@@ -929,3 +929,17 @@ inline juce::String shortcutHintFor(const ShortcutManager* manager, const juce::
         key.getModifiers() == juce::ModifierKeys() && ((code >= 'a' && code <= 'z') || (code >= 'A' && code <= 'Z'));
     return bareLetter ? display.toLowerCase() : display;
 }
+
+/** Bare display name for the platform's primary modifier key ("Cmd" on macOS, "Ctrl" everywhere
+ *  else) — the same #if JUCE_MAC ShortcutManager::keyPressToDisplayString uses above, pulled out
+ *  for copy that names the modifier on its own rather than as part of a rebindable KeyPress (e.g.
+ *  "hold Cmd while scrolling to zoom" — a mouse-wheel gesture, not an action in the shortcuts
+ *  table, so shortcutHintFor doesn't apply). A hardcoded "Cmd" in a tooltip or label is wrong on
+ *  every non-Mac build; route it through this instead. */
+inline juce::String platformCommandKeyName() {
+#if JUCE_MAC
+    return "Cmd";
+#else
+    return "Ctrl";
+#endif
+}

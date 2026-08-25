@@ -12,7 +12,6 @@ public:
         addParameter(releaseParam = new juce::AudioParameterFloat("release", "Release (ms)", 1.0f, 500.0f, 100.0f));
         addParameter(inputGainParam =
                          new juce::AudioParameterFloat("inputGain", "Input Gain (dB)", -20.0f, 20.0f, 0.0f));
-        addDualIOParameter();
         addMuteParameter();
     }
 

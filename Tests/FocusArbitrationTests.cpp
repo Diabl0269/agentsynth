@@ -1176,7 +1176,7 @@ TEST_F(FocusArbitrationTest, NaturalScrollingPreferenceReachesTheTimelineAndTheR
 }
 
 // ============================================================================
-// 14. "Scroll up zooms in" — the same settings-file path, the other wheel flag
+// 14. "Scroll up to zoom in" — the same settings-file path, the other wheel flag
 // ============================================================================
 
 TEST_F(FocusArbitrationTest, ZoomScrollPreferenceReachesTheTimelineAndTheRoll) {

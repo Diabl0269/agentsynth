@@ -1,5 +1,6 @@
 #include "PreferencesSettingsTab.h"
 #include "../AI/AIStateMapper.h"
+#include "../ShortcutManager.h"
 #include "Theme/AppLookAndFeel.h"
 #include <functional>
 
@@ -60,8 +61,9 @@ constexpr int kDualIOChoiceFollowGlobal = 1;
 constexpr int kDualIOChoiceAlwaysOn = 2;
 constexpr int kDualIOChoiceAlwaysOff = 3;
 
-// Every module type that carries the Dual I/O parameter (ModuleBase::addDualIOParameter): the FX
-// modules plus the split-block voice modules (docs/fx_modules.md § Stereo I/O).
+// Every module type that carries the Dual I/O parameter — which ModuleBase's constructor grants from
+// the module's channel shape (ModuleBase::StereoAudio): the FX modules plus the split-block voice
+// modules (docs/fx_modules.md § Stereo I/O).
 //
 // DERIVED, never hand-listed: synth::AIStateMapper::dualIOCapableModuleTypes() probes the module
 // factory and asks each module hasDualIOParameter(), so the popup below cannot go stale. It used to
@@ -190,6 +192,29 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     titleLabel.setText("Preferences", juce::dontSendNotification);
     titleLabel.setFont(juce::Font(juce::FontOptions(18.0f, juce::Font::bold)));
 
+    // Live filter (round 3 follow-up): styled like ModuleLibraryComponent's own search box, which
+    // is the closest precedent for a live text filter in this app.
+    addAndMakeVisible(searchField);
+    searchField.setMultiLine(false);
+    searchField.setReturnKeyStartsNewLine(false);
+    searchField.setEscapeAndReturnKeysConsumed(true);
+    searchField.setSelectAllWhenFocused(true);
+    searchField.setJustification(juce::Justification::centredLeft);
+    searchField.setIndents(6, 0);
+    searchField.setFont(juce::Font(juce::FontOptions(13.0f)));
+    searchField.setTextToShowWhenEmpty("Filter preferences...", findColour(juce::Label::textColourId).withAlpha(0.5f));
+    searchField.setTooltip("Filters the rows below by name or description as you type.");
+    searchField.onTextChange = [this] { applySearchFilter(searchField.getText()); };
+    searchField.onEscapeKey = [this] {
+        if (searchField.getText().isNotEmpty()) {
+            // dontSendNotification + a direct applySearchFilter() call, mirroring
+            // ModuleLibraryComponent::setSearchText: deterministic regardless of whether
+            // juce::TextEditor's own change notification happens to fire synchronously.
+            searchField.setText({}, juce::dontSendNotification);
+            applySearchFilter({});
+        }
+    };
+
     addAndMakeVisible(smartConnectionLabel);
     smartConnectionLabel.setText("Smart connections:", juce::dontSendNotification);
     smartConnectionLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
@@ -283,17 +308,28 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     addAndMakeVisible(zoomScrollUpZoomsInToggle);
     // DEFAULT TRUE, and deliberately the same idiom as the row above: "up zooms in" is what both
     // wheel-zoom surfaces already did, so nobody's gesture changes until they ask for it here.
+    //
+    // Label reworded from "Scroll up zooms in" (round 3 follow-up): that phrasing read as a
+    // statement of fact ("this is what happens"), not a preference with two states — indistinguishable
+    // from a label describing unconditional behaviour. "Scroll up to zoom in" reads as an
+    // instruction that's true only while the toggle is on, and the tooltip spells out the OFF state
+    // explicitly rather than leaving it as "not this", which is the ambiguity the alternate
+    // "Scroll direction for zoom" wording has the same problem: neither state is named, only a mode
+    // is implied. Persisted key (kZoomScrollUpZoomsInKey) is unchanged.
     zoomScrollUpZoomsInToggle.setToggleState(
         appProperties.getUserSettings()->getBoolValue(kZoomScrollUpZoomsInKey, true), juce::dontSendNotification);
-    zoomScrollUpZoomsInToggle.setTooltip("On (the default) zooms IN when you scroll up with Cmd (or Cmd+Shift) held. "
-                                         "Turn it off if you expect scrolling up to zoom out.");
+    zoomScrollUpZoomsInToggle.setTooltip(
+        "When on (the default), scroll up with " + platformCommandKeyName() + " (or " + platformCommandKeyName() +
+        "+Shift) held to zoom in. When off, scrolling up zooms out instead (natural scrolling).");
     zoomScrollUpZoomsInToggle.onClick = [this] {
         persistZoomScrollUpZoomsIn(zoomScrollUpZoomsInToggle.getToggleState());
     };
 
     addAndMakeVisible(zoomScrollUpZoomsInHint);
-    zoomScrollUpZoomsInHint.setText("Affects Cmd (horizontal) and Cmd+Shift (vertical) wheel-zoom in the timeline and "
-                                    "the piano roll. Plain scrolling follows the setting above.",
+    zoomScrollUpZoomsInHint.setText("Affects " + platformCommandKeyName() + " (horizontal) and " +
+                                        platformCommandKeyName() +
+                                        "+Shift (vertical) wheel-zoom in the timeline and the piano roll. Plain "
+                                        "scrolling follows the setting above.",
                                     juce::dontSendNotification);
     zoomScrollUpZoomsInHint.setFont(juce::Font(juce::FontOptions(11.5f)));
     zoomScrollUpZoomsInHint.setColour(juce::Label::textColourId,
@@ -325,60 +361,171 @@ void PreferencesSettingsTab::resized() {
     auto bounds = getLocalBounds().reduced(12);
     dividerBounds.clear();
 
-    // Each group is followed by a hairline rule, so related settings read as one block instead of
-    // an undifferentiated stack of rows.
+    titleLabel.setBounds(bounds.removeFromTop(28));
+    bounds.removeFromTop(8);
+    searchField.setBounds(bounds.removeFromTop(26));
+    bounds.removeFromTop(12);
+
+    // ---- Live filter (round 3 follow-up item 2) --------------------------------------------
+    //
+    // Each of the groups below is a "row" for filtering purposes — the same grouping the dividers
+    // already draw, so filtering never needs a finer-grained concept of "row" than what the layout
+    // already treats as one block. A group matches when ANY of its components' button text, label
+    // text or tooltip contains the query (case-insensitive); an empty query matches everything, so
+    // an untouched search field reproduces the exact bounds this function always produced.
+    const juce::String query = searchQuery;
+
+    auto textOf = [](juce::Component& c) {
+        // getTooltip() is not const on juce::SettableTooltipClient, hence the non-const parameter —
+        // resized() itself is non-const, so there is nothing this actually mutates.
+        juce::String s;
+        if (auto* b = dynamic_cast<juce::Button*>(&c))
+            s << b->getButtonText() << " ";
+        if (auto* l = dynamic_cast<juce::Label*>(&c))
+            s << l->getText() << " ";
+        if (auto* t = dynamic_cast<juce::SettableTooltipClient*>(&c))
+            s << t->getTooltip() << " ";
+        return s;
+    };
+    auto groupMatches = [&](std::initializer_list<juce::Component*> comps) {
+        if (query.isEmpty())
+            return true;
+        for (auto* c : comps)
+            if (textOf(*c).containsIgnoreCase(query))
+                return true;
+        return false;
+    };
+    auto setGroupVisible = [](std::initializer_list<juce::Component*> comps, bool visible) {
+        for (auto* c : comps)
+            c->setVisible(visible);
+    };
+
+    // Each group that wants a divider after it sets pendingDivider = true; the divider is only
+    // actually drawn once a LATER group turns out to be visible (beginGroup below), so a filtered-
+    // out group in between never leaves an orphan hairline over empty space, and the first/last
+    // visible group never gets a leading/trailing one either.
+    bool pendingDivider = false;
     auto addDivider = [this, &bounds] {
         bounds.removeFromTop(10);
         dividerBounds.push_back(bounds.removeFromTop(1));
         bounds.removeFromTop(10);
     };
+    auto beginGroup = [&](bool visible) {
+        if (visible && pendingDivider)
+            addDivider();
+        if (visible)
+            pendingDivider = false;
+    };
 
-    titleLabel.setBounds(bounds.removeFromTop(28));
-    bounds.removeFromTop(12);
-
-    auto smartRow = bounds.removeFromTop(24);
-    smartConnectionLabel.setBounds(smartRow.removeFromLeft(160));
-    smartConnectionCombo.setBounds(smartRow.removeFromLeft(220));
-    addDivider();
-
-    doubleClickDisconnectToggle.setBounds(bounds.removeFromTop(24));
-    addDivider();
-
-    alignmentGuideToggle.setBounds(bounds.removeFromTop(24));
-    addDivider();
-
-    // One line, one row (see the toggle's declaration comment): the button is sized to its own
-    // text via changeWidthToFitText rather than a fixed guess, so the toggle keeps as much of the
-    // row as it can for its own (longer) label.
+    // Group 1: smart connections
     {
-        auto dualIORow = bounds.removeFromTop(24);
-        perModuleDefaultsButton.changeWidthToFitText(24);
-        const int buttonWidth = juce::jmax(perModuleDefaultsButton.getWidth(), 160);
-        perModuleDefaultsButton.setBounds(dualIORow.removeFromRight(buttonWidth));
-        dualIORow.removeFromRight(12);
-        defaultDualIOToggle.setBounds(dualIORow);
+        const bool visible = groupMatches({&smartConnectionLabel, &smartConnectionCombo});
+        setGroupVisible({&smartConnectionLabel, &smartConnectionCombo}, visible);
+        beginGroup(visible);
+        if (visible) {
+            auto smartRow = bounds.removeFromTop(24);
+            smartConnectionLabel.setBounds(smartRow.removeFromLeft(160));
+            smartConnectionCombo.setBounds(smartRow.removeFromLeft(220));
+        }
+        pendingDivider = pendingDivider || visible;
     }
-    addDivider();
 
-    loopSelectionArmsToggle.setBounds(bounds.removeFromTop(24));
-    // Same group as the row above (no divider between them): both are about the loop locators, and
-    // separating them would imply they are unrelated settings.
-    bounds.removeFromTop(10);
-    doubleClickSpansLocatorsToggle.setBounds(bounds.removeFromTop(24));
-    addDivider();
+    // Group 2: double-click disconnect
+    {
+        const bool visible = groupMatches({&doubleClickDisconnectToggle});
+        setGroupVisible({&doubleClickDisconnectToggle}, visible);
+        beginGroup(visible);
+        if (visible)
+            doubleClickDisconnectToggle.setBounds(bounds.removeFromTop(24));
+        pendingDivider = pendingDivider || visible;
+    }
 
-    naturalScrollingToggle.setBounds(bounds.removeFromTop(24));
-    // Indented under the toggle it explains, so the hint reads as a caption rather than as another
-    // preference row.
-    naturalScrollingHint.setBounds(bounds.removeFromTop(18).withTrimmedLeft(24));
-    // Same group (no divider): both are wheel-direction preferences, and separating them would imply
-    // the zoom one is unrelated to the row it qualifies.
-    bounds.removeFromTop(10);
-    zoomScrollUpZoomsInToggle.setBounds(bounds.removeFromTop(24));
-    zoomScrollUpZoomsInHint.setBounds(bounds.removeFromTop(18).withTrimmedLeft(24));
-    addDivider();
+    // Group 3: alignment guides
+    {
+        const bool visible = groupMatches({&alignmentGuideToggle});
+        setGroupVisible({&alignmentGuideToggle}, visible);
+        beginGroup(visible);
+        if (visible)
+            alignmentGuideToggle.setBounds(bounds.removeFromTop(24));
+        pendingDivider = pendingDivider || visible;
+    }
 
-    pianoRollKeyLabelsToggle.setBounds(bounds.removeFromTop(24));
+    // Group 4: Dual I/O (one line, one row — see the toggle's declaration comment). The button is
+    // sized to its own text via changeWidthToFitText rather than a fixed guess, so the toggle keeps
+    // as much of the row as it can for its own (longer) label.
+    {
+        const bool visible = groupMatches({&defaultDualIOToggle, &perModuleDefaultsButton});
+        setGroupVisible({&defaultDualIOToggle, &perModuleDefaultsButton}, visible);
+        beginGroup(visible);
+        if (visible) {
+            auto dualIORow = bounds.removeFromTop(24);
+            perModuleDefaultsButton.changeWidthToFitText(24);
+            const int buttonWidth = juce::jmax(perModuleDefaultsButton.getWidth(), 160);
+            perModuleDefaultsButton.setBounds(dualIORow.removeFromRight(buttonWidth));
+            dualIORow.removeFromRight(12);
+            defaultDualIOToggle.setBounds(dualIORow);
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+
+    // Group 5: the two loop-locator toggles (no divider between them — see their declaration
+    // comments). Grouped for filtering too: they read as one conversation, so a query matching
+    // either keeps both rows together rather than splitting a pair that explains itself as a pair.
+    {
+        const bool visible = groupMatches({&loopSelectionArmsToggle, &doubleClickSpansLocatorsToggle});
+        setGroupVisible({&loopSelectionArmsToggle, &doubleClickSpansLocatorsToggle}, visible);
+        beginGroup(visible);
+        if (visible) {
+            loopSelectionArmsToggle.setBounds(bounds.removeFromTop(24));
+            bounds.removeFromTop(10);
+            doubleClickSpansLocatorsToggle.setBounds(bounds.removeFromTop(24));
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+
+    // Group 6: the two wheel-direction toggles + their hints (no divider between them, same
+    // "reads as one conversation" reasoning as group 5).
+    {
+        const bool visible = groupMatches(
+            {&naturalScrollingToggle, &naturalScrollingHint, &zoomScrollUpZoomsInToggle, &zoomScrollUpZoomsInHint});
+        setGroupVisible(
+            {&naturalScrollingToggle, &naturalScrollingHint, &zoomScrollUpZoomsInToggle, &zoomScrollUpZoomsInHint},
+            visible);
+        beginGroup(visible);
+        if (visible) {
+            naturalScrollingToggle.setBounds(bounds.removeFromTop(24));
+            // Indented under the toggle it explains, so the hint reads as a caption rather than as
+            // another preference row.
+            naturalScrollingHint.setBounds(bounds.removeFromTop(18).withTrimmedLeft(24));
+            bounds.removeFromTop(10);
+            zoomScrollUpZoomsInToggle.setBounds(bounds.removeFromTop(24));
+            zoomScrollUpZoomsInHint.setBounds(bounds.removeFromTop(18).withTrimmedLeft(24));
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+
+    // Group 7: piano roll key labels (last — no divider after it, filtered or not).
+    {
+        const bool visible = groupMatches({&pianoRollKeyLabelsToggle});
+        setGroupVisible({&pianoRollKeyLabelsToggle}, visible);
+        beginGroup(visible);
+        if (visible)
+            pianoRollKeyLabelsToggle.setBounds(bounds.removeFromTop(24));
+    }
+}
+
+void PreferencesSettingsTab::applySearchFilter(const juce::String& query) {
+    searchQuery = query.trim();
+    resized();
+    repaint();
+}
+
+void PreferencesSettingsTab::setSearchFilterForTest(const juce::String& query) {
+    // dontSendNotification + an explicit applySearchFilter() call, mirroring
+    // ModuleLibraryComponent::setSearchText — deterministic regardless of whether juce::TextEditor's
+    // own change notification happens to run synchronously in a headless test.
+    searchField.setText(query, juce::dontSendNotification);
+    applySearchFilter(query);
 }
 
 void PreferencesSettingsTab::setGraphEditor(GraphEditor* ge) {

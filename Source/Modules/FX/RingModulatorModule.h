@@ -20,10 +20,10 @@ public:
         addParameter(characterParam = new juce::AudioParameterFloat("character", "Character", 0.0f, 1.0f, 0.5f));
         addParameter(oversamplingParam = new juce::AudioParameterChoice("oversampling", "Oversampling",
                                                                         juce::StringArray{"Off", "2x", "4x"}, 1));
-        // OUTPUT-side Dual I/O, the Voice Mixer's shape rather than the usual FX one: raw ch0/ch1 on
-        // the INPUT side are Carrier and Modulator — two unrelated mono jacks, not a stereo pair —
-        // so only the output pair collapses. Added before Level, like every other FX (docs/fx_modules.md).
-        addDualIOParameter();
+        // NOTE: no Dual I/O registration here, on purpose. `ModuleBase(name, 5, 2)` matches
+        // StereoAudio::Auto's shape (>= 2 in, exactly 2 out), so the base adds the toggle and the
+        // collapsing output jack itself — this module is the regression test for that inheritance
+        // (it shipped stereo with no toggle back when the opt-in was per-module).
         addOutputLevelParameter();
         addMuteParameter();
         oversamplingParam->addListener(this);
@@ -201,16 +201,15 @@ public:
         const juce::String labels[] = {"Carrier", "Modulator", "Mix", "Drive", "Character"};
         return (i >= 0 && i < 5) ? labels[i] : ModuleBase::getInputPortLabel(i);
     }
-    // Output-only Dual I/O: "Left"/"Right" when split, one "Audio" jack owning raw ch0+ch1 when
-    // collapsed (both legs carry the same wet signal, so collapsing loses nothing audible).
-    juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
-    int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
-    LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
-
+    // Output-only Dual I/O — and NOTHING here implements it. "Left"/"Right" when split, one "Audio"
+    // jack owning raw ch0+ch1 when collapsed (both legs carry the same wet signal, so collapsing
+    // loses nothing audible), all three inherited from ModuleBase::hasCollapsibleOutputPair().
+    //
     // The INPUT side is deliberately NOT mapped through mapStereoPairInput: ch1 is the Modulator
     // jack, and calling it PortRole::Audio would make ModuleBase::rightAudioLegChannel()'s ch1 look
     // like an input right leg — GraphEditor's Dual I/O toggle would then wire a neighbour's Audio R
-    // into this module's Modulator input. The inherited map leaves those five jacks as they were.
+    // into this module's Modulator input. The inherited input map leaves those five jacks as they
+    // were, which is exactly why the base infers the output pair only.
 
     std::vector<ModulationTarget> getModulationTargets() const override {
         return {{"Mix", 2}, {"Drive", 3}, {"Character", 4}};

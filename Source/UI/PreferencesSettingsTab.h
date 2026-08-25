@@ -56,8 +56,9 @@ public:
     std::optional<bool> getDualIOOverrideForType(const juce::String& moduleType) const;
     void setDualIOOverrideForType(const juce::String& moduleType, std::optional<bool> overrideValue);
 
-    // Every module type that carries the Dual I/O parameter (ModuleBase::addDualIOParameter), in
-    // the per-module popup's row order: the FX modules plus the split-block voice modules
+    // Every module type that carries the Dual I/O parameter (granted by ModuleBase's constructor from
+    // the module's channel shape), in the per-module popup's row order: the FX plus the split-block
+    // voice modules
     // (docs/modules.md, docs/fx_modules.md § Stereo I/O).
     //
     // DISCOVERED, not hand-listed — a thin wrapper over synth::AIStateMapper::dualIOCapableModuleTypes(),
@@ -85,6 +86,21 @@ public:
     // assert one falls where the Dual I/O row ends without reaching into paint() itself.
     const std::vector<juce::Rectangle<int>>& getDividerBoundsForTest() const { return dividerBounds; }
 
+    // Live filter across every preference row's label/tooltip text (round 3 follow-up item 2).
+    // Setting the real searchField's text would also work, but that posts an async notification in
+    // a real run — this drives the exact same code path (applySearchFilter) synchronously, the same
+    // "set text without notification, then call the handler directly" idiom
+    // ModuleLibraryComponent::setSearchText uses for its own headless tests.
+    void setSearchFilterForTest(const juce::String& query);
+    juce::String getSearchFilterForTest() const { return searchQuery; }
+    // Invokes the search field's Esc handler exactly as a real key press would — the same "call the
+    // callback directly" idiom TimelinePanelTests.cpp uses for its own onEscapeKey seam, since a
+    // headless run cannot dispatch a real key event.
+    void triggerSearchEscapeForTest() {
+        if (searchField.onEscapeKey)
+            searchField.onEscapeKey();
+    }
+
 private:
     void persistSmartConnectionMode(GraphEditor::SmartConnectionMode mode);
     void persistDoubleClickPortDisconnect(bool enabled);
@@ -101,8 +117,20 @@ private:
     // exercises the exact component a click would open, not a lookalike.
     std::unique_ptr<juce::Component> buildDualIOPerModuleDefaultsPopup();
 
+    // Re-lays the tab for the current searchQuery: hides every row whose label/tooltip text does
+    // not contain it (case-insensitive), collapsing the vertical gap and any now-orphaned divider.
+    // Called from resized() and from every place searchQuery changes.
+    void applySearchFilter(const juce::String& query);
+
     juce::ApplicationProperties& appProperties;
     GraphEditor* graphEditor{nullptr}; // weak, owned by MainComponent
+
+    // Live filter field, top of the tab (SettingsWindow has no cross-tab search rig — see the class
+    // comment above — so this is scoped to the Preferences tab, the same "per-tab, not per-window"
+    // choice ModuleLibraryComponent's own search box makes for the module library). Esc clears it,
+    // matching ModuleLibraryComponent::searchEditor's onEscapeKey.
+    juce::TextEditor searchField;
+    juce::String searchQuery; // trimmed, case-insensitive-compared in applySearchFilter/resized()
 
     juce::Label titleLabel;
     juce::Label smartConnectionLabel;
@@ -134,7 +162,7 @@ private:
     // Sits directly under the natural-scrolling pair because it is the same gesture with a modifier
     // held, and users reach for both in the same visit. Independent of it, though: this one governs
     // the Cmd / Cmd+Shift wheel-ZOOM branches only, which is what its own caption spells out.
-    juce::ToggleButton zoomScrollUpZoomsInToggle{"Scroll up zooms in"};
+    juce::ToggleButton zoomScrollUpZoomsInToggle{"Scroll up to zoom in"};
     juce::Label zoomScrollUpZoomsInHint;
     // On (the default) labels every row in the piano roll's keys column; off labels only the Cs —
     // PianoRollComponent::KeyLabelMode::AllNotes / OctavesOnly.

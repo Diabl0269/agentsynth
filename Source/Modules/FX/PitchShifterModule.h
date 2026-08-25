@@ -37,7 +37,6 @@ public:
                          new juce::AudioParameterFloat("window", "Window (ms)", kMinWindowMs, kMaxWindowMs, 50.0f));
         addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback", 0.0f, kMaxFeedback, 0.0f));
         addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 1.0f));
-        addDualIOParameter();
         addOutputLevelParameter();
         addMuteParameter();
         enableVisualBuffer(true);

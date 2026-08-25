@@ -326,11 +326,39 @@ notification, mirroring the clip-lane area's own refresh seam), `refreshFromDoc(
 is gone and closes the roll the same way. Panel API: `openPianoRoll(ClipId)` / `closePianoRoll()` /
 `isPianoRollOpen()`.
 
-**Z-order.** `pianoRoll_` occupies the exact same rect `clipLaneArea_` does (`gridLanesBounds_`),
-added via `addChildComponent` (not `addAndMakeVisible`, so it starts invisible) right after
-`clipLaneArea_` and before `playhead_` — so only one of clip-lane-area/piano-roll is ever visible,
-and the playhead overlay stays topmost and untouched either way (same bounds, same
-`viewState_.beatToX` mapping it always had).
+**Z-order.** `pianoRoll_` is added via `addChildComponent` (not `addAndMakeVisible`, so it starts
+invisible) right after `clipLaneArea_` and before `playhead_` — so only one of
+clip-lane-area/piano-roll is ever visible, and the playhead overlay stays topmost and untouched
+either way (same bounds, same `viewState_.beatToX` mapping it always had).
+
+**Vertical layout: toolbar row, then ruler, then note canvas.** While the roll is CLOSED nothing is
+unusual — the ruler is the top row of the lanes region and the roll occupies exactly
+`gridLanesBounds_`, the clip-lane rect. While it is **open**, the panel reserves
+`PianoRollComponent::kToolbarHeight` from the top of the lanes region for the roll's chip toolbar
+*before* placing the ruler, and gives the roll a rect spanning the whole unit — toolbar row, ruler
+band, canvas. The roll's own `resized()` is the single carve-up:
+
+| Band | Height | Owner |
+|---|---|---|
+| Chip toolbar | `kToolbarHeight` | the roll (its own chrome) |
+| Ruler | `rulerBandHeight_` | **left blank** for `ruler_`, a sibling drawn on top of it |
+| Note canvas | the remainder | the roll (keys-column gutter + grid) |
+
+The middle band is what puts the chrome **above** the ruler rather than sandwiched between the ruler
+and the notes — chrome wedged between two content rows was the layout bug. The owner pushes the
+ruler's real height in via `setRulerBandHeight()` (0 by default, which collapses the layout back to
+toolbar-then-canvas for a bare roll or a test), and the panel calls `ruler_.toFront(false)` while
+open because the roll was added to the panel *after* the ruler and would otherwise paint over it.
+
+**`canvasTop()` is the one seam** every grid/row/hit-test coordinate reads — `kToolbarHeight +
+rulerBandHeight_`. Introducing it is what let the ruler move in between the chrome and the canvas
+without a y-offset having to be found and corrected at twenty separate call sites, and it is why a
+standalone roll (`rulerBandHeight_ == 0`) has bit-for-bit the pre-toolbar-row geometry.
+`openPianoRoll`/`closePianoRoll` both re-run `resized()`, because `isOpen()` is what the panel's
+carve-up branches on. The playhead overlay's skipped region is the union of the ruler and the **roll's
+own rect** (not `gridLanesBounds_`), so the overlay does not draw its line across the chips. Adding a
+second context toolbar later is one more `removeFromTop` in that one carve-up plus a constant — no
+other y-coordinate in the file moves. Pinned by `PianoRollLayoutTest`.
 
 **Coordinate system — the roll owns its own horizontal mapping.** The keys column is a real 44 px
 GUTTER (`kKeysColumnWidth`): `PianoRollComponent::beatToX(absBeat)` is `leftGutterWidth() + (beat -
@@ -346,6 +374,34 @@ while another reads the new one. The roll's zoom and scroll are its own; the pan
 `TimelineViewState` is still shared, but for exactly ONE thing — the **snap division**
 (`snapBeat`/`divisionBeats`), so the roll's gridlines, its snapped edits and the panel's snap
 selector can never disagree.
+
+**The keys column is a virtual keyboard.** Pressing a key there auditions that pitch through the
+SAME `onAuditionNote` path a note click uses (see **Note audition** below), so it reaches exactly the
+destination modules the track plays through, with exactly the same no-stuck-note guarantees — round 1
+deliberately left this a no-op ("no virtual-keyboard preview in v1") and this is that gap closed.
+Mouse-down on a key is the note-on, dragging up or down the column re-articulates **once per key**
+(gated on the pitch actually changing, so sliding inside one key costs no MIDI and no repaint), and
+mouse-up is the note-off. A drag that strays sideways off the column is clamped to the column's own
+y-range rather than abandoned: a finger sliding down a keyboard drifts horizontally all the time, and
+dropping the gesture there would leave the note held with no way to release it. Velocity is a fixed
+`kKeysColumnVelocity` (102, ~0.8 of full scale) — a virtual keyboard has no velocity sensor, and
+previewing everything at 127 misrepresents how the patch sounds under the notes being written.
+
+The held key paints in the theme's `toolActive` token — the same "this control is switched on" colour
+the edit-tool strip, the follow-playhead button and the roll's own Snap chip use — over the key's OWN
+rect, so a black key lights up across just its narrower flush-left area and the white showing through
+beside it stays white. `keyFill` itself is reassigned rather than only the drawn colour, so
+`labelColourFor` still contrasts the note name against what is actually underneath it. Repaints are
+confined to the one or two key rows involved (`keyRowRect`), never the column.
+
+A keys press starts **no document gesture**: no drag mode, no selection change, no undo step. It is
+tracked by its own pair of members (`keysColumnPressing_`/`keysColumnPitch_`) rather than a
+`DragMode`, precisely so none of the note-gesture machinery can mistake it for an edit — `mouseDrag`
+handles it and returns before any of that runs. `endKeysColumnPress()` only drops the *pressed paint*;
+the note-off comes from `stopAudition()`, which `mouseUp` and every cancel path
+(`openClip`/`closeRoll`/`visibilityChanged`/a tool switch/the destructor) already call
+unconditionally, so there is exactly one owner of the release. Pinned by `PianoRollKeysColumnTest`
+plus two `PianoRollAuditionIntegrationTest` cases that drive the real panel down to the host recorder.
 
 **Piano-style keys column + key labels.** The keys column paints alternating white/black-key row
 tints from `colors.pianoKeyWhite`/`pianoKeyBlack` (see [`theming.md` §2](theming.md#2-token-reference))

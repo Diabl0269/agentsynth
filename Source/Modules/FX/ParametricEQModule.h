@@ -73,7 +73,6 @@ public:
 
         addParameter(outputGainParam =
                          new juce::AudioParameterFloat("outputGain", "Output", gainRange(), 0.0f, dbAttributes()));
-        addDualIOParameter();
         addMuteParameter();
         enableVisualBuffer(true);
     }

@@ -34,6 +34,7 @@
 #include "Theme/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <set>
@@ -832,10 +833,19 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
             }
         }
 
+        // Draw the RESOLVED legs, not one segment per suggestion: a collapsed jack landing on the
+        // terminal sink is one suggestion but two cables, and a preview that showed a single wire
+        // while the drop fanned both raws was lying about what was about to happen.
         for (const auto& s : editor.smartSuggestions) {
-            for (const auto& cable : s.upstreamCables)
-                strokePreview(cable.p1, cable.p2, previewColour(s.signal, s.upstreamCategory, 0.40f), s.signal);
-            strokePreview(s.p1, s.p2, previewColour(s.signal, s.sourceCategory, 0.40f), s.signal);
+            for (const auto& leg : s.upstreamPreviewLegs)
+                strokePreview(leg.p1, leg.p2, previewColour(s.signal, s.upstreamCategory, 0.40f), s.signal);
+
+            if (s.mainPreviewLegs.empty()) {
+                strokePreview(s.p1, s.p2, previewColour(s.signal, s.sourceCategory, 0.40f), s.signal);
+                continue;
+            }
+            for (const auto& leg : s.mainPreviewLegs)
+                strokePreview(leg.p1, leg.p2, previewColour(s.signal, s.sourceCategory, 0.40f), s.signal);
         }
     }
 }
@@ -1605,6 +1615,7 @@ void GraphEditor::refreshSmartSuggestions() {
         juce::AudioProcessorGraph::NodeID upstreamId{};
         std::vector<SmartSuggestion::InsertLink> doomedLinks;
         std::vector<SmartSuggestion::InsertLink> upstreamCables;
+        std::vector<SmartSuggestion::InsertLink> upstreamPreviewLegs;
         synth::ui::ModuleCategory upstreamCategory = synth::ui::ModuleCategory::Utility;
     };
 
@@ -1644,6 +1655,34 @@ void GraphEditor::refreshSmartSuggestions() {
                 return (neighbor->getBounds().getPosition() + juce::Point<int>(x, 30)).toFloat();
             }
             return (neighbor->getBounds().getPosition() + neighbor->getPortCenter(jack, isInput)).toFloat();
+        };
+
+        /** The cables one connectPorts call actually draws, so a preview can never claim less than
+         *  the drop will wire. Walks the SAME PolyLink connectPorts walks, maps each raw pair back
+         *  to its visible jacks, and dedupes: several raw edges through one jack pair are one cable,
+         *  but a collapsed jack fanning onto a destination that fronts those raws separately is two.
+         *  Endpoints come from caller-supplied providers because either end can be the ghost, the
+         *  neighbour, or (for an insert's upstream leg) a third card entirely. */
+        using JackPointFn = std::function<juce::Point<float>(int jack, bool isInput)>;
+        auto resolveDrawnLegs = [](juce::AudioProcessor* sProc, int sJack, juce::AudioProcessor* dProc, int dJack,
+                                   const JackPointFn& srcPointFor, const JackPointFn& dstPointFor) {
+            std::vector<SmartSuggestion::InsertLink> legs;
+            auto* sMb = dynamic_cast<ModuleBase*>(sProc);
+            auto* dMb = dynamic_cast<ModuleBase*>(dProc);
+            const auto link = resolvePolyLink(sMb, sJack, dMb, dJack);
+            for (int v = 0; v < link.voiceCount; ++v) {
+                const int rawSrc = link.sourceRawChannel + v * link.sourceStride;
+                const int rawDst = link.destRawChannel + v;
+                SmartSuggestion::InsertLink leg;
+                leg.fromJack = sMb != nullptr ? sMb->mapOutputChannel(rawSrc).visibleJackIndex : rawSrc;
+                leg.toJack = dMb != nullptr ? dMb->mapInputChannel(rawDst).visibleJackIndex : rawDst;
+                if (std::find(legs.begin(), legs.end(), leg) != legs.end())
+                    continue; // same drawn cable, just another raw edge inside it
+                leg.p1 = srcPointFor(leg.fromJack, false);
+                leg.p2 = dstPointFor(leg.toJack, true);
+                legs.push_back(leg);
+            }
+            return legs;
         };
 
         auto pushAudioGroup = [&](bool ghostIsSource, juce::AudioProcessor* srcProc, juce::AudioProcessor* dstProc,
@@ -1799,6 +1838,15 @@ void GraphEditor::refreshSmartSuggestions() {
                         cable.p1 = plan.doomedLinks[i].p1;
                         cable.p2 = jackPoint(/*fromGhost=*/true, ghostInJack, true, false);
                         plan.upstreamCables.push_back(cable);
+
+                        // ONE connectPorts call here can still draw two cables (a collapsed upstream
+                        // jack landing on a Dual I/O ghost covers both its legs), so the preview is
+                        // resolved from the fan rather than from the cable list.
+                        for (auto& leg : resolveDrawnLegs(
+                                 upstreamComp->getModule(), cable.fromJack, ghostProc, ghostInJack,
+                                 [&](int jack, bool) { return upstreamJackPoint(jack); },
+                                 [&](int jack, bool isInput) { return jackPoint(true, jack, isInput, false); }))
+                            plan.upstreamPreviewLegs.push_back(leg);
                     }
                     if (plan.upstreamCables.empty())
                         return;
@@ -1859,6 +1907,18 @@ void GraphEditor::refreshSmartSuggestions() {
                 if (auto* smb = dynamic_cast<ModuleBase*>(srcProc))
                     s.sourceCategory = synth::ui::categoryFor(smb->getModuleType());
 
+                // What the drop will really wire — one preview segment per DRAWN cable, which for a
+                // collapsed jack landing on the terminal sink is two, not one.
+                const JackPointFn ghostPointFn = [&](int jack, bool isInput) {
+                    return jackPoint(/*fromGhost=*/true, jack, isInput, false);
+                };
+                const JackPointFn neighborPointFn = [&](int jack, bool isInput) {
+                    return jackPoint(/*fromGhost=*/false, jack, isInput, false);
+                };
+                s.mainPreviewLegs =
+                    resolveDrawnLegs(srcProc, srcJack, dstProc, dstJack, ghostIsSource ? ghostPointFn : neighborPointFn,
+                                     ghostIsSource ? neighborPointFn : ghostPointFn);
+
                 int score = pairScore;
                 if (srcLegs.size() >= 2 && dstLegs.size() >= 2 && srcJack == srcLegs[0] && dstJack == dstLegs[0])
                     score += 2;
@@ -1870,6 +1930,7 @@ void GraphEditor::refreshSmartSuggestions() {
                     s.upstreamId = insertPlan->upstreamId;
                     s.doomedLinks = insertPlan->doomedLinks;
                     s.upstreamCables = insertPlan->upstreamCables;
+                    s.upstreamPreviewLegs = insertPlan->upstreamPreviewLegs;
                     s.upstreamCategory = insertPlan->upstreamCategory;
                 }
 
@@ -3714,6 +3775,13 @@ void GraphEditor::itemDragEnter(const SourceDetails& dragSourceDetails) {
         estSize = estimateModuleSize("Hosted Plugin");
     } else {
         dragPreviewProbe = synth::AIStateMapper::createModule(name);
+        // The probe IS the ghost for smart-connect purposes: its jack layout decides the preview
+        // AND the plan that gets applied on drop. It must therefore go through exactly the same
+        // Dual I/O default the real module will get in itemDropped — otherwise a plan computed for
+        // a collapsed ghost is applied to a module that spawned dual, and only the left legs get
+        // wired (the ghost's fan resolves to one raw channel per jack instead of two).
+        if (dragPreviewProbe != nullptr)
+            applyDefaultDualIOForNewModule(*dragPreviewProbe, name);
         estSize = estimateModuleSize(name);
     }
 

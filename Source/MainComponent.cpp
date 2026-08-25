@@ -2663,7 +2663,7 @@ void MainComponent::applyNaturalScrollingPreference() {
 void MainComponent::applyZoomScrollPreference() {
     // Same shape as applyNaturalScrollingPreference above.
     //
-    // Phrased POSITIVELY in Preferences ("Scroll up zooms in", default on) while the components carry
+    // Phrased POSITIVELY in Preferences ("Scroll up to zoom in", default on) while the components carry
     // the INVERSION flag, so this is the one place the polarity flips — exactly the natural-scrolling
     // idiom next door. ONE call, to the panel: setZoomScrollInverted forwards to the piano roll
     // itself (see its header comment), so reaching into getPianoRoll() here would be a second writer

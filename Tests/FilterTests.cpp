@@ -38,7 +38,7 @@ TEST_F(FilterTest, LowPassAttenuatesHighFreq) {
     // by name if possible or just assume implementation details for now as we are
     // inside the codebase. Let's iterate params to find "Cutoff".
 
-    auto* cutoffParam = filter.getParameters()[1]; // Assumption: 1=Cutoff, 2=Resonance
+    juce::AudioProcessorParameter* cutoffParam = findParameterByID(&filter, "cutoff");
     for (auto* p : filter.getParameters()) {
         if (p->getName(100) == "Cutoff") {
             cutoffParam = p;
@@ -59,7 +59,7 @@ TEST_F(FilterTest, LowPassAttenuatesHighFreq) {
 }
 
 TEST_F(FilterTest, ModulationScalesCorrectly) {
-    auto* cutoffParam = dynamic_cast<juce::AudioParameterFloat*>(filter.getParameters()[1]);
+    auto* cutoffParam = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&filter, "cutoff"));
 
     // Set base cutoff to 440Hz
     cutoffParam->setValueNotifyingHost(cutoffParam->getNormalisableRange().convertTo0to1(440.0f));
@@ -92,7 +92,7 @@ TEST_F(FilterTest, MultiParamModulation) {
 }
 
 TEST_F(FilterTest, FilterTypeParameterExists) {
-    auto* typeParam = dynamic_cast<juce::AudioParameterChoice*>(filter.getParameters()[4]);
+    auto* typeParam = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(&filter, "filterType"));
     ASSERT_NE(typeParam, nullptr);
     EXPECT_EQ(typeParam->choices.size(), 7);
 }
@@ -100,7 +100,7 @@ TEST_F(FilterTest, FilterTypeParameterExists) {
 TEST_F(FilterTest, AllFilterTypesProcessWithoutCrash) {
     for (int type = 0; type < 7; ++type) {
         filter.prepareToPlay(44100.0, 512);
-        auto* typeParam = dynamic_cast<juce::AudioParameterChoice*>(filter.getParameters()[4]);
+        auto* typeParam = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(&filter, "filterType"));
         ASSERT_NE(typeParam, nullptr);
 
         float normalized = (type == 0) ? 0.0f : static_cast<float>(type) / 6.0f;
@@ -118,12 +118,12 @@ TEST_F(FilterTest, AllFilterTypesProcessWithoutCrash) {
 
 TEST_F(FilterTest, HPFAttenuatesLowFreq) {
     // Set to HPF24 (index 2)
-    auto* typeParam = dynamic_cast<juce::AudioParameterChoice*>(filter.getParameters()[4]);
+    auto* typeParam = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(&filter, "filterType"));
     ASSERT_NE(typeParam, nullptr);
     typeParam->setValueNotifyingHost(2.0f / 6.0f);
 
     // Set cutoff high
-    auto* cutoffParam = dynamic_cast<juce::AudioParameterFloat*>(filter.getParameters()[1]);
+    auto* cutoffParam = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&filter, "cutoff"));
     ASSERT_NE(cutoffParam, nullptr);
     cutoffParam->setValueNotifyingHost(0.9f);
 
@@ -141,7 +141,7 @@ TEST_F(FilterTest, HPFAttenuatesLowFreq) {
 
 TEST_F(FilterTest, NotchProcessesWithoutCrash) {
     // Set to Notch (index 6)
-    auto* typeParam = dynamic_cast<juce::AudioParameterChoice*>(filter.getParameters()[4]);
+    auto* typeParam = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(&filter, "filterType"));
     ASSERT_NE(typeParam, nullptr);
     typeParam->setValueNotifyingHost(1.0f);
 
@@ -149,7 +149,7 @@ TEST_F(FilterTest, NotchProcessesWithoutCrash) {
 }
 
 TEST_F(FilterTest, PolyMode_IndependentFiltering) {
-    auto* polyP = dynamic_cast<juce::AudioParameterBool*>(filter.getParameters()[5]);
+    auto* polyP = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(&filter, "poly"));
     ASSERT_NE(polyP, nullptr);
     *polyP = true;
 
@@ -172,7 +172,7 @@ TEST_F(FilterTest, PolyMode_IndependentFiltering) {
 }
 
 TEST_F(FilterTest, PolyMode_NoBleed) {
-    auto* polyP = dynamic_cast<juce::AudioParameterBool*>(filter.getParameters()[5]);
+    auto* polyP = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(&filter, "poly"));
     *polyP = true;
     filter.prepareToPlay(44100.0, 512);
 

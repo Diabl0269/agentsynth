@@ -1,5 +1,6 @@
 #include "../Source/AI/AIStateMapper.h"
 #include "../Source/Modules/ModuleBase.h"
+#include "../Source/ShortcutManager.h"
 #include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/PreferencesSettingsTab.h"
 #include <algorithm>
@@ -620,4 +621,161 @@ TEST_F(PreferencesSettingsTabTest, LoadDualIOPerModuleOverridesParsesWithoutATab
     ASSERT_EQ(overrides.count("Filter"), 1u);
     EXPECT_FALSE(overrides.at("Filter"));
     EXPECT_EQ(overrides.count("Delay"), 0u);
+}
+
+// ---- Round 3 follow-up: live search filter -----------------------------------------------------
+
+namespace {
+juce::ToggleButton* findToggleByText(PreferencesSettingsTab& tab, const juce::String& text) {
+    for (auto* child : tab.getChildren())
+        if (auto* tb = dynamic_cast<juce::ToggleButton*>(child))
+            if (tb->getButtonText().containsIgnoreCase(text))
+                return tb;
+    return nullptr;
+}
+} // namespace
+
+// An untouched filter must reproduce the exact unfiltered layout — the empty-query fast path
+// groupMatches()/resized() rely on, and also the state every existing bounds-sensitive test above
+// (e.g. DualIOGroupIsOneLineWithADividerBelow) assumes.
+TEST_F(PreferencesSettingsTabTest, EmptySearchFilterShowsEveryRow) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 700);
+    EXPECT_TRUE(tab.getSearchFilterForTest().isEmpty());
+
+    for (const juce::String& label : {"Double-click port to disconnect", "Show Alignment Guides",
+                                      "Split Left/Right jacks on new modules", "Label every key"}) {
+        auto* toggle = findToggleByText(tab, label);
+        ASSERT_NE(toggle, nullptr) << label;
+        EXPECT_TRUE(toggle->isVisible()) << label << " should be visible with no filter applied";
+    }
+}
+
+TEST_F(PreferencesSettingsTabTest, SearchFilterHidesNonMatchingRowsByLabelText) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 700);
+
+    tab.setSearchFilterForTest("alignment");
+    EXPECT_TRUE(findToggleByText(tab, "Show Alignment Guides")->isVisible());
+    EXPECT_FALSE(findToggleByText(tab, "Double-click port to disconnect")->isVisible());
+    EXPECT_FALSE(findToggleByText(tab, "Label every key")->isVisible());
+}
+
+// A query that only appears in a TOOLTIP (not the visible label) must still surface the row — the
+// spec is "label/tooltip text", not "label text alone".
+TEST_F(PreferencesSettingsTabTest, SearchFilterMatchesByTooltipText) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 700);
+
+    auto* alignmentToggle = findToggleByText(tab, "Show Alignment Guides");
+    ASSERT_NE(alignmentToggle, nullptr);
+    ASSERT_TRUE(alignmentToggle->getTooltip().containsIgnoreCase("dragging"))
+        << "test premise: 'dragging' only appears in this row's tooltip, not its label";
+
+    tab.setSearchFilterForTest("dragging");
+    EXPECT_TRUE(alignmentToggle->isVisible());
+    EXPECT_FALSE(findToggleByText(tab, "Label every key")->isVisible());
+}
+
+// The two loop-locator toggles are one filterable group (no divider between them — see their
+// declaration comments): a query matching either keeps both visible together.
+TEST_F(PreferencesSettingsTabTest, SearchFilterKeepsAGroupedPairTogether) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 700);
+
+    tab.setSearchFilterForTest("locator");
+    EXPECT_TRUE(findToggleByText(tab, "Timeline: P (loop selection)")->isVisible());
+    EXPECT_TRUE(findToggleByText(tab, "double-click inside the locators")->isVisible());
+    EXPECT_FALSE(findToggleByText(tab, "Label every key")->isVisible());
+}
+
+TEST_F(PreferencesSettingsTabTest, ClearingSearchFilterRestoresEveryRow) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 700);
+
+    tab.setSearchFilterForTest("alignment");
+    ASSERT_FALSE(findToggleByText(tab, "Label every key")->isVisible());
+
+    tab.setSearchFilterForTest("");
+    EXPECT_TRUE(findToggleByText(tab, "Label every key")->isVisible());
+    EXPECT_TRUE(findToggleByText(tab, "Show Alignment Guides")->isVisible());
+}
+
+// Esc clears the field — driven by invoking the real onEscapeKey callback (see
+// TimelinePanelTests.cpp's identical "call onEscapeKey() directly" idiom), not a synthetic key
+// event, which a headless run cannot dispatch.
+TEST_F(PreferencesSettingsTabTest, EscapeClearsTheSearchFilter) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 700);
+
+    tab.setSearchFilterForTest("alignment");
+    ASSERT_EQ(tab.getSearchFilterForTest(), "alignment");
+    ASSERT_FALSE(findToggleByText(tab, "Label every key")->isVisible());
+
+    tab.triggerSearchEscapeForTest();
+    EXPECT_TRUE(tab.getSearchFilterForTest().isEmpty());
+    EXPECT_TRUE(findToggleByText(tab, "Label every key")->isVisible());
+}
+
+// Dividers must collapse sensibly: when only ONE group matches, there is nothing left for a
+// hairline to separate, so none should be drawn at all.
+TEST_F(PreferencesSettingsTabTest, NoDividersLeftOverWhenOnlyOneGroupMatches) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 700);
+    ASSERT_GT(tab.getDividerBoundsForTest().size(), 0u) << "test premise: the unfiltered tab has dividers";
+
+    tab.setSearchFilterForTest("label every key");
+    EXPECT_TRUE(tab.getDividerBoundsForTest().empty()) << "a single matching group has no neighbour to separate from";
+}
+
+// A query matching two NON-adjacent groups — "double-click" is in both group 2's toggle text
+// ("Double-click port to disconnect") and group 5's second toggle text ("Timeline: double-click
+// inside the locators spans them"), with groups 3 and 4 (neither mentioning it) filtered out in
+// between — must draw exactly ONE divider between the two survivors: not zero (the filtered-out
+// groups must not swallow it) and not two (an orphan hairline on each side of the gap).
+TEST_F(PreferencesSettingsTabTest, ExactlyOneDividerBetweenTwoSurvivingNonAdjacentGroups) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 700);
+
+    tab.setSearchFilterForTest("double-click");
+    EXPECT_TRUE(findToggleByText(tab, "Double-click port to disconnect")->isVisible());
+    EXPECT_TRUE(findToggleByText(tab, "double-click inside the locators")->isVisible());
+    EXPECT_FALSE(findToggleByText(tab, "Show Alignment Guides")->isVisible());
+    EXPECT_FALSE(findToggleByText(tab, "Split Left/Right")->isVisible());
+    EXPECT_EQ(tab.getDividerBoundsForTest().size(), 1u);
+}
+
+// ---- Round 3 follow-up: "Scroll up zooms in" -> "Scroll up to zoom in" wording -----------------
+
+TEST_F(PreferencesSettingsTabTest, ZoomScrollToggleUsesTheRewordedLabelAndExplainsBothStatesInTooltip) {
+    PreferencesSettingsTab tab(appProperties);
+    auto* toggle = findToggleByText(tab, "Scroll up to zoom in");
+    ASSERT_NE(toggle, nullptr) << "label must be reworded from the ambiguous 'Scroll up zooms in'";
+    EXPECT_TRUE(toggle->getTooltip().containsIgnoreCase("when off"))
+        << "tooltip must spell out the OFF state explicitly rather than leaving it as 'not this'";
+    EXPECT_TRUE(toggle->getTooltip().containsIgnoreCase("natural scrolling"));
+
+    // Persisted key is unchanged by the wording change.
+    tab.setZoomScrollUpZoomsInEnabled(false);
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("zoomScrollUpZoomsIn"), "0");
+}
+
+// ---- Round 3 follow-up: OS-specific modifier names (item 4) ------------------------------------
+
+// The tooltip and hint must name the modifier through platformCommandKeyName() rather than a
+// hardcoded "Cmd" literal — this asserts the DERIVED value appears, so the test still passes (and
+// still means something) on a non-Mac build where that helper returns "Ctrl".
+TEST_F(PreferencesSettingsTabTest, ZoomScrollStringsUseThePlatformModifierNameNotAHardcodedOne) {
+    PreferencesSettingsTab tab(appProperties);
+    auto* toggle = findToggleByText(tab, "Scroll up to zoom in");
+    ASSERT_NE(toggle, nullptr);
+    EXPECT_TRUE(toggle->getTooltip().contains(platformCommandKeyName()));
+
+    juce::Label* hint = nullptr;
+    for (auto* child : tab.getChildren())
+        if (auto* l = dynamic_cast<juce::Label*>(child))
+            if (l->getText().contains("wheel-zoom"))
+                hint = l;
+    ASSERT_NE(hint, nullptr) << "the zoom-scroll hint label must still exist";
+    EXPECT_TRUE(hint->getText().contains(platformCommandKeyName()));
 }

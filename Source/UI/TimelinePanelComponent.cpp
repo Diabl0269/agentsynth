@@ -29,6 +29,10 @@ constexpr int kSnapComboWidth = 90;
 // Wide enough for the word "Snap" (it used to read "Q" and be 30 px) — see the member's comment in
 // TimelinePanelComponent.h for why the label is the verb and not the key.
 constexpr int kSnapToggleButtonWidth = 46;
+
+// A marker's stem where it crosses the CLIPS, well under the ruler flag's own alpha: it has to
+// locate the marker against the arrangement without competing with the clips for attention.
+constexpr float kMarkerLaneStemAlpha = 0.40f;
 constexpr int kFollowPlayheadButtonWidth = 30;
 constexpr const char* kTimelineSnapPropertyKey = "timelineSnap";
 constexpr const char* kTimelineSnapEnabledPropertyKey = "timelineSnapEnabled";
@@ -562,6 +566,10 @@ void TimelinePanelComponent::openPianoRoll(synth::ClipId id) {
     clipLaneArea_.setVisible(false);
     pianoRoll_.setVisible(true);
     pianoRoll_.grabKeyboardFocus();
+    // The lanes region is carved DIFFERENTLY once the roll is open — it reserves a toolbar row above
+    // the ruler (see resized()) — and isOpen() is what that carve-up branches on, so the layout has
+    // to be re-run now rather than waiting for the next resize.
+    resized();
     // The ruler now labels the ROLL's beats (offset by its keys gutter, plus the scale-assist
     // panel's width while THAT is open too — see PianoRollComponent::leftGutterWidth), so the bar
     // numbers above show the edited clip's real timeline position instead of wherever the lanes
@@ -577,6 +585,7 @@ void TimelinePanelComponent::closePianoRoll() {
     pianoRoll_.setVisible(false);
     clipLaneArea_.setVisible(true);
     clipLaneArea_.grabKeyboardFocus();
+    resized(); // the toolbar row goes away and the ruler moves back to the top — same reason as above
     ruler_.setMappingOverride(nullptr, 0); // back to the shared lanes mapping
     playhead_.repaint();                   // the overlay owns its whole rect again
 }
@@ -1159,8 +1168,12 @@ void TimelinePanelComponent::timelineChanged(const synth::TimelineDoc&) {
     syncTrackHeaders();
     clipLaneArea_.refreshFromDoc();
     // The ruler's marker flags come straight off the doc, so a mutation is the ONLY thing that can
-    // move them — this is the repaint that replaces polling them (see TimelineRulerComponent).
+    // move them — this is the repaint that replaces polling them (see TimelineRulerComponent). The
+    // lanes rect goes with it, because this component paints each marker's stem down through the
+    // clips (see paint()); bounded to that rect rather than the whole panel.
     ruler_.repaint();
+    if (!gridLanesBounds_.isEmpty())
+        repaint(gridLanesBounds_);
     // If the roll is open on a clip this mutation just removed, refreshFromDoc() closes it
     // itself and fires onCloseRequested -> closePianoRoll() (wired in the constructor), which is
     // what swaps clipLaneArea_ back into view.
@@ -1541,7 +1554,7 @@ void TimelinePanelComponent::resized() {
     // MainComponent::resized()).
     int transportBarHeight = 34;
     int trackHeaderWidth = 190;
-    int rulerHeight = 24;
+    int rulerHeight = 30; // keep in step with Theme::Metrics::timelineRulerHeight
     int automationStripHeight = 72;
     if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
         const auto& m = lf->getTheme().metrics;
@@ -1564,6 +1577,17 @@ void TimelinePanelComponent::resized() {
     layoutTrackHeaders();
 
     auto lanes = lanesBounds_;
+    // While the piano roll is OPEN its chip toolbar is the top row of the lanes region — ABOVE the
+    // ruler, so the roll's chrome sits over the whole unit instead of being sandwiched between the
+    // ruler and the note canvas. The roll's rect then spans toolbar + ruler + canvas, and the roll
+    // leaves the ruler's band blank for this sibling to draw in (PianoRollComponent::
+    // setRulerBandHeight). While the roll is closed nothing here changes: the ruler is the top row and
+    // the roll gets gridLanesBounds_ like the clip lanes do.
+    const bool rollOpen = pianoRoll_.isOpen();
+    const int rollTop = lanes.getY();
+    // Open, the ruler drops below the roll's toolbar row; closed, it is the top row as it always was.
+    if (rollOpen)
+        lanes.removeFromTop(synth::ui::PianoRollComponent::kToolbarHeight);
     ruler_.setBounds(lanes.removeFromTop(rulerHeight));
     gridLanesBounds_ = lanes;
 
@@ -1578,10 +1602,25 @@ void TimelinePanelComponent::resized() {
     // The clip-lane area fills EXACTLY the rect the grid below is painted into (paint()'s
     // gridLanesBounds_ loop, unchanged) — so clips line up with the bar/beat grid pixel-for-pixel.
     clipLaneArea_.setBounds(gridLanesBounds_);
-    // The piano roll occupies the SAME rect, unconditionally (whichever of the two is
-    // invisible just doesn't paint) — this is also what keeps its beatToX(beat) mapping identical
-    // to the clip lanes' and the playhead's (see PianoRollComponent's class comment).
-    pianoRoll_.setBounds(gridLanesBounds_);
+    // The piano roll covers the clip lanes' rect PLUS its own toolbar row and the ruler band between
+    // them (see above) — so its canvas is pixel-aligned with the clip lanes and the playhead exactly
+    // as before, because canvasTop() accounts for the two rows above it. Closed, the extra rows are
+    // zero-height and this is literally gridLanesBounds_.
+    // The band height is pushed UNCONDITIONALLY, even while the roll is closed and its rect is only
+    // the clip-lane rect. That looks redundant but is load-bearing: openPianoRoll() calls openClip()
+    // — which frames the clip against canvasTop() — BEFORE this re-layout runs, so a band pushed in
+    // only on the open path would frame the very first clip against the wrong canvas height. A closed
+    // roll is invisible, so a canvasTop() describing the open geometry costs nothing meanwhile.
+    pianoRoll_.setRulerBandHeight(rulerHeight);
+    // The rect, by contrast, IS two-mode: closed, the roll is exactly the clip-lane rect (the two are
+    // interchangeable there, and leaving an invisible component sitting over the ruler is the kind of
+    // thing that reads as a bug); open, it also covers its toolbar row and the ruler band.
+    pianoRoll_.setBounds(rollOpen ? gridLanesBounds_.withTop(rollTop) : gridLanesBounds_);
+    // The ruler is a SIBLING drawn inside the band the roll reserves for it, and the roll was added to
+    // this panel after the ruler — so without this the roll would paint over it. Re-asserted here
+    // rather than once at open time because a re-layout is the only moment the overlap can appear.
+    if (rollOpen)
+        ruler_.toFront(false);
 
     // The playhead spans the WHOLE lanes region, ruler included, so the line reads as one stroke
     // from the ruler down through the tracks. Its local x == 0 is lanesBounds_.getX(), which is
@@ -1595,7 +1634,10 @@ void TimelinePanelComponent::resized() {
     // (LocalPlayheadClient), and the ruler strip is skipped too because it then labels bars
     // through the ROLL's mapping (setMappingOverride), where the overlay's shared-mapping x would
     // be a lie. While the roll is closed the region is ignored and the overlay owns its whole rect.
-    playhead_.setLocalPlayheadRegion(ruler_.getBounds().getUnion(gridLanesBounds_) -
+    // The roll's OWN rect, not gridLanesBounds_, so the toolbar row it added above the ruler is in
+    // the skipped region too — otherwise the overlay would draw its line straight across the chips.
+    // Closed, pianoRoll_.getBounds() IS gridLanesBounds_, so this is unchanged there.
+    playhead_.setLocalPlayheadRegion(ruler_.getBounds().getUnion(pianoRoll_.getBounds()) -
                                      playhead_.getBounds().getPosition());
 
     // Strip header row (tool buttons, lane/record-mode pickers, close) above the curve
@@ -1769,6 +1811,41 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
                     g.drawVerticalLine(xOrigin + (int)std::llround(subX), (float)top, (float)bottom);
                 }
             }
+        }
+    }
+
+    // ---- Column divider: the track-header column | lanes seam ----
+    //
+    // Drawn HERE, by the component that owns the seam, rather than by whatever happens to sit on
+    // either side of it. The header column butts straight up against the lanes region — and, when
+    // the piano roll is open, against the roll's own right-hand utility sidebar (the scale panel) —
+    // so without this the track list and that sidebar read as one undifferentiated block. Any
+    // future right-side sidebar inherits the divider for free, because it is a property of the
+    // panel's layout and not of the sidebar.
+    //
+    // Spans the panel below the transport strip only: the transport bar is one continuous row of
+    // chrome across the full width, and cutting it in half would imply a column boundary that its
+    // own controls do not respect.
+    if (!trackHeaderBounds_.isEmpty()) {
+        const int x = trackHeaderBounds_.getRight() - 1;
+        g.setColour(border);
+        g.drawVerticalLine(x, (float)trackHeaderBounds_.getY(), (float)getHeight());
+    }
+
+    // ---- Marker stems through the lanes ----
+    //
+    // The ruler's flag says WHAT a marker is; this says WHERE, against the clips. A static painted
+    // line at low alpha, repainted only when the doc changes (timelineChanged -> repaint of the
+    // lanes rect) — no timer, no per-frame work, so the §3 animation rules are untouched.
+    if (doc_ != nullptr && !gridLanesBounds_.isEmpty() && viewState_.pixelsPerBeat > 0.0) {
+        const double widthPx = (double)gridLanesBounds_.getWidth();
+        for (const auto& marker : doc_->getMarkers()) {
+            const double x = viewState_.beatToX(marker.beat);
+            if (x < 0.0 || x > widthPx)
+                continue;
+            g.setColour(juce::Colour(marker.colourArgb).withAlpha(kMarkerLaneStemAlpha));
+            g.fillRect((float)(gridLanesBounds_.getX() + (int)std::llround(x)), (float)gridLanesBounds_.getY(),
+                       synth::ui::kMarkerStemWidth, (float)gridLanesBounds_.getHeight());
         }
     }
 }

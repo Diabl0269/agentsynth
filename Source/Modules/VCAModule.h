@@ -32,12 +32,13 @@ public:
         // 24 in / 24 out: Audio L on 0-7, gain CV on 8-15, Audio R on 16-23. Declaring the outputs
         // above every CV input index also makes JUCE hand this node private copies of shared CV
         // buffers, so the end-of-block clear can only ever zero its own copy.
-        : ModuleBase("VCA", kNumChannels, kNumChannels) {
+        // StereoAudio::Declared: 24 outputs, so the Auto shape test cannot see the stereo pair — the
+        // right leg is the kRightBase block, and it ships SPLIT.
+        : ModuleBase("VCA", kNumChannels, kNumChannels, StereoAudio::Declared) {
         addParameter(gainParam = new juce::AudioParameterFloat("gain", "Gain", 0.0f, 1.0f, 0.5f));
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
-        // Defaults to dual: this module gates in stereo now. Collapsed, its jack layout is exactly
-        // what it was before #219 — Audio, CV.
-        addDualIOParameter(/*defaultDual=*/true);
+        // Dual I/O comes from the ctor's StereoAudio::Declared above (defaults to split: this module
+        // gates in stereo). Collapsed, its jack layout is exactly what it was before #219 — Audio, CV.
         addMuteParameter();
         enableVisualBuffer(true);
     }

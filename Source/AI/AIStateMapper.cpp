@@ -698,7 +698,7 @@ juce::StringArray AIStateMapper::moduleFactoryTypeNames() {
 }
 
 const juce::StringArray& AIStateMapper::dualIOCapableModuleTypes() {
-    // Probed from the factory rather than hand-listed: a module that gains addDualIOParameter() has
+    // Probed from the factory rather than hand-listed: a module that gains the Dual I/O toggle has
     // to show up in the Preferences per-module popup without anyone remembering to add it there.
     // One instance per factory key, built once — cheap enough for a lazily-initialised static
     // (every module here is default-constructible with no device, no file and no plugin scan), and

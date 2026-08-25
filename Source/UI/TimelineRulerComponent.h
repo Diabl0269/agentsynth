@@ -71,25 +71,43 @@ constexpr double kMinBeatLabelSpacingPx = 48.0; // "80.2" needs this much room b
 // clickable rect and the painted rect are the same rect (see markerFlagWidthFor), and a
 // font-measured width would make a hit-test assertion mean something different on every platform —
 // the same reason the bar-label stride above is computed from a constant.
-constexpr float kMarkerFlagHeight = 9.0f;
+constexpr float kMarkerFlagHeight = 13.0f;
 // The band the flags live in: the flag plus the 1 px hairline the strip draws along its bottom
 // edge, which the band sits clear of.
 constexpr float kMarkerBandHeight = kMarkerFlagHeight + 1.0f;
 
 /** The height the bar/beat NUMBERS are centred in: everything above the marker band. Pure, and the
  *  ONE place the split lives — paint() centres its labels in it and buildMarkerFlags() starts the
- *  band where it ends, so a number and a flag can never be handed overlapping rows. Degrades to the
- *  full height on a strip too short to carve a band out of (nothing to protect there anyway). */
+ *  band where it ends, so a number and a flag can never be handed overlapping rows.
+ *
+ *  The band is carved only while at least `kMinNumbersRowHeight` is left for the numbers; below that
+ *  the whole strip stays the numbers row (there is nothing left worth protecting, and a flag taller
+ *  than its own strip would be worse than an overlapping one). */
+constexpr float kMinNumbersRowHeight = 8.0f;
+
 inline float rulerLabelRowHeight(int componentHeight) noexcept {
     const float full = (float)juce::jmax(0, componentHeight);
-    return full > kMarkerBandHeight * 2.0f ? full - kMarkerBandHeight : full;
+    return full - kMarkerBandHeight >= kMinNumbersRowHeight ? full - kMarkerBandHeight : full;
 }
-constexpr float kMarkerStemWidth = 1.0f;
-constexpr float kMarkerFlagPadX = 3.0f;
-constexpr float kMarkerCharWidthPx = 5.5f; // nominal advance for the 9 pt label font
-constexpr float kMarkerMinFlagWidth = 9.0f;
-constexpr float kMarkerMaxFlagWidth = 140.0f;
-constexpr float kMarkerFlagFontHeight = 9.0f;
+// 2 px, not a hairline: this is the line that actually locates a marker on screen, and at 1 px in
+// the marker's own colour it disappeared against the bar lines it crosses.
+constexpr float kMarkerStemWidth = 2.0f;
+constexpr float kMarkerFlagPadX = 4.0f;
+constexpr float kMarkerCharWidthPx = 6.0f; // nominal advance for the 11 pt label font
+constexpr float kMarkerMinFlagWidth = 12.0f;
+constexpr float kMarkerMaxFlagWidth = 160.0f;
+// Matches the bar-number font: a marker label is a name the user typed and has to be as readable as
+// the ruler's own numbers, not a footnote.
+constexpr float kMarkerFlagFontHeight = 11.0f;
+
+/** The label colour for a flag filled with `flagColour` — black or white, whichever the fill's own
+ *  luminance leaves readable. Deliberately MAXIMUM contrast rather than
+ *  `PianoRollComponent::labelColourFor`'s `contrasting(0.7f)`: a marker colour is arbitrary user
+ *  data and the label sits at 11 pt inside a 13 px tab, so anything less than black-or-white loses
+ *  legibility on the mid-tones. Pure and static so a test can assert both branches directly. */
+inline juce::Colour markerLabelColourFor(juce::Colour flagColour) noexcept {
+    return flagColour.getPerceivedBrightness() > 0.5f ? juce::Colours::black : juce::Colours::white;
+}
 
 /** The flag width for a label of `textLength` characters — clamped so an empty label still has a
  *  grabbable tab and a pathological one cannot swallow the strip. Pure and font-independent. */

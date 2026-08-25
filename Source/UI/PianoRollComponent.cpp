@@ -150,6 +150,7 @@ PianoRollComponent::~PianoRollComponent() {
     // component went away, so the noteOff has to be emitted here (see onAuditionNote's contract).
     // Before the animation teardown, because the callback is the thing with a deadline.
     stopAudition();
+    keysColumnPressing_ = false; // no repaint from a dying component; the note-off above is the point
     // The AnimationDriver's callbacks capture 'this' indirectly (see setScalePanelVisible); an
     // animation still running when this object goes away would call back into a destroyed
     // component, exactly the hazard ModuleLibraryComponent's own destructor guards against.
@@ -169,6 +170,7 @@ void PianoRollComponent::openClip(synth::ClipId id) {
     cmdToggleNote_ = {};
     // A note auditioned in the OLD clip has no mouse-up coming — this IS the end of that gesture.
     stopAudition();
+    endKeysColumnPress();
     autoScrollTimer_.stopTimer(); // a drag from the PREVIOUS clip cannot still be scrolling this one
     selection_.clear();
     // The line has to be re-announced against the new framing before it is drawn again.
@@ -195,7 +197,7 @@ void PianoRollComponent::openClip(synth::ClipId id) {
     }
     clipId_ = id;
 
-    const int visibleRows = std::max(1, (getHeight() - kHeaderHeight) / (int)pixelsPerSemitone_);
+    const int visibleRows = std::max(1, (getHeight() - canvasTop()) / (int)pixelsPerSemitone_);
     const int median = medianPitchOf(clip->notes);
     firstVisiblePitch_ = juce::jlimit(0, 127, median + visibleRows / 2);
     // A fresh, freshly-computed landing for the clip just opened — never a continuation of
@@ -228,6 +230,7 @@ void PianoRollComponent::closeRoll() {
     // was still in flight, so the owner dropped it and the note hung until bypass (audition notes are
     // deliberately exempt from every positional flush — see TimelineMidiSourceModule).
     stopAudition();
+    endKeysColumnPress();
     clipId_ = {};
     selection_.clear();
     dragMode_ = DragMode::None;
@@ -336,28 +339,28 @@ int PianoRollComponent::rowShiftedPitch(int originPitch, long long rowDelta) con
 
 int PianoRollComponent::yForPitch(int pitch) const noexcept {
     if (visiblePitches_.empty())
-        return kHeaderHeight;
-    // topRowPosition_ IS the (fractional) row index whose top edge sits at y == kHeaderHeight (see
+        return canvasTop();
+    // topRowPosition_ IS the (fractional) row index whose top edge sits at y == canvasTop() (see
     // the class comment) — the exact same formula the old int-only firstRow used, with firstRow
     // simply replaced by the continuous anchor. An integral topRowPosition_ reproduces today's
     // pixel-for-pixel result (llround(N * ps) == llround((double)N * ps) for integer N).
     const double pitchRow = (double)nearestVisibleRowIndex(pitch);
-    return kHeaderHeight + (int)std::llround((topRowPosition_ - pitchRow) * pixelsPerSemitone_);
+    return canvasTop() + (int)std::llround((topRowPosition_ - pitchRow) * pixelsPerSemitone_);
 }
 
 int PianoRollComponent::pitchForY(int y) const noexcept {
     if (visiblePitches_.empty())
         return firstVisiblePitch_;
-    // Inverts yForPitch's formula: solving y == kHeaderHeight + (topRowPosition_ - row) *
+    // Inverts yForPitch's formula: solving y == canvasTop() + (topRowPosition_ - row) *
     // pixelsPerSemitone_ for the INTEGER row whose drawn rect (see yForPitch) contains `y` gives
-    // row == ceil(topRowPosition_ - (y - kHeaderHeight) / pixelsPerSemitone_) — ceil, not floor,
+    // row == ceil(topRowPosition_ - (y - canvasTop()) / pixelsPerSemitone_) — ceil, not floor,
     // because each row's rect starts AT its own y and extends towards increasing y (decreasing row
     // index — pitch decreases as y increases). This pins identical to the old
-    // "firstRow - floor((y-kHeaderHeight)/ps)" when topRowPosition_ is itself an integer N:
+    // "firstRow - floor((y-canvasTop())/ps)" when topRowPosition_ is itself an integer N:
     // ceil(N - x) == N - floor(x) for integer N and any real x. kRowEpsilon guards the case where
     // floating-point noise from the divide pushes a should-be-exact row boundary a hair past the
     // integer it should ceil down to.
-    const double rowsBelowTop = (double)(y - kHeaderHeight) / pixelsPerSemitone_;
+    const double rowsBelowTop = (double)(y - canvasTop()) / pixelsPerSemitone_;
     const long long total = (long long)visiblePitches_.size();
     const long long targetRow =
         std::clamp((long long)std::ceil(topRowPosition_ - rowsBelowTop - kRowEpsilon), 0LL, total - 1);
@@ -397,7 +400,7 @@ double PianoRollComponent::minTopRowPosition() const noexcept {
     // loop bounds; here kept exact, since a fractional row of headroom is exactly what should let
     // the lowest row land a fraction short of the bottom edge rather than snapping early).
     const double gridRows =
-        pixelsPerSemitone_ > 0.0 ? (double)std::max(0, getHeight() - kHeaderHeight) / pixelsPerSemitone_ : 0.0;
+        pixelsPerSemitone_ > 0.0 ? (double)std::max(0, getHeight() - canvasTop()) / pixelsPerSemitone_ : 0.0;
     return std::max(0.0, maxTopRowPosition() - std::max(0.0, totalRows - gridRows));
 }
 
@@ -745,7 +748,7 @@ juce::String PianoRollComponent::keyLabelFor(int pitch, KeyLabelMode mode, int r
 
 juce::Rectangle<int> PianoRollComponent::gridRegion() const noexcept {
     const int gutter = leftGutterWidth();
-    return {gutter, kHeaderHeight, std::max(0, getWidth() - gutter), std::max(0, getHeight() - kHeaderHeight)};
+    return {gutter, canvasTop(), std::max(0, getWidth() - gutter), std::max(0, getHeight() - canvasTop())};
 }
 
 juce::Rectangle<int> PianoRollComponent::computeNoteRect(double absStartBeat, double absLengthBeats, int pitch) const {
@@ -959,7 +962,7 @@ void PianoRollComponent::paintGrid(juce::Graphics& g) {
     const int width = getWidth();
     const int height = getHeight();
     const int rowHeight = std::max(1, (int)pixelsPerSemitone_);
-    const int visibleRows = std::max(0, (height - kHeaderHeight) / rowHeight) + 2;
+    const int visibleRows = std::max(0, (height - canvasTop()) / rowHeight) + 2;
     const long long totalRows = (long long)visiblePitches_.size();
     if (totalRows > 0) {
         const long long firstRow = (long long)nearestVisibleRowIndex(firstVisiblePitch_);
@@ -988,7 +991,7 @@ void PianoRollComponent::paintGrid(juce::Graphics& g) {
 
     // Dim the part of the grid outside [clipStart, clipEnd) — notes can only exist inside the
     // clip, so anything outside it is never editable.
-    const float top = (float)kHeaderHeight;
+    const float top = (float)canvasTop();
     const float bottom = (float)height;
     const float startX = (float)beatToX(clip->startBeat);
     const float endX = (float)beatToX(clip->startBeat + clip->lengthBeats);
@@ -1083,16 +1086,21 @@ void PianoRollComponent::paintPlayhead(juce::Graphics& g) {
 
 void PianoRollComponent::paintKeysColumn(juce::Graphics& g) {
     using namespace synth::theme;
-    juce::Colour whiteKey, blackKey, sep;
+    juce::Colour whiteKey, blackKey, sep, pressed;
     if (auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel())) {
         const auto& c = lf->getTheme().colors;
         whiteKey = c.pianoKeyWhite;
         blackKey = c.pianoKeyBlack;
         sep = c.border;
+        // The SAME token every other "this control is switched on" state in the timeline uses (the
+        // edit-tool strip, the follow-playhead button, the roll's own Snap chip), so a held key reads
+        // as lit rather than as a differently-coloured key.
+        pressed = c.toolActive;
     } else {
         whiteKey = juce::Colours::whitesmoke;
         blackKey = juce::Colours::black;
         sep = juce::Colours::grey;
+        pressed = juce::Colours::cyan;
     }
 
     // White fills the FULL column width first; every black-key row then overlays a narrower rect
@@ -1131,10 +1139,19 @@ void PianoRollComponent::paintKeysColumn(juce::Graphics& g) {
         const int y = yForPitch(pitch);
         const juce::Rectangle<int> rowRect(keysColumnBounds_.getX(), y, keysColumnBounds_.getWidth(), rowHeight);
         const bool isBlack = isBlackKeyPitchClass(pitchClass);
-        const juce::Colour keyFill = isBlack ? blackKey : whiteKey;
+        // A key held down by the pointer (see beginKeysColumnPress) paints in the lit token instead of
+        // its own fill — over the key's OWN rect, so a black key lights up only across its narrower
+        // flush-left area and the white showing through beside it stays white. keyFill is reassigned
+        // too, not just the drawn colour, so labelColourFor still contrasts against what is actually
+        // underneath the text.
+        const bool keyHeld = keysColumnPressing_ && pitch == keysColumnPitch_;
+        const juce::Colour keyFill = keyHeld ? pressed : (isBlack ? blackKey : whiteKey);
         if (isBlack) {
-            g.setColour(blackKey);
+            g.setColour(keyFill);
             g.fillRect(rowRect.getX(), rowRect.getY(), blackWidth, rowRect.getHeight());
+        } else if (keyHeld) {
+            g.setColour(keyFill);
+            g.fillRect(rowRect);
         }
 
         // A real keyboard's only FULL-width key separators are between the two white-key pairs
@@ -1203,9 +1220,9 @@ void PianoRollComponent::paintHeader(juce::Graphics& g) {
     }
 
     g.setColour(bg);
-    g.fillRect(0, 0, getWidth(), kHeaderHeight);
+    g.fillRect(0, 0, getWidth(), kToolbarHeight);
     g.setColour(border);
-    g.drawHorizontalLine(kHeaderHeight - 1, 0.0f, (float)getWidth());
+    g.drawHorizontalLine(kToolbarHeight - 1, 0.0f, (float)getWidth());
 
     // Every drawn header control gets the SAME chip treatment a real juce::TextButton gets from
     // AppLookAndFeel::drawButtonBackground (resting = a raised surface, hover = .brighter(0.12f),
@@ -1540,8 +1557,22 @@ void PianoRollComponent::setPlayheadBeat(double absoluteBeat) {
 
 //==============================================================================
 void PianoRollComponent::resized() {
+    // THE one carve-up. Vertically the roll is three bands, top to bottom:
+    //
+    //   1. the CHIP TOOLBAR      (kToolbarHeight)   — this component's own chrome
+    //   2. the RULER band        (rulerBandHeight_) — left blank for the panel's ruler, a SIBLING
+    //                                                 drawn on top of it (see setRulerBandHeight)
+    //   3. the NOTE CANVAS       (the remainder)    — keys column gutter + grid
+    //
+    // Band 2 is why the toolbar ends up ABOVE the ruler instead of sandwiched between the ruler and
+    // the notes: the roll's rect spans the whole unit and simply does not paint that strip.
+    // rulerBandHeight_ is 0 by default, which collapses this to the original toolbar-then-canvas
+    // layout for a bare roll. Adding another context toolbar later is one more removeFromTop HERE and
+    // a second constant — no y-coordinate anywhere else in the file changes, because everything below
+    // reads canvasTop().
     auto bounds = getLocalBounds();
-    auto header = bounds.removeFromTop(kHeaderHeight);
+    auto header = bounds.removeFromTop(kToolbarHeight);
+    bounds.removeFromTop(rulerBandHeight_);
     backButtonBounds_ = header.removeFromLeft(60).reduced(3, 2);
     header.removeFromLeft(4);
     // Six chips. The GAPS carry meaning: 4 px separates groups, 2 px separates members of one group,
@@ -1557,8 +1588,8 @@ void PianoRollComponent::resized() {
     header.removeFromLeft(2);
     scaleFilterButtonBounds_ = header.removeFromLeft(24).reduced(2, 2);
 
-    // The panel sits WEST of the keys column, below the header row (its own controls, not this
-    // header strip's buttons, are how the user works it) — carved BEFORE the keys column, at its
+    // The panel sits WEST of the keys column, below the toolbar and ruler rows (its own controls, not
+    // the toolbar's chips, are how the user works it) — carved BEFORE the keys column, at its
     // CURRENT animated width (see leftGutterWidth()), so leftGutterWidth() and this layout can
     // never disagree about where the grid starts, at any point in the slide.
     const int scaleWidth = leftGutterWidth() - kKeysColumnWidth;
@@ -1757,6 +1788,7 @@ void PianoRollComponent::setActiveTool(EditTool tool) {
     // The cancelled gesture's preview note goes with it — this is a drag that will never see a
     // mouseUp, which is exactly the no-stuck-note case stopAudition exists for.
     stopAudition();
+    endKeysColumnPress();
 
     applyToolCursor();
     repaint();
@@ -1957,7 +1989,7 @@ void PianoRollComponent::updateSplitPreview(juce::Point<int> pos) {
     double beat = 0.0;
     bool has = false;
 
-    if (activeTool_ == EditTool::Split && doc_ != nullptr && clipId_.isValid() && pos.y >= kHeaderHeight &&
+    if (activeTool_ == EditTool::Split && doc_ != nullptr && clipId_.isValid() && pos.y >= canvasTop() &&
         pos.x >= leftGutterWidth()) {
         if (auto hit = hitTestNote(pos)) {
             if (const auto* hovered = doc_->getNote(hit->id)) {
@@ -2030,7 +2062,7 @@ void PianoRollComponent::updateHoverCursor(juce::Point<int> pos) {
         return; // the other five tools act on a click — their cursor never changes on hover
 
     bool onEdge = false;
-    if (doc_ != nullptr && clipId_.isValid() && pos.y >= kHeaderHeight && pos.x >= leftGutterWidth()) {
+    if (doc_ != nullptr && clipId_.isValid() && pos.y >= canvasTop() && pos.x >= leftGutterWidth()) {
         if (auto hit = hitTestNote(pos))
             onEdge = hit->onRightEdge;
     }
@@ -2047,12 +2079,86 @@ void PianoRollComponent::lookAndFeelChanged() {
     applyToolCursor();
 }
 
+void PianoRollComponent::setRulerBandHeight(int heightPx) {
+    const int clamped = std::max(0, heightPx);
+    if (clamped == rulerBandHeight_)
+        return; // no-op: the owner re-runs its layout constantly, and canvasTop() moving is expensive
+    rulerBandHeight_ = clamped;
+    resized(); // canvasTop() moved, so the keys column and the grid rect both have to be re-carved
+    repaint();
+}
+
+//==============================================================================
+// ---- Keys-column audition (the virtual keyboard down the left gutter) ----
+
+juce::Rectangle<int> PianoRollComponent::keyRowRect(int pitch) const noexcept {
+    if (pitch < 0 || pitch > 127 || keysColumnBounds_.isEmpty())
+        return {};
+    const int rowHeight = std::max(1, (int)pixelsPerSemitone_);
+    return {keysColumnBounds_.getX(), yForPitch(pitch), keysColumnBounds_.getWidth(), rowHeight};
+}
+
+bool PianoRollComponent::isKeysColumnPoint(juce::Point<int> pos) const noexcept {
+    // keysColumnBounds_ already excludes the scale panel (it is carved AFTER it in resized()) and
+    // starts at canvasTop(), so it excludes the toolbar row and the ruler band too — one rect test
+    // covers every "not actually a key" case.
+    return !keysColumnBounds_.isEmpty() && keysColumnBounds_.contains(pos);
+}
+
+void PianoRollComponent::beginKeysColumnPress(juce::Point<int> pos) {
+    if (!isKeysColumnPoint(pos))
+        return;
+    const int pitch = juce::jlimit(0, 127, pitchForY(pos.y));
+    keysColumnPressing_ = true;
+    const int previous = keysColumnPitch_;
+    keysColumnPitch_ = pitch;
+    // Straight through the SAME audition seam a note click uses — the owner cannot tell the two
+    // apart, and does not need to: both are "the user asked to hear this pitch on this track".
+    startAudition(pitch, kKeysColumnVelocity);
+    if (previous != pitch && previous >= 0)
+        repaint(keyRowRect(previous));
+    repaint(keyRowRect(pitch));
+}
+
+void PianoRollComponent::updateKeysColumnPress(juce::Point<int> pos) {
+    if (!keysColumnPressing_)
+        return;
+    // Clamped to the column's own y range rather than abandoned when the pointer strays sideways: a
+    // finger sliding down a keyboard routinely drifts off the keys horizontally, and dropping the
+    // gesture there would leave the note held with no way to release it.
+    const int clampedY = juce::jlimit(keysColumnBounds_.getY(), keysColumnBounds_.getBottom() - 1, pos.y);
+    const int pitch = juce::jlimit(0, 127, pitchForY(clampedY));
+    if (pitch == keysColumnPitch_)
+        return; // the gate: sliding inside one key costs no MIDI and no repaint
+    const int previous = keysColumnPitch_;
+    keysColumnPitch_ = pitch;
+    retriggerAudition(pitch);
+    if (previous >= 0)
+        repaint(keyRowRect(previous));
+    repaint(keyRowRect(pitch));
+}
+
+void PianoRollComponent::endKeysColumnPress() {
+    if (!keysColumnPressing_)
+        return;
+    const int previous = keysColumnPitch_;
+    keysColumnPressing_ = false;
+    keysColumnPitch_ = -1;
+    // stopAudition() is NOT called here: mouseUp already calls it unconditionally, and so does every
+    // cancel path (openClip/closeRoll/visibilityChanged/the destructor/a tool switch). Releasing it
+    // twice would be harmless but this way there is exactly one owner of the note-off.
+    if (previous >= 0)
+        repaint(keyRowRect(previous));
+}
+
 void PianoRollComponent::visibilityChanged() {
     // Going away mid-gesture means no mouseUp is coming (the panel swapped the clip lanes back in,
     // the timeline panel collapsed, the window closed) — the one path a stuck note would otherwise
     // come from. Becoming visible is a no-op: nothing can be sounding yet.
-    if (!isVisible())
+    if (!isVisible()) {
         stopAudition();
+        endKeysColumnPress();
+    }
 }
 
 //==============================================================================
@@ -2757,10 +2863,17 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
         toggleScaleFilter();
         return;
     }
-    if (pos.y < kHeaderHeight)
+    if (pos.y < canvasTop())
         return; // rest of the header strip: inert
-    if (pos.x < leftGutterWidth())
-        return; // keys column (and scale panel, while open): no virtual-keyboard preview in v1
+    if (pos.x < leftGutterWidth()) {
+        // KEYS COLUMN = a virtual keyboard. Pressing a key auditions that pitch through the SAME
+        // onAuditionNote path a note click uses, so it reaches the same destination modules the
+        // track plays through, with the same no-stuck-note guarantees. The scale panel (also left of
+        // the gutter while open) is a real child component and never reaches this branch — but
+        // isKeysColumnPoint checks the column's own rect anyway rather than trusting that.
+        beginKeysColumnPress(pos);
+        return;
+    }
 
     // Everything below this line is the SELECT tool's gesture table. The other five tools act on
     // the click alone and start no drag at all (see setActiveTool), so they never reach it — no
@@ -2852,6 +2965,13 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
 }
 
 void PianoRollComponent::mouseDrag(const juce::MouseEvent& e) {
+    // A keys-column press is its own gesture: it starts no drag mode, so it has to be handled before
+    // the note-gesture machinery below (which would read dragMode_ == None and return anyway).
+    if (keysColumnPressing_) {
+        updateKeysColumnPress(e.getPosition());
+        return;
+    }
+
     if (pendingEmptyClick_) {
         // The press mouseDown could not classify has now moved: it was a marquee, not a deselect.
         // Plain drag REPLACES the selection (the modifier variants armed themselves additively at
@@ -3089,6 +3209,7 @@ void PianoRollComponent::mouseUp(const juce::MouseEvent&) {
     // Same "unconditional, before any branch returns" reasoning, and for a sharper reason: EVERY
     // early return below is a path a note-on must not survive. A no-op when nothing is sounding.
     stopAudition();
+    endKeysColumnPress(); // releases the virtual key's pressed paint; the note-off came from above
 
     if (dragMode_ == DragMode::Marquee) {
         endMarquee();
@@ -3228,7 +3349,7 @@ void PianoRollComponent::mouseDoubleClick(const juce::MouseEvent& e) {
     if (activeTool_ != EditTool::Select)
         return;
     const auto pos = e.getPosition();
-    if (pos.y < kHeaderHeight || pos.x < leftGutterWidth())
+    if (pos.y < canvasTop() || pos.x < leftGutterWidth())
         return;
 
     // JUCE dispatches this AFTER the second mouseDown/mouseUp pair, so whatever those did (select a
@@ -3370,10 +3491,10 @@ void PianoRollComponent::zoomVerticalAroundY(double factor, double anchorY) {
     // sits at anchorY. Unlike before this change, nothing here rounds the result back to a whole
     // row: the anchored row's y stays pinned across the zoom to floating-point precision instead of
     // "within one row".
-    const double rowsAbove = (anchorY - (double)kHeaderHeight) / pixelsPerSemitone_;
+    const double rowsAbove = (anchorY - (double)canvasTop()) / pixelsPerSemitone_;
     const double anchorRow = topRowPosition_ - rowsAbove;
     setPixelsPerSemitone(pixelsPerSemitone_ * factor);
-    const double newRowsAbove = (anchorY - (double)kHeaderHeight) / pixelsPerSemitone_;
+    const double newRowsAbove = (anchorY - (double)canvasTop()) / pixelsPerSemitone_;
     setTopRowPosition(anchorRow + newRowsAbove);
     repaint();
 }

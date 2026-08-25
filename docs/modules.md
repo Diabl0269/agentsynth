@@ -2,17 +2,49 @@
 
 Detailed specifications for Agent Synth's primary synthesis modules.
 
-> **Which modules are stereo-capable is a question with one answer.** A module declares that it can
-> split its audio jacks by calling `ModuleBase::addDualIOParameter()` in its constructor, and
-> `AIStateMapper::dualIOCapableModuleTypes()` is the single authoritative list — probed from the
-> module factory (one throwaway instance per type, asked `hasDualIOParameter()`), cached, and read by
-> both consumers of the question: the Preferences per-module defaults popup
+> **Dual I/O is INHERITED, not registered.** A module does not opt into the stereo-jack toggle;
+> `ModuleBase`'s constructor decides from its channel shape and adds the `dualIO` parameter itself.
+> The rule (`ModuleBase::hasStereoOutputPairShape`) is **≥ 2 inputs and exactly 2 outputs** — audio
+> on raw ch0/ch1 with any further inputs being CV, i.e. the FX shape. A module of that shape also
+> inherits the collapsing output jack (`ModuleBase::hasCollapsibleOutputPair` drives the default
+> `getOutputPortLabel` / `getVisibleOutputPortCount` / `mapOutputChannel`), so a new stereo FX needs
+> **no Dual I/O code at all** — pinned by
+> `StereoDeclaration.ANewModuleWithTheStereoShapeInheritsTheWholeToggle`. The *input* side is
+> deliberately not inferred: whether ch0/ch1 are an input pair is not knowable from the shape (Voice
+> Mixer's ch0-7 are voice inputs; the Ring Modulator's ch0/ch1 are Carrier and Modulator), so an
+> input pair stays an explicit `mapStereoPairInput` declaration.
+>
+> Two exceptions, both stated in the constructor call and both swept by
+> `StereoDeclaration.EveryFactoryModuleFollowsTheShapeRuleOrADocumentedException`:
+>
+> | `ModuleBase::StereoAudio` | Modules | Why |
+> |---|---|---|
+> | `Auto` (default) | every FX, Voice Mixer, Ring Modulator | shape says stereo; toggle ships **collapsed** |
+> | `Declared` | Oscillator, Wavetable, Filter, VCA, Sampler | a second leg the shape cannot see (own `kRightBase` block, or a ch0/ch1 pair alongside more outputs); ships **split** |
+> | `None` | Comparator, Rec Tap | shape matches by accident. Comparator's ch0/ch1 are Signal + Threshold CV in and Gate + inverted Gate out — no audio output at all. Rec Tap is a hidden recording tap whose two channels are the take's capture pair, wired by the record flow and never patched. |
+>
+> This replaced a per-module `addDualIOParameter()` call, which is a thing you can forget: the Ring
+> Modulator shipped a stereo output pair without one for a whole release — no header toggle, no
+> Preferences row, no global "Split Left/Right jacks" coverage, and nothing red in the build. It now
+> gets all of it by inheritance, and `StereoDeclaration.RingModulatorGetsTheTogglePurelyByInheritance`
+> is what keeps that true.
+>
+> `AIStateMapper::dualIOCapableModuleTypes()` remains the single authoritative *list* — probed from
+> the module factory (one throwaway instance per type, asked `hasDualIOParameter()`), cached, and read
+> by both consumers of the question: the Preferences per-module defaults popup
 > (`PreferencesSettingsTab::getDualIOModuleTypes()`) and the default a newly created module gets
-> (`GraphEditor::applyDefaultDualIOForNewModule`). Never re-list those types by hand — the Ring
-> Modulator sat outside a hand-written copy of the list for a whole release: it had a stereo output
-> pair, but no Preferences row, no global "Split Left/Right jacks" coverage, and no failing test.
+> (`GraphEditor::applyDefaultDualIOForNewModule`). Never re-list those types by hand.
 > The toggle's semantics (what "off" means per layout, what happens to existing cables in each
 > direction) live in [`fx_modules.md § Stereo I/O`](fx_modules.md#stereo-io-dual-io-toggle).
+>
+> One consequence worth knowing: `dualIO` is now parameter **index 1** on every module that has it
+> (straight after `bypassed`), where it used to sit late in each module's own list. Saved patches are
+> unaffected — every parameter is keyed by `paramID` in both `ModuleBase::getStateInformation` and
+> `AIStateMapper`, and the id and per-module default are unchanged
+> (`StereoDeclaration.APatchSavedBeforeTheMoveLoadsWithTheSameLayout` loads a pre-change patch and
+> checks the layout). But it is a live demonstration of why
+> [the guide](Module_Development_Guide.md) says to look parameters up by ID: a `getParameters()[n]`
+> site that shifted does not fail loudly, it silently resolves to the wrong parameter.
 
 > **Level parameters.** There is no universal per-module gain. Modules that output audio expose a level control: Oscillator, LFO, Noise and Voice Mixer have their own `level`; VCA has `gain`; Filter and the FX modules use the shared opt-in output-level stage documented in [`fx_modules.md § Output Level`](fx_modules.md#output-level-shared-stage). Modules that output **pitch/gate CV or MIDI** (Sequencer, Poly Sequencer, ADSR, Poly MIDI, MIDI Keyboard, External MIDI) deliberately have none — scaling a V/oct pitch CV transposes it, and scaling a gate drops it below the `> 0.5f` trigger threshold. Attenuverter has none because it already is a gain stage.
 

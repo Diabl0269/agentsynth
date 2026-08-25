@@ -70,7 +70,7 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 // visible.
 //
 // The scroll POSITION itself is `topRowPosition_` — a CONTINUOUS (fractional) index into
-// visiblePitches_: the row whose top edge sits at y == kHeaderHeight. `firstVisiblePitch_` is
+// visiblePitches_: the row whose top edge sits at y == canvasTop(). `firstVisiblePitch_` is
 // DERIVED from it (visiblePitches_[floor(topRowPosition_)], reclamped to stay a member of
 // visiblePitches_), kept in sync at the one seam every writer goes through (setTopRowPosition), so
 // it is always a member of visiblePitches_. This split is what makes vertical scrolling sub-pixel
@@ -104,7 +104,12 @@ public:
     // The scale-assist panel's fixed width when open, carved from the LEFT of the keys column —
     // see leftGutterWidth() and the class comment.
     static constexpr int kScalePanelWidth = 170;
-    static constexpr int kHeaderHeight = 20;
+    // The CHIP TOOLBAR row's height — the roll's own chrome strip, at the very top of its rect and
+    // ABOVE the ruler band (see setRulerBandHeight and the layout note in resized()). Named as its own
+    // constant, and the single place the row's height is decided, because more context toolbars are
+    // expected here: adding one is a second `removeFromTop` in the one carve-up, not a hunt through
+    // every y-coordinate in the file.
+    static constexpr int kToolbarHeight = 20;
     // Default vertical zoom, and its clamps (Cmd+Shift+wheel scales it — see mouseWheelMove).
     static constexpr double kPixelsPerSemitone = 10.0;
     static constexpr double kMinPixelsPerSemitone = 4.0;
@@ -118,11 +123,37 @@ public:
     static constexpr int kResizeZonePx = 5;
     // Local playhead line: same width/strip margin the panel overlay uses, so the line reads as one
     // stroke across the ruler and the roll.
+    /** Where the NOTE CANVAS starts, in this component's y — the toolbar row plus the ruler band
+     *  below it (`kToolbarHeight + rulerBandHeight_`). THE single seam every grid/row/hit-test
+     *  coordinate goes through, which is what let the ruler move in between the chrome and the canvas
+     *  without a y-offset having to be found and fixed at twenty separate call sites.
+     *
+     *  With no ruler band (the default — a bare roll in a test, or any embedding that doesn't hand one
+     *  over) this is exactly kToolbarHeight, i.e. the pre-toolbar-row geometry, unchanged. */
+    int canvasTop() const noexcept { return kToolbarHeight + rulerBandHeight_; }
+
+    /** Height of the band the roll RESERVES, immediately under its toolbar row, for the panel's ruler
+     *  strip — which is a SIBLING component drawn on top of it, not something the roll paints. The
+     *  owner pushes the ruler's real height here (TimelinePanelComponent::resized) so the note canvas
+     *  starts below it; 0, the default, means "no ruler above me" and collapses the layout back to
+     *  toolbar-then-canvas.
+     *
+     *  This is what puts the chip toolbar ABOVE the ruler rather than sandwiched between the ruler and
+     *  the notes: the roll's rect spans the whole unit, its top row is chrome, and the ruler occupies
+     *  a band the roll deliberately leaves blank. Clamped at >= 0; re-lays-out and repaints on a
+     *  change, and is a no-op when the value is unchanged. */
+    void setRulerBandHeight(int heightPx);
+    int getRulerBandHeight() const noexcept { return rulerBandHeight_; }
+
     static constexpr float kPlayheadLineWidth = TimelinePlayheadOverlay::kLineWidth;
     static constexpr int kPlayheadStripHalfWidth = TimelinePlayheadOverlay::kStripHalfWidth;
     // Momentary "Q was pressed" highlight, in ms. Driven by a ONE-SHOT juce::Timer (it stops itself
     // in the first callback) and repainting only the button's own rect — bounded, never a loop.
     static constexpr int kQuantiseFlashMs = 120;
+    // Velocity a keys-column press auditions at. Fixed, and deliberately not 127: a virtual keyboard
+    // has no velocity sensor, and previewing everything at full blast misrepresents how the patch
+    // actually sounds under the notes the user is writing. ~0.8 of full scale.
+    static constexpr int kKeysColumnVelocity = 102;
 
     // getTooltipFor() builds the Q / Q♪ / Scale header buttons' tooltip text dynamically — see
     // quantiseTooltipText()/quantisePitchTooltipText()/scaleTooltipText() below — rather than a
@@ -679,6 +710,9 @@ public:
     // told the owner to play, which is exactly what the no-stuck-note tests assert on.
     int getAuditionPitchForTest() const noexcept { return auditionActive_ ? auditionPitch_ : -1; }
     bool isAuditionActiveForTest() const noexcept { return auditionActive_; }
+    // The KEY the pointer is holding down in the keys column, or -1 — what paintKeysColumn draws
+    // pressed, and the state a keys-column drag walks.
+    int getPressedKeyForTest() const noexcept { return keysColumnPressing_ ? keysColumnPitch_ : -1; }
 
     // ---- Resize test hooks ----
     // The in-flight resize's LENGTH DELTA, shared by every note in the gesture (see resizeNotes_),
@@ -1101,6 +1135,21 @@ private:
     // panel AND the roll's own scale context. Called from openClip, after clipId_ is set.
     void restoreScaleMemoryForOpenClip();
 
+    // ---- Keys-column audition ----
+    // True when `pos` is inside the KEYS column proper (not the scale panel to its left, not the
+    // toolbar/ruler rows above) — i.e. somewhere a virtual key could be pressed.
+    bool isKeysColumnPoint(juce::Point<int> pos) const noexcept;
+    // Presses the key under `pos`: auditions its pitch at kKeysColumnVelocity and paints it pressed.
+    // A no-op when the point isn't a key.
+    void beginKeysColumnPress(juce::Point<int> pos);
+    // Drag across keys: retriggers on a pitch CHANGE only (so sliding inside one key costs nothing),
+    // repainting just the two key rows involved.
+    void updateKeysColumnPress(juce::Point<int> pos);
+    // Releases the held key. Safe to call unconditionally — every gesture-cancel path does.
+    void endKeysColumnPress();
+    // The key row's rect in the keys column, for the gated pressed-state repaints. Empty for -1.
+    juce::Rectangle<int> keyRowRect(int pitch) const noexcept;
+
     void paintKeysColumn(juce::Graphics& g);
     void paintHeader(juce::Graphics& g);
     void paintGrid(juce::Graphics& g);
@@ -1149,7 +1198,7 @@ private:
     NoteSelectionModel selection_;
 
     // The continuous vertical scroll anchor: the FRACTIONAL index into visiblePitches_ of the row
-    // whose top edge sits at y == kHeaderHeight — see the class comment's "Vertical row mapping"
+    // whose top edge sits at y == canvasTop() — see the class comment's "Vertical row mapping"
     // section and setTopRowPosition (the one seam every writer goes through). Replaces the old
     // "truncate to a whole row, carry the remainder" scheme (a separate pitchScrollRemainder_
     // accumulator) with the position itself simply staying fractional — the accumulator is
@@ -1157,7 +1206,7 @@ private:
     // firstVisiblePitch_'s old default (row index == pitch value in the unfiltered/default case).
     double topRowPosition_ = 60.0;
 
-    // firstVisiblePitch_ is the HIGHEST pitch drawn at the grid's top row (y == kHeaderHeight),
+    // firstVisiblePitch_ is the HIGHEST pitch drawn at the grid's top row (y == canvasTop()),
     // clamped to [0, 127] — see yForPitch/pitchForY. Named to match the design doc's "scroll
     // position", even though (unlike TimelineViewState::firstVisibleBeat, the beat at x==0) this
     // one is the TOP of the range rather than conceptually its start, because pitch increases
@@ -1250,10 +1299,19 @@ private:
     // The length the last overrun prompt asked for (0.0 = never prompted) — a test hook, and the one
     // piece of the prompt that outlives the async alert. See promptExtendClipToFitNotes.
     double lastExtendPromptLength_ = 0.0;
+    // See setRulerBandHeight. 0 = no ruler above us, which is the standalone/test geometry.
+    int rulerBandHeight_ = 0;
     // The clip that prompt was raised FOR. Recorded alongside the length purely so a test can pin
     // the capture; the real answer path carries the id in the alert's own callback, not through here
     // (a member would be overwritten by a second prompt before the first was answered).
     synth::ClipId lastExtendPromptClip_;
+
+    // ---- Keys-column audition (a virtual keyboard down the roll's left gutter) ----
+    // The pitch whose key is currently held down there, or -1. Distinct from auditionPitch_: that is
+    // "what is sounding" (a note click sets it too), this is "the KEY the pointer is on", and it is
+    // what paintKeysColumn draws pressed.
+    int keysColumnPitch_ = -1;
+    bool keysColumnPressing_ = false;
 
     // ---- Note audition (see onAuditionNote) ----
     // auditionActive_ is the single source of truth for "we have emitted a noteOn nobody has matched

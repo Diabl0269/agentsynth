@@ -192,7 +192,8 @@ public:
      *  called for an unrelated settings write costs a bool read. */
     void applyNaturalScrollingPreference();
 
-    /** The Preferences "Scroll up zooms in" key. DEFAULT TRUE — "up zooms in" is what both
+    /** The Preferences "Scroll up to zoom in" key (relabelled from "Scroll up zooms in" — round 3
+     *  follow-up; the persisted key name is unchanged). DEFAULT TRUE — "up zooms in" is what both
      *  wheel-zoom surfaces already did before the preference existed, so an install that never opens
      *  Preferences is unaffected. Owned here for the same reason kNaturalScrollingKey is: the tab
      *  writes it, MainComponent is what applies it. */

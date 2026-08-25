@@ -291,12 +291,38 @@ scrolled off the left edge may still have most of its tab on screen.
 the bar numbers are vertically centred, so a marker at beat 4 was painted straight over the ruler's
 own "4". The numbers row and the marker band now **tile** the strip's height instead of overlapping
 it: `rulerLabelRowHeight(componentHeight)` is the height the bar/beat labels are centred in
-(`height - kMarkerBandHeight`, or the full height on a strip too short to carve a band out of), and
-everything below it belongs to markers. That helper is the ONE place the split lives — `paint()`
-centres its labels in it and `buildMarkerFlags()` starts the band where it ends, so a number and a
-flag can never be handed overlapping rows. At the themed 24 px the numbers get `0..14` and a flag
-gets `14..23`. The **stem** is the one thing that deliberately crosses the boundary: it is what
-names the exact beat, and it is 1 px.
+(`height - kMarkerBandHeight`, falling back to the full height once that would leave the numbers less
+than `kMinNumbersRowHeight`), and everything below it belongs to markers. That helper is the ONE
+place the split lives — `paint()` centres its labels in it and `buildMarkerFlags()` starts the band
+where it ends, so a number and a flag can never be handed overlapping rows.
+
+**`Metrics::timelineRulerHeight` is 30, up from 24, to pay for that split.** At 24 the two rows had
+to share a strip sized for one, which squeezed the flag to 9 px with a 9 pt label — that is where
+"the flag is barely visible" came from. At 30 the numbers get 17 px (comfortable for the 11 pt bar
+font) and the band gets 13. The metric has exactly one production consumer
+(`TimelinePanelComponent::resized`, which carries the same literal as its headless fallback).
+
+**Making a flag actually readable.** The label font is `kMarkerFlagFontHeight = 11` — the SAME size
+as the bar numbers, because a marker label is a name the user typed and has to compete with the
+ruler's own text, not whisper under it. The tab is filled at full opacity and outlined with a 1 px
+`darker(0.5f)` edge, so a light flag on a light theme still has a shape instead of bleeding into the
+strip. Label colour comes from `markerLabelColourFor(fill)` — black or white by the fill's own
+`getPerceivedBrightness()`, i.e. **maximum** contrast, deliberately stronger than
+`PianoRollComponent::labelColourFor`'s `contrasting(0.7f)`: a marker colour is arbitrary user data
+and 11 pt inside a 13 px tab has no legibility to spare on the mid-tones.
+
+**The stem, in two places.** `kMarkerStemWidth` is 2 px, not a hairline — at 1 px in the marker's own
+colour it vanished against the bar lines it crosses. In the RULER it runs the full height: full
+opacity across the marker band and `kMarkerStemAlpha` above it, so it reads as belonging to the flag
+without competing with the numbers it passes through. It is the one thing that deliberately crosses
+the row boundary, because it is what names the exact beat.
+
+`TimelinePanelComponent::paint()` then continues each stem **down through the lanes** at
+`kMarkerLaneStemAlpha` (0.40), which is what makes a marker locatable against the clips rather than
+only against the ruler. That is a static painted line on the panel's existing change-driven repaint
+path — `timelineChanged()` repaints the ruler and `gridLanesBounds_` — so there is no timer and no
+per-frame work; the [§3](layout_visuals_animation.md) animation rules are untouched. Off-screen
+markers are culled per marker, not clamped to an edge.
 
 The tab's WIDTH comes from the label's character COUNT (`markerFlagWidthFor(textLength)`, clamped to
 `[kMarkerMinFlagWidth, kMarkerMaxFlagWidth]`), never from measured text — the clickable rect and the
@@ -313,6 +339,29 @@ mechanism. No timer (`docs/layout_visuals_animation.md` §3).
 **Gestures.** Marker flags are hit-tested BEFORE the zone split and before the transport null-check
 (a marker lives on the doc, so it stays editable in a build with no transport wired in). Anything
 outside a flag rect behaves exactly as it did.
+
+**The right button is inert apart from opening the menu** — and that gate is a bug fix, not tidiness.
+The marker context menu appeared for a split second and then dismissed itself, because:
+
+1. `mouseDown` on a right-click showed the menu and returned **before** latching `gestureZone_`,
+   which therefore still held whatever the previous gesture left in it (its initialiser is
+   `Zone::Playhead`);
+2. the ruler had captured the mouse on that press, so JUCE delivered the matching `mouseUp` to it
+   even with the menu modal;
+3. `mouseUp` found no marker drag latched, fell through to the zone branch, and — reading that stale
+   `Zone::Playhead` — ran `postSeekIfChanged()`, which calls `TransportService::locateBeat()` **and**
+   `repaint()` on the very component the menu had been anchored to via `withTargetComponent(this)`.
+
+`TimelineClipLaneArea` never had the problem because its `mouseDown` gates the whole gesture path
+behind `if (!e.mods.isLeftButtonDown()) return;`, so a right-click there latches nothing and its
+`mouseDrag`/`mouseUp` are structurally inert. The ruler now mirrors that: `mouseDown`, `mouseDrag`
+and `mouseUp` all return early on `e.mods.isPopupMenu()`, and `showMarkerContextMenu` uses a plain
+`juce::PopupMenu::Options()` exactly as `showClipContextMenu` does — no `withTargetComponent`, which
+on a full-width 24-to-30 px strip also anchored the menu somewhere unrelated to the flag clicked.
+A side effect worth naming: right-clicking the ruler used to **seek the playhead**, for the same
+reason. It no longer does. Pinned by `TimelineRulerMarkerTest.RightClickOnAFlagLatchesNothingAnd-
+PostsNothing` and `RightClickOffAFlagDoesNotSeekOrLoop` (the harness cannot observe a
+`juce::PopupMenu`'s lifetime, so these pin the gesture-state invariant instead).
 
 | Gesture | Effect |
 |---|---|
@@ -422,7 +471,8 @@ pitch at the TOP row and pitch grows upward — a view moving down therefore DEC
 why that branch negates the result (see `docs/timeline_panel_clips_automation.md` §2); the horizontal axis on both surfaces needs no
 such remapping, since a view moving right IS a larger `firstVisibleBeat`.
 
-**Zoom-scroll direction** (`Settings → Preferences → "Scroll up zooms in"`, default ON, key
+**Zoom-scroll direction** (`Settings → Preferences → "Scroll up to zoom in"` — relabelled from
+"Scroll up zooms in" in a later pass; persisted key unchanged, default ON, key
 `zoomScrollUpZoomsIn`) is a separate preference from Natural scrolling, because zoom-on-wheel cares
 about the FINGER rather than the content: `ScrollPolicy.h`'s `wheelGestureIsUpward()` recovers the
 physical gesture direction by XOR-ing the dominant delta's sign with `isReversed` (the one place
@@ -459,6 +509,20 @@ column. The column is a fixed
 `"+ Track"` strip (22 px) at the top plus a `juce::Viewport` below it, so a project with more
 tracks than fit **scrolls**; rows are never compressed. Both live inside `getTrackHeaderBounds()`,
 so the panel's three regions still tile exactly.
+
+**The column divider.** Because the regions tile, the header column's right edge and the lanes'
+left edge are the same pixel — and with nothing drawn on it the track list ran straight into
+whatever sat to its right. With the piano roll open that neighbour is the roll's own right-hand
+utility sidebar (the scale panel), so the track list and that sidebar read as one undifferentiated
+block, which is what the report was about. `TimelinePanelComponent::paint()` now draws a 1 px
+`Colors::border` line on the seam, from the header column's top to the panel's bottom.
+
+Two decisions in that one line. It is drawn by the **panel**, not by either neighbour: the seam is a
+property of the panel's layout, so every future right-side sidebar inherits the divider instead of
+having to remember to draw its own edge (and two neighbours both drawing one would double it). And
+it starts at `trackHeaderBounds_.getY()`, i.e. **below the transport strip**, because that strip is
+one continuous row of chrome across the full width — cutting it in half would imply a column
+boundary its own controls do not respect.
 
 **Toggle sizing.** The `M`/`S`/`R`/`A` toggles are `kToggleWidth` (24 px, up from 20) with an
 explicit `kToggleGap` (4 px) between adjacent buttons — laid out edge-to-edge with no gap read as

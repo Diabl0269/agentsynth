@@ -666,10 +666,14 @@ TEST(TimelineRulerMarkerTest, FlagsSitInTheirOwnBandBelowTheNumbersRow) {
         EXPECT_LE(flag.bounds.getBottom(), 24.0f);
     }
 
-    // A strip too short to carve a band out of keeps its full height for the numbers rather than
-    // ending up with a negative row.
+    // A strip too short to leave the numbers a usable row keeps its full height for them rather
+    // than ending up with a negative row or a flag taller than the strip.
     EXPECT_FLOAT_EQ(synth::ui::rulerLabelRowHeight(8), 8.0f);
     EXPECT_FLOAT_EQ(synth::ui::rulerLabelRowHeight(0), 0.0f);
+    // ...and the boundary: the band appears as soon as kMinNumbersRowHeight survives it.
+    const int firstBanded = (int)(synth::ui::kMarkerBandHeight + synth::ui::kMinNumbersRowHeight);
+    EXPECT_FLOAT_EQ(synth::ui::rulerLabelRowHeight(firstBanded), (float)firstBanded - synth::ui::kMarkerBandHeight);
+    EXPECT_FLOAT_EQ(synth::ui::rulerLabelRowHeight(firstBanded - 1), (float)(firstBanded - 1));
 
     // Width comes from the label's character COUNT, never from measured text.
     EXPECT_FLOAT_EQ(flags[0].bounds.getWidth(), synth::ui::markerFlagWidthFor(5));
@@ -924,6 +928,102 @@ TEST(TimelineRulerMarkerTest, DoubleClickOnAFlagOpensTheRenameEditor) {
     EXPECT_EQ(f.doc.getMarker(marker)->text, "Verse");
 }
 
+// THE regression behind "the right-click menu flashes and dismisses itself". The menu is opened
+// from mouseDown; the release that follows must not touch the transport or repaint, or it kills the
+// modal window it just opened. The harness cannot observe a juce::PopupMenu's lifetime, so this pins
+// the gesture-state invariant instead: a right-click latches NOTHING and posts NOTHING.
+TEST(TimelineRulerMarkerTest, RightClickOnAFlagLatchesNothingAndPostsNothing) {
+    MarkerRulerFixture f;
+    const auto marker = f.doc.addMarker(2.0, "Intro", 0xff000000);
+    ASSERT_TRUE(f.transport.setLoop(1.0, 9.0, true));
+    f.transport.tick(512);
+    const double posBefore = f.transport.getPositionSnapshot().ppq;
+    const auto revisionBefore = f.doc.getRevision();
+
+    const auto onFlag = flagCentre(*f.ruler, marker);
+    const auto rightClick = makeClickEvent(*f.ruler, onFlag, juce::ModifierKeys::popupMenuClickModifier);
+
+    f.ruler->mouseDown(rightClick);
+    EXPECT_FALSE(f.ruler->getDraggingMarkerForTest().isValid()) << "a right-click must not latch a marker drag";
+
+    // The whole release path: this is what used to run postSeekIfChanged() under a STALE latched
+    // gestureZone_ and dismiss the menu.
+    f.ruler->mouseDrag(
+        makeDragEvent(*f.ruler, {onFlag.x + 40.0f, onFlag.y}, onFlag, juce::ModifierKeys::popupMenuClickModifier));
+    f.ruler->mouseUp(rightClick);
+    f.transport.tick(512);
+
+    EXPECT_EQ(f.ruler->getSeekPostCountForTest(), 0) << "a right-click never scrubs the playhead";
+    EXPECT_DOUBLE_EQ(f.transport.getPositionSnapshot().ppq, posBefore);
+    EXPECT_DOUBLE_EQ(f.transport.getPositionSnapshot().loopStartPpq, 1.0) << "and never moves a locator";
+    EXPECT_DOUBLE_EQ(f.transport.getPositionSnapshot().loopEndPpq, 9.0);
+    EXPECT_TRUE(f.transport.getPositionSnapshot().looping);
+    EXPECT_EQ(f.doc.getRevision(), revisionBefore) << "and mutates nothing";
+    EXPECT_FALSE(f.ruler->getDraggingMarkerForTest().isValid());
+}
+
+// The same gate, off a flag: a right-click anywhere on the strip is inert. It used to seek, because
+// mouseDown latched the playhead zone for ANY button and seeked on press.
+TEST(TimelineRulerMarkerTest, RightClickOffAFlagDoesNotSeekOrLoop) {
+    MarkerRulerFixture f;
+    ASSERT_TRUE(f.transport.setLoop(1.0, 9.0, true));
+    f.transport.tick(512);
+    const double posBefore = f.transport.getPositionSnapshot().ppq;
+
+    for (const float y : {kLoopZoneY, kPlayheadZoneY}) {
+        const auto pos = juce::Point<float>{600.0f, y};
+        const auto rightClick = makeClickEvent(*f.ruler, pos, juce::ModifierKeys::popupMenuClickModifier);
+        f.ruler->mouseDown(rightClick);
+        f.ruler->mouseUp(rightClick);
+    }
+    f.transport.tick(512);
+
+    EXPECT_EQ(f.ruler->getSeekPostCountForTest(), 0);
+    EXPECT_DOUBLE_EQ(f.transport.getPositionSnapshot().ppq, posBefore);
+    EXPECT_DOUBLE_EQ(f.transport.getPositionSnapshot().loopStartPpq, 1.0);
+    EXPECT_DOUBLE_EQ(f.transport.getPositionSnapshot().loopEndPpq, 9.0);
+
+    // ...while the LEFT button still does everything it always did.
+    const auto leftClick = makeClickEvent(*f.ruler, {600.0f, kPlayheadZoneY});
+    f.ruler->mouseDown(leftClick);
+    f.transport.tick(512);
+    EXPECT_EQ(f.ruler->getSeekPostCountForTest(), 1) << "the left-button scrub is untouched";
+    EXPECT_DOUBLE_EQ(f.transport.getPositionSnapshot().ppq, 15.0);
+}
+
+// Marker visuals: the flag has to be big enough to read, and its label has to contrast against
+// whatever colour the user picked.
+TEST(TimelineRulerMarkerTest, FlagsAreLargeEnoughToReadAndLabelsContrastWithTheFill) {
+    // A dark fill takes white text, a light fill takes black — both branches of the pure helper.
+    EXPECT_EQ(synth::ui::markerLabelColourFor(juce::Colour(0xff101010)), juce::Colours::white);
+    EXPECT_EQ(synth::ui::markerLabelColourFor(juce::Colour(0xffF0F0F0)), juce::Colours::black);
+    // The amber a new marker gets is a light mid-tone: black text, which is the case the old
+    // fixed-token version got wrong.
+    EXPECT_EQ(synth::ui::markerLabelColourFor(juce::Colour(0xffE0A33D)), juce::Colours::black);
+
+    // The flag is tall enough for its own 11 pt label, and the stem is not a hairline.
+    EXPECT_GE(synth::ui::kMarkerFlagHeight, synth::ui::kMarkerFlagFontHeight + 1.0f);
+    EXPECT_GE(synth::ui::kMarkerStemWidth, 2.0f);
+
+    // At the themed 30 px strip the numbers row still clears the bar-number font, and the band gets
+    // the rest — the two tile exactly.
+    const float labelRow = synth::ui::rulerLabelRowHeight(30);
+    EXPECT_FLOAT_EQ(labelRow, 30.0f - synth::ui::kMarkerBandHeight);
+    EXPECT_GE(labelRow, 13.0f) << "the bar numbers must still have room to render";
+
+    MarkerRulerFixture f;
+    f.ruler->setSize(800, 30);
+    const auto marker = f.doc.addMarker(2.0, "Chorus", 0xffE0A33D);
+    const auto flags = f.ruler->buildMarkerFlags();
+    ASSERT_EQ(flags.size(), 1u);
+    EXPECT_FLOAT_EQ(flags[0].bounds.getY(), labelRow);
+    EXPECT_FLOAT_EQ(flags[0].bounds.getHeight(), synth::ui::kMarkerFlagHeight);
+    // "Chorus" is 6 characters — the tab is sized from the count, so it is wide enough to hold them.
+    EXPECT_FLOAT_EQ(flags[0].bounds.getWidth(), synth::ui::markerFlagWidthFor(6));
+    EXPECT_GT(flags[0].bounds.getWidth(), 6.0f * synth::ui::kMarkerCharWidthPx);
+    EXPECT_EQ(f.ruler->markerAt(flags[0].bounds.getCentre()), marker) << "and the bigger tab is all clickable";
+}
+
 TEST(TimelineRulerMarkerTest, DoubleClickOffAFlagOpensNothing) {
     MarkerRulerFixture f;
     f.doc.addMarker(2.0, "Intro", 0xff000000);
@@ -1019,6 +1119,70 @@ TEST(TimelineRulerMarkerTest, MarkersWorkWithoutATransportAndSwappingTheDocReset
     ruler.mouseDown(makeClickEvent(ruler, {80.0f, kPlayheadZoneY}));
     EXPECT_FALSE(ruler.getDraggingMarkerForTest().isValid());
     EXPECT_TRUE(ruler.buildMarkerFlags().empty());
+}
+
+// The track-header column and whatever sits to its right (the lanes, the open piano roll, and the
+// roll's own scale sidebar) used to butt together with no separation. The divider is drawn by the
+// panel — the component that owns the seam — so a future right-side sidebar inherits it.
+TEST(TimelinePanelDividerTest, AColumnDividerSeparatesTheHeaderColumnFromTheLanes) {
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 260);
+
+    const auto header = panel.getTrackHeaderBounds();
+    const auto lanes = panel.getLanesBounds();
+    ASSERT_FALSE(header.isEmpty());
+    ASSERT_FALSE(lanes.isEmpty());
+
+    // The seam the divider is painted on: the header column's right edge, which is also the lanes'
+    // left edge (the three regions tile, so there is exactly one boundary here).
+    EXPECT_EQ(header.getRight(), lanes.getX()) << "precondition: the two columns are flush";
+
+    // It spans from the header column's top (below the transport strip) to the panel's bottom — the
+    // transport bar is one continuous row and must not be cut in half.
+    EXPECT_GT(header.getY(), 0) << "the header column starts below the transport strip";
+    EXPECT_EQ(header.getBottom(), panel.getHeight());
+
+    // Painted, not a child component: the panel draws it, so nothing has to be laid out for it and
+    // no sidebar can forget to.
+    juce::Image image(juce::Image::ARGB, panel.getWidth(), panel.getHeight(), true);
+    juce::Graphics g(image);
+    EXPECT_NO_THROW(panel.paintEntireComponent(g, true));
+
+    // The divider column is not left transparent — something was drawn on the seam.
+    const int x = header.getRight() - 1;
+    bool anyPixelPainted = false;
+    for (int y = header.getY(); y < panel.getHeight(); ++y)
+        if (image.getPixelAt(x, y).getAlpha() > 0) {
+            anyPixelPainted = true;
+            break;
+        }
+    EXPECT_TRUE(anyPixelPainted) << "the seam at x=" << x << " must carry a divider";
+}
+
+// A marker's stem is painted down through the clips as well as in the ruler, so a marker is locatable
+// against the arrangement. Static paint, repainted only when the doc changes — no timer.
+TEST(TimelinePanelDividerTest, MarkerStemsPaintThroughTheLanesAndFollowTheDoc) {
+    synth::TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setTimelineDoc(&doc);
+    panel.setSize(1200, 260);
+    panel.getViewState().pixelsPerBeat = 40.0;
+    panel.getViewState().firstVisibleBeat = 0.0;
+    doc.addTrack(synth::TrackKind::Midi, "Track 1");
+
+    juce::Image image(juce::Image::ARGB, panel.getWidth(), panel.getHeight(), true);
+    juce::Graphics g(image);
+    EXPECT_NO_THROW(panel.paintEntireComponent(g, true)) << "no markers: nothing to draw, no crash";
+
+    doc.addMarker(4.0, "Chorus", 0xffE0A33D);
+    EXPECT_NO_THROW(panel.paintEntireComponent(g, true));
+
+    // Off-screen markers are culled rather than clamped to an edge.
+    doc.addMarker(100000.0, "Far away", 0xffE0A33D);
+    EXPECT_NO_THROW(panel.paintEntireComponent(g, true));
+
+    panel.setTimelineDoc(nullptr);
+    EXPECT_NO_THROW(panel.paintEntireComponent(g, true)) << "no doc: the stem pass is skipped";
 }
 
 // Toggling snap OFF must not change which grid lines are DRAWN — it turns MAGNETISM off. The lanes
@@ -2478,10 +2642,20 @@ TEST(TimelinePanelResizeTest, InternalLayoutHoldsAtDoubleHeight) {
     EXPECT_EQ(lanes.getHeight(), lanesAtDefault + 220) << "the extra height all goes to the lanes";
     EXPECT_EQ(panel.getResizeHandle().getWidth(), 1200);
 
-    // The clip lanes still fill the lanes region below the 24 px ruler — the rect the grid is
-    // painted into, so clips stay aligned with it at any height.
-    EXPECT_EQ(panel.getClipLaneArea().getBounds(), lanes.withTrimmedTop(24));
-    EXPECT_EQ(panel.getPianoRoll().getBounds(), lanes.withTrimmedTop(24));
+    // The clip lanes still fill the lanes region below the 30 px ruler — the rect the grid is
+    // painted into, so clips stay aligned with it at any height. (30, up from 24: the strip now
+    // tiles a numbers row and a marker band — see Theme::Metrics::timelineRulerHeight.)
+    EXPECT_EQ(panel.getClipLaneArea().getBounds(), lanes.withTrimmedTop(30));
+    // The ROLL shares the same rect, except for how much of the ruler band it claims: it owns the
+    // vertical run above the ruler when its chip toolbar is showing, so that top edge belongs to
+    // PianoRollComponent's own layout and is asserted in its own tests. What must hold HERE is that
+    // the roll tracks the lanes REGION at any panel height — full width, flush bottom, top inside.
+    const auto roll = panel.getPianoRoll().getBounds();
+    EXPECT_EQ(roll.getX(), lanes.getX());
+    EXPECT_EQ(roll.getWidth(), lanes.getWidth());
+    EXPECT_EQ(roll.getBottom(), lanes.getBottom());
+    EXPECT_GE(roll.getY(), lanes.getY());
+    EXPECT_LE(roll.getY(), lanes.getY() + 30);
     // The header list fills the taller viewport even with no tracks (no gap under the last row).
     ASSERT_NE(panel.getTrackHeaderViewport().getViewedComponent(), nullptr);
     EXPECT_GE(panel.getTrackHeaderViewport().getViewedComponent()->getHeight(),

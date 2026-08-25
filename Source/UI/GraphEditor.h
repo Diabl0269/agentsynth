@@ -395,9 +395,18 @@ public:
         int ghostJack = 0;
         int neighborJack = 0;
         bool isMidi = false;
-        juce::Point<float> p1{}, p2{}; // canvas endpoints for preview paint
+        juce::Point<float> p1{}, p2{}; // head endpoints; mainPreviewLegs is what actually gets drawn
         synth::ui::CableSignal signal = synth::ui::CableSignal::Audio;
         synth::ui::ModuleCategory sourceCategory = synth::ui::ModuleCategory::Utility;
+
+        /** Every frosted segment the preview must draw, so it shows exactly what the drop will wire.
+         *  ONE suggestion is not one drawn cable: connectPorts fans a collapsed jack across a whole
+         *  raw pair, and when the far end fronts those raws as two separate visible jacks (the
+         *  terminal sink does — it has no ModuleBase to group them) that is two cables on screen.
+         *  Resolved from the same PolyLink connectPorts uses and deduped to distinct visible jack
+         *  pairs, because N graph edges through one jack pair are still one cable. */
+        std::vector<InsertLink> mainPreviewLegs;     // ghostJack → neighborJack
+        std::vector<InsertLink> upstreamPreviewLegs; // upstream → ghost (insert only)
 
         // ---- Insert-in-series (audio only; ghostIsSource is always true) ----
         bool isInsert = false;
@@ -409,7 +418,8 @@ public:
         bool operator==(const SmartSuggestion& o) const noexcept {
             return ghostIsSource == o.ghostIsSource && neighborId == o.neighborId && ghostJack == o.ghostJack &&
                    neighborJack == o.neighborJack && isMidi == o.isMidi && isInsert == o.isInsert &&
-                   upstreamId == o.upstreamId && doomedLinks == o.doomedLinks && upstreamCables == o.upstreamCables;
+                   upstreamId == o.upstreamId && doomedLinks == o.doomedLinks && upstreamCables == o.upstreamCables &&
+                   mainPreviewLegs == o.mainPreviewLegs && upstreamPreviewLegs == o.upstreamPreviewLegs;
         }
         bool operator!=(const SmartSuggestion& o) const noexcept { return !(*this == o); }
     };
@@ -445,6 +455,13 @@ public:
     int getSmartSuggestionCount() const noexcept { return (int)smartSuggestions.size(); }
     const std::vector<SmartSuggestion>& getSmartSuggestions() const noexcept { return smartSuggestions; }
     bool nodeHasCables(juce::AudioProcessorGraph::NodeID nodeId) const;
+    /** Audio-jack occupancy, for asserting that a reroute left nothing dangling. */
+    bool isInputJackFreeForTests(juce::AudioProcessorGraph::NodeID nodeId, int jack) const {
+        return isInputJackFree(nodeId, jack, false);
+    }
+    bool isOutputJackFreeForTests(juce::AudioProcessorGraph::NodeID nodeId, int jack) const {
+        return isOutputJackFree(nodeId, jack, false);
+    }
 
     // ---- Onboarding / UI Phase 5 helpers (headless-testable) ----
 

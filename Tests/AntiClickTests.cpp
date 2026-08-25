@@ -79,7 +79,7 @@ TEST_F(AntiClickTest, OscillatorFrequencySmoothing) {
     OscillatorModule osc;
     osc.prepareToPlay(44100.0, 512);
 
-    auto* coarseParam = dynamic_cast<juce::AudioParameterInt*>(osc.getParameters()[3]);
+    auto* coarseParam = dynamic_cast<juce::AudioParameterInt*>(findParameterByID(&osc, "coarse"));
     ASSERT_NE(coarseParam, nullptr);
 
     // Initial coarse

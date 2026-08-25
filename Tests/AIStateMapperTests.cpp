@@ -151,7 +151,7 @@ TEST(AIStateMapperTest, ChoiceParameterStringMapping) {
 
     auto oscNode = graph.getNodes().getUnchecked(0);
     auto* osc = dynamic_cast<juce::AudioProcessor*>(oscNode->getProcessor());
-    auto* waveformParam = dynamic_cast<juce::AudioParameterChoice*>(osc->getParameters().getUnchecked(1));
+    auto* waveformParam = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(osc, "waveform"));
 
     ASSERT_NE(waveformParam, nullptr);
     ASSERT_EQ(waveformParam->getIndex(), 2); // "Saw" is index 2
@@ -167,7 +167,7 @@ TEST(AIStateMapperTest, ChoiceParameterCaseInsensitiveMapping) {
 
     auto oscNode = graph.getNodes().getUnchecked(0);
     auto* osc = dynamic_cast<juce::AudioProcessor*>(oscNode->getProcessor());
-    auto* waveformParam = dynamic_cast<juce::AudioParameterChoice*>(osc->getParameters().getUnchecked(1));
+    auto* waveformParam = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(osc, "waveform"));
 
     ASSERT_NE(waveformParam, nullptr);
     ASSERT_EQ(waveformParam->getIndex(), 2); // "saw" matches "Saw"

@@ -1097,7 +1097,7 @@ TEST(PianoRollInteractionTest, LocalPlayheadUsesTheRollsOwnMapping) {
     // Playing: each moved position repaints a STRIP, never the component.
     f.roll.setPlayheadBeat(6.5);
     EXPECT_EQ(f.roll.requests, 2);
-    EXPECT_EQ(f.roll.lastStrip.getY(), PianoRollComponent::kHeaderHeight) << "confined below the header";
+    EXPECT_EQ(f.roll.lastStrip.getY(), f.roll.canvasTop()) << "confined below the header";
     EXPECT_GE(f.roll.lastStrip.getX(), PianoRollComponent::kKeysColumnWidth) << "and right of the keys gutter";
     EXPECT_LE(f.roll.lastStrip.getWidth(), 20 + 2 * PianoRollComponent::kPlayheadStripHalfWidth + 1);
     EXPECT_LT(f.roll.lastStrip.getWidth(), f.roll.getWidth());
@@ -2868,7 +2868,7 @@ TEST(PianoRollZoomApiTest, ZoomVerticalKeepsTheCentrePitchAndClampsAtBothEnds) {
     ASSERT_DOUBLE_EQ(f.roll.getPixelsPerSemitone(), PianoRollComponent::kPixelsPerSemitone);
 
     // 160 px tall, 20 of them the header -> the grid's centre row sits at y == 20 + 70.
-    const int centreY = PianoRollComponent::kHeaderHeight + (160 - PianoRollComponent::kHeaderHeight) / 2;
+    const int centreY = f.roll.canvasTop() + (160 - f.roll.canvasTop()) / 2;
     const int centrePitch = f.roll.pitchForY(centreY);
 
     f.roll.zoomVertical(2.0);
@@ -2908,7 +2908,7 @@ TEST(PianoRollZoomApiTest, CmdShiftWheelZoomKeepsTheAnchoredYFixedEvenFromAFract
     f.roll.setTopRowPositionForTest(std::floor(f.roll.getTopRowPositionForTest()) + 0.5);
     ASSERT_DOUBLE_EQ(f.roll.getTopRowPositionForTest(), std::floor(f.roll.getTopRowPositionForTest()) + 0.5);
 
-    const int anchorY = PianoRollComponent::kHeaderHeight + 37; // an arbitrary point inside the grid
+    const int anchorY = f.roll.canvasTop() + 37; // an arbitrary point inside the grid
     const int pitchBefore = f.roll.pitchForY(anchorY);
 
     const int mods = juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier;
@@ -3176,7 +3176,7 @@ TEST(PianoRollRowMappingTest, VisibilityOnCollapsesEmptyOutOfScaleRowsButKeepsNo
         << "out-of-scale pitch with no note collapses out of the grid";
 
     // pitchForY must never land on a collapsed row, at any y in the visible component.
-    for (int y = PianoRollComponent::kHeaderHeight; y < f.roll.getHeight(); ++y)
+    for (int y = f.roll.canvasTop(); y < f.roll.getHeight(); ++y)
         EXPECT_NE(f.roll.pitchForY(y), 63);
 }
 
@@ -3223,7 +3223,7 @@ TEST(PianoRollRowMappingTest, FirstVisiblePitchIsAlwaysAMemberOfVisiblePitches) 
 
 // THE regression pin: openClip lands on a whole row, and with topRowPosition_ integral,
 // yForPitch's new formula must produce PIXEL-FOR-PIXEL the same result the old
-// "kHeaderHeight + llround((firstRow - pitchRow) * ps)" int-only math did — reproduced verbatim
+// "canvasTop() + llround((firstRow - pitchRow) * ps)" int-only math did — reproduced verbatim
 // here as the ground truth, rather than re-deriving it from yForPitch itself.
 TEST(PianoRollRowMappingTest, YForPitchPinsIdenticalToTheOldIntegerMathWhenTopRowPositionIsIntegral) {
     PianoRollFixture f;
@@ -3236,7 +3236,7 @@ TEST(PianoRollRowMappingTest, YForPitchPinsIdenticalToTheOldIntegerMathWhenTopRo
     const int firstRow = f.roll.getFirstVisiblePitchForTest(); // row index == pitch value, unfiltered
     const double ps = f.roll.getPixelsPerSemitone();
     for (int pitch = 0; pitch <= 127; ++pitch) {
-        const int expectedY = PianoRollComponent::kHeaderHeight + (int)std::llround((double)(firstRow - pitch) * ps);
+        const int expectedY = f.roll.canvasTop() + (int)std::llround((double)(firstRow - pitch) * ps);
         EXPECT_EQ(f.roll.yForPitch(pitch), expectedY) << "pitch " << pitch;
     }
 }
@@ -5111,7 +5111,7 @@ TEST(PianoRollHeaderButtonTest, AllSixChipsAreDistinctNonOverlappingAndInReading
     for (const auto& [name, rect] : chips) {
         EXPECT_FALSE(rect.isEmpty()) << name;
         EXPECT_GE(rect.getY(), 0) << name;
-        EXPECT_LE(rect.getBottom(), PianoRollComponent::kHeaderHeight) << name << " must stay inside the header strip";
+        EXPECT_LE(rect.getBottom(), PianoRollComponent::kToolbarHeight) << name << " must stay inside the toolbar row";
     }
 
     for (size_t i = 0; i + 1 < chips.size(); ++i) {
@@ -5517,6 +5517,314 @@ TEST(PianoRollCmdMoveTest, CmdOnTheRightEdgeStillResizesRatherThanMoving) {
 
     EXPECT_DOUBLE_EQ(f.doc.getNote(id)->startBeat, 2.0) << "a resize never moves the start";
     EXPECT_GT(f.doc.getNote(id)->lengthBeats, 1.0);
+}
+
+// ============================================================================
+// 27. KEYS-COLUMN AUDITION — the virtual keyboard down the left gutter.
+// ============================================================================
+
+TEST(PianoRollKeysColumnTest, PressingAKeyAuditionsItAndReleasingStopsIt) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+
+    std::vector<AuditionEvent> events;
+    recordAuditionInto(f, events);
+
+    const auto keys = f.roll.getKeysColumnBounds();
+    ASSERT_FALSE(keys.isEmpty());
+    const int pitch = 64;
+    const juce::Point<float> onKey((float)keys.getCentreX(), (float)f.roll.yForPitch(pitch) + 2.0f);
+    ASSERT_EQ(f.roll.pitchForY((int)onKey.y), pitch) << "the synthesized point really is on that key";
+
+    f.roll.mouseDown(leftClick(f.roll, onKey));
+    ASSERT_EQ(events.size(), 1u);
+    EXPECT_EQ(events[0].pitch, pitch);
+    EXPECT_TRUE(events[0].on);
+    EXPECT_NEAR(events[0].velocity01, 102.0f / 127.0f, 1.0e-4f) << "a virtual key has no velocity sensor";
+    EXPECT_EQ(f.roll.getPressedKeyForTest(), pitch) << "and the key paints pressed";
+
+    f.roll.mouseUp(leftClick(f.roll, onKey));
+    ASSERT_EQ(events.size(), 2u);
+    EXPECT_EQ(events[1].pitch, pitch);
+    EXPECT_FALSE(events[1].on);
+    EXPECT_EQ(f.roll.getPressedKeyForTest(), -1);
+}
+
+// Dragging DOWN the keyboard re-articulates on each new key, and costs nothing while the pointer
+// stays inside one — the same state-change gate the note drag's retrigger uses.
+TEST(PianoRollKeysColumnTest, DraggingAcrossKeysRetriggersOncePerKey) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+
+    std::vector<AuditionEvent> events;
+    recordAuditionInto(f, events);
+
+    const auto keys = f.roll.getKeysColumnBounds();
+    const juce::Point<float> anchor((float)keys.getCentreX(), (float)f.roll.yForPitch(64) + 2.0f);
+    f.roll.mouseDown(leftClick(f.roll, anchor));
+    ASSERT_EQ(events.size(), 1u);
+    ASSERT_EQ(events[0].pitch, 64);
+
+    // Still inside the SAME key row: no MIDI at all.
+    f.roll.mouseDrag(leftDrag(f.roll, anchor + juce::Point<float>(0.0f, 1.0f), anchor));
+    EXPECT_EQ(events.size(), 1u) << "sliding inside one key must not retrigger";
+
+    // Down two rows (kPixelsPerSemitone == 10 -> 20 px): off the old pitch, on the new one.
+    const juce::Point<float> lower(anchor.x, anchor.y + 20.0f);
+    f.roll.mouseDrag(leftDrag(f.roll, lower, anchor));
+    ASSERT_EQ(events.size(), 3u);
+    EXPECT_EQ(events[1].pitch, 64);
+    EXPECT_FALSE(events[1].on) << "the old key is released first";
+    EXPECT_EQ(events[2].pitch, 62);
+    EXPECT_TRUE(events[2].on);
+    EXPECT_EQ(f.roll.getPressedKeyForTest(), 62);
+
+    f.roll.mouseUp(leftDrag(f.roll, lower, anchor));
+    ASSERT_EQ(events.size(), 4u);
+    EXPECT_EQ(events[3].pitch, 62);
+    EXPECT_FALSE(events[3].on);
+
+    int held = 0;
+    for (const auto& e : events)
+        held += e.on ? 1 : -1;
+    EXPECT_EQ(held, 0) << "every note-on got exactly one note-off";
+}
+
+// A keys press starts NO document gesture: no drag mode, no selection change, no undo step.
+TEST(PianoRollKeysColumnTest, PressingAKeyEditsNothing) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+    const auto id = f.doc.addNote(clipId, makeNote(1.0, 60, 1.0));
+    f.roll.getSelectionForTest().setSelection({id});
+
+    const auto keys = f.roll.getKeysColumnBounds();
+    const juce::Point<float> onKey((float)keys.getCentreX(), (float)f.roll.yForPitch(72) + 2.0f);
+    f.roll.mouseDown(leftClick(f.roll, onKey));
+    f.roll.mouseDrag(leftDrag(f.roll, onKey + juce::Point<float>(0.0f, 30.0f), onKey));
+    f.roll.mouseUp(leftDrag(f.roll, onKey + juce::Point<float>(0.0f, 30.0f), onKey));
+
+    EXPECT_FALSE(f.roll.isMarqueeActiveForTest());
+    EXPECT_TRUE(f.roll.getSelectionForTest().contains(id)) << "the selection is untouched";
+    EXPECT_DOUBLE_EQ(f.doc.getNote(id)->startBeat, 1.0);
+    EXPECT_FALSE(f.undo.canUndo()) << "a preview is not an edit";
+}
+
+// The toolbar row and the ruler band above the keys column are NOT keys.
+TEST(PianoRollKeysColumnTest, TheToolbarAndRulerRowsAboveTheColumnAreNotKeys) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+    f.roll.setRulerBandHeight(16);
+
+    std::vector<AuditionEvent> events;
+    recordAuditionInto(f, events);
+
+    const int columnX = f.roll.getKeysColumnBounds().getCentreX();
+    // Inside the toolbar row, left of every chip (the chips start at x == 0, so aim below them in the
+    // ruler band instead for the second case).
+    f.roll.mouseDown(leftClick(f.roll, {(float)columnX, (float)(PianoRollComponent::kToolbarHeight + 4)}));
+    f.roll.mouseUp(leftClick(f.roll, {(float)columnX, (float)(PianoRollComponent::kToolbarHeight + 4)}));
+    EXPECT_TRUE(events.empty()) << "the ruler band is the ruler's, not a key";
+
+    // And the first real key row DOES sound, so the guard isn't just swallowing everything.
+    const juce::Point<float> firstKey((float)columnX, (float)f.roll.canvasTop() + 2.0f);
+    f.roll.mouseDown(leftClick(f.roll, firstKey));
+    EXPECT_EQ(events.size(), 1u);
+    f.roll.mouseUp(leftClick(f.roll, firstKey));
+}
+
+TEST(PianoRollKeysColumnTest, EveryCancelPathReleasesAHeldKey) {
+    const auto runCancelCase = [](const std::function<void(PianoRollFixture&)>& cancel) {
+        PianoRollFixture f;
+        const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+        const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+        f.open(clipId);
+        std::vector<AuditionEvent> events;
+        recordAuditionInto(f, events);
+
+        const auto keys = f.roll.getKeysColumnBounds();
+        f.roll.mouseDown(leftClick(f.roll, {(float)keys.getCentreX(), (float)f.roll.yForPitch(60) + 2.0f}));
+        ASSERT_EQ(events.size(), 1u);
+        ASSERT_EQ(f.roll.getPressedKeyForTest(), 60);
+
+        cancel(f);
+        ASSERT_EQ(events.size(), 2u);
+        EXPECT_FALSE(events[1].on);
+        EXPECT_EQ(events[1].pitch, 60);
+        EXPECT_EQ(f.roll.getPressedKeyForTest(), -1) << "and the key stops painting pressed";
+    };
+
+    runCancelCase([](PianoRollFixture& f) { f.roll.closeRoll(); });
+    runCancelCase([](PianoRollFixture& f) { f.roll.setActiveTool(synth::ui::EditTool::Erase); });
+    runCancelCase([](PianoRollFixture& f) {
+        f.roll.setVisible(true);
+        f.roll.setVisible(false);
+    });
+    runCancelCase([](PianoRollFixture& f) {
+        const auto other = f.doc.addClip(f.doc.getTracks().front().id, 8.0, 8.0, "Other");
+        f.roll.openClip(other);
+    });
+}
+
+// ---- Through the real panel wiring, to the host recorder ----
+
+TEST(PianoRollAuditionIntegrationTest, AKeysColumnPressReachesTheHostAndReleasesOnMouseUp) {
+    AuditionIntegrationFixture f;
+    auto& r = f.roll();
+    ASSERT_TRUE(r.isOpen());
+
+    const auto keys = r.getKeysColumnBounds();
+    ASSERT_FALSE(keys.isEmpty());
+    const juce::Point<float> onKey((float)keys.getCentreX(), (float)r.yForPitch(67) + 2.0f);
+    ASSERT_EQ(r.pitchForY((int)onKey.y), 67);
+
+    r.mouseDown(leftClick(r, onKey));
+    ASSERT_EQ(f.host.onCalls().size(), 1u);
+    EXPECT_EQ(f.host.onCalls()[0].track, f.trackId);
+    EXPECT_EQ(f.host.onCalls()[0].pitch, 67);
+    EXPECT_EQ(f.host.onCalls()[0].velocity, 102);
+    EXPECT_TRUE(f.host.offCalls().empty());
+
+    r.mouseUp(leftClick(r, onKey));
+    ASSERT_EQ(f.host.offCalls().size(), 1u);
+    EXPECT_EQ(f.host.offCalls()[0].track, f.trackId);
+    EXPECT_EQ(f.host.offCalls()[0].pitch, 67);
+    EXPECT_EQ(f.host.calls.size(), 2u) << "exactly one on and one off";
+}
+
+TEST(PianoRollAuditionIntegrationTest, ClosingThePanelMidKeyPressStillDeliversTheOff) {
+    AuditionIntegrationFixture f;
+    auto& r = f.roll();
+    const auto keys = r.getKeysColumnBounds();
+    r.mouseDown(leftClick(r, {(float)keys.getCentreX(), (float)r.yForPitch(60) + 2.0f}));
+    ASSERT_EQ(f.host.onCalls().size(), 1u);
+
+    f.panel.closePianoRoll();
+    ASSERT_EQ(f.host.offCalls().size(), 1u) << "a held virtual key must not survive the roll closing";
+    EXPECT_EQ(f.host.offCalls()[0].track, f.trackId);
+    EXPECT_EQ(f.host.calls.size(), 2u);
+}
+
+// ============================================================================
+// 28. TOOLBAR ROW ABOVE THE RULER — the roll's three-band vertical layout.
+// ============================================================================
+
+TEST(PianoRollLayoutTest, ChipsStayInTheToolbarRowAndTheCanvasStartsBelowTheRulerBand) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+
+    // No band by default: the layout collapses to toolbar-then-canvas, i.e. the original geometry.
+    EXPECT_EQ(f.roll.getRulerBandHeight(), 0);
+    EXPECT_EQ(f.roll.canvasTop(), PianoRollComponent::kToolbarHeight);
+
+    constexpr int kBand = 18;
+    f.roll.setRulerBandHeight(kBand);
+    EXPECT_EQ(f.roll.getRulerBandHeight(), kBand);
+    EXPECT_EQ(f.roll.canvasTop(), PianoRollComponent::kToolbarHeight + kBand);
+
+    // The chips did NOT move: they are the top row, above the band.
+    for (const auto& rect :
+         {f.roll.getBackButtonBounds(), f.roll.getSnapButtonBounds(), f.roll.getQuantiseButtonBounds(),
+          f.roll.getQuantisePitchButtonBounds(), f.roll.getScaleButtonBounds(), f.roll.getScaleFilterButtonBounds()}) {
+        EXPECT_LE(rect.getBottom(), PianoRollComponent::kToolbarHeight);
+    }
+
+    // The canvas regions start BELOW the band — no overlap with either row above them.
+    EXPECT_EQ(f.roll.getKeysColumnBounds().getY(), f.roll.canvasTop());
+    EXPECT_EQ(f.roll.getNoteGridBounds().getY(), f.roll.canvasTop());
+    EXPECT_GE(f.roll.getKeysColumnBounds().getY(), PianoRollComponent::kToolbarHeight + kBand);
+
+    // And the row mapping followed: the top row's y is the canvas top, not the toolbar's bottom.
+    EXPECT_EQ(f.roll.yForPitch(f.roll.getFirstVisiblePitchForTest()), f.roll.canvasTop());
+}
+
+TEST(PianoRollLayoutTest, SettingTheSameRulerBandHeightTwiceIsANoOp) {
+    PianoRollFixture f;
+    f.roll.setRulerBandHeight(14);
+    const auto keysBefore = f.roll.getKeysColumnBounds();
+    f.roll.setRulerBandHeight(14);
+    EXPECT_EQ(f.roll.getKeysColumnBounds(), keysBefore);
+    // Negatives are clamped rather than inverting the layout.
+    f.roll.setRulerBandHeight(-5);
+    EXPECT_EQ(f.roll.getRulerBandHeight(), 0);
+}
+
+// A band taller than the component must not produce a negative-height canvas.
+TEST(PianoRollLayoutTest, AnAbsurdlyTallBandDegradesToAnEmptyCanvasRatherThanNegativeBounds) {
+    PianoRollFixture f;
+    f.roll.setSize(900, 40);
+    f.roll.setRulerBandHeight(500);
+    EXPECT_GE(f.roll.getKeysColumnBounds().getHeight(), 0);
+    EXPECT_GE(f.roll.getNoteGridBounds().getHeight(), 0);
+}
+
+// The whole point of the exercise, asserted against the REAL panel: toolbar row, then ruler, then
+// canvas, tiling the lanes region top to bottom with no overlap.
+TEST(PianoRollLayoutTest, ThePanelPutsTheToolbarRowAboveTheRulerWithNoOverlap) {
+    AuditionIntegrationFixture f;
+    auto& r = f.roll();
+    ASSERT_TRUE(r.isOpen());
+
+    const auto rollBounds = r.getBounds();
+    const auto rulerBounds = f.panel.getRuler().getBounds();
+    ASSERT_FALSE(rollBounds.isEmpty());
+    ASSERT_FALSE(rulerBounds.isEmpty());
+
+    // 1. The toolbar row is the TOP of the roll's rect, and the ruler starts exactly where it ends.
+    EXPECT_EQ(rulerBounds.getY(), rollBounds.getY() + PianoRollComponent::kToolbarHeight)
+        << "the ruler sits immediately below the toolbar row, not above it";
+    EXPECT_GT(rulerBounds.getY(), rollBounds.getY()) << "the toolbar is ABOVE the ruler";
+
+    // 2. The roll knows the band's height, so its canvas starts below the ruler.
+    EXPECT_EQ(r.getRulerBandHeight(), rulerBounds.getHeight());
+    const int canvasTopInPanel = rollBounds.getY() + r.canvasTop();
+    EXPECT_EQ(canvasTopInPanel, rulerBounds.getBottom()) << "the note canvas begins where the ruler ends";
+
+    // 3. The three bands tile without overlapping: chips above the ruler, canvas below it.
+    for (const auto& chip : {r.getSnapButtonBounds(), r.getQuantiseButtonBounds(), r.getScaleButtonBounds(),
+                             r.getScaleFilterButtonBounds()}) {
+        const int chipBottomInPanel = rollBounds.getY() + chip.getBottom();
+        EXPECT_LE(chipBottomInPanel, rulerBounds.getY()) << "a chip overlaps the ruler";
+    }
+    EXPECT_GE(rollBounds.getY() + r.getKeysColumnBounds().getY(), rulerBounds.getBottom());
+
+    // Closing collapses it: the ruler returns to the top of the lanes region and the roll drops back
+    // to exactly the clip-lane rect (an invisible component left sitting over the ruler reads as a
+    // bug). The BAND height stays pushed in, deliberately — see the note in the panel's resized():
+    // openPianoRoll frames a clip before the re-layout, so canvasTop() has to be right beforehand.
+    const int rulerTopWhileOpen = rulerBounds.getY();
+    f.panel.closePianoRoll();
+    EXPECT_EQ(f.panel.getRuler().getBounds().getY(), rollBounds.getY())
+        << "closed, the ruler is the TOP row of the lanes region again";
+    EXPECT_LT(f.panel.getRuler().getBounds().getY(), rulerTopWhileOpen) << "i.e. it moved back up";
+    EXPECT_EQ(r.getBounds(), f.panel.getClipLaneArea().getBounds())
+        << "closed, the roll occupies exactly the clip-lane rect again";
+    EXPECT_EQ(r.getRulerBandHeight(), rulerBounds.getHeight()) << "the band stays known while closed";
+}
+
+// The framing-order guarantee the unconditional band push exists for: the very FIRST clip opened must
+// be framed against the real canvas height, not against a canvasTop() that is still missing the ruler
+// band. A clip framed too tall centres its notes wrong and zooms to the wrong fit.
+TEST(PianoRollLayoutTest, TheFirstClipOpenedIsFramedAgainstTheRealCanvasTop) {
+    AuditionIntegrationFixture f; // its ctor calls openPianoRoll for the first time
+    auto& r = f.roll();
+    ASSERT_TRUE(r.isOpen());
+
+    const auto rulerHeight = f.panel.getRuler().getBounds().getHeight();
+    ASSERT_GT(rulerHeight, 0);
+    EXPECT_EQ(r.canvasTop(), PianoRollComponent::kToolbarHeight + rulerHeight)
+        << "canvasTop() already accounted for the ruler band when the clip was framed";
+    // The framed row mapping must land the top row exactly at that canvas top.
+    EXPECT_EQ(r.yForPitch(r.getFirstVisiblePitchForTest()), r.canvasTop());
 }
 
 // ============================================================================

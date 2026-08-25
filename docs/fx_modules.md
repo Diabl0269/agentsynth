@@ -17,6 +17,48 @@ or shrink the channel count — it only changes how many jacks you see:
 CV jacks (Drive, Rate, …) keep their **raw** channel indices so presets and the AI schema stay stable;
 in single-jack mode they simply shift one slot down in the visible column.
 
+### The toggle is inherited, not registered
+
+**A module never opts in.** `ModuleBase`'s constructor adds the `dualIO` parameter itself when the
+module's channel shape says stereo — `ModuleBase::hasStereoOutputPairShape`: **≥ 2 inputs and exactly
+2 outputs**, i.e. audio on raw ch0/ch1 with any further inputs being CV. That shape also gets the
+collapsing output jack for free: `hasCollapsibleOutputPair()` drives `ModuleBase`'s default
+`getOutputPortLabel` / `getVisibleOutputPortCount` / `mapOutputChannel`, so **a new stereo FX needs no
+Dual I/O code whatsoever** — declare `ModuleBase("Foo", 4, 2)` and the toggle, the `"Audio"`/`Left`/
+`Right` labels and the two-leg fan are all there.
+
+Deliberately **output-side only**. Whether ch0/ch1 are an *input* pair cannot be inferred from the
+shape — Voice Mixer's ch0-7 are eight voice inputs and the Ring Modulator's ch0/ch1 are Carrier and
+Modulator, two unrelated mono jacks — so an input pair stays an explicit declaration through
+`mapStereoPairInput` / `stereoInputLabel` / `stereoVisibleInputCount`.
+
+The exceptions are stated in the constructor call, and there are only three kinds:
+
+| `ModuleBase::StereoAudio` | Modules | Meaning |
+|---|---|---|
+| `Auto` (the default) | every FX, Voice Mixer, Ring Modulator | shape decides; toggle ships **collapsed** |
+| `Declared` | Oscillator, Wavetable, Filter, VCA, Sampler | a second audio leg the shape cannot see — its own `kRightBase` block, or a ch0/ch1 pair alongside further outputs. Toggle ships **split**; the module owns its jack maps. |
+| `None` | Comparator, Rec Tap | the shape matches by accident. Comparator's ch0/ch1 are Signal + Threshold CV in and Gate + inverted Gate out (no audio output at all); Rec Tap is a hidden recording tap whose two channels are the take's capture pair, wired by the record flow and never patched. |
+
+Why it moved: `addDualIOParameter()` was a call you could forget, and the Ring Modulator did ship a
+stereo output pair without it — no header toggle, no Preferences row, and nothing red.
+`StereoDeclaration.EveryFactoryModuleFollowsTheShapeRuleOrADocumentedException` now sweeps every
+factory module against the rule plus those two tables, so a new module that needs an exception fails
+the build's test run until it is listed with a reason (and
+`…TheExceptionTablesHaveNoStaleEntries` fails if a listed module is renamed or stops matching the
+shape). `StereoDeclaration.ANewModuleWithTheStereoShapeInheritsTheWholeToggle` pins the
+zero-code-required claim, and `…RingModulatorGetsTheTogglePurelyByInheritance` pins the module the bug
+was reported on.
+
+`dualIO` is consequently parameter **index 1** on every module that carries it. Saved patches do not
+care — parameters are keyed by `paramID` on both the `ModuleBase::getStateInformation` and the
+`AIStateMapper` paths, and neither the id nor any module's default changed
+(`StereoDeclaration.APatchSavedBeforeTheMoveLoadsWithTheSameLayout` loads a patch authored before the
+move and checks every layout, including the Ring Modulator falling to its default because the patch
+predates its toggle). Positional `getParameters()[n]` lookups did care, which is exactly why
+[the guide](Module_Development_Guide.md) forbids them: a shifted index resolves to the wrong
+parameter *silently*.
+
 Toggling Dual I/O **does not rewire existing cables away**. Raw ch0/ch1 stay connected; only jack
 visibility changes. If only the left output was patched (common when the next node is Audio Output),
 toggling Dual I/O on completes the pair (`L→L` / `R→R`) so the Right jack is not left hanging.
@@ -97,8 +139,10 @@ Sampler and Voice Mixer). That list is **derived, never hand-written**:
 module answers `ModuleBase::hasDualIOParameter()`, and `PreferencesSettingsTab::getDualIOModuleTypes()`
 is a thin wrapper over it. It used to be a literal list, and the Ring Modulator was missing from it —
 the module had a stereo output pair, the popup had no row for it, the global toggle skipped it, and
-nothing in the build noticed. A module that gains `addDualIOParameter()` now appears with no second
-edit; `PreferencesSettingsTabTest.DualIOModuleTypesIsDerivedFromTheModulesThemselves` and
+nothing in the build noticed. A module that gains the toggle now appears with no second edit — and
+since the toggle itself is inherited from the channel shape (below), a new stereo FX reaches this
+popup without anyone writing a line of Dual I/O code;
+`PreferencesSettingsTabTest.DualIOModuleTypesIsDerivedFromTheModulesThemselves` and
 `…EveryDualIOCapableTypeReachesBothThePopupAndTheNewModulePath` walk the factory and check both
 consumers (the popup rows and `applyDefaultDualIOForNewModule`) for every type on it, and
 `ModuleComponentTest.DualIOHeaderButtonOnEveryStereoCapableModule` checks the header control.
@@ -153,7 +197,7 @@ Adopting modules: **Distortion, Delay, Reverb, Chorus, Phaser, Flanger, Filter, 
 Rules that make this safe:
 
 - **Opt-in, never in the `ModuleBase` ctor.** "Gain" is wrong on pitch/gate CV outputs — scaling a V/oct pitch CV transposes it, and scaling a gate drops it under the `> 0.5f` trigger threshold that ADSR uses. Sequencer, ADSR, LFO, Poly MIDI, MIDI Keyboard and External MIDI therefore do **not** adopt it. Attenuverter does not either — it already *is* a gain/polarity stage.
-- **Added last in the parameter list among value params.** Parameter position is load-bearing for positional `getParameters()[n]` call sites; appending keeps existing indices pointing at the same parameter. `addDualIOParameter()` (layout toggle) is added *before* Level so Level stays the last continuous control. Pinned by `OutputLevelTests.LevelParameterIsAddedLast` and `…AttenuverterKeepsAmountAtParameterIndexOne`.
+- **Added last in the parameter list among value params.** Appending keeps every existing index pointing at the same parameter, so Level stays the last continuous control (only `muted` follows it). The Dual I/O toggle is *not* in this list any more — `ModuleBase`'s constructor adds it at index 1 (see § Stereo I/O), which is what made the repo-wide rule "look parameters up by ID, never `getParameters()[n]`" concrete. Pinned by `OutputLevelTests.LevelParameterIsAddedLast` and `…AttenuverterKeepsAmountAtParameterIndexOne`.
 - **Modules that already have a level/gain parameter do not get a second one** — Oscillator, LFO, Noise and Voice Mixer have `level`; VCA has `gain`; Limiter has `inputGain`; Compressor has `makeupGain`.
 - **`numAudioChannels` excludes CV.** Only the leading audio channels are scaled; CV input channels are left for the module's own clearing logic. Filter passes `8` in poly mode and `1` in mono.
 - **Bypass/mute contract is unchanged.** `applyOutputLevel` is never reached on the bypass branch (dry pass-through stays untouched, so Level cannot silence a bypassed module) nor on mute (already cleared). See [`architecture.md`](architecture.md).

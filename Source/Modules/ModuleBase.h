@@ -106,7 +106,42 @@ inline bool isMidiInstrumentType(ModuleType type) noexcept {
 
 class ModuleBase : public juce::AudioProcessor {
 public:
-    ModuleBase(const juce::String& name, int numInputs, int numOutputs)
+    // -------------------------------------------------------------------------
+    // Stereo audio declaration — how a module gets the Dual I/O toggle.
+    //
+    // INHERITED, NOT REGISTERED. There is no `addDualIOParameter()` to remember: the base
+    // constructor decides from the module's channel shape and adds the parameter itself. It used to
+    // be a per-module opt-in call, and the Ring Modulator shipped a stereo output pair without it —
+    // no header toggle, no Preferences row, no failing test. The only per-module decision left is
+    // the *exception*, and every exception is documented — see the enumerators below and the
+    // `StereoDeclaration` suite in Tests/StereoVoiceModuleTests.cpp, which sweeps the whole factory
+    // against this rule plus its two exception tables.
+    // -------------------------------------------------------------------------
+    enum class StereoAudio {
+        /** Default. The base infers it from the channel shape: **>= 2 inputs and EXACTLY 2 outputs**
+            means raw ch0/ch1 are the module's stereo output pair (the FX shape — audio on ch0/ch1,
+            any further inputs are CV). Such a module gets the Dual I/O toggle, defaulting to
+            COLLAPSED (one "Audio" jack owning both legs), plus the collapsing output-jack behaviour
+            from `mapStereoPairOutput` for free. A module whose shape does NOT match gets nothing —
+            that is how every CV module, every source and every wide/poly module stays untouched. */
+        Auto,
+        /** The module has a second audio leg the shape test cannot see — its right leg is on its own
+            `kRightBase` block (Oscillator, Wavetable, Filter, VCA) or it pairs ch0/ch1 alongside
+            further outputs (Sampler). It gets the toggle defaulting to SPLIT, and owns its own jack
+            maps. If a future module ever needs "declared, but collapsed by default", add a fourth
+            enumerator rather than flipping this one — five saved-patch defaults depend on it. */
+        Declared,
+        /** Documented opt-out: the channel shape matches but there is no stereo pair to split. */
+        None,
+    };
+
+    /** The shape test behind `StereoAudio::Auto`, exposed so tests can sweep the factory with the
+        same rule the constructor applies rather than a copy of it. */
+    static constexpr bool hasStereoOutputPairShape(int numInputs, int numOutputs) {
+        return numInputs >= 2 && numOutputs == 2;
+    }
+
+    ModuleBase(const juce::String& name, int numInputs, int numOutputs, StereoAudio stereo = StereoAudio::Auto)
         : AudioProcessor(
               BusesProperties()
                   .withInput("Input", juce::AudioChannelSet::discreteChannels(std::max(1, numInputs)), numInputs > 0)
@@ -114,25 +149,26 @@ public:
                               numOutputs > 0))
         , moduleName(name) {
         addParameter(bypassedParam = new juce::AudioParameterBool("bypassed", "Bypassed", false));
+
+        // Bus layout stays fixed for the module's lifetime (JUCE cannot renegotiate without dropping
+        // graph connections), so Dual I/O only ever changes jack *visibility* and the logical-port
+        // mapping:
+        //   Dual on  — separate Left / Right jacks
+        //   Dual off — one "Audio" jack (both raw legs for a contiguous pair; the left leg only for
+        //              a split-block module, whose right block is not adjacent to ch0)
+        //
+        // Added here, second, rather than late in each module's own list: the base constructor is
+        // the only place that runs for EVERY module without anyone opting in. Parameter order is
+        // explicitly not part of a module's contract (docs/architecture.md) — look parameters up
+        // with findParameterByID, never by index.
+        const bool declared = stereo == StereoAudio::Declared;
+        if (declared || (stereo == StereoAudio::Auto && hasStereoOutputPairShape(numInputs, numOutputs)))
+            addParameter(dualIOParam = new juce::AudioParameterBool("dualIO", "Dual I/O", declared));
     }
 
     void addMuteParameter() {
         if (!mutedParam)
             addParameter(mutedParam = new juce::AudioParameterBool("muted", "Muted", false));
-    }
-
-    // Opt-in stereo I/O jack layout for modules that process a fixed L/R pair on raw ch0/ch1.
-    //
-    // Bus layout stays 2+ channels for the module's lifetime (JUCE cannot renegotiate without
-    // dropping graph connections). Dual I/O only changes *visibility* and logical-port mapping:
-    //   Dual on  — separate Left / Right jacks (legacy FX layout)
-    //   Dual off — one "Audio" jack that fans both raw channels (polyVoiceSpan == 2)
-    // Call before addOutputLevelParameter() / addMuteParameter() so Level stays last among
-    // value params. Default is single-jack — the common mono→FX insert case.
-    void addDualIOParameter(bool defaultDual = false) {
-        if (dualIOParam)
-            return;
-        addParameter(dualIOParam = new juce::AudioParameterBool("dualIO", "Dual I/O", defaultDual));
     }
 
     bool hasDualIOParameter() const { return dualIOParam != nullptr; }
@@ -433,11 +469,27 @@ public:
 
     virtual std::vector<ModulationTarget> getModulationTargets() const { return {}; }
     virtual juce::String getInputPortLabel(int channelIndex) const { return "In " + juce::String(channelIndex); }
-    virtual juce::String getOutputPortLabel(int channelIndex) const { return "Out " + juce::String(channelIndex); }
     virtual int getVisibleInputPortCount() const { return getTotalNumInputChannels(); }
-    virtual int getVisibleOutputPortCount() const { return getTotalNumOutputChannels(); }
     virtual ModulationCategory getModulationCategory() const { return ModulationCategory::Other; }
     virtual ModuleType getModuleType() const = 0;
+
+    /** True when raw ch0/ch1 are this module's whole output bus AND it carries the Dual I/O toggle —
+        i.e. the shape `StereoAudio::Auto` matched. The three output-side defaults below then follow
+        the toggle on their own, so a module of that shape needs no jack-layout code at all: it gets
+        one "Audio" jack owning both legs when collapsed and Left/Right when split.
+
+        Deliberately output-side ONLY. Whether ch0/ch1 are an *input* pair is not inferable from the
+        shape — Voice Mixer's ch0-7 are eight voice inputs and the Ring Modulator's ch0/ch1 are
+        Carrier and Modulator, two unrelated mono jacks — so an input pair stays an explicit
+        declaration through `mapStereoPairInput` / `stereoInputLabel` / `stereoVisibleInputCount`. */
+    bool hasCollapsibleOutputPair() const { return dualIOParam != nullptr && getTotalNumOutputChannels() == 2; }
+
+    virtual juce::String getOutputPortLabel(int channelIndex) const {
+        return hasCollapsibleOutputPair() ? stereoOutputLabel(channelIndex) : "Out " + juce::String(channelIndex);
+    }
+    virtual int getVisibleOutputPortCount() const {
+        return hasCollapsibleOutputPair() ? stereoVisibleOutputCount() : getTotalNumOutputChannels();
+    }
 
     virtual LogicalPort mapInputChannel(int rawChannel) const {
         LogicalPort p;
@@ -450,6 +502,9 @@ public:
     }
 
     virtual LogicalPort mapOutputChannel(int rawChannel) const {
+        if (hasCollapsibleOutputPair())
+            return mapStereoPairOutput(rawChannel);
+
         LogicalPort p;
         int vis = getVisibleOutputPortCount();
         p.visibleJackIndex = (vis > 0) ? juce::jlimit(0, vis - 1, rawChannel) : 0;

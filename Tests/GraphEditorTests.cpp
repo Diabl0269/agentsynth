@@ -3788,6 +3788,160 @@ TEST_F(GraphEditorTest, SmartConnectionCmdInsertDoesNotDuplicateOneUpstreamLegOn
     EXPECT_TRUE(graph.isConnected({{chorusId, 1}, {outId, 1}}));
 }
 
+// ---- Preview must show exactly what the drop wires -------------------------
+
+TEST_F(GraphEditorTest, SmartConnectionParallelAddPreviewCoversBothOutputLegs) {
+    // One suggestion is not one cable. A collapsed ghost jack fans across the sink's whole raw pair,
+    // and the sink fronts those raws as two SEPARATE visible jacks (no ModuleBase to group them), so
+    // the drop wires two cables. The preview used to draw a single wire to the left leg only.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 700);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.setInsertModifierOverrideForTests(false);
+    editor.setDefaultDualIOForNewModules(false); // collapsed ghost: one jack owning both raw legs
+
+    auto f = makeWiredSink(engine, editor);
+
+    DummyDragSource dummySource;
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource, juce::Point<int>(440, 100));
+    editor.itemDragEnter(details);
+    editor.itemDragMove(details);
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0);
+
+    std::set<int> previewedSinkJacks;
+    for (const auto& s : editor.getSmartSuggestions()) {
+        ASSERT_FALSE(s.isInsert);
+        ASSERT_FALSE(s.mainPreviewLegs.empty()) << "the preview must enumerate its resolved legs";
+        for (const auto& leg : s.mainPreviewLegs) {
+            previewedSinkJacks.insert(leg.toJack);
+            EXPECT_NE(leg.p1, leg.p2) << "every previewed leg needs real endpoints";
+        }
+    }
+    EXPECT_EQ(previewedSinkJacks, (std::set<int>{0, 1}))
+        << "preview drew " << previewedSinkJacks.size() << " sink leg(s); the drop fans both";
+
+    // And the drop really does wire both, so the preview above is the truth and not just a guess.
+    editor.itemDropped(details);
+    const auto chorusId = findNodeIdByName(engine.getGraph(), "Chorus");
+    ASSERT_NE(chorusId.uid, 0u);
+    EXPECT_TRUE(engine.getGraph().isConnected({{chorusId, 0}, {f.outId, 0}}));
+    EXPECT_TRUE(engine.getGraph().isConnected({{chorusId, 1}, {f.outId, 1}}));
+}
+
+TEST_F(GraphEditorTest, SmartConnectionProbeHonoursTheDualIODefault) {
+    // The library-drop ghost is an AIStateMapper probe, and it decides both the preview and the plan
+    // that gets applied. It never used to receive applyDefaultDualIOForNewModule, so with the
+    // default set to dual the plan was computed for a COLLAPSED ghost and then applied to a module
+    // that spawned dual — wiring only the left legs.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 700);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.setInsertModifierOverrideForTests(false);
+    editor.setDefaultDualIOForNewModules(true); // ghost must front Left/Right, same as the real drop
+
+    auto f = makeWiredSink(engine, editor);
+
+    DummyDragSource dummySource;
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource, juce::Point<int>(440, 100));
+    editor.itemDragEnter(details);
+    editor.itemDragMove(details);
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0);
+
+    // A dual ghost has one output jack per leg, so the plan must name BOTH of them.
+    std::set<int> plannedGhostJacks;
+    for (const auto& s : editor.getSmartSuggestions())
+        plannedGhostJacks.insert(s.ghostJack);
+    EXPECT_EQ(plannedGhostJacks, (std::set<int>{0, 1}))
+        << "the probe still looks collapsed — plan and spawned module disagree";
+
+    editor.itemDropped(details);
+    const auto chorusId = findNodeIdByName(engine.getGraph(), "Chorus");
+    ASSERT_NE(chorusId.uid, 0u);
+    auto* chorusMb = dynamic_cast<ModuleBase*>(engine.getGraph().getNodeForId(chorusId)->getProcessor());
+    ASSERT_NE(chorusMb, nullptr);
+    EXPECT_TRUE(chorusMb->isDualIO()) << "the spawned module is dual, which is what the probe must match";
+    EXPECT_TRUE(engine.getGraph().isConnected({{chorusId, 0}, {f.outId, 0}}));
+    EXPECT_TRUE(engine.getGraph().isConnected({{chorusId, 1}, {f.outId, 1}}))
+        << "a dual ghost must wire its RIGHT leg too";
+}
+
+TEST_F(GraphEditorTest, SmartConnectionCmdInsertWiresBothLegsOfADualGhostBetweenDualNeighbours) {
+    // The exact user repro: Delay L+R → Reverb L+R, cmd-drag a Chorus between them. Every node dual.
+    // Expect four new cables (Delay L→Chorus L, Delay R→Chorus R, Chorus L→Reverb L, Chorus R→Reverb
+    // R), no direct Delay→Reverb left, and nothing dangling on any Right jack.
+    AudioEngine engine;
+    AppUndoManager undoMgr;
+    GraphEditor editor(engine, &undoMgr);
+    editor.setSize(1400, 700);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.setInsertModifierOverrideForTests(true);
+    editor.setDefaultDualIOForNewModules(true); // the dropped Chorus spawns dual, like the user's
+
+    auto& graph = engine.getGraph();
+    auto delayNode = graph.addNode(std::make_unique<DelayModule>());
+    delayNode->properties.set("x", 40);
+    delayNode->properties.set("y", 100);
+    auto reverbNode = graph.addNode(std::make_unique<ReverbModule>());
+    reverbNode->properties.set("x", 760);
+    reverbNode->properties.set("y", 100);
+    setDualIOParam(*delayNode->getProcessor(), true);
+    setDualIOParam(*reverbNode->getProcessor(), true);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    const auto delayId = delayNode->nodeID;
+    const auto reverbId = reverbNode->nodeID;
+    editor.connectPorts(delayId, 0, reverbId, 0, false, false); // L → L
+    editor.connectPorts(delayId, 1, reverbId, 1, false, false); // R → R
+    ASSERT_TRUE(graph.isConnected({{delayId, 0}, {reverbId, 0}}));
+    ASSERT_TRUE(graph.isConnected({{delayId, 1}, {reverbId, 1}}));
+    ASSERT_EQ(countAudioConnectionsBetween(graph, delayId, reverbId), 2);
+
+    DummyDragSource dummySource;
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource, juce::Point<int>(440, 100));
+    editor.itemDragEnter(details);
+    editor.itemDragMove(details);
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0);
+    for (const auto& s : editor.getSmartSuggestions()) {
+        ASSERT_TRUE(s.isInsert);
+        EXPECT_EQ(s.upstreamId, delayId);
+        EXPECT_EQ(s.doomedLinks.size(), 2u) << "both original cables are doomed";
+        EXPECT_EQ(s.upstreamCables.size(), 2u) << "a dual ghost takes one cable per leg, not one total";
+    }
+    editor.itemDropped(details);
+
+    const auto chorusId = findNodeIdByName(graph, "Chorus");
+    ASSERT_NE(chorusId.uid, 0u);
+
+    EXPECT_EQ(countAudioConnectionsBetween(graph, delayId, reverbId), 0) << "no direct cable may survive";
+    EXPECT_TRUE(graph.isConnected({{delayId, 0}, {chorusId, 0}})) << "Delay L → Chorus L";
+    EXPECT_TRUE(graph.isConnected({{delayId, 1}, {chorusId, 1}})) << "Delay R → Chorus R (was dangling)";
+    EXPECT_TRUE(graph.isConnected({{chorusId, 0}, {reverbId, 0}})) << "Chorus L → Reverb L";
+    EXPECT_TRUE(graph.isConnected({{chorusId, 1}, {reverbId, 1}})) << "Chorus R → Reverb R (was dangling)";
+    // No cross-wiring: a leg must not be duplicated across both of the far end's inputs.
+    EXPECT_FALSE(graph.isConnected({{delayId, 0}, {chorusId, 1}}));
+    EXPECT_FALSE(graph.isConnected({{chorusId, 0}, {reverbId, 1}}));
+
+    // Nothing dangling: every leg that was carrying signal before is carrying signal after.
+    EXPECT_FALSE(editor.isOutputJackFreeForTests(delayId, 1)) << "Delay Right OUT must not be left dangling";
+    EXPECT_FALSE(editor.isInputJackFreeForTests(reverbId, 1)) << "Reverb Right IN must not be left dangling";
+    EXPECT_FALSE(editor.isInputJackFreeForTests(chorusId, 1)) << "Chorus Right IN must be fed";
+    EXPECT_FALSE(editor.isOutputJackFreeForTests(chorusId, 1)) << "Chorus Right OUT must be used";
+
+    // Still one undo step, restoring both original cables exactly.
+    ASSERT_TRUE(undoMgr.undo());
+    EXPECT_EQ(findNodeIdByName(graph, "Chorus").uid, 0u);
+    const auto restoredDelay = findNodeIdByName(graph, "Delay");
+    const auto restoredReverb = findNodeIdByName(graph, "Reverb");
+    ASSERT_NE(restoredDelay.uid, 0u);
+    ASSERT_NE(restoredReverb.uid, 0u);
+    EXPECT_TRUE(graph.isConnected({{restoredDelay, 0}, {restoredReverb, 0}}));
+    EXPECT_TRUE(graph.isConnected({{restoredDelay, 1}, {restoredReverb, 1}}));
+    EXPECT_EQ(countAudioConnectionsBetween(graph, restoredDelay, restoredReverb), 2);
+}
+
 // --- Double-click port disconnect (issue #216) -------------------------------
 
 static ModuleComponent* findModuleComp(GraphEditor& editor, juce::AudioProcessor* proc) {

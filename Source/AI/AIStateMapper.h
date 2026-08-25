@@ -252,9 +252,10 @@ public:
      * each module `ModuleBase::hasDualIOParameter()`, never from a hand-kept list. Both consumers
      * of that question read it: `PreferencesSettingsTab::getDualIOModuleTypes()` (the per-module
      * defaults popup) and the Dual I/O default that `GraphEditor::applyDefaultDualIOForNewModule`
-     * applies to a newly created module. A module that gains `addDualIOParameter()` therefore
-     * appears in the Preferences popup with no second edit — the Ring Modulator was missing from
-     * the popup for exactly as long as that list was written out by hand.
+     * applies to a newly created module. Since `ModuleBase`'s constructor adds the toggle from the
+     * module's channel shape (`ModuleBase::StereoAudio`), a new stereo module appears in the
+     * Preferences popup without a single extra edit anywhere — the Ring Modulator was missing from
+     * that popup for exactly as long as this list was written out by hand.
      */
     static const juce::StringArray& dualIOCapableModuleTypes();
 

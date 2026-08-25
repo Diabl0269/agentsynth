@@ -145,7 +145,7 @@ TEST_F(DelayModuleTest, ProcessBlockPassesSignalThrough) {
 }
 
 TEST_F(DelayModuleTest, FeedbackParameterExists) {
-    auto* feedbackParam = dynamic_cast<juce::AudioParameterFloat*>(module->getParameters()[2]);
+    auto* feedbackParam = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(module.get(), "feedback"));
     ASSERT_NE(feedbackParam, nullptr);
     EXPECT_FLOAT_EQ(feedbackParam->get(), 0.5f); // default
 }
@@ -209,8 +209,8 @@ TEST_F(DistortionModuleTest, HighDriveClipsSignal) {
     lowDrive.prepareToPlay(44100.0, 512);
     highDrive.prepareToPlay(44100.0, 512);
 
-    auto* driveParamLow = dynamic_cast<juce::AudioParameterFloat*>(lowDrive.getParameters()[1]);
-    auto* driveParamHigh = dynamic_cast<juce::AudioParameterFloat*>(highDrive.getParameters()[1]);
+    auto* driveParamLow = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&lowDrive, "drive"));
+    auto* driveParamHigh = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&highDrive, "drive"));
     ASSERT_NE(driveParamLow, nullptr);
     ASSERT_NE(driveParamHigh, nullptr);
 
@@ -218,8 +218,8 @@ TEST_F(DistortionModuleTest, HighDriveClipsSignal) {
     driveParamHigh->setValueNotifyingHost(1.0f); // max drive (20.0)
 
     // Set mix=1.0 (fully wet) on both so we hear the distortion effect clearly
-    auto* mixParamLow = dynamic_cast<juce::AudioParameterFloat*>(lowDrive.getParameters()[2]);
-    auto* mixParamHigh = dynamic_cast<juce::AudioParameterFloat*>(highDrive.getParameters()[2]);
+    auto* mixParamLow = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&lowDrive, "mix"));
+    auto* mixParamHigh = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&highDrive, "mix"));
     mixParamLow->setValueNotifyingHost(1.0f);
     mixParamHigh->setValueNotifyingHost(1.0f);
 
@@ -257,12 +257,12 @@ TEST_F(DistortionModuleTest, PrepareToPlayAndProcessDoNotCrash) {
 
 TEST_F(DistortionModuleTest, MinDriveIsTransparent) {
     // At drive=1 (minimum) with mix=1 and oversampling=Off, output should equal input
-    auto* driveP = dynamic_cast<juce::AudioParameterFloat*>(module->getParameters()[1]);
-    auto* mixP = dynamic_cast<juce::AudioParameterFloat*>(module->getParameters()[2]);
-    auto* osP = dynamic_cast<juce::AudioParameterChoice*>(module->getParameters()[4]); // Index 4 now
-    driveP->setValueNotifyingHost(0.0f);                                               // normalized 0 = drive 1.0
-    mixP->setValueNotifyingHost(1.0f);                                                 // fully wet
-    *osP = 0; // Off — isolate waveshaper from oversampling filters
+    auto* driveP = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(module.get(), "drive"));
+    auto* mixP = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(module.get(), "mix"));
+    auto* osP = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(module.get(), "oversampling"));
+    driveP->setValueNotifyingHost(0.0f); // normalized 0 = drive 1.0
+    mixP->setValueNotifyingHost(1.0f);   // fully wet
+    *osP = 0;                            // Off — isolate waveshaper from oversampling filters
 
     module->prepareToPlay(44100.0, 512); // re-init smoothers with new param values
 
@@ -282,7 +282,7 @@ TEST_F(DistortionModuleTest, MinDriveIsTransparent) {
 
 TEST_F(DistortionModuleTest, OversamplingOffProducesOutput) {
     // Set oversampling to Off (index 0)
-    auto* param = dynamic_cast<juce::AudioParameterChoice*>(module->getParameters()[4]);
+    auto* param = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(module.get(), "oversampling"));
     ASSERT_NE(param, nullptr);
     *param = 0; // Off
 
@@ -310,7 +310,7 @@ TEST_F(DistortionModuleTest, OversamplingOffProducesOutput) {
 }
 
 TEST_F(DistortionModuleTest, Oversampling4xProducesOutput) {
-    auto* param = dynamic_cast<juce::AudioParameterChoice*>(module->getParameters()[3]);
+    auto* param = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(module.get(), "oversampling"));
     ASSERT_NE(param, nullptr);
     *param = 2; // 4x
 
@@ -333,7 +333,7 @@ TEST_F(DistortionModuleTest, Oversampling4xProducesOutput) {
 }
 
 TEST_F(DistortionModuleTest, OversamplingParameterProperties) {
-    auto* param = dynamic_cast<juce::AudioParameterChoice*>(module->getParameters()[4]);
+    auto* param = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(module.get(), "oversampling"));
     ASSERT_NE(param, nullptr);
     EXPECT_EQ(param->choices.size(), 3);
     EXPECT_EQ(param->choices[0], juce::String("Off"));
@@ -350,14 +350,14 @@ TEST_F(DistortionModuleTest, OversamplingNotInModulationTargets) {
 }
 
 TEST_F(DistortionModuleTest, LatencyZeroWhenOff) {
-    auto* param = dynamic_cast<juce::AudioParameterChoice*>(module->getParameters()[4]);
+    auto* param = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(module.get(), "oversampling"));
     ASSERT_NE(param, nullptr);
     *param = 0; // Off
     EXPECT_DOUBLE_EQ(module->getLatencyInSamples(), 0.0);
 }
 
 TEST_F(DistortionModuleTest, LatencyNonZeroWhenEnabled) {
-    auto* param = dynamic_cast<juce::AudioParameterChoice*>(module->getParameters()[4]);
+    auto* param = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(module.get(), "oversampling"));
     ASSERT_NE(param, nullptr);
     *param = 1; // 2x
     EXPECT_GT(module->getLatencyInSamples(), 0.0);
@@ -366,7 +366,7 @@ TEST_F(DistortionModuleTest, LatencyNonZeroWhenEnabled) {
 }
 
 TEST_F(DistortionModuleTest, SwitchModesDuringPlayback) {
-    auto* param = dynamic_cast<juce::AudioParameterChoice*>(module->getParameters()[4]);
+    auto* param = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(module.get(), "oversampling"));
     ASSERT_NE(param, nullptr);
 
     juce::MidiBuffer midi;
@@ -406,20 +406,20 @@ TEST_F(DistortionModuleTest, HighDriveClipsSignalAllModes) {
         highDrive.prepareToPlay(44100.0, 512);
 
         // Set oversampling mode
-        auto* lowOsParam = dynamic_cast<juce::AudioParameterChoice*>(lowDrive.getParameters()[4]);
-        auto* highOsParam = dynamic_cast<juce::AudioParameterChoice*>(highDrive.getParameters()[4]);
+        auto* lowOsParam = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(&lowDrive, "oversampling"));
+        auto* highOsParam = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(&highDrive, "oversampling"));
         *lowOsParam = mode;
         *highOsParam = mode;
 
         // Set drive: low=1 (normalized 0), high=20 (normalized 1)
-        auto* lowDriveParam = dynamic_cast<juce::AudioParameterFloat*>(lowDrive.getParameters()[1]);
-        auto* highDriveParam = dynamic_cast<juce::AudioParameterFloat*>(highDrive.getParameters()[1]);
+        auto* lowDriveParam = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&lowDrive, "drive"));
+        auto* highDriveParam = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&highDrive, "drive"));
         lowDriveParam->setValueNotifyingHost(0.0f);
         highDriveParam->setValueNotifyingHost(1.0f);
 
         // Set mix to fully wet
-        auto* lowMixParam = dynamic_cast<juce::AudioParameterFloat*>(lowDrive.getParameters()[2]);
-        auto* highMixParam = dynamic_cast<juce::AudioParameterFloat*>(highDrive.getParameters()[2]);
+        auto* lowMixParam = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&lowDrive, "mix"));
+        auto* highMixParam = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&highDrive, "mix"));
         lowMixParam->setValueNotifyingHost(1.0f);
         highMixParam->setValueNotifyingHost(1.0f);
 
@@ -515,8 +515,8 @@ TEST_F(ReverbModuleTest, MonoProcessingDoesNotCrash) {
 
 TEST_F(ReverbModuleTest, RoomSizeParameterIsApplied) {
     // Just verify the parameters exist and are the right types
-    auto* roomSizeParam = dynamic_cast<juce::AudioParameterFloat*>(module->getParameters()[1]);
-    auto* dampingParam = dynamic_cast<juce::AudioParameterFloat*>(module->getParameters()[2]);
+    auto* roomSizeParam = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(module.get(), "roomSize"));
+    auto* dampingParam = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(module.get(), "damping"));
     ASSERT_NE(roomSizeParam, nullptr);
     ASSERT_NE(dampingParam, nullptr);
 

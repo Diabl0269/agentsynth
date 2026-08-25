@@ -200,12 +200,11 @@ TEST(PresetManagerTest, PolyPad_NoEnvToOscLevelConnection) {
     ASSERT_NE(adsrNode, nullptr) << "Poly Pad should have an 'Amp Env' node";
     ASSERT_NE(oscNode, nullptr) << "Poly Pad should have an Oscillator node";
 
-    // Assert the oscillator is in poly mode
-    // OscillatorModule parameter indices: 0=bypassed, 1=waveform, 2=octave, 3=coarse, 4=fine,
-    //   5=level, 6=poly, 7=unison, 8=detune, 9=muted
+    // Assert the oscillator is in poly mode. Look up by ID, not index — ModuleBase's dualIO
+    // parameter shifts every module-owned index.
     auto* osc = dynamic_cast<OscillatorModule*>(oscNode->getProcessor());
     ASSERT_NE(osc, nullptr);
-    auto* polyParam = dynamic_cast<juce::AudioParameterBool*>(osc->getParameters()[6]);
+    auto* polyParam = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(osc, "poly"));
     ASSERT_NE(polyParam, nullptr);
     EXPECT_TRUE(polyParam->get()) << "Oscillator in Poly Pad should have poly=true";
 

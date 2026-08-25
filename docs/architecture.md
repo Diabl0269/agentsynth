@@ -363,7 +363,7 @@ Both still use two separate branches, never a fused `if (isBypassed() || isMuted
 
 Two constraints follow from the contract above: `applyOutputLevel` must sit **after** both early returns (a bypassed module passes dry audio through at full level; a muted one is already cleared), and `numAudioChannels` must exclude CV channels. Full rules, including why this is opt-in rather than universal and why it must be the last parameter added, live in [`fx_modules.md § Output Level`](fx_modules.md#output-level-shared-stage).
 
-Related: look parameters up with `findParameterByID(processor, "paramID")` rather than `getParameters()[n]`. Parameter order is not part of a module's contract, and positional lookups silently repoint when a parameter is added.
+Related: look parameters up with `findParameterByID(processor, "paramID")` rather than `getParameters()[n]`. Parameter order is not part of a module's contract, and positional lookups silently repoint when a parameter is added. `ModuleBase`'s constructor now adds two parameters of its own — `bypassed` at index 0 and, for a stereo-shaped module, `dualIO` at index 1 ([`fx_modules.md § The toggle is inherited, not registered`](fx_modules.md#the-toggle-is-inherited-not-registered)) — so every module's own parameters start at an index the base owns. Saved state is unaffected either way: both `ModuleBase::getStateInformation` and `AIStateMapper` key parameters by `paramID`.
 
 ### 7. GraphEditor
 

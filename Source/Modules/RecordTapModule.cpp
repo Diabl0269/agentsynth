@@ -2,7 +2,11 @@
 #include "../Transport/TransportService.h"
 
 RecordTapModule::RecordTapModule(int ringCapacityFrames)
-    : ModuleBase("Rec Tap", kNumChannels, kNumChannels)
+    // StereoAudio::None — a documented Dual I/O opt-out. The 2-in/2-out shape matches
+    // StereoAudio::Auto, but this is a hidden recording tap: its two channels are the take's
+    // capture pair, wired by the record flow rather than patched, and it has no card the user can
+    // put a jack-layout toggle on. Splitting them would only add a parameter to its saved state.
+    : ModuleBase("Rec Tap", kNumChannels, kNumChannels, StereoAudio::None)
     , ringCapacityFrames_(juce::jmax(1, ringCapacityFrames))
     , ring_(juce::jmax(1, ringCapacityFrames)) {
     // Everything the audio thread touches is allocated HERE, once. processBlock never sizes

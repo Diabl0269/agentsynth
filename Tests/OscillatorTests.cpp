@@ -167,7 +167,7 @@ TEST_F(OscillatorTest, ModulatesTuning) {
 
 TEST_F(OscillatorTest, PolyMode_IndependentVoices) {
     // Enable poly mode
-    auto* polyP = dynamic_cast<juce::AudioParameterBool*>(oscillator.getParameters()[6]);
+    auto* polyP = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(&oscillator, "poly"));
     ASSERT_NE(polyP, nullptr);
     *polyP = true;
 
@@ -198,8 +198,8 @@ TEST_F(OscillatorTest, MonoMode_BackwardsCompatible) {
 
 TEST_F(OscillatorTest, Unison_MonoMode) {
     // Find unison and detune params
-    auto* unisonP = dynamic_cast<juce::AudioParameterInt*>(oscillator.getParameters()[7]);
-    auto* detuneP = dynamic_cast<juce::AudioParameterFloat*>(oscillator.getParameters()[8]);
+    auto* unisonP = dynamic_cast<juce::AudioParameterInt*>(findParameterByID(&oscillator, "unison"));
+    auto* detuneP = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&oscillator, "detune"));
     ASSERT_NE(unisonP, nullptr);
     ASSERT_NE(detuneP, nullptr);
 

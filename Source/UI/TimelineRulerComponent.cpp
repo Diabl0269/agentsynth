@@ -348,7 +348,11 @@ void TimelineRulerComponent::showMarkerContextMenu(synth::MarkerId id) {
             self->applyMarkerContextChoice(id, MarkerContextChoice::Delete);
     });
 
-    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this));
+    // Plain Options(), exactly as TimelineClipLaneArea::showClipContextMenu does — the menu opens at
+    // the mouse. Deliberately NOT withTargetComponent(this): this strip is full-width and 24 px
+    // tall, so anchoring to the whole component puts the menu somewhere unrelated to the flag that
+    // was clicked, and it ties the menu's lifetime to a component this gesture repaints.
+    menu.showMenuAsync(juce::PopupMenu::Options());
 }
 
 void TimelineRulerComponent::applyMarkerContextChoice(synth::MarkerId id, MarkerContextChoice choice) {
@@ -386,17 +390,25 @@ void TimelineRulerComponent::paintMarkers(juce::Graphics& g) const {
         const auto fill = lit ? flag.colour.brighter(kMarkerHoverBrighten) : flag.colour;
 
         // Full-height stem at the marker's own beat: the tab runs to the right of it, so without
-        // this the exact position would only be readable from the tab's left edge.
+        // this the exact position would only be readable from the tab's left edge. Full opacity
+        // across the marker BAND and faded above it, so the stem reads as belonging to the flag
+        // without competing with the bar numbers it passes through.
         g.setColour(fill.withAlpha(kMarkerStemAlpha));
-        g.fillRect(flag.bounds.getX(), 0.0f, kMarkerStemWidth, (float)getHeight());
+        g.fillRect(flag.bounds.getX(), 0.0f, kMarkerStemWidth, flag.bounds.getY());
+        g.setColour(fill);
+        g.fillRect(flag.bounds.getX(), flag.bounds.getY(), kMarkerStemWidth, flag.bounds.getHeight());
 
         g.setColour(fill);
         g.fillRect(flag.bounds);
+        // A 1 px darker edge, so a light flag on a light theme still has a shape rather than
+        // bleeding into the strip behind it.
+        g.setColour(fill.darker(0.5f));
+        g.drawRect(flag.bounds, 1.0f);
 
         if (flag.text.isNotEmpty()) {
             // Contrast against the USER'S colour, not a theme text token: a marker colour is
             // arbitrary, so a fixed token would go invisible over half the palette.
-            g.setColour(fill.getPerceivedBrightness() > 0.5f ? juce::Colours::black : juce::Colours::white);
+            g.setColour(markerLabelColourFor(fill));
             g.drawText(flag.text, flag.bounds.reduced(kMarkerFlagPadX, 0.0f).toNearestInt(),
                        juce::Justification::centredLeft, false);
         }
@@ -413,6 +425,18 @@ void TimelineRulerComponent::mouseDown(const juce::MouseEvent& e) {
     // Markers are hit-tested BEFORE the zone split and before the transport check: a marker lives
     // on the doc, so it stays draggable and editable in a build with no transport wired in.
     if (handleMarkerMouseDown(e))
+        return;
+
+    // RIGHT BUTTON STOPS HERE, always — the gate TimelineClipLaneArea::mouseDown has and this
+    // component was missing. Without it the press fell through to the zone latch below and the
+    // matching mouseUp then scrubbed the playhead (`postSeekIfChanged` -> locateBeat + repaint)
+    // while a context menu was modal, which is what made the marker menu flash and dismiss itself.
+    // A right-click opens a menu; it never seeks, never sets a loop and never latches a gesture.
+    //
+    // Gated on isPopupMenu() specifically rather than on `!isLeftButtonDown()` (the sibling's
+    // stricter form): the popup is the only button whose press opens a modal window, and therefore
+    // the only one that can be dismissed by what this component does next.
+    if (e.mods.isPopupMenu())
         return;
 
     if (transport_ == nullptr)
@@ -443,6 +467,11 @@ void TimelineRulerComponent::mouseDown(const juce::MouseEvent& e) {
 }
 
 void TimelineRulerComponent::mouseDrag(const juce::MouseEvent& e) {
+    // Right button: inert. See mouseDown — nothing may touch the transport or repaint while a
+    // context menu opened by this gesture is modal.
+    if (e.mods.isPopupMenu())
+        return;
+
     // Marker drag: snapped through the SHARED view state, exactly like every other beat this strip
     // posts, and clamped at 0 because a marker's beat is >= 0 in the model.
     if (draggingMarker_.isValid()) {
@@ -466,6 +495,12 @@ void TimelineRulerComponent::mouseDrag(const juce::MouseEvent& e) {
 }
 
 void TimelineRulerComponent::mouseUp(const juce::MouseEvent& e) {
+    // Right button: inert, for the reason spelled out in mouseDown. THIS is the branch that used to
+    // fire `postSeekIfChanged` under a stale latched `gestureZone_` and kill the menu it had just
+    // opened.
+    if (e.mods.isPopupMenu())
+        return;
+
     if (draggingMarker_.isValid()) {
         const auto id = draggingMarker_;
         const double beat = markerDragBeat_;
