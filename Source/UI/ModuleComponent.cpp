@@ -2530,8 +2530,8 @@ void ModuleComponent::updateDualIOTooltip() {
     if (dualIOButton == nullptr)
         return;
     const bool dual = dynamic_cast<ModuleBase*>(module) != nullptr && static_cast<ModuleBase*>(module)->isDualIO();
-    dualIOButton->setTooltip(dual ? "Dual I/O on — separate Left and Right jacks"
-                                  : "Dual I/O off — one Audio jack (Left + Right)");
+    dualIOButton->setTooltip(dual ? "Dual I/O on - separate Left and Right jacks"
+                                  : "Dual I/O off - one Audio jack (Left + Right)");
 }
 
 void ModuleComponent::applyDualIOLayoutChange() {
@@ -2606,7 +2606,13 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
         if (getType(module) == ModuleType::Attenuverter)
             return; // cannot drag
 
-        if (e.mods.isPopupMenu()) {
+        // TRUE right button only, deliberately not isPopupMenu(): on macOS JUCE defines
+        // popupMenuClickModifier as (rightButtonModifier | ctrlModifier), so isPopupMenu() is also
+        // true for Ctrl+LEFT-click — and Ctrl+left-click is the insert-between drag modifier plus
+        // the additive-selection toggle (see below). A card cannot open a menu and start a drag from
+        // the same press, so the legacy one-button-mouse affordance loses here; right-click and
+        // two-finger tap still open the menu on every platform.
+        if (e.mods.isRightButtonDown()) {
             // Right-clicking outside the current selection retargets it to this module, so the
             // menu always acts on something the user can see is selected.
             if (!owner.isNodeSelected(nodeId))
@@ -2724,19 +2730,39 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
             m.addItem("Delete Module", [this] { owner.deleteModule(this); });
             m.showMenuAsync(juce::PopupMenu::Options());
         } else {
-            // ---- Selection semantics (issue #156) ----
-            // Shift/Cmd-click toggles membership and does NOT begin a drag: a modifier-click is an
-            // edit to the selection, not a move.
-            const bool additive = e.mods.isShiftDown() || e.mods.isCommandDown() || e.mods.isCtrlDown();
-            if (additive) {
+            // ---- Selection semantics (issue #156) + Ctrl insert-between ----
+            //
+            // Ctrl+CLICK is an additive-select toggle and Ctrl+DRAG is an insert-between move, and
+            // at mouse-down those are indistinguishable — so we arm BOTH and let mouse-up decide,
+            // the same deferred classification the piano roll uses for Cmd on a note body
+            // (cmdToggleNote_). The drag has to win at press time because it needs state (dragger,
+            // undo capture, landing ghost) that cannot be conjured later; the toggle is the one that
+            // can be completed retroactively, so mouseUp finishes it only if nothing moved.
+            //
+            // The selection is COLLAPSED onto this module for the duration, not added to: a group
+            // drag suppresses smart connections entirely (shouldOfferSmartConnections) and moves
+            // every member, so a leftover multi-selection would silently disable insert. The
+            // pre-press selection is restored in mouseUp if the press turns out to be a click.
+            //
+            // Ctrl is tested BEFORE the additive modifiers and that ordering is load-bearing: on
+            // Windows/Linux JUCE defines commandModifier AS ctrlModifier, so isCommandDown() is true
+            // whenever Ctrl is down. Testing additive first would early-return there and a Ctrl+drag
+            // could never arm the dragger — insert would be macOS-only. Taking this branch keeps
+            // Ctrl+click toggling on those platforms anyway, via the deferred completion below.
+            if (e.mods.isCtrlDown()) {
+                ctrlTogglePending = true;
+                ctrlPressSelection = owner.getSelectedNodes();
+                owner.selectModule(nodeId, false);
+            } else if (e.mods.isShiftDown() || e.mods.isCommandDown()) {
+                // Shift/Cmd-click toggles membership and does NOT begin a drag: a modifier-click is
+                // an edit to the selection, not a move.
                 owner.selectModule(nodeId, true);
                 return;
-            }
-
-            // A plain click on an already-selected module keeps the whole group intact so it can be
-            // dragged; clicking anything else collapses the selection onto it.
-            if (!owner.isNodeSelected(nodeId))
+            } else if (!owner.isNodeSelected(nodeId)) {
+                // A plain click on an already-selected module keeps the whole group intact so it can
+                // be dragged; clicking anything else collapses the selection onto it.
                 owner.selectModule(nodeId, false);
+            }
 
             dragStartPosition = getPosition();
             bodyDragActive = true;
@@ -2781,9 +2807,23 @@ void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
             return;
         bodyDragActive = false;
 
+        // Ctrl+press armed a drag AND a pending selection toggle; the press turning out to be a
+        // click is what decides it was really the toggle. Restore the selection the press collapsed
+        // and flip this module's membership. A Ctrl+DRAG leaves the collapsed single selection
+        // alone, exactly like a plain drag does.
+        const bool moved = getPosition() != dragStartPosition;
+        if (ctrlTogglePending) {
+            if (!moved) {
+                owner.setSelectedNodes(ctrlPressSelection);
+                owner.selectModule(nodeId, true); // additive: toggles membership
+            }
+            ctrlTogglePending = false;
+            ctrlPressSelection.clear();
+        }
+
         // Finalize first so smart-connection suggestions (still held on the editor) can apply;
         // then clear the ghost overlay.
-        if (getPosition() != dragStartPosition) {
+        if (moved) {
             // Snap to grid and resolve overlap BEFORE the undo snapshot so the
             // snapped/cleared final position is what gets captured in the diff.
             //

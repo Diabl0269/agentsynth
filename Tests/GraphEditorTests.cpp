@@ -3327,12 +3327,12 @@ TEST_F(GraphEditorTest, SmartConnectionMonoToStereoIsBothOrNeither) {
     editor.endDragPreview();
 }
 
-// --- Occupied audio destinations: parallel add vs. Cmd insert-in-series ------
+// --- Occupied audio destinations: parallel add vs. Ctrl insert-in-series ------
 // Default (no modifier): the terminal audio sink accepts an ADDITIVE parallel cable, because it is
 // wired in essentially every real patch and summing into the mix bus is what a hand-dragged cable
 // there already does. Every other occupied destination stays a hard stop.
-// Cmd held: INSERT IN SERIES at ANY module — the upstream cabling is rerouted through the ghost.
-// Cmd is sampled live per drag tick, never latched at mouse-down (see isInsertModifierDown).
+// Ctrl held: INSERT IN SERIES at ANY module — the upstream cabling is rerouted through the ghost.
+// Ctrl is sampled live per drag tick, never latched at mouse-down (see isInsertModifierDown).
 
 /** Adds the graph's terminal audio sink the way AudioEngine does. The channel layout has to be set
  *  BEFORE the node is added: AudioGraphIOProcessor snapshots it once, in setParentGraph, and an
@@ -3382,7 +3382,7 @@ TEST_F(GraphEditorTest, SmartConnectionAddsParallelCableAtOccupiedAudioOutput) {
     GraphEditor editor(engine, &undoMgr);
     editor.setSize(1200, 700);
     editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
-    editor.setInsertModifierOverrideForTests(false); // no Cmd
+    editor.setInsertModifierOverrideForTests(false); // no Ctrl
 
     auto& graph = engine.getGraph();
     auto f = makeWiredSink(engine, editor);
@@ -3394,7 +3394,7 @@ TEST_F(GraphEditorTest, SmartConnectionAddsParallelCableAtOccupiedAudioOutput) {
     editor.itemDragMove(details);
     ASSERT_GT(editor.getSmartSuggestionCount(), 0) << "an occupied sink must still offer a parallel cable";
     for (const auto& s : editor.getSmartSuggestions()) {
-        EXPECT_FALSE(s.isInsert) << "without Cmd nothing is ever rerouted";
+        EXPECT_FALSE(s.isInsert) << "without Ctrl nothing is ever rerouted";
         EXPECT_TRUE(s.doomedLinks.empty());
         EXPECT_EQ(s.neighborId, f.outId);
     }
@@ -3449,13 +3449,13 @@ TEST_F(GraphEditorTest, SmartConnectionAddsParallelCableForPureSourceAtOccupiedA
     EXPECT_EQ(countAudioConnectionsBetween(graph, f.reverbId, f.outId), 2) << "existing cable untouched";
 }
 
-// ---- Cmd: insert-in-series, at any module -----------------------------------
+// ---- Ctrl: insert-in-series, at any module -----------------------------------
 
 /** Reverb (upstream, 40/600) → Delay (insert target, 760/100), one collapsed cable covering both
  *  raw legs, so the target's audio input group is FULLY occupied. Leaves room for a 280px ghost at
  *  x=440 just left of the Delay. Collapsed FX on both ends keeps the group a single leg — a Filter
  *  fronts TWO audio input legs (L/R), and wiring only one leaves a mixed free/occupied group that
- *  insert deliberately refuses (see SmartConnectionCmdDoesNotInsertIntoPartlyWiredStereoInput). */
+ *  insert deliberately refuses (see SmartConnectionCtrlDoesNotInsertIntoPartlyWiredStereoInput). */
 struct WiredChainFixture {
     juce::AudioProcessorGraph::Node::Ptr upstreamNode, targetNode;
     juce::AudioProcessorGraph::NodeID upstreamId, targetId;
@@ -3478,7 +3478,7 @@ static WiredChainFixture makeWiredChain(AudioEngine& engine, GraphEditor& editor
     return f;
 }
 
-TEST_F(GraphEditorTest, SmartConnectionWithoutCmdNeverInsertsIntoOccupiedModule) {
+TEST_F(GraphEditorTest, SmartConnectionWithoutCtrlNeverInsertsIntoOccupiedModule) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1200, 700);
@@ -3506,12 +3506,12 @@ TEST_F(GraphEditorTest, SmartConnectionWithoutCmdNeverInsertsIntoOccupiedModule)
     editor.endDragPreview();
 }
 
-TEST_F(GraphEditorTest, SmartConnectionCmdInsertsIntoOccupiedOrdinaryModule) {
+TEST_F(GraphEditorTest, SmartConnectionCtrlInsertsIntoOccupiedOrdinaryModule) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1200, 700);
     editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
-    editor.setInsertModifierOverrideForTests(true); // Cmd held
+    editor.setInsertModifierOverrideForTests(true); // Ctrl held
 
     auto f = makeWiredChain(engine, editor);
 
@@ -3520,7 +3520,7 @@ TEST_F(GraphEditorTest, SmartConnectionCmdInsertsIntoOccupiedOrdinaryModule) {
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
 
-    ASSERT_GT(editor.getSmartSuggestionCount(), 0) << "Cmd must offer an insert at an ordinary module";
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0) << "Ctrl must offer an insert at an ordinary module";
     for (const auto& s : editor.getSmartSuggestions()) {
         EXPECT_TRUE(s.isInsert);
         EXPECT_TRUE(s.ghostIsSource);
@@ -3540,7 +3540,7 @@ TEST_F(GraphEditorTest, SmartConnectionCmdInsertsIntoOccupiedOrdinaryModule) {
     editor.endDragPreview();
 }
 
-TEST_F(GraphEditorTest, SmartConnectionCmdInsertAtOccupiedModuleIsOneUndoStep) {
+TEST_F(GraphEditorTest, SmartConnectionCtrlInsertAtOccupiedModuleIsOneUndoStep) {
     AudioEngine engine;
     AppUndoManager undoMgr;
     GraphEditor editor(engine, &undoMgr);
@@ -3576,12 +3576,12 @@ TEST_F(GraphEditorTest, SmartConnectionCmdInsertAtOccupiedModuleIsOneUndoStep) {
         << "one undo must put the rerouted cable back";
 }
 
-TEST_F(GraphEditorTest, SmartConnectionCmdDoesNotInsertPureSourceIntoOccupiedModule) {
+TEST_F(GraphEditorTest, SmartConnectionCtrlDoesNotInsertPureSourceIntoOccupiedModule) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1200, 700);
     editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
-    editor.setInsertModifierOverrideForTests(true); // Cmd held, and still refused
+    editor.setInsertModifierOverrideForTests(true); // Ctrl held, and still refused
 
     auto f = makeWiredChain(engine, editor, /*wireIt=*/false);
 
@@ -3597,16 +3597,16 @@ TEST_F(GraphEditorTest, SmartConnectionCmdDoesNotInsertPureSourceIntoOccupiedMod
 
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
-    // Even with Cmd: an Oscillator has no audio input, so there is nothing to put in series. And
+    // Even with Ctrl: an Oscillator has no audio input, so there is nothing to put in series. And
     // outside the terminal sink a parallel sum is not offered either.
     EXPECT_EQ(editor.getSmartSuggestionCount(), 0);
     editor.endDragPreview();
 }
 
-TEST_F(GraphEditorTest, SmartConnectionCmdInsertIsBothOrNeitherAcrossStereoInputLegs) {
+TEST_F(GraphEditorTest, SmartConnectionCtrlInsertIsBothOrNeitherAcrossStereoInputLegs) {
     // Both-or-neither. A Filter fronts TWO audio input legs (Left/Right). With only one wired the
     // group is half occupied and rerouting it would silently change what sums where — refused even
-    // with Cmd. Wire the rest and the very same drag becomes a valid insert, which is what makes
+    // with Ctrl. Wire the rest and the very same drag becomes a valid insert, which is what makes
     // the refusal above a rule rather than an accident of geometry.
     AudioEngine engine;
     GraphEditor editor(engine);
@@ -3654,15 +3654,15 @@ TEST_F(GraphEditorTest, SmartConnectionCmdInsertIsBothOrNeitherAcrossStereoInput
     editor.itemDragMove(details);
     ASSERT_GT(editor.getSmartSuggestionCount(), 0);
     for (const auto& s : editor.getSmartSuggestions()) {
-        EXPECT_TRUE(s.isInsert) << "a fully occupied group is a valid Cmd insert";
+        EXPECT_TRUE(s.isInsert) << "a fully occupied group is a valid Ctrl insert";
         EXPECT_EQ(s.upstreamId, reverbNode->nodeID);
     }
     editor.endDragPreview();
 }
 
-// ---- Cmd insert: stereo fan correctness ------------------------------------
+// ---- Ctrl insert: stereo fan correctness ------------------------------------
 
-TEST_F(GraphEditorTest, SmartConnectionCmdInsertRemovesEveryDoomedLegOfADualIOUpstream) {
+TEST_F(GraphEditorTest, SmartConnectionCtrlInsertRemovesEveryDoomedLegOfADualIOUpstream) {
     // Regression: a Dual I/O upstream feeds the sink through TWO distinct cables (jack0→raw0,
     // jack1→raw1). A collapsed ghost's output fans across both raw legs, so the fan dedupe keeps
     // only one jack pair — and the doomed links used to hang off the surviving pair, so the second
@@ -3728,7 +3728,7 @@ TEST_F(GraphEditorTest, SmartConnectionCmdInsertRemovesEveryDoomedLegOfADualIOUp
     EXPECT_EQ(countAudioConnectionsBetween(graph, restoredReverb, restoredOut), 2);
 }
 
-TEST_F(GraphEditorTest, SmartConnectionCmdInsertDoesNotDuplicateOneUpstreamLegOntoADualIOGhost) {
+TEST_F(GraphEditorTest, SmartConnectionCtrlInsertDoesNotDuplicateOneUpstreamLegOntoADualIOGhost) {
     // The mirror image of the test above: a COLLAPSED upstream reaches the sink through one visible
     // cable that owns both raw legs, while a Dual I/O ghost has two separate input jacks. Wiring
     // that one upstream jack into each of them would fan its LEFT leg over both ghost legs, summing
@@ -3867,8 +3867,8 @@ TEST_F(GraphEditorTest, SmartConnectionProbeHonoursTheDualIODefault) {
         << "a dual ghost must wire its RIGHT leg too";
 }
 
-TEST_F(GraphEditorTest, SmartConnectionCmdInsertWiresBothLegsOfADualGhostBetweenDualNeighbours) {
-    // The exact user repro: Delay L+R → Reverb L+R, cmd-drag a Chorus between them. Every node dual.
+TEST_F(GraphEditorTest, SmartConnectionCtrlInsertWiresBothLegsOfADualGhostBetweenDualNeighbours) {
+    // The exact user repro: Delay L+R → Reverb L+R, ctrl-drag a Chorus between them. Every node dual.
     // Expect four new cables (Delay L→Chorus L, Delay R→Chorus R, Chorus L→Reverb L, Chorus R→Reverb
     // R), no direct Delay→Reverb left, and nothing dangling on any Right jack.
     AudioEngine engine;
@@ -3940,6 +3940,176 @@ TEST_F(GraphEditorTest, SmartConnectionCmdInsertWiresBothLegsOfADualGhostBetween
     EXPECT_TRUE(graph.isConnected({{restoredDelay, 0}, {restoredReverb, 0}}));
     EXPECT_TRUE(graph.isConnected({{restoredDelay, 1}, {restoredReverb, 1}}));
     EXPECT_EQ(countAudioConnectionsBetween(graph, restoredDelay, restoredReverb), 2);
+}
+
+// ---- Ctrl gesture plumbing: both press orderings, and selection integrity ---
+//
+// Two SEPARATE mechanisms both keyed to Ctrl, and the tests below drive each on its own terms:
+//   * press-time classification reads the MouseEvent's own mods (ModuleComponent::mouseDown), so
+//     these tests hand it a real Ctrl-flagged event;
+//   * the live per-tick sample reads the keyboard (GraphEditor::isInsertModifierDown), which a
+//     headless test cannot press, so it uses the override.
+
+static ModuleComponent* findModuleComp(GraphEditor& editor, juce::AudioProcessor* proc); // defined below
+
+static juce::MouseEvent makeModuleClickWithMods(juce::Component& comp, juce::Point<int> position,
+                                                juce::ModifierKeys mods, int clicks = 1) {
+    const auto pos = position.toFloat();
+    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos, mods, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                            &comp, &comp, juce::Time::getCurrentTime(), pos, juce::Time::getCurrentTime(), clicks,
+                            false);
+}
+
+static juce::ModifierKeys ctrlLeftClick() {
+    return juce::ModifierKeys(juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::leftButtonModifier);
+}
+static juce::ModifierKeys plainLeftClick() { return juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier); }
+
+/** Reverb upstream (40/600) → Delay target (760/100) already cabled, plus a Chorus at (40/300) to
+ *  drag. Real modules throughout, so the ghost is the actual processor (canvas-move path). */
+struct CtrlDragFixture {
+    juce::AudioProcessorGraph::NodeID upstreamId, targetId, ghostId;
+    ModuleComponent* ghostComp = nullptr;
+};
+static CtrlDragFixture makeCtrlDragFixture(AudioEngine& engine, GraphEditor& editor) {
+    CtrlDragFixture f;
+    auto& graph = engine.getGraph();
+    auto target = graph.addNode(std::make_unique<DelayModule>());
+    target->properties.set("x", 760);
+    target->properties.set("y", 100);
+    auto upstream = graph.addNode(std::make_unique<ReverbModule>());
+    upstream->properties.set("x", 40);
+    upstream->properties.set("y", 600);
+    auto ghost = graph.addNode(std::make_unique<ChorusModule>());
+    ghost->properties.set("x", 40);
+    ghost->properties.set("y", 300);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+    f.targetId = target->nodeID;
+    f.upstreamId = upstream->nodeID;
+    f.ghostId = ghost->nodeID;
+    editor.connectPorts(f.upstreamId, 0, f.targetId, 0, false, false);
+    f.ghostComp = findModuleComp(editor, ghost->getProcessor());
+    return f;
+}
+
+TEST_F(GraphEditorTest, SmartConnectionCtrlHeldBeforePressStillArmsAnInsertDrag) {
+    // Ordering (b): Ctrl down FIRST, then press and drag. Two things used to swallow this press
+    // before it could arm a drag, and this test guards both:
+    //   1. the additive-selection branch returned early on Ctrl;
+    //   2. on macOS isPopupMenu() is (rightButton | ctrl), so Ctrl+LEFT-click opened the module
+    //      context menu and returned.
+    // Either one leaves dragPreviewActive false, which makes updateDragPreview a no-op and yields
+    // zero suggestions — so a non-zero suggestion count here proves the press armed the drag.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1400, 1000);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.setInsertModifierOverrideForTests(true); // Ctrl physically held
+
+    auto f = makeCtrlDragFixture(engine, editor);
+    ASSERT_NE(f.ghostComp, nullptr);
+
+    const juce::Point<int> bodyPoint{f.ghostComp->getWidth() / 2, f.ghostComp->getHeight() / 2};
+    ASSERT_FALSE(f.ghostComp->getPortForPoint(bodyPoint).has_value()) << "the press must land on the card BODY";
+
+    f.ghostComp->mouseDown(makeModuleClickWithMods(*f.ghostComp, bodyPoint, ctrlLeftClick()));
+    editor.updateDragPreview({440, 100}); // drag it between upstream and target
+
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0)
+        << "Ctrl-held press never armed the drag (selection early-return, or a context menu)";
+    for (const auto& s : editor.getSmartSuggestions()) {
+        EXPECT_TRUE(s.isInsert);
+        EXPECT_EQ(s.neighborId, f.targetId);
+        EXPECT_EQ(s.upstreamId, f.upstreamId);
+    }
+    editor.endDragPreview();
+}
+
+TEST_F(GraphEditorTest, SmartConnectionCtrlPressedMidDragTurnsTheSuggestionIntoAnInsert) {
+    // Ordering (a): start an ordinary drag, THEN press Ctrl. The modifier is sampled per tick, so
+    // the very same ghost position flips from "nothing on offer" to an insert.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1400, 1000);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.setInsertModifierOverrideForTests(false); // no modifier yet
+
+    auto f = makeCtrlDragFixture(engine, editor);
+    ASSERT_NE(f.ghostComp, nullptr);
+
+    const juce::Point<int> bodyPoint{f.ghostComp->getWidth() / 2, f.ghostComp->getHeight() / 2};
+    f.ghostComp->mouseDown(makeModuleClickWithMods(*f.ghostComp, bodyPoint, plainLeftClick()));
+    editor.updateDragPreview({440, 100});
+    EXPECT_EQ(editor.getSmartSuggestionCount(), 0)
+        << "the target's input is occupied and it is not the sink, so an unmodified drag gets nothing";
+
+    editor.setInsertModifierOverrideForTests(true); // user presses Ctrl mid-drag
+    editor.updateDragPreview({440, 100});
+
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0) << "pressing Ctrl mid-drag must offer the insert";
+    for (const auto& s : editor.getSmartSuggestions()) {
+        EXPECT_TRUE(s.isInsert);
+        EXPECT_EQ(s.upstreamId, f.upstreamId);
+    }
+    editor.endDragPreview();
+}
+
+TEST_F(GraphEditorTest, CtrlClickTogglesSelectionButCtrlDragDoesNot) {
+    // The deferred classification, from the selection's point of view. A Ctrl+CLICK must behave as a
+    // pure additive toggle and leave the rest of the selection alone; a Ctrl+DRAG must move the card
+    // and NOT leave a stray toggle behind.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1400, 1000);
+    editor.setInsertModifierOverrideForTests(true);
+
+    auto& graph = engine.getGraph();
+    auto a = graph.addNode(std::make_unique<OscillatorModule>());
+    a->properties.set("x", 40);
+    a->properties.set("y", 40);
+    auto b = graph.addNode(std::make_unique<FilterModule>());
+    b->properties.set("x", 400);
+    b->properties.set("y", 40);
+    auto c = graph.addNode(std::make_unique<DelayModule>());
+    c->properties.set("x", 40);
+    c->properties.set("y", 500);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    auto* compC = findModuleComp(editor, c->getProcessor());
+    ASSERT_NE(compC, nullptr);
+    const juce::Point<int> bodyPoint{compC->getWidth() / 2, compC->getHeight() / 2};
+
+    // A + B selected; Ctrl+click C ADDS it and keeps A and B.
+    editor.setSelectedNodes({a->nodeID, b->nodeID});
+    compC->mouseDown(makeModuleClickWithMods(*compC, bodyPoint, ctrlLeftClick()));
+    compC->mouseUp(makeModuleClickWithMods(*compC, bodyPoint, ctrlLeftClick()));
+    EXPECT_EQ(editor.getSelectionCount(), 3);
+    EXPECT_TRUE(editor.isNodeSelected(a->nodeID)) << "a Ctrl+click must not discard the rest of the selection";
+    EXPECT_TRUE(editor.isNodeSelected(b->nodeID));
+    EXPECT_TRUE(editor.isNodeSelected(c->nodeID));
+
+    // Ctrl+click C again REMOVES it, still keeping A and B.
+    compC->mouseDown(makeModuleClickWithMods(*compC, bodyPoint, ctrlLeftClick()));
+    compC->mouseUp(makeModuleClickWithMods(*compC, bodyPoint, ctrlLeftClick()));
+    EXPECT_EQ(editor.getSelectionCount(), 2);
+    EXPECT_FALSE(editor.isNodeSelected(c->nodeID)) << "a second Ctrl+click must toggle it back off";
+    EXPECT_TRUE(editor.isNodeSelected(a->nodeID));
+    EXPECT_TRUE(editor.isNodeSelected(b->nodeID));
+
+    // Now a Ctrl+DRAG: the press collapses onto C so the move is single-module (a group drag would
+    // suppress smart connections), it actually moves, and mouse-up must NOT run the toggle.
+    editor.setSelectedNodes({a->nodeID, b->nodeID});
+    compC->mouseDown(makeModuleClickWithMods(*compC, bodyPoint, ctrlLeftClick()));
+    EXPECT_EQ(editor.getSelectionCount(), 1) << "the press collapses onto the dragged card";
+    EXPECT_TRUE(editor.isNodeSelected(c->nodeID));
+    compC->setTopLeftPosition(compC->getPosition() + juce::Point<int>(120, 0)); // the drag moved it
+    compC->mouseUp(makeModuleClickWithMods(*compC, bodyPoint, ctrlLeftClick()));
+
+    EXPECT_TRUE(editor.isNodeSelected(c->nodeID)) << "a Ctrl+drag must not toggle the dragged card away";
+    EXPECT_EQ(editor.getSelectionCount(), 1) << "and must not resurrect the pre-press selection either";
+    editor.endDragPreview();
 }
 
 // --- Double-click port disconnect (issue #216) -------------------------------

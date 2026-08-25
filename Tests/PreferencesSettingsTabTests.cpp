@@ -635,6 +635,22 @@ juce::ToggleButton* findToggleByText(PreferencesSettingsTab& tab, const juce::St
 }
 } // namespace
 
+// ---- Round 4 follow-up: the search field must not auto-grab focus on open ---------------------
+//
+// The actual bug (searchField stealing OS keyboard focus the instant the Settings DialogWindow's
+// peer is first shown) needs a real ComponentPeer — juce::Component::grabKeyboardFocus() is a
+// documented no-op without one (see TimelineClipLaneArea.cpp's identical caveat), and nothing in
+// this suite calls addToDesktop(). So this pins the code-level fix instead of the runtime
+// behaviour it prevents: the tab itself now wants keyboard focus (matching
+// ShortcutsSettingsTab's identical fix for its own sibling search box), which is what makes it —
+// not the search field — the target the very first, unsolicited focus grab lands on.
+TEST_F(PreferencesSettingsTabTest, TabItselfWantsKeyboardFocusSoItInterceptsTheOpeningFocusGrab) {
+    PreferencesSettingsTab tab(appProperties);
+    EXPECT_TRUE(tab.getWantsKeyboardFocus())
+        << "without this, the search field is the first focus-wanting descendant and silently "
+           "steals keyboard focus the moment the Settings window is first shown";
+}
+
 // An untouched filter must reproduce the exact unfiltered layout — the empty-query fast path
 // groupMatches()/resized() rely on, and also the state every existing bounds-sensitive test above
 // (e.g. DualIOGroupIsOneLineWithADividerBelow) assumes.

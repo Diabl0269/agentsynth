@@ -729,8 +729,11 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
             return;
         }
 
-        // Fail fast on no armed track, BEFORE touching the transport — a rejected request must not
-        // have the side effect of starting playback.
+        // Record does NOT require an armed track (see docs/timeline_panel_core.md's transport
+        // section) — pressing Record always rolls the transport with the record indicator lit,
+        // capturing on whichever track (if any) happens to be armed. With nothing armed this is
+        // identical to Play plus a lit record indicator, plus a transient status-bar notice so the
+        // silence isn't mistaken for a bug.
         //
         // The lookup considers Audio tracks too, and FIRST-ARMED WINS. With one armed track
         // of each kind the one earlier in the document decides which kind of take this is; there is
@@ -745,16 +748,13 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
                 break;
             }
         }
-        if (!armedTrack.isValid()) {
-            timelinePanel.getTransportBar().setRecordingState(false);
-            statusBar.showMessage("Arm a track to record");
-            return;
-        }
+        const bool anyArmed = armedTrack.isValid();
 
         // An audio take's tap and its destination files are resolved BEFORE the transport
-        // moves, for the same reason the armed-track check is — a request that cannot be honoured
-        // must not leave the transport rolling.
-        const bool isAudioTake = (armedKind == synth::TrackKind::Audio);
+        // moves, for the same reason as always — a request that cannot be honoured must not leave
+        // the transport rolling. Only reachable with an armed Audio track; with nothing armed (or a
+        // MIDI track armed) there is no take to resolve here.
+        const bool isAudioTake = anyArmed && (armedKind == synth::TrackKind::Audio);
         AudioTake take;
         RecordTapModule* tapModule = nullptr;
         if (isAudioTake) {
@@ -828,13 +828,20 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
             take.captureBpm = snap.bpm > 0.0 ? snap.bpm : 120.0;
             take.captureRecordingLatencySamples = audioEngine.getRecordingLatencySamples();
             audioTake_ = take;
-        } else {
+        } else if (anyArmed) {
             // punchInBeat is BOTH the recorder's own bookkeeping and the audio-thread filter
             // threshold — captureBlock() drops everything before it, so the pre-roll bars the
             // performer plays along with the click are heard but never committed.
             midiRecorder.startRecording(armedTrack, punchInBeat);
+        } else {
+            // Nothing armed: the transport is rolling and the indicator is about to light, but no
+            // take of either kind starts. Arming a track MID-ROLL does not retroactively start one
+            // either — TimelineDoc::setTrackArmed() has no listener watching for this; the user has
+            // to stop and press Record again once something is armed.
+            statusBar.showMessage("Recording started - no track is armed");
         }
 
+        // Lit regardless of arming — a bare "record" is still record-on.
         timelinePanel.getTransportBar().setRecordingState(true);
     };
 
@@ -1041,10 +1048,12 @@ juce::String MainComponent::computeOutputDeviceInfoText() const {
 
     const int numOutputChannels = device->getActiveOutputChannels().countNumberOfSetBits();
 
-    // "\xc2\xb7" is the UTF-8 encoding of U+00B7 MIDDLE DOT (matches the "·" separator used
-    // elsewhere in this codebase, e.g. EQWindow.h / docs/layout.md's status-line examples), spelled
-    // as an escape rather than a literal byte so it survives any non-UTF-8 build/editor pipeline.
-    return device->getName() + " \xc2\xb7 " + khzText + " kHz \xc2\xb7 " + juce::String(numOutputChannels) + "ch";
+    // Plain ASCII separator. A "\xc2\xb7" (UTF-8 U+00B7 MIDDLE DOT) used to sit here, on the theory
+    // that an escape survives a non-UTF-8 editor better than a literal byte — but the escape is the
+    // same three bytes, and juce::String's `const char*` constructor decodes bytes as LATIN-1, so
+    // both spellings reached the status bar as mojibake. ASCII or juce::CharPointer_UTF8; see the
+    // string-literal invariant in CLAUDE.md, guarded by scripts/tests/check-nonascii-literals.test.sh.
+    return device->getName() + " - " + khzText + " kHz - " + juce::String(numOutputChannels) + "ch";
 }
 
 MainComponent::~MainComponent() {
@@ -1211,7 +1220,7 @@ void MainComponent::timerCallback() {
 
     if (audioEngine.consumeFeedbackGuardTripped()) {
         feedbackGuardLatched_ = true;
-        statusBar.showMessage("Input muted — sustained clipping (feedback protection)");
+        statusBar.showMessage("Input muted - sustained clipping (feedback protection)");
     }
 
     audioEngine.setInputMonitoringEnabled(anyAudioTrackArmed && !feedbackGuardLatched_);
@@ -1750,7 +1759,7 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
     }
 #if JUCE_MAC || JUCE_WINDOWS
     case AppCommands::checkForUpdates: {
-        result.setInfo("Check for Updates…", "Check for a newer version of the app", "Help", 0);
+        result.setInfo("Check for Updates...", "Check for a newer version of the app", "Help", 0);
         result.setActive(updateManager.isAvailable());
         break;
     }
@@ -3454,7 +3463,7 @@ std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> MainComponent::getAvai
             option.nodeUuid = uuid;
             option.paramId = param.paramId;
             option.paramIndex = param.index;
-            option.label = moduleLabel + " \xC2\xB7 " + param.displayName;
+            option.label = moduleLabel + " - " + param.displayName;
             options.push_back(std::move(option));
         }
     }

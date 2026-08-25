@@ -489,7 +489,7 @@ void ModMatrixComponent::ModRow::populateCombos() {
                             // text (JUCE never concatenates ancestor submenu titles), so the module
                             // name must live here too, or a multi-output module's box shows a bare
                             // "Out N" with no way to tell which module it is.
-                            instSourceSub.addItem(itemId, displayName + " \u00B7 Out " + juce::String(i + 1));
+                            instSourceSub.addItem(itemId, displayName + " - Out " + juce::String(i + 1));
                             sourceCombo.addItem(displayName + " Out " + juce::String(i + 1), itemId);
                         }
                         catSourceSub.addSubMenu(displayName, instSourceSub);
@@ -505,7 +505,7 @@ void ModMatrixComponent::ModRow::populateCombos() {
                         // Same fix as the source leaves above: the closed combo box's label comes
                         // only from this item's own text, never from the submenu title, so the
                         // module name has to be baked in here too.
-                        instDestSub.addItem(itemId, displayName + " \u00B7 " + target.name);
+                        instDestSub.addItem(itemId, displayName + " - " + target.name);
                         destCombo.addItem(displayName + ": " + target.name, itemId);
                     }
                     catDestSub.addSubMenu(displayName, instDestSub);

@@ -51,10 +51,12 @@ constexpr int kMinWidthForWaveform = 24;
 constexpr double kFallbackBpm = 120.0;
 constexpr double kFallbackSampleRate = 44100.0;
 
-// The empty-row hint (see TimelineClipLaneArea::emptyRowHintFor). Escaped UTF-8 for the em dash so
-// the source file stays plain ASCII, the same way the theme/label strings elsewhere spell one.
-constexpr const char* kMidiEmptyRowHint = "Double-click to add a clip \xE2\x80\x94 or arm (R) and record";
-constexpr const char* kAudioEmptyRowHint = "Drop an audio file \xE2\x80\x94 or arm (R) and record";
+// The empty-row hint (see TimelineClipLaneArea::emptyRowHintFor). ASCII only: these end up in a
+// juce::String, whose `const char*` constructor decodes bytes as LATIN-1, so the "\xE2\x80\x94" em
+// dash that used to sit here painted as three mojibake characters. An escape is no safer than a
+// typed glyph — it is the same bytes. See the string-literal invariant in CLAUDE.md.
+constexpr const char* kMidiEmptyRowHint = "Double-click to add a clip - or arm (R) and record";
+constexpr const char* kAudioEmptyRowHint = "Drop an audio file - or arm (R) and record";
 
 // The hint is dropped rather than clipped or shrunk below these: a row shorter than this has no
 // room for an 11 px line, and one narrower than the text plus its padding would truncate mid-word.
@@ -1898,7 +1900,7 @@ void TimelineClipLaneArea::showClipContextMenu(synth::ClipId id, juce::Point<int
                  [this, id] { applyClipContextChoice(id, ClipContextChoice::ToggleMute, 0.0); });
     // Not a ClipContextChoice: renaming opens an editor rather than mutating, so the headless
     // seam is renameClip() and the enum case is inert (see ClipContextChoice's own comment).
-    menu.addItem("Rename…", [this, id] { beginRenameClip(id); });
+    menu.addItem("Rename...", [this, id] { beginRenameClip(id); });
     menu.addItem("Delete", [this, id] { applyClipContextChoice(id, ClipContextChoice::Delete, 0.0); });
 
     // Offered for any audio clip (non-empty assetRef) regardless of whether the asset
@@ -1908,7 +1910,7 @@ void TimelineClipLaneArea::showClipContextMenu(synth::ClipId id, juce::Point<int
     // onRelinkAudioRequested's own comment).
     if (clip->assetRef.isNotEmpty() && onRelinkAudioRequested) {
         menu.addSeparator();
-        menu.addItem("Relink audio…", [this, id] { onRelinkAudioRequested(id); });
+        menu.addItem("Relink audio...", [this, id] { onRelinkAudioRequested(id); });
     }
 
     menu.showMenuAsync(juce::PopupMenu::Options());

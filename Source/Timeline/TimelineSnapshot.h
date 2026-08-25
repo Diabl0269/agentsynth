@@ -128,11 +128,11 @@ struct TimelineSnapshot {
         double sourceStartSeconds = 0.0; // where inside the asset this clip starts reading
     };
 
-    static_assert(std::is_trivially_copyable_v<TrackInfo>, "audio-thread PODs only — no juce::String, no vectors");
-    static_assert(std::is_trivially_copyable_v<NoteEvent>, "audio-thread PODs only — no juce::String, no vectors");
-    static_assert(std::is_trivially_copyable_v<LaneInfo>, "audio-thread PODs only — no juce::String, no vectors");
-    static_assert(std::is_trivially_copyable_v<Point>, "audio-thread PODs only — no juce::String, no vectors");
-    static_assert(std::is_trivially_copyable_v<AudioClipInfo>, "audio-thread PODs only — no juce::String, no vectors");
+    static_assert(std::is_trivially_copyable_v<TrackInfo>, "audio-thread PODs only - no juce::String, no vectors");
+    static_assert(std::is_trivially_copyable_v<NoteEvent>, "audio-thread PODs only - no juce::String, no vectors");
+    static_assert(std::is_trivially_copyable_v<LaneInfo>, "audio-thread PODs only - no juce::String, no vectors");
+    static_assert(std::is_trivially_copyable_v<Point>, "audio-thread PODs only - no juce::String, no vectors");
+    static_assert(std::is_trivially_copyable_v<AudioClipInfo>, "audio-thread PODs only - no juce::String, no vectors");
 
     TimelineSnapshot();
     ~TimelineSnapshot();

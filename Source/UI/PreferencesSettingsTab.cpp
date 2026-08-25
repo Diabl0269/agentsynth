@@ -188,6 +188,22 @@ GraphEditor::SmartConnectionMode modeFromComboId(int id) {
 
 PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& props)
     : appProperties(props) {
+    // Round 4 follow-up: without this, searchField below — a juce::TextEditor, and the first
+    // focus-wanting descendant in this tab — auto-grabs keyboard focus the moment the Settings
+    // DialogWindow's peer first gains OS focus. ComponentPeer::handleFocusGain() calls
+    // grabKeyboardFocus() on the window's root component whenever a brand-new peer is shown with
+    // nothing previously focused; since PreferencesSettingsTab itself didn't want focus, that call
+    // fell through to KeyboardFocusTraverser::getDefaultComponent(), which returns the first
+    // wants-focus child it finds in traversal order — searchField, purely because it happens to be
+    // the first text field added. Declaring the TAB ITSELF as a focus target intercepts that
+    // traversal one level up: takeKeyboardFocus() short-circuits onto the first component that
+    // wants focus without descending further, so the tab (inert, no visible caret) absorbs the
+    // opening grab instead of the search field. Exact same fix, same reason, as
+    // ShortcutsSettingsTab's own setWantsKeyboardFocus(true) for its sibling search box — see that
+    // constructor. Does NOT affect clicking directly into the field: TextEditor's own
+    // wantsKeyboardFocus is untouched, so a click still focuses it normally.
+    setWantsKeyboardFocus(true);
+
     addAndMakeVisible(titleLabel);
     titleLabel.setText("Preferences", juce::dontSendNotification);
     titleLabel.setFont(juce::Font(juce::FontOptions(18.0f, juce::Font::bold)));
@@ -224,7 +240,12 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     smartConnectionCombo.addItem("New modules only", 2);
     smartConnectionCombo.addItem("When main I/O is free", 3);
     smartConnectionCombo.addItem("All module moves", 4);
-    smartConnectionCombo.setTooltip("Suggest cables to nearby modules while placing or moving a card.");
+    // "Ctrl" is spelled literally rather than through platformCommandKeyName(): the insert modifier
+    // is the Control key on every platform, macOS included, precisely because Cmd already means
+    // additive selection there.
+    smartConnectionCombo.setTooltip("Suggest cables to nearby modules while placing or moving a card. "
+                                    "Hold Ctrl while dragging to insert the module into an existing "
+                                    "cable instead of adding a new one.");
     {
         const auto mode = GraphEditor::smartConnectionModeFromString(
             appProperties.getUserSettings()->getValue("smartConnectionMode", "NewAndUnwired"));
@@ -252,7 +273,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     addAndMakeVisible(defaultDualIOToggle);
     defaultDualIOToggle.setToggleState(
         appProperties.getUserSettings()->getBoolValue("defaultDualIOForNewModules", false), juce::dontSendNotification);
-    defaultDualIOToggle.setTooltip("Splits the audio jacks on every stereo-capable module — FX, Voice Mixer output, "
+    defaultDualIOToggle.setTooltip("Splits the audio jacks on every stereo-capable module - FX, Voice Mixer output, "
                                    "Oscillator, Wavetable, Filter, VCA and Sampler. Applies to modules already on the "
                                    "canvas as well as new ones. Card heights do not change.");
     defaultDualIOToggle.onClick = [this] { persistDefaultDualIOForNewModules(defaultDualIOToggle.getToggleState()); };
@@ -261,7 +282,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
 
     addAndMakeVisible(perModuleDefaultsButton);
     perModuleDefaultsButton.setTooltip(
-        "Per-module overrides of the Split Left/Right default above — Follow global, Always on, or Always off for "
+        "Per-module overrides of the Split Left/Right default above - Follow global, Always on, or Always off for "
         "each module type. Applies to modules created after the change, same as the toggle.");
     perModuleDefaultsButton.onClick = [this] {
         auto popup = buildDualIOPerModuleDefaultsPopup();
@@ -283,7 +304,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         juce::dontSendNotification);
     doubleClickSpansLocatorsToggle.setTooltip(
         "When on (the default), double-clicking empty lane space INSIDE the loop locators creates a clip spanning "
-        "them. Outside the locators — or with no locators set — you still get a one-bar clip. Turn it off to always "
+        "them. Outside the locators - or with no locators set - you still get a one-bar clip. Turn it off to always "
         "get one bar.");
     doubleClickSpansLocatorsToggle.onClick = [this] {
         persistDoubleClickSpansLocators(doubleClickSpansLocatorsToggle.getToggleState());

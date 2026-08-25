@@ -28,7 +28,7 @@ public:
         // model picker in AIChatComponent, which most users see far more often than this dialog.
         providerCombo.setTooltip("Local (Ollama) processing stays on this machine. Hosted mode "
                                  "sends your prompt and current patch to Agent Synth's servers "
-                                 "for processing \xe2\x80\x94 see " +
+                                 "for processing - see " +
                                  juce::String(synth::branding::kWebsiteUrl) + "/privacy.");
 
         // Built once and reused by selectedDescriptor() below: populating the combo from a
@@ -131,8 +131,8 @@ public:
         // Disabled + "sign in required" tooltip when signed out, same gating precedent as
         // AccountRow/PlanBadge reading AccountService's published state.
         addAndMakeVisible(promptLearningToggle);
-        promptLearningToggle.setButtonText(juce::String::fromUTF8(
-            "Help improve AgentSynth \xe2\x80\x94 share my hosted-mode prompts for product learning"));
+        promptLearningToggle.setButtonText(
+            juce::String::fromUTF8("Help improve AgentSynth - share my hosted-mode prompts for product learning"));
         promptLearningToggle.onClick = [this] {
             if (accountService != nullptr)
                 accountService->setPromptLearningOptIn(promptLearningToggle.getToggleState());

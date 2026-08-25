@@ -102,7 +102,7 @@ std::pair<const void*, int> IconLibrary::binaryDataForIcon(Icon id) {
         {BinaryData::catio_svg, BinaryData::catio_svgSize},
     };
     static_assert(std::size(kTable) == (size_t)Icon::kCount,
-                  "kTable size does not match Icon::kCount — update binaryDataForIcon lookup table");
+                  "kTable size does not match Icon::kCount - update binaryDataForIcon lookup table");
 
     return kTable[static_cast<size_t>(id)];
 #else

@@ -54,10 +54,10 @@ enum class TrackKind : int {
     Automation = 2, // reserved: lanes may live on their own track row later
 };
 
-static_assert(static_cast<int>(TrackKind::Midi) == 0, "TrackKind is serialised as an int — renumbering breaks files");
-static_assert(static_cast<int>(TrackKind::Audio) == 1, "TrackKind is serialised as an int — renumbering breaks files");
+static_assert(static_cast<int>(TrackKind::Midi) == 0, "TrackKind is serialised as an int - renumbering breaks files");
+static_assert(static_cast<int>(TrackKind::Audio) == 1, "TrackKind is serialised as an int - renumbering breaks files");
 static_assert(static_cast<int>(TrackKind::Automation) == 2,
-              "TrackKind is serialised as an int — renumbering breaks files");
+              "TrackKind is serialised as an int - renumbering breaks files");
 
 // Interpolation from a breakpoint to the next one. Serialised as an int (same contract as
 // TrackKind: the numbers are format).
@@ -68,11 +68,11 @@ enum class BreakpointCurve : int {
 };
 
 static_assert(static_cast<int>(BreakpointCurve::Hold) == 0,
-              "BreakpointCurve is serialised as an int — renumbering breaks files");
+              "BreakpointCurve is serialised as an int - renumbering breaks files");
 static_assert(static_cast<int>(BreakpointCurve::Linear) == 1,
-              "BreakpointCurve is serialised as an int — renumbering breaks files");
+              "BreakpointCurve is serialised as an int - renumbering breaks files");
 static_assert(static_cast<int>(BreakpointCurve::Bezier) == 2,
-              "BreakpointCurve is serialised as an int — renumbering breaks files");
+              "BreakpointCurve is serialised as an int - renumbering breaks files");
 
 // Per-lane automation record mode. Serialised as an int (same contract as TrackKind and
 // BreakpointCurve: the numbers are format), and flattened into TimelineSnapshot::LaneInfo so the
@@ -98,15 +98,15 @@ enum class LaneRecordMode : int {
 };
 
 static_assert(static_cast<int>(LaneRecordMode::Off) == 0,
-              "LaneRecordMode is serialised as an int — renumbering breaks files");
+              "LaneRecordMode is serialised as an int - renumbering breaks files");
 static_assert(static_cast<int>(LaneRecordMode::Read) == 1,
-              "LaneRecordMode is serialised as an int — renumbering breaks files");
+              "LaneRecordMode is serialised as an int - renumbering breaks files");
 static_assert(static_cast<int>(LaneRecordMode::Touch) == 2,
-              "LaneRecordMode is serialised as an int — renumbering breaks files");
+              "LaneRecordMode is serialised as an int - renumbering breaks files");
 static_assert(static_cast<int>(LaneRecordMode::Latch) == 3,
-              "LaneRecordMode is serialised as an int — renumbering breaks files");
+              "LaneRecordMode is serialised as an int - renumbering breaks files");
 static_assert(static_cast<int>(LaneRecordMode::Write) == 4,
-              "LaneRecordMode is serialised as an int — renumbering breaks files");
+              "LaneRecordMode is serialised as an int - renumbering breaks files");
 
 // One note inside a clip. startBeat is CLIP-RELATIVE (offset from the clip's own startBeat),
 // so moving a clip moves its notes with it and never rewrites them. `id` is a stable,

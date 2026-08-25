@@ -1,12 +1,15 @@
 #pragma once
 
 #include "../Plugin/Hosting/HostedPluginBackend.h"
+#include "../ShortcutManager.h"
 #include "../SnippetManager.h"
+#include "ModuleLibraryHelpPopup.h"
 #include "Theme/AppLookAndFeel.h"
 #include "UIAnimation.h"
 #include <algorithm>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <vector>
@@ -46,6 +49,10 @@ public:
     static constexpr int kHeaderHeight = 25;
     static constexpr int kHeaderGap = 5; // extra breathing room above every header but the first
     static constexpr int kItemHeight = 32;
+
+    // The "?" help button sharing the collapse-all strip's row — see getHelpButtonBounds().
+    static constexpr int kHelpButtonSize = 18;
+    static constexpr int kHelpButtonMargin = 6;
 
     /** Inclusive [start, start+length) range of a case-insensitive query hit inside a label. */
     struct HighlightSpan {
@@ -343,6 +350,13 @@ public:
      *  available, which keeps headless tests and every non-singleton module unaffected. */
     std::function<bool(const juce::String&)> isModuleAvailable;
 
+    /** ShortcutManager whose LIVE bindings back the "Key shortcuts" section of the help popover
+     *  (see showHelpPopover() / createHelpPopupForTest()) — read-only, the sidebar never rebinds
+     *  anything. Optional: null (the default — every headless test, and any owner that has not
+     *  wired one yet) falls back to each curated shortcut's shipped default binding, via
+     *  shortcutHintFor's own null-manager contract. */
+    void setShortcutManager(const ShortcutManager* manager) noexcept { shortcutManager = manager; }
+
     /** True when the row at `index` is a draggable row that can currently be added. Snippet rows are
      *  draggable but never gated — the predicate only ever describes module types. */
     bool isEntryEnabled(int index) const {
@@ -373,7 +387,7 @@ public:
             return "Generates audio waveforms (sine, saw, square, triangle). Switch Poly on to run "
                    "8 voices driven by a Poly MIDI pitch fan.";
         if (moduleName.equalsIgnoreCase("Wavetable"))
-            return "Scans through 3D wavetables — six built-ins or load your own file.";
+            return "Scans through 3D wavetables - six built-ins or load your own file.";
         if (moduleName.equalsIgnoreCase("Noise"))
             return "Generates noise (white, pink, brown).";
         if (moduleName.equalsIgnoreCase("Sampler"))
@@ -389,7 +403,7 @@ public:
         if (moduleName.equalsIgnoreCase("Poly MIDI"))
             return "Converts MIDI into 8 voices of pitch and gate CV. Patch Poly Out to an "
                    "Oscillator's Pitch and an ADSR's Gate, and switch Poly on for every module in "
-                   "the chain (Oscillator, ADSR, Filter, VCA) — with Poly off, only one voice sounds.";
+                   "the chain (Oscillator, ADSR, Filter, VCA) - with Poly off, only one voice sounds.";
         if (moduleName.equalsIgnoreCase("External MIDI"))
             return "Routes external MIDI device input into the patch graph.";
         if (moduleName.equalsIgnoreCase("ADSR"))
@@ -399,7 +413,7 @@ public:
         if (moduleName.equalsIgnoreCase("Envelope Follower"))
             return "Tracks an audio signal's amplitude and outputs it as modulation CV.";
         if (moduleName.equalsIgnoreCase("VCA"))
-            return "Voltage-controlled amplifier — controls signal amplitude via CV. Switch Poly on "
+            return "Voltage-controlled amplifier - controls signal amplitude via CV. Switch Poly on "
                    "to gain-control 8 voices and sum them to stereo.";
         if (moduleName.equalsIgnoreCase("Filter"))
             return "Multi-mode resonant filter (low-pass, high-pass, band-pass). Switch Poly on to "
@@ -415,7 +429,7 @@ public:
         if (moduleName.equalsIgnoreCase("Distortion"))
             return "Waveshaping distortion from soft saturation to hard clipping.";
         if (moduleName.equalsIgnoreCase("Ring Modulator"))
-            return "Oversampled diode-ring modulator — metallic, bell-like sum and difference tones.";
+            return "Oversampled diode-ring modulator - metallic, bell-like sum and difference tones.";
         if (moduleName.equalsIgnoreCase("Bitcrusher"))
             return "For Lo-Fi, sample-rate reduction, and retro digital grit.";
         if (moduleName.equalsIgnoreCase("Pitch Shifter"))
@@ -429,7 +443,7 @@ public:
         if (moduleName.equalsIgnoreCase("Limiter"))
             return "Brickwall limiter that prevents the signal from exceeding 0 dBFS.";
         if (moduleName.equalsIgnoreCase("Macros"))
-            return "Bank of assignable macro knobs — one knob drives many parameters at once.";
+            return "Bank of assignable macro knobs - one knob drives many parameters at once.";
         if (moduleName.equalsIgnoreCase("Sample & Hold"))
             return "Latches a source value on each clock edge for stepped random CV.";
         if (moduleName.equalsIgnoreCase("Voice Mixer"))
@@ -440,7 +454,7 @@ public:
             return "Emits a gate while the Signal is above Threshold, plus the inverted gate. Slice "
                    "an LFO, a kick, or any CV into a pulse.";
         if (moduleName.equalsIgnoreCase("Audio Input"))
-            return "Audio from the input device — one jack per input channel. Only one per patch.";
+            return "Audio from the input device - one jack per input channel. Only one per patch.";
         if (moduleName.equalsIgnoreCase("Audio Output"))
             return "Sends the patch to the output device. Only one per patch.";
         // Generic fallback for any unrecognised module name.
@@ -449,14 +463,14 @@ public:
 
     /** Tooltip for a saved snippet row. */
     static juce::String snippetDescription(const juce::String& name, int moduleCount) {
-        return "Snippet \"" + name + "\" — " + juce::String(moduleCount) +
+        return "Snippet \"" + name + "\" - " + juce::String(moduleCount) +
                (moduleCount == 1 ? " module. " : " modules. ") + "Drag onto the canvas to insert the whole group.";
     }
 
     /** Tooltip for a scanned plugin row. */
     static juce::String pluginDescription(const juce::String& name, const juce::String& format) {
         return name + " (" + format +
-               ") — a plugin installed on this machine. Drag it onto the canvas, or click "
+               ") - a plugin installed on this machine. Drag it onto the canvas, or click "
                "to drop it in the middle.";
     }
 
@@ -828,15 +842,33 @@ public:
         }
 
         // ---- Pinned chrome: the search field is a child TextEditor in the top 32 px; the
-        // collapse-all strip is drawn here so scrolled rows cannot show through it. ----
+        // collapse-all strip (plus the "?" help button sharing its row) is drawn here so scrolled
+        // rows cannot show through it. ----
         {
             const bool allCollapsed = areAllSectionsCollapsed();
             g.setColour(bgColour);
             g.fillRect(0, kSearchHeight, getWidth(), kTopStripHeight);
+
+            // "?" help button, left of the COLLAPSE ALL / EXPAND ALL label — paint() and the mouse
+            // handlers share getHelpButtonBounds() so the drawn button and the clickable button can
+            // never drift apart (the same reason cable paint/hit-test share one enumeration
+            // elsewhere in this app — see GraphEditor::buildVisibleCables).
+            const auto helpBoundsInt = getHelpButtonBounds();
+            const auto helpBoundsF = helpBoundsInt.toFloat();
+            if (helpButtonHovered) {
+                g.setColour(accentColour.withAlpha(0.16f));
+                g.fillEllipse(helpBoundsF);
+            }
+            g.setColour(helpButtonHovered ? accentColour : mutedColour);
+            g.drawEllipse(helpBoundsF.reduced(0.5f), 1.0f);
+            g.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
+            g.drawText("?", helpBoundsInt, juce::Justification::centred);
+
             g.setColour(topStripHovered ? accentColour : mutedColour);
             g.setFont(juce::Font(juce::FontOptions(11.0f)));
-            g.drawText(allCollapsed ? "EXPAND ALL" : "COLLAPSE ALL", 10, kSearchHeight + 2, contentWidth - 20,
-                       kTopStripHeight - 4, juce::Justification::centredRight);
+            g.drawText(allCollapsed ? "EXPAND ALL" : "COLLAPSE ALL", 10 + kHelpButtonSize + kHelpButtonMargin,
+                       kSearchHeight + 2, contentWidth - 20 - kHelpButtonSize - kHelpButtonMargin, kTopStripHeight - 4,
+                       juce::Justification::centredRight);
         }
     }
 
@@ -846,19 +878,26 @@ public:
 
     void mouseMove(const juce::MouseEvent& e) override {
         const bool wasTopStripHovered = topStripHovered;
+        const bool wasHelpButtonHovered = helpButtonHovered;
         topStripHovered = isInTopStrip(e.y);
+        // The help button shares the strip's row, so its own hover is a sub-check within it —
+        // shares getHelpButtonBounds() with paint() and mouseDown() (see that method's comment).
+        helpButtonHovered = topStripHovered && getHelpButtonBounds().contains(e.getPosition());
 
         const int entryUnderMouse = getEntryIndexAtComponentY(e.y);
         // Only interactive rows can be hovered; headers and hints clamp to -1.
         const int newIndex = isInteractiveEntry(entryUnderMouse) ? entryUnderMouse : -1;
 
-        if (newIndex != hoveredIndex || topStripHovered != wasTopStripHovered) {
+        if (newIndex != hoveredIndex || topStripHovered != wasTopStripHovered ||
+            helpButtonHovered != wasHelpButtonHovered) {
             hoveredIndex = newIndex;
 
             // Update tooltip: the shared TooltipWindow (owned by MainComponent) reads
             // this component's tooltip string on each hover. Setting it here on hover
             // change means each draggable row surfaces its per-module description.
-            if (topStripHovered) {
+            if (helpButtonHovered) {
+                setTooltip("Open a quick guide to using the module library.");
+            } else if (topStripHovered) {
                 setTooltip("Collapse or expand every category in the library.");
             } else if (hoveredIndex >= 0) {
                 setTooltip(tooltipForEntry(hoveredIndex));
@@ -881,9 +920,10 @@ public:
     }
 
     void mouseExit(const juce::MouseEvent&) override {
-        if (hoveredIndex != -1 || topStripHovered) {
+        if (hoveredIndex != -1 || topStripHovered || helpButtonHovered) {
             hoveredIndex = -1;
             topStripHovered = false;
+            helpButtonHovered = false;
             setTooltip({});
             setMouseCursor(juce::MouseCursor::NormalCursor);
             repaint();
@@ -894,6 +934,10 @@ public:
         pressedIndex = -1;
 
         if (isInTopStrip(e.y)) {
+            if (getHelpButtonBounds().contains(e.getPosition())) {
+                showHelpPopover();
+                return;
+            }
             toggleAllSections();
             return;
         }
@@ -1056,7 +1100,43 @@ public:
         return getEntryIndexAt(y + scrollOffset);
     }
 
+    /** Bounds (component space) of the small "?" help button on the collapse-all strip, left of
+     *  the COLLAPSE ALL / EXPAND ALL label. paint() and the mouse handlers share this one rect so
+     *  the drawn button and the clickable button can never drift apart. */
+    static juce::Rectangle<int> getHelpButtonBounds() noexcept {
+        return {kHelpButtonMargin, kSearchHeight + (kTopStripHeight - kHelpButtonSize) / 2, kHelpButtonSize,
+                kHelpButtonSize};
+    }
+
+    bool isHelpButtonHoveredForTest() const noexcept { return helpButtonHovered; }
+
+    /** Test seam for the help popover: builds the exact content component showHelpPopover() would
+     *  hand to a juce::CallOutBox, without launching the CallOutBox itself (which needs real
+     *  screen coordinates and a live desktop — a real popup/menu window is exactly the CI segfault
+     *  trap documented in docs/timeline_panel_core.md's marker-context-menu seam note). Mirrors
+     *  PreferencesSettingsTab::createDualIOPerModuleDefaultsPopupForTest. */
+    std::unique_ptr<juce::Component> createHelpPopupForTest() const { return buildHelpPopup(); }
+
+protected:
+    /** Launches the help guide in a themed juce::CallOutBox anchored on the help button — the
+     *  house pattern for a compact popover (see MidiDestinationPicker.h). A juce::CallOutBox is a
+     *  real top-level window (the same class of CI segfault trap documented in
+     *  docs/timeline_panel_core.md's marker-context-menu seam note), so this is a protected
+     *  virtual a test can override to record the request instead of creating one — mirrors
+     *  TimelineRulerComponent::openMarkerContextMenu. Production behaviour (mouseDown routing the
+     *  button's rect here instead of to toggleAllSections()) is exercised as-is either way. */
+    virtual void showHelpPopover() {
+        juce::CallOutBox::launchAsynchronously(buildHelpPopup(), localAreaToGlobal(getHelpButtonBounds()), nullptr);
+    }
+
 private:
+    /** Builds the exact content component showHelpPopover() hands to a juce::CallOutBox — shared
+     *  with createHelpPopupForTest() so the test seam exercises the real popup, never a lookalike
+     *  (mirrors PreferencesSettingsTab::buildDualIOPerModuleDefaultsPopup / its test seam). */
+    std::unique_ptr<juce::Component> buildHelpPopup() const {
+        return std::make_unique<synth::ui::ModuleLibraryHelpPopup>(shortcutManager);
+    }
+
     float targetProgressFor(const juce::String& header) const { return isSectionCollapsed(header) ? 1.0f : 0.0f; }
 
     void snapSectionProgressToTargets() {
@@ -1483,9 +1563,11 @@ private:
     juce::Array<synth::SnippetInfo> snippets;
     std::vector<synth::PluginIdentity> plugins;
     std::set<juce::String> collapsedSections;
-    int hoveredIndex = -1;        // -1 = no hover; updated on mouseMove/mouseExit only
-    int pressedIndex = -1;        // row whose click is pending a mouseUp (Action / Plugin rows only)
-    bool topStripHovered = false; // hover state for the collapse-all chrome
+    int hoveredIndex = -1;          // -1 = no hover; updated on mouseMove/mouseExit only
+    int pressedIndex = -1;          // row whose click is pending a mouseUp (Action / Plugin rows only)
+    bool topStripHovered = false;   // hover state for the collapse-all chrome
+    bool helpButtonHovered = false; // hover state for the "?" help button sharing that row
+    const ShortcutManager* shortcutManager = nullptr; // read-only; see setShortcutManager()
 
     /** Pixels of movement that turn a plugin-row press into a drag rather than a click. */
     static constexpr int kDragStartThresholdPx = 4;

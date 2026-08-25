@@ -1562,10 +1562,10 @@ TEST(TimelineClipLaneAuthoringTest, EmptyRowHintTextIsPerKindAndOnlyForEmptyRows
     f.doc.addTrack(TrackKind::Automation, "Automation");
     ASSERT_TRUE(audioTrack.isValid());
 
-    EXPECT_EQ(f.lane.getEmptyRowHintForTest(0),
-              juce::String::fromUTF8("Double-click to add a clip \xE2\x80\x94 or arm (R) and record"));
-    EXPECT_EQ(f.lane.getEmptyRowHintForTest(1),
-              juce::String::fromUTF8("Drop an audio file \xE2\x80\x94 or arm (R) and record"));
+    // ASCII: the hint used to carry a UTF-8 em dash, which juce::String decoded as Latin-1 and
+    // painted as mojibake (see CLAUDE.md's string-literal invariant).
+    EXPECT_EQ(f.lane.getEmptyRowHintForTest(0), juce::String("Double-click to add a clip - or arm (R) and record"));
+    EXPECT_EQ(f.lane.getEmptyRowHintForTest(1), juce::String("Drop an audio file - or arm (R) and record"));
     EXPECT_TRUE(f.lane.getEmptyRowHintForTest(2).isEmpty()) << "an automation row has nothing to author";
     EXPECT_TRUE(f.lane.getEmptyRowHintForTest(9).isEmpty()) << "no such row";
 

@@ -345,7 +345,7 @@ PatchValidationResult AIStateMapper::validateNodeParams(juce::AudioProcessor* pr
                 ids.add(id);
             return {false, PatchValidationError::UnknownParameterKey,
                     "Unknown parameter \"" + key +
-                        "\" — it doesn't match any real parameter on this module and would be silently ignored, "
+                        "\" - it doesn't match any real parameter on this module and would be silently ignored, "
                         "leaving that value at its default. This module's actual parameter IDs are: " +
                         ids.joinIntoString(", ") + "."};
         }
@@ -449,7 +449,7 @@ PatchValidationResult AIStateMapper::validatePatch(const juce::var& json, const 
     // this check. Same class of rule as the node "state" blob (see applyExtraStateToProcessor).
     if (rootObj->hasProperty("timeline"))
         return {false, PatchValidationError::TimelineNotAllowed,
-                "Patch suggestions must not contain a \"timeline\" property — timeline and automation "
+                "Patch suggestions must not contain a \"timeline\" property - timeline and automation "
                 "data is not accepted from a patch suggestion. Remove it and resend only nodes, "
                 "connections and modulations."};
 

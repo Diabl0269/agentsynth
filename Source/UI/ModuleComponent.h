@@ -242,6 +242,14 @@ private:
     // subsequent mouseDrag from moving a component the dragger was never started on.
     bool bodyDragActive = false;
 
+    // Ctrl+press arms an insert-between DRAG and an additive-select TOGGLE at once, because at
+    // mouse-down they are indistinguishable (mirrors PianoRollComponent::cmdToggleNote_). The press
+    // collapses the selection onto this module so the drag is single-module — a group drag would
+    // suppress smart connections — and mouseUp restores this snapshot and flips membership instead,
+    // but only if nothing moved.
+    bool ctrlTogglePending = false;
+    std::vector<juce::AudioProcessorGraph::NodeID> ctrlPressSelection;
+
     float cachedRMS = 0.0f;
     float lastPaintedRMS = -1.0f;
     std::vector<float> rmsReadBuffer;

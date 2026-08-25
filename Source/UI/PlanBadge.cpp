@@ -57,7 +57,7 @@ void PlanBadge::updateFromSnapshot(const AccountSnapshot& snapshot) {
     textLabel.setColour(juce::Label::textColourId, textColour);
 
     const juce::String planLabel = isPro ? "Pro" : "Free";
-    textLabel.setText(planLabel + " \xc2\xb7 " + juce::String(snapshot.requestsUsed) + " / " +
+    textLabel.setText(planLabel + " - " + juce::String(snapshot.requestsUsed) + " / " +
                           juce::String(snapshot.monthlyRequestLimit) + " this month",
                       juce::dontSendNotification);
 

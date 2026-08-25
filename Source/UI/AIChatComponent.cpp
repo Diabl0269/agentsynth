@@ -1424,9 +1424,9 @@ void AIChatComponent::updateChatDisplay() {
                         if (self == nullptr)
                             return;
                         self->messages.push_back({"assistant",
-                                                  "That patch was rejected (" + info.error + ") — asking for a fix (" +
+                                                  "That patch was rejected (" + info.error + ") - asking for a fix (" +
                                                       juce::String(info.failedAttempt + 1) + "/" +
-                                                      juce::String(info.totalAttempts) + ")…",
+                                                      juce::String(info.totalAttempts) + ")...",
                                                   ""});
                         refreshLater();
                     });

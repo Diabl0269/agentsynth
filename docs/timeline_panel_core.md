@@ -901,25 +901,37 @@ it, so there is nothing to bound beyond "don't repaint an unchanged tick".
 `getReadoutRepaintCountForTest()` is the test seam, the same counting idiom
 `TimelinePanelComponent::getTransportUpdateCountForTest()` uses.
 
-**Recording is the one control the bar is not authoritative over.** Starting a take needs an armed
-MIDI track, which only `MainComponent` can see (it owns the `TimelineDoc`). The record button's
-click computes `!getToggleState()` and reports that as *intent* through
-`std::function<void(bool)> onRecordToggled` — it never flips its own toggle state. `setRecordingState(bool)`
-is the ONE thing that ever does, called back by the owner with the real outcome. `MainComponent`'s
-implementation (installed in `initialiseCommon()`):
+**Recording is the one control the bar is not authoritative over.** Whether a take actually
+captures anything, and onto which track, is something only `MainComponent` can see (it owns the
+`TimelineDoc`). The record button's click computes `!getToggleState()` and reports that as *intent*
+through `std::function<void(bool)> onRecordToggled` — it never flips its own toggle state.
+`setRecordingState(bool)` is the ONE thing that ever does, called back by the owner with the real
+outcome, and it is set the same way **regardless of whether anything is armed** — the indicator
+reflects record-ON, not "a take is capturing". `MainComponent`'s implementation (installed in
+`initialiseCommon()`):
 
-- **ON** — iterates `timelineDoc.getTracks()` for the first `armed && kind == TrackKind::Midi`
-  track. None found -> `setRecordingState(false)` + `statusBar.showMessage("Arm a track to
-  record")`, and the transport is left untouched — a rejected request must not have the side effect
-  of starting playback. Found -> **record implies roll** (a DAW convention: the record button starts
-  the transport if it isn't already playing), then `midiRecorder.startRecording(track, currentPpq)`.
+- **ON does NOT require an armed track.** It iterates `timelineDoc.getTracks()` for the first
+  `armed && (kind == TrackKind::Midi || kind == TrackKind::Audio)` track (first-armed-wins — there
+  is deliberately no "record both at once"), but either way the transport rolls: **record implies
+  roll** (a DAW convention — the record button starts the transport if it isn't already playing) and
+  `setRecordingState(true)` fire unconditionally. An armed MIDI track additionally calls
+  `midiRecorder.startRecording(track, currentPpq)`; an armed Audio track resolves a
+  `RecordTapModule` tap and take files *before* the transport moves (a request that cannot be
+  honoured — no Audio Output in the patch, or the take file can't be created/opened — must not
+  leave the transport rolling) and then starts its capture. **With nothing armed**, the transport
+  still rolls and the indicator still lights — identical to Play plus a lit record indicator — no
+  take of either kind starts, and `statusBar.showMessage("Recording started - no track is armed")`
+  explains the silence. Arming a track *mid-roll* does not retroactively start a take either:
+  `TimelineDoc::setTrackArmed` has no listener watching for this, so the user has to stop and press
+  Record again once something is armed.
 - **OFF** (button click, or the 10 Hz poll noticing `playing -> stopped` while
   `midiRecorder.isRecording()` — the user hit Space/Stop instead of the record button) — both routes
   go through one `MainComponent::commitMidiRecording()`: `midiRecorder.stopAndCommit(doc, undo)`,
   `midiRecorder.hadOverrun()` -> `statusBar.showMessage("Dropped MIDI events during recording")`,
   then `setRecordingState(false)`. One choke point means the explicit and the auto-commit paths can
   never diverge — see `docs/architecture.md`'s MidiRecorder wiring entry (hook 5) for the full
-  before/after ordering (armed-check before roll, so a rejected click has zero side effects).
+  ordering. With nothing armed there was never a take to commit, so OFF just turns the indicator
+  back off.
 
 `AudioEngine::setMidiCaptureSink(&midiRecorder)` is the other half of the app-level wiring (feeds
 `MidiRecorder::captureBlock` from `AudioEngine::renderNextBlock`'s one collector-merged buffer) —

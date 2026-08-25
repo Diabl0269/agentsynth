@@ -302,6 +302,53 @@ With every section expanded the rows exceed any realistic panel height, so the s
 - **Rows lose the bar's width** (`getRowContentWidth()`) while it is visible, so row text and the
   snippet count never run under the thumb.
 
+### Help popover
+
+A small themed "?" button sits on the collapse-all strip, left of the COLLAPSE ALL / EXPAND ALL
+label — `ModuleLibraryComponent::getHelpButtonBounds()` is the one rect `paint()` and the mouse
+handlers (`mouseMove`/`mouseDown`/`mouseExit`) all read, so the drawn button and the clickable one
+can never drift apart (the same "one enumeration" rule `buildRows()` follows for the rows
+themselves). Its hover state (`helpButtonHovered`) is tracked independently of the rest of the
+strip's own hover flag so the tooltip can name the button specifically ("Open a quick guide…")
+rather than reusing the collapse-all strip's tooltip.
+
+Clicking it opens `synth::ui::ModuleLibraryHelpPopup` (`Source/UI/ModuleLibraryHelpPopup.h`) in a
+`juce::CallOutBox` anchored on the button — the same self-painted-opaque-panel pattern
+`MidiDestinationPicker` documents (a parentless `CallOutBox` does not necessarily inherit
+`synth::theme::AppLookAndFeel`). The popup holds three plain disclosure sections — **Using
+modules**, **Your first patch**, and **Key shortcuts** — open by default, each collapsible via its
+own header row (no accordion animation: a one-shot guide read once and dismissed does not need
+`ModuleLibraryComponent`'s own animated fold). It scrolls via a `juce::Viewport` when the expanded
+content overflows `kMaxHeight`, and collapsing a section re-sizes the popup itself (the
+`juce::CallOutBox` tracks its content component's size), the same "rebuild → resize" pattern
+`MidiDestinationPicker::refreshRows()` uses.
+
+Content is data first: `usingModulesLines()` / `firstPatchSteps()` / `shortcutLines()` are pure
+static helpers, so a test can assert on the guide's text without ever constructing a
+`juce::Component` — the same idiom `ModuleLibraryComponent::descriptionFor` already uses. The "Key
+shortcuts" section resolves BOTH halves of each line live: the key via `shortcutHintFor` (so a
+rebind is reflected the next time the popover opens, never stale) and the label via
+`ShortcutManager::getActionDescription` (so it can never drift from the Settings tab's own
+wording either). `ModuleLibraryComponent::setShortcutManager()` is how an owner wires the live
+manager in — read-only, the sidebar never rebinds anything; unset (every headless test) falls back
+to each curated shortcut's shipped default via `shortcutHintFor`'s own null-manager contract. The
+"Your first patch" steps are the minimal audible patch verified against
+`Source/PresetManager.cpp`'s Default preset and `VCAModule`'s own CV handling (see
+[`modules.md`](modules.md#vca-amplifier-module)): Poly MIDI → Oscillator → VCA → Audio Output, with
+an ADSR into the VCA's CV input — not optional shaping, since an unpatched VCA CV input reads as
+silence rather than an implicit "fully open" value.
+
+Opening the popover is a `protected virtual` (`showHelpPopover()`), the same seam idiom
+[§3's cable doc](#3-cable-interaction) and `TimelineRulerComponent::openMarkerContextMenu` use for
+any real popup/menu window: a `juce::CallOutBox` launched in a display-less test runner is the
+exact SIGSEGV trap documented in [`timeline_panel_core.md`](timeline_panel_core.md), so tests
+either drive the pure content helpers directly, exercise hover/geometry (which touch nothing
+window-related), or override `showHelpPopover()` in a test-only subclass to confirm `mouseDown`
+routes the button's rect there instead of to `toggleAllSections()`.
+`ModuleLibraryComponent::createHelpPopupForTest()` is the separate seam for the popup's CONTENT —
+it builds the exact component the real button would hand to a `CallOutBox`, without ever launching
+one, mirroring `PreferencesSettingsTab::createDualIOPerModuleDefaultsPopupForTest`.
+
 ### Keyboard Shortcuts settings tab mirrors this pattern
 
 `Source/UI/ShortcutsSettingsTab.h/.cpp` — the Settings "Keyboard Shortcuts" tab — grew the same

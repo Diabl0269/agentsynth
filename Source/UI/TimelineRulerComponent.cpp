@@ -322,11 +322,11 @@ void TimelineRulerComponent::openMarkerContextMenu(synth::MarkerId id) {
 
     juce::Component::SafePointer<TimelineRulerComponent> safeThis(this);
     juce::PopupMenu menu;
-    menu.addItem("Rename\xe2\x80\xa6", [safeThis, id] {
+    menu.addItem("Rename...", [safeThis, id] {
         if (auto* self = safeThis.getComponent())
             self->beginRenameMarker(id);
     });
-    menu.addItem("Change colour\xe2\x80\xa6", [safeThis, id] {
+    menu.addItem("Change colour...", [safeThis, id] {
         auto* self = safeThis.getComponent();
         if (self == nullptr)
             return;

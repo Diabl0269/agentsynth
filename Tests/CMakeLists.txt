@@ -133,6 +133,7 @@ add_executable(Tests
     ModuleLibraryCollapseAnimationTests.cpp
     ModuleLibraryScrollTests.cpp
     ModuleLibrarySearchTests.cpp
+    ModuleLibraryHelpPopupTests.cpp
     SelectionModelTests.cpp
     SnippetManagerTests.cpp
     MultiSelectTests.cpp

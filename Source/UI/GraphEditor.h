@@ -427,18 +427,21 @@ public:
     void setSmartConnectionMode(SmartConnectionMode mode) { smartConnectionMode = mode; }
     SmartConnectionMode getSmartConnectionMode() const noexcept { return smartConnectionMode; }
 
-    /** Cmd/Ctrl turns a proximity suggestion into an insert-in-series. Sampled LIVE on every
-     *  drag tick rather than latched at mouse-down, and that is load-bearing: Cmd at mouse-down
-     *  already means "toggle selection membership" (`ModuleComponent::mouseDown`, issue #156),
-     *  which returns before a body drag ever starts — so a Cmd-held press can never reach the
-     *  drag path at all. Pressing Cmd part-way through an already-started drag is unambiguous and
-     *  leaves the selection semantics untouched.
+    /** CTRL turns a proximity suggestion into an insert-in-series. Ctrl on every platform (it is
+     *  the literal Control key on macOS too, NOT Cmd) — Cmd was tried first and lost, because
+     *  Cmd-click is the additive-selection modifier and the two gestures are indistinguishable at
+     *  mouse-down.
+     *
+     *  Sampled LIVE on every drag tick rather than latched at mouse-down, so BOTH orderings work:
+     *  press-then-Ctrl (the modifier is picked up on the next tick) and Ctrl-then-press (the
+     *  deferred classification in `ModuleComponent::mouseDown` arms a drag as well as a selection
+     *  toggle, and this read simply sees Ctrl already down).
      *
      *  Tests set the override; production leaves it empty and reads the real keyboard. */
     void setInsertModifierOverrideForTests(std::optional<bool> down) { insertModifierOverride = down; }
     bool isInsertModifierDown() const {
         return insertModifierOverride.has_value() ? *insertModifierOverride
-                                                  : juce::ModifierKeys::getCurrentModifiersRealtime().isCommandDown();
+                                                  : juce::ModifierKeys::getCurrentModifiersRealtime().isCtrlDown();
     }
 
     /** Persist / restore helpers (Preferences tab + MainComponent launch restore). */

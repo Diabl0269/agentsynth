@@ -89,7 +89,7 @@ PatchEvalResult evaluatePatch(const juce::AudioProcessorGraph& graph) {
         if (!result.sourceReachesOutput)
             reasons.add(samplerReachesOutput
                             ? "Audio Output is only reachable through a Sampler, which stays silent until a "
-                              "file is loaded — add an Oscillator, Wavetable or Noise module so the patch makes sound"
+                              "file is loaded - add an Oscillator, Wavetable or Noise module so the patch makes sound"
                             : "Audio Output is not reachable from any Oscillator, Wavetable or Noise module");
     }
 

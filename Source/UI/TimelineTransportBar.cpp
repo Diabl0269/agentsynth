@@ -211,7 +211,7 @@ TimelineTransportBar::TimelineTransportBar() {
     addAndMakeVisible(metronomeButton_);
     metronomeButton_.setComponentID("timelineTransportMetronome");
     metronomeButton_.setClickingTogglesState(false); // this bar owns the visual explicitly below
-    metronomeButton_.setTooltip("Metronome click (summed after the graph — never recorded or bounced)");
+    metronomeButton_.setTooltip("Metronome click (summed after the graph - never recorded or bounced)");
     metronomeButton_.onClick = [this] {
         const bool newState = !metronomeButton_.getToggleState();
         metronomeButton_.setToggleState(newState, juce::dontSendNotification);
@@ -242,7 +242,7 @@ TimelineTransportBar::TimelineTransportBar() {
     addAndMakeVisible(bpmLabel_);
     bpmLabel_.setComponentID("timelineTransportBpmLabel");
     bpmLabel_.setJustificationType(juce::Justification::centred);
-    bpmLabel_.setTooltip("Tempo (double-click to type, drag to scrub — Cmd for fine)");
+    bpmLabel_.setTooltip("Tempo (double-click to type, drag to scrub - Cmd for fine)");
     bpmLabel_.setEditable(false, true, false); // double-click to edit, same idiom as the track-name label
     bpmLabel_.setText(formatBpm(120.0), juce::dontSendNotification);
     bpmLabel_.onTextChange = [this] {

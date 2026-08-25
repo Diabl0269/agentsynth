@@ -232,7 +232,7 @@ TimelineValidationResult validateClip(const juce::var& clipVar, const juce::Stri
     if (assetRef.isNotEmpty())
         return fail(Error::AssetNotAllowed, clipText + " names the audio asset \"" + assetRef +
                                                 "\". Audio assets and the clips that reference them are created by "
-                                                "the app (recording, import), never supplied here — send a MIDI clip "
+                                                "the app (recording, import), never supplied here - send a MIDI clip "
                                                 "with an empty \"assetRef\" instead.");
 
     double gainDb = 0.0;
@@ -359,7 +359,7 @@ TimelineValidationResult validateLane(const juce::var& laneVar, const juce::Stri
     if (recordMode != static_cast<int>(LaneRecordMode::Off) && recordMode != static_cast<int>(LaneRecordMode::Read))
         return fail(Error::RecordModeNotAllowed,
                     laneText + " asks for record mode " + juce::String(recordMode) +
-                        ". Only Read (1) and Off (0) are accepted here — arming a lane to record is a decision the "
+                        ". Only Read (1) and Off (0) are accepted here - arming a lane to record is a decision the "
                         "user makes in the app.");
 
     const juce::Array<juce::var>* pointList = nullptr;

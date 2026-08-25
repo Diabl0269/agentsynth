@@ -18,7 +18,7 @@ public:
                                                                       {"Oldest", "Round-Robin", "Random"}, 0));
         // Off by default: gate stays a plain 0/1 flag, so every patch saved before this parameter
         // existed loads with byte-identical gate CV.
-        addParameter(velToGateParam = new juce::AudioParameterBool("velToGate", "Vel → Gate", false));
+        addParameter(velToGateParam = new juce::AudioParameterBool("velToGate", "Vel -> Gate", false));
         enableVisualBuffer(true);
     }
 

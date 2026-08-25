@@ -288,9 +288,12 @@ protected:
     static void quiesceEngine(MainComponent& mc) { mc.getAudioEngine().suspendDeviceCallback(); }
 };
 
-// ---- 6. RecordRequiresArmedTrack ----
+// ---- 6. RecordRollsWithoutAnArmedTrack ----
 
-TEST_F(TimelineTransportBarAppWiringTest, RecordRequiresArmedTrack) {
+// Record no longer requires an armed track (docs/timeline_panel_core.md's transport section):
+// pressing Record always rolls the transport with the indicator lit, exactly like Play plus a lit
+// record indicator when nothing is armed to capture into.
+TEST_F(TimelineTransportBarAppWiringTest, RecordRollsWithoutAnArmedTrack) {
     MainComponent mc(std::make_unique<MockProviderTB>());
     mc.setSize(1600, 900);
     quiesceEngine(mc);
@@ -298,16 +301,34 @@ TEST_F(TimelineTransportBarAppWiringTest, RecordRequiresArmedTrack) {
     auto& bar = mc.getTimelinePanel().getTransportBar();
     auto& transport = mc.getAudioEngine().getTransport();
 
-    // No armed track anywhere in the doc: the click is refused, the button snaps back off, a
-    // status message appears, and the transport is left untouched (no side effect on a rejection).
+    // No armed track anywhere in the doc: the click is HONOURED — the indicator lights, the
+    // transport rolls, no take of either kind starts, and a transient status message explains the
+    // silence (asserted via StatusBarComponent's own test hook).
+    bar.getRecordButton().onClick();
+    EXPECT_TRUE(bar.isRecordingForTest());
+    EXPECT_FALSE(mc.getMidiRecorderForTest().isRecording());
+    EXPECT_EQ(mc.getStatusBar().getTransientMessageForTest(), "Recording started - no track is armed");
+    transport.tick(512); // drains the play() posted by "record implies roll"
+    EXPECT_TRUE(transport.getPositionSnapshot().playing);
+
+    // Record off cleanly: no take was ever in flight, so commitAudioRecording()/
+    // commitMidiRecording() are both no-ops past turning the indicator back off.
     bar.getRecordButton().onClick();
     EXPECT_FALSE(bar.isRecordingForTest());
     EXPECT_FALSE(mc.getMidiRecorderForTest().isRecording());
-    EXPECT_EQ(mc.getStatusBar().getTransientMessageForTest(), "Arm a track to record");
-    transport.tick(512);
-    EXPECT_FALSE(transport.getPositionSnapshot().playing);
+}
 
-    // Arm a track: the SAME click now succeeds — capture starts and record implies roll.
+// ---- 6b. RecordWithAnArmedTrackIsUnchanged ----
+
+// The pre-existing armed-track path is untouched by removing the arming requirement above.
+TEST_F(TimelineTransportBarAppWiringTest, RecordWithAnArmedTrackIsUnchanged) {
+    MainComponent mc(std::make_unique<MockProviderTB>());
+    mc.setSize(1600, 900);
+    quiesceEngine(mc);
+
+    auto& bar = mc.getTimelinePanel().getTransportBar();
+    auto& transport = mc.getAudioEngine().getTransport();
+
     auto& doc = mc.getTimelineDoc();
     const auto trackId = doc.addTrack(synth::TrackKind::Midi, "Track 1");
     ASSERT_TRUE(doc.setTrackArmed(trackId, true));

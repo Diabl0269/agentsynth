@@ -406,8 +406,11 @@ TEST_F(MainComponentFeedbackGuardTest, StaysOffAfterTripWhileArmedThenDisarmRear
     // the Audio track is still armed.
     mc.timerCallback();
     EXPECT_FALSE(engine.isInputMonitoringEnabled());
+    // ASCII. This assertion used to hold a UTF-8 em dash in a juce::String("...") literal — which
+    // decodes as Latin-1, so the EXPECTED value was itself mojibake and matched the equally broken
+    // production string. Both are ASCII now; see CLAUDE.md's string-literal invariant.
     EXPECT_EQ(mc.getStatusBar().getTransientMessageForTest(),
-              juce::String("Input muted — sustained clipping (feedback protection)"));
+              juce::String("Input muted - sustained clipping (feedback protection)"));
 
     // Still armed, still latched, across a further poll.
     mc.timerCallback();

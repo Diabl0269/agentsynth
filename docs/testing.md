@@ -710,6 +710,12 @@ Those caps come from measurement, not taste. Healthy: `update` 5-15 s, `install`
 
 `timeout-minutes: 15` on the step is the backstop, not the mechanism — every package-manager step has one now (Linux apt, macOS brew, the ASAN job's cached-apt action), because a package manager with no ceiling stalls until the 6-hour job limit instead of failing. Failover is covered by `scripts/tests/ci-install-linux-deps.test.sh` (13 cases, Lint job) against a fake `apt-get`: a path that only runs during an outage otherwise gets tested by the outage. One of those cases exists because `sed -i` takes a mandatory backup suffix on BSD sed and none on GNU sed, so the original rewrite edited the file in CI and silently did nothing on macOS.
 
+### String literals are ASCII-only (Lint job)
+
+`scripts/tests/check-nonascii-literals.test.sh` (15 cases, ~1 s, no compiler) fails the Lint job when a `Source/**.{cpp,h}` line puts a non-ASCII byte inside a double-quoted literal. The reason is a JUCE contract that nothing else enforces: `juce::String`'s `const char*` constructor decodes its bytes with `CharPointer_ASCII` — **Latin-1, not UTF-8** — so `"Rename…"` reaches the UI as `"Renameâ€¦"`, one mojibake glyph per byte. A hex escape (`"Rename\xe2\x80\xa6"`) is the *identical* three bytes and fails the same way; that spelling is how the bug shipped a second time after the first "fix", which is why the checker flags `\x`/`\u` escapes above `0x7F` as well as raw bytes. Write plain ASCII, or declare the encoding with `juce::CharPointer_UTF8` / `juce::String::fromUTF8` — a line mentioning either is exempt.
+
+Scope and limits, all deliberate: **comments are exempt** (this codebase writes prose em dashes throughout them and they never reach `juce::String`); **`Tests/` is out of scope** (its non-ASCII lives in gtest `<<` streams, which go to a `std::ostream` and render fine); a line opening a **raw string literal** (`R"(...)"`) is skipped rather than parsed, since it has its own quoting rules; and the scanner is a byte-level state machine (`scripts/nonascii-literals.py`) that tracks string/char/line-comment/block-comment state, not a C++ parser — it does not model octal escapes or line continuations inside a literal.
+
 ### What didn't work
 
 - **Unity builds** (`CMAKE_UNITY_BUILD`): Incompatible with JUCE — Obj-C++ `.mm` files cannot be merged into C++ unity translation units.

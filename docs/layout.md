@@ -803,7 +803,7 @@ Persisted as `smartConnectionMode` in `juce::ApplicationProperties`. Default: **
 | **When main I/O is free** (default) | Yes | Yes, when the jacks that would be wired are still free (source output and dest input) |
 | **All module moves** | Yes | Yes (dest input must be free; a source that already fans out may still tap a free dest) |
 
-Group multi-select drags never smart-connect. Snippet drops are excluded. "Dest input must be free" has two exceptions, both below: the terminal audio sink takes a parallel cable anyway, and Cmd turns any occupied destination into an insert.
+Group multi-select drags never smart-connect. Snippet drops are excluded. "Dest input must be free" has two exceptions, both below: the terminal audio sink takes a parallel cable anyway, and **Ctrl** turns any occupied destination into an insert.
 
 ### Behaviour
 
@@ -814,7 +814,7 @@ Group multi-select drags never smart-connect. Snippet drops are excluded. "Dest 
 
 Library drags cache a short-lived `AIStateMapper::createModule` probe for jack metadata before a real `ModuleComponent` exists.
 
-### Occupied destinations: parallel add, and Cmd to insert
+### Occupied destinations: parallel add, and Ctrl to insert
 
 An already-wired destination jack is not one rule but three, depending on the modifier and the node:
 
@@ -822,23 +822,37 @@ An already-wired destination jack is not one rule but three, depending on the mo
 |---|---|---|
 | no modifier | terminal audio sink (Audio Output) | **additive parallel cable** — ghost's audio out joins what is already there, existing cables untouched |
 | no modifier | any other module | **nothing** (hard stop, unchanged) |
-| **Cmd/Ctrl held** | **any** module | **insert in series** — the upstream cabling is rerouted *through* the ghost |
+| **Ctrl held** | **any** module | **insert in series** — the upstream cabling is rerouted *through* the ghost |
 
 **Why the sink is special without a modifier.** Audio Output is a bare `juce::AudioGraphIOProcessor` (never a `ModuleBase` — the graph's output channel count is tied to it) and is wired in essentially every real patch, so a hard stop there meant a module parked next to it could never be offered anything at all. Summing into the mix bus is also exactly what dragging a cable there by hand already does, so a parallel add is the unsurprising default. Every other occupied jack stays a hard stop: silently summing into something the user wired mid-patch is not a suggestion worth making.
 
-**Why Cmd is sampled live, not latched at mouse-down.** Cmd at mouse-down already means "toggle selection membership" (`ModuleComponent::mouseDown`, issue #156) — and that path `return`s *before* a body drag begins, so `beginDragPreview` is never called. A Cmd-held press therefore cannot reach the drag path at all, and latching the modifier at press time would make canvas-move inserts impossible. `GraphEditor::isInsertModifierDown()` instead reads the keyboard on every drag tick, so the user starts an ordinary drag and presses Cmd once the ghost is where they want it. Selection semantics are untouched. Library drags have no such conflict and work either way.
+**Why the modifier is Ctrl, not Cmd.** Cmd was tried first and lost: **Cmd-click is the additive-selection modifier** (`ModuleComponent::mouseDown`, issue #156), and that path `return`s *before* a body drag begins — so a Cmd-held press could never reach the drag path at all. Ctrl is the literal Control key on **every** platform here, macOS included.
+
+**Both press orderings work.** The modifier is read two different ways, and both are Ctrl:
+
+1. **Press, then Ctrl.** `GraphEditor::isInsertModifierDown()` samples the keyboard on every drag tick (never latched at press time), so an ordinary drag becomes an insert the moment Ctrl goes down. Guarded by `SmartConnectionCtrlPressedMidDragTurnsTheSuggestionIntoAnInsert`.
+2. **Ctrl, then press.** A Ctrl+press is ambiguous at mouse-down — it could be an additive-select toggle or an insert drag — so `ModuleComponent::mouseDown` **arms both** and lets mouse-up decide, the same deferred classification the piano roll uses for Cmd on a note body (`cmdToggleNote_`). The drag wins at press time because it needs state (dragger, undo capture, landing ghost) that cannot be conjured later; the toggle is the half that can be completed retroactively, and `mouseUp` finishes it **only if nothing moved**. Guarded by `SmartConnectionCtrlHeldBeforePressStillArmsAnInsertDrag`.
+
+Two things had to change for ordering 2, and both are load-bearing:
+
+- **Ctrl is tested before the additive modifiers.** On Windows/Linux JUCE defines `commandModifier` *as* `ctrlModifier`, so `isCommandDown()` is true whenever Ctrl is down. Testing additive first would early-return there and a Ctrl+drag could never arm the dragger — insert would be macOS-only. Taking the Ctrl branch keeps Ctrl+click toggling on those platforms anyway, through the deferred completion.
+- **The module body menu keys on the true right button, not `isPopupMenu()`.** On macOS JUCE defines `popupMenuClickModifier` as `(rightButtonModifier | ctrlModifier)`, so `isPopupMenu()` is *also* true for Ctrl+**left**-click — which opened the card's context menu and returned before any drag could start. A card cannot open a menu and begin a drag from one press, and Ctrl+click must stay a selection toggle, so the legacy one-button-mouse affordance loses on the body. Right-click and two-finger tap still open the menu everywhere. Jack and knob menus are untouched and still open on `isPopupMenu()` — neither is on a drag path, so a Ctrl+click there still shows Disconnect / Automate as before.
+
+**The Ctrl press collapses the selection onto the dragged card**, restoring the pre-press selection in `mouseUp` if the press turns out to be a click. A group drag suppresses smart connections entirely and moves every member, so a leftover multi-selection would otherwise silently disable insert. Guarded by `CtrlClickTogglesSelectionButCtrlDragDoesNot`.
+
+Library drags have no modifier conflict and both orderings work trivially.
 
 ### Insert-in-series
 
 `SmartSuggestion::isInsert` turns one suggestion record into the reroute. It carries two cable **sets** — `doomedLinks` (upstream → destination, all to be removed) and `upstreamCables` (upstream → ghost, replacing them) — plus the record's own `ghostJack` → `neighborJack`.
 
-Both sets describe the **whole insert group**, not the record's own leg, and both are deduped, so applying them once per suggestion is idempotent. This is load-bearing: a Dual I/O upstream reaches the destination through *two* distinct cables, while a collapsed ghost output fans across both raw legs so only one jack pair survives the dedupe below. Hanging the doomed link off the surviving pair loses the other one, and that cable stays connected — summing into the destination's right leg alongside the ghost's output. Guarded by `SmartConnectionCmdInsertRemovesEveryDoomedLegOfADualIOUpstream`.
+Both sets describe the **whole insert group**, not the record's own leg, and both are deduped, so applying them once per suggestion is idempotent. This is load-bearing: a Dual I/O upstream reaches the destination through *two* distinct cables, while a collapsed ghost output fans across both raw legs so only one jack pair survives the dedupe below. Hanging the doomed link off the surviving pair loses the other one, and that cable stays connected — summing into the destination's right leg alongside the ghost's output. Guarded by `SmartConnectionCtrlInsertRemovesEveryDoomedLegOfADualIOUpstream`.
 
-`upstreamCables` is deduped by the raw **ghost-input** channels each cable covers — the mirror of the destination-side rule, since a collapsed jack on *either* end fans. Without it, a collapsed upstream's single jack wired into both of a Dual I/O ghost's inputs would duplicate its left leg onto the right. Guarded by `SmartConnectionCmdInsertDoesNotDuplicateOneUpstreamLegOntoADualIOGhost`.
+`upstreamCables` is deduped by the raw **ghost-input** channels each cable covers — the mirror of the destination-side rule, since a collapsed jack on *either* end fans. Without it, a collapsed upstream's single jack wired into both of a Dual I/O ghost's inputs would duplicate its left leg onto the right. Guarded by `SmartConnectionCtrlInsertDoesNotDuplicateOneUpstreamLegOntoADualIOGhost`.
 
 All of these must hold, or nothing is offered:
 
-- **Cmd is held.** Nothing ever inserts without it.
+- **Ctrl is held.** Nothing ever inserts without it.
 - The ghost is the cable **source**, and has at least one audio **input** leg. A pure source (Oscillator, LFO) is refused: there is nothing for the rerouted upstream to feed. (At the sink, a source instead gets the parallel add above.)
 - **Every** leg of the group is occupied, by one and the same upstream node — both-or-neither, mirroring the stereo group rule. A mix of free and occupied legs, or two different feeds, would change the summing.
 - The feeding cable resolves through `findSingleUpstreamAudioLink`, which works at **cable** level (a visible output jack, never a raw graph edge) and returns nothing for a jack summed from several cables or fed through a mod routing / attenuverter chain.
@@ -852,7 +866,7 @@ Scoring and the 96 px proximity cap are unchanged. An insert scores like the pla
 
 **Dual ghosts wire per leg.** When the ghost is Dual I/O, each of its legs gets its own cable on both sides — upstream L → ghost L, upstream R → ghost R, ghost L → dest L, ghost R → dest R. No leg is folded or dropped. The one place a leg still folds is a *collapsed* ghost: its single input jack owns both raw channels, so a Dual I/O upstream feeding it can only reach the ghost through one cable, and the upstream's right leg is not carried. That is inherent to collapsing a split pair, and the destination is left correctly wired either way.
 
-**The probe carries the Dual I/O default.** The library-drop ghost is an `AIStateMapper::createModule` probe, and its jack layout decides *both* the preview and the plan that gets applied on drop — so it goes through the same `applyDefaultDualIOForNewModule` (global default + per-module override) that the real module gets in `itemDropped`. Skipping it was a live bug: with the default set to dual, the plan was computed for a collapsed ghost and then applied to a module that spawned dual, and only the left legs got wired — the ghost's fan resolved to one raw channel per jack instead of two, leaving the upstream's and destination's Right jacks dangling. Guarded by `SmartConnectionProbeHonoursTheDualIODefault` and `SmartConnectionCmdInsertWiresBothLegsOfADualGhostBetweenDualNeighbours`.
+**The probe carries the Dual I/O default.** The library-drop ghost is an `AIStateMapper::createModule` probe, and its jack layout decides *both* the preview and the plan that gets applied on drop — so it goes through the same `applyDefaultDualIOForNewModule` (global default + per-module override) that the real module gets in `itemDropped`. Skipping it was a live bug: with the default set to dual, the plan was computed for a collapsed ghost and then applied to a module that spawned dual, and only the left legs got wired — the ghost's fan resolved to one raw channel per jack instead of two, leaving the upstream's and destination's Right jacks dangling. Guarded by `SmartConnectionProbeHonoursTheDualIODefault` and `SmartConnectionCtrlInsertWiresBothLegsOfADualGhostBetweenDualNeighbours`.
 
 **Preview draws resolved legs, not one segment per suggestion.** One suggestion is not one cable: `connectPorts` fans a collapsed jack across a whole raw pair, and when the far end fronts those raws as two separate visible jacks (the terminal sink does — it has no `ModuleBase` to group them) that is *two* cables on screen. `mainPreviewLegs` / `upstreamPreviewLegs` are resolved from the same `PolyLink` `connectPorts` walks, mapped back to visible jacks and deduped to distinct jack pairs (N raw edges through one jack pair are still one cable). Previously the preview drew a single wire to the left output while the drop fanned both raws. Guarded by `SmartConnectionParallelAddPreviewCoversBothOutputLegs`.
 
