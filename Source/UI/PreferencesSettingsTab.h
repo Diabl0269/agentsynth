@@ -118,11 +118,11 @@ private:
     std::unique_ptr<juce::Component> buildDualIOPerModuleDefaultsPopup();
 
     // Shared muted-hint treatment for the small explanatory line under a preference row (round 5
-    // fix): naturalScrollingHint and zoomDirectionHint shared the exact same bug — a fixed 18px
-    // height gives room for barely one line, so a hint whose text is wider than the row squeezes
-    // horizontally (Label's default minimum-horizontal-scale) instead of wrapping. Callers still
-    // set their own text and bounds; this only fixes the font/colour/wrap behaviour, at one spot,
-    // for both.
+    // fix): naturalScrollingHint and zoomScrollUpZoomsInHint shared the exact same bug — a fixed
+    // 18px height gives room for barely one line, so a hint whose text is wider than the row
+    // squeezes horizontally (Label's default minimum-horizontal-scale) instead of wrapping.
+    // Callers still set their own text and bounds; this only fixes the font/colour/wrap behaviour,
+    // at one spot, for both. Kept through round 6's checkbox revert on this row.
     void styleMutedHintLabel(juce::Label& hint);
 
     // Re-lays the tab for the current searchQuery: hides every row whose label/tooltip text does
@@ -171,16 +171,16 @@ private:
     // held, and users reach for both in the same visit. Independent of it, though: this one governs
     // the Cmd / Cmd+Shift wheel-ZOOM branches only, which is what its own caption spells out.
     //
-    // Round 5: replaced the "Scroll up to zoom in" checkbox with a labelled two-option dropdown
-    // after the wording drew pushback twice — a boolean toggle for a direction preference always
-    // reads as "on meaning what, exactly?", and naming both states directly removes the ambiguity
-    // outright rather than wordsmithing around it again. isZoomScrollUpZoomsInEnabled() /
-    // setZoomScrollUpZoomsInEnabled() below are UNCHANGED — same persisted key, same boolean
-    // contract — so nothing outside this file (FocusArbitrationTests.cpp's
-    // ZoomScrollPreferenceReachesTheTimelineAndTheRoll, MainComponent) needed to change.
-    juce::Label zoomDirectionLabel;
-    juce::ComboBox zoomDirectionCombo;
-    juce::Label zoomDirectionHint;
+    // Round 5 replaced this checkbox with a labelled two-option dropdown ("Zoom direction:" +
+    // "Scroll up to zoom in" / "Scroll down to zoom in") to remove the boolean wording's
+    // ambiguity. Round 6 reverts that: the user does not want two-value selects, so this is back
+    // to a checkbox, now with a single-line hint carrying the explanation the round-3/5 tooltip
+    // used to. isZoomScrollUpZoomsInEnabled() / setZoomScrollUpZoomsInEnabled() were UNCHANGED
+    // across all three rounds — same persisted key, same boolean contract — so nothing outside
+    // this file (FocusArbitrationTests.cpp's ZoomScrollPreferenceReachesTheTimelineAndTheRoll,
+    // MainComponent) ever needed to change.
+    juce::ToggleButton zoomScrollUpZoomsInToggle{"Scroll up to zoom in"};
+    juce::Label zoomScrollUpZoomsInHint;
     // On (the default) labels every row in the piano roll's keys column; off labels only the Cs —
     // PianoRollComponent::KeyLabelMode::AllNotes / OctavesOnly.
     juce::ToggleButton pianoRollKeyLabelsToggle{"Label every key"};

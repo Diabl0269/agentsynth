@@ -250,10 +250,41 @@ public:
     /** Simulates clicking the popover header's close (X) — fires onCloseRequested. */
     void triggerCloseForTest() { topBar_.triggerCloseForTest(); }
 
+    /** Bounds (local to the header bar) of the pin / close icons — a hit-test seam so a test can
+     *  assert the icons occupy real, non-degenerate, non-overlapping space without needing real
+     *  screen coordinates. */
+    juce::Rectangle<int> getPinBoundsForTest() const { return topBar_.getPinBounds(); }
+    juce::Rectangle<int> getCloseBoundsForTest() const { return topBar_.getCloseBounds(); }
+
+    /** The header bar's own bounds relative to THIS popup — exactly what resized() gave it — so a
+     *  test can assert the header sits at (or near) the popup's own top rather than reaching into
+     *  private layout state. */
+    juce::Rectangle<int> getHeaderBoundsForTest() const { return topBar_.getBounds(); }
+
+    /** Simulates hovering the pin (true) / close (false) icon and returns whatever tooltip that
+     *  hover would show — exercises the SAME mouseMove()-driven tooltip wiring a real hover uses
+     *  (see TopBar::simulateHoverForTest), not a hard-coded string. */
+    juce::String simulateHeaderHoverForTest(bool overPin) {
+        topBar_.simulateHoverForTest(overPin);
+        return topBar_.getTooltip();
+    }
+
+    /** Simulates a real drag gesture landing on the header bar (down at its centre, then a drag by
+     *  `delta`) — exercises the actual juce::ComponentDragger wiring end to end. Only moves this
+     *  popup while pinned (setPinnedForPaint(true) arms TopBar::draggable_ first), exactly as a
+     *  real gesture would. */
+    void simulateHeaderDragForTest(juce::Point<int> delta) { topBar_.simulateDragForTest(delta); }
+
 private:
     // ---- Popover header: pin toggle + title + close, and (once pinned) the drag handle for the
-    // floating host. A single fixed bar, not a per-section HeaderRow. -------------------------
-    class TopBar : public juce::Component {
+    // floating host. A single fixed bar, not a per-section HeaderRow. This is the ONE piece of
+    // chrome that must NEVER end up inside the scrollable viewport_ — it is a sibling of it, laid
+    // out first in resized(), so it can never be clipped or scrolled away regardless of content
+    // length (see ModuleLibraryComponent::defaultFloatingPosition for the OTHER half of "the header
+    // must always be reachable": keeping the whole popup on screen in the first place). ----------
+    class TopBar
+        : public juce::Component
+        , public juce::SettableTooltipClient {
     public:
         TopBar(std::function<void()> onPin, std::function<void()> onClose)
             : onPin_(std::move(onPin))
@@ -286,10 +317,54 @@ private:
             const int titleWidth = juce::jmax(0, closeArea.getX() - 4 - titleLeft);
             g.setColour(textColour_);
             g.setFont(juce::Font(juce::FontOptions(12.5f, juce::Font::bold)));
-            g.drawText("Module Library Help", titleLeft, 0, titleWidth, getHeight(), juce::Justification::centredLeft);
+            // Short and panel-like ("Help") rather than repeating "Module Library" — the popover
+            // is already anchored on that button, and a floating panel reads more like a panel
+            // with a short, plain title.
+            g.drawText("Help", titleLeft, 0, titleWidth, getHeight(), juce::Justification::centredLeft);
 
-            drawPinGlyph(g, pinArea.toFloat(), pinned_ ? accentColour_ : textColour_, pinned_);
-            drawCloseGlyph(g, closeArea.toFloat(), textColour_);
+            // Hover highlight — same "accent fill behind the glyph" treatment
+            // ModuleLibraryComponent's own "?" button uses for its hover state, so the two read as
+            // one visual language.
+            if (hoveredPin_) {
+                g.setColour(accentColour_.withAlpha(0.18f));
+                g.fillEllipse(pinArea.toFloat());
+            }
+            if (hoveredClose_) {
+                g.setColour(accentColour_.withAlpha(0.18f));
+                g.fillEllipse(closeArea.toFloat());
+            }
+
+            drawPinGlyph(g, pinArea.toFloat(), (pinned_ || hoveredPin_) ? accentColour_ : textColour_, pinned_);
+            drawCloseGlyph(g, closeArea.toFloat(), hoveredClose_ ? accentColour_ : textColour_);
+        }
+
+        void mouseMove(const juce::MouseEvent& e) override {
+            const auto pos = e.getPosition();
+            const bool overPin = getPinBounds().contains(pos);
+            const bool overClose = getCloseBounds().contains(pos);
+            if (overPin == hoveredPin_ && overClose == hoveredClose_)
+                return;
+            hoveredPin_ = overPin;
+            hoveredClose_ = overClose;
+            if (hoveredPin_)
+                setTooltip("Pin - keep open while you work");
+            else if (hoveredClose_)
+                setTooltip("Close");
+            else
+                setTooltip({});
+            setMouseCursor(overPin || overClose ? juce::MouseCursor::PointingHandCursor
+                                                : juce::MouseCursor::NormalCursor);
+            repaint();
+        }
+
+        void mouseExit(const juce::MouseEvent&) override {
+            if (!hoveredPin_ && !hoveredClose_)
+                return;
+            hoveredPin_ = false;
+            hoveredClose_ = false;
+            setTooltip({});
+            setMouseCursor(juce::MouseCursor::NormalCursor);
+            repaint();
         }
 
         void mouseDown(const juce::MouseEvent& e) override {
@@ -322,7 +397,49 @@ private:
                 onClose_();
         }
 
+        /** Simulates hovering the pin (true) or close (false) icon — real mouse events never reach
+         *  a headless test's components via the OS-level hit-testing this bypasses (same idiom as
+         *  ModuleLibraryComponentTests.cpp's simulateMouseMoveAt). Drives the SAME mouseMove() path
+         *  a real hover would, so it exercises the tooltip/hover-paint wiring for real. */
+        void simulateHoverForTest(bool overPin) {
+            const auto pos = (overPin ? getPinBounds() : getCloseBounds()).getCentre().toFloat();
+            mouseMove(makeHoverEvent(*this, pos));
+        }
+
+        /** Simulates a real drag gesture landing on this header — down at the header's centre,
+         *  then a drag to centre + delta — exercising the ACTUAL juce::ComponentDragger wiring
+         *  (mouseDown()/mouseDrag() above), not a stand-in. Only takes effect once setDraggable()
+         *  has been armed, exactly like a real gesture would gate on it. */
+        void simulateDragForTest(juce::Point<int> delta) {
+            const auto downPos = getLocalBounds().getCentre().toFloat();
+            const auto dragPos = downPos + delta.toFloat();
+            mouseDown(makeDragEvent(*this, downPos, downPos, false));
+            mouseDrag(makeDragEvent(*this, dragPos, downPos, true));
+        }
+
     private:
+        // No mouse button down — the natural state for a hover/move event. mouseMove() only reads
+        // the position, but a real hover never carries a button, so neither should this.
+        static juce::MouseEvent makeHoverEvent(TopBar& self, juce::Point<float> pos) {
+            return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos, juce::ModifierKeys(), 1.0f,
+                                    0.0f, 0.0f, 0.0f, 0.0f, &self, &self, juce::Time::getCurrentTime(), pos,
+                                    juce::Time::getCurrentTime(), 0, false);
+        }
+
+        // Left button down — required for juce::ComponentDragger, which asserts
+        // e.mods.isAnyMouseButtonDown() in both startDraggingComponent() and dragComponent().
+        // `wasDragged` only affects other JUCE bookkeeping (e.g. e.mouseWasDraggedSinceMouseDown()),
+        // never the ComponentDragger maths itself (that reads only .getPosition() /
+        // .getMouseDownPosition() / .mods) — set correctly anyway (false for the down event, true
+        // for the drag) since it costs nothing and keeps the synthetic event physically plausible.
+        static juce::MouseEvent makeDragEvent(TopBar& self, juce::Point<float> pos, juce::Point<float> mouseDownPos,
+                                              bool wasDragged) {
+            const juce::ModifierKeys leftDown(juce::ModifierKeys::leftButtonModifier);
+            return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos, leftDown, 1.0f, 0.0f, 0.0f,
+                                    0.0f, 0.0f, &self, &self, juce::Time::getCurrentTime(), mouseDownPos,
+                                    juce::Time::getCurrentTime(), 1, wasDragged);
+        }
+
         static void drawPinGlyph(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour, bool pinned) {
             const float headR = area.getWidth() * 0.22f;
             const auto centre = area.getCentre();
@@ -350,6 +467,8 @@ private:
         static constexpr int kIconSize = 16;
         bool pinned_ = false;
         bool draggable_ = false;
+        bool hoveredPin_ = false;
+        bool hoveredClose_ = false;
         juce::Colour textColour_ = juce::Colours::white;
         juce::Colour accentColour_ = juce::Colours::lightblue;
         std::function<void()> onPin_;

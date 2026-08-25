@@ -1190,6 +1190,21 @@ juce::String GraphEditor::getModuleTitle(juce::AudioProcessorGraph::NodeID nodeI
     return processor != nullptr ? processor->getName() : juce::String();
 }
 
+void GraphEditor::commitAnyOpenTitleRename() {
+    // Copy the card list first: committing mutates the graph (and pushes an undo snapshot), and
+    // nothing may be iterating content.getModules() across that.
+    std::vector<ModuleComponent*> renaming;
+    for (auto* comp : content.getModules())
+        if (comp != nullptr && comp->isRenamingTitle())
+            renaming.push_back(comp);
+
+    for (auto* comp : renaming) {
+        juce::Component::SafePointer<ModuleComponent> safe(comp);
+        if (safe != nullptr)
+            safe->finishTitleRename(true);
+    }
+}
+
 void GraphEditor::refreshSuggestionsIfInsertModifierChanged() {
     if (!dragPreviewActive)
         return;
@@ -1693,6 +1708,10 @@ void GraphEditor::refreshSmartSuggestions() {
     }
 
     const auto ghostBounds = dragPreviewGhost;
+    // Where the cursor is pointing, before anti-overlap relocated the card. Empty on paths that
+    // never set it (older tests drive updateDragPreview directly), in which case candidacy falls
+    // back to the landing rect exactly as before.
+    const auto aimBounds = dragPreviewAim;
 
     struct Candidate {
         SmartSuggestion suggestion;
@@ -1733,9 +1752,15 @@ void GraphEditor::refreshSmartSuggestions() {
             continue;
 
         const auto neighborBounds = neighbor->getBounds();
-        const float moduleDist = edgeToEdgeDistance(ghostBounds.toFloat(), neighborBounds.toFloat());
-        // Cheap cull: facing jacks cannot be closer than the modules themselves.
-        if (moduleDist > kSmartConnectionProximityPx)
+        // Cheap cull: facing jacks cannot be closer than the modules themselves. Measured against
+        // BOTH where the card will land and where the cursor is aiming, whichever is closer — a
+        // ghost aimed into a gap gets pushed clear by anti-overlap, and only the aim reflects what
+        // the user meant. The jack-level test below still gates ordinary suggestions, so admitting
+        // an aim-based candidate here does not by itself create one.
+        const float landingDist = edgeToEdgeDistance(ghostBounds.toFloat(), neighborBounds.toFloat());
+        const float aimDist =
+            aimBounds.isEmpty() ? landingDist : edgeToEdgeDistance(aimBounds.toFloat(), neighborBounds.toFloat());
+        if (std::min(landingDist, aimDist) > kSmartConnectionProximityPx)
             continue;
 
         auto* neighborProc = neighbor->getModule();
@@ -1806,23 +1831,42 @@ void GraphEditor::refreshSmartSuggestions() {
             if (pairs.empty())
                 return;
 
-            // Jack-to-jack proximity + left-to-right flow: a module on the right must not wrap
-            // its outputs around to the dragged module's left inputs.
+            // An INSERT is aimed differently from a new cable, so the jack-level test below does not
+            // apply to it. Both of its halves assume the ghost sits clear to the LEFT of the card it
+            // is being wired into — true for a new cable, false for an insert, where the natural aim
+            // is the gap between two wired cards or the doomed cable itself. There the ghost
+            // OVERLAPS its destination: its output jack is inside (or past) the destination's left
+            // edge, so the flow rule rejects every pair and the jack distance blows past the cap.
+            //
+            // For an insert we lean on the module-level proximity cull above (which an overlapping
+            // ghost passes at distance 0) plus one guard: the ghost's CENTRE must not be past the
+            // destination's right edge. Dragged clean past a card is not "insert into it" — and that
+            // guard is also what stops an insert being offered into a card the ghost has already
+            // moved beyond, e.g. the upstream it is being spliced in after. Final geometry is
+            // findFreeSlot's business either way, so a transiently overlapping ghost is harmless.
+            const auto& insertAim = aimBounds.isEmpty() ? ghostBounds : aimBounds;
+            const bool relaxFlowForInsert =
+                ghostIsSource && isInsertModifierDown() && insertAim.getCentreX() <= neighborBounds.getRight();
+
             const size_t beforeProximity = pairs.size();
-            pairs.erase(std::remove_if(pairs.begin(), pairs.end(),
-                                       [&](const std::pair<int, int>& pr) {
-                                           const auto srcPt = jackPoint(ghostIsSource, pr.first, false, false);
-                                           const auto dstPt = jackPoint(!ghostIsSource, pr.second, true, false);
-                                           if (srcPt.x > dstPt.x + 8.0f)
-                                               return true;
-                                           return srcPt.getDistanceFrom(dstPt) > kSmartConnectionProximityPx;
-                                       }),
-                        pairs.end());
-            if (pairs.empty())
-                return;
-            // Stereo / fan groups: both-or-neither on proximity, same as occupancy.
-            if (beforeProximity >= 2 && pairs.size() != beforeProximity)
-                return;
+            if (!relaxFlowForInsert) {
+                // Jack-to-jack proximity + left-to-right flow: a module on the right must not wrap
+                // its outputs around to the dragged module's left inputs.
+                pairs.erase(std::remove_if(pairs.begin(), pairs.end(),
+                                           [&](const std::pair<int, int>& pr) {
+                                               const auto srcPt = jackPoint(ghostIsSource, pr.first, false, false);
+                                               const auto dstPt = jackPoint(!ghostIsSource, pr.second, true, false);
+                                               if (srcPt.x > dstPt.x + 8.0f)
+                                                   return true;
+                                               return srcPt.getDistanceFrom(dstPt) > kSmartConnectionProximityPx;
+                                           }),
+                            pairs.end());
+                if (pairs.empty())
+                    return;
+                // Stereo / fan groups: both-or-neither on proximity, same as occupancy.
+                if (beforeProximity >= 2 && pairs.size() != beforeProximity)
+                    return;
+            }
 
             // What an already-occupied destination jack means depends on the modifier and the node:
             //
@@ -2577,6 +2621,12 @@ void GraphEditor::mouseExit(const juce::MouseEvent&) {
 }
 
 void GraphEditor::mouseDown(const juce::MouseEvent& e) {
+    // Clicking away from an inline title editor commits it. Done explicitly and FIRST rather than
+    // leaning on the grabKeyboardFocus() below to fire onFocusLost: that ordering happens to work
+    // for a canvas press but is invisible coupling, and it does nothing for a press on a card
+    // (ModuleComponent never grabs focus). Idempotent — whichever path runs second finds no editor.
+    commitAnyOpenTitleRename();
+
     // Any press on the canvas takes focus, so the canvas-scoped Delete/Escape keys land here
     // rather than on whichever panel happened to be focused last. Must come BEFORE the cable
     // menu below, which returns early — otherwise a right-click on a wire would skip it.
@@ -3705,6 +3755,13 @@ void GraphEditor::beginDragPreview(int w, int h, juce::AudioProcessorGraph::Node
 void GraphEditor::updateDragPreview(juce::Point<int> desiredTopLeftCanvas) {
     if (!dragPreviewActive)
         return;
+    // Where the user is POINTING, before anti-overlap moves the card. A ghost aimed at the gap
+    // between two wired cards necessarily overlaps them — it is wider than the gap — so
+    // resolvePlacement throws it clear, and judging a suggestion only by that landing spot means
+    // aiming at the gap can never earn one. Candidacy is judged from the aim; the landing spot is
+    // still what gets drawn and where the card ends up (see refreshSmartSuggestions).
+    dragPreviewAim = juce::Rectangle<int>(desiredTopLeftCanvas.x, desiredTopLeftCanvas.y, dragPreviewW, dragPreviewH);
+
     auto resolved = resolvePlacement(desiredTopLeftCanvas, dragPreviewW, dragPreviewH, dragPreviewSelfId);
     dragPreviewGhost = juce::Rectangle<int>(resolved.x, resolved.y, dragPreviewW, dragPreviewH);
 
@@ -3891,14 +3948,15 @@ void GraphEditor::itemDragEnter(const SourceDetails& dragSourceDetails) {
     }
 
     beginDragPreview(estSize.x, estSize.y, juce::AudioProcessorGraph::NodeID{});
-    // Compute initial ghost position
+    // Centred on the cursor — see ghostTopLeftForCursor. beginDragPreview above has already set the
+    // ghost size this depends on.
     auto canvasPos = content.getLocalPoint(this, dragSourceDetails.localPosition).roundToInt();
-    updateDragPreview(canvasPos);
+    updateDragPreview(ghostTopLeftForCursor(canvasPos));
 }
 
 void GraphEditor::itemDragMove(const SourceDetails& dragSourceDetails) {
     auto canvasPos = content.getLocalPoint(this, dragSourceDetails.localPosition).roundToInt();
-    updateDragPreview(canvasPos);
+    updateDragPreview(ghostTopLeftForCursor(canvasPos));
 }
 
 void GraphEditor::itemDragExit(const SourceDetails& dragSourceDetails) {
@@ -3919,7 +3977,14 @@ bool GraphEditor::graphHasModuleNamed(juce::AudioProcessorGraph& graph, const ju
 
 void GraphEditor::itemDropped(const SourceDetails& dragSourceDetails) {
     const juce::String name = dragSourceDetails.description.toString();
-    auto dropPos = content.getLocalPoint(this, dragSourceDetails.localPosition).roundToInt();
+    // The drop lands exactly where the preview showed: the ghost rect is already snapped and
+    // de-overlapped, so taking its position (rather than re-deriving one from the cursor) makes it
+    // impossible for the two to disagree. Falls back to the centred cursor if there is no live ghost
+    // (a drop with no preceding drag-move, which only happens in tests).
+    auto dropPos =
+        (dragPreviewActive && !dragPreviewGhost.isEmpty())
+            ? dragPreviewGhost.getPosition()
+            : ghostTopLeftForCursor(content.getLocalPoint(this, dragSourceDetails.localPosition).roundToInt());
 
     // Snippet drop: resolve the payload to its JSON via the owner and insert the whole group.
     // Checked before the single-module path because both arrive on the same DragAndDrop channel,
@@ -4247,6 +4312,13 @@ void GraphEditor::completeStereoPairConnections(ModuleComponent* moduleComp) {
         return false;
     };
 
+    auto inputChannelIsFed = [&](int rawChannel) {
+        for (const auto& c : graph.getConnections())
+            if (c.destination.nodeID == nodeId && !c.destination.isMIDI() && c.destination.channelIndex == rawChannel)
+                return true;
+        return false;
+    };
+
     const int myOutputLeg = rightAudioLegOf(mb, /*asInput=*/false);
     const int myInputLeg = rightAudioLegOf(mb, /*asInput=*/true);
 
@@ -4272,6 +4344,19 @@ void GraphEditor::completeStereoPairConnections(ModuleComponent* moduleComp) {
             // dropHiddenRightLegConnections, which is what puts the duplicate back on collapse.
             if (destLeg > 0 && destNode != nullptr && hasEdge(nodeId, myOutputLeg, destNode->nodeID, destLeg))
                 graph.removeConnection({{nodeId, 0}, {destNode->nodeID, destLeg}});
+
+            // destLeg < 0 means the destination has no SECOND audio input the user can see — a
+            // collapsed split-block module (Filter/VCA/Wavetable), whose one "Audio" jack is its left
+            // leg alone. Our right leg is then left unpatched ON PURPOSE, and this is the one shape
+            // where "both legs wired after the toggle" cannot be honoured:
+            //   * wiring it onto the destination's hidden kRightBase makes a cable that is audible
+            //     and impossible to unplug (the invariant dropHiddenRightLegConnections exists for),
+            //   * wiring it onto the destination's mono jack alongside our left leg SUMS the two —
+            //     identical legs, so the patch jumps +6 dB from a jack-layout toggle. Dual I/O is
+            //     explicitly not a mono/stereo switch and must never change level.
+            // The jack is visible and unplugged, so the user can aim it wherever they meant. The
+            // INPUT side below is not symmetric with this: feeding two of our legs from one source
+            // channel COPIES a signal, it does not sum one.
         }
 
         // Incoming: source's left leg is patched to ours, and the source is itself a stereo pair.
@@ -4286,6 +4371,24 @@ void GraphEditor::completeStereoPairConnections(ModuleComponent* moduleComp) {
             // right input, its left leg must not still be wired there too.
             if (srcLeg > 0 && srcNode != nullptr && hasEdge(srcNode->nodeID, srcLeg, nodeId, myInputLeg))
                 graph.removeConnection({{srcNode->nodeID, 0}, {nodeId, myInputLeg}});
+
+            // MONO-ONLY UPSTREAM: the source has no second audio output the user can see — either a
+            // collapsed split-block module (its "Audio" jack is the left leg alone) or a genuinely
+            // mono one. Broadcast the feed our LEFT leg already has onto the right leg, so a module
+            // the user just split arrives with both legs live rather than half-wired.
+            //
+            // This is the one place the mono broadcast is applied to a non-adjacent right leg, and it
+            // is deliberately confined to this handler: flipping the toggle is an explicit user
+            // action on one module, whereas resolvePolyLink governs manual cable drags and
+            // smart-connect, where the established behaviour for a split-block pair is left-leg-only
+            // (see its comment). Nothing here widens that.
+            //
+            // Copying a feed, unlike the output side above, cannot change the mix: the source drives
+            // one more destination at the same level. Guarded on the right leg being unfed so a
+            // second toggle cannot stack feeds, and it takes the channel that already feeds our left
+            // audio input rather than assuming ch0 is audio on the peer - the user routed that edge.
+            if (srcLeg < 0 && srcNode != nullptr && !inputChannelIsFed(myInputLeg))
+                graph.addConnection({{srcNode->nodeID, c.source.channelIndex}, {nodeId, myInputLeg}});
         }
     }
 

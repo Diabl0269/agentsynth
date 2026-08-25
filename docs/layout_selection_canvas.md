@@ -370,6 +370,39 @@ header bar's `mouseDown`/`mouseDrag`, gated off entirely while unpinned (`setDra
 it never fights a `CallOutBox`'s own self-repositioning. Pin state is session-only — it is not
 persisted across app restarts, matching the pattern's own preference.
 
+**The header always ships as non-scrolling chrome, and the position it lands at is always
+clamped.** A real regression here is worth stating plainly: the first cut of pinning placed the
+floating popup at "wherever the `CallOutBox` happened to be on screen", translated verbatim into
+the floating host's local space with no bounds-checking. The help button anchor sits in the
+sidebar's own topmost strip, only a few px below the very top of the window, so there is almost no
+room above it — any small mismatch between the callout's screen position and the host's own (a
+border inset, a display-scaling rounding, a host whose own top-left is not literally screen (0,0))
+landed the popup with a slightly negative Y. Since the header is drawn at the popup's own local
+`(kOuterPadding, kOuterPadding)` — i.e. right at its top — a negative Y pushes exactly the header
+above the host's visible area while the scrollable body content, sitting lower in local space,
+stays on screen: the reported symptom precisely (header and pin/title/X gone, content starting
+mid-sentence, nothing left to click for move or close, only scroll). The header itself was never
+the wrong thing — `TopBar` is and always was a plain sibling of `viewport_`, laid out first in
+`resized()`, so it can never be *structurally* clipped into the scrollable area; it was the whole
+popup's on-screen POSITION that was wrong, taking the header out of view along with it.
+
+The fix is two static-ish helpers on `ModuleLibraryComponent`, used everywhere a floating position
+is set: `defaultFloatingPosition()` computes a *sensible* spot — just right of the sidebar, level
+with its top, clear of any toolbar above it — instead of trusting the callout's screen position at
+all; `clampToHost()` then constrains that (or any other candidate position) so the popup's entire
+rect stays inside the host's local bounds, falling back to the host's top-left corner (never
+negative) when the popup is larger than the host in either axis. `ModuleLibraryComponent::resized()`
+also calls the clamp (`reclampFloatingHelpPopover()`) whenever the sidebar itself reflows, since a
+window resize is exactly the other way this class of bug could resurface.
+
+**Pin affordance.** The pin icon now has a real hover state (an accent-tinted highlight behind the
+glyph, mirroring the sidebar's own "?" button treatment) and a tooltip ("Pin - keep open while you
+work") via `juce::SettableTooltipClient`, resolved dynamically per hovered icon exactly the way
+`ModuleLibraryComponent::mouseMove` already resolves its own per-row tooltip. The close (X) gets the
+same hover treatment and a plain "Close" tooltip. The header's title reads simply "Help" — short and
+panel-like — rather than repeating "Module Library" a second time right next to the button that
+opened it.
+
 Opening the popover is split across TWO `protected virtual` leaves, both the same seam idiom
 [§3's cable doc](#3-cable-interaction) and `TimelineRulerComponent::openMarkerContextMenu` use for
 any real popup/menu window (a `juce::CallOutBox` launched in a display-less test runner is the

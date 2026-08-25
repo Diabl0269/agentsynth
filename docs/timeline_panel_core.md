@@ -490,11 +490,11 @@ pitch at the TOP row and pitch grows upward — a view moving down therefore DEC
 why that branch negates the result (see `docs/timeline_panel_clips_automation.md` §2); the horizontal axis on both surfaces needs no
 such remapping, since a view moving right IS a larger `firstVisibleBeat`.
 
-**Zoom-scroll direction** (`Settings → Preferences → "Zoom direction"`, a two-option dropdown —
-"Scroll up to zoom in" / "Scroll down to zoom in" — replacing a boolean checkbox of the same two
-names in round 5, itself relabelled from "Scroll up zooms in" in round 3; persisted key and its
-boolean semantics unchanged throughout, default ON, key `zoomScrollUpZoomsIn`) is a separate
-preference from Natural scrolling, because zoom-on-wheel cares
+**Zoom-scroll direction** (`Settings → Preferences → "Scroll up to zoom in"`, a checkbox — briefly
+a "Zoom direction" two-option dropdown in round 5, reverted back to a checkbox in round 6 after
+user pushback on two-value selects; itself relabelled from "Scroll up zooms in" in round 3;
+persisted key and its boolean semantics unchanged throughout, default ON, key
+`zoomScrollUpZoomsIn`) is a separate preference from Natural scrolling, because zoom-on-wheel cares
 about the FINGER rather than the content: `ScrollPolicy.h`'s `wheelGestureIsUpward()` recovers the
 physical gesture direction by XOR-ing the dominant delta's sign with `isReversed` (the one place
 `isReversed` IS consulted — a plain scroll must not do this, per the paragraph above), so "scroll up

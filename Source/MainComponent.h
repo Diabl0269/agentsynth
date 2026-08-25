@@ -192,13 +192,14 @@ public:
      *  called for an unrelated settings write costs a bool read. */
     void applyNaturalScrollingPreference();
 
-    /** The Preferences "Zoom direction" dropdown's key. Round 5 follow-up: the boolean checkbox
-     *  (itself relabelled from "Scroll up zooms in" to "Scroll up to zoom in" in round 3) is now a
-     *  two-option dropdown -- "Scroll up to zoom in" / "Scroll down to zoom in" -- but the
-     *  persisted key name and its boolean semantics are unchanged, migration-free. DEFAULT TRUE:
-     *  "up zooms in" is what both wheel-zoom surfaces already did before the preference existed,
-     *  so an install that never opens Preferences is unaffected. Owned here for the same reason
-     *  kNaturalScrollingKey is: the tab writes it, MainComponent is what applies it. */
+    /** The Preferences "Scroll up to zoom in" checkbox's key (relabelled from "Scroll up zooms in"
+     *  in round 3; briefly a "Zoom direction" two-option dropdown in round 5, reverted back to a
+     *  checkbox in round 6 after user pushback on two-value selects). The persisted key name and
+     *  its boolean semantics have been unchanged, migration-free, across every one of those rounds.
+     *  DEFAULT TRUE: "up zooms in" is what both wheel-zoom surfaces already did before the
+     *  preference existed, so an install that never opens Preferences is unaffected. Owned here for
+     *  the same reason kNaturalScrollingKey is: the tab writes it, MainComponent is what applies
+     *  it. */
     static constexpr const char* kZoomScrollUpZoomsInKey = "zoomScrollUpZoomsIn";
 
     /** Re-reads kZoomScrollUpZoomsInKey and pushes `!upZoomsIn` into the timeline panel, which

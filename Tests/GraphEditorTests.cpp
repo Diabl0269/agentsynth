@@ -1177,6 +1177,14 @@ TEST_F(GraphEditorTest, TogglingDualIOKeepsBothStereoLegs) {
     // The right leg is still fed — but by the Oscillator's own Audio R block, not by a second copy
     // of Audio L. The collapsed jack's mono duplicate has to go with it: keeping both would sum
     // L+R into the Delay's Right input (+6 dB on one side) behind what draws as a single cable.
+    //
+    // RECONCILED with the later ruling that a module split while wired must come up with both legs
+    // live (SplittingAMidChainVoiceModule*): that ruling introduced a mono BROADCAST, and this test
+    // is not in tension with it. A broadcast is the fallback for a peer that has no right leg at
+    // all; here the Oscillator upstream is dual and owns a real Audio R, so the real leg wins and
+    // the stand-in copy is removed. The two rules are one rule: prefer the peer's right leg, copy
+    // the left only when there is none. Pinned from the other direction by
+    // SplittingAMidChainVoiceModulePrefersRealRightLegsOverABroadcast.
     EXPECT_TRUE(hasEdge(OscillatorModule::kRightBase, 1)) << "Right leg must survive Dual I/O on";
     EXPECT_FALSE(hasEdge(0, 1)) << "the collapsed jack's duplicate of Audio L must not double-feed Right";
 
@@ -1414,10 +1422,17 @@ TEST_F(GraphEditorTest, SplittingASourceWiresAudioRIntoADualDestinationsOwnRight
 }
 
 TEST_F(GraphEditorTest, SplittingASourceNeverWiresIntoACollapsedPeersHiddenRightBlock) {
-    // The reported screenshot: Audio L into a COLLAPSED Filter's single Audio jack. The Filter's
-    // right block exists but is hidden, so there is nowhere coherent for Audio R to go — and the
-    // one thing the toggle must not do is wire it there anyway, creating a cable that is audible
-    // and unreachable.
+    // Audio L into a COLLAPSED Filter's single Audio jack, and the SOURCE is the module being split.
+    // The Filter's right block exists but is hidden, so the one thing the toggle must not do is wire
+    // Audio R there anyway, creating a cable that is audible and unreachable.
+    //
+    // RECONCILED with the later "both legs live after a split" ruling: that ruling is honoured by
+    // copying a feed on the INPUT side, which cannot happen here — the module being split is the
+    // upstream, so this is the output side, and the alternatives there are this forbidden hidden
+    // cable or summing both legs into the peer's mono jack (+6 dB from a layout toggle). So the
+    // right OUTPUT leg stays a visible, unplugged jack. Do not "fix" this test by wiring the block;
+    // the case where the downstream CAN take the leg is
+    // SplittingAMidChainVoiceModuleWiresAllFourLegsWhenTheDownstreamCanTakeIt.
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(800, 600);
@@ -1436,6 +1451,204 @@ TEST_F(GraphEditorTest, SplittingASourceNeverWiresIntoACollapsedPeersHiddenRight
     for (int ch = FilterModule::kRightBase; ch < filterNode->getProcessor()->getTotalNumInputChannels(); ++ch)
         EXPECT_EQ(feedCount(graph, filterNode->nodeID, ch), 0)
             << "nothing may be wired onto a hidden right block (channel " << ch << ")";
+}
+
+// ---------------------------------------------------------------------------
+// Dual I/O toggle on a SPLIT-BLOCK module that was wired while collapsed
+//
+// Reported shape: a Filter sitting mid-chain, flipped to Dual I/O while patched. Audio L in and out
+// stayed wired and BOTH right jacks came up dangling, because a collapsed neighbour exposes no
+// second audio jack for rightAudioLegOf() to find. The ruling: a module the user just split must
+// arrive with both legs live.
+//
+// What that means per side is NOT symmetric, and the asymmetry is the point:
+//   * INPUT  - copy the feed the left leg already has onto the right leg. Driving one more
+//              destination from the same source channel cannot change the mix.
+//   * OUTPUT - wire the right leg to the destination's right leg when the destination HAS one
+//              (collapsed FX pair raw1, or a dual peer's own block). When it has none, leave the
+//              jack unpatched: the two alternatives are a cable onto a hidden jack (audible,
+//              unpluggable) or summing both identical legs into one mono input, which makes a
+//              layout toggle +6 dB louder. Dual I/O is not a mono/stereo switch.
+// ---------------------------------------------------------------------------
+
+TEST_F(GraphEditorTest, SplittingAMidChainVoiceModuleFeedsItsRightInputFromAMonoUpstream) {
+    // The screenshot, exactly: collapsed Oscillator -> Filter -> collapsed VCA, and the Filter is the
+    // one being toggled. Audio R in is broadcast-fed; Audio R out has nowhere legal to go, so it
+    // stays a visible, unplugged jack (see the header comment).
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto& graph = engine.getGraph();
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    auto vcaNode = graph.addNode(std::make_unique<VCAModule>());
+    setDualIOParam(*oscNode->getProcessor(), false);
+    setDualIOParam(*filterNode->getProcessor(), false);
+    setDualIOParam(*vcaNode->getProcessor(), false);
+    ASSERT_TRUE(graph.addConnection({{oscNode->nodeID, 0}, {filterNode->nodeID, 0}}));
+    ASSERT_TRUE(graph.addConnection({{filterNode->nodeID, 0}, {vcaNode->nodeID, 0}}));
+    editor.updateComponents();
+
+    setDualIOParam(*filterNode->getProcessor(), true);
+
+    EXPECT_TRUE(graphHasEdge(graph, oscNode->nodeID, 0, filterNode->nodeID, 0)) << "Audio L in survives";
+    EXPECT_TRUE(graphHasEdge(graph, filterNode->nodeID, 0, vcaNode->nodeID, 0)) << "Audio L out survives";
+    EXPECT_TRUE(graphHasEdge(graph, oscNode->nodeID, 0, filterNode->nodeID, FilterModule::kRightBase))
+        << "Audio R in must be fed by the mono upstream, not left dangling";
+    EXPECT_EQ(feedCount(graph, filterNode->nodeID, FilterModule::kRightBase), 1)
+        << "and fed exactly once, so a second toggle cannot stack feeds";
+
+    // The one leg that stays unpatched, and the two things that must NOT have happened instead.
+    for (int ch = VCAModule::kRightBase; ch < vcaNode->getProcessor()->getTotalNumInputChannels(); ++ch)
+        EXPECT_EQ(feedCount(graph, vcaNode->nodeID, ch), 0) << "no cable onto the collapsed VCA's hidden block";
+    EXPECT_EQ(feedCount(graph, vcaNode->nodeID, 0), 1)
+        << "and both legs must not be summed into the VCA's mono jack, which would add 6 dB";
+
+    // Toggling back off leaves the mono chain exactly as it started.
+    setDualIOParam(*filterNode->getProcessor(), false);
+    EXPECT_TRUE(graphHasEdge(graph, oscNode->nodeID, 0, filterNode->nodeID, 0));
+    EXPECT_EQ(feedCount(graph, filterNode->nodeID, FilterModule::kRightBase), 0)
+        << "collapsing unhooks the hidden right leg again";
+    EXPECT_EQ(feedCount(graph, filterNode->nodeID, 0), 1) << "and does not re-point the broadcast onto the left leg";
+}
+
+TEST_F(GraphEditorTest, SplittingAMidChainVoiceModuleWiresAllFourLegsWhenTheDownstreamCanTakeIt) {
+    // Same shape with an FX downstream: a collapsed Distortion's one Audio jack owns raw0 AND raw1,
+    // so the right leg has a legal, visible target and all four of the Filter's jacks end up wired.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto& graph = engine.getGraph();
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    auto distNode = graph.addNode(std::make_unique<DistortionModule>());
+    setDualIOParam(*oscNode->getProcessor(), false);
+    setDualIOParam(*filterNode->getProcessor(), false);
+    ASSERT_FALSE(dynamic_cast<ModuleBase*>(distNode->getProcessor())->isDualIO()) << "FX default to collapsed";
+    ASSERT_TRUE(graph.addConnection({{oscNode->nodeID, 0}, {filterNode->nodeID, 0}}));
+    ASSERT_TRUE(graph.addConnection({{filterNode->nodeID, 0}, {distNode->nodeID, 0}}));
+    ASSERT_TRUE(graph.addConnection({{filterNode->nodeID, 0}, {distNode->nodeID, 1}}))
+        << "a mono feed into a collapsed FX pair fans onto both raw legs";
+    editor.updateComponents();
+
+    setDualIOParam(*filterNode->getProcessor(), true);
+
+    EXPECT_TRUE(graphHasEdge(graph, oscNode->nodeID, 0, filterNode->nodeID, 0)) << "Audio L in";
+    EXPECT_TRUE(graphHasEdge(graph, oscNode->nodeID, 0, filterNode->nodeID, FilterModule::kRightBase))
+        << "Audio R in, broadcast from the mono upstream";
+    EXPECT_TRUE(graphHasEdge(graph, filterNode->nodeID, 0, distNode->nodeID, 0)) << "Audio L out";
+    EXPECT_TRUE(graphHasEdge(graph, filterNode->nodeID, FilterModule::kRightBase, distNode->nodeID, 1))
+        << "Audio R out must reach the collapsed pair's second raw leg";
+    EXPECT_FALSE(graphHasEdge(graph, filterNode->nodeID, 0, distNode->nodeID, 1))
+        << "and the left leg's stand-in copy must go with it, or the right leg carries L+R";
+    EXPECT_EQ(feedCount(graph, distNode->nodeID, 1), 1);
+}
+
+TEST_F(GraphEditorTest, SplittingAnOutputOnlyVoiceModuleTouchesOnlyItsOutputSide) {
+    // The Oscillator has no audio input at all (its 14 inputs are pitch and mod CV), so the input
+    // half of the rewire must not fire, and its kRightBase must not be mistaken for an audio in.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto& graph = engine.getGraph();
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    auto delayNode = graph.addNode(std::make_unique<DelayModule>());
+    setDualIOParam(*oscNode->getProcessor(), false);
+    ASSERT_TRUE(graph.addConnection({{oscNode->nodeID, 0}, {delayNode->nodeID, 0}}));
+    ASSERT_TRUE(graph.addConnection({{oscNode->nodeID, 0}, {delayNode->nodeID, 1}}));
+    editor.updateComponents();
+
+    setDualIOParam(*oscNode->getProcessor(), true);
+
+    EXPECT_TRUE(graphHasEdge(graph, oscNode->nodeID, OscillatorModule::kRightBase, delayNode->nodeID, 1))
+        << "Audio R out pairs with the collapsed Delay's second raw leg";
+    EXPECT_FALSE(graphHasEdge(graph, oscNode->nodeID, 0, delayNode->nodeID, 1)) << "no double feed";
+
+    for (int ch = 0; ch < oscNode->getProcessor()->getTotalNumInputChannels(); ++ch)
+        EXPECT_EQ(feedCount(graph, oscNode->nodeID, ch), 0)
+            << "an output-only module must gain no input cables (channel " << ch << ")";
+}
+
+TEST_F(GraphEditorTest, SplittingAMidChainVoiceModulePrefersRealRightLegsOverABroadcast) {
+    // Dual neighbours on both sides: the real Audio R blocks win, and no broadcast happens. This is
+    // the rule that keeps TogglingDualIOKeepsBothStereoLegs true - a copy of Audio L stands in for
+    // the right leg only while there is no right leg to be had.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto& graph = engine.getGraph();
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    auto vcaNode = graph.addNode(std::make_unique<VCAModule>());
+    ASSERT_TRUE(dynamic_cast<ModuleBase*>(oscNode->getProcessor())->isDualIO()) << "voice modules default to dual";
+    ASSERT_TRUE(dynamic_cast<ModuleBase*>(vcaNode->getProcessor())->isDualIO());
+    setDualIOParam(*filterNode->getProcessor(), false);
+    ASSERT_TRUE(graph.addConnection({{oscNode->nodeID, 0}, {filterNode->nodeID, 0}}));
+    ASSERT_TRUE(graph.addConnection({{filterNode->nodeID, 0}, {vcaNode->nodeID, 0}}));
+    editor.updateComponents();
+
+    setDualIOParam(*filterNode->getProcessor(), true);
+
+    EXPECT_TRUE(graphHasEdge(graph, oscNode->nodeID, OscillatorModule::kRightBase, filterNode->nodeID,
+                             FilterModule::kRightBase))
+        << "Audio R in comes from the upstream's own right block";
+    EXPECT_FALSE(graphHasEdge(graph, oscNode->nodeID, 0, filterNode->nodeID, FilterModule::kRightBase))
+        << "so no broadcast of Audio L";
+    EXPECT_TRUE(
+        graphHasEdge(graph, filterNode->nodeID, FilterModule::kRightBase, vcaNode->nodeID, VCAModule::kRightBase))
+        << "Audio R out reaches the downstream's own right block, never its ch1 CV";
+    EXPECT_FALSE(graphHasEdge(graph, filterNode->nodeID, FilterModule::kRightBase, vcaNode->nodeID, 1))
+        << "ch1 is the VCA gain CV";
+}
+
+TEST_F(GraphEditorTest, SplittingAMidChainVoiceModuleIsOneUndoableStep) {
+    AudioEngine engine;
+    AppUndoManager undoMgr;
+    GraphEditor editor(engine, &undoMgr);
+    editor.setSize(800, 600);
+
+    auto& graph = engine.getGraph();
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    setDualIOParam(*oscNode->getProcessor(), false);
+    setDualIOParam(*filterNode->getProcessor(), false);
+    ASSERT_TRUE(graph.addConnection({{oscNode->nodeID, 0}, {filterNode->nodeID, 0}}));
+    editor.updateComponents();
+    ASSERT_NE(cardFor(editor, filterNode->getProcessor()), nullptr) << "the card is what listens to the gesture";
+
+    juce::AudioProcessorParameter* dualParam = nullptr;
+    for (auto* p : filterNode->getProcessor()->getParameters())
+        if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*>(p); withId && withId->paramID == "dualIO")
+            dualParam = p;
+    ASSERT_NE(dualParam, nullptr);
+
+    dualParam->beginChangeGesture();
+    dualParam->setValueNotifyingHost(1.0f);
+    dualParam->endChangeGesture();
+
+    ASSERT_TRUE(graphHasEdge(graph, oscNode->nodeID, 0, filterNode->nodeID, FilterModule::kRightBase))
+        << "the broadcast happened";
+
+    ASSERT_TRUE(undoMgr.undo());
+
+    juce::AudioProcessorGraph::NodeID osc, filter;
+    for (auto* node : graph.getNodes()) {
+        if (dynamic_cast<OscillatorModule*>(node->getProcessor()) != nullptr)
+            osc = node->nodeID;
+        if (dynamic_cast<FilterModule*>(node->getProcessor()) != nullptr)
+            filter = node->nodeID;
+    }
+    ASSERT_NE(filter.uid, 0u);
+
+    auto* restoredFilter = dynamic_cast<ModuleBase*>(graph.getNodeForId(filter)->getProcessor());
+    ASSERT_NE(restoredFilter, nullptr);
+    EXPECT_FALSE(restoredFilter->isDualIO()) << "undo restores the parameter";
+    EXPECT_TRUE(graphHasEdge(graph, osc, 0, filter, 0)) << "and the mono cable it was wired with";
+    EXPECT_EQ(feedCount(graph, filter, FilterModule::kRightBase), 0) << "undo takes the broadcast back out";
 }
 
 // ---------------------------------------------------------------------------
@@ -2806,6 +3019,14 @@ static int countAudioConnectionsBetween(juce::AudioProcessorGraph& graph, juce::
     return n;
 }
 
+/** Cursor position that puts a library ghost's TOP-LEFT at `topLeft`. A library drag CENTRES the
+ *  ghost on the cursor, so a test that wants the ghost at a particular spot has to say so in cursor
+ *  terms rather than passing the top-left it used to. */
+static juce::Point<int> libraryCursorForGhostTopLeft(const juce::String& moduleType, juce::Point<int> topLeft) {
+    const auto size = GraphEditor::estimateModuleSize(moduleType);
+    return topLeft + juce::Point<int>(size.x / 2, size.y / 2);
+}
+
 static void sizeModuleComponents(GraphEditor& editor, int w = 280, int h = 300) {
     auto* content = editor.getChildComponent(0);
     ASSERT_NE(content, nullptr);
@@ -2829,7 +3050,8 @@ TEST_F(GraphEditorTest, SmartConnectionOffDoesNotAutoWireOnDrop) {
     sizeModuleComponents(editor);
 
     DummyDragSource dummySource;
-    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource, juce::Point<int>(120, 120));
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource,
+                                                   libraryCursorForGhostTopLeft("Oscillator", {120, 120}));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
     EXPECT_EQ(editor.getSmartSuggestionCount(), 0);
@@ -2859,14 +3081,16 @@ TEST_F(GraphEditorTest, SmartConnectionSuggestsNearCompatibleNeighbor) {
 
     DummyDragSource dummySource;
     // Drop point near the filter (within the 96 px proximity window after anti-overlap).
-    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource, juce::Point<int>(80, 100));
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource,
+                                                   libraryCursorForGhostTopLeft("Oscillator", {80, 100}));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
 
     EXPECT_GT(editor.getSmartSuggestionCount(), 0) << "Oscillator ghost near a Filter should suggest an audio cable";
 
     // Far away — suggestions clear.
-    juce::DragAndDropTarget::SourceDetails far(juce::var("Oscillator"), &dummySource, juce::Point<int>(50, 500));
+    juce::DragAndDropTarget::SourceDetails far(juce::var("Oscillator"), &dummySource,
+                                               libraryCursorForGhostTopLeft("Oscillator", {50, 500}));
     editor.itemDragMove(far);
     EXPECT_EQ(editor.getSmartSuggestionCount(), 0);
     editor.endDragPreview();
@@ -2886,7 +3110,8 @@ TEST_F(GraphEditorTest, SmartConnectionNewDropAutoWires) {
     sizeModuleComponents(editor);
 
     DummyDragSource dummySource;
-    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource, juce::Point<int>(80, 100));
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource,
+                                                   libraryCursorForGhostTopLeft("Oscillator", {80, 100}));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
     ASSERT_GT(editor.getSmartSuggestionCount(), 0);
@@ -3143,7 +3368,8 @@ TEST_F(GraphEditorTest, SmartConnectionIncompatiblePairSuggestsNothing) {
     editor.connectPorts(oscNode->nodeID, 0, filterNode->nodeID, 0, false, false);
 
     DummyDragSource dummySource;
-    juce::DragAndDropTarget::SourceDetails details(juce::var("LFO"), &dummySource, juce::Point<int>(80, 100));
+    juce::DragAndDropTarget::SourceDetails details(juce::var("LFO"), &dummySource,
+                                                   libraryCursorForGhostTopLeft("LFO", {80, 100}));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
     // LFO is not a known MIDI source; Filter audio in is taken; mod CV is not suggested in v1.
@@ -3175,7 +3401,8 @@ TEST_F(GraphEditorTest, SmartConnectionStereoToStereoWiresBothLegs) {
     sizeModuleComponents(editor);
 
     DummyDragSource dummySource;
-    juce::DragAndDropTarget::SourceDetails details(juce::var("Delay"), &dummySource, juce::Point<int>(80, 100));
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Delay"), &dummySource,
+                                                   libraryCursorForGhostTopLeft("Delay", {80, 100}));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
     ASSERT_GE(editor.getSmartSuggestionCount(), 1) << "Dual I/O off: one Audio→Audio preview, which fans both raw legs";
@@ -3207,7 +3434,8 @@ TEST_F(GraphEditorTest, SmartConnectionMonoToStereoFansBothInputs) {
     sizeModuleComponents(editor);
 
     DummyDragSource dummySource;
-    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource, juce::Point<int>(80, 100));
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource,
+                                                   libraryCursorForGhostTopLeft("Oscillator", {80, 100}));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
     ASSERT_GE(editor.getSmartSuggestionCount(), 1) << "Mono→collapsed stereo should preview Delay's Audio jack";
@@ -3237,7 +3465,8 @@ TEST_F(GraphEditorTest, SmartConnectionStereoToMonoFansBothOutputs) {
     sizeModuleComponents(editor);
 
     DummyDragSource dummySource;
-    juce::DragAndDropTarget::SourceDetails details(juce::var("Delay"), &dummySource, juce::Point<int>(80, 100));
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Delay"), &dummySource,
+                                                   libraryCursorForGhostTopLeft("Delay", {80, 100}));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
     ASSERT_GE(editor.getSmartSuggestionCount(), 1) << "Collapsed stereo→mono should preview Delay Audio into Filter";
@@ -3268,7 +3497,8 @@ TEST_F(GraphEditorTest, SmartConnectionDoesNotTreatMathABAsStereo) {
     sizeModuleComponents(editor);
 
     DummyDragSource dummySource;
-    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource, juce::Point<int>(80, 100));
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource,
+                                                   libraryCursorForGhostTopLeft("Oscillator", {80, 100}));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
     // Math A/B are unlabeled PortRole::Other, so they are never a stereo destination pair. The
@@ -3319,7 +3549,8 @@ TEST_F(GraphEditorTest, SmartConnectionMonoToStereoIsBothOrNeither) {
     editor.connectPorts(filler->nodeID, 0, delayNode->nodeID, 0, false, false);
 
     DummyDragSource dummySource;
-    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource, juce::Point<int>(80, 100));
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource,
+                                                   libraryCursorForGhostTopLeft("Oscillator", {80, 100}));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
     // Left taken → both-or-neither: no mono→stereo fan onto Right alone.
@@ -3389,7 +3620,8 @@ TEST_F(GraphEditorTest, SmartConnectionAddsParallelCableAtOccupiedAudioOutput) {
     ASSERT_EQ(countAudioConnectionsBetween(graph, f.reverbId, f.outId), 2);
 
     DummyDragSource dummySource;
-    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource, juce::Point<int>(440, 100));
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource,
+                                                   libraryCursorForGhostTopLeft("Chorus", {440, 100}));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
     ASSERT_GT(editor.getSmartSuggestionCount(), 0) << "an occupied sink must still offer a parallel cable";
@@ -3435,7 +3667,8 @@ TEST_F(GraphEditorTest, SmartConnectionAddsParallelCableForPureSourceAtOccupiedA
     auto f = makeWiredSink(engine, editor);
 
     DummyDragSource dummySource;
-    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource, juce::Point<int>(440, 100));
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource,
+                                                   libraryCursorForGhostTopLeft("Oscillator", {440, 100}));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
     ASSERT_GT(editor.getSmartSuggestionCount(), 0) << "a source at an occupied sink gets a parallel cable";
@@ -3488,7 +3721,8 @@ TEST_F(GraphEditorTest, SmartConnectionWithoutCtrlNeverInsertsIntoOccupiedModule
     auto f = makeWiredChain(engine, editor, /*wireIt=*/false);
 
     DummyDragSource dummySource;
-    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource, juce::Point<int>(440, 100));
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource,
+                                                   libraryCursorForGhostTopLeft("Chorus", {440, 100}));
 
     // Positive control, so the zero below is the modifier rule and not a geometry accident.
     editor.itemDragEnter(details);
@@ -3516,7 +3750,8 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlInsertsIntoOccupiedOrdinaryModule) {
     auto f = makeWiredChain(engine, editor);
 
     DummyDragSource dummySource;
-    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource, juce::Point<int>(440, 100));
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource,
+                                                   libraryCursorForGhostTopLeft("Chorus", {440, 100}));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
 
@@ -3553,7 +3788,8 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlInsertAtOccupiedModuleIsOneUndoStep) 
     ASSERT_GT(countAudioConnectionsBetween(graph, f.upstreamId, f.targetId), 0);
 
     DummyDragSource dummySource;
-    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource, juce::Point<int>(440, 100));
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource,
+                                                   libraryCursorForGhostTopLeft("Chorus", {440, 100}));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
     ASSERT_GT(editor.getSmartSuggestionCount(), 0);
@@ -3586,7 +3822,8 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlDoesNotInsertPureSourceIntoOccupiedMo
     auto f = makeWiredChain(engine, editor, /*wireIt=*/false);
 
     DummyDragSource dummySource;
-    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource, juce::Point<int>(440, 100));
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource,
+                                                   libraryCursorForGhostTopLeft("Oscillator", {440, 100}));
 
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
@@ -3637,7 +3874,8 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlInsertIsBothOrNeitherAcrossStereoInpu
     ASSERT_GE(audioLegs.size(), 2u) << "this test needs a destination with a multi-leg audio input group";
 
     DummyDragSource dummySource;
-    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource, juce::Point<int>(440, 100));
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource,
+                                                   libraryCursorForGhostTopLeft("Chorus", {440, 100}));
 
     // Phase 1: only the first leg wired → half-occupied group, no insert.
     editor.connectPorts(reverbNode->nodeID, 0, filterNode->nodeID, audioLegs[0], false, false);
@@ -3692,7 +3930,8 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlInsertRemovesEveryDoomedLegOfADualIOU
     ASSERT_EQ(countAudioConnectionsBetween(graph, reverbId, outId), 2);
 
     DummyDragSource dummySource;
-    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource, juce::Point<int>(440, 100));
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource,
+                                                   libraryCursorForGhostTopLeft("Chorus", {440, 100}));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
     ASSERT_GT(editor.getSmartSuggestionCount(), 0);
@@ -3804,7 +4043,8 @@ TEST_F(GraphEditorTest, SmartConnectionParallelAddPreviewCoversBothOutputLegs) {
     auto f = makeWiredSink(engine, editor);
 
     DummyDragSource dummySource;
-    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource, juce::Point<int>(440, 100));
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource,
+                                                   libraryCursorForGhostTopLeft("Chorus", {440, 100}));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
     ASSERT_GT(editor.getSmartSuggestionCount(), 0);
@@ -3844,7 +4084,8 @@ TEST_F(GraphEditorTest, SmartConnectionProbeHonoursTheDualIODefault) {
     auto f = makeWiredSink(engine, editor);
 
     DummyDragSource dummySource;
-    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource, juce::Point<int>(440, 100));
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource,
+                                                   libraryCursorForGhostTopLeft("Chorus", {440, 100}));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
     ASSERT_GT(editor.getSmartSuggestionCount(), 0);
@@ -3900,7 +4141,8 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlInsertWiresBothLegsOfADualGhostBetwee
     ASSERT_EQ(countAudioConnectionsBetween(graph, delayId, reverbId), 2);
 
     DummyDragSource dummySource;
-    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource, juce::Point<int>(440, 100));
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource,
+                                                   libraryCursorForGhostTopLeft("Chorus", {440, 100}));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
     ASSERT_GT(editor.getSmartSuggestionCount(), 0);
@@ -4162,7 +4404,8 @@ TEST_F(GraphEditorTest, SmartConnectionPreviewLegsLandOnTheRealDestinationJack) 
     ASSERT_NE(destComp, nullptr);
 
     DummyDragSource dummySource;
-    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource, juce::Point<int>(440, 100));
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource,
+                                                   libraryCursorForGhostTopLeft("Chorus", {440, 100}));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
     ASSERT_GT(editor.getSmartSuggestionCount(), 0);
@@ -4270,7 +4513,8 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlLibraryDropInsertsIntoAnOccupiedModul
     ASSERT_GT(countAudioConnectionsBetween(graph, f.upstreamId, f.targetId), 0);
 
     DummyDragSource dummySource;
-    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource, juce::Point<int>(440, 100));
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource,
+                                                   libraryCursorForGhostTopLeft("Chorus", {440, 100}));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
 
@@ -4520,6 +4764,227 @@ TEST_F(GraphEditorTest, AutoNumberingStillAppliesAlongsideCustomTitles) {
     EXPECT_EQ(editor.getModuleTitle(first->nodeID, first->getProcessor()), "Shimmer Bus");
     EXPECT_EQ(editor.getModuleTitle(second->nodeID, second->getProcessor()), "Chorus 2")
         << "an un-renamed sibling still follows the numbering";
+}
+
+TEST_F(GraphEditorTest, ModuleTitleRenameIsDismissedByAPressOutsideTheEditor) {
+    // The editor's own onFocusLost is not enough: almost nothing on this canvas wants keyboard
+    // focus, so clicking a card body or the background never takes focus off the editor and the
+    // callback never fires. Every press path has to commit it from the presser's side. All three
+    // surfaces the user can plausibly click are covered here.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 800);
+
+    auto& graph = engine.getGraph();
+    auto a = graph.addNode(std::make_unique<ChorusModule>());
+    a->properties.set("x", 40);
+    a->properties.set("y", 40);
+    auto b = graph.addNode(std::make_unique<DelayModule>());
+    b->properties.set("x", 500);
+    b->properties.set("y", 40);
+    engine.updateModuleNames();
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    auto* compA = findModuleComp(editor, a->getProcessor());
+    auto* compB = findModuleComp(editor, b->getProcessor());
+    ASSERT_NE(compA, nullptr);
+    ASSERT_NE(compB, nullptr);
+
+    const juce::Point<int> bodyA{compA->getWidth() / 2, compA->getHeight() / 2};
+    const juce::Point<int> bodyB{compB->getWidth() / 2, compB->getHeight() / 2};
+
+    auto openEditorWith = [&](const juce::String& text) {
+        compA->beginTitleRename();
+        auto* ed = dynamic_cast<juce::TextEditor*>(compA->findChildWithID("moduleTitleRenameEditor"));
+        ASSERT_NE(ed, nullptr);
+        ed->setText(text, juce::dontSendNotification);
+    };
+
+    // 1. A press on the SAME card's body.
+    openEditorWith("Named By Body Click");
+    ASSERT_TRUE(compA->isRenamingTitle());
+    compA->mouseDown(makeModuleClickWithMods(*compA, bodyA, plainLeftClick()));
+    EXPECT_FALSE(compA->isRenamingTitle()) << "a press on the card body must dismiss the editor";
+    EXPECT_EQ(editor.getModuleDisplayName(a->nodeID), "Named By Body Click") << "clicking away commits";
+
+    // 2. A press on ANOTHER card.
+    openEditorWith("Named By Other Card");
+    ASSERT_TRUE(compA->isRenamingTitle());
+    compB->mouseDown(makeModuleClickWithMods(*compB, bodyB, plainLeftClick()));
+    EXPECT_FALSE(compA->isRenamingTitle()) << "a press on a different card must dismiss it too";
+    EXPECT_EQ(editor.getModuleDisplayName(a->nodeID), "Named By Other Card");
+
+    // 3. A press on empty canvas.
+    openEditorWith("Named By Canvas Click");
+    ASSERT_TRUE(compA->isRenamingTitle());
+    editor.mouseDown(makeModuleClickWithMods(editor, {1000, 700}, plainLeftClick()));
+    EXPECT_FALSE(compA->isRenamingTitle()) << "a press on empty canvas must dismiss it";
+    EXPECT_EQ(editor.getModuleDisplayName(a->nodeID), "Named By Canvas Click");
+
+    // Escape is still the only cancel, and it must survive all of the above wiring.
+    openEditorWith("Should Not Stick");
+    compA->finishTitleRename(false);
+    EXPECT_EQ(editor.getModuleDisplayName(a->nodeID), "Named By Canvas Click") << "Escape still discards";
+}
+
+// --- Every FX must be insertable, aiming AT THE GAP --------------------------
+//
+// The ghost is centred on the cursor for a library drag, and the insert path relaxes the jack-level
+// left-to-right rule, so the natural aim works: put the cursor in the gap between two wired cards
+// (or over the cable itself) and the insert is offered. This used to require aiming roughly one
+// card-width to the LEFT of the destination, which nobody does — it read as "this module doesn't
+// support insert", and a report of exactly that shape turned out to have no per-module cause.
+//
+// Fixture: upstream at 40 (280 wide, so 40..320), destination at 460 (460..740), leaving a 140px
+// visible gap at 320..460. The cursor goes in the middle of that gap.
+
+class SmartConnectionFxInsertTest : public ::testing::TestWithParam<const char*> {};
+
+namespace {
+constexpr int kFxUpstreamX = 40;
+constexpr int kFxTargetX = 460;
+constexpr int kFxGapCentreX = 390; // middle of the 320..460 gap
+constexpr int kFxLaneY = 100;
+} // namespace
+
+/** Two wired cards with a visible gap, sized as the app sizes them. */
+struct FxChainFixture {
+    juce::AudioProcessorGraph::NodeID upstreamId, targetId;
+};
+static FxChainFixture makeFxChain(AudioEngine& engine, GraphEditor& editor) {
+    FxChainFixture f;
+    auto& graph = engine.getGraph();
+    auto upstream = graph.addNode(std::make_unique<ReverbModule>());
+    upstream->properties.set("x", kFxUpstreamX);
+    upstream->properties.set("y", kFxLaneY);
+    auto target = graph.addNode(std::make_unique<DelayModule>());
+    target->properties.set("x", kFxTargetX);
+    target->properties.set("y", kFxLaneY);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+    f.upstreamId = upstream->nodeID;
+    f.targetId = target->nodeID;
+    editor.connectPorts(f.upstreamId, 0, f.targetId, 0, false, false);
+    return f;
+}
+
+TEST_P(SmartConnectionFxInsertTest, CtrlDragAtTheGapInsertsThisFx) {
+    const juce::String fxName(GetParam());
+
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 900);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.setInsertModifierOverrideForTests(true); // Ctrl held
+
+    auto& graph = engine.getGraph();
+    auto f = makeFxChain(engine, editor);
+    ASSERT_GT(countAudioConnectionsBetween(graph, f.upstreamId, f.targetId), 0);
+
+    std::set<juce::uint32> before;
+    for (auto* n : graph.getNodes())
+        before.insert(n->nodeID.uid);
+
+    // Cursor IN THE GAP — the aim a user actually takes.
+    DummyDragSource dummySource;
+    juce::DragAndDropTarget::SourceDetails details(juce::var(fxName), &dummySource,
+                                                   juce::Point<int>(kFxGapCentreX, kFxLaneY));
+    editor.itemDragEnter(details);
+    editor.itemDragMove(details);
+
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0) << fxName << " offered nothing with the cursor over the gap";
+    for (const auto& s : editor.getSmartSuggestions()) {
+        EXPECT_TRUE(s.isInsert) << fxName << " offered a plain connect instead of an insert";
+        EXPECT_EQ(s.neighborId, f.targetId) << fxName << " aimed at the wrong neighbour";
+        EXPECT_EQ(s.upstreamId, f.upstreamId) << fxName << " picked the wrong upstream";
+    }
+
+    editor.itemDropped(details);
+
+    juce::AudioProcessorGraph::NodeID ghostId{};
+    for (auto* n : graph.getNodes())
+        if (before.find(n->nodeID.uid) == before.end())
+            ghostId = n->nodeID;
+    ASSERT_NE(ghostId.uid, 0u) << fxName << " was not created on drop";
+
+    EXPECT_EQ(countAudioConnectionsBetween(graph, f.upstreamId, f.targetId), 0)
+        << fxName << " left the original cable in place";
+    EXPECT_GT(countAudioConnectionsBetween(graph, f.upstreamId, ghostId), 0) << fxName << " is not fed by the upstream";
+    EXPECT_GT(countAudioConnectionsBetween(graph, ghostId, f.targetId), 0) << fxName << " does not feed the target";
+}
+
+INSTANTIATE_TEST_SUITE_P(AllFxTypes, SmartConnectionFxInsertTest,
+                         ::testing::Values("Distortion", "Delay", "Reverb", "Chorus", "Phaser", "Flanger", "Compressor",
+                                           "Limiter", "Bitcrusher", "Pitch Shifter", "Parametric EQ",
+                                           "Ring Modulator"));
+
+TEST_F(GraphEditorTest, SmartConnectionInsertAimWindowSpansTheWholeGap) {
+    // Every cursor position across the visible gap must offer the insert, and so must a cursor over
+    // the destination's own left half (aiming at the cable that ends there). Dragged clean PAST the
+    // destination must not.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 900);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.setInsertModifierOverrideForTests(true);
+
+    auto f = makeFxChain(engine, editor);
+    DummyDragSource dummySource;
+
+    auto insertsAt = [&](int cursorX) {
+        juce::DragAndDropTarget::SourceDetails d(juce::var("Chorus"), &dummySource,
+                                                 juce::Point<int>(cursorX, kFxLaneY));
+        editor.itemDragEnter(d);
+        editor.itemDragMove(d);
+        int n = 0;
+        for (const auto& s : editor.getSmartSuggestions())
+            if (s.isInsert)
+                ++n;
+        editor.endDragPreview();
+        return n;
+    };
+
+    // The whole visible gap, end to end.
+    for (int x = 320; x <= 460; x += 10)
+        EXPECT_GT(insertsAt(x), 0) << "no insert with the cursor at x=" << x << ", inside the gap";
+
+    // Over the destination card itself — aiming at the cable's far end.
+    EXPECT_GT(insertsAt(520), 0) << "no insert with the cursor over the destination's left half";
+
+    // Dragged clean past the destination: its centre is beyond the card's right edge, so this is not
+    // "insert into it" any more.
+    EXPECT_EQ(insertsAt(900), 0) << "an insert was offered for a ghost dragged well past the destination";
+}
+
+TEST_F(GraphEditorTest, SmartConnectionPlainSuggestionKeepsTheLeftToRightFlowRule) {
+    // The relaxation is scoped to the insert path. WITHOUT the modifier, a ghost sitting to the right
+    // of a module must still not have that module's outputs wrapped back into it.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 900);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.setInsertModifierOverrideForTests(false); // no Ctrl
+
+    auto& graph = engine.getGraph();
+    auto delayNode = graph.addNode(std::make_unique<DelayModule>());
+    delayNode->properties.set("x", 400);
+    delayNode->properties.set("y", kFxLaneY);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    // Ghost centred to the RIGHT of the Delay: its own output must not be proposed backwards into
+    // the Delay's input, and the Delay must not be proposed as a source into the ghost's left inputs
+    // from a position the ghost has already passed.
+    DummyDragSource dummySource;
+    juce::DragAndDropTarget::SourceDetails d(juce::var("Chorus"), &dummySource, juce::Point<int>(760, kFxLaneY));
+    editor.itemDragEnter(d);
+    editor.itemDragMove(d);
+    for (const auto& s : editor.getSmartSuggestions()) {
+        EXPECT_FALSE(s.isInsert) << "no modifier, so nothing may be rerouted";
+        EXPECT_FALSE(s.ghostIsSource) << "a ghost to the right must not feed the module on its left";
+    }
+    editor.endDragPreview();
 }
 
 // --- Double-click port disconnect (issue #216) -------------------------------

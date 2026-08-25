@@ -379,6 +379,30 @@ public:
     /** Title a card should paint: the custom one when set, else the auto-numbered module name. */
     juce::String getModuleTitle(juce::AudioProcessorGraph::NodeID nodeId, juce::AudioProcessor* processor) const;
 
+    /** Ghost top-left for a library drag's cursor position: the ghost is CENTRED on the cursor.
+     *
+     *  That is what every other drag-and-drop surface does, and it is what makes "aim at the gap"
+     *  mean what it looks like. Anchoring the ghost by its top-left put the card a full width to the
+     *  RIGHT of the cursor, so a suggestion could only be earned by aiming roughly one card-width
+     *  LEFT of the destination — nobody does that, and it read as "this module doesn't support
+     *  insert". A canvas MOVE deliberately keeps its grab-point anchoring: that card is already
+     *  under the user's finger and re-anchoring it mid-drag would make it jump.
+     *
+     *  Every library path (enter, move, drop) resolves through this, or the drop lands somewhere the
+     *  preview never showed. */
+    juce::Point<int> ghostTopLeftForCursor(juce::Point<int> cursorCanvasPos) const {
+        return cursorCanvasPos - juce::Point<int>(dragPreviewW / 2, dragPreviewH / 2);
+    }
+
+    /** Commits and closes any open inline title editor, on any card.
+     *
+     *  Called from every canvas press path (GraphEditor::mouseDown for empty canvas and cables,
+     *  ModuleComponent::mouseDown for any card) because the editor's own onFocusLost is NOT enough:
+     *  almost nothing on this canvas wants keyboard focus, so clicking a module body or the
+     *  background never takes focus away from the editor and the callback never fires. Clicking
+     *  away has to commit from the presser's side instead. Escape still cancels. */
+    void commitAnyOpenTitleRename();
+
     /** True when the visible jack already has at least one graph edge or mod routing. */
     bool isPortConnected(ModuleComponent* module, int portIndex, bool isInput, bool isMidi) const;
 
@@ -725,6 +749,9 @@ private:
     int dragPreviewW = 0, dragPreviewH = 0;
     juce::AudioProcessorGraph::NodeID dragPreviewSelfId{};
     juce::Rectangle<int> dragPreviewGhost;
+    // The un-de-overlapped rect under the cursor. Suggestion candidacy is judged from this, so
+    // aiming at a gap narrower than the card still counts; the card still LANDS at dragPreviewGhost.
+    juce::Rectangle<int> dragPreviewAim;
     // Library-drag probe: jack metadata for a module that does not exist on the canvas yet.
     bool dragPreviewIsSnippet = false;
     std::unique_ptr<juce::AudioProcessor> dragPreviewProbe;

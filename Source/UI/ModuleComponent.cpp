@@ -2567,6 +2567,12 @@ void ModuleComponent::parameterGestureChanged(int parameterIndex, bool gestureIs
 }
 
 void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
+    // Clicking anywhere on a card commits an open inline title editor — this card's or another's.
+    // FIRST, before the child-control guard below returns, so a press on a knob dismisses it too.
+    // A press inside the editor itself never reaches here: it is a plain child with no mouse
+    // listener registered on it, so JUCE delivers that press to the editor.
+    owner.commitAnyOpenTitleRename();
+
     // A click that landed on a CHILD control this component attached itself to as a
     // MouseListener (currently just the generic auto-UI sliders — see createControls()) rather
     // than on this component's own body. e.getPosition() below is in THAT CHILD's local space, not

@@ -665,6 +665,7 @@ public:
     void resized() override {
         searchEditor.setBounds(8, 4, juce::jmax(0, getWidth() - 16), kSearchHeight - 8);
         updateScrollBar();
+        reclampFloatingHelpPopover();
     }
 
     void lookAndFeelChanged() override {
@@ -1223,6 +1224,52 @@ private:
         return top;
     }
 
+    /** Clamps `desired` so `popup`'s ENTIRE rect — header included, since that is what sits at the
+     *  popup's own local (0,0) — stays within `host`'s local bounds. This is the fix for a real
+     *  bug: the previous pin transition placed the popup at "wherever the callout happened to be
+     *  on screen", and the callout is anchored on the help button, which lives in the sidebar's
+     *  OWN topmost strip — very close to the top of the whole window. Any small mismatch between
+     *  the callout's screen position and `host`'s (a border inset, a display-scaling rounding, a
+     *  host whose own top-left is not screen (0,0)) landed the popup with a slightly negative Y,
+     *  which pushes the header — drawn at the popup's own y≈kOuterPadding — above y=0 of the host
+     *  and off screen entirely, while the viewport content below it (larger local y) stayed
+     *  visible and scrollable. That exactly matches the reported symptom: header gone, content
+     *  starting mid-sentence, nothing left to click for move/close. Never trust an unclamped
+     *  position for a component the user must always be able to reach again. */
+    static juce::Point<int> clampToHost(const juce::Component& host, const juce::Component& popup,
+                                        juce::Point<int> desired) {
+        const auto hostBounds = host.getLocalBounds();
+        const int maxX = juce::jmax(0, hostBounds.getWidth() - popup.getWidth());
+        const int maxY = juce::jmax(0, hostBounds.getHeight() - popup.getHeight());
+        return {juce::jlimit(0, maxX, desired.x), juce::jlimit(0, maxY, desired.y)};
+    }
+
+    /** Where a freshly-pinned popup appears: just to the right of the library sidebar, level with
+     *  its top — a sensible, predictable spot a first-time user is already looking near, clear of
+     *  any toolbar above the sidebar — rather than reusing the callout's screen position (see
+     *  clampToHost() for why that was fragile). Always clamped, so this is safe even when the host
+     *  is smaller than the sidebar's own width plus the popup (the popup then simply pins to the
+     *  host's top-left, which keeps the header reachable even though it can no longer sit "beside"
+     *  the sidebar). */
+    juce::Point<int> defaultFloatingPosition(juce::Component& host) const {
+        const auto sidebarInHost = host.getLocalArea(this, getLocalBounds());
+        constexpr int kMargin = 12;
+        const juce::Point<int> desired(sidebarInHost.getRight() + kMargin, juce::jmax(kMargin, sidebarInHost.getY()));
+        return clampToHost(host, *helpPopup_, desired);
+    }
+
+    /** Keeps a pinned popover's header reachable across a host resize (the sidebar resizing is the
+     *  best proxy this component has for "the window/host may have changed size" — see resized()).
+     *  No-op unless the popup exists, is pinned, and is currently parented somewhere. */
+    void reclampFloatingHelpPopover() {
+        if (!helpPopup_ || !helpPopup_->isPinned())
+            return;
+        auto* parent = helpPopup_->getParentComponent();
+        if (!parent)
+            return;
+        helpPopup_->setTopLeftPosition(clampToHost(*parent, *helpPopup_, helpPopup_->getPosition()));
+    }
+
     /** Re-hosts the SAME persistent popup between a juce::CallOutBox (unpinned) and a plain,
      *  non-modal floating child of floatingHelpHostFor() (pinned) — see the class comment on
      *  synth::ui::ModuleLibraryHelpPopup for why this transplant is only safe because
@@ -1231,12 +1278,6 @@ private:
     void setHelpPopoverPinned(bool wantPinned) {
         if (!helpPopup_ || wantPinned == helpPopup_->isPinned())
             return;
-
-        // Where the popup currently reads on screen — the callout's position when pinning, or
-        // wherever the user last dragged it to when un-pinning back into a fresh callout anchored
-        // there instead of snapping back to the "?" button.
-        const auto screenBounds =
-            helpPopup_->isShowing() ? helpPopup_->getScreenBounds() : localAreaToGlobal(getHelpButtonBounds());
 
         helpPopup_->setPinnedForPaint(wantPinned);
 
@@ -1248,7 +1289,7 @@ private:
             }
             auto* host = floatingHelpHostFor(*this);
             host->addAndMakeVisible(*helpPopup_); // auto-detaches from any previous parent
-            helpPopup_->setTopLeftPosition(host->getLocalPoint(nullptr, screenBounds.getPosition()));
+            helpPopup_->setTopLeftPosition(defaultFloatingPosition(*host));
             helpPopup_->setVisible(true);
             helpPopup_->toFront(true);
         } else {

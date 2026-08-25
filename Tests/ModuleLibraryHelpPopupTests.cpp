@@ -362,6 +362,122 @@ TEST(ModuleLibraryHelpPin, ClosingViaTheOwnerSeamMatchesTheButton) {
 }
 
 // ============================================================================
+// Round 6 regressions — the pinned popover was reported jammed at the top of the window with its
+// header off-screen (unreachable for move/close, only the scrolled body content visible). See
+// ModuleLibraryComponent::clampToHost's comment for the mechanism: an unclamped position derived
+// from the callout's screen bounds could land the popup at a slightly negative Y, pushing the
+// header above the host's visible area while the viewport content stayed on screen.
+// ============================================================================
+
+TEST(ModuleLibraryHelpPin, PinnedBoundsFitEntirelyWithinALargeHost) {
+    ModuleLibraryComponent comp;
+    comp.setSize(1200, 900); // plenty of room around and below the sidebar
+    auto* popup = comp.createHelpPopupForTest();
+
+    comp.setHelpPopoverPinnedForTest(true);
+
+    auto* host = popup->getParentComponent();
+    ASSERT_NE(host, nullptr);
+    EXPECT_TRUE(host->getLocalBounds().contains(popup->getBounds()))
+        << "the whole popup, header included, must fit inside the host";
+}
+
+TEST(ModuleLibraryHelpPin, PinnedBoundsNeverGoNegativeEvenInATinyHost) {
+    // A host smaller than the popup in both axes: there is no position that fits the popup
+    // entirely, but the header (the popup's own top-left) must still never be pushed off-screen.
+    ModuleLibraryComponent comp;
+    comp.setSize(120, 90);
+    auto* popup = comp.createHelpPopupForTest();
+
+    comp.setHelpPopoverPinnedForTest(true);
+
+    const auto popupBounds = popup->getBounds();
+    EXPECT_GE(popupBounds.getX(), 0);
+    EXPECT_GE(popupBounds.getY(), 0);
+}
+
+TEST(ModuleLibraryHelpPin, HeaderTopIsNeverAboveTheHostsVisibleArea) {
+    ModuleLibraryComponent comp;
+    comp.setSize(300, 220);
+    auto* popup = comp.createHelpPopupForTest();
+
+    comp.setHelpPopoverPinnedForTest(true);
+
+    // popup->getY() IS the header's top edge in host-local space (the header sits at the popup's
+    // own local y=0..kOuterPadding) — this is the exact coordinate that was reported negative.
+    EXPECT_GE(popup->getY(), 0);
+    EXPECT_GE(popup->getHeaderBoundsForTest().getY(), 0) << "the header's own bounds within the popup";
+}
+
+TEST(ModuleLibraryHelpPin, ReflowingTheSidebarReclampsAnAlreadyPinnedPopover) {
+    ModuleLibraryComponent comp;
+    comp.setSize(1200, 900);
+    auto* popup = comp.createHelpPopupForTest();
+    comp.setHelpPopoverPinnedForTest(true);
+    ASSERT_TRUE(comp.getLocalBounds().contains(popup->getBounds()));
+
+    // Shrinks the host out from under the popup (comp doubles as its own floating host in this
+    // headless test — see floatingHelpHostFor()) - resized() must re-clamp it, not leave it
+    // hanging half off the new, smaller area.
+    comp.setSize(150, 100);
+
+    const auto popupBounds = popup->getBounds();
+    EXPECT_GE(popupBounds.getX(), 0);
+    EXPECT_GE(popupBounds.getY(), 0);
+}
+
+TEST(ModuleLibraryHelpPin, DraggingTheHeaderMovesTheFloatingPanel) {
+    ModuleLibraryComponent comp;
+    comp.setSize(1200, 900);
+    auto* popup = comp.createHelpPopupForTest();
+    comp.setHelpPopoverPinnedForTest(true);
+    const auto before = popup->getPosition();
+
+    popup->simulateHeaderDragForTest({40, 25});
+
+    EXPECT_EQ(popup->getPosition(), before + juce::Point<int>(40, 25))
+        << "dragging the header must move the floating popup by exactly the drag delta";
+}
+
+TEST(ModuleLibraryHelpPin, DraggingTheHeaderDoesNothingWhileUnpinned) {
+    // setDraggable() is only ever armed once pinned (see setPinnedForPaint) — dragging inside a
+    // juce::CallOutBox would fight its own self-repositioning.
+    ModuleLibraryComponent comp;
+    comp.setSize(1200, 900);
+    auto* popup = comp.createHelpPopupForTest();
+    const auto before = popup->getPosition();
+
+    popup->simulateHeaderDragForTest({40, 25});
+
+    EXPECT_EQ(popup->getPosition(), before);
+}
+
+TEST(ModuleLibraryHelpPin, PinIconHitTestBoundsAreReal) {
+    ModuleLibraryHelpPopup popup;
+    const auto pinBounds = popup.getPinBoundsForTest();
+    const auto closeBounds = popup.getCloseBoundsForTest();
+
+    EXPECT_GT(pinBounds.getWidth(), 0);
+    EXPECT_GT(pinBounds.getHeight(), 0);
+    EXPECT_GT(closeBounds.getWidth(), 0);
+    EXPECT_GT(closeBounds.getHeight(), 0);
+    EXPECT_FALSE(pinBounds.intersects(closeBounds)) << "pin and close must be two distinct hit targets";
+}
+
+TEST(ModuleLibraryHelpPin, HoveringThePinIconShowsAnExplanatoryTooltip) {
+    ModuleLibraryHelpPopup popup;
+    const auto tooltip = popup.simulateHeaderHoverForTest(/*overPin=*/true);
+    EXPECT_TRUE(tooltip.isNotEmpty());
+    EXPECT_TRUE(tooltip.containsIgnoreCase("pin"));
+}
+
+TEST(ModuleLibraryHelpPin, HoveringTheCloseIconShowsATooltipToo) {
+    ModuleLibraryHelpPopup popup;
+    const auto tooltip = popup.simulateHeaderHoverForTest(/*overPin=*/false);
+    EXPECT_TRUE(tooltip.isNotEmpty());
+}
+
+// ============================================================================
 // Content drift guards — "Your first patch" must mention every module the recipe depends on
 // ============================================================================
 
