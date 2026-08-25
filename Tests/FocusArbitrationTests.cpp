@@ -1235,6 +1235,33 @@ static bool pressAndPump(MainComponent& mc, const juce::KeyPress& key) {
     return consumed;
 }
 
+// One deterministic audio block through a Hosted-mode engine — the file header's rule, and the same
+// call CopyPasteClipsRebasedAtPlayhead above already makes.
+//
+// WHY ANY TEST THAT READS TRANSPORT STATE NEEDS IT: setLoop()/locateBeat()/play() do not mutate the
+// transport, they only POST a Command onto TransportService's lock-free FIFO, which is drained by
+// tick() from the AUDIO CALLBACK. getPositionSnapshot() therefore keeps reporting the pre-command
+// values (ppq 0, and the loop-range defaults 0..4) until a block runs. With a real output device the
+// callback thread drains it eventually — which is why this reads as "flaky but green" on a dev Mac —
+// but a headless CI box has no audio device at all (ALSA refuses to open one on the Linux runner),
+// so nothing EVER drains and the snapshot never moves. Hosted mode opens no device by design, so
+// one processHostBlock() is the whole drain, on the test's own thread, on every platform.
+static void driveOneHostBlock(AudioEngine& engine) {
+    juce::AudioBuffer<float> buffer(2, 512);
+    buffer.clear();
+    juce::MidiBuffer midi;
+    engine.processHostBlock(buffer, midi);
+}
+
+// pressAndPump + a drain. Both stages are needed and the order is fixed: MainComponent::keyPressed
+// dispatches its command asynchronously, so the message loop has to run before the transport command
+// even exists in the FIFO, and only then can a block drain it.
+static bool pressPumpAndDrain(MainComponent& mc, AudioEngine& engine, const juce::KeyPress& key) {
+    const bool consumed = pressAndPump(mc, key);
+    driveOneHostBlock(engine);
+    return consumed;
+}
+
 TEST_F(FocusArbitrationTest, ShiftedSymbolKeyCodesFromTheRealKeyboardReachTheGridCommands) {
     PersistedKeysGuard guard({"timelineSnap", "timelineSnapEnabled"});
 
@@ -1281,38 +1308,50 @@ TEST_F(FocusArbitrationTest, ShiftedSymbolKeyCodesFromTheRealKeyboardReachTheGri
 // COMMAND actions. The original test called panel.keyPressed() directly and never exercised any of
 // that. This one goes through MainComponent, which is the LAST stop a real keystroke reaches.
 TEST_F(FocusArbitrationTest, LocatorJumpKeysWorkWithFocusOutsideTheTimelinePanel) {
-    MainComponent mc(std::make_unique<FocusMockProvider>());
+    // Hosted engine, driven by hand: BOTH halves of what this test reads live behind the transport's
+    // command FIFO — the loop range the jump consults and the position it lands on — so every step
+    // ends in a drain. See driveOneHostBlock.
+    synth::theme::ThemeManager tm;
+    synth::theme::AppLookAndFeel lf;
+    AudioEngine engine(AudioEngine::HostMode::Hosted);
+    engine.initialise();
+    engine.prepareForHost(44100.0, 512, 0, 2);
+    MainComponent mc(tm, lf, engine, std::make_unique<FocusMockProvider>());
     mc.setSize(1200, 800);
     mc.simulateToggleTimelineClick();
     ASSERT_TRUE(mc.isTimelineConfiguredVisible());
 
-    auto& transport = mc.getAudioEngine().getTransport();
+    auto& transport = engine.getTransport();
     ASSERT_TRUE(transport.setLoop(4.0, 12.0, true));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    driveOneHostBlock(engine);
+    ASSERT_DOUBLE_EQ(transport.getPositionSnapshot().loopStartPpq, 4.0)
+        << "precondition: the locators the jump reads are the ones we just set, not the 0..4 defaults";
+    ASSERT_DOUBLE_EQ(transport.getPositionSnapshot().loopEndPpq, 12.0);
 
     // Nothing inside the timeline holds focus — exactly the state after dragging the ruler.
     ASSERT_EQ(mc.resolveEditSurface(), MainComponent::EditSurface::Graph)
         << "precondition: focus is NOT in the clip lanes";
 
     // Option+2 -> the RIGHT locator. Through MainComponent, the real last stop.
-    EXPECT_TRUE(pressAndPump(mc, juce::KeyPress('2', juce::ModifierKeys::altModifier, '2')));
+    EXPECT_TRUE(pressPumpAndDrain(mc, engine, juce::KeyPress('2', juce::ModifierKeys::altModifier, '2')));
     EXPECT_DOUBLE_EQ(transport.getPositionSnapshot().ppq, 12.0) << "this is the jump that did nothing before";
 
     // Option+1 -> the LEFT locator.
-    EXPECT_TRUE(pressAndPump(mc, juce::KeyPress('1', juce::ModifierKeys::altModifier, '1')));
+    EXPECT_TRUE(pressPumpAndDrain(mc, engine, juce::KeyPress('1', juce::ModifierKeys::altModifier, '1')));
     EXPECT_DOUBLE_EQ(transport.getPositionSnapshot().ppq, 4.0);
 
     // Disarming looping keeps the RANGE, so the keys keep working (the same "a range exists
     // independently of whether it is armed" rule the ruler's brace has).
     ASSERT_TRUE(transport.setLoop(4.0, 12.0, false));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
-    EXPECT_TRUE(pressAndPump(mc, juce::KeyPress('2', juce::ModifierKeys::altModifier, '2')));
+    driveOneHostBlock(engine);
+    ASSERT_FALSE(transport.getPositionSnapshot().looping);
+    EXPECT_TRUE(pressPumpAndDrain(mc, engine, juce::KeyPress('2', juce::ModifierKeys::altModifier, '2')));
     EXPECT_DOUBLE_EQ(transport.getPositionSnapshot().ppq, 12.0);
 
     // The forward is a WHITELIST, not a blanket one: the panel's bare letters must NOT start firing
     // while the canvas has focus.
     const auto beforeSnap = mc.getTimelinePanel().getViewState().snapEnabled;
-    EXPECT_FALSE(pressAndPump(mc, juce::KeyPress('j', juce::ModifierKeys::noModifiers, 'j')));
+    EXPECT_FALSE(pressPumpAndDrain(mc, engine, juce::KeyPress('j', juce::ModifierKeys::noModifiers, 'j')));
     EXPECT_EQ(mc.getTimelinePanel().getViewState().snapEnabled, beforeSnap)
         << "a bare panel letter must not reach the panel from the canvas";
 }
@@ -1320,32 +1359,39 @@ TEST_F(FocusArbitrationTest, LocatorJumpKeysWorkWithFocusOutsideTheTimelinePanel
 // The same keys with focus INSIDE the panel still go through the panel's own keyPressed (bubbling),
 // not the forward — and a degenerate span is a no-op that reports the key unhandled.
 TEST_F(FocusArbitrationTest, LocatorJumpKeysAlsoWorkFromInsideThePanelAndNoOpWithNoLocators) {
-    MainComponent mc(std::make_unique<FocusMockProvider>());
+    synth::theme::ThemeManager tm;
+    synth::theme::AppLookAndFeel lf;
+    AudioEngine engine(AudioEngine::HostMode::Hosted);
+    engine.initialise();
+    engine.prepareForHost(44100.0, 512, 0, 2);
+    MainComponent mc(tm, lf, engine, std::make_unique<FocusMockProvider>());
     mc.setSize(1200, 800);
     mc.simulateToggleTimelineClick();
     ASSERT_TRUE(mc.isTimelineConfiguredVisible());
 
     auto& panel = mc.getTimelinePanel();
-    auto& transport = mc.getAudioEngine().getTransport();
+    auto& transport = engine.getTransport();
     ASSERT_TRUE(transport.setLoop(4.0, 12.0, true));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    driveOneHostBlock(engine);
+    ASSERT_DOUBLE_EQ(transport.getPositionSnapshot().loopEndPpq, 12.0);
 
+    // panel.keyPressed is synchronous (no command dispatch), so only the transport drain is needed.
     EXPECT_TRUE(panel.keyPressed(juce::KeyPress('2', juce::ModifierKeys::altModifier, '2')));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    driveOneHostBlock(engine);
     EXPECT_DOUBLE_EQ(transport.getPositionSnapshot().ppq, 12.0);
 
     // A collapsed span is also what "no locators set yet" looks like: the key reports unhandled
     // rather than being swallowed, and the cursor stays put.
     ASSERT_TRUE(transport.setLoop(0.0, 12.0, true));
     transport.locateBeat(3.0);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    driveOneHostBlock(engine);
     const double before = transport.getPositionSnapshot().ppq;
     ASSERT_DOUBLE_EQ(before, 3.0);
     // setLoop refuses a zero-length range, so drive the guard through the panel with a span that
     // exists but is degenerate at the model level: loopStart == loopEnd is unreachable via setLoop,
     // so assert the guard's OTHER observable — a jump to locator 1 at loopStart 0 lands at 0.
     EXPECT_TRUE(panel.keyPressed(juce::KeyPress('1', juce::ModifierKeys::altModifier, '1')));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    driveOneHostBlock(engine);
     EXPECT_DOUBLE_EQ(transport.getPositionSnapshot().ppq, 0.0);
 }
 
