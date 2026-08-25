@@ -16,10 +16,26 @@
     -DENABLE_AI_HARNESS=ON.
 
         ./build/Tools/AIPatchHarness/AIPatchHarness [--provider ollama|remote] [--model M] [--runs N]
-            [--host URL] [--limit N] [--json OUT]
+            [--host URL] [--limit N] [--json OUT] [--think true|false] [--temperature X] [--seed N]
+            [--max-requests N]
+
+    P1-11 determinism: --think/--temperature/--seed are --provider ollama only (ignored, with a
+    warning, for --provider remote — RemoteProvider has no notion of sampling knobs). Unlike
+    Tools/AIEvalHarness (where these stay unset by default, for a P6-13 before/after comparison),
+    this harness PINS temperature 0 and a fixed seed by default: a scheduled/ratcheted run (P1-11)
+    needs repeat runs to be comparable, and an ~8-point run-to-run swing from unpinned sampling
+    makes any ratchet threshold meaningless.
+
+    P1-11 cost ceilings: --runs is hard-capped at kMaxRunsPerInvocation regardless of what is
+    passed, and --max-requests bounds the total outbound model requests for the whole invocation
+    (counted at RecordingProvider::sendPrompt, so a scenario's retry round-trips count too) —
+    required, with no default, for --provider remote, since that path can reach a paid vendor
+    (AWS Bedrock via synth-platform's INFERENCE_PROVIDER) and must never run with an unbounded
+    budget. See RequestBudget.h.
 
     Exit code is 0 whenever the run completed, whatever the pass rate — the histogram is
-    the output, not a pass/fail verdict.
+    the output, not a pass/fail verdict. Exit code is 1 only for a harness usage error (bad
+    --think value, --provider remote with no --max-requests) — never for a low pass rate.
 */
 
 #include "AI/AIIntegrationService.h"
@@ -27,6 +43,7 @@
 #include "AI/AIStateMapper.h"
 #include "AI/OllamaProvider.h"
 #include "AI/RemoteProvider.h"
+#include "RequestBudget.h"
 #include "Scenarios.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -35,6 +52,7 @@
 
 #include <cstdio>
 #include <map>
+#include <optional>
 #include <vector>
 
 namespace {
@@ -50,11 +68,28 @@ using synth::harness::scenarios;
 // this must not change provider behaviour, only observe it.
 class RecordingProvider : public synth::AIProvider {
 public:
-    explicit RecordingProvider(std::unique_ptr<synth::AIProvider> providerToWrap)
-        : inner(std::move(providerToWrap)) {}
+    RecordingProvider(std::unique_ptr<synth::AIProvider> providerToWrap, synth::harness::RequestBudget& requestBudget)
+        : inner(std::move(providerToWrap))
+        , budget(requestBudget) {}
 
     RequestId sendPrompt(const std::vector<Message>& conversation, CompletionCallback callback,
                          const juce::var& responseSchema, std::function<void(const juce::String&)> onDelta) override {
+        // P1-11 hard ceiling: refused BEFORE the wrapped provider is ever touched, so a request
+        // over budget never reaches a vendor (or even local Ollama) — the budget's whole point is
+        // that a runaway retry loop can't run past it, not just that it gets counted.
+        if (!budget.tryConsume()) {
+            budgetExceeded = true;
+            if (callback) {
+                AIResponse response;
+                response.success = false;
+                response.error.kind = AIErrorKind::Quota;
+                response.error.message =
+                    "harness request budget exceeded (" + juce::String(budget.limit()) + " requests)";
+                callback(response);
+            }
+            return {};
+        }
+
         return inner->sendPrompt(
             conversation,
             [this, callback](const AIResponse& response) {
@@ -83,9 +118,11 @@ public:
     bool isHosted() const override { return inner->isHosted(); }
 
     std::vector<juce::String> responses;
+    bool budgetExceeded = false;
 
 private:
     std::unique_ptr<synth::AIProvider> inner;
+    synth::harness::RequestBudget& budget;
 };
 
 juce::String argValue(const juce::StringArray& args, const juce::String& flag, const juce::String& fallback) {
@@ -121,10 +158,24 @@ struct Outcome {
     // shorter than retriesUsed; a replay's double should repeat its last scripted entry rather
     // than require an exact length match, mirroring Tests/AIPatchRetryTests.cpp's ScriptedProvider.
     std::vector<juce::String> retryResponses;
+
+    // P1-11: RequestBudget tripped during this scenario (initial send or a retry round-trip).
+    // The caller stops launching further scenarios once this is seen, rather than burning wall
+    // clock on a run of guaranteed budget-exceeded failures.
+    bool budgetExceeded = false;
+};
+
+// P1-11 sampling knobs actually applied to the provider — see the file header comment. Only
+// meaningful for --provider ollama; RemoteProvider has no notion of these.
+struct SamplingArgs {
+    std::optional<bool> think;
+    double temperature = 0.0;
+    int seed = 0;
 };
 
 Outcome runScenario(const Scenario& scenario, const juce::String& host, const juce::String& model,
-                    const juce::String& providerKind) {
+                    const juce::String& providerKind, const SamplingArgs& sampling,
+                    synth::harness::RequestBudget& budget) {
     Outcome outcome;
 
     juce::AudioProcessorGraph graph;
@@ -148,9 +199,10 @@ Outcome runScenario(const Scenario& scenario, const juce::String& host, const ju
         auto ollamaProvider = std::make_unique<synth::OllamaProvider>(host);
         ollamaProvider->setTestMode(true); // deliver callbacks synchronously; no message loop here
         ollamaProvider->setModel(model);
+        ollamaProvider->setSamplingOptions({sampling.think, sampling.temperature, sampling.seed});
         provider = std::move(ollamaProvider);
     }
-    auto recordingProvider = std::make_unique<RecordingProvider>(std::move(provider));
+    auto recordingProvider = std::make_unique<RecordingProvider>(std::move(provider), budget);
     RecordingProvider* recording = recordingProvider.get();
     service.setProvider(std::move(recordingProvider));
 
@@ -174,10 +226,12 @@ Outcome runScenario(const Scenario& scenario, const juce::String& host, const ju
     // provider-error message.
     if (!done.wait(270000)) {
         outcome.message = "timed out waiting for model";
+        outcome.budgetExceeded = recording->budgetExceeded;
         return outcome;
     }
     if (!success) {
         outcome.message = "provider error: " + responseText;
+        outcome.budgetExceeded = recording->budgetExceeded;
         return outcome;
     }
     outcome.responded = true;
@@ -216,6 +270,7 @@ Outcome runScenario(const Scenario& scenario, const juce::String& host, const ju
         outcome.retryResponses.assign(recording->responses.begin() + 1, recording->responses.end());
     }
 
+    outcome.budgetExceeded = recording->budgetExceeded;
     return outcome;
 }
 
@@ -232,12 +287,59 @@ int main(int argc, char* argv[]) {
     const juce::String defaultHost = providerKind == "remote" ? "http://localhost:8787" : "http://localhost:11434";
     const juce::String host = argValue(args, "--host", defaultHost);
     const juce::String model = argValue(args, "--model", "gemma4:12b-it-qat");
-    const int runs = juce::jmax(1, argValue(args, "--runs", "1").getIntValue());
+
+    // P1-11: hard-capped regardless of what is asked for, so a fat-fingered --runs can't turn a
+    // scheduled/manually-dispatched invocation into a runaway loop.
+    constexpr int kMaxRunsPerInvocation = 10;
+    const int runsRequested = juce::jmax(1, argValue(args, "--runs", "1").getIntValue());
+    const int runs = juce::jmin(runsRequested, kMaxRunsPerInvocation);
+    if (runs != runsRequested)
+        std::fprintf(stderr, "warning: --runs %d exceeds the per-invocation cap of %d; clamped to %d\n", runsRequested,
+                     kMaxRunsPerInvocation, runs);
+
     const int limit = argValue(args, "--limit", "0").getIntValue();
     const juce::String jsonOut = argValue(args, "--json", "");
 
-    std::printf("AIPatchHarness  provider=%s  host=%s  model=%s  runs=%d  scenarios=%d\n", providerKind.toRawUTF8(),
-                host.toRawUTF8(), model.toRawUTF8(), runs, (int)scenarios().size());
+    // P1-11 determinism knobs — see the file header comment. Pinned by default (temperature 0,
+    // fixed seed) for --provider ollama; explicitly ignored for --provider remote, which has no
+    // notion of sampling options.
+    constexpr int kDefaultEvalSeed = 42;
+    const juce::String thinkFlag = argValue(args, "--think", "");
+    std::optional<bool> think;
+    if (thinkFlag.isNotEmpty()) {
+        if (thinkFlag != "true" && thinkFlag != "false") {
+            std::fprintf(stderr, "unknown --think \"%s\" (expected \"true\" or \"false\")\n", thinkFlag.toRawUTF8());
+            return 1;
+        }
+        think = (thinkFlag == "true");
+    }
+    const juce::String temperatureFlag = argValue(args, "--temperature", "");
+    const double temperature = temperatureFlag.isNotEmpty() ? temperatureFlag.getDoubleValue() : 0.0;
+    const juce::String seedFlag = argValue(args, "--seed", "");
+    const int seed = seedFlag.isNotEmpty() ? seedFlag.getIntValue() : kDefaultEvalSeed;
+    const bool samplingAppliesToThisProvider = providerKind != "remote";
+    if (!samplingAppliesToThisProvider && (think.has_value() || temperatureFlag.isNotEmpty() || seedFlag.isNotEmpty()))
+        std::fprintf(stderr, "warning: --think/--temperature/--seed are --provider ollama only; ignored here\n");
+    const SamplingArgs sampling{think, temperature, seed};
+
+    // P1-11 request budget: required (no default) for --provider remote, since that path can
+    // reach a paid vendor (AWS Bedrock via synth-platform's INFERENCE_PROVIDER) and must never
+    // run with an unbounded ceiling. Free for --provider ollama, so it stays opt-in there.
+    const juce::String maxRequestsFlag = argValue(args, "--max-requests", "");
+    if (maxRequestsFlag.isEmpty() && providerKind == "remote") {
+        std::fprintf(stderr, "error: --max-requests is required with --provider remote — a paid-vendor run must "
+                             "never have an unbounded request budget\n");
+        return 1;
+    }
+    const int maxRequests = maxRequestsFlag.isNotEmpty() ? maxRequestsFlag.getIntValue() : 0; // 0 = unlimited
+    synth::harness::RequestBudget budget(maxRequests);
+
+    std::printf("AIPatchHarness  provider=%s  host=%s  model=%s  runs=%d  scenarios=%d  maxRequests=%s\n",
+                providerKind.toRawUTF8(), host.toRawUTF8(), model.toRawUTF8(), runs, (int)scenarios().size(),
+                maxRequests > 0 ? juce::String(maxRequests).toRawUTF8() : "unlimited");
+    if (samplingAppliesToThisProvider)
+        std::printf("  sampling: temperature=%.2f seed=%d think=%s\n", temperature, seed,
+                    think.has_value() ? (*think ? "true" : "false") : "unset");
     std::printf("%-20s %-6s %s\n", "scenario", "run", "outcome");
     std::printf("--------------------------------------------------------------------\n");
 
@@ -249,10 +351,11 @@ int main(int argc, char* argv[]) {
     const auto& allScenarios = scenarios();
     const int scenarioCount = limit > 0 ? juce::jmin(limit, (int)allScenarios.size()) : (int)allScenarios.size();
 
-    for (int run = 1; run <= runs; ++run) {
+    bool stoppedForBudget = false;
+    for (int run = 1; run <= runs && !stoppedForBudget; ++run) {
         for (int i = 0; i < scenarioCount; ++i) {
             const auto& scenario = allScenarios[i];
-            const auto outcome = runScenario(scenario, host, model, providerKind);
+            const auto outcome = runScenario(scenario, host, model, providerKind, sampling, budget);
             ++total;
 
             juce::String label;
@@ -312,6 +415,17 @@ int main(int argc, char* argv[]) {
                 retryResponsesJson.add(r);
             rec->setProperty("retryResponses", retryResponsesJson);
             records.add(juce::var(rec.get()));
+
+            if (outcome.budgetExceeded) {
+                // Stop launching further scenarios — the budget will refuse every remaining
+                // request anyway, so there is no value in burning wall clock recording a run of
+                // guaranteed budget-exceeded failures. This scenario's own outcome (recorded
+                // above) is whatever it managed before the budget tripped.
+                std::printf("*** request budget exceeded (%d/%d) — stopping early ***\n", budget.used(),
+                            budget.limit());
+                stoppedForBudget = true;
+                break;
+            }
         }
     }
 
@@ -332,6 +446,12 @@ int main(int argc, char* argv[]) {
     std::printf("  mode repaired:            %d\n", repairedCount);
     if (providerErrors > 0)
         std::printf("provider errors (excluded): %d\n", providerErrors);
+    if (budget.limit() > 0)
+        std::printf("request budget:             %d / %d used\n", budget.used(), budget.limit());
+    else
+        std::printf("request budget:             %d used (unlimited)\n", budget.used());
+    if (stoppedForBudget)
+        std::printf("*** stopped early: request budget exceeded ***\n");
     std::printf("\nrejections by PatchValidationError:\n");
     if (errorTally.empty()) {
         std::printf("  (none)\n");
@@ -345,14 +465,29 @@ int main(int argc, char* argv[]) {
     if (jsonOut.isNotEmpty()) {
         juce::DynamicObject::Ptr root = new juce::DynamicObject();
         root->setProperty("model", model);
+        root->setProperty("provider", providerKind);
         // ISO 8601 UTC, so a committed corpus file self-documents when it was recorded without
         // relying on filesystem/VCS timestamps that don't survive a checkout.
         root->setProperty("capturedAt", juce::Time::getCurrentTime().toISO8601(true));
         root->setProperty("runs", runs);
         root->setProperty("attempted", attempted);
         root->setProperty("valid", validCount);
+        root->setProperty("appliedCount", appliedCount);
         root->setProperty("unparseable", unparseable);
         root->setProperty("providerErrors", providerErrors);
+        root->setProperty("requestBudget", budget.limit()); // 0 = unlimited
+        root->setProperty("requestsUsed", budget.used());
+        root->setProperty("stoppedForBudget", stoppedForBudget);
+        // Sampling actually applied to the provider — omitted entirely for --provider remote,
+        // which ignores these, so a report can never claim pinned sampling that never happened
+        // (docs/AI_Engine.md: "quoted validity numbers must name the model and the sampling
+        // settings").
+        if (samplingAppliesToThisProvider) {
+            root->setProperty("temperature", temperature);
+            root->setProperty("seed", seed);
+            if (think.has_value())
+                root->setProperty("think", *think);
+        }
         root->setProperty("records", records);
         // Pretty-printed (not allOnOneLine): committed fixtures under Tests/fixtures/ai-patches/
         // are re-recorded and diffed by a human deciding regression-vs-intended-change — a 50+ KB

@@ -27,6 +27,11 @@ cmake --build build --target AIPatchHarness
 | `--host` | `http://localhost:11434` | Ollama base URL. Defaults to `http://localhost:8787` instead when `--provider remote` (the synth-platform API server's default port). |
 | `--limit` | `0` (no limit) | Run only the first N scenarios instead of all 20 — use this for a cheap/fast validation pass before a full `remote` sweep, since remote calls cost real (tiny) money via AWS Bedrock. |
 | `--json` | *(none)* | Write per-attempt records to this file for later analysis. |
+| `--runs` | `1` | Hard-capped at 10 regardless of what is passed (P1-11) — a safety ceiling against a fat-fingered `--runs 9999` turning a scheduled invocation into a runaway loop. |
+| `--think` | *(unset)* | `--provider ollama` only. `true`/`false` — sets Ollama's `think` request field. Ignored, with a warning, for `--provider remote`. |
+| `--temperature` | `0` | `--provider ollama` only. Nests under the request's `options.temperature`. **Pinned by default** (P1-11) — unlike `Tools/AIEvalHarness`, which leaves this unset — because a scheduled/ratcheted run needs repeat runs to be comparable; an unpinned run swings ~8 points run to run, which would make any ratchet threshold meaningless. Ignored, with a warning, for `--provider remote`. |
+| `--seed` | `42` | `--provider ollama` only. Nests under the request's `options.seed`. Pinned by default for the same reason as `--temperature`. Ignored, with a warning, for `--provider remote`. |
+| `--max-requests` | *(unlimited)* for `ollama`; **required** for `remote` | Hard ceiling (P1-11) on outbound model requests for the whole invocation, enforced at the single chokepoint every request passes through (so a scenario's retry round-trips count too, not just top-level attempts) — see `RequestBudget.h`. Once tripped, every further request is refused before it ever reaches the provider, and the run stops launching new scenarios. Required for `--provider remote` with no default: that path can reach a paid vendor (AWS Bedrock), and a paid-vendor run must never have an unbounded budget. |
 
 ### `--json` record format
 
@@ -35,12 +40,19 @@ The output file is one JSON object:
 ```jsonc
 {
   "model": "gpt-oss:20b",
+  "provider": "ollama",
   "capturedAt": "2026-08-23T14:03:11.000Z",  // ISO 8601 UTC, when this run was captured
   "runs": 2,
   "attempted": 40,        // records where the provider actually responded (excludes provider errors)
   "valid": 34,            // of `attempted`, how many validated on the model's first answer
+  "appliedCount": 38,     // of `attempted`, how many applyPatchWithRetry ultimately applied
   "unparseable": 1,
   "providerErrors": 0,
+  "requestBudget": 0,     // --max-requests as passed; 0 = unlimited
+  "requestsUsed": 42,     // outbound requests actually made (initial sends + retries)
+  "stoppedForBudget": false,
+  "temperature": 0,       // omitted entirely for --provider remote, which ignores sampling
+  "seed": 42,             // (never claim pinned sampling that wasn't actually applied)
   "records": [ /* one entry per (scenario, run) — see below */ ]
 }
 ```
@@ -147,6 +159,31 @@ Two rates are reported, and they answer different questions:
 
 `provider errors` are excluded from the denominator so an unreachable or timed-out Ollama cannot
 flatter the result.
+
+## Nightly scheduled eval (P1-11)
+
+`.github/workflows/ai-eval-nightly.yml` runs this harness on a schedule — OFF by default. It only
+does anything once a human sets the `AI_EVAL_ENABLED` repository variable to `true` (Settings ->
+Secrets and variables -> Actions -> Variables); unset means the job's `if:` never evaluates true
+and nothing is built or run, on the schedule or on a manual `workflow_dispatch` click. The job runs
+on a **self-hosted** runner by default (`AI_EVAL_RUNNER` variable overrides the label) — that's
+what makes the default `--provider ollama` path actually free: a runner someone already owns,
+paying only electricity, not a GitHub-hosted minute. Turning it off again is the same one step in
+reverse (unset the variable); the schedule can stay in the file.
+
+`workflow_dispatch` always exists independent of the schedule — that's the normal way to run this
+before there is revenue to justify a recurring job, or to run a one-off `--provider remote` sweep
+against Bedrock (which needs its own `--max-requests`, entered as a dispatch input; never scheduled).
+
+**The ratchet.** `scripts/ai-eval-ratchet.sh` compares the run's applied-after-retry rate against a
+committed baseline at `eval-results/ai-eval-baseline.json`. No baseline exists yet as of P1-11 —
+the script reports and exits 0 until one does. To establish it: run the workflow (dispatch or
+schedule) against the confirmed production model and sampling, look at the result, and if it's a
+number you're happy calling "normal," commit that `--json` output at that path in its own PR. From
+then on the ratchet fails the *job* (never a PR, never a required check — this workflow isn't on
+`pull_request`/`push`) if the applied rate drops more than 8 points versus the baseline, with both
+runs needing at least 50 attempts before the comparison is trusted. See the script's own header
+comment for the env vars that tune this.
 
 ## Caveats
 

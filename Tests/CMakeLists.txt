@@ -66,6 +66,7 @@ add_executable(Tests
     AIPatchValidationTests.cpp
     AIPatchRetryTests.cpp
     AIPatchFixtureReplayTests.cpp
+    RequestBudgetTests.cpp
     PatchEvalTests.cpp
     PatchDiffTests.cpp
     AIProviderRegistryTests.cpp
