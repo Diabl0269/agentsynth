@@ -407,9 +407,9 @@ golden prompts against `Source/AI/PatchEval.h`'s structural checks (unit-tested 
 model a measured decision instead of a guess. Same opt-in flag, same exclusion from CI — see its
 README.
 
-**P1-11: a quoted rate means nothing without the model and the sampling settings alongside it.**
+**A quoted rate means nothing without the model and the sampling settings alongside it.**
 `AIPatchHarness` pins `--temperature 0` and a fixed `--seed` by default (unlike `AIEvalHarness`,
-which leaves them unset for its own P6-13 before/after comparisons) — an unpinned run swings ~8
+which leaves them unset for its own before/after comparisons) — an unpinned run swings ~8
 points on the same model and prompts, so a bare percentage is not comparable across runs unless
 both sides fixed sampling the same way. `--provider remote` ignores these entirely (`RemoteProvider`
 has no sampling knobs), which is why the harness's `--json` output only ever records
