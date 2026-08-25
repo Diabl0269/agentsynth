@@ -4347,16 +4347,31 @@ void GraphEditor::completeStereoPairConnections(ModuleComponent* moduleComp) {
 
             // destLeg < 0 means the destination has no SECOND audio input the user can see — a
             // collapsed split-block module (Filter/VCA/Wavetable), whose one "Audio" jack is its left
-            // leg alone. Our right leg is then left unpatched ON PURPOSE, and this is the one shape
-            // where "both legs wired after the toggle" cannot be honoured:
-            //   * wiring it onto the destination's hidden kRightBase makes a cable that is audible
-            //     and impossible to unplug (the invariant dropHiddenRightLegConnections exists for),
-            //   * wiring it onto the destination's mono jack alongside our left leg SUMS the two —
-            //     identical legs, so the patch jumps +6 dB from a jack-layout toggle. Dual I/O is
-            //     explicitly not a mono/stereo switch and must never change level.
-            // The jack is visible and unplugged, so the user can aim it wherever they meant. The
-            // INPUT side below is not symmetric with this: feeding two of our legs from one source
-            // channel COPIES a signal, it does not sum one.
+            // leg alone. USER RULING: wire our right leg into that same mono jack anyway, as an
+            // explicit summed second cable. A module the user just split must not come up with a
+            // visibly dangling Audio R, and stereo-into-mono summing is what hand-wiring both legs
+            // onto that jack already produces — connectPorts has always allowed summed inputs.
+            //
+            // While both legs still carry the identical signal (the usual state right after a split)
+            // the sum is +6 dB. That is transient: it lasts only until the legs differ, which is the
+            // point of splitting. This was left dangling before precisely to avoid that jump; the
+            // ruling traded it for both jacks being wired.
+            //
+            // What does NOT change: never wire the destination's hidden kRightBase. That block has no
+            // jack, so the cable would be audible and impossible to unplug — the invariant
+            // dropHiddenRightLegConnections exists to enforce. Here the target is
+            // c.destination.channelIndex, the very channel our left leg is already wired to, so it is
+            // visible by construction.
+            //
+            // Confined to split-block modules on purpose: their right leg is hidden again on
+            // collapse, so dropHiddenRightLegConnections removes this extra cable for free and the
+            // on/off round-trip is exact. An FX's raw1 stays part of its collapsed jack, so the same
+            // cable would survive a collapse and be indistinguishable from a hand-drawn one.
+            // (myOutputLeg >= 0 on a split-block module already implies it is currently dual: its
+            // kRightBase is only reachable from a visible jack in that state.)
+            if (destLeg < 0 && destNode != nullptr && mb->hasSplitBlockStereo() &&
+                !hasEdge(nodeId, myOutputLeg, destNode->nodeID, c.destination.channelIndex))
+                graph.addConnection({{nodeId, myOutputLeg}, {destNode->nodeID, c.destination.channelIndex}});
         }
 
         // Incoming: source's left leg is patched to ours, and the source is itself a stereo pair.
@@ -4383,10 +4398,11 @@ void GraphEditor::completeStereoPairConnections(ModuleComponent* moduleComp) {
             // smart-connect, where the established behaviour for a split-block pair is left-leg-only
             // (see its comment). Nothing here widens that.
             //
-            // Copying a feed, unlike the output side above, cannot change the mix: the source drives
-            // one more destination at the same level. Guarded on the right leg being unfed so a
-            // second toggle cannot stack feeds, and it takes the channel that already feeds our left
-            // audio input rather than assuming ch0 is audio on the peer - the user routed that edge.
+            // Copying a feed cannot change the mix at all: the source simply drives one more
+            // destination at the same level. (The output side above sums instead, which is why it
+            // needed a ruling and this did not.) Guarded on the right leg being unfed so a second
+            // toggle cannot stack feeds, and it takes the channel that already feeds our left audio
+            // input rather than assuming ch0 is audio on the peer - the user routed that edge.
             if (srcLeg < 0 && srcNode != nullptr && !inputChannelIsFed(myInputLeg))
                 graph.addConnection({{srcNode->nodeID, c.source.channelIndex}, {nodeId, myInputLeg}});
         }

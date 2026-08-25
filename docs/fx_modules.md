@@ -94,33 +94,45 @@ pair still passes, because its one `Audio` jack owns raw ch1 through `voiceSpan 
 ### Splitting a split-block module that was wired mono
 
 The table above covers a peer that *has* a right leg. When it does not — a collapsed split-block
-neighbour, whose one `"Audio"` jack is its left leg alone — `rightAudioLegOf` returns -1, and for a
-while the split simply left both of the toggled module's right jacks dangling. That is the reported
-Filter-mid-chain case: `Audio L` in and out stayed wired, `Audio R` in and out came up empty. A
-module the user just split has to arrive with both legs live, so the two sides now differ:
+neighbour, whose one `"Audio"` jack is its left leg alone — `rightAudioLegOf` returns -1, and the
+split used to leave the toggled module's right jacks dangling. That is the reported Filter-mid-chain
+case: `Audio L` in and out stayed wired, `Audio R` in and out came up empty. A module the user just
+split has to arrive with **both legs wired**:
 
 | Side | Peer has a right leg | Peer is mono-only |
 |---|---|---|
 | **Input** (`Audio R` in) | wire it: collapsed FX pair → its raw1, dual peer → its own `kRightBase` (never ch1) | **broadcast** — copy the channel that already feeds `Audio L` onto `Audio R` |
-| **Output** (`Audio R` out) | wire it, and drop the left leg's stand-in copy | leave the jack **unpatched** |
+| **Output** (`Audio R` out) | wire it, and drop the left leg's stand-in copy | **sum** — a second cable into the same mono jack `Audio L` feeds |
 
-The asymmetry is the whole point, and it is about gain, not tidiness:
+The two sides get there by different means, and the distinction matters:
 
 - Feeding two of *our* legs from one source channel **copies** a signal — the source drives one more
-  destination at the same level, so the mix cannot move. That is why the input side broadcasts. (It
-  is the same mono→pair fan `resolvePolyLink` already performs for an adjacent pair, applied here to
-  a non-adjacent `kRightBase` block.)
-- Feeding one *peer* channel from two of our legs **sums** them — and after a broadcast both legs
-  carry the identical signal, so the patch would jump **+6 dB** from a jack-layout toggle. Dual I/O
-  is explicitly not a mono/stereo switch and must never change level, so the output leg stays a
-  visible, unplugged jack the user can aim themselves. The other candidate — wiring it onto the
-  peer's hidden block — is the audible-but-unpluggable cable the rule above forbids outright.
+  destination at the same level, so the mix cannot move. (It is the same mono→pair fan
+  `resolvePolyLink` already performs for an adjacent pair, applied here to a non-adjacent
+  `kRightBase` block.)
+- Feeding one *peer* channel from two of our legs **sums** them. While both legs still carry the
+  identical signal — the usual state right after a split — that sum is **+6 dB**. It is a transient
+  jump, lasting only until the legs differ, which is the point of splitting; and it is exactly what
+  dragging both legs onto that jack by hand produces, since `connectPorts` has always allowed summed
+  inputs and stereo-into-mono summing is the standard convention. Wiring both jacks won out over
+  avoiding the jump.
 
-**Prefer a real right leg over a broadcast.** A copy of `Audio L` only ever stands in where there is
-no right leg to be had; the moment the peer has one, the real pair is wired and the copy is removed.
-That single rule is what reconciles this with `TogglingDualIOKeepsBothStereoLegs`, which pins the
-removal, and it is pinned from the other side by
-`SplittingAMidChainVoiceModulePrefersRealRightLegsOverABroadcast`.
+**The hidden block is still off limits.** The other candidate for the mono-only output case — wiring
+onto the peer's hidden `kRightBase` — remains forbidden: the cable would be audible and impossible to
+unplug. The summed cable instead targets the channel `Audio L` is already wired to, which is visible
+by construction.
+
+**Prefer a real right leg.** A copy of `Audio L` (input) or a summed second cable (output) only ever
+stands in where there is no right leg to be had; the moment the peer has one, the real pair is wired
+and the stand-in copy is removed. That single rule is what reconciles this with
+`TogglingDualIOKeepsBothStereoLegs`, which pins the removal, and it is pinned from the other side by
+`SplittingAMidChainVoiceModulePrefersRealRightLegsOverABroadcast`. Dual→dual is untouched by any of
+it: both ends have real legs, so it is a plain `L→L` / `R→R` pair.
+
+Both stand-ins are confined to **split-block** toggled modules, which is what makes the on/off
+round-trip exact: their right leg is hidden again on collapse, so `dropHiddenRightLegConnections`
+removes the broadcast and the summed cable for free. An FX's raw1 stays part of its collapsed jack,
+so the same cable would survive a collapse and be indistinguishable from a hand-drawn one.
 
 Confined to the toggle handler on purpose: flipping Dual I/O is an explicit action on one module,
 whereas `resolvePolyLink` governs manual cable drags and smart-connect, where a split-block pair

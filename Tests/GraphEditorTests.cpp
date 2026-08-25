@@ -1421,18 +1421,17 @@ TEST_F(GraphEditorTest, SplittingASourceWiresAudioRIntoADualDestinationsOwnRight
         << "ch1 is the Filter's Cutoff CV and must never be wired as audio";
 }
 
-TEST_F(GraphEditorTest, SplittingASourceNeverWiresIntoACollapsedPeersHiddenRightBlock) {
-    // Audio L into a COLLAPSED Filter's single Audio jack, and the SOURCE is the module being split.
-    // The Filter's right block exists but is hidden, so the one thing the toggle must not do is wire
-    // Audio R there anyway, creating a cable that is audible and unreachable.
+TEST_F(GraphEditorTest, SplittingASourceSumsAudioRIntoACollapsedPeersMonoJackNeverItsHiddenBlock) {
+    // The reported screenshot: a collapsed Oscillator wired into a COLLAPSED Filter's single Audio
+    // jack, then split. Audio R used to come up visibly dangling because the Filter has no second
+    // audio input jack to pair with.
     //
-    // RECONCILED with the later "both legs live after a split" ruling: that ruling is honoured by
-    // copying a feed on the INPUT side, which cannot happen here — the module being split is the
-    // upstream, so this is the output side, and the alternatives there are this forbidden hidden
-    // cable or summing both legs into the peer's mono jack (+6 dB from a layout toggle). So the
-    // right OUTPUT leg stays a visible, unplugged jack. Do not "fix" this test by wiring the block;
-    // the case where the downstream CAN take the leg is
-    // SplittingAMidChainVoiceModuleWiresAllFourLegsWhenTheDownstreamCanTakeIt.
+    // USER RULING: wire it into that same mono jack — a summed second cable, exactly what dragging
+    // both legs there by hand produces. Two things the ruling did NOT change, both still asserted
+    // here: the destination's hidden kRightBase block stays unwired (no audible, unpluggable cable),
+    // and a destination that HAS a right leg still gets a real pair
+    // (SplittingAMidChainVoiceModuleWiresAllFourLegsWhenTheDownstreamCanTakeIt, and dual->dual in
+    // SplittingAMidChainVoiceModulePrefersRealRightLegsOverABroadcast).
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(800, 600);
@@ -1448,9 +1447,20 @@ TEST_F(GraphEditorTest, SplittingASourceNeverWiresIntoACollapsedPeersHiddenRight
     setDualIOParam(*oscNode->getProcessor(), true);
 
     EXPECT_TRUE(graphHasEdge(graph, oscNode->nodeID, 0, filterNode->nodeID, 0)) << "the left leg is untouched";
+    EXPECT_TRUE(graphHasEdge(graph, oscNode->nodeID, OscillatorModule::kRightBase, filterNode->nodeID, 0))
+        << "Audio R must be wired into the collapsed destination's mono jack, not left dangling";
+    EXPECT_EQ(feedCount(graph, filterNode->nodeID, 0), 2) << "exactly one extra cable: Audio L plus Audio R";
     for (int ch = FilterModule::kRightBase; ch < filterNode->getProcessor()->getTotalNumInputChannels(); ++ch)
         EXPECT_EQ(feedCount(graph, filterNode->nodeID, ch), 0)
             << "nothing may be wired onto a hidden right block (channel " << ch << ")";
+    EXPECT_FALSE(graphHasEdge(graph, oscNode->nodeID, OscillatorModule::kRightBase, filterNode->nodeID, 1))
+        << "ch1 is the Filter's Cutoff CV and must never be wired as audio";
+
+    // ...and toggling back off round-trips exactly: the extra cable rides the hidden right block, so
+    // the collapse-drops rule takes it away and the single mono cable is all that is left.
+    setDualIOParam(*oscNode->getProcessor(), false);
+    EXPECT_EQ(feedCount(graph, filterNode->nodeID, 0), 1) << "collapsing must remove the summed second cable";
+    EXPECT_TRUE(graphHasEdge(graph, oscNode->nodeID, 0, filterNode->nodeID, 0)) << "leaving the original cable";
 }
 
 // ---------------------------------------------------------------------------
@@ -1461,20 +1471,24 @@ TEST_F(GraphEditorTest, SplittingASourceNeverWiresIntoACollapsedPeersHiddenRight
 // second audio jack for rightAudioLegOf() to find. The ruling: a module the user just split must
 // arrive with both legs live.
 //
-// What that means per side is NOT symmetric, and the asymmetry is the point:
+// Both sides end up wired, by different means:
 //   * INPUT  - copy the feed the left leg already has onto the right leg. Driving one more
 //              destination from the same source channel cannot change the mix.
 //   * OUTPUT - wire the right leg to the destination's right leg when the destination HAS one
-//              (collapsed FX pair raw1, or a dual peer's own block). When it has none, leave the
-//              jack unpatched: the two alternatives are a cable onto a hidden jack (audible,
-//              unpluggable) or summing both identical legs into one mono input, which makes a
-//              layout toggle +6 dB louder. Dual I/O is not a mono/stereo switch.
+//              (collapsed FX pair raw1, or a dual peer's own block). When it has none, wire it into
+//              the destination's mono jack as a summed second cable, per user ruling: a dangling
+//              Audio R was the complaint, and stereo-into-mono summing is what hand-wiring both
+//              legs there already does. While the legs are still identical that sum is +6 dB, which
+//              is transient - it lasts until the legs differ, which is why one splits.
+//
+// One thing neither side may do: wire the peer's HIDDEN kRightBase block. A cable there is audible
+// and impossible to unplug, and dropHiddenRightLegConnections exists to keep it that way.
 // ---------------------------------------------------------------------------
 
 TEST_F(GraphEditorTest, SplittingAMidChainVoiceModuleFeedsItsRightInputFromAMonoUpstream) {
     // The screenshot, exactly: collapsed Oscillator -> Filter -> collapsed VCA, and the Filter is the
-    // one being toggled. Audio R in is broadcast-fed; Audio R out has nowhere legal to go, so it
-    // stays a visible, unplugged jack (see the header comment).
+    // one being toggled. Audio R in is broadcast-fed from the mono upstream; Audio R out is summed
+    // into the collapsed VCA's mono jack (see the header comment).
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(800, 600);
@@ -1499,18 +1513,27 @@ TEST_F(GraphEditorTest, SplittingAMidChainVoiceModuleFeedsItsRightInputFromAMono
     EXPECT_EQ(feedCount(graph, filterNode->nodeID, FilterModule::kRightBase), 1)
         << "and fed exactly once, so a second toggle cannot stack feeds";
 
-    // The one leg that stays unpatched, and the two things that must NOT have happened instead.
+    // The output side. This assertion was the reverse until the user ruled on it: it used to require
+    // exactly one feed on the VCA's mono jack, on the grounds that summing two identical legs makes a
+    // layout toggle +6 dB louder. The ruling accepted that transient jump in exchange for both jacks
+    // being wired, so the same shape now expects the second cable - while still never touching the
+    // VCA's hidden right block.
+    EXPECT_TRUE(graphHasEdge(graph, filterNode->nodeID, FilterModule::kRightBase, vcaNode->nodeID, 0))
+        << "Audio R out must be summed into the collapsed VCA's mono jack";
+    EXPECT_EQ(feedCount(graph, vcaNode->nodeID, 0), 2) << "exactly one extra cable, not a stack of them";
     for (int ch = VCAModule::kRightBase; ch < vcaNode->getProcessor()->getTotalNumInputChannels(); ++ch)
         EXPECT_EQ(feedCount(graph, vcaNode->nodeID, ch), 0) << "no cable onto the collapsed VCA's hidden block";
-    EXPECT_EQ(feedCount(graph, vcaNode->nodeID, 0), 1)
-        << "and both legs must not be summed into the VCA's mono jack, which would add 6 dB";
 
-    // Toggling back off leaves the mono chain exactly as it started.
+    // Toggling back off leaves the mono chain exactly as it started, on both sides: the broadcast and
+    // the summed cable both hang off the Filter's hidden right block, so the collapse-drops rule
+    // takes them with it.
     setDualIOParam(*filterNode->getProcessor(), false);
     EXPECT_TRUE(graphHasEdge(graph, oscNode->nodeID, 0, filterNode->nodeID, 0));
     EXPECT_EQ(feedCount(graph, filterNode->nodeID, FilterModule::kRightBase), 0)
         << "collapsing unhooks the hidden right leg again";
     EXPECT_EQ(feedCount(graph, filterNode->nodeID, 0), 1) << "and does not re-point the broadcast onto the left leg";
+    EXPECT_EQ(feedCount(graph, vcaNode->nodeID, 0), 1) << "and the summed second cable is gone";
+    EXPECT_TRUE(graphHasEdge(graph, filterNode->nodeID, 0, vcaNode->nodeID, 0)) << "leaving the original cable";
 }
 
 TEST_F(GraphEditorTest, SplittingAMidChainVoiceModuleWiresAllFourLegsWhenTheDownstreamCanTakeIt) {
