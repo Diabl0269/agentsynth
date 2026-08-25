@@ -1464,6 +1464,134 @@ TEST_F(GraphEditorTest, SplittingASourceSumsAudioRIntoACollapsedPeersMonoJackNev
 }
 
 // ---------------------------------------------------------------------------
+// Expanding a DESTINATION that already carries a summed pair: migrate, never add
+//
+// The sum above is a cable aimed at a jack that no longer exists once the destination splits. The
+// reported sequence made that concrete: Osc to dual left two cables on the Filter's mono jack, and
+// then splitting the FILTER wired a third (L->L, the old R->L sum, plus a new R->R). Expanding has
+// to MOVE the second feed onto the new Audio R, so every jack ends up with exactly one cable.
+// ---------------------------------------------------------------------------
+
+TEST_F(GraphEditorTest, ExpandingADestinationMigratesASummedPairInsteadOfAddingAThirdCable) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto& graph = engine.getGraph();
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    setDualIOParam(*oscNode->getProcessor(), false);
+    setDualIOParam(*filterNode->getProcessor(), false);
+    ASSERT_TRUE(graph.addConnection({{oscNode->nodeID, 0}, {filterNode->nodeID, 0}}));
+    editor.updateComponents();
+
+    auto edgesBetween = [&] {
+        int n = 0;
+        for (const auto& c : graph.getConnections())
+            if (c.source.nodeID == oscNode->nodeID && c.destination.nodeID == filterNode->nodeID && !c.source.isMIDI())
+                ++n;
+        return n;
+    };
+
+    // Step 1 - split the SOURCE: its Audio R is summed into the Filter's still-mono jack.
+    setDualIOParam(*oscNode->getProcessor(), true);
+    ASSERT_EQ(edgesBetween(), 2);
+    ASSERT_EQ(feedCount(graph, filterNode->nodeID, 0), 2);
+
+    // Step 2 - split the DESTINATION. This is the bug: it used to add a third cable.
+    setDualIOParam(*filterNode->getProcessor(), true);
+
+    EXPECT_EQ(edgesBetween(), 2) << "expanding the destination must migrate the sum, not add to it";
+    EXPECT_TRUE(graphHasEdge(graph, oscNode->nodeID, 0, filterNode->nodeID, 0)) << "L to L";
+    EXPECT_TRUE(graphHasEdge(graph, oscNode->nodeID, OscillatorModule::kRightBase, filterNode->nodeID,
+                             FilterModule::kRightBase))
+        << "R to R, moved off the mono jack rather than duplicated";
+    EXPECT_EQ(feedCount(graph, filterNode->nodeID, 0), 1) << "exactly one cable per jack";
+    EXPECT_EQ(feedCount(graph, filterNode->nodeID, FilterModule::kRightBase), 1);
+    EXPECT_FALSE(graphHasEdge(graph, oscNode->nodeID, OscillatorModule::kRightBase, filterNode->nodeID, 0))
+        << "the old summed cable must be gone, not left alongside the new pair";
+}
+
+TEST_F(GraphEditorTest, ExpandingADestinationMigratesOneRawOfACollapsedUpstreamJack) {
+    // The duplicate-of-one-jack variant: a collapsed Delay's single Audio jack owns raw0 AND raw1, and
+    // both are wired onto a collapsed Filter's mono jack. Expanding the Filter moves the raw1 feed
+    // onto Audio R, because that raw is the upstream's right leg even though it fronts one jack.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto& graph = engine.getGraph();
+    auto delayNode = graph.addNode(std::make_unique<DelayModule>());
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    setDualIOParam(*filterNode->getProcessor(), false);
+    ASSERT_FALSE(dynamic_cast<ModuleBase*>(delayNode->getProcessor())->isDualIO());
+    ASSERT_TRUE(graph.addConnection({{delayNode->nodeID, 0}, {filterNode->nodeID, 0}}));
+    ASSERT_TRUE(graph.addConnection({{delayNode->nodeID, 1}, {filterNode->nodeID, 0}}));
+    editor.updateComponents();
+
+    setDualIOParam(*filterNode->getProcessor(), true);
+
+    EXPECT_TRUE(graphHasEdge(graph, delayNode->nodeID, 0, filterNode->nodeID, 0)) << "raw0 stays on Audio L";
+    EXPECT_TRUE(graphHasEdge(graph, delayNode->nodeID, 1, filterNode->nodeID, FilterModule::kRightBase))
+        << "raw1 migrates to Audio R";
+    EXPECT_EQ(feedCount(graph, filterNode->nodeID, 0), 1);
+    EXPECT_EQ(feedCount(graph, filterNode->nodeID, FilterModule::kRightBase), 1);
+}
+
+TEST_F(GraphEditorTest, ExpandingADestinationLeavesAHandBuiltMixOfTwoSourcesAlone) {
+    // Two feeds from two DIFFERENT modules is a mix the user built. Splitting must not move half of
+    // it onto the new jack, and with the mono jack no longer single-fed it does not broadcast either.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto& graph = engine.getGraph();
+    auto oscA = graph.addNode(std::make_unique<OscillatorModule>());
+    auto oscB = graph.addNode(std::make_unique<OscillatorModule>());
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    setDualIOParam(*oscA->getProcessor(), false);
+    setDualIOParam(*oscB->getProcessor(), false);
+    setDualIOParam(*filterNode->getProcessor(), false);
+    ASSERT_TRUE(graph.addConnection({{oscA->nodeID, 0}, {filterNode->nodeID, 0}}));
+    ASSERT_TRUE(graph.addConnection({{oscB->nodeID, 0}, {filterNode->nodeID, 0}}));
+    editor.updateComponents();
+
+    setDualIOParam(*filterNode->getProcessor(), true);
+
+    EXPECT_EQ(feedCount(graph, filterNode->nodeID, 0), 2) << "the hand-built mix stays intact";
+    EXPECT_EQ(feedCount(graph, filterNode->nodeID, FilterModule::kRightBase), 0)
+        << "and nothing is moved or copied onto Audio R";
+}
+
+TEST_F(GraphEditorTest, TheWholeSplitThenCollapseSequenceReturnsToOneMonoCable) {
+    // Split source, split destination, collapse destination, collapse source: back to the single
+    // cable the patch started with, with nothing stranded on either hidden right block.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto& graph = engine.getGraph();
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    setDualIOParam(*oscNode->getProcessor(), false);
+    setDualIOParam(*filterNode->getProcessor(), false);
+    ASSERT_TRUE(graph.addConnection({{oscNode->nodeID, 0}, {filterNode->nodeID, 0}}));
+    editor.updateComponents();
+
+    setDualIOParam(*oscNode->getProcessor(), true);
+    setDualIOParam(*filterNode->getProcessor(), true);
+    setDualIOParam(*filterNode->getProcessor(), false);
+    setDualIOParam(*oscNode->getProcessor(), false);
+
+    int audioEdges = 0;
+    for (const auto& c : graph.getConnections())
+        if (!c.source.isMIDI() && !c.destination.isMIDI())
+            ++audioEdges;
+    EXPECT_EQ(audioEdges, 1) << "the sequence must land back on exactly one cable";
+    EXPECT_TRUE(graphHasEdge(graph, oscNode->nodeID, 0, filterNode->nodeID, 0)) << "and it is the original one";
+}
+
+// ---------------------------------------------------------------------------
 // Dual I/O toggle on a SPLIT-BLOCK module that was wired while collapsed
 //
 // Reported shape: a Filter sitting mid-chain, flipped to Dual I/O while patched. Audio L in and out

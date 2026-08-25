@@ -104,6 +104,9 @@ split has to arrive with **both legs wired**:
 | **Input** (`Audio R` in) | wire it: collapsed FX pair → its raw1, dual peer → its own `kRightBase` (never ch1) | **broadcast** — copy the channel that already feeds `Audio L` onto `Audio R` |
 | **Output** (`Audio R` out) | wire it, and drop the left leg's stand-in copy | **sum** — a second cable into the same mono jack `Audio L` feeds |
 
+Both input-side entries assume the left jack has exactly **one** feed; when it has two, the migration
+rule below runs instead.
+
 The two sides get there by different means, and the distinction matters:
 
 - Feeding two of *our* legs from one source channel **copies** a signal — the source drives one more
@@ -121,6 +124,19 @@ The two sides get there by different means, and the distinction matters:
 onto the peer's hidden `kRightBase` — remains forbidden: the cable would be audible and impossible to
 unplug. The summed cable instead targets the channel `Audio L` is already wired to, which is visible
 by construction.
+
+**Expanding a destination MIGRATES the sum, it does not add to it.** A summed cable is aimed at a
+jack that stops existing the moment that destination splits, so before anything else is wired, an
+audio input carrying **two feeds from the same upstream node** hands the second one to the new
+`Audio R` — preferring the feed that comes off the upstream's right leg, so the pair lands
+`L→L` / `R→R`. Without that step the sequence "split the source, then split the destination" left
+three cables on one pair: `L→L`, the stale `R→L` sum, and a fresh `R→R` on top. The same step covers
+two raws of one collapsed upstream jack wired onto the same input.
+
+Two feeds from *different* modules are a mix the user built by hand: migration leaves them alone, and
+because the jack is then not single-fed, the right-leg wire and the broadcast are both skipped too —
+picking one of the two to pair or copy would choose a winner by cable order and leave the legs
+carrying different mixes.
 
 **Prefer a real right leg.** A copy of `Audio L` (input) or a summed second cable (output) only ever
 stands in where there is no right leg to be had; the moment the peer has one, the real pair is wired

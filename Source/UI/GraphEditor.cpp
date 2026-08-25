@@ -4312,15 +4312,67 @@ void GraphEditor::completeStereoPairConnections(ModuleComponent* moduleComp) {
         return false;
     };
 
-    auto inputChannelIsFed = [&](int rawChannel) {
+    auto inputFeedCount = [&](int rawChannel) {
+        int n = 0;
         for (const auto& c : graph.getConnections())
             if (c.destination.nodeID == nodeId && !c.destination.isMIDI() && c.destination.channelIndex == rawChannel)
-                return true;
-        return false;
+                ++n;
+        return n;
     };
+    auto inputChannelIsFed = [&](int rawChannel) { return inputFeedCount(rawChannel) > 0; };
 
     const int myOutputLeg = rightAudioLegOf(mb, /*asInput=*/false);
     const int myInputLeg = rightAudioLegOf(mb, /*asInput=*/true);
+
+    // MIGRATE BEFORE WIRING. An audio input that was one jack a moment ago can already carry TWO
+    // feeds from the same upstream node: that is the summed cable the upstream's own split put there
+    // (its Audio R aimed at our mono jack), or two raws of one collapsed jack hand-wired onto it.
+    // Splitting gives that second feed a jack of its own, so it MOVES — anything else leaves it in
+    // place and hangs a third cable off the same pair, which is exactly what the reported
+    // Osc-then-Filter sequence produced: L->L, the old R->L sum, and a new R->R on top.
+    //
+    // Only a pair from the SAME upstream node migrates. Two feeds from two different modules are a
+    // mix the user built by hand, and moving half of it somewhere else would be rewriting their
+    // patch; that case falls through untouched (and, having more than one feed, takes neither the
+    // right-leg wire nor the broadcast below).
+    if (myInputLeg > 0 && mb->isDualIO() && !inputChannelIsFed(myInputLeg)) {
+        std::vector<juce::AudioProcessorGraph::Connection> leftFeeds;
+        for (const auto& c : graph.getConnections())
+            if (c.destination.nodeID == nodeId && !c.destination.isMIDI() && c.destination.channelIndex == 0)
+                leftFeeds.push_back(c);
+
+        if (leftFeeds.size() > 1) {
+            const juce::AudioProcessorGraph::Connection* migrate = nullptr;
+            for (const auto& candidate : leftFeeds) {
+                int fromSameNode = 0;
+                for (const auto& other : leftFeeds)
+                    if (other.source.nodeID == candidate.source.nodeID)
+                        ++fromSameNode;
+                if (fromSameNode < 2)
+                    continue;
+
+                // Prefer the feed that comes off the upstream's RIGHT leg, so the pair lands
+                // L->L / R->R rather than crossed. Falling back to any second feed from that node
+                // covers the collapsed-jack case, where both raws belong to one visible jack.
+                auto* srcNode = graph.getNodeForId(candidate.source.nodeID);
+                const int srcLeg =
+                    srcNode != nullptr ? rightAudioLegOf(srcNode->getProcessor(), /*asInput=*/false) : -1;
+                if (candidate.source.channelIndex == srcLeg) {
+                    migrate = &candidate;
+                    break;
+                }
+                if (migrate == nullptr && candidate.source.channelIndex != 0)
+                    migrate = &candidate;
+            }
+
+            if (migrate != nullptr) {
+                const juce::AudioProcessorGraph::Connection moved{migrate->source, {nodeId, myInputLeg}};
+                graph.removeConnection(*migrate);
+                if (!hasEdge(moved.source.nodeID, moved.source.channelIndex, nodeId, myInputLeg))
+                    graph.addConnection(moved);
+            }
+        }
+    }
 
     const auto connections = graph.getConnections();
     for (const auto& c : connections) {
@@ -4375,8 +4427,13 @@ void GraphEditor::completeStereoPairConnections(ModuleComponent* moduleComp) {
         }
 
         // Incoming: source's left leg is patched to ours, and the source is itself a stereo pair.
+        //
+        // Gated on the left jack having exactly ONE feed, which is what it has after the migration
+        // above did its work. More than one means a mix of two different modules that migration
+        // deliberately left alone: pairing or broadcasting one of them onto Audio R would pick a
+        // winner by cable order and leave the legs carrying different mixes.
         if (c.destination.nodeID == nodeId && c.destination.channelIndex == 0 && c.source.channelIndex == 0 &&
-            myInputLeg >= 0) {
+            myInputLeg >= 0 && inputFeedCount(0) == 1) {
             auto* srcNode = graph.getNodeForId(c.source.nodeID);
             const int srcLeg = srcNode != nullptr ? rightAudioLegOf(srcNode->getProcessor(), /*asInput=*/false) : -1;
             if (srcLeg >= 0 && !hasEdge(srcNode->nodeID, srcLeg, nodeId, myInputLeg))
