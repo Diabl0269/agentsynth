@@ -761,37 +761,144 @@ TEST_F(PreferencesSettingsTabTest, ExactlyOneDividerBetweenTwoSurvivingNonAdjace
     EXPECT_EQ(tab.getDividerBoundsForTest().size(), 1u);
 }
 
-// ---- Round 3 follow-up: "Scroll up zooms in" -> "Scroll up to zoom in" wording -----------------
+// ---- Round 5: "Scroll up to zoom in" checkbox -> "Zoom direction" dropdown ---------------------
+//
+// Round 3 reworded a boolean toggle's label ("Scroll up zooms in" -> "Scroll up to zoom in") to
+// remove an ambiguity; the wording still drew pushback twice, so round 5 replaces the toggle
+// outright with a labelled two-option dropdown that names both states directly. The persisted key
+// and its boolean semantics are UNCHANGED (migration-free): option 1 ("Scroll up to zoom in")
+// maps to true, option 2 ("Scroll down to zoom in") to false.
 
-TEST_F(PreferencesSettingsTabTest, ZoomScrollToggleUsesTheRewordedLabelAndExplainsBothStatesInTooltip) {
+namespace {
+// The combo has no stable component ID, so it is found the same way DualIOPerModulePopupContent's
+// own combos are in the tests above: by its item text, which is unique to this row.
+juce::ComboBox* findZoomDirectionCombo(PreferencesSettingsTab& tab) {
+    for (auto* child : tab.getChildren())
+        if (auto* combo = dynamic_cast<juce::ComboBox*>(child))
+            if (combo->getNumItems() == 2 && combo->getItemText(0).containsIgnoreCase("zoom in"))
+                return combo;
+    return nullptr;
+}
+} // namespace
+
+TEST_F(PreferencesSettingsTabTest, ZoomDirectionIsALabelledDropdownNamingBothStatesDirectly) {
     PreferencesSettingsTab tab(appProperties);
-    auto* toggle = findToggleByText(tab, "Scroll up to zoom in");
-    ASSERT_NE(toggle, nullptr) << "label must be reworded from the ambiguous 'Scroll up zooms in'";
-    EXPECT_TRUE(toggle->getTooltip().containsIgnoreCase("when off"))
-        << "tooltip must spell out the OFF state explicitly rather than leaving it as 'not this'";
-    EXPECT_TRUE(toggle->getTooltip().containsIgnoreCase("natural scrolling"));
 
-    // Persisted key is unchanged by the wording change.
+    // The old checkbox is gone.
+    EXPECT_EQ(findToggleByText(tab, "Scroll up to zoom in"), nullptr)
+        << "the boolean checkbox must be replaced, not left alongside the dropdown";
+
+    bool foundRowLabel = false;
+    for (auto* child : tab.getChildren())
+        if (auto* l = dynamic_cast<juce::Label*>(child))
+            if (l->getText() == "Zoom direction:")
+                foundRowLabel = true;
+    EXPECT_TRUE(foundRowLabel) << "the row must be introduced by a 'Zoom direction' label";
+
+    auto* combo = findZoomDirectionCombo(tab);
+    ASSERT_NE(combo, nullptr);
+    ASSERT_EQ(combo->getNumItems(), 2);
+    EXPECT_EQ(combo->getItemText(0), "Scroll up to zoom in");
+    EXPECT_EQ(combo->getItemText(1), "Scroll down to zoom in");
+}
+
+// The persisted key, its boolean semantics, and the public getter/setter are all unchanged —
+// FocusArbitrationTest.ZoomScrollPreferenceReachesTheTimelineAndTheRoll drives exactly these and
+// needed no edit for this round. This test pins the combo/bool mapping underneath them.
+TEST_F(PreferencesSettingsTabTest, ZoomDirectionComboRoundTripsThroughTheUnchangedBooleanKey) {
+    PreferencesSettingsTab tab(appProperties);
+    auto* combo = findZoomDirectionCombo(tab);
+    ASSERT_NE(combo, nullptr);
+
+    ASSERT_TRUE(tab.isZoomScrollUpZoomsInEnabled()) << "default ON (\"up zooms in\")";
+    EXPECT_EQ(combo->getText(), "Scroll up to zoom in");
+
+    // Driving the real combo (not the setter) is what a real click does.
+    combo->setSelectedItemIndex(1, juce::sendNotificationSync); // "Scroll down to zoom in"
+    EXPECT_FALSE(tab.isZoomScrollUpZoomsInEnabled());
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("zoomScrollUpZoomsIn"), "0")
+        << "persisted key name and boolean encoding are migration-free";
+
+    combo->setSelectedItemIndex(0, juce::sendNotificationSync); // "Scroll up to zoom in"
+    EXPECT_TRUE(tab.isZoomScrollUpZoomsInEnabled());
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("zoomScrollUpZoomsIn"), "1");
+
+    // The public setter still drives the combo, not just the persisted file.
     tab.setZoomScrollUpZoomsInEnabled(false);
+    EXPECT_EQ(combo->getText(), "Scroll down to zoom in");
     EXPECT_EQ(appProperties.getUserSettings()->getValue("zoomScrollUpZoomsIn"), "0");
 }
 
-// ---- Round 3 follow-up: OS-specific modifier names (item 4) ------------------------------------
-
-// The tooltip and hint must name the modifier through platformCommandKeyName() rather than a
-// hardcoded "Cmd" literal — this asserts the DERIVED value appears, so the test still passes (and
-// still means something) on a non-Mac build where that helper returns "Ctrl".
-TEST_F(PreferencesSettingsTabTest, ZoomScrollStringsUseThePlatformModifierNameNotAHardcodedOne) {
+TEST_F(PreferencesSettingsTabTest, ZoomDirectionLoadsThePersistedSelection) {
+    appProperties.getUserSettings()->setValue("zoomScrollUpZoomsIn", "0");
     PreferencesSettingsTab tab(appProperties);
-    auto* toggle = findToggleByText(tab, "Scroll up to zoom in");
-    ASSERT_NE(toggle, nullptr);
-    EXPECT_TRUE(toggle->getTooltip().contains(platformCommandKeyName()));
+    auto* combo = findZoomDirectionCombo(tab);
+    ASSERT_NE(combo, nullptr);
+    EXPECT_EQ(combo->getText(), "Scroll down to zoom in");
+    EXPECT_FALSE(tab.isZoomScrollUpZoomsInEnabled());
+}
+
+// The row must stay findable by the search filter — "zoom" now matches the row label, the combo's
+// own item text and its tooltip, not a toggle's button text.
+TEST_F(PreferencesSettingsTabTest, ZoomDirectionRowIsFindableBySearchingZoom) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 700);
+
+    tab.setSearchFilterForTest("zoom");
+    auto* combo = findZoomDirectionCombo(tab);
+    ASSERT_NE(combo, nullptr);
+    EXPECT_TRUE(combo->isVisible());
+    EXPECT_FALSE(findToggleByText(tab, "Label every key")->isVisible());
+}
+
+// ---- Round 3/5 follow-up: OS-specific modifier names --------------------------------------------
+
+// The combo tooltip and the hint label must name the modifier through platformCommandKeyName()
+// rather than a hardcoded "Cmd" literal — this asserts the DERIVED value appears, so the test
+// still passes (and still means something) on a non-Mac build where that helper returns "Ctrl".
+TEST_F(PreferencesSettingsTabTest, ZoomDirectionStringsUseThePlatformModifierNameNotAHardcodedOne) {
+    PreferencesSettingsTab tab(appProperties);
+    auto* combo = findZoomDirectionCombo(tab);
+    ASSERT_NE(combo, nullptr);
+    EXPECT_TRUE(combo->getTooltip().contains(platformCommandKeyName()));
 
     juce::Label* hint = nullptr;
     for (auto* child : tab.getChildren())
         if (auto* l = dynamic_cast<juce::Label*>(child))
-            if (l->getText().contains("wheel-zoom"))
+            if (l->getText().contains("wheel zoom"))
                 hint = l;
-    ASSERT_NE(hint, nullptr) << "the zoom-scroll hint label must still exist";
+    ASSERT_NE(hint, nullptr) << "the zoom-direction hint label must still exist";
     EXPECT_TRUE(hint->getText().contains(platformCommandKeyName()));
+}
+
+// ---- Round 5: hint-label layout (cramped/narrow rendering) --------------------------------------
+//
+// naturalScrollingHint and zoomDirectionHint shared the same bug: fixed at 18px tall, room for
+// barely one line, so a hint wider than the row got horizontally squeezed instead of wrapping.
+// Both are fixed at the shared spot (PreferencesSettingsTab::styleMutedHintLabel); this pins the
+// observable parts of that fix without depending on exact pixel values, which the font/theme could
+// legitimately move.
+TEST_F(PreferencesSettingsTabTest, HintLabelsGetTwoLinesOfHeightAndNeverSqueezeHorizontally) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 700);
+
+    juce::Label* naturalHint = nullptr;
+    juce::Label* zoomHint = nullptr;
+    for (auto* child : tab.getChildren()) {
+        if (auto* l = dynamic_cast<juce::Label*>(child)) {
+            if (l->getText().containsIgnoreCase("graph canvas pans"))
+                naturalHint = l;
+            if (l->getText().contains("wheel zoom"))
+                zoomHint = l;
+        }
+    }
+    ASSERT_NE(naturalHint, nullptr);
+    ASSERT_NE(zoomHint, nullptr);
+
+    for (auto* hint : {naturalHint, zoomHint}) {
+        EXPECT_GT(hint->getHeight(), 18) << "must be taller than the old one-line height";
+        EXPECT_GE(hint->getMinimumHorizontalScale(), 1.0f)
+            << "must never shrink text horizontally to fit - wrap onto a second line instead";
+        EXPECT_FALSE(hint->getBounds().isEmpty());
+    }
 }

@@ -128,6 +128,20 @@ void AppLookAndFeel::applyTheme(const Theme& newTheme) {
     setColour(juce::Slider::backgroundColourId, c.surface);
 
     setColour(juce::Label::textColourId, c.textPrimary);
+    // An EDITABLE label (setEditable) opens a juce::TextEditor whose colours do NOT come from the
+    // TextEditor ids below. juce::Label::createEditorComponent copies these three across
+    // afterwards, and only when the id "isColourSpecified" — which LookAndFeel_V4 does for
+    // textWhenEditingColourId, from its own default-scheme white. So the app's themed
+    // TextEditor::textColourId was set correctly and then CLOBBERED by V4's white on the way into
+    // the editor: the timeline transport bar's BPM and time-signature fields typed white-on-white
+    // on every light theme. Overriding all three here is what makes an inline label editor themed;
+    // outlineWhenEditing maps to TextEditor::focusedOutlineColourId, hence the accent.
+    setColour(juce::Label::textWhenEditingColourId, c.textPrimary);
+    setColour(juce::Label::backgroundWhenEditingColourId, c.bg0);
+    setColour(juce::Label::outlineWhenEditingColourId, c.accent);
+    // The caret is its own component with its own id, and V4 leaves it at plain black — invisible
+    // against the dark bg0 the editor above sits on.
+    setColour(juce::CaretComponent::caretColourId, c.accent);
 
     setColour(juce::TextButton::buttonColourId, c.surface);
     setColour(juce::TextButton::buttonOnColourId, c.accent);

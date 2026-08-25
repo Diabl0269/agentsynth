@@ -79,6 +79,30 @@ public:
         bool isMidi = false;
     };
 
+    /** Header band the card title is drawn in, and the double-click-to-rename hit zone. */
+    static constexpr int kHeaderHeight = 24;
+
+    /** What the header paints: the user's custom title when set, else the auto-numbered module
+     *  name. Never reads the processor name directly — see GraphEditor::getModuleTitle. */
+    juce::String cardTitle() const;
+
+    /** Opens the inline rename editor over the title. Public so a test can drive it without
+     *  synthesising a double-click. No-op for an Attenuverter (it has no header). */
+    void beginTitleRename();
+
+    /** Closes the inline editor, committing the typed text or discarding it. */
+    void finishTitleRename(bool commit);
+
+    /** True while the inline rename editor is open. */
+    bool isRenamingTitle() const noexcept { return titleEditor != nullptr; }
+
+    /** Height of the header strip above the port gutter. Shared with
+     *  GraphEditor::estimatePortCenter, which has to place a drag GHOST's jacks at exactly the same
+     *  y as a real card's: the two carried separate literals (38 here, 30 there) and every smart
+     *  connection preview cable terminated 8px above the jack dot it claimed to land on. One
+     *  constant so they cannot drift again. */
+    static constexpr int kPortGutterHeaderHeight = 38;
+
     std::optional<Port> getPortForPoint(juce::Point<int> localPoint);
     juce::Point<int> getPortCenter(int index, bool isInput);
 
@@ -249,6 +273,10 @@ private:
     // but only if nothing moved.
     bool ctrlTogglePending = false;
     std::vector<juce::AudioProcessorGraph::NodeID> ctrlPressSelection;
+
+    // Inline rename editor, alive only between beginTitleRename and finishTitleRename. A child
+    // component, so there is no window seam to stub out for a display-less test run.
+    std::unique_ptr<juce::TextEditor> titleEditor;
 
     float cachedRMS = 0.0f;
     float lastPaintedRMS = -1.0f;

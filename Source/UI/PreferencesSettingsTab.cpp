@@ -49,6 +49,19 @@ constexpr const char* kTimelineDoubleClickSpansLocatorsKey = "timelineDoubleClic
 // the Keyboard Shortcuts tab's section headers (see its kDividerAlpha — keep the two in step).
 constexpr float kDividerAlpha = 0.12f;
 
+// Combo item ids for the zoom-direction dropdown (round 5). Not the raw bool: 0 is reserved by
+// juce::ComboBox for "nothing selected", same reasoning as the Dual I/O choice ids below. Option 1
+// maps to the persisted TRUE ("up zooms in", the default); option 2 to FALSE. See
+// isZoomScrollUpZoomsInEnabled() / setZoomScrollUpZoomsInEnabled().
+constexpr int kZoomDirectionUpId = 1;
+constexpr int kZoomDirectionDownId = 2;
+
+// Height for a muted hint label under a preference row (round 5 fix): enough for TWO lines at the
+// hint's 11.5pt font, so text wider than the row wraps instead of being horizontally squeezed —
+// the 18px the two hints used before this only fit one line, and neither hint's text is short
+// enough to actually be one line at the tab's real width.
+constexpr int kHintHeight = 32;
+
 // Per-module overrides of "defaultDualIOForNewModules", one compact JSON object: {"TypeName":
 // true|false}. A type absent from the object follows the global default — that is the whole
 // reason this is a JSON blob under one key rather than one key per module type, the same way
@@ -323,38 +336,41 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     naturalScrollingHint.setText("Affects the timeline and the piano roll. The graph canvas pans instead of "
                                  "scrolling and is unaffected.",
                                  juce::dontSendNotification);
-    naturalScrollingHint.setFont(juce::Font(juce::FontOptions(11.5f)));
-    naturalScrollingHint.setColour(juce::Label::textColourId, findColour(juce::Label::textColourId).withAlpha(0.65f));
+    styleMutedHintLabel(naturalScrollingHint);
 
-    addAndMakeVisible(zoomScrollUpZoomsInToggle);
-    // DEFAULT TRUE, and deliberately the same idiom as the row above: "up zooms in" is what both
-    // wheel-zoom surfaces already did, so nobody's gesture changes until they ask for it here.
+    addAndMakeVisible(zoomDirectionLabel);
+    zoomDirectionLabel.setText("Zoom direction:", juce::dontSendNotification);
+    zoomDirectionLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
+
+    addAndMakeVisible(zoomDirectionCombo);
+    zoomDirectionCombo.addItem("Scroll up to zoom in", kZoomDirectionUpId);
+    zoomDirectionCombo.addItem("Scroll down to zoom in", kZoomDirectionDownId);
+    // DEFAULT "up" (kZoomDirectionUpId), and deliberately the same idiom as the row above: "up
+    // zooms in" is what both wheel-zoom surfaces already did, so nobody's gesture changes until
+    // they ask for it here.
     //
-    // Label reworded from "Scroll up zooms in" (round 3 follow-up): that phrasing read as a
-    // statement of fact ("this is what happens"), not a preference with two states — indistinguishable
-    // from a label describing unconditional behaviour. "Scroll up to zoom in" reads as an
-    // instruction that's true only while the toggle is on, and the tooltip spells out the OFF state
-    // explicitly rather than leaving it as "not this", which is the ambiguity the alternate
-    // "Scroll direction for zoom" wording has the same problem: neither state is named, only a mode
-    // is implied. Persisted key (kZoomScrollUpZoomsInKey) is unchanged.
-    zoomScrollUpZoomsInToggle.setToggleState(
-        appProperties.getUserSettings()->getBoolValue(kZoomScrollUpZoomsInKey, true), juce::dontSendNotification);
-    zoomScrollUpZoomsInToggle.setTooltip(
-        "When on (the default), scroll up with " + platformCommandKeyName() + " (or " + platformCommandKeyName() +
-        "+Shift) held to zoom in. When off, scrolling up zooms out instead (natural scrolling).");
-    zoomScrollUpZoomsInToggle.onClick = [this] {
-        persistZoomScrollUpZoomsIn(zoomScrollUpZoomsInToggle.getToggleState());
+    // Renamed from a checkbox to this labelled dropdown (round 5) after the boolean wording drew
+    // pushback twice: "Scroll up zooms in" read as an unconditional statement, and "Scroll up to
+    // zoom in" (round 3's fix) still needed a tooltip to spell out what "off" meant. Naming both
+    // states directly removes the ambiguity outright instead of wordsmithing around it again.
+    // Persisted key and its boolean semantics are UNCHANGED: option 1 maps to true, option 2 to
+    // false — see isZoomScrollUpZoomsInEnabled() / persistZoomScrollUpZoomsIn() below, still the
+    // only read/write sites, still under kZoomScrollUpZoomsInKey.
+    zoomDirectionCombo.setSelectedId(appProperties.getUserSettings()->getBoolValue(kZoomScrollUpZoomsInKey, true)
+                                         ? kZoomDirectionUpId
+                                         : kZoomDirectionDownId,
+                                     juce::dontSendNotification);
+    zoomDirectionCombo.setTooltip("Which physical scroll direction zooms in, holding " + platformCommandKeyName() +
+                                  " (or " + platformCommandKeyName() + "+Shift) over the timeline or the piano roll.");
+    zoomDirectionCombo.onChange = [this] {
+        persistZoomScrollUpZoomsIn(zoomDirectionCombo.getSelectedId() == kZoomDirectionUpId);
     };
 
-    addAndMakeVisible(zoomScrollUpZoomsInHint);
-    zoomScrollUpZoomsInHint.setText("Affects " + platformCommandKeyName() + " (horizontal) and " +
-                                        platformCommandKeyName() +
-                                        "+Shift (vertical) wheel-zoom in the timeline and the piano roll. Plain "
-                                        "scrolling follows the setting above.",
-                                    juce::dontSendNotification);
-    zoomScrollUpZoomsInHint.setFont(juce::Font(juce::FontOptions(11.5f)));
-    zoomScrollUpZoomsInHint.setColour(juce::Label::textColourId,
-                                      findColour(juce::Label::textColourId).withAlpha(0.65f));
+    addAndMakeVisible(zoomDirectionHint);
+    zoomDirectionHint.setText("Applies to " + platformCommandKeyName() + " (or " + platformCommandKeyName() +
+                                  "+Shift) wheel zoom in the timeline and piano roll.",
+                              juce::dontSendNotification);
+    styleMutedHintLabel(zoomDirectionHint);
 
     addAndMakeVisible(pianoRollKeyLabelsToggle);
     // DEFAULT TRUE ("all"): matches PianoRollComponent::KeyLabelMode::AllNotes, its own default,
@@ -404,6 +420,13 @@ void PreferencesSettingsTab::resized() {
             s << b->getButtonText() << " ";
         if (auto* l = dynamic_cast<juce::Label*>(&c))
             s << l->getText() << " ";
+        // Every item's text, not just the current selection: the zoom-direction row (round 5) must
+        // be findable by "zoom" regardless of which option is picked, and both of its option
+        // strings say "zoom in" — matching on the live selection alone would make the search
+        // result depend on the current setting, which is not what a label/tooltip search means.
+        if (auto* combo = dynamic_cast<juce::ComboBox*>(&c))
+            for (int i = 0; i < combo->getNumItems(); ++i)
+                s << combo->getItemText(i) << " ";
         if (auto* t = dynamic_cast<juce::SettableTooltipClient*>(&c))
             s << t->getTooltip() << " ";
         return s;
@@ -504,23 +527,28 @@ void PreferencesSettingsTab::resized() {
         pendingDivider = pendingDivider || visible;
     }
 
-    // Group 6: the two wheel-direction toggles + their hints (no divider between them, same
+    // Group 6: natural scrolling + zoom direction, with their hints (no divider between them, same
     // "reads as one conversation" reasoning as group 5).
     {
-        const bool visible = groupMatches(
-            {&naturalScrollingToggle, &naturalScrollingHint, &zoomScrollUpZoomsInToggle, &zoomScrollUpZoomsInHint});
-        setGroupVisible(
-            {&naturalScrollingToggle, &naturalScrollingHint, &zoomScrollUpZoomsInToggle, &zoomScrollUpZoomsInHint},
-            visible);
+        const bool visible = groupMatches({&naturalScrollingToggle, &naturalScrollingHint, &zoomDirectionLabel,
+                                           &zoomDirectionCombo, &zoomDirectionHint});
+        setGroupVisible({&naturalScrollingToggle, &naturalScrollingHint, &zoomDirectionLabel, &zoomDirectionCombo,
+                         &zoomDirectionHint},
+                        visible);
         beginGroup(visible);
         if (visible) {
             naturalScrollingToggle.setBounds(bounds.removeFromTop(24));
             // Indented under the toggle it explains, so the hint reads as a caption rather than as
-            // another preference row.
-            naturalScrollingHint.setBounds(bounds.removeFromTop(18).withTrimmedLeft(24));
+            // another preference row. kHintHeight (not a single line's worth): round 5 fix for both
+            // hints in this group — see styleMutedHintLabel.
+            naturalScrollingHint.setBounds(bounds.removeFromTop(kHintHeight).withTrimmedLeft(24));
             bounds.removeFromTop(10);
-            zoomScrollUpZoomsInToggle.setBounds(bounds.removeFromTop(24));
-            zoomScrollUpZoomsInHint.setBounds(bounds.removeFromTop(18).withTrimmedLeft(24));
+            // Zoom direction: a labelled dropdown (round 5), same label+combo shape as the smart-
+            // connections row above rather than a toggle — see zoomDirectionCombo's declaration.
+            auto zoomRow = bounds.removeFromTop(24);
+            zoomDirectionLabel.setBounds(zoomRow.removeFromLeft(160));
+            zoomDirectionCombo.setBounds(zoomRow.removeFromLeft(220));
+            zoomDirectionHint.setBounds(bounds.removeFromTop(kHintHeight).withTrimmedLeft(24));
         }
         pendingDivider = pendingDivider || visible;
     }
@@ -640,10 +668,12 @@ void PreferencesSettingsTab::persistNaturalScrolling(bool enabled) {
     // preference does not scale.
 }
 
-bool PreferencesSettingsTab::isZoomScrollUpZoomsInEnabled() const { return zoomScrollUpZoomsInToggle.getToggleState(); }
+bool PreferencesSettingsTab::isZoomScrollUpZoomsInEnabled() const {
+    return zoomDirectionCombo.getSelectedId() == kZoomDirectionUpId;
+}
 
 void PreferencesSettingsTab::setZoomScrollUpZoomsInEnabled(bool enabled) {
-    zoomScrollUpZoomsInToggle.setToggleState(enabled, juce::dontSendNotification);
+    zoomDirectionCombo.setSelectedId(enabled ? kZoomDirectionUpId : kZoomDirectionDownId, juce::dontSendNotification);
     persistZoomScrollUpZoomsIn(enabled);
 }
 
@@ -761,4 +791,15 @@ std::unique_ptr<juce::Component> PreferencesSettingsTab::buildDualIOPerModuleDef
 
 std::unique_ptr<juce::Component> PreferencesSettingsTab::createDualIOPerModuleDefaultsPopupForTest() {
     return buildDualIOPerModuleDefaultsPopup();
+}
+
+void PreferencesSettingsTab::styleMutedHintLabel(juce::Label& hint) {
+    hint.setFont(juce::Font(juce::FontOptions(11.5f)));
+    hint.setColour(juce::Label::textColourId, findColour(juce::Label::textColourId).withAlpha(0.65f));
+    // Wrap instead of squeeze: the default minimum-horizontal-scale (~0.7) lets drawFittedText
+    // cram an over-wide single line into the box by shrinking it horizontally, which is exactly
+    // the "cramped/narrow" look this was fixed for. With kHintHeight giving room for two lines,
+    // there is never a reason to squeeze instead of wrapping.
+    hint.setMinimumHorizontalScale(1.0f);
+    hint.setJustificationType(juce::Justification::topLeft);
 }

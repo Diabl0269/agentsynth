@@ -490,9 +490,11 @@ pitch at the TOP row and pitch grows upward — a view moving down therefore DEC
 why that branch negates the result (see `docs/timeline_panel_clips_automation.md` §2); the horizontal axis on both surfaces needs no
 such remapping, since a view moving right IS a larger `firstVisibleBeat`.
 
-**Zoom-scroll direction** (`Settings → Preferences → "Scroll up to zoom in"` — relabelled from
-"Scroll up zooms in" in a later pass; persisted key unchanged, default ON, key
-`zoomScrollUpZoomsIn`) is a separate preference from Natural scrolling, because zoom-on-wheel cares
+**Zoom-scroll direction** (`Settings → Preferences → "Zoom direction"`, a two-option dropdown —
+"Scroll up to zoom in" / "Scroll down to zoom in" — replacing a boolean checkbox of the same two
+names in round 5, itself relabelled from "Scroll up zooms in" in round 3; persisted key and its
+boolean semantics unchanged throughout, default ON, key `zoomScrollUpZoomsIn`) is a separate
+preference from Natural scrolling, because zoom-on-wheel cares
 about the FINGER rather than the content: `ScrollPolicy.h`'s `wheelGestureIsUpward()` recovers the
 physical gesture direction by XOR-ing the dominant delta's sign with `isReversed` (the one place
 `isReversed` IS consulted — a plain scroll must not do this, per the paragraph above), so "scroll up
@@ -879,6 +881,22 @@ value this bar remembers between polls:
   **without posting anything** on rejection. The label then reverts to whatever the snapshot is
   CURRENTLY reporting (not a remembered value) — a rejected edit never touched the transport, so the
   snapshot is already the last known-good time signature.
+
+> **An editable `juce::Label`'s editor does NOT inherit the app's `TextEditor` colours.** Both fields
+> above typed **white on white** on every light theme until this was fixed, and the mechanism is
+> worth knowing before adding a third one. `Label::createEditorComponent` copies
+> `Label::textWhenEditingColourId` / `backgroundWhenEditingColourId` / `outlineWhenEditingColourId`
+> onto the new editor's `TextEditor::textColourId` / `backgroundColourId` /
+> `focusedOutlineColourId` — but only for ids that `isColourSpecified()`, and `LookAndFeel_V4`
+> **does** specify `textWhenEditingColourId` from its own default-scheme white. So
+> `AppLookAndFeel`'s themed `TextEditor::textColourId` was set correctly and then clobbered by V4's
+> white on the way in. `AppLookAndFeel::applyTheme` now sets all three Label editing ids (plus
+> `CaretComponent::caretColourId`, which V4 leaves black and therefore invisible on a dark theme),
+> which fixes every editable label at once — these two and the track-name label in §3. A raw
+> `juce::TextEditor` (the clip-rename and marker-rename editors) was never affected: it reads
+> `TextEditor::textColourId` straight off the LookAndFeel. Pinned by
+> `TimelineTransportBarTest.InlineFieldEditorsTakeTheirColoursFromTheTheme`, which asserts the
+> TOKENS in a light and a dark theme so the fix cannot regress into a second hardcoded colour.
 - **`updateFromTransport()`** (the drive seam, called from the panel's existing 10 Hz poll) resyncs
   the play/loop button visuals and the two labels' text from the snapshot — so a Space-bar play
   triggered elsewhere reflects here within one tick — but skips a label mid-edit

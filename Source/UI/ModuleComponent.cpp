@@ -1,4 +1,5 @@
 #include "ModuleComponent.h"
+#include "../AI/AIStateMapper.h" // kMaxModuleDisplayNameChars — one cap for typed and loaded titles
 #include "../Modules/ExternalMidiModule.h"
 #include "../Modules/MacroControlModule.h"
 #include "../Modules/ModuleBase.h"
@@ -1798,16 +1799,16 @@ void ModuleComponent::paint(juce::Graphics& g) {
     if (lf != nullptr) {
         // Single owner of card treatment: background, drop shadow, body fill, border, and the
         // header band (filled + title drawn) all come from the active theme.
-        lf->drawModulePanel(g, getLocalBounds().toFloat(), 24, module->getName(), isSelected, isBypassed);
+        lf->drawModulePanel(g, getLocalBounds().toFloat(), kHeaderHeight, cardTitle(), isSelected, isBypassed);
     } else {
         // Fallback path (no themed LnF): plain fill + simple header so tests render without crashing.
         g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
         g.setColour(isSelected ? juce::Colours::aqua : juce::Colours::black);
         g.drawRect(getLocalBounds(), 2);
         g.setColour(juce::Colours::darkgrey);
-        g.fillRect(0, 0, getWidth(), 24);
+        g.fillRect(0, 0, getWidth(), kHeaderHeight);
         g.setColour(juce::Colours::white);
-        g.drawText(module->getName(), 0, 0, getWidth(), 24, juce::Justification::centred, true);
+        g.drawText(cardTitle(), 0, 0, getWidth(), kHeaderHeight, juce::Justification::centred, true);
     }
 
     // Drop-target highlight while an audio file hovers over a Sampler.
@@ -2079,7 +2080,7 @@ juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
     }
 
     int yStep = 20;
-    int headerHeight = 38;
+    int headerHeight = kPortGutterHeaderHeight;
 
     int portOffset = 0;
     if (module->producesMidi()) {
@@ -2606,6 +2607,17 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
         if (getType(module) == ModuleType::Attenuverter)
             return; // cannot drag
 
+        // Double-click the HEADER opens the inline rename. Intercepted here, before any drag is
+        // armed, exactly like the port double-click above: the first click of the pair has already
+        // armed (and its mouseUp disarmed) a body drag, and letting the second click arm another one
+        // would leave bodyDragActive set under an open editor, so the next stray mouseDrag would
+        // move the card out from under the cursor. Returning before dragStartPosition/bodyDragActive
+        // are touched is what keeps the two gestures from fighting.
+        if (e.getNumberOfClicks() >= 2 && !e.mods.isRightButtonDown() && e.getPosition().y < kHeaderHeight) {
+            beginTitleRename();
+            return;
+        }
+
         // TRUE right button only, deliberately not isPopupMenu(): on macOS JUCE defines
         // popupMenuClickModifier as (rightButtonModifier | ctrlModifier), so isPopupMenu() is also
         // true for Ctrl+LEFT-click — and Ctrl+left-click is the insert-between drag modifier plus
@@ -2775,6 +2787,54 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
             owner.beginDragPreview(getWidth(), getHeight(), getNodeId());
         }
     }
+}
+
+juce::String ModuleComponent::cardTitle() const { return owner.getModuleTitle(nodeId, module); }
+
+void ModuleComponent::beginTitleRename() {
+    if (module == nullptr || getType(module) == ModuleType::Attenuverter)
+        return;
+
+    // Any editor already open commits first, and that mutates the graph — so nothing may hold state
+    // across it. Same ordering as TimelineRulerComponent::beginRenameMarker.
+    finishTitleRename(true);
+
+    titleEditor = std::make_unique<juce::TextEditor>("moduleTitleRenameEditor");
+    titleEditor->setComponentID("moduleTitleRenameEditor");
+    titleEditor->setMultiLine(false);
+    titleEditor->setReturnKeyStartsNewLine(false);
+    titleEditor->setJustification(juce::Justification::centred);
+    titleEditor->setInputRestrictions(synth::kMaxModuleDisplayNameChars);
+    // Seeded with what the header currently SHOWS, so a first rename starts from "Chorus 2" rather
+    // than from an empty box the user has to retype.
+    titleEditor->setText(cardTitle(), juce::dontSendNotification);
+    titleEditor->setBounds(2, 1, std::max(40, getWidth() - 4), kHeaderHeight - 2);
+    titleEditor->onReturnKey = [this] { finishTitleRename(true); };
+    titleEditor->onEscapeKey = [this] { finishTitleRename(false); };
+    // Clicking away commits; Escape is the only cancel. Matches every other in-place rename here.
+    titleEditor->onFocusLost = [this] { finishTitleRename(true); };
+    addAndMakeVisible(*titleEditor);
+    titleEditor->selectAll();
+    titleEditor->grabKeyboardFocus();
+}
+
+void ModuleComponent::finishTitleRename(bool commit) {
+    if (titleEditor == nullptr)
+        return;
+
+    // Detach FIRST: destroying the editor moves focus off it, which fires onFocusLost, which
+    // re-enters here and finds a null editor and stops.
+    auto editor = std::move(titleEditor);
+    const juce::String typed = editor->getText();
+    editor.reset();
+
+    if (!commit)
+        return;
+
+    // Typing the auto-numbered name back is the same as having no custom title, so it stores as
+    // blank and keeps following the numbering instead of freezing today's number in place.
+    owner.setModuleDisplayName(nodeId, typed.trim() == module->getName() ? juce::String() : typed);
+    repaint();
 }
 
 void ModuleComponent::moved() {

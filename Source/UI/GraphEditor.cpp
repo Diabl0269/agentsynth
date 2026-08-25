@@ -801,6 +801,17 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
             preview.sourceCategory = category;
             return editor.colourForCable(preview).withAlpha(alpha);
         };
+
+        // An insert REROUTES existing cabling rather than adding to it, which is a destructive-ish
+        // edit the user should be able to tell apart from an ordinary suggestion at a glance. Its
+        // new legs are tinted toward the theme's warning colour — INTERPOLATED, not replaced, so the
+        // cable's own resolved identity (signal, category, user override) still reads through, and
+        // taken from a theme token rather than a literal.
+        static const synth::theme::Colors fallbackColors{};
+        const auto& themeColors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
+        auto insertTint = [&themeColors](juce::Colour base) {
+            return base.interpolatedWith(themeColors.warning.withAlpha(base.getFloatAlpha()), 0.65f);
+        };
         auto strokePreview = [&](juce::Point<float> p1, juce::Point<float> p2, juce::Colour colour,
                                  synth::ui::CableSignal signal) {
             auto path = GraphEditor::buildCablePath(p1, p2);
@@ -837,15 +848,20 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
         // terminal sink is one suggestion but two cables, and a preview that showed a single wire
         // while the drop fanned both raws was lying about what was about to happen.
         for (const auto& s : editor.smartSuggestions) {
+            const auto legColour = [&](synth::ui::ModuleCategory category) {
+                const auto base = previewColour(s.signal, category, 0.40f);
+                return s.isInsert ? insertTint(base) : base;
+            };
+
             for (const auto& leg : s.upstreamPreviewLegs)
-                strokePreview(leg.p1, leg.p2, previewColour(s.signal, s.upstreamCategory, 0.40f), s.signal);
+                strokePreview(leg.p1, leg.p2, legColour(s.upstreamCategory), s.signal);
 
             if (s.mainPreviewLegs.empty()) {
-                strokePreview(s.p1, s.p2, previewColour(s.signal, s.sourceCategory, 0.40f), s.signal);
+                strokePreview(s.p1, s.p2, legColour(s.sourceCategory), s.signal);
                 continue;
             }
             for (const auto& leg : s.mainPreviewLegs)
-                strokePreview(leg.p1, leg.p2, previewColour(s.signal, s.sourceCategory, 0.40f), s.signal);
+                strokePreview(leg.p1, leg.p2, legColour(s.sourceCategory), s.signal);
         }
     }
 }
@@ -918,6 +934,25 @@ GraphEditor::PolyLink GraphEditor::resolvePolyLink(const ModuleBase* source, int
             if (s.voiceSpan == 1 && d.voiceSpan == 2 && d.role == PortRole::Audio) {
                 voiceCount = 2;
                 sourceStride = 0;
+            }
+
+            // ...but a DUAL I/O FX's LEFT jack is not mono — it is one half of a split pair sitting
+            // on raw0/raw1, and duplicating it onto both destination legs drops the right channel
+            // entirely (a dual Reverb landing on a collapsed Chorus wired only Left). Wire the real
+            // pair instead: L -> raw0, R -> raw1.
+            //
+            // Deliberately limited to an ADJACENT right leg, i.e. the FX layout. The split-block
+            // voice modules (Oscillator, Filter, VCA, Wavetable) put Audio R on its own kRightBase
+            // block far from ch0, and for those the established behaviour is the mono broadcast
+            // above — ResolvePolyLinkBroadcastsMonoIntoCollapsedStereoPair and
+            // TogglingDualIOKeepsBothStereoLegs both encode it, the latter explaining that the
+            // right leg gets picked up separately from the module's own Audio R block. Widening
+            // this to non-adjacent legs is a deliberate behaviour change for manual cable drags
+            // too, not something to slip in behind a smart-connect fix.
+            if (s.voiceSpan == 1 && d.voiceSpan == 2 && d.role == PortRole::Audio && s.role == PortRole::Audio &&
+                source != nullptr && source->isDualIO() && source->rightAudioLegChannel() == s.rawHeadChannel + 1) {
+                voiceCount = 2;
+                sourceStride = 1;
             }
 
             // Collapsed stereo source (span 2) dropped on dest jack 0: fan L→L / R→R when the
@@ -1110,6 +1145,61 @@ juce::String GraphEditor::smartConnectionModeToString(SmartConnectionMode mode) 
     }
 }
 
+juce::String GraphEditor::getModuleDisplayName(juce::AudioProcessorGraph::NodeID nodeId) const {
+    if (auto* node = audioEngine.getGraph().getNodeForId(nodeId))
+        return node->properties["displayName"].toString();
+    return {};
+}
+
+void GraphEditor::setModuleDisplayName(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& name) {
+    auto& graph = audioEngine.getGraph();
+    auto* node = graph.getNodeForId(nodeId);
+    if (node == nullptr)
+        return;
+
+    // Blank or whitespace-only reverts to the auto-numbered default rather than showing an empty
+    // header. Capped at the same length the untrusted patch path caps at, so a title typed here and
+    // a title loaded from a file can never disagree about what is storable.
+    const auto trimmed = name.trim().substring(0, synth::kMaxModuleDisplayNameChars);
+    if (trimmed == getModuleDisplayName(nodeId))
+        return; // no-op rename: do not burn an undo step on it
+
+    auto apply = [this, nodeId, trimmed] {
+        if (auto* n = audioEngine.getGraph().getNodeForId(nodeId)) {
+            if (trimmed.isEmpty())
+                n->properties.remove("displayName");
+            else
+                n->properties.set("displayName", trimmed);
+        }
+        for (auto* comp : content.getModules())
+            if (comp != nullptr && comp->getNodeId() == nodeId)
+                comp->repaint();
+    };
+
+    if (undoManager)
+        undoManager->recordStructuralChange(graph, apply);
+    else
+        apply();
+}
+
+juce::String GraphEditor::getModuleTitle(juce::AudioProcessorGraph::NodeID nodeId,
+                                         juce::AudioProcessor* processor) const {
+    const auto custom = getModuleDisplayName(nodeId);
+    if (custom.isNotEmpty())
+        return custom;
+    return processor != nullptr ? processor->getName() : juce::String();
+}
+
+void GraphEditor::refreshSuggestionsIfInsertModifierChanged() {
+    if (!dragPreviewActive)
+        return;
+    const bool insertNow = isInsertModifierDown();
+    if (insertNow == lastSampledInsertModifier)
+        return; // the common case: one bool compare per drag tick
+    lastSampledInsertModifier = insertNow;
+    refreshSmartSuggestions();
+}
+
 void GraphEditor::clearSmartSuggestions() { smartSuggestions.clear(); }
 
 bool GraphEditor::nodeHasCables(juce::AudioProcessorGraph::NodeID nodeId) const {
@@ -1158,12 +1248,16 @@ juce::Point<int> GraphEditor::estimatePortCenter(juce::AudioProcessor* proc, juc
 
     if (isMidi) {
         if (isInput)
-            return {bounds.getX() + 10, bounds.getY() + 30};
-        return {bounds.getRight() - 10, bounds.getY() + 30};
+            return {bounds.getX() + 10, bounds.getY() + ModuleComponent::kPortGutterHeaderHeight};
+        return {bounds.getRight() - 10, bounds.getY() + ModuleComponent::kPortGutterHeaderHeight};
     }
 
     const int yStep = 20;
-    const int headerHeight = 30;
+    // MUST equal ModuleComponent::getPortCenter's headerHeight. It read 30 while the real card used
+    // 38, so every ghost preview cable terminated 8px ABOVE the jack dot it claimed to land on —
+    // visibly floating over the jack's label row. Pinned by
+    // GraphEditorTest.GhostPortEstimateMatchesTheRealJackCentre.
+    const int headerHeight = ModuleComponent::kPortGutterHeaderHeight;
     int portOffset = 0;
     if (proc->producesMidi())
         portOffset = 20;
@@ -3553,6 +3647,14 @@ void GraphEditor::timerCallback() {
         content.connectionAnimPhase -= 1.0f;
     repaintCanvas();
 
+    // Pressing or RELEASING Ctrl is not a mouse move, and suggestions were only recomputed from
+    // updateDragPreview — so a drag that stopped moving kept showing a stale insert preview after
+    // the modifier was let go (and never picked one up if Ctrl went down while the mouse was
+    // still). Re-evaluate on this existing 30 Hz tick rather than a new timer, and only when the
+    // sampled state actually flipped: a drag that holds its modifier costs one bool compare, and
+    // refreshSmartSuggestions repaints only when the suggestion set really changed.
+    refreshSuggestionsIfInsertModifierChanged();
+
     // Minimap (issue #159): only build the model while visible, and only when it's needed —
     // setModel() itself only repaints when the model actually changed (no repaint storm on a
     // static patch).
@@ -3589,6 +3691,9 @@ void GraphEditor::beginDragPreview(int w, int h, juce::AudioProcessorGraph::Node
     dragPreviewGhost = {};
     alignmentGuides.clear();
     clearSmartSuggestions();
+    // Seed the tick's comparison from the state at press time, so a drag started WITH the modifier
+    // already held is not reported as a change on its very first tick.
+    lastSampledInsertModifier = isInsertModifierDown();
     // Body-drag of an existing module: clear any leftover library-drop probe.
     if (selfId.uid != 0) {
         dragPreviewIsSnippet = false;

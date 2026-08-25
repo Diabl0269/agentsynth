@@ -117,6 +117,14 @@ private:
     // exercises the exact component a click would open, not a lookalike.
     std::unique_ptr<juce::Component> buildDualIOPerModuleDefaultsPopup();
 
+    // Shared muted-hint treatment for the small explanatory line under a preference row (round 5
+    // fix): naturalScrollingHint and zoomDirectionHint shared the exact same bug — a fixed 18px
+    // height gives room for barely one line, so a hint whose text is wider than the row squeezes
+    // horizontally (Label's default minimum-horizontal-scale) instead of wrapping. Callers still
+    // set their own text and bounds; this only fixes the font/colour/wrap behaviour, at one spot,
+    // for both.
+    void styleMutedHintLabel(juce::Label& hint);
+
     // Re-lays the tab for the current searchQuery: hides every row whose label/tooltip text does
     // not contain it (case-insensitive), collapsing the vertical gap and any now-orphaned divider.
     // Called from resized() and from every place searchQuery changes.
@@ -162,8 +170,17 @@ private:
     // Sits directly under the natural-scrolling pair because it is the same gesture with a modifier
     // held, and users reach for both in the same visit. Independent of it, though: this one governs
     // the Cmd / Cmd+Shift wheel-ZOOM branches only, which is what its own caption spells out.
-    juce::ToggleButton zoomScrollUpZoomsInToggle{"Scroll up to zoom in"};
-    juce::Label zoomScrollUpZoomsInHint;
+    //
+    // Round 5: replaced the "Scroll up to zoom in" checkbox with a labelled two-option dropdown
+    // after the wording drew pushback twice — a boolean toggle for a direction preference always
+    // reads as "on meaning what, exactly?", and naming both states directly removes the ambiguity
+    // outright rather than wordsmithing around it again. isZoomScrollUpZoomsInEnabled() /
+    // setZoomScrollUpZoomsInEnabled() below are UNCHANGED — same persisted key, same boolean
+    // contract — so nothing outside this file (FocusArbitrationTests.cpp's
+    // ZoomScrollPreferenceReachesTheTimelineAndTheRoll, MainComponent) needed to change.
+    juce::Label zoomDirectionLabel;
+    juce::ComboBox zoomDirectionCombo;
+    juce::Label zoomDirectionHint;
     // On (the default) labels every row in the piano roll's keys column; off labels only the Cs —
     // PianoRollComponent::KeyLabelMode::AllNotes / OctavesOnly.
     juce::ToggleButton pianoRollKeyLabelsToggle{"Label every key"};

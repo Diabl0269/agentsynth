@@ -137,6 +137,28 @@ None of `schemaVersion`, `uuid` or `"timeline"` appears in `getPatchSchema()` �
 is an invitation to emit it, and all three are ours to write. Pinned by
 `AIStateMapperTest.SchemaOmitsReservedFields`.
 
+### Per-node `displayName`
+
+A node may carry a `"displayName"` string: the user's custom card title, set by double-clicking the
+card header (see [`docs/layout.md`](layout.md)). It is emitted only when set, so an un-renamed node's
+JSON is byte-identical to before the field existed.
+
+Unlike `uuid` and `state`, it is applied on **both** the trusted and untrusted paths — because it is
+**display-only**. It is never consulted for module-type resolution (that is `"type"`), for node
+identity (`"uuid"`), for parameter values, or for anything else semantic, so the worst an untrusted
+patch can do with it is mislabel a card, which the user can see and rename. It IS length-capped at
+`synth::kMaxModuleDisplayNameChars` (64) on every path that accepts one — including the one the user
+types into, so a title typed in the app and a title loaded from a file can never disagree about what
+is storable. The cap is what stops a hostile patch stuffing a megabyte of text into a title and
+wedging the canvas paint. Blank or whitespace-only means "no custom title".
+
+Deliberately a separate field rather than reusing the processor's name: `ModuleBase::getName()` is
+the auto-numbered `"Chorus 2"` that `AudioEngine::updateModuleNames()` recomputes wholesale on every
+graph change, so a custom title stored there is clobbered by the next node added.
+
+Pinned by `ModuleTitleRoundTripsThroughGraphJSON` and
+`UntrustedPatchDisplayNameIsCappedAndDisplayOnly`.
+
 Unknown top-level keys (anything besides `nodes`, `connections`, `modulations`, `mode`, `remove`,
 `removeModulations`, `schemaVersion`) are preserved across a save/load round-trip by `PatchDocument`
 (see `Source/PatchDocument.h`). These preserved keys are inert — never interpreted, never validated,

@@ -312,24 +312,23 @@ themselves). Its hover state (`helpButtonHovered`) is tracked independently of t
 strip's own hover flag so the tooltip can name the button specifically ("Open a quick guide…")
 rather than reusing the collapse-all strip's tooltip.
 
-Clicking it opens `synth::ui::ModuleLibraryHelpPopup` (`Source/UI/ModuleLibraryHelpPopup.h`) in a
-`juce::CallOutBox` anchored on the button — the same self-painted-opaque-panel pattern
-`MidiDestinationPicker` documents (a parentless `CallOutBox` does not necessarily inherit
-`synth::theme::AppLookAndFeel`). The popup holds three plain disclosure sections — **Using
-modules**, **Your first patch**, and **Key shortcuts** — open by default, each collapsible via its
-own header row (no accordion animation: a one-shot guide read once and dismissed does not need
-`ModuleLibraryComponent`'s own animated fold). It scrolls via a `juce::Viewport` when the expanded
-content overflows `kMaxHeight`, and collapsing a section re-sizes the popup itself (the
-`juce::CallOutBox` tracks its content component's size), the same "rebuild → resize" pattern
-`MidiDestinationPicker::refreshRows()` uses.
+Clicking it shows `synth::ui::ModuleLibraryHelpPopup` (`Source/UI/ModuleLibraryHelpPopup.h`) — a
+self-painted opaque panel, the same pattern `MidiDestinationPicker` documents (a parentless
+`CallOutBox` does not necessarily inherit `synth::theme::AppLookAndFeel`, and neither does a
+floating window — see "Pin / float it over the canvas" below). The popup holds three plain
+disclosure sections — **Using modules**, **Your first patch**, and **Key shortcuts** — open by
+default, each collapsible via its own header row (no accordion animation: a one-shot guide read
+once and dismissed does not need `ModuleLibraryComponent`'s own animated fold). It scrolls via a
+`juce::Viewport` when the expanded content overflows `kMaxHeight`, and collapsing a section
+re-sizes the popup itself, the same "rebuild → resize" pattern `MidiDestinationPicker::refreshRows()`
+uses.
 
 Content is data first: `usingModulesLines()` / `firstPatchSteps()` / `shortcutLines()` are pure
 static helpers, so a test can assert on the guide's text without ever constructing a
 `juce::Component` — the same idiom `ModuleLibraryComponent::descriptionFor` already uses. The "Key
-shortcuts" section resolves BOTH halves of each line live: the key via `shortcutHintFor` (so a
-rebind is reflected the next time the popover opens, never stale) and the label via
-`ShortcutManager::getActionDescription` (so it can never drift from the Settings tab's own
-wording either). `ModuleLibraryComponent::setShortcutManager()` is how an owner wires the live
+shortcuts" section resolves BOTH halves of each line live: the key via `shortcutHintFor` and the
+label via `ShortcutManager::getActionDescription` (so it can never drift from the Settings tab's
+own wording either). `ModuleLibraryComponent::setShortcutManager()` is how an owner wires the live
 manager in — read-only, the sidebar never rebinds anything; unset (every headless test) falls back
 to each curated shortcut's shipped default via `shortcutHintFor`'s own null-manager contract. The
 "Your first patch" steps are the minimal audible patch verified against
@@ -338,16 +337,51 @@ to each curated shortcut's shipped default via `shortcutHintFor`'s own null-mana
 an ADSR into the VCA's CV input — not optional shaping, since an unpatched VCA CV input reads as
 silence rather than an implicit "fully open" value.
 
-Opening the popover is a `protected virtual` (`showHelpPopover()`), the same seam idiom
+**Pin / float it over the canvas.** The popover's header carries a pin icon (default **off**) and a
+close (X). Unpinned, it behaves exactly as above: `ModuleLibraryComponent` wraps it in a
+`juce::CallOutBox`, dismiss-on-outside-click/Esc. Pinning it re-hosts the SAME popup instance as a
+plain, non-modal child of an ancestor component instead — `addAndMakeVisible`, never a new desktop
+window — so it stays up while the user builds the "Your first patch" chain on the canvas, closed
+only by the header's X. This needed a real design decision, not just a flag: `juce::CallOutBox::
+launchAsynchronously()`'s content is owned by an opaque, private `ModalComponentManager::Callback`
+that deletes the box AND its content together the instant either is dismissed — there is no safe
+way to detach a `launchAsynchronously`'d component and keep using it. So `ModuleLibraryComponent`
+never calls it: it owns ONE persistent `ModuleLibraryHelpPopup` (`helpPopup_`, created lazily,
+never rebuilt) and, when unpinned, wraps it in a *manually* constructed
+`CallOutBox(Component&, area, parent)` — the plain, non-owning constructor — entering modal state
+itself with `deleteWhenDismissed = false`. That reproduces the exact dismiss-on-outside-click/Esc
+UX (`CallOutBox::inputAttemptWhenModal()` only ever calls `exitModalState()` + `setVisible(false)`,
+never `delete`) while keeping full manual ownership, so a pin click can safely reparent the same
+object into `floatingHelpHostFor()` — the root of whatever ancestor chain the sidebar is currently
+in, walked generically rather than naming `MainComponent`, so the popup can float over the canvas
+without this file depending on that class. Un-pinning reverses the transplant by constructing a
+fresh callout around the same object; `juce::Component::addAndMakeVisible` auto-detaches a
+component from wherever it was parented before, so neither direction needs an explicit
+"remove from old parent" step.
+
+A persistent instance being re-hosted (rather than rebuilt fresh per open, as it was before this
+feature) has one consequence worth stating: the "Key shortcuts" text is no longer fixed at
+construction. `refreshShortcutSection()` re-generates it against the live `ShortcutManager` and
+`ModuleLibraryComponent::showHelpPopover()` calls it on every open — otherwise a rebind made in
+Settings while the popup object is alive would freeze at whatever it said when the popup was first
+built, staling exactly the thing "resolved live" was supposed to guarantee never happens. Dragging
+the floating popup by its header ("if cheap") is a two-line `juce::ComponentDragger` use in the
+header bar's `mouseDown`/`mouseDrag`, gated off entirely while unpinned (`setDraggable(pinned)`) so
+it never fights a `CallOutBox`'s own self-repositioning. Pin state is session-only — it is not
+persisted across app restarts, matching the pattern's own preference.
+
+Opening the popover is split across TWO `protected virtual` leaves, both the same seam idiom
 [§3's cable doc](#3-cable-interaction) and `TimelineRulerComponent::openMarkerContextMenu` use for
-any real popup/menu window: a `juce::CallOutBox` launched in a display-less test runner is the
-exact SIGSEGV trap documented in [`timeline_panel_core.md`](timeline_panel_core.md), so tests
-either drive the pure content helpers directly, exercise hover/geometry (which touch nothing
-window-related), or override `showHelpPopover()` in a test-only subclass to confirm `mouseDown`
-routes the button's rect there instead of to `toggleAllSections()`.
-`ModuleLibraryComponent::createHelpPopupForTest()` is the separate seam for the popup's CONTENT —
-it builds the exact component the real button would hand to a `CallOutBox`, without ever launching
-one, mirroring `PreferencesSettingsTab::createDualIOPerModuleDefaultsPopupForTest`.
+any real popup/menu window (a `juce::CallOutBox` launched in a display-less test runner is the
+exact SIGSEGV trap documented in [`timeline_panel_core.md`](timeline_panel_core.md)):
+`showHelpPopover()` is the pin-aware dispatcher (ensure the popup exists, refresh its shortcuts,
+decide float-vs-callout), and `launchHelpCallOutBox()` is JUST the real `CallOutBox` construction —
+split apart so a test can override only the second (never creating a real window) while the first
+still runs its real logic for real, which is what lets pinning, closing, and the "survives an
+outside click" guarantee all be exercised headlessly. `ModuleLibraryComponent::
+createHelpPopupForTest()` is the separate seam for the popup's CONTENT — it returns the SAME
+persistent object the real button shows (creating it on first call), never a fresh lookalike,
+mirroring `PreferencesSettingsTab::createDualIOPerModuleDefaultsPopupForTest`.
 
 ### Keyboard Shortcuts settings tab mirrors this pattern
 

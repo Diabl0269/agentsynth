@@ -107,6 +107,11 @@ public:
         if (vblankUpdater.has_value())
             collapseAnim.stop(*vblankUpdater);
         verticalScrollBar.removeListener(this);
+        // helpCallOutBox_ holds a non-owning reference to *helpPopup_ (see the help-popover
+        // section below) — end its modal state before either member starts tearing down, purely
+        // defensive (juce::Component's own destructor already detaches from any modal manager).
+        if (helpCallOutBox_)
+            helpCallOutBox_->exitModalState(0);
     }
 
     // -------------------------------------------------------------------------
@@ -964,13 +969,18 @@ public:
         // Click-activated rows (the scan command, and plugin rows, which support BOTH click-to-add
         // and drag-to-place) defer to mouseUp/mouseDrag. Module and snippet rows keep starting their
         // drag on mouse-down, which is what every existing drag test drives.
+        // TRUE right button, deliberately not isPopupMenu(): on macOS JUCE defines
+        // popupMenuClickModifier as (rightButtonModifier | ctrlModifier), so isPopupMenu() is also
+        // true for Ctrl+LEFT-click — and Ctrl is the insert-between drag modifier. Testing
+        // isPopupMenu() here meant a Ctrl-held press on a library row never started a drag at all,
+        // so Ctrl+drag-from-library could not reach the canvas. Right-click still suppresses drags.
         if (entry.kind == RowKind::Action || entry.kind == RowKind::Plugin) {
-            if (!e.mods.isPopupMenu())
+            if (!pressSuppressesRowDrag(e.mods))
                 pressedIndex = index;
             return;
         }
 
-        if (entry.kind == RowKind::Snippet && e.mods.isPopupMenu()) {
+        if (entry.kind == RowKind::Snippet && pressSuppressesRowDrag(e.mods)) {
             const auto name = entry.text;
             juce::PopupMenu m;
             m.addItem("Delete Snippet", [this, name] {
@@ -981,7 +991,7 @@ public:
             return;
         }
 
-        if (e.mods.isPopupMenu())
+        if (pressSuppressesRowDrag(e.mods))
             return;
 
         // An unavailable row must not start a drag at all — accepting one and then dropping it on
@@ -1025,6 +1035,16 @@ public:
     /** Names of the module TYPES the library offers — i.e. every row that maps to a factory entry.
      *  Filtered on RowKind::Module rather than "not a header": the sidebar also carries snippet rows
      *  and the "No snippets yet" placeholder, and neither is a module type callers can instantiate. */
+    /** True when a press on a row must NOT start (or activate) a drag — a context-menu press.
+     *
+     *  TRUE right button only, deliberately not isPopupMenu(): on macOS JUCE defines
+     *  popupMenuClickModifier as (rightButtonModifier | ctrlModifier), so isPopupMenu() is also true
+     *  for Ctrl+LEFT-click. Ctrl is the insert-between drag modifier, so testing isPopupMenu() here
+     *  meant a Ctrl-held press on a library row never started a drag and Ctrl+drag-from-library
+     *  could not reach the canvas at all. Extracted so the rule is testable without a live
+     *  DragAndDropContainer. */
+    static bool pressSuppressesRowDrag(const juce::ModifierKeys& mods) { return mods.isRightButtonDown(); }
+
     juce::StringArray getDraggableModuleNames() const {
         juce::StringArray names;
         for (const auto& entry : entries)
@@ -1110,31 +1130,147 @@ public:
 
     bool isHelpButtonHoveredForTest() const noexcept { return helpButtonHovered; }
 
-    /** Test seam for the help popover: builds the exact content component showHelpPopover() would
-     *  hand to a juce::CallOutBox, without launching the CallOutBox itself (which needs real
-     *  screen coordinates and a live desktop — a real popup/menu window is exactly the CI segfault
-     *  trap documented in docs/timeline_panel_core.md's marker-context-menu seam note). Mirrors
-     *  PreferencesSettingsTab::createDualIOPerModuleDefaultsPopupForTest. */
-    std::unique_ptr<juce::Component> createHelpPopupForTest() const { return buildHelpPopup(); }
+    // -------------------------------------------------------------------------
+    // Help popover pin/float test seams (round 2) — see the class comment on
+    // synth::ui::ModuleLibraryHelpPopup for why the CallOutBox/floating split is implemented the
+    // way it is. Every seam below is safe to call on a plain ModuleLibraryComponent EXCEPT where
+    // noted: pinning never launches a real CallOutBox, only UN-pinning (or opening while unpinned)
+    // does, which is why those two are reached through the launchHelpCallOutBox() virtual instead.
+    // -------------------------------------------------------------------------
+
+    /** Returns the persistent help popup content, creating it on first use — the same object
+     *  showHelpPopover() shows, whichever host it currently lives in (or none, before the first
+     *  open). Never launches a juce::CallOutBox or creates a floating window by itself. */
+    synth::ui::ModuleLibraryHelpPopup* createHelpPopupForTest() {
+        ensureHelpPopupCreated();
+        return helpPopup_.get();
+    }
+
+    /** Re-generates the "Key shortcuts" section against the currently-wired ShortcutManager,
+     *  exactly as showHelpPopover() does on every real open — see
+     *  ModuleLibraryHelpPopup::refreshShortcutSection for why a persistent instance needs this. */
+    void refreshHelpPopoverForTest() {
+        if (helpPopup_)
+            helpPopup_->refreshShortcutSection(shortcutManager);
+    }
+
+    bool isHelpPopoverPinnedForTest() const noexcept { return helpPopup_ && helpPopup_->isPinned(); }
+
+    /** Drives the SAME pin transition the popover's own pin icon requests. Pinning itself never
+     *  constructs a juce::CallOutBox (only un-pinning does, via launchHelpCallOutBox()), so this
+     *  is safe to call with `true` on a plain ModuleLibraryComponent in a headless test; calling
+     *  it with `false` needs launchHelpCallOutBox() stubbed first (see
+     *  RecordingCallOutBoxModuleLibraryComponent in ModuleLibraryHelpPopupTests.cpp). */
+    void setHelpPopoverPinnedForTest(bool pinned) { setHelpPopoverPinned(pinned); }
+
+    /** Drives the SAME close path the popover's own close (X) requests. Never touches
+     *  launchHelpCallOutBox() regardless of prior pin state, so always safe headlessly. */
+    void closeHelpPopoverForTest() { closeHelpPopover(); }
 
 protected:
-    /** Launches the help guide in a themed juce::CallOutBox anchored on the help button — the
-     *  house pattern for a compact popover (see MidiDestinationPicker.h). A juce::CallOutBox is a
-     *  real top-level window (the same class of CI segfault trap documented in
-     *  docs/timeline_panel_core.md's marker-context-menu seam note), so this is a protected
-     *  virtual a test can override to record the request instead of creating one — mirrors
-     *  TimelineRulerComponent::openMarkerContextMenu. Production behaviour (mouseDown routing the
-     *  button's rect here instead of to toggleAllSections()) is exercised as-is either way. */
+    /** Ensures the persistent popup exists, refreshes its live-bound content, and shows it through
+     *  whichever host its current pin state calls for. This is the ONE entry point mouseDown()
+     *  routes the help button's click through; it never constructs a juce::CallOutBox directly
+     *  (see launchHelpCallOutBox() below), so overriding just that leaf lets a test exercise this
+     *  method's real pin-aware dispatch without ever creating a real top-level window — the same
+     *  "protected virtual leaf" seam idiom docs/timeline_panel_core.md documents for
+     *  TimelineRulerComponent::openMarkerContextMenu. */
     virtual void showHelpPopover() {
-        juce::CallOutBox::launchAsynchronously(buildHelpPopup(), localAreaToGlobal(getHelpButtonBounds()), nullptr);
+        ensureHelpPopupCreated();
+        helpPopup_->refreshShortcutSection(shortcutManager);
+        if (helpPopup_->isPinned()) {
+            helpPopup_->setVisible(true);
+            helpPopup_->toFront(true);
+            return;
+        }
+        launchHelpCallOutBox();
+    }
+
+    /** Constructs the actual juce::CallOutBox around the persistent popup — the one real
+     *  top-level-window-creating leaf in this class (see the class comment on
+     *  synth::ui::ModuleLibraryHelpPopup for why launchAsynchronously is deliberately NOT used
+     *  here). A test overrides just this to stub the window while leaving showHelpPopover()'s and
+     *  setHelpPopoverPinned()'s real dispatch/re-hosting logic intact. */
+    virtual void launchHelpCallOutBox() {
+        helpCallOutBox_ =
+            std::make_unique<juce::CallOutBox>(*helpPopup_, localAreaToGlobal(getHelpButtonBounds()), nullptr);
+        helpCallOutBox_->setVisible(true);
+        // deleteWhenDismissed = false: an outside click / Esc ends modal state and hides the box
+        // (CallOutBox::inputAttemptWhenModal()) but never deletes it or its content, which is what
+        // lets a later pin click safely reparent *helpPopup_ instead of losing it.
+        helpCallOutBox_->enterModalState(true, nullptr, false);
     }
 
 private:
-    /** Builds the exact content component showHelpPopover() hands to a juce::CallOutBox — shared
-     *  with createHelpPopupForTest() so the test seam exercises the real popup, never a lookalike
-     *  (mirrors PreferencesSettingsTab::buildDualIOPerModuleDefaultsPopup / its test seam). */
-    std::unique_ptr<juce::Component> buildHelpPopup() const {
-        return std::make_unique<synth::ui::ModuleLibraryHelpPopup>(shortcutManager);
+    void ensureHelpPopupCreated() {
+        if (helpPopup_)
+            return;
+        helpPopup_ = std::make_unique<synth::ui::ModuleLibraryHelpPopup>(shortcutManager);
+        helpPopup_->onPinToggleRequested = [this] { setHelpPopoverPinned(!helpPopup_->isPinned()); };
+        helpPopup_->onCloseRequested = [this] { closeHelpPopover(); };
+    }
+
+    /** The ancestor a pinned popup floats in: walked all the way to the root of whatever window
+     *  this component is currently inside, so the popup can extend beyond the sidebar's own narrow
+     *  bounds over the canvas ("owned by the library/main UI", never a new desktop window). Falls
+     *  back to `from` itself when there is no parent yet (every headless test, and the brief window
+     *  before this component is added to the real app) — degraded but harmless, since nothing
+     *  about the transition itself depends on which component ends up hosting it. */
+    static juce::Component* floatingHelpHostFor(juce::Component& from) {
+        juce::Component* top = &from;
+        while (top->getParentComponent() != nullptr)
+            top = top->getParentComponent();
+        return top;
+    }
+
+    /** Re-hosts the SAME persistent popup between a juce::CallOutBox (unpinned) and a plain,
+     *  non-modal floating child of floatingHelpHostFor() (pinned) — see the class comment on
+     *  synth::ui::ModuleLibraryHelpPopup for why this transplant is only safe because
+     *  launchAsynchronously is never used to show it. No-op if the popup does not exist yet or is
+     *  already in the requested state. */
+    void setHelpPopoverPinned(bool wantPinned) {
+        if (!helpPopup_ || wantPinned == helpPopup_->isPinned())
+            return;
+
+        // Where the popup currently reads on screen — the callout's position when pinning, or
+        // wherever the user last dragged it to when un-pinning back into a fresh callout anchored
+        // there instead of snapping back to the "?" button.
+        const auto screenBounds =
+            helpPopup_->isShowing() ? helpPopup_->getScreenBounds() : localAreaToGlobal(getHelpButtonBounds());
+
+        helpPopup_->setPinnedForPaint(wantPinned);
+
+        if (wantPinned) {
+            if (helpCallOutBox_) {
+                helpCallOutBox_->exitModalState(0);
+                helpCallOutBox_->setVisible(false);
+                helpCallOutBox_.reset(); // does NOT delete *helpPopup_ — see the class comment
+            }
+            auto* host = floatingHelpHostFor(*this);
+            host->addAndMakeVisible(*helpPopup_); // auto-detaches from any previous parent
+            helpPopup_->setTopLeftPosition(host->getLocalPoint(nullptr, screenBounds.getPosition()));
+            helpPopup_->setVisible(true);
+            helpPopup_->toFront(true);
+        } else {
+            launchHelpCallOutBox(); // its ctor's addAndMakeVisible detaches the popup from the host
+        }
+    }
+
+    /** Hides and detaches the popup from whichever host currently shows it, and resets pin state
+     *  so the next "?" click (or setHelpPopoverPinned(true)) starts clean. The popup object itself
+     *  survives — closing is not the same as never having opened it. */
+    void closeHelpPopover() {
+        if (!helpPopup_)
+            return;
+        if (helpCallOutBox_) {
+            helpCallOutBox_->exitModalState(0);
+            helpCallOutBox_->setVisible(false);
+            helpCallOutBox_.reset();
+        } else if (auto* parent = helpPopup_->getParentComponent()) {
+            parent->removeChildComponent(helpPopup_.get());
+        }
+        helpPopup_->setVisible(false);
+        helpPopup_->setPinnedForPaint(false);
     }
 
     float targetProgressFor(const juce::String& header) const { return isSectionCollapsed(header) ? 1.0f : 0.0f; }
@@ -1584,4 +1720,12 @@ private:
     std::map<juce::String, float> sectionProgress;
     std::optional<juce::VBlankAnimatorUpdater> vblankUpdater;
     synth::ui::AnimationDriver collapseAnim;
+
+    // Help popover (round 2: pin/float) — helpPopup_ is the ONE persistent content instance a pin
+    // click re-hosts; helpCallOutBox_ exists only while it is shown unpinned. Declared in THIS
+    // order (helpPopup_ first) so automatic member teardown destroys helpCallOutBox_ FIRST
+    // (reverse declaration order) — it holds a non-owning `Component&` to *helpPopup_, so tearing
+    // it down after would leave a dangling reference for the instant before its own destructor ran.
+    std::unique_ptr<synth::ui::ModuleLibraryHelpPopup> helpPopup_;
+    std::unique_ptr<juce::CallOutBox> helpCallOutBox_;
 };

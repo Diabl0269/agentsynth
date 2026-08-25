@@ -1,12 +1,24 @@
 // ModuleLibraryHelpPopupTests.cpp
 //
 // Headless coverage for the module library sidebar's "?" help button (ModuleLibraryComponent) and
-// its popover content (synth::ui::ModuleLibraryHelpPopup) — no juce::CallOutBox is ever launched.
-// A real CallOutBox is a top-level window and crashes a display-less test runner exactly the way
-// docs/timeline_panel_core.md's marker-context-menu seam note describes for juce::PopupMenu, so
-// every test here drives either the pure content helpers, the mouse-hover/geometry seam, or
-// createHelpPopupForTest() / a showHelpPopover() override — never the real launch path. Mirrors
-// MidiDestinationPickerTests.cpp's "talk to the component directly" approach.
+// its popover content (synth::ui::ModuleLibraryHelpPopup) — a real juce::CallOutBox is NEVER
+// constructed anywhere in this file. That is a top-level window and crashes a display-less test
+// runner exactly the way docs/timeline_panel_core.md's marker-context-menu seam note describes for
+// juce::PopupMenu, so every test here drives either the pure content helpers, the mouse-
+// hover/geometry seam, or one of the two protected-virtual leaves ModuleLibraryComponent exposes
+// for exactly this reason:
+//   - showHelpPopover()      — the whole pin-aware dispatch; RecordingModuleLibraryComponent stubs
+//                              this ENTIRELY, for tests that only care whether the help button was
+//                              clicked at all (vs. falling through to toggleAllSections()).
+//   - launchHelpCallOutBox() — ONLY the real juce::CallOutBox construction;
+//                              RecordingCallOutBoxModuleLibraryComponent stubs just this, so
+//                              showHelpPopover()'s and setHelpPopoverPinned()'s real pin/re-host
+//                              logic still runs for real. Pinning itself (setHelpPopoverPinned(true))
+//                              never reaches launchHelpCallOutBox() at all, so it is exercised
+//                              directly on a plain ModuleLibraryComponent wherever that is all a
+//                              test needs — see synth::ui::ModuleLibraryHelpPopup's class comment
+//                              for why the CallOutBox/floating split is implemented this way.
+// Mirrors MidiDestinationPickerTests.cpp's "talk to the component directly" approach.
 
 #include "../Source/ShortcutManager.h"
 #include "../Source/UI/ModuleLibraryComponent.h"
@@ -32,6 +44,16 @@ public:
 
 protected:
     void showHelpPopover() override { ++helpPopoverRequests; }
+};
+
+// Stubs ONLY the real juce::CallOutBox construction, leaving showHelpPopover()'s pin-aware
+// dispatch and setHelpPopoverPinned()'s un-pin path fully real — see this file's header comment.
+class RecordingCallOutBoxModuleLibraryComponent : public ModuleLibraryComponent {
+public:
+    int callOutBoxLaunches = 0;
+
+protected:
+    void launchHelpCallOutBox() override { ++callOutBoxLaunches; }
 };
 
 } // namespace
@@ -132,11 +154,17 @@ TEST(ModuleLibraryHelpButton, ClickingElsewhereInTheStripStillCollapsesEverythin
 
 TEST(ModuleLibraryHelpPopupSeam, CreateHelpPopupForTestBuildsTheRealPopupContent) {
     ModuleLibraryComponent comp;
-    auto content = comp.createHelpPopupForTest();
-    ASSERT_NE(content, nullptr);
+    auto* popup = comp.createHelpPopupForTest();
+    EXPECT_NE(popup, nullptr) << "the seam must hand back the same object the real button would show";
+}
 
-    auto* popup = dynamic_cast<ModuleLibraryHelpPopup*>(content.get());
-    EXPECT_NE(popup, nullptr) << "the seam must hand back the same component type the real button opens";
+TEST(ModuleLibraryHelpPopupSeam, CreateHelpPopupForTestReturnsTheSamePersistentInstanceEveryCall) {
+    // The popup is built ONCE and re-hosted, never rebuilt per open — a pin transition would have
+    // nothing to transplant otherwise. Calling the seam twice must hand back the identical object.
+    ModuleLibraryComponent comp;
+    auto* first = comp.createHelpPopupForTest();
+    auto* second = comp.createHelpPopupForTest();
+    EXPECT_EQ(first, second);
 }
 
 TEST(ModuleLibraryHelpPopupSeam, ThreeSectionsInOrder) {
@@ -177,8 +205,7 @@ TEST(ModuleLibraryHelpPopupSeam, ComponentPassesItsShortcutManagerIntoThePopup) 
     ModuleLibraryComponent comp;
     comp.setShortcutManager(&manager);
 
-    auto content = comp.createHelpPopupForTest();
-    auto* popup = dynamic_cast<ModuleLibraryHelpPopup*>(content.get());
+    auto* popup = comp.createHelpPopupForTest();
     ASSERT_NE(popup, nullptr);
 
     // The command modifier renders "Cmd" on macOS and "Ctrl" elsewhere — resolve the expected
@@ -191,6 +218,147 @@ TEST(ModuleLibraryHelpPopupSeam, ComponentPassesItsShortcutManagerIntoThePopup) 
     const juce::String joined = lines.joinIntoString(" | ");
     EXPECT_TRUE(joined.contains(cmdU));
     EXPECT_FALSE(joined.contains(cmdZ));
+}
+
+TEST(ModuleLibraryHelpPopupSeam, RefreshingAfterARebindUpdatesTheShortcutSectionOfAPersistentPopup) {
+    // setShortcutManager()/createHelpPopupForTest() only capture the manager's bindings ONCE, at
+    // first construction — because the popup now persists across opens (so pinning has something
+    // to re-host), the owner must re-pull the live bindings on every subsequent open
+    // (refreshHelpPopoverForTest() drives the exact call showHelpPopover() makes for real) or a
+    // rebind made after the popup already exists would stale forever for this app session.
+    ShortcutManager manager;
+    ModuleLibraryComponent comp;
+    comp.setShortcutManager(&manager);
+    auto* popup = comp.createHelpPopupForTest();
+
+    const auto cmdZ =
+        ShortcutManager::keyPressToDisplayString(juce::KeyPress('z', juce::ModifierKeys::commandModifier, 0));
+    const auto cmdU =
+        ShortcutManager::keyPressToDisplayString(juce::KeyPress('u', juce::ModifierKeys::commandModifier, 0));
+    ASSERT_TRUE(popup->getSectionLinesForTest(ModuleLibraryHelpPopup::KeyShortcuts).joinIntoString("|").contains(cmdZ));
+
+    manager.setBinding("undo", juce::KeyPress('u', juce::ModifierKeys::commandModifier, 0));
+    comp.refreshHelpPopoverForTest();
+
+    const auto after = popup->getSectionLinesForTest(ModuleLibraryHelpPopup::KeyShortcuts).joinIntoString("|");
+    EXPECT_TRUE(after.contains(cmdU));
+    EXPECT_FALSE(after.contains(cmdZ));
+}
+
+// ============================================================================
+// Pin / float (round 2) — a real juce::CallOutBox is never constructed in this section; pinning
+// alone never reaches one, and every test that could reach the un-pin/reopen path uses
+// RecordingCallOutBoxModuleLibraryComponent (see this file's header comment).
+// ============================================================================
+
+TEST(ModuleLibraryHelpPin, DefaultsToUnpinned) {
+    ModuleLibraryComponent comp;
+    EXPECT_FALSE(comp.isHelpPopoverPinnedForTest());
+    EXPECT_FALSE(comp.createHelpPopupForTest()->isPinned());
+}
+
+TEST(ModuleLibraryHelpPin, UnpinnedClickStillRoutesThroughTheRealCallOutBoxLaunchSeam) {
+    // "Unpinned dismiss behaviour unchanged": clicking "?" while unpinned must still take the
+    // callout path (never the floating one) — proven by counting calls to the one leaf that
+    // constructs the real juce::CallOutBox, with showHelpPopover()'s actual dispatch logic intact.
+    RecordingCallOutBoxModuleLibraryComponent comp;
+    comp.setSize(200, 600);
+
+    const auto bounds = ModuleLibraryComponent::getHelpButtonBounds();
+    comp.mouseDown(makeMouseEventAt(comp, bounds.toFloat().getCentre()));
+
+    EXPECT_EQ(comp.callOutBoxLaunches, 1);
+    EXPECT_FALSE(comp.isHelpPopoverPinnedForTest());
+}
+
+TEST(ModuleLibraryHelpPin, PinningReHostsTheSamePopupWithTheSameSectionContent) {
+    ModuleLibraryComponent comp;
+    auto* popup = comp.createHelpPopupForTest();
+    const auto firstPatchBefore = popup->getSectionLinesForTest(ModuleLibraryHelpPopup::FirstPatch);
+    const auto shortcutsBefore = popup->getSectionLinesForTest(ModuleLibraryHelpPopup::KeyShortcuts);
+
+    comp.setHelpPopoverPinnedForTest(true);
+
+    EXPECT_TRUE(comp.isHelpPopoverPinnedForTest());
+    EXPECT_TRUE(popup->isPinned());
+    // Same object — re-hosted, not rebuilt.
+    EXPECT_EQ(comp.createHelpPopupForTest(), popup);
+    EXPECT_EQ(popup->getSectionLinesForTest(ModuleLibraryHelpPopup::FirstPatch), firstPatchBefore);
+    EXPECT_EQ(popup->getSectionLinesForTest(ModuleLibraryHelpPopup::KeyShortcuts), shortcutsBefore);
+    // Re-hosted as a plain, non-modal child (addAndMakeVisible on an ancestor) — never a desktop
+    // window: isOnDesktop() is exactly the flag juce::ComponentDragger itself branches on.
+    ASSERT_NE(popup->getParentComponent(), nullptr);
+    EXPECT_FALSE(popup->isOnDesktop());
+    EXPECT_TRUE(popup->isVisible());
+}
+
+TEST(ModuleLibraryHelpPin, PinTogglesBackAndForthThroughTheHeaderButton) {
+    RecordingCallOutBoxModuleLibraryComponent comp;
+    auto* popup = comp.createHelpPopupForTest();
+    ASSERT_FALSE(popup->isPinned());
+
+    popup->triggerPinToggleForTest();
+    EXPECT_TRUE(popup->isPinned());
+    EXPECT_TRUE(comp.isHelpPopoverPinnedForTest());
+    EXPECT_EQ(comp.callOutBoxLaunches, 0) << "pinning alone must never construct a callout";
+
+    popup->triggerPinToggleForTest(); // un-pin — routes back through the (stubbed) callout launch
+    EXPECT_FALSE(popup->isPinned());
+    EXPECT_FALSE(comp.isHelpPopoverPinnedForTest());
+    EXPECT_EQ(comp.callOutBoxLaunches, 1);
+}
+
+TEST(ModuleLibraryHelpPin, PinnedPopoverSurvivesASimulatedOutsideClick) {
+    ModuleLibraryComponent comp;
+    comp.setSize(200, 600);
+    auto* popup = comp.createHelpPopupForTest();
+    comp.setHelpPopoverPinnedForTest(true);
+    ASSERT_TRUE(popup->isVisible());
+
+    // The exact gesture that would have dismissed a juce::CallOutBox: a click far from the popup,
+    // on the "canvas" side of things (here, elsewhere on the library component itself, standing in
+    // for the app's ancestor chain — see floatingHelpHostFor()). A plain non-modal child has no
+    // dismiss-on-outside-click wiring at all, so this must be a complete no-op for it.
+    comp.mouseDown(makeMouseEventAt(comp, {5.0f, 500.0f}));
+    comp.mouseUp(makeMouseEventAt(comp, {5.0f, 500.0f}));
+
+    EXPECT_TRUE(popup->isVisible());
+    EXPECT_NE(popup->getParentComponent(), nullptr);
+    EXPECT_TRUE(comp.isHelpPopoverPinnedForTest());
+}
+
+TEST(ModuleLibraryHelpPin, CloseButtonHidesAndDetachesAPinnedPopover) {
+    ModuleLibraryComponent comp;
+    auto* popup = comp.createHelpPopupForTest();
+    comp.setHelpPopoverPinnedForTest(true);
+    ASSERT_NE(popup->getParentComponent(), nullptr);
+
+    popup->triggerCloseForTest();
+
+    EXPECT_FALSE(comp.isHelpPopoverPinnedForTest());
+    EXPECT_FALSE(popup->isPinned());
+    EXPECT_FALSE(popup->isVisible());
+    EXPECT_EQ(popup->getParentComponent(), nullptr);
+}
+
+TEST(ModuleLibraryHelpPin, CloseButtonWithNoActiveHostIsSafe) {
+    // The popup exists (created lazily) but was never shown through either host — closing it must
+    // not crash, and must leave pin state clean for the next open.
+    ModuleLibraryComponent comp;
+    auto* popup = comp.createHelpPopupForTest();
+    EXPECT_NO_THROW(popup->triggerCloseForTest());
+    EXPECT_FALSE(comp.isHelpPopoverPinnedForTest());
+}
+
+TEST(ModuleLibraryHelpPin, ClosingViaTheOwnerSeamMatchesTheButton) {
+    ModuleLibraryComponent comp;
+    auto* popup = comp.createHelpPopupForTest();
+    comp.setHelpPopoverPinnedForTest(true);
+
+    comp.closeHelpPopoverForTest();
+
+    EXPECT_FALSE(comp.isHelpPopoverPinnedForTest());
+    EXPECT_FALSE(popup->isVisible());
 }
 
 // ============================================================================

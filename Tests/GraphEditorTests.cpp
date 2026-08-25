@@ -4112,6 +4112,416 @@ TEST_F(GraphEditorTest, CtrlClickTogglesSelectionButCtrlDragDoesNot) {
     editor.endDragPreview();
 }
 
+// ---- Round 5 regressions: library Ctrl, live downgrade, jack alignment, dual fan ----
+
+TEST_F(GraphEditorTest, GhostPortEstimateMatchesTheRealJackCentre) {
+    // The drag ghost's jack positions come from GraphEditor::estimatePortCenter while a real card's
+    // come from ModuleComponent::getPortCenter. They carried separate header literals (30 vs 38), so
+    // every preview cable terminated 8px ABOVE the jack dot it claimed to land on.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1000, 700);
+
+    auto& graph = engine.getGraph();
+    auto node = graph.addNode(std::make_unique<DelayModule>());
+    node->properties.set("x", 200);
+    node->properties.set("y", 120);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    auto* comp = findModuleComp(editor, node->getProcessor());
+    ASSERT_NE(comp, nullptr);
+    const auto bounds = comp->getBounds();
+
+    for (bool isInput : {true, false}) {
+        for (int jack = 0; jack < 2; ++jack) {
+            const auto real = bounds.getPosition() + comp->getPortCenter(jack, isInput);
+            const auto ghost = GraphEditor::estimatePortCenter(node->getProcessor(), bounds, jack, isInput, false);
+            EXPECT_EQ(ghost, real) << "ghost estimate drifted from the real jack centre for "
+                                   << (isInput ? "input" : "output") << " jack " << jack;
+        }
+    }
+}
+
+TEST_F(GraphEditorTest, SmartConnectionPreviewLegsLandOnTheRealDestinationJack) {
+    // End-to-end version of the above: the previewed leg's destination endpoint must sit on the
+    // destination card's actual jack dot, not floating over its label row.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 700);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.setInsertModifierOverrideForTests(false);
+
+    auto& graph = engine.getGraph();
+    auto dest = graph.addNode(std::make_unique<DelayModule>());
+    dest->properties.set("x", 760);
+    dest->properties.set("y", 100);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+    auto* destComp = findModuleComp(editor, dest->getProcessor());
+    ASSERT_NE(destComp, nullptr);
+
+    DummyDragSource dummySource;
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource, juce::Point<int>(440, 100));
+    editor.itemDragEnter(details);
+    editor.itemDragMove(details);
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0);
+
+    for (const auto& s : editor.getSmartSuggestions()) {
+        ASSERT_FALSE(s.mainPreviewLegs.empty());
+        for (const auto& leg : s.mainPreviewLegs) {
+            const auto expected =
+                (destComp->getBounds().getPosition() + destComp->getPortCenter(leg.toJack, true)).toFloat();
+            EXPECT_LT(leg.p2.getDistanceFrom(expected), 1.0f)
+                << "preview leg ends at " << leg.p2.y << " but the jack dot is at " << expected.y;
+        }
+    }
+    editor.endDragPreview();
+}
+
+TEST_F(GraphEditorTest, SmartConnectionReleasingCtrlMidDragDowngradesTheInsert) {
+    // Pressing or releasing the modifier is not a mouse move. Suggestions used to be recomputed only
+    // from updateDragPreview, so letting Ctrl go without moving left the insert preview on screen.
+    // The drag tick re-samples and must flip it back, and forward again, with no mouse movement.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1400, 1000);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.setInsertModifierOverrideForTests(true);
+
+    auto f = makeCtrlDragFixture(engine, editor);
+    ASSERT_NE(f.ghostComp, nullptr);
+
+    const juce::Point<int> bodyPoint{f.ghostComp->getWidth() / 2, f.ghostComp->getHeight() / 2};
+    f.ghostComp->mouseDown(makeModuleClickWithMods(*f.ghostComp, bodyPoint, ctrlLeftClick()));
+    editor.updateDragPreview({440, 100});
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0);
+    for (const auto& s : editor.getSmartSuggestions())
+        ASSERT_TRUE(s.isInsert);
+
+    // Ctrl released, mouse perfectly still: the tick must downgrade the preview.
+    editor.setInsertModifierOverrideForTests(false);
+    editor.pumpDragModifierTickForTests();
+    for (const auto& s : editor.getSmartSuggestions())
+        EXPECT_FALSE(s.isInsert) << "releasing Ctrl left a stale insert preview on screen";
+
+    // And pressing it again, still without moving, must bring the insert back.
+    editor.setInsertModifierOverrideForTests(true);
+    editor.pumpDragModifierTickForTests();
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0);
+    for (const auto& s : editor.getSmartSuggestions())
+        EXPECT_TRUE(s.isInsert) << "re-pressing Ctrl without moving must re-offer the insert";
+
+    editor.endDragPreview();
+}
+
+TEST_F(GraphEditorTest, SmartConnectionDualOutputWiresBothLegsIntoACollapsedInput) {
+    // A dual Reverb dropped beside a collapsed Chorus wired only Left: the planner treated the
+    // Left jack as MONO and let connectPorts duplicate it onto both destination raw legs (stride 0),
+    // which also made the Right jack's pair redundant and dropped it. Left must reach raw0 and Right
+    // must reach raw1.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 700);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.setInsertModifierOverrideForTests(false);
+
+    auto& graph = engine.getGraph();
+    auto chorusNode = graph.addNode(std::make_unique<ChorusModule>()); // Dual I/O off: collapsed input
+    chorusNode->properties.set("x", 760);
+    chorusNode->properties.set("y", 100);
+    auto reverbNode = graph.addNode(std::make_unique<ReverbModule>());
+    reverbNode->properties.set("x", 40);
+    reverbNode->properties.set("y", 100);
+    setDualIOParam(*reverbNode->getProcessor(), true); // dual OUTPUT: separate Left/Right jacks
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    const auto reverbId = reverbNode->nodeID;
+    const auto chorusId = chorusNode->nodeID;
+
+    auto* reverbComp = findModuleComp(editor, reverbNode->getProcessor());
+    ASSERT_NE(reverbComp, nullptr);
+    editor.beginDragPreview(reverbComp->getWidth(), reverbComp->getHeight(), reverbId);
+    editor.updateDragPreview({440, 100});
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0);
+    editor.finalizeModuleDrag(reverbComp);
+    editor.endDragPreview();
+
+    EXPECT_TRUE(graph.isConnected({{reverbId, 0}, {chorusId, 0}})) << "Left must reach the collapsed jack's raw0";
+    EXPECT_TRUE(graph.isConnected({{reverbId, 1}, {chorusId, 1}})) << "Right must reach the collapsed jack's raw1";
+    EXPECT_FALSE(graph.isConnected({{reverbId, 0}, {chorusId, 1}}))
+        << "Left must not be duplicated onto the right leg as well";
+}
+
+TEST_F(GraphEditorTest, SmartConnectionCtrlLibraryDropInsertsIntoAnOccupiedModule) {
+    // Item 1's canvas half: a LIBRARY drag with Ctrl held must offer the insert, not just a
+    // canvas-move drag. The library row's own press guard is covered by
+    // ModuleLibraryRowPress.CtrlLeftClickDoesNotSuppressTheDrag.
+    AudioEngine engine;
+    AppUndoManager undoMgr;
+    GraphEditor editor(engine, &undoMgr);
+    editor.setSize(1200, 700);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.setInsertModifierOverrideForTests(true); // Ctrl held for the whole library drag
+
+    auto& graph = engine.getGraph();
+    auto f = makeWiredChain(engine, editor);
+    ASSERT_GT(countAudioConnectionsBetween(graph, f.upstreamId, f.targetId), 0);
+
+    DummyDragSource dummySource;
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource, juce::Point<int>(440, 100));
+    editor.itemDragEnter(details);
+    editor.itemDragMove(details);
+
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0) << "a Ctrl-held library drag must offer the insert";
+    for (const auto& s : editor.getSmartSuggestions()) {
+        EXPECT_TRUE(s.isInsert);
+        EXPECT_EQ(s.upstreamId, f.upstreamId);
+    }
+    editor.itemDropped(details);
+
+    const auto chorusId = findNodeIdByName(graph, "Chorus");
+    ASSERT_NE(chorusId.uid, 0u);
+    EXPECT_EQ(countAudioConnectionsBetween(graph, f.upstreamId, f.targetId), 0);
+    EXPECT_GT(countAudioConnectionsBetween(graph, f.upstreamId, chorusId), 0);
+    EXPECT_GT(countAudioConnectionsBetween(graph, chorusId, f.targetId), 0);
+}
+
+TEST_F(GraphEditorTest, ResolvePolyLinkPairsADualSourceOntoACollapsedDestination) {
+    // The pure-function half of the fix, and the mirror direction that already worked.
+    ReverbModule dualSource;
+    setDualIOParam(dualSource, true);
+    ChorusModule collapsedDest; // Dual I/O off
+
+    const auto fromDual = GraphEditor::resolvePolyLink(&dualSource, 0, &collapsedDest, 0);
+    EXPECT_EQ(fromDual.voiceCount, 2) << "a dual source's Left jack must carry the whole pair";
+    EXPECT_EQ(fromDual.sourceRawChannel, 0);
+    EXPECT_EQ(fromDual.destRawChannel, 0);
+    EXPECT_EQ(fromDual.sourceStride, 1) << "stride must step to the module's own right leg, not 0";
+
+    // Mirror: collapsed source into a dual destination still fans L->L / R->R.
+    ReverbModule collapsedSource;
+    ChorusModule dualDest;
+    setDualIOParam(dualDest, true);
+    const auto toDual = GraphEditor::resolvePolyLink(&collapsedSource, 0, &dualDest, 0);
+    EXPECT_EQ(toDual.voiceCount, 2);
+    EXPECT_EQ(toDual.sourceStride, 1);
+}
+
+// --- Double-click module title to rename (custom card titles) ----------------
+//
+// The custom title is the node property "displayName". It is deliberately NOT the processor's own
+// name: ModuleBase::getName() is the auto-numbered "Chorus 2" that AudioEngine::updateModuleNames()
+// recomputes wholesale on every graph change, so a title written there is clobbered by the next node
+// added. These tests pin both halves — the custom title sticks, and the numbering still works.
+
+TEST_F(GraphEditorTest, ModuleTitleRenameCommitsAndFallsBackToTheNumberedName) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(900, 600);
+
+    auto& graph = engine.getGraph();
+    auto node = graph.addNode(std::make_unique<ChorusModule>());
+    engine.updateModuleNames(); // assigns "Chorus 1"
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    auto* comp = findModuleComp(editor, node->getProcessor());
+    ASSERT_NE(comp, nullptr);
+    const auto numbered = node->getProcessor()->getName();
+    ASSERT_TRUE(numbered.isNotEmpty());
+    EXPECT_EQ(comp->cardTitle(), numbered) << "with no custom title the card shows the numbered name";
+
+    comp->beginTitleRename();
+    ASSERT_TRUE(comp->isRenamingTitle());
+    auto* ed = dynamic_cast<juce::TextEditor*>(comp->findChildWithID("moduleTitleRenameEditor"));
+    ASSERT_NE(ed, nullptr);
+    EXPECT_EQ(ed->getText(), numbered) << "the editor is seeded with what the header shows";
+
+    ed->setText("Shimmer Bus", juce::dontSendNotification);
+    comp->finishTitleRename(true);
+
+    EXPECT_FALSE(comp->isRenamingTitle());
+    EXPECT_EQ(editor.getModuleDisplayName(node->nodeID), "Shimmer Bus");
+    EXPECT_EQ(comp->cardTitle(), "Shimmer Bus");
+    EXPECT_EQ(node->getProcessor()->getName(), numbered) << "the processor's numbered name is untouched";
+}
+
+TEST_F(GraphEditorTest, ModuleTitleRenameEscapeCancelsAndWhitespaceReverts) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(900, 600);
+
+    auto& graph = engine.getGraph();
+    auto node = graph.addNode(std::make_unique<ChorusModule>());
+    engine.updateModuleNames();
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+    auto* comp = findModuleComp(editor, node->getProcessor());
+    ASSERT_NE(comp, nullptr);
+    const auto numbered = node->getProcessor()->getName();
+
+    // Escape discards.
+    comp->beginTitleRename();
+    auto* ed = dynamic_cast<juce::TextEditor*>(comp->findChildWithID("moduleTitleRenameEditor"));
+    ASSERT_NE(ed, nullptr);
+    ed->setText("Discard Me", juce::dontSendNotification);
+    comp->finishTitleRename(false);
+    EXPECT_EQ(editor.getModuleDisplayName(node->nodeID), "") << "Escape must not store anything";
+    EXPECT_EQ(comp->cardTitle(), numbered);
+
+    // Commit a real name, then blank it out: whitespace reverts to the numbered default.
+    editor.setModuleDisplayName(node->nodeID, "Shimmer Bus");
+    ASSERT_EQ(comp->cardTitle(), "Shimmer Bus");
+
+    comp->beginTitleRename();
+    ed = dynamic_cast<juce::TextEditor*>(comp->findChildWithID("moduleTitleRenameEditor"));
+    ASSERT_NE(ed, nullptr);
+    ed->setText("    ", juce::dontSendNotification);
+    comp->finishTitleRename(true);
+    EXPECT_EQ(editor.getModuleDisplayName(node->nodeID), "") << "whitespace-only clears the custom title";
+    EXPECT_EQ(comp->cardTitle(), numbered);
+}
+
+TEST_F(GraphEditorTest, ModuleTitleRenameIsUndoable) {
+    AudioEngine engine;
+    AppUndoManager undoMgr;
+    GraphEditor editor(engine, &undoMgr);
+    editor.setSize(900, 600);
+
+    auto& graph = engine.getGraph();
+    auto node = graph.addNode(std::make_unique<ChorusModule>());
+    engine.updateModuleNames();
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+    const auto nodeId = node->nodeID;
+
+    editor.setModuleDisplayName(nodeId, "First Name");
+    ASSERT_EQ(editor.getModuleDisplayName(nodeId), "First Name");
+    editor.setModuleDisplayName(nodeId, "Second Name");
+    ASSERT_EQ(editor.getModuleDisplayName(nodeId), "Second Name");
+
+    ASSERT_TRUE(undoMgr.undo());
+    const auto afterUndo = findNodeIdByName(graph, "Chorus 1");
+    // The node id survives a structural restore here, but resolve by whatever is live to be safe.
+    const auto liveId = afterUndo.uid != 0 ? afterUndo : nodeId;
+    EXPECT_EQ(editor.getModuleDisplayName(liveId), "First Name") << "undo restores the previous title";
+}
+
+TEST_F(GraphEditorTest, ModuleTitleRenameDoesNotArmABodyDrag) {
+    // The double-click must be intercepted BEFORE the drag is armed, or bodyDragActive stays set
+    // under an open editor and the next stray mouseDrag walks the card off under the cursor.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(900, 600);
+
+    auto& graph = engine.getGraph();
+    auto node = graph.addNode(std::make_unique<ChorusModule>());
+    engine.updateModuleNames();
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+    auto* comp = findModuleComp(editor, node->getProcessor());
+    ASSERT_NE(comp, nullptr);
+
+    const auto before = comp->getPosition();
+    const juce::Point<int> titlePoint{comp->getWidth() / 2, 8}; // inside the header band
+    comp->mouseDown(makeModuleClickWithMods(*comp, titlePoint, plainLeftClick(), /*clicks=*/2));
+
+    ASSERT_TRUE(comp->isRenamingTitle()) << "a double-click on the header opens the editor";
+
+    // A drag arriving now must not move the card: no dragger was armed.
+    comp->mouseDrag(makeModuleClickWithMods(*comp, titlePoint + juce::Point<int>(80, 40), plainLeftClick()));
+    EXPECT_EQ(comp->getPosition(), before) << "the rename must not have armed a body drag";
+
+    comp->finishTitleRename(false);
+}
+
+TEST_F(GraphEditorTest, ModuleTitleRoundTripsThroughGraphJSON) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(900, 600);
+
+    auto& graph = engine.getGraph();
+    auto node = graph.addNode(std::make_unique<ChorusModule>());
+    engine.updateModuleNames();
+    editor.updateComponents();
+    editor.setModuleDisplayName(node->nodeID, "Shimmer Bus");
+
+    const auto json = synth::AIStateMapper::graphToJSON(graph);
+    const auto text = juce::JSON::toString(json);
+    EXPECT_TRUE(text.contains("Shimmer Bus")) << "the custom title must be serialized";
+
+    // Trusted reload: the title comes back.
+    AudioEngine reloaded;
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, reloaded.getGraph(), /*clearExisting=*/true,
+                                                       /*trusted=*/true));
+    bool found = false;
+    for (auto* n : reloaded.getGraph().getNodes()) {
+        if (n->getProcessor() != nullptr && n->getProcessor()->getName().startsWith("Chorus")) {
+            EXPECT_EQ(n->properties["displayName"].toString(), "Shimmer Bus");
+            found = true;
+        }
+    }
+    EXPECT_TRUE(found) << "the renamed Chorus survived the round trip";
+}
+
+TEST_F(GraphEditorTest, UntrustedPatchDisplayNameIsCappedAndDisplayOnly) {
+    // Display-only and length-capped on the untrusted path: it may relabel a card and nothing else.
+    // In particular it must never influence which module type gets created — that is "type".
+    AudioEngine engine;
+    const juce::String oversized = juce::String::repeatedString("A", synth::kMaxModuleDisplayNameChars * 4);
+
+    juce::String patch = R"({"nodes":[{"id":1,"type":"Chorus","displayName":")" + oversized + R"("}]})";
+    const auto json = juce::JSON::parse(patch);
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, engine.getGraph(), /*clearExisting=*/true,
+                                                       /*trusted=*/false));
+
+    int chorusCount = 0;
+    for (auto* n : engine.getGraph().getNodes()) {
+        if (n->getProcessor() == nullptr)
+            continue;
+        if (dynamic_cast<ChorusModule*>(n->getProcessor()) != nullptr) {
+            ++chorusCount;
+            const auto stored = n->properties["displayName"].toString();
+            EXPECT_LE(stored.length(), synth::kMaxModuleDisplayNameChars) << "an untrusted title must be capped";
+            EXPECT_TRUE(stored.isNotEmpty());
+        }
+    }
+    EXPECT_EQ(chorusCount, 1) << "the title must not have changed which module type was created";
+}
+
+TEST_F(GraphEditorTest, AutoNumberingStillAppliesAlongsideCustomTitles) {
+    // Renaming one instance must not disturb the numbering of the others, and a renamed card keeps
+    // its own title while updateModuleNames renumbers the processors underneath.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 800);
+
+    auto& graph = engine.getGraph();
+    auto first = graph.addNode(std::make_unique<ChorusModule>());
+    auto second = graph.addNode(std::make_unique<ChorusModule>());
+    engine.updateModuleNames();
+    editor.updateComponents();
+
+    EXPECT_EQ(first->getProcessor()->getName(), "Chorus 1");
+    EXPECT_EQ(second->getProcessor()->getName(), "Chorus 2");
+
+    editor.setModuleDisplayName(first->nodeID, "Shimmer Bus");
+
+    // A third instance arrives and everything renumbers.
+    auto third = graph.addNode(std::make_unique<ChorusModule>());
+    engine.updateModuleNames();
+    editor.updateComponents();
+
+    EXPECT_EQ(third->getProcessor()->getName(), "Chorus 3") << "auto-numbering still counts every instance";
+    EXPECT_EQ(editor.getModuleDisplayName(first->nodeID), "Shimmer Bus")
+        << "renumbering must not clobber a custom title";
+    EXPECT_EQ(editor.getModuleTitle(first->nodeID, first->getProcessor()), "Shimmer Bus");
+    EXPECT_EQ(editor.getModuleTitle(second->nodeID, second->getProcessor()), "Chorus 2")
+        << "an un-renamed sibling still follows the numbering";
+}
+
 // --- Double-click port disconnect (issue #216) -------------------------------
 
 static ModuleComponent* findModuleComp(GraphEditor& editor, juce::AudioProcessor* proc) {

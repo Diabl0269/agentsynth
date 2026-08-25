@@ -354,3 +354,22 @@ TEST(ModuleLibraryFocus, ParentDoesNotGrabFocusOnMouseClick) {
     // We can't directly test the searchEditor's focus behavior from here since it's private,
     // but we've verified the parent's behavior is correct.
 }
+
+// ============================================================================
+// pressSuppressesRowDrag — Ctrl+left-click must stay draggable
+// ============================================================================
+
+TEST(ModuleLibraryRowPress, CtrlLeftClickDoesNotSuppressTheDrag) {
+    // The whole point: Ctrl is the insert-between drag modifier, so a Ctrl-held press on a library
+    // row has to start a drag. On macOS JUCE folds Ctrl+left-click into isPopupMenu(), which used to
+    // make this press open a menu (or do nothing) and never reach the canvas.
+    const juce::ModifierKeys ctrlLeft(juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::leftButtonModifier);
+    EXPECT_FALSE(ModuleLibraryComponent::pressSuppressesRowDrag(ctrlLeft));
+
+    const juce::ModifierKeys plainLeft(juce::ModifierKeys::leftButtonModifier);
+    EXPECT_FALSE(ModuleLibraryComponent::pressSuppressesRowDrag(plainLeft));
+
+    // A real right-click still suppresses it, on every platform.
+    const juce::ModifierKeys rightButton(juce::ModifierKeys::rightButtonModifier);
+    EXPECT_TRUE(ModuleLibraryComponent::pressSuppressesRowDrag(rightButton));
+}

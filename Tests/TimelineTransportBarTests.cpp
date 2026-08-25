@@ -13,6 +13,7 @@
 #include "../Source/Timeline/TimelineDoc.h"
 #include "../Source/Transport/TransportService.h"
 #include "../Source/UI/Theme/AppLookAndFeel.h"
+#include "../Source/UI/Theme/BuiltInThemes.h"
 #include "../Source/UI/TimelinePanelComponent.h"
 #include "../Source/UI/TimelineTransportBar.h"
 #include "MainComponent.h"
@@ -392,4 +393,84 @@ TEST_F(TimelineTransportBarAppWiringTest, StopWhileRecordingCommitsOnce) {
     // wasTransportPlaying_ edge never re-fires.
     mc.timerCallback();
     EXPECT_EQ(doc.getTrack(trackId)->clips.size(), 1u);
+}
+
+// ---- Inline editor theming ----
+
+// THE bug: the BPM field typed WHITE text, invisible on every light theme.
+//
+// An editable juce::Label opens a juce::TextEditor whose colours do NOT come from the app's
+// TextEditor ids. juce::Label::createEditorComponent copies Label::textWhenEditingColourId over
+// TextEditor::textColourId afterwards, but only when that id "isColourSpecified" — and
+// LookAndFeel_V4 DOES specify it, from its own default-scheme white. So AppLookAndFeel set
+// TextEditor::textColourId correctly and V4's white clobbered it on the way into the editor.
+//
+// Asserted against the theme TOKENS in both a light and a dark theme rather than against any
+// literal colour, so this cannot be "fixed" by hardcoding a second constant.
+namespace {
+struct EditorColours {
+    juce::Colour text, background, caret;
+};
+
+EditorColours openEditorColours(juce::Label& label) {
+    label.showEditor();
+    auto* editor = label.getCurrentTextEditor();
+    if (editor == nullptr)
+        return {};
+    const EditorColours out{editor->findColour(juce::TextEditor::textColourId),
+                            editor->findColour(juce::TextEditor::backgroundColourId),
+                            editor->findColour(juce::CaretComponent::caretColourId)};
+    // DISCARD: this test is about colours, and committing would fire onTextChange -> setBpm() /
+    // setTimeSignature() as a side effect.
+    label.hideEditor(true);
+    return out;
+}
+} // namespace
+
+TEST(TimelineTransportBarTest, InlineFieldEditorsTakeTheirColoursFromTheTheme) {
+    for (const auto& theme : {synth::theme::makeDaylight(), synth::theme::makeObsidian()}) {
+        synth::theme::AppLookAndFeel lf;
+        lf.applyTheme(theme);
+
+        synth::ui::TimelineTransportBar bar;
+        bar.setLookAndFeel(&lf);
+        bar.setSize(500, 28);
+
+        const auto& c = lf.getTheme().colors;
+        for (auto* label : {&bar.getBpmLabel(), &bar.getTimeSigLabel()}) {
+            ASSERT_TRUE(label->isEditableOnDoubleClick()) << "precondition: this field opens an inline editor";
+            const auto colours = openEditorColours(*label);
+
+            EXPECT_EQ(colours.text, c.textPrimary) << "editor text must be the theme's text token, in " << theme.id;
+            EXPECT_EQ(colours.background, c.bg0) << "editor background token, in " << theme.id;
+            EXPECT_EQ(colours.caret, c.accent) << "caret token, in " << theme.id;
+
+            // The actual user-visible failure: text the same colour as what it sits on.
+            EXPECT_NE(colours.text, colours.background) << "typed text must contrast with the field, in " << theme.id;
+        }
+
+        bar.setLookAndFeel(nullptr);
+    }
+}
+
+// The regression in its plainest form: on a LIGHT theme the editor text must not be white, which is
+// what V4's unoverridden Label::textWhenEditingColourId supplied.
+TEST(TimelineTransportBarTest, InlineFieldEditorTextIsNotWhiteOnALightTheme) {
+    const auto daylight = synth::theme::makeDaylight();
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(daylight);
+
+    synth::ui::TimelineTransportBar bar;
+    bar.setLookAndFeel(&lf);
+    bar.setSize(500, 28);
+
+    ASSERT_LT(daylight.colors.bg0.getPerceivedBrightness(), 1.0f);
+    ASSERT_GT(daylight.colors.bg0.getPerceivedBrightness(), 0.5f) << "precondition: Daylight is a LIGHT theme";
+
+    const auto colours = openEditorColours(bar.getBpmLabel());
+    EXPECT_NE(colours.text, juce::Colours::white);
+    // Dark text on a light field: the contrast the user could not see before.
+    EXPECT_LT(colours.text.getPerceivedBrightness(), colours.background.getPerceivedBrightness());
+
+    bar.setLookAndFeel(nullptr);
 }

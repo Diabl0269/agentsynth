@@ -7,6 +7,11 @@
 
 namespace synth {
 
+/** Hard cap on a module's user-set card title, applied wherever a "displayName" is accepted —
+ *  including the untrusted patch path, where it is the only thing stopping a hostile patch from
+ *  stuffing a megabyte of text into a title and wedging the canvas paint. */
+inline constexpr int kMaxModuleDisplayNameChars = 64;
+
 /**
  * @brief Why a patch JSON failed validation, so callers (and the UI) can say what was wrong.
  */

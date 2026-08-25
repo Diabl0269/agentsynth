@@ -358,6 +358,27 @@ public:
         return dualIOPerModuleOverrides;
     }
 
+    // ---- Custom module titles -----------------------------------------------
+    // A user-set card title, stored as the node property "displayName". Message-thread ONLY and
+    // display-only, which is why — unlike "uuid" — it is deliberately NOT mirrored into the
+    // processor: nothing on the audio thread reads a card title, so there is no lock-free read to
+    // make sound, and adding a mirror would only create a second copy to keep in sync. Do not
+    // "fix" this by mirroring it.
+    //
+    // It is also deliberately NOT the processor's own name: ModuleBase::getName() is the
+    // auto-numbered "Chorus 2" that AudioEngine::updateModuleNames() recomputes wholesale on every
+    // graph change (it strips trailing digits to renumber), so a custom title written there would
+    // be clobbered by the next node added. The numbered name stays the fallback.
+
+    /** The user's custom title for a node, or an empty string when it has none. */
+    juce::String getModuleDisplayName(juce::AudioProcessorGraph::NodeID nodeId) const;
+
+    /** Sets (or, given blank/whitespace, clears) a node's custom title. Undoable. */
+    void setModuleDisplayName(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& name);
+
+    /** Title a card should paint: the custom one when set, else the auto-numbered module name. */
+    juce::String getModuleTitle(juce::AudioProcessorGraph::NodeID nodeId, juce::AudioProcessor* processor) const;
+
     /** True when the visible jack already has at least one graph edge or mod routing. */
     bool isPortConnected(ModuleComponent* module, int portIndex, bool isInput, bool isMidi) const;
 
@@ -458,6 +479,14 @@ public:
     int getSmartSuggestionCount() const noexcept { return (int)smartSuggestions.size(); }
     const std::vector<SmartSuggestion>& getSmartSuggestions() const noexcept { return smartSuggestions; }
     bool nodeHasCables(juce::AudioProcessorGraph::NodeID nodeId) const;
+    /** Runs just the drag tick's modifier re-sample, so a test can exercise a press/release that
+     *  happens without any mouse movement without needing a real 30 Hz timer. */
+    void pumpDragModifierTickForTests() { refreshSuggestionsIfInsertModifierChanged(); }
+
+    /** Port centre inside a bounds rect — must agree with ModuleComponent::getPortCenter. */
+    static juce::Point<int> estimatePortCenter(juce::AudioProcessor* proc, juce::Rectangle<int> bounds, int jack,
+                                               bool isInput, bool isMidi);
+
     /** Audio-jack occupancy, for asserting that a reroute left nothing dangling. */
     bool isInputJackFreeForTests(juce::AudioProcessorGraph::NodeID nodeId, int jack) const {
         return isInputJackFree(nodeId, jack, false);
@@ -703,6 +732,9 @@ private:
     // Smart-connection suggestions for the active drag preview.
     SmartConnectionMode smartConnectionMode = SmartConnectionMode::NewAndUnwired;
     std::optional<bool> insertModifierOverride; // tests only; empty means read the real keyboard
+    // Last modifier state the drag tick saw, so a press/release that happens WITHOUT a mouse move
+    // still re-evaluates the suggestions exactly once (see timerCallback).
+    bool lastSampledInsertModifier = false;
     std::vector<SmartSuggestion> smartSuggestions;
     static constexpr float kSmartConnectionProximityPx = 96.0f;
 
@@ -711,9 +743,9 @@ private:
     void clearSmartSuggestions();
     bool shouldOfferSmartConnections() const;
     void applyDefaultDualIOForNewModule(juce::AudioProcessor& processor, const juce::String& moduleType) const;
-    /** Port centre inside a bounds rect — mirrors ModuleComponent::getPortCenter for ghost previews. */
-    static juce::Point<int> estimatePortCenter(juce::AudioProcessor* proc, juce::Rectangle<int> bounds, int jack,
-                                               bool isInput, bool isMidi);
+    /** Re-evaluates the suggestions when the insert modifier changed since the last drag tick.
+     *  A modifier press/release is not a mouse move, so nothing else would notice it. */
+    void refreshSuggestionsIfInsertModifierChanged();
     bool isInputJackFree(juce::AudioProcessorGraph::NodeID nodeId, int jack, bool isMidi) const;
     bool isOutputJackFree(juce::AudioProcessorGraph::NodeID nodeId, int jack, bool isMidi) const;
     bool areJacksAlreadyConnected(juce::AudioProcessorGraph::NodeID srcId, int srcJack,

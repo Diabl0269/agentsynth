@@ -370,6 +370,47 @@ active before that — so without this, the field showed stale colours until the
 - The empty-state message ("No modulations active…") now draws inside the post-header/footer
   `area` rect, not `getLocalBounds()`, so it no longer overlaps the title/header bands.
 
+### Custom card titles (double-click the header to rename)
+
+Double-clicking a module card's **header band** (`ModuleComponent::kHeaderHeight`, 24px) opens an
+inline `juce::TextEditor` over the title. Return or clicking away commits, Escape cancels, and the
+editor is seeded with whatever the header currently shows so a first rename starts from `Chorus 2`
+rather than an empty box. It is a **child component**, so there is no window seam to stub out for a
+display-less test run. Themed for free: `AppLookAndFeel` already overrides
+`fillTextEditorBackground` / `drawTextEditorOutline`.
+
+**The custom title is NOT the processor's name.** `ModuleBase::getName()` is the auto-numbered
+`"Chorus 2"`, and `AudioEngine::updateModuleNames()` recomputes every one of those **wholesale on
+every graph change** — it strips a trailing number off each name and renumbers per base type. A
+custom title written there would be clobbered by the next node the user adds, and worse, `"My Chorus
+2"` would have its `2` stripped and be renumbered into `"My Chorus 3"`. So the custom title lives in
+the node property **`displayName`**, and the numbered processor name stays the fallback:
+`GraphEditor::getModuleTitle()` returns the custom one when set, else `processor->getName()`. Card
+paint goes through `ModuleComponent::cardTitle()` and never reads the processor name directly.
+
+Consequences worth knowing:
+
+- Renaming one instance does not disturb any other instance's number, and a later instance still
+  auto-numbers correctly (a renamed `Chorus 1` does not free up the name — the count is per base
+  type over all nodes). Pinned by `AutoNumberingStillAppliesAlongsideCustomTitles`.
+- Blank or whitespace-only reverts to the numbered default rather than showing an empty header.
+- Typing the numbered name back in stores **blank**, so the card keeps following the numbering
+  instead of freezing today's number as a literal custom title.
+- `displayName` is message-thread-only and display-only, so it is deliberately **not** mirrored into
+  the processor the way `uuid` is: nothing on the audio thread reads a card title, so there is no
+  lock-free read to make sound and a mirror would only add a second copy to keep in sync.
+
+**Gesture ordering.** The double-click is intercepted in `mouseDown` on `getNumberOfClicks() >= 2`,
+*before* `dragStartPosition` / `bodyDragActive` are touched — the same interception the port
+double-click uses. The first click of the pair has already armed and disarmed a body drag; letting
+the second arm another would leave `bodyDragActive` set under an open editor, so the next stray
+`mouseDrag` would walk the card out from under the cursor. Pinned by
+`ModuleTitleRenameDoesNotArmABodyDrag`.
+
+**Undo** goes through `recordStructuralChange`, which is also what makes the title survive an
+undo/redo of any *other* structural change: the snapshot is `graphToJSON`, so the title has to be
+serialized (below) for undo to restore it at all.
+
 ### ModuleComponent header button layout
 
 The header area of each module card (`Source/UI/ModuleComponent.cpp`) contains `DrawableButton` instances (not `TextButton`), positioned in `resized()`:
@@ -840,7 +881,20 @@ Two things had to change for ordering 2, and both are load-bearing:
 
 **The Ctrl press collapses the selection onto the dragged card**, restoring the pre-press selection in `mouseUp` if the press turns out to be a click. A group drag suppresses smart connections entirely and moves every member, so a leftover multi-selection would otherwise silently disable insert. Guarded by `CtrlClickTogglesSelectionButCtrlDragDoesNot`.
 
-Library drags have no modifier conflict and both orderings work trivially.
+Library drags need one extra fix for this to hold; see below.
+
+**Ctrl reaches the library drag too.** A library row starts its drag on mouse-down, and that press was guarded by `isPopupMenu()` — which on macOS is `(rightButtonModifier | ctrlModifier)`, so a Ctrl-held press never started a drag at all and Ctrl+drag-from-library could not reach the canvas. The guard is now `ModuleLibraryComponent::pressSuppressesRowDrag` (true right button only), the same call the module body makes. Guarded by `ModuleLibraryRowPress.CtrlLeftClickDoesNotSuppressTheDrag` and `SmartConnectionCtrlLibraryDropInsertsIntoAnOccupiedModule`.
+
+**A modifier change is not a mouse move.** Suggestions used to be recomputed only from `updateDragPreview`, so pressing or releasing Ctrl while the mouse was still did nothing — most visibly, releasing Ctrl left a stale insert preview on screen. `GraphEditor::refreshSuggestionsIfInsertModifierChanged()` re-samples on the existing 30 Hz drag tick (no new timer) and recomputes only when the sampled state actually flipped, so a drag holding its modifier costs one bool compare per tick and `refreshSmartSuggestions` still repaints only when the suggestion set really changed. Seeded at `beginDragPreview` so a drag started with Ctrl already held is not reported as a change on its first tick. Guarded by `SmartConnectionReleasingCtrlMidDragDowngradesTheInsert`, which flips the modifier twice without moving the mouse.
+
+**Insert previews are tinted.** An insert reroutes existing cabling rather than adding to it, so its new legs are drawn tinted toward the theme's `warning` token — interpolated over the colour `resolveCableColour` already produced, never replacing it, so the cable's own signal/category/user-override identity still reads through. The doomed cables keep their dashed dimmed treatment. Token, not a literal.
+
+**Ghost jack positions come from one constant.** `GraphEditor::estimatePortCenter` (drag ghost) and `ModuleComponent::getPortCenter` (real card) have to agree, and they carried separate header literals — 30 and 38. Every preview cable therefore terminated 8px ABOVE the jack dot it claimed to land on, floating over the jack's label row. Both now read `ModuleComponent::kPortGutterHeaderHeight`. Guarded by `GhostPortEstimateMatchesTheRealJackCentre` (estimate vs real, every jack) and `SmartConnectionPreviewLegsLandOnTheRealDestinationJack` (end-to-end, within 1px).
+
+**A dual FX output pairs onto a collapsed input.** A collapsed destination jack is ONE visible jack owning two raw channels, so the only way to fill both is a fan from a single cable — there is no cable-level way to address its right leg on its own. A dual I/O FX's Left jack was being treated as mono and stride-0 duplicated onto both destination legs, which also made the Right jack's pair redundant so the dedupe dropped it: a dual Reverb landing on a collapsed Chorus wired only Left. `resolvePolyLink` now pairs L -> raw0 / R -> raw1 for a dual source whose right leg is **adjacent** (the FX raw0/raw1 layout).
+
+Deliberately limited to adjacent legs. The split-block voice modules (Oscillator, Filter, VCA, Wavetable) put Audio R on its own `kRightBase` block far from ch0, and for those the established behaviour is the mono broadcast — `ResolvePolyLinkBroadcastsMonoIntoCollapsedStereoPair` encodes it directly, and `TogglingDualIOKeepsBothStereoLegs` explains that their right leg is picked up separately from the module's own Audio R block. Widening the rule to non-adjacent legs would change **manual cable drags** as well, so it is a deliberate call rather than something to fold into a smart-connect fix. Guarded by `SmartConnectionDualOutputWiresBothLegsIntoACollapsedInput` and `ResolvePolyLinkPairsADualSourceOntoACollapsedDestination`.
+
 
 ### Insert-in-series
 
