@@ -444,6 +444,22 @@ provider error rather than a rejection. `--json` records include the raw model t
 `retryResponses`) behind each outcome — that's the offline corpus the fixture-replay tests above
 are built from.
 
+**Determinism and cost ceilings (P1-11).** Unlike `AIEvalHarness` below, this harness pins
+`--temperature 0` and a fixed `--seed` by default — needed so repeat runs are comparable enough to
+ratchet against (unpinned sampling swings ~8 points run to run). `--runs` is hard-capped at 10, and
+`--max-requests` bounds total outbound requests for the whole invocation (required, with no
+default, for `--provider remote`, since that path can reach a paid vendor). See
+`Tools/AIPatchHarness/RequestBudget.h` — its `RequestBudget` class is covered directly by
+`Tests/RequestBudgetTests.cpp`, independent of any live model.
+
+`.github/workflows/ai-eval-nightly.yml` runs this harness on a schedule, OFF by default (gated on
+the `AI_EVAL_ENABLED` repository variable) — see "Nightly scheduled eval (P1-11)" in
+`Tools/AIPatchHarness/README.md` for the full switch/runner/ratchet story. It never blocks a merge:
+it isn't a `pull_request`/`push` workflow, and `scripts/ai-eval-ratchet.sh` (unit-tested by
+`scripts/tests/ai-eval-ratchet.test.sh`, run by the Lint job) only fails *that job*, comparing
+against a committed baseline that doesn't exist yet as of this writing — the script is inert
+(reports, exits 0) until a human commits one.
+
 `Tools/AIEvalHarness` scores a different thing: of the patches that pass validation and apply, are
 they actually usable — has an output, that output is reachable from a real sound source, every
 parameter in range? It replays 40 golden prompts and runs `Source/AI/PatchEval.h`'s checks against
