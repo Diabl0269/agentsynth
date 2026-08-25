@@ -104,6 +104,14 @@ split has to arrive with **both legs wired**:
 | **Input** (`Audio R` in) | wire it: collapsed FX pair → its raw1, dual peer → its own `kRightBase` (never ch1) | **broadcast** — copy the channel that already feeds `Audio L` onto `Audio R` |
 | **Output** (`Audio R` out) | wire it, and drop the left leg's stand-in copy | **sum** — a second cable into the same mono jack `Audio L` feeds |
 
+"Mono-only" on the output side covers two shapes: a collapsed split-block peer (one `"Audio"` jack
+that is its left leg alone) and a **dedicated mono audio input that is nobody's pair** — the Ring
+Modulator's `Carrier` (ch0) and `Modulator` (ch1), whose roles differ so neither is ever a right-hand
+input. The second shape needs no ch0 cable to qualify: the rewire follows whichever channel `Audio L`
+is wired to. What it will *not* do is dump an audio-rate copy onto modulation CV, so a cable the user
+aimed at `Cutoff` or `Rate` gains nothing from a split (`mapInputChannel` role `ModCV`, or the channel
+appearing in `getModulationTargets`, disqualifies it).
+
 Both input-side entries assume the left jack has exactly **one** feed; when it has two, the migration
 rule below runs instead.
 
@@ -285,6 +293,7 @@ CV control of Level is deliberately **not** implemented — it would need a new 
   `out = d(m + c/2) + d(-m + c/2) - d(m - c/2) - d(-m - c/2)`. This is **not** a clean multiply — Math's `Mult` output already covers that. The diode dead-zone is what gives the metallic, gated, bell-like character.
 - **Oversampling**: Same real-time-safe scheme as Distortion. `Off` / `2x` / `4x` (default `2x`); both oversamplers are pre-allocated in `prepareToPlay` and swapped via an `AudioProcessorParameter::Listener`. A latency-compensation delay line keeps the dry carrier aligned for wet/dry mixing. Oversampling is excluded from `getModulationTargets()`.
 - **I/O**: Carrier (ch0), Modulator (ch1), Mix CV (ch2), Drive CV (ch3), Character CV (ch4). Stereo out is the mono ring-mod result duplicated to Left/Right. Dry is the unprocessed carrier. No internal carrier oscillator — patch an Oscillator into Carrier.
+- **Bypass emits the CARRIER on both legs**, not "both raw channels untouched". This module's dry path is defined by its own `mix = 0` (ch0 duplicated onto both output legs), and ch1 is the Modulator *input* — so a plain early return left a bypassed Ring Modulator emitting whatever was patched to Modulator, hard right, with silence on the left. That reached a user as "I only hear the right side, out of a module I disabled". Bypass therefore copies ch0 onto ch1 and clears the CV block; with nothing on Carrier a bypassed Ring Modulator is silent. Pinned by `RingModulatorModuleTest.BypassEmitsTheCarrierOnBothLegsNotTheModulator` and, at graph level, `AudioRenderingTest.BypassedRingModulatorDoesNotLeakItsModulatorInputToTheRight`. The dry pass-through itself is still by design — what was wrong was *which* signal this module calls dry.
 - **Dual I/O**: **output-only** (the Voice Mixer's shape, not the usual FX one — the input pair is Carrier + Modulator, two unrelated mono jacks). Off by default like every other FX: one `"Audio"` jack owning raw ch0/ch1, split into `Left`/`Right` when on. Purely a jack-layout change — both legs already carry the same wet signal, so `RingModulatorModuleTest.DualIODoesNotChangeWhatItRenders` pins the DSP as untouched. The input map is deliberately left on `ModuleBase`'s default so ch1 (Modulator) never reports `PortRole::Audio`; see § Stereo I/O for why that matters.
 - **Parameters**: Drive (0.5–8, default 1), Mix (0–1, default 1), Character (0–1, default 0.5), Oversampling (Off/2x/4x), Dual I/O (layout toggle), Level (0–1). Character maps the diode forward-bias / linear-region breakpoints (`vb` / `vl`) from near-clean multiply (`vb≈0.02`, `vl≈0.05`) to hard gated (`vb≈0.5`, `vl≈1.0`). Parker's typical `vb≈0.2` / `vl≈0.4` sits at the default.
 - **CV Inputs**: Mix (ch2), Drive (ch3), Character (ch4). Every continuous parameter has a CV jack; Oversampling does not.

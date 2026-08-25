@@ -190,8 +190,14 @@ TEST_F(RingModulatorModuleTest, DualIODoesNotChangeWhatItRenders) {
 }
 
 TEST_F(RingModulatorModuleTest, BypassAndMuteAreUnaffectedByDualIO) {
-    // The bypass/mute contract, in both jack layouts: bypass passes the two audio channels dry and
+    // The bypass/mute contract, in both jack layouts: bypass passes the module's DRY signal and
     // clears ONLY the CV block; mute clears everything.
+    //
+    // "Dry" on this module is the CARRIER on both output legs, which is what mix = 0 produces - not
+    // "both raw channels untouched". This test asserted the latter until a user patch showed what it
+    // costs: ch1 is the Modulator INPUT, so passing it through unchanged turned a bypassed Ring
+    // Modulator into a hard-right feed of whatever was patched to Modulator. See
+    // BypassEmitsTheCarrierOnBothLegsNotTheModulator.
     for (bool dual : {false, true}) {
         SCOPED_TRACE(dual ? "dual" : "collapsed");
 
@@ -211,9 +217,11 @@ TEST_F(RingModulatorModuleTest, BypassAndMuteAreUnaffectedByDualIO) {
         juce::MidiBuffer midi;
         bypassed.processBlock(buffer, midi);
 
-        for (int ch = 0; ch < 2; ++ch)
-            for (int i = 0; i < kBlockSize; ++i)
-                ASSERT_FLOAT_EQ(buffer.getSample(ch, i), dry.getSample(ch, i)) << "ch " << ch << " sample " << i;
+        for (int i = 0; i < kBlockSize; ++i) {
+            ASSERT_FLOAT_EQ(buffer.getSample(0, i), dry.getSample(0, i)) << "carrier passes dry, sample " << i;
+            ASSERT_FLOAT_EQ(buffer.getSample(1, i), dry.getSample(0, i))
+                << "the right leg carries the CARRIER, not the modulator, sample " << i;
+        }
         for (int ch = 2; ch < 5; ++ch)
             for (int i = 0; i < kBlockSize; ++i)
                 ASSERT_FLOAT_EQ(buffer.getSample(ch, i), 0.0f) << "CV ch " << ch << " must be cleared on bypass";
@@ -229,6 +237,61 @@ TEST_F(RingModulatorModuleTest, BypassAndMuteAreUnaffectedByDualIO) {
         muted.processBlock(mutedBuffer, midi);
         for (int ch = 0; ch < 5; ++ch)
             EXPECT_LT(mutedBuffer.getRMSLevel(ch, 0, kBlockSize), 1.0e-9f) << "ch " << ch << " must be silent on mute";
+    }
+}
+
+TEST_F(RingModulatorModuleTest, BypassEmitsTheCarrierOnBothLegsNotTheModulator) {
+    // Distilled from a user patch that was audible only on the RIGHT, out of a module they had
+    // bypassed. The shape: nothing patched to Carrier, an oscillator patched to Modulator, module
+    // bypassed, output straight to Audio Output. Bypass returned both raw channels untouched, so the
+    // modulator arrived as the right output leg and the left leg was silent.
+    //
+    // Dry on this module is the carrier (the mix = 0 path duplicates ch0 onto both legs), so a
+    // bypassed Ring Modulator with no carrier must be SILENT on both legs, and with a carrier must
+    // put it on both legs equally.
+    for (bool dual : {false, true}) {
+        SCOPED_TRACE(dual ? "dual" : "collapsed");
+
+        {
+            RingModulatorModule modulatorOnly;
+            setBool(modulatorOnly, "dualIO", dual);
+            modulatorOnly.prepareToPlay(kSampleRate, kBlockSize);
+            modulatorOnly.setBypassed(true);
+
+            juce::AudioBuffer<float> buffer(5, kBlockSize);
+            buffer.clear();
+            for (int i = 0; i < kBlockSize; ++i) // Modulator only; Carrier stays silent
+                buffer.setSample(
+                    1, i, 0.8f * std::sin(juce::MathConstants<float>::twoPi * 220.0f * (float)i / (float)kSampleRate));
+
+            juce::MidiBuffer midi;
+            modulatorOnly.processBlock(buffer, midi);
+
+            EXPECT_LT(buffer.getRMSLevel(0, 0, kBlockSize), 1.0e-9f) << "left leg must stay silent";
+            EXPECT_LT(buffer.getRMSLevel(1, 0, kBlockSize), 1.0e-9f)
+                << "and the modulator must NOT leak out as the right leg";
+        }
+
+        {
+            RingModulatorModule carrierOnly;
+            setBool(carrierOnly, "dualIO", dual);
+            carrierOnly.prepareToPlay(kSampleRate, kBlockSize);
+            carrierOnly.setBypassed(true);
+
+            juce::AudioBuffer<float> buffer(5, kBlockSize);
+            buffer.clear();
+            for (int i = 0; i < kBlockSize; ++i)
+                buffer.setSample(
+                    0, i, 0.8f * std::sin(juce::MathConstants<float>::twoPi * 440.0f * (float)i / (float)kSampleRate));
+
+            juce::MidiBuffer midi;
+            carrierOnly.processBlock(buffer, midi);
+
+            const float left = buffer.getRMSLevel(0, 0, kBlockSize);
+            const float right = buffer.getRMSLevel(1, 0, kBlockSize);
+            EXPECT_GT(left, 0.1f) << "the carrier passes dry";
+            EXPECT_NEAR(right, left, 1.0e-6f) << "and reaches both legs equally, centred like mix = 0";
+        }
     }
 }
 

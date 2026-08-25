@@ -46,6 +46,16 @@ Detailed specifications for Agent Synth's primary synthesis modules.
 > [the guide](Module_Development_Guide.md) says to look parameters up by ID: a `getParameters()[n]`
 > site that shifted does not fail loudly, it silently resolves to the wrong parameter.
 
+> **Factory presets author BOTH legs.** A preset is applied through `AIStateMapper` with no knowledge
+> of preferences, so every module comes up on its **constructor default** — and the split-block voice
+> modules default to SPLIT. A preset whose cable list only wires ch0 therefore loads as a patch with
+> every `Audio R` jack bare, which is what "all the connections are one sided" meant. So each preset's
+> `connections` carry the right leg explicitly (`Osc ch14 → Filter ch11 → VCA ch16 →` the FX pair or
+> `Audio Output` R), and a right leg is never faked with a channel that carries nothing — Poly Pad
+> wired the VCA's ch1, which is its gain-CV *input* and a silent pass-through as an output, so one
+> side received actual silence. Rationale and traps: `Source/PresetManager.cpp`; enforced for every
+> preset by `EveryFactoryPreset/PresetStereoTest.RendersBothChannels`.
+
 > **Level parameters.** There is no universal per-module gain. Modules that output audio expose a level control: Oscillator, LFO, Noise and Voice Mixer have their own `level`; VCA has `gain`; Filter and the FX modules use the shared opt-in output-level stage documented in [`fx_modules.md § Output Level`](fx_modules.md#output-level-shared-stage). Modules that output **pitch/gate CV or MIDI** (Sequencer, Poly Sequencer, ADSR, Poly MIDI, MIDI Keyboard, External MIDI) deliberately have none — scaling a V/oct pitch CV transposes it, and scaling a gate drops it below the `> 0.5f` trigger threshold. Attenuverter has none because it already is a gain stage.
 
 ## Oscillator Module

@@ -6,6 +6,7 @@
 #include "../Source/Modules/FX/DelayModule.h"
 #include "../Source/Modules/FX/DistortionModule.h"
 #include "../Source/Modules/FX/ReverbModule.h"
+#include "../Source/Modules/FX/RingModulatorModule.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/LFOModule.h"
 #include "../Source/Modules/MathModule.h"
@@ -1510,6 +1511,59 @@ TEST_F(GraphEditorTest, ExpandingADestinationMigratesASummedPairInsteadOfAddingA
     EXPECT_EQ(feedCount(graph, filterNode->nodeID, FilterModule::kRightBase), 1);
     EXPECT_FALSE(graphHasEdge(graph, oscNode->nodeID, OscillatorModule::kRightBase, filterNode->nodeID, 0))
         << "the old summed cable must be gone, not left alongside the new pair";
+}
+
+TEST_F(GraphEditorTest, SplittingASourceSumsAudioRIntoADedicatedMonoAudioInput) {
+    // The Ring Modulator's Carrier (ch0) and Modulator (ch1) are two mono audio inputs with distinct
+    // roles - never a stereo pair. Splitting an Oscillator that feeds Modulator used to wire Audio L
+    // and stop, because the rewire only looked at cables landing on the destination's ch0. Same
+    // ruling as the collapsed mono jack: sum the right leg into that very input.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto& graph = engine.getGraph();
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    auto ringNode = graph.addNode(std::make_unique<RingModulatorModule>());
+    setDualIOParam(*oscNode->getProcessor(), false);
+    ASSERT_TRUE(graph.addConnection({{oscNode->nodeID, 0}, {ringNode->nodeID, 1}})) << "Osc into Modulator";
+    editor.updateComponents();
+
+    setDualIOParam(*oscNode->getProcessor(), true);
+
+    EXPECT_TRUE(graphHasEdge(graph, oscNode->nodeID, 0, ringNode->nodeID, 1)) << "Audio L keeps the Modulator input";
+    EXPECT_TRUE(graphHasEdge(graph, oscNode->nodeID, OscillatorModule::kRightBase, ringNode->nodeID, 1))
+        << "Audio R must land on the same Modulator input, not dangle";
+    EXPECT_EQ(feedCount(graph, ringNode->nodeID, 1), 2) << "exactly one extra cable";
+    EXPECT_EQ(feedCount(graph, ringNode->nodeID, 0), 0) << "Carrier is a different jack and must stay empty";
+    for (int ch = 2; ch < 5; ++ch)
+        EXPECT_EQ(feedCount(graph, ringNode->nodeID, ch), 0)
+            << "and no audio may be dumped onto a CV jack (channel " << ch << ")";
+
+    // Collapse round-trips: the extra cable hangs off the hidden right block.
+    setDualIOParam(*oscNode->getProcessor(), false);
+    EXPECT_EQ(feedCount(graph, ringNode->nodeID, 1), 1);
+    EXPECT_TRUE(graphHasEdge(graph, oscNode->nodeID, 0, ringNode->nodeID, 1));
+}
+
+TEST_F(GraphEditorTest, SplittingASourceNeverSumsAudioRIntoAModulationInput) {
+    // The counterpart guard: a cable the user aimed at a CV jack must not gain an audio-rate copy of
+    // the right leg. Filter ch2 is Resonance CV.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto& graph = engine.getGraph();
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    setDualIOParam(*oscNode->getProcessor(), false);
+    ASSERT_TRUE(graph.addConnection({{oscNode->nodeID, 0}, {filterNode->nodeID, 2}}));
+    editor.updateComponents();
+
+    setDualIOParam(*oscNode->getProcessor(), true);
+
+    EXPECT_EQ(feedCount(graph, filterNode->nodeID, 2), 1) << "a CV jack gains nothing from a split";
+    EXPECT_FALSE(graphHasEdge(graph, oscNode->nodeID, OscillatorModule::kRightBase, filterNode->nodeID, 2));
 }
 
 TEST_F(GraphEditorTest, ExpandingADestinationMigratesOneRawOfACollapsedUpstreamJack) {
@@ -5134,6 +5188,151 @@ TEST_F(GraphEditorTest, SmartConnectionPlainSuggestionKeepsTheLeftToRightFlowRul
     for (const auto& s : editor.getSmartSuggestions()) {
         EXPECT_FALSE(s.isInsert) << "no modifier, so nothing may be rerouted";
         EXPECT_FALSE(s.ghostIsSource) << "a ghost to the right must not feed the module on its left";
+    }
+    editor.endDragPreview();
+}
+
+// --- Vertical aim: the whole destination card, both axes ---------------------
+//
+// Reported as "it doesn't always recognize the audio output, only when I dragged it a bit below".
+// The vertical acceptance region was never the problem: it already spanned the card plus a generous
+// margin. What actually happened is that only ONE neighbour's candidate group survives selection,
+// and a ghost being spliced into a cable sits between TWO valid neighbours — the upstream it is
+// being inserted after is a perfectly good plain "feed the new module" candidate. It was winning on
+// proximity and discarding the insert, and which of the two won flipped with small cursor moves, so
+// nudging down appeared to fix it. Inserts now outrank plain candidates.
+
+/** Insert offered at each cursor Y over a vertical span, for a destination at destY. */
+struct VerticalAimProbe {
+    int firstHit = -1, lastHit = -1, hits = 0, gaps = 0;
+};
+static VerticalAimProbe probeVerticalAim(GraphEditor& editor, juce::AudioProcessorGraph::NodeID destId, int cursorX,
+                                         int fromY, int toY, int step) {
+    VerticalAimProbe p;
+    DummyDragSource ds;
+    bool wasHit = false;
+    for (int cy = fromY; cy <= toY; cy += step) {
+        juce::DragAndDropTarget::SourceDetails d(juce::var("Chorus"), &ds, juce::Point<int>(cursorX, cy));
+        editor.itemDragEnter(d);
+        editor.itemDragMove(d);
+        bool hit = false;
+        for (const auto& s : editor.getSmartSuggestions())
+            if (s.isInsert && s.neighborId == destId)
+                hit = true;
+        editor.endDragPreview();
+
+        if (hit) {
+            if (p.firstHit < 0)
+                p.firstHit = cy;
+            p.lastHit = cy;
+            ++p.hits;
+        } else if (wasHit && cy < p.lastHit) {
+            ++p.gaps;
+        }
+        wasHit = hit;
+    }
+    // A gap is a miss strictly between two hits.
+    return p;
+}
+
+/** Sizes every card the way the app does, from the footprint table, rather than one uniform size.
+ *  Load-bearing here: the Audio Output card is only ~100px tall, so a uniform 300px would not
+ *  reproduce anything about it. */
+static void sizeModuleComponentsRealistically(GraphEditor& editor) {
+    auto* content = editor.getChildComponent(0);
+    ASSERT_NE(content, nullptr);
+    for (auto* child : content->getChildren())
+        if (auto* mc = dynamic_cast<ModuleComponent*>(child)) {
+            const auto size = GraphEditor::estimateModuleSize(mc->getModule()->getName());
+            mc->setSize(size.x, size.y);
+        }
+}
+
+class SmartConnectionVerticalAimTest : public ::testing::TestWithParam<bool> {};
+
+TEST_P(SmartConnectionVerticalAimTest, InsertIsOfferedAcrossTheWholeDestinationCardHeight) {
+    const bool destIsAudioOutput = GetParam();
+    const bool nearUpstream = true; // the real shape: last FX sits right beside the destination
+
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(2000, 1600);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.setInsertModifierOverrideForTests(true);
+
+    auto& graph = engine.getGraph();
+    constexpr int kDestX = 460;
+    constexpr int kLaneY = 400;
+
+    juce::AudioProcessorGraph::NodeID destId;
+    if (destIsAudioOutput) {
+        destId = addAudioOutputNode(graph, kDestX, kLaneY)->nodeID;
+    } else {
+        auto d = graph.addNode(std::make_unique<DelayModule>());
+        d->properties.set("x", kDestX);
+        d->properties.set("y", kLaneY);
+        destId = d->nodeID;
+    }
+    auto up = graph.addNode(std::make_unique<ReverbModule>());
+    up->properties.set("x", nearUpstream ? 120 : 40);
+    up->properties.set("y", kLaneY);
+    editor.updateComponents();
+    sizeModuleComponentsRealistically(editor);
+    editor.connectPorts(up->nodeID, 0, destId, 0, false, false);
+
+    int destTop = 0, destBottom = 0;
+    for (auto* child : editor.getChildComponent(0)->getChildren())
+        if (auto* mc = dynamic_cast<ModuleComponent*>(child))
+            if (mc->getNodeId() == destId) {
+                destTop = mc->getY();
+                destBottom = mc->getBottom();
+            }
+    ASSERT_GT(destBottom, destTop);
+
+    const auto probe = probeVerticalAim(editor, destId, /*cursorX=*/390, /*fromY=*/destTop - 300,
+                                        /*toY=*/destBottom + 300, /*step=*/10);
+
+    ASSERT_GT(probe.hits, 0) << "no insert offered at ANY cursor height over the destination";
+    EXPECT_EQ(probe.gaps, 0) << "the vertical window has holes in it, which is what 'flaky' means";
+
+    // Aiming anywhere over the card body must work, same rule as the horizontal axis.
+    EXPECT_LE(probe.firstHit, destTop) << "aiming at the card's top edge is refused";
+    EXPECT_GE(probe.lastHit, destBottom) << "aiming at the card's bottom edge is refused";
+}
+
+INSTANTIATE_TEST_SUITE_P(DestinationKinds, SmartConnectionVerticalAimTest, ::testing::Values(true, false),
+                         [](const testing::TestParamInfo<bool>& i) {
+                             return i.param ? "AudioOutput" : "OrdinaryModule";
+                         });
+
+TEST_F(GraphEditorTest, SmartConnectionInsertOutranksAPlainSuggestionFromTheUpstream) {
+    // The arbitration bug in isolation: the upstream is a valid plain neighbour AND the destination
+    // is a valid insert target. Only one group survives, and it must be the insert.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(2000, 1200);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.setInsertModifierOverrideForTests(true);
+
+    auto& graph = engine.getGraph();
+    auto outNode = addAudioOutputNode(graph, 460, 400);
+    auto up = graph.addNode(std::make_unique<ReverbModule>());
+    up->properties.set("x", 120); // close enough to be its own candidate
+    up->properties.set("y", 400);
+    editor.updateComponents();
+    sizeModuleComponentsRealistically(editor);
+    editor.connectPorts(up->nodeID, 0, outNode->nodeID, 0, false, false);
+
+    DummyDragSource ds;
+    juce::DragAndDropTarget::SourceDetails d(juce::var("Chorus"), &ds, juce::Point<int>(390, 450));
+    editor.itemDragEnter(d);
+    editor.itemDragMove(d);
+
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0);
+    for (const auto& s : editor.getSmartSuggestions()) {
+        EXPECT_TRUE(s.isInsert) << "a plain suggestion from the upstream hid the insert";
+        EXPECT_EQ(s.neighborId, outNode->nodeID);
+        EXPECT_EQ(s.upstreamId, up->nodeID);
     }
     editor.endDragPreview();
 }

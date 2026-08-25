@@ -974,6 +974,147 @@ TEST(TimelineMidiSourceTest, EngineRendersTimelineNotesAsGateCV) {
     engine.shutdown();
 }
 
+// THE user report: "stopping the timeline while a note is playing leaves the note sounding forever."
+// Driven through the whole engine (transport tick -> snapshot publish -> graph render -> gate CV),
+// because the module-level StopFlushesActiveNotes above already passes — so if this hangs, the
+// note-off is being emitted and then lost somewhere between the module and the instrument.
+TEST(TimelineMidiSourceTest, EngineStopMidNoteDropsTheGateWithinOneBlock) {
+    AudioEngine engine(AudioEngine::HostMode::Hosted);
+    engine.initialise();
+
+    const juce::String patchJson = juce::String(R"({
+        "nodes": [
+            {"id": 1, "type": "Track In",     "uuid": ")") +
+                                   kMyUuid + R"("},
+            {"id": 2, "type": "Poly MIDI",    "uuid": "aaaaaaaa-0000-0000-0000-000000000002"},
+            {"id": 3, "type": "Audio Output", "uuid": "aaaaaaaa-0000-0000-0000-000000000003"}
+        ],
+        "connections": [
+            {"src": 1, "srcPort": -1, "dst": 2, "dstPort": -1},
+            {"src": 2, "srcPort": 8,  "dst": 3, "dstPort": 0}
+        ]
+    })";
+
+    const juce::var patch = juce::JSON::parse(patchJson);
+    ASSERT_TRUE(patch.isObject());
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(patch, engine.getGraph(), /*clearExisting=*/true,
+                                                       /*trusted=*/true));
+
+    TimelineMidiSourceModule* trackIn = nullptr;
+    for (auto* node : engine.getGraph().getNodes())
+        if (auto* t = dynamic_cast<TimelineMidiSourceModule*>(node->getProcessor()))
+            trackIn = t;
+    ASSERT_NE(trackIn, nullptr);
+
+    engine.prepareForHost(kSampleRate, kBlock, 0, 2);
+
+    // A LONG note — beat 1 to beat 9 — so the stop below lands squarely inside it.
+    TimelineDoc doc;
+    const auto trackId = doc.addTrack(TrackKind::Midi, "Track 1");
+    ASSERT_TRUE(doc.setTrackBinding(trackId, kMyUuid));
+    const auto clipId = doc.addClip(trackId, 0.0, 16.0, "Clip");
+    ASSERT_TRUE(doc.addNote(clipId, makeNote(1.0, 60, 8.0)).isValid());
+    engine.getTimelineSnapshots().publish(TimelineSnapshot::buildFrom(doc));
+
+    ASSERT_TRUE(engine.getTransport().play());
+
+    const auto renderOne = [&engine] {
+        juce::AudioBuffer<float> buffer(2, kBlock);
+        buffer.clear();
+        juce::MidiBuffer midi;
+        engine.processHostBlock(buffer, midi);
+        return buffer.getSample(0, kBlock - 1);
+    };
+
+    float gateDuringNote = 0.0f;
+    for (int block = 0; block <= 60; ++block)
+        gateDuringNote = renderOne();
+    ASSERT_NEAR(gateDuringNote, 1.0f, 1.0e-3f) << "precondition: the note is sounding when we stop";
+    ASSERT_EQ(trackIn->getActiveNoteCount(), 1) << "precondition: the source is holding it";
+
+    // STOP, mid-note.
+    ASSERT_TRUE(engine.getTransport().stop());
+
+    // The block the stop takes effect in must release the note.
+    renderOne();
+    EXPECT_EQ(trackIn->getActiveNoteCount(), 0) << "the stop must release the source's held notes";
+
+    // The gate has 5 ms of smoothing on it, so give it a few blocks to fall — but it must actually
+    // fall. THIS is the assertion the user's bug fails: the note sounds forever.
+    float gateAfterStop = 1.0f;
+    for (int block = 0; block < 40; ++block)
+        gateAfterStop = renderOne();
+    EXPECT_NEAR(gateAfterStop, 0.0f, 1.0e-3f) << "stopping the timeline mid-note must silence it";
+
+    engine.releaseFromHost();
+    engine.shutdown();
+}
+
+// The same stop, with automation SLICING on — a callback becomes several 64-sample render passes,
+// so the stop transition lands on one slice and the continuity prediction has to survive the rest.
+TEST(TimelineMidiSourceTest, EngineStopMidNoteDropsTheGateWithAutomationSlicing) {
+    AudioEngine engine(AudioEngine::HostMode::Hosted);
+    engine.initialise();
+    engine.setAutomationSlicingEnabled(true);
+
+    const juce::String patchJson = juce::String(R"({
+        "nodes": [
+            {"id": 1, "type": "Track In",     "uuid": ")") +
+                                   kMyUuid + R"("},
+            {"id": 2, "type": "Poly MIDI",    "uuid": "aaaaaaaa-0000-0000-0000-000000000002"},
+            {"id": 3, "type": "Audio Output", "uuid": "aaaaaaaa-0000-0000-0000-000000000003"}
+        ],
+        "connections": [
+            {"src": 1, "srcPort": -1, "dst": 2, "dstPort": -1},
+            {"src": 2, "srcPort": 8,  "dst": 3, "dstPort": 0}
+        ]
+    })";
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(juce::JSON::parse(patchJson), engine.getGraph(),
+                                                       /*clearExisting=*/true, /*trusted=*/true));
+
+    TimelineMidiSourceModule* trackIn = nullptr;
+    for (auto* node : engine.getGraph().getNodes())
+        if (auto* t = dynamic_cast<TimelineMidiSourceModule*>(node->getProcessor()))
+            trackIn = t;
+    ASSERT_NE(trackIn, nullptr);
+
+    engine.prepareForHost(kSampleRate, kBlock, 0, 2);
+
+    TimelineDoc doc;
+    const auto trackId = doc.addTrack(TrackKind::Midi, "Track 1");
+    ASSERT_TRUE(doc.setTrackBinding(trackId, kMyUuid));
+    const auto clipId = doc.addClip(trackId, 0.0, 16.0, "Clip");
+    ASSERT_TRUE(doc.addNote(clipId, makeNote(1.0, 60, 8.0)).isValid());
+    engine.getTimelineSnapshots().publish(TimelineSnapshot::buildFrom(doc));
+
+    ASSERT_TRUE(engine.getTransport().play());
+
+    const auto renderOne = [&engine] {
+        juce::AudioBuffer<float> buffer(2, kBlock);
+        buffer.clear();
+        juce::MidiBuffer midi;
+        engine.processHostBlock(buffer, midi);
+        return buffer.getSample(0, kBlock - 1);
+    };
+
+    float gate = 0.0f;
+    for (int block = 0; block <= 60; ++block)
+        gate = renderOne();
+    ASSERT_NEAR(gate, 1.0f, 1.0e-3f) << "precondition: sounding when we stop";
+    ASSERT_EQ(trackIn->getActiveNoteCount(), 1);
+
+    ASSERT_TRUE(engine.getTransport().stop());
+    renderOne();
+    EXPECT_EQ(trackIn->getActiveNoteCount(), 0) << "sliced passes must still see the stop";
+
+    for (int block = 0; block < 40; ++block)
+        gate = renderOne();
+    EXPECT_NEAR(gate, 0.0f, 1.0e-3f) << "stopping mid-note must silence it with slicing on too";
+
+    engine.releaseFromHost();
+    engine.shutdown();
+}
+
 // ================================================================================================
 // AUDITION (pushAuditionNote) — the piano roll's note-click preview.
 //
@@ -1162,4 +1303,94 @@ TEST(TimelineMidiSourceAudition, AFullFifoDropsRatherThanBlocking) {
     h.renderBlock(snapshot.get());
     EXPECT_EQ(h.module.getAuditionNoteCount(), 12);
     EXPECT_LE(h.module.getActiveNoteCount(), TimelineMidiSourceModule::kMaxActiveNotes);
+}
+
+// THE stuck-note bug, in the one place a note-off can actually be LOST.
+//
+// A preview is deliberately spared by every positional flush (stop, locate, loop wrap), so nothing
+// that happens later on the transport can clean one up. That makes a dropped note-OFF terminal: the
+// note is held for the life of the process, and Stop — the one thing a user reaches for when a note
+// hangs — provably cannot clear it. pushAuditionNote therefore raises a panic when it has to drop an
+// off, and the next block releases every preview.
+TEST(TimelineMidiSourceAudition, ADroppedNoteOffPanicsAndReleasesEveryPreview) {
+    Harness h;
+    Doc d;
+    const auto snapshot = d.snapshot();
+
+    // One preview sounding, cleanly.
+    ASSERT_TRUE(h.module.pushAuditionNote(60, 100, /*noteOn=*/true));
+    h.renderBlock(snapshot.get());
+    ASSERT_EQ(h.module.getAuditionNoteCount(), 1);
+
+    // Now fill the FIFO so the note-off cannot be queued, and confirm it really was refused. The
+    // filler is note-OFFs for a pitch nothing is auditioning: they drain to nothing (see
+    // NoteOffForAPitchThatIsNotAuditionedEmitsNothing...), so the only thing this block can change
+    // is the stranded note itself.
+    while (h.module.pushAuditionNote(72, 0, /*noteOn=*/false))
+        ;
+    EXPECT_FALSE(h.module.pushAuditionNote(60, 0, /*noteOn=*/false)) << "precondition: the off was dropped";
+
+    // The very next block releases the stranded preview. Before the panic path existed this note
+    // stayed held forever and no stop/locate/wrap could touch it.
+    const auto events = h.renderBlock(snapshot.get());
+    EXPECT_EQ(h.module.getAuditionNoteCount(), 0) << "a dropped note-off must not strand a preview";
+
+    bool sawOffFor60 = false;
+    for (const auto& e : events)
+        if (e.isNoteOff && e.pitch == 60)
+            sawOffFor60 = true;
+    EXPECT_TRUE(sawOffFor60) << "and the release must be a real note-off, not just a forgotten entry";
+}
+
+// The panic is armed only by a dropped OFF. A dropped note-ON owes nothing — nothing sounded — and
+// must not tear down previews that are sounding perfectly well.
+TEST(TimelineMidiSourceAudition, ADroppedNoteOnDoesNotDisturbHeldPreviews) {
+    Harness h;
+    Doc d;
+    const auto snapshot = d.snapshot();
+
+    ASSERT_TRUE(h.module.pushAuditionNote(60, 100, /*noteOn=*/true));
+    h.renderBlock(snapshot.get());
+    ASSERT_EQ(h.module.getAuditionNoteCount(), 1);
+
+    while (h.module.pushAuditionNote(72, 100, /*noteOn=*/true))
+        ;                          // fill to capacity
+    h.renderBlock(snapshot.get()); // drains whatever fitted
+    h.renderBlock(snapshot.get()); // and a second block, so a stray panic would have fired
+    EXPECT_GE(h.module.getAuditionNoteCount(), 1) << "a dropped note-ON must not release anything";
+}
+
+// The deliberate half of the contract, pinned so the panic path above cannot be "simplified" into
+// releasing previews on stop: a HEALTHY preview survives a stop, a locate and a loop wrap.
+TEST(TimelineMidiSourceAudition, AHealthyPreviewSurvivesStopAndLocate) {
+    Doc doc;
+    ASSERT_TRUE(doc.doc.addNote(doc.clipId, makeNote(1.0, 60, 8.0)).isValid());
+    auto snapshot = doc.snapshot();
+
+    Harness h;
+    ASSERT_TRUE(h.transport.play());
+    h.renderBlocks(snapshot.get(), blockOfBeat(1.0) + 1);
+    ASSERT_EQ(h.module.getActiveNoteCount(), 1) << "the timeline note is sounding";
+
+    ASSERT_TRUE(h.module.pushAuditionNote(72, 100, /*noteOn=*/true));
+    h.renderBlock(snapshot.get());
+    ASSERT_EQ(h.module.getAuditionNoteCount(), 1);
+    ASSERT_EQ(h.module.getActiveNoteCount(), 2);
+
+    // STOP: the timeline note goes, the preview stays.
+    ASSERT_TRUE(h.transport.stop());
+    h.renderBlock(snapshot.get());
+    EXPECT_EQ(h.module.getActiveNoteCount(), 1) << "the timeline note must be released";
+    EXPECT_EQ(h.module.getAuditionNoteCount(), 1) << "the preview must NOT be (a monitor path)";
+
+    // LOCATE: same rule.
+    ASSERT_TRUE(h.transport.locateBeat(32.0));
+    h.renderBlock(snapshot.get());
+    EXPECT_EQ(h.module.getAuditionNoteCount(), 1);
+
+    // Its own note-off is what ends it.
+    ASSERT_TRUE(h.module.pushAuditionNote(72, 0, /*noteOn=*/false));
+    h.renderBlock(snapshot.get());
+    EXPECT_EQ(h.module.getAuditionNoteCount(), 0);
+    EXPECT_EQ(h.module.getActiveNoteCount(), 0);
 }

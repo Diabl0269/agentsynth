@@ -85,6 +85,14 @@ public:
         }
 
         if (isBypassed()) {
+            // Dry pass-through, and for THIS module dry means the CARRIER on both output legs -
+            // exactly what mix = 0 produces below. ch1 is the Modulator INPUT, not a right-hand
+            // audio input, so it must not survive as the right output leg: a bypassed Ring
+            // Modulator with only its Modulator patched would otherwise emit that modulator hard
+            // right and nothing left, which is how a disabled module ended up being the only thing
+            // audible in a user's patch (and only on one side).
+            if (numChannels > 1)
+                buffer.copyFrom(1, 0, buffer, 0, 0, numSamples);
             for (int ch = 2; ch < numChannels; ++ch)
                 buffer.clear(ch, 0, numSamples);
             return;

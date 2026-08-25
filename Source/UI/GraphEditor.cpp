@@ -2160,6 +2160,22 @@ void GraphEditor::refreshSmartSuggestions() {
     // pairs and mono↔stereo fans are multiple candidates with the same neighborId/ghostIsSource).
     if (!audioCandidates.empty()) {
         std::sort(audioCandidates.begin(), audioCandidates.end(), [](const Candidate& a, const Candidate& b) {
+            // An INSERT outranks every plain candidate, whatever the distances say. Only ONE
+            // neighbour's group survives this sort, and a ghost being spliced into a cable sits
+            // between two cards that are BOTH valid neighbours — the upstream it is being inserted
+            // after is a perfectly good plain "feed the new module" candidate, and it was winning on
+            // proximity and discarding the insert entirely. That is what made Ctrl+drag near the
+            // Audio Output look flaky: whether the sink or the upstream won flipped with small
+            // cursor moves, so nudging down "made it work". An insert is an explicit, modifier-held
+            // request; a plain connect is a passive offer, and a passive offer must never hide it.
+            //
+            // It showed up at the Audio Output specifically because the sink is a bare
+            // AudioGraphIOProcessor, and scoreSmartPair returns a flat 2 for a non-ModuleBase end —
+            // so the sink loses on SCORE to any real module neighbour, before distance is even
+            // consulted. An ordinary destination outscores the upstream and happened to win anyway,
+            // which is why the same gesture felt reliable everywhere else.
+            if (a.suggestion.isInsert != b.suggestion.isInsert)
+                return a.suggestion.isInsert;
             if (a.score != b.score)
                 return a.score > b.score;
             return a.distance < b.distance;
@@ -2170,6 +2186,8 @@ void GraphEditor::refreshSmartSuggestions() {
                 continue;
             if (c.suggestion.ghostIsSource != best.suggestion.ghostIsSource)
                 continue;
+            if (c.suggestion.isInsert != best.suggestion.isInsert)
+                continue; // never mix a reroute and a plain add in one applied group
             smartSuggestions.push_back(c.suggestion);
         }
     }
@@ -4424,6 +4442,37 @@ void GraphEditor::completeStereoPairConnections(ModuleComponent* moduleComp) {
             if (destLeg < 0 && destNode != nullptr && mb->hasSplitBlockStereo() &&
                 !hasEdge(nodeId, myOutputLeg, destNode->nodeID, c.destination.channelIndex))
                 graph.addConnection({{nodeId, myOutputLeg}, {destNode->nodeID, c.destination.channelIndex}});
+        }
+
+        // Outgoing into a DEDICATED mono audio input, i.e. a jack that is nobody's stereo pair: the
+        // Ring Modulator's Carrier (ch0) and Modulator (ch1) are the case that reached a user, since
+        // their roles differ and ch1 is never a right-hand input. The branch above only ever looked at
+        // cables landing on the destination's ch0, so a module split while feeding Modulator wired
+        // Audio L and stopped. Same ruling as the collapsed mono jack: sum the right leg into the very
+        // same input.
+        if (c.source.nodeID == nodeId && c.source.channelIndex == 0 && c.destination.channelIndex != 0 &&
+            myOutputLeg >= 0 && mb->hasSplitBlockStereo()) {
+            auto* destNode = graph.getNodeForId(c.destination.nodeID);
+            const int destCh = c.destination.channelIndex;
+
+            // Qualifies only when the target is a standalone mono AUDIO input the user can see:
+            //   * a real ModuleBase jack (graph I/O has no roles to ask, and its ch1 is a stereo leg),
+            //   * reachable from a visible jack, so never a hidden block,
+            //   * not modulation CV - our left leg being patched there does not license dumping an
+            //     audio-rate copy onto a Cutoff or Rate jack as well,
+            //   * span 1 and not the right leg of a pair, which the ch0 branch above already covers.
+            bool qualifies = false;
+            if (destNode != nullptr) {
+                if (auto* destMb = dynamic_cast<ModuleBase*>(destNode->getProcessor())) {
+                    const LogicalPort port = destMb->mapInputChannel(destCh);
+                    qualifies = audioChannelReachableFromJack(*destMb, destCh, /*isInput=*/true) &&
+                                port.role != PortRole::ModCV && !destMb->isAutoPromotableModTarget(destCh) &&
+                                port.polyVoiceSpan == 1 && rightAudioLegOf(destMb, /*asInput=*/true) != destCh;
+                }
+            }
+
+            if (qualifies && !hasEdge(nodeId, myOutputLeg, destNode->nodeID, destCh))
+                graph.addConnection({{nodeId, myOutputLeg}, {destNode->nodeID, destCh}});
         }
 
         // Incoming: source's left leg is patched to ours, and the source is itself a stereo pair.

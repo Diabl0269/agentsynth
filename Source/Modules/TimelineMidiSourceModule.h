@@ -30,8 +30,19 @@
  * idiom), drained once per block: no lock, no allocation and no logging on the audio thread, and a
  * full FIFO DROPS the event rather than blocking. An auditioned note is parked in the same
  * active_ table a played note is, with an INFINITE end beat (kAuditionEndBeat) so emitRange's
- * end-beat scan can never release it — its own note-off does, and so does every hygiene flush
- * below, which is what keeps a held preview from surviving a stop/locate/bypass/loop wrap.
+ * end-beat scan can never release it.
+ *
+ * WHAT RELEASES A PREVIEW, precisely — this list is the whole contract, and getting it wrong is how
+ * a note sounds forever: its own note-off; a bypass or a lost transport (flushActiveNotes, which
+ * takes auditions with it); or the panic path below. NOT a stop, a locate or a loop wrap — those go
+ * through flushTimelineNotes, which deliberately SPARES auditions, because cutting a preview short
+ * because the user pressed Stop would break the monitor path audition exists to provide.
+ *
+ * That sparing is also the trap: since a dropped note-OFF can never be cleaned up by a later
+ * positional event, pushAuditionNote raises auditionPanic_ when the FIFO cannot take an off, and the
+ * next block releases every preview. Without it, one dropped off leaves a note held for the life of
+ * the process and Stop — the one thing a user reaches for — provably cannot clear it.
+ *
  * Deliberately NOT gated on the track's mute/solo: audition is a monitor path, the same way
  * clicking a key on a MIDI Keyboard module is.
  *
@@ -94,13 +105,24 @@ public:
      *  a hygiene flush, and a stray note-off would cut a timeline note of the same pitch short.
      *
      *  @return false when the FIFO is full and the event was DROPPED. The caller may re-post; it must
-     *  not block. (A dropped note-ON is silence, which is survivable; a dropped note-OFF cannot
-     *  strand a note, because every flush path releases audition notes too.) */
+     *  not block. A dropped note-ON is silence, which is survivable. A dropped note-OFF is NOT: it
+     *  used to be safe because every flush released audition notes, but the positional flushes now
+     *  deliberately spare them, so nothing downstream would ever clean one up. That case raises
+     *  auditionPanic_ instead, and the next block releases every preview — see the class comment. */
     bool pushAuditionNote(int pitch, int velocity, bool noteOn, int channel = 1) noexcept {
         int start1 = 0, size1 = 0, start2 = 0, size2 = 0;
         auditionFifo_.prepareToWrite(1, start1, size1, start2, size2);
-        if (size1 + size2 < 1)
+        if (size1 + size2 < 1) {
+            // A dropped note-ON is harmless: nothing sounded, so nothing is owed. A dropped
+            // note-OFF strands a note FOREVER — the audition sentinel makes every hygiene flush
+            // (stop, locate, loop wrap) skip it, so no later event can ever clean it up, and Stop
+            // (the one thing a user reaches for when a note hangs) is specifically the thing that
+            // cannot help. So an off that cannot be queued raises a PANIC instead, on an atomic
+            // that has no capacity to overflow: the next block releases every held audition note.
+            if (!noteOn)
+                auditionPanic_.store(true, std::memory_order_release);
             return false;
+        }
         auditionSlots_[(std::size_t)start1] = {pitch, velocity, channel, noteOn};
         auditionFifo_.finishedWrite(1);
         return true;
@@ -188,6 +210,12 @@ public:
         // land on top of a preview the same block started) and BEFORE every early return below, so a
         // click sounds with the transport STOPPED, on an unbound track, and on a muted one. That is
         // the point of a monitor path: the user asked to hear this note, not to hear the timeline.
+        // PANIC first: a note-off the FIFO could not take (see pushAuditionNote) would otherwise
+        // strand its note forever, because the hygiene flush above deliberately spares auditions.
+        // Runs BEFORE the drain so anything queued after the panic still applies normally.
+        if (auditionPanic_.exchange(false, std::memory_order_acq_rel))
+            releaseAllAuditionNotes(midiMessages);
+
         drainAuditionEvents(midiMessages);
 
         if (!info.playing || snapshot == nullptr || numSamples <= 0) {
@@ -459,7 +487,12 @@ private:
 
     // Empties the FIFO without emitting anything — the bypass / no-transport path (see their
     // comments). Reads through the same finishedRead accounting, never by resetting the FIFO.
+    //
+    // Clears any pending PANIC too: both callers have just run flushActiveNotes, which already took
+    // the audition notes with it, so a panic left armed here would fire a release for notes that no
+    // longer exist the next time this node became usable.
     void discardAuditionEvents() {
+        auditionPanic_.store(false, std::memory_order_release);
         for (;;) {
             int start1 = 0, size1 = 0, start2 = 0, size2 = 0;
             auditionFifo_.prepareToRead(1, start1, size1, start2, size2);
@@ -484,6 +517,18 @@ private:
             return; // overflow: drop the on rather than owe an off we cannot track
         midiMessages.addEvent(
             juce::MidiMessage::noteOn(channel, pitch, (juce::uint8)juce::jlimit(1, 127, event.velocity)), 0);
+    }
+
+    // Every held AUDITION note released, timeline notes untouched — the mirror of
+    // flushTimelineNotes. Reached only from the panic path (a note-off the FIFO could not take),
+    // which is the one case where the preview's own off is never coming.
+    void releaseAllAuditionNotes(juce::MidiBuffer& midiMessages, int offset = 0) {
+        for (int i = numActive_ - 1; i >= 0; --i) {
+            if (!isAuditionNote(active_[i]))
+                continue;
+            midiMessages.addEvent(juce::MidiMessage::noteOff(active_[i].channel, active_[i].pitch), offset);
+            removeActiveAt(i);
+        }
     }
 
     // Releases a held AUDITION note of this pitch/channel and nothing else. The isAuditionNote guard
@@ -517,6 +562,10 @@ private:
     // is wait-free and the drain allocates nothing.
     juce::AbstractFifo auditionFifo_{kAuditionFifoCapacity};
     std::array<AuditionEvent, (std::size_t)kAuditionFifoCapacity> auditionSlots_{};
+
+    // "An audition note-off was dropped — release every preview." A bool, not a queued event, for
+    // the reason it exists: it must be impossible to lose, and an atomic cannot be full.
+    std::atomic<bool> auditionPanic_{false};
 
     std::int64_t expectedNextBlockStart_ = 0;
     bool haveLastBlock_ = false;
