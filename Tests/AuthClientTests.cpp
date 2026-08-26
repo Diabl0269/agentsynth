@@ -991,6 +991,24 @@ TEST(AuthClientTest, SubmitGeneralFeedbackTransportFailure) {
     EXPECT_TRUE(result.transportError.isNotEmpty());
 }
 
+TEST(AuthClientTest, SubmitGeneralFeedbackWithEmptyAccessTokenSendsDeviceIdInsteadOfAuthorization) {
+    juce::StringPairArray capturedHeaders;
+
+    auto performer = [&](const juce::String&, const juce::String&, const juce::StringPairArray& headers,
+                         const juce::String&, int, const std::atomic<bool>&) -> synth::AuthClient::HttpResult {
+        capturedHeaders = headers;
+        return makeStatus(200, "");
+    };
+
+    // Non-empty device id, empty access token: an anonymous (signed-out) submission (P6-17).
+    synth::AuthClient client{kHost, kClientId, performer, "device-abc-123"};
+    const auto result = client.submitGeneralFeedback("", "bug", "anonymous report", kNeverCancelled);
+
+    ASSERT_TRUE(result.ok);
+    EXPECT_EQ(capturedHeaders.getValue("X-Device-Id", ""), juce::String("device-abc-123"));
+    EXPECT_TRUE(capturedHeaders.getValue("Authorization", "").isEmpty());
+}
+
 // ============================================================================
 // revoke / logout — fire-and-forget
 // ============================================================================

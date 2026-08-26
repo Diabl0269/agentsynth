@@ -7,9 +7,9 @@ void ToolbarComponent::setButtons(std::array<juce::DrawableButton*, NumSlots> bt
 // ---------------------------------------------------------------------------
 // Sub-group membership per Slot, used both to space groups apart in layoutButtons() and to
 // find the group boundaries paint() draws separator hairlines at. Matches the Slot enum's
-// documented grouping (ToolbarComponent.h:21-22): left [Library]|[New,Save,Load]|[Settings]|
-// [Undo,Redo]|[AutoArrange]; right [ToggleMinimap,ToggleModMatrix,ToggleAiPanel,ToggleTimeline]|
-// [ToggleTheme].
+// documented grouping (ToolbarComponent.h:21-22): left [Library]|[New,Save,Load]|
+// [Settings,Feedback]|[Undo,Redo]|[AutoArrange]; right
+// [ToggleMinimap,ToggleModMatrix,ToggleAiPanel,ToggleTimeline]|[ToggleTheme].
 namespace {
 int groupOf(int slot) {
     switch (slot) {
@@ -20,6 +20,7 @@ int groupOf(int slot) {
     case ToolbarComponent::Load:
         return 1;
     case ToolbarComponent::Settings:
+    case ToolbarComponent::Feedback:
         return 2;
     case ToolbarComponent::Undo:
     case ToolbarComponent::Redo:
@@ -53,6 +54,7 @@ void ToolbarComponent::layoutButtons(juce::Rectangle<int> bounds) {
         112.0f, // Save
         116.0f, // Load
         96.0f,  // Settings
+        40.0f,  // Feedback — always icon-only, never grows a text label
         72.0f,  // Undo
         72.0f,  // Redo
         120.0f, // AutoArrange

@@ -25,6 +25,7 @@ enum class Icon : int {
     ActionNew,
     ActionSettings,
     ActionAutoArrange,
+    ActionFeedback,
     ToggleAI,
     ToggleMatrix,
     ToggleLibrary,

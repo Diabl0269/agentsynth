@@ -494,6 +494,25 @@ TEST_F(SettingsWindowTest, RemembersLastSelectedTab) {
     EXPECT_EQ(settingsWindow.getCurrentTabIndex(), 1);
 }
 
+TEST_F(SettingsWindowTest, InitialTabNameOverridesPersistedTabSelection) {
+    // Persisted preference points at a different tab (index 1, AI) — initialTabName should win.
+    appProperties.getUserSettings()->setValue("settingsTab", 1);
+    appProperties.saveIfNeeded();
+
+    SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                  themeManager, nullptr, nullptr, true, nullptr, "Feedback");
+
+    int expectedIndex = -1;
+    for (int i = 0; i < settingsWindow.getNumTabs(); ++i) {
+        if (settingsWindow.getTabName(i) == "Feedback") {
+            expectedIndex = i;
+            break;
+        }
+    }
+    ASSERT_GE(expectedIndex, 0) << "No tab named \"Feedback\" found";
+    EXPECT_EQ(settingsWindow.getCurrentTabIndex(), expectedIndex);
+}
+
 TEST_F(SettingsWindowTest, ResizingDoesNotCrash) {
     SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
                                   themeManager, nullptr);

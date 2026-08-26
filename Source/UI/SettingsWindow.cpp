@@ -378,7 +378,7 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
                                synth::AIIntegrationService& aiService, synth::AIChatComponent& aiChatComponent,
                                ShortcutManager& shortcutManager, synth::theme::ThemeManager& themeManager,
                                GraphEditor* graphEditor, synth::AccountService* accountService, bool showAudioTab,
-                               std::function<void(bool)> onTimelineFeatureToggled)
+                               std::function<void(bool)> onTimelineFeatureToggled, juce::String initialTabName)
     : appProperties(appProperties)
     , themeManager(themeManager) {
     if (showAudioTab) {
@@ -412,8 +412,19 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
 
     addAndMakeVisible(tabs);
 
-    // Restore last selected tab
-    tabs.setCurrentTabIndex(appProperties.getUserSettings()->getIntValue("settingsTab", 0), false);
+    // Restore last selected tab — unless the caller asked for a specific tab by name (e.g. the
+    // toolbar's feedback button opening Settings pre-selected to "Feedback"), in which case that
+    // wins over the persisted preference.
+    int initialIndex = -1;
+    if (initialTabName.isNotEmpty())
+        for (int i = 0; i < tabs.getNumTabs(); ++i)
+            if (tabs.getTabNames()[i] == initialTabName) {
+                initialIndex = i;
+                break;
+            }
+    if (initialIndex < 0)
+        initialIndex = appProperties.getUserSettings()->getIntValue("settingsTab", 0);
+    tabs.setCurrentTabIndex(initialIndex, false);
 
     themeManager.addChangeListener(this);
 }

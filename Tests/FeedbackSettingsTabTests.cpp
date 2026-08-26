@@ -299,7 +299,10 @@ TEST_F(FeedbackSettingsTabTest, SyncUsesLocalApiUrlOverrideWhenSet) {
 }
 #endif
 
-TEST_F(FeedbackSettingsTabTest, NotSignedInDoesNotAttemptSync) {
+// P6-17: a signed-out user with an accountService attached still gets synced -- anonymously, via
+// this device's X-Device-Id -- rather than skipped as it was before P6-17 (superseding the old
+// "no sync while signed out" contract).
+TEST_F(FeedbackSettingsTabTest, SignedOutStillSyncsFeedbackAnonymouslyViaDeviceId) {
     auto tokenStore = std::make_unique<synth::InMemoryTokenStore>();
     synth::AccountService accountService("http://mock-host:8787", makeSignInPerformer(), std::move(tokenStore));
     // Deliberately not signed in: no attemptSilentSignIn()/signIn() call, so the account stays
@@ -314,9 +317,16 @@ TEST_F(FeedbackSettingsTabTest, NotSignedInDoesNotAttemptSync) {
     tab.getFeedbackEditorForTest().setText("crashes on launch", juce::sendNotificationSync);
     juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
     tab.getSendButtonForTest().triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(200);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
 
-    EXPECT_EQ(captured->callCount.load(), 0) << "no sync should be attempted while signed out";
+    ASSERT_TRUE(waitUntil([&] { return captured->callCount.load() >= 1; }))
+        << "feedback POST never landed on the background thread while signed out";
+    EXPECT_EQ(captured->callCount.load(), 1);
+    EXPECT_TRUE(captured->url.endsWith("/v1/feedback")) << captured->url;
+    // Anonymous: no bearer token, but the device's stable id is present so the server can still
+    // attribute the submission.
+    EXPECT_TRUE(captured->headers.getValue("Authorization", "").isEmpty());
+    EXPECT_TRUE(captured->headers.getValue("X-Device-Id", "").isNotEmpty());
 
     // Local log still got the entry.
     ASSERT_EQ(lines().size(), 1);

@@ -311,9 +311,15 @@ GeneralFeedbackStore` appends one JSON object per line (`{timestamp, category, t
 rationale as `PatchFeedbackStore` above, but its own file since the two logs track unrelated
 things. P6-16 additionally syncs each submission to the server, fire-and-forget, mirroring
 "Patch Feedback Sync to Server (P6-9, client side)" below with one deliberate difference: this
-sync is gated on sign-in only, NOT Pro — `POST /v1/feedback` has no plan check server-side either,
-so any signed-in account may submit general feedback. The local log above is still written
-unconditionally regardless of sign-in state or sync outcome.
+sync is NOT Pro-gated — `POST /v1/feedback` has no plan check server-side either, so any account
+may submit general feedback. P6-17 extended this further: the sync now fires whenever
+`FeedbackSettingsTab` has an `accountService` attached at all, whether or not the user is signed
+in. `AuthClient::submitGeneralFeedback` sets `Authorization: Bearer <accessToken>` only when
+`accessToken` is non-empty (signed in); it always sets `X-Device-Id` from the `AuthClient`'s own
+stable per-install device id (see `Source/Auth/DeviceIdStore.h`) when non-empty, so a signed-out
+submission is still attributable server-side via that anonymous id rather than being dropped
+client-side. The local log above is still written unconditionally regardless of sign-in state or
+sync outcome.
 
 ### AI Patch Undo/Redo Contract
 
