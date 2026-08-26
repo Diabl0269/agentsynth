@@ -500,7 +500,7 @@ TEST_F(SettingsWindowTest, InitialTabNameOverridesPersistedTabSelection) {
     appProperties.saveIfNeeded();
 
     SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
-                                  themeManager, nullptr, nullptr, true, nullptr, "Feedback");
+                                  themeManager, nullptr, nullptr, true, "Feedback");
 
     int expectedIndex = -1;
     for (int i = 0; i < settingsWindow.getNumTabs(); ++i) {

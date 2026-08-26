@@ -906,11 +906,10 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     addAndMakeVisible(feedbackButton);
     feedbackButton.setComponentID("feedbackButton");
     feedbackButton.onClick = [this]() {
-        auto* settingsComp = new SettingsWindow(
-            audioEngine.getDeviceManager(), appProperties, aiService, aiChatComponent, shortcutManager, *themeManager,
-            &graphEditor, &accountService,
-            /*showAudioTab=*/!audioEngine.isHosted(), [this](bool enabled) { applyTimelineFeatureEnabled(enabled); },
-            "Feedback");
+        auto* settingsComp =
+            new SettingsWindow(audioEngine.getDeviceManager(), appProperties, aiService, aiChatComponent,
+                               shortcutManager, *themeManager, &graphEditor, &accountService,
+                               /*showAudioTab=*/!audioEngine.isHosted(), "Feedback");
         settingsComp->setSize(500, 450);
 
         juce::DialogWindow::LaunchOptions options;
