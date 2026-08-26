@@ -5337,6 +5337,388 @@ TEST_F(GraphEditorTest, SmartConnectionInsertOutranksAPlainSuggestionFromTheUpst
     editor.endDragPreview();
 }
 
+// --- Ctrl with nothing to insert must still connect normally -----------------
+//
+// Regression: "an insert outranks every plain candidate" was an overcorrection. With Ctrl held, an
+// insert into some occupied module in range stole the drop from the free module the user was aiming
+// at, so Ctrl+drag stopped connecting anything ordinary. The demotion is now targeted: only a plain
+// offer coming FROM the cable's own upstream loses to the insert.
+
+TEST_F(GraphEditorTest, SmartConnectionCtrlWithNothingToInsertStillConnectsOnLibraryDrop) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 900);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.setInsertModifierOverrideForTests(true); // Ctrl held, but nothing is occupied
+
+    auto& graph = engine.getGraph();
+    auto dest = graph.addNode(std::make_unique<DelayModule>());
+    dest->properties.set("x", 700);
+    dest->properties.set("y", 400);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    DummyDragSource ds;
+    juce::DragAndDropTarget::SourceDetails d(juce::var("Chorus"), &ds,
+                                             libraryCursorForGhostTopLeft("Chorus", {700 - 280 - 40, 400}));
+    editor.itemDragEnter(d);
+    editor.itemDragMove(d);
+
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0) << "Ctrl must not suppress an ordinary connection";
+    for (const auto& s : editor.getSmartSuggestions()) {
+        EXPECT_FALSE(s.isInsert) << "there is nothing occupied to insert into";
+        EXPECT_EQ(s.neighborId, dest->nodeID);
+    }
+    editor.itemDropped(d);
+
+    const auto ghostId = findNodeIdByName(graph, "Chorus");
+    ASSERT_NE(ghostId.uid, 0u);
+    EXPECT_GT(countAudioConnectionsBetween(graph, ghostId, dest->nodeID), 0) << "the plain cable was never applied";
+}
+
+TEST_F(GraphEditorTest, SmartConnectionCtrlWithNothingToInsertStillConnectsOnCanvasMove) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.setInsertModifierOverrideForTests(true);
+
+    auto& graph = engine.getGraph();
+    auto dest = graph.addNode(std::make_unique<DelayModule>());
+    dest->properties.set("x", 700);
+    dest->properties.set("y", 400);
+    auto ghost = graph.addNode(std::make_unique<ChorusModule>());
+    ghost->properties.set("x", 40);
+    ghost->properties.set("y", 900);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    ModuleComponent* ghostComp = nullptr;
+    for (auto* c : editor.getModuleComponents())
+        if (c->getNodeId() == ghost->nodeID)
+            ghostComp = c;
+    ASSERT_NE(ghostComp, nullptr);
+
+    editor.beginDragPreview(ghostComp->getWidth(), ghostComp->getHeight(), ghost->nodeID);
+    editor.updateDragPreview({700 - 280 - 40, 400}); // a move is top-left anchored
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0) << "Ctrl must not suppress an ordinary connection on a move";
+    for (const auto& s : editor.getSmartSuggestions())
+        EXPECT_FALSE(s.isInsert);
+    editor.finalizeModuleDrag(ghostComp);
+    editor.endDragPreview();
+
+    EXPECT_GT(countAudioConnectionsBetween(graph, ghost->nodeID, dest->nodeID), 0);
+}
+
+TEST_F(GraphEditorTest, SmartConnectionInsertDoesNotStealFromTheModuleBeingAimedAt) {
+    // An occupied module in range offers an insert; a FREE module right under the cursor offers a
+    // plain connect. Aim must win — the insert may only outrank a plain offer from its own upstream.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(2400, 1400);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.setInsertModifierOverrideForTests(true);
+
+    auto& graph = engine.getGraph();
+    auto freeDest = graph.addNode(std::make_unique<DelayModule>());
+    freeDest->properties.set("x", 700);
+    freeDest->properties.set("y", 400);
+    auto occUp = graph.addNode(std::make_unique<ReverbModule>());
+    occUp->properties.set("x", 120);
+    occUp->properties.set("y", 400);
+    auto occDest = graph.addNode(std::make_unique<ChorusModule>());
+    occDest->properties.set("x", 430);
+    occDest->properties.set("y", 400);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+    editor.connectPorts(occUp->nodeID, 0, occDest->nodeID, 0, false, false);
+
+    DummyDragSource ds;
+    juce::DragAndDropTarget::SourceDetails d(juce::var("Chorus"), &ds, juce::Point<int>(660, 450));
+    editor.itemDragEnter(d);
+    editor.itemDragMove(d);
+
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0);
+    for (const auto& s : editor.getSmartSuggestions()) {
+        EXPECT_EQ(s.neighborId, freeDest->nodeID) << "the insert stole the drop from the module under the cursor";
+        EXPECT_FALSE(s.isInsert);
+    }
+    editor.endDragPreview();
+}
+
+// --- Role-named mono audio inputs (Ring Modulator Carrier / Modulator) -------
+//
+// Ring Modulator's input side is five discrete jacks: Carrier, Modulator, and three CV. Both audio
+// jacks carry PortRole::Other from the inherited input map, so classification is label/role driven
+// rather than index driven: collectSmartAudioLegs takes the FIRST audio-ish jack as the module's one
+// mono audio input and never treats two unlabeled jacks as a stereo pair. Carrier is therefore the
+// proximity target and Modulator is left for the user to patch deliberately.
+
+TEST_F(GraphEditorTest, SmartConnectionDualUpstreamSumsBothLegsIntoRingModulatorCarrier) {
+    // Previously only ONE leg landed: both pairs target Carrier's single raw channel, and the
+    // redundancy dedupe keyed on the destination raw alone, so it discarded the second leg. Summing
+    // two source legs into one dedicated mono input is the intent, not a duplicate.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 900);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.setInsertModifierOverrideForTests(false);
+
+    auto& graph = engine.getGraph();
+    auto ring = graph.addNode(std::make_unique<RingModulatorModule>());
+    ring->properties.set("x", 460);
+    ring->properties.set("y", 400);
+    auto dist = graph.addNode(std::make_unique<DistortionModule>());
+    dist->properties.set("x", 40);
+    dist->properties.set("y", 400);
+    setDualIOParam(*dist->getProcessor(), true); // dual OUTPUT: separate Left/Right jacks
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    auto* ringMb = dynamic_cast<ModuleBase*>(ring->getProcessor());
+    ASSERT_NE(ringMb, nullptr);
+    ASSERT_EQ(ringMb->getInputPortLabel(0), "Carrier");
+    ASSERT_EQ(ringMb->getInputPortLabel(1), "Modulator");
+
+    ModuleComponent* distComp = nullptr;
+    for (auto* c : editor.getModuleComponents())
+        if (c->getNodeId() == dist->nodeID)
+            distComp = c;
+    ASSERT_NE(distComp, nullptr);
+
+    editor.beginDragPreview(distComp->getWidth(), distComp->getHeight(), dist->nodeID);
+    editor.updateDragPreview({140, 400});
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0);
+    for (const auto& s : editor.getSmartSuggestions())
+        EXPECT_EQ(s.neighborJack, 0) << "only Carrier may be proposed; Modulator is patched deliberately";
+    editor.finalizeModuleDrag(distComp);
+    editor.endDragPreview();
+
+    // Both legs summed into Carrier (raw 0), and nothing on Modulator (raw 1).
+    EXPECT_TRUE(graph.isConnected({{dist->nodeID, 0}, {ring->nodeID, 0}})) << "Left leg missing from Carrier";
+    EXPECT_TRUE(graph.isConnected({{dist->nodeID, 1}, {ring->nodeID, 0}})) << "Right leg missing from Carrier";
+    EXPECT_FALSE(graph.isConnected({{dist->nodeID, 0}, {ring->nodeID, 1}}));
+    EXPECT_FALSE(graph.isConnected({{dist->nodeID, 1}, {ring->nodeID, 1}}));
+    EXPECT_TRUE(editor.isInputJackFreeForTests(ring->nodeID, 1)) << "Modulator must never be auto-wired";
+}
+
+TEST_F(GraphEditorTest, SmartConnectionRingModulatorAsSourceIsUnchanged) {
+    // Its OUTPUT side is an ordinary collapsible stereo pair; only the input side is special.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 900);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.setInsertModifierOverrideForTests(false);
+
+    auto& graph = engine.getGraph();
+    auto dest = graph.addNode(std::make_unique<DelayModule>());
+    dest->properties.set("x", 700);
+    dest->properties.set("y", 400);
+    auto ring = graph.addNode(std::make_unique<RingModulatorModule>());
+    ring->properties.set("x", 40);
+    ring->properties.set("y", 900);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    ModuleComponent* ringComp = nullptr;
+    for (auto* c : editor.getModuleComponents())
+        if (c->getNodeId() == ring->nodeID)
+            ringComp = c;
+    ASSERT_NE(ringComp, nullptr);
+
+    editor.beginDragPreview(ringComp->getWidth(), ringComp->getHeight(), ring->nodeID);
+    editor.updateDragPreview({700 - 280 - 40, 400});
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0) << "Ring Modulator must still work as a source";
+    for (const auto& s : editor.getSmartSuggestions()) {
+        EXPECT_TRUE(s.ghostIsSource);
+        EXPECT_EQ(s.neighborId, dest->nodeID);
+    }
+    editor.finalizeModuleDrag(ringComp);
+    editor.endDragPreview();
+    EXPECT_GT(countAudioConnectionsBetween(graph, ring->nodeID, dest->nodeID), 0);
+}
+
+// --- Gesture matrix: the whole smart-connect contract in one table -----------
+//
+// Two regressions in this subsystem shipped past a green suite (the round-6 aim anchoring, then the
+// Ctrl-plain suppression) because each fix was covered only by tests for the case it fixed. This
+// sweeps every modifier state against every destination kind on both gestures, so a behaviour change
+// has to EDIT THE TABLE deliberately instead of being discovered by a user.
+//
+// The four modifier states collapse to two effective values at evaluation time, but they exercise
+// different plumbing: held-before goes through the press-time path, pressed/released-mid-drag go
+// through the live per-tick re-sample that had no coverage before round 6.
+//
+// Aim is the clear-left position for every cell, so the MODIFIER is the only variable. (Aiming at
+// the gap is deliberately insert-only — see the note in the report; a plain suggestion still
+// requires the flow rule, which an overlapping ghost fails.)
+
+enum class GestureOutcome { None, Plain, Insert };
+
+static const char* outcomeName(GestureOutcome o) {
+    switch (o) {
+    case GestureOutcome::None:
+        return "None";
+    case GestureOutcome::Plain:
+        return "Plain";
+    case GestureOutcome::Insert:
+        return "Insert";
+    }
+    return "?";
+}
+
+enum class ModifierGesture { NoModifier, CtrlHeldBefore, CtrlPressedMidDrag, CtrlReleasedMidDrag };
+enum class DestKind { FreeOrdinary, OccupiedOrdinary, OccupiedAudioOutput, FreeAudioOutput };
+
+struct MatrixRow {
+    DestKind dest;
+    ModifierGesture modifier;
+    GestureOutcome expected;
+};
+
+// EXPECTED BEHAVIOUR TABLE - edit deliberately.
+//
+//   destination            | no modifier | Ctrl (any of the three Ctrl-down-at-evaluation gestures)
+//   -----------------------+-------------+--------------------------------------------------------
+//   free ordinary          | Plain       | Plain   (nothing occupied to insert into)
+//   occupied ordinary      | None        | Insert  (hard stop without the modifier)
+//   occupied Audio Output  | Plain       | Insert  (the sink's parallel-add is that Plain)
+//   free Audio Output      | Plain       | Plain
+//
+// CtrlReleasedMidDrag ends with the modifier UP, so it must match the no-modifier column.
+static const MatrixRow kGestureMatrix[] = {
+    {DestKind::FreeOrdinary, ModifierGesture::NoModifier, GestureOutcome::Plain},
+    {DestKind::FreeOrdinary, ModifierGesture::CtrlHeldBefore, GestureOutcome::Plain},
+    {DestKind::FreeOrdinary, ModifierGesture::CtrlPressedMidDrag, GestureOutcome::Plain},
+    {DestKind::FreeOrdinary, ModifierGesture::CtrlReleasedMidDrag, GestureOutcome::Plain},
+
+    {DestKind::OccupiedOrdinary, ModifierGesture::NoModifier, GestureOutcome::None},
+    {DestKind::OccupiedOrdinary, ModifierGesture::CtrlHeldBefore, GestureOutcome::Insert},
+    {DestKind::OccupiedOrdinary, ModifierGesture::CtrlPressedMidDrag, GestureOutcome::Insert},
+    {DestKind::OccupiedOrdinary, ModifierGesture::CtrlReleasedMidDrag, GestureOutcome::None},
+
+    {DestKind::OccupiedAudioOutput, ModifierGesture::NoModifier, GestureOutcome::Plain},
+    {DestKind::OccupiedAudioOutput, ModifierGesture::CtrlHeldBefore, GestureOutcome::Insert},
+    {DestKind::OccupiedAudioOutput, ModifierGesture::CtrlPressedMidDrag, GestureOutcome::Insert},
+    {DestKind::OccupiedAudioOutput, ModifierGesture::CtrlReleasedMidDrag, GestureOutcome::Plain},
+
+    {DestKind::FreeAudioOutput, ModifierGesture::NoModifier, GestureOutcome::Plain},
+    {DestKind::FreeAudioOutput, ModifierGesture::CtrlHeldBefore, GestureOutcome::Plain},
+    {DestKind::FreeAudioOutput, ModifierGesture::CtrlPressedMidDrag, GestureOutcome::Plain},
+    {DestKind::FreeAudioOutput, ModifierGesture::CtrlReleasedMidDrag, GestureOutcome::Plain},
+};
+
+struct GestureMatrixCase {
+    MatrixRow row;
+    bool libraryDrop;
+};
+
+static std::vector<GestureMatrixCase> allGestureMatrixCases() {
+    std::vector<GestureMatrixCase> cases;
+    for (const auto& row : kGestureMatrix)
+        for (bool libraryDrop : {true, false})
+            cases.push_back({row, libraryDrop});
+    return cases;
+}
+
+class SmartConnectionGestureMatrixTest : public ::testing::TestWithParam<GestureMatrixCase> {};
+
+TEST_P(SmartConnectionGestureMatrixTest, MatchesTheExpectedOutcome) {
+    const auto& c = GetParam();
+
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(2000, 1400);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+
+    auto& graph = engine.getGraph();
+    constexpr int kDestX = 760;
+    constexpr int kLaneY = 400;
+    const bool destIsSink = c.row.dest == DestKind::OccupiedAudioOutput || c.row.dest == DestKind::FreeAudioOutput;
+    const bool destOccupied = c.row.dest == DestKind::OccupiedOrdinary || c.row.dest == DestKind::OccupiedAudioOutput;
+
+    juce::AudioProcessorGraph::NodeID destId;
+    if (destIsSink) {
+        destId = addAudioOutputNode(graph, kDestX, kLaneY)->nodeID;
+    } else {
+        auto d = graph.addNode(std::make_unique<DelayModule>());
+        d->properties.set("x", kDestX);
+        d->properties.set("y", kLaneY);
+        destId = d->nodeID;
+    }
+
+    juce::AudioProcessorGraph::NodeID upstreamId{};
+    if (destOccupied) {
+        // Parked far away so it is not itself a neighbour candidate: this matrix is about the
+        // modifier, and arbitration between two neighbours has its own dedicated tests.
+        auto up = graph.addNode(std::make_unique<ReverbModule>());
+        up->properties.set("x", 40);
+        up->properties.set("y", 1100);
+        upstreamId = up->nodeID;
+    }
+
+    juce::AudioProcessorGraph::NodeID ghostId{};
+    if (!c.libraryDrop) {
+        auto g = graph.addNode(std::make_unique<ChorusModule>());
+        g->properties.set("x", 40);
+        g->properties.set("y", 40);
+        ghostId = g->nodeID;
+    }
+
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+    if (destOccupied)
+        editor.connectPorts(upstreamId, 0, destId, 0, false, false);
+
+    // Clear-left aim: the ghost's top-left one card-width plus a small gap before the destination.
+    const juce::Point<int> ghostTopLeft{kDestX - 280 - 40, kLaneY};
+
+    const bool startsWithCtrl =
+        c.row.modifier == ModifierGesture::CtrlHeldBefore || c.row.modifier == ModifierGesture::CtrlReleasedMidDrag;
+    editor.setInsertModifierOverrideForTests(startsWithCtrl);
+
+    DummyDragSource ds;
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &ds,
+                                                   libraryCursorForGhostTopLeft("Chorus", ghostTopLeft));
+    ModuleComponent* ghostComp = nullptr;
+    if (c.libraryDrop) {
+        editor.itemDragEnter(details);
+        editor.itemDragMove(details);
+    } else {
+        for (auto* mc : editor.getModuleComponents())
+            if (mc->getNodeId() == ghostId)
+                ghostComp = mc;
+        ASSERT_NE(ghostComp, nullptr);
+        editor.beginDragPreview(ghostComp->getWidth(), ghostComp->getHeight(), ghostId);
+        editor.updateDragPreview(ghostTopLeft);
+    }
+
+    // Mid-drag modifier transitions go through the live per-tick re-sample, with NO mouse movement.
+    if (c.row.modifier == ModifierGesture::CtrlPressedMidDrag) {
+        editor.setInsertModifierOverrideForTests(true);
+        editor.pumpDragModifierTickForTests();
+    } else if (c.row.modifier == ModifierGesture::CtrlReleasedMidDrag) {
+        editor.setInsertModifierOverrideForTests(false);
+        editor.pumpDragModifierTickForTests();
+    }
+
+    GestureOutcome actual = GestureOutcome::None;
+    for (const auto& s : editor.getSmartSuggestions()) {
+        if (s.neighborId != destId)
+            continue;
+        actual = s.isInsert ? GestureOutcome::Insert : GestureOutcome::Plain;
+        break;
+    }
+
+    EXPECT_EQ(actual, c.row.expected) << "gesture=" << (c.libraryDrop ? "libraryDrop" : "canvasMove")
+                                      << " dest=" << (int)c.row.dest << " modifier=" << (int)c.row.modifier
+                                      << " expected=" << outcomeName(c.row.expected)
+                                      << " actual=" << outcomeName(actual);
+    editor.endDragPreview();
+}
+
+INSTANTIATE_TEST_SUITE_P(EveryCell, SmartConnectionGestureMatrixTest, ::testing::ValuesIn(allGestureMatrixCases()));
+
 // --- Double-click port disconnect (issue #216) -------------------------------
 
 static ModuleComponent* findModuleComp(GraphEditor& editor, juce::AudioProcessor* proc) {

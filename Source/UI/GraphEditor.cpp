@@ -1999,16 +1999,29 @@ void GraphEditor::refreshSmartSuggestions() {
             // second pair for its right leg would wire the source's LEFT leg there too, summing.
             // A no-op wherever the pairs already claim distinct raws. Insert plans are built above
             // and deliberately unaffected: a doomed link must not vanish with the pair that named it.
+            //
+            // A pair is redundant only when it adds NOTHING on EITHER side — no new destination raw
+            // channel AND no new source raw channel. Keying on the destination alone was wrong for a
+            // dedicated mono input: a dual upstream feeding a Ring Modulator's Carrier produces
+            // (Left -> Carrier) and (Right -> Carrier), which share a destination raw but carry
+            // DIFFERENT source legs, and summing both into that one jack is exactly the intent (it
+            // is what hand-wiring and the Dual I/O toggle rewire both do). Dropping the second one
+            // silently threw away a channel. The source test is what keeps the original case fixed:
+            // a collapsed jack's fan already claims both raws on both sides, so its redundant
+            // partner still contributes neither.
             {
                 std::vector<std::pair<int, int>> keptPairs;
-                std::set<int> claimedRawDsts;
+                std::set<int> claimedRawDsts, claimedRawSrcs;
                 for (const auto& pr : pairs) {
                     const auto fan = resolvePolyLink(srcMb, pr.first, dstMb, pr.second);
-                    bool alreadyCovered = true;
-                    for (int v = 0; v < fan.voiceCount; ++v)
+                    bool addsDst = false, addsSrc = false;
+                    for (int v = 0; v < fan.voiceCount; ++v) {
                         if (claimedRawDsts.insert(fan.destRawChannel + v).second)
-                            alreadyCovered = false;
-                    if (!alreadyCovered)
+                            addsDst = true;
+                        if (claimedRawSrcs.insert(fan.sourceRawChannel + v * fan.sourceStride).second)
+                            addsSrc = true;
+                    }
+                    if (addsDst || addsSrc)
                         keptPairs.push_back(pr);
                 }
                 if (keptPairs.empty())
@@ -2159,23 +2172,42 @@ void GraphEditor::refreshSmartSuggestions() {
     // Audio: keep every suggestion that shares the winning neighbor + direction (stereo L/R
     // pairs and mono↔stereo fans are multiple candidates with the same neighborId/ghostIsSource).
     if (!audioCandidates.empty()) {
-        std::sort(audioCandidates.begin(), audioCandidates.end(), [](const Candidate& a, const Candidate& b) {
-            // An INSERT outranks every plain candidate, whatever the distances say. Only ONE
-            // neighbour's group survives this sort, and a ghost being spliced into a cable sits
-            // between two cards that are BOTH valid neighbours — the upstream it is being inserted
-            // after is a perfectly good plain "feed the new module" candidate, and it was winning on
-            // proximity and discarding the insert entirely. That is what made Ctrl+drag near the
-            // Audio Output look flaky: whether the sink or the upstream won flipped with small
-            // cursor moves, so nudging down "made it work". An insert is an explicit, modifier-held
-            // request; a plain connect is a passive offer, and a passive offer must never hide it.
-            //
-            // It showed up at the Audio Output specifically because the sink is a bare
-            // AudioGraphIOProcessor, and scoreSmartPair returns a flat 2 for a non-ModuleBase end —
-            // so the sink loses on SCORE to any real module neighbour, before distance is even
-            // consulted. An ordinary destination outscores the upstream and happened to win anyway,
-            // which is why the same gesture felt reliable everywhere else.
-            if (a.suggestion.isInsert != b.suggestion.isInsert)
-                return a.suggestion.isInsert;
+        // Only ONE neighbour's group survives this sort, so the ordering decides which offer the user
+        // gets. Two competing pressures, and getting either wrong is a bug we have already shipped:
+        //
+        //  * A ghost being spliced into a cable sits between two cards that are BOTH valid
+        //    neighbours — the upstream it is being inserted AFTER also offers a perfectly good plain
+        //    "feed the new module" cable. That plain offer was winning on proximity and discarding
+        //    the insert, which is what made Ctrl+drag near the Audio Output look flaky (whether the
+        //    sink or the upstream won flipped with small cursor moves, so nudging down "fixed" it).
+        //    It surfaced at the sink specifically because a bare AudioGraphIOProcessor scores a flat
+        //    2 in scoreSmartPair, so it loses on SCORE to any real module before distance matters.
+        //
+        //  * But making an insert beat EVERY plain candidate outright was an overcorrection: with
+        //    Ctrl held, an insert into some occupied module across the canvas then stole the drop
+        //    from the free module the user was actually aiming at, so Ctrl+drag stopped connecting
+        //    anything ordinary.
+        //
+        // So the demotion is targeted rather than global: a plain candidate loses only when its
+        // neighbour is the very upstream an insert wants to reroute. Every other plain candidate
+        // still competes with the insert on score and distance, so aim wins.
+        std::set<juce::uint32> insertUpstreamUids;
+        for (const auto& c : audioCandidates)
+            if (c.suggestion.isInsert)
+                insertUpstreamUids.insert(c.suggestion.upstreamId.uid);
+
+        const auto rankOf = [&insertUpstreamUids](const Candidate& c) {
+            if (c.suggestion.isInsert)
+                return 1;
+            // A plain offer FROM the cable's upstream is the one thing that must never mask the
+            // insert: it is the same gesture read two ways, and the insert is the explicit one.
+            return insertUpstreamUids.count(c.suggestion.neighborId.uid) > 0 ? 0 : 1;
+        };
+
+        std::sort(audioCandidates.begin(), audioCandidates.end(), [&rankOf](const Candidate& a, const Candidate& b) {
+            const int ra = rankOf(a), rb = rankOf(b);
+            if (ra != rb)
+                return ra > rb;
             if (a.score != b.score)
                 return a.score > b.score;
             return a.distance < b.distance;
