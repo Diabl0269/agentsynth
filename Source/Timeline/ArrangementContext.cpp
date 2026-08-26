@@ -174,7 +174,7 @@ juce::String ArrangementContext::summarize(const TimelineDoc& doc, const juce::A
 
     const int remaining = static_cast<int>(tracks.size()) - includedTracks;
     if (remaining > 0)
-        result += juce::String("\n\xe2\x80\xa6 [+") + juce::String(remaining) +
+        result += juce::String::fromUTF8("\n\xe2\x80\xa6 [+") + juce::String(remaining) +
                   " more tracks]"; // U+2026 HORIZONTAL ELLIPSIS, UTF-8 encoded
 
     return result;
