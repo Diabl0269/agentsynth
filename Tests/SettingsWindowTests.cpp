@@ -192,10 +192,10 @@ protected:
     synth::theme::ThemeManager themeManager;
 };
 
-TEST_F(SettingsWindowTest, HasFiveTabs) {
+TEST_F(SettingsWindowTest, HasSixTabs) {
     SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
                                   themeManager, nullptr);
-    EXPECT_EQ(settingsWindow.getNumTabs(), 5);
+    EXPECT_EQ(settingsWindow.getNumTabs(), 6);
 }
 
 TEST_F(SettingsWindowTest, TabNamesAreCorrect) {
@@ -206,6 +206,7 @@ TEST_F(SettingsWindowTest, TabNamesAreCorrect) {
     EXPECT_EQ(settingsWindow.getTabName(2), "Keyboard Shortcuts");
     EXPECT_EQ(settingsWindow.getTabName(3), "Preferences");
     EXPECT_EQ(settingsWindow.getTabName(4), "Appearance");
+    EXPECT_EQ(settingsWindow.getTabName(5), "Feedback");
 }
 
 TEST_F(SettingsWindowTest, PreferencesTabHostsBehaviourControls) {

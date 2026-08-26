@@ -338,6 +338,20 @@ The rating lives on `MessageData::ratingState`/`ratingComment` for the session (
 "not reconstructed on replay" precedent as `showUpgradeAction`, just above) — the durable copy is
 the JSONL log, not the in-memory chat history.
 
+### General Feedback (P6-10)
+
+The Settings dialog's "Feedback" tab (`Source/UI/FeedbackSettingsTab`, last tab, added after
+Appearance) is the general-purpose sibling of the patch-specific thumbs above: free-text bug
+reports, feature requests, or comments not tied to any one AI-generated patch. `Source/
+GeneralFeedbackStore` appends one JSON object per line (`{timestamp, category, text}`) to
+`<user app data>/Agent Synth/general_feedback.jsonl` — same append-only JSON-Lines shape and
+rationale as `PatchFeedbackStore` above, but its own file since the two logs track unrelated
+things. P6-16 additionally syncs each submission to the server, fire-and-forget, mirroring
+"Patch Feedback Sync to Server (P6-9, client side)" below with one deliberate difference: this
+sync is gated on sign-in only, NOT Pro — `POST /v1/feedback` has no plan check server-side either,
+so any signed-in account may submit general feedback. The local log above is still written
+unconditionally regardless of sign-in state or sync outcome.
+
 ### AI Patch Undo/Redo Contract
 
 `AIIntegrationService::applyPatch()` routes through `AppUndoManager::recordAIPatch()` whenever an

@@ -145,6 +145,8 @@ add_library(Core STATIC
     Source/AppUndoManager.cpp
     Source/AppUndoManager.h
     Source/Branding.h
+    Source/GeneralFeedbackStore.cpp
+    Source/GeneralFeedbackStore.h
     Source/PresetManager.cpp
     Source/PresetManager.h
     Source/PatchDocument.cpp
@@ -555,6 +557,8 @@ add_library(AppUI STATIC
     Source/Plugin/Hosting/HostedPluginWindowManager.h
     Source/UI/AppearanceSettingsTab.cpp
     Source/UI/AppearanceSettingsTab.h
+    Source/UI/FeedbackSettingsTab.cpp
+    Source/UI/FeedbackSettingsTab.h
     Source/UI/PreferencesSettingsTab.cpp
     Source/UI/PreferencesSettingsTab.h
     Source/UI/ShortcutsSettingsTab.cpp

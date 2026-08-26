@@ -77,6 +77,7 @@ add_executable(Tests
     KeychainTokenStoreTests.cpp
     DeviceIdStoreTests.cpp
     PatchFeedbackStoreTests.cpp
+    GeneralFeedbackStoreTests.cpp
     LocalHistoryStoreTests.cpp
     MainComponentTests.cpp
     GraphEditorTests.cpp
@@ -113,6 +114,7 @@ add_executable(Tests
     ShortcutManagerTests.cpp
     ShortcutsSettingsTabTests.cpp
     PreferencesSettingsTabTests.cpp
+    FeedbackSettingsTabTests.cpp
     AudioRenderingTests.cpp
     LogicalPortTests.cpp
     OutputLevelTests.cpp
@@ -191,6 +193,7 @@ add_executable(Tests
     ../Source/UI/AppearanceSettingsTab.cpp
     ../Source/UI/PreferencesSettingsTab.cpp
     ../Source/UI/ShortcutsSettingsTab.cpp
+    ../Source/UI/FeedbackSettingsTab.cpp
 )
 
 # MainComponent.cpp above pulls in synth::update::UpdateManager (Source/Update/UpdateManager.h) on

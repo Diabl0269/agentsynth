@@ -4,6 +4,7 @@
 #include "../Branding.h"
 #include "../ShortcutManager.h"
 #include "AppearanceSettingsTab.h"
+#include "FeedbackSettingsTab.h"
 #include "PreferencesSettingsTab.h"
 #include "ShortcutsSettingsTab.h"
 
@@ -401,6 +402,11 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
     auto* appearanceSettingsTab = new AppearanceSettingsTab(themeManager, appProperties);
     appearanceSettingsTab->setGraphEditor(graphEditor); // wire the tab to graph editor
     tabs.addTab("Appearance", juce::Colours::transparentBlack, appearanceSettingsTab, true);
+
+    // P6-10: general feedback entry point, not tied to any one AI-generated patch. Added last so
+    // it doesn't shift the tab indices every other test in SettingsWindowTests.cpp hardcodes.
+    auto* feedbackSettingsTab = new FeedbackSettingsTab(accountService);
+    tabs.addTab("Feedback", juce::Colours::transparentBlack, feedbackSettingsTab, true);
 
     addAndMakeVisible(tabs);
 
