@@ -240,7 +240,7 @@ The four **waveform icons** (`WaveformSine`, `WaveformSaw`, `WaveformSquare`, `W
 
 **`Icon::FollowPlayhead`** (index 40) is the toolbar-style toggle button next to the timeline panel's snap selector that page-flips the view to keep the playhead on screen while playing — see [`timeline_panel_core.md` §2](timeline_panel_core.md#2-ruler-grid-zoomscroll-snap-loop-brace).
 
-**`Icon::CatIO`** (index 41) is the speaker glyph for the module library's "I/O" category header (Audio Input / Audio Output — previously fell back to `CatUtility`, which gave the graph's actual source/sink no visual identity of its own) and doubles as the Audio Output card's identity glyph in `ModuleComponent::paint()`. Appended after `FollowPlayhead` rather than grouped with the other `CatXxx` entries so every existing enum ordinal (and the hardcoded spot-checks in `IconLibraryTests.cpp`) stays unchanged — see [`layout.md`'s Audio Output card identity treatment](layout.md#audio-output-card-identity-treatment).
+**`Icon::CatIO`** (index 41) is the speaker glyph for the module library's "I/O" category header (Audio Input / Audio Output — previously fell back to `CatUtility`, which gave the graph's actual source/sink no visual identity of its own) and doubles as the Audio Output card's identity glyph in `ModuleComponent::paint()`. Appended after `FollowPlayhead` rather than grouped with the other `CatXxx` entries so it never displaces any of the ordinals before it — see [`layout.md`'s Audio Output card identity treatment](layout.md#audio-output-card-identity-treatment).
 
 ### Token → tint map
 
