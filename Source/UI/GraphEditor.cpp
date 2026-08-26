@@ -1470,13 +1470,19 @@ GraphEditor::findSingleUpstreamAudioLink(juce::AudioProcessorGraph::NodeID dstId
         auto* srcMb = dynamic_cast<ModuleBase*>(srcNode->getProcessor());
         const int srcJack =
             srcMb != nullptr ? srcMb->mapOutputChannel(c.source.channelIndex).visibleJackIndex : c.source.channelIndex;
-        const UpstreamLink link{c.source.nodeID, srcJack};
 
         if (!found.has_value())
-            found = link;
-        else if (found->nodeId != link.nodeId || found->jack != link.jack)
-            return std::nullopt; // summed from several cables — rerouting would change the mix
+            found = UpstreamLink{c.source.nodeID, {}};
+        else if (found->nodeId != c.source.nodeID)
+            return std::nullopt; // a genuine hand-built mix: rerouting it would change what sums
+
+        // Several legs of the SAME node is our own dual-to-mono wiring, not a mix — collect them all
+        // and let the planner doom every one of them.
+        if (std::find(found->jacks.begin(), found->jacks.end(), srcJack) == found->jacks.end())
+            found->jacks.push_back(srcJack);
     }
+    if (found.has_value())
+        std::sort(found->jacks.begin(), found->jacks.end()); // Left before Right, deterministically
     return found;
 }
 
@@ -1911,15 +1917,15 @@ void GraphEditor::refreshSmartSuggestions() {
                     // must be fed by one and the same upstream node, or nothing is offered. A mix of
                     // free and occupied legs, or two different feeds, would change the summing.
                     std::optional<juce::AudioProcessorGraph::NodeID> upstreamNode;
-                    std::unordered_map<int, int> upstreamJackForDst;
+                    std::unordered_map<int, std::vector<int>> upstreamJacksForDst;
                     for (int d : uniqueDsts) {
                         const auto up = findSingleUpstreamAudioLink(dstNodeIdForFreeCheck, d);
-                        if (!up.has_value() || up->nodeId == dragPreviewSelfId)
+                        if (!up.has_value() || up->jacks.empty() || up->nodeId == dragPreviewSelfId)
                             return;
                         if (upstreamNode.has_value() && *upstreamNode != up->nodeId)
                             return;
                         upstreamNode = up->nodeId;
-                        upstreamJackForDst[d] = up->jack;
+                        upstreamJacksForDst[d] = up->jacks;
                     }
 
                     auto* upstreamComp = upstreamNode.has_value() ? componentForNode(*upstreamNode) : nullptr;
@@ -1945,29 +1951,43 @@ void GraphEditor::refreshSmartSuggestions() {
                     // independently of the fan dedupe below. Hanging these off the surviving pairs
                     // instead would lose the link of any pair the dedupe drops, and the cable it
                     // stood for would survive and sum into the sink beside the ghost's output.
+                    // One doomed cable per (upstream leg -> destination jack): a dual upstream summed
+                    // into a collapsed mono input contributes TWO, and both have to go or the
+                    // survivor keeps summing in beside the ghost.
                     for (int d : uniqueDsts) {
-                        SmartSuggestion::InsertLink doomed;
-                        doomed.fromJack = upstreamJackForDst[d];
-                        doomed.toJack = d;
-                        doomed.p1 = upstreamJackPoint(doomed.fromJack);
-                        doomed.p2 = jackPoint(/*fromGhost=*/false, d, true, false);
-                        plan.doomedLinks.push_back(doomed);
+                        for (int fromJack : upstreamJacksForDst[d]) {
+                            SmartSuggestion::InsertLink doomed;
+                            doomed.fromJack = fromJack;
+                            doomed.toJack = d;
+                            doomed.p1 = upstreamJackPoint(fromJack);
+                            doomed.p2 = jackPoint(/*fromGhost=*/false, d, true, false);
+                            plan.doomedLinks.push_back(doomed);
+                        }
                     }
 
-                    // Upstream → ghost, deduped by the raw GHOST-INPUT channels each cable covers:
-                    // a cable onto a collapsed ghost jack already fans across both raw legs, so a
-                    // second one from the upstream's other leg would duplicate one leg over both.
-                    // (Mirror image of the sink-side dedupe — a collapsed jack on either end folds.)
-                    std::set<int> claimedRawGhostIns;
+                    // Upstream -> ghost. Redundant only when a cable adds NOTHING on EITHER side —
+                    // no new raw ghost-input channel AND no new raw upstream-output channel. The
+                    // same both-sides rule the destination-side dedupe uses, and for the same
+                    // reason: a collapsed jack's fan already claims both raws on both ends, so its
+                    // redundant partner contributes neither, while two DISTINCT upstream legs
+                    // summing into one collapsed ghost input each contribute a real source channel
+                    // and must both survive. Keying on the ghost input alone dropped the Right leg.
+                    //
+                    // The index mapping does the rest: a dual ghost's legs are taken in order (L->L,
+                    // R->R) and a collapsed ghost clamps to its single jack, which sums.
+                    std::set<int> claimedRawGhostIns, claimedRawUpstreamOuts;
                     for (size_t i = 0; i < plan.doomedLinks.size(); ++i) {
                         const int ghostInJack = ghostInLegs[std::min(i, ghostInLegs.size() - 1)];
                         const auto fan =
                             resolvePolyLink(upstreamMb, plan.doomedLinks[i].fromJack, ghostMb, ghostInJack);
-                        bool alreadyCovered = true;
-                        for (int v = 0; v < fan.voiceCount; ++v)
+                        bool addsGhostIn = false, addsUpstreamOut = false;
+                        for (int v = 0; v < fan.voiceCount; ++v) {
                             if (claimedRawGhostIns.insert(fan.destRawChannel + v).second)
-                                alreadyCovered = false;
-                        if (alreadyCovered)
+                                addsGhostIn = true;
+                            if (claimedRawUpstreamOuts.insert(fan.sourceRawChannel + v * fan.sourceStride).second)
+                                addsUpstreamOut = true;
+                        }
+                        if (!addsGhostIn && !addsUpstreamOut)
                             continue;
 
                         SmartSuggestion::InsertLink cable;

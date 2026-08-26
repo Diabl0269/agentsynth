@@ -2,6 +2,7 @@
 #include "../Source/AppUndoManager.h"
 #include "../Source/Modules/ADSRModule.h"
 #include "../Source/Modules/AttenuverterModule.h"
+#include "../Source/Modules/FX/BitcrusherModule.h"
 #include "../Source/Modules/FX/ChorusModule.h"
 #include "../Source/Modules/FX/DelayModule.h"
 #include "../Source/Modules/FX/DistortionModule.h"
@@ -5538,6 +5539,141 @@ TEST_F(GraphEditorTest, SmartConnectionRingModulatorAsSourceIsUnchanged) {
     EXPECT_GT(countAudioConnectionsBetween(graph, ring->nodeID, dest->nodeID), 0);
 }
 
+// --- Insert into a jack fed by a SUMMED PAIR from one upstream ---------------
+//
+// The user's shape: a DUAL Delay (separate L/R output jacks) feeding a COLLAPSED Bitcrusher's single
+// Audio jack through TWO cables (Delay L -> Audio, Delay R -> Audio). That is not an exotic patch —
+// it is what the Dual I/O toggle rewire and a hand-dragged pair both produce, and what our own
+// dual-to-mono summing rules now yield routinely.
+//
+// findSingleUpstreamAudioLink refused ANY jack with more than one feed, so Ctrl+drag offered nothing
+// there. A multi-feed jack whose feeds all come from ONE node's legs is our own canonical wiring;
+// only feeds from DIFFERENT nodes are a hand-built mix worth protecting.
+
+/** Dual `upstream` summed into `dest`'s collapsed audio input, the screenshot's exact wiring. */
+static void wireDualUpstreamSummedIntoCollapsedInput(GraphEditor& editor,
+                                                     juce::AudioProcessorGraph::NodeID upstreamId,
+                                                     juce::AudioProcessorGraph::NodeID destId) {
+    editor.connectPorts(upstreamId, 0, destId, 0, false, false); // Left  -> Audio
+    editor.connectPorts(upstreamId, 1, destId, 0, false, false); // Right -> Audio
+}
+
+TEST_F(GraphEditorTest, SmartConnectionInsertsIntoAJackFedByASummedDualPair) {
+    AudioEngine engine;
+    AppUndoManager undoMgr;
+    GraphEditor editor(engine, &undoMgr);
+    editor.setSize(2000, 1200);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.setInsertModifierOverrideForTests(true);
+
+    auto& graph = engine.getGraph();
+    auto delayNode = graph.addNode(std::make_unique<DelayModule>());
+    delayNode->properties.set("x", 40);
+    delayNode->properties.set("y", 400);
+    setDualIOParam(*delayNode->getProcessor(), true); // dual: separate Left/Right output jacks
+    auto crusherNode = graph.addNode(std::make_unique<BitcrusherModule>()); // collapsed single Audio in
+    crusherNode->properties.set("x", 760);
+    crusherNode->properties.set("y", 400);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    const auto delayId = delayNode->nodeID;
+    const auto crusherId = crusherNode->nodeID;
+    wireDualUpstreamSummedIntoCollapsedInput(editor, delayId, crusherId);
+    ASSERT_TRUE(graph.isConnected({{delayId, 0}, {crusherId, 0}}));
+    ASSERT_TRUE(graph.isConnected({{delayId, 1}, {crusherId, 0}}));
+    ASSERT_EQ(countAudioConnectionsBetween(graph, delayId, crusherId), 2);
+
+    std::set<juce::uint32> before;
+    for (auto* n : graph.getNodes())
+        before.insert(n->nodeID.uid);
+
+    DummyDragSource ds;
+    juce::DragAndDropTarget::SourceDetails d(juce::var("Distortion"), &ds,
+                                             libraryCursorForGhostTopLeft("Distortion", {760 - 280 - 40, 400}));
+    editor.itemDragEnter(d);
+    editor.itemDragMove(d);
+
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0) << "a summed dual pair is our own wiring, not a hand-built mix";
+    for (const auto& s : editor.getSmartSuggestions()) {
+        EXPECT_TRUE(s.isInsert);
+        EXPECT_EQ(s.neighborId, crusherId);
+        EXPECT_EQ(s.upstreamId, delayId);
+        EXPECT_EQ(s.doomedLinks.size(), 2u) << "both summed legs must be doomed, not just one";
+    }
+    editor.itemDropped(d);
+
+    juce::AudioProcessorGraph::NodeID ghostId{};
+    for (auto* n : graph.getNodes())
+        if (before.find(n->nodeID.uid) == before.end())
+            ghostId = n->nodeID;
+    ASSERT_NE(ghostId.uid, 0u);
+
+    // Both original cables gone, the ghost spliced in, nothing left summing into the destination.
+    EXPECT_EQ(countAudioConnectionsBetween(graph, delayId, crusherId), 0)
+        << "a surviving leg would keep summing in beside the ghost";
+    EXPECT_GT(countAudioConnectionsBetween(graph, delayId, ghostId), 0) << "the upstream must feed the ghost";
+    EXPECT_GT(countAudioConnectionsBetween(graph, ghostId, crusherId), 0) << "the ghost must feed the destination";
+    // Neither upstream leg may be lost on the way into the ghost. Asserted as channel coverage
+    // rather than exact raw pairs: which raw channel each leg lands on is the fan's business (and is
+    // pinned by the dedicated dual/collapsed tests), but a leg with NO edge at all is a dropped
+    // channel, which is the bug this shape used to have.
+    bool leftReachesGhost = false, rightReachesGhost = false;
+    for (const auto& conn : graph.getConnections()) {
+        if (conn.source.nodeID != delayId || conn.destination.nodeID != ghostId)
+            continue;
+        if (conn.source.channelIndex == 0)
+            leftReachesGhost = true;
+        if (conn.source.channelIndex == 1)
+            rightReachesGhost = true;
+    }
+    EXPECT_TRUE(leftReachesGhost) << "Left leg lost on the way into the ghost";
+    EXPECT_TRUE(rightReachesGhost) << "Right leg lost on the way into the ghost";
+
+    // One undo step restores the original summed pair exactly.
+    ASSERT_TRUE(undoMgr.undo());
+    const auto restoredDelay = findNodeIdByName(graph, "Delay");
+    const auto restoredCrusher = findNodeIdByName(graph, "Bitcrusher");
+    ASSERT_NE(restoredDelay.uid, 0u);
+    ASSERT_NE(restoredCrusher.uid, 0u);
+    EXPECT_EQ(countAudioConnectionsBetween(graph, restoredDelay, restoredCrusher), 2)
+        << "one undo must put both summed cables back";
+}
+
+TEST_F(GraphEditorTest, SmartConnectionStillRefusesAJackMixedFromDifferentNodes) {
+    // The guard that must stay: two DIFFERENT upstream nodes summed into one jack is a hand-built
+    // mix, and rerouting it would silently change what sums where.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(2000, 1400);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.setInsertModifierOverrideForTests(true);
+
+    auto& graph = engine.getGraph();
+    auto crusher = graph.addNode(std::make_unique<BitcrusherModule>());
+    crusher->properties.set("x", 760);
+    crusher->properties.set("y", 400);
+    auto upA = graph.addNode(std::make_unique<DelayModule>());
+    upA->properties.set("x", 40);
+    upA->properties.set("y", 1000);
+    auto upB = graph.addNode(std::make_unique<ReverbModule>());
+    upB->properties.set("x", 40);
+    upB->properties.set("y", 1200);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+    editor.connectPorts(upA->nodeID, 0, crusher->nodeID, 0, false, false);
+    editor.connectPorts(upB->nodeID, 0, crusher->nodeID, 0, false, false);
+
+    DummyDragSource ds;
+    juce::DragAndDropTarget::SourceDetails d(juce::var("Distortion"), &ds,
+                                             libraryCursorForGhostTopLeft("Distortion", {760 - 280 - 40, 400}));
+    editor.itemDragEnter(d);
+    editor.itemDragMove(d);
+    for (const auto& s : editor.getSmartSuggestions())
+        EXPECT_FALSE(s.isInsert) << "a mix from two different nodes must never be rerouted";
+    editor.endDragPreview();
+}
+
 // --- Gesture matrix: the whole smart-connect contract in one table -----------
 //
 // Two regressions in this subsystem shipped past a green suite (the round-6 aim anchoring, then the
@@ -5568,7 +5704,8 @@ static const char* outcomeName(GestureOutcome o) {
 }
 
 enum class ModifierGesture { NoModifier, CtrlHeldBefore, CtrlPressedMidDrag, CtrlReleasedMidDrag };
-enum class DestKind { FreeOrdinary, OccupiedOrdinary, OccupiedAudioOutput, FreeAudioOutput };
+enum class DestKind { FreeOrdinary, OccupiedOrdinary, OccupiedAudioOutput, FreeAudioOutput,
+                      OccupiedBySummedPair };
 
 struct MatrixRow {
     DestKind dest;
@@ -5584,6 +5721,7 @@ struct MatrixRow {
 //   occupied ordinary      | None        | Insert  (hard stop without the modifier)
 //   occupied Audio Output  | Plain       | Insert  (the sink's parallel-add is that Plain)
 //   free Audio Output      | Plain       | Plain
+//   occupied by summed pair| None        | Insert  (one upstream's L+R summed into a collapsed in)
 //
 // CtrlReleasedMidDrag ends with the modifier UP, so it must match the no-modifier column.
 static const MatrixRow kGestureMatrix[] = {
@@ -5606,6 +5744,13 @@ static const MatrixRow kGestureMatrix[] = {
     {DestKind::FreeAudioOutput, ModifierGesture::CtrlHeldBefore, GestureOutcome::Plain},
     {DestKind::FreeAudioOutput, ModifierGesture::CtrlPressedMidDrag, GestureOutcome::Plain},
     {DestKind::FreeAudioOutput, ModifierGesture::CtrlReleasedMidDrag, GestureOutcome::Plain},
+
+    // One upstream's Left AND Right legs summed into a collapsed mono input: our own canonical
+    // dual-to-mono wiring, which the multi-feed guard used to refuse outright.
+    {DestKind::OccupiedBySummedPair, ModifierGesture::NoModifier, GestureOutcome::None},
+    {DestKind::OccupiedBySummedPair, ModifierGesture::CtrlHeldBefore, GestureOutcome::Insert},
+    {DestKind::OccupiedBySummedPair, ModifierGesture::CtrlPressedMidDrag, GestureOutcome::Insert},
+    {DestKind::OccupiedBySummedPair, ModifierGesture::CtrlReleasedMidDrag, GestureOutcome::None},
 };
 
 struct GestureMatrixCase {
@@ -5635,7 +5780,9 @@ TEST_P(SmartConnectionGestureMatrixTest, MatchesTheExpectedOutcome) {
     constexpr int kDestX = 760;
     constexpr int kLaneY = 400;
     const bool destIsSink = c.row.dest == DestKind::OccupiedAudioOutput || c.row.dest == DestKind::FreeAudioOutput;
-    const bool destOccupied = c.row.dest == DestKind::OccupiedOrdinary || c.row.dest == DestKind::OccupiedAudioOutput;
+    const bool summedPair = c.row.dest == DestKind::OccupiedBySummedPair;
+    const bool destOccupied = c.row.dest == DestKind::OccupiedOrdinary ||
+                              c.row.dest == DestKind::OccupiedAudioOutput || summedPair;
 
     juce::AudioProcessorGraph::NodeID destId;
     if (destIsSink) {
@@ -5651,10 +5798,18 @@ TEST_P(SmartConnectionGestureMatrixTest, MatchesTheExpectedOutcome) {
     if (destOccupied) {
         // Parked far away so it is not itself a neighbour candidate: this matrix is about the
         // modifier, and arbitration between two neighbours has its own dedicated tests.
-        auto up = graph.addNode(std::make_unique<ReverbModule>());
-        up->properties.set("x", 40);
-        up->properties.set("y", 1100);
-        upstreamId = up->nodeID;
+        if (summedPair) {
+            auto up = graph.addNode(std::make_unique<DelayModule>());
+            up->properties.set("x", 40);
+            up->properties.set("y", 1100);
+            setDualIOParam(*up->getProcessor(), true); // dual out, so it has two legs to sum
+            upstreamId = up->nodeID;
+        } else {
+            auto up = graph.addNode(std::make_unique<ReverbModule>());
+            up->properties.set("x", 40);
+            up->properties.set("y", 1100);
+            upstreamId = up->nodeID;
+        }
     }
 
     juce::AudioProcessorGraph::NodeID ghostId{};
@@ -5667,7 +5822,9 @@ TEST_P(SmartConnectionGestureMatrixTest, MatchesTheExpectedOutcome) {
 
     editor.updateComponents();
     sizeModuleComponents(editor);
-    if (destOccupied)
+    if (summedPair)
+        wireDualUpstreamSummedIntoCollapsedInput(editor, upstreamId, destId);
+    else if (destOccupied)
         editor.connectPorts(upstreamId, 0, destId, 0, false, false);
 
     // Clear-left aim: the ghost's top-left one card-width plus a small gap before the destination.

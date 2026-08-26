@@ -778,16 +778,24 @@ private:
     bool areJacksAlreadyConnected(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
                                   juce::AudioProcessorGraph::NodeID dstId, int dstJack, bool isMidi) const;
 
-    /** The one cable feeding an audio input jack, at CABLE level (a visible output jack of the
-     *  feeding node, never a raw graph edge). */
+    /** The cabling feeding an audio input jack, at CABLE level (visible output jacks of the feeding
+     *  node, never raw graph edges). */
     struct UpstreamLink {
         juce::AudioProcessorGraph::NodeID nodeId{};
-        int jack = 0;
+        /** Every distinct visible OUTPUT jack of that ONE node feeding the destination jack.
+         *
+         *  More than one is normal, not exotic: a dual upstream's Left and Right legs both landing
+         *  on a collapsed mono input is our own canonical dual-to-mono wiring — it is what the Dual
+         *  I/O toggle rewire and a hand-dragged pair of cables both produce. Refusing multi-feed
+         *  outright meant insert silently did nothing for that extremely common shape. Feeds from
+         *  DIFFERENT nodes are still refused: that is a hand-built mix, and rerouting it would
+         *  change what sums where. */
+        std::vector<int> jacks;
     };
 
-    /** Resolves the single cable currently feeding `dstJack`, or nullopt when the jack is free, is
-     *  summed from more than one visible jack, or is fed through a mod routing / attenuverter chain
-     *  (neither is ever silently rerouted). Insert-in-series is only offered when this succeeds. */
+    /** Resolves the cabling currently feeding `dstJack`, or nullopt when the jack is free, is fed
+     *  from more than one NODE (a hand-built mix), or is fed through a mod routing / attenuverter
+     *  chain (neither is ever silently rerouted). Insert-in-series needs this to succeed. */
     std::optional<UpstreamLink> findSingleUpstreamAudioLink(juce::AudioProcessorGraph::NodeID dstId, int dstJack) const;
 
     /** Removes the audio cable between two visible jacks — the exact inverse of connectPorts, so a

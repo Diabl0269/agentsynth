@@ -12,7 +12,7 @@ FeedbackSettingsTab::FeedbackSettingsTab(synth::AccountService* accountServiceIn
 
     addAndMakeVisible(descriptionLabel);
     descriptionLabel.setText(
-        "Bug reports, feature requests, or anything else \xe2\x80\x94 not tied to a specific patch. "
+        "Bug reports, feature requests, or anything else - not tied to a specific patch. "
         "Saved on this device, and sent to us too if you're signed in.",
         juce::dontSendNotification);
     descriptionLabel.setJustificationType(juce::Justification::topLeft);
@@ -120,5 +120,5 @@ void FeedbackSettingsTab::sendFeedback() {
 
     feedbackEditor.clear();
     updateSendButtonEnablement();
-    statusLabel.setText("Thanks \xe2\x80\x94 feedback saved.", juce::dontSendNotification);
+    statusLabel.setText("Thanks - feedback saved.", juce::dontSendNotification);
 }
