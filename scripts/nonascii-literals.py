@@ -94,6 +94,11 @@ def scan_file(path):
     with open(path, "rb") as handle:
         lines = handle.read().split(b"\n")
     in_block = False
+    # Tracks a CharPointer_UTF8/fromUTF8 call whose argument list spans lines: while the parens
+    # opened on the marker line are still unbalanced, continuation lines are exempt too (the
+    # per-line paren count is a heuristic — parens inside literals distort it — but it only ever
+    # widens the exemption immediately after an explicit encoding marker, never elsewhere).
+    utf8_call_carry = 0
     for number, raw in enumerate(lines, 1):
         # Exempt: a line that already declares its encoding — juce::CharPointer_UTF8 or the
         # equivalent juce::String::fromUTF8, both of which tell JUCE the bytes are UTF-8 — and a raw
@@ -103,7 +108,13 @@ def scan_file(path):
         # juce::String, prints them. The rule is worth more than the exception: "no raw non-ASCII
         # byte in any string literal" is one sentence a reviewer can hold, and an em dash in a
         # compile-time diagnostic buys nothing that "-" does not.
-        exempt = b"CharPointer_UTF8" in raw or b"fromUTF8" in raw or b'R"' in raw
+        marker = b"CharPointer_UTF8" in raw or b"fromUTF8" in raw
+        exempt = marker or b'R"' in raw or utf8_call_carry > 0
+        net_parens = raw.count(b"(") - raw.count(b")")
+        if marker:
+            utf8_call_carry = max(utf8_call_carry + net_parens, 0)
+        elif utf8_call_carry > 0:
+            utf8_call_carry = max(utf8_call_carry + net_parens, 0)
         found, in_block = scan_line(raw, in_block)
         if found and not exempt:
             hits.append((number, raw.decode("utf-8", "replace").strip()))

@@ -1093,7 +1093,7 @@ TEST_F(ModuleComponentTest, AudioOutputCardStoresAndPaintsDeviceInfoText) {
     auto node = addAudioOutputNode(engine.getGraph());
     ModuleComponent moduleComponent(node->getProcessor(), node->nodeID, editor);
 
-    const juce::String deviceText("Test Device \xc2\xb7 48 kHz \xc2\xb7 2ch");
+    const juce::String deviceText("Test Device - 48 kHz - 2ch");
     moduleComponent.setOutputDeviceInfoText(deviceText);
     EXPECT_EQ(moduleComponent.getOutputDeviceInfoTextForTest(), deviceText);
 

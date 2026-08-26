@@ -3463,7 +3463,7 @@ std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> MainComponent::getAvai
             option.nodeUuid = uuid;
             option.paramId = param.paramId;
             option.paramIndex = param.index;
-            option.label = moduleLabel + " - " + param.displayName;
+            option.label = moduleLabel + juce::String::fromUTF8(" \xC2\xB7 ") + param.displayName;
             options.push_back(std::move(option));
         }
     }

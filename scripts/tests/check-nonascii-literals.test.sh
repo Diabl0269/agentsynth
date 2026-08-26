@@ -84,6 +84,7 @@ printf '// A line comment with an em dash \xe2\x80\x94 and an ellipsis\xe2\x80\x
 printf '/* A block comment\n * spanning lines with \xe2\x80\x94 dashes\n */\nint x = 0;\n' >"$GOOD/blockcomment.cpp"
 printf 'auto a = juce::String::fromUTF8("\xe2\x80\xa6");\n' >"$GOOD/fromutf8.cpp"
 printf 'auto a = juce::String(juce::CharPointer_UTF8("\xe2\x80\x94"));\n' >"$GOOD/charpointer.cpp"
+printf 'label.setText(\n    juce::String::fromUTF8(\n        "an em dash \xe2\x80\x94 wrapped call "\n        "spanning \xe2\x80\x94 lines"),\n    juce::dontSendNotification);\nauto after = juce::String("plain ascii after the call");\n' >"$GOOD/multiline_fromutf8.cpp"
 printf 'auto a = juce::String("\\x41\\x7F");\n' >"$GOOD/lowescapes.cpp"
 printf "char c = '\\\\';\nauto a = juce::String(\"an escaped quote \\\\\" then ascii\");\n" >"$GOOD/escapes.cpp"
 check "the whole clean fixture set passes" "verdict" "$(flagged "$GOOD")" "no"
@@ -96,6 +97,10 @@ done
 # A block comment must not swallow the rest of the file: real code after it is still checked.
 printf '/* dash \xe2\x80\x94 */\nauto a = juce::String("bad \xe2\x80\x94 here");\n' >"$WORK/afterblock.cpp"
 check "code after a closed block comment is still scanned" "verdict" "$(flagged "$WORK/afterblock.cpp")" "yes"
+
+# The multi-line fromUTF8 exemption must end with the call: a raw literal after it is still bad.
+printf 'auto a = juce::String::fromUTF8(\n    "ok \xe2\x80\x94 inside");\nauto b = juce::String("bad \xe2\x80\x94 after");\n' >"$WORK/afterutf8call.cpp"
+check "a raw literal after a closed fromUTF8 call is still flagged" "verdict" "$(flagged "$WORK/afterutf8call.cpp")" "yes"
 
 # --- the real thing: the repo's own Source/ tree must be clean -----------------------------
 output="$(python3 "$CHECK" "$REPO_ROOT/Source" 2>&1)"

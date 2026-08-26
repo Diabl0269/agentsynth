@@ -115,6 +115,13 @@ jobs:
       # Guards the nightly/manual AIPatchHarness ratchet (P1-11), which never runs here itself
       # (needs a live model) but is cheap and deterministic to unit test. ~1s, no model, no network.
       run: bash scripts/tests/ai-eval-ratchet.test.sh
+    - name: Test UTF-8 literal check
+      run: bash scripts/tests/utf8-literal-check.test.sh
+    - name: Check for un-decoded UTF-8 escapes
+      # juce::String(const char*) decodes as ASCII, not UTF-8 -- a "\xe2\x80\x94"-style escape
+      # passed straight to a String-taking API silently renders as mojibake (P6-16, 2026-08-26).
+      # See scripts/utf8-literal-check.sh's own doc comment for the full story.
+      run: bash scripts/utf8-literal-check.sh
 
   build-and-test:
     name: Build, Test, and Coverage

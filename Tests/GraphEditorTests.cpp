@@ -5989,10 +5989,10 @@ TEST_F(GraphEditorTest, RefreshOutputDeviceInfoPushesProviderTextToTheOutputCard
     ASSERT_NE(outComp, nullptr);
     EXPECT_TRUE(outComp->getOutputDeviceInfoTextForTest().isEmpty()) << "nothing pushed in yet";
 
-    editor.setOutputDeviceInfoProvider([] { return juce::String("Test Device \xc2\xb7 48 kHz \xc2\xb7 2ch"); });
+    editor.setOutputDeviceInfoProvider([] { return juce::String("Test Device - 48 kHz - 2ch"); });
     editor.refreshOutputDeviceInfo();
 
-    EXPECT_EQ(outComp->getOutputDeviceInfoTextForTest(), juce::String("Test Device \xc2\xb7 48 kHz \xc2\xb7 2ch"));
+    EXPECT_EQ(outComp->getOutputDeviceInfoTextForTest(), juce::String("Test Device - 48 kHz - 2ch"));
 }
 
 TEST_F(GraphEditorTest, RefreshOutputDeviceInfoLeavesOtherCardsUntouched) {
@@ -6009,7 +6009,7 @@ TEST_F(GraphEditorTest, RefreshOutputDeviceInfoLeavesOtherCardsUntouched) {
     ASSERT_NE(oscComp, nullptr);
     juce::ignoreUnused(outNode);
 
-    editor.setOutputDeviceInfoProvider([] { return juce::String("Test Device \xc2\xb7 48 kHz \xc2\xb7 2ch"); });
+    editor.setOutputDeviceInfoProvider([] { return juce::String("Test Device - 48 kHz - 2ch"); });
     editor.refreshOutputDeviceInfo();
 
     EXPECT_TRUE(oscComp->getOutputDeviceInfoTextForTest().isEmpty())
@@ -6047,7 +6047,7 @@ TEST_F(GraphEditorTest, RefreshOutputDeviceInfoClearsTextWhenProviderReturnsEmpt
     auto* outComp = findModuleComp(editor, outNode->getProcessor());
     ASSERT_NE(outComp, nullptr);
 
-    editor.setOutputDeviceInfoProvider([] { return juce::String("Test Device \xc2\xb7 48 kHz \xc2\xb7 2ch"); });
+    editor.setOutputDeviceInfoProvider([] { return juce::String("Test Device - 48 kHz - 2ch"); });
     editor.refreshOutputDeviceInfo();
     ASSERT_FALSE(outComp->getOutputDeviceInfoTextForTest().isEmpty());
 

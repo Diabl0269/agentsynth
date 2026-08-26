@@ -626,7 +626,7 @@ std::vector<TimelinePanelComponent::AutomationLaneOption> TimelinePanelComponent
                 trackHeaderHost_ != nullptr ? trackHeaderHost_->getNodeDisplayName(lane.nodeUuid) : juce::String();
             if (nodeLabel.isEmpty())
                 nodeLabel = lane.nodeUuid.substring(0, 8); // uuid-head fallback
-            options.push_back({lane.id, nodeLabel + " - " + lane.paramId, false, {}});
+            options.push_back({lane.id, nodeLabel + juce::String::fromUTF8(" \xC2\xB7 ") + lane.paramId, false, {}});
         }
     }
 
