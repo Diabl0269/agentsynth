@@ -17,9 +17,13 @@
 !include "MUI2.nsh"
 
 Name "Agent Synth"
-; Relative to makensis's invocation cwd (CI runs it from the repo root — see
-; build-artifacts.yml's "Build Windows installer" step), NOT to this script's own directory.
-OutFile "installer\windows\AgentSynthSetup.exe"
+; Relative to THIS SCRIPT'S OWN DIRECTORY (installer\windows\), not to makensis's invocation cwd —
+; NSIS resolves a relative OutFile against the .nsi file's location regardless of where makensis is
+; run from. A previous version of this comment claimed the opposite and pointed this at
+; "installer\windows\AgentSynthSetup.exe", which resolved to the doubled, non-existent
+; installer\windows\installer\windows\AgentSynthSetup.exe and failed with "Can't open output file"
+; on every CI run (masked until 2026-08-25 by the makensis-not-on-PATH bug always failing first).
+OutFile "AgentSynthSetup.exe"
 Unicode True
 
 ; Per-user install, HKCU only — no admin elevation required. This keeps WinSparkle's silent-ish

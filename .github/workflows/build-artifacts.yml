@@ -71,13 +71,18 @@ jobs:
     steps:
     - uses: actions/checkout@v6
 
-    # Linux Dependencies
+    # Linux Dependencies — plain apt through the shared failover script, not
+    # awalsh128/cache-apt-pkgs-action. That action resolves and pins exact package versions up
+    # front, then installs those exact .debs with no retry; when the Azure mirror serves a stale
+    # index (a point-release rotates out from under it) the fetch 404s and the whole release build
+    # fails outright, as happened on 2026-08-25. scripts/ci-install-linux-deps.sh is the same
+    # mirror-failover script ci.yml's build-and-test job already uses for exactly this reason — see
+    # docs/testing.md "Dependency install: the apt mirror is not reliable". timeout-minutes matches
+    # ci.yml's backstop: without a ceiling a sick mirror stalls for hours instead of failing over.
     - name: Install Linux Dependencies
       if: runner.os == 'Linux'
-      uses: awalsh128/cache-apt-pkgs-action@latest
-      with:
-        packages: cmake ninja-build ccache libasound2-dev libx11-dev libxinerama-dev libxext-dev libxcomposite-dev libxcursor-dev libxrandr-dev libxrender-dev libfontconfig1-dev libfreetype6-dev libglu1-mesa-dev libcurl4-openssl-dev libgtk-3-dev libjack-jackd2-dev freeglut3-dev pkg-config
-        version: 1.1
+      timeout-minutes: 15
+      run: bash scripts/ci-install-linux-deps.sh
 
     # macOS Dependencies
     - name: Install macOS Dependencies
@@ -146,10 +151,26 @@ jobs:
     # NSIS (P5-6): windows-latest doesn't ship it, and it's only needed to build the installer,
     # so this step is a no-op cost on the other two matrix legs' runners were it there — guard by
     # OS to avoid an unnecessary choco call on Linux/macOS.
+    #
+    # `choco install` points the machine's registry PATH at NSIS, but every later step in this job
+    # is a fresh pwsh process that inherited its environment at job start — it never re-reads the
+    # registry, so makensis stayed invisible to "Build Windows installer" on every release build
+    # since this step was added (PR #241): "makensis: The term ... is not recognized as the name of
+    # a cmdlet...". $GITHUB_PATH is the one channel GitHub Actions re-reads before each step, so
+    # resolve makensis.exe's install directory explicitly and publish it through that instead of
+    # relying on $env:Path.
     - name: Install NSIS
       if: runner.os == 'Windows'
       shell: pwsh
-      run: choco install nsis -y
+      run: |
+        choco install nsis -y
+        $searchRoots = @("$env:ProgramFiles\NSIS", "${env:ProgramFiles(x86)}\NSIS")
+        $makensis = Get-ChildItem -Path $searchRoots -Filter makensis.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+        if (-not $makensis) {
+          Write-Error "makensis.exe not found under $($searchRoots -join ', ') after choco install nsis"
+          exit 1
+        }
+        Add-Content -Path $env:GITHUB_PATH -Value $makensis.DirectoryName
 
     # Configure CMake — Ninja on every OS so this matches the PR CI build path
     # (see the "Setup MSVC" note above for why Ninja and not the VS generator).
