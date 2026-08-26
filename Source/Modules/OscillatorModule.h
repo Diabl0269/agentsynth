@@ -30,14 +30,15 @@ public:
     static constexpr int modCVChannelFor(int jack, bool poly) { return poly ? (kPolyModCVBase + jack - 1) : jack; }
 
     OscillatorModule()
-        : ModuleBase("Oscillator", kNumInputs,
-                     kNumOutputs) // 14 in: 8 per-voice pitch CV (0-7) + 6 shared mod CV (8-13).
-                                  // 22 out: Audio L on 0-7, silent pass-throughs on 8-13, Audio R on
-                                  // 14-21. Declaring outputs ABOVE every CV input channel is what makes
-                                  // JUCE copy shared-mod-CV input buffers when they fan out to several
-                                  // downstream nodes, so our post-render clear cannot corrupt them —
-                                  // see the processPolyMode clear note. Do NOT reduce this below 14.
-    {
+        // 14 in: 8 per-voice pitch CV (0-7) + 6 shared mod CV (8-13).
+        // 22 out: Audio L on 0-7, silent pass-throughs on 8-13, Audio R on 14-21. Declaring outputs
+        // ABOVE every CV input channel is what makes JUCE copy shared-mod-CV input buffers when they
+        // fan out to several downstream nodes, so our post-render clear cannot corrupt them — see the
+        // processPolyMode clear note. Do NOT reduce this below 14.
+        //
+        // StereoAudio::Declared: with 22 outputs the Auto shape test cannot see the stereo pair —
+        // Audio R is the kRightBase block, not ch1. Ships SPLIT.
+        : ModuleBase("Oscillator", kNumInputs, kNumOutputs, StereoAudio::Declared) {
         addParameter(waveformParam = new juce::AudioParameterChoice("waveform", "Waveform",
                                                                     {"Sine", "Square", "Saw", "Triangle"}, 0));
         addParameter(octaveParam = new juce::AudioParameterInt(juce::ParameterID("octave", 1), "Octave", -4, 4, 0));
@@ -48,9 +49,9 @@ public:
         addParameter(unisonParam = new juce::AudioParameterInt(juce::ParameterID("unison", 1), "Unison", 1, 8, 1));
         addParameter(detuneParam = new juce::AudioParameterFloat("detune", "Detune", 0.0f, 100.0f, 0.0f));
         addParameter(panParam = new juce::AudioParameterFloat("pan", "Pan", -1.0f, 1.0f, 0.0f));
-        // Defaults to dual: this module is stereo now, so showing both legs is the honest
-        // out-of-the-box state. The Preferences default overrides it for newly dropped modules.
-        addDualIOParameter(/*defaultDual=*/true);
+        // Dual I/O comes from the ctor's StereoAudio::Declared above, defaulting to split: this
+        // module is stereo, so showing both legs is the honest out-of-the-box state. The Preferences
+        // default overrides it for newly dropped modules.
         addMuteParameter();
         enableVisualBuffer(true);
     }

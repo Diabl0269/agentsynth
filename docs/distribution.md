@@ -1,6 +1,6 @@
 # Distribution & Auto-Update
 
-Direct-download distribution (no app stores — see [P5·2](../CLAUDE.md) / the roadmap). This doc
+Direct-download distribution (no app stores). This doc
 covers how release builds get their version identity and how Sparkle (macOS) / WinSparkle
 (Windows) check for updates.
 
@@ -83,8 +83,7 @@ Two numbers are baked into every macOS build, and they mean different things:
   enclosure points at. Running the bare portable `Agent Synth.exe` as "the update" would just
   launch a second instance rather than install anything, so this task also added an NSIS installer
   (`installer/windows/AgentSynth.nsi`) — CI now ships `AgentSynthSetup.exe` as the Windows release
-  artifact instead of the raw exe (see the SmartScreen download-page note in P5·5's doc for what
-  that filename change means for the checksum-verification copy).
+  artifact instead of the raw exe.
   - **Per-user install** (`$LOCALAPPDATA\AgentSynth`, HKCU registry, `RequestExecutionLevel user`)
     — deliberately not Program Files. Not strictly required for correctness (WinSparkle already
     shows its own "update available" dialog before running the installer, so a UAC prompt mid-flow
@@ -112,7 +111,7 @@ Two numbers are baked into every macOS build, and they mean different things:
 ### macOS (Sparkle)
 
 Sparkle signs update archives with an EdDSA (Ed25519) key pair, kept in your macOS Keychain. This
-is separate from Apple code signing (P5·2) — it's Sparkle's own update-integrity mechanism.
+is separate from Apple code signing — it's Sparkle's own update-integrity mechanism.
 
 1. Build once locally on macOS (`cmake -S . -B build && cmake --build build`) so Sparkle's
    distribution is fetched to `build/_deps/sparkle-src/`.
@@ -172,8 +171,8 @@ Automated (`build-artifacts.yml`):
   and uploads the resulting `appcast.xml` back onto the release as an asset.
 - Publishing that `appcast.xml` to `https://agentsynth.app/updates/appcast.xml` — the `SUFeedURL`
   baked into the app (`SYNTH_UPDATE_FEED_URL` in `CMakeLists.txt`) — is automated too, but the
-  workflow lives in the **synth-platform** repo, not here: `synth-platform/.github/workflows/deploy-web.yml`
-  fetches `https://github.com/Diabl0269/agentsynth/releases/latest/download/appcast.xml` and
+  workflow lives in the private backend repo, not here. It fetches
+  `https://github.com/Diabl0269/agentsynth/releases/latest/download/appcast.xml` and
   redeploys `apps/web` — with the fetched appcast dropped at `dist/updates/appcast.xml` — only when
   it changed. That alias only ever resolves to the newest **non-prerelease** release, which is
   exactly the point (see "Promoting a build to stable" below): a per-push prerelease never reaches
@@ -183,17 +182,17 @@ Automated (`build-artifacts.yml`):
   (`--download-url-prefix` points there directly, so only the small `appcast.xml` file needed a
   second home).
 
-- The Windows side (P5·6) mirrors this: the build job also bakes in `SYNTH_WINSPARKLE_PUBLIC_KEY`,
+- The Windows side mirrors this: the build job also bakes in `SYNTH_WINSPARKLE_PUBLIC_KEY`,
   builds an NSIS installer (`AgentSynthSetup.exe`) via `makensis`, and after `release`,
   `publish-appcast-windows` (gated on `vars.WINSPARKLE_PUBLIC_KEY != ''`, `runs-on: windows-latest`)
   signs that installer with `winsparkle-tool.exe`, hand-templates `appcast-windows.xml` (WinSparkle
   has no `generate_appcast`-equivalent directory scanner), and uploads it to the release. Publishing
   `appcast-windows.xml` to `https://agentsynth.app/updates/appcast-windows.xml` reuses the exact
-  same `synth-platform/deploy-web.yml` mechanism as the macOS `appcast.xml` — a small, additive
-  extension of P5·7's existing infrastructure rather than a new pipeline.
+  same hosted-backend deploy mechanism as the macOS `appcast.xml` — a small, additive
+  extension of the existing infrastructure rather than a new pipeline.
 
-**Not automated**: nothing on the appcast-publishing path for either platform (P5·7 done
-2026-08-20 for macOS; P5·6 extends the same infrastructure for Windows). "Check for Updates" now
+**Not automated**: nothing on the appcast-publishing path for either platform (macOS shipped
+2026-08-20; Windows extends the same infrastructure). "Check for Updates" now
 round-trips against a real, live feed once a key exists for that platform; the 404-then-silent-no-op
 behavior described in earlier drafts of this doc no longer applies to that step.
 
@@ -202,7 +201,7 @@ behavior described in earlier drafts of this doc no longer applies to that step.
 Every push to `main` ships a GitHub **prerelease** (`build-artifacts.yml`) — that's continuous
 build/QA output, not something real users should auto-update onto. `promote-release.yml` is the
 separate, manual step that turns one specific already-built prerelease into the actual release
-Sparkle/WinSparkle and the download page serve (P5·10):
+Sparkle/WinSparkle and the download page serve:
 
 1. Pick a tag that's been running/tested and looks good — `gh release list --repo Diabl0269/agentsynth`.
 2. Actions ▸ Promote Release ▸ Run workflow, with that tag (e.g. `v0.112.0`) as the input. (Only the
@@ -213,7 +212,7 @@ Sparkle/WinSparkle and the download page serve (P5·10):
    `WINSPARKLE_PUBLIC_KEY` exists — see "Windows (WinSparkle)" above), and fails loudly rather than
    promoting a release that would leave auto-update or the download page's checksum link 404ing.
 4. GitHub's `/releases/latest` (and `/releases/latest/download/<asset>`) now resolves to this tag.
-   Trigger `synth-platform`'s `deploy-web` workflow by hand (`workflow_dispatch`) so
+   Trigger the private backend repo's deploy-web workflow by hand (`workflow_dispatch`) so
    `agentsynth.app/updates/appcast.xml` picks up the promoted build immediately — otherwise its
    daily schedule catches it within 24h regardless.
 
@@ -225,14 +224,13 @@ forward on a promotion you chose.
 ## What's not built yet
 
 - **Notarization** — CI's existing `codesign --force --deep -s -` is ad-hoc signing, not a real
-  Developer ID + notarization (that's P5·2). Sparkle's own update-signature check (the EdDSA key
+  Developer ID + notarization. Sparkle's own update-signature check (the EdDSA key
   above) doesn't require notarization to function, but Gatekeeper may still warn on the *initial*
-  install until P5·2 lands — that's an existing, separate problem this task doesn't change.
-- **Windows code signing** — `AgentSynthSetup.exe` is unsigned (P5·2 defers the Windows
-  certificate past first revenue), so SmartScreen still warns on install, same as the raw exe did
-  before P5·6 — WinSparkle's EdDSA signature check is a separate, orthogonal mechanism (update
-  integrity) and doesn't touch this. Existing, unchanged problem — see the marketing site's
-  SmartScreen explainer (P5·5).
+  install until real notarization is added — that's an existing, separate problem this task doesn't change.
+- **Windows code signing** — `AgentSynthSetup.exe` is unsigned (the Windows certificate hasn't
+  been purchased yet), so SmartScreen still warns on install, same as the raw exe did
+  before the installer replaced it — WinSparkle's EdDSA signature check is a separate, orthogonal
+  mechanism (update integrity) and doesn't touch this. Existing, unchanged problem.
 
 ## Testing
 
@@ -276,7 +274,7 @@ first), or hand-edit the `<sparkle:edSignature>` in the generated `appcast.xml`.
 refuses the update instead of installing it.
 
 **5. End-to-end against the real deployment** — `https://agentsynth.app/updates/appcast.xml` is
-live (P5·7); with a real key and a signed release, repeat step 3 against production instead of a
+live; with a real key and a signed release, repeat step 3 against production instead of a
 local server.
 
 ### Windows (WinSparkle) manual verification
@@ -323,7 +321,7 @@ shortcuts, and appears in Add/Remove Programs. Confirm `AgentSynthSetup.exe /S` 
 update instead of installing it.
 
 **6. End-to-end against the real deployment** — once `https://agentsynth.app/updates/appcast-windows.xml`
-is live (small extension to the synth-platform `deploy-web.yml` P5·7 already built) and a real key
+is live (a small extension to the hosted backend's existing deploy mechanism) and a real key
 + signed release exist, repeat step 4 against production instead of a local server.
 
 **`promote-release.yml`**: no automated coverage — it's ~20 lines of `gh` CLI calls against GitHub's

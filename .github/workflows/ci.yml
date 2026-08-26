@@ -106,6 +106,11 @@ jobs:
       # Covers the apt mirror-failover path, which by definition only runs during an outage — the
       # one that burned six hours of runner time on 2026-08-18. Same deal: ~1s, no apt, no network.
       run: bash scripts/tests/ci-install-linux-deps.test.sh
+    - name: Check string literals are ASCII-safe
+      # juce::String decodes a `const char*` as Latin-1, so a non-ASCII literal ships as mojibake
+      # ("Rename…" rendered "Renameâ€¦"). A compiler cannot catch it and no test asserted on it.
+      # Same deal as the two above: ~1s, no compiler.
+      run: bash scripts/tests/check-nonascii-literals.test.sh
     - name: Test AI eval ratchet
       # Guards the nightly/manual AIPatchHarness ratchet (P1-11), which never runs here itself
       # (needs a live model) but is cheap and deterministic to unit test. ~1s, no model, no network.

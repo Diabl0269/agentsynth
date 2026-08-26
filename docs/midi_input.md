@@ -29,7 +29,7 @@ This replaces the old hand-rolled `incomingMessages` buffer + `CriticalSection`,
 
 Messages timestamped `0` (untimestamped — e.g. hand-constructed messages from tests or other synthetic sources) still land at sample 0 of the next block: `MidiMessageCollector` computes a deeply negative sample offset for them relative to its wall-clock reference point and clamps it to `0` on drain, preserving the old behaviour for callers that never call `setTimeStamp()`.
 
-## Recording (TL3-3): the recorder taps one of these two paths only
+## Recording: the recorder taps one of these two paths only
 
 `synth::MidiRecorder` (`Source/Timeline/MidiRecorder.h/.cpp`) is the single place external MIDI is recorded into a timeline clip, and it hangs off the **collector-merged buffer only** — the same `midiMessages` the graph itself renders (drained from `midiMessageCollector` in standalone mode, or handed straight to `processHostBlock` by the host). `AudioEngine::renderNextBlock` calls `recorder->captureBlock(midiMessages, transport.getCurrentBlockInfo())` once per callback, right after the timeline snapshot is opened.
 
@@ -46,7 +46,7 @@ A survey of every MIDI producer/consumer in the codebase and how each handles a 
 | `MidiKeyboardModule` | Sample-accurate | Preserves `metadata.samplePosition` when it re-adds octave-shifted notes to the output buffer. |
 | `PolyMidiModule` | Sample-accurate | Chunk-renders per event: uses `msg.getTimeStamp()` (populated by `MidiMessageMetadata::getMessage()` from `samplePosition`) as a render-chunk boundary, so gate/pitch changes land on the exact sample. |
 | `AudioEngine` (`midiMessageCollector`, graph-input path) | Sample-accurate | `juce::MidiMessageCollector` converts MIDI-thread wall-clock timestamps into sample offsets within the audio block. |
-| `ExternalMidiModule` | Sample-accurate (fixed by TL1-6) | Now backed by its own `juce::MidiMessageCollector`; previously stamped everything at sample 0 (the bug this task fixes). |
+| `ExternalMidiModule` | Sample-accurate (fixed) | Now backed by its own `juce::MidiMessageCollector`; previously stamped everything at sample 0 (the bug this task fixes). |
 | `ADSRModule` (mono MIDI branch) | Block-granularity | Applies `noteOn()`/`noteOff()` for every event in the block before `applyEnvelopeToBuffer()` runs across the whole block — event offsets are read but not acted on. |
 | `OscillatorModule` | Block-granularity | Overwrites `lastMidiNote` from the last note-on seen in the block; the resulting pitch is applied uniformly across the whole block. |
 | `SamplerModule` | Block-granularity | Gate/note state (`midiGateOpen`, `midiNote`) is latched from the MIDI loop before the per-sample render loop runs, ignoring each event's `samplePosition`. |
@@ -56,4 +56,4 @@ A survey of every MIDI producer/consumer in the codebase and how each handles a 
 
 Block-granularity is an accepted trade-off for hand-played/CV-triggered input today — the poly path (gate-CV, sample-accurate via `PolyMidiModule`) is the timeline's actual route, so per-module fixes for the mono/legacy paths above are deferred to their own tasks rather than bundled here.
 
-`SequencerModule` / `PolySequencerModule`'s hardcoded offsets are left as-is deliberately: existing presets are golden-tested byte-identical against those exact sample positions, and computing the true beat-crossing sample is revisited under the transport-sync task TL1-8.
+`SequencerModule` / `PolySequencerModule`'s hardcoded offsets are left as-is deliberately: existing presets are golden-tested byte-identical against those exact sample positions, and computing the true beat-crossing sample is revisited under a future transport-sync task.

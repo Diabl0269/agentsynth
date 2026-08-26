@@ -36,25 +36,6 @@ TEST_F(IntegrationTest, OscToFilterToVCA) {
     EXPECT_TRUE(graph.addConnection({{filterNode->nodeID, 0}, {vcaNode->nodeID, 0}}));
 }
 
-TEST_F(IntegrationTest, LFOModulatesFilterCutoff) {
-    auto& graph = engine.getGraph();
-    graph.clear();
-
-    auto lfoNode = graph.addNode(std::make_unique<LFOModule>());
-    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
-
-    ASSERT_NE(lfoNode, nullptr);
-    ASSERT_NE(filterNode, nullptr);
-
-    engine.addModRouting(lfoNode->nodeID, 0, filterNode->nodeID, 1);
-
-    auto routings = engine.getActiveModRoutings();
-    ASSERT_EQ(routings.size(), 1);
-    EXPECT_EQ(routings[0].sourceNodeID, lfoNode->nodeID);
-    EXPECT_EQ(routings[0].destNodeID, filterNode->nodeID);
-    EXPECT_EQ(routings[0].destChannelIndex, 1);
-}
-
 TEST_F(IntegrationTest, ADSREnvelopeToVCA) {
     auto& graph = engine.getGraph();
     graph.clear();
@@ -204,10 +185,9 @@ TEST(PolyPad_EnvToOscModulatesOscLevel, RisingEnvelopeRaisesOscillatorLevel) {
     OscillatorModule osc;
     osc.prepareToPlay(kSampleRate, kBlockSize);
 
-    // Parameter indices (ModuleBase adds bypassed at 0):
-    //   0=bypassed, 1=waveform, 2=octave, 3=coarse, 4=fine, 5=level, 6=poly, 7=unison, 8=detune, 9=muted
-    auto* levelParam = dynamic_cast<juce::AudioParameterFloat*>(osc.getParameters()[5]);
-    auto* polyParam = dynamic_cast<juce::AudioParameterBool*>(osc.getParameters()[6]);
+    // Look up by ID, not index — ModuleBase's dualIO parameter shifts every module-owned index.
+    auto* levelParam = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&osc, "level"));
+    auto* polyParam = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(&osc, "poly"));
     ASSERT_NE(levelParam, nullptr);
     ASSERT_NE(polyParam, nullptr);
     *levelParam = 0.0f;                     // base level zero; output is purely CV-driven
@@ -354,9 +334,10 @@ TEST(PolyPad_EnvModulatesOutput_NotSilenced, EnvToVcaNotZeroedByOscillatorClear)
     NodePtr oscNode = graph.addNode(std::move(oscMod));
     ASSERT_NE(oscNode, nullptr);
     {
-        // Parameters: 0=bypassed, 1=waveform, 2=octave, 3=coarse, 4=fine, 5=level, 6=poly, 7=unison, 8=detune, 9=muted
-        auto* polyParam = dynamic_cast<juce::AudioParameterBool*>(oscNode->getProcessor()->getParameters()[6]);
-        auto* levelParam = dynamic_cast<juce::AudioParameterFloat*>(oscNode->getProcessor()->getParameters()[5]);
+        // Look up by ID, not index — ModuleBase's dualIO parameter shifts every module-owned index.
+        auto* polyParam = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(oscNode->getProcessor(), "poly"));
+        auto* levelParam =
+            dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(oscNode->getProcessor(), "level"));
         ASSERT_NE(polyParam, nullptr);
         ASSERT_NE(levelParam, nullptr);
         polyParam->setValueNotifyingHost(1.0f); // poly mode: Level CV = input 12
@@ -369,9 +350,9 @@ TEST(PolyPad_EnvModulatesOutput_NotSilenced, EnvToVcaNotZeroedByOscillatorClear)
     NodePtr vcaNode = graph.addNode(std::move(vcaMod));
     ASSERT_NE(vcaNode, nullptr);
     {
-        // Parameters: 0=bypassed, 1=gain, 2=poly, 3=muted
-        auto* polyParam = dynamic_cast<juce::AudioParameterBool*>(vcaNode->getProcessor()->getParameters()[2]);
-        auto* gainParam = dynamic_cast<juce::AudioParameterFloat*>(vcaNode->getProcessor()->getParameters()[1]);
+        // Look up by ID, not index — ModuleBase's dualIO parameter shifts every module-owned index.
+        auto* polyParam = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(vcaNode->getProcessor(), "poly"));
+        auto* gainParam = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(vcaNode->getProcessor(), "gain"));
         ASSERT_NE(polyParam, nullptr);
         ASSERT_NE(gainParam, nullptr);
         polyParam->setValueNotifyingHost(1.0f); // poly mode

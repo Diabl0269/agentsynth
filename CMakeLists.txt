@@ -483,6 +483,9 @@ juce_add_binary_data(Assets SOURCES
     assets/icons/track-audio.svg
     assets/icons/track-automation.svg
     assets/icons/follow-playhead.svg
+    # I/O category icon (speaker glyph) — Audio Input/Output library rows and the Audio Output
+    # card's identity treatment; both previously fell back to CatUtility.
+    assets/icons/cat-io.svg
 )
 
 # The themed LookAndFeel lives in Core and pulls typefaces from BinaryData;

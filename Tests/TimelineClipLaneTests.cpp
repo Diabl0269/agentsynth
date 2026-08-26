@@ -26,6 +26,7 @@
 #include "../Source/Modules/RecordTapModule.h"
 #include "../Source/Timeline/PeaksFile.h"
 #include "../Source/Timeline/TimelineDoc.h"
+#include "../Source/Transport/TransportService.h"
 #include "../Source/UI/ClipSelectionModel.h"
 #include "../Source/UI/TimelineClipLaneArea.h"
 #include "../Source/UI/TimelineViewState.h"
@@ -1226,6 +1227,195 @@ TEST(TimelineClipLaneAuthoringTest, DoubleClickNamesClipsInSequenceAndSnapOffKee
     EXPECT_EQ(track->clips[1].name, juce::String("Clip 2")) << "the auto-name counts the row's clips";
 }
 
+// ---------------------------------------------------------------------------
+// Double-click spans the loop locators (preference-gated, default ON).
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// A clip-lane fixture with a live transport and its own settings file, so the locator span and the
+// preference that gates it are both real rather than stubbed.
+struct LocatorSpanFixture : ClipLaneFixture {
+    synth::TransportService transport;
+    juce::ApplicationProperties appProperties;
+
+    LocatorSpanFixture() {
+        juce::PropertiesFile::Options options;
+        options.applicationName = "TimelineClipLaneLocatorSpanTest";
+        options.filenameSuffix = "test";
+        options.storageFormat = juce::PropertiesFile::storeAsXML;
+        appProperties.setStorageParameters(options);
+        if (auto* settings = appProperties.getUserSettings())
+            settings->clear();
+
+        transport.prepare(48000.0, 512);
+        lane.setTransport(&transport);
+        lane.setApplicationProperties(&appProperties);
+        // Snap::Off throughout, so the ONLY thing that can decide the clip's start/length is the
+        // locator rule under test rather than a grid line coinciding with it.
+        state.snap = TimelineViewState::Snap::Off;
+    }
+
+    ~LocatorSpanFixture() {
+        if (auto* settings = appProperties.getUserSettings())
+            settings->clear();
+    }
+
+    void setLocators(double startBeat, double endBeat, bool arm = true) {
+        ASSERT_TRUE(transport.setLoop(startBeat, endBeat, arm));
+        transport.tick(512);
+    }
+
+    void setPreference(bool enabled) {
+        appProperties.getUserSettings()->setValue("timelineDoubleClickSpansLocators", enabled ? "1" : "0");
+    }
+};
+
+} // namespace
+
+TEST(TimelineClipLaneLocatorSpanTest, DoubleClickInsideTheLocatorsSpansThemByDefault) {
+    LocatorSpanFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    f.setLocators(2.0, 6.0);
+
+    // x = 160 px -> beat 4.0, inside [2, 6).
+    f.lane.mouseDoubleClick(leftClick(f.lane, {160.0f, rowCentreY(f.lane, 0)}));
+
+    const auto* track = f.doc.getTrack(trackId);
+    ASSERT_NE(track, nullptr);
+    ASSERT_EQ(track->clips.size(), 1u);
+    EXPECT_DOUBLE_EQ(track->clips[0].startBeat, 2.0) << "the clip starts at the LEFT locator, not the click";
+    EXPECT_DOUBLE_EQ(track->clips[0].lengthBeats, 4.0) << "and runs to the right one";
+
+    // Still ONE undo step, exactly like the one-bar path.
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_TRUE(f.doc.getTrack(trackId)->clips.empty());
+}
+
+TEST(TimelineClipLaneLocatorSpanTest, OutsideTheLocatorsKeepsTheOneBarBehaviour) {
+    LocatorSpanFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    f.setLocators(2.0, 6.0);
+
+    // x = 400 px -> beat 10.0, past the right locator.
+    f.lane.mouseDoubleClick(leftClick(f.lane, {400.0f, rowCentreY(f.lane, 0)}));
+    // x = 20 px -> beat 0.5, before the left one.
+    f.lane.mouseDoubleClick(leftClick(f.lane, {20.0f, rowCentreY(f.lane, 0)}));
+
+    const auto* track = f.doc.getTrack(trackId);
+    ASSERT_EQ(track->clips.size(), 2u);
+    for (const auto& clip : track->clips)
+        EXPECT_DOUBLE_EQ(clip.lengthBeats, 4.0) << "one bar at the default 4/4";
+    EXPECT_DOUBLE_EQ(track->clips[0].startBeat, 0.5) << "authored where the user clicked (Snap::Off)";
+    EXPECT_DOUBLE_EQ(track->clips[1].startBeat, 10.0);
+}
+
+// The span is half-open: a click exactly ON the right locator belongs to what comes after the loop.
+TEST(TimelineClipLaneLocatorSpanTest, TheSpanIsHalfOpenAtBothEnds) {
+    LocatorSpanFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    f.setLocators(2.0, 6.0);
+
+    // Exactly on the LEFT locator (beat 2.0) is inside.
+    f.lane.mouseDoubleClick(leftClick(f.lane, {80.0f, rowCentreY(f.lane, 0)}));
+    ASSERT_EQ(f.doc.getTrack(trackId)->clips.size(), 1u);
+    EXPECT_DOUBLE_EQ(f.doc.getTrack(trackId)->clips[0].startBeat, 2.0);
+    EXPECT_DOUBLE_EQ(f.doc.getTrack(trackId)->clips[0].lengthBeats, 4.0);
+
+    // Exactly on the RIGHT locator (beat 6.0) is not.
+    f.lane.mouseDoubleClick(leftClick(f.lane, {240.0f, rowCentreY(f.lane, 0)}));
+    const auto* track = f.doc.getTrack(trackId);
+    ASSERT_EQ(track->clips.size(), 2u);
+    const auto& atRightLocator = track->clips[1];
+    EXPECT_DOUBLE_EQ(atRightLocator.startBeat, 6.0);
+    EXPECT_DOUBLE_EQ(atRightLocator.lengthBeats, 4.0) << "one bar, not a second copy of the loop";
+}
+
+TEST(TimelineClipLaneLocatorSpanTest, PreferenceOffAlwaysGivesOneBar) {
+    LocatorSpanFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    f.setLocators(2.0, 6.0);
+    f.setPreference(false);
+
+    f.lane.mouseDoubleClick(leftClick(f.lane, {160.0f, rowCentreY(f.lane, 0)})); // beat 4.0, inside
+    const auto* track = f.doc.getTrack(trackId);
+    ASSERT_EQ(track->clips.size(), 1u);
+    EXPECT_DOUBLE_EQ(track->clips[0].startBeat, 4.0);
+    EXPECT_DOUBLE_EQ(track->clips[0].lengthBeats, 4.0);
+
+    // Flipping it back on takes effect on the very next double-click — the key is read at use
+    // time, never cached. Clicked at beat 2.5, which is inside the locators AND clear of the
+    // one-bar clip just authored at [4, 8) (a double-click ON a clip opens the roll instead).
+    f.setPreference(true);
+    f.lane.mouseDoubleClick(leftClick(f.lane, {100.0f, rowCentreY(f.lane, 0)}));
+    ASSERT_EQ(f.doc.getTrack(trackId)->clips.size(), 2u);
+    const auto& spanned = f.doc.getTrack(trackId)->clips[0];
+    EXPECT_DOUBLE_EQ(spanned.startBeat, 2.0);
+    EXPECT_DOUBLE_EQ(spanned.lengthBeats, 4.0);
+}
+
+// A degenerate span (end <= start) is also what "no locators set yet" looks like: nothing to span.
+TEST(TimelineClipLaneLocatorSpanTest, DegenerateOrAbsentLocatorsFallBackToOneBar) {
+    LocatorSpanFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+
+    // A fresh transport's loop is whatever it defaults to; force the degenerate case explicitly by
+    // asking locatorSpanForDoubleClick directly (setLoop itself refuses a zero-length range).
+    const auto snap = f.transport.getPositionSnapshot();
+    if (!(snap.loopEndPpq > snap.loopStartPpq))
+        EXPECT_FALSE(f.lane.locatorSpanForDoubleClick(0.0).has_value());
+
+    // With a real span, the same query answers for a beat inside and declines for one outside.
+    f.setLocators(2.0, 6.0);
+    ASSERT_TRUE(f.lane.locatorSpanForDoubleClick(4.0).has_value());
+    EXPECT_DOUBLE_EQ(f.lane.locatorSpanForDoubleClick(4.0)->first, 2.0);
+    EXPECT_DOUBLE_EQ(f.lane.locatorSpanForDoubleClick(4.0)->second, 6.0);
+    EXPECT_FALSE(f.lane.locatorSpanForDoubleClick(6.0).has_value());
+    EXPECT_FALSE(f.lane.locatorSpanForDoubleClick(-1.0).has_value());
+
+    // Looping switched OFF still counts: the locators are a RANGE, and disarming them only stops
+    // playback from wrapping (see TimelineRulerComponent::braceStateFor, same rule).
+    f.setLocators(2.0, 6.0, /*arm=*/false);
+    EXPECT_TRUE(f.lane.locatorSpanForDoubleClick(4.0).has_value());
+    f.lane.mouseDoubleClick(leftClick(f.lane, {160.0f, rowCentreY(f.lane, 0)}));
+    ASSERT_EQ(f.doc.getTrack(trackId)->clips.size(), 1u);
+    EXPECT_DOUBLE_EQ(f.doc.getTrack(trackId)->clips[0].lengthBeats, 4.0);
+    EXPECT_DOUBLE_EQ(f.doc.getTrack(trackId)->clips[0].startBeat, 2.0);
+}
+
+// No transport (and no settings file) at all: the feature is simply unavailable, never a crash.
+TEST(TimelineClipLaneLocatorSpanTest, NoTransportOrNoSettingsFallsBackToOneBar) {
+    ClipLaneFixture bare; // no transport, no ApplicationProperties
+    const auto trackId = bare.doc.addTrack(TrackKind::Midi, "Track 1");
+    bare.state.snap = TimelineViewState::Snap::Off;
+    EXPECT_FALSE(bare.lane.locatorSpanForDoubleClick(4.0).has_value());
+
+    bare.lane.mouseDoubleClick(leftClick(bare.lane, {160.0f, rowCentreY(bare.lane, 0)}));
+    ASSERT_EQ(bare.doc.getTrack(trackId)->clips.size(), 1u);
+    EXPECT_DOUBLE_EQ(bare.doc.getTrack(trackId)->clips[0].startBeat, 4.0);
+    EXPECT_DOUBLE_EQ(bare.doc.getTrack(trackId)->clips[0].lengthBeats, 4.0);
+}
+
+// The Draw tool authors its own clips through the same createMidiClipAt and must NOT pick up the
+// locator span — a drag states its own length.
+TEST(TimelineClipLaneLocatorSpanTest, TheDrawToolIsUnaffectedByTheLocators) {
+    LocatorSpanFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    f.setLocators(2.0, 6.0);
+    f.lane.setActiveTool(synth::ui::EditTool::Draw);
+
+    // A Draw press inside the locators, released without a drag: one bar, as it always was.
+    const juce::Point<float> pos(160.0f, rowCentreY(f.lane, 0));
+    f.lane.mouseDown(leftClick(f.lane, pos));
+    f.lane.mouseUp(leftClick(f.lane, pos));
+
+    const auto* track = f.doc.getTrack(trackId);
+    ASSERT_EQ(track->clips.size(), 1u);
+    EXPECT_DOUBLE_EQ(track->clips[0].lengthBeats, 4.0);
+    EXPECT_DOUBLE_EQ(track->clips[0].startBeat, 4.0) << "the Draw anchor, not the left locator";
+}
+
 TEST(TimelineClipLaneAuthoringTest, DoubleClickIgnoresAutomationRowsAndEmptyPanelSpace) {
     ClipLaneFixture f;
     const auto automationTrack = f.doc.addTrack(TrackKind::Automation, "Automation");
@@ -1372,10 +1562,10 @@ TEST(TimelineClipLaneAuthoringTest, EmptyRowHintTextIsPerKindAndOnlyForEmptyRows
     f.doc.addTrack(TrackKind::Automation, "Automation");
     ASSERT_TRUE(audioTrack.isValid());
 
-    EXPECT_EQ(f.lane.getEmptyRowHintForTest(0),
-              juce::String::fromUTF8("Double-click to add a clip \xE2\x80\x94 or arm (R) and record"));
-    EXPECT_EQ(f.lane.getEmptyRowHintForTest(1),
-              juce::String::fromUTF8("Drop an audio file \xE2\x80\x94 or arm (R) and record"));
+    // ASCII: the hint used to carry a UTF-8 em dash, which juce::String decoded as Latin-1 and
+    // painted as mojibake (see CLAUDE.md's string-literal invariant).
+    EXPECT_EQ(f.lane.getEmptyRowHintForTest(0), juce::String("Double-click to add a clip - or arm (R) and record"));
+    EXPECT_EQ(f.lane.getEmptyRowHintForTest(1), juce::String("Drop an audio file - or arm (R) and record"));
     EXPECT_TRUE(f.lane.getEmptyRowHintForTest(2).isEmpty()) << "an automation row has nothing to author";
     EXPECT_TRUE(f.lane.getEmptyRowHintForTest(9).isEmpty()) << "no such row";
 

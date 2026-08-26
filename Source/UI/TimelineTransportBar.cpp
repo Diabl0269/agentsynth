@@ -7,13 +7,16 @@
 namespace synth::ui {
 
 namespace {
-constexpr int kButtonSize = 22;
+// 26 (was 22): timeline-panel button-size sweep, paired with growing
+// Metrics::timelineTransportBarHeight (28->34) so the glyphs actually render larger instead of
+// being clamped straight back down by resized()'s `min(kButtonSize, bounds.getHeight())`.
+constexpr int kButtonSize = 26;
 // Inter-control spacing. Widened from 4 px: the row read as one dense block of glyphs rather than
 // four separate buttons. Group separations are kGap * 2.
 constexpr int kGap = 7;
 // The bar's own padding inside its strip. The panel already trims the 5 px resize grab strip off
 // the top before handing us our bounds, so this is plain breathing room — kept tight vertically so
-// the square buttons get as much of the 28 px strip as possible.
+// the square buttons get as much of the 34 px strip as possible.
 constexpr int kEdgePaddingX = 4;
 constexpr int kEdgePaddingY = 2;
 constexpr int kBpmLabelWidth = 52;
@@ -208,7 +211,7 @@ TimelineTransportBar::TimelineTransportBar() {
     addAndMakeVisible(metronomeButton_);
     metronomeButton_.setComponentID("timelineTransportMetronome");
     metronomeButton_.setClickingTogglesState(false); // this bar owns the visual explicitly below
-    metronomeButton_.setTooltip("Metronome click (summed after the graph — never recorded or bounced)");
+    metronomeButton_.setTooltip("Metronome click (summed after the graph - never recorded or bounced)");
     metronomeButton_.onClick = [this] {
         const bool newState = !metronomeButton_.getToggleState();
         metronomeButton_.setToggleState(newState, juce::dontSendNotification);
@@ -239,7 +242,7 @@ TimelineTransportBar::TimelineTransportBar() {
     addAndMakeVisible(bpmLabel_);
     bpmLabel_.setComponentID("timelineTransportBpmLabel");
     bpmLabel_.setJustificationType(juce::Justification::centred);
-    bpmLabel_.setTooltip("Tempo (double-click to type, drag to scrub — Cmd for fine)");
+    bpmLabel_.setTooltip("Tempo (double-click to type, drag to scrub - Cmd for fine)");
     bpmLabel_.setEditable(false, true, false); // double-click to edit, same idiom as the track-name label
     bpmLabel_.setText(formatBpm(120.0), juce::dontSendNotification);
     bpmLabel_.onTextChange = [this] {

@@ -391,10 +391,14 @@ public:
         // keyPressed() hardcoded before it started resolving them through here, so the defaults are
         // a no-op for anyone who has already learned them. timelineSnapToggle is shared with the
         // piano roll on purpose: one binding, one key, whichever surface has focus.
-        bindings["timelineSnapToggle"] = juce::KeyPress('q', juce::ModifierKeys::noModifiers, 0);
+        // J, not Q: Cubase's own snap key. Q is Cubase's *quantise*, which is what the piano roll
+        // uses it for, so leaving snap on Q made one letter mean two different verbs depending on
+        // which timeline surface had focus. Still shared with the roll — one binding, one key,
+        // whichever surface has focus.
+        bindings["timelineSnapToggle"] = juce::KeyPress('j', juce::ModifierKeys::noModifiers, 0);
         bindings["timelineToggleLoop"] = juce::KeyPress('l', juce::ModifierKeys::noModifiers, 0);
         bindings["timelineLoopSelection"] = juce::KeyPress('p', juce::ModifierKeys::noModifiers, 0);
-        // F mirrors the transport strip's follow-playhead button, panel-scoped like Q/L/P.
+        // F mirrors the transport strip's follow-playhead button, panel-scoped like J/L/P.
         bindings["timelineFollowPlayheadToggle"] = juce::KeyPress('f', juce::ModifierKeys::noModifiers, 0);
         // Cubase's tool row (see synth::ui::EditTool for why 2, 6 and 9 stay unclaimed). Bare
         // digits: category scoping is what makes that safe next to the Ctrl+Shift+digit grid block
@@ -405,12 +409,36 @@ public:
         bindings["timelineToolErase"] = juce::KeyPress('5', juce::ModifierKeys::noModifiers, 0);
         bindings["timelineToolMute"] = juce::KeyPress('7', juce::ModifierKeys::noModifiers, 0);
         bindings["timelineToolDraw"] = juce::KeyPress('8', juce::ModifierKeys::noModifiers, 0);
+        // Option+1 / Option+2: park the cursor on the left / right loop locator.
+        //
+        // A PLAIN Alt chord, deliberately NOT Ctrl+Shift+digit, and the reason is a real bug rather
+        // than taste. These two briefly lived on Ctrl+Shift+1/2 — the chord the grid-set family
+        // owns — and were dead in the app, because moving a DEFAULT binding does not migrate a
+        // user's PERSISTED one: `saveToProperties` writes every action's key, so any install whose
+        // settings had ever been saved still had `snapSetWhole`/`snapSetHalf` sitting on
+        // Ctrl+Shift+1/2. `getActionsForKeyPress` then returned both ids for that chord, and
+        // `MainComponent::keyPressed` takes "the first action bound to this key that HAS a command"
+        // — so the stale grid COMMAND won and the locator jump never ran. Option+digit was never
+        // bound to anything in any shipped version, so no persisted value can shadow it.
+        //
+        // Alt is also the one modifier family immune to the macOS shifted-character problem
+        // `keyPressMatches` exists to work around: `charactersIgnoringModifiers` DOES ignore
+        // Option, so Option+1 arrives carrying '1' and matches by key code directly. Stored as a
+        // key code plus a modifier set, never as the glyph macOS delivers for Option+digit — the
+        // same reason `pianoRollNavPrevNote` stores an arrow plus altModifier.
+        bindings["timelineJumpToLocator1"] = juce::KeyPress('1', juce::ModifierKeys::altModifier, 0);
+        bindings["timelineJumpToLocator2"] = juce::KeyPress('2', juce::ModifierKeys::altModifier, 0);
+
         // REAL ctrlModifier, not commandModifier. On macOS the Ctrl+digit space is genuinely free
         // (Cmd+digit is reserved by hosts and by the native menu bar), which is what the user asked
         // for; on Windows/Linux juce::ModifierKeys::commandModifier IS ctrlModifier, so these read
         // as Ctrl+Shift+digit on every platform and the table needs no per-platform branch. The
         // digit key codes are what keeps them clear of the Cmd+Shift General bindings, which use
         // letters and the two zoom punctuation keys.
+        //
+        // These are back on their ORIGINAL Ctrl+Shift+digit home, which is also what every existing
+        // install has persisted — see the locator note above for why briefly moving them to
+        // Ctrl+Alt was the wrong half of the problem to solve.
         const int ctrlShift = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier;
         bindings["snapSetWhole"] = juce::KeyPress('1', juce::ModifierKeys(ctrlShift), 0);
         bindings["snapSetHalf"] = juce::KeyPress('2', juce::ModifierKeys(ctrlShift), 0);
@@ -424,14 +452,15 @@ public:
         //    one of the three EditTool.h deliberately leaves unclaimed — carry NO modifiers, and
         //    modifier equality is exact on the binding side (keyPressMatches only normalizes the key
         //    CODE, never the modifier set), so Ctrl+Shift+7 can no more reach the Mute tool than
-        //    Ctrl+Shift+1 could reach Select.
+        //    Ctrl+Shift+1 could reach Select. The Option+digit locator pair above is a third
+        //    modifier set on the same two key codes, and stays distinct for exactly the same reason.
         bindings["snapSetThirtySecond"] = juce::KeyPress('6', juce::ModifierKeys(ctrlShift), 0);
         bindings["snapSetSixtyFourth"] = juce::KeyPress('7', juce::ModifierKeys(ctrlShift), 0);
         bindings["snapSetHundredTwentyEighth"] = juce::KeyPress('8', juce::ModifierKeys(ctrlShift), 0);
         // Same modifier family as the eight above (they are the same verb, stepped instead of
         // absolute), on the horizontal arrows: coarser is left, finer is right, which matches the
         // snap combo reading coarsest-to-finest top-to-bottom. The piano roll's arrow bindings are
-        // bare/Shift/Alt, so Ctrl+Shift is clear of all six of them as well.
+        // bare/Shift/Alt, so Ctrl+Shift is clear of all six of those as well.
         bindings["snapCyclePrev"] = juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys(ctrlShift), 0);
         bindings["snapCycleNext"] = juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(ctrlShift), 0);
 
@@ -451,7 +480,25 @@ public:
             juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier, 0);
         bindings["pianoRollNavPrevNote"] = juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys::altModifier, 0);
         bindings["pianoRollNavNextNote"] = juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::altModifier, 0);
-        bindings["pianoRollQuantise"] = juce::KeyPress('q', juce::ModifierKeys::shiftModifier, 0);
+        // BARE Q IS QUANTISE in the piano roll (Cubase parity): on a note editor the most reachable
+        // key belongs to the verb you use constantly, not to an on/off switch you set once a session.
+        // Snap moved off Q to J — but as the SHARED "timelineSnapToggle" (which is J), not as a
+        // piano-roll action of its own: two rebindable actions both labelled "Toggle Snap", both
+        // defaulting to J and both flipping the same TimelineViewState flag would be a Settings list
+        // the user cannot reason about. One binding, one key, whichever surface has focus, exactly as
+        // before — only the key it lands on changed.
+        bindings["pianoRollQuantise"] = juce::KeyPress('q', juce::ModifierKeys::noModifiers, 0);
+        // Pitch quantise keeps Option+Shift+Q: still recognisably the same "Q family" verb, and one
+        // chord away from anything destructive. Stored as a KEY CODE plus a modifier set, never as the
+        // Unicode glyph macOS actually delivers for Option+letter ('œ' for Option+Q) — keyPressMatches
+        // compares key codes, the same reason "pianoRollNavPrevNote" can store an arrow key plus
+        // altModifier and still match.
+        bindings["pianoRollQuantisePitches"] = juce::KeyPress(
+            'q', juce::ModifierKeys(juce::ModifierKeys::altModifier | juce::ModifierKeys::shiftModifier), 0);
+        // Option+S, the keyboard twin of the header's row-filter chip. Clear of "pianoRollToggleScalePanel"
+        // (Ctrl+S, below) on every platform: modifier equality is exact, and Alt is Alt even on
+        // Windows/Linux where JUCE's Cmd collapses onto Ctrl.
+        bindings["pianoRollToggleScaleFilter"] = juce::KeyPress('s', juce::ModifierKeys::altModifier, 0);
         // Real ctrlModifier, deliberately NOT commandModifier — "savePreset" already owns Cmd+S, and
         // this toggle must never be that shortcut wearing a different hat. On macOS the two chords
         // are genuinely distinct physical keys. On Windows/Linux, where juce::ModifierKeys::
@@ -596,6 +643,12 @@ public:
             return "Mute Tool";
         if (actionId == "timelineToolDraw")
             return "Draw Tool";
+        // "Locator 1"/"Locator 2" rather than "loop start"/"loop end": the two are the same pair of
+        // numbers, and every DAW that has this key calls them locators.
+        if (actionId == "timelineJumpToLocator1")
+            return "Jump to Locator 1";
+        if (actionId == "timelineJumpToLocator2")
+            return "Jump to Locator 2";
         // Labelled with the same note values the snap combo shows ("1", "1/2", …) rather than
         // "Whole"/"Half", so the shortcut list and the selector name the grid identically.
         if (actionId == "snapSetWhole")
@@ -636,6 +689,10 @@ public:
             return "Select Next Note";
         if (actionId == "pianoRollQuantise")
             return "Quantise Selected Notes";
+        if (actionId == "pianoRollQuantisePitches")
+            return "Quantise Note Pitches to Scale";
+        if (actionId == "pianoRollToggleScaleFilter")
+            return "Show Only Scale Notes";
         if (actionId == "pianoRollToggleScalePanel")
             return "Toggle Scale Panel";
         return actionId;
@@ -752,6 +809,8 @@ private:
             {"timelineToolErase", ShortcutCategory::Timeline},
             {"timelineToolMute", ShortcutCategory::Timeline},
             {"timelineToolDraw", ShortcutCategory::Timeline},
+            {"timelineJumpToLocator1", ShortcutCategory::Timeline},
+            {"timelineJumpToLocator2", ShortcutCategory::Timeline},
             {"snapSetWhole", ShortcutCategory::Timeline},
             {"snapSetHalf", ShortcutCategory::Timeline},
             {"snapSetQuarter", ShortcutCategory::Timeline},
@@ -772,7 +831,9 @@ private:
             {"pianoRollNavPrevNote", ShortcutCategory::PianoRoll},
             {"pianoRollNavNextNote", ShortcutCategory::PianoRoll},
             {"pianoRollQuantise", ShortcutCategory::PianoRoll},
+            {"pianoRollQuantisePitches", ShortcutCategory::PianoRoll},
             {"pianoRollToggleScalePanel", ShortcutCategory::PianoRoll},
+            {"pianoRollToggleScaleFilter", ShortcutCategory::PianoRoll},
         };
         return table;
     }
@@ -867,4 +928,18 @@ inline juce::String shortcutHintFor(const ShortcutManager* manager, const juce::
     const bool bareLetter =
         key.getModifiers() == juce::ModifierKeys() && ((code >= 'a' && code <= 'z') || (code >= 'A' && code <= 'Z'));
     return bareLetter ? display.toLowerCase() : display;
+}
+
+/** Bare display name for the platform's primary modifier key ("Cmd" on macOS, "Ctrl" everywhere
+ *  else) — the same #if JUCE_MAC ShortcutManager::keyPressToDisplayString uses above, pulled out
+ *  for copy that names the modifier on its own rather than as part of a rebindable KeyPress (e.g.
+ *  "hold Cmd while scrolling to zoom" — a mouse-wheel gesture, not an action in the shortcuts
+ *  table, so shortcutHintFor doesn't apply). A hardcoded "Cmd" in a tooltip or label is wrong on
+ *  every non-Mac build; route it through this instead. */
+inline juce::String platformCommandKeyName() {
+#if JUCE_MAC
+    return "Cmd";
+#else
+    return "Ctrl";
+#endif
 }

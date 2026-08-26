@@ -1,4 +1,8 @@
 #include "PreferencesSettingsTab.h"
+#include "../AI/AIStateMapper.h"
+#include "../ShortcutManager.h"
+#include "Theme/AppLookAndFeel.h"
+#include <functional>
 
 namespace {
 int comboIdFromMode(GraphEditor::SmartConnectionMode mode) {
@@ -34,10 +38,144 @@ constexpr const char* kZoomScrollUpZoomsInKey = "zoomScrollUpZoomsIn";
 // roll's own KeyLabelMode default, so an install that never opens this tab is unaffected.
 constexpr const char* kPianoRollKeyLabelsKey = "pianoRollKeyLabels";
 
+// Read at use time by TimelineClipLaneArea::locatorSpanForDoubleClick, and duplicated here for the
+// same reason kNaturalScrollingKey above is. DEFAULT TRUE: authoring a clip that fills the loop you
+// just set is the whole point of the feature, so it ships on and the toggle exists to turn it OFF
+// for anyone who wants the plain one-bar clip back.
+constexpr const char* kTimelineDoubleClickSpansLocatorsKey = "timelineDoubleClickSpansLocators";
+
 // Group-separator alpha. Softened from 0.18: at that contrast the hairlines read as table borders
 // and boxed each preference in, which is the same complaint that produced the gentler rule under
 // the Keyboard Shortcuts tab's section headers (see its kDividerAlpha — keep the two in step).
 constexpr float kDividerAlpha = 0.12f;
+
+// Height for a muted hint label under a preference row (round 5 fix): enough for TWO lines at the
+// hint's 11.5pt font, so text wider than the row wraps instead of being horizontally squeezed —
+// the 18px the two hints used before this only fit one line, and neither hint's text is short
+// enough to actually be one line at the tab's real width.
+constexpr int kHintHeight = 32;
+
+// Per-module overrides of "defaultDualIOForNewModules", one compact JSON object: {"TypeName":
+// true|false}. A type absent from the object follows the global default — that is the whole
+// reason this is a JSON blob under one key rather than one key per module type, the same way
+// ShortcutManager keeps its rebinds as one object instead of one property per action.
+constexpr const char* kDualIOPerModuleDefaultsKey = "dualIOPerModuleDefaults";
+
+// Combo item ids for the per-module popup's 3-state choice (0 is reserved by juce::ComboBox for
+// "nothing selected", so these start at 1 like every other combo in this file).
+constexpr int kDualIOChoiceFollowGlobal = 1;
+constexpr int kDualIOChoiceAlwaysOn = 2;
+constexpr int kDualIOChoiceAlwaysOff = 3;
+
+// Every module type that carries the Dual I/O parameter — which ModuleBase's constructor grants from
+// the module's channel shape (ModuleBase::StereoAudio): the FX modules plus the split-block voice
+// modules (docs/fx_modules.md § Stereo I/O).
+//
+// DERIVED, never hand-listed: synth::AIStateMapper::dualIOCapableModuleTypes() probes the module
+// factory and asks each module hasDualIOParameter(), so the popup below cannot go stale. It used to
+// be a literal vector here, and the Ring Modulator was missing from it — the module supported a
+// stereo pair but no row existed to set its default, and nothing failed.
+//
+// The names are factory keys, which is exactly what GraphEditor::addModuleAtCanvasPosition receives
+// as the "name" it creates and what applyDefaultDualIOForNewModule matches overrides against.
+const std::vector<juce::String>& dualIOModuleTypes() {
+    static const std::vector<juce::String> types = [] {
+        std::vector<juce::String> v;
+        for (const auto& name : synth::AIStateMapper::dualIOCapableModuleTypes())
+            v.push_back(name);
+        return v;
+    }();
+    return types;
+}
+
+// Popup content for the "Per-module I/O defaults..." button: a plain themed column, one
+// juce::Label + juce::ComboBox pair per module type, flat children (no per-row wrapper) so tests
+// can find the Nth juce::ComboBox the same way ClickingTheToggleReachesTheEditorAndNewModules
+// finds the Dual I/O ToggleButton — by walking getChildren() and dynamic_cast. No search box and
+// no viewport, unlike MidiDestinationPicker: one row per stereo-capable module at kRowHeight fits
+// comfortably inside a CallOutBox on any real screen, and a popup this rarely opened does not earn
+// that rig.
+class DualIOPerModulePopupContent : public juce::Component {
+public:
+    DualIOPerModulePopupContent(const std::vector<juce::String>& moduleTypes,
+                                const std::function<std::optional<bool>(const juce::String&)>& getOverride,
+                                const std::function<void(const juce::String&, std::optional<bool>)>& setOverride) {
+        rows.reserve(moduleTypes.size());
+        for (const auto& type : moduleTypes) {
+            auto label = std::make_unique<juce::Label>();
+            label->setText(type, juce::dontSendNotification);
+            label->setFont(juce::Font(juce::FontOptions(12.5f)));
+            addAndMakeVisible(*label);
+
+            auto combo = std::make_unique<juce::ComboBox>();
+            combo->addItem("Follow global", kDualIOChoiceFollowGlobal);
+            combo->addItem("Always on", kDualIOChoiceAlwaysOn);
+            combo->addItem("Always off", kDualIOChoiceAlwaysOff);
+            const auto current = getOverride(type);
+            combo->setSelectedId(current.has_value() ? (*current ? kDualIOChoiceAlwaysOn : kDualIOChoiceAlwaysOff)
+                                                     : kDualIOChoiceFollowGlobal,
+                                 juce::dontSendNotification);
+            combo->onChange = [c = combo.get(), type, setOverride] {
+                switch (c->getSelectedId()) {
+                case kDualIOChoiceAlwaysOn:
+                    setOverride(type, true);
+                    break;
+                case kDualIOChoiceAlwaysOff:
+                    setOverride(type, false);
+                    break;
+                default:
+                    setOverride(type, std::nullopt);
+                    break;
+                }
+            };
+            addAndMakeVisible(*combo);
+
+            rows.push_back({std::move(label), std::move(combo)});
+        }
+        setSize(kWidth, kPadding * 2 + kRowHeight * static_cast<int>(rows.size()));
+    }
+
+    void resized() override {
+        auto bounds = getLocalBounds().reduced(kPadding);
+        for (auto& row : rows) {
+            auto r = bounds.removeFromTop(kRowHeight);
+            row.label->setBounds(r.removeFromLeft(kLabelWidth));
+            row.combo->setBounds(r);
+        }
+    }
+
+    // Opaque themed panel, mirroring MidiDestinationPicker's paint(): a CallOutBox launched with no
+    // parent (see this file's onClick lambda) becomes a top-level window that does not necessarily
+    // inherit synth::theme::AppLookAndFeel.
+    void paint(juce::Graphics& g) override {
+        juce::Colour bg = juce::Colours::darkgrey.darker(0.4f);
+        juce::Colour border = juce::Colours::grey.darker();
+        float radius = 6.0f;
+        if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
+            const auto& c = lf->getTheme().colors;
+            bg = c.surface;
+            border = c.border;
+            radius = lf->getTheme().metrics.cornerRadius;
+        }
+        auto b = getLocalBounds().toFloat();
+        g.setColour(bg);
+        g.fillRoundedRectangle(b, radius);
+        g.setColour(border);
+        g.drawRoundedRectangle(b.reduced(0.5f), radius, 1.0f);
+    }
+
+private:
+    static constexpr int kWidth = 320;
+    static constexpr int kPadding = 8;
+    static constexpr int kRowHeight = 26;
+    static constexpr int kLabelWidth = 150;
+
+    struct Row {
+        std::unique_ptr<juce::Label> label;
+        std::unique_ptr<juce::ComboBox> combo;
+    };
+    std::vector<Row> rows;
+};
 
 GraphEditor::SmartConnectionMode modeFromComboId(int id) {
     switch (id) {
@@ -56,9 +194,48 @@ GraphEditor::SmartConnectionMode modeFromComboId(int id) {
 
 PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& props)
     : appProperties(props) {
+    // Round 4 follow-up: without this, searchField below — a juce::TextEditor, and the first
+    // focus-wanting descendant in this tab — auto-grabs keyboard focus the moment the Settings
+    // DialogWindow's peer first gains OS focus. ComponentPeer::handleFocusGain() calls
+    // grabKeyboardFocus() on the window's root component whenever a brand-new peer is shown with
+    // nothing previously focused; since PreferencesSettingsTab itself didn't want focus, that call
+    // fell through to KeyboardFocusTraverser::getDefaultComponent(), which returns the first
+    // wants-focus child it finds in traversal order — searchField, purely because it happens to be
+    // the first text field added. Declaring the TAB ITSELF as a focus target intercepts that
+    // traversal one level up: takeKeyboardFocus() short-circuits onto the first component that
+    // wants focus without descending further, so the tab (inert, no visible caret) absorbs the
+    // opening grab instead of the search field. Exact same fix, same reason, as
+    // ShortcutsSettingsTab's own setWantsKeyboardFocus(true) for its sibling search box — see that
+    // constructor. Does NOT affect clicking directly into the field: TextEditor's own
+    // wantsKeyboardFocus is untouched, so a click still focuses it normally.
+    setWantsKeyboardFocus(true);
+
     addAndMakeVisible(titleLabel);
     titleLabel.setText("Preferences", juce::dontSendNotification);
     titleLabel.setFont(juce::Font(juce::FontOptions(18.0f, juce::Font::bold)));
+
+    // Live filter (round 3 follow-up): styled like ModuleLibraryComponent's own search box, which
+    // is the closest precedent for a live text filter in this app.
+    addAndMakeVisible(searchField);
+    searchField.setMultiLine(false);
+    searchField.setReturnKeyStartsNewLine(false);
+    searchField.setEscapeAndReturnKeysConsumed(true);
+    searchField.setSelectAllWhenFocused(true);
+    searchField.setJustification(juce::Justification::centredLeft);
+    searchField.setIndents(6, 0);
+    searchField.setFont(juce::Font(juce::FontOptions(13.0f)));
+    searchField.setTextToShowWhenEmpty("Filter preferences...", findColour(juce::Label::textColourId).withAlpha(0.5f));
+    searchField.setTooltip("Filters the rows below by name or description as you type.");
+    searchField.onTextChange = [this] { applySearchFilter(searchField.getText()); };
+    searchField.onEscapeKey = [this] {
+        if (searchField.getText().isNotEmpty()) {
+            // dontSendNotification + a direct applySearchFilter() call, mirroring
+            // ModuleLibraryComponent::setSearchText: deterministic regardless of whether
+            // juce::TextEditor's own change notification happens to fire synchronously.
+            searchField.setText({}, juce::dontSendNotification);
+            applySearchFilter({});
+        }
+    };
 
     addAndMakeVisible(smartConnectionLabel);
     smartConnectionLabel.setText("Smart connections:", juce::dontSendNotification);
@@ -69,7 +246,12 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     smartConnectionCombo.addItem("New modules only", 2);
     smartConnectionCombo.addItem("When main I/O is free", 3);
     smartConnectionCombo.addItem("All module moves", 4);
-    smartConnectionCombo.setTooltip("Suggest cables to nearby modules while placing or moving a card.");
+    // "Ctrl" is spelled literally rather than through platformCommandKeyName(): the insert modifier
+    // is the Control key on every platform, macOS included, precisely because Cmd already means
+    // additive selection there.
+    smartConnectionCombo.setTooltip("Suggest cables to nearby modules while placing or moving a card. "
+                                    "Hold Ctrl while dragging to insert the module into an existing "
+                                    "cable instead of adding a new one.");
     {
         const auto mode = GraphEditor::smartConnectionModeFromString(
             appProperties.getUserSettings()->getValue("smartConnectionMode", "NewAndUnwired"));
@@ -97,14 +279,21 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     addAndMakeVisible(defaultDualIOToggle);
     defaultDualIOToggle.setToggleState(
         appProperties.getUserSettings()->getBoolValue("defaultDualIOForNewModules", false), juce::dontSendNotification);
-    defaultDualIOToggle.setTooltip("Splits the audio jacks on every stereo-capable module — FX, Voice Mixer output, "
+    defaultDualIOToggle.setTooltip("Splits the audio jacks on every stereo-capable module - FX, Voice Mixer output, "
                                    "Oscillator, Wavetable, Filter, VCA and Sampler. Applies to modules already on the "
                                    "canvas as well as new ones. Card heights do not change.");
     defaultDualIOToggle.onClick = [this] { persistDefaultDualIOForNewModules(defaultDualIOToggle.getToggleState()); };
 
+    dualIOPerModuleOverrides = loadDualIOPerModuleOverrides(appProperties);
+
     addAndMakeVisible(perModuleDefaultsButton);
-    perModuleDefaultsButton.setEnabled(false);
-    perModuleDefaultsButton.setTooltip("Per-module I/O default overrides are planned in a follow-up preference.");
+    perModuleDefaultsButton.setTooltip(
+        "Per-module overrides of the Split Left/Right default above - Follow global, Always on, or Always off for "
+        "each module type. Applies to modules created after the change, same as the toggle.");
+    perModuleDefaultsButton.onClick = [this] {
+        auto popup = buildDualIOPerModuleDefaultsPopup();
+        juce::CallOutBox::launchAsynchronously(std::move(popup), perModuleDefaultsButton.getScreenBounds(), nullptr);
+    };
 
     addAndMakeVisible(loopSelectionArmsToggle);
     loopSelectionArmsToggle.setToggleState(
@@ -114,17 +303,18 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         "looping on. When off, P only places the locators (use L to toggle looping).");
     loopSelectionArmsToggle.onClick = [this] { persistLoopSelectionArms(loopSelectionArmsToggle.getToggleState()); };
 
-    addAndMakeVisible(timelineFeatureToggle);
-    // DEFAULT TRUE: existing users already have the timeline visible/hidden per their own
-    // "timelinePanelVisible" choice — this is a higher-level kill switch on top of that, and must
-    // not itself change behaviour for anyone who has never touched it.
-    timelineFeatureToggle.setToggleState(appProperties.getUserSettings()->getBoolValue("timelineFeatureEnabled", true),
-                                         juce::dontSendNotification);
-    timelineFeatureToggle.setTooltip(
-        "When off, the timeline panel, its toolbar button, and Cmd+T / Space are hidden — the "
-        "timeline document and audio-engine playback are untouched, so turning this back on "
-        "restores exactly where you left off.");
-    timelineFeatureToggle.onClick = [this] { persistTimelineFeatureEnabled(timelineFeatureToggle.getToggleState()); };
+    addAndMakeVisible(doubleClickSpansLocatorsToggle);
+    // DEFAULT TRUE, same idiom as the rows above.
+    doubleClickSpansLocatorsToggle.setToggleState(
+        appProperties.getUserSettings()->getBoolValue(kTimelineDoubleClickSpansLocatorsKey, true),
+        juce::dontSendNotification);
+    doubleClickSpansLocatorsToggle.setTooltip(
+        "When on (the default), double-clicking empty lane space INSIDE the loop locators creates a clip spanning "
+        "them. Outside the locators - or with no locators set - you still get a one-bar clip. Turn it off to always "
+        "get one bar.");
+    doubleClickSpansLocatorsToggle.onClick = [this] {
+        persistDoubleClickSpansLocators(doubleClickSpansLocatorsToggle.getToggleState());
+    };
 
     addAndMakeVisible(naturalScrollingToggle);
     // DEFAULT TRUE: "natural" is the juce::Viewport convention every scrolling surface in the app
@@ -139,27 +329,35 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     naturalScrollingHint.setText("Affects the timeline and the piano roll. The graph canvas pans instead of "
                                  "scrolling and is unaffected.",
                                  juce::dontSendNotification);
-    naturalScrollingHint.setFont(juce::Font(juce::FontOptions(11.5f)));
-    naturalScrollingHint.setColour(juce::Label::textColourId, findColour(juce::Label::textColourId).withAlpha(0.65f));
+    styleMutedHintLabel(naturalScrollingHint);
 
     addAndMakeVisible(zoomScrollUpZoomsInToggle);
     // DEFAULT TRUE, and deliberately the same idiom as the row above: "up zooms in" is what both
     // wheel-zoom surfaces already did, so nobody's gesture changes until they ask for it here.
+    //
+    // Round 6: back to a checkbox after round 5's labelled dropdown ("Zoom direction:" + two
+    // options) drew a second round of pushback -- the user does not want two-value selects. The
+    // explanation that used to live in the toggle's own tooltip now lives in the always-visible
+    // hint below instead, one line, ASCII only. Persisted key and its boolean semantics are
+    // UNCHANGED across every round: see isZoomScrollUpZoomsInEnabled() /
+    // persistZoomScrollUpZoomsIn() below, still the only read/write sites, still under
+    // kZoomScrollUpZoomsInKey.
     zoomScrollUpZoomsInToggle.setToggleState(
         appProperties.getUserSettings()->getBoolValue(kZoomScrollUpZoomsInKey, true), juce::dontSendNotification);
-    zoomScrollUpZoomsInToggle.setTooltip("On (the default) zooms IN when you scroll up with Cmd (or Cmd+Shift) held. "
-                                         "Turn it off if you expect scrolling up to zoom out.");
+    zoomScrollUpZoomsInToggle.setTooltip("When off, scrolling up zooms out. Applies to " + platformCommandKeyName() +
+                                         " wheel zoom in the timeline and piano roll.");
     zoomScrollUpZoomsInToggle.onClick = [this] {
         persistZoomScrollUpZoomsIn(zoomScrollUpZoomsInToggle.getToggleState());
     };
 
     addAndMakeVisible(zoomScrollUpZoomsInHint);
-    zoomScrollUpZoomsInHint.setText("Affects Cmd (horizontal) and Cmd+Shift (vertical) wheel-zoom in the timeline and "
-                                    "the piano roll. Plain scrolling follows the setting above.",
+    // One line (round 6): short enough that styleMutedHintLabel's two-line-tall box (kept from
+    // round 5's layout fix) never needs the second line, but the taller box is harmless and keeping
+    // it means this row and naturalScrollingHint above it stay pixel-identical in height.
+    zoomScrollUpZoomsInHint.setText("When off, scrolling up zooms out. Applies to " + platformCommandKeyName() +
+                                        " wheel zoom in the timeline and piano roll.",
                                     juce::dontSendNotification);
-    zoomScrollUpZoomsInHint.setFont(juce::Font(juce::FontOptions(11.5f)));
-    zoomScrollUpZoomsInHint.setColour(juce::Label::textColourId,
-                                      findColour(juce::Label::textColourId).withAlpha(0.65f));
+    styleMutedHintLabel(zoomScrollUpZoomsInHint);
 
     addAndMakeVisible(pianoRollKeyLabelsToggle);
     // DEFAULT TRUE ("all"): matches PianoRollComponent::KeyLabelMode::AllNotes, its own default,
@@ -187,51 +385,176 @@ void PreferencesSettingsTab::resized() {
     auto bounds = getLocalBounds().reduced(12);
     dividerBounds.clear();
 
-    // Each group is followed by a hairline rule, so related settings read as one block instead of
-    // an undifferentiated stack of rows.
+    titleLabel.setBounds(bounds.removeFromTop(28));
+    bounds.removeFromTop(8);
+    searchField.setBounds(bounds.removeFromTop(26));
+    bounds.removeFromTop(12);
+
+    // ---- Live filter (round 3 follow-up item 2) --------------------------------------------
+    //
+    // Each of the groups below is a "row" for filtering purposes — the same grouping the dividers
+    // already draw, so filtering never needs a finer-grained concept of "row" than what the layout
+    // already treats as one block. A group matches when ANY of its components' button text, label
+    // text or tooltip contains the query (case-insensitive); an empty query matches everything, so
+    // an untouched search field reproduces the exact bounds this function always produced.
+    const juce::String query = searchQuery;
+
+    auto textOf = [](juce::Component& c) {
+        // getTooltip() is not const on juce::SettableTooltipClient, hence the non-const parameter —
+        // resized() itself is non-const, so there is nothing this actually mutates.
+        juce::String s;
+        if (auto* b = dynamic_cast<juce::Button*>(&c))
+            s << b->getButtonText() << " ";
+        if (auto* l = dynamic_cast<juce::Label*>(&c))
+            s << l->getText() << " ";
+        // No juce::ComboBox branch: that was added in round 5 specifically so the zoom-direction
+        // dropdown's row was findable by "zoom" regardless of which option was selected. Round 6
+        // reverted that row to a checkbox — its button text ("Scroll up to zoom in") already
+        // contains "zoom" via the juce::Button branch above, so no combo special-case is needed.
+        if (auto* t = dynamic_cast<juce::SettableTooltipClient*>(&c))
+            s << t->getTooltip() << " ";
+        return s;
+    };
+    auto groupMatches = [&](std::initializer_list<juce::Component*> comps) {
+        if (query.isEmpty())
+            return true;
+        for (auto* c : comps)
+            if (textOf(*c).containsIgnoreCase(query))
+                return true;
+        return false;
+    };
+    auto setGroupVisible = [](std::initializer_list<juce::Component*> comps, bool visible) {
+        for (auto* c : comps)
+            c->setVisible(visible);
+    };
+
+    // Each group that wants a divider after it sets pendingDivider = true; the divider is only
+    // actually drawn once a LATER group turns out to be visible (beginGroup below), so a filtered-
+    // out group in between never leaves an orphan hairline over empty space, and the first/last
+    // visible group never gets a leading/trailing one either.
+    bool pendingDivider = false;
     auto addDivider = [this, &bounds] {
         bounds.removeFromTop(10);
         dividerBounds.push_back(bounds.removeFromTop(1));
         bounds.removeFromTop(10);
     };
+    auto beginGroup = [&](bool visible) {
+        if (visible && pendingDivider)
+            addDivider();
+        if (visible)
+            pendingDivider = false;
+    };
 
-    titleLabel.setBounds(bounds.removeFromTop(28));
-    bounds.removeFromTop(12);
+    // Group 1: smart connections
+    {
+        const bool visible = groupMatches({&smartConnectionLabel, &smartConnectionCombo});
+        setGroupVisible({&smartConnectionLabel, &smartConnectionCombo}, visible);
+        beginGroup(visible);
+        if (visible) {
+            auto smartRow = bounds.removeFromTop(24);
+            smartConnectionLabel.setBounds(smartRow.removeFromLeft(160));
+            smartConnectionCombo.setBounds(smartRow.removeFromLeft(220));
+        }
+        pendingDivider = pendingDivider || visible;
+    }
 
-    auto smartRow = bounds.removeFromTop(24);
-    smartConnectionLabel.setBounds(smartRow.removeFromLeft(160));
-    smartConnectionCombo.setBounds(smartRow.removeFromLeft(220));
-    addDivider();
+    // Group 2: double-click disconnect
+    {
+        const bool visible = groupMatches({&doubleClickDisconnectToggle});
+        setGroupVisible({&doubleClickDisconnectToggle}, visible);
+        beginGroup(visible);
+        if (visible)
+            doubleClickDisconnectToggle.setBounds(bounds.removeFromTop(24));
+        pendingDivider = pendingDivider || visible;
+    }
 
-    doubleClickDisconnectToggle.setBounds(bounds.removeFromTop(24));
-    addDivider();
+    // Group 3: alignment guides
+    {
+        const bool visible = groupMatches({&alignmentGuideToggle});
+        setGroupVisible({&alignmentGuideToggle}, visible);
+        beginGroup(visible);
+        if (visible)
+            alignmentGuideToggle.setBounds(bounds.removeFromTop(24));
+        pendingDivider = pendingDivider || visible;
+    }
 
-    alignmentGuideToggle.setBounds(bounds.removeFromTop(24));
-    addDivider();
+    // Group 4: Dual I/O (one line, one row — see the toggle's declaration comment). The button is
+    // sized to its own text via changeWidthToFitText rather than a fixed guess, so the toggle keeps
+    // as much of the row as it can for its own (longer) label.
+    {
+        const bool visible = groupMatches({&defaultDualIOToggle, &perModuleDefaultsButton});
+        setGroupVisible({&defaultDualIOToggle, &perModuleDefaultsButton}, visible);
+        beginGroup(visible);
+        if (visible) {
+            auto dualIORow = bounds.removeFromTop(24);
+            perModuleDefaultsButton.changeWidthToFitText(24);
+            const int buttonWidth = juce::jmax(perModuleDefaultsButton.getWidth(), 160);
+            perModuleDefaultsButton.setBounds(dualIORow.removeFromRight(buttonWidth));
+            dualIORow.removeFromRight(12);
+            defaultDualIOToggle.setBounds(dualIORow);
+        }
+        pendingDivider = pendingDivider || visible;
+    }
 
-    defaultDualIOToggle.setBounds(bounds.removeFromTop(24));
-    bounds.removeFromTop(10);
-    perModuleDefaultsButton.setBounds(bounds.removeFromTop(24).removeFromLeft(220));
-    bounds.removeFromTop(10);
+    // Group 5: the two loop-locator toggles (no divider between them — see their declaration
+    // comments). Grouped for filtering too: they read as one conversation, so a query matching
+    // either keeps both rows together rather than splitting a pair that explains itself as a pair.
+    {
+        const bool visible = groupMatches({&loopSelectionArmsToggle, &doubleClickSpansLocatorsToggle});
+        setGroupVisible({&loopSelectionArmsToggle, &doubleClickSpansLocatorsToggle}, visible);
+        beginGroup(visible);
+        if (visible) {
+            loopSelectionArmsToggle.setBounds(bounds.removeFromTop(24));
+            bounds.removeFromTop(10);
+            doubleClickSpansLocatorsToggle.setBounds(bounds.removeFromTop(24));
+        }
+        pendingDivider = pendingDivider || visible;
+    }
 
-    loopSelectionArmsToggle.setBounds(bounds.removeFromTop(24));
-    bounds.removeFromTop(10);
+    // Group 6: the two wheel-direction toggles + their hints (no divider between them, same
+    // "reads as one conversation" reasoning as group 5).
+    {
+        const bool visible = groupMatches(
+            {&naturalScrollingToggle, &naturalScrollingHint, &zoomScrollUpZoomsInToggle, &zoomScrollUpZoomsInHint});
+        setGroupVisible(
+            {&naturalScrollingToggle, &naturalScrollingHint, &zoomScrollUpZoomsInToggle, &zoomScrollUpZoomsInHint},
+            visible);
+        beginGroup(visible);
+        if (visible) {
+            naturalScrollingToggle.setBounds(bounds.removeFromTop(24));
+            // Indented under the toggle it explains, so the hint reads as a caption rather than as
+            // another preference row. kHintHeight (not a single line's worth): round 5 fix for both
+            // hints in this group — see styleMutedHintLabel.
+            naturalScrollingHint.setBounds(bounds.removeFromTop(kHintHeight).withTrimmedLeft(24));
+            bounds.removeFromTop(10);
+            zoomScrollUpZoomsInToggle.setBounds(bounds.removeFromTop(24));
+            zoomScrollUpZoomsInHint.setBounds(bounds.removeFromTop(kHintHeight).withTrimmedLeft(24));
+        }
+        pendingDivider = pendingDivider || visible;
+    }
 
-    timelineFeatureToggle.setBounds(bounds.removeFromTop(24));
-    addDivider();
+    // Group 7: piano roll key labels (last — no divider after it, filtered or not).
+    {
+        const bool visible = groupMatches({&pianoRollKeyLabelsToggle});
+        setGroupVisible({&pianoRollKeyLabelsToggle}, visible);
+        beginGroup(visible);
+        if (visible)
+            pianoRollKeyLabelsToggle.setBounds(bounds.removeFromTop(24));
+    }
+}
 
-    naturalScrollingToggle.setBounds(bounds.removeFromTop(24));
-    // Indented under the toggle it explains, so the hint reads as a caption rather than as another
-    // preference row.
-    naturalScrollingHint.setBounds(bounds.removeFromTop(18).withTrimmedLeft(24));
-    // Same group (no divider): both are wheel-direction preferences, and separating them would imply
-    // the zoom one is unrelated to the row it qualifies.
-    bounds.removeFromTop(10);
-    zoomScrollUpZoomsInToggle.setBounds(bounds.removeFromTop(24));
-    zoomScrollUpZoomsInHint.setBounds(bounds.removeFromTop(18).withTrimmedLeft(24));
-    addDivider();
+void PreferencesSettingsTab::applySearchFilter(const juce::String& query) {
+    searchQuery = query.trim();
+    resized();
+    repaint();
+}
 
-    pianoRollKeyLabelsToggle.setBounds(bounds.removeFromTop(24));
+void PreferencesSettingsTab::setSearchFilterForTest(const juce::String& query) {
+    // dontSendNotification + an explicit applySearchFilter() call, mirroring
+    // ModuleLibraryComponent::setSearchText — deterministic regardless of whether juce::TextEditor's
+    // own change notification happens to run synchronously in a headless test.
+    searchField.setText(query, juce::dontSendNotification);
+    applySearchFilter(query);
 }
 
 void PreferencesSettingsTab::setGraphEditor(GraphEditor* ge) {
@@ -242,6 +565,7 @@ void PreferencesSettingsTab::setGraphEditor(GraphEditor* ge) {
     graphEditor->setDoubleClickPortDisconnectEnabled(doubleClickDisconnectToggle.getToggleState());
     graphEditor->setAlignmentGuidesEnabled(alignmentGuideToggle.getToggleState());
     graphEditor->setDefaultDualIOForNewModules(defaultDualIOToggle.getToggleState());
+    graphEditor->setDualIOPerModuleOverrides(dualIOPerModuleOverrides);
 }
 
 GraphEditor::SmartConnectionMode PreferencesSettingsTab::getSmartConnectionMode() const {
@@ -283,25 +607,27 @@ void PreferencesSettingsTab::setLoopSelectionArmsEnabled(bool enabled) {
     persistLoopSelectionArms(enabled);
 }
 
+bool PreferencesSettingsTab::isDoubleClickSpansLocatorsEnabled() const {
+    return doubleClickSpansLocatorsToggle.getToggleState();
+}
+
+void PreferencesSettingsTab::setDoubleClickSpansLocatorsEnabled(bool enabled) {
+    doubleClickSpansLocatorsToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistDoubleClickSpansLocators(enabled);
+}
+
+void PreferencesSettingsTab::persistDoubleClickSpansLocators(bool enabled) {
+    // Nothing live to push: TimelineClipLaneArea reads this key at use time (on the next
+    // double-click), the same way the row above it is read by the timeline's P handler.
+    appProperties.getUserSettings()->setValue(kTimelineDoubleClickSpansLocatorsKey, enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+}
+
 void PreferencesSettingsTab::persistLoopSelectionArms(bool enabled) {
     // Read at use time by TimelinePanelComponent's P handler and MainComponent's
     // onLoopRangeRequested — nothing live to push here, unlike the GraphEditor settings above.
     appProperties.getUserSettings()->setValue("timelineLoopSelectionArms", enabled ? "1" : "0");
     appProperties.getUserSettings()->saveIfNeeded();
-}
-
-bool PreferencesSettingsTab::isTimelineFeatureEnabled() const { return timelineFeatureToggle.getToggleState(); }
-
-void PreferencesSettingsTab::setTimelineFeatureEnabled(bool enabled) {
-    timelineFeatureToggle.setToggleState(enabled, juce::dontSendNotification);
-    persistTimelineFeatureEnabled(enabled);
-}
-
-void PreferencesSettingsTab::persistTimelineFeatureEnabled(bool enabled) {
-    appProperties.getUserSettings()->setValue("timelineFeatureEnabled", enabled ? "1" : "0");
-    appProperties.getUserSettings()->saveIfNeeded();
-    if (onTimelineFeatureToggled)
-        onTimelineFeatureToggled(enabled);
 }
 
 bool PreferencesSettingsTab::isNaturalScrollingEnabled() const { return naturalScrollingToggle.getToggleState(); }
@@ -319,7 +645,7 @@ void PreferencesSettingsTab::persistNaturalScrolling(bool enabled) {
     // reaches the timeline and the piano roll without this tab having to know they exist (see
     // MainComponent::applyNaturalScrollingPreference). That is also why there is no
     // onNaturalScrollingToggled callback for SettingsWindow to wire — one constructor argument per
-    // preference does not scale, and the "Show timeline" kill switch already needs the one it has.
+    // preference does not scale.
 }
 
 bool PreferencesSettingsTab::isZoomScrollUpZoomsInEnabled() const { return zoomScrollUpZoomsInToggle.getToggleState(); }
@@ -384,4 +710,74 @@ void PreferencesSettingsTab::persistDefaultDualIOForNewModules(bool enabled) {
         // retro-applies — setGraphEditor() and the startup restore must not touch the patch.
         graphEditor->applyDualIOToExistingModules(enabled);
     }
+}
+
+const std::vector<juce::String>& PreferencesSettingsTab::getDualIOModuleTypes() { return dualIOModuleTypes(); }
+
+std::map<juce::String, bool> PreferencesSettingsTab::loadDualIOPerModuleOverrides(juce::ApplicationProperties& props) {
+    std::map<juce::String, bool> overrides;
+    // getValue's default ("{}") is never written back — reading it must not create the key, the
+    // same discipline every other "not yet touched" preference in this file follows.
+    const auto raw = props.getUserSettings()->getValue(kDualIOPerModuleDefaultsKey, "{}");
+    // Held in a named var rather than chained straight into getDynamicObject(): a temporary var's
+    // ReferenceCountedObjectPtr releases the DynamicObject the moment the temporary is destroyed
+    // (end of this statement), which would leave `obj` dangling for the loop below.
+    const juce::var parsed = juce::JSON::parse(raw);
+    if (auto* obj = parsed.getDynamicObject()) {
+        for (const auto& prop : obj->getProperties())
+            overrides[prop.name.toString()] = static_cast<bool>(prop.value);
+    }
+    return overrides;
+}
+
+std::optional<bool> PreferencesSettingsTab::getDualIOOverrideForType(const juce::String& moduleType) const {
+    auto it = dualIOPerModuleOverrides.find(moduleType);
+    return it != dualIOPerModuleOverrides.end() ? std::optional<bool>(it->second) : std::nullopt;
+}
+
+void PreferencesSettingsTab::setDualIOOverrideForType(const juce::String& moduleType,
+                                                      std::optional<bool> overrideValue) {
+    if (overrideValue.has_value())
+        dualIOPerModuleOverrides[moduleType] = *overrideValue;
+    else
+        dualIOPerModuleOverrides.erase(moduleType);
+    persistDualIOPerModuleOverrides();
+}
+
+void PreferencesSettingsTab::persistDualIOPerModuleOverrides() {
+    juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+    for (const auto& [type, dual] : dualIOPerModuleOverrides)
+        obj->setProperty(type, dual);
+    // Compact (allOnOneLine=true): this is a single ApplicationProperties value, not a file meant
+    // to be read by a human.
+    appProperties.getUserSettings()->setValue(kDualIOPerModuleDefaultsKey,
+                                              juce::JSON::toString(juce::var(obj.get()), true));
+    appProperties.getUserSettings()->saveIfNeeded();
+    // New-modules-only, exactly like the global default above: no retro-apply to the canvas, and
+    // no separate startup-restore step to write here — MainComponent calls
+    // loadDualIOPerModuleOverrides() itself and pushes straight into the real GraphEditor, the same
+    // way it re-reads "defaultDualIOForNewModules" rather than waiting on this tab to exist.
+    if (graphEditor)
+        graphEditor->setDualIOPerModuleOverrides(dualIOPerModuleOverrides);
+}
+
+std::unique_ptr<juce::Component> PreferencesSettingsTab::buildDualIOPerModuleDefaultsPopup() {
+    return std::make_unique<DualIOPerModulePopupContent>(
+        getDualIOModuleTypes(), [this](const juce::String& type) { return getDualIOOverrideForType(type); },
+        [this](const juce::String& type, std::optional<bool> value) { setDualIOOverrideForType(type, value); });
+}
+
+std::unique_ptr<juce::Component> PreferencesSettingsTab::createDualIOPerModuleDefaultsPopupForTest() {
+    return buildDualIOPerModuleDefaultsPopup();
+}
+
+void PreferencesSettingsTab::styleMutedHintLabel(juce::Label& hint) {
+    hint.setFont(juce::Font(juce::FontOptions(11.5f)));
+    hint.setColour(juce::Label::textColourId, findColour(juce::Label::textColourId).withAlpha(0.65f));
+    // Wrap instead of squeeze: the default minimum-horizontal-scale (~0.7) lets drawFittedText
+    // cram an over-wide single line into the box by shrinking it horizontally, which is exactly
+    // the "cramped/narrow" look this was fixed for. With kHintHeight giving room for two lines,
+    // there is never a reason to squeeze instead of wrapping.
+    hint.setMinimumHorizontalScale(1.0f);
+    hint.setJustificationType(juce::Justification::topLeft);
 }

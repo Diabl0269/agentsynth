@@ -720,6 +720,93 @@ TEST(ColourPickerPopupTest, RemoveFavouriteRemovesOnlyTheMatch) {
 }
 
 // =============================================================================
+// 7c. ColourPickerPopup — preview/commit consistency (regression suite for the reported bug:
+// the popup's header/fields show one colour but the colour actually APPLIED differs)
+// =============================================================================
+//
+// Constructs the popup directly (no TimelineTrackHeaderComponent involved) with plain lambdas
+// recording every preview/commit call, so these tests pin the CONTRACT at the shared-component
+// level: whatever colour the popup last shows is exactly what gets committed, for every way of
+// setting it (hex field / slider edit, and a favourites-shelf preset click) — see
+// ColourPickerPopup.h's commitOnce() for the root cause this guards against.
+
+namespace {
+struct PickerProbe {
+    std::vector<juce::Colour> previews;
+    juce::Colour committed = juce::Colours::transparentBlack;
+    bool committedCalled = false;
+};
+} // namespace
+
+TEST(ColourPickerPopupTest, HexOrSliderEditCommitsExactlyWhatWasPreviewed_DistinctHexVsDecimalDigits) {
+    // 0x96 / 0x00 / 0xFF: 0x96 is 150 decimal, so a layer that read a hex field back as decimal
+    // (parsing "96" as 96 rather than 0x96) would land on a visibly different red channel here.
+    const juce::Colour picked(0xff9600FFu);
+    PickerProbe probe;
+    auto popup = std::make_unique<synth::ui::ColourPickerPopup>(
+        juce::Colours::black, nullptr, [&](juce::Colour c) { probe.previews.push_back(c); },
+        [&](juce::Colour c) {
+            probe.committed = c;
+            probe.committedCalled = true;
+        });
+
+    popup->setCurrentColourForTest(picked);
+    ASSERT_FALSE(probe.previews.empty());
+    EXPECT_EQ(probe.previews.back(), picked);
+
+    popup->commitForTest();
+    ASSERT_TRUE(probe.committedCalled);
+    EXPECT_EQ(probe.committed, picked) << "committed colour must equal the last previewed colour";
+    EXPECT_EQ(probe.committed.getARGB(), 0xff9600FFu);
+}
+
+TEST(ColourPickerPopupTest, FavouritePresetClickCommitsExactlyWhatWasPreviewed) {
+    PickerProbe probe;
+    auto popup = std::make_unique<synth::ui::ColourPickerPopup>(
+        juce::Colours::black, nullptr, [&](juce::Colour c) { probe.previews.push_back(c); },
+        [&](juce::Colour c) {
+            probe.committed = c;
+            probe.committedCalled = true;
+        });
+
+    ASSERT_GT(popup->getFavouriteCountForTest(), 0);
+    const juce::Colour preset = popup->getFavouriteColourForTest(0);
+    popup->clickFavouriteForTest(0);
+    ASSERT_FALSE(probe.previews.empty());
+    EXPECT_EQ(probe.previews.back(), preset);
+
+    popup->commitForTest();
+    EXPECT_EQ(probe.committed.getARGB(), preset.getARGB());
+}
+
+// Regression test for the reported bug. A real slider drag or hex-field edit updates the
+// selector's own displayed state (header + R/G/B fields) SYNCHRONOUSLY, but only reaches this
+// popup's preview/commit machinery once juce::ColourSelector's change broadcast is DISPATCHED,
+// which is asynchronous. simulateUnbroadcastSelectorEditForTest() reproduces exactly that
+// without pumping the message loop, so a commitOnce() that trusted the last-dispatched preview
+// (rather than reconciling with the selector) would commit the colour from BEFORE this edit.
+TEST(ColourPickerPopupTest, CommitReconcilesTheExact9600FFCaseEvenWithNoDispatchedBroadcast) {
+    PickerProbe probe;
+    auto popup = std::make_unique<synth::ui::ColourPickerPopup>(
+        juce::Colour(0xff000000u), nullptr, [&](juce::Colour c) { probe.previews.push_back(c); },
+        [&](juce::Colour c) {
+            probe.committed = c;
+            probe.committedCalled = true;
+        });
+
+    popup->simulateUnbroadcastSelectorEditForTest(juce::Colour(0xff9600FFu));
+    // Deliberately no message-loop pump here — the change broadcast is still pending, exactly
+    // like the real race (see ColourPickerPopup.h's commitOnce() comment).
+    popup->commitForTest();
+
+    ASSERT_TRUE(probe.committedCalled);
+    EXPECT_EQ(probe.committed.getARGB(), 0xff9600FFu);
+    EXPECT_EQ(probe.committed.getRed(), (juce::uint8)0x96);
+    EXPECT_EQ(probe.committed.getGreen(), (juce::uint8)0x00);
+    EXPECT_EQ(probe.committed.getBlue(), (juce::uint8)0xFF);
+}
+
+// =============================================================================
 // 8. synth::ui::resolveTrackColour — the pure resolver
 // =============================================================================
 

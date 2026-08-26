@@ -154,6 +154,18 @@ public:
         selector_.setCurrentColour(c, juce::dontSendNotification);
         previewNow(c);
     }
+    // Mirrors what a REAL slider drag or hex-field edit does to the selector: both commit through
+    // juce::ColourSelector::changeColour(), which calls setCurrentColour() with its default,
+    // ASYNC notification — the selector's own displayed state (header/fields) updates
+    // synchronously, but our changeListenerCallback (and so lastColour_) only updates once that
+    // broadcast is actually dispatched on the message loop. Deliberately does NOT pump the
+    // message loop and does NOT call previewNow itself, so a test can call commitForTest() right
+    // after this and prove commit reconciles with the selector even though no change broadcast
+    // has been delivered yet — the exact race behind the "picker shows one colour, applied colour
+    // is another" bug (see commitOnce()'s comment).
+    void simulateUnbroadcastSelectorEditForTest(juce::Colour c) {
+        selector_.setCurrentColour(c, juce::sendNotification);
+    }
     int getFavouriteCountForTest() const { return (int)favourites_.size(); }
     juce::Colour getFavouriteColourForTest(int index) const {
         return (index >= 0 && index < (int)favourites_.size()) ? favourites_[(size_t)index]
@@ -207,6 +219,22 @@ private:
         if (committed_)
             return;
         committed_ = true;
+        // Reconcile with the selector's OWN current colour before reading lastColour_. The
+        // selector's displayed state (header swatch + R/G/B/hex fields) is updated synchronously
+        // inside juce::ColourSelector::setCurrentColour, before it even queues its change
+        // broadcast — but a real slider drag or hex-field edit reaches OUR previewNow() only once
+        // that broadcast is asynchronously dispatched (juce::Slider commits a drag/text edit with
+        // sendNotificationSync on the SLIDER, yet ColourSelector::changeColour() forwards it to
+        // setCurrentColour with the default, ASYNC notification). If this popup is torn down
+        // between "the user finishes an edit" and "that broadcast reaches us" — e.g. the same
+        // click that commits a hex-field edit via focus-loss is also the click that dismisses the
+        // juce::CallOutBox — lastColour_ is still one edit stale, and the committed colour would
+        // silently differ from the value the header/fields last showed (the reported bug: picker
+        // shows 9600FF, applied track colour is whatever was picked before it). previewNow() here
+        // is idempotent when there is nothing to reconcile (every consumer's preview write is a
+        // no-op on an unchanged colour, e.g. TimelineDoc::setTrackColour), so this is safe to run
+        // unconditionally rather than only in the race.
+        previewNow(selector_.getCurrentColour());
         if (onCommit_)
             onCommit_(lastColour_);
     }

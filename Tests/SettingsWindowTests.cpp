@@ -809,3 +809,57 @@ TEST(AppearanceSettingsTabNoteColourTest, ResetNoteSwatchAndResetAllFallBackToTh
         EXPECT_EQ(tab.getNoteSwatchColour(pitchClass), themeNoteFill);
     }
 }
+
+// Regression tests for the "piano-roll note colours in Settings look darker than the actual
+// notes" bug: the un-overridden swatch used to draw at a flat 0.2 alpha instead of going through
+// synth::ui::resolveNoteColour at all. The fix routes BOTH overridden and un-overridden swatches
+// through that same resolver (composited over the panel background), so the preview can never
+// drift from what the roll actually paints.
+TEST(AppearanceSettingsTabNoteColourTest, UnoverriddenSwatchPreviewMatchesResolveNoteColourComposited) {
+    IsolatedAppearancePropsGuard guard("Agent Synth Appearance Note Colour Test 4");
+    synth::theme::ThemeManager themeManager;
+    AppearanceSettingsTab tab(themeManager, guard.props);
+
+    const int pitchClass = 5; // F, left un-overridden
+    ASSERT_FALSE(tab.isNoteSwatchOverridden(pitchClass)) << "test premise: nothing pinned yet";
+
+    const auto& colors = themeManager.getActiveTheme().colors;
+    synth::ui::NoteColourOverrides empty;
+    const auto expectedFill =
+        synth::ui::resolveNoteColour(colors, pitchClass, AppearanceSettingsTab::kNoteSwatchPreviewVelocity,
+                                     /*selected*/ false, /*muted*/ false, /*outOfScale*/ false, empty)
+            .fill;
+    const auto panelBackground = tab.findColour(juce::ResizableWindow::backgroundColourId);
+    const auto expected = panelBackground.overlaidWith(expectedFill);
+
+    EXPECT_EQ(tab.getNoteSwatchPreviewColour(pitchClass), expected)
+        << "the un-overridden preview must render through the SAME resolver the piano roll uses, "
+           "not a separately dimmed formula -- this is the reported bug (preview read darker than "
+           "the roll's actual notes)";
+}
+
+TEST(AppearanceSettingsTabNoteColourTest, OverriddenSwatchPreviewMatchesResolveNoteColourComposited) {
+    IsolatedAppearancePropsGuard guard("Agent Synth Appearance Note Colour Test 5");
+    synth::theme::ThemeManager themeManager;
+    AppearanceSettingsTab tab(themeManager, guard.props);
+
+    const int pitchClass = 9; // A
+    const auto pinned = juce::Colour(0xff3388CCu);
+    tab.setNoteSwatchColour(pitchClass, pinned);
+    ASSERT_TRUE(tab.isNoteSwatchOverridden(pitchClass))
+        << "the overridden/default distinction must still be detectable now that the fill formula "
+           "is shared -- the ring (driven by isNoteSwatchOverridden) is the only thing left to tell "
+           "them apart";
+
+    const auto& colors = themeManager.getActiveTheme().colors;
+    synth::ui::NoteColourOverrides overrides;
+    overrides.set(pitchClass, pinned);
+    const auto expectedFill =
+        synth::ui::resolveNoteColour(colors, pitchClass, AppearanceSettingsTab::kNoteSwatchPreviewVelocity,
+                                     /*selected*/ false, /*muted*/ false, /*outOfScale*/ false, overrides)
+            .fill;
+    const auto panelBackground = tab.findColour(juce::ResizableWindow::backgroundColourId);
+    const auto expected = panelBackground.overlaidWith(expectedFill);
+
+    EXPECT_EQ(tab.getNoteSwatchPreviewColour(pitchClass), expected);
+}

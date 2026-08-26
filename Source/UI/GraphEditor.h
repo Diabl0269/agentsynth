@@ -10,6 +10,7 @@
 #include "SelectionModel.h"
 #include "UIAnimation.h"
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -158,6 +159,23 @@ public:
      *  re-measure the affected cards. Called from the owner's device-state-changed callback. */
     void refreshIoModulesAfterDeviceChange();
 
+    /** Output-card identity treatment (docs/layout.md — module chrome): installs the callback
+     *  MainComponent uses to describe where the signal actually goes (device name + sample rate +
+     *  channel count, "Host audio" in HostMode::Hosted, or an empty string to hide the line). Set
+     *  once; MainComponent already owns the Standalone-vs-Hosted framing (see how
+     *  StatusBarComponent's device chrome is built) so GraphEditor/ModuleComponent stay ignorant of
+     *  it and just render whatever string comes back. */
+    void setOutputDeviceInfoProvider(std::function<juce::String()> provider) {
+        outputDeviceInfoProvider = std::move(provider);
+    }
+
+    /** MESSAGE THREAD. Calls the provider above (a no-op if none is installed) and pushes the
+     *  result into the Audio Output card's ModuleComponent, which repaints only if the text
+     *  actually changed. Call once right after installing the provider (so the card is populated
+     *  at startup) and again every time AudioEngine::onDeviceStateChanged fires — there is no
+     *  timer polling this. */
+    void refreshOutputDeviceInfo();
+
     // Dual I/O only remaps visible jacks onto raw ch0/ch1. A collapsed Audio cable that only
     // landed on the left leg (typical when the far end is Audio Output, which is not ModuleBase)
     // is completed to L→L / R→R so toggling Dual I/O on shows both jacks wired.
@@ -304,11 +322,86 @@ public:
      *  the dual layout in both states. */
     void applyDualIOToExistingModules(bool dual);
 
-    /** Removes any cable still attached to a collapsed split-block module's hidden right leg.
-     *  Graph-level, so it works before the cards exist. No-op for FX pairs, whose collapsed jack
-     *  legitimately still owns both raw legs. */
+    /** Unhooks a collapsed split-block module's hidden right leg, RE-POINTING each cable onto the
+     *  matching channel of the surviving left block wherever the far end still exposes it (and
+     *  simply dropping it where it does not). Graph-level, so it works before the cards exist.
+     *  No-op for FX pairs, whose collapsed jack legitimately still owns both raw legs.
+     *
+     *  The re-point is what keeps a collapse level across the stereo field: without it, collapsing
+     *  the default patch's VCA starved the whole FX tail's right channel and the mix jumped left. */
     void dropHiddenRightLegConnections(juce::AudioProcessorGraph::NodeID nodeId);
+
+    /** The raw channel carrying `proc`'s right audio leg for wiring purposes, or -1 when it has none
+     *  the user can reach. Asks the module (FX use ch1, split-block modules their own kRightBase),
+     *  then requires the channel to be reachable from a VISIBLE jack — a collapsed split-block
+     *  module still reports PortRole::Audio on its hidden block, and wiring that would create a
+     *  cable nobody can unplug. Static so tests can pin it directly. */
+    static int rightAudioLegOf(juce::AudioProcessor* proc, bool asInput);
+
+    /** True when `rawChannel` is covered by one of the module's currently VISIBLE jacks (a jack's
+     *  JackTarget spans `voiceSpan` consecutive raw channels, which is how a collapsed FX jack owns
+     *  both of its legs). The wiring-side counterpart of handleModuleResized's exposure check. */
+    static bool audioChannelReachableFromJack(const ModuleBase& mb, int rawChannel, bool isInput);
     bool getDefaultDualIOForNewModules() const noexcept { return defaultDualIOForNewModules; }
+
+    /** Per-module-type overrides of the default above, keyed by module type (ModuleBase::getName(),
+     *  e.g. "Reverb"). A type with no entry follows the global default. Read only from
+     *  applyDefaultDualIOForNewModule — new modules only, exactly like the global default itself:
+     *  changing this does NOT retro-apply to modules already on the canvas (there is no
+     *  per-module counterpart to applyDualIOToExistingModules). Set from
+     *  PreferencesSettingsTab::setGraphEditor / setDualIOOverrideForType, and from MainComponent at
+     *  startup via PreferencesSettingsTab::loadDualIOPerModuleOverrides. */
+    void setDualIOPerModuleOverrides(std::map<juce::String, bool> overrides) {
+        dualIOPerModuleOverrides = std::move(overrides);
+    }
+    const std::map<juce::String, bool>& getDualIOPerModuleOverrides() const noexcept {
+        return dualIOPerModuleOverrides;
+    }
+
+    // ---- Custom module titles -----------------------------------------------
+    // A user-set card title, stored as the node property "displayName". Message-thread ONLY and
+    // display-only, which is why — unlike "uuid" — it is deliberately NOT mirrored into the
+    // processor: nothing on the audio thread reads a card title, so there is no lock-free read to
+    // make sound, and adding a mirror would only create a second copy to keep in sync. Do not
+    // "fix" this by mirroring it.
+    //
+    // It is also deliberately NOT the processor's own name: ModuleBase::getName() is the
+    // auto-numbered "Chorus 2" that AudioEngine::updateModuleNames() recomputes wholesale on every
+    // graph change (it strips trailing digits to renumber), so a custom title written there would
+    // be clobbered by the next node added. The numbered name stays the fallback.
+
+    /** The user's custom title for a node, or an empty string when it has none. */
+    juce::String getModuleDisplayName(juce::AudioProcessorGraph::NodeID nodeId) const;
+
+    /** Sets (or, given blank/whitespace, clears) a node's custom title. Undoable. */
+    void setModuleDisplayName(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& name);
+
+    /** Title a card should paint: the custom one when set, else the auto-numbered module name. */
+    juce::String getModuleTitle(juce::AudioProcessorGraph::NodeID nodeId, juce::AudioProcessor* processor) const;
+
+    /** Ghost top-left for a library drag's cursor position: the ghost is CENTRED on the cursor.
+     *
+     *  That is what every other drag-and-drop surface does, and it is what makes "aim at the gap"
+     *  mean what it looks like. Anchoring the ghost by its top-left put the card a full width to the
+     *  RIGHT of the cursor, so a suggestion could only be earned by aiming roughly one card-width
+     *  LEFT of the destination — nobody does that, and it read as "this module doesn't support
+     *  insert". A canvas MOVE deliberately keeps its grab-point anchoring: that card is already
+     *  under the user's finger and re-anchoring it mid-drag would make it jump.
+     *
+     *  Every library path (enter, move, drop) resolves through this, or the drop lands somewhere the
+     *  preview never showed. */
+    juce::Point<int> ghostTopLeftForCursor(juce::Point<int> cursorCanvasPos) const {
+        return cursorCanvasPos - juce::Point<int>(dragPreviewW / 2, dragPreviewH / 2);
+    }
+
+    /** Commits and closes any open inline title editor, on any card.
+     *
+     *  Called from every canvas press path (GraphEditor::mouseDown for empty canvas and cables,
+     *  ModuleComponent::mouseDown for any card) because the editor's own onFocusLost is NOT enough:
+     *  almost nothing on this canvas wants keyboard focus, so clicking a module body or the
+     *  background never takes focus away from the editor and the callback never fires. Clicking
+     *  away has to commit from the presser's side instead. Escape still cancels. */
+    void commitAnyOpenTitleRename();
 
     /** True when the visible jack already has at least one graph edge or mod routing. */
     bool isPortConnected(ModuleComponent* module, int portIndex, bool isInput, bool isMidi) const;
@@ -318,27 +411,83 @@ public:
     // library-only / free-main-I/O moves / all moves (see SmartConnectionMode).
     enum class SmartConnectionMode { Off, NewOnly, NewAndUnwired, AllMoves };
 
-    /** One suggested cable shown as a frosted preview during drag; applied on drop. */
+    /** One suggested cable shown as a frosted preview during drag; applied on drop.
+     *
+     *  `isInsert` turns the same record into an insert-in-series: the ghost is spliced into cabling
+     *  that already exists rather than given a jack of its own. Two cable SETS then come with it —
+     *  `doomedLinks` (upstream → sink, to be removed, drawn dashed) and `upstreamCables`
+     *  (upstream → ghost, replacing them) — plus this record's own ghostJack → neighborJack.
+     *
+     *  Both sets describe the WHOLE insert group, not just this record's leg, and both are already
+     *  deduped, so applying them once per suggestion is idempotent. They are deliberately not
+     *  per-leg: a jack pair dropped by the fan dedupe must NOT take its doomed link with it, or the
+     *  cable it represented survives and sums into the sink alongside the ghost's output.
+     *
+     *  Only offered for the graph's terminal audio sink; see refreshSmartSuggestions. */
     struct SmartSuggestion {
+        /** One cable of an insert, at visible-jack level. Endpoints are for preview paint only. */
+        struct InsertLink {
+            int fromJack = 0; // upstream visible OUTPUT jack
+            int toJack = 0;   // sink visible input jack (doomed), or ghost visible input jack (new)
+            juce::Point<float> p1{}, p2{};
+
+            bool operator==(const InsertLink& o) const noexcept { return fromJack == o.fromJack && toJack == o.toJack; }
+        };
+
         /** When true the dragged module is the cable source; when false it is the destination. */
         bool ghostIsSource = true;
         juce::AudioProcessorGraph::NodeID neighborId{};
         int ghostJack = 0;
         int neighborJack = 0;
         bool isMidi = false;
-        juce::Point<float> p1{}, p2{}; // canvas endpoints for preview paint
+        juce::Point<float> p1{}, p2{}; // head endpoints; mainPreviewLegs is what actually gets drawn
         synth::ui::CableSignal signal = synth::ui::CableSignal::Audio;
         synth::ui::ModuleCategory sourceCategory = synth::ui::ModuleCategory::Utility;
 
+        /** Every frosted segment the preview must draw, so it shows exactly what the drop will wire.
+         *  ONE suggestion is not one drawn cable: connectPorts fans a collapsed jack across a whole
+         *  raw pair, and when the far end fronts those raws as two separate visible jacks (the
+         *  terminal sink does — it has no ModuleBase to group them) that is two cables on screen.
+         *  Resolved from the same PolyLink connectPorts uses and deduped to distinct visible jack
+         *  pairs, because N graph edges through one jack pair are still one cable. */
+        std::vector<InsertLink> mainPreviewLegs;     // ghostJack → neighborJack
+        std::vector<InsertLink> upstreamPreviewLegs; // upstream → ghost (insert only)
+
+        // ---- Insert-in-series (audio only; ghostIsSource is always true) ----
+        bool isInsert = false;
+        juce::AudioProcessorGraph::NodeID upstreamId{}; // node whose cabling gets rerouted
+        std::vector<InsertLink> doomedLinks;            // upstream → sink, every one to remove
+        std::vector<InsertLink> upstreamCables;         // upstream → ghost, replacing them
+        synth::ui::ModuleCategory upstreamCategory = synth::ui::ModuleCategory::Utility;
+
         bool operator==(const SmartSuggestion& o) const noexcept {
             return ghostIsSource == o.ghostIsSource && neighborId == o.neighborId && ghostJack == o.ghostJack &&
-                   neighborJack == o.neighborJack && isMidi == o.isMidi;
+                   neighborJack == o.neighborJack && isMidi == o.isMidi && isInsert == o.isInsert &&
+                   upstreamId == o.upstreamId && doomedLinks == o.doomedLinks && upstreamCables == o.upstreamCables &&
+                   mainPreviewLegs == o.mainPreviewLegs && upstreamPreviewLegs == o.upstreamPreviewLegs;
         }
         bool operator!=(const SmartSuggestion& o) const noexcept { return !(*this == o); }
     };
 
     void setSmartConnectionMode(SmartConnectionMode mode) { smartConnectionMode = mode; }
     SmartConnectionMode getSmartConnectionMode() const noexcept { return smartConnectionMode; }
+
+    /** CTRL turns a proximity suggestion into an insert-in-series. Ctrl on every platform (it is
+     *  the literal Control key on macOS too, NOT Cmd) — Cmd was tried first and lost, because
+     *  Cmd-click is the additive-selection modifier and the two gestures are indistinguishable at
+     *  mouse-down.
+     *
+     *  Sampled LIVE on every drag tick rather than latched at mouse-down, so BOTH orderings work:
+     *  press-then-Ctrl (the modifier is picked up on the next tick) and Ctrl-then-press (the
+     *  deferred classification in `ModuleComponent::mouseDown` arms a drag as well as a selection
+     *  toggle, and this read simply sees Ctrl already down).
+     *
+     *  Tests set the override; production leaves it empty and reads the real keyboard. */
+    void setInsertModifierOverrideForTests(std::optional<bool> down) { insertModifierOverride = down; }
+    bool isInsertModifierDown() const {
+        return insertModifierOverride.has_value() ? *insertModifierOverride
+                                                  : juce::ModifierKeys::getCurrentModifiersRealtime().isCtrlDown();
+    }
 
     /** Persist / restore helpers (Preferences tab + MainComponent launch restore). */
     static SmartConnectionMode smartConnectionModeFromString(const juce::String& s);
@@ -354,6 +503,21 @@ public:
     int getSmartSuggestionCount() const noexcept { return (int)smartSuggestions.size(); }
     const std::vector<SmartSuggestion>& getSmartSuggestions() const noexcept { return smartSuggestions; }
     bool nodeHasCables(juce::AudioProcessorGraph::NodeID nodeId) const;
+    /** Runs just the drag tick's modifier re-sample, so a test can exercise a press/release that
+     *  happens without any mouse movement without needing a real 30 Hz timer. */
+    void pumpDragModifierTickForTests() { refreshSuggestionsIfInsertModifierChanged(); }
+
+    /** Port centre inside a bounds rect — must agree with ModuleComponent::getPortCenter. */
+    static juce::Point<int> estimatePortCenter(juce::AudioProcessor* proc, juce::Rectangle<int> bounds, int jack,
+                                               bool isInput, bool isMidi);
+
+    /** Audio-jack occupancy, for asserting that a reroute left nothing dangling. */
+    bool isInputJackFreeForTests(juce::AudioProcessorGraph::NodeID nodeId, int jack) const {
+        return isInputJackFree(nodeId, jack, false);
+    }
+    bool isOutputJackFreeForTests(juce::AudioProcessorGraph::NodeID nodeId, int jack) const {
+        return isOutputJackFree(nodeId, jack, false);
+    }
 
     // ---- Onboarding / UI Phase 5 helpers (headless-testable) ----
 
@@ -556,6 +720,8 @@ private:
     };
 
     AudioEngine& audioEngine;
+    // See setOutputDeviceInfoProvider/refreshOutputDeviceInfo above.
+    std::function<juce::String()> outputDeviceInfoProvider;
     GraphContentComponent content;
     ModMatrixComponent modMatrix;
     bool isMatrixVisible = false;
@@ -583,12 +749,19 @@ private:
     int dragPreviewW = 0, dragPreviewH = 0;
     juce::AudioProcessorGraph::NodeID dragPreviewSelfId{};
     juce::Rectangle<int> dragPreviewGhost;
+    // The un-de-overlapped rect under the cursor. Suggestion candidacy is judged from this, so
+    // aiming at a gap narrower than the card still counts; the card still LANDS at dragPreviewGhost.
+    juce::Rectangle<int> dragPreviewAim;
     // Library-drag probe: jack metadata for a module that does not exist on the canvas yet.
     bool dragPreviewIsSnippet = false;
     std::unique_ptr<juce::AudioProcessor> dragPreviewProbe;
 
     // Smart-connection suggestions for the active drag preview.
     SmartConnectionMode smartConnectionMode = SmartConnectionMode::NewAndUnwired;
+    std::optional<bool> insertModifierOverride; // tests only; empty means read the real keyboard
+    // Last modifier state the drag tick saw, so a press/release that happens WITHOUT a mouse move
+    // still re-evaluates the suggestions exactly once (see timerCallback).
+    bool lastSampledInsertModifier = false;
     std::vector<SmartSuggestion> smartSuggestions;
     static constexpr float kSmartConnectionProximityPx = 96.0f;
 
@@ -596,14 +769,39 @@ private:
     void applySmartSuggestions(juce::AudioProcessorGraph::NodeID ghostNodeId, bool recordUndo);
     void clearSmartSuggestions();
     bool shouldOfferSmartConnections() const;
-    void applyDefaultDualIOForNewModule(juce::AudioProcessor& processor) const;
-    /** Port centre inside a bounds rect — mirrors ModuleComponent::getPortCenter for ghost previews. */
-    static juce::Point<int> estimatePortCenter(juce::AudioProcessor* proc, juce::Rectangle<int> bounds, int jack,
-                                               bool isInput, bool isMidi);
+    void applyDefaultDualIOForNewModule(juce::AudioProcessor& processor, const juce::String& moduleType) const;
+    /** Re-evaluates the suggestions when the insert modifier changed since the last drag tick.
+     *  A modifier press/release is not a mouse move, so nothing else would notice it. */
+    void refreshSuggestionsIfInsertModifierChanged();
     bool isInputJackFree(juce::AudioProcessorGraph::NodeID nodeId, int jack, bool isMidi) const;
     bool isOutputJackFree(juce::AudioProcessorGraph::NodeID nodeId, int jack, bool isMidi) const;
     bool areJacksAlreadyConnected(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
                                   juce::AudioProcessorGraph::NodeID dstId, int dstJack, bool isMidi) const;
+
+    /** The cabling feeding an audio input jack, at CABLE level (visible output jacks of the feeding
+     *  node, never raw graph edges). */
+    struct UpstreamLink {
+        juce::AudioProcessorGraph::NodeID nodeId{};
+        /** Every distinct visible OUTPUT jack of that ONE node feeding the destination jack.
+         *
+         *  More than one is normal, not exotic: a dual upstream's Left and Right legs both landing
+         *  on a collapsed mono input is our own canonical dual-to-mono wiring — it is what the Dual
+         *  I/O toggle rewire and a hand-dragged pair of cables both produce. Refusing multi-feed
+         *  outright meant insert silently did nothing for that extremely common shape. Feeds from
+         *  DIFFERENT nodes are still refused: that is a hand-built mix, and rerouting it would
+         *  change what sums where. */
+        std::vector<int> jacks;
+    };
+
+    /** Resolves the cabling currently feeding `dstJack`, or nullopt when the jack is free, is fed
+     *  from more than one NODE (a hand-built mix), or is fed through a mod routing / attenuverter
+     *  chain (neither is ever silently rerouted). Insert-in-series needs this to succeed. */
+    std::optional<UpstreamLink> findSingleUpstreamAudioLink(juce::AudioProcessorGraph::NodeID dstId, int dstJack) const;
+
+    /** Removes the audio cable between two visible jacks — the exact inverse of connectPorts, so a
+     *  collapsed stereo wire drops both raw legs. Caller owns the undo transaction. */
+    void disconnectAudioLink(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
+                             juce::AudioProcessorGraph::NodeID dstId, int dstJack);
 
     juce::AudioProcessorGraph::NodeID draggingAttenuverterNodeId;
     float attenDragStartValue = 0.0f;
@@ -695,6 +893,7 @@ private:
     bool alignmentGuidesEnabled = true;
     bool doubleClickPortDisconnectEnabled = true;
     bool defaultDualIOForNewModules = false;
+    std::map<juce::String, bool> dualIOPerModuleOverrides;
 
     void updateTransform();
 

@@ -340,7 +340,7 @@ std::vector<SnippetManager::NodeID> SnippetManager::insertSnippet(const juce::va
     auto validation = AIStateMapper::validatePatch(prepared, graph, /*clearExisting=*/false, /*trusted=*/false,
                                                    /*allowInternalModuleTypes=*/true);
     if (!validation.ok) {
-        juce::Logger::writeToLog("SnippetManager::insertSnippet: snippet rejected — " + validation.message);
+        juce::Logger::writeToLog("SnippetManager::insertSnippet: snippet rejected - " + validation.message);
         return {};
     }
 

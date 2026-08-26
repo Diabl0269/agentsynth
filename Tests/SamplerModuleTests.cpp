@@ -91,19 +91,29 @@ protected:
     }
 
     juce::AudioParameterChoice* playMode() {
-        return dynamic_cast<juce::AudioParameterChoice*>(module->getParameters()[1]);
+        return dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(module.get(), "playMode"));
     }
-    juce::AudioParameterFloat* pitch() { return dynamic_cast<juce::AudioParameterFloat*>(module->getParameters()[2]); }
-    juce::AudioParameterInt* rootNote() { return dynamic_cast<juce::AudioParameterInt*>(module->getParameters()[3]); }
-    juce::AudioParameterBool* loop() { return dynamic_cast<juce::AudioParameterBool*>(module->getParameters()[4]); }
-    juce::AudioParameterFloat* start() { return dynamic_cast<juce::AudioParameterFloat*>(module->getParameters()[5]); }
+    juce::AudioParameterFloat* pitch() {
+        return dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(module.get(), "pitch"));
+    }
+    juce::AudioParameterInt* rootNote() {
+        return dynamic_cast<juce::AudioParameterInt*>(findParameterByID(module.get(), "rootNote"));
+    }
+    juce::AudioParameterBool* loop() {
+        return dynamic_cast<juce::AudioParameterBool*>(findParameterByID(module.get(), "loop"));
+    }
+    juce::AudioParameterFloat* start() {
+        return dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(module.get(), "start"));
+    }
     juce::AudioParameterFloat* grainSize() {
-        return dynamic_cast<juce::AudioParameterFloat*>(module->getParameters()[6]);
+        return dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(module.get(), "grainSize"));
     }
     juce::AudioParameterFloat* density() {
-        return dynamic_cast<juce::AudioParameterFloat*>(module->getParameters()[7]);
+        return dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(module.get(), "density"));
     }
-    juce::AudioParameterFloat* level() { return dynamic_cast<juce::AudioParameterFloat*>(module->getParameters()[9]); }
+    juce::AudioParameterFloat* level() {
+        return dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(module.get(), "level"));
+    }
 };
 
 } // namespace
@@ -115,7 +125,7 @@ protected:
 TEST_F(SamplerModuleTest, FactoryInitialisation) {
     EXPECT_EQ(module->getModuleType(), ModuleType::Sampler);
     EXPECT_EQ(module->getName(), "Sampler");
-    // bypassed, playMode, pitch, rootNote, loop, start, grainSize, density, spray, level, dualIO,
+    // bypassed, dualIO, playMode, pitch, rootNote, loop, start, grainSize, density, spray, level,
     // muted  (dualIO added in #219 — the module has always emitted a real stereo pair)
     EXPECT_EQ(module->getParameters().size(), 12);
     EXPECT_EQ(module->getTotalNumInputChannels(), SamplerModule::kNumChannels);

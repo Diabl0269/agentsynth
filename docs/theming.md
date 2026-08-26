@@ -138,11 +138,11 @@ The following `Metrics` fields are **code-only layout constants** — they contr
 | `librarySidebarWidth` | `200` | Library panel width when visible (px) — code-only |
 | `aiPanelWidth` | `300` | AI panel width when visible (px) — code-only |
 | `iconSize` | `16` | Icon render size in library / status bar contexts (px) — code-only |
-| `timelinePanelHeight` | `220` | Timeline panel **default** height and minimum drag height (px) — the live height is the user's, persisted under the `timelinePanelHeight` setting key (see [`layout.md` §16](layout.md)) — code-only (TL5-1) |
-| `timelineTrackHeaderWidth` | `160` | Timeline track-header column width (px) — code-only (TL5-1) |
-| `timelineTransportBarHeight` | `28` | Timeline transport-bar strip height (px) — code-only (TL5-1) |
-| `timelineRulerHeight` | `24` | Timeline ruler strip height, top of the lanes region (px) — code-only (TL5-2) |
-| `timelineTrackRowHeight` | `56` | Row height shared by the track-header column and the clip-lane area (px) — code-only (TL5-7) |
+| `timelinePanelHeight` | `220` | Timeline panel **default** height and minimum drag height (px) — the live height is the user's, persisted under the `timelinePanelHeight` setting key (see [`timeline_panel_core.md` §1](timeline_panel_core.md)) — code-only |
+| `timelineTrackHeaderWidth` | `190` | Timeline track-header column width (px) — code-only |
+| `timelineTransportBarHeight` | `34` | Timeline transport-bar strip height (px) — code-only |
+| `timelineRulerHeight` | `24` | Timeline ruler strip height, top of the lanes region (px) — code-only |
+| `timelineTrackRowHeight` | `56` | Row height shared by the track-header column and the clip-lane area (px) — code-only |
 
 The following `Metrics` fields are **UI rendering constants** — they control the appearance of UI visual effects and are also **not parsed from user JSON**. A user theme that includes these keys will have them silently ignored.
 
@@ -207,7 +207,7 @@ Agent Synth uses SVG `Drawable` icons — **not** an icon or glyph font. This av
 
 ### Icon enum
 
-40 icons are defined in `synth::theme::Icon` (in `Source/UI/Theme/IconLibrary.h`):
+41 icons are defined in `synth::theme::Icon` (in `Source/UI/Theme/IconLibrary.h`):
 
 ```
 TransportPlay    TransportStop    ActionUndo       ActionRedo
@@ -221,21 +221,24 @@ ToggleMinimap    ModuleDualIO
 ToolSelect       ToolSplit        ToolGlue         ToolErase
 ToolMute         ToolDraw
 TrackMidi        TrackAudio       TrackAutomation  FollowPlayhead
+CatIO
 ```
 
 **`Icon::TransportPlay` is scaffolding** — the SVG asset is present and the enum value exists, but no `DrawableButton` is wired to it. It is tinted to `textMuted` and reserved for a future transport affordance.
 
 The four **waveform icons** (`WaveformSine`, `WaveformSaw`, `WaveformSquare`, `WaveformTriangle`, indices 24–27) are rendered in the Oscillator waveform combo via `AppLookAndFeel::drawPopupMenuItem` (14×14 glyph left of the item text) and `drawComboBox` (selected waveform glyph in the closed combo). `positionComboBoxText` shifts the label right when the selected item has an icon.
 
-**`Icon::ToggleMinimap`** (index 28) is the toolbar toggle for the Graph Editor minimap overlay — see [`layout.md` §15](layout.md#15-minimap-overlay-issue-159).
+**`Icon::ToggleMinimap`** (index 28) is the toolbar toggle for the Graph Editor minimap overlay — see [`layout_selection_canvas.md` §4](layout_selection_canvas.md#4-minimap-overlay-issue-159).
 
 **`Icon::ModuleDualIO`** (index 29) is the module-header toggle that splits a collapsed `"Audio"` jack into separate Left/Right jacks. There is no universal stereo-split glyph; this one is a Y-fork into two jacks. The button's tooltip carries the Dual I/O on/off copy. See [`fx_modules.md` § Stereo I/O](fx_modules.md#stereo-io-dual-io-toggle).
 
 **`Icon::ToolSelect` … `Icon::ToolDraw`** (indices 30–35) are the six glyphs for the timeline edit-tool strip (`synth::ui::EditTool` — Select, Split, Glue, Erase, Mute, Draw; see [`Source/UI/EditTool.h`](../Source/UI/EditTool.h)): a pointer arrow, scissors, a glue bottle, an angled eraser block, a crossed-out speaker (visually distinct from `ModuleMute` — that one is an outlined speaker with a small corner X; this one is a solid-filled speaker with a single strike-through slash), and a pencil at ~45°. `Source/UI/ToolCursors.h`'s `makeToolCursor()` renders these same tinted Drawables into the custom per-tool mouse cursor shown over the clip lanes / piano roll, rather than shipping a second cursor-only asset — see that header's doc comment for the per-tool hotspot table.
 
-**`Icon::TrackMidi`, `Icon::TrackAudio`, `Icon::TrackAutomation`** (indices 36–38) are the timeline track header's kind-badge glyphs — one per `synth::TrackKind`, drawn in place of the old `"MIDI"`/`"AUD"`/`"AUTO"` text pill when a themed `AppLookAndFeel` and the asset library are both present (`TimelineTrackHeaderComponent::kindBadgeIcon`; see [`layout.md` §16 TL5-3](layout.md#tl5-3-track-headers-binding-chips-add-track)). The text pill remains the fallback in a headless build or when the icon asset is missing — the badge is identity chrome either way, never a control.
+**`Icon::TrackMidi`, `Icon::TrackAudio`, `Icon::TrackAutomation`** (indices 36–38) are the timeline track header's kind-badge glyphs — one per `synth::TrackKind`, drawn in place of the old `"MIDI"`/`"AUD"`/`"AUTO"` text pill when a themed `AppLookAndFeel` and the asset library are both present (`TimelineTrackHeaderComponent::kindBadgeIcon`; see [`timeline_panel_core.md` §3](timeline_panel_core.md#3-track-headers-binding-chips-add-track)). The text pill remains the fallback in a headless build or when the icon asset is missing — the badge is identity chrome either way, never a control.
 
-**`Icon::FollowPlayhead`** (index 39) is the toolbar-style toggle button next to the timeline panel's snap selector that page-flips the view to keep the playhead on screen while playing — see [`layout.md` §16](layout.md#tl5-2-ruler-grid-zoomscroll-snap-loop-brace).
+**`Icon::FollowPlayhead`** (index 39) is the toolbar-style toggle button next to the timeline panel's snap selector that page-flips the view to keep the playhead on screen while playing — see [`timeline_panel_core.md` §2](timeline_panel_core.md#2-ruler-grid-zoomscroll-snap-loop-brace).
+
+**`Icon::CatIO`** (index 40) is the speaker glyph for the module library's "I/O" category header (Audio Input / Audio Output — previously fell back to `CatUtility`, which gave the graph's actual source/sink no visual identity of its own) and doubles as the Audio Output card's identity glyph in `ModuleComponent::paint()`. Appended after `FollowPlayhead` rather than grouped with the other `CatXxx` entries so every existing enum ordinal (and the hardcoded spot-checks in `IconLibraryTests.cpp`) stays unchanged — see [`layout.md`'s Audio Output card identity treatment](layout.md#audio-output-card-identity-treatment).
 
 ### Token → tint map
 
@@ -250,7 +253,7 @@ The four **waveform icons** (`WaveformSine`, `WaveformSaw`, `WaveformSquare`, `W
 | `TransportPlay` | `textMuted` (scaffolding; no DrawableButton consumer) |
 | All toolbar actions + transport stop + toggles | `textPrimary` |
 | `ToolSelect` … `ToolDraw` (edit-tool strip) | `textPrimary` — active-tool highlight is a separate `toolActive`-coloured button state, not a different icon tint |
-| Category icons (`CatSources` … `CatUtility`) | `textMuted` |
+| Category icons (`CatSources` … `CatUtility`, `CatIO`) | `textMuted` |
 | `WaveformSine`, `WaveformSaw`, `WaveformSquare`, `WaveformTriangle` | `textPrimary` (consumer: Oscillator waveform combo via `drawPopupMenuItem`/`drawComboBox`) |
 | `TrackMidi`, `TrackAudio`, `TrackAutomation` | `textMuted` — quiet identity chrome, same convention as the category icons above |
 | `FollowPlayhead` | `textPrimary` — a toolbar-style toggle, so it follows the toolbar action set's base tint rather than the muted track-badge one |
@@ -291,6 +294,7 @@ JUCE's binary-data name mangler **strips hyphens** and concatenates the remainin
 | `waveform-saw.svg` | `BinaryData::waveformsaw_svg` |
 | `waveform-square.svg` | `BinaryData::waveformsquare_svg` |
 | `waveform-triangle.svg` | `BinaryData::waveformtriangle_svg` |
+| `cat-io.svg` | `BinaryData::catio_svg` |
 
 Note: the spec text says "a-b.svg → `BinaryData::a_b_svg`" — this is incorrect. Hyphens are stripped, not converted to underscores. The `IconLibrary.cpp` lookup table uses the real symbol names. A CMake guard (`file(GLOB)` + `string(FIND ... "_")`) enforces hyphen-only filenames to prevent accidental underscore collisions.
 
@@ -518,7 +522,7 @@ second file is created.
 `applyTheme()` remaps all JUCE ColourIds, then `sendLookAndFeelChangeMessage()` propagates
 `lookAndFeelChanged()` to all child components, then a single `repaint()` is requested.
 Because module cards are buffered via `synth::ui::ZoomFrozenCachedImage` (see
-[`docs/layout.md` §10](layout.md#10-ui-rendering-performance)), only their cached images are
+[`docs/layout_visuals_animation.md` §2](layout_visuals_animation.md#2-ui-rendering-performance)), only their cached images are
 invalidated and re-rendered once. There is no animation loop or per-tick repaint added.
 
 ---
@@ -699,11 +703,16 @@ take the other eleven down with it.
 
 **The UI** is the Appearance tab's "Piano Roll Notes" swatch row (`AppearanceSettingsTab`, one
 12-cell row keyed C…B): left-click opens a `synth::ui::ColourPickerPopup` (§ below), right-click
-resets that pitch class's override. An un-overridden swatch draws hollow/dimmed rather than
-filled-with-a-ring — unlike a cable-colour swatch, a note-colour swatch has no "always has a
-value" theme token backing every entry, so "not set, currently showing the theme's `noteFill`"
-has to read as visually distinct from "set to a colour that happens to be close to `noteFill`".
-"Reset all" clears every pitch class in one action.
+resets that pitch class's override. Every swatch — overridden or not — previews the colour through
+`AppearanceSettingsTab::getNoteSwatchPreviewColour()`, which calls the exact same
+`resolveNoteColour()` the roll paints notes with (a representative unselected/in-scale note at a
+fixed velocity chosen so its brightness multiplier is ≈1.0), composited over the panel background
+so the resolver's deliberate fill alpha can't read as a washed-out or darker chip than the real
+note. A previous version drew the un-overridden swatch at a flat, hand-rolled low alpha instead of
+going through the resolver at all, which is exactly what made the preview read as noticeably
+darker than the piano roll's actual notes. "Not set" vs. "pinned" is told apart by the swatch's
+ring instead of the fill now — a brighter ring marks a pinned pitch class, same affordance as the
+cable-colour swatches in §11. "Reset all" clears every pitch class in one action.
 
 ## 13. Colour picker popup
 
@@ -725,3 +734,14 @@ records nothing; closing on a different colour first silently restores the origi
 undo-recorded mutation) and then performs the real edit as the ONE undo step whose undo target is
 the original colour — so dragging through a dozen preview colours before landing on a choice costs
 exactly one `Cmd+Z`, not a dozen.
+
+Committing always reconciles with `juce::ColourSelector::getCurrentColour()` rather than trusting
+whatever the last dispatched preview happened to be. A real slider drag or hex-field edit updates
+the selector's own displayed state (the header swatch and the R/G/B/hex fields) synchronously, but
+only reaches this popup's preview callback once `ColourSelector`'s change broadcast is actually
+*dispatched* — which is asynchronous. If the popup is torn down between "the user finishes an
+edit" and "that broadcast arrives" (the same click that commits a hex-field edit via focus-loss
+can also be the click that dismisses the `juce::CallOutBox`), a commit that only replayed the last
+preview would apply a stale, one-edit-old colour while the header/fields already showed the new
+one. `commitOnce()` re-previews from the selector's live colour immediately before firing the
+commit callback, closing that gap for every consumer of this shared component.

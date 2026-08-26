@@ -92,12 +92,28 @@ juce::String PresetManager::getPresetJSON(int index) {
     //
     // All pairs verified pairwise with kCollisionGap = 12; zero overlaps per preset.
     //
-    // Stereo (issue #219): the Default preset wires BOTH legs down the voice chain —
+    // Stereo (issue #219): EVERY preset wires BOTH legs down the voice chain —
     // Osc ch14 -> Filter ch11 -> VCA ch16 -> Distortion ch1, alongside the ch0 left leg. Each
     // module's right leg is its own kRightBase block, never ch1 (that is Waveform / Cutoff / gain
     // CV on the three of them). The FX tail from Distortion onwards takes a contiguous ch0/ch1
     // pair, which is why the right leg lands on Distortion ch1 rather than a kRightBase channel.
     // Pinned by StereoDefaultPreset.RightLegIsWiredFromOscillatorThroughToTheFX.
+    //
+    // WHY IT IS THE PRESET'S JOB. A preset applies through AIStateMapper with no knowledge of
+    // preferences, so a module comes up on its CONSTRUCTOR default — and the split-block voice
+    // modules default to SPLIT. A single-leg cable list therefore loads as a patch whose every
+    // Audio R jack is empty: it is not just cosmetic, it looks unfinished and it wastes the right
+    // path. (MainComponent::applyStoredDualIOPreferenceToPatch may collapse the whole patch
+    // afterwards if the user's preference says so; the collapse rules drop or re-point these
+    // right-leg cables cleanly, so authoring them is safe in both worlds.)
+    //
+    // Two traps this rule closes, both of which shipped:
+    //   * "all connections are one sided" — presets 1-5 wired only ch0 and duplicated the VCA's
+    //     LEFT leg into Audio Output R, so the patch sounded centred but every right jack was bare.
+    //   * a leg wired to a channel that carries nothing. Poly Pad ran VCA ch1 -> Reverb R; ch1 is
+    //     the VCA's gain CV INPUT and, as an output, a silent pass-through, so the right channel
+    //     received actual silence. The right head of a poly VCA is kRightBase (ch16).
+    // Pinned for every preset by EveryFactoryPreset/PresetStereoTest.RendersBothChannels.
 
     switch (index) {
     case 0: // Default - Matching original sound exactly
@@ -169,13 +185,15 @@ juce::String PresetManager::getPresetJSON(int index) {
     {"src": 11, "srcPort": -1, "dst": 6, "dstPort": -1},
     {"src": 11, "srcPort": -1, "dst": 7, "dstPort": -1},
     {"src": 3, "srcPort": 0, "dst": 4, "dstPort": 0},
+    {"src": 3, "srcPort": 14, "dst": 4, "dstPort": 11},
     {"src": 4, "srcPort": 0, "dst": 5, "dstPort": 0},
+    {"src": 4, "srcPort": 11, "dst": 5, "dstPort": 16},
     {"src": 6, "srcPort": 0, "dst": 9, "dstPort": 0},
     {"src": 9, "srcPort": 0, "dst": 5, "dstPort": 1},
     {"src": 7, "srcPort": 0, "dst": 10, "dstPort": 0},
     {"src": 10, "srcPort": 0, "dst": 4, "dstPort": 1},
     {"src": 5, "srcPort": 0, "dst": 2, "dstPort": 0},
-    {"src": 5, "srcPort": 0, "dst": 2, "dstPort": 1}
+    {"src": 5, "srcPort": 16, "dst": 2, "dstPort": 1}
   ]
 })";
 
@@ -200,11 +218,13 @@ juce::String PresetManager::getPresetJSON(int index) {
     {"src": 11, "srcPort": -1, "dst": 3, "dstPort": -1},
     {"src": 11, "srcPort": -1, "dst": 6, "dstPort": -1},
     {"src": 3, "srcPort": 0, "dst": 4, "dstPort": 0},
+    {"src": 3, "srcPort": 14, "dst": 4, "dstPort": 11},
     {"src": 4, "srcPort": 0, "dst": 5, "dstPort": 0},
+    {"src": 4, "srcPort": 11, "dst": 5, "dstPort": 16},
     {"src": 6, "srcPort": 0, "dst": 10, "dstPort": 0},
     {"src": 10, "srcPort": 0, "dst": 5, "dstPort": 1},
     {"src": 5, "srcPort": 0, "dst": 7, "dstPort": 0},
-    {"src": 5, "srcPort": 0, "dst": 7, "dstPort": 1},
+    {"src": 5, "srcPort": 16, "dst": 7, "dstPort": 1},
     {"src": 7, "srcPort": 0, "dst": 8, "dstPort": 0},
     {"src": 7, "srcPort": 1, "dst": 8, "dstPort": 1},
     {"src": 8, "srcPort": 0, "dst": 2, "dstPort": 0},
@@ -233,13 +253,15 @@ juce::String PresetManager::getPresetJSON(int index) {
     {"src": 11, "srcPort": -1, "dst": 3, "dstPort": -1},
     {"src": 11, "srcPort": -1, "dst": 7, "dstPort": -1},
     {"src": 3, "srcPort": 0, "dst": 4, "dstPort": 0},
+    {"src": 3, "srcPort": 14, "dst": 4, "dstPort": 11},
     {"src": 4, "srcPort": 0, "dst": 5, "dstPort": 0},
+    {"src": 4, "srcPort": 11, "dst": 5, "dstPort": 16},
     {"src": 6, "srcPort": 0, "dst": 9, "dstPort": 0},
     {"src": 9, "srcPort": 0, "dst": 4, "dstPort": 1},
     {"src": 7, "srcPort": 0, "dst": 10, "dstPort": 0},
     {"src": 10, "srcPort": 0, "dst": 5, "dstPort": 1},
     {"src": 5, "srcPort": 0, "dst": 2, "dstPort": 0},
-    {"src": 5, "srcPort": 0, "dst": 2, "dstPort": 1}
+    {"src": 5, "srcPort": 16, "dst": 2, "dstPort": 1}
   ]
 })";
 
@@ -262,11 +284,13 @@ juce::String PresetManager::getPresetJSON(int index) {
     {"src": 9, "srcPort": -1, "dst": 4, "dstPort": -1},
     {"src": 9, "srcPort": -1, "dst": 7, "dstPort": -1},
     {"src": 4, "srcPort": 0, "dst": 5, "dstPort": 0},
+    {"src": 4, "srcPort": 14, "dst": 5, "dstPort": 11},
     {"src": 5, "srcPort": 0, "dst": 6, "dstPort": 0},
+    {"src": 5, "srcPort": 11, "dst": 6, "dstPort": 16},
     {"src": 7, "srcPort": 0, "dst": 8, "dstPort": 0},
     {"src": 8, "srcPort": 0, "dst": 6, "dstPort": 1},
     {"src": 6, "srcPort": 0, "dst": 2, "dstPort": 0},
-    {"src": 6, "srcPort": 0, "dst": 2, "dstPort": 1}
+    {"src": 6, "srcPort": 16, "dst": 2, "dstPort": 1}
   ]
 })";
 
@@ -293,13 +317,15 @@ juce::String PresetManager::getPresetJSON(int index) {
     {"src": 7, "srcPort": -1, "dst": 8, "dstPort": -1},
     {"src": 7, "srcPort": -1, "dst": 9, "dstPort": -1},
     {"src": 3, "srcPort": 0, "dst": 4, "dstPort": 0},
+    {"src": 3, "srcPort": 14, "dst": 4, "dstPort": 11},
     {"src": 4, "srcPort": 0, "dst": 5, "dstPort": 0},
+    {"src": 4, "srcPort": 11, "dst": 5, "dstPort": 16},
     {"src": 8, "srcPort": 0, "dst": 10, "dstPort": 0},
     {"src": 10, "srcPort": 0, "dst": 5, "dstPort": 1},
     {"src": 9, "srcPort": 0, "dst": 11, "dstPort": 0},
     {"src": 11, "srcPort": 0, "dst": 4, "dstPort": 1},
     {"src": 5, "srcPort": 0, "dst": 2, "dstPort": 0},
-    {"src": 5, "srcPort": 0, "dst": 2, "dstPort": 1}
+    {"src": 5, "srcPort": 16, "dst": 2, "dstPort": 1}
   ]
 })";
 
@@ -345,6 +371,14 @@ juce::String PresetManager::getPresetJSON(int index) {
     {"src": 5, "srcPort": 5, "dst": 6, "dstPort": 5},
     {"src": 5, "srcPort": 6, "dst": 6, "dstPort": 6},
     {"src": 5, "srcPort": 7, "dst": 6, "dstPort": 7},
+    {"src": 5, "srcPort": 14, "dst": 6, "dstPort": 11},
+    {"src": 5, "srcPort": 15, "dst": 6, "dstPort": 12},
+    {"src": 5, "srcPort": 16, "dst": 6, "dstPort": 13},
+    {"src": 5, "srcPort": 17, "dst": 6, "dstPort": 14},
+    {"src": 5, "srcPort": 18, "dst": 6, "dstPort": 15},
+    {"src": 5, "srcPort": 19, "dst": 6, "dstPort": 16},
+    {"src": 5, "srcPort": 20, "dst": 6, "dstPort": 17},
+    {"src": 5, "srcPort": 21, "dst": 6, "dstPort": 18},
     {"src": 6, "srcPort": 0, "dst": 7, "dstPort": 0},
     {"src": 6, "srcPort": 1, "dst": 7, "dstPort": 1},
     {"src": 6, "srcPort": 2, "dst": 7, "dstPort": 2},
@@ -353,6 +387,14 @@ juce::String PresetManager::getPresetJSON(int index) {
     {"src": 6, "srcPort": 5, "dst": 7, "dstPort": 5},
     {"src": 6, "srcPort": 6, "dst": 7, "dstPort": 6},
     {"src": 6, "srcPort": 7, "dst": 7, "dstPort": 7},
+    {"src": 6, "srcPort": 11, "dst": 7, "dstPort": 16},
+    {"src": 6, "srcPort": 12, "dst": 7, "dstPort": 17},
+    {"src": 6, "srcPort": 13, "dst": 7, "dstPort": 18},
+    {"src": 6, "srcPort": 14, "dst": 7, "dstPort": 19},
+    {"src": 6, "srcPort": 15, "dst": 7, "dstPort": 20},
+    {"src": 6, "srcPort": 16, "dst": 7, "dstPort": 21},
+    {"src": 6, "srcPort": 17, "dst": 7, "dstPort": 22},
+    {"src": 6, "srcPort": 18, "dst": 7, "dstPort": 23},
     {"src": 8, "srcPort": 0, "dst": 7, "dstPort": 8},
     {"src": 8, "srcPort": 1, "dst": 7, "dstPort": 9},
     {"src": 8, "srcPort": 2, "dst": 7, "dstPort": 10},
@@ -362,7 +404,7 @@ juce::String PresetManager::getPresetJSON(int index) {
     {"src": 8, "srcPort": 6, "dst": 7, "dstPort": 14},
     {"src": 8, "srcPort": 7, "dst": 7, "dstPort": 15},
     {"src": 7, "srcPort": 0, "dst": 10, "dstPort": 0},
-    {"src": 7, "srcPort": 1, "dst": 10, "dstPort": 1},
+    {"src": 7, "srcPort": 16, "dst": 10, "dstPort": 1},
     {"src": 10, "srcPort": 0, "dst": 2, "dstPort": 0},
     {"src": 10, "srcPort": 1, "dst": 2, "dstPort": 1}
   ]

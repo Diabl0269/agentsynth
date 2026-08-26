@@ -1,12 +1,15 @@
 #pragma once
 
 #include "../Plugin/Hosting/HostedPluginBackend.h"
+#include "../ShortcutManager.h"
 #include "../SnippetManager.h"
+#include "ModuleLibraryHelpPopup.h"
 #include "Theme/AppLookAndFeel.h"
 #include "UIAnimation.h"
 #include <algorithm>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <vector>
@@ -46,6 +49,10 @@ public:
     static constexpr int kHeaderHeight = 25;
     static constexpr int kHeaderGap = 5; // extra breathing room above every header but the first
     static constexpr int kItemHeight = 32;
+
+    // The "?" help button sharing the collapse-all strip's row — see getHelpButtonBounds().
+    static constexpr int kHelpButtonSize = 18;
+    static constexpr int kHelpButtonMargin = 6;
 
     /** Inclusive [start, start+length) range of a case-insensitive query hit inside a label. */
     struct HighlightSpan {
@@ -100,6 +107,11 @@ public:
         if (vblankUpdater.has_value())
             collapseAnim.stop(*vblankUpdater);
         verticalScrollBar.removeListener(this);
+        // helpCallOutBox_ holds a non-owning reference to *helpPopup_ (see the help-popover
+        // section below) — end its modal state before either member starts tearing down, purely
+        // defensive (juce::Component's own destructor already detaches from any modal manager).
+        if (helpCallOutBox_)
+            helpCallOutBox_->exitModalState(0);
     }
 
     // -------------------------------------------------------------------------
@@ -343,6 +355,13 @@ public:
      *  available, which keeps headless tests and every non-singleton module unaffected. */
     std::function<bool(const juce::String&)> isModuleAvailable;
 
+    /** ShortcutManager whose LIVE bindings back the "Key shortcuts" section of the help popover
+     *  (see showHelpPopover() / createHelpPopupForTest()) — read-only, the sidebar never rebinds
+     *  anything. Optional: null (the default — every headless test, and any owner that has not
+     *  wired one yet) falls back to each curated shortcut's shipped default binding, via
+     *  shortcutHintFor's own null-manager contract. */
+    void setShortcutManager(const ShortcutManager* manager) noexcept { shortcutManager = manager; }
+
     /** True when the row at `index` is a draggable row that can currently be added. Snippet rows are
      *  draggable but never gated — the predicate only ever describes module types. */
     bool isEntryEnabled(int index) const {
@@ -373,7 +392,7 @@ public:
             return "Generates audio waveforms (sine, saw, square, triangle). Switch Poly on to run "
                    "8 voices driven by a Poly MIDI pitch fan.";
         if (moduleName.equalsIgnoreCase("Wavetable"))
-            return "Scans through 3D wavetables — six built-ins or load your own file.";
+            return "Scans through 3D wavetables - six built-ins or load your own file.";
         if (moduleName.equalsIgnoreCase("Noise"))
             return "Generates noise (white, pink, brown).";
         if (moduleName.equalsIgnoreCase("Sampler"))
@@ -389,7 +408,7 @@ public:
         if (moduleName.equalsIgnoreCase("Poly MIDI"))
             return "Converts MIDI into 8 voices of pitch and gate CV. Patch Poly Out to an "
                    "Oscillator's Pitch and an ADSR's Gate, and switch Poly on for every module in "
-                   "the chain (Oscillator, ADSR, Filter, VCA) — with Poly off, only one voice sounds.";
+                   "the chain (Oscillator, ADSR, Filter, VCA) - with Poly off, only one voice sounds.";
         if (moduleName.equalsIgnoreCase("External MIDI"))
             return "Routes external MIDI device input into the patch graph.";
         if (moduleName.equalsIgnoreCase("ADSR"))
@@ -399,7 +418,7 @@ public:
         if (moduleName.equalsIgnoreCase("Envelope Follower"))
             return "Tracks an audio signal's amplitude and outputs it as modulation CV.";
         if (moduleName.equalsIgnoreCase("VCA"))
-            return "Voltage-controlled amplifier — controls signal amplitude via CV. Switch Poly on "
+            return "Voltage-controlled amplifier - controls signal amplitude via CV. Switch Poly on "
                    "to gain-control 8 voices and sum them to stereo.";
         if (moduleName.equalsIgnoreCase("Filter"))
             return "Multi-mode resonant filter (low-pass, high-pass, band-pass). Switch Poly on to "
@@ -415,7 +434,7 @@ public:
         if (moduleName.equalsIgnoreCase("Distortion"))
             return "Waveshaping distortion from soft saturation to hard clipping.";
         if (moduleName.equalsIgnoreCase("Ring Modulator"))
-            return "Oversampled diode-ring modulator — metallic, bell-like sum and difference tones.";
+            return "Oversampled diode-ring modulator - metallic, bell-like sum and difference tones.";
         if (moduleName.equalsIgnoreCase("Bitcrusher"))
             return "For Lo-Fi, sample-rate reduction, and retro digital grit.";
         if (moduleName.equalsIgnoreCase("Pitch Shifter"))
@@ -429,7 +448,7 @@ public:
         if (moduleName.equalsIgnoreCase("Limiter"))
             return "Brickwall limiter that prevents the signal from exceeding 0 dBFS.";
         if (moduleName.equalsIgnoreCase("Macros"))
-            return "Bank of assignable macro knobs — one knob drives many parameters at once.";
+            return "Bank of assignable macro knobs - one knob drives many parameters at once.";
         if (moduleName.equalsIgnoreCase("Sample & Hold"))
             return "Latches a source value on each clock edge for stepped random CV.";
         if (moduleName.equalsIgnoreCase("Voice Mixer"))
@@ -440,7 +459,7 @@ public:
             return "Emits a gate while the Signal is above Threshold, plus the inverted gate. Slice "
                    "an LFO, a kick, or any CV into a pulse.";
         if (moduleName.equalsIgnoreCase("Audio Input"))
-            return "Audio from the input device — one jack per input channel. Only one per patch.";
+            return "Audio from the input device - one jack per input channel. Only one per patch.";
         if (moduleName.equalsIgnoreCase("Audio Output"))
             return "Sends the patch to the output device. Only one per patch.";
         // Generic fallback for any unrecognised module name.
@@ -449,14 +468,14 @@ public:
 
     /** Tooltip for a saved snippet row. */
     static juce::String snippetDescription(const juce::String& name, int moduleCount) {
-        return "Snippet \"" + name + "\" — " + juce::String(moduleCount) +
+        return "Snippet \"" + name + "\" - " + juce::String(moduleCount) +
                (moduleCount == 1 ? " module. " : " modules. ") + "Drag onto the canvas to insert the whole group.";
     }
 
     /** Tooltip for a scanned plugin row. */
     static juce::String pluginDescription(const juce::String& name, const juce::String& format) {
         return name + " (" + format +
-               ") — a plugin installed on this machine. Drag it onto the canvas, or click "
+               ") - a plugin installed on this machine. Drag it onto the canvas, or click "
                "to drop it in the middle.";
     }
 
@@ -646,6 +665,7 @@ public:
     void resized() override {
         searchEditor.setBounds(8, 4, juce::jmax(0, getWidth() - 16), kSearchHeight - 8);
         updateScrollBar();
+        reclampFloatingHelpPopover();
     }
 
     void lookAndFeelChanged() override {
@@ -828,15 +848,33 @@ public:
         }
 
         // ---- Pinned chrome: the search field is a child TextEditor in the top 32 px; the
-        // collapse-all strip is drawn here so scrolled rows cannot show through it. ----
+        // collapse-all strip (plus the "?" help button sharing its row) is drawn here so scrolled
+        // rows cannot show through it. ----
         {
             const bool allCollapsed = areAllSectionsCollapsed();
             g.setColour(bgColour);
             g.fillRect(0, kSearchHeight, getWidth(), kTopStripHeight);
+
+            // "?" help button, left of the COLLAPSE ALL / EXPAND ALL label — paint() and the mouse
+            // handlers share getHelpButtonBounds() so the drawn button and the clickable button can
+            // never drift apart (the same reason cable paint/hit-test share one enumeration
+            // elsewhere in this app — see GraphEditor::buildVisibleCables).
+            const auto helpBoundsInt = getHelpButtonBounds();
+            const auto helpBoundsF = helpBoundsInt.toFloat();
+            if (helpButtonHovered) {
+                g.setColour(accentColour.withAlpha(0.16f));
+                g.fillEllipse(helpBoundsF);
+            }
+            g.setColour(helpButtonHovered ? accentColour : mutedColour);
+            g.drawEllipse(helpBoundsF.reduced(0.5f), 1.0f);
+            g.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
+            g.drawText("?", helpBoundsInt, juce::Justification::centred);
+
             g.setColour(topStripHovered ? accentColour : mutedColour);
             g.setFont(juce::Font(juce::FontOptions(11.0f)));
-            g.drawText(allCollapsed ? "EXPAND ALL" : "COLLAPSE ALL", 10, kSearchHeight + 2, contentWidth - 20,
-                       kTopStripHeight - 4, juce::Justification::centredRight);
+            g.drawText(allCollapsed ? "EXPAND ALL" : "COLLAPSE ALL", 10 + kHelpButtonSize + kHelpButtonMargin,
+                       kSearchHeight + 2, contentWidth - 20 - kHelpButtonSize - kHelpButtonMargin, kTopStripHeight - 4,
+                       juce::Justification::centredRight);
         }
     }
 
@@ -846,19 +884,26 @@ public:
 
     void mouseMove(const juce::MouseEvent& e) override {
         const bool wasTopStripHovered = topStripHovered;
+        const bool wasHelpButtonHovered = helpButtonHovered;
         topStripHovered = isInTopStrip(e.y);
+        // The help button shares the strip's row, so its own hover is a sub-check within it —
+        // shares getHelpButtonBounds() with paint() and mouseDown() (see that method's comment).
+        helpButtonHovered = topStripHovered && getHelpButtonBounds().contains(e.getPosition());
 
         const int entryUnderMouse = getEntryIndexAtComponentY(e.y);
         // Only interactive rows can be hovered; headers and hints clamp to -1.
         const int newIndex = isInteractiveEntry(entryUnderMouse) ? entryUnderMouse : -1;
 
-        if (newIndex != hoveredIndex || topStripHovered != wasTopStripHovered) {
+        if (newIndex != hoveredIndex || topStripHovered != wasTopStripHovered ||
+            helpButtonHovered != wasHelpButtonHovered) {
             hoveredIndex = newIndex;
 
             // Update tooltip: the shared TooltipWindow (owned by MainComponent) reads
             // this component's tooltip string on each hover. Setting it here on hover
             // change means each draggable row surfaces its per-module description.
-            if (topStripHovered) {
+            if (helpButtonHovered) {
+                setTooltip("Open a quick guide to using the module library.");
+            } else if (topStripHovered) {
                 setTooltip("Collapse or expand every category in the library.");
             } else if (hoveredIndex >= 0) {
                 setTooltip(tooltipForEntry(hoveredIndex));
@@ -881,9 +926,10 @@ public:
     }
 
     void mouseExit(const juce::MouseEvent&) override {
-        if (hoveredIndex != -1 || topStripHovered) {
+        if (hoveredIndex != -1 || topStripHovered || helpButtonHovered) {
             hoveredIndex = -1;
             topStripHovered = false;
+            helpButtonHovered = false;
             setTooltip({});
             setMouseCursor(juce::MouseCursor::NormalCursor);
             repaint();
@@ -894,6 +940,10 @@ public:
         pressedIndex = -1;
 
         if (isInTopStrip(e.y)) {
+            if (getHelpButtonBounds().contains(e.getPosition())) {
+                showHelpPopover();
+                return;
+            }
             toggleAllSections();
             return;
         }
@@ -920,13 +970,18 @@ public:
         // Click-activated rows (the scan command, and plugin rows, which support BOTH click-to-add
         // and drag-to-place) defer to mouseUp/mouseDrag. Module and snippet rows keep starting their
         // drag on mouse-down, which is what every existing drag test drives.
+        // TRUE right button, deliberately not isPopupMenu(): on macOS JUCE defines
+        // popupMenuClickModifier as (rightButtonModifier | ctrlModifier), so isPopupMenu() is also
+        // true for Ctrl+LEFT-click — and Ctrl is the insert-between drag modifier. Testing
+        // isPopupMenu() here meant a Ctrl-held press on a library row never started a drag at all,
+        // so Ctrl+drag-from-library could not reach the canvas. Right-click still suppresses drags.
         if (entry.kind == RowKind::Action || entry.kind == RowKind::Plugin) {
-            if (!e.mods.isPopupMenu())
+            if (!pressSuppressesRowDrag(e.mods))
                 pressedIndex = index;
             return;
         }
 
-        if (entry.kind == RowKind::Snippet && e.mods.isPopupMenu()) {
+        if (entry.kind == RowKind::Snippet && pressSuppressesRowDrag(e.mods)) {
             const auto name = entry.text;
             juce::PopupMenu m;
             m.addItem("Delete Snippet", [this, name] {
@@ -937,7 +992,7 @@ public:
             return;
         }
 
-        if (e.mods.isPopupMenu())
+        if (pressSuppressesRowDrag(e.mods))
             return;
 
         // An unavailable row must not start a drag at all — accepting one and then dropping it on
@@ -981,6 +1036,16 @@ public:
     /** Names of the module TYPES the library offers — i.e. every row that maps to a factory entry.
      *  Filtered on RowKind::Module rather than "not a header": the sidebar also carries snippet rows
      *  and the "No snippets yet" placeholder, and neither is a module type callers can instantiate. */
+    /** True when a press on a row must NOT start (or activate) a drag — a context-menu press.
+     *
+     *  TRUE right button only, deliberately not isPopupMenu(): on macOS JUCE defines
+     *  popupMenuClickModifier as (rightButtonModifier | ctrlModifier), so isPopupMenu() is also true
+     *  for Ctrl+LEFT-click. Ctrl is the insert-between drag modifier, so testing isPopupMenu() here
+     *  meant a Ctrl-held press on a library row never started a drag and Ctrl+drag-from-library
+     *  could not reach the canvas at all. Extracted so the rule is testable without a live
+     *  DragAndDropContainer. */
+    static bool pressSuppressesRowDrag(const juce::ModifierKeys& mods) { return mods.isRightButtonDown(); }
+
     juce::StringArray getDraggableModuleNames() const {
         juce::StringArray names;
         for (const auto& entry : entries)
@@ -1056,7 +1121,199 @@ public:
         return getEntryIndexAt(y + scrollOffset);
     }
 
+    /** Bounds (component space) of the small "?" help button on the collapse-all strip, left of
+     *  the COLLAPSE ALL / EXPAND ALL label. paint() and the mouse handlers share this one rect so
+     *  the drawn button and the clickable button can never drift apart. */
+    static juce::Rectangle<int> getHelpButtonBounds() noexcept {
+        return {kHelpButtonMargin, kSearchHeight + (kTopStripHeight - kHelpButtonSize) / 2, kHelpButtonSize,
+                kHelpButtonSize};
+    }
+
+    bool isHelpButtonHoveredForTest() const noexcept { return helpButtonHovered; }
+
+    // -------------------------------------------------------------------------
+    // Help popover pin/float test seams (round 2) — see the class comment on
+    // synth::ui::ModuleLibraryHelpPopup for why the CallOutBox/floating split is implemented the
+    // way it is. Every seam below is safe to call on a plain ModuleLibraryComponent EXCEPT where
+    // noted: pinning never launches a real CallOutBox, only UN-pinning (or opening while unpinned)
+    // does, which is why those two are reached through the launchHelpCallOutBox() virtual instead.
+    // -------------------------------------------------------------------------
+
+    /** Returns the persistent help popup content, creating it on first use — the same object
+     *  showHelpPopover() shows, whichever host it currently lives in (or none, before the first
+     *  open). Never launches a juce::CallOutBox or creates a floating window by itself. */
+    synth::ui::ModuleLibraryHelpPopup* createHelpPopupForTest() {
+        ensureHelpPopupCreated();
+        return helpPopup_.get();
+    }
+
+    /** Re-generates the "Key shortcuts" section against the currently-wired ShortcutManager,
+     *  exactly as showHelpPopover() does on every real open — see
+     *  ModuleLibraryHelpPopup::refreshShortcutSection for why a persistent instance needs this. */
+    void refreshHelpPopoverForTest() {
+        if (helpPopup_)
+            helpPopup_->refreshShortcutSection(shortcutManager);
+    }
+
+    bool isHelpPopoverPinnedForTest() const noexcept { return helpPopup_ && helpPopup_->isPinned(); }
+
+    /** Drives the SAME pin transition the popover's own pin icon requests. Pinning itself never
+     *  constructs a juce::CallOutBox (only un-pinning does, via launchHelpCallOutBox()), so this
+     *  is safe to call with `true` on a plain ModuleLibraryComponent in a headless test; calling
+     *  it with `false` needs launchHelpCallOutBox() stubbed first (see
+     *  RecordingCallOutBoxModuleLibraryComponent in ModuleLibraryHelpPopupTests.cpp). */
+    void setHelpPopoverPinnedForTest(bool pinned) { setHelpPopoverPinned(pinned); }
+
+    /** Drives the SAME close path the popover's own close (X) requests. Never touches
+     *  launchHelpCallOutBox() regardless of prior pin state, so always safe headlessly. */
+    void closeHelpPopoverForTest() { closeHelpPopover(); }
+
+protected:
+    /** Ensures the persistent popup exists, refreshes its live-bound content, and shows it through
+     *  whichever host its current pin state calls for. This is the ONE entry point mouseDown()
+     *  routes the help button's click through; it never constructs a juce::CallOutBox directly
+     *  (see launchHelpCallOutBox() below), so overriding just that leaf lets a test exercise this
+     *  method's real pin-aware dispatch without ever creating a real top-level window — the same
+     *  "protected virtual leaf" seam idiom docs/timeline_panel_core.md documents for
+     *  TimelineRulerComponent::openMarkerContextMenu. */
+    virtual void showHelpPopover() {
+        ensureHelpPopupCreated();
+        helpPopup_->refreshShortcutSection(shortcutManager);
+        if (helpPopup_->isPinned()) {
+            helpPopup_->setVisible(true);
+            helpPopup_->toFront(true);
+            return;
+        }
+        launchHelpCallOutBox();
+    }
+
+    /** Constructs the actual juce::CallOutBox around the persistent popup — the one real
+     *  top-level-window-creating leaf in this class (see the class comment on
+     *  synth::ui::ModuleLibraryHelpPopup for why launchAsynchronously is deliberately NOT used
+     *  here). A test overrides just this to stub the window while leaving showHelpPopover()'s and
+     *  setHelpPopoverPinned()'s real dispatch/re-hosting logic intact. */
+    virtual void launchHelpCallOutBox() {
+        helpCallOutBox_ =
+            std::make_unique<juce::CallOutBox>(*helpPopup_, localAreaToGlobal(getHelpButtonBounds()), nullptr);
+        helpCallOutBox_->setVisible(true);
+        // deleteWhenDismissed = false: an outside click / Esc ends modal state and hides the box
+        // (CallOutBox::inputAttemptWhenModal()) but never deletes it or its content, which is what
+        // lets a later pin click safely reparent *helpPopup_ instead of losing it.
+        helpCallOutBox_->enterModalState(true, nullptr, false);
+    }
+
 private:
+    void ensureHelpPopupCreated() {
+        if (helpPopup_)
+            return;
+        helpPopup_ = std::make_unique<synth::ui::ModuleLibraryHelpPopup>(shortcutManager);
+        helpPopup_->onPinToggleRequested = [this] { setHelpPopoverPinned(!helpPopup_->isPinned()); };
+        helpPopup_->onCloseRequested = [this] { closeHelpPopover(); };
+    }
+
+    /** The ancestor a pinned popup floats in: walked all the way to the root of whatever window
+     *  this component is currently inside, so the popup can extend beyond the sidebar's own narrow
+     *  bounds over the canvas ("owned by the library/main UI", never a new desktop window). Falls
+     *  back to `from` itself when there is no parent yet (every headless test, and the brief window
+     *  before this component is added to the real app) — degraded but harmless, since nothing
+     *  about the transition itself depends on which component ends up hosting it. */
+    static juce::Component* floatingHelpHostFor(juce::Component& from) {
+        juce::Component* top = &from;
+        while (top->getParentComponent() != nullptr)
+            top = top->getParentComponent();
+        return top;
+    }
+
+    /** Clamps `desired` so `popup`'s ENTIRE rect — header included, since that is what sits at the
+     *  popup's own local (0,0) — stays within `host`'s local bounds. This is the fix for a real
+     *  bug: the previous pin transition placed the popup at "wherever the callout happened to be
+     *  on screen", and the callout is anchored on the help button, which lives in the sidebar's
+     *  OWN topmost strip — very close to the top of the whole window. Any small mismatch between
+     *  the callout's screen position and `host`'s (a border inset, a display-scaling rounding, a
+     *  host whose own top-left is not screen (0,0)) landed the popup with a slightly negative Y,
+     *  which pushes the header — drawn at the popup's own y≈kOuterPadding — above y=0 of the host
+     *  and off screen entirely, while the viewport content below it (larger local y) stayed
+     *  visible and scrollable. That exactly matches the reported symptom: header gone, content
+     *  starting mid-sentence, nothing left to click for move/close. Never trust an unclamped
+     *  position for a component the user must always be able to reach again. */
+    static juce::Point<int> clampToHost(const juce::Component& host, const juce::Component& popup,
+                                        juce::Point<int> desired) {
+        const auto hostBounds = host.getLocalBounds();
+        const int maxX = juce::jmax(0, hostBounds.getWidth() - popup.getWidth());
+        const int maxY = juce::jmax(0, hostBounds.getHeight() - popup.getHeight());
+        return {juce::jlimit(0, maxX, desired.x), juce::jlimit(0, maxY, desired.y)};
+    }
+
+    /** Where a freshly-pinned popup appears: just to the right of the library sidebar, level with
+     *  its top — a sensible, predictable spot a first-time user is already looking near, clear of
+     *  any toolbar above the sidebar — rather than reusing the callout's screen position (see
+     *  clampToHost() for why that was fragile). Always clamped, so this is safe even when the host
+     *  is smaller than the sidebar's own width plus the popup (the popup then simply pins to the
+     *  host's top-left, which keeps the header reachable even though it can no longer sit "beside"
+     *  the sidebar). */
+    juce::Point<int> defaultFloatingPosition(juce::Component& host) const {
+        const auto sidebarInHost = host.getLocalArea(this, getLocalBounds());
+        constexpr int kMargin = 12;
+        const juce::Point<int> desired(sidebarInHost.getRight() + kMargin, juce::jmax(kMargin, sidebarInHost.getY()));
+        return clampToHost(host, *helpPopup_, desired);
+    }
+
+    /** Keeps a pinned popover's header reachable across a host resize (the sidebar resizing is the
+     *  best proxy this component has for "the window/host may have changed size" — see resized()).
+     *  No-op unless the popup exists, is pinned, and is currently parented somewhere. */
+    void reclampFloatingHelpPopover() {
+        if (!helpPopup_ || !helpPopup_->isPinned())
+            return;
+        auto* parent = helpPopup_->getParentComponent();
+        if (!parent)
+            return;
+        helpPopup_->setTopLeftPosition(clampToHost(*parent, *helpPopup_, helpPopup_->getPosition()));
+    }
+
+    /** Re-hosts the SAME persistent popup between a juce::CallOutBox (unpinned) and a plain,
+     *  non-modal floating child of floatingHelpHostFor() (pinned) — see the class comment on
+     *  synth::ui::ModuleLibraryHelpPopup for why this transplant is only safe because
+     *  launchAsynchronously is never used to show it. No-op if the popup does not exist yet or is
+     *  already in the requested state. */
+    void setHelpPopoverPinned(bool wantPinned) {
+        if (!helpPopup_ || wantPinned == helpPopup_->isPinned())
+            return;
+
+        helpPopup_->setPinnedForPaint(wantPinned);
+
+        if (wantPinned) {
+            if (helpCallOutBox_) {
+                helpCallOutBox_->exitModalState(0);
+                helpCallOutBox_->setVisible(false);
+                helpCallOutBox_.reset(); // does NOT delete *helpPopup_ — see the class comment
+            }
+            auto* host = floatingHelpHostFor(*this);
+            host->addAndMakeVisible(*helpPopup_); // auto-detaches from any previous parent
+            helpPopup_->setTopLeftPosition(defaultFloatingPosition(*host));
+            helpPopup_->setVisible(true);
+            helpPopup_->toFront(true);
+        } else {
+            launchHelpCallOutBox(); // its ctor's addAndMakeVisible detaches the popup from the host
+        }
+    }
+
+    /** Hides and detaches the popup from whichever host currently shows it, and resets pin state
+     *  so the next "?" click (or setHelpPopoverPinned(true)) starts clean. The popup object itself
+     *  survives — closing is not the same as never having opened it. */
+    void closeHelpPopover() {
+        if (!helpPopup_)
+            return;
+        if (helpCallOutBox_) {
+            helpCallOutBox_->exitModalState(0);
+            helpCallOutBox_->setVisible(false);
+            helpCallOutBox_.reset();
+        } else if (auto* parent = helpPopup_->getParentComponent()) {
+            parent->removeChildComponent(helpPopup_.get());
+        }
+        helpPopup_->setVisible(false);
+        helpPopup_->setPinnedForPaint(false);
+    }
+
     float targetProgressFor(const juce::String& header) const { return isSectionCollapsed(header) ? 1.0f : 0.0f; }
 
     void snapSectionProgressToTargets() {
@@ -1332,7 +1589,10 @@ private:
         g.fillPath(p);
     }
 
-    // Map a category header string to its Icon enum value.
+public:
+    /** Maps a category header string to its Icon enum value. Public (rather than the private
+     *  section every other static paint helper here lives in) so IconLibrary/ModuleLibrary tests
+     *  can assert the mapping directly instead of rendering a row and inspecting pixels. */
     static synth::theme::Icon categoryIconForHeader(const juce::String& header) {
         if (header.equalsIgnoreCase(kSnippetsHeader) || header.equalsIgnoreCase(kPluginsHeader))
             return synth::theme::Icon::CatUtility;
@@ -1350,10 +1610,15 @@ private:
             return synth::theme::Icon::CatTimeFX;
         if (header.equalsIgnoreCase("Dynamics"))
             return synth::theme::Icon::CatDynamics;
+        // Audio Input / Audio Output's singleton section — previously fell back to CatUtility,
+        // which gave the graph's actual source/sink no visual identity of its own.
+        if (header.equalsIgnoreCase("I/O"))
+            return synth::theme::Icon::CatIO;
         // "Utility" and any unrecognised headers fall back to CatUtility.
         return synth::theme::Icon::CatUtility;
     }
 
+private:
     /** Rebuilds the flat entry list: the Snippets section first (it holds what the user just made
      *  and reaches for most), then the fixed module catalogue. */
     void rebuildEntries() {
@@ -1475,9 +1740,11 @@ private:
     juce::Array<synth::SnippetInfo> snippets;
     std::vector<synth::PluginIdentity> plugins;
     std::set<juce::String> collapsedSections;
-    int hoveredIndex = -1;        // -1 = no hover; updated on mouseMove/mouseExit only
-    int pressedIndex = -1;        // row whose click is pending a mouseUp (Action / Plugin rows only)
-    bool topStripHovered = false; // hover state for the collapse-all chrome
+    int hoveredIndex = -1;          // -1 = no hover; updated on mouseMove/mouseExit only
+    int pressedIndex = -1;          // row whose click is pending a mouseUp (Action / Plugin rows only)
+    bool topStripHovered = false;   // hover state for the collapse-all chrome
+    bool helpButtonHovered = false; // hover state for the "?" help button sharing that row
+    const ShortcutManager* shortcutManager = nullptr; // read-only; see setShortcutManager()
 
     /** Pixels of movement that turn a plugin-row press into a drag rather than a click. */
     static constexpr int kDragStartThresholdPx = 4;
@@ -1494,4 +1761,12 @@ private:
     std::map<juce::String, float> sectionProgress;
     std::optional<juce::VBlankAnimatorUpdater> vblankUpdater;
     synth::ui::AnimationDriver collapseAnim;
+
+    // Help popover (round 2: pin/float) — helpPopup_ is the ONE persistent content instance a pin
+    // click re-hosts; helpCallOutBox_ exists only while it is shown unpinned. Declared in THIS
+    // order (helpPopup_ first) so automatic member teardown destroys helpCallOutBox_ FIRST
+    // (reverse declaration order) — it holds a non-owning `Component&` to *helpPopup_, so tearing
+    // it down after would leave a dangling reference for the instant before its own destructor ran.
+    std::unique_ptr<synth::ui::ModuleLibraryHelpPopup> helpPopup_;
+    std::unique_ptr<juce::CallOutBox> helpCallOutBox_;
 };

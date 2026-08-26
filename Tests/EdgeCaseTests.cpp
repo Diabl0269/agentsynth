@@ -125,13 +125,13 @@ TEST(EdgeCaseTests, OscillatorExtremeParameters) {
     osc.prepareToPlay(44100.0, 512);
 
     // Set extreme octave, coarse, fine values
-    if (auto octaveParam = osc.getParameters()[1]) {
+    if (auto octaveParam = findParameterByID(&osc, "octave")) {
         octaveParam->setValueNotifyingHost(-4.0f); // Extreme low
     }
-    if (auto coarseParam = osc.getParameters()[2]) {
+    if (auto coarseParam = findParameterByID(&osc, "coarse")) {
         coarseParam->setValueNotifyingHost(-12.0f / 12.0f); // Normalize to [0,1]
     }
-    if (auto fineParam = osc.getParameters()[3]) {
+    if (auto fineParam = findParameterByID(&osc, "fine")) {
         fineParam->setValueNotifyingHost(-100.0f / 100.0f); // Normalize to [0,1]
     }
 
@@ -157,7 +157,7 @@ TEST(EdgeCaseTests, FilterMaxResonance) {
     filter.prepareToPlay(44100.0, 512);
 
     // Set resonance to maximum
-    if (auto resonanceParam = filter.getParameters()[2]) {
+    if (auto resonanceParam = findParameterByID(&filter, "resonance")) {
         resonanceParam->setValueNotifyingHost(1.0f);
     }
 
@@ -193,7 +193,7 @@ TEST(EdgeCaseTests, OscillatorRapidParameterChanges) {
     juce::MidiBuffer midi;
 
     // Change waveform parameter rapidly for 100 blocks
-    auto waveformParam = osc.getParameters()[4]; // Assuming waveform is the 5th parameter
+    auto waveformParam = findParameterByID(&osc, "waveform");
 
     for (int block = 0; block < 100; ++block) {
         // Cycle through waveforms
@@ -255,7 +255,7 @@ TEST(EdgeCaseTests, OscillatorAllWaveforms) {
     juce::AudioBuffer<float> buffer(2, 512);
     juce::MidiBuffer midi;
 
-    auto waveformParam = osc.getParameters()[4]; // Assuming waveform is parameter index 4
+    auto waveformParam = findParameterByID(&osc, "waveform");
 
     // Test each waveform (0-3: Sine, Saw, Square, Triangle)
     for (int wf = 0; wf < 4; ++wf) {

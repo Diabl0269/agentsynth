@@ -13,14 +13,15 @@ protected:
 };
 
 TEST_F(DistortionSweep, MixZeroSineVerification) {
-    auto params = module->getParameters();
-    ASSERT_GE(params.size(), 5) << "Module has only " << params.size() << " parameters, expected at least 5";
+    ASSERT_GE(module->getParameters().size(), 5)
+        << "Module has only " << module->getParameters().size() << " parameters, expected at least 5";
 
-    // Parameters: 0: Bypassed, 1: Drive, 2: Mix, 3: Type, 4: Oversampling
-    auto* driveP = dynamic_cast<juce::AudioParameterFloat*>(params[1]);
-    auto* mixP = dynamic_cast<juce::AudioParameterFloat*>(params[2]);
-    auto* typeP = dynamic_cast<juce::AudioParameterChoice*>(params[3]);
-    auto* osP = dynamic_cast<juce::AudioParameterChoice*>(params[4]);
+    // By ID, not index — ModuleBase's own parameters (bypassed, and dualIO on a stereo-shaped
+    // module) sit ahead of the module's, so a positional lookup silently resolves to the wrong one.
+    auto* driveP = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(module.get(), "drive"));
+    auto* mixP = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(module.get(), "mix"));
+    auto* typeP = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(module.get(), "type"));
+    auto* osP = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(module.get(), "oversampling"));
 
     ASSERT_NE(driveP, nullptr) << "Drive param is null";
     ASSERT_NE(mixP, nullptr) << "Mix param is null";
@@ -52,10 +53,12 @@ TEST_F(DistortionSweep, MixZeroSineVerification) {
 }
 
 TEST_F(DistortionSweep, DistortionTypeDistorts) {
-    auto params = module->getParameters();
-    auto* typeP = dynamic_cast<juce::AudioParameterChoice*>(params[3]);
-    auto* mixP = dynamic_cast<juce::AudioParameterFloat*>(params[2]);
-    auto* driveP = dynamic_cast<juce::AudioParameterFloat*>(params[1]);
+    auto* typeP = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(module.get(), "type"));
+    auto* mixP = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(module.get(), "mix"));
+    auto* driveP = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(module.get(), "drive"));
+    ASSERT_NE(typeP, nullptr);
+    ASSERT_NE(mixP, nullptr);
+    ASSERT_NE(driveP, nullptr);
 
     mixP->setValueNotifyingHost(1.0f); // fully wet
     driveP->setValueNotifyingHost(10.0f);

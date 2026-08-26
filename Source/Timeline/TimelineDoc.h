@@ -35,6 +35,7 @@ struct TrackIdTag {};
 struct ClipIdTag {};
 struct LaneIdTag {};
 struct NoteIdTag {};
+struct MarkerIdTag {};
 
 } // namespace detail
 
@@ -42,6 +43,7 @@ using TrackId = detail::TimelineId<detail::TrackIdTag>;
 using ClipId = detail::TimelineId<detail::ClipIdTag>;
 using LaneId = detail::TimelineId<detail::LaneIdTag>;
 using NoteId = detail::TimelineId<detail::NoteIdTag>;
+using MarkerId = detail::TimelineId<detail::MarkerIdTag>;
 
 // Serialised as an int, so these numbers are format. Values 3..15 are reserved for future
 // kinds; a file carrying one is rejected by fromVar rather than coerced into a kind this
@@ -52,10 +54,10 @@ enum class TrackKind : int {
     Automation = 2, // reserved: lanes may live on their own track row later
 };
 
-static_assert(static_cast<int>(TrackKind::Midi) == 0, "TrackKind is serialised as an int — renumbering breaks files");
-static_assert(static_cast<int>(TrackKind::Audio) == 1, "TrackKind is serialised as an int — renumbering breaks files");
+static_assert(static_cast<int>(TrackKind::Midi) == 0, "TrackKind is serialised as an int - renumbering breaks files");
+static_assert(static_cast<int>(TrackKind::Audio) == 1, "TrackKind is serialised as an int - renumbering breaks files");
 static_assert(static_cast<int>(TrackKind::Automation) == 2,
-              "TrackKind is serialised as an int — renumbering breaks files");
+              "TrackKind is serialised as an int - renumbering breaks files");
 
 // Interpolation from a breakpoint to the next one. Serialised as an int (same contract as
 // TrackKind: the numbers are format).
@@ -66,11 +68,11 @@ enum class BreakpointCurve : int {
 };
 
 static_assert(static_cast<int>(BreakpointCurve::Hold) == 0,
-              "BreakpointCurve is serialised as an int — renumbering breaks files");
+              "BreakpointCurve is serialised as an int - renumbering breaks files");
 static_assert(static_cast<int>(BreakpointCurve::Linear) == 1,
-              "BreakpointCurve is serialised as an int — renumbering breaks files");
+              "BreakpointCurve is serialised as an int - renumbering breaks files");
 static_assert(static_cast<int>(BreakpointCurve::Bezier) == 2,
-              "BreakpointCurve is serialised as an int — renumbering breaks files");
+              "BreakpointCurve is serialised as an int - renumbering breaks files");
 
 // Per-lane automation record mode. Serialised as an int (same contract as TrackKind and
 // BreakpointCurve: the numbers are format), and flattened into TimelineSnapshot::LaneInfo so the
@@ -96,15 +98,15 @@ enum class LaneRecordMode : int {
 };
 
 static_assert(static_cast<int>(LaneRecordMode::Off) == 0,
-              "LaneRecordMode is serialised as an int — renumbering breaks files");
+              "LaneRecordMode is serialised as an int - renumbering breaks files");
 static_assert(static_cast<int>(LaneRecordMode::Read) == 1,
-              "LaneRecordMode is serialised as an int — renumbering breaks files");
+              "LaneRecordMode is serialised as an int - renumbering breaks files");
 static_assert(static_cast<int>(LaneRecordMode::Touch) == 2,
-              "LaneRecordMode is serialised as an int — renumbering breaks files");
+              "LaneRecordMode is serialised as an int - renumbering breaks files");
 static_assert(static_cast<int>(LaneRecordMode::Latch) == 3,
-              "LaneRecordMode is serialised as an int — renumbering breaks files");
+              "LaneRecordMode is serialised as an int - renumbering breaks files");
 static_assert(static_cast<int>(LaneRecordMode::Write) == 4,
-              "LaneRecordMode is serialised as an int — renumbering breaks files");
+              "LaneRecordMode is serialised as an int - renumbering breaks files");
 
 // One note inside a clip. startBeat is CLIP-RELATIVE (offset from the clip's own startBeat),
 // so moving a clip moves its notes with it and never rewrites them. `id` is a stable,
@@ -260,8 +262,23 @@ struct Track {
     bool orphaned = false;
 };
 
-// The timeline's message-thread document model: tracks, clips, notes and automation
-// lanes, in beats. Mutable and serialisable, with no GUI or editor dependency.
+// One named position in the arrangement — a cue point the ruler draws a flag for. Deliberately
+// NOT a track: a marker has no clips, no binding and no audible effect, it is a label on the
+// timebase, so it lives on the document rather than in the track list (a "marker track" would
+// otherwise have to be excluded from every place that iterates tracks to make sound).
+//
+// `beat` is absolute (unlike a note's clip-relative start), `text` is free-form and may be empty
+// (a flag with no label is legal), and `colourArgb` is inert display data. Markers stay sorted by
+// (beat, id) — the same rule clips follow, so a ruler paint is a walk rather than a sort.
+struct Marker {
+    MarkerId id;
+    double beat = 0.0;
+    juce::String text;
+    juce::uint32 colourArgb = 0xffE0A33D; // amber; the editor overwrites this from the theme
+};
+
+// The timeline's message-thread document model: tracks, clips, notes, automation
+// lanes and markers, in beats. Mutable and serialisable, with no GUI or editor dependency.
 //
 // Beats are canonical — nothing here stores samples, and tempo/time signature deliberately
 // live on TransportService, not in this document (a tempo map moves in here only when real
@@ -303,6 +320,11 @@ public:
     static constexpr int kMaxNotesPerClip = 16384;
     static constexpr int kMaxLanesPerTrack = 512;
     static constexpr int kMaxBreakpointsPerLane = 16384;
+    static constexpr int kMaxMarkers = 1024;
+    // Longest marker label the model holds. A label is a cue name, not a document: an over-long
+    // one is REJECTED (by the mutation API, by fromVar and by synth::validateTimeline alike),
+    // never truncated — truncating would silently store something other than what was asked for.
+    static constexpr int kMaxMarkerTextLength = 128;
 
     // Upper bound on any id or next-id counter fromVar() accepts, so `id + 1` on the next
     // allocation can never signed-overflow. Generous relative to anything kMaxTracks etc. could
@@ -550,11 +572,34 @@ public:
     // it in recordTimelineChange).
     bool rebindLane(LaneId id, const juce::String& newNodeUuid);
 
+    // -- Markers ---------------------------------------------------------------
+    // Adds a marker at `beat`. Inserted in sorted position; returns an invalid MarkerId on
+    // rejection — a non-finite or negative `beat`, a `text` longer than kMaxMarkerTextLength, or a
+    // doc already at kMaxMarkers. `text` may be EMPTY (an unlabelled flag is legal) and is stored
+    // verbatim: unlike setClipName there is no trim-and-reject, because a marker is identified by
+    // its position, not by its name, so a blank one is still a usable cue point.
+    MarkerId addMarker(double beat, const juce::String& text, juce::uint32 colourArgb);
+    // Removes the marker. The id is retired, never reissued.
+    bool removeMarker(MarkerId id);
+    // Rejects a `text` over kMaxMarkerTextLength; setting the text it already has is a no-op.
+    bool setMarkerText(MarkerId id, const juce::String& text);
+    bool setMarkerColour(MarkerId id, juce::uint32 colourArgb);
+    // Re-seats the marker at its new sorted position. Rejects a non-finite or negative beat;
+    // moving it to where it already is is a no-op.
+    bool moveMarker(MarkerId id, double newBeat);
+
+    // nullptr once the marker is gone. Invalidated by the next mutation, like getTrack's pointer.
+    const Marker* getMarker(MarkerId id) const;
+    const std::vector<Marker>& getMarkers() const noexcept { return markers; }
+
     // -- Document-level --------------------------------------------------------
-    // Drops every track. Id counters are NOT reset — ids stay unique for the doc's lifetime.
-    // No-op (and no notification) on an already-empty doc.
+    // Drops every track AND every marker. Id counters are NOT reset — ids stay unique for the
+    // doc's lifetime. No-op (and no notification) on an already-empty doc.
     void clear();
 
+    // TRACKS only, deliberately: this is what ArrangementContext asks to decide whether there is
+    // an arrangement to describe, and a document holding nothing but cue points has no
+    // arrangement. Markers are chrome on the timebase, not content.
     bool isEmpty() const noexcept { return tracks.empty(); }
 
     // Bumped once per effective mutation. Starts at 0 on a fresh doc; consumers cache it to
@@ -566,6 +611,11 @@ public:
     // Field names are lowerCamelCase; the next-id counters ride along so ids stay stable
     // across save/load. Track::orphaned / AutomationLane::orphaned are NOT written — they are
     // runtime-derived, not part of the document's persistent identity.
+    //
+    // "markers" (and its "nextMarkerId" counter) is an ADDITIVE top-level array: a file written
+    // before markers existed simply has no key and loads with none, and kFormatVersion stays 1.
+    // synth::validateTimeline allow-lists both keys with its own strict per-marker rules — a new
+    // top-level key that gate does not know about is REFUSED, so the two must be extended together.
     juce::var toVar() const;
 
     // All-or-nothing: on ANY malformed field (wrong type, out-of-range value, duplicate id,
@@ -607,13 +657,16 @@ private:
     MidiNote* findNote(NoteId id, Clip** ownerOut = nullptr);
     AutomationLane* findLane(LaneId id, Track** ownerOut = nullptr);
     AutomationLane* findLaneForParam(const juce::String& nodeUuid, const juce::String& paramId);
+    Marker* findMarker(MarkerId id);
 
     std::vector<Track> tracks;
+    std::vector<Marker> markers;
 
     std::int64_t nextTrackId = 1;
     std::int64_t nextClipId = 1;
     std::int64_t nextLaneId = 1;
     std::int64_t nextNoteId = 1;
+    std::int64_t nextMarkerId = 1;
     std::int64_t revision = 0;
 
     juce::ListenerList<Listener> listeners;

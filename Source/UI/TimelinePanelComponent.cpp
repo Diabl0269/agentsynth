@@ -24,8 +24,16 @@ constexpr double kZoomWheelSensitivity = 2.0;
 constexpr double kScrollPixelsPerWheelUnit = 200.0;
 
 constexpr int kSnapComboWidth = 90;
-constexpr int kSnapToggleButtonWidth = 26;
-constexpr int kFollowPlayheadButtonWidth = 26;
+// 30 (was 26): part of the timeline-panel button-size sweep — both buttons are .reduced(2) at
+// their setBounds() call site, so the effective on-screen size grows from 22 to 26 px.
+// Wide enough for the word "Snap" (it used to read "Q" and be 30 px) — see the member's comment in
+// TimelinePanelComponent.h for why the label is the verb and not the key.
+constexpr int kSnapToggleButtonWidth = 46;
+
+// A marker's stem where it crosses the CLIPS, well under the ruler flag's own alpha: it has to
+// locate the marker against the arrangement without competing with the clips for attention.
+constexpr float kMarkerLaneStemAlpha = 0.40f;
+constexpr int kFollowPlayheadButtonWidth = 30;
 constexpr const char* kTimelineSnapPropertyKey = "timelineSnap";
 constexpr const char* kTimelineSnapEnabledPropertyKey = "timelineSnapEnabled";
 constexpr const char* kTimelineFollowPlayheadPropertyKey = "timelineFollowPlayhead";
@@ -44,7 +52,9 @@ constexpr int kAddTrackButtonHeight = 22;
 // Automation strip chrome geometry. Code-only (mirrors the rest of this file's literal
 // fallbacks); the strip's own height comes from the themed Metrics::timelineAutomationStripHeight.
 constexpr int kAutomationStripHeaderHeight = 24;
-constexpr int kAutomationToolButtonWidth = 24;
+// 28 (was 24): timeline-panel button-size sweep — .reduced(2) at the setBounds() call site takes
+// the effective width from 20 to 24 px.
+constexpr int kAutomationToolButtonWidth = 28;
 constexpr int kAutomationRecordModeComboWidth = 90;
 constexpr int kAutomationCloseButtonWidth = 24;
 constexpr int kAutomationToolRadioGroupId = 4200;
@@ -53,7 +63,9 @@ constexpr int kAutomationToolRadioGroupId = 4200;
 // (4300 — distinct from the automation strip's 4200, which is a different set of tools entirely
 // and must not untoggle these).
 constexpr int kEditToolRadioGroupId = 4300;
-constexpr int kEditToolButtonWidth = 24;
+// 28 (was 24): timeline-panel button-size sweep — .reduced(2) at the setBounds() call site takes
+// the effective width from 20 to 24 px.
+constexpr int kEditToolButtonWidth = 28;
 
 // The icon each edit tool's button paints — the SAME glyph synth::ui::makeToolCursor renders the
 // tool's cursor from, so button and cursor can never disagree.
@@ -93,7 +105,7 @@ TimelinePanelComponent::TimelinePanelComponent() {
     addAndMakeVisible(addTrackButton_);
     addTrackButton_.setComponentID("timelineAddTrackButton");
     addTrackButton_.setTooltip("Add a MIDI or Audio track");
-    addTrackButton_.onClick = [this] { showAddTrackMenu(); };
+    addTrackButton_.onClick = [this] { openAddTrackMenu(); };
 
     addAndMakeVisible(trackHeaderViewport_);
     trackHeaderViewport_.setComponentID("timelineTrackHeaderViewport");
@@ -219,6 +231,45 @@ TimelinePanelComponent::TimelinePanelComponent() {
         snapToggleButton_.setToggleState(viewState_.snapEnabled, juce::dontSendNotification);
         ruler_.repaint();
         repaint();
+    };
+    // NOTE AUDITION. The roll emits a pitch + on/off edge and knows nothing about the graph; the
+    // only thing this panel adds is WHICH TRACK — resolved from the edited clip, since the roll's
+    // own callback deliberately carries no clip/track (see PianoRollComponent::onAuditionNote) — and
+    // then it is the host's job (MainComponent) to reach the track's bound Track In node.
+    //
+    // ASYMMETRIC BY DESIGN, and this is the whole correctness argument. A note-ON is disposable: no
+    // host, no doc, roll closed or an unresolvable track all mean silence, which is fine. A note-OFF
+    // is NOT — an audition note is deliberately exempt from every positional flush in
+    // TimelineMidiSourceModule, so a dropped off hangs the note until the node is bypassed. So the
+    // track resolved for the ON is LATCHED, and the matching OFF is routed to that latched track
+    // unconditionally (host/doc null aside). It must not re-resolve, because by the time the off
+    // fires the clip may be deleted, the roll closed, or a DIFFERENT clip open — all three of which
+    // would either drop the off or, worse, send it to the wrong track.
+    //
+    // The latch holds at most one note (the roll sounds one note at a time and always emits its own
+    // off before a retrigger's on — see startAudition), so a plain member is enough; it is cleared on
+    // the off.
+    pianoRoll_.onAuditionNote = [this](int pitch, float velocity01, bool on) {
+        if (trackHeaderHost_ == nullptr || doc_ == nullptr)
+            return;
+        const int velocity = juce::jlimit(1, 127, (int)std::lround(velocity01 * 127.0f));
+
+        if (!on) {
+            // Whatever the ON went to, the OFF follows it. No isOpen() check, no re-resolution.
+            const auto latched = auditionTrackLatch_;
+            auditionTrackLatch_ = {};
+            if (latched.isValid())
+                trackHeaderHost_->auditionTrackNote(latched, pitch, velocity, false);
+            return;
+        }
+
+        if (!pianoRoll_.isOpen())
+            return;
+        const auto* track = doc_->getTrackForClip(pianoRoll_.getClipId());
+        if (track == nullptr)
+            return;
+        auditionTrackLatch_ = track->id;
+        trackHeaderHost_->auditionTrackNote(track->id, pitch, velocity, true);
     };
 
     // Automation strip. All start invisible — resized()/showAutomationLane()/
@@ -348,8 +399,8 @@ void TimelinePanelComponent::refreshShortcutTooltips() {
     }
 
     snapToggleButton_.setTooltip(synth::ui::formatShortcutHint(
-        "Snap to grid on/off",
-        shortcutHintFor(shortcuts_, "timelineSnapToggle", juce::KeyPress('q', juce::ModifierKeys::noModifiers, 0))));
+        "Snap on/off",
+        shortcutHintFor(shortcuts_, "timelineSnapToggle", juce::KeyPress('j', juce::ModifierKeys::noModifiers, 0))));
 
     // "Follow playhead" used to carry no key hint at all — the ONE sibling in this strip that
     // didn't say its own shortcut.
@@ -432,6 +483,9 @@ void TimelinePanelComponent::setTimelineDoc(synth::TimelineDoc* doc) {
     clipLaneArea_.setTimelineDoc(doc_);
     pianoRoll_.setTimelineDoc(doc_);
     automationEditor_.setTimelineDoc(doc_);
+    // The ruler draws (and edits) the doc's MARKERS — see TimelineRulerComponent's class comment
+    // for why it never listens to the doc itself: this panel's timelineChanged() repaints it.
+    ruler_.setTimelineDoc(doc_);
     // A lane id selected against the OLD doc can't mean anything against a new one (a fresh
     // preset/bundle load, or the flag-OFF null-doc case) — close outright rather than trying to
     // re-resolve it.
@@ -445,6 +499,8 @@ void TimelinePanelComponent::setUndoManager(AppUndoManager* undoManager) {
     clipLaneArea_.setUndoManager(undoManager);
     pianoRoll_.setUndoManager(undoManager);
     automationEditor_.setUndoManager(undoManager);
+    // Marker drag/rename/recolour/delete are real edits and belong on the same one undo stack.
+    ruler_.setUndoManager(undoManager);
 }
 
 //==============================================================================
@@ -510,6 +566,10 @@ void TimelinePanelComponent::openPianoRoll(synth::ClipId id) {
     clipLaneArea_.setVisible(false);
     pianoRoll_.setVisible(true);
     pianoRoll_.grabKeyboardFocus();
+    // The lanes region is carved DIFFERENTLY once the roll is open — it reserves a toolbar row above
+    // the ruler (see resized()) — and isOpen() is what that carve-up branches on, so the layout has
+    // to be re-run now rather than waiting for the next resize.
+    resized();
     // The ruler now labels the ROLL's beats (offset by its keys gutter, plus the scale-assist
     // panel's width while THAT is open too — see PianoRollComponent::leftGutterWidth), so the bar
     // numbers above show the edited clip's real timeline position instead of wherever the lanes
@@ -525,6 +585,7 @@ void TimelinePanelComponent::closePianoRoll() {
     pianoRoll_.setVisible(false);
     clipLaneArea_.setVisible(true);
     clipLaneArea_.grabKeyboardFocus();
+    resized(); // the toolbar row goes away and the ruler moves back to the top — same reason as above
     ruler_.setMappingOverride(nullptr, 0); // back to the shared lanes mapping
     playhead_.repaint();                   // the overlay owns its whole rect again
 }
@@ -948,9 +1009,11 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
     // child (JUCE bubbles unhandled keys up the parent chain), so they cover every focus target
     // inside the timeline — track headers, the lanes, the roll (which consumes Q itself).
 
-    // Q = toggle grid magnetism (Shift+Q one-shot quantise lives on the roll, where the notes are).
-    // Shares "timelineSnapToggle" with the roll: one binding, one key, whichever surface has focus.
-    if (matchesAction(key, "timelineSnapToggle", plainKey('q'))) {
+    // J = toggle grid magnetism (Cubase's snap key). Shares "timelineSnapToggle" with the roll: one
+    // binding, one key, whichever surface has focus. Deliberately NOT Q any more — Q is Cubase's
+    // quantise, which is what the roll uses it for, so one letter meant two verbs depending on
+    // which timeline surface happened to have focus.
+    if (matchesAction(key, "timelineSnapToggle", plainKey('j'))) {
         setSnapEnabled(!viewState_.snapEnabled);
         return true;
     }
@@ -969,6 +1032,35 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
     if (matchesAction(key, "timelineFollowPlayheadToggle", plainKey('f'))) {
         setFollowPlayheadEnabled(!isFollowPlayheadEnabled());
         return true;
+    }
+
+    // Option+1 / Option+2 = park the cursor on the left / right loop locator.
+    //
+    // Surface-resolved, not a command: it acts on the timeline's own transport, and there is
+    // nothing for it to do on any other surface. A DEGENERATE or unset span (end <= start, which is
+    // also what "no locators yet" looks like) is a no-op that returns false, so the keystroke stays
+    // available to whatever else might claim it rather than being silently swallowed.
+    //
+    // REACHABILITY, and it is the whole bug these keys shipped with: this method only runs when the
+    // focused component is INSIDE this panel's subtree (JUCE bubbles an unhandled key up the parent
+    // chain), and the only thing under this panel that takes keyboard focus is the clip lane area
+    // (and the roll). Setting locators by dragging the RULER — the obvious way to do it — leaves
+    // focus wherever it was, so the keystroke never reached here at all.
+    // MainComponent::keyPressed forwards these two ids back to this panel as its last act for
+    // exactly that reason; see its `forwardsToTimelinePanel` list.
+    if (transport_ != nullptr) {
+        const juce::ModifierKeys alt{juce::ModifierKeys::altModifier};
+        const bool toStart = matchesAction(key, "timelineJumpToLocator1", juce::KeyPress('1', alt, 0));
+        const bool toEnd = matchesAction(key, "timelineJumpToLocator2", juce::KeyPress('2', alt, 0));
+        if (toStart || toEnd) {
+            const auto snap = transport_->getPositionSnapshot();
+            if (!(snap.loopEndPpq > snap.loopStartPpq))
+                return false;
+            transport_->locateBeat(toStart ? snap.loopStartPpq : snap.loopEndPpq);
+            // The playhead overlay picks the new position up on the panel's next 10 Hz poll; the
+            // ruler needs no repaint (the locators themselves did not move).
+            return true;
+        }
     }
 
     // P = loop the selection. With the roll open the "selection" is the edited clip; otherwise the
@@ -1006,6 +1098,13 @@ void TimelinePanelComponent::setTrackHeaderHost(TrackHeaderHost* host) {
 }
 
 void TimelinePanelComponent::applyAddTrackMenuChoice(int menuId) {
+    // Marker first: it is the one entry that needs no TrackHeaderHost (a marker is document data
+    // with no graph node behind it), so it must not be gated on the host check below.
+    if (menuId == kAddMarkerMenuId) {
+        addMarkerAtPlayhead();
+        return;
+    }
+
     if (trackHeaderHost_ == nullptr)
         return;
 
@@ -1015,10 +1114,48 @@ void TimelinePanelComponent::applyAddTrackMenuChoice(int menuId) {
         trackHeaderHost_->addAudioTrack();
 }
 
-void TimelinePanelComponent::showAddTrackMenu() {
+synth::MarkerId TimelinePanelComponent::addMarkerAtPlayhead() {
+    if (doc_ == nullptr)
+        return {};
+
+    // The transport's CURRENT position, unsnapped: a marker is a cue for something the user just
+    // heard, so it belongs exactly where the playhead is rather than on the nearest grid line
+    // (a drag afterwards DOES snap — see TimelineRulerComponent::mouseDrag).
+    const double beat = transport_ != nullptr ? std::max(0.0, transport_->getPositionSnapshot().ppq) : 0.0;
+    // "Marker N" counted off the existing markers, the same shape createMidiClipAt's "Clip N" uses.
+    // Not unique by construction (deleting #2 of three makes the next one a second "Marker 3") —
+    // a marker is identified by its id and its position, and a name collision is the user's to
+    // resolve by renaming, not something to paper over with a hunt for a free number.
+    const juce::String name = "Marker " + juce::String((int)doc_->getMarkers().size() + 1);
+
+    synth::MarkerId newId;
+    auto mutate = [this, beat, name, &newId] { newId = doc_->addMarker(beat, name, defaultMarkerColourArgb()); };
+    if (undoManager_ != nullptr)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+
+    // The doc notification already repainted the ruler (timelineChanged) — nothing else to do.
+    return newId;
+}
+
+juce::uint32 TimelinePanelComponent::defaultMarkerColourArgb() const {
+    // A theme token, not a literal, so a marker lands in the palette the rest of the panel draws
+    // in. `warning` is the amber family — deliberately NOT `accent`, which is what the loop brace
+    // and the playhead already use in this same 24 px strip.
+    if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        return lf->getTheme().colors.warning.getARGB();
+    return synth::Marker{}.colourArgb; // headless: the model's own amber default
+}
+
+void TimelinePanelComponent::openAddTrackMenu() {
     juce::PopupMenu menu;
     menu.addItem(kAddMidiTrackMenuId, "MIDI Track");
     menu.addItem(kAddAudioTrackMenuId, "Audio Track");
+    // Separated because it is not a track at all: a marker adds no row to the header column and
+    // nothing to the graph, it drops a flag on the ruler.
+    menu.addSeparator();
+    menu.addItem(kAddMarkerMenuId, "Add Marker");
 
     juce::Component::SafePointer<TimelinePanelComponent> safeThis(this);
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&addTrackButton_), [safeThis](int result) {
@@ -1030,6 +1167,13 @@ void TimelinePanelComponent::showAddTrackMenu() {
 void TimelinePanelComponent::timelineChanged(const synth::TimelineDoc&) {
     syncTrackHeaders();
     clipLaneArea_.refreshFromDoc();
+    // The ruler's marker flags come straight off the doc, so a mutation is the ONLY thing that can
+    // move them — this is the repaint that replaces polling them (see TimelineRulerComponent). The
+    // lanes rect goes with it, because this component paints each marker's stem down through the
+    // clips (see paint()); bounded to that rect rather than the whole panel.
+    ruler_.repaint();
+    if (!gridLanesBounds_.isEmpty())
+        repaint(gridLanesBounds_);
     // If the roll is open on a clip this mutation just removed, refreshFromDoc() closes it
     // itself and fires onCloseRequested -> closePianoRoll() (wired in the constructor), which is
     // what swaps clipLaneArea_ back into view.
@@ -1127,8 +1271,18 @@ void TimelinePanelComponent::layoutTrackHeaders() {
 
 void TimelinePanelComponent::setApplicationProperties(juce::ApplicationProperties* props) {
     appProperties_ = props;
-    if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
+    // Forwarded even when there is no user-settings file: both of these degrade to "in-memory
+    // only" / "read the default" rather than needing one, and the early return below would
+    // otherwise leave them holding a stale pointer.
+    clipLaneArea_.setApplicationProperties(props);
+    if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr) {
+        ruler_.setPropertiesFile(nullptr);
         return;
+    }
+
+    // Where the marker colour picker's favourites shelf persists to — the same shelf the track
+    // header's swatch uses, so a colour saved from one is offered by the other.
+    ruler_.setPropertiesFile(appProperties_->getUserSettings());
 
     int saved = appProperties_->getUserSettings()->getIntValue(kTimelineSnapPropertyKey, (int)viewState_.snap);
     saved = juce::jlimit((int)TimelineViewState::Snap::Off, (int)TimelineViewState::Snap::HundredTwentyEighth, saved);
@@ -1397,10 +1551,10 @@ void TimelinePanelComponent::syncTrackScroll() {
 //==============================================================================
 void TimelinePanelComponent::resized() {
     // Themed metrics with literal fallbacks for the headless test path (same pattern as
-    // MainComponent::resized()/computePanelBounds()).
-    int transportBarHeight = 28;
-    int trackHeaderWidth = 160;
-    int rulerHeight = 24;
+    // MainComponent::resized()).
+    int transportBarHeight = 34;
+    int trackHeaderWidth = 190;
+    int rulerHeight = 30; // keep in step with Theme::Metrics::timelineRulerHeight
     int automationStripHeight = 72;
     if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
         const auto& m = lf->getTheme().metrics;
@@ -1423,6 +1577,17 @@ void TimelinePanelComponent::resized() {
     layoutTrackHeaders();
 
     auto lanes = lanesBounds_;
+    // While the piano roll is OPEN its chip toolbar is the top row of the lanes region — ABOVE the
+    // ruler, so the roll's chrome sits over the whole unit instead of being sandwiched between the
+    // ruler and the note canvas. The roll's rect then spans toolbar + ruler + canvas, and the roll
+    // leaves the ruler's band blank for this sibling to draw in (PianoRollComponent::
+    // setRulerBandHeight). While the roll is closed nothing here changes: the ruler is the top row and
+    // the roll gets gridLanesBounds_ like the clip lanes do.
+    const bool rollOpen = pianoRoll_.isOpen();
+    const int rollTop = lanes.getY();
+    // Open, the ruler drops below the roll's toolbar row; closed, it is the top row as it always was.
+    if (rollOpen)
+        lanes.removeFromTop(synth::ui::PianoRollComponent::kToolbarHeight);
     ruler_.setBounds(lanes.removeFromTop(rulerHeight));
     gridLanesBounds_ = lanes;
 
@@ -1437,10 +1602,25 @@ void TimelinePanelComponent::resized() {
     // The clip-lane area fills EXACTLY the rect the grid below is painted into (paint()'s
     // gridLanesBounds_ loop, unchanged) — so clips line up with the bar/beat grid pixel-for-pixel.
     clipLaneArea_.setBounds(gridLanesBounds_);
-    // The piano roll occupies the SAME rect, unconditionally (whichever of the two is
-    // invisible just doesn't paint) — this is also what keeps its beatToX(beat) mapping identical
-    // to the clip lanes' and the playhead's (see PianoRollComponent's class comment).
-    pianoRoll_.setBounds(gridLanesBounds_);
+    // The piano roll covers the clip lanes' rect PLUS its own toolbar row and the ruler band between
+    // them (see above) — so its canvas is pixel-aligned with the clip lanes and the playhead exactly
+    // as before, because canvasTop() accounts for the two rows above it. Closed, the extra rows are
+    // zero-height and this is literally gridLanesBounds_.
+    // The band height is pushed UNCONDITIONALLY, even while the roll is closed and its rect is only
+    // the clip-lane rect. That looks redundant but is load-bearing: openPianoRoll() calls openClip()
+    // — which frames the clip against canvasTop() — BEFORE this re-layout runs, so a band pushed in
+    // only on the open path would frame the very first clip against the wrong canvas height. A closed
+    // roll is invisible, so a canvasTop() describing the open geometry costs nothing meanwhile.
+    pianoRoll_.setRulerBandHeight(rulerHeight);
+    // The rect, by contrast, IS two-mode: closed, the roll is exactly the clip-lane rect (the two are
+    // interchangeable there, and leaving an invisible component sitting over the ruler is the kind of
+    // thing that reads as a bug); open, it also covers its toolbar row and the ruler band.
+    pianoRoll_.setBounds(rollOpen ? gridLanesBounds_.withTop(rollTop) : gridLanesBounds_);
+    // The ruler is a SIBLING drawn inside the band the roll reserves for it, and the roll was added to
+    // this panel after the ruler — so without this the roll would paint over it. Re-asserted here
+    // rather than once at open time because a re-layout is the only moment the overlap can appear.
+    if (rollOpen)
+        ruler_.toFront(false);
 
     // The playhead spans the WHOLE lanes region, ruler included, so the line reads as one stroke
     // from the ruler down through the tracks. Its local x == 0 is lanesBounds_.getX(), which is
@@ -1454,7 +1634,10 @@ void TimelinePanelComponent::resized() {
     // (LocalPlayheadClient), and the ruler strip is skipped too because it then labels bars
     // through the ROLL's mapping (setMappingOverride), where the overlay's shared-mapping x would
     // be a lie. While the roll is closed the region is ignored and the overlay owns its whole rect.
-    playhead_.setLocalPlayheadRegion(ruler_.getBounds().getUnion(gridLanesBounds_) -
+    // The roll's OWN rect, not gridLanesBounds_, so the toolbar row it added above the ruler is in
+    // the skipped region too — otherwise the overlay would draw its line straight across the chips.
+    // Closed, pianoRoll_.getBounds() IS gridLanesBounds_, so this is unchanged there.
+    playhead_.setLocalPlayheadRegion(ruler_.getBounds().getUnion(pianoRoll_.getBounds()) -
                                      playhead_.getBounds().getPosition());
 
     // Strip header row (tool buttons, lane/record-mode pickers, close) above the curve
@@ -1577,7 +1760,14 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
         // Requiring drawBeatLines keeps the hierarchy monotonic: a subdivision may never be
         // visible while its parent beat level is hidden (possible otherwise, because the beat
         // gate is ~8 px/beat while the readability guard is ~3 px/line).
-        const double division = viewState_.divisionBeats(beatsPerBar);
+        //
+        // divisionBeatsRAW, never divisionBeats(): the snap SWITCH must not change which lines are
+        // DRAWN. Snap off means "don't magnetise to the grid", not "hide the grid" — a ruler that
+        // loses its subdivision lines the moment you turn magnetism off leaves you eyeballing
+        // positions against nothing, and the chosen division is still what the roll and the lanes
+        // are showing. Same split PianoRollComponent draws with (see its own note: magnetism reads
+        // divisionBeats, drawing reads divisionBeatsRaw).
+        const double division = viewState_.divisionBeatsRaw(beatsPerBar);
         const bool drawSubdivisionLines = drawBeatLines && division > 0.0 && division < 1.0 &&
                                           synth::ui::gridLevelIsReadable(division, viewState_.pixelsPerBeat);
 
@@ -1621,6 +1811,41 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
                     g.drawVerticalLine(xOrigin + (int)std::llround(subX), (float)top, (float)bottom);
                 }
             }
+        }
+    }
+
+    // ---- Column divider: the track-header column | lanes seam ----
+    //
+    // Drawn HERE, by the component that owns the seam, rather than by whatever happens to sit on
+    // either side of it. The header column butts straight up against the lanes region — and, when
+    // the piano roll is open, against the roll's own right-hand utility sidebar (the scale panel) —
+    // so without this the track list and that sidebar read as one undifferentiated block. Any
+    // future right-side sidebar inherits the divider for free, because it is a property of the
+    // panel's layout and not of the sidebar.
+    //
+    // Spans the panel below the transport strip only: the transport bar is one continuous row of
+    // chrome across the full width, and cutting it in half would imply a column boundary that its
+    // own controls do not respect.
+    if (!trackHeaderBounds_.isEmpty()) {
+        const int x = trackHeaderBounds_.getRight() - 1;
+        g.setColour(border);
+        g.drawVerticalLine(x, (float)trackHeaderBounds_.getY(), (float)getHeight());
+    }
+
+    // ---- Marker stems through the lanes ----
+    //
+    // The ruler's flag says WHAT a marker is; this says WHERE, against the clips. A static painted
+    // line at low alpha, repainted only when the doc changes (timelineChanged -> repaint of the
+    // lanes rect) — no timer, no per-frame work, so the §3 animation rules are untouched.
+    if (doc_ != nullptr && !gridLanesBounds_.isEmpty() && viewState_.pixelsPerBeat > 0.0) {
+        const double widthPx = (double)gridLanesBounds_.getWidth();
+        for (const auto& marker : doc_->getMarkers()) {
+            const double x = viewState_.beatToX(marker.beat);
+            if (x < 0.0 || x > widthPx)
+                continue;
+            g.setColour(juce::Colour(marker.colourArgb).withAlpha(kMarkerLaneStemAlpha));
+            g.fillRect((float)(gridLanesBounds_.getX() + (int)std::llround(x)), (float)gridLanesBounds_.getY(),
+                       synth::ui::kMarkerStemWidth, (float)gridLanesBounds_.getHeight());
         }
     }
 }

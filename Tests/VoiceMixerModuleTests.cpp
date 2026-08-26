@@ -73,7 +73,7 @@ TEST_F(VoiceMixerModuleTest, SilentWhenAllInputsAreZero) {
 
 TEST_F(VoiceMixerModuleTest, LevelParameterExists) {
     // Verify module has a level parameter
-    auto* levelParam = dynamic_cast<juce::AudioParameterFloat*>(mixer->getParameters()[1]);
+    auto* levelParam = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(mixer.get(), "level"));
     ASSERT_NE(levelParam, nullptr);
     EXPECT_EQ(levelParam->paramID, "level");
 }
@@ -98,7 +98,7 @@ TEST_F(VoiceMixerModuleTest, OutputAttenuatedByLevelParameter) {
     float out1 = buffer1.getSample(0, 511);
 
     // Change level to higher value
-    auto* levelParam = dynamic_cast<juce::AudioParameterFloat*>(mixer->getParameters()[1]);
+    auto* levelParam = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(mixer.get(), "level"));
     levelParam->setValueNotifyingHost(1.0f);
     mixer->prepareToPlay(44100.0, 512); // Reset smoothing
     mixer->processBlock(buffer2, midi);

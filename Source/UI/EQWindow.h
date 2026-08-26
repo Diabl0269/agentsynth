@@ -24,7 +24,7 @@ public:
         spectrumToggle.onClick = [this] { curve->setShowSpectrum(spectrumToggle.getToggleState()); };
         addAndMakeVisible(spectrumToggle);
 
-        hint.setText("Double-click to add or remove a point  ·  drag to move  ·  scroll over a point for Q",
+        hint.setText("Double-click to add or remove a point  -  drag to move  -  scroll over a point for Q",
                      juce::dontSendNotification);
         hint.setJustificationType(juce::Justification::centredLeft);
         hint.setInterceptsMouseClicks(false, false);

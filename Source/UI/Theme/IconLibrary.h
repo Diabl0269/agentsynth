@@ -63,6 +63,12 @@ enum class Icon : int {
     TrackAudio,
     TrackAutomation,
     FollowPlayhead,
+    // I/O category icon (speaker glyph): the ModuleLibraryComponent "I/O" header (Audio Input /
+    // Audio Output) and the Audio Output card's identity treatment in ModuleComponent — both
+    // previously fell back to CatUtility, which had no way to say "this is where sound goes".
+    // Appended here rather than grouped next to the other CatXxx entries so every existing
+    // enum ordinal (and the IconLibraryTests.cpp spot-checks against them) stays unchanged.
+    CatIO,
     kCount
 };
 

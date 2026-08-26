@@ -11,7 +11,6 @@ public:
         addParameter(depthParam = new juce::AudioParameterFloat("depth", "Bit Depth", 1.0f, 24.0f, 24.0f));
         addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 1.0f));
         addParameter(ditherParam = new juce::AudioParameterFloat("dither", "Dither", 0.0f, 1.0f, 0.0f));
-        addDualIOParameter();
         addOutputLevelParameter();
         addMuteParameter();
         enableVisualBuffer(true);

@@ -792,6 +792,18 @@ AIChatComponent::~AIChatComponent() {
     stopTimer();
     // Stop any running pulse animation before members are destroyed.
     spinnerDot.stopPulse(vblankUpdater);
+
+    // Free the conversation's bubbles. `messageList` is a plain juce::Component, and both kinds of
+    // child it holds are raw-`new`ed by updateChatDisplay() — the MessageBubbles and, while a request
+    // is in flight, waitingStatusLabel. addAndMakeVisible does NOT take ownership, and
+    // juce::Component's destructor only *removes* its children, it never deletes them, so the ONE
+    // thing that frees them is updateChatDisplay()'s own deleteAllChildren() on the next redraw.
+    // Without this, the last batch — whatever was on screen at teardown — outlived the component, in
+    // the app as well as in tests. Same two lines updateChatDisplay() opens with, in the same order:
+    // the non-owning waitingStatusLabel pointer has to be dropped BEFORE the object behind it goes.
+    waitingStatusLabel = nullptr;
+    messageList.deleteAllChildren();
+
 #ifndef NDEBUG
     juce::Logger::setCurrentLogger(nullptr);
 #endif
@@ -1412,9 +1424,9 @@ void AIChatComponent::updateChatDisplay() {
                         if (self == nullptr)
                             return;
                         self->messages.push_back({"assistant",
-                                                  "That patch was rejected (" + info.error + ") — asking for a fix (" +
+                                                  "That patch was rejected (" + info.error + ") - asking for a fix (" +
                                                       juce::String(info.failedAttempt + 1) + "/" +
-                                                      juce::String(info.totalAttempts) + ")…",
+                                                      juce::String(info.totalAttempts) + ")...",
                                                   ""});
                         refreshLater();
                     });

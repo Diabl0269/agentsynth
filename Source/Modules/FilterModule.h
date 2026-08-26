@@ -38,7 +38,9 @@ public:
         // 19 in / 19 out: Audio L on 0-7, shared CV on 8-10, Audio R on 11-18. Declaring the
         // outputs above every CV input channel also makes JUCE hand this node private copies of
         // shared CV buffers, so the end-of-block CV clear can only ever zero our own copy.
-        : ModuleBase("Filter", kNumChannels, kNumChannels) {
+        // StereoAudio::Declared: 19 outputs, so the Auto shape test cannot see this module's stereo
+        // pair — its right leg is the kRightBase block, and it ships SPLIT.
+        : ModuleBase("Filter", kNumChannels, kNumChannels, StereoAudio::Declared) {
         addParameter(cutoffParam = new juce::AudioParameterFloat("cutoff", "Cutoff", 20.0f, 20000.0f, 440.0f));
         addParameter(resonanceParam = new juce::AudioParameterFloat("resonance", "Resonance", 0.0f, 1.0f, 0.1f));
         addParameter(driveParam = new juce::AudioParameterFloat("drive", "Drive", 1.0f, 10.0f, 1.0f));
@@ -46,9 +48,9 @@ public:
                          "filterType", "Filter Type",
                          juce::StringArray{"LPF24", "LPF12", "HPF24", "HPF12", "BPF24", "BPF12", "Notch"}, 0));
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
-        // Defaults to dual: this module filters in stereo now. Collapsed, its jack layout is
-        // exactly what it was before #219 — Audio, Cutoff, Resonance, Drive.
-        addDualIOParameter(/*defaultDual=*/true);
+        // Dual I/O comes from the ctor's StereoAudio::Declared above (defaults to split: this module
+        // filters in stereo). Collapsed, its jack layout is exactly what it was before #219 — Audio,
+        // Cutoff, Resonance, Drive.
         addOutputLevelParameter();
         addMuteParameter();
         enableVisualBuffer(true);

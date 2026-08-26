@@ -31,7 +31,7 @@ class Metronome; // Forward declaration (Source/Transport/Metronome.h)
 //
 // MainComponent docks this full-width, above the status bar, toggled via the toolbar button /
 // Cmd+T shortcut and slid in/out through the same coordinated AnimationDriver that already
-// animates the library/AI panels (see MainComponent::animatePanelTransition()). This class owns
+// animates the library/AI panels (see MainComponent::beginPanelSlide()). This class owns
 // none of that: it is layout + paint, with no timer and no animation of its own — updateFromTransport()
 // is driven by MainComponent's EXISTING 10 Hz timer, and the only timer anywhere under this panel
 // is the playhead overlay's, which runs only while the transport plays (see
@@ -413,10 +413,21 @@ public:
     int getTransportUpdateCountForTest() const noexcept { return transportUpdateCount_; }
 
     // ---- Track headers ----
-    // Menu ids for the "+ Track" button's two-item menu. Numbered from 1 because
-    // juce::PopupMenu reserves 0 for "dismissed".
+    // Menu ids for the "+ Track" button's menu. Numbered from 1 because juce::PopupMenu reserves 0
+    // for "dismissed".
     static constexpr int kAddMidiTrackMenuId = 1;
     static constexpr int kAddAudioTrackMenuId = 2;
+    // Below a separator, because a marker is NOT a track: it adds no header row and no graph node.
+    // It shares this menu because "+ Track" is where a user reaches for "add something to the
+    // arrangement", and a second button for one item would not earn its pixels.
+    static constexpr int kAddMarkerMenuId = 3;
+
+    /** Adds a marker at the transport's current position, named "Marker N", coloured from the
+     *  theme (see defaultMarkerColourArgb) — ONE recordTimelineChange when an undo manager is
+     *  installed. Returns the new id, or an invalid one when there is no doc or the doc refused
+     *  (kMaxMarkers). Public because it IS the "+ Track" menu's Add Marker action and the seam a
+     *  test drives instead of the async menu. */
+    synth::MarkerId addMarkerAtPlayhead();
 
     juce::TextButton& getAddTrackButton() noexcept { return addTrackButton_; }
 
@@ -459,6 +470,18 @@ public:
                    ? trackHeaderList_.headers.getUnchecked(index)
                    : nullptr;
     }
+
+protected:
+    /** Opens the "+ Track" button's menu (MIDI Track / Audio Track / Add Marker). The default
+     *  implementation shows a real `juce::PopupMenu` via `showMenuAsync`.
+     *
+     *  Protected virtual for the same display-less-runner reason as
+     *  `TimelineRulerComponent::openMarkerContextMenu`: a real menu window needs a display to be
+     *  positioned on, and JUCE dereferences a null one on a headless CI runner. No test reaches this
+     *  today (they all drive `applyAddTrackMenuChoice` directly, which is the documented headless
+     *  seam), but a test that clicked the button would crash exactly the way the marker menu did —
+     *  so the override point exists before someone writes that test. */
+    virtual void openAddTrackMenu();
 
 private:
     // TimelineDoc::Listener — the single trigger for a header rebuild/refresh, AND the
@@ -609,10 +632,13 @@ private:
     // roll; spans ruler + lanes and intercepts no mouse clicks (see TimelinePlayheadOverlay's ctor).
     TimelinePlayheadOverlay playhead_{viewState_};
     juce::ComboBox snapCombo_;
-    // The transport-bar twin of the piano roll's "Q": toggles TimelineViewState::snapEnabled from
-    // the panel chrome, so the switch is discoverable without opening a clip. Toggle STATE mirrors
-    // the shared flag via setSnapEnabled() — the button never owns it.
-    juce::TextButton snapToggleButton_{"Q"};
+    // Toggles TimelineViewState::snapEnabled from the panel chrome, so the switch is discoverable
+    // without opening a clip. Toggle STATE mirrors the shared flag via setSnapEnabled() — the
+    // button never owns it. Labelled "Snap" rather than with its key: the key moved from Q to J
+    // (Cubase's snap key — Q is Cubase's *quantise*, which is what the roll uses it for), and a
+    // button that spells its own letter goes stale the moment the binding is rebound. The live key
+    // is in the tooltip, through synth::shortcutHintFor.
+    juce::TextButton snapToggleButton_{"Snap"};
     // The one writer for the snap switch from panel chrome/keys: flips the flag, persists, syncs
     // the button's lit state, and repaints every grid painter.
     void setSnapEnabled(bool enabled);
@@ -653,10 +679,22 @@ private:
     // paste time (see pasteClipsAtPlayhead()).
     synth::TransportService* transport_ = nullptr;
 
+    // NOTE AUDITION — the track the currently-sounding preview note was sent TO, latched when the
+    // note-ON was forwarded and cleared when its note-OFF is. Invalid means nothing is sounding.
+    //
+    // Why a latch rather than re-resolving at note-off time: an audition note is exempt from every
+    // positional flush in TimelineMidiSourceModule, so a dropped or misrouted note-off hangs the note
+    // until the node is bypassed. Between the on and the off the edited clip can be deleted, the roll
+    // can close, or a different clip can open — re-resolving would drop the off in the first two cases
+    // and send it to the WRONG track in the third. See the onAuditionNote wiring in the constructor.
+    synth::TrackId auditionTrackLatch_;
+
     // The button opens a MIDI/Audio menu rather than adding a MIDI track outright.
     juce::TextButton addTrackButton_{"+ Track"};
 
-    void showAddTrackMenu();
+    // The theme's colour for a NEW marker (see addMarkerAtPlayhead). Falls back to the model's own
+    // default with no themed LookAndFeel installed, like every other paint-time resolve here.
+    juce::uint32 defaultMarkerColourArgb() const;
 
     // ---- Vertical track scroll/zoom (shared TimelineViewState::trackScrollY/rowHeightScale) ----
     // The themed row height with the shared vertical-zoom factor applied — the SAME value

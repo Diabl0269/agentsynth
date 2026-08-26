@@ -7,6 +7,11 @@
 
 namespace synth {
 
+/** Hard cap on a module's user-set card title, applied wherever a "displayName" is accepted —
+ *  including the untrusted patch path, where it is the only thing stopping a hostile patch from
+ *  stuffing a megabyte of text into a title and wedging the canvas paint. */
+inline constexpr int kMaxModuleDisplayNameChars = 64;
+
 /**
  * @brief Why a patch JSON failed validation, so callers (and the UI) can say what was wrong.
  */
@@ -243,6 +248,21 @@ public:
 
     /** @brief Every key registered in the module factory, sorted. */
     static juce::StringArray moduleFactoryTypeNames();
+
+    /**
+     * @brief Every factory type whose module carries the Dual I/O parameter, sorted.
+     *
+     * THE authoritative answer to "does this module type support the Dual I/O toggle" — derived by
+     * probing the factory (one throwaway instance per type, computed once and cached) and asking
+     * each module `ModuleBase::hasDualIOParameter()`, never from a hand-kept list. Both consumers
+     * of that question read it: `PreferencesSettingsTab::getDualIOModuleTypes()` (the per-module
+     * defaults popup) and the Dual I/O default that `GraphEditor::applyDefaultDualIOForNewModule`
+     * applies to a newly created module. Since `ModuleBase`'s constructor adds the toggle from the
+     * module's channel shape (`ModuleBase::StereoAudio`), a new stereo module appears in the
+     * Preferences popup without a single extra edit anywhere — the Ring Modulator was missing from
+     * that popup for exactly as long as this list was written out by hand.
+     */
+    static const juce::StringArray& dualIOCapableModuleTypes();
 
     /**
      * @brief The module types a model is allowed to author, sorted.

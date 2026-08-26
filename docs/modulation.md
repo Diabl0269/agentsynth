@@ -6,34 +6,34 @@ This document describes the modulation architecture: how routing is modeled, how
 
 ## Automation writes the base value; CV stacks on top
 
-Timeline automation (TL4-2) and CV modulation are **not** competing for the same slot, and neither one is layered on top of the other by any code that knows about both — the layering is a consequence of how modules already work.
+Timeline automation and CV modulation are **not** competing for the same slot, and neither one is layered on top of the other by any code that knows about both — the layering is a consequence of how modules already work.
 
-- **Automation is a very precise knob turn.** `synth::AutomationApplier` stores the lane's value straight into the target parameter (`setValue`, denormalised → normalised, clamped into the parameter's own range) once per render pass, before the graph runs. Nothing distinguishes that store from the user dragging the knob: it changes the parameter's **base value**, permanently, until something else changes it. For one of our own modules that target is a `juce::RangedAudioParameter` and "the parameter's own range" is its `NormalisableRange`; for a hosted plugin's own parameter (TL7-6, below) there is no `NormalisableRange` to clamp into, so the lane's own `RangeSnapshot` — always `{0, 1, default}` for a hosted parameter — plays that role instead.
+- **Automation is a very precise knob turn.** `synth::AutomationApplier` stores the lane's value straight into the target parameter (`setValue`, denormalised → normalised, clamped into the parameter's own range) once per render pass, before the graph runs. Nothing distinguishes that store from the user dragging the knob: it changes the parameter's **base value**, permanently, until something else changes it. For one of our own modules that target is a `juce::RangedAudioParameter` and "the parameter's own range" is its `NormalisableRange`; for a hosted plugin's own parameter (below) there is no `NormalisableRange` to clamp into, so the lane's own `RangeSnapshot` — always `{0, 1, default}` for a hosted parameter — plays that role instead.
 - **CV is added per sample, on top of whatever the base value currently is.** Every module reads `param->get()` fresh at the top of its own `processBlock` and then adds the CV it finds on the corresponding input channel (scaled by the attenuverter on the cable). It never writes the parameter back.
 - **So the two compose without either knowing about the other**: automation moves the base, CV wiggles around wherever the base happens to be. Automating a filter's cutoff while an envelope also modulates it gives "the envelope, riding the automated curve" — which is what a user drawing an automation lane on a modulated parameter expects.
 
 Two consequences worth stating explicitly:
 
-- **Automation is visible to the user as a moved knob**, because it really is one. That is why the applier deliberately does *not* call `setValueNotifyingHost` — pushing a listener notification per automated parameter per block from the audio thread is the wrong mechanism for that; UI reflection is a message-thread concern (TL4-5).
+- **Automation is visible to the user as a moved knob**, because it really is one. That is why the applier deliberately does *not* call `setValueNotifyingHost` — pushing a listener notification per automated parameter per block from the audio thread is the wrong mechanism for that; UI reflection is a message-thread concern.
 - **Automation only writes while the transport is playing.** Stopped, the knob is the user's again and the applier writes nothing, so a paused session never fights a mouse drag. CV, by contrast, keeps flowing whenever its source module is producing signal — a stopped transport does not silence an LFO.
 
-### Recording a knob (TL4-4)
+### Recording a knob
 
 The reverse direction is the same idea run backwards, and it has one contract worth stating here because it governs every knob in the app: **turning a knob only records automation while a real gesture is in flight.** `synth::AutomationRecorder` listens for `beginChangeGesture` / `setValueNotifyingHost` / `endChangeGesture` — the trio every JUCE slider attachment produces — and captures a value change **only** while a capture span is open, which only a gesture (or, for a `Write` lane, the transport starting to play) can open. That single rule is what keeps a preset load, an AI patch apply or an undo restore from silently overwriting every armed lane: they all move parameters exactly like a knob drag does, and they all do it without a gesture.
 
-While a gesture *is* in flight, the hand wins: the parameter is "claimed", the applier skips it, and the automation lane stops fighting the mouse for as long as the button is down. Let go and playback resumes on the very next block — for a `Touch` lane; a `Latch` lane keeps writing until the transport stops. Full mode table and the commit/thinning rules: [`docs/architecture.md` → AutomationRecorder](architecture.md#automationrecorder-tl4-4-record-modes-and-gesture-capture).
+While a gesture *is* in flight, the hand wins: the parameter is "claimed", the applier skips it, and the automation lane stops fighting the mouse for as long as the button is down. Let go and playback resumes on the very next block — for a `Touch` lane; a `Latch` lane keeps writing until the transport stops. Full mode table and the commit/thinning rules: [`docs/architecture.md` → AutomationRecorder](architecture.md#automationrecorder-record-modes-and-gesture-capture).
 
-### Hosted plugin parameters as automation lanes (TL7-6)
+### Hosted plugin parameters as automation lanes
 
 A [hosted plugin](modules.md#hosted-plugin-module-third-party-vst3--au-hidden)'s own parameters live on the *inner* `juce::AudioPluginInstance`, discovered at load — never on `HostedPluginModule`'s own `getParameters()` (that carries only `muted`). Two things follow from "discovered at load": the parameter set is not `juce::RangedAudioParameter` the way our own modules' parameters are (see below), and it can change **shape** between versions of the same plugin. A lane therefore has to survive an update that reshuffles parameters without ever landing on the wrong one. The full keying/fallback/orphan rule:
 
 1. **Exact id match wins.** The lane's `paramId` is matched against the live instance's `juce::HostedAudioProcessorParameter::getParameterID()` — the interface VST3/AU/LV2 wrappers implement for a persistent string identity. This always resolves the lane when the id still exists, at whatever index it now sits at.
 2. **A stored index hint is a narrow rescue, never a guess.** Every lane also carries `paramIndexHint` (captured once, at creation, from the parameter's index at that moment). If the exact id match fails, the hint is consulted **only** to check whether the plugin format has no stable ids at all (the parameter at that index itself has no id — see [`docs/modules.md`](modules.md#hosted-plugin-module-third-party-vst3--au-hidden)'s table). If the hinted index instead names a *different*, still-identified parameter — a plugin update having moved the parameter set under us — that is exactly the case this rule exists to catch, and the lane **orphans** instead of silently binding to whatever is there now.
-3. **Anything else orphans too**: no live instance at all (still loading, unloaded, or the plugin isn't installed), or a hinted index that no longer exists. Orphaned lanes are retained and re-bindable (TL2-6 policy), never auto-deleted or silently repointed.
+3. **Anything else orphans too**: no live instance at all (still loading, unloaded, or the plugin isn't installed), or a hinted index that no longer exists. Orphaned lanes are retained and re-bindable, never auto-deleted or silently repointed.
 
-Non-plugin modules are entirely unaffected: their lanes resolve exactly as before TL7-6 (`paramID` match, a miss is merely unbound, never orphaned).
+Non-plugin modules are entirely unaffected: their lanes resolve exactly as they did before hosted-plugin lanes existed (`paramID` match, a miss is merely unbound, never orphaned).
 
-Every lane-resolution call site — the audio-thread binding build, `TimelineReconciler`, the AI-tool `writeLane` path (`TimelineOps`/`TimelineValidator`), and the automation recorder's rebind — goes through the one shared resolver, `synth::resolveLaneParameter` (`Source/Timeline/AutomationBinding.h`), so this rule cannot drift between the audio path, the AI-tool path and the UI path. See [`docs/architecture.md` → Automation lanes on hosted-plugin parameters](architecture.md#automation-lanes-on-hosted-plugin-parameters-tl7-6) for the resolver's shape and the normalised-range note.
+Every lane-resolution call site — the audio-thread binding build, `TimelineReconciler`, the AI-tool `writeLane` path (`TimelineOps`/`TimelineValidator`), and the automation recorder's rebind — goes through the one shared resolver, `synth::resolveLaneParameter` (`Source/Timeline/AutomationBinding.h`), so this rule cannot drift between the audio path, the AI-tool path and the UI path. See [`docs/architecture.md` → Automation lanes on hosted-plugin parameters](architecture.md#automation-lanes-on-hosted-plugin-parameters) for the resolver's shape and the normalised-range note.
 
 The automation strip's lane picker offers **"Add lane…"** entries for a hosted plugin's not-yet-automated instance parameters (there is no `ModuleComponent` knob to right-click for them — the plugin has its own editor). Choosing one creates a lane with a `RangeSnapshot` of `{0, 1, default}` (a hosted parameter's native domain is always 0..1) and captures `paramIndexHint` from the parameter's current index.
 
@@ -124,6 +124,8 @@ virtual LogicalPort mapOutputChannel(int rawChannel) const;
 ```
 
 Poly-capable modules override these to describe fans. The default base implementation clamps any out-of-range channel to the last visible jack and marks `isPolyGroupHead` based on whether `rawChannel < getVisible*PortCount()`.
+
+That fallback has a trap once a module's visible jack count grows: any raw channel below `getVisible*PortCount()` that no override claims is reported as its own `isPolyGroupHead`, so an unclaimed channel becomes a phantom second head on a real jack and `getJackTargets` hands out a duplicate wire for it. A module that adds visible jacks must override the mapping for every raw channel it exposes rather than inherit the fallback.
 
 ### `JackTarget` / `getJackTargets`
 
@@ -224,9 +226,9 @@ This combination — PolyBus for per-voice gate control, DirectCV for a shared t
 
 `ModuleComponent` renders Serum-style modulation rings on knobs for any active modulation targeting that module. It calls `AudioEngine::getModulationRoutings()` (via the `GraphEditor`'s cached snapshot) to find which knobs have live modulation and paints a ring overlay proportional to the routed signal value. This gives a real-time visual indication of modulation depth directly on the parameter knob.
 
-**Which knob a ring belongs on is `getModRingSliderIndex()`'s call, and it returns -1 for a knob that is not visible.** A card can page its controls (the Wavetable tab strip, `layout.md` §9), and a knob on a hidden page keeps the bounds it had when its page was last laid out — so a ring drawn straight from `sliders[i]->getBounds()` paints an orange arc over empty card. The rule lives in that one accessor so it can be tested without a themed LookAndFeel and a live routing.
+**Which knob a ring belongs on is `getModRingSliderIndex()`'s call, and it returns -1 for a knob that is not visible.** A card can page its controls (the Wavetable tab strip, `layout_visuals_animation.md` §1), and a knob on a hidden page keeps the bounds it had when its page was last laid out — so a ring drawn straight from `sliders[i]->getBounds()` paints an orange arc over empty card. The rule lives in that one accessor so it can be tested without a themed LookAndFeel and a live routing.
 
-**Right-click any knob → "Automate '\<Param\>'"** opens that parameter's automation lane in the timeline panel's automation strip (creating its lane/track on first use) — see `layout.md` §16 TL5-9 for the full path (`ModuleComponent` → `GraphEditor::onAutomateParameterRequested` → `MainComponent::automateParameter`).
+**Right-click any knob → "Automate '\<Param\>'"** opens that parameter's automation lane in the timeline panel's automation strip (creating its lane/track on first use) — see `timeline_panel_clips_automation.md` §3 for the full path (`ModuleComponent` → `GraphEditor::onAutomateParameterRequested` → `MainComponent::automateParameter`).
 
 ---
 
