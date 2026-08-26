@@ -624,6 +624,38 @@ AuthClient::submitMessageFeedback(const juce::String& accessToken, const juce::S
     return result;
 }
 
+AuthClient::SubmitGeneralFeedbackResult AuthClient::submitGeneralFeedback(const juce::String& accessToken,
+                                                                          const juce::String& category,
+                                                                          const juce::String& text,
+                                                                          const std::atomic<bool>& cancelled) const {
+    SubmitGeneralFeedbackResult result;
+
+    juce::StringPairArray headers;
+    headers.set("Authorization", "Bearer " + accessToken);
+    headers.set("Content-Type", "application/json");
+
+    juce::DynamicObject::Ptr bodyObj = new juce::DynamicObject();
+    bodyObj->setProperty("category", category);
+    bodyObj->setProperty("text", text);
+    const juce::String body = juce::JSON::toString(juce::var(bodyObj.get()));
+
+    const juce::String url = host + "/v1/feedback";
+    const auto http = performHttp("POST", url, headers, body, kRequestTimeoutMs, cancelled);
+
+    if (http.transportFailed || http.timedOut) {
+        result.transportError = http.errorMessage.isNotEmpty() ? http.errorMessage : "Error: request failed.";
+        return result;
+    }
+
+    if (http.httpStatus != 200) {
+        result.transportError = "Error: POST " + url + " failed (HTTP " + juce::String(http.httpStatus) + ").";
+        return result;
+    }
+
+    result.ok = true;
+    return result;
+}
+
 bool AuthClient::revoke(const juce::String& token, const std::atomic<bool>& cancelled) const {
     juce::StringPairArray headers;
     headers.set("Content-Type", "application/x-www-form-urlencoded");
