@@ -27,9 +27,9 @@ public:
         // P4-6: hosted mode sends the prompt and current patch off this machine to Agent Synth's
         // servers; local (Ollama) mode never leaves it. See also the same disclosure next to the
         // model picker in AIChatComponent, which most users see far more often than this dialog.
-        providerCombo.setTooltip("Local (Ollama) processing stays on this machine. Hosted mode "
-                                 "sends your prompt and current patch to Agent Synth's servers "
-                                 "for processing \xe2\x80\x94 see " +
+        providerCombo.setTooltip(juce::String::fromUTF8("Local (Ollama) processing stays on this machine. Hosted mode "
+                                                        "sends your prompt and current patch to Agent Synth's servers "
+                                                        "for processing \xe2\x80\x94 see ") +
                                  juce::String(synth::branding::kWebsiteUrl) + "/privacy.");
 
         // Built once and reused by selectedDescriptor() below: populating the combo from a
