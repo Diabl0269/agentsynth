@@ -167,6 +167,13 @@ public:
         juce::String transportError;
     };
 
+    /** Result of POST /v1/feedback (P6-16). No response body worth parsing on success -- `ok` is
+        the whole story, same shape as SubmitMessageFeedbackResult. */
+    struct SubmitGeneralFeedbackResult {
+        bool ok = false;
+        juce::String transportError;
+    };
+
     explicit AuthClient(juce::String host = "http://localhost:8787", juce::String clientId = "synth-desktop",
                         juce::String deviceId = "");
 
@@ -229,6 +236,15 @@ public:
     SubmitMessageFeedbackResult submitMessageFeedback(const juce::String& accessToken,
                                                       const juce::String& conversationId, const juce::String& messageId,
                                                       const juce::String& rating, const juce::String& comment,
+                                                      const std::atomic<bool>& cancelled) const;
+
+    /** POST /v1/feedback with `Authorization: Bearer <accessToken>` and a JSON
+        `{"category": category, "text": text}` body (P6-16). `category` is "bug", "feature", or
+        "other". Unlike submitMessageFeedback (P6-9), the server does NOT plan-gate this -- any
+        signed-in account may submit general feedback -- so callers only need to gate on sign-in,
+        not on plan. */
+    SubmitGeneralFeedbackResult submitGeneralFeedback(const juce::String& accessToken, const juce::String& category,
+                                                      const juce::String& text,
                                                       const std::atomic<bool>& cancelled) const;
 
     /** POST /v1/auth/revoke. Fire-and-forget: the endpoint always answers 200 with an empty body,

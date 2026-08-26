@@ -309,9 +309,11 @@ reports, feature requests, or comments not tied to any one AI-generated patch. `
 GeneralFeedbackStore` appends one JSON object per line (`{timestamp, category, text}`) to
 `<user app data>/Agent Synth/general_feedback.jsonl` — same append-only JSON-Lines shape and
 rationale as `PatchFeedbackStore` above, but its own file since the two logs track unrelated
-things. Local-only for now: no server endpoint exists yet, following the same deferred client/
-server split P6-3/P6-9 used (see "Patch Feedback Sync to Server" below) — don't build one
-speculatively.
+things. P6-16 additionally syncs each submission to the server, fire-and-forget, mirroring
+"Patch Feedback Sync to Server (P6-9, client side)" below with one deliberate difference: this
+sync is gated on sign-in only, NOT Pro — `POST /v1/feedback` has no plan check server-side either,
+so any signed-in account may submit general feedback. The local log above is still written
+unconditionally regardless of sign-in state or sync outcome.
 
 ### AI Patch Undo/Redo Contract
 

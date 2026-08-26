@@ -407,7 +407,7 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
 
     // P6-10: general feedback entry point, not tied to any one AI-generated patch. Added last so
     // it doesn't shift the tab indices every other test in SettingsWindowTests.cpp hardcodes.
-    auto* feedbackSettingsTab = new FeedbackSettingsTab();
+    auto* feedbackSettingsTab = new FeedbackSettingsTab(accountService);
     tabs.addTab("Feedback", juce::Colours::transparentBlack, feedbackSettingsTab, true);
 
     addAndMakeVisible(tabs);
