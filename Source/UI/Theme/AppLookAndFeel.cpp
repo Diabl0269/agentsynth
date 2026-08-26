@@ -235,6 +235,7 @@ void AppLookAndFeel::retintIcons() {
     iconLibrary_.setTintColour(Icon::ActionLoad, c.textMuted);
     iconLibrary_.setTintColour(Icon::ActionSettings, c.textMuted);
     iconLibrary_.setTintColour(Icon::ActionAutoArrange, c.textMuted);
+    iconLibrary_.setTintColour(Icon::ActionFeedback, c.textMuted);
     iconLibrary_.setTintColour(Icon::ToggleAI, c.textMuted);
     iconLibrary_.setTintColour(Icon::ToggleMatrix, c.textMuted);
     iconLibrary_.setTintColour(Icon::ToggleLibrary, c.textMuted);

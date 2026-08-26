@@ -1,5 +1,6 @@
 #include "FeedbackSettingsTab.h"
 #include "../AI/AuthClient.h"
+#include "../Auth/DeviceIdStore.h"
 #include "../Branding.h"
 #include <atomic>
 #include <thread>
@@ -97,26 +98,30 @@ void FeedbackSettingsTab::sendFeedback() {
     // Local log: unconditional, regardless of plan/sign-in/sync outcome.
     store.record(text, category);
 
-    // P6-16: additionally sync to the server, fire-and-forget, when signed in with a usable
-    // access token. Unlike patch feedback (P6-9) this is NOT Pro-gated -- any signed-in account.
-    // Detached background thread, mirrors AIChatComponent's P6-9 sync block: captures COPIES
-    // only (a small, copyable, stateless AuthClient plus plain strings), never `this` or any UI
-    // state, so the thread owns everything it touches and safely outlives this callback.
+    // P6-16/P6-17: additionally sync to the server, fire-and-forget, whenever accountService is
+    // attached -- a null accountService means fully local-only (existing, deliberate contract
+    // every bare `FeedbackSettingsTab tab;` test call site relies on). Unlike patch feedback
+    // (P6-9) this is NOT Pro-gated and, per P6-17, not even sign-in-gated: authenticated via the
+    // account's access token when signed in, anonymous via this device's stable id
+    // (X-Device-Id, see AuthClient::submitGeneralFeedback) when signed out. Detached background
+    // thread, mirrors AIChatComponent's P6-9 sync block: captures COPIES only (a small, copyable,
+    // stateless AuthClient plus plain strings), never `this` or any UI state, so the thread owns
+    // everything it touches and safely outlives this callback.
     if (accountService != nullptr) {
         const auto snapshot = accountService->getSnapshot();
         const bool signedIn = snapshot.state == synth::AccountState::SignedIn;
         const juce::String accessToken = signedIn ? accountService->getAccessToken() : juce::String();
 
-        if (signedIn && accessToken.isNotEmpty()) {
-            synth::AuthClient client = testFeedbackHttpPerformer
-                                           ? synth::AuthClient(synth::branding::resolveApiBaseUrl(), "synth-desktop",
-                                                               testFeedbackHttpPerformer)
-                                           : synth::AuthClient(synth::branding::resolveApiBaseUrl());
-            std::thread([client, accessToken, categoryStr, text]() {
-                std::atomic<bool> cancelled{false};
-                client.submitGeneralFeedback(accessToken, categoryStr, text, cancelled);
-            }).detach();
-        }
+        synth::AuthClient client =
+            testFeedbackHttpPerformer
+                ? synth::AuthClient(synth::branding::resolveApiBaseUrl(), "synth-desktop", testFeedbackHttpPerformer,
+                                    synth::DeviceIdStore().getDeviceId())
+                : synth::AuthClient(synth::branding::resolveApiBaseUrl(), "synth-desktop",
+                                    synth::DeviceIdStore().getDeviceId());
+        std::thread([client, accessToken, categoryStr, text]() {
+            std::atomic<bool> cancelled{false};
+            client.submitGeneralFeedback(accessToken, categoryStr, text, cancelled);
+        }).detach();
     }
 
     feedbackEditor.clear();

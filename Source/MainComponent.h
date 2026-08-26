@@ -654,6 +654,7 @@ private:
     juce::DrawableButton saveButton{"save", juce::DrawableButton::ImageAboveTextLabel};
     juce::DrawableButton loadButton{"load", juce::DrawableButton::ImageAboveTextLabel};
     juce::DrawableButton settingsButton{"settings", juce::DrawableButton::ImageAboveTextLabel};
+    juce::DrawableButton feedbackButton{"feedback", juce::DrawableButton::ImageAboveTextLabel};
     juce::DrawableButton undoButton{"undo", juce::DrawableButton::ImageAboveTextLabel};
     juce::DrawableButton redoButton{"redo", juce::DrawableButton::ImageAboveTextLabel};
     juce::DrawableButton toggleAiPanelButton{"toggleAi", juce::DrawableButton::ImageAboveTextLabel};

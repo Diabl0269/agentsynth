@@ -445,6 +445,7 @@ juce_add_binary_data(Assets SOURCES
     assets/icons/action-load.svg
     assets/icons/action-settings.svg
     assets/icons/action-auto-arrange.svg
+    assets/icons/action-feedback.svg
     assets/icons/toggle-ai.svg
     assets/icons/toggle-matrix.svg
     assets/icons/toggle-library.svg

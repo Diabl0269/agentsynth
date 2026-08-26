@@ -196,11 +196,11 @@ toggle moves the fraction and calls back in here. See `docs/layout_visuals_anima
 ### Toolbar FlexBox layout (`ToolbarComponent`)
 
 `ToolbarComponent::layoutButtons(bounds)` runs a single `juce::FlexBox` (row, align-center):
-- Left group: Library, Save, Load, Settings, Undo, Redo, AutoArrange
+- Left group: Library, Save, Load, Settings, Feedback, Undo, Redo, AutoArrange
 - Flex spacer (`withFlex(1.0f)`) — fills available gap
 - Right group: ToggleModMatrix, ToggleAiPanel
 
-**Narrow mode** fires when `bounds.getWidth() <= Metrics::minWindowWidth` (480 px). In narrow mode, all button `prefWidth` = 32 (icon-only). In wide mode each button has a labelled preferred width (Library 96, Save 112, Load 116, Settings 96, Undo 72, Redo 72, AutoArrange 120, ToggleModMatrix 104, ToggleAiPanel 92).
+**Narrow mode** fires when `bounds.getWidth() <= Metrics::minWindowWidth` (480 px). In narrow mode, all button `prefWidth` = 32 (icon-only). In wide mode each button has a labelled preferred width (Library 96, Save 112, Load 116, Settings 96, Undo 72, Redo 72, AutoArrange 120, ToggleModMatrix 104, ToggleAiPanel 92). `Feedback` (P6-17) sits in the same sub-group as `Settings` (`groupOf()` returns the same id for both, so no separator is drawn between them) and is always icon-only — its preferred width is a fixed 40 regardless of narrow/wide mode, since it never grows a text label.
 
 ### Narrow-mode gate in `MainComponent::resized()`
 

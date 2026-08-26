@@ -20,13 +20,15 @@ class ToolbarComponent : public juce::Component {
 public:
     // Logical slot order — matches the left group [Library..AutoArrange] + right group
     // [ToggleMinimap, ToggleModMatrix, ToggleAiPanel, ToggleTimeline, ToggleTheme]. NumSlots is
-    // the array size.
+    // the array size. Feedback sits immediately after Settings (same group — icon-only,
+    // visually paired with the settings gear rather than a new standalone cluster).
     enum Slot {
         Library = 0,
         New,
         Save,
         Load,
         Settings,
+        Feedback,
         Undo,
         Redo,
         AutoArrange,

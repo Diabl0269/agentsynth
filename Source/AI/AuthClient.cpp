@@ -631,7 +631,12 @@ AuthClient::SubmitGeneralFeedbackResult AuthClient::submitGeneralFeedback(const 
     SubmitGeneralFeedbackResult result;
 
     juce::StringPairArray headers;
-    headers.set("Authorization", "Bearer " + accessToken);
+    // Bearer auth only when signed in; otherwise this is an anonymous submission attributed via
+    // X-Device-Id below (P6-17).
+    if (accessToken.isNotEmpty())
+        headers.set("Authorization", "Bearer " + accessToken);
+    if (deviceId.isNotEmpty())
+        headers.set("X-Device-Id", deviceId);
     headers.set("Content-Type", "application/json");
 
     juce::DynamicObject::Ptr bodyObj = new juce::DynamicObject();

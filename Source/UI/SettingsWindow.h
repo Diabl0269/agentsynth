@@ -22,10 +22,14 @@ public:
     // contract as AccountRow/PlanBadge::setAccountService(nullptr) — so every existing call site
     // (including every SettingsWindowTests.cpp test) keeps compiling and gets the signed-out-only
     // AI tab (P6-7's prompt-learning toggle disabled) rather than a required dependency.
+    // initialTabName: when non-empty and it matches a tab's name (by exact TabbedComponent tab
+    // name), that tab is selected on construction instead of the persisted "settingsTab"
+    // preference. Empty (the default) keeps the existing persisted-tab behaviour.
     SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::ApplicationProperties& appProperties,
                    synth::AIIntegrationService& aiService, synth::AIChatComponent& aiChatComponent,
                    ShortcutManager& shortcutManager, synth::theme::ThemeManager& themeManager, GraphEditor* graphEditor,
-                   synth::AccountService* accountService = nullptr, bool showAudioTab = true);
+                   synth::AccountService* accountService = nullptr, bool showAudioTab = true,
+                   juce::String initialTabName = {});
     ~SettingsWindow() override;
 
     void resized() override;

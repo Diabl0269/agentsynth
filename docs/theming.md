@@ -207,17 +207,17 @@ Agent Synth uses SVG `Drawable` icons — **not** an icon or glyph font. This av
 
 ### Icon enum
 
-41 icons are defined in `synth::theme::Icon` (in `Source/UI/Theme/IconLibrary.h`):
+42 icons are defined in `synth::theme::Icon` (in `Source/UI/Theme/IconLibrary.h`):
 
 ```
 TransportPlay    TransportStop    ActionUndo       ActionRedo
 ActionSave       ActionLoad       ActionNew        ActionSettings
-ActionAutoArrange ToggleAI        ToggleMatrix     ToggleLibrary
-ThemeToggle      ModuleBypass     ModuleMute       ModuleDelete
-CatSources       CatSequencing    CatEnvelopes     CatFilters
-CatModulationFX  CatTimeFX        CatDynamics      CatUtility
-WaveformSine     WaveformSaw      WaveformSquare   WaveformTriangle
-ToggleMinimap    ModuleDualIO
+ActionAutoArrange ActionFeedback  ToggleAI         ToggleMatrix
+ToggleLibrary    ThemeToggle      ModuleBypass     ModuleMute
+ModuleDelete     CatSources       CatSequencing    CatEnvelopes
+CatFilters       CatModulationFX  CatTimeFX        CatDynamics
+CatUtility       WaveformSine     WaveformSaw      WaveformSquare
+WaveformTriangle ToggleMinimap    ModuleDualIO
 ToolSelect       ToolSplit        ToolGlue         ToolErase
 ToolMute         ToolDraw
 TrackMidi        TrackAudio       TrackAutomation  FollowPlayhead
@@ -226,19 +226,21 @@ CatIO
 
 **`Icon::TransportPlay` is scaffolding** — the SVG asset is present and the enum value exists, but no `DrawableButton` is wired to it. It is tinted to `textMuted` and reserved for a future transport affordance.
 
-The four **waveform icons** (`WaveformSine`, `WaveformSaw`, `WaveformSquare`, `WaveformTriangle`, indices 24–27) are rendered in the Oscillator waveform combo via `AppLookAndFeel::drawPopupMenuItem` (14×14 glyph left of the item text) and `drawComboBox` (selected waveform glyph in the closed combo). `positionComboBoxText` shifts the label right when the selected item has an icon.
+**`Icon::ActionFeedback`** (index 9, P6-17) is the toolbar button that opens Settings pre-selected to the Feedback tab — a speech-bubble glyph, tinted the same muted toolbar-action base as every other `Action*`/`Toggle*` icon (see `AppLookAndFeel::retintIcons()`; it needs its own explicit `setTintColour` call — there is no loop over `Icon::kCount` that would have covered it automatically).
 
-**`Icon::ToggleMinimap`** (index 28) is the toolbar toggle for the Graph Editor minimap overlay — see [`layout_selection_canvas.md` §4](layout_selection_canvas.md#4-minimap-overlay-issue-159).
+The four **waveform icons** (`WaveformSine`, `WaveformSaw`, `WaveformSquare`, `WaveformTriangle`, indices 25–28) are rendered in the Oscillator waveform combo via `AppLookAndFeel::drawPopupMenuItem` (14×14 glyph left of the item text) and `drawComboBox` (selected waveform glyph in the closed combo). `positionComboBoxText` shifts the label right when the selected item has an icon.
 
-**`Icon::ModuleDualIO`** (index 29) is the module-header toggle that splits a collapsed `"Audio"` jack into separate Left/Right jacks. There is no universal stereo-split glyph; this one is a Y-fork into two jacks. The button's tooltip carries the Dual I/O on/off copy. See [`fx_modules.md` § Stereo I/O](fx_modules.md#stereo-io-dual-io-toggle).
+**`Icon::ToggleMinimap`** (index 29) is the toolbar toggle for the Graph Editor minimap overlay — see [`layout_selection_canvas.md` §4](layout_selection_canvas.md#4-minimap-overlay-issue-159).
 
-**`Icon::ToolSelect` … `Icon::ToolDraw`** (indices 30–35) are the six glyphs for the timeline edit-tool strip (`synth::ui::EditTool` — Select, Split, Glue, Erase, Mute, Draw; see [`Source/UI/EditTool.h`](../Source/UI/EditTool.h)): a pointer arrow, scissors, a glue bottle, an angled eraser block, a crossed-out speaker (visually distinct from `ModuleMute` — that one is an outlined speaker with a small corner X; this one is a solid-filled speaker with a single strike-through slash), and a pencil at ~45°. `Source/UI/ToolCursors.h`'s `makeToolCursor()` renders these same tinted Drawables into the custom per-tool mouse cursor shown over the clip lanes / piano roll, rather than shipping a second cursor-only asset — see that header's doc comment for the per-tool hotspot table.
+**`Icon::ModuleDualIO`** (index 30) is the module-header toggle that splits a collapsed `"Audio"` jack into separate Left/Right jacks. There is no universal stereo-split glyph; this one is a Y-fork into two jacks. The button's tooltip carries the Dual I/O on/off copy. See [`fx_modules.md` § Stereo I/O](fx_modules.md#stereo-io-dual-io-toggle).
 
-**`Icon::TrackMidi`, `Icon::TrackAudio`, `Icon::TrackAutomation`** (indices 36–38) are the timeline track header's kind-badge glyphs — one per `synth::TrackKind`, drawn in place of the old `"MIDI"`/`"AUD"`/`"AUTO"` text pill when a themed `AppLookAndFeel` and the asset library are both present (`TimelineTrackHeaderComponent::kindBadgeIcon`; see [`timeline_panel_core.md` §3](timeline_panel_core.md#3-track-headers-binding-chips-add-track)). The text pill remains the fallback in a headless build or when the icon asset is missing — the badge is identity chrome either way, never a control.
+**`Icon::ToolSelect` … `Icon::ToolDraw`** (indices 31–36) are the six glyphs for the timeline edit-tool strip (`synth::ui::EditTool` — Select, Split, Glue, Erase, Mute, Draw; see [`Source/UI/EditTool.h`](../Source/UI/EditTool.h)): a pointer arrow, scissors, a glue bottle, an angled eraser block, a crossed-out speaker (visually distinct from `ModuleMute` — that one is an outlined speaker with a small corner X; this one is a solid-filled speaker with a single strike-through slash), and a pencil at ~45°. `Source/UI/ToolCursors.h`'s `makeToolCursor()` renders these same tinted Drawables into the custom per-tool mouse cursor shown over the clip lanes / piano roll, rather than shipping a second cursor-only asset — see that header's doc comment for the per-tool hotspot table.
 
-**`Icon::FollowPlayhead`** (index 39) is the toolbar-style toggle button next to the timeline panel's snap selector that page-flips the view to keep the playhead on screen while playing — see [`timeline_panel_core.md` §2](timeline_panel_core.md#2-ruler-grid-zoomscroll-snap-loop-brace).
+**`Icon::TrackMidi`, `Icon::TrackAudio`, `Icon::TrackAutomation`** (indices 37–39) are the timeline track header's kind-badge glyphs — one per `synth::TrackKind`, drawn in place of the old `"MIDI"`/`"AUD"`/`"AUTO"` text pill when a themed `AppLookAndFeel` and the asset library are both present (`TimelineTrackHeaderComponent::kindBadgeIcon`; see [`timeline_panel_core.md` §3](timeline_panel_core.md#3-track-headers-binding-chips-add-track)). The text pill remains the fallback in a headless build or when the icon asset is missing — the badge is identity chrome either way, never a control.
 
-**`Icon::CatIO`** (index 40) is the speaker glyph for the module library's "I/O" category header (Audio Input / Audio Output — previously fell back to `CatUtility`, which gave the graph's actual source/sink no visual identity of its own) and doubles as the Audio Output card's identity glyph in `ModuleComponent::paint()`. Appended after `FollowPlayhead` rather than grouped with the other `CatXxx` entries so every existing enum ordinal (and the hardcoded spot-checks in `IconLibraryTests.cpp`) stays unchanged — see [`layout.md`'s Audio Output card identity treatment](layout.md#audio-output-card-identity-treatment).
+**`Icon::FollowPlayhead`** (index 40) is the toolbar-style toggle button next to the timeline panel's snap selector that page-flips the view to keep the playhead on screen while playing — see [`timeline_panel_core.md` §2](timeline_panel_core.md#2-ruler-grid-zoomscroll-snap-loop-brace).
+
+**`Icon::CatIO`** (index 41) is the speaker glyph for the module library's "I/O" category header (Audio Input / Audio Output — previously fell back to `CatUtility`, which gave the graph's actual source/sink no visual identity of its own) and doubles as the Audio Output card's identity glyph in `ModuleComponent::paint()`. Appended after `FollowPlayhead` rather than grouped with the other `CatXxx` entries so it never displaces any of the ordinals before it — see [`layout.md`'s Audio Output card identity treatment](layout.md#audio-output-card-identity-treatment).
 
 ### Token → tint map
 
@@ -290,6 +292,7 @@ JUCE's binary-data name mangler **strips hyphens** and concatenates the remainin
 | `action-undo.svg` | `BinaryData::actionundo_svg` |
 | `cat-modulation-fx.svg` | `BinaryData::catmodulationfx_svg` |
 | `action-auto-arrange.svg` | `BinaryData::actionautoarrange_svg` |
+| `action-feedback.svg` | `BinaryData::actionfeedback_svg` |
 | `waveform-sine.svg` | `BinaryData::waveformsine_svg` |
 | `waveform-saw.svg` | `BinaryData::waveformsaw_svg` |
 | `waveform-square.svg` | `BinaryData::waveformsquare_svg` |

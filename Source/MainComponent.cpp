@@ -903,13 +903,31 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         options.launchAsync();
     };
 
+    addAndMakeVisible(feedbackButton);
+    feedbackButton.setComponentID("feedbackButton");
+    feedbackButton.onClick = [this]() {
+        auto* settingsComp =
+            new SettingsWindow(audioEngine.getDeviceManager(), appProperties, aiService, aiChatComponent,
+                               shortcutManager, *themeManager, &graphEditor, &accountService,
+                               /*showAudioTab=*/!audioEngine.isHosted(), "Feedback");
+        settingsComp->setSize(500, 450);
+
+        juce::DialogWindow::LaunchOptions options;
+        options.content.setOwned(settingsComp);
+        options.dialogTitle = "Settings";
+        options.componentToCentreAround = this;
+        options.useNativeTitleBar = true;
+        options.resizable = true;
+        options.launchAsync();
+    };
+
     // Hand the (now-constructed) buttons to the toolbar for FlexBox layout. Order MUST match
     // ToolbarComponent::Slot.
     // ORDERING CONTRACT: setButtons() MUST be called BEFORE setSize() so that the first
     // resized() -> layoutButtons() pass finds the registered buttons and positions them.
     // Calling setSize() before setButtons() leaves all buttons with zero bounds on first launch.
-    toolbar.setButtons({&toggleLibraryButton, &newButton, &saveButton, &loadButton, &settingsButton, &undoButton,
-                        &redoButton, &autoArrangeButton, &toggleMinimapButton, &toggleModMatrixButton,
+    toolbar.setButtons({&toggleLibraryButton, &newButton, &saveButton, &loadButton, &settingsButton, &feedbackButton,
+                        &undoButton, &redoButton, &autoArrangeButton, &toggleMinimapButton, &toggleModMatrixButton,
                         &toggleAiPanelButton, &toggleTimelineButton, &themeToggleButton});
 
     // Now that buttons are registered, trigger the first layout pass. resized() calls
@@ -2432,6 +2450,7 @@ void MainComponent::applyToolbarIcons() {
     setIcon(saveButton, Icon::ActionSave);
     setIcon(loadButton, Icon::ActionLoad);
     setIcon(settingsButton, Icon::ActionSettings);
+    setIcon(feedbackButton, Icon::ActionFeedback);
     setIcon(undoButton, Icon::ActionUndo);
     setIcon(redoButton, Icon::ActionRedo);
     setIcon(autoArrangeButton, Icon::ActionAutoArrange);
@@ -2486,6 +2505,7 @@ void MainComponent::applyToolbarIcons() {
     saveButton.setTooltip(hint("Save preset", "savePreset"));
     loadButton.setTooltip(hint("Load preset", "openPreset"));
     settingsButton.setTooltip(hint("Open settings", "openSettings"));
+    feedbackButton.setTooltip("Send feedback");
     undoButton.setTooltip(hint("Undo", "undo"));
     redoButton.setTooltip(hint("Redo", "redo"));
     autoArrangeButton.setTooltip(hint("Auto-arrange modules", "autoArrange"));
