@@ -1,4 +1,5 @@
 #include "ModuleComponent.h"
+#include "../AI/AIStateMapper.h" // kMaxModuleDisplayNameChars — one cap for typed and loaded titles
 #include "../Modules/ExternalMidiModule.h"
 #include "../Modules/MacroControlModule.h"
 #include "../Modules/ModuleBase.h"
@@ -34,6 +35,17 @@ static ModuleType getType(juce::AudioProcessor* module) {
     if (auto* mb = dynamic_cast<ModuleBase*>(module))
         return mb->getModuleType();
     return ModuleType::Oscillator;
+}
+
+/** True for the graph's terminal audio sink (Audio Output). Mirrors GraphEditor.cpp's
+ *  isTerminalAudioSink — detected by TYPE, not by name, so a ModuleBase happening to be titled
+ *  "Audio Output" cannot impersonate it. A bare juce::AudioGraphIOProcessor is never a ModuleBase,
+ *  so getType() above always falls back to Oscillator for it; this is the one place in this file
+ *  that actually cares which IO node it is (the output-card identity treatment in paint()). */
+static bool isAudioOutputIONode(juce::AudioProcessor* module) {
+    using IOProcessor = juce::AudioProcessorGraph::AudioGraphIOProcessor;
+    auto* io = dynamic_cast<IOProcessor*>(module);
+    return io != nullptr && io->getType() == IOProcessor::audioOutputNode;
 }
 
 ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGraph::NodeID nId, GraphEditor& owner,
@@ -1787,16 +1799,16 @@ void ModuleComponent::paint(juce::Graphics& g) {
     if (lf != nullptr) {
         // Single owner of card treatment: background, drop shadow, body fill, border, and the
         // header band (filled + title drawn) all come from the active theme.
-        lf->drawModulePanel(g, getLocalBounds().toFloat(), 24, module->getName(), isSelected, isBypassed);
+        lf->drawModulePanel(g, getLocalBounds().toFloat(), kHeaderHeight, cardTitle(), isSelected, isBypassed);
     } else {
         // Fallback path (no themed LnF): plain fill + simple header so tests render without crashing.
         g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
         g.setColour(isSelected ? juce::Colours::aqua : juce::Colours::black);
         g.drawRect(getLocalBounds(), 2);
         g.setColour(juce::Colours::darkgrey);
-        g.fillRect(0, 0, getWidth(), 24);
+        g.fillRect(0, 0, getWidth(), kHeaderHeight);
         g.setColour(juce::Colours::white);
-        g.drawText(module->getName(), 0, 0, getWidth(), 24, juce::Justification::centred, true);
+        g.drawText(cardTitle(), 0, 0, getWidth(), kHeaderHeight, juce::Justification::centred, true);
     }
 
     // Drop-target highlight while an audio file hovers over a Sampler.
@@ -1830,6 +1842,36 @@ void ModuleComponent::paint(juce::Graphics& g) {
         auto ledColour = (lf != nullptr) ? lf->getTheme().colors.success : juce::Colours::limegreen;
         g.setColour(ledColour.withAlpha(ledAlpha));
         g.fillEllipse(6.0f, 8.0f, 8.0f, 8.0f);
+    }
+
+    // Output-card identity treatment (user request: "a better way to represent the output module
+    // and its destinations"). Audio Output is a bare juce::AudioGraphIOProcessor and otherwise
+    // renders through the exact same generic path as every card above — this is the one additive
+    // block that gives it its own identity. The glyph reuses the activity LED's slot: Audio Output
+    // is never a ModuleBase, so it never has a VisualBuffer and cachedRMS above stays 0.0f forever
+    // for this card, leaving that slot permanently dark otherwise. The destination line is pushed
+    // in by GraphEditor::refreshOutputDeviceInfo (MainComponent -> GraphEditor -> here) whenever
+    // AudioEngine's device state changes; an empty string (no device open yet, headless build, or
+    // Hosted mode with nothing to report) means "draw no line" rather than an empty one.
+    if (isAudioOutputIONode(module)) {
+        if (lf != nullptr) {
+            if (auto ioIcon = lf->getIcon(synth::theme::Icon::CatIO)) {
+                // Owned clone (not peekIcon's shared view): retinted below to the TITLE's colour,
+                // not the library sidebar's fixed textMuted, so glyph + title read as one lockup —
+                // this must never touch the shared IconLibrary cache other cards/rows also read.
+                const auto& c = lf->getTheme().colors;
+                const auto titleColour = isSelected ? c.accent : (isBypassed ? c.textDisabled : c.textPrimary);
+                ioIcon->replaceColour(c.textMuted, titleColour); // c.textMuted is retintIcons()'s baked-in tint
+                ioIcon->drawWithin(g, outputCardIconBoundsForTest(*lf), juce::RectanglePlacement::centred, 1.0f);
+            }
+        }
+        if (outputDeviceInfoText.isNotEmpty()) {
+            auto mutedColour = (lf != nullptr) ? lf->getTheme().colors.textMuted : juce::Colours::grey;
+            g.setColour(mutedColour);
+            g.setFont(juce::Font(juce::FontOptions((lf != nullptr) ? lf->getTheme().type.micro : 9.0f)));
+            g.drawFittedText(outputDeviceInfoText, kContentMargin, 27, getWidth() - kContentMargin * 2, 14,
+                             juce::Justification::centredLeft, 1);
+        }
     }
 
     // --- PORTS ---
@@ -2038,7 +2080,7 @@ juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
     }
 
     int yStep = 20;
-    int headerHeight = 38;
+    int headerHeight = kPortGutterHeaderHeight;
 
     int portOffset = 0;
     if (module->producesMidi()) {
@@ -2365,6 +2407,47 @@ void ModuleComponent::refreshPortLayout() {
     repaint();
 }
 
+void ModuleComponent::setOutputDeviceInfoText(const juce::String& text) {
+    // A no-op on every module except Audio Output: the card layout never changes (this only
+    // affects a paint-time text draw), so unlike refreshPortLayout above there is nothing to
+    // re-measure — just invalidate the cached image if the text actually changed.
+    if (module == nullptr || !isAudioOutputIONode(module) || outputDeviceInfoText == text)
+        return;
+
+    outputDeviceInfoText = text;
+    repaint();
+}
+
+juce::Rectangle<float> ModuleComponent::outputCardIconBoundsForTest(const synth::theme::AppLookAndFeel& lf) {
+    // Mirrors the title's own font — theme.type.h2, bold — set in AppLookAndFeel::drawModulePanel.
+    const juce::Font titleFont(juce::FontOptions(lf.getTheme().type.h2, juce::Font::bold));
+
+    // JUCE exposes no direct cap-height accessor. 0.72x ascent is the standard sans-serif
+    // approximation (Inter — embedded for every UI face here, see docs/theming.md — sits close to
+    // this) and tracks the visible glyph ink far more closely than the full ascent+descent box
+    // drawText centres text within: an all-caps, all-punctuation-free title (the title is upper-
+    // cased + letter-spaced in drawModulePanel) never touches the descender clearance that box
+    // reserves, so centring on THAT box reads slightly low against the glyphs actually on screen.
+    const float capHeight = titleFont.getAscent() * 0.72f;
+
+    // Header band geometry, copied from AppLookAndFeel::drawModulePanel (body = bounds.reduced(2);
+    // header = body.withHeight(24), passed down from paint() below as literal 24): the same
+    // vertically-centred text-box math drawText itself uses, so this converges on the same
+    // baseline drawText would place the title on.
+    constexpr float kHeaderTop = 2.0f;
+    constexpr float kHeaderHeight = 24.0f;
+    const float textBoxTop = kHeaderTop + (kHeaderHeight - titleFont.getHeight()) * 0.5f;
+    const float baseline = textBoxTop + titleFont.getAscent();
+    const float capCentreY = baseline - capHeight * 0.5f;
+
+    // Sized to the title's cap-height (not the full header band) and right-aligned to the activity
+    // LED's own right edge — fillEllipse(6, 8, 8, 8) a few lines below, right edge at x=14 — so the
+    // gap to the title's left inset (22, see drawModulePanel) stays the same 8px the LED's absence
+    // already reserves, whatever the icon's resulting width turns out to be.
+    constexpr float kIconRightEdge = 14.0f;
+    return juce::Rectangle<float>(kIconRightEdge - capHeight, capCentreY - capHeight * 0.5f, capHeight, capHeight);
+}
+
 void ModuleComponent::applyMacroCountChange() {
     if (module == nullptr || dynamic_cast<MacroControlModule*>(module) == nullptr)
         return;
@@ -2448,8 +2531,8 @@ void ModuleComponent::updateDualIOTooltip() {
     if (dualIOButton == nullptr)
         return;
     const bool dual = dynamic_cast<ModuleBase*>(module) != nullptr && static_cast<ModuleBase*>(module)->isDualIO();
-    dualIOButton->setTooltip(dual ? "Dual I/O on — separate Left and Right jacks"
-                                  : "Dual I/O off — one Audio jack (Left + Right)");
+    dualIOButton->setTooltip(dual ? "Dual I/O on - separate Left and Right jacks"
+                                  : "Dual I/O off - one Audio jack (Left + Right)");
 }
 
 void ModuleComponent::applyDualIOLayoutChange() {
@@ -2484,6 +2567,12 @@ void ModuleComponent::parameterGestureChanged(int parameterIndex, bool gestureIs
 }
 
 void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
+    // Clicking anywhere on a card commits an open inline title editor — this card's or another's.
+    // FIRST, before the child-control guard below returns, so a press on a knob dismisses it too.
+    // A press inside the editor itself never reaches here: it is a plain child with no mouse
+    // listener registered on it, so JUCE delivers that press to the editor.
+    owner.commitAnyOpenTitleRename();
+
     // A click that landed on a CHILD control this component attached itself to as a
     // MouseListener (currently just the generic auto-UI sliders — see createControls()) rather
     // than on this component's own body. e.getPosition() below is in THAT CHILD's local space, not
@@ -2524,7 +2613,24 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
         if (getType(module) == ModuleType::Attenuverter)
             return; // cannot drag
 
-        if (e.mods.isPopupMenu()) {
+        // Double-click the HEADER opens the inline rename. Intercepted here, before any drag is
+        // armed, exactly like the port double-click above: the first click of the pair has already
+        // armed (and its mouseUp disarmed) a body drag, and letting the second click arm another one
+        // would leave bodyDragActive set under an open editor, so the next stray mouseDrag would
+        // move the card out from under the cursor. Returning before dragStartPosition/bodyDragActive
+        // are touched is what keeps the two gestures from fighting.
+        if (e.getNumberOfClicks() >= 2 && !e.mods.isRightButtonDown() && e.getPosition().y < kHeaderHeight) {
+            beginTitleRename();
+            return;
+        }
+
+        // TRUE right button only, deliberately not isPopupMenu(): on macOS JUCE defines
+        // popupMenuClickModifier as (rightButtonModifier | ctrlModifier), so isPopupMenu() is also
+        // true for Ctrl+LEFT-click — and Ctrl+left-click is the insert-between drag modifier plus
+        // the additive-selection toggle (see below). A card cannot open a menu and start a drag from
+        // the same press, so the legacy one-button-mouse affordance loses here; right-click and
+        // two-finger tap still open the menu on every platform.
+        if (e.mods.isRightButtonDown()) {
             // Right-clicking outside the current selection retargets it to this module, so the
             // menu always acts on something the user can see is selected.
             if (!owner.isNodeSelected(nodeId))
@@ -2642,19 +2748,39 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
             m.addItem("Delete Module", [this] { owner.deleteModule(this); });
             m.showMenuAsync(juce::PopupMenu::Options());
         } else {
-            // ---- Selection semantics (issue #156) ----
-            // Shift/Cmd-click toggles membership and does NOT begin a drag: a modifier-click is an
-            // edit to the selection, not a move.
-            const bool additive = e.mods.isShiftDown() || e.mods.isCommandDown() || e.mods.isCtrlDown();
-            if (additive) {
+            // ---- Selection semantics (issue #156) + Ctrl insert-between ----
+            //
+            // Ctrl+CLICK is an additive-select toggle and Ctrl+DRAG is an insert-between move, and
+            // at mouse-down those are indistinguishable — so we arm BOTH and let mouse-up decide,
+            // the same deferred classification the piano roll uses for Cmd on a note body
+            // (cmdToggleNote_). The drag has to win at press time because it needs state (dragger,
+            // undo capture, landing ghost) that cannot be conjured later; the toggle is the one that
+            // can be completed retroactively, so mouseUp finishes it only if nothing moved.
+            //
+            // The selection is COLLAPSED onto this module for the duration, not added to: a group
+            // drag suppresses smart connections entirely (shouldOfferSmartConnections) and moves
+            // every member, so a leftover multi-selection would silently disable insert. The
+            // pre-press selection is restored in mouseUp if the press turns out to be a click.
+            //
+            // Ctrl is tested BEFORE the additive modifiers and that ordering is load-bearing: on
+            // Windows/Linux JUCE defines commandModifier AS ctrlModifier, so isCommandDown() is true
+            // whenever Ctrl is down. Testing additive first would early-return there and a Ctrl+drag
+            // could never arm the dragger — insert would be macOS-only. Taking this branch keeps
+            // Ctrl+click toggling on those platforms anyway, via the deferred completion below.
+            if (e.mods.isCtrlDown()) {
+                ctrlTogglePending = true;
+                ctrlPressSelection = owner.getSelectedNodes();
+                owner.selectModule(nodeId, false);
+            } else if (e.mods.isShiftDown() || e.mods.isCommandDown()) {
+                // Shift/Cmd-click toggles membership and does NOT begin a drag: a modifier-click is
+                // an edit to the selection, not a move.
                 owner.selectModule(nodeId, true);
                 return;
-            }
-
-            // A plain click on an already-selected module keeps the whole group intact so it can be
-            // dragged; clicking anything else collapses the selection onto it.
-            if (!owner.isNodeSelected(nodeId))
+            } else if (!owner.isNodeSelected(nodeId)) {
+                // A plain click on an already-selected module keeps the whole group intact so it can
+                // be dragged; clicking anything else collapses the selection onto it.
                 owner.selectModule(nodeId, false);
+            }
 
             dragStartPosition = getPosition();
             bodyDragActive = true;
@@ -2667,6 +2793,54 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
             owner.beginDragPreview(getWidth(), getHeight(), getNodeId());
         }
     }
+}
+
+juce::String ModuleComponent::cardTitle() const { return owner.getModuleTitle(nodeId, module); }
+
+void ModuleComponent::beginTitleRename() {
+    if (module == nullptr || getType(module) == ModuleType::Attenuverter)
+        return;
+
+    // Any editor already open commits first, and that mutates the graph — so nothing may hold state
+    // across it. Same ordering as TimelineRulerComponent::beginRenameMarker.
+    finishTitleRename(true);
+
+    titleEditor = std::make_unique<juce::TextEditor>("moduleTitleRenameEditor");
+    titleEditor->setComponentID("moduleTitleRenameEditor");
+    titleEditor->setMultiLine(false);
+    titleEditor->setReturnKeyStartsNewLine(false);
+    titleEditor->setJustification(juce::Justification::centred);
+    titleEditor->setInputRestrictions(synth::kMaxModuleDisplayNameChars);
+    // Seeded with what the header currently SHOWS, so a first rename starts from "Chorus 2" rather
+    // than from an empty box the user has to retype.
+    titleEditor->setText(cardTitle(), juce::dontSendNotification);
+    titleEditor->setBounds(2, 1, std::max(40, getWidth() - 4), kHeaderHeight - 2);
+    titleEditor->onReturnKey = [this] { finishTitleRename(true); };
+    titleEditor->onEscapeKey = [this] { finishTitleRename(false); };
+    // Clicking away commits; Escape is the only cancel. Matches every other in-place rename here.
+    titleEditor->onFocusLost = [this] { finishTitleRename(true); };
+    addAndMakeVisible(*titleEditor);
+    titleEditor->selectAll();
+    titleEditor->grabKeyboardFocus();
+}
+
+void ModuleComponent::finishTitleRename(bool commit) {
+    if (titleEditor == nullptr)
+        return;
+
+    // Detach FIRST: destroying the editor moves focus off it, which fires onFocusLost, which
+    // re-enters here and finds a null editor and stops.
+    auto editor = std::move(titleEditor);
+    const juce::String typed = editor->getText();
+    editor.reset();
+
+    if (!commit)
+        return;
+
+    // Typing the auto-numbered name back is the same as having no custom title, so it stores as
+    // blank and keeps following the numbering instead of freezing today's number in place.
+    owner.setModuleDisplayName(nodeId, typed.trim() == module->getName() ? juce::String() : typed);
+    repaint();
 }
 
 void ModuleComponent::moved() {
@@ -2699,9 +2873,23 @@ void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
             return;
         bodyDragActive = false;
 
+        // Ctrl+press armed a drag AND a pending selection toggle; the press turning out to be a
+        // click is what decides it was really the toggle. Restore the selection the press collapsed
+        // and flip this module's membership. A Ctrl+DRAG leaves the collapsed single selection
+        // alone, exactly like a plain drag does.
+        const bool moved = getPosition() != dragStartPosition;
+        if (ctrlTogglePending) {
+            if (!moved) {
+                owner.setSelectedNodes(ctrlPressSelection);
+                owner.selectModule(nodeId, true); // additive: toggles membership
+            }
+            ctrlTogglePending = false;
+            ctrlPressSelection.clear();
+        }
+
         // Finalize first so smart-connection suggestions (still held on the editor) can apply;
         // then clear the ghost overlay.
-        if (getPosition() != dragStartPosition) {
+        if (moved) {
             // Snap to grid and resolve overlap BEFORE the undo snapshot so the
             // snapped/cleared final position is what gets captured in the diff.
             //

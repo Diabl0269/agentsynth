@@ -2175,8 +2175,8 @@ TEST_F(AIChatComponentTest, ArrangeModeSelectorFollowsTimelinePreferenceRegardle
     chat.refreshModels(); // the post-setProvider resync point (CLAUDE.md ordering contract)
     EXPECT_TRUE(chat.isModeSelectorVisibleForTesting());
 
-    // Preference toggled off mid-session (MainComponent::applyTimelineFeatureEnabled re-syncs the
-    // selector): hidden again.
+    // Switch toggled off mid-session (the owner re-syncs the selector after flipping it): hidden
+    // again.
     service.setTimelineToolsEnabled(false);
     chat.refreshModeControls();
     EXPECT_FALSE(chat.isModeSelectorVisibleForTesting());

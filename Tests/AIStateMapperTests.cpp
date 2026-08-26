@@ -151,7 +151,7 @@ TEST(AIStateMapperTest, ChoiceParameterStringMapping) {
 
     auto oscNode = graph.getNodes().getUnchecked(0);
     auto* osc = dynamic_cast<juce::AudioProcessor*>(oscNode->getProcessor());
-    auto* waveformParam = dynamic_cast<juce::AudioParameterChoice*>(osc->getParameters().getUnchecked(1));
+    auto* waveformParam = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(osc, "waveform"));
 
     ASSERT_NE(waveformParam, nullptr);
     ASSERT_EQ(waveformParam->getIndex(), 2); // "Saw" is index 2
@@ -167,7 +167,7 @@ TEST(AIStateMapperTest, ChoiceParameterCaseInsensitiveMapping) {
 
     auto oscNode = graph.getNodes().getUnchecked(0);
     auto* osc = dynamic_cast<juce::AudioProcessor*>(oscNode->getProcessor());
-    auto* waveformParam = dynamic_cast<juce::AudioParameterChoice*>(osc->getParameters().getUnchecked(1));
+    auto* waveformParam = dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(osc, "waveform"));
 
     ASSERT_NE(waveformParam, nullptr);
     ASSERT_EQ(waveformParam->getIndex(), 2); // "saw" matches "Saw"
@@ -1184,7 +1184,7 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
                            "Step 5 Chord, Step 5 Root, Step 6 Chord, Step 6 Root, Step 7 Chord, Step 7 Root, "
                            "Step 8 Chord, Step 8 Root, bpm, bypassed, run, syncToTransport"},
         {"Reverb", "bypassed, damping, dry, dualIO, muted, outputLevel, roomSize, wet, width"},
-        {"Ring Modulator", "bypassed, character, drive, mix, muted, outputLevel, oversampling"},
+        {"Ring Modulator", "bypassed, character, drive, dualIO, mix, muted, outputLevel, oversampling"},
         {"Sample & Hold", "bypassed, clock, holdMode, level, muted, offset, rate, slew, source, trigThreshold"},
         {"Sampler",
          "bypassed, density, dualIO, grainSize, level, loop, muted, pitch, playMode, rootNote, spray, start"},

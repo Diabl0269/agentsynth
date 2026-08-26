@@ -119,6 +119,122 @@ TEST(AnimationDriverLerpBounds, HalfTIsMidpoint) {
 }
 
 // ============================================================================
+// PanelSlide — the [0..1] open fraction a sliding panel's layout is derived
+// from. Pure state, so all of this is exact and needs no message loop: it is
+// the math MainComponent's three panels (library / AI / timeline) share.
+// ============================================================================
+
+TEST(PanelSlide, StartsClosedAndStill) {
+    synth::ui::PanelSlide slide;
+    EXPECT_FLOAT_EQ(slide.getProgress(), 0.0f);
+    EXPECT_FALSE(slide.isMoving());
+    EXPECT_EQ(slide.sizeBetween(0, 200), 0);
+}
+
+TEST(PanelSlide, SnapToLandsImmediatelyAndLeavesNoTweenBehind) {
+    synth::ui::PanelSlide slide;
+    slide.snapTo(1.0f);
+    EXPECT_FLOAT_EQ(slide.getProgress(), 1.0f);
+    EXPECT_FLOAT_EQ(slide.getTarget(), 1.0f);
+    EXPECT_FLOAT_EQ(slide.getTweenStart(), 1.0f) << "a snap must not look like a tween in flight";
+    EXPECT_FALSE(slide.isMoving());
+}
+
+// The synchronous path: no VBlank reaches an off-screen component, so the fraction has to land on
+// the target inside retarget() itself rather than wait for frames that never arrive.
+TEST(PanelSlide, RetargetWithoutAnimationSnapsAndReportsNoTween) {
+    synth::ui::PanelSlide slide;
+    EXPECT_FALSE(slide.retarget(1.0f, /*canAnimate=*/false));
+    EXPECT_FLOAT_EQ(slide.getProgress(), 1.0f);
+    EXPECT_FALSE(slide.isMoving());
+    EXPECT_FLOAT_EQ(slide.getTweenStart(), 0.0f) << "the start point it snapped from stays readable";
+
+    EXPECT_FALSE(slide.retarget(0.0f, /*canAnimate=*/false));
+    EXPECT_FLOAT_EQ(slide.getProgress(), 0.0f);
+}
+
+TEST(PanelSlide, RetargetToWhereItAlreadyRestsIsNotATween) {
+    synth::ui::PanelSlide slide;
+    slide.snapTo(1.0f);
+    EXPECT_FALSE(slide.retarget(1.0f, /*canAnimate=*/true)) << "nothing to animate";
+    EXPECT_FLOAT_EQ(slide.getProgress(), 1.0f);
+}
+
+TEST(PanelSlide, TweenHoldsTheFractionUntilTheFirstFrameThenFollowsIt) {
+    synth::ui::PanelSlide slide;
+    ASSERT_TRUE(slide.retarget(1.0f, /*canAnimate=*/true));
+    EXPECT_FLOAT_EQ(slide.getProgress(), 0.0f) << "retarget must not itself move a tweening panel";
+    EXPECT_TRUE(slide.isMoving());
+
+    slide.applyTweenAt(0.25f);
+    EXPECT_FLOAT_EQ(slide.getProgress(), 0.25f);
+    slide.applyTweenAt(1.0f);
+    EXPECT_FLOAT_EQ(slide.getProgress(), 1.0f);
+}
+
+// The whole point of keeping a fraction: a re-toggle mid-slide reverses from where the panel IS,
+// never from an extreme (that restart is what read on screen as a jump).
+TEST(PanelSlide, MidFlightRetargetReversesFromTheCurrentFraction) {
+    synth::ui::PanelSlide slide;
+    ASSERT_TRUE(slide.retarget(1.0f, /*canAnimate=*/true));
+    slide.applyTweenAt(0.5f);
+    ASSERT_FLOAT_EQ(slide.getProgress(), 0.5f);
+
+    ASSERT_TRUE(slide.retarget(0.0f, /*canAnimate=*/true));
+    EXPECT_FLOAT_EQ(slide.getTweenStart(), 0.5f) << "the reversal starts HERE, not at 1.0";
+    EXPECT_FLOAT_EQ(slide.getProgress(), 0.5f) << "and the panel does not move until the next frame";
+
+    slide.applyTweenAt(0.5f);
+    EXPECT_FLOAT_EQ(slide.getProgress(), 0.25f) << "halfway back from 0.5 towards 0";
+    slide.applyTweenAt(1.0f);
+    EXPECT_FLOAT_EQ(slide.getProgress(), 0.0f);
+}
+
+TEST(PanelSlide, FinishPinsTheExactEndValue) {
+    synth::ui::PanelSlide slide;
+    ASSERT_TRUE(slide.retarget(1.0f, /*canAnimate=*/true));
+    slide.applyTweenAt(0.97f);
+    ASSERT_NE(slide.getProgress(), 1.0f) << "test premise: the last frame lands short";
+
+    slide.finish();
+    EXPECT_FLOAT_EQ(slide.getProgress(), 1.0f);
+    EXPECT_FALSE(slide.isMoving());
+}
+
+TEST(PanelSlide, SizeBetweenIsExactAtBothEndpointsAndLerpsInBetween) {
+    synth::ui::PanelSlide slide;
+    EXPECT_EQ(slide.sizeBetween(0, 300), 0);
+    slide.snapTo(1.0f);
+    EXPECT_EQ(slide.sizeBetween(0, 300), 300) << "a fully open panel must measure exactly its full size";
+    slide.snapTo(0.5f);
+    EXPECT_EQ(slide.sizeBetween(0, 300), 150);
+
+    // A panel whose closed size isn't zero (the library's sidebarCollapsedWidth) lerps between the
+    // two, so both ends stay pixel-exact.
+    slide.snapTo(0.0f);
+    EXPECT_EQ(slide.sizeBetween(40, 200), 40);
+    slide.snapTo(0.5f);
+    EXPECT_EQ(slide.sizeBetween(40, 200), 120);
+    slide.snapTo(1.0f);
+    EXPECT_EQ(slide.sizeBetween(40, 200), 200);
+}
+
+TEST(PanelSlide, ClampsOutOfRangeTargetsAndFrames) {
+    synth::ui::PanelSlide slide;
+    slide.snapTo(4.0f);
+    EXPECT_FLOAT_EQ(slide.getProgress(), 1.0f);
+    slide.snapTo(-4.0f);
+    EXPECT_FLOAT_EQ(slide.getProgress(), 0.0f);
+
+    EXPECT_FALSE(slide.retarget(9.0f, /*canAnimate=*/false));
+    EXPECT_FLOAT_EQ(slide.getProgress(), 1.0f);
+
+    ASSERT_TRUE(slide.retarget(0.0f, /*canAnimate=*/true));
+    slide.applyTweenAt(2.0f); // an easing that overshoots (easeOutBack) must not push it past 0
+    EXPECT_FLOAT_EQ(slide.getProgress(), 0.0f);
+}
+
+// ============================================================================
 // formatShortcutHint
 // ============================================================================
 

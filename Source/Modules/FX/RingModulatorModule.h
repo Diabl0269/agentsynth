@@ -20,6 +20,10 @@ public:
         addParameter(characterParam = new juce::AudioParameterFloat("character", "Character", 0.0f, 1.0f, 0.5f));
         addParameter(oversamplingParam = new juce::AudioParameterChoice("oversampling", "Oversampling",
                                                                         juce::StringArray{"Off", "2x", "4x"}, 1));
+        // NOTE: no Dual I/O registration here, on purpose. `ModuleBase(name, 5, 2)` matches
+        // StereoAudio::Auto's shape (>= 2 in, exactly 2 out), so the base adds the toggle and the
+        // collapsing output jack itself — this module is the regression test for that inheritance
+        // (it shipped stereo with no toggle back when the opt-in was per-module).
         addOutputLevelParameter();
         addMuteParameter();
         oversamplingParam->addListener(this);
@@ -81,6 +85,14 @@ public:
         }
 
         if (isBypassed()) {
+            // Dry pass-through, and for THIS module dry means the CARRIER on both output legs -
+            // exactly what mix = 0 produces below. ch1 is the Modulator INPUT, not a right-hand
+            // audio input, so it must not survive as the right output leg: a bypassed Ring
+            // Modulator with only its Modulator patched would otherwise emit that modulator hard
+            // right and nothing left, which is how a disabled module ended up being the only thing
+            // audible in a user's patch (and only on one side).
+            if (numChannels > 1)
+                buffer.copyFrom(1, 0, buffer, 0, 0, numSamples);
             for (int ch = 2; ch < numChannels; ++ch)
                 buffer.clear(ch, 0, numSamples);
             return;
@@ -197,7 +209,15 @@ public:
         const juce::String labels[] = {"Carrier", "Modulator", "Mix", "Drive", "Character"};
         return (i >= 0 && i < 5) ? labels[i] : ModuleBase::getInputPortLabel(i);
     }
-    juce::String getOutputPortLabel(int i) const override { return i == 0 ? "Left" : "Right"; }
+    // Output-only Dual I/O — and NOTHING here implements it. "Left"/"Right" when split, one "Audio"
+    // jack owning raw ch0+ch1 when collapsed (both legs carry the same wet signal, so collapsing
+    // loses nothing audible), all three inherited from ModuleBase::hasCollapsibleOutputPair().
+    //
+    // The INPUT side is deliberately NOT mapped through mapStereoPairInput: ch1 is the Modulator
+    // jack, and calling it PortRole::Audio would make ModuleBase::rightAudioLegChannel()'s ch1 look
+    // like an input right leg — GraphEditor's Dual I/O toggle would then wire a neighbour's Audio R
+    // into this module's Modulator input. The inherited input map leaves those five jacks as they
+    // were, which is exactly why the base infers the output pair only.
 
     std::vector<ModulationTarget> getModulationTargets() const override {
         return {{"Mix", 2}, {"Drive", 3}, {"Character", 4}};

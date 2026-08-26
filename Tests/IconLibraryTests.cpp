@@ -256,16 +256,45 @@ TEST(IconLibraryTest, WaveformIconBinaryDataSymbols) {
 // 11. WaveformIconEnumCountCoversNewIcons
 // ---------------------------------------------------------------------------
 TEST(IconLibraryTest, WaveformIconEnumCountCoversNewIcons) {
-    // The enum must now contain 41 entries (22 Phase-3 + ActionNew + ThemeToggle + ActionFeedback
+    // The enum must now contain 42 entries (22 Phase-3 + ActionNew + ThemeToggle + ActionFeedback
     // (P6-17) + 4 waveform + ToggleMinimap + ModuleDualIO + the 6 edit-tool icons + the 3
-    // track-kind badges and FollowPlayhead). The static_assert in IconLibrary.cpp enforces kTable
-    // alignment at compile time; this runtime check catches any mismatch that slips through
-    // without a rebuild.
-    EXPECT_EQ((int)Icon::kCount, 41);
+    // track-kind badges and FollowPlayhead + CatIO). The static_assert in IconLibrary.cpp
+    // enforces kTable alignment at compile time; this runtime check catches any mismatch that
+    // slips through without a rebuild.
+    EXPECT_EQ((int)Icon::kCount, 42);
     // Spot-check ordinal positions of the new waveform icons (shifted +2 by ActionNew at index 6
-    // and ThemeToggle at index 13, then +1 more by ActionFeedback at index 9).
+    // and ThemeToggle at index 13, then +1 more by ActionFeedback at index 9; CatIO is appended
+    // after FollowPlayhead so it doesn't shift anything before it).
     EXPECT_EQ((int)Icon::WaveformSine, 25);
     EXPECT_EQ((int)Icon::WaveformSaw, 26);
     EXPECT_EQ((int)Icon::WaveformSquare, 27);
     EXPECT_EQ((int)Icon::WaveformTriangle, 28);
+}
+
+// ---------------------------------------------------------------------------
+// 12. CatIOIconLoadsAndHasExpectedOrdinal
+// ---------------------------------------------------------------------------
+TEST(IconLibraryTest, CatIOIconLoadsAndHasExpectedOrdinal) {
+    // CatIO is appended after FollowPlayhead (index 40, shifted +1 by ActionFeedback at index 9),
+    // immediately before kCount — see the comment on the enum entry for why it isn't grouped next
+    // to the other CatXxx values.
+    EXPECT_EQ((int)Icon::CatIO, 41);
+
+    IconLibrary lib;
+    auto d = lib.getDrawable(Icon::CatIO);
+    if (kAssetsPresent)
+        EXPECT_NE(d, nullptr) << "CatIO icon returned null with assets present";
+}
+
+// ---------------------------------------------------------------------------
+// 13. CatIOBinaryDataSymbol
+// ---------------------------------------------------------------------------
+TEST(IconLibraryTest, CatIOBinaryDataSymbol) {
+    // 'cat-io.svg' -> BinaryData::catio_svg (hyphen stripped, same mangling as every other icon).
+#ifdef HAS_FONT_ASSETS
+    EXPECT_NE(BinaryData::catio_svg, nullptr);
+    EXPECT_GT(BinaryData::catio_svgSize, 0);
+#else
+    GTEST_SKIP() << "BinaryData not linked in this build";
+#endif
 }

@@ -107,7 +107,37 @@ All audio modules in Agent Synth inherit from `ModuleBase`, which in turn extend
     *   `applyOutputLevel(buffer, numAudioChannels)` as the last statement of the normal `processBlock` path — after both early returns, never inside them.
 
     `ModuleAdoptionTests.EveryAudioOutputModuleHasALevelControl` enforces this: a new audio module without one fails the build's test run until you either adopt the stage or add the module to the documented exclusion list. Skip it **only** if your module outputs pitch/gate CV or MIDI — scaling a V/oct pitch CV detunes it and scaling a gate drops it under the `> 0.5f` trigger threshold. Rules and rationale: [`fx_modules.md § Output Level`](fx_modules.md#output-level-shared-stage).
-*   **Look parameters up by ID, not index.** Use `findParameterByID(processor, "paramID")`; `getParameters()[n]` silently repoints whenever a parameter is added ahead of it.
+*   **Look parameters up by ID, not index.** Use `findParameterByID(processor, "paramID")`; `getParameters()[n]` silently repoints whenever a parameter is added ahead of it. This is not hypothetical: moving the Dual I/O toggle into `ModuleBase`'s constructor shifted every stereo module's own parameters by one, and the positional lookups that broke did not fail — they resolved to the wrong parameter and quietly did nothing.
+
+### Dual I/O is automatic — you opt *out*, never in
+
+**Do not add a Dual I/O parameter.** `ModuleBase`'s constructor adds it for you when your channel
+shape says stereo — `hasStereoOutputPairShape()`: **≥ 2 inputs and exactly 2 outputs** (audio on raw
+ch0/ch1, any further inputs being CV). That shape also inherits the collapsing output jack, so
+`ModuleBase("MyFX", 4, 2)` gives you the header toggle, the `"Audio"` / `Left` / `Right` labels and
+the two-leg cable fan with no code of your own. If your module has a stereo **input** pair as well,
+declare that part explicitly — it is not inferable from the shape (Voice Mixer's ch0-7 are voice
+inputs; the Ring Modulator's ch0/ch1 are Carrier and Modulator):
+
+```cpp
+juce::String getInputPortLabel(int i) const override { return stereoInputLabel(i, kNumCV, cvLabels); }
+int getVisibleInputPortCount() const override { return stereoVisibleInputCount(kNumCV); }
+LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, kNumCV); }
+```
+
+Opt out or override the inference with the constructor's fourth argument, `ModuleBase::StereoAudio`:
+
+| Value | Use it when | Effect |
+|---|---|---|
+| `Auto` (default) | ordinary stereo FX | shape decides; toggle ships **collapsed** |
+| `Declared` | you have a second audio leg the shape cannot see — its own `kRightBase` block above the CV inputs, or a ch0/ch1 pair alongside further outputs | toggle ships **split**; you own your jack maps |
+| `None` | the shape matches but there is no stereo pair (CV-only jacks, a hidden tap) | no toggle |
+
+`StereoDeclaration.EveryFactoryModuleFollowsTheShapeRuleOrADocumentedException` sweeps every factory
+module against that rule, so if your module needs `Declared` or `None` you must also add it to the
+table in `Tests/StereoVoiceModuleTests.cpp` **with a written reason** — the build's test run fails
+until you do. That is deliberate: the decision cannot be skipped, only made explicitly. Details and
+the current exception list: [`fx_modules.md § The toggle is inherited, not registered`](fx_modules.md#the-toggle-is-inherited-not-registered).
 
 ## 3. Parameter Management and Modular Routing
 

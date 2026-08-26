@@ -13,6 +13,7 @@
 #include "../Source/Timeline/TimelineDoc.h"
 #include "../Source/Transport/TransportService.h"
 #include "../Source/UI/Theme/AppLookAndFeel.h"
+#include "../Source/UI/Theme/BuiltInThemes.h"
 #include "../Source/UI/TimelinePanelComponent.h"
 #include "../Source/UI/TimelineTransportBar.h"
 #include "MainComponent.h"
@@ -211,7 +212,7 @@ TEST(TimelineTransportBarTest, RecordReadsRedWhenEngaged) {
 TEST(TimelineTransportBarTest, GlyphButtonsAreSquareAndSpaced) {
     synth::ui::TimelineTransportBar bar;
 
-    for (const int height : {28, 23}) {
+    for (const int height : {34, 29}) {
         bar.setSize(500, height);
 
         for (auto* button :
@@ -288,9 +289,12 @@ protected:
     static void quiesceEngine(MainComponent& mc) { mc.getAudioEngine().suspendDeviceCallback(); }
 };
 
-// ---- 6. RecordRequiresArmedTrack ----
+// ---- 6. RecordRollsWithoutAnArmedTrack ----
 
-TEST_F(TimelineTransportBarAppWiringTest, RecordRequiresArmedTrack) {
+// Record no longer requires an armed track (docs/timeline_panel_core.md's transport section):
+// pressing Record always rolls the transport with the indicator lit, exactly like Play plus a lit
+// record indicator when nothing is armed to capture into.
+TEST_F(TimelineTransportBarAppWiringTest, RecordRollsWithoutAnArmedTrack) {
     MainComponent mc(std::make_unique<MockProviderTB>());
     mc.setSize(1600, 900);
     quiesceEngine(mc);
@@ -298,16 +302,34 @@ TEST_F(TimelineTransportBarAppWiringTest, RecordRequiresArmedTrack) {
     auto& bar = mc.getTimelinePanel().getTransportBar();
     auto& transport = mc.getAudioEngine().getTransport();
 
-    // No armed track anywhere in the doc: the click is refused, the button snaps back off, a
-    // status message appears, and the transport is left untouched (no side effect on a rejection).
+    // No armed track anywhere in the doc: the click is HONOURED — the indicator lights, the
+    // transport rolls, no take of either kind starts, and a transient status message explains the
+    // silence (asserted via StatusBarComponent's own test hook).
+    bar.getRecordButton().onClick();
+    EXPECT_TRUE(bar.isRecordingForTest());
+    EXPECT_FALSE(mc.getMidiRecorderForTest().isRecording());
+    EXPECT_EQ(mc.getStatusBar().getTransientMessageForTest(), "Recording started - no track is armed");
+    transport.tick(512); // drains the play() posted by "record implies roll"
+    EXPECT_TRUE(transport.getPositionSnapshot().playing);
+
+    // Record off cleanly: no take was ever in flight, so commitAudioRecording()/
+    // commitMidiRecording() are both no-ops past turning the indicator back off.
     bar.getRecordButton().onClick();
     EXPECT_FALSE(bar.isRecordingForTest());
     EXPECT_FALSE(mc.getMidiRecorderForTest().isRecording());
-    EXPECT_EQ(mc.getStatusBar().getTransientMessageForTest(), "Arm a track to record");
-    transport.tick(512);
-    EXPECT_FALSE(transport.getPositionSnapshot().playing);
+}
 
-    // Arm a track: the SAME click now succeeds — capture starts and record implies roll.
+// ---- 6b. RecordWithAnArmedTrackIsUnchanged ----
+
+// The pre-existing armed-track path is untouched by removing the arming requirement above.
+TEST_F(TimelineTransportBarAppWiringTest, RecordWithAnArmedTrackIsUnchanged) {
+    MainComponent mc(std::make_unique<MockProviderTB>());
+    mc.setSize(1600, 900);
+    quiesceEngine(mc);
+
+    auto& bar = mc.getTimelinePanel().getTransportBar();
+    auto& transport = mc.getAudioEngine().getTransport();
+
     auto& doc = mc.getTimelineDoc();
     const auto trackId = doc.addTrack(synth::TrackKind::Midi, "Track 1");
     ASSERT_TRUE(doc.setTrackArmed(trackId, true));
@@ -371,4 +393,84 @@ TEST_F(TimelineTransportBarAppWiringTest, StopWhileRecordingCommitsOnce) {
     // wasTransportPlaying_ edge never re-fires.
     mc.timerCallback();
     EXPECT_EQ(doc.getTrack(trackId)->clips.size(), 1u);
+}
+
+// ---- Inline editor theming ----
+
+// THE bug: the BPM field typed WHITE text, invisible on every light theme.
+//
+// An editable juce::Label opens a juce::TextEditor whose colours do NOT come from the app's
+// TextEditor ids. juce::Label::createEditorComponent copies Label::textWhenEditingColourId over
+// TextEditor::textColourId afterwards, but only when that id "isColourSpecified" — and
+// LookAndFeel_V4 DOES specify it, from its own default-scheme white. So AppLookAndFeel set
+// TextEditor::textColourId correctly and V4's white clobbered it on the way into the editor.
+//
+// Asserted against the theme TOKENS in both a light and a dark theme rather than against any
+// literal colour, so this cannot be "fixed" by hardcoding a second constant.
+namespace {
+struct EditorColours {
+    juce::Colour text, background, caret;
+};
+
+EditorColours openEditorColours(juce::Label& label) {
+    label.showEditor();
+    auto* editor = label.getCurrentTextEditor();
+    if (editor == nullptr)
+        return {};
+    const EditorColours out{editor->findColour(juce::TextEditor::textColourId),
+                            editor->findColour(juce::TextEditor::backgroundColourId),
+                            editor->findColour(juce::CaretComponent::caretColourId)};
+    // DISCARD: this test is about colours, and committing would fire onTextChange -> setBpm() /
+    // setTimeSignature() as a side effect.
+    label.hideEditor(true);
+    return out;
+}
+} // namespace
+
+TEST(TimelineTransportBarTest, InlineFieldEditorsTakeTheirColoursFromTheTheme) {
+    for (const auto& theme : {synth::theme::makeDaylight(), synth::theme::makeObsidian()}) {
+        synth::theme::AppLookAndFeel lf;
+        lf.applyTheme(theme);
+
+        synth::ui::TimelineTransportBar bar;
+        bar.setLookAndFeel(&lf);
+        bar.setSize(500, 28);
+
+        const auto& c = lf.getTheme().colors;
+        for (auto* label : {&bar.getBpmLabel(), &bar.getTimeSigLabel()}) {
+            ASSERT_TRUE(label->isEditableOnDoubleClick()) << "precondition: this field opens an inline editor";
+            const auto colours = openEditorColours(*label);
+
+            EXPECT_EQ(colours.text, c.textPrimary) << "editor text must be the theme's text token, in " << theme.id;
+            EXPECT_EQ(colours.background, c.bg0) << "editor background token, in " << theme.id;
+            EXPECT_EQ(colours.caret, c.accent) << "caret token, in " << theme.id;
+
+            // The actual user-visible failure: text the same colour as what it sits on.
+            EXPECT_NE(colours.text, colours.background) << "typed text must contrast with the field, in " << theme.id;
+        }
+
+        bar.setLookAndFeel(nullptr);
+    }
+}
+
+// The regression in its plainest form: on a LIGHT theme the editor text must not be white, which is
+// what V4's unoverridden Label::textWhenEditingColourId supplied.
+TEST(TimelineTransportBarTest, InlineFieldEditorTextIsNotWhiteOnALightTheme) {
+    const auto daylight = synth::theme::makeDaylight();
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(daylight);
+
+    synth::ui::TimelineTransportBar bar;
+    bar.setLookAndFeel(&lf);
+    bar.setSize(500, 28);
+
+    ASSERT_LT(daylight.colors.bg0.getPerceivedBrightness(), 1.0f);
+    ASSERT_GT(daylight.colors.bg0.getPerceivedBrightness(), 0.5f) << "precondition: Daylight is a LIGHT theme";
+
+    const auto colours = openEditorColours(bar.getBpmLabel());
+    EXPECT_NE(colours.text, juce::Colours::white);
+    // Dark text on a light field: the contrast the user could not see before.
+    EXPECT_LT(colours.text.getPerceivedBrightness(), colours.background.getPerceivedBrightness());
+
+    bar.setLookAndFeel(nullptr);
 }

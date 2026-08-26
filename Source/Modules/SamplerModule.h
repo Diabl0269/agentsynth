@@ -77,7 +77,9 @@ public:
     };
 
     SamplerModule()
-        : ModuleBase("Sampler", kNumChannels, kNumChannels) {
+        // StereoAudio::Declared: its legs ARE the contiguous ch0/ch1 pair, but the module declares
+        // seven channels (CV inputs), so the Auto shape test cannot see it. Ships SPLIT.
+        : ModuleBase("Sampler", kNumChannels, kNumChannels, StereoAudio::Declared) {
         addParameter(playModeParam = new juce::AudioParameterChoice("playMode", "Mode", {"Sample", "Granular"}, 0));
         addParameter(pitchParam = new juce::AudioParameterFloat("pitch", "Pitch", -24.0f, 24.0f, 0.0f));
         addParameter(rootNoteParam =
@@ -90,10 +92,9 @@ public:
                          new juce::AudioParameterFloat("density", "Density", kMinDensity, kMaxDensity, 20.0f));
         addParameter(sprayParam = new juce::AudioParameterFloat("spray", "Spray", 0.0f, 1.0f, 0.1f));
         addParameter(levelParam = new juce::AudioParameterFloat("level", "Level", 0.0f, 1.0f, 0.8f));
-        // Defaults to dual — this module has always emitted a real stereo pair. Its legs ARE the
-        // contiguous ch0/ch1 pair, so collapsing uses the FX helpers rather than the split-block
-        // ones: one "Audio" jack that owns both raw legs (#219).
-        addDualIOParameter(/*defaultDual=*/true);
+        // Dual I/O comes from the ctor's StereoAudio::Declared above, defaulting to split — this
+        // module has always emitted a real stereo pair. Collapsing uses the FX helpers rather than
+        // the split-block ones: one "Audio" jack that owns both raw legs (#219).
         addMuteParameter();
         enableVisualBuffer(true);
     }

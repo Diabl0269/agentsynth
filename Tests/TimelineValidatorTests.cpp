@@ -79,6 +79,9 @@ juce::DynamicObject& laneObj(juce::var& root, int laneIndex = 0) {
 juce::DynamicObject& pointObj(juce::var& root, int pointIndex = 0) {
     return obj(arrayProp(laneObj(root), "points").getReference(pointIndex));
 }
+juce::DynamicObject& markerObj(juce::var& root, int markerIndex = 0) {
+    return obj(arrayProp(obj(root), "markers").getReference(markerIndex));
+}
 
 // Pads an array out to `size` by repeating its first element. Only ever used for the cap cases,
 // where the cap is checked before the elements are, so aliased duplicates are exactly as good as
@@ -199,6 +202,55 @@ std::vector<Case> makeCases() {
 
         {TimelineValidationError::InternalError, "the loader refuses a next-id counter this gate does not model",
          [](juce::var& root) { obj(root).setProperty("nextClipId", 0); }},
+
+        // -- markers -------------------------------------------------------------------------
+        // Additive top-level data, allow-listed ONLY because validateMarker checks it field by
+        // field. Every shape below is a way that check could have been skipped.
+
+        {TimelineValidationError::TooManyMarkers, "one marker over kMaxMarkers",
+         [](juce::var& root) { growTo(arrayProp(obj(root), "markers"), TimelineDoc::kMaxMarkers + 1); }},
+
+        {TimelineValidationError::MarkerTextTooLong, "a marker label is one character over the cap",
+         [](juce::var& root) {
+             markerObj(root).setProperty("text",
+                                         juce::String::repeatedString("x", TimelineDoc::kMaxMarkerTextLength + 1));
+         }},
+
+        {TimelineValidationError::BeatOutOfBounds, "a marker sits past kMaxPpqUntrusted",
+         [](juce::var& root) { markerObj(root).setProperty("beat", synth::kMaxPpqUntrusted + 1.0); }},
+
+        {TimelineValidationError::BeatOutOfBounds, "a marker sits at a negative beat",
+         [](juce::var& root) { markerObj(root).setProperty("beat", -0.5); }},
+
+        {TimelineValidationError::MalformedRoot, "a marker carries an unknown key",
+         [](juce::var& root) { markerObj(root).setProperty("onClick", "rm -rf /"); }},
+
+        {TimelineValidationError::MalformedRoot, "a marker entry is not an object",
+         [](juce::var& root) { arrayProp(obj(root), "markers").set(0, juce::var(42)); }},
+
+        {TimelineValidationError::MalformedRoot, "a marker has no id",
+         [](juce::var& root) { markerObj(root).removeProperty("id"); }},
+
+        {TimelineValidationError::MalformedRoot, "a marker id is not positive",
+         [](juce::var& root) { markerObj(root).setProperty("id", 0); }},
+
+        {TimelineValidationError::MalformedRoot, "two markers share an id",
+         [](juce::var& root) { markerObj(root, 1).setProperty("id", markerObj(root, 0).getProperty("id")); }},
+
+        {TimelineValidationError::MalformedRoot, "a marker's beat is a string",
+         [](juce::var& root) { markerObj(root).setProperty("beat", "four"); }},
+
+        {TimelineValidationError::MalformedRoot, "a marker's text is a number",
+         [](juce::var& root) { markerObj(root).setProperty("text", 12); }},
+
+        {TimelineValidationError::MalformedRoot, "a marker's colourArgb is a string",
+         [](juce::var& root) { markerObj(root).setProperty("colourArgb", "#ff0000"); }},
+
+        {TimelineValidationError::MalformedRoot, "a marker's colourArgb is outside the 32-bit range",
+         [](juce::var& root) { markerObj(root).setProperty("colourArgb", (juce::int64)0x1ffffffffLL); }},
+
+        {TimelineValidationError::MalformedRoot, "\"markers\" is not an array",
+         [](juce::var& root) { obj(root).setProperty("markers", "Intro, Chorus"); }},
     };
 }
 
@@ -227,6 +279,10 @@ protected:
                         makeRange(static_cast<float>(kCutoffMin), static_cast<float>(kCutoffMax), 440.0f));
         doc.addBreakpoint(lane, 0.0, 440.0);
         doc.addBreakpoint(lane, 4.0, 8000.0);
+
+        // Two markers, so the per-marker cases have both a first and a second entry to break.
+        doc.addMarker(0.0, "Intro", 0xffE0A33D);
+        doc.addMarker(8.0, "Chorus", 0xff44AA88);
     }
 
     // A fresh serialisation each time: the cases mutate the var in place, so they must never
@@ -446,6 +502,94 @@ TEST_F(TimelineValidatorTest, AutomationTrackKindIsAccepted) {
     juce::var document = validDocument();
     trackObj(document).setProperty("kind", static_cast<int>(TrackKind::Automation));
     EXPECT_TRUE(validateTimeline(document, graph).ok);
+}
+
+// =============================================================================
+// 4b. Markers — allow-listed, but only because every field is checked
+// =============================================================================
+
+TEST_F(TimelineValidatorTest, ValidMarkersPassAndThenApply) {
+    const juce::var document = validDocument();
+    const auto result = validateTimeline(document, graph);
+    ASSERT_TRUE(result.ok) << result.message;
+
+    TimelineDoc target;
+    ASSERT_TRUE(target.fromVar(document));
+    ASSERT_EQ(target.getMarkers().size(), 2u);
+    EXPECT_EQ(target.getMarkers()[0].text, "Intro");
+    EXPECT_DOUBLE_EQ(target.getMarkers()[1].beat, 8.0);
+    EXPECT_EQ(target.getMarkers()[1].colourArgb, 0xff44AA88u);
+}
+
+// The whole reason "markers" and "nextMarkerId" are on the top-level allowlist: this gate is run
+// routinely on TimelineDoc::toVar() output, and a document that HAS markers must not be rejected
+// as carrying an unknown key.
+TEST_F(TimelineValidatorTest, MarkerKeysAreAcceptedAtTheTopLevelButNothingElseIs) {
+    juce::var document = validDocument();
+    ASSERT_TRUE(obj(document).hasProperty("markers"));
+    ASSERT_TRUE(obj(document).hasProperty("nextMarkerId"));
+    EXPECT_TRUE(validateTimeline(document, graph).ok);
+
+    // A near-miss spelling is still an unknown key — allow-listing is exact, not fuzzy.
+    juce::var misspelled = validDocument();
+    obj(misspelled).setProperty("marker", juce::Array<juce::var>());
+    const auto result = validateTimeline(misspelled, graph);
+    EXPECT_FALSE(result.ok);
+    EXPECT_EQ(result.error, TimelineValidationError::MalformedRoot);
+}
+
+// A document with no markers at all — which is every document written before they existed — must
+// still validate.
+TEST_F(TimelineValidatorTest, DocumentWithoutMarkersStillValidates) {
+    juce::var document = validDocument();
+    obj(document).removeProperty("markers");
+    obj(document).removeProperty("nextMarkerId");
+    EXPECT_TRUE(validateTimeline(document, graph).ok) << "the markers key is additive, not required";
+
+    juce::var emptyArray = validDocument();
+    obj(emptyArray).setProperty("markers", juce::Array<juce::var>());
+    EXPECT_TRUE(validateTimeline(emptyArray, graph).ok) << "an empty markers array is equally fine";
+}
+
+// The label cap's boundary is inclusive, and an EMPTY label is legal (an unlabelled flag).
+TEST_F(TimelineValidatorTest, MarkerLabelBoundsAreInclusiveAndEmptyIsLegal) {
+    juce::var atCap = validDocument();
+    markerObj(atCap).setProperty("text", juce::String::repeatedString("x", TimelineDoc::kMaxMarkerTextLength));
+    EXPECT_TRUE(validateTimeline(atCap, graph).ok) << "exactly at the cap is legal";
+
+    juce::var empty = validDocument();
+    markerObj(empty).setProperty("text", "");
+    EXPECT_TRUE(validateTimeline(empty, graph).ok);
+
+    // Rejected, NOT truncated: the loader would have taken the long label too (its own cap is the
+    // same number, so here the two agree — the point is that neither one shortens it).
+    juce::var tooLong = validDocument();
+    markerObj(tooLong).setProperty("text", juce::String::repeatedString("x", TimelineDoc::kMaxMarkerTextLength + 1));
+    const auto result = validateTimeline(tooLong, graph);
+    EXPECT_FALSE(result.ok);
+    EXPECT_EQ(result.error, TimelineValidationError::MarkerTextTooLong);
+    TimelineDoc target;
+    EXPECT_FALSE(target.fromVar(tooLong)) << "the loader agrees rather than truncating";
+}
+
+// A marker's colour is inert display data, so the full 32-bit range is legal — including 0.
+TEST_F(TimelineValidatorTest, MarkerColourSpansTheWhole32BitRange) {
+    for (const juce::int64 argb : {(juce::int64)0, (juce::int64)0xffffffffLL, (juce::int64)0x8000ff00LL}) {
+        juce::var document = validDocument();
+        markerObj(document).setProperty("colourArgb", argb);
+        EXPECT_TRUE(validateTimeline(document, graph).ok) << "colourArgb " << argb << " must be accepted";
+    }
+}
+
+// Marker beats are bounded by the same untrusted PPQ cap everything else is, at both ends.
+TEST_F(TimelineValidatorTest, MarkerBeatBoundsAreInclusiveAtTheCap) {
+    juce::var atCap = validDocument();
+    markerObj(atCap).setProperty("beat", synth::kMaxPpqUntrusted);
+    EXPECT_TRUE(validateTimeline(atCap, graph).ok);
+
+    juce::var atZero = validDocument();
+    markerObj(atZero).setProperty("beat", 0.0);
+    EXPECT_TRUE(validateTimeline(atZero, graph).ok);
 }
 
 // =============================================================================

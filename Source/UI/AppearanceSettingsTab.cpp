@@ -161,11 +161,12 @@ private:
 //==============================================================================
 // NoteSwatchRow - clickable pitch-class swatches for the piano roll's note colours.
 //
-// Same interaction as CableSwatchRow (left-click opens a picker, right-click resets) but an
-// un-overridden swatch draws hollow/dimmed rather than filled-with-a-thin-ring: a note colour
-// swatch has no "always has a value" theme token backing every entry the way a cable signal kind
-// does, so "not set, currently showing the theme's noteFill" has to read as visually different
-// from "set to a colour that happens to be close to noteFill".
+// Same interaction AND ring treatment as CableSwatchRow (left-click opens a picker, right-click
+// resets; a pinned swatch gets a brighter ring). The fill, however, is never a hand-dimmed
+// stand-in: every swatch — overridden or not — previews the colour synth::ui::resolveNoteColour
+// would actually paint in the roll (see AppearanceSettingsTab::getNoteSwatchPreviewColour), which
+// is the fix for a UX bug where the "not customized" swatch read as noticeably darker than the
+// roll's real notes. "Not set" vs. "pinned" is told apart by the ring alone now.
 //==============================================================================
 class AppearanceSettingsTab::NoteSwatchRow
     : public juce::Component
@@ -182,21 +183,16 @@ public:
             auto reducedCell = cell.reduced(3.0f);
             auto swatch = reducedCell.removeFromTop(16.0f);
 
-            const juce::Colour colour = owner.getNoteSwatchColour(i);
+            // Always the colour resolveNoteColour would actually paint in the roll (composited
+            // over the panel background) — overridden and un-overridden swatches share this fill
+            // now; only the ring below still marks the distinction, exactly like CableSwatchRow's
+            // pinned/theme ring.
+            g.setColour(owner.getNoteSwatchPreviewColour(i));
+            g.fillRoundedRectangle(swatch, 3.0f);
+
             const bool overridden = owner.isNoteSwatchOverridden(i);
-            if (overridden) {
-                g.setColour(colour);
-                g.fillRoundedRectangle(swatch, 3.0f);
-                g.setColour(juce::Colours::white.withAlpha(0.9f));
-                g.drawRoundedRectangle(swatch, 3.0f, 1.8f);
-            } else {
-                // Hollow/dimmed: a faint fill plus a faint outline, never the solid+bright-ring
-                // treatment a pinned swatch gets — "not set" must not look like "set to grey".
-                g.setColour(colour.withAlpha(0.2f));
-                g.fillRoundedRectangle(swatch, 3.0f);
-                g.setColour(colour.withAlpha(0.5f));
-                g.drawRoundedRectangle(swatch, 3.0f, 1.0f);
-            }
+            g.setColour(overridden ? juce::Colours::white.withAlpha(0.9f) : juce::Colours::black.withAlpha(0.4f));
+            g.drawRoundedRectangle(swatch, 3.0f, overridden ? 1.8f : 1.0f);
 
             g.setColour(owner.themeManager.getActiveTheme().colors.textMuted);
             g.setFont(juce::Font(juce::FontOptions(9.5f)));
@@ -709,6 +705,27 @@ juce::Colour AppearanceSettingsTab::getNoteSwatchColour(int pitchClass) const {
     if (const auto& o = noteColourOverrides.perPitchClass[(size_t)pitchClass])
         return *o;
     return themeManager.getActiveTheme().colors.noteFill;
+}
+
+juce::Colour AppearanceSettingsTab::getNoteSwatchPreviewColour(int pitchClass) const {
+    if (pitchClass < 0 || pitchClass >= kNoteSwatchCount)
+        return juce::Colours::transparentBlack;
+
+    // The SAME resolver PianoRollComponent paints notes with (NoteColour.h's file comment) — never
+    // a second, hand-rolled formula, so a settings preview and the roll's real notes can't drift
+    // apart the way they did before this fix (the un-overridden swatch used to draw at a flat 0.2
+    // alpha instead of going through resolveNoteColour at all).
+    const auto& colors = themeManager.getActiveTheme().colors;
+    const auto paint =
+        synth::ui::resolveNoteColour(colors, pitchClass, kNoteSwatchPreviewVelocity,
+                                     /*selected*/ false, /*muted*/ false, /*outOfScale*/ false, noteColourOverrides);
+
+    // resolveNoteColour's fill carries a deliberate alpha (0.8 unselected) that reads correctly
+    // against the roll's dark canvas but washes out/darkens against this panel unless explicitly
+    // composited — alpha-blend it over the panel background so the swatch matches how the colour
+    // actually looks once painted, rather than showing a translucent chip.
+    const juce::Colour panelBackground = findColour(juce::ResizableWindow::backgroundColourId);
+    return panelBackground.overlaidWith(paint.fill);
 }
 
 bool AppearanceSettingsTab::isNoteSwatchOverridden(int pitchClass) const noexcept {

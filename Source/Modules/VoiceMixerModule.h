@@ -8,7 +8,6 @@ public:
         : ModuleBase("Voice Mixer", 8, 2) // 8 voice channels in, stereo out
     {
         addParameter(levelParam = new juce::AudioParameterFloat("level", "Level", 0.0f, 1.0f, 0.125f));
-        addDualIOParameter();
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
@@ -57,9 +56,10 @@ public:
     }
 
     juce::String getInputPortLabel(int i) const override { return "Voice " + juce::String(i); }
-    juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
-    int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
-    LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
+    // No output-side overrides and no Dual I/O registration: ModuleBase("Voice Mixer", 8, 2) matches
+    // the StereoAudio::Auto shape, so the toggle and the collapsing "Audio"/Left/Right output jack
+    // are inherited. Only the eight INPUT jacks are this module's own — which is exactly why the base
+    // infers the output pair and never the input one.
     // Pure audio utility — processBlock's midiMessages parameter is unused.
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }

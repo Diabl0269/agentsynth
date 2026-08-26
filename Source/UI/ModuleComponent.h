@@ -22,6 +22,10 @@ namespace synth::ui {
 class ZoomFrozenCachedImage; // Forward declaration — see ZoomFrozenCachedImage.h
 }
 
+namespace synth::theme {
+class AppLookAndFeel; // Forward declaration — see Theme/AppLookAndFeel.h
+}
+
 class ModuleComponent
     : public juce::Component
     , public juce::Timer
@@ -56,6 +60,17 @@ public:
      *  steps applyMacroCountChange takes for the Macro bank's "Knobs" parameter. */
     void refreshPortLayout();
 
+    /** Output-card identity treatment only: repoints the muted destination line drawn under the
+     *  Audio Output card's title (device name + sample rate + channel count, or "Host audio" in
+     *  HostMode::Hosted, or empty to hide the line entirely). A no-op on every other module —
+     *  callers do not need to check isAudioOutputIONode() first. Pushed in by
+     *  GraphEditor::refreshOutputDeviceInfo() (MainComponent -> GraphEditor -> here) whenever
+     *  AudioEngine's device state changes; never polled. MESSAGE THREAD ONLY. Repaints (the single
+     *  ZoomFrozenCachedImage refresh seam — see refreshPortLayout above) only when the text
+     *  actually changed. */
+    void setOutputDeviceInfoText(const juce::String& text);
+    const juce::String& getOutputDeviceInfoTextForTest() const noexcept { return outputDeviceInfoText; }
+
     // Interaction Logic
     struct Port {
         juce::Rectangle<int> area;
@@ -63,6 +78,30 @@ public:
         bool isInput;
         bool isMidi = false;
     };
+
+    /** Header band the card title is drawn in, and the double-click-to-rename hit zone. */
+    static constexpr int kHeaderHeight = 24;
+
+    /** What the header paints: the user's custom title when set, else the auto-numbered module
+     *  name. Never reads the processor name directly — see GraphEditor::getModuleTitle. */
+    juce::String cardTitle() const;
+
+    /** Opens the inline rename editor over the title. Public so a test can drive it without
+     *  synthesising a double-click. No-op for an Attenuverter (it has no header). */
+    void beginTitleRename();
+
+    /** Closes the inline editor, committing the typed text or discarding it. */
+    void finishTitleRename(bool commit);
+
+    /** True while the inline rename editor is open. */
+    bool isRenamingTitle() const noexcept { return titleEditor != nullptr; }
+
+    /** Height of the header strip above the port gutter. Shared with
+     *  GraphEditor::estimatePortCenter, which has to place a drag GHOST's jacks at exactly the same
+     *  y as a real card's: the two carried separate literals (38 here, 30 there) and every smart
+     *  connection preview cable terminated 8px above the jack dot it claimed to land on. One
+     *  constant so they cannot drift again. */
+    static constexpr int kPortGutterHeaderHeight = 38;
 
     std::optional<Port> getPortForPoint(juce::Point<int> localPoint);
     juce::Point<int> getPortCenter(int index, bool isInput);
@@ -121,6 +160,13 @@ public:
     void setRasterFrozen(bool frozen);
     bool isRasterFrozen() const noexcept;
     const synth::ui::ZoomFrozenCachedImage* getRasterCacheForTest() const noexcept { return rasterCache; }
+
+    /** Output-card identity glyph bounds (see paint()'s isAudioOutputIONode block): proportional
+     *  to the title's own cap-height rather than the full 24px header band, right-aligned to the
+     *  activity LED's own right edge so the gap before the title text matches the header's
+     *  existing padding rhythm. A pure function of the title font, pulled out of paint() so a test
+     *  can assert the exact geometry painted without inspecting pixels. */
+    static juce::Rectangle<float> outputCardIconBoundsForTest(const synth::theme::AppLookAndFeel& lf);
 
 private:
     // Non-owning: the juce::Component base owns this via setCachedComponentImage(). See
@@ -220,10 +266,27 @@ private:
     // subsequent mouseDrag from moving a component the dragger was never started on.
     bool bodyDragActive = false;
 
+    // Ctrl+press arms an insert-between DRAG and an additive-select TOGGLE at once, because at
+    // mouse-down they are indistinguishable (mirrors PianoRollComponent::cmdToggleNote_). The press
+    // collapses the selection onto this module so the drag is single-module — a group drag would
+    // suppress smart connections — and mouseUp restores this snapshot and flips membership instead,
+    // but only if nothing moved.
+    bool ctrlTogglePending = false;
+    std::vector<juce::AudioProcessorGraph::NodeID> ctrlPressSelection;
+
+    // Inline rename editor, alive only between beginTitleRename and finishTitleRename. A child
+    // component, so there is no window seam to stub out for a display-less test run.
+    std::unique_ptr<juce::TextEditor> titleEditor;
+
     float cachedRMS = 0.0f;
     float lastPaintedRMS = -1.0f;
     std::vector<float> rmsReadBuffer;
     int lastActiveStep = -1;
+
+    // Output-card identity treatment (Audio Output only — see setOutputDeviceInfoText). Empty
+    // means "nothing to show yet" (before the first refresh, or a Hosted build that returned
+    // nothing), which paint() treats as "draw no subtitle line" rather than an empty line.
+    juce::String outputDeviceInfoText;
 
     void createControls();
     void updateLayout();

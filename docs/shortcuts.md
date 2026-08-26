@@ -1,16 +1,16 @@
 # Keyboard Shortcuts
 
 Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/ShortcutsSettingsTab.h/.cpp`).
-`ShortcutManager` (`Source/ShortcutManager.h`) registers **51 actions** across four categories —
-**General** (22, app-wide or routed per focused editor), **Graph** (2), **Timeline** (17) and
-**Piano Roll** (10) — every one of them rebindable, including keys that used to be hardcoded:
+`ShortcutManager` (`Source/ShortcutManager.h`) registers **58 actions** across four categories —
+**General** (22, app-wide or routed per focused editor), **Graph** (2), **Timeline** (22) and
+**Piano Roll** (12) — every one of them rebindable, including keys that used to be hardcoded:
 nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the six tool
 digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
 any key except Escape commits it, swapping with whatever action in the **same category** already
 held that key. The tab groups rows into one collapsible section per category with a search box
 above them (matches against both the action's description and its current binding text — "cmd"
 finds every Cmd shortcut, "transpose" finds the piano-roll block) and a top strip that flips between
-"COLLAPSE ALL"/"EXPAND ALL"; see [`layout.md §13`](layout.md#13-collapsible-library-sections) for
+"COLLAPSE ALL"/"EXPAND ALL"; see [`layout_selection_canvas.md §2`](layout_selection_canvas.md#2-collapsible-library-sections) for
 the shared collapsible-list pattern it mirrors. Export/import round-trip every binding as JSON;
 Reset restores the defaults below. A native macOS menu bar (File + Edit) provides Undo/Redo via
 `ApplicationCommandManager`.
@@ -33,7 +33,7 @@ when reasoning about a key that "does nothing."
 | Cmd+K | Toggle Minimap |
 | Ctrl+A (macOS) / Cmd+Shift+A (elsewhere) | Toggle AI Panel — moved off Cmd+A so Select All could take the platform-standard chord. One of the very few per-platform defaults: on macOS Ctrl is a real separate modifier, on Windows/Linux JUCE's Cmd IS Ctrl so Ctrl+A would collide with Select All |
 | Cmd+B | Toggle Module Library |
-| Cmd+T | Toggle Timeline Panel (see [`layout.md §16`](layout.md)) |
+| Cmd+T | Toggle Timeline Panel (see [`timeline_panel_core.md §1`](timeline_panel_core.md)) |
 | Cmd+A | Select All in Focused Editor (actionId/`AppCommands` name still `selectAllModules` — see "Surface routing" below) |
 | Cmd+Shift+S | Save Selection as Snippet |
 | Cmd+C | Copy (Selected Modules, or — see "Surface routing" below — the timeline's selected clips/notes) |
@@ -47,11 +47,9 @@ when reasoning about a key that "does nothing."
 | Cmd+Shift+= | Zoom In Vertically |
 | Cmd+Shift+- | Zoom Out Vertically |
 
-Cmd+T and Space are also inactive whenever
-Preferences → "Show timeline (experimental)" is turned off — the runtime kill switch described in
-[`layout.md §16`](layout.md). While it's off, the timeline transport simply isn't reachable; that's
-intended, not a bug. The grid and zoom commands below are likewise inactive whenever the panel
-itself isn't open (`isTimelineVisible`), the same as any other timeline-only command.
+Cmd+T and Space are always active — the timeline is GA (see [`timeline_panel_core.md §1`](timeline_panel_core.md)). The grid
+and zoom commands below are inactive whenever the panel itself isn't open (`isTimelineVisible`),
+the same as any other timeline-only command.
 
 `Cmd+A` is the platform-standard Select All (the way Cubase and every text field read it), so it
 owns the bare chord and the AI panel sits on a REAL `Ctrl+A` on macOS (Ctrl is a distinct physical
@@ -67,13 +65,13 @@ typing a literal space character — so they only reach `MainComponent::keyPress
 dispatch point) when no text field is being edited; the AI chat input keeps its normal copy/paste
 and spacebar behaviour. `Cmd+X` reuses the same safety: `x` claims no other binding in this table
 and no component's local `keyPressed` hardcodes a bare `x` either (the panel-local letters are
-Q/L/P, the roll's is Q, the lane area's is P). `Cmd+R` (`r`) is likewise free on both counts. Copy,
+J/L/P, the roll's is Q, the lane area's is P). `Cmd+R` (`r`) is likewise free on both counts. Copy,
 Paste, Duplicate and Cut are marked **inactive** when there is nothing to act on (nothing selected /
 an empty clipboard on the acting surface — see below), which greys the menu row and makes
 `ApplicationCommandTarget::tryToInvoke` refuse the key outright; Repeat is inactive with no
 selection AND always inactive on the Graph surface.
 
-### Surface routing (TL5-10): who Cmd+C/V/D/X/R and Cmd+A act on
+### Surface routing: who Cmd+C/V/D/X/R and Cmd+A act on
 
 Cmd+C/V/D/X/R and Cmd+A are global commands (`MainComponent::getAllCommands`/
 `getCommandInfo`/`perform`), but "the canvas" is not the only editable surface once the timeline
@@ -103,7 +101,7 @@ What each surface does:
 
 | Surface | Copy | Paste | Duplicate | Cut | Repeat |
 |---|---|---|---|---|---|
-| Graph | Copies the selected modules (unchanged since before TL5-10) | Pastes at the next cascade position | Copies the selection one step down-right, clipboard untouched | Composed from Copy + Delete (`copySelection()` then `deleteSelection()`), one undo step | **Inactive** — a spatial canvas has no time axis to tile copies along; Duplicate is the graph's equivalent gesture (see below) |
+| Graph | Copies the selected modules (unchanged) | Pastes at the next cascade position | Copies the selection one step down-right, clipboard untouched | Composed from Copy + Delete (`copySelection()` then `deleteSelection()`), one undo step | **Inactive** — a spatial canvas has no time axis to tile copies along; Duplicate is the graph's equivalent gesture (see below) |
 | TimelineClips | Serialises the selected clips — notes (each with its own muted flag), name, length, muted flag and every audio field (`assetRef`, gain, both fades, `sourceStartSeconds`) — into the panel's own clip clipboard, starts relative to the earliest selected clip | Re-inserts every clipboard clip onto **its original track**, re-based so the earliest clip lands at the transport's current position (snapped to the view-state's snap setting); the track fallback is **kind-aware** — a clip lands back only on a track that still plays its payload (audio → `TrackKind::Audio`, MIDI → `TrackKind::Midi`), else the doc's first track of the required kind, else the clip is skipped. Audio fields go back through `setClipAsset`/`setClipGainDb`/`setClipFades` (never a raw struct write), so a clipboard `assetRef` is re-validated exactly like a freshly-loaded file's — a clipboard is only as trustworthy as whatever filled it. One undo step for the whole paste; the pasted clips end up selected. | `TimelineDoc::duplicateClip` per selected clip, batched into one undo step; the new clips end up selected | `TimelinePanelComponent::cutSelectedClips()` — copy, then delete the selection, as ONE `recordTimelineChange` (so undo restores it in a single step) | `repeatSelectedClips(count)` — `count` back-to-back copies of the selection's own span (`max end - min start`, not each clip's own length, so a multi-clip rhythm tiles intact), the first starting one span-length after the selection's start. One undo step; every created clip ends up selected. |
 | PianoRoll | Copies the selected notes (each field, `muted` included) into the roll's OWN note clipboard, offsets stored relative to the earliest selected note — the clipboard is a member of the roll, so it survives switching clips (`openClip`), and a block copied in one clip pastes into another | `pasteNotesAtPlayhead()` anchors the block at the **snapped, clip-relative playhead position** when that lands inside `[0, clip length)`, else at 0.0; `MainComponent::perform` primes the playhead from the live transport (`setPlayheadBeat(transport.getPositionSnapshot().ppq)`) immediately before pasting, so a paste with the transport stopped still lands under the position the user can see rather than wherever a stale internal beat was left. Notes at/after the clip's end are skipped, an overrunning note's length is clamped to the clip's end. One undo step; the pasted notes end up selected. | Copies the selection to immediately after its own span (same pitches), one undo step, selects the copies — does NOT touch the clipboard (duplicating isn't copying, and silently stomping a clipboard the user filled deliberately would be a surprise) | `cutSelectedNotes()` — copy then delete, one undo step (fills the clipboard first, so a cut is always paste-able) | `repeatSelectedNotes(count)` — `count` copies of the selection block, each one span further along, **clipped at the clip's end**: placement stops at the first block that would fall entirely outside the clip rather than piling every remaining copy onto the last beat. One undo step; every created note ends up selected. |
 
@@ -127,7 +125,7 @@ and every module (`GraphEditor::selectAllModules()`) on Graph. Unlike the clipbo
 
 Cmd+=/Cmd+- is the platform's own zoom accelerator (every browser, every editor); Cmd+Shift+=/-
 is the vertical axis, mirroring the modifier the mouse wheel already uses (Cmd+wheel = horizontal,
-Cmd+Shift+wheel = vertical — see [`layout.md §16`](layout.md)), so the keyboard and the wheel teach
+Cmd+Shift+wheel = vertical — see [`timeline_panel_core.md §2`](timeline_panel_core.md)), so the keyboard and the wheel teach
 the same shape. All four are `AppCommands`/`ApplicationCommandManager` commands (unlike the
 Timeline/PianoRoll surface keys below) and route by the SAME `resolveEditSurface()` the clipboard
 verbs use, in/out factor `1.25` / `1 / 1.25` (`MainComponent::kZoomInFactor`/`kZoomOutFactor`):
@@ -136,7 +134,7 @@ verbs use, in/out factor `1.25` / `1 / 1.25` (`MainComponent::kZoomInFactor`/`kZ
 |---|---|---|
 | Graph | `GraphEditor::zoomAroundCentre` — the canvas' one zoom level | **Inactive** — the canvas zooms uniformly (one `zoomLevel`, no separate axes), so a second key that did the same thing under a different modifier would be a trap, not a feature |
 | TimelineClips | `TimelinePanelComponent::zoomTimelineHorizontal` — `TimelineViewState::pixelsPerBeat`, anchored at the visible centre | `zoomTimelineVertical` — `TimelineViewState::rowHeightScale` (track row height), anchored at the visible centre |
-| PianoRoll | `PianoRollComponent::zoomHorizontal` — the roll's OWN `pixelsPerBeat` (never the shared `TimelineViewState` — see [`layout.md §16`](layout.md)) | `zoomVertical` — `pixelsPerSemitone_` |
+| PianoRoll | `PianoRollComponent::zoomHorizontal` — the roll's OWN `pixelsPerBeat` (never the shared `TimelineViewState` — see [`timeline_panel_clips_automation.md §2`](timeline_panel_clips_automation.md)) | `zoomVertical` — `pixelsPerSemitone_` |
 
 Each keypress reports its own status-bar message ("Canvas: zoom", "Timeline: zoom" / "Timeline:
 track height", "Piano roll: zoom" / "Piano roll: vertical zoom") so a held key's effect is visible
@@ -164,11 +162,53 @@ and, for the loop-selection key, `TimelineClipLaneArea::keyPressed()` too):
 
 | Shortcut | Action |
 |----------|--------|
-| Q | Toggle Snap (grid magnetism) — the chosen division survives underneath; shared with the piano roll (one binding, `timelineSnapToggle`, whichever surface has focus) |
+| J | Toggle Snap (grid magnetism) — the chosen division survives underneath, and so do the grid LINES (see below); shared with the piano roll (one binding, `timelineSnapToggle`, whichever surface has focus). Cubase's snap key; **Q** is Cubase's *quantise*, which is what the roll uses it for |
 | L | Toggle Looping, keeping the existing bounds — the transport bar's loop button |
-| F | Toggle Follow Playhead (`timelineFollowPlayheadToggle`) — mirrors the transport strip's follow button; panel-scoped like Q/L/P, so it works whichever timeline surface (lanes or roll) has focus |
+| F | Toggle Follow Playhead (`timelineFollowPlayheadToggle`) — mirrors the transport strip's follow button; panel-scoped like J/L/P, so it works whichever timeline surface (lanes or roll) has focus |
 | P | Loop the Selection — sets the transport loop to the selected clips' (or, with the roll open, the edited clip's) span. Whether it also arms looping is `Settings → Preferences → "Timeline: P (loop selection) also switches looping on"` (default on; off = locators only) |
-| 1 / 3 / 4 / 5 / 7 / 8 | Switch the active edit tool: 1 Select, 3 Split, 4 Glue, 5 Erase, 7 Mute, 8 Draw (Cubase's own numbering — see [`layout.md §16`](layout.md)) |
+| 1 / 3 / 4 / 5 / 7 / 8 | Switch the active edit tool: 1 Select, 3 Split, 4 Glue, 5 Erase, 7 Mute, 8 Draw (Cubase's own numbering — see [`timeline_panel_core.md §7`](timeline_panel_core.md)) |
+| Option+1 | Jump to Locator 1 — parks the cursor on the LEFT loop locator (`timelineJumpToLocator1`) |
+| Option+2 | Jump to Locator 2 — the RIGHT loop locator (`timelineJumpToLocator2`) |
+
+**Snap toggles MAGNETISM, not the grid.** Turning snap off stops edits being pulled onto the
+division; it does **not** change which grid lines are drawn. Paint sites read
+`TimelineViewState::divisionBeatsRaw()` (the chosen division, whatever the switch says) and only
+magnetism reads `divisionBeats()` (which collapses to `0` when the switch is off). Getting this
+backwards made the lanes' subdivision lines vanish the moment a user turned magnetism off, leaving
+them eyeballing positions against nothing. Same split in the piano roll — see its own note.
+
+**Why the locator jumps are on plain Option+digit** — and the bug that put them there. They shipped
+briefly on `Ctrl+Shift+1/2`, the chord the grid-set family owns, and were **dead in the app**:
+
+- `ShortcutManager::saveToProperties` writes **every** action's binding, so one rebind of anything
+  freezes the whole table on disk. Moving a DEFAULT therefore does not move a user's PERSISTED key.
+- So on any install whose settings had ever been saved, `snapSetWhole`/`snapSetHalf` were still
+  sitting on `Ctrl+Shift+1/2`, and `getActionsForKeyPress` returned **both** ids for the chord.
+- `MainComponent::keyPressed` takes "the first action bound to this key that HAS a command" — so the
+  stale grid command won and the locator jump never ran.
+
+`Option+digit` was never bound to anything in any shipped version, so no persisted value can shadow
+it. Option is also the one modifier family immune to the macOS shifted-character problem below
+(`charactersIgnoringModifiers` *does* ignore Option), so these two need no rescue at all.
+Pinned by `ShortcutManagerTest.APersistedCommandBindingShadowsASurfaceActionOnTheSameChord`.
+
+**Reachability: a surface action needs focus inside its own panel — except these two.** A surface
+action only runs if the focused component is inside the owning panel's subtree, because that is how
+JUCE bubbles an unhandled key. Under the timeline panel the only things that take keyboard focus are
+the clip lane area and the piano roll — **not** the ruler, the track headers or the transport bar. So
+setting the locators by dragging the ruler (the obvious way to do it) left focus on the canvas and
+the keystroke died in `MainComponent::keyPressed`, which only dispatches commands.
+`MainComponent::keyPressed` therefore ends with a **last-chance forward** of a two-id whitelist
+(`forwardsToTimelinePanel`) back into `TimelinePanelComponent::keyPressed`. Deliberately a whitelist
+and not a blanket forward: forwarding everything the panel resolves would make its bare letters and
+tool digits (J/L/P/F, 1/3/4/5/7/8) fire while the graph canvas has focus, which is a different
+feature with its own design question.
+
+Both jumps are **surface**-resolved rather than commands: a locator jump acts on the timeline's own
+transport and means nothing on any other surface. A **degenerate or unset** span
+(`loopEnd <= loopStart`) is a no-op that reports the key unhandled rather than swallowing it, and
+looping being switched OFF does not matter — the locators are a *range*, and disarming them only
+stops playback wrapping (the same rule `TimelineRulerComponent::braceStateFor` follows).
 
 **Grid commands** (`AppCommands`/`ApplicationCommandManager` — dispatched through
 `MainComponent::perform`, active exactly while the timeline panel is on screen):
@@ -186,15 +226,28 @@ and, for the loop-selection key, `TimelineClipLaneArea::keyPressed()` too):
 | Ctrl+Shift+Left | Grid Coarser (step toward Bar) |
 | Ctrl+Shift+Right | Grid Finer (step toward 1/128) |
 
-**Shift-chorded symbol keys and the macOS peer.** These commands only work on a real Mac keyboard
-because binding lookups go through `ShortcutManager::keyPressMatches`, not exact `KeyPress`
-equality: JUCE's macOS peer builds a key code from `charactersIgnoringModifiers`, which — per its
-own source comment — does *not* ignore Shift, so Ctrl+Shift+1 arrives as `!` and Cmd+Shift+`=`
-arrives as `+`. The matcher folds both sides through a US-layout unshift map when both carry Shift
-(other layouts degrade to exact match). Conflict detection deliberately stays exact so two
-different stored chords never merge. Headless tests construct `KeyPress('1', mods)` directly and
-would never catch this class of bug — `FocusArbitrationTest.ShiftedSymbolKeyCodesFromTheRealKeyboardReachTheGridCommands`
-pins the real-event form instead.
+**Three Timeline families share the digit row**, separated only by their modifier set: **bare** =
+the edit tools, **Ctrl+Shift** = set the grid, **Option** = jump to a locator. Modifier equality on
+the binding side is exact (`keyPressMatches` normalizes only the key CODE), so none of the three can
+reach another; `ShortcutManagerTest.BareToolDigitsDoNotCollideWithTheGridOrLocatorCommands` is the
+tripwire. The grid-set family is on its ORIGINAL `Ctrl+Shift+digit` home, which is also what every
+existing install has persisted — see the locator note above for why moving it was the wrong half of
+that problem to solve.
+
+**Shift-chorded symbol keys and the macOS peer.** Binding lookups go through
+`ShortcutManager::keyPressMatches`, not exact `KeyPress` equality: JUCE's macOS peer builds a key
+code from `charactersIgnoringModifiers`, which — per its own source comment — does *not* ignore
+Shift, so Ctrl+Shift+1 arrives as `!` and Cmd+Shift+`=` arrives as `+`. The matcher folds both sides
+through a US-layout unshift map when both carry Shift (other layouts degrade to exact match).
+Conflict detection deliberately stays exact so two different stored chords never merge. Headless
+tests construct `KeyPress('1', mods)` directly and would never catch this class of bug —
+`FocusArbitrationTest.ShiftedSymbolKeyCodesFromTheRealKeyboardReachTheGridCommands` pins the
+real-event form instead, on the grid family's own `!`/`^`/`&`/`*`.
+
+Note that `charactersIgnoringModifiers` DOES ignore **Option**, which is half of why the locator
+jumps sit on plain `Option+digit`: a real Option+2 arrives carrying `2` and matches by key code
+directly, so that pair is outside this bug's reach entirely. The rescue matters for the eight
+Ctrl+Shift grid commands and the Cmd+Shift zoom pair.
 
 **Ctrl, not Cmd — deliberately, including on macOS.** `ShortcutManager::resetToDefaults` binds
 these with `juce::ModifierKeys::ctrlModifier`, a REAL Ctrl rather than `commandModifier`. On macOS
@@ -205,7 +258,7 @@ modifier) and modifier equality in `ShortcutManager::bindingMatches` is exact, C
 never be mistaken for a bare `1` — category scoping is what makes the two safe to coexist in the
 same section at all.
 
-**The five set-commands and the two cycle-commands are five+two separate commands, not one
+**The eight set-commands and the two cycle-commands are eight+two separate commands, not one
 parameterised command** — `juce::ApplicationCommandManager` has no notion of an argument, so a menu
 row and a key binding are per-command; "set the grid to 1/8" has to BE a command to be rebindable or
 show up in a menu at all.
@@ -224,18 +277,20 @@ moved — a held key parked at a clamp says so instead of implying another step 
 
 ## Piano Roll
 
-All nine are surface-resolved — consulted directly by `PianoRollComponent::keyPressed()`, never
+All twelve are surface-resolved — consulted directly by `PianoRollComponent::keyPressed()`, never
 dispatched through `ApplicationCommandManager`:
 
 | Shortcut | Action |
 |----------|--------|
 | ← / → | Nudge Notes Left / Right — the whole selection, by one grid division (one snap cell; a sixteenth when snap is off) |
-| ↑ / ↓ | Transpose Up / Down a Semitone — the whole selection |
+| ↑ / ↓ | Transpose Up / Down **one visible row** — the whole selection. A semitone normally; the next **scale degree** while *Show Only Scale Notes* is on, because the row set IS the scale then. One implementation either way (`transposeSelectedNotesByRow`, stepping `visiblePitches_` through the same `rowShiftedPitch` seam a drag uses), so an arrow key can never strand a note on a hidden out-of-scale row |
 | Shift+↑ / Shift+↓ | Transpose Up / Down an Octave (12 semitones) — the same octave-jump convention every DAW uses, a separate action rather than a modifier read off the plain one so it can be rebound on its own |
 | Alt+← / Alt+→ | Select Previous / Next Note — navigates BETWEEN notes in the clip's canonical (start, pitch) order, collapsing a multi-selection onto the outer neighbour; scrolls an off-screen target into view. Selection-only, never a document edit. Alt+↑/↓ is reserved (unclaimed) |
-| Shift+Q | Quantise Selected Notes — one-shot: snap the selected notes (or all notes when nothing is selected) to the chosen grid, even while snap is toggled off. Tested BEFORE the bare-Q toggle below since it's the more specific of the pair |
-| Q | Toggle Snap — same `timelineSnapToggle` action the timeline panel uses; whichever surface has focus |
+| **Q** | **Quantise Selected Notes** (`pianoRollQuantise`) — one-shot: snap the selected notes' STARTS (or all notes when nothing is selected) to the chosen grid, even while snap is toggled off. **Cubase parity:** on a note editor the bare, most reachable key belongs to the verb you use constantly, not to a switch you set once a session |
+| Option+Shift+Q | Quantise Note Pitches to Scale (`pianoRollQuantisePitches`) — snaps the selected notes' PITCHES (or all notes when nothing is selected) into the scale picked in Scale Assist, via `MusicalScale::snapPitch`. Falls THROUGH (returns `false`) when no scale is chosen: "No scale" has nothing to quantise into. Matched BEFORE bare Q, since it is the more specific chord |
+| J | Toggle Snap — grid magnetism on/off, the **shared** `timelineSnapToggle` the timeline panel also uses (one binding, one key, whichever surface has focus; deliberately NOT duplicated into a piano-roll action, since two "Toggle Snap" rows on the same key flipping the same flag is a Settings list nobody could reason about). **Magnetism only: the chosen grid stays VISIBLE either way** |
 | Ctrl+S | Toggle the Scale Assist panel (`pianoRollToggleScalePanel`) — real Control, not Cmd (Cmd+S stays the app's save); inert while a text field inside the panel has focus |
+| Option+S | **Show Only Scale Notes** (`pianoRollToggleScaleFilter`) — collapses the out-of-scale rows out of the grid, and makes ↑/↓ step by scale degree (above). One modifier away from Ctrl+S on purpose: adjacent verbs on adjacent chips should rhyme, and modifier equality is exact so they cannot collide. Remembered per clip; falls through with no clip open |
 
 Every arrow/octave/nav action returns `false` (falls through) when nothing is selected, so the key
 keeps whatever meaning it has elsewhere with an empty selection — nudge/transpose EDIT the
@@ -246,6 +301,25 @@ equality is exact on modifiers, which is what keeps Left/Shift+Left/Alt+Left thr
 actions. Digit keys are deliberately absent here — tool switching belongs to the panel (see
 Timeline above), so the roll and the panel can never disagree about which tool is active.
 
+**One letter, one verb, on both surfaces.** Snap moved off Q to J for the *timeline* too, so bare Q
+is now unambiguously "quantise" (the roll's `pianoRollQuantise`) and bare J is unambiguously "snap"
+(the shared `timelineSnapToggle`) — the roll resolves the latter directly rather than owning a
+duplicate of it. Pitch-quantize is matched **before** bare Q, since `Option+Shift+Q` is the more
+specific chord.
+
+**Option+letter is stored as a key CODE, never as a character.** macOS delivers Option+Q to the app
+as the Unicode glyph `œ`, not as `'q'` plus an Alt flag, so `pianoRollQuantisePitches` and
+`pianoRollToggleScaleFilter` are `juce::KeyPress('<letter>', <modifiers>, 0)` and are matched through
+`ShortcutManager::keyPressMatches` (key code + exact modifier set) — the same shape the arrow-key
+bindings already use, and the reason they survive the platform's own key translation.
+
+**Every one of these keys has a header chip twin**, and each chip does exactly one thing on a plain
+click (no modifier variants anywhere in the header any more): **Snap**, **Quantise**, **Quantise
+Pitches**, **Scale** and **Show Only Scale Notes**. The first three and the last carry small drawn
+vector glyphs rather than letters — "Q" for a grid toggle was the same letter the timeline binds to
+snap, and a second "Q" beside it for pitch-quantise told the user nothing. See
+[`timeline_panel_clips_automation.md §2`](timeline_panel_clips_automation.md).
+
 2 (Range Selection), 6 (Zoom) and 9 (Play/Scrub) are Cubase tools this app doesn't ship yet and stay
 **unassigned on purpose** — `editToolForKeyChar` (`Source/UI/EditTool.h`) returns `nullopt` for
 them, so those three digits are simply never consumed rather than remapping the six shipped tools
@@ -253,17 +327,18 @@ onto 1–6. Shipping one of the missing three later costs no rebind: the digit i
 
 ## Command vs surface actions
 
-The 49 actions split into two kinds, and telling them apart is the key to reasoning about "why
+The 58 actions split into two kinds, and telling them apart is the key to reasoning about "why
 doesn't this key do anything":
 
-- **Command-dispatched** (31 actions) — every General action, both Graph actions, and the Timeline
-  category's five grid-set + two grid-cycle commands. `AppCommands::getCommandForAction(actionId)`
+- **Command-dispatched** (34 actions) — every General action, both Graph actions, and the Timeline
+  category's eight grid-set + two grid-cycle commands. `AppCommands::getCommandForAction(actionId)`
   returns a real `juce::CommandID` for these; `MainComponent` implements
   `ApplicationCommandTarget`, so they appear in the native menu bar, drive toolbar tooltip text, and
   their enabled/disabled state is whatever `getCommandInfo` reports.
-- **Surface-resolved** (20 actions) — the timeline panel's own keys (`timelineSnapToggle`,
+- **Surface-resolved** (24 actions) — the timeline panel's own keys (`timelineSnapToggle`,
   `timelineToggleLoop`, `timelineLoopSelection`, `timelineFollowPlayheadToggle`, the six
-  `timelineTool*` digits) and all ten piano roll actions. `AppCommands::getCommandForAction` returns `AppCommands::kNoCommand` (`0`,
+  `timelineTool*` digits, and the two `timelineJumpToLocator*` keys) plus every piano roll action.
+  `AppCommands::getCommandForAction` returns `AppCommands::kNoCommand` (`0`,
   `juce::ApplicationCommandManager`'s own "not a command" value) for every one of these — they are
   never dispatched through the command manager at all. Instead, the owning component's own
   `keyPressed()` calls a small `matchesAction(key, actionId, fallback)` helper that reads
@@ -289,7 +364,7 @@ rebindable key with no command behind it would fire and do nothing).
 collision within the SAME category (`ShortcutCategory`: General/Graph/Timeline/PianoRoll). The
 timeline and the piano roll can never hold keyboard focus at the same time, so a bare key repeating
 across categories is legal and must not be reported as a conflict — that's what lets Q mean
-"toggle snap" identically on both surfaces, and lets the timeline's bare-key DAW conventions (Q/L/P,
+"toggle snap" identically on both surfaces, and lets the timeline's bare-key DAW conventions (J/L/P,
 the tool digits) and the roll's bare arrow keys coexist with General's Cmd-modified table without
 forcing any of them into a modifier combination nobody uses. WITHIN a category the check is as
 strict as ever — a second General Cmd+X still reports the first one, which is what the Settings
@@ -303,7 +378,7 @@ find in a rebinding list. Each surface's own `keyPressed()` hardcodes them direc
 
 | Shortcut | Context | Action |
 |----------|---------|--------|
-| Escape | AI panel, request in flight | Cancel the in-flight AI request (same as the Cancel button — actually aborts it, see [`AI_Engine.md`](AI_Engine.md#request-cancellation)) |
+| Escape | AI panel, request in flight | Cancel the in-flight AI request (same as the Cancel button — actually aborts it, see [`AI_Engine_providers_accounts.md`](AI_Engine_providers_accounts.md#10-request-cancellation)) |
 | Escape | Canvas, modules selected | Clear the selection |
 | Delete / Backspace | Canvas, modules selected | Delete every selected module (one undo step) |
 | Escape | Clip lanes, clips selected | Clear the clip selection |
@@ -330,12 +405,12 @@ deliberately does **not** consume the tool digits at all — tool switching belo
 the roll and the panel can never disagree about which tool is active. The whole selection nudges/
 transposes by ONE shared delta (never per-note), clamped so the group stays inside the clip window
 (`[0, clipLength)`) or the pitch range (`[0, 127]`) as a unit — the same "clamp the group together"
-rule `TimelineClipLaneArea`'s cross-track move drag uses (see [`layout.md §16`](layout.md)).
+rule `TimelineClipLaneArea`'s cross-track move drag uses (see [`timeline_panel_clips_automation.md §1`](timeline_panel_clips_automation.md)).
 
 ## Canvas mouse gestures
 
 Multi-select is layered on top of the existing pan gesture rather than replacing it, so no existing
-habit changes. See [`layout.md §12`](layout.md) for the full contract.
+habit changes. See [`layout_selection_canvas.md §1`](layout_selection_canvas.md) for the full contract.
 
 | Gesture | Action |
 |---------|--------|

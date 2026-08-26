@@ -222,6 +222,27 @@ void adoptUuidIfTrusted(juce::AudioProcessorGraph::Node* node, const juce::Dynam
     }
 }
 
+// Copies a patch node's custom card title ("displayName") onto the live node.
+//
+// Applied on BOTH the trusted and untrusted paths, unlike "uuid" and "state" above, because it is
+// display-only: it is never consulted for module-type resolution (that is "type"), for node
+// identity ("uuid"), for parameter values, or for anything else semantic. The worst an untrusted
+// patch can do with it is mislabel a card, which the user can see and rename. It IS length-capped,
+// so a hostile patch cannot stuff a megabyte of text into a title and wedge the canvas paint.
+//
+// Blank or whitespace-only means "no custom title" — the card falls back to the auto-numbered name
+// AudioEngine::updateModuleNames() maintains on the processor.
+void applyDisplayNameToNode(juce::AudioProcessorGraph::Node* node, const juce::DynamicObject* nObj) {
+    if (node == nullptr || nObj == nullptr || !nObj->hasProperty("displayName"))
+        return;
+    const auto name = nObj->getProperty("displayName").toString().trim();
+    if (name.isEmpty()) {
+        node->properties.remove("displayName");
+        return;
+    }
+    node->properties.set("displayName", name.substring(0, synth::kMaxModuleDisplayNameChars));
+}
+
 // Renders whatever the model put in an id field, so the rejection names the offending value even
 // when it was not a usable integer at all.
 juce::String describeId(const juce::var& value) {
@@ -345,7 +366,7 @@ PatchValidationResult AIStateMapper::validateNodeParams(juce::AudioProcessor* pr
                 ids.add(id);
             return {false, PatchValidationError::UnknownParameterKey,
                     "Unknown parameter \"" + key +
-                        "\" — it doesn't match any real parameter on this module and would be silently ignored, "
+                        "\" - it doesn't match any real parameter on this module and would be silently ignored, "
                         "leaving that value at its default. This module's actual parameter IDs are: " +
                         ids.joinIntoString(", ") + "."};
         }
@@ -449,7 +470,7 @@ PatchValidationResult AIStateMapper::validatePatch(const juce::var& json, const 
     // this check. Same class of rule as the node "state" blob (see applyExtraStateToProcessor).
     if (rootObj->hasProperty("timeline"))
         return {false, PatchValidationError::TimelineNotAllowed,
-                "Patch suggestions must not contain a \"timeline\" property — timeline and automation "
+                "Patch suggestions must not contain a \"timeline\" property - timeline and automation "
                 "data is not accepted from a patch suggestion. Remove it and resend only nodes, "
                 "connections and modulations."};
 
@@ -697,6 +718,25 @@ juce::StringArray AIStateMapper::moduleFactoryTypeNames() {
     return names;
 }
 
+const juce::StringArray& AIStateMapper::dualIOCapableModuleTypes() {
+    // Probed from the factory rather than hand-listed: a module that gains the Dual I/O toggle has
+    // to show up in the Preferences per-module popup without anyone remembering to add it there.
+    // One instance per factory key, built once — cheap enough for a lazily-initialised static
+    // (every module here is default-constructible with no device, no file and no plugin scan), and
+    // the alternative is the stale list this replaces.
+    static const juce::StringArray types = [] {
+        juce::StringArray result;
+        for (const auto& name : moduleFactoryTypeNames()) {
+            auto probe = createModule(name);
+            auto* mb = dynamic_cast<ModuleBase*>(probe.get());
+            if (mb != nullptr && mb->hasDualIOParameter())
+                result.add(name);
+        }
+        return result;
+    }();
+    return types;
+}
+
 juce::StringArray AIStateMapper::authorableModuleTypes() {
     juce::StringArray names;
     for (const auto& name : moduleFactoryTypeNames())
@@ -829,6 +869,16 @@ juce::var AIStateMapper::graphToJSON(juce::AudioProcessorGraph& graph) {
                 mirrorUuidIntoProcessor(node, uuid);
             }
             n->setProperty("uuid", uuid);
+
+            // User's custom card title, when they renamed it. Deliberately a SEPARATE field from the
+            // processor's own name: "type" carries the factory type, and the processor's getName()
+            // is the auto-numbered "Chorus 2" that AudioEngine::updateModuleNames() recomputes
+            // wholesale on every graph change (it even strips trailing digits to renumber). Storing
+            // a custom name there would be clobbered on the next node add. Emitted only when set, so
+            // every un-renamed node's JSON stays byte-identical to before.
+            const auto displayName = node->properties["displayName"].toString();
+            if (displayName.isNotEmpty())
+                n->setProperty("displayName", displayName);
 
             // Params — store denormalized values to match applyJSONToGraph expectations
             juce::DynamicObject::Ptr params = new juce::DynamicObject();
@@ -1204,6 +1254,7 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                                 }
                                 applyExtraStateToProcessor(existingNode->getProcessor(), nObj, trusted);
                                 adoptUuidIfTrusted(existingNode, nObj, trusted);
+                                applyDisplayNameToNode(existingNode, nObj);
                                 // Update position if provided
                                 if (nObj->hasProperty("position")) {
                                     if (auto* posObj = nObj->getProperty("position").getDynamicObject()) {
@@ -1241,6 +1292,7 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                             idMap[oldId] = node->nodeID;
                             newlyCreatedNodes.insert(node->nodeID);
                             adoptUuidIfTrusted(node.get(), nObj, trusted);
+                            applyDisplayNameToNode(node.get(), nObj);
                             if (nObj->hasProperty("position")) {
                                 if (auto* posObj = nObj->getProperty("position").getDynamicObject()) {
                                     node->properties.set("x", posObj->getProperty("x"));
@@ -1669,8 +1721,10 @@ bool AIStateMapper::applySnapshotPreservingNodes(const juce::var& snapshot, juce
                 applyParamsToProcessor(live->getProcessor(), pObj, /*trusted=*/true, /*skipUnchanged=*/true);
         if (auto* live = resolve(t))
             applyExtraStateIfChanged(live->getProcessor(), t.obj);
-        if (auto* live = resolve(t))
+        if (auto* live = resolve(t)) {
             applyPositionToNode(live, t.obj);
+            applyDisplayNameToNode(live, t.obj);
+        }
     }
 
     // 2. Drop every live node the snapshot does not contain. Their processors — and every UI object
@@ -1729,6 +1783,7 @@ bool AIStateMapper::applySnapshotPreservingNodes(const juce::var& snapshot, juce
         node->properties.set("uuid", t.uuid);
         mirrorUuidIntoProcessor(node.get(), t.uuid);
         applyPositionToNode(node.get(), t.obj);
+        applyDisplayNameToNode(node.get(), t.obj);
     }
 
     // 4. Connections: apply the delta only. A restore that changed no wiring issues no graph

@@ -124,6 +124,19 @@ struct TrackHeaderHost {
      *  longer resolves (a stale popup must never crash). Non-pure with an inert default so every
      *  existing TrackHeaderHost implementer keeps compiling. */
     virtual void setMidiDestinationConnected(synth::TrackId, juce::uint32, bool) {}
+
+    /** NOTE AUDITION — sends one preview note-on (`noteOn` true) or note-off into the track's bound
+     *  Track In node, so it reaches exactly the destination modules the track's clips play through
+     *  (they are graph connections FROM that node — see setMidiDestinationConnected above). Driven by
+     *  the piano roll's note click (PianoRollComponent::onAuditionNote, forwarded by
+     *  TimelinePanelComponent). A no-op when the track's binding no longer resolves — clicking a note
+     *  on an unbound track must be silent, never a crash.
+     *
+     *  Called on the MESSAGE thread; the implementation hands the event to the node through a
+     *  wait-free FIFO (TimelineMidiSourceModule::pushAuditionNote) rather than touching the audio
+     *  thread. Non-pure with an inert default so every existing TrackHeaderHost implementer — and
+     *  every test stub — keeps compiling. */
+    virtual void auditionTrackNote(synth::TrackId, int /*pitch*/, int /*velocity*/, bool /*noteOn*/) {}
 };
 
 class TimelineTrackHeaderComponent : public juce::Component {

@@ -20,6 +20,12 @@ bool clipLess(const Clip& a, const Clip& b) {
     return a.id.value < b.id.value;
 }
 
+bool markerLess(const Marker& a, const Marker& b) {
+    if (a.beat != b.beat)
+        return a.beat < b.beat;
+    return a.id.value < b.id.value;
+}
+
 bool noteLess(const MidiNote& a, const MidiNote& b) {
     if (a.startBeat != b.startBeat)
         return a.startBeat < b.startBeat;
@@ -72,6 +78,9 @@ bool isValidAssetRefString(const juce::String& ref) noexcept {
 
     return true;
 }
+
+// A marker label is capped but never trimmed or rewritten — see TimelineDoc::addMarker.
+bool isValidMarkerText(const juce::String& text) noexcept { return text.length() <= TimelineDoc::kMaxMarkerTextLength; }
 
 bool isValidRange(const AutomationLane::RangeSnapshot& range) noexcept {
     return std::isfinite(range.minValue) && std::isfinite(range.maxValue) && std::isfinite(range.defaultValue) &&
@@ -294,6 +303,13 @@ AutomationLane* TimelineDoc::findLaneForParam(const juce::String& nodeUuid, cons
     return nullptr;
 }
 
+Marker* TimelineDoc::findMarker(MarkerId id) {
+    for (auto& marker : markers)
+        if (marker.id == id)
+            return &marker;
+    return nullptr;
+}
+
 const Track* TimelineDoc::getTrack(TrackId id) const { return findTrack(id); }
 
 const Clip* TimelineDoc::getClip(ClipId id) const { return const_cast<TimelineDoc*>(this)->findClip(id); }
@@ -326,6 +342,8 @@ const Track* TimelineDoc::getTrackForLane(LaneId id) const {
 const AutomationLane* TimelineDoc::getLaneForParam(const juce::String& nodeUuid, const juce::String& paramId) const {
     return const_cast<TimelineDoc*>(this)->findLaneForParam(nodeUuid, paramId);
 }
+
+const Marker* TimelineDoc::getMarker(MarkerId id) const { return const_cast<TimelineDoc*>(this)->findMarker(id); }
 
 // --------------------------------------------------------------------- tracks --
 
@@ -1151,12 +1169,88 @@ bool TimelineDoc::rebindLane(LaneId id, const juce::String& newNodeUuid) {
     });
 }
 
+// -------------------------------------------------------------------- markers --
+
+MarkerId TimelineDoc::addMarker(double beat, const juce::String& text, juce::uint32 colourArgb) {
+    if (!isFiniteAtOrAfterZero(beat) || !isValidMarkerText(text))
+        return {};
+    if (static_cast<int>(markers.size()) >= kMaxMarkers)
+        return {};
+
+    return applyMutation([&] {
+        Marker marker;
+        marker.id = MarkerId{nextMarkerId++};
+        marker.beat = beat;
+        marker.text = text;
+        marker.colourArgb = colourArgb;
+        const auto pos = std::lower_bound(markers.begin(), markers.end(), marker, markerLess);
+        return markers.insert(pos, std::move(marker))->id;
+    });
+}
+
+bool TimelineDoc::removeMarker(MarkerId id) {
+    auto* marker = findMarker(id);
+    if (marker == nullptr)
+        return false;
+
+    return applyMutation([&] {
+        markers.erase(markers.begin() + (marker - markers.data()));
+        return true;
+    });
+}
+
+bool TimelineDoc::setMarkerText(MarkerId id, const juce::String& text) {
+    auto* marker = findMarker(id);
+    if (marker == nullptr || !isValidMarkerText(text))
+        return false;
+    if (marker->text == text)
+        return true; // already there: no revision bump, no notification
+    return applyMutation([&] {
+        marker->text = text;
+        return true;
+    });
+}
+
+bool TimelineDoc::setMarkerColour(MarkerId id, juce::uint32 colourArgb) {
+    auto* marker = findMarker(id);
+    if (marker == nullptr)
+        return false;
+    if (marker->colourArgb == colourArgb)
+        return true;
+    return applyMutation([&] {
+        marker->colourArgb = colourArgb;
+        return true;
+    });
+}
+
+bool TimelineDoc::moveMarker(MarkerId id, double newBeat) {
+    auto* marker = findMarker(id);
+    if (marker == nullptr || !isFiniteAtOrAfterZero(newBeat))
+        return false;
+    if (marker->beat == newBeat)
+        return true;
+
+    return applyMutation([&] {
+        // Copy out, erase, re-insert at the sorted position — the same re-seat moveClip does, so
+        // the (beat, id) order holds without re-sorting the whole vector.
+        Marker moved = *marker;
+        moved.beat = newBeat;
+        markers.erase(markers.begin() + (marker - markers.data()));
+        const auto pos = std::lower_bound(markers.begin(), markers.end(), moved, markerLess);
+        markers.insert(pos, std::move(moved));
+        return true;
+    });
+}
+
 // ----------------------------------------------------------------- doc-level --
 
 void TimelineDoc::clear() {
-    if (tracks.empty())
+    if (tracks.empty() && markers.empty())
         return;
-    applyMutation([&] { tracks.clear(); });
+    applyMutation([&] {
+        tracks.clear();
+        markers.clear();
+    });
 }
 
 // -------------------------------------------------------------- serialisation --
@@ -1170,6 +1264,7 @@ juce::var TimelineDoc::toVar() const {
     root->setProperty("nextClipId", static_cast<juce::int64>(nextClipId));
     root->setProperty("nextLaneId", static_cast<juce::int64>(nextLaneId));
     root->setProperty("nextNoteId", static_cast<juce::int64>(nextNoteId));
+    root->setProperty("nextMarkerId", static_cast<juce::int64>(nextMarkerId));
 
     juce::Array<juce::var> trackVars;
     for (const auto& track : tracks) {
@@ -1252,6 +1347,19 @@ juce::var TimelineDoc::toVar() const {
     }
     root->setProperty("tracks", trackVars);
 
+    // Written ALWAYS (an empty array when there are none), the same one-shape-to-parse rule the
+    // clips' audio fields follow. Additive — kFormatVersion stays 1.
+    juce::Array<juce::var> markerVars;
+    for (const auto& marker : markers) {
+        juce::DynamicObject::Ptr m = new juce::DynamicObject();
+        m->setProperty("id", static_cast<juce::int64>(marker.id.value));
+        m->setProperty("beat", marker.beat);
+        m->setProperty("text", marker.text);
+        m->setProperty("colourArgb", static_cast<juce::int64>(marker.colourArgb));
+        markerVars.add(juce::var(m.get()));
+    }
+    root->setProperty("markers", markerVars);
+
     return juce::var(root.get());
 }
 
@@ -1268,10 +1376,12 @@ bool TimelineDoc::fromVar(const juce::var& state) {
     std::int64_t parsedNextClipId = 1;
     std::int64_t parsedNextLaneId = 1;
     std::int64_t parsedNextNoteId = 1;
+    std::int64_t parsedNextMarkerId = 1;
     if (!readOptionalCounter(rootObj->getProperty("nextTrackId"), parsedNextTrackId) ||
         !readOptionalCounter(rootObj->getProperty("nextClipId"), parsedNextClipId) ||
         !readOptionalCounter(rootObj->getProperty("nextLaneId"), parsedNextLaneId) ||
-        !readOptionalCounter(rootObj->getProperty("nextNoteId"), parsedNextNoteId))
+        !readOptionalCounter(rootObj->getProperty("nextNoteId"), parsedNextNoteId) ||
+        !readOptionalCounter(rootObj->getProperty("nextMarkerId"), parsedNextMarkerId))
         return false;
 
     const juce::Array<juce::var>* trackList = nullptr;
@@ -1281,10 +1391,12 @@ bool TimelineDoc::fromVar(const juce::var& state) {
     // Everything below builds into `parsed`; the live doc isn't touched until the very last
     // step, which is what makes a malformed field a clean no-op rather than a half-load.
     std::vector<Track> parsed;
+    std::vector<Marker> parsedMarkers;
     std::set<std::int64_t> seenTrackIds;
     std::set<std::int64_t> seenClipIds;
     std::set<std::int64_t> seenLaneIds;
     std::set<std::int64_t> seenNoteIds;
+    std::set<std::int64_t> seenMarkerIds;
     std::set<std::pair<juce::String, juce::String>> seenLaneParams;
 
     if (trackList != nullptr) {
@@ -1515,6 +1627,45 @@ bool TimelineDoc::fromVar(const juce::var& state) {
         }
     }
 
+    // Markers. Absent (every file written before they existed) means none — additive, so no
+    // version bump. Same loader rule as everything above: an absent field takes its default, a
+    // present one must be well-typed AND in range, and the sort order is repaired rather than
+    // trusted.
+    const juce::Array<juce::var>* markerList = nullptr;
+    if (!readOptionalArray(rootObj->getProperty("markers"), markerList))
+        return false;
+    if (markerList != nullptr) {
+        if (markerList->size() > kMaxMarkers)
+            return false;
+        parsedMarkers.reserve(static_cast<size_t>(markerList->size()));
+
+        for (const auto& markerVar : *markerList) {
+            auto* mObj = markerVar.getDynamicObject();
+            if (mObj == nullptr)
+                return false;
+
+            Marker marker;
+            std::int64_t markerIdValue = 0;
+            if (!readId(mObj->getProperty("id"), markerIdValue) || !seenMarkerIds.insert(markerIdValue).second)
+                return false;
+            marker.id = MarkerId{markerIdValue};
+
+            std::int64_t colourValue = static_cast<std::int64_t>(marker.colourArgb);
+            if (!readOptionalDouble(mObj->getProperty("beat"), marker.beat) ||
+                !readOptionalString(mObj->getProperty("text"), marker.text) ||
+                !readOptionalInt64(mObj->getProperty("colourArgb"), colourValue))
+                return false;
+            if (!isFiniteAtOrAfterZero(marker.beat) || !isValidMarkerText(marker.text))
+                return false;
+            if (colourValue < 0 || colourValue > 0xffffffffLL)
+                return false;
+            marker.colourArgb = static_cast<juce::uint32>(colourValue);
+
+            parsedMarkers.push_back(std::move(marker));
+        }
+        std::stable_sort(parsedMarkers.begin(), parsedMarkers.end(), markerLess);
+    }
+
     // Counters are floored at one past the highest id actually present: a hand-edited file that
     // lowers a counter must not be able to make the doc hand out an id it's already using.
     for (const auto& track : parsed) {
@@ -1527,13 +1678,17 @@ bool TimelineDoc::fromVar(const juce::var& state) {
         for (const auto& lane : track.lanes)
             parsedNextLaneId = std::max(parsedNextLaneId, lane.id.value + 1);
     }
+    for (const auto& marker : parsedMarkers)
+        parsedNextMarkerId = std::max(parsedNextMarkerId, marker.id.value + 1);
 
     return applyMutation([&] {
         tracks = std::move(parsed);
+        markers = std::move(parsedMarkers);
         nextTrackId = parsedNextTrackId;
         nextClipId = parsedNextClipId;
         nextLaneId = parsedNextLaneId;
         nextNoteId = parsedNextNoteId;
+        nextMarkerId = parsedNextMarkerId;
         return true;
     });
 }

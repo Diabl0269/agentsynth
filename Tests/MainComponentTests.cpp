@@ -1,9 +1,11 @@
 #include "../Source/AI/AIProvider.h"
 #include "../Source/AI/AIProviderRegistry.h"
+#include "FakeAudioIODevice.h"
 #include "MainComponent.h"
 #include "UI/ToolbarComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <vector>
 
 class MockProvider : public synth::AIProvider {
 public:
@@ -608,6 +610,66 @@ TEST_F(MainComponentTest, StatusBarTimerGating) {
     // 2nd tick: counter hits 2 -> status bar updates -> resets to 0.
     mc.timerCallback();
     EXPECT_EQ(mc.getStatusBarTickCountForTest(), 0);
+}
+
+// The always-visible transport cluster (see docs/layout.md §5): the status bar must receive
+// play-state/position/BPM from the SAME unconditional PositionSnapshot poll that already exists in
+// timerCallback(), so it works identically whether the timeline panel is open or closed.
+TEST_F(MainComponentTest, StatusBarReceivesTransportStateFromTimerCallback) {
+    MainComponent mc(std::make_unique<MockProvider>());
+
+    // Two ticks reach the 5 Hz status-bar sub-tick (see StatusBarTimerGating above).
+    mc.timerCallback();
+    mc.timerCallback();
+
+    auto& sb = mc.getStatusBar();
+    EXPECT_FALSE(sb.getTransportButton().getToggleState()) << "transport starts stopped";
+    const juce::String text = sb.getTransportDisplayTextForTest();
+    EXPECT_TRUE(text.contains(synth::ui::TimelineTransportBar::formatBarBeat(0.0, 4, 4)))
+        << "reuses TimelineTransportBar's own formatBarBeat(), not a reimplementation";
+    EXPECT_TRUE(text.contains("120.0")) << "default transport tempo";
+}
+
+// The status bar's play/stop button must drive the SAME TransportService the timeline transport
+// bar uses — not a parallel play/stop of its own.
+//
+// play()/stop() only POST a command onto TransportService's lock-free FIFO (see its threading
+// contract); only tick(), called from the audio thread's device callback, actually drains it into
+// getPositionSnapshot().playing. A real device's callback thread would do that asynchronously, so
+// asserting on it right after the click would race the real hardware. Same fix LatencyAlignmentTests.cpp
+// uses: suspend the real callback and drive one block by hand with the shared FakeAudioIODevice, so
+// the command is guaranteed to have drained before the assertion runs.
+TEST_F(MainComponentTest, StatusBarPlayStopButtonDrivesTheSameTransport) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    auto& engine = mc.getAudioEngine();
+    auto& transport = engine.getTransport();
+
+    engine.suspendDeviceCallback();
+    synth::test::FakeAudioIODevice fake(2, 2);
+    engine.audioDeviceAboutToStart(&fake);
+
+    const auto driveOneBlock = [&engine] {
+        constexpr int kBlockSize = synth::test::kFakeDeviceBlockSize;
+        std::vector<float> left((std::size_t)kBlockSize, 0.0f), right((std::size_t)kBlockSize, 0.0f);
+        std::vector<float> outLeft((std::size_t)kBlockSize, 0.0f), outRight((std::size_t)kBlockSize, 0.0f);
+        const float* inputs[] = {left.data(), right.data()};
+        float* outputs[] = {outLeft.data(), outRight.data()};
+        engine.audioDeviceIOCallbackWithContext(inputs, 2, outputs, 2, kBlockSize, {});
+    };
+
+    ASSERT_FALSE(transport.getPositionSnapshot().playing);
+
+    // NOT triggerClick(): that posts a command message, which never dispatches in a headless test
+    // (see StatusBarTests.cpp's own TransportButtonClickFiresOwnerWiredCallback).
+    mc.getStatusBar().getTransportButton().onClick();
+    driveOneBlock();
+    EXPECT_TRUE(transport.getPositionSnapshot().playing);
+
+    mc.getStatusBar().getTransportButton().onClick();
+    driveOneBlock();
+    EXPECT_FALSE(transport.getPositionSnapshot().playing);
+
+    engine.audioDeviceStopped();
 }
 
 TEST_F(MainComponentTest, PatchNameIsDefaultOnStartup) {

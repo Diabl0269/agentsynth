@@ -29,7 +29,7 @@ public:
                    synth::AIIntegrationService& aiService, synth::AIChatComponent& aiChatComponent,
                    ShortcutManager& shortcutManager, synth::theme::ThemeManager& themeManager, GraphEditor* graphEditor,
                    synth::AccountService* accountService = nullptr, bool showAudioTab = true,
-                   std::function<void(bool)> onTimelineFeatureToggled = nullptr, juce::String initialTabName = {});
+                   juce::String initialTabName = {});
     ~SettingsWindow() override;
 
     void resized() override;

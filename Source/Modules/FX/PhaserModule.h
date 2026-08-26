@@ -13,7 +13,6 @@ public:
                          new juce::AudioParameterFloat("centreFreq", "Centre Freq (Hz)", 200.0f, 10000.0f, 1300.0f));
         addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback", -1.0f, 1.0f, 0.0f));
         addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 0.5f));
-        addDualIOParameter();
         addOutputLevelParameter();
         addMuteParameter();
     }

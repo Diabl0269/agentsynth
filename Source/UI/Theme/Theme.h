@@ -125,10 +125,19 @@ struct Metrics {
     int iconSize{16};             // code-only; not parsed from user JSON
 
     // Timeline panel (bottom-docked, toggled via the toolbar / Cmd+T).
-    int timelinePanelHeight{220};       // code-only; not parsed from user JSON
-    int timelineTrackHeaderWidth{160};  // code-only; not parsed from user JSON
-    int timelineTransportBarHeight{28}; // code-only; not parsed from user JSON
-    int timelineRulerHeight{24};        // code-only; not parsed from user JSON
+    int timelinePanelHeight{220}; // code-only; not parsed from user JSON
+    // 190 (was 160): widened alongside the M/S/R/A toggle row (TimelineTrackHeaderComponent::
+    // kToggleWidth 20->24, plus an explicit inter-button gap) so the wider toggles don't crush the
+    // name label down to a handful of pixels when a track's automation ("A") button is visible.
+    int timelineTrackHeaderWidth{190}; // code-only; not parsed from user JSON
+    // 34 (was 28): grown so TimelineTransportBar's glyph buttons (kButtonSize 22->26) actually
+    // render larger instead of being clamped back down by the strip height.
+    int timelineTransportBarHeight{34}; // code-only; not parsed from user JSON
+    // 30, up from 24: the strip carries TWO tiled rows now — the bar/beat numbers and the marker
+    // band below them (see TimelineRulerComponent's rulerLabelRowHeight). At 24 the marker flag had
+    // to be squeezed to 9 px, which is where "the flag is barely visible" came from; 30 gives the
+    // numbers 17 px and the flags 13. Code-only; not parsed from user JSON.
+    int timelineRulerHeight{30};
     // The row height BOTH the track-header column and the clip-lane area lay their rows
     // out at — the single source that keeps header rows and clip rows aligned. Replaces what used
     // to be TimelineTrackHeaderComponent::kRowHeight's exclusive say in the matter; that constant

@@ -51,17 +51,16 @@ public:
     void triggerSend() { sendButtonClicked(); }
 
     /**
-     * @brief Syncs the Patch/Arrange mode selector's visibility to its gate: the timeline
-     *        feature preference is on (areTimelineToolsEnabled — the same switch
-     *        MainComponent::applyTimelineFeatureEnabled drives — plus a live timeline context).
+     * @brief Syncs the Patch/Arrange mode selector's visibility to its gate: areTimelineToolsEnabled()
+     *        (unconditionally on now that the timeline is GA) AND a live timeline context.
      *
      * Deliberately PROVIDER-AGNOSTIC (the local/remote parity rule): arrange mode works on both
      * transports (see AIIntegrationService::sendArrangeMessage), so the provider never gates the
-     * UI. Called from refreshModels() (a convenient known resync point) and by MainComponent
-     * whenever the timeline preference toggles — the service has no listener mechanism for that
-     * switch, so the owner that flips it re-syncs this, the same ownership shape as the
-     * refreshModels() re-call documented in CLAUDE.md. Hiding the selector also resets it to
-     * Patch: an invisible control must not keep steering requests.
+     * UI. Called from refreshModels() (a convenient known resync point) — the timeline context is
+     * installed after refreshModels() runs at startup, so MainComponent re-calls this once both are
+     * in place, the same ownership shape as the refreshModels() re-call documented in CLAUDE.md.
+     * Hiding the selector also resets it to Patch: an invisible control must not keep steering
+     * requests.
      */
     void refreshModeControls();
 

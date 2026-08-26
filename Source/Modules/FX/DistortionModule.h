@@ -17,7 +17,6 @@ public:
         addParameter(oversamplingParam = new juce::AudioParameterChoice("oversampling", "Oversampling",
                                                                         juce::StringArray{"Off", "2x", "4x"},
                                                                         1)); // default 2x preserves backward compat
-        addDualIOParameter();
         addOutputLevelParameter();
         addMuteParameter();
         oversamplingParam->addListener(this);

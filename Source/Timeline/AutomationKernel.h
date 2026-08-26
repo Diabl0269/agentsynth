@@ -56,7 +56,7 @@ struct AutomationCursor {
 };
 
 static_assert(std::is_trivially_copyable_v<AutomationCursor>,
-              "AutomationCursor is audio-thread state — trivially copyable POD only");
+              "AutomationCursor is audio-thread state - trivially copyable POD only");
 static_assert(std::is_standard_layout_v<AutomationCursor>, "AutomationCursor must stay a plain struct");
 
 struct AutomationKernel {
@@ -187,6 +187,6 @@ private:
 
 static_assert(noexcept(AutomationKernel::evaluate(std::declval<const TimelineSnapshot::Point*>(), 0, 0.0, 0.0,
                                                   std::declval<AutomationCursor&>())),
-              "AutomationKernel::evaluate runs on the audio thread — it must stay noexcept");
+              "AutomationKernel::evaluate runs on the audio thread - it must stay noexcept");
 
 } // namespace synth

@@ -132,8 +132,8 @@ public:
         // Disabled + "sign in required" tooltip when signed out, same gating precedent as
         // AccountRow/PlanBadge reading AccountService's published state.
         addAndMakeVisible(promptLearningToggle);
-        promptLearningToggle.setButtonText(juce::String::fromUTF8(
-            "Help improve AgentSynth \xe2\x80\x94 share my hosted-mode prompts for product learning"));
+        promptLearningToggle.setButtonText(
+            juce::String::fromUTF8("Help improve AgentSynth - share my hosted-mode prompts for product learning"));
         promptLearningToggle.onClick = [this] {
             if (accountService != nullptr)
                 accountService->setPromptLearningOptIn(promptLearningToggle.getToggleState());
@@ -378,7 +378,7 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
                                synth::AIIntegrationService& aiService, synth::AIChatComponent& aiChatComponent,
                                ShortcutManager& shortcutManager, synth::theme::ThemeManager& themeManager,
                                GraphEditor* graphEditor, synth::AccountService* accountService, bool showAudioTab,
-                               std::function<void(bool)> onTimelineFeatureToggled, juce::String initialTabName)
+                               juce::String initialTabName)
     : appProperties(appProperties)
     , themeManager(themeManager) {
     if (showAudioTab) {
@@ -398,7 +398,6 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
 
     auto* preferencesSettingsTab = new PreferencesSettingsTab(appProperties);
     preferencesSettingsTab->setGraphEditor(graphEditor);
-    preferencesSettingsTab->onTimelineFeatureToggled = std::move(onTimelineFeatureToggled);
     tabs.addTab("Preferences", juce::Colours::transparentBlack, preferencesSettingsTab, true);
 
     auto* appearanceSettingsTab = new AppearanceSettingsTab(themeManager, appProperties);

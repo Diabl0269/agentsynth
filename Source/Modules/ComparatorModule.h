@@ -28,7 +28,11 @@ class ComparatorModule
     , public ThresholdMeterSource {
 public:
     ComparatorModule()
-        : ModuleBase("Comparator", 2, 2) {
+        // StereoAudio::None — a documented Dual I/O opt-out. The 2-in/2-out shape matches
+        // StereoAudio::Auto by accident: ch0/ch1 in are Signal and Threshold CV, and ch0/ch1 out are
+        // Gate and its inverse. There is no stereo pair to split (and no audio output at all — see
+        // the bypass/mute note above), so the toggle must not appear.
+        : ModuleBase("Comparator", 2, 2, StereoAudio::None) {
         // `trigThreshold`, not `threshold`: Compressor and Limiter both own a `threshold`
         // float meaning dB. Same id as Sample & Hold because both mean a bipolar CV slice.
         addParameter(thresholdParam = new juce::AudioParameterFloat("trigThreshold", "Threshold", -1.0f, 1.0f, 0.5f));

@@ -163,16 +163,15 @@ public:
     // Construction
     // -------------------------------------------------------------------------
     WavetableOscillatorModule()
-        : ModuleBase("Wavetable", kNumInputs,
-                     kNumOutputs) // kNumInputs in: 8 per-voice pitch CV (0-7) + 15 shared mod CV.
-                                  // More outputs than inputs are declared for the same reason as
-                                  // OscillatorModule: JUCE's AudioProcessorGraph only makes a
-                                  // private copy of an input buffer when
-                                  // inputChan < getTotalNumOutputChannels(). Declaring kNumOutputs
-                                  // stops our post-render clear of the CV channels from corrupting
-                                  // a CV source that also feeds another node. The channels above
-                                  // the audio blocks are silent pass-through outputs.
-    {
+        // kNumInputs in: 8 per-voice pitch CV (0-7) + 15 shared mod CV. More outputs than inputs are
+        // declared for the same reason as OscillatorModule: JUCE's AudioProcessorGraph only makes a
+        // private copy of an input buffer when inputChan < getTotalNumOutputChannels(). Declaring
+        // kNumOutputs stops our post-render clear of the CV channels from corrupting a CV source that
+        // also feeds another node. The channels above the audio blocks are silent pass-throughs.
+        //
+        // StereoAudio::Declared: with more than two outputs the Auto shape test cannot see the stereo
+        // pair — Audio R is the kRightBase block, not ch1. Ships SPLIT.
+        : ModuleBase("Wavetable", kNumInputs, kNumOutputs, StereoAudio::Declared) {
         addParameter(tableParam = new juce::AudioParameterChoice(
                          "table", "Table",
                          {"Basic Shapes", "Harmonic Sweep", "Pulse", "Formant", "Bell", "Digital", "Loaded File"}, 0));
@@ -206,9 +205,9 @@ public:
         addParameter(subOctaveParam = new juce::AudioParameterChoice("subOctave", "Sub Oct", {"-1", "-2"}, 0));
         addParameter(subShapeParam = new juce::AudioParameterChoice("subShape", "Sub Wave", {"Sine", "Square"}, 0));
         addParameter(panParam = new juce::AudioParameterFloat("pan", "Pan", -1.0f, 1.0f, 0.0f));
-        // Defaults to dual — this module has been stereo since #180. Collapsed it shows a single
-        // "Audio" jack carrying the left leg, matching every other split-block module (#219).
-        addDualIOParameter(/*defaultDual=*/true);
+        // Dual I/O comes from the ctor's StereoAudio::Declared above, defaulting to split — this
+        // module has been stereo since #180. Collapsed it shows a single "Audio" jack carrying the
+        // left leg, matching every other split-block module (#219).
         addParameter(syncModeParam = new juce::AudioParameterChoice("syncMode", "Sync In",
                                                                     {"Off", "Hard Sync", "Ring Mod", "AM"}, 0));
 

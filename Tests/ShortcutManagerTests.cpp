@@ -19,6 +19,8 @@ const juce::StringArray& surfaceResolvedActionIds() {
     static const juce::StringArray ids{
         // PianoRollComponent::keyPressed
         "pianoRollQuantise",
+        "pianoRollQuantisePitches",
+        "pianoRollToggleScaleFilter",
         "pianoRollNavNextNote",
         "pianoRollNavPrevNote",
         "pianoRollNudgeRight",
@@ -39,6 +41,8 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "timelineToolErase",
         "timelineToolMute",
         "timelineToolDraw",
+        "timelineJumpToLocator1",
+        "timelineJumpToLocator2",
         // TimelineClipLaneArea::keyPressed (its P shares timelineLoopSelection with the panel)
     };
     return ids;
@@ -229,9 +233,11 @@ TEST_F(ShortcutManagerTest, SameKeyWithinACategoryIsStillAConflictAndStillAutoSw
     EXPECT_TRUE(manager.getConflictingAction("cutSelection", manager.getBinding("cutSelection")).isEmpty());
 }
 
-// Modifier equality is EXACT, which is what keeps the bare tool digits clear of the Ctrl+Shift grid
+// Modifier equality is EXACT, which is what keeps the bare tool digits clear of the Ctrl+Alt grid
 // commands that share their key codes — the pair most likely to be "fixed" into a collision later.
-TEST_F(ShortcutManagerTest, BareToolDigitsDoNotCollideWithTheCtrlShiftGridCommands) {
+// Three Timeline families now share the digit row (bare = tools, Ctrl+Alt = set the grid,
+// Ctrl+Shift+1/2 = jump to a locator) and only the modifier set separates them.
+TEST_F(ShortcutManagerTest, BareToolDigitsDoNotCollideWithTheGridOrLocatorCommands) {
     struct Pair {
         const char* toolId;
         const char* gridId;
@@ -251,9 +257,97 @@ TEST_F(ShortcutManagerTest, BareToolDigitsDoNotCollideWithTheCtrlShiftGridComman
         EXPECT_TRUE(toolBinding.getModifiers().getRawFlags() == 0);
         EXPECT_TRUE(gridBinding.getModifiers().isCtrlDown());
         EXPECT_TRUE(gridBinding.getModifiers().isShiftDown());
+        EXPECT_FALSE(gridBinding.getModifiers().isAltDown()) << "Alt+digit belongs to the locator jumps";
         EXPECT_FALSE(toolBinding == gridBinding);
         // Same category, and still no conflict, because the modifiers differ.
         EXPECT_TRUE(manager.getConflictingAction(pair.toolId, toolBinding).isEmpty());
+    }
+
+    // The third family on the same key code: all three are distinct stored chords on '1'.
+    const auto tool1 = manager.getBinding("timelineToolSelect");
+    const auto grid1 = manager.getBinding("snapSetWhole");
+    const auto locator1 = manager.getBinding("timelineJumpToLocator1");
+    EXPECT_EQ(tool1.getKeyCode(), '1');
+    EXPECT_EQ(grid1.getKeyCode(), '1');
+    EXPECT_EQ(locator1.getKeyCode(), '1');
+    EXPECT_FALSE(tool1 == grid1);
+    EXPECT_FALSE(grid1 == locator1);
+    EXPECT_FALSE(tool1 == locator1);
+    EXPECT_TRUE(manager.getConflictingAction("timelineJumpToLocator1", locator1).isEmpty());
+}
+
+// ---------------------------------------------------------------------------
+// Locator jumps — the chord the grid-set family used to own
+// ---------------------------------------------------------------------------
+
+TEST_F(ShortcutManagerTest, LocatorJumpsOwnOptionOneAndTwo) {
+    EXPECT_EQ(manager.getBinding("timelineJumpToLocator1"), juce::KeyPress('1', juce::ModifierKeys::altModifier, 0));
+    EXPECT_EQ(manager.getBinding("timelineJumpToLocator2"), juce::KeyPress('2', juce::ModifierKeys::altModifier, 0));
+
+    // Timeline category, and SURFACE actions — the panel's keyPressed resolves them, so there must
+    // be no command behind either one (MainComponent would otherwise try to dispatch one).
+    EXPECT_EQ(ShortcutManager::getCategory("timelineJumpToLocator1"), ShortcutCategory::Timeline);
+    EXPECT_EQ(ShortcutManager::getCategory("timelineJumpToLocator2"), ShortcutCategory::Timeline);
+    EXPECT_EQ(AppCommands::getCommandForAction("timelineJumpToLocator1"), AppCommands::kNoCommand);
+    EXPECT_EQ(AppCommands::getCommandForAction("timelineJumpToLocator2"), AppCommands::kNoCommand);
+
+    EXPECT_EQ(ShortcutManager::getActionDescription("timelineJumpToLocator1"), "Jump to Locator 1");
+    EXPECT_EQ(ShortcutManager::getActionDescription("timelineJumpToLocator2"), "Jump to Locator 2");
+
+    // Exactly one action per chord, and NOT the grid: the grid-set family kept Ctrl+Shift+digit, so
+    // these two had to land somewhere no shipped version ever bound. That is the whole point —
+    // moving a DEFAULT does not migrate a user's PERSISTED binding, so a locator jump sharing a
+    // chord with a grid COMMAND loses to it in MainComponent::keyPressed forever after.
+    EXPECT_EQ(manager.getActionForKeyPress(juce::KeyPress('1', juce::ModifierKeys::altModifier, 0)),
+              "timelineJumpToLocator1");
+    EXPECT_EQ(manager.getActionForKeyPress(juce::KeyPress('2', juce::ModifierKeys::altModifier, 0)),
+              "timelineJumpToLocator2");
+    EXPECT_EQ(manager.getActionsForKeyPress(juce::KeyPress('1', juce::ModifierKeys::altModifier, 0)).size(), 1);
+    EXPECT_EQ(manager.getActionsForKeyPress(juce::KeyPress('2', juce::ModifierKeys::altModifier, 0)).size(), 1);
+
+    // The grid family is back on Ctrl+Shift+digit, where every existing install already has it.
+    const int ctrlShift = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier;
+    EXPECT_EQ(manager.getBinding("snapSetWhole"), juce::KeyPress('1', juce::ModifierKeys(ctrlShift), 0));
+    EXPECT_EQ(manager.getBinding("snapSetHalf"), juce::KeyPress('2', juce::ModifierKeys(ctrlShift), 0));
+}
+
+// THE root cause of "jump to locator 2 does nothing", pinned so the same shape cannot come back.
+//
+// `saveToProperties` writes EVERY action's binding, so one rebind of anything freezes the whole
+// table on disk. A later build that moves a default therefore does NOT move the user's key — and if
+// the chord it moved OFF still has a stale COMMAND on it, `MainComponent::keyPressed`'s "first
+// action bound to this key that HAS a command" rule dispatches the command and the new surface
+// action never runs.
+TEST_F(ShortcutManagerTest, APersistedCommandBindingShadowsASurfaceActionOnTheSameChord) {
+    const int ctrlShift = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier;
+    const juce::KeyPress chord('2', juce::ModifierKeys(ctrlShift), 0);
+
+    // Simulate the collision the shipped defaults would have had: a surface action moved onto the
+    // chord a command already owns.
+    manager.setBinding("timelineJumpToLocator2", chord);
+    const auto matches = manager.getActionsForKeyPress(chord);
+    ASSERT_GE(matches.size(), 2) << "both ids answer to the chord";
+    EXPECT_TRUE(matches.contains("timelineJumpToLocator2"));
+    EXPECT_TRUE(matches.contains("snapSetHalf"));
+
+    // MainComponent's rule, restated here: the COMMAND wins, whatever the table order.
+    juce::String dispatched;
+    for (const auto& action : matches)
+        if (AppCommands::getCommandForAction(action) != AppCommands::kNoCommand) {
+            dispatched = action;
+            break;
+        }
+    EXPECT_EQ(dispatched, "snapSetHalf") << "the grid command swallows the chord; the locator jump never runs";
+
+    // The shipped defaults avoid it by construction: Option+digit collides with nothing.
+    ShortcutManager fresh;
+    for (const char* id : {"timelineJumpToLocator1", "timelineJumpToLocator2"}) {
+        const auto binding = fresh.getBinding(id);
+        const auto all = fresh.getActionsForKeyPress(binding);
+        EXPECT_EQ(all.size(), 1) << id << " must be the only action on its chord";
+        for (const auto& other : all)
+            EXPECT_EQ(AppCommands::getCommandForAction(other), AppCommands::kNoCommand)
+                << id << " shares its chord with the command " << other;
     }
 }
 
@@ -264,6 +358,10 @@ TEST_F(ShortcutManagerTest, BareToolDigitsDoNotCollideWithTheCtrlShiftGridComman
 TEST_F(ShortcutManagerTest, GridCommandsUseRealCtrlNotCommand) {
     // Deliberate: on macOS the Ctrl+digit space is free where Cmd+digit is not. On Windows/Linux
     // juce::ModifierKeys::commandModifier IS ctrlModifier, so this reads as Ctrl there either way.
+    //
+    // The eight ABSOLUTE grid commands are Ctrl+ALT+digit: Ctrl+Shift+1/2 now belongs to the locator
+    // jumps, and moving the whole family kept it a single coherent block rather than splitting the
+    // digit row across two modifier sets.
     for (const char* actionId :
          {"snapSetWhole", "snapSetHalf", "snapSetQuarter", "snapSetEighth", "snapSetSixteenth", "snapSetThirtySecond",
           "snapSetSixtyFourth", "snapSetHundredTwentyEighth", "snapCyclePrev", "snapCycleNext"}) {
@@ -348,8 +446,8 @@ TEST_F(ShortcutManagerTest, KeyPressMatchesNormalizesOnlyWhenBothSidesCarryShift
     EXPECT_FALSE(ShortcutManager::keyPressMatches(bare7, juce::KeyPress('&', juce::ModifierKeys::shiftModifier, '&')));
     // Shift on the BINDING only.
     EXPECT_FALSE(ShortcutManager::keyPressMatches(juce::KeyPress('&', juce::ModifierKeys::shiftModifier, 0), bare7));
-    // Modifiers still have to agree exactly, normalization or not: Ctrl+Shift+'&' is the 1/64 grid
-    // command, never the Mute tool's bare 7.
+    // Modifiers still have to agree exactly, normalization or not: Ctrl+Shift+'&' is nobody's
+    // binding, and certainly never the Mute tool's bare 7.
     EXPECT_FALSE(ShortcutManager::keyPressMatches(bare7, juce::KeyPress('&', juce::ModifierKeys(ctrlShift), '&')));
     // And an invalid binding (an action the user cleared) matches nothing at all.
     EXPECT_FALSE(
@@ -388,6 +486,15 @@ TEST_F(ShortcutManagerTest, GetActionForKeyPressResolvesAShiftedSymbolEvent) {
 
     // Exactly ONE action per shifted event — the normalization must not make a keystroke ambiguous.
     EXPECT_EQ(manager.getActionsForKeyPress(juce::KeyPress('&', juce::ModifierKeys(ctrlShift), '&')).size(), 1);
+
+    // The locator pair, on plain Option+digit, needs no rescue at all: Option IS ignored by
+    // charactersIgnoringModifiers, so a real Option+2 arrives carrying '2' and matches directly.
+    // That immunity is half of why the pair was moved there.
+    EXPECT_EQ(manager.getActionForKeyPress(juce::KeyPress('1', juce::ModifierKeys::altModifier, '1')),
+              "timelineJumpToLocator1");
+    EXPECT_EQ(manager.getActionForKeyPress(juce::KeyPress('2', juce::ModifierKeys::altModifier, '2')),
+              "timelineJumpToLocator2");
+
     // And the bare tool digit is untouched by any of it.
     EXPECT_EQ(manager.getActionForKeyPress(juce::KeyPress('7', juce::ModifierKeys::noModifiers, '7')),
               "timelineToolMute");
@@ -412,6 +519,10 @@ TEST_F(ShortcutManagerTest, ConflictDetectionStaysExactAndDoesNotNormalizeShifte
         << "Ctrl+Shift+'!' stored is not Ctrl+Shift+'1' stored";
     EXPECT_EQ(manager.getConflictingAction("snapCycleNext", juce::KeyPress('1', juce::ModifierKeys(ctrlShift), 0)),
               "snapSetWhole");
+
+    // ...and the locator pair's own chord reports itself, on its own modifier set.
+    EXPECT_EQ(manager.getConflictingAction("snapCycleNext", juce::KeyPress('2', juce::ModifierKeys::altModifier, 0)),
+              "timelineJumpToLocator2");
 }
 
 TEST_F(ShortcutManagerTest, ZoomCommandsUseTheCommandModifierZoomPair) {
@@ -431,10 +542,22 @@ TEST_F(ShortcutManagerTest, SurfaceDefaultsAreExactlyTheComponentsHardcodedFallb
     // These are the keys PianoRollComponent/TimelinePanelComponent fall back to with NO manager
     // installed. If a default here drifted from its fallback, installing a manager would silently
     // MOVE a key the user had already learned.
-    EXPECT_EQ(manager.getBinding("timelineSnapToggle"), juce::KeyPress('q', juce::ModifierKeys::noModifiers, 0));
+    // Snap is J (Cubase's snap key), NOT Q — Q is Cubase's quantise, which is what the roll uses it
+    // for, so one letter used to mean two verbs depending on which surface had focus.
+    EXPECT_EQ(manager.getBinding("timelineSnapToggle"), juce::KeyPress('j', juce::ModifierKeys::noModifiers, 0));
     EXPECT_EQ(manager.getBinding("timelineToggleLoop"), juce::KeyPress('l', juce::ModifierKeys::noModifiers, 0));
     EXPECT_EQ(manager.getBinding("timelineLoopSelection"), juce::KeyPress('p', juce::ModifierKeys::noModifiers, 0));
-    EXPECT_EQ(manager.getBinding("pianoRollQuantise"), juce::KeyPress('q', juce::ModifierKeys::shiftModifier, 0));
+    // BARE Q is quantise in the roll (Cubase parity). Snap has no piano-roll action of its own: the
+    // roll resolves the SHARED "timelineSnapToggle" above, which is J — two rebindable "Toggle Snap"
+    // actions on the same key flipping the same flag would be a Settings list nobody could reason
+    // about. Pitch quantise keeps Option+Shift+Q, stored as key code + modifiers rather than the
+    // Unicode glyph macOS delivers for Option+letter.
+    EXPECT_EQ(manager.getBinding("pianoRollQuantise"), juce::KeyPress('q', juce::ModifierKeys::noModifiers, 0));
+    EXPECT_EQ(manager.getBinding("pianoRollToggleScaleFilter"),
+              juce::KeyPress('s', juce::ModifierKeys::altModifier, 0));
+    EXPECT_EQ(manager.getBinding("pianoRollQuantisePitches"),
+              juce::KeyPress(
+                  'q', juce::ModifierKeys(juce::ModifierKeys::altModifier | juce::ModifierKeys::shiftModifier), 0));
     EXPECT_EQ(manager.getBinding("pianoRollNudgeLeft"),
               juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys::noModifiers, 0));
     EXPECT_EQ(manager.getBinding("pianoRollNavPrevNote"),
@@ -643,6 +766,53 @@ TEST_F(ShortcutManagerTest, PianoRollToggleScalePanelDefaultIsRealCtrlS) {
     EXPECT_EQ(ShortcutManager::getCategory("pianoRollToggleScalePanel"), ShortcutCategory::PianoRoll);
     EXPECT_EQ(ShortcutManager::getActionDescription("pianoRollToggleScalePanel"), "Toggle Scale Panel");
     EXPECT_TRUE(manager.getActionIds().contains("pianoRollToggleScalePanel"));
+}
+
+// The row filter's own key. Option+S, deliberately one modifier away from the scale PANEL's Ctrl+S:
+// the two are adjacent verbs on adjacent chips, so the chords should rhyme — but they must not
+// collide, and modifier equality is exact, so they cannot.
+TEST_F(ShortcutManagerTest, PianoRollScaleFilterDefaultIsOptionSAndDoesNotCollideWithTheScalePanelToggle) {
+    const auto filter = manager.getBinding("pianoRollToggleScaleFilter");
+    const auto panel = manager.getBinding("pianoRollToggleScalePanel");
+    EXPECT_EQ(filter.getKeyCode(), 's');
+    EXPECT_TRUE(filter.getModifiers().isAltDown());
+    EXPECT_FALSE(filter.getModifiers().isCtrlDown());
+    EXPECT_FALSE(filter.getModifiers().isShiftDown());
+    EXPECT_NE(filter, panel) << "same letter, different modifier - and that has to stay true";
+    EXPECT_EQ(ShortcutManager::getCategory("pianoRollToggleScaleFilter"), ShortcutCategory::PianoRoll);
+    EXPECT_EQ(ShortcutManager::getActionDescription("pianoRollToggleScaleFilter"), "Show Only Scale Notes");
+
+    // The conflict detector agrees (it is exact on modifiers, by design — see bindingsCollide).
+    EXPECT_NE(manager.getConflictingAction("pianoRollToggleScalePanel", filter), "pianoRollToggleScalePanel");
+}
+
+// The letters mean ONE verb each now, across both timeline surfaces: bare J is "snap" and bare Q is
+// "quantise". Snap is a SINGLE shared action ("timelineSnapToggle") that the piano roll resolves too
+// — deliberately not duplicated into a piano-roll action, since two rebindable "Toggle Snap" rows on
+// the same key flipping the same TimelineViewState flag is a Settings list nobody could reason about.
+TEST_F(ShortcutManagerTest, SnapIsJAndQuantiseIsQOnBothSurfacesWithoutColliding) {
+    const juce::KeyPress bareJ('j', juce::ModifierKeys::noModifiers, 0);
+    const juce::KeyPress bareQ('q', juce::ModifierKeys::noModifiers, 0);
+
+    EXPECT_EQ(manager.getBinding("pianoRollQuantise"), bareQ);
+    EXPECT_EQ(manager.getBinding("timelineSnapToggle"), bareJ) << "the snap key moved off Q, for both surfaces";
+    EXPECT_EQ(ShortcutManager::getCategory("pianoRollQuantise"), ShortcutCategory::PianoRoll);
+    EXPECT_EQ(ShortcutManager::getCategory("timelineSnapToggle"), ShortcutCategory::Timeline);
+
+    // Exactly ONE snap action exists.
+    EXPECT_FALSE(manager.getActionIds().contains("pianoRollSnapToggle"))
+        << "snap must not gain a second, piano-roll-only action";
+
+    // The two letters are clear of each other in both directions, which matters because the roll
+    // tests quantise FIRST: had they collided, snap would be unreachable in the piano roll entirely.
+    EXPECT_NE(manager.getBinding("timelineSnapToggle"), manager.getBinding("pianoRollQuantise"));
+    EXPECT_TRUE(manager.getConflictingAction("pianoRollQuantise", bareJ).isEmpty());
+    EXPECT_TRUE(manager.getConflictingAction("timelineSnapToggle", bareQ).isEmpty());
+
+    const auto qMatches = manager.getActionsForKeyPress(bareQ);
+    EXPECT_TRUE(qMatches.contains("pianoRollQuantise"));
+    EXPECT_FALSE(qMatches.contains("timelineSnapToggle"));
+    EXPECT_TRUE(manager.getActionsForKeyPress(bareJ).contains("timelineSnapToggle"));
 }
 
 // ---------------------------------------------------------------------------
