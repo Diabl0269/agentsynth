@@ -115,6 +115,14 @@ private:
                              DocumentWindow::allButtons) {
             setUsingNativeTitleBar(true);
             setContentOwned(new MainComponent(tm, lf), true);
+            if (auto* mc = dynamic_cast<MainComponent*>(getContentComponent())) {
+                mc->onDocumentTitleChanged = [this](const juce::String& title) {
+                    setName(title + " - " + JUCEApplication::getInstance()->getApplicationName());
+                };
+                // Seeds the title before any save/dirty event has fired — getCurrentPatchName()
+                // starts as "Default", matching the window's pre-existing untitled state.
+                mc->onDocumentTitleChanged(mc->getCurrentPatchName());
+            }
 
 #if JUCE_IOS || JUCE_ANDROID
             setFullScreen(true);
@@ -158,6 +166,10 @@ private:
                 auto& cm = mc->getCommandManager();
                 if (menuIndex == 0) {
                     menu.addCommandItem(&cm, AppCommands::savePreset);
+                    menu.addCommandItem(&cm, AppCommands::saveProjectAs);
+                    menu.addSeparator();
+                    menu.addCommandItem(&cm, AppCommands::exportPatchOnly);
+                    menu.addSeparator();
                     menu.addCommandItem(&cm, AppCommands::openPreset);
                     menu.addSeparator();
                     menu.addCommandItem(&cm, AppCommands::openSettings);

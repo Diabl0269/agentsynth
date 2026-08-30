@@ -10,6 +10,7 @@
 #include "Plugin/Hosting/HostedPluginWindowManager.h"
 #include "Plugin/Hosting/PluginScanService.h"
 #include "PresetManager.h"
+#include "ProjectBundle.h"
 #include "ShortcutManager.h"
 #include "SnippetManager.h"
 #include "Timeline/AutomationRecorder.h"
@@ -258,6 +259,14 @@ public:
     /** Exactly what the Open dialog's callback runs: an `.agsproj` bundle directory loads graph +
      *  timeline, anything else loads a plain `.json` preset. */
     bool openProjectForTest(const juce::File& file) { return openFromFile(file); }
+    /** What performSaveProject(false) will do next: true if there's no bundle to resave to
+     *  silently, so Cmd+S is about to prompt for a location. */
+    bool wouldPromptOnSaveForTest() const {
+        return !(currentBundleDir_ != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir_));
+    }
+    /** Exactly what the "Export Patch Only" menu item's chooser callback runs once the user has
+     *  picked a file — bypasses the async dialog itself, same idiom as saveProjectForTest. */
+    void exportPatchOnlyForTest(const juce::File& file) { exportPatchOnly(file); }
     /** Exactly what the production "Relink audio…" FileChooser callback runs once the user
      *  has picked a file — bypasses the async dialog itself, same idiom as saveProjectForTest. */
     void relinkClipAssetForTest(synth::ClipId id, const juce::File& chosenFile) { relinkClipAsset(id, chosenFile); }
@@ -294,6 +303,12 @@ public:
     AppUndoManager& getUndoManager() { return undoManager; }
     AudioEngine& getAudioEngine() { return audioEngine; }
     const juce::String& getCurrentPatchName() const { return currentPatchName_; }
+    /** Fires whenever the window title text (patch name + dirty marker) should be re-read — see
+     *  notifyDocumentTitleChanged(). Main.cpp's MainWindow wires this to its own setName(). */
+    std::function<void(const juce::String&)> onDocumentTitleChanged;
+    /** True once an undo-able edit has happened since the last save/load — see changeListenerCallback's
+     *  AppUndoManager branch. */
+    bool isProjectDirtyForTest() const { return isDirty_; }
     // Non-const access to ApplicationProperties for persistence tests (read-back within session).
     juce::ApplicationProperties& getAppPropertiesForTest() { return appProperties; }
     int getStatusBarTickCountForTest() const { return statusBarTickCount_; }
@@ -539,6 +554,19 @@ private:
     // `file` is whatever the chooser returned; the .agsproj branch is what makes a bundle a bundle.
     void saveToFile(const juce::File& file);
     bool openFromFile(const juce::File& file);
+    // Cmd+S's actual decision: resave silently to the remembered bundle when one is open and
+    // `forceChooser` is false, otherwise prompt (defaulting the suggested name to `.agsproj`, which
+    // is what steers a first save toward the bundle format instead of the legacy plain preset).
+    // `forceChooser` is what "Save Project As" (Cmd+Opt+S) sets to always prompt even with a bundle
+    // already open.
+    void performSaveProject(bool forceChooser);
+    // The legacy patch-only export: calls graphEditor.savePreset directly (never saveToFile), so
+    // exporting a snapshot from an open BUNDLE project never renames the window title, mutates
+    // currentBundleDir_, or touches isDirty_ — it's a side export, not a change of what document is
+    // open.
+    void exportPatchOnly(const juce::File& file);
+    // The chooser-launching wrapper the "Export Patch Only" menu item actually calls.
+    void promptExportPatchOnly();
     // One choke point for "load factory preset N + keep the timeline in step", shared by the Load
     // menu and simulateLoadFactoryPresetForTest.
     void loadFactoryPresetAtIndex(int index);
@@ -594,6 +622,10 @@ private:
 
     // Update the displayed patch name (status bar). Immediate repaint, no timer delay.
     void setCurrentPatchName(const juce::String& name);
+    // Fires onDocumentTitleChanged with currentPatchName_ plus a " *" dirty marker. Called at the
+    // end of setCurrentPatchName() and nowhere else — every save/load/new-patch path already routes
+    // through it.
+    void notifyDocumentTitleChanged();
 
     // Owned fallback objects used when the delegating ctor is called (tests/legacy).
     // Null when the primary ctor is used (refs point at external objects instead).
@@ -741,6 +773,10 @@ private:
     // Declared BEFORE statusBar so it is fully constructed when statusBar's ctor runs.
     juce::String currentPatchName_{"Default"};
     StatusBarComponent statusBar;
+    // True once an undo-able edit has happened since the last save/load — set by
+    // changeListenerCallback's AppUndoManager branch, cleared by saveToFile/openFromFile/newPatch.
+    // Never touched by exportPatchOnly (a side export, not "the project got saved").
+    bool isDirty_ = false;
 
     // Declared here (not in AudioEngine or Core) because it is settings-backed and
     // UI-driven; installed into the process-wide DefaultHostedPluginBackend by the constructor and
