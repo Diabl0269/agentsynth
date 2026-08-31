@@ -267,6 +267,12 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // Safe in both ctors: undoManager is declared before aiService, so it is already constructed here.
     aiService.setUndoManager(&undoManager);
 
+    // juce::UndoManager is a ChangeBroadcaster that fires on every perform/undo/redo — the one
+    // signal that means "something changed since the last save/load" without this class having to
+    // hook every individual mutation site. changeListenerCallback dispatches on the source, so this
+    // never fires the theme re-skin or settings-file branches.
+    undoManager.getUndoManager().addChangeListener(this);
+
     // ORDERING CONTRACT: read the persisted panel-visibility flags FIRST, before any
     // setVisible()/addAndMakeVisible() call that depends on them. These override the member
     // initialisers (isLibraryVisible{true}, isAiPanelVisible=false).
@@ -545,16 +551,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
 
     addAndMakeVisible(saveButton);
     saveButton.setComponentID("saveButton");
-    saveButton.onClick = [this] {
-        fileChooser = std::make_unique<juce::FileChooser>(
-            "Save Preset", juce::File::getSpecialLocation(juce::File::userDocumentsDirectory), kPatchFileFilter);
-        auto flags = juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles;
-        fileChooser->launchAsync(flags, [this](const juce::FileChooser& fc) {
-            auto file = fc.getResult();
-            if (file != juce::File{})
-                saveToFile(file);
-        });
-    };
+    saveButton.onClick = [this] { performSaveProject(false); };
 
     addAndMakeVisible(loadButton);
     loadButton.setComponentID("loadButton");
@@ -1116,6 +1113,10 @@ MainComponent::~MainComponent() {
     // point would call back into freed memory.
     if (auto* settings = appProperties.getUserSettings())
         settings->removeChangeListener(this);
+    // Same reason: undoManager outlives this call (its own destructor runs after this body), so a
+    // stray perform/undo/redo between now and then must not reach a callback that touches
+    // half-torn-down members.
+    undoManager.getUndoManager().removeChangeListener(this);
     stopTimer();
     aiService.removeListener(this);
     // Order matters: stop listening to the doc first (nothing may republish while we tear down),
@@ -1143,6 +1144,17 @@ MainComponent::~MainComponent() {
 
 // ---- Change callbacks: theme re-skin, and the live settings-file path ----
 void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
+    // The undo manager broadcasts on every perform/undo/redo/new-transaction — the FIRST such
+    // event since the last save/load is what flips the dirty flag and refreshes the window title.
+    // Checked before the settings/theme dispatch below since it is neither of those broadcasters.
+    if (source != nullptr && source == &undoManager.getUndoManager()) {
+        if (!isDirty_) {
+            isDirty_ = true;
+            notifyDocumentTitleChanged();
+        }
+        return;
+    }
+
     // Dispatch on the source, not "assume theme": two broadcasters reach here now. A settings write
     // must NOT trigger a full re-skin (persisting a panel height or a snap division would re-theme
     // the whole window), and a theme switch must not re-read preferences.
@@ -1402,6 +1414,47 @@ void MainComponent::openPresetFromFile() {
     });
 }
 
+// Cmd+S's decision (see the header comment): resave silently to the remembered bundle when one is
+// open and the caller isn't forcing the chooser, otherwise prompt. The suggested name defaults to
+// `.agsproj` — not because the filter forbids `.json` (it still lists both, and saveToFile still
+// branches on whatever extension comes back), but because a first-time saver who just hits Enter
+// should land on the bundle format, which is what actually keeps the timeline.
+void MainComponent::performSaveProject(bool forceChooser) {
+    if (!forceChooser && currentBundleDir_ != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir_)) {
+        saveToFile(currentBundleDir_);
+        return;
+    }
+
+    const auto suggested = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+                               .getChildFile(currentPatchName_ + synth::ProjectBundle::kBundleExtension);
+    fileChooser = std::make_unique<juce::FileChooser>("Save Project", suggested, kPatchFileFilter);
+    auto flags = juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles;
+    fileChooser->launchAsync(flags, [this](const juce::FileChooser& fc) {
+        auto file = fc.getResult();
+        if (file != juce::File{})
+            saveToFile(file);
+    });
+}
+
+// The legacy patch-only export — see the header comment for why this calls graphEditor.savePreset
+// directly rather than saveToFile: exporting a snapshot from an open bundle must never look like
+// the project itself was (re)saved.
+void MainComponent::exportPatchOnly(const juce::File& file) {
+    graphEditor.savePreset(file);
+    statusBar.showMessage("Exported patch: " + file.getFileNameWithoutExtension());
+}
+
+void MainComponent::promptExportPatchOnly() {
+    fileChooser = std::make_unique<juce::FileChooser>(
+        "Export Patch Only", juce::File::getSpecialLocation(juce::File::userDocumentsDirectory), "*.json");
+    auto flags = juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles;
+    fileChooser->launchAsync(flags, [this](const juce::FileChooser& fc) {
+        auto file = fc.getResult();
+        if (file != juce::File{})
+            exportPatchOnly(file);
+    });
+}
+
 // ---- Save / open: one `.json` preset path, one `.agsproj` bundle path ----
 
 void MainComponent::saveToFile(const juce::File& file) {
@@ -1431,6 +1484,9 @@ void MainComponent::saveToFile(const juce::File& file) {
         // (Audio/ + Peaks/) rather than into app data.
         currentBundleDir_ = file;
         refreshAssetRoots(); // Clip playback resolves against the bundle we just became
+        // Clear BEFORE setCurrentPatchName, which is what fires the title notify — the notify must
+        // see the just-saved, clean state.
+        isDirty_ = false;
         setCurrentPatchName(file.getFileNameWithoutExtension());
         statusBar.showMessage("Saved: " + file.getFileNameWithoutExtension());
         return;
@@ -1438,6 +1494,7 @@ void MainComponent::saveToFile(const juce::File& file) {
 
     // Plain preset save — byte-identical to what it has always written.
     graphEditor.savePreset(file);
+    isDirty_ = false;
     setCurrentPatchName(file.getFileNameWithoutExtension());
     statusBar.showMessage("Saved: " + file.getFileNameWithoutExtension());
 }
@@ -1485,6 +1542,7 @@ bool MainComponent::openFromFile(const juce::File& file) {
         // ProjectBundle::load already reconciled once; this republishes the freshly loaded document
         // (and rebinds the recorder) against the graph as it now stands.
         reconcileTimelineAfterGraphChange();
+        isDirty_ = false;
         setCurrentPatchName(file.getFileNameWithoutExtension());
         statusBar.showMessage("Loaded: " + file.getFileNameWithoutExtension());
         return true;
@@ -1493,6 +1551,7 @@ bool MainComponent::openFromFile(const juce::File& file) {
     ProgrammaticApplyScope guard(*this);
     graphEditor.loadPreset(file);
     reconcileTimelineAfterGraphChange();
+    isDirty_ = false;
     setCurrentPatchName(file.getFileNameWithoutExtension());
     statusBar.showMessage("Loaded: " + file.getFileNameWithoutExtension());
     return true;
@@ -1506,12 +1565,12 @@ void MainComponent::paint(juce::Graphics& g) {
 }
 
 void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
-    commands.addArray({AppCommands::openSettings, AppCommands::savePreset, AppCommands::openPreset,
-                       AppCommands::newPatch, AppCommands::undo, AppCommands::redo, AppCommands::toggleModMatrix,
-                       AppCommands::toggleMinimap, AppCommands::toggleAiPanel, AppCommands::autoArrange,
-                       AppCommands::toggleLibrary, AppCommands::selectAllModules, AppCommands::saveSnippet,
-                       AppCommands::copySelection, AppCommands::pasteSelection, AppCommands::duplicateSelection,
-                       AppCommands::cutSelection,
+    commands.addArray({AppCommands::openSettings, AppCommands::savePreset, AppCommands::saveProjectAs,
+                       AppCommands::exportPatchOnly, AppCommands::openPreset, AppCommands::newPatch, AppCommands::undo,
+                       AppCommands::redo, AppCommands::toggleModMatrix, AppCommands::toggleMinimap,
+                       AppCommands::toggleAiPanel, AppCommands::autoArrange, AppCommands::toggleLibrary,
+                       AppCommands::selectAllModules, AppCommands::saveSnippet, AppCommands::copySelection,
+                       AppCommands::pasteSelection, AppCommands::duplicateSelection, AppCommands::cutSelection,
                        // Registered unconditionally alongside togglePlayback below even though only
                        // the timeline surfaces implement it — reported inactive rather than dropping
                        // the row from Settings.
@@ -1547,6 +1606,18 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         result.setInfo("Save Preset", "Save the current preset", "General", 0);
         auto kp = shortcutManager.getBinding("savePreset");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    case AppCommands::saveProjectAs: {
+        result.setInfo("Save Project As...", "Save the project to a new location", "General", 0);
+        auto kp = shortcutManager.getBinding("saveProjectAs");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    case AppCommands::exportPatchOnly: {
+        // No addDefaultKeypress — not rebindable, same pattern as checkForUpdates.
+        result.setInfo("Export Patch Only (.json)...",
+                       "Save just the patch, without the timeline, as a plain JSON preset", "General", 0);
         break;
     }
     case AppCommands::openPreset: {
@@ -1794,8 +1865,13 @@ bool MainComponent::perform(const InvocationInfo& info) {
             settingsButton.onClick();
         return true;
     case AppCommands::savePreset:
-        if (saveButton.onClick)
-            saveButton.onClick();
+        performSaveProject(false);
+        return true;
+    case AppCommands::saveProjectAs:
+        performSaveProject(true);
+        return true;
+    case AppCommands::exportPatchOnly:
+        promptExportPatchOnly();
         return true;
     case AppCommands::openPreset:
         openPresetFromFile();
@@ -1814,6 +1890,7 @@ bool MainComponent::perform(const InvocationInfo& info) {
         currentBundleDir_ = juce::File();
         refreshAssetRoots(); // No bundle any more, so no bundle-relative ref resolves
         reconcileTimelineAfterGraphChange();
+        isDirty_ = false;
         setCurrentPatchName("Untitled");
         statusBar.showMessage("New patch");
         return true;
@@ -2672,6 +2749,12 @@ void MainComponent::setAlignmentGuidesEnabled(bool enabled) {
 void MainComponent::setCurrentPatchName(const juce::String& name) {
     currentPatchName_ = name;
     statusBar.repaint();
+    notifyDocumentTitleChanged();
+}
+
+void MainComponent::notifyDocumentTitleChanged() {
+    if (onDocumentTitleChanged)
+        onDocumentTitleChanged(currentPatchName_ + (isDirty_ ? juce::String(" *") : juce::String()));
 }
 
 // =============================================================================

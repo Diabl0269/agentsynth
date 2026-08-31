@@ -7,6 +7,13 @@ namespace AppCommands {
 enum CommandIDs {
     openSettings = 0x100,
     savePreset,
+    // Save-with-a-chooser, always — the explicit escape hatch from savePreset's "resave silently
+    // to the remembered bundle" default. Rebindable (Cmd+Opt+S) — see resetToDefaults().
+    saveProjectAs,
+    // Legacy patch-only export: writes a plain `.json` via GraphEditor::savePreset directly, never
+    // touching currentBundleDir_ or the window title. NOT rebindable — same treatment as
+    // checkForUpdates below (no action id string, no default binding, no Settings-list row).
+    exportPatchOnly,
     openPreset,
     newPatch,
     undo,
@@ -74,6 +81,8 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return openSettings;
     if (actionId == "savePreset")
         return savePreset;
+    if (actionId == "saveProjectAs")
+        return saveProjectAs;
     if (actionId == "openPreset")
         return openPreset;
     if (actionId == "newPatch")
@@ -316,6 +325,14 @@ public:
         // ---- General ----
         bindings["openSettings"] = juce::KeyPress(',', juce::ModifierKeys::commandModifier, 0);
         bindings["savePreset"] = juce::KeyPress('s', juce::ModifierKeys::commandModifier, 0);
+        // Cmd+Opt+S, deliberately NOT Cmd+Shift+S (that chord is "saveSnippet" — two command
+        // actions can never share a chord, since MainComponent::keyPressed dispatches the FIRST
+        // bound action that has a command, and the loser would be permanently dead). Cmd+Opt+S is
+        // free: the only other 's' bindings are savePreset (Cmd+S), saveSnippet (Cmd+Shift+S), and
+        // pianoRollToggleScaleFilter (bare Alt+S) — and modifier equality is exact, so Cmd+Alt+S can
+        // never match bare Alt+S.
+        bindings["saveProjectAs"] =
+            juce::KeyPress('s', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
         bindings["openPreset"] = juce::KeyPress('o', juce::ModifierKeys::commandModifier, 0);
         bindings["newPatch"] = juce::KeyPress('n', juce::ModifierKeys::commandModifier, 0);
         bindings["undo"] = juce::KeyPress('z', juce::ModifierKeys::commandModifier, 0);
@@ -576,6 +593,8 @@ public:
             return "Open Settings";
         if (actionId == "savePreset")
             return "Save Preset";
+        if (actionId == "saveProjectAs")
+            return "Save Project As";
         if (actionId == "openPreset")
             return "Open Preset";
         if (actionId == "newPatch")
@@ -774,6 +793,7 @@ private:
             // General — app-wide, plus everything routed per focused surface.
             {"openSettings", ShortcutCategory::General},
             {"savePreset", ShortcutCategory::General},
+            {"saveProjectAs", ShortcutCategory::General},
             {"openPreset", ShortcutCategory::General},
             {"newPatch", ShortcutCategory::General},
             {"undo", ShortcutCategory::General},

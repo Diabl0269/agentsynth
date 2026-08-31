@@ -1,8 +1,8 @@
 # Keyboard Shortcuts
 
 Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/ShortcutsSettingsTab.h/.cpp`).
-`ShortcutManager` (`Source/ShortcutManager.h`) registers **58 actions** across four categories —
-**General** (22, app-wide or routed per focused editor), **Graph** (2), **Timeline** (22) and
+`ShortcutManager` (`Source/ShortcutManager.h`) registers **59 actions** across four categories —
+**General** (23, app-wide or routed per focused editor), **Graph** (2), **Timeline** (22) and
 **Piano Roll** (12) — every one of them rebindable, including keys that used to be hardcoded:
 nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the six tool
 digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
@@ -25,7 +25,8 @@ when reasoning about a key that "does nothing."
 |----------|--------|
 | Cmd+, | Open Settings |
 | Cmd+N | New Patch (clear canvas) |
-| Cmd+S | Save Preset |
+| Cmd+S | Save Preset — writes a project bundle (`.agsproj`, graph + timeline) and silently resaves to the remembered bundle on every subsequent press; prompts for a location only on the first save or when no bundle is open (see [`architecture.md`](architecture.md)) |
+| Cmd+Opt+S | Save Project As — always prompts for a new location |
 | Cmd+O | Open Preset (file picker) |
 | Cmd+Z | Undo |
 | Cmd+Shift+Z | Redo |

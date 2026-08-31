@@ -64,6 +64,26 @@ TEST_F(ShortcutManagerTest, DefaultBindingsCorrect) {
     EXPECT_TRUE(manager.getBinding("redo").getModifiers().isShiftDown());
 }
 
+// "Save Project As" lives on Cmd+Opt+S, deliberately one modifier away from BOTH "savePreset"
+// (Cmd+S) and "saveSnippet" (Cmd+Shift+S) — and, in a different category entirely, the piano
+// roll's bare Alt+S ("pianoRollToggleScaleFilter"). Pinned explicitly rather than relying only on
+// the generic sweep tests, since a collision here would leave one of the two 's' actions
+// permanently dead (MainComponent::keyPressed dispatches the FIRST bound action with a command).
+TEST_F(ShortcutManagerTest, SaveProjectAsUsesCmdOptSAndDoesNotCollideWithPianoRollAltS) {
+    const auto saveAs = manager.getBinding("saveProjectAs");
+    EXPECT_EQ(saveAs.getKeyCode(), 's');
+    EXPECT_TRUE(saveAs.getModifiers().isCommandDown());
+    EXPECT_TRUE(saveAs.getModifiers().isAltDown());
+    EXPECT_FALSE(saveAs.getModifiers().isShiftDown());
+    EXPECT_TRUE(manager.getConflictingAction("saveProjectAs", saveAs).isEmpty());
+
+    const auto scaleFilter = manager.getBinding("pianoRollToggleScaleFilter");
+    EXPECT_EQ(scaleFilter.getKeyCode(), 's');
+    EXPECT_TRUE(scaleFilter.getModifiers().isAltDown());
+    EXPECT_FALSE(scaleFilter.getModifiers().isCommandDown());
+    EXPECT_NE(saveAs, scaleFilter) << "same letter and Alt, but Cmd is the difference - genuinely distinct chords";
+}
+
 TEST_F(ShortcutManagerTest, CopyPasteDuplicateUseThePlatformStandardKeys) {
     EXPECT_EQ(manager.getBinding("copySelection").getKeyCode(), 'c');
     EXPECT_TRUE(manager.getBinding("copySelection").getModifiers().isCommandDown());
