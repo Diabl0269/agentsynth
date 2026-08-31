@@ -1,4 +1,5 @@
 #include "../Source/AI/AIStateMapper.h"
+#include "../Source/Branding.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Modules/VCAModule.h"
@@ -437,4 +438,13 @@ TEST_F(ProjectBundleTest, IsBundleDetection) {
     auto plainFile = root.getChildFile("NotADirectory.agsproj");
     plainFile.replaceWithText("not a bundle");
     EXPECT_FALSE(ProjectBundle::isBundle(plainFile));
+}
+
+TEST_F(ProjectBundleTest, DefaultProjectsDirectoryLivesUnderUserMusic) {
+    const auto dir = ProjectBundle::getDefaultProjectsDirectory();
+    const auto music = juce::File::getSpecialLocation(juce::File::userMusicDirectory);
+
+    EXPECT_TRUE(dir.isAChildOf(music));
+    EXPECT_TRUE(dir.getFileName().equalsIgnoreCase(synth::branding::kProjectsFolderName));
+    EXPECT_TRUE(dir.isDirectory());
 }
