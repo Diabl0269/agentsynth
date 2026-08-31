@@ -163,10 +163,35 @@ public:
     // Convenience methods that delegate to undoManager
     bool canUndo() const { return undoManager.canUndo(); }
     bool canRedo() const { return undoManager.canRedo(); }
-    bool undo() { return undoManager.undo(); }
-    bool redo() { return undoManager.redo(); }
+    // Undo and redo bump the edit serial for the same reason a fresh edit does: after a save, an
+    // undo moves the document AWAY from what is on disk, so it has to read as modified.
+    bool undo() {
+        const bool did = undoManager.undo();
+        if (did)
+            ++editSerial_;
+        return did;
+    }
+    bool redo() {
+        const bool did = undoManager.redo();
+        if (did)
+            ++editSerial_;
+        return did;
+    }
     void clearUndoHistory() { undoManager.clearUndoHistory(); }
     void beginNewTransaction() { undoManager.beginNewTransaction(); }
+
+    /** Counts every change this manager has actually applied to the document — one per pushed
+     *  action, plus one per undo/redo. Monotonic, never reset.
+     *
+     *  It exists because `juce::UndoManager`'s own change broadcast is ASYNCHRONOUS
+     *  (`sendChangeMessage()`), which makes "am I dirty?" unanswerable from the broadcast alone: a
+     *  path that edits the document and then declares it clean in the same call stack (New Patch
+     *  clears the timeline and the graph, each an undoable step, before resetting the document)
+     *  leaves a notification already queued, and that notification would otherwise arrive after the
+     *  reset and re-dirty a brand-new document. A listener that instead compares this serial against
+     *  the one captured at save/load/new time recomputes the truth on every notification, so a stale
+     *  one is harmless. See `MainComponent::markDocumentClean`. */
+    int getEditSerial() const { return editSerial_; }
 
     // Called by the undoable actions this manager creates — never by anything else.
     void fireBeforeRestore() {
@@ -179,9 +204,18 @@ public:
     }
 
 private:
+    // THE one wrapper every push goes through, so the serial below can never drift from what the
+    // undo stack actually holds - nothing outside this class calls undoManager.perform().
+    bool performAction(juce::UndoableAction* action) {
+        ++editSerial_;
+        return undoManager.perform(action);
+    }
+
     GraphEditor* graphEditor = nullptr;
     juce::UndoManager undoManager{30000000, 50}; // 30MB limit, 50 min transactions
     juce::var capturedBeforeState;
+    // See getEditSerial(). Incremented by performAction() and by a successful undo/redo.
+    int editSerial_ = 0;
 
     // See setRestoreHooks(). Safe for an action to hold `this` and call through these: every action
     // lives inside `undoManager`, which is a member destroyed with this object.

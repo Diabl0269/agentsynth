@@ -317,14 +317,14 @@ void AppUndoManager::recordStructuralChange(juce::AudioProcessorGraph& graph, st
 
     auto afterState = synth::AIStateMapper::graphToJSON(graph);
 
-    undoManager.perform(createGraphSnapshotAction(graph, beforeState, afterState));
+    performAction(createGraphSnapshotAction(graph, beforeState, afterState));
 }
 
 void AppUndoManager::recordParameterChange(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID nodeId,
                                            const juce::String& paramId, float oldValue, float newValue) {
     // The firstPerform flag will skip the first perform() since the parameter
     // was already changed by the user.
-    undoManager.perform(new ParameterChangeAction(graph, nodeId, paramId, oldValue, newValue));
+    performAction(new ParameterChangeAction(graph, nodeId, paramId, oldValue, newValue));
 }
 
 void AppUndoManager::recordPositionChange(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID nodeId,
@@ -333,7 +333,7 @@ void AppUndoManager::recordPositionChange(juce::AudioProcessorGraph& graph, juce
 
     // The firstPerform flag will skip the first perform() since the position
     // was already changed by the user dragging on the canvas.
-    undoManager.perform(new PositionChangeAction(graph, nodeId, oldX, oldY, newX, newY, postRestore));
+    performAction(new PositionChangeAction(graph, nodeId, oldX, oldY, newX, newY, postRestore));
 }
 
 bool AppUndoManager::recordAIPatch(juce::AudioProcessorGraph& graph, const juce::String& actionName,
@@ -352,7 +352,7 @@ bool AppUndoManager::recordAIPatch(juce::AudioProcessorGraph& graph, const juce:
     auto afterState = synth::AIStateMapper::graphToJSON(graph);
 
     undoManager.beginNewTransaction(actionName);
-    undoManager.perform(new SnapshotAction(
+    performAction(new SnapshotAction(
         beforeState, afterState, graph, preRestore, postRestore, [this] { fireBeforeRestore(); },
         [this] { fireAfterRestore(); }));
     return true;
@@ -370,7 +370,7 @@ void AppUndoManager::pushSnapshotFromCapture(juce::AudioProcessorGraph& graph) {
 
     if (juce::JSON::toString(capturedBeforeState) != juce::JSON::toString(afterState)) {
         undoManager.beginNewTransaction();
-        undoManager.perform(createGraphSnapshotAction(graph, capturedBeforeState, afterState));
+        performAction(createGraphSnapshotAction(graph, capturedBeforeState, afterState));
     }
 
     capturedBeforeState = juce::var();
@@ -390,7 +390,7 @@ bool AppUndoManager::recordTimelineChange(synth::TimelineDoc& doc, const std::fu
         return false; // no-op mutation: don't create an undo step
 
     undoManager.beginNewTransaction();
-    undoManager.perform(new TimelineSnapshotAction(
+    performAction(new TimelineSnapshotAction(
         doc, beforeState, afterState, [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); }));
     return true;
 }
@@ -419,9 +419,9 @@ bool AppUndoManager::recordCombinedChange(juce::AudioProcessorGraph& graph, synt
     // Both perform() calls land in the same transaction (no beginNewTransaction between them), so a
     // single undo()/redo() reverts or re-applies whichever of the two actually changed, together.
     if (graphChanged)
-        undoManager.perform(createGraphSnapshotAction(graph, graphBefore, graphAfter));
+        performAction(createGraphSnapshotAction(graph, graphBefore, graphAfter));
     if (timelineChanged)
-        undoManager.perform(new TimelineSnapshotAction(
+        performAction(new TimelineSnapshotAction(
             doc, timelineBefore, timelineAfter, [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); }));
 
     return true;

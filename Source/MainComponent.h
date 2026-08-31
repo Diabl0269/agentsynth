@@ -255,7 +255,11 @@ public:
     }
     /** Exactly what the Save dialog's callback runs: a name ending in `.agsproj` writes a project
      *  bundle (graph + timeline), anything else writes a plain `.json` preset. */
-    void saveProjectForTest(const juce::File& file) { saveToFile(file); }
+    bool saveProjectForTest(const juce::File& file) { return saveToFile(file); }
+    /** The post-guard half of New Patch only — bypasses guardUnsavedChanges, same idiom as
+     *  saveProjectForTest bypassing the save chooser. Tests that want the guard itself go through
+     *  the AppCommands::newPatch command or unsavedChangesPrompt instead. */
+    void newPatchForTest() { newPatch(); }
     /** Exactly what the Open dialog's callback runs: an `.agsproj` bundle directory loads graph +
      *  timeline, anything else loads a plain `.json` preset. */
     bool openProjectForTest(const juce::File& file) { return openFromFile(file); }
@@ -306,9 +310,30 @@ public:
     /** Fires whenever the window title text (patch name + dirty marker) should be re-read — see
      *  notifyDocumentTitleChanged(). Main.cpp's MainWindow wires this to its own setName(). */
     std::function<void(const juce::String&)> onDocumentTitleChanged;
-    /** True once an undo-able edit has happened since the last save/load — see changeListenerCallback's
-     *  AppUndoManager branch. */
-    bool isProjectDirtyForTest() const { return isDirty_; }
+
+    /** What the user picked in the unsaved-changes dialog. Save runs performSaveProject and only
+     *  continues if the save actually succeeded; Discard continues immediately; Cancel abandons the
+     *  action that asked. */
+    enum class UnsavedChangesChoice { Save, Discard, Cancel };
+
+    /** Test/automation seam for the unsaved-changes dialog, same idiom as onDocumentTitleChanged:
+     *  when set it REPLACES the real async juce::AlertWindow, so a headless run (which has no message
+     *  loop to answer a real modal with) can drive whichever arm it wants. The first argument is the
+     *  human-readable name of the action that is about to discard the document ("New Patch", "Quit"). */
+    std::function<void(const juce::String& actionLabel, std::function<void(UnsavedChangesChoice)> onChoice)>
+        unsavedChangesPrompt;
+
+    /** True once an undo-able edit has happened since the last save/load - see changeListenerCallback's
+     *  AppUndoManager branch. Deliberately NOT reset by undoing back to the state that was saved -
+     *  see the dirty-state section of docs/architecture.md for why a false "clean" is the dangerous
+     *  direction. */
+    bool isProjectDirty() const { return isDirty_; }
+
+    /** THE gate every document-replacing action goes through: runs `proceed` straight away on a clean
+     *  document, otherwise asks first and runs it only on Save (successful) or Discard. Asynchronous by
+     *  nature - the caller must treat `proceed` as "maybe later, maybe never" and must not do the
+     *  destructive work itself. */
+    void guardUnsavedChanges(const juce::String& actionLabel, std::function<void()> proceed);
     // Non-const access to ApplicationProperties for persistence tests (read-back within session).
     juce::ApplicationProperties& getAppPropertiesForTest() { return appProperties; }
     int getStatusBarTickCountForTest() const { return statusBarTickCount_; }
@@ -552,14 +577,19 @@ private:
 
     // ---- File handlers, minus the dialogs ----
     // `file` is whatever the chooser returned; the .agsproj branch is what makes a bundle a bundle.
-    void saveToFile(const juce::File& file);
+    // Returns whether the save actually succeeded — guardUnsavedChanges' Save arm only continues
+    // past a save that returned true.
+    bool saveToFile(const juce::File& file);
     bool openFromFile(const juce::File& file);
     // Cmd+S's actual decision: resave silently to the remembered bundle when one is open and
     // `forceChooser` is false, otherwise prompt (defaulting the suggested name to `.agsproj`, which
     // is what steers a first save toward the bundle format instead of the legacy plain preset).
     // `forceChooser` is what "Save Project As" (Cmd+Opt+S) sets to always prompt even with a bundle
-    // already open.
-    void performSaveProject(bool forceChooser);
+    // already open. `onFinished` (optional) reports whether the save actually happened: false for a
+    // cancelled chooser AND for a save that ran but failed — the unsaved-changes guard's Save arm
+    // is the only caller that supplies it, since every other call site (menu/toolbar) has nothing
+    // waiting on the outcome.
+    void performSaveProject(bool forceChooser, std::function<void(bool saved)> onFinished = {});
     // The legacy patch-only export: calls graphEditor.savePreset directly (never saveToFile), so
     // exporting a snapshot from an open BUNDLE project never renames the window title, mutates
     // currentBundleDir_, or touches isDirty_ — it's a side export, not a change of what document is
@@ -572,6 +602,13 @@ private:
     void loadFactoryPresetAtIndex(int index);
     // New Patch empties the timeline as well as the canvas, as its own undoable step.
     void clearTimelineForNewPatch();
+    // The post-guard half of AppCommands::newPatch — everything the command used to do inline,
+    // now reachable directly so guardUnsavedChanges can hand it in as `proceed`.
+    void newPatch();
+    // The post-guard half of openPresetFromFile() — launches the actual chooser. Split out so
+    // guardUnsavedChanges can run BEFORE the dialog opens rather than after the user has already
+    // picked a file.
+    void launchOpenPresetChooser();
 
     // ChangeListener (juce::ChangeListener override) — called when ThemeManager broadcasts.
     // Implements the 3-step re-skin pass: applyTheme → sendLookAndFeelChangeMessage → repaint.
@@ -622,10 +659,25 @@ private:
 
     // Update the displayed patch name (status bar). Immediate repaint, no timer delay.
     void setCurrentPatchName(const juce::String& name);
+    // The ONE way the document becomes clean: clears isDirty_ AND rebases savedEditSerial_ on the
+    // undo manager's current serial, which is what makes the reset survive an async change
+    // notification that was already queued when it ran. Never write isDirty_ = false directly.
+    void markDocumentClean();
     // Fires onDocumentTitleChanged with currentPatchName_ plus a " *" dirty marker. Called at the
     // end of setCurrentPatchName() and nowhere else — every save/load/new-patch path already routes
     // through it.
     void notifyDocumentTitleChanged();
+
+    // The real dialog behind guardUnsavedChanges, split from applyUnsavedChangesAnswer for exactly
+    // the reason PianoRollComponent::promptExtendClipToFitNotes is split from
+    // applyExtendPromptAnswer: a headless test has no message loop to answer a real AlertWindow with,
+    // so the ANSWER logic has to be reachable without one. Async (never a modal loop) and
+    // SafePointer-guarded — the answer can arrive after this component is gone.
+    void promptUnsavedChanges(const juce::String& actionLabel, std::function<void(UnsavedChangesChoice)> onChoice);
+    // What each arm of the dialog DOES. `proceed` is invoked LAST in every arm that continues, so a
+    // continuation that destroys this component (Quit does exactly that) can never return into a
+    // method that still touches members.
+    void applyUnsavedChangesAnswer(UnsavedChangesChoice choice, std::function<void()> proceed);
 
     // Owned fallback objects used when the delegating ctor is called (tests/legacy).
     // Null when the primary ctor is used (refs point at external objects instead).
@@ -773,10 +825,17 @@ private:
     // Declared BEFORE statusBar so it is fully constructed when statusBar's ctor runs.
     juce::String currentPatchName_{"Default"};
     StatusBarComponent statusBar;
-    // True once an undo-able edit has happened since the last save/load — set by
-    // changeListenerCallback's AppUndoManager branch, cleared by saveToFile/openFromFile/newPatch.
+    // True once an undo-able edit has happened since the last save/load — recomputed by
+    // changeListenerCallback's AppUndoManager branch, cleared through markDocumentClean() by
+    // saveToFile/openFromFile/newPatch. NOT by loadFactoryPresetAtIndex, which keeps the live
+    // timeline and so has no right to claim the document matches anything on disk.
     // Never touched by exportPatchOnly (a side export, not "the project got saved").
     bool isDirty_ = false;
+    // The AppUndoManager::getEditSerial() value as of the last save/load/new document — the
+    // baseline isDirty_ is derived from. See markDocumentClean() for why a serial rather than just
+    // the flag: the undo manager's change broadcast is async, so a notification can arrive after
+    // the document was reset and must be able to recompute rather than blindly re-dirty it.
+    int savedEditSerial_ = 0;
 
     // Declared here (not in AudioEngine or Core) because it is settings-backed and
     // UI-driven; installed into the process-wide DefaultHostedPluginBackend by the constructor and
