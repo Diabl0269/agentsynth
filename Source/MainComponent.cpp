@@ -574,13 +574,17 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
             if (result == 1000) {
                 openPresetFromFile();
             } else if (result > 0) {
-                statusBar.showMessage("Loading preset...");
-                // loadFactoryPresetAtIndex detaches existing components (stopping scope timers) before the
-                // graph is cleared — avoids a use-after-free where a ScopeComponent reads a freed
-                // VisualBuffer — and reconciles the timeline's bindings against the new graph.
-                loadFactoryPresetAtIndex(result - 1);
-                setCurrentPatchName(presets[result - 1].name);
-                statusBar.showMessage("Loaded: " + presets[result - 1].name);
+                // Capture `presets` by value again (the outer local is gone by the time this runs)
+                // and `index` so the guard's continuation still knows which preset was picked.
+                guardUnsavedChanges("Loading a preset", [this, presets, index = result - 1] {
+                    statusBar.showMessage("Loading preset...");
+                    // loadFactoryPresetAtIndex detaches existing components (stopping scope timers) before the
+                    // graph is cleared — avoids a use-after-free where a ScopeComponent reads a freed
+                    // VisualBuffer — and reconciles the timeline's bindings against the new graph.
+                    loadFactoryPresetAtIndex(index);
+                    setCurrentPatchName(presets[index].name);
+                    statusBar.showMessage("Loaded: " + presets[index].name);
+                });
             }
         });
     };
@@ -1144,12 +1148,19 @@ MainComponent::~MainComponent() {
 
 // ---- Change callbacks: theme re-skin, and the live settings-file path ----
 void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
-    // The undo manager broadcasts on every perform/undo/redo/new-transaction — the FIRST such
-    // event since the last save/load is what flips the dirty flag and refreshes the window title.
+    // The undo manager broadcasts on every perform/undo/redo/new-transaction. This RECOMPUTES the
+    // answer from the edit serial rather than blindly setting dirty, because that broadcast is
+    // ASYNC (juce::ChangeBroadcaster::sendChangeMessage) and therefore always potentially stale:
+    // New Patch clears the timeline and the graph — two real undoable steps — and only then resets
+    // the document, so a notification for those steps is still queued when the reset runs. Setting
+    // the flag on arrival would re-dirty a brand-new "Untitled" document one message-loop pass
+    // after it was created; comparing serials makes the late notification a no-op instead, since
+    // markDocumentClean() captured the baseline AFTER those steps.
     // Checked before the settings/theme dispatch below since it is neither of those broadcasters.
     if (source != nullptr && source == &undoManager.getUndoManager()) {
-        if (!isDirty_) {
-            isDirty_ = true;
+        const bool nowDirty = undoManager.getEditSerial() != savedEditSerial_;
+        if (nowDirty != isDirty_) {
+            isDirty_ = nowDirty;
             notifyDocumentTitleChanged();
         }
         return;
@@ -1397,9 +1408,26 @@ void MainComponent::loadFactoryPresetAtIndex(int index) {
     ProgrammaticApplyScope guard(*this);
     graphEditor.loadFactoryPreset(index);
     reconcileTimelineAfterGraphChange();
+    // A factory preset is not the bundle that was open, so the next Cmd+S must prompt for a new
+    // location rather than silently overwrite it — same reasoning as the newPatch case's "A new
+    // document is not the old bundle" comment.
+    currentBundleDir_ = juce::File();
+    refreshAssetRoots();
+    // NOT markDocumentClean(), unlike newPatch/open/save. A factory preset replaces the GRAPH and
+    // leaves the live timeline exactly where it was, so "this document now matches something on
+    // disk" would be a lie the moment the timeline holds anything: an unsaved arrangement would
+    // survive the load with the dirty flag cleared, and quitting after that would discard it
+    // without ever asking. The load records no undo transaction of its own (it goes through
+    // PresetManager, not AppUndoManager), so leaving the flag alone is also accurate in the other
+    // direction - a clean document stays clean, a dirty one stays dirty.
 }
 
+// Guards BEFORE the dialog opens — the chooser itself is the post-guard half, below.
 void MainComponent::openPresetFromFile() {
+    guardUnsavedChanges("Opening another project", [this] { launchOpenPresetChooser(); });
+}
+
+void MainComponent::launchOpenPresetChooser() {
     fileChooser = std::make_unique<juce::FileChooser>(
         "Load Preset", juce::File::getSpecialLocation(juce::File::userDocumentsDirectory), kPatchFileFilter);
     // A `.agsproj` bundle is a DIRECTORY, not a file, so the browser has to allow picking one; a
@@ -1419,9 +1447,11 @@ void MainComponent::openPresetFromFile() {
 // `.agsproj` — not because the filter forbids `.json` (it still lists both, and saveToFile still
 // branches on whatever extension comes back), but because a first-time saver who just hits Enter
 // should land on the bundle format, which is what actually keeps the timeline.
-void MainComponent::performSaveProject(bool forceChooser) {
+void MainComponent::performSaveProject(bool forceChooser, std::function<void(bool saved)> onFinished) {
     if (!forceChooser && currentBundleDir_ != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir_)) {
-        saveToFile(currentBundleDir_);
+        const bool ok = saveToFile(currentBundleDir_);
+        if (onFinished)
+            onFinished(ok);
         return;
     }
 
@@ -1429,10 +1459,16 @@ void MainComponent::performSaveProject(bool forceChooser) {
                                .getChildFile(currentPatchName_ + synth::ProjectBundle::kBundleExtension);
     fileChooser = std::make_unique<juce::FileChooser>("Save Project", suggested, kPatchFileFilter);
     auto flags = juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles;
-    fileChooser->launchAsync(flags, [this](const juce::FileChooser& fc) {
+    fileChooser->launchAsync(flags, [this, onFinished](const juce::FileChooser& fc) {
         auto file = fc.getResult();
-        if (file != juce::File{})
-            saveToFile(file);
+        if (file == juce::File{}) {
+            if (onFinished)
+                onFinished(false);
+            return;
+        }
+        const bool ok = saveToFile(file);
+        if (onFinished)
+            onFinished(ok);
     });
 }
 
@@ -1457,7 +1493,7 @@ void MainComponent::promptExportPatchOnly() {
 
 // ---- Save / open: one `.json` preset path, one `.agsproj` bundle path ----
 
-void MainComponent::saveToFile(const juce::File& file) {
+bool MainComponent::saveToFile(const juce::File& file) {
     statusBar.showMessage("Saving...");
 
     if (file.getFileExtension() == synth::ProjectBundle::kBundleExtension) {
@@ -1478,7 +1514,7 @@ void MainComponent::saveToFile(const juce::File& file) {
             synth::ProjectBundle::save(file, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument());
         if (!result.ok) {
             statusBar.showMessage("Save failed: " + result.message);
-            return;
+            return false;
         }
         // From here on this document IS a bundle, so the next take is written into it
         // (Audio/ + Peaks/) rather than into app data.
@@ -1486,17 +1522,18 @@ void MainComponent::saveToFile(const juce::File& file) {
         refreshAssetRoots(); // Clip playback resolves against the bundle we just became
         // Clear BEFORE setCurrentPatchName, which is what fires the title notify — the notify must
         // see the just-saved, clean state.
-        isDirty_ = false;
+        markDocumentClean();
         setCurrentPatchName(file.getFileNameWithoutExtension());
         statusBar.showMessage("Saved: " + file.getFileNameWithoutExtension());
-        return;
+        return true;
     }
 
     // Plain preset save — byte-identical to what it has always written.
     graphEditor.savePreset(file);
-    isDirty_ = false;
+    markDocumentClean();
     setCurrentPatchName(file.getFileNameWithoutExtension());
     statusBar.showMessage("Saved: " + file.getFileNameWithoutExtension());
+    return true;
 }
 
 bool MainComponent::openFromFile(const juce::File& file) {
@@ -1542,7 +1579,7 @@ bool MainComponent::openFromFile(const juce::File& file) {
         // ProjectBundle::load already reconciled once; this republishes the freshly loaded document
         // (and rebinds the recorder) against the graph as it now stands.
         reconcileTimelineAfterGraphChange();
-        isDirty_ = false;
+        markDocumentClean();
         setCurrentPatchName(file.getFileNameWithoutExtension());
         statusBar.showMessage("Loaded: " + file.getFileNameWithoutExtension());
         return true;
@@ -1551,7 +1588,13 @@ bool MainComponent::openFromFile(const juce::File& file) {
     ProgrammaticApplyScope guard(*this);
     graphEditor.loadPreset(file);
     reconcileTimelineAfterGraphChange();
-    isDirty_ = false;
+    // A legacy patch is not a bundle, so the document that is now open has no bundle to resave to;
+    // leaving the previous bundle's path installed would make the next Cmd+S overwrite a project
+    // this patch was never part of, timeline included. (The .agsproj branch above already sets
+    // currentBundleDir_ = file, so only this plain-preset tail needs the reset.)
+    currentBundleDir_ = juce::File();
+    refreshAssetRoots();
+    markDocumentClean();
     setCurrentPatchName(file.getFileNameWithoutExtension());
     statusBar.showMessage("Loaded: " + file.getFileNameWithoutExtension());
     return true;
@@ -1876,25 +1919,9 @@ bool MainComponent::perform(const InvocationInfo& info) {
     case AppCommands::openPreset:
         openPresetFromFile();
         return true;
-    case AppCommands::newPatch: {
-        ProgrammaticApplyScope guard(*this);
-        // Two undo steps, deliberately: GraphEditor::newPatch() owns the graph's own
-        // recordStructuralChange, and folding the timeline into it would mean either nesting
-        // transactions or duplicating the clear. The timeline is cleared FIRST so the graph's step
-        // is the newer one — Cmd+Z brings the canvas back, Cmd+Z again brings the timeline back,
-        // and the post-restore reconcile re-derives the bindings after each.
-        clearTimelineForNewPatch();
-        graphEditor.newPatch();
-        // A new document is not the old bundle, so the next take goes to app data rather
-        // than into a bundle this patch no longer belongs to.
-        currentBundleDir_ = juce::File();
-        refreshAssetRoots(); // No bundle any more, so no bundle-relative ref resolves
-        reconcileTimelineAfterGraphChange();
-        isDirty_ = false;
-        setCurrentPatchName("Untitled");
-        statusBar.showMessage("New patch");
+    case AppCommands::newPatch:
+        guardUnsavedChanges("New Patch", [this] { newPatch(); });
         return true;
-    }
     case AppCommands::undo:
         if (undoManager.canUndo())
             undoManager.undo();
@@ -2757,6 +2784,86 @@ void MainComponent::notifyDocumentTitleChanged() {
         onDocumentTitleChanged(currentPatchName_ + (isDirty_ ? juce::String(" *") : juce::String()));
 }
 
+// The ONE way the document becomes clean — every save/load/new-document path calls this instead of
+// writing isDirty_ directly. Capturing the undo manager's serial here is what makes the flag
+// immune to the async change broadcast (see changeListenerCallback): the baseline is taken AFTER
+// whatever edits the caller just made, so a notification still queued for those edits recomputes
+// to "clean" rather than undoing this reset. Callers clear BEFORE setCurrentPatchName(), which is
+// what fires the title notify — the notify has to see the settled state.
+void MainComponent::markDocumentClean() {
+    savedEditSerial_ = undoManager.getEditSerial();
+    isDirty_ = false;
+}
+
+// ---- Unsaved-changes guard ----
+
+void MainComponent::guardUnsavedChanges(const juce::String& actionLabel, std::function<void()> proceed) {
+    if (!proceed)
+        return;
+    if (!isDirty_) {
+        proceed();
+        return;
+    }
+    promptUnsavedChanges(actionLabel,
+                         [this, proceed](UnsavedChangesChoice choice) { applyUnsavedChangesAnswer(choice, proceed); });
+}
+
+void MainComponent::promptUnsavedChanges(const juce::String& actionLabel,
+                                         std::function<void(UnsavedChangesChoice)> onChoice) {
+    if (unsavedChangesPrompt) {
+        unsavedChangesPrompt(actionLabel, std::move(onChoice));
+        return;
+    }
+
+    auto options = juce::MessageBoxOptions()
+                       .withIconType(juce::MessageBoxIconType::QuestionIcon)
+                       .withTitle("Unsaved Changes")
+                       .withMessage(actionLabel + " will discard unsaved changes to \"" + currentPatchName_ + "\".")
+                       .withButton("Save")
+                       .withButton("Discard")
+                       .withButton("Cancel");
+    // ASYNC, never a modal loop — same reasoning as PianoRollComponent::promptExtendClipToFitNotes.
+    // SafePointer because the answer can arrive after this component is gone (Quit's own
+    // continuation destroys it).
+    juce::Component::SafePointer<MainComponent> safeThis(this);
+    juce::AlertWindow::showAsync(options, [safeThis, onChoice](int result) {
+        // onChoice (via guardUnsavedChanges) closes over `this`, so the guard below is what keeps
+        // a dismissed component from having a member function invoked on it after destruction —
+        // the same SafePointer role PianoRollComponent::promptExtendClipToFitNotes's callback plays.
+        if (safeThis.getComponent() == nullptr)
+            return;
+        // Verified against JUCE's own showAsync plumbing (build/_deps/juce-src/modules/
+        // juce_gui_basics/lookandfeel/juce_LookAndFeel_V2.cpp, createAlertWindow's 3-button branch):
+        // button 1 (the FIRST .withButton, "Save") returns 1, button 2 ("Discard") returns 2, button
+        // 3 ("Cancel") returns 0 — and 0 is also what a dismissed/closed window returns, so anything
+        // but 1 or 2 has to fall back to Cancel rather than a destructive arm.
+        UnsavedChangesChoice choice = UnsavedChangesChoice::Cancel;
+        if (result == 1)
+            choice = UnsavedChangesChoice::Save;
+        else if (result == 2)
+            choice = UnsavedChangesChoice::Discard;
+        onChoice(choice);
+    });
+}
+
+void MainComponent::applyUnsavedChangesAnswer(UnsavedChangesChoice choice, std::function<void()> proceed) {
+    switch (choice) {
+    case UnsavedChangesChoice::Cancel:
+        return;
+    case UnsavedChangesChoice::Discard:
+        proceed();
+        return;
+    case UnsavedChangesChoice::Save:
+        // A failed save (or a cancelled chooser, which reports saved=false) must not continue —
+        // the whole point of the guard is that Save only counts once it actually happened.
+        performSaveProject(false, [proceed](bool saved) {
+            if (saved)
+                proceed();
+        });
+        return;
+    }
+}
+
 // =============================================================================
 // Timeline app wiring
 // =============================================================================
@@ -3059,6 +3166,27 @@ void MainComponent::clearTimelineForNewPatch() {
     if (timelineDoc.isEmpty())
         return; // clear() on an empty doc is a genuine no-op — no undo step for it either
     undoManager.recordTimelineChange(timelineDoc, [this] { timelineDoc.clear(); });
+}
+
+// The post-guard half of AppCommands::newPatch — see the command's own comment in perform() for
+// why the guard has to run first. Everything below is unchanged from before the guard existed.
+void MainComponent::newPatch() {
+    ProgrammaticApplyScope guard(*this);
+    // Two undo steps, deliberately: GraphEditor::newPatch() owns the graph's own
+    // recordStructuralChange, and folding the timeline into it would mean either nesting
+    // transactions or duplicating the clear. The timeline is cleared FIRST so the graph's step
+    // is the newer one — Cmd+Z brings the canvas back, Cmd+Z again brings the timeline back,
+    // and the post-restore reconcile re-derives the bindings after each.
+    clearTimelineForNewPatch();
+    graphEditor.newPatch();
+    // A new document is not the old bundle, so the next take goes to app data rather
+    // than into a bundle this patch no longer belongs to.
+    currentBundleDir_ = juce::File();
+    refreshAssetRoots(); // No bundle any more, so no bundle-relative ref resolves
+    reconcileTimelineAfterGraphChange();
+    markDocumentClean();
+    setCurrentPatchName("Untitled");
+    statusBar.showMessage("New patch");
 }
 
 juce::AudioProcessorGraph::Node* MainComponent::findNodeByUuid(const juce::String& uuid) const {

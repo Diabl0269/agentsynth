@@ -65,6 +65,7 @@ Everything else below is a tripwire index. The full rule lives in the named area
 - Timeline data crosses threads only via `EpochExchange`: opened once per render pass, published snapshot-first/bindings-second, republished after any graph change. → [`docs/architecture.md`](docs/architecture.md)
 - `MainComponent` owns the app's live `TimelineDoc`; every graph change must reach `MainComponent::timelineChanged` / the reconcile pass (hook inventory: [`docs/architecture.md` §8](docs/architecture.md)); a binding is never re-established automatically. → [`docs/timeline_panel_core.md §3`](docs/timeline_panel_core.md)
 - Every node-uuid write mirrors into the processor via `ModuleBase::setNodeUuid`; written once, never rewritten. → [`docs/architecture.md`](docs/architecture.md)
+- Every document-replacing action goes through `MainComponent::guardUnsavedChanges` (async — hand it the work, never do it then ask), and any path that replaces the document with something that is not a bundle drops `currentBundleDir_`. → [`docs/architecture.md`](docs/architecture.md)
 - No non-ASCII bytes in a `Source/` string literal — `juce::String`'s `const char*` ctor decodes as Latin-1, so `"Rename…"` (or its hex-escape spelling) ships mojibake; use ASCII or `juce::CharPointer_UTF8`/`String::fromUTF8`. Guarded by `scripts/tests/check-nonascii-literals.test.sh`. → [`docs/testing.md`](docs/testing.md)
 
 **Modules & channels** (`Source/Modules/CLAUDE.md`):
