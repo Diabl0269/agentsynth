@@ -32,6 +32,10 @@ constexpr const char* kSettingsFolderName = "Agent Synth";
 // directory); seeded here so a future on-disk preset store has a name to use.
 constexpr const char* kPresetFolderName = "Agent Synth";
 
+// Default subdirectory under the user's Music folder for project bundles (.agsproj).
+// Project save/open dialogs start here via ProjectBundle::getDefaultProjectsDirectory().
+constexpr const char* kProjectsFolderName = "AgentSynth";
+
 // Previous kSettingsFolderName values, ordered newest-first. SettingsMigration walks this
 // list at startup and copies forward the first entry that exists and has data, so a rename
 // doesn't orphan existing users' settings/presets/themes. Seeded with the current name;

@@ -80,6 +80,10 @@ public:
      *  parameters are left completely untouched. */
     static ProjectLoadResult load(const juce::File& bundleDir, juce::AudioProcessorGraph& graph, TimelineDoc& timeline,
                                   PatchDocument& patchDocument);
+
+    /** `<userMusicDirectory>/<kProjectsFolderName>`, created on demand. Starting directory for
+     *  project save/open/export dialogs (see MainComponent). */
+    static juce::File getDefaultProjectsDirectory();
 };
 
 } // namespace synth

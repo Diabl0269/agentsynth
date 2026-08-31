@@ -1,4 +1,5 @@
 #include "ProjectBundle.h"
+#include "Branding.h"
 #include "Timeline/TimelineReconciler.h"
 
 namespace synth {
@@ -111,6 +112,16 @@ ProjectLoadResult ProjectBundle::load(const juce::File& bundleDir, juce::AudioPr
     TimelineReconciler::reconcile(timeline, graph);
 
     return {true, {}};
+}
+
+juce::File ProjectBundle::getDefaultProjectsDirectory() {
+    juce::File folder =
+        juce::File::getSpecialLocation(juce::File::userMusicDirectory).getChildFile(branding::kProjectsFolderName);
+
+    if (!folder.exists())
+        folder.createDirectory();
+
+    return folder;
 }
 
 } // namespace synth

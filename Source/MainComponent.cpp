@@ -1429,7 +1429,7 @@ void MainComponent::openPresetFromFile() {
 
 void MainComponent::launchOpenPresetChooser() {
     fileChooser = std::make_unique<juce::FileChooser>(
-        "Load Preset", juce::File::getSpecialLocation(juce::File::userDocumentsDirectory), kPatchFileFilter);
+        "Load Preset", synth::ProjectBundle::getDefaultProjectsDirectory(), kPatchFileFilter);
     // A `.agsproj` bundle is a DIRECTORY, not a file, so the browser has to allow picking one; a
     // plain `.json` preset is still an ordinary file pick. openFromFile() branches on what comes
     // back, so the two cases never depend on which flag the platform's dialog honoured.
@@ -1455,8 +1455,8 @@ void MainComponent::performSaveProject(bool forceChooser, std::function<void(boo
         return;
     }
 
-    const auto suggested = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
-                               .getChildFile(currentPatchName_ + synth::ProjectBundle::kBundleExtension);
+    const auto suggested = synth::ProjectBundle::getDefaultProjectsDirectory().getChildFile(
+        currentPatchName_ + synth::ProjectBundle::kBundleExtension);
     fileChooser = std::make_unique<juce::FileChooser>("Save Project", suggested, kPatchFileFilter);
     auto flags = juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles;
     fileChooser->launchAsync(flags, [this, onFinished](const juce::FileChooser& fc) {
@@ -1481,8 +1481,8 @@ void MainComponent::exportPatchOnly(const juce::File& file) {
 }
 
 void MainComponent::promptExportPatchOnly() {
-    fileChooser = std::make_unique<juce::FileChooser>(
-        "Export Patch Only", juce::File::getSpecialLocation(juce::File::userDocumentsDirectory), "*.json");
+    fileChooser = std::make_unique<juce::FileChooser>("Export Patch Only",
+                                                      synth::ProjectBundle::getDefaultProjectsDirectory(), "*.json");
     auto flags = juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles;
     fileChooser->launchAsync(flags, [this](const juce::FileChooser& fc) {
         auto file = fc.getResult();
