@@ -43,6 +43,19 @@ public:
     void setNaturalScrollingEnabled(bool enabled);
     bool isZoomScrollUpZoomsInEnabled() const;
     void setZoomScrollUpZoomsInEnabled(bool enabled);
+    // Autosave (P8-4): periodic sidecar save of the open bundle, gated on the edit serial having
+    // moved since the last one — see MainComponent::maybeAutosave. DEFAULT ON at 2 minutes.
+    bool isAutosaveEnabled() const;
+    void setAutosaveEnabled(bool enabled);
+    // Any exact integer 1-120 (a plain digits-only juce::TextEditor field, not a fixed-choice combo
+    // or a slider with +/- buttons — see the constructor), in minutes.
+    int getAutosaveIntervalMinutes() const;
+    void setAutosaveIntervalMinutes(int minutes);
+    // Cubase-style rotating backup history (see ProjectBundle::saveAutosave): how many PREVIOUS
+    // autosave snapshots are kept as numbered autosave-<n>.json files alongside the live
+    // autosave.json. Any exact integer 0-50; 0 disables the backup history entirely. DEFAULT 5.
+    int getAutosaveBackupCount() const;
+    void setAutosaveBackupCount(int count);
     // "all" (every key labelled) vs "c" (only the Cs) — PianoRollComponent::KeyLabelMode, read by
     // TimelinePanelComponent::reloadPianoRollAppearancePrefs(). true == "all" (the default).
     bool isPianoRollKeyLabelModeAll() const;
@@ -110,6 +123,9 @@ private:
     void persistDoubleClickSpansLocators(bool enabled);
     void persistNaturalScrolling(bool enabled);
     void persistZoomScrollUpZoomsIn(bool enabled);
+    void persistAutosaveEnabled(bool enabled);
+    void persistAutosaveIntervalMinutes(int minutes);
+    void persistAutosaveBackupCount(int count);
     void persistPianoRollKeyLabelMode(bool labelEveryKey);
     void persistDualIOPerModuleOverrides();
 
@@ -184,6 +200,18 @@ private:
     // On (the default) labels every row in the piano roll's keys column; off labels only the Cs —
     // PianoRollComponent::KeyLabelMode::AllNotes / OctavesOnly.
     juce::ToggleButton pianoRollKeyLabelsToggle{"Label every key"};
+    // Autosave (P8-4). One single line: the toggle, then "Every: [field] min", then
+    // "Keep: [field] backups" — three independent statements that read as one group, not stacked
+    // rows. Both numeric fields are plain digits-only juce::TextEditors (exact-integer entry, no
+    // +/- buttons and no fixed-choice list) - see the constructor for the commit-on-return/
+    // commit-on-focus-lost handling.
+    juce::ToggleButton autosaveEnabledToggle{"Autosave"};
+    juce::Label autosaveIntervalLabel;
+    juce::TextEditor autosaveIntervalEditor;
+    juce::Label autosaveIntervalUnitLabel;
+    juce::Label autosaveBackupCountLabel;
+    juce::TextEditor autosaveBackupCountEditor;
+    juce::Label autosaveBackupCountUnitLabel;
 
     // Hairline rules between preference groups, painted in paint() from these bounds.
     std::vector<juce::Rectangle<int>> dividerBounds;

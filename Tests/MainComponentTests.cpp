@@ -82,6 +82,14 @@ protected:
             s->setValue("aiPanelVisible", "0");        // default: hidden
             s->setValue("minimapVisible", "1");        // default: visible
             s->removeValue("aiRequestTimeoutMs");      // default: AIChatComponent::kDefaultRequestTimeoutMs
+            // Autosave defaults ON in the app, but every test that dirties a doc and drives
+            // timerCallback()/runAutosaveTickForTest() shares this SAME real settings file — leaving
+            // it on would make an unrelated test start writing autosave.json into its temp bundle
+            // dir. Forced OFF here (not just reset to the app default) so every pre-existing test's
+            // behavior is unaffected; AutosaveTests.cpp turns it back on explicitly per test.
+            s->setValue("autosaveEnabled", "0");
+            s->removeValue("autosaveIntervalMinutes"); // default: 2
+            s->removeValue("autosaveBackupCount");     // default: 5
             s->saveIfNeeded();
         }
     }

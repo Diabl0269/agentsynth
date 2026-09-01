@@ -175,6 +175,180 @@ TEST_F(ProjectBundleTest, RoundTripGraphAndTimeline) {
     EXPECT_EQ(juce::JSON::toString(freshTimeline.toVar()), originalTimelineJson);
 }
 
+// ---------------------------------------------------------------------------
+// P8-4: the autosave sidecar (autosave.json). Same JSON shape as project.json, written/read to a
+// SEPARATE file — save()/load() must never see it, and it must never see project.json.
+// ---------------------------------------------------------------------------
+
+TEST_F(ProjectBundleTest, SaveAutosaveWritesSidecarWithoutTouchingProjectJson) {
+    juce::AudioProcessorGraph graph;
+    buildSampleGraph(graph);
+    TimelineDoc timeline;
+    buildSampleTimeline(timeline);
+    PatchDocument patchDocument;
+
+    auto dir = bundleDir("Autosave");
+    ASSERT_TRUE(ProjectBundle::save(dir, graph, timeline, patchDocument).ok);
+    auto projectFile = dir.getChildFile(ProjectBundle::kProjectFileName);
+    const auto projectJsonBefore = projectFile.loadFileAsString();
+
+    // Mutate the live graph AFTER the real save, so autosave's content provably differs from what
+    // project.json already holds.
+    auto vca2 = graph.addNode(std::make_unique<VCAModule>());
+    vca2->properties.set("x", 900);
+    vca2->properties.set("y", 0);
+
+    ASSERT_FALSE(ProjectBundle::hasAutosave(dir));
+    const auto result = ProjectBundle::saveAutosave(dir, graph, timeline, patchDocument, /*maxBackups=*/0);
+    ASSERT_TRUE(result.ok) << result.message;
+
+    EXPECT_TRUE(ProjectBundle::hasAutosave(dir));
+    auto autosaveFile = dir.getChildFile("autosave.json");
+    EXPECT_TRUE(autosaveFile.existsAsFile());
+    // project.json is byte-for-byte untouched by an autosave write.
+    EXPECT_EQ(projectFile.loadFileAsString(), projectJsonBefore);
+    // The sidecar reflects the POST-mutation graph (one more node than project.json's).
+    auto autosaveJson = juce::JSON::parse(autosaveFile);
+    ASSERT_TRUE(autosaveJson.getProperty("nodes", {}).isArray());
+    EXPECT_EQ(autosaveJson.getProperty("nodes", {}).getArray()->size(), 4);
+    auto projectJson = juce::JSON::parse(projectFile);
+    EXPECT_EQ(projectJson.getProperty("nodes", {}).getArray()->size(), 3);
+}
+
+TEST_F(ProjectBundleTest, LoadAutosaveRoundTripsGraphAndTimelineFromTheSidecarOnly) {
+    juce::AudioProcessorGraph originalGraph;
+    buildSampleGraph(originalGraph);
+    TimelineDoc originalTimeline;
+    buildSampleTimeline(originalTimeline);
+    PatchDocument originalPatchDoc;
+
+    auto dir = bundleDir("LoadAutosave");
+    dir.createDirectory(); // saveAutosave() requires the bundle directory to already exist.
+    ASSERT_TRUE(
+        ProjectBundle::saveAutosave(dir, originalGraph, originalTimeline, originalPatchDoc, /*maxBackups=*/0).ok);
+    ASSERT_FALSE(dir.getChildFile(ProjectBundle::kProjectFileName).existsAsFile())
+        << "saveAutosave must never create project.json";
+
+    auto originalUuids = nodeUuids(originalGraph);
+    auto originalTimelineJson = juce::JSON::toString(originalTimeline.toVar());
+
+    juce::AudioProcessorGraph freshGraph;
+    TimelineDoc freshTimeline;
+    PatchDocument freshPatchDoc;
+    const auto result = ProjectBundle::loadAutosave(dir, freshGraph, freshTimeline, freshPatchDoc);
+    ASSERT_TRUE(result.ok) << result.message;
+
+    EXPECT_EQ(freshGraph.getNumNodes(), originalGraph.getNumNodes());
+    EXPECT_EQ(nodeUuids(freshGraph), originalUuids);
+    EXPECT_EQ(juce::JSON::toString(freshTimeline.toVar()), originalTimelineJson);
+}
+
+TEST_F(ProjectBundleTest, DiscardAutosaveRemovesTheSidecarAndIsANoOpWhenAbsent) {
+    juce::AudioProcessorGraph graph;
+    buildSampleGraph(graph);
+    TimelineDoc timeline;
+    PatchDocument patchDocument;
+
+    auto dir = bundleDir("Discard");
+    ASSERT_TRUE(ProjectBundle::save(dir, graph, timeline, patchDocument).ok);
+    ASSERT_TRUE(ProjectBundle::saveAutosave(dir, graph, timeline, patchDocument, /*maxBackups=*/0).ok);
+    ASSERT_TRUE(ProjectBundle::hasAutosave(dir));
+
+    ProjectBundle::discardAutosave(dir);
+    EXPECT_FALSE(ProjectBundle::hasAutosave(dir));
+    // project.json is unaffected by discarding the sidecar.
+    EXPECT_TRUE(ProjectBundle::isBundle(dir));
+
+    // A no-op the second time, on an already-absent sidecar - must not throw/crash.
+    ProjectBundle::discardAutosave(dir);
+    EXPECT_FALSE(ProjectBundle::hasAutosave(dir));
+}
+
+// ---------------------------------------------------------------------------
+// P8-4 follow-up: the Cubase-style rotating backup history (autosave-<n>.json).
+// ---------------------------------------------------------------------------
+
+TEST_F(ProjectBundleTest, SaveAutosaveRotatesPreviousSidecarsIntoNumberedBackupsAndEvictsTheOldest) {
+    juce::AudioProcessorGraph graph;
+    buildSampleGraph(graph); // 3 nodes to start
+    TimelineDoc timeline;
+    PatchDocument patchDocument;
+    auto dir = bundleDir("Rotate");
+    dir.createDirectory();
+
+    auto nodeCountOf = [](const juce::File& f) -> int {
+        auto json = juce::JSON::parse(f);
+        auto* arr = json.getProperty("nodes", {}).getArray();
+        return arr == nullptr ? -1 : (int)arr->size();
+    };
+
+    // 5 autosaves in a row, one more node each time (3, 4, 5, 6, 7 nodes), maxBackups=3.
+    for (int i = 0; i < 5; ++i) {
+        if (i > 0) {
+            auto extra = graph.addNode(std::make_unique<VCAModule>());
+            extra->properties.set("x", 900 + i);
+            extra->properties.set("y", 0);
+        }
+        ASSERT_TRUE(ProjectBundle::saveAutosave(dir, graph, timeline, patchDocument, /*maxBackups=*/3).ok);
+    }
+
+    // Final state: autosave.json = 7 nodes (the last write), autosave-1/2/3 hold the three most
+    // recent PRIOR states (6, 5, 4 nodes) in that order, and the oldest (3-node) state is evicted -
+    // there is no autosave-4.json.
+    EXPECT_EQ(nodeCountOf(dir.getChildFile("autosave.json")), 7);
+    EXPECT_EQ(nodeCountOf(dir.getChildFile("autosave-1.json")), 6);
+    EXPECT_EQ(nodeCountOf(dir.getChildFile("autosave-2.json")), 5);
+    EXPECT_EQ(nodeCountOf(dir.getChildFile("autosave-3.json")), 4);
+    EXPECT_FALSE(dir.getChildFile("autosave-4.json").existsAsFile());
+}
+
+TEST_F(ProjectBundleTest, MaxBackupsZeroKeepsNoBackupFilesEver) {
+    juce::AudioProcessorGraph graph;
+    buildSampleGraph(graph);
+    TimelineDoc timeline;
+    PatchDocument patchDocument;
+    auto dir = bundleDir("NoBackups");
+    dir.createDirectory();
+
+    for (int i = 0; i < 4; ++i) {
+        auto extra = graph.addNode(std::make_unique<VCAModule>());
+        extra->properties.set("x", 900 + i);
+        extra->properties.set("y", 0);
+        ASSERT_TRUE(ProjectBundle::saveAutosave(dir, graph, timeline, patchDocument, /*maxBackups=*/0).ok);
+    }
+
+    EXPECT_TRUE(dir.getChildFile("autosave.json").existsAsFile());
+    EXPECT_FALSE(dir.getChildFile("autosave-1.json").existsAsFile());
+    EXPECT_FALSE(dir.getChildFile("autosave-2.json").existsAsFile());
+}
+
+TEST_F(ProjectBundleTest, DiscardAutosaveLeavesTheNumberedBackupHistoryUntouched) {
+    juce::AudioProcessorGraph graph;
+    buildSampleGraph(graph);
+    TimelineDoc timeline;
+    PatchDocument patchDocument;
+    auto dir = bundleDir("DiscardKeepsBackups");
+    dir.createDirectory();
+
+    for (int i = 0; i < 3; ++i) {
+        if (i > 0) {
+            auto extra = graph.addNode(std::make_unique<VCAModule>());
+            extra->properties.set("x", 900 + i);
+            extra->properties.set("y", 0);
+        }
+        ASSERT_TRUE(ProjectBundle::saveAutosave(dir, graph, timeline, patchDocument, /*maxBackups=*/2).ok);
+    }
+    ASSERT_TRUE(dir.getChildFile("autosave-1.json").existsAsFile());
+    ASSERT_TRUE(dir.getChildFile("autosave-2.json").existsAsFile());
+
+    ProjectBundle::discardAutosave(dir);
+
+    EXPECT_FALSE(ProjectBundle::hasAutosave(dir)) << "the live sidecar is discarded";
+    EXPECT_TRUE(dir.getChildFile("autosave-1.json").existsAsFile()) << "the backup history is a disk safety net, "
+                                                                       "not touched by discardAutosave";
+    EXPECT_TRUE(dir.getChildFile("autosave-2.json").existsAsFile());
+}
+
 TEST_F(ProjectBundleTest, LoadOrderIsAllOrNothing_BadPatch) {
     auto dir = bundleDir("BadPatch");
     dir.createDirectory();

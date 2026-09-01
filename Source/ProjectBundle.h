@@ -54,6 +54,22 @@ struct ProjectLoadResult {
  * ### Save
  * `graphToJSON` → `patchDocument.toVar` → `"timeline"` set to `timeline.toVar()` **last**, so the
  * live `TimelineDoc` (not a stale stashed value) is authoritative.
+ *
+ * ### Autosave
+ * `saveAutosave()` writes the identical JSON shape to a separate `autosave.json` sidecar —
+ * `project.json` is never overwritten in place by autosave. `loadAutosave()` mirrors `load()`'s
+ * validation exactly, reading the sidecar instead. See `MainComponent::performAutosave` /
+ * `MainComponent::openFromFile` for the gate that writes it and the recovery prompt that reads it,
+ * and docs/architecture.md for the full autosave design.
+ *
+ * ### Autosave backup history
+ * Before each autosave overwrites `autosave.json`, the PREVIOUS sidecar is rotated into a numbered
+ * history — `autosave-1.json` (most recent), `autosave-2.json`, ... up to `maxBackups` — classic
+ * logrotate: `autosave-<maxBackups>.json` is evicted, everything else shifts up by one, then the old
+ * `autosave.json` becomes `autosave-1.json`. `maxBackups <= 0` disables rotation entirely (plain
+ * overwrite, as before). This history is a disk-only safety net: `discardAutosave()` only ever
+ * removes the live `autosave.json`, never the numbered backups, and the in-app recovery prompt only
+ * ever offers the live sidecar — the backups exist for manual recovery outside the app.
  */
 class ProjectBundle {
 public:
@@ -61,6 +77,9 @@ public:
     static constexpr const char* kBundleExtension = ".agsproj";
     /** The one file inside a bundle carrying patch + timeline JSON. */
     static constexpr const char* kProjectFileName = "project.json";
+    /** Autosave sidecar — same JSON shape as `project.json`, written by a periodic autosave
+     *  (MainComponent::performAutosave) and never touched by save()/load(). See saveAutosave(). */
+    static constexpr const char* kAutosaveFileName = "autosave.json";
     /** Reserved asset subdirectory names — see the class comment's Asset policy. */
     static constexpr const char* kAudioSubdirName = "Audio";
     static constexpr const char* kPeaksSubdirName = "Peaks";
@@ -84,6 +103,45 @@ public:
     /** `<userMusicDirectory>/<kProjectsFolderName>`, created on demand. Starting directory for
      *  project save/open/export dialogs (see MainComponent). */
     static juce::File getDefaultProjectsDirectory();
+
+    /** Writes `<bundleDir>/autosave.json` — the exact same JSON shape save() writes to
+     *  `project.json` (same "timeline set last" ordering), to a SEPARATE sidecar file.
+     *  `project.json` and `Audio/`/`Peaks/` are never touched. `bundleDir` must already exist (an
+     *  unsaved project has no bundle yet, so MainComponent never calls this before the first
+     *  explicit save — see docs/architecture.md). Before writing, the PREVIOUS `autosave.json` (if
+     *  any) is rotated into the numbered backup history — see the class comment's "Autosave backup
+     *  history" section. `maxBackups <= 0` disables rotation (plain overwrite). */
+    static ProjectLoadResult saveAutosave(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
+                                          const TimelineDoc& timeline, PatchDocument& patchDocument, int maxBackups);
+
+    /** True if `<bundleDir>/autosave.json` exists. Checked on open, before `project.json` loads —
+     *  see MainComponent::openFromFile. */
+    static bool hasAutosave(const juce::File& bundleDir);
+
+    /** Loads `<bundleDir>/autosave.json` — same all-or-nothing validation and output contract as
+     *  load(), just reading the sidecar instead of `project.json`. */
+    static ProjectLoadResult loadAutosave(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
+                                          TimelineDoc& timeline, PatchDocument& patchDocument);
+
+    /** Deletes `<bundleDir>/autosave.json` if present. A no-op if it doesn't exist. Called once a
+     *  pending sidecar has been resolved: after the user answers the recovery prompt (either arm),
+     *  and after any subsequent explicit save (a fresh save supersedes it). */
+    static void discardAutosave(const juce::File& bundleDir);
+
+private:
+    // Shared by save()/saveAutosave(): graphToJSON -> patchDocument.toVar -> "timeline" set LAST.
+    // Identical content either way; only the destination file name differs.
+    static juce::var buildProjectJson(juce::AudioProcessorGraph& graph, const TimelineDoc& timeline,
+                                      PatchDocument& patchDocument);
+
+    // Shared by load()/loadAutosave(): the fixed, all-or-nothing validation order documented on the
+    // class, parametrized only on which file to read.
+    static ProjectLoadResult loadFromFile(const juce::File& jsonFile, juce::AudioProcessorGraph& graph,
+                                          TimelineDoc& timeline, PatchDocument& patchDocument);
+
+    // The logrotate step saveAutosave() runs before writing new content to autosave.json — see the
+    // class comment's "Autosave backup history" section. A no-op when maxBackups <= 0.
+    static void rotateAutosaveBackups(const juce::File& bundleDir, int maxBackups);
 };
 
 } // namespace synth

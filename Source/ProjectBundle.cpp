@@ -16,6 +16,23 @@ bool ProjectBundle::isBundle(const juce::File& dir) {
     return dir.getChildFile(kProjectFileName).existsAsFile();
 }
 
+juce::var ProjectBundle::buildProjectJson(juce::AudioProcessorGraph& graph, const TimelineDoc& timeline,
+                                          PatchDocument& patchDocument) {
+    auto json = AIStateMapper::graphToJSON(graph);
+    // Re-merge whatever unknown top-level keys were stashed on this bundle's last load — mirrors
+    // GraphEditor::savePreset. A stale "timeline" among them (e.g. this document started life as a
+    // plain .json that already carried one) is overwritten below: the live TimelineDoc is
+    // authoritative on save, not whatever happened to be stashed.
+    json = patchDocument.toVar(json);
+
+    auto* rootObj = json.getDynamicObject();
+    if (rootObj != nullptr)
+        // Set LAST so a fresh timeline always wins over a stashed one.
+        rootObj->setProperty(kTimelineKey, timeline.toVar());
+
+    return json;
+}
+
 ProjectLoadResult ProjectBundle::save(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
                                       const TimelineDoc& timeline, PatchDocument& patchDocument) {
     if (!bundleDir.exists() && !bundleDir.createDirectory())
@@ -29,18 +46,9 @@ ProjectLoadResult ProjectBundle::save(const juce::File& bundleDir, juce::AudioPr
     if (!peaksDir.exists() && !peaksDir.createDirectory())
         return {false, "io: could not create \"" + peaksDir.getFullPathName() + "\"."};
 
-    auto json = AIStateMapper::graphToJSON(graph);
-    // Re-merge whatever unknown top-level keys were stashed on this bundle's last load — mirrors
-    // GraphEditor::savePreset. A stale "timeline" among them (e.g. this document started life as a
-    // plain .json that already carried one) is overwritten below: the live TimelineDoc is
-    // authoritative on save, not whatever happened to be stashed.
-    json = patchDocument.toVar(json);
-
-    auto* rootObj = json.getDynamicObject();
-    if (rootObj == nullptr)
+    auto json = buildProjectJson(graph, timeline, patchDocument);
+    if (json.getDynamicObject() == nullptr)
         return {false, "io: graphToJSON did not produce a JSON object."};
-    // Set LAST so a fresh timeline always wins over a stashed one.
-    rootObj->setProperty(kTimelineKey, timeline.toVar());
 
     auto projectFile = bundleDir.getChildFile(kProjectFileName);
     // juce::File::replaceWithText already writes to a temp file and renames over the target.
@@ -50,9 +58,77 @@ ProjectLoadResult ProjectBundle::save(const juce::File& bundleDir, juce::AudioPr
     return {true, {}};
 }
 
+void ProjectBundle::rotateAutosaveBackups(const juce::File& bundleDir, int maxBackups) {
+    if (maxBackups <= 0)
+        return;
+
+    auto autosaveFile = bundleDir.getChildFile(kAutosaveFileName);
+    if (!autosaveFile.existsAsFile())
+        return; // nothing to rotate yet - this is the first autosave for this bundle.
+
+    // Evict the oldest backup first so the shift loop below never collides with a file it's about
+    // to move into.
+    auto oldestFile = bundleDir.getChildFile("autosave-" + juce::String(maxBackups) + ".json");
+    if (oldestFile.existsAsFile())
+        oldestFile.deleteFile();
+
+    for (int k = maxBackups - 1; k >= 1; --k) {
+        auto from = bundleDir.getChildFile("autosave-" + juce::String(k) + ".json");
+        if (!from.existsAsFile())
+            continue;
+        auto to = bundleDir.getChildFile("autosave-" + juce::String(k + 1) + ".json");
+        from.moveFileTo(to);
+    }
+
+    autosaveFile.moveFileTo(bundleDir.getChildFile("autosave-1.json"));
+}
+
+ProjectLoadResult ProjectBundle::saveAutosave(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
+                                              const TimelineDoc& timeline, PatchDocument& patchDocument,
+                                              int maxBackups) {
+    // No Audio/Peaks directory creation, and no touching project.json — an autosave is a sidecar
+    // only. bundleDir itself must already exist (a project with no bundle yet has nowhere to put
+    // the sidecar; MainComponent's autosave gate requires ProjectBundle::isBundle(currentBundleDir_)
+    // before ever calling this, so that case never reaches here).
+    if (!bundleDir.isDirectory())
+        return {false, "io: \"" + bundleDir.getFullPathName() + "\" is not a bundle directory."};
+
+    auto json = buildProjectJson(graph, timeline, patchDocument);
+    if (json.getDynamicObject() == nullptr)
+        return {false, "io: graphToJSON did not produce a JSON object."};
+
+    // Rotate the PREVIOUS sidecar into the numbered history before writing the new one over it.
+    rotateAutosaveBackups(bundleDir, maxBackups);
+
+    auto autosaveFile = bundleDir.getChildFile(kAutosaveFileName);
+    if (!autosaveFile.replaceWithText(juce::JSON::toString(json)))
+        return {false, "io: could not write \"" + autosaveFile.getFullPathName() + "\"."};
+
+    return {true, {}};
+}
+
+bool ProjectBundle::hasAutosave(const juce::File& bundleDir) {
+    return bundleDir.getChildFile(kAutosaveFileName).existsAsFile();
+}
+
+ProjectLoadResult ProjectBundle::loadAutosave(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
+                                              TimelineDoc& timeline, PatchDocument& patchDocument) {
+    return loadFromFile(bundleDir.getChildFile(kAutosaveFileName), graph, timeline, patchDocument);
+}
+
+void ProjectBundle::discardAutosave(const juce::File& bundleDir) {
+    auto autosaveFile = bundleDir.getChildFile(kAutosaveFileName);
+    if (autosaveFile.existsAsFile())
+        autosaveFile.deleteFile();
+}
+
 ProjectLoadResult ProjectBundle::load(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
                                       TimelineDoc& timeline, PatchDocument& patchDocument) {
-    auto projectFile = bundleDir.getChildFile(kProjectFileName);
+    return loadFromFile(bundleDir.getChildFile(kProjectFileName), graph, timeline, patchDocument);
+}
+
+ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juce::AudioProcessorGraph& graph,
+                                              TimelineDoc& timeline, PatchDocument& patchDocument) {
     if (!projectFile.existsAsFile())
         return {false, "io: \"" + projectFile.getFullPathName() + "\" does not exist."};
 
