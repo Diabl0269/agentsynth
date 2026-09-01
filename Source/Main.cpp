@@ -184,6 +184,7 @@ private:
                     menu.addCommandItem(&cm, AppCommands::saveProjectAs);
                     menu.addSeparator();
                     menu.addCommandItem(&cm, AppCommands::exportPatchOnly);
+                    menu.addCommandItem(&cm, AppCommands::exportAudio);
                     menu.addSeparator();
                     menu.addCommandItem(&cm, AppCommands::openPreset);
                     menu.addSeparator();

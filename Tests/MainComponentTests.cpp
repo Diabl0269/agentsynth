@@ -395,10 +395,11 @@ TEST_F(MainComponentTest, CommandManagerHasCommands) {
 #if JUCE_MAC
     expectedCommandCount += 1;
 #endif
-    // exportPatchOnly is the same "no action id string, no keyboard shortcut" shape as
-    // checkForUpdates above (see ShortcutManager.h) — registered unconditionally in getAllCommands,
-    // absent from the shortcut table on purpose, so it needs the same manual +1 here.
-    expectedCommandCount += 1;
+    // exportPatchOnly and exportAudio are the same "no action id string, no keyboard shortcut"
+    // shape as checkForUpdates above (see ShortcutManager.h) — registered unconditionally in
+    // getAllCommands, absent from the shortcut table on purpose, so each needs the same manual +1
+    // here.
+    expectedCommandCount += 2;
     EXPECT_EQ(commands.size(), expectedCommandCount);
     for (const auto& actionId : expectedActions)
         EXPECT_TRUE(commands.contains(AppCommands::getCommandForAction(actionId)))

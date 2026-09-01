@@ -17,7 +17,9 @@
 #include "Timeline/MidiRecorder.h"
 #include "Timeline/TimelineDoc.h"
 #include "Timeline/TimelineOps.h"
+#include "Transport/BounceRunner.h"
 #include "UI/AIChatComponent.h"
+#include "UI/ExportAudioDialog.h"
 #include "UI/GraphEditor.h"
 #include "UI/ModuleLibraryComponent.h"
 #include "UI/StatusBarComponent.h"
@@ -647,6 +649,9 @@ private:
     void exportPatchOnly(const juce::File& file);
     // The chooser-launching wrapper the "Export Patch Only" menu item actually calls.
     void promptExportPatchOnly();
+    // The "Export Audio..." menu item's handler: shows synth::ui::ExportAudioDialog, then drives a
+    // BounceRunner from its options. See Source/UI/ExportAudioDialog.h.
+    void promptExportAudio();
     // One choke point for "load factory preset N + keep the timeline in step", shared by the Load
     // menu and simulateLoadFactoryPresetForTest.
     void loadFactoryPresetAtIndex(int index);
@@ -728,11 +733,10 @@ private:
     // recording, the undo edit serial has moved since the last autosave (NOT isDirty_/
     // isProjectDirty() — see markDocumentClean()'s comment: isDirty_ is never cleared by autosave,
     // so gating on it alone would rewrite the sidecar every interval forever with zero new edits),
-    // and the configured interval has elapsed. Deliberately has NO bounce-in-progress check:
-    // BounceExporter::bounce() blocks the message thread for its entire render and
-    // OfflineTransportDriver never pumps juce::MessageManager, so timerCallback() structurally
-    // cannot run while a bounce is in flight (see docs/architecture.md — a future progress dialog
-    // must keep that true by never pumping the message loop from inside bounce()).
+    // and the configured interval has elapsed. Also gates on isBounceInProgress_: a bounce now
+    // renders in chunks via BounceRunner, ticking a juce::Timer between chunks instead of blocking
+    // the message thread for the whole take (see Transport/BounceRunner.h), so timerCallback() DOES
+    // run mid-render and this check is what stops a sidecar write from firing into it.
     void maybeAutosave();
     // Writes the sidecar via ProjectBundle::saveAutosave and, only on success, rebases
     // lastAutosavedEditSerial_. Never calls markDocumentClean() — isDirty_/savedEditSerial_ and
@@ -923,6 +927,20 @@ private:
     // its very first qualifying tick). Wall-clock rather than a tick count on purpose: the shared
     // 10 Hz timer's actual firing rate is not guaranteed exact.
     juce::uint32 lastAutosaveMs_ = 0;
+
+    // True from the moment an Export Audio (bounce) render starts until its completion callback
+    // runs — checked by maybeAutosave() (a sidecar write mid-render is pointless and autosave has
+    // no business touching the document while the engine is offline-prepared) and by
+    // guardUnsavedChanges() (New Patch/Open/Load preset/Quit must not mutate or replace the graph
+    // out from under a live render — see BounceRunner.h). Owning the runner and this flag together
+    // is what makes "one bounce in flight at a time" true without a second piece of state to drift.
+    bool isBounceInProgress_ = false;
+    std::unique_ptr<synth::BounceRunner> bounceRunner_;
+    // The currently-shown Export Audio dialog, polled for progress by timerCallback() - a
+    // SafePointer because the modal window (and its content) can go away independently, and
+    // reportProgress() must simply become a no-op rather than a dangling call. Owned by the
+    // DialogWindow that shows it, never by MainComponent.
+    juce::Component::SafePointer<synth::ui::ExportAudioDialog> exportDialog_;
 
     // Declared here (not in AudioEngine or Core) because it is settings-backed and
     // UI-driven; installed into the process-wide DefaultHostedPluginBackend by the constructor and

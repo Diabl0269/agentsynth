@@ -353,6 +353,11 @@ public:
     const Track* getTrack(TrackId id) const;
     const std::vector<Track>& getTracks() const noexcept { return tracks; }
 
+    // Beat of the last clip's end across every track (startBeat + lengthBeats, maximised), 0.0 if
+    // no track has a clip. This is "the whole arrangement" for export/bounce — deliberately blind
+    // to automation lanes and markers, which have no audible length of their own.
+    double getArrangementEndBeat() const noexcept;
+
     // -- Clips ----------------------------------------------------------------
     // startBeat must be finite and >= 0, lengthBeats finite and > 0. Inserted in sorted
     // position; returns an invalid ClipId on rejection.

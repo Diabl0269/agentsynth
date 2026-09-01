@@ -14,6 +14,9 @@ enum CommandIDs {
     // touching currentBundleDir_ or the window title. NOT rebindable — same treatment as
     // checkForUpdates below (no action id string, no default binding, no Settings-list row).
     exportPatchOnly,
+    // Offline audio bounce (BounceExporter/BounceRunner) - the whole arrangement or the current
+    // loop range, rendered to WAV/AIFF. NOT rebindable, same treatment as exportPatchOnly above.
+    exportAudio,
     openPreset,
     newPatch,
     undo,
