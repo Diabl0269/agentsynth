@@ -44,6 +44,18 @@ constexpr const char* kPianoRollKeyLabelsKey = "pianoRollKeyLabels";
 // for anyone who wants the plain one-bar clip back.
 constexpr const char* kTimelineDoubleClickSpansLocatorsKey = "timelineDoubleClickSpansLocators";
 
+// Autosave (P8-4). Read at use time by MainComponent::maybeAutosave every timerCallback() tick,
+// duplicated here for the same reason kNaturalScrollingKey above is. DEFAULT ON at 2 minutes:
+// autosave is a safety net, not an opt-in, so an install that never opens this tab still gets it.
+constexpr const char* kAutosaveEnabledKey = "autosaveEnabled";
+constexpr const char* kAutosaveIntervalMinutesKey = "autosaveIntervalMinutes";
+constexpr int kDefaultAutosaveIntervalMinutes = 2;
+// Cubase-style rotating backup history — see ProjectBundle::saveAutosave. Duplicated from
+// MainComponent's own copy of this key/default for the same "one-line string not worth a header
+// dependency" reason as kAutosaveEnabledKey above.
+constexpr const char* kAutosaveBackupCountKey = "autosaveBackupCount";
+constexpr int kDefaultAutosaveBackupCount = 5;
+
 // Group-separator alpha. Softened from 0.18: at that contrast the hairlines read as table borders
 // and boxed each preference in, which is the same complaint that produced the gentler rule under
 // the Keyboard Shortcuts tab's section headers (see its kDividerAlpha — keep the two in step).
@@ -369,6 +381,75 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     pianoRollKeyLabelsToggle.onClick = [this] {
         persistPianoRollKeyLabelMode(pianoRollKeyLabelsToggle.getToggleState());
     };
+
+    addAndMakeVisible(autosaveEnabledToggle);
+    // DEFAULT TRUE: autosave is a safety net, not an opt-in — see kAutosaveEnabledKey above.
+    autosaveEnabledToggle.setToggleState(appProperties.getUserSettings()->getBoolValue(kAutosaveEnabledKey, true),
+                                         juce::dontSendNotification);
+    autosaveEnabledToggle.setTooltip("Periodically saves an in-progress copy of the open project to a separate "
+                                     "file, offered for recovery next time it's opened. Never overwrites your own "
+                                     "saved file.");
+    autosaveEnabledToggle.onClick = [this] { persistAutosaveEnabled(autosaveEnabledToggle.getToggleState()); };
+
+    addAndMakeVisible(autosaveIntervalLabel);
+    autosaveIntervalLabel.setText("Every:", juce::dontSendNotification);
+    autosaveIntervalLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
+
+    addAndMakeVisible(autosaveIntervalEditor);
+    autosaveIntervalEditor.setMultiLine(false);
+    autosaveIntervalEditor.setReturnKeyStartsNewLine(false);
+    autosaveIntervalEditor.setSelectAllWhenFocused(true);
+    autosaveIntervalEditor.setJustification(juce::Justification::centred);
+    autosaveIntervalEditor.setInputRestrictions(3, "0123456789"); // digits only; 3 chars covers 120 with headroom
+    autosaveIntervalEditor.setTooltip("How often autosave writes the recovery copy while the project has unsaved "
+                                      "changes, in minutes. Any exact value from 1 to 120.");
+    autosaveIntervalEditor.setText(juce::String(appProperties.getUserSettings()->getIntValue(
+                                       kAutosaveIntervalMinutesKey, kDefaultAutosaveIntervalMinutes)),
+                                   juce::dontSendNotification);
+    // Commit on BOTH Return and focus-lost - clicking away without pressing Return must not silently
+    // discard (or worse, leave unpersisted) whatever was typed, the same reasoning ModuleComponent's
+    // titleEditor commits on both. The clamp always writes a valid value back into the field, so an
+    // out-of-range or emptied entry (getIntValue() reads an empty string as 0) snaps visibly to
+    // something valid rather than persisting garbage.
+    auto commitAutosaveInterval = [this] {
+        const int clamped = juce::jlimit(1, 120, autosaveIntervalEditor.getText().getIntValue());
+        autosaveIntervalEditor.setText(juce::String(clamped), juce::dontSendNotification);
+        persistAutosaveIntervalMinutes(clamped);
+    };
+    autosaveIntervalEditor.onReturnKey = commitAutosaveInterval;
+    autosaveIntervalEditor.onFocusLost = commitAutosaveInterval;
+
+    addAndMakeVisible(autosaveIntervalUnitLabel);
+    autosaveIntervalUnitLabel.setText("min", juce::dontSendNotification);
+    autosaveIntervalUnitLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
+
+    addAndMakeVisible(autosaveBackupCountLabel);
+    autosaveBackupCountLabel.setText("Keep:", juce::dontSendNotification);
+    autosaveBackupCountLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
+
+    addAndMakeVisible(autosaveBackupCountEditor);
+    autosaveBackupCountEditor.setMultiLine(false);
+    autosaveBackupCountEditor.setReturnKeyStartsNewLine(false);
+    autosaveBackupCountEditor.setSelectAllWhenFocused(true);
+    autosaveBackupCountEditor.setJustification(juce::Justification::centred);
+    autosaveBackupCountEditor.setInputRestrictions(3, "0123456789"); // digits only; 3 chars covers 50 with headroom
+    autosaveBackupCountEditor.setTooltip("How many previous autosave snapshots to keep on disk as numbered backups, "
+                                         "in addition to the most recent one. 0 keeps no history. Any exact value "
+                                         "from 0 to 50.");
+    autosaveBackupCountEditor.setText(juce::String(appProperties.getUserSettings()->getIntValue(
+                                          kAutosaveBackupCountKey, kDefaultAutosaveBackupCount)),
+                                      juce::dontSendNotification);
+    auto commitAutosaveBackupCount = [this] {
+        const int clamped = juce::jlimit(0, 50, autosaveBackupCountEditor.getText().getIntValue());
+        autosaveBackupCountEditor.setText(juce::String(clamped), juce::dontSendNotification);
+        persistAutosaveBackupCount(clamped);
+    };
+    autosaveBackupCountEditor.onReturnKey = commitAutosaveBackupCount;
+    autosaveBackupCountEditor.onFocusLost = commitAutosaveBackupCount;
+
+    addAndMakeVisible(autosaveBackupCountUnitLabel);
+    autosaveBackupCountUnitLabel.setText("backups", juce::dontSendNotification);
+    autosaveBackupCountUnitLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
 }
 
 void PreferencesSettingsTab::paint(juce::Graphics& g) {
@@ -533,13 +614,43 @@ void PreferencesSettingsTab::resized() {
         pendingDivider = pendingDivider || visible;
     }
 
-    // Group 7: piano roll key labels (last — no divider after it, filtered or not).
+    // Group 7: piano roll key labels
     {
         const bool visible = groupMatches({&pianoRollKeyLabelsToggle});
         setGroupVisible({&pianoRollKeyLabelsToggle}, visible);
         beginGroup(visible);
         if (visible)
             pianoRollKeyLabelsToggle.setBounds(bounds.removeFromTop(24));
+        pendingDivider = pendingDivider || visible;
+    }
+
+    // Group 8: autosave (last — no divider after it, filtered or not). One single row: the toggle,
+    // then "Every: [field] min", then "Keep: [field] backups" — three independent statements read
+    // together as one line rather than stacked as separate rows.
+    {
+        const std::initializer_list<juce::Component*> autosaveComps = {
+            &autosaveEnabledToggle,       &autosaveIntervalLabel,    &autosaveIntervalEditor,
+            &autosaveIntervalUnitLabel,   &autosaveBackupCountLabel, &autosaveBackupCountEditor,
+            &autosaveBackupCountUnitLabel};
+        const bool visible = groupMatches(autosaveComps);
+        setGroupVisible(autosaveComps, visible);
+        beginGroup(visible);
+        if (visible) {
+            auto row = bounds.removeFromTop(24);
+            autosaveEnabledToggle.setBounds(row.removeFromLeft(90));
+            row.removeFromLeft(16);
+            autosaveIntervalLabel.setBounds(row.removeFromLeft(40));
+            row.removeFromLeft(4);
+            autosaveIntervalEditor.setBounds(row.removeFromLeft(36));
+            row.removeFromLeft(4);
+            autosaveIntervalUnitLabel.setBounds(row.removeFromLeft(30));
+            row.removeFromLeft(16);
+            autosaveBackupCountLabel.setBounds(row.removeFromLeft(40));
+            row.removeFromLeft(4);
+            autosaveBackupCountEditor.setBounds(row.removeFromLeft(36));
+            row.removeFromLeft(4);
+            autosaveBackupCountUnitLabel.setBounds(row.removeFromLeft(55));
+        }
     }
 }
 
@@ -661,6 +772,49 @@ void PreferencesSettingsTab::persistZoomScrollUpZoomsIn(bool enabled) {
     // No live push from here either: the SAME juce::PropertiesFile ChangeBroadcaster path
     // persistNaturalScrolling documents above carries it, landing in
     // MainComponent::applyZoomScrollPreference.
+}
+
+bool PreferencesSettingsTab::isAutosaveEnabled() const { return autosaveEnabledToggle.getToggleState(); }
+
+void PreferencesSettingsTab::setAutosaveEnabled(bool enabled) {
+    autosaveEnabledToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistAutosaveEnabled(enabled);
+}
+
+void PreferencesSettingsTab::persistAutosaveEnabled(bool enabled) {
+    appProperties.getUserSettings()->setValue(kAutosaveEnabledKey, enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+    // No live push from here: MainComponent::maybeAutosave reads the key directly on every tick, the
+    // same "read at use time" idiom persistDoubleClickSpansLocators documents above — there is
+    // nothing to push, since the very next tick already sees the new value.
+}
+
+int PreferencesSettingsTab::getAutosaveIntervalMinutes() const {
+    return autosaveIntervalEditor.getText().getIntValue();
+}
+
+void PreferencesSettingsTab::setAutosaveIntervalMinutes(int minutes) {
+    const int clamped = juce::jlimit(1, 120, minutes);
+    autosaveIntervalEditor.setText(juce::String(clamped), juce::dontSendNotification);
+    persistAutosaveIntervalMinutes(clamped);
+}
+
+void PreferencesSettingsTab::persistAutosaveIntervalMinutes(int minutes) {
+    appProperties.getUserSettings()->setValue(kAutosaveIntervalMinutesKey, minutes);
+    appProperties.getUserSettings()->saveIfNeeded();
+}
+
+int PreferencesSettingsTab::getAutosaveBackupCount() const { return autosaveBackupCountEditor.getText().getIntValue(); }
+
+void PreferencesSettingsTab::setAutosaveBackupCount(int count) {
+    const int clamped = juce::jlimit(0, 50, count);
+    autosaveBackupCountEditor.setText(juce::String(clamped), juce::dontSendNotification);
+    persistAutosaveBackupCount(clamped);
+}
+
+void PreferencesSettingsTab::persistAutosaveBackupCount(int count) {
+    appProperties.getUserSettings()->setValue(kAutosaveBackupCountKey, count);
+    appProperties.getUserSettings()->saveIfNeeded();
 }
 
 void PreferencesSettingsTab::persistSmartConnectionMode(GraphEditor::SmartConnectionMode mode) {

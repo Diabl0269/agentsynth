@@ -38,6 +38,20 @@ constexpr int kMaxTakeNumber = 10000;
 // reasoning as synth::MidiRecorder::kMinNoteLengthBeats.
 constexpr double kMinAudioClipLengthBeats = 1.0 / 32.0;
 
+// Autosave preferences, read directly (no cached member — the 10 Hz timerCallback() cost of a
+// juce::PropertiesFile lookup is negligible, and a direct read means Preferences can never go stale
+// between a settings write and the next tick). Duplicated from PreferencesSettingsTab's own key
+// constants, the same "one-line string not worth a header dependency" reasoning as
+// kNaturalScrollingKey there. DEFAULT ON at 2 minutes: autosave is a safety net, not an opt-in.
+constexpr const char* kAutosaveEnabledKey = "autosaveEnabled";
+constexpr const char* kAutosaveIntervalMinutesKey = "autosaveIntervalMinutes";
+constexpr int kDefaultAutosaveIntervalMinutes = 2;
+// Cubase-style rotating backup history (see ProjectBundle::saveAutosave) - how many PREVIOUS
+// sidecars are kept as numbered autosave-<n>.json files alongside the live autosave.json. 0
+// disables rotation (plain overwrite); clamped to [0, 50] the same way the combo/slider limits it.
+constexpr const char* kAutosaveBackupCountKey = "autosaveBackupCount";
+constexpr int kDefaultAutosaveBackupCount = 5;
+
 // A clip's assetRef always names the .wav asset — chooseTakeFiles() is what establishes the
 // pairing with its .agpk peaks sidecar: same stem, and either a sibling "Peaks/" directory (a saved
 // bundle: "Audio/take-n.wav" <-> "Peaks/take-n.agpk") or the SAME "Recordings/" directory (an
@@ -1231,6 +1245,12 @@ void MainComponent::timerCallback() {
         statusBar.showMessage("Recording stopped: audio device changed");
     }
 
+    // Autosave's gate, on the same driver — see maybeAutosave()'s own comment. Placed AFTER the
+    // three commit-on-stop checks above (not before): a take that just committed on this very tick
+    // must be allowed to autosave immediately, not wait for the take flag to clear on some later
+    // tick, and a take still genuinely in flight must still block it.
+    maybeAutosave();
+
     wasTransportPlaying_ = position.playing;
 
     // Clears the count-in pre-roll's forced-on click once the transport reaches the punch-in
@@ -1520,6 +1540,9 @@ bool MainComponent::saveToFile(const juce::File& file) {
         // (Audio/ + Peaks/) rather than into app data.
         currentBundleDir_ = file;
         refreshAssetRoots(); // Clip playback resolves against the bundle we just became
+        // A fresh explicit save supersedes any pending autosave sidecar — project.json now carries
+        // everything the sidecar would have offered to recover.
+        synth::ProjectBundle::discardAutosave(file);
         // Clear BEFORE setCurrentPatchName, which is what fires the title notify — the notify must
         // see the just-saved, clean state.
         markDocumentClean();
@@ -1545,44 +1568,24 @@ bool MainComponent::openFromFile(const juce::File& file) {
             return false;
         }
 
-        ProgrammaticApplyScope guard(*this);
-        // Detach BEFORE the load frees the current graph's processors — the same ordering
-        // GraphEditor::loadPreset uses, and for the same reason (a live ScopeComponent timer would
-        // otherwise read a freed VisualBuffer).
-        graphEditor.detachAllModuleComponents();
-
-        // The roots move to the new bundle BEFORE the load, not after it. ProjectBundle::load moves
-        // the timeline into the live doc, and that fires timelineChanged synchronously — publishing
-        // to the engine and the clip streamer while the load is still running. With the old roots
-        // still installed, that publish resolves this bundle's clip refs against the PREVIOUS
-        // bundle's Audio/ folder: the wrong file, or silence. Takes recorded from here on belong to
-        // this bundle for the same reason.
-        const juce::File previousBundleDir = currentBundleDir_;
-        currentBundleDir_ = file;
-        refreshAssetRoots();
-
-        const auto result =
-            synth::ProjectBundle::load(file, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument());
-        // Reconcile the view whatever happened: on failure the load left the graph exactly as it
-        // was, and the components still have to come back after the detach above.
-        graphEditor.updateComponents();
-        if (!result.ok) {
-            // load() is all-or-nothing, so a failure has to leave the previous project intact —
-            // roots included, or the still-open document would start resolving its clips against a
-            // bundle it was never part of.
-            currentBundleDir_ = previousBundleDir;
-            refreshAssetRoots();
-            statusBar.showMessage("Load failed: " + result.message);
-            return false;
+        // A prior session left a sidecar this bundle's project.json has never seen (autosave, or a
+        // crash before the next explicit save) — ask BEFORE either file loads, rather than loading
+        // project.json and silently discarding a possibly-newer autosave. Asynchronous, so this
+        // reports "handled" rather than the eventual load's own success/failure; the only reader of
+        // openFromFile's return today (openProjectForTest) is exercised exclusively by tests that
+        // don't pre-seed a sidecar, so this branch changes nothing about any existing synchronous
+        // assertion — new autosave-recovery tests drive autosaveRecoveryPrompt directly instead, the
+        // same idiom promptUnsavedChanges's own tests already use.
+        if (synth::ProjectBundle::hasAutosave(file)) {
+            juce::Component::SafePointer<MainComponent> safeThis(this);
+            promptAutosaveRecovery([safeThis, file](AutosaveRecoveryChoice choice) {
+                if (auto* self = safeThis.getComponent())
+                    self->applyAutosaveRecoveryAnswer(choice, file);
+            });
+            return true;
         }
 
-        // ProjectBundle::load already reconciled once; this republishes the freshly loaded document
-        // (and rebinds the recorder) against the graph as it now stands.
-        reconcileTimelineAfterGraphChange();
-        markDocumentClean();
-        setCurrentPatchName(file.getFileNameWithoutExtension());
-        statusBar.showMessage("Loaded: " + file.getFileNameWithoutExtension());
-        return true;
+        return loadBundleFromFile(file);
     }
 
     ProgrammaticApplyScope guard(*this);
@@ -1598,6 +1601,129 @@ bool MainComponent::openFromFile(const juce::File& file) {
     setCurrentPatchName(file.getFileNameWithoutExtension());
     statusBar.showMessage("Loaded: " + file.getFileNameWithoutExtension());
     return true;
+}
+
+bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
+    ProgrammaticApplyScope guard(*this);
+    // Detach BEFORE the load frees the current graph's processors — the same ordering
+    // GraphEditor::loadPreset uses, and for the same reason (a live ScopeComponent timer would
+    // otherwise read a freed VisualBuffer).
+    graphEditor.detachAllModuleComponents();
+
+    // The roots move to the new bundle BEFORE the load, not after it. ProjectBundle::load moves
+    // the timeline into the live doc, and that fires timelineChanged synchronously — publishing
+    // to the engine and the clip streamer while the load is still running. With the old roots
+    // still installed, that publish resolves this bundle's clip refs against the PREVIOUS
+    // bundle's Audio/ folder: the wrong file, or silence. Takes recorded from here on belong to
+    // this bundle for the same reason.
+    const juce::File previousBundleDir = currentBundleDir_;
+    currentBundleDir_ = bundleDir;
+    refreshAssetRoots();
+
+    const auto result =
+        synth::ProjectBundle::load(bundleDir, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument());
+    // Reconcile the view whatever happened: on failure the load left the graph exactly as it
+    // was, and the components still have to come back after the detach above.
+    graphEditor.updateComponents();
+    if (!result.ok) {
+        // load() is all-or-nothing, so a failure has to leave the previous project intact —
+        // roots included, or the still-open document would start resolving its clips against a
+        // bundle it was never part of.
+        currentBundleDir_ = previousBundleDir;
+        refreshAssetRoots();
+        statusBar.showMessage("Load failed: " + result.message);
+        return false;
+    }
+
+    // ProjectBundle::load already reconciled once; this republishes the freshly loaded document
+    // (and rebinds the recorder) against the graph as it now stands.
+    reconcileTimelineAfterGraphChange();
+    markDocumentClean();
+    setCurrentPatchName(bundleDir.getFileNameWithoutExtension());
+    statusBar.showMessage("Loaded: " + bundleDir.getFileNameWithoutExtension());
+    return true;
+}
+
+bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
+    ProgrammaticApplyScope guard(*this);
+    graphEditor.detachAllModuleComponents();
+
+    const juce::File previousBundleDir = currentBundleDir_;
+    currentBundleDir_ = bundleDir;
+    refreshAssetRoots();
+
+    const auto result = synth::ProjectBundle::loadAutosave(bundleDir, audioEngine.getGraph(), timelineDoc,
+                                                           graphEditor.getPatchDocument());
+    graphEditor.updateComponents();
+    if (!result.ok) {
+        currentBundleDir_ = previousBundleDir;
+        refreshAssetRoots();
+        statusBar.showMessage("Recovery failed: " + result.message);
+        return false;
+    }
+
+    reconcileTimelineAfterGraphChange();
+    // Deliberately NOT markDocumentClean(): the recovered state is not what's on disk (project.json
+    // still holds the older, last-explicitly-saved content), so the document must read as dirty —
+    // see the header comment on loadAutosaveFromFile for why isDirty_ is written directly here
+    // rather than through the usual recompute-from-serial path.
+    isDirty_ = true;
+    // Rebase both autosave baselines to this instant: the in-memory state now exactly matches what
+    // the (about to be discarded) sidecar held, so nothing "new" exists to autosave yet — the next
+    // autosave should only fire once the user edits further, same as right after an explicit save.
+    lastAutosavedEditSerial_ = undoManager.getEditSerial();
+    lastAutosaveMs_ = juce::Time::getMillisecondCounter();
+    // setCurrentPatchName() calls notifyDocumentTitleChanged() at its end and nowhere else in this
+    // file (see that function's comment) — isDirty_ is set BEFORE this call so the notify's " *"
+    // marker reflects the just-restored dirty state, not a stale one.
+    setCurrentPatchName(bundleDir.getFileNameWithoutExtension());
+    statusBar.showMessage("Recovered unsaved changes: " + bundleDir.getFileNameWithoutExtension());
+    return true;
+}
+
+void MainComponent::applyAutosaveRecoveryAnswer(AutosaveRecoveryChoice choice, const juce::File& bundleDir) {
+    if (choice == AutosaveRecoveryChoice::Restore) {
+        // A corrupt/invalid sidecar must not strand the user on whatever was open before, nor
+        // silently destroy the only copy of the data it held: on failure, fall back to the normal
+        // load and keep the sidecar so the user isn't left with neither the restore nor the file.
+        if (loadAutosaveFromFile(bundleDir))
+            synth::ProjectBundle::discardAutosave(bundleDir);
+        else
+            loadBundleFromFile(bundleDir);
+        return;
+    }
+    // Discard: the sidecar is stale/unwanted either way, so it goes before the normal load runs —
+    // a load failure here must not leave a discarded-but-still-on-disk sidecar behind.
+    synth::ProjectBundle::discardAutosave(bundleDir);
+    loadBundleFromFile(bundleDir);
+}
+
+void MainComponent::promptAutosaveRecovery(std::function<void(AutosaveRecoveryChoice)> onChoice) {
+    if (autosaveRecoveryPrompt) {
+        autosaveRecoveryPrompt(std::move(onChoice));
+        return;
+    }
+
+    auto options = juce::MessageBoxOptions()
+                       .withIconType(juce::MessageBoxIconType::QuestionIcon)
+                       .withTitle("Recover Unsaved Changes")
+                       .withMessage("An autosave from a previous session was found for this project. "
+                                    "Restore it, or discard it and open the last saved version?")
+                       .withButton("Restore")
+                       .withButton("Discard");
+    // ASYNC, never a modal loop — same reasoning as promptUnsavedChanges.
+    juce::Component::SafePointer<MainComponent> safeThis(this);
+    juce::AlertWindow::showAsync(options, [safeThis, onChoice](int result) {
+        if (safeThis.getComponent() == nullptr)
+            return;
+        // juce::AlertWindow::showAsync's documented TWO-button result convention (see its header
+        // comment — different from the three-button one promptUnsavedChanges uses): button[0]
+        // ("Restore") returns 1, button[1] ("Discard") returns 0 — and a dismissed/closed window
+        // ALSO returns 0, which lands on Discard here. That is deliberately the non-destructive arm:
+        // project.json, the last known-good state, is what a dismissed prompt falls back to, never a
+        // silent Restore the user never asked for.
+        onChoice(result == 1 ? AutosaveRecoveryChoice::Restore : AutosaveRecoveryChoice::Discard);
+    });
 }
 
 //==============================================================================
@@ -2793,6 +2919,53 @@ void MainComponent::notifyDocumentTitleChanged() {
 void MainComponent::markDocumentClean() {
     savedEditSerial_ = undoManager.getEditSerial();
     isDirty_ = false;
+    // See the header comment: autosave's own baseline rebases here too, both fields, so the very
+    // next qualifying tick doesn't fire off zero real edits or a stale elapsed-time gap.
+    lastAutosavedEditSerial_ = savedEditSerial_;
+    lastAutosaveMs_ = juce::Time::getMillisecondCounter();
+}
+
+bool MainComponent::isRecordingActive() const { return audioTake_.capturing || midiRecorder.isRecording(); }
+
+void MainComponent::maybeAutosave() {
+    if (!synth::ProjectBundle::isBundle(currentBundleDir_))
+        return; // an unsaved project has no bundle to put a sidecar in — inert until first save.
+    if (isRecordingActive())
+        return;
+
+    auto* settings = appProperties.getUserSettings();
+    const bool enabled = settings == nullptr || settings->getBoolValue(kAutosaveEnabledKey, true);
+    if (!enabled)
+        return;
+
+    if (undoManager.getEditSerial() == lastAutosavedEditSerial_)
+        return; // nothing new since the last autosave (or the last explicit save/load).
+
+    const int intervalMinutes =
+        settings == nullptr ? kDefaultAutosaveIntervalMinutes
+                            : settings->getIntValue(kAutosaveIntervalMinutesKey, kDefaultAutosaveIntervalMinutes);
+    const juce::uint32 intervalMs = (juce::uint32)juce::jmax(1, intervalMinutes) * 60000u;
+    if (juce::Time::getMillisecondCounter() - lastAutosaveMs_ < intervalMs)
+        return;
+
+    performAutosave();
+    // Bumped regardless of performAutosave()'s outcome: a persistently failing write (disk full,
+    // permissions) must not retry every single tick, only every interval.
+    lastAutosaveMs_ = juce::Time::getMillisecondCounter();
+}
+
+void MainComponent::performAutosave() {
+    auto* settings = appProperties.getUserSettings();
+    const int backupCount =
+        settings == nullptr
+            ? kDefaultAutosaveBackupCount
+            : juce::jlimit(0, 50, settings->getIntValue(kAutosaveBackupCountKey, kDefaultAutosaveBackupCount));
+    const auto result = synth::ProjectBundle::saveAutosave(currentBundleDir_, audioEngine.getGraph(), timelineDoc,
+                                                           graphEditor.getPatchDocument(), backupCount);
+    if (result.ok)
+        lastAutosavedEditSerial_ = undoManager.getEditSerial();
+    else
+        statusBar.showMessage("Autosave failed: " + result.message);
 }
 
 // ---- Unsaved-changes guard ----
@@ -2851,6 +3024,11 @@ void MainComponent::applyUnsavedChangesAnswer(UnsavedChangesChoice choice, std::
     case UnsavedChangesChoice::Cancel:
         return;
     case UnsavedChangesChoice::Discard:
+        // The user just explicitly said to throw these changes away — a pending autosave sidecar
+        // holds exactly that same discarded content, so leaving it behind would prompt to "recover"
+        // it again next time this bundle is opened. discardAutosave() is a safe no-op when
+        // currentBundleDir_ is empty (never-yet-saved project) or has no sidecar.
+        synth::ProjectBundle::discardAutosave(currentBundleDir_);
         proceed();
         return;
     case UnsavedChangesChoice::Save:

@@ -168,6 +168,7 @@ add_executable(Tests
     TimelineE2ETests.cpp
     PatchDocumentTests.cpp
     ProjectBundleTests.cpp
+    AutosaveTests.cpp
     AssetManagerTests.cpp
     BrandingTests.cpp
     ../Source/MainComponent.cpp

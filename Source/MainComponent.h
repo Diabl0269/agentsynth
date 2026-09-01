@@ -261,8 +261,31 @@ public:
      *  the AppCommands::newPatch command or unsavedChangesPrompt instead. */
     void newPatchForTest() { newPatch(); }
     /** Exactly what the Open dialog's callback runs: an `.agsproj` bundle directory loads graph +
-     *  timeline, anything else loads a plain `.json` preset. */
+     *  timeline, anything else loads a plain `.json` preset. If the bundle carries a pending
+     *  autosave sidecar, this kicks off the async recovery prompt instead (see
+     *  autosaveRecoveryPrompt) and returns true without the load having happened yet — a test
+     *  exercising that path drives autosaveRecoveryPrompt directly, the same idiom
+     *  unsavedChangesPrompt uses. */
     bool openProjectForTest(const juce::File& file) { return openFromFile(file); }
+    /** Runs performAutosave()'s exact gate check once, synchronously — the same call
+     *  timerCallback() makes on every tick, exposed so a test can drive it without a real
+     *  juce::Timer. */
+    void runAutosaveTickForTest() { maybeAutosave(); }
+    /** Test-only: back-dates the "last autosave" wall-clock baseline by `elapsedMs`, so a test can
+     *  simulate the configured interval having elapsed without a real sleep. Computed relative to
+     *  the CURRENT counter (rather than writing a fixed small value) so it is correct regardless of
+     *  how large juce::Time::getMillisecondCounter() already is when the test runs. */
+    void setAutosaveElapsedMsForTest(juce::uint32 elapsedMs) {
+        lastAutosaveMs_ = juce::Time::getMillisecondCounter() - elapsedMs;
+    }
+    /** True once an audio or MIDI take is capturing — see isRecordingActive(). Test-only seam so a
+     *  test can assert the autosave gate is actually reading live recording state without making
+     *  AudioTake/MidiRecorder internals public. */
+    bool isRecordingActiveForTest() const { return isRecordingActive(); }
+    /** Test-only: forces AudioTake::capturing without the real record-arm/record-button/master-tap
+     *  machinery — used only to verify the autosave gate respects this flag. Never commits a clip;
+     *  callers must reset it back to false before the test ends. */
+    void setAudioTakeCapturingForTest(bool capturing) { audioTake_.capturing = capturing; }
     /** What performSaveProject(false) will do next: true if there's no bundle to resave to
      *  silently, so Cmd+S is about to prompt for a location. */
     bool wouldPromptOnSaveForTest() const {
@@ -322,6 +345,16 @@ public:
      *  human-readable name of the action that is about to discard the document ("New Patch", "Quit"). */
     std::function<void(const juce::String& actionLabel, std::function<void(UnsavedChangesChoice)> onChoice)>
         unsavedChangesPrompt;
+
+    /** What the user picked when openFromFile found a pending autosave sidecar on the bundle being
+     *  opened. Restore loads autosave.json instead of project.json and leaves the document dirty
+     *  (the loaded state diverges from what's on disk); Discard loads project.json normally. Either
+     *  arm deletes the sidecar afterwards — see ProjectBundle::discardAutosave. */
+    enum class AutosaveRecoveryChoice { Restore, Discard };
+
+    /** Test/automation seam for the autosave-recovery prompt, same idiom as unsavedChangesPrompt:
+     *  when set it REPLACES the real async juce::AlertWindow. */
+    std::function<void(std::function<void(AutosaveRecoveryChoice)> onChoice)> autosaveRecoveryPrompt;
 
     /** True once an undo-able edit has happened since the last save/load - see changeListenerCallback's
      *  AppUndoManager branch. Deliberately NOT reset by undoing back to the state that was saved -
@@ -581,6 +614,23 @@ private:
     // past a save that returned true.
     bool saveToFile(const juce::File& file);
     bool openFromFile(const juce::File& file);
+    // The actual bundle load (graph + timeline from `<bundleDir>/project.json`), extracted out of
+    // openFromFile's bundle branch so the autosave-recovery continuation below can also reach it on
+    // the Discard arm without duplicating the load/reconcile/markDocumentClean sequence.
+    bool loadBundleFromFile(const juce::File& bundleDir);
+    // The Restore arm: loads `<bundleDir>/autosave.json` in place of project.json and deliberately
+    // does NOT call markDocumentClean() — the loaded state is not what's on disk, so the document
+    // must read as dirty. isDirty_ is set true directly here, the one exception to "never write
+    // isDirty_ outside the recompute-from-serial path" (see markDocumentClean()'s comment): there is
+    // no undo action to derive dirtiness from, since this mutates the graph/timeline the same
+    // programmatic way ProjectBundle::load always has.
+    bool loadAutosaveFromFile(const juce::File& bundleDir);
+    // openFromFile's bundle branch, continued: reached either immediately (no sidecar) or from the
+    // async autosaveRecoveryPrompt's answer.
+    void applyAutosaveRecoveryAnswer(AutosaveRecoveryChoice choice, const juce::File& bundleDir);
+    // The real dialog behind the has-autosave branch of openFromFile, same async/test-hook shape as
+    // promptUnsavedChanges below.
+    void promptAutosaveRecovery(std::function<void(AutosaveRecoveryChoice)> onChoice);
     // Cmd+S's actual decision: resave silently to the remembered bundle when one is open and
     // `forceChooser` is false, otherwise prompt (defaulting the suggested name to `.agsproj`, which
     // is what steers a first save toward the bundle format instead of the legacy plain preset).
@@ -662,7 +712,32 @@ private:
     // The ONE way the document becomes clean: clears isDirty_ AND rebases savedEditSerial_ on the
     // undo manager's current serial, which is what makes the reset survive an async change
     // notification that was already queued when it ran. Never write isDirty_ = false directly.
+    // Also rebases autosave's OWN baseline (lastAutosavedEditSerial_/lastAutosaveMs_) to match: the
+    // document now matches what's on disk (an explicit save/load/new-patch), so there is nothing an
+    // autosave sidecar would capture beyond it, and resetting the elapsed-time baseline stops the
+    // very next qualifying tick from firing off a stale "elapsed since epoch" gap. This does NOT
+    // couple autosave to isDirty_/savedEditSerial_ in the other direction — maybeAutosave() never
+    // reads either of those, and performAutosave() never writes them.
     void markDocumentClean();
+    // True while an audio or MIDI take is actively capturing — checked by the autosave gate so it
+    // never fires mid-take (see docs/architecture.md). No public accessor for the underlying
+    // AudioTake/MidiRecorder state on purpose; go through isRecordingActiveForTest() in tests.
+    bool isRecordingActive() const;
+    // The autosave gate, run once per timerCallback() tick (no second juce::Timer). Fires
+    // performAutosave() only when ALL of: enabled in preferences, a bundle is open, no take is
+    // recording, the undo edit serial has moved since the last autosave (NOT isDirty_/
+    // isProjectDirty() — see markDocumentClean()'s comment: isDirty_ is never cleared by autosave,
+    // so gating on it alone would rewrite the sidecar every interval forever with zero new edits),
+    // and the configured interval has elapsed. Deliberately has NO bounce-in-progress check:
+    // BounceExporter::bounce() blocks the message thread for its entire render and
+    // OfflineTransportDriver never pumps juce::MessageManager, so timerCallback() structurally
+    // cannot run while a bounce is in flight (see docs/architecture.md — a future progress dialog
+    // must keep that true by never pumping the message loop from inside bounce()).
+    void maybeAutosave();
+    // Writes the sidecar via ProjectBundle::saveAutosave and, only on success, rebases
+    // lastAutosavedEditSerial_. Never calls markDocumentClean() — isDirty_/savedEditSerial_ and
+    // project.json itself are untouched by autosave.
+    void performAutosave();
     // Fires onDocumentTitleChanged with currentPatchName_ plus a " *" dirty marker. Called at the
     // end of setCurrentPatchName() and nowhere else — every save/load/new-patch path already routes
     // through it.
@@ -836,6 +911,18 @@ private:
     // the flag: the undo manager's change broadcast is async, so a notification can arrive after
     // the document was reset and must be able to recompute rather than blindly re-dirty it.
     int savedEditSerial_ = 0;
+
+    // Autosave's own baseline — a SEPARATE serial from savedEditSerial_ above (see
+    // maybeAutosave()/performAutosave()/markDocumentClean() comments): rebased on a successful
+    // autosave write and on markDocumentClean(), never on anything else. Comparing against this
+    // directly (rather than isDirty_) is what stops autosave from rewriting an unchanged sidecar
+    // every interval forever.
+    int lastAutosavedEditSerial_ = 0;
+    // juce::Time::getMillisecondCounter() as of the last autosave write (or the last
+    // markDocumentClean(), which resets this so a freshly opened/saved document doesn't autosave on
+    // its very first qualifying tick). Wall-clock rather than a tick count on purpose: the shared
+    // 10 Hz timer's actual firing rate is not guaranteed exact.
+    juce::uint32 lastAutosaveMs_ = 0;
 
     // Declared here (not in AudioEngine or Core) because it is settings-backed and
     // UI-driven; installed into the process-wide DefaultHostedPluginBackend by the constructor and
