@@ -153,6 +153,8 @@ add_library(Core STATIC
     Source/PatchDocument.h
     Source/ProjectBundle.cpp
     Source/ProjectBundle.h
+    Source/RecentProjects.cpp
+    Source/RecentProjects.h
     Source/SnippetManager.cpp
     Source/SnippetManager.h
     Source/SettingsMigration.cpp

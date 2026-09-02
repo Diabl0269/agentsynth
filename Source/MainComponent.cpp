@@ -518,6 +518,9 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         if (pluginBackend != nullptr)
             pluginBackend->setScanService(&pluginScanService);
     }
+    if (auto savedRecentProjects = juce::parseXML(appProperties.getUserSettings()->getValue(kRecentProjectsKey)))
+        recentProjects.loadFromXml(*savedRecentProjects);
+
     moduleLibrary.onScanPluginsRequested = [this] { startPluginScan(); };
     moduleLibrary.onPluginActivated = [this](const synth::PluginIdentity& identity) {
         graphEditor.addHostedPluginAtCanvasPosition(identity, graphEditor.getViewportCentreInCanvasSpace());
@@ -603,10 +606,34 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         }
         menu.addSeparator();
         menu.addItem(1000, "Load from file...");
-        // Capture `presets` by value — the outer local is gone by the time the async callback runs.
-        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&loadButton), [this, presets](int result) {
+
+        // Recent Projects — pruned of anything that vanished from disk since the last time this
+        // menu was built (a moved/deleted bundle), which is also the only time the pruned list
+        // needs re-persisting.
+        if (recentProjects.pruneMissing() > 0)
+            saveRecentProjects();
+        auto recents = recentProjects.getEntries();
+        if (!recents.empty()) {
+            menu.addSeparator();
+            juce::PopupMenu recentMenu;
+            for (int i = 0; i < (int)recents.size(); ++i)
+                recentMenu.addItem(2000 + i, recents[(size_t)i].getFileNameWithoutExtension());
+            menu.addSubMenu("Recent Projects", recentMenu);
+        }
+
+        // Capture `presets`/`recents` by value — the outer locals are gone by the time the async
+        // callback runs.
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&loadButton), [this, presets,
+                                                                                         recents](int result) {
             if (result == 1000) {
                 openPresetFromFile();
+            } else if (result >= 2000) {
+                const auto index = (size_t)(result - 2000);
+                if (index >= recents.size())
+                    return;
+                // Same guard as "Load from file...": the recent project itself is opened through
+                // openFromFile, which re-adds it (moving it back to the front) on success.
+                guardUnsavedChanges("Opening a recent project", [this, file = recents[index]] { openFromFile(file); });
             } else if (result > 0) {
                 // Capture `presets` by value again (the outer local is gone by the time this runs)
                 // and `index` so the guard's continuation still knows which preset was picked.
@@ -1638,6 +1665,8 @@ bool MainComponent::saveToFile(const juce::File& file) {
         // A fresh explicit save supersedes any pending autosave sidecar — project.json now carries
         // everything the sidecar would have offered to recover.
         synth::ProjectBundle::discardAutosave(file);
+        recentProjects.addProject(file);
+        saveRecentProjects();
         // Clear BEFORE setCurrentPatchName, which is what fires the title notify — the notify must
         // see the just-saved, clean state.
         markDocumentClean();
@@ -1734,6 +1763,8 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
     // (and rebinds the recorder) against the graph as it now stands.
     reconcileTimelineAfterGraphChange();
     markDocumentClean();
+    recentProjects.addProject(bundleDir);
+    saveRecentProjects();
     setCurrentPatchName(bundleDir.getFileNameWithoutExtension());
     statusBar.showMessage("Loaded: " + bundleDir.getFileNameWithoutExtension());
     return true;
@@ -1768,6 +1799,8 @@ bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
     // autosave should only fire once the user edits further, same as right after an explicit save.
     lastAutosavedEditSerial_ = undoManager.getEditSerial();
     lastAutosaveMs_ = juce::Time::getMillisecondCounter();
+    recentProjects.addProject(bundleDir);
+    saveRecentProjects();
     // setCurrentPatchName() calls notifyDocumentTitleChanged() at its end and nowhere else in this
     // file (see that function's comment) — isDirty_ is set BEFORE this call so the notify's " *"
     // marker reflects the just-restored dirty state, not a stale one.
@@ -2440,6 +2473,15 @@ void MainComponent::refreshPluginLibrary() {
 void MainComponent::savePluginScanList() {
     if (auto xml = getPluginScanService().toXml()) {
         appProperties.getUserSettings()->setValue(kPluginScanListKey, xml->toString());
+        appProperties.saveIfNeeded();
+    }
+}
+
+// ---- Recent projects ----
+
+void MainComponent::saveRecentProjects() {
+    if (auto xml = recentProjects.toXml()) {
+        appProperties.getUserSettings()->setValue(kRecentProjectsKey, xml->toString());
         appProperties.saveIfNeeded();
     }
 }
