@@ -304,12 +304,14 @@ TEST(TimelineReconciliationBundleTest, BundleLoadSetsOrphanFlags) {
     ASSERT_TRUE(fakeLane.isValid());
 
     PatchDocument patchDocument;
-    ASSERT_TRUE(ProjectBundle::save(dir, graph, timeline, patchDocument).ok);
+    synth::MacroSet macros;
+    ASSERT_TRUE(ProjectBundle::save(dir, graph, timeline, patchDocument, macros).ok);
 
     juce::AudioProcessorGraph freshGraph;
     TimelineDoc freshTimeline;
     PatchDocument freshPatchDocument;
-    auto result = ProjectBundle::load(dir, freshGraph, freshTimeline, freshPatchDocument);
+    synth::MacroSet freshMacros;
+    auto result = ProjectBundle::load(dir, freshGraph, freshTimeline, freshPatchDocument, freshMacros);
     ASSERT_TRUE(result.ok) << result.message;
 
     auto* loadedReal = freshTimeline.getLane(realLane);

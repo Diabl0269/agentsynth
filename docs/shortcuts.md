@@ -1,8 +1,8 @@
 # Keyboard Shortcuts
 
 Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/ShortcutsSettingsTab.h/.cpp`).
-`ShortcutManager` (`Source/ShortcutManager.h`) registers **60 actions** across four categories —
-**General** (24, app-wide or routed per focused editor), **Graph** (2), **Timeline** (22) and
+`ShortcutManager` (`Source/ShortcutManager.h`) registers **62 actions** across four categories —
+**General** (24, app-wide or routed per focused editor), **Graph** (4), **Timeline** (22) and
 **Piano Roll** (12) — every one of them rebindable, including keys that used to be hardcoded:
 nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the six tool
 digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
@@ -148,8 +148,11 @@ even with no mouse involved.
 |----------|--------|
 | Cmd+L | Auto Arrange |
 | Cmd+Shift+S | Save Selection as Snippet |
+| Cmd+G | Group Selection into Macro |
+| Cmd+Shift+G | Ungroup Macro |
 
-Graph holds only the two verbs that mean nothing on any other surface — everything that means the
+Graph holds only the four verbs that mean nothing on any other surface — auto-arrange,
+save-selection-as-snippet, and now grouping/ungrouping a macro (P8-12) — everything that means the
 same thing everywhere (copy/paste/cut/duplicate/repeat/select-all, both zoom pairs) is General
 instead, so it can route through `resolveEditSurface()`.
 
@@ -329,10 +332,10 @@ onto 1–6. Shipping one of the missing three later costs no rebind: the digit i
 
 ## Command vs surface actions
 
-The 58 actions split into two kinds, and telling them apart is the key to reasoning about "why
+The 62 actions split into two kinds, and telling them apart is the key to reasoning about "why
 doesn't this key do anything":
 
-- **Command-dispatched** (34 actions) — every General action, both Graph actions, and the Timeline
+- **Command-dispatched** (38 actions) — every General action, all four Graph actions, and the Timeline
   category's eight grid-set + two grid-cycle commands. `AppCommands::getCommandForAction(actionId)`
   returns a real `juce::CommandID` for these; `MainComponent` implements
   `ApplicationCommandTarget`, so they appear in the native menu bar, drive toolbar tooltip text, and

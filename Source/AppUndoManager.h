@@ -6,7 +6,8 @@
 
 namespace synth {
 class TimelineDoc; // Forward declaration (Source/Timeline/TimelineDoc.h)
-}
+class MacroSet;    // Forward declaration (Source/MacroSet.h)
+} // namespace synth
 
 /**
  * @class AppUndoManager
@@ -137,6 +138,27 @@ public:
      */
     bool recordCombinedChange(juce::AudioProcessorGraph& graph, synth::TimelineDoc& doc,
                               const std::function<void()>& mutation);
+
+    /**
+     * @brief Records a mutation that may touch the graph and/or a synth::MacroSet as ONE undo
+     *        step (the canonical case: deleting a collapsed macro card, which removes both its
+     *        member nodes and the now-empty macro).
+     *
+     * Same shape as recordCombinedChange (graph + TimelineDoc): begins one transaction, captures
+     * both "before" states, runs the mutation once, captures both "after" states, then pushes a
+     * graph SnapshotAction and/or a MacroSnapshotAction — only for the domain(s) that actually
+     * changed — inside that one transaction. A plain group/ungroup/rename/recolour/collapse
+     * never touches the graph, so only the MacroSnapshotAction is pushed; deleting a macro's
+     * members pushes both, and one undo() restores the nodes AND the macro's membership
+     * together.
+     *
+     * @param graph Reference to the audio processor graph.
+     * @param macros Reference to the macro set.
+     * @param mutation Lambda that performs the combined mutation.
+     * @return true if either domain changed and a transaction was pushed, false if neither did.
+     */
+    bool recordGraphAndMacroChange(juce::AudioProcessorGraph& graph, synth::MacroSet& macros,
+                                   const std::function<void()>& mutation);
 
     /**
      * @brief Hooks fired around EVERY restore this manager performs on undo/redo — the graph's

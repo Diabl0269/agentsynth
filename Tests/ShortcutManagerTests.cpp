@@ -769,6 +769,61 @@ TEST_F(ShortcutManagerTest, GetActionDescription_ToggleMinimapIsNonEmpty) {
 }
 
 // ---------------------------------------------------------------------------
+// Macro group/ungroup (P8-12)
+// ---------------------------------------------------------------------------
+
+// Default binding for grouping the selection into a macro must be Cmd+G, with no extra modifiers.
+TEST_F(ShortcutManagerTest, GroupSelectionDefaultBindingIsCmdG) {
+    const auto kp = manager.getBinding("groupSelection");
+    EXPECT_EQ(kp.getKeyCode(), 'g');
+    EXPECT_TRUE(kp.getModifiers().isCommandDown());
+    EXPECT_FALSE(kp.getModifiers().isShiftDown());
+    EXPECT_FALSE(kp.getModifiers().isAltDown());
+}
+
+// Default binding for ungrouping must be Cmd+Shift+G.
+TEST_F(ShortcutManagerTest, UngroupSelectionDefaultBindingIsCmdShiftG) {
+    const auto kp = manager.getBinding("ungroupSelection");
+    EXPECT_EQ(kp.getKeyCode(), 'g');
+    EXPECT_TRUE(kp.getModifiers().isCommandDown());
+    EXPECT_TRUE(kp.getModifiers().isShiftDown());
+    EXPECT_FALSE(kp.getModifiers().isAltDown());
+}
+
+// AppCommands::getCommandForAction must resolve "groupSelection"/"ungroupSelection" to the real
+// command IDs.
+TEST_F(ShortcutManagerTest, GetCommandForAction_ResolvesGroupSelection) {
+    EXPECT_EQ(AppCommands::getCommandForAction("groupSelection"), AppCommands::groupSelection);
+}
+
+TEST_F(ShortcutManagerTest, GetCommandForAction_ResolvesUngroupSelection) {
+    EXPECT_EQ(AppCommands::getCommandForAction("ungroupSelection"), AppCommands::ungroupSelection);
+}
+
+// "groupSelection"/"ungroupSelection" must be registered action ids (drives Settings' shortcut
+// list).
+TEST_F(ShortcutManagerTest, ActionIds_ContainsGroupSelection) {
+    EXPECT_TRUE(manager.getActionIds().contains("groupSelection"));
+}
+
+TEST_F(ShortcutManagerTest, ActionIds_ContainsUngroupSelection) {
+    EXPECT_TRUE(manager.getActionIds().contains("ungroupSelection"));
+}
+
+// Both actions need a human-readable, non-empty description for the Settings UI.
+TEST_F(ShortcutManagerTest, GetActionDescription_GroupSelectionIsNonEmpty) {
+    const auto description = ShortcutManager::getActionDescription("groupSelection");
+    EXPECT_FALSE(description.isEmpty());
+    EXPECT_EQ(description, "Group Selection into Macro");
+}
+
+TEST_F(ShortcutManagerTest, GetActionDescription_UngroupSelectionIsNonEmpty) {
+    const auto description = ShortcutManager::getActionDescription("ungroupSelection");
+    EXPECT_FALSE(description.isEmpty());
+    EXPECT_EQ(description, "Ungroup Macro");
+}
+
+// ---------------------------------------------------------------------------
 // Piano roll: scale panel toggle (Ctrl+S)
 // ---------------------------------------------------------------------------
 

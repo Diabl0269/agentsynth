@@ -140,6 +140,7 @@ add_executable(Tests
     SelectionModelTests.cpp
     SnippetManagerTests.cpp
     MultiSelectTests.cpp
+    MacroContainerTests.cpp
     ClipboardTests.cpp
     PanelAnimationAndLoadingTests.cpp
     TimelinePanelTests.cpp
@@ -193,6 +194,7 @@ add_executable(Tests
     ../Source/UI/PlanBadge.cpp
     ../Source/UI/SignInDialog.cpp
     ../Source/UI/ModuleComponent.cpp
+    ../Source/UI/MacroCardComponent.cpp
     ../Source/Plugin/Hosting/HostedPluginEditorWindow.cpp
     ../Source/UI/SettingsWindow.cpp
     ../Source/UI/AppearanceSettingsTab.cpp

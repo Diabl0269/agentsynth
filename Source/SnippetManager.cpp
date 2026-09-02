@@ -6,6 +6,7 @@
 #include <limits>
 #include <map>
 #include <set>
+#include <utility>
 
 namespace synth {
 
@@ -114,7 +115,7 @@ juce::Point<int> SnippetManager::selectionOrigin(juce::AudioProcessorGraph& grap
 }
 
 juce::var SnippetManager::extractSnippet(juce::AudioProcessorGraph& graph, const std::vector<NodeID>& selection,
-                                         const juce::String& name, bool includeExtraState) {
+                                         const juce::String& name, bool includeExtraState, const MacroSet& macros) {
     // Resolve the selection to the uids actually eligible for capture.
     std::set<int> keep;
     for (auto id : selection) {
@@ -204,6 +205,55 @@ juce::var SnippetManager::extractSnippet(juce::AudioProcessorGraph& graph, const
         }
     }
     root->setProperty("modulations", modulations);
+
+    // Macros (P8-12): capture only a macro whose FULL membership is inside `keep` — the same
+    // self-contained rule connections/modulations already follow. Membership is emitted using
+    // this snippet's own node ids (matching "nodes" above), not uuids: those ids get renumbered
+    // on insert, uuids don't exist yet for a macro captured into a still-unsaved snippet var.
+    if (!macros.empty()) {
+        // uuid -> original node id, so a macro's uuid-keyed membership can be tested against `keep`.
+        std::map<juce::String, int> idForUuid;
+        for (auto* node : graph.getNodes()) {
+            const juce::String uuid = node->properties["uuid"].toString();
+            if (uuid.isNotEmpty() && keep.count((int)node->nodeID.uid) > 0)
+                idForUuid[uuid] = (int)node->nodeID.uid;
+        }
+
+        juce::Array<juce::var> macrosArr;
+        for (const auto& macro : macros.getAll()) {
+            std::vector<int> memberIds;
+            bool fullyContained = true;
+            for (const auto& uuid : macro.members) {
+                auto it = idForUuid.find(uuid);
+                if (it == idForUuid.end()) {
+                    fullyContained = false;
+                    break;
+                }
+                memberIds.push_back(it->second);
+            }
+            if (!fullyContained || memberIds.empty())
+                continue;
+
+            juce::DynamicObject::Ptr m = new juce::DynamicObject();
+            m->setProperty("name", macro.name);
+            m->setProperty("colour", macro.colour.toString());
+            m->setProperty("collapsed", macro.collapsed);
+            const auto relPos = macro.bounds.getPosition() - origin;
+            juce::DynamicObject::Ptr boundsObj = new juce::DynamicObject();
+            boundsObj->setProperty("x", relPos.x);
+            boundsObj->setProperty("y", relPos.y);
+            boundsObj->setProperty("w", macro.bounds.getWidth());
+            boundsObj->setProperty("h", macro.bounds.getHeight());
+            m->setProperty("bounds", juce::var(boundsObj.get()));
+            juce::Array<juce::var> memberArr;
+            for (int id : memberIds)
+                memberArr.add(id);
+            m->setProperty("members", memberArr);
+            macrosArr.add(juce::var(m.get()));
+        }
+        if (!macrosArr.isEmpty())
+            root->setProperty("macros", macrosArr);
+    }
 
     return juce::var(root.get());
 }
@@ -305,6 +355,50 @@ juce::var SnippetManager::prepareForInsert(const juce::var& snippet, juce::Point
     }
     root->setProperty("modulations", modulations);
 
+    // Macros (P8-12): remap membership through the same idMap node ids were just renumbered
+    // through. A member id this snippet doesn't carry (shouldn't happen — extractSnippet only
+    // ever captures a fully-contained macro — but a hand-edited .agsnip could claim one) drops
+    // that member; a macro left with fewer than two members this way is dropped outright, since
+    // a stray single-member "group" is meaningless.
+    if (auto* macrosList = arrayProperty(src, "macros")) {
+        juce::Array<juce::var> macrosArr;
+        for (const auto& macroVar : *macrosList) {
+            auto* macroObj = macroVar.getDynamicObject();
+            if (macroObj == nullptr)
+                continue;
+
+            auto* memberList = arrayProperty(macroObj, "members");
+            if (memberList == nullptr)
+                continue;
+
+            juce::Array<juce::var> newMembers;
+            for (const auto& memberVar : *memberList) {
+                auto it = idMap.find((int)memberVar);
+                if (it != idMap.end())
+                    newMembers.add(it->second);
+            }
+            if (newMembers.size() < 2)
+                continue;
+
+            juce::DynamicObject::Ptr m = new juce::DynamicObject();
+            m->setProperty("name", macroObj->getProperty("name"));
+            m->setProperty("colour", macroObj->getProperty("colour"));
+            m->setProperty("collapsed", macroObj->getProperty("collapsed"));
+            if (auto* boundsObj = macroObj->getProperty("bounds").getDynamicObject()) {
+                juce::DynamicObject::Ptr newBounds = new juce::DynamicObject();
+                newBounds->setProperty("x", intProperty(boundsObj, "x") + dropPos.x);
+                newBounds->setProperty("y", intProperty(boundsObj, "y") + dropPos.y);
+                newBounds->setProperty("w", boundsObj->getProperty("w"));
+                newBounds->setProperty("h", boundsObj->getProperty("h"));
+                m->setProperty("bounds", juce::var(newBounds.get()));
+            }
+            m->setProperty("members", newMembers);
+            macrosArr.add(juce::var(m.get()));
+        }
+        if (!macrosArr.isEmpty())
+            root->setProperty("macros", macrosArr);
+    }
+
     return juce::var(root.get());
 }
 
@@ -314,7 +408,8 @@ juce::var SnippetManager::prepareForInsert(const juce::var& snippet, juce::Point
 
 std::vector<SnippetManager::NodeID> SnippetManager::insertSnippet(const juce::var& snippet,
                                                                   juce::AudioProcessorGraph& graph,
-                                                                  juce::Point<int> dropPos, bool includeExtraState) {
+                                                                  juce::Point<int> dropPos, bool includeExtraState,
+                                                                  std::vector<Macro>* outMacros) {
     auto prepared = prepareForInsert(snippet, dropPos, nextFreeIdBase(graph), includeExtraState);
 
     auto* preparedObj = prepared.getDynamicObject();
@@ -337,8 +432,22 @@ std::vector<SnippetManager::NodeID> SnippetManager::insertSnippet(const juce::va
     // module types the AI is barred from authoring. That restriction guards against a MODEL
     // reaching for them; it is not a property of app-authored files, and applying it here would
     // reject legitimate snippets.
+    //
+    // validatePatch's untrusted path refuses ANY payload carrying a "macros" key (see
+    // AIStateMapper.cpp) - including our own snippet's, since that refusal can't distinguish a
+    // patch suggestion smuggling one in from a snippet that legitimately carries one. Strip it for
+    // validation only; applyJSONToGraph never reads "macros" and the resolution below reads
+    // `preparedObj` directly, so restoring it afterwards is all that's needed.
+    juce::var strippedMacros;
+    const bool hadMacros = preparedObj->hasProperty("macros");
+    if (hadMacros) {
+        strippedMacros = preparedObj->getProperty("macros");
+        preparedObj->removeProperty("macros");
+    }
     auto validation = AIStateMapper::validatePatch(prepared, graph, /*clearExisting=*/false, /*trusted=*/false,
                                                    /*allowInternalModuleTypes=*/true);
+    if (hadMacros)
+        preparedObj->setProperty("macros", strippedMacros);
     if (!validation.ok) {
         juce::Logger::writeToLog("SnippetManager::insertSnippet: snippet rejected - " + validation.message);
         return {};
@@ -353,8 +462,13 @@ std::vector<SnippetManager::NodeID> SnippetManager::insertSnippet(const juce::va
     // existing MIDI source) as a convenience for AI-authored patches. A snippet is an exact
     // sub-graph: the wires it does NOT have are as deliberate as the ones it does, and those
     // convenience connections would splice the inserted group into the surrounding patch.
+    //
+    // idMap: this snippet's own node ids (the "id" prepareForInsert assigned, also what a
+    // "macros" entry's members reference) -> the real NodeID applyJSONToGraph actually created.
+    // Needed because merge-mode apply does not honour the requested id (see below).
+    std::map<int, juce::AudioProcessorGraph::NodeID> idMap;
     if (!AIStateMapper::applyJSONToGraph(prepared, graph, /*clearExisting=*/false, /*trusted=*/true,
-                                         /*autoConnectNewNodes=*/false))
+                                         /*autoConnectNewNodes=*/false, &idMap))
         return {};
 
     // Diff rather than trusting the requested ids: merge-mode apply assigns its own ids.
@@ -366,6 +480,47 @@ std::vector<SnippetManager::NodeID> SnippetManager::insertSnippet(const juce::va
             continue; // attenuverters rebuilt for modulations aren't user-selectable
         added.push_back(node->nodeID);
     }
+
+    if (outMacros != nullptr) {
+        if (auto* macrosList = arrayProperty(preparedObj, "macros")) {
+            for (const auto& macroVar : *macrosList) {
+                auto* macroObj = macroVar.getDynamicObject();
+                if (macroObj == nullptr)
+                    continue;
+                auto* memberList = arrayProperty(macroObj, "members");
+                if (memberList == nullptr)
+                    continue;
+
+                Macro macro;
+                macro.name = macroObj->getProperty("name").toString();
+                macro.colour = juce::Colour::fromString(macroObj->getProperty("colour").toString());
+                macro.collapsed = (bool)macroObj->getProperty("collapsed");
+                if (auto* boundsObj = macroObj->getProperty("bounds").getDynamicObject()) {
+                    macro.bounds = {intProperty(boundsObj, "x"), intProperty(boundsObj, "y"),
+                                    intProperty(boundsObj, "w"), intProperty(boundsObj, "h")};
+                }
+                for (const auto& memberVar : *memberList) {
+                    auto it = idMap.find((int)memberVar);
+                    if (it == idMap.end())
+                        continue;
+                    auto* node = graph.getNodeForId(it->second);
+                    if (node == nullptr)
+                        continue;
+                    // A freshly pasted node has no "uuid" yet — applyJSONToGraph only adopts one
+                    // from the incoming JSON when trusted AND the JSON carried one (it never does
+                    // for a snippet node, see extractSnippet), so generate it here rather than
+                    // reading an empty property. ensureNodeUuid is the same lazy-generation
+                    // graphToJSON itself uses, exposed for exactly this "just created it" case.
+                    const juce::String uuid = AIStateMapper::ensureNodeUuid(node);
+                    if (uuid.isNotEmpty())
+                        macro.members.push_back(uuid);
+                }
+                if (macro.members.size() >= 2)
+                    outMacros->push_back(std::move(macro));
+            }
+        }
+    }
+
     return added;
 }
 

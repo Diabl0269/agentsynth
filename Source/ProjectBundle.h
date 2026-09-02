@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AI/AIStateMapper.h"
+#include "MacroSet.h"
 #include "PatchDocument.h"
 #include "Timeline/TimelineDoc.h"
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -35,25 +36,29 @@ struct ProjectLoadResult {
  * and rewrite refs. Nothing under `Audio/`/`Peaks/`/`Recordings/` is ever auto-deleted except via
  * `AssetManager::cleanUnusedAssets`, which never touches `Recordings/`.
  *
- * `"timeline"` is a reserved top-level key everywhere else: a plain preset stashes it inertly, and
- * `AIStateMapper::validatePatch` refuses it from provider output. `ProjectBundle::load` is the one
- * place it's meaningful, in this all-or-nothing order:
+ * `"timeline"` and `"macros"` (P8-12) are both reserved top-level keys everywhere else: a plain
+ * preset stashes them inertly, and `AIStateMapper::validatePatch` refuses either from provider
+ * output. `ProjectBundle::load` is the one place they're meaningful, in this all-or-nothing
+ * order:
  *  1. Parse `project.json`; reject if unparseable/non-object.
- *  2. Detach `"timeline"` before validation, since the untrusted validator refuses any patch
- *     carrying that key.
+ *  2. Detach `"timeline"` AND `"macros"` before validation, since the untrusted validator
+ *     refuses any patch carrying either key.
  *  3. Gate: `AIStateMapper::validatePatch(patch, graph, clearExisting=true, trusted=false)`.
- *  4. Validate `"timeline"` into a local `TimelineDoc::fromVar` (all-or-nothing); a missing key
- *     means an empty timeline, a malformed one is rejected whole.
- *  5. Only once both pass: `applyJSONToGraph(..., trusted=true)` (replaying our own output, so
- *     uuids are honoured and values aren't rescaled), then `patchDocument.loadFromVar` and
- *     `timeline.fromVar`/`clear()`.
+ *  4. Validate `"timeline"` into a local `TimelineDoc::fromVar` and `"macros"` into a local
+ *     `MacroSet::fromVar` (both all-or-nothing); a missing key means empty, a malformed one is
+ *     rejected whole.
+ *  5. Only once all three pass: `applyJSONToGraph(..., trusted=true)` (replaying our own output,
+ *     so uuids are honoured and values aren't rescaled), then `patchDocument.loadFromVar`,
+ *     `timeline.fromVar`/`clear()`, and `macros = std::move(localMacros)`.
  *  6. `TimelineReconciler::reconcile(timeline, graph)` recomputes bindings against live node
- *     uuids; an unresolved binding is flagged `orphaned`, NEVER deleted.
- * On any earlier failure, `graph`/`timeline`/`patchDocument` are left untouched.
+ *     uuids (an unresolved binding is flagged `orphaned`, NEVER deleted); `macros.retainOnly`
+ *     drops any member uuid that doesn't resolve, dissolving a macro left with none.
+ * On any earlier failure, `graph`/`timeline`/`patchDocument`/`macros` are left untouched.
  *
  * ### Save
- * `graphToJSON` → `patchDocument.toVar` → `"timeline"` set to `timeline.toVar()` **last**, so the
- * live `TimelineDoc` (not a stale stashed value) is authoritative.
+ * `graphToJSON` → `patchDocument.toVar` → `"timeline"` set to `timeline.toVar()` and `"macros"`
+ * set to `macros.toVar()`, both set **last**, so the live `TimelineDoc`/`MacroSet` (never a stale
+ * stashed value) are authoritative.
  *
  * ### Autosave
  * `saveAutosave()` writes the identical JSON shape to a separate `autosave.json` sidecar —
@@ -90,15 +95,16 @@ public:
 
     /** Writes `<bundleDir>/project.json`, creating `bundleDir` and its `Audio/`/`Peaks/`
      *  subdirectories if they don't already exist. See the class comment for the exact JSON
-     *  shape and the "timeline set last" rationale. */
+     *  shape and the "timeline set last" rationale — "macros" (P8-12) follows the identical
+     *  reserved-key treatment. */
     static ProjectLoadResult save(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
-                                  const TimelineDoc& timeline, PatchDocument& patchDocument);
+                                  const TimelineDoc& timeline, PatchDocument& patchDocument, const MacroSet& macros);
 
-    /** Loads `<bundleDir>/project.json` into `graph`/`timeline`/`patchDocument`, following the
-     *  fixed, all-or-nothing order documented on the class. On any failure, all three output
-     *  parameters are left completely untouched. */
+    /** Loads `<bundleDir>/project.json` into `graph`/`timeline`/`patchDocument`/`macros`,
+     *  following the fixed, all-or-nothing order documented on the class. On any failure, all
+     *  four output parameters are left completely untouched. */
     static ProjectLoadResult load(const juce::File& bundleDir, juce::AudioProcessorGraph& graph, TimelineDoc& timeline,
-                                  PatchDocument& patchDocument);
+                                  PatchDocument& patchDocument, MacroSet& macros);
 
     /** `<userMusicDirectory>/<kProjectsFolderName>`, created on demand. Starting directory for
      *  project save/open/export dialogs (see MainComponent). */
@@ -112,7 +118,8 @@ public:
      *  any) is rotated into the numbered backup history — see the class comment's "Autosave backup
      *  history" section. `maxBackups <= 0` disables rotation (plain overwrite). */
     static ProjectLoadResult saveAutosave(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
-                                          const TimelineDoc& timeline, PatchDocument& patchDocument, int maxBackups);
+                                          const TimelineDoc& timeline, PatchDocument& patchDocument,
+                                          const MacroSet& macros, int maxBackups);
 
     /** True if `<bundleDir>/autosave.json` exists. Checked on open, before `project.json` loads —
      *  see MainComponent::openFromFile. */
@@ -121,7 +128,7 @@ public:
     /** Loads `<bundleDir>/autosave.json` — same all-or-nothing validation and output contract as
      *  load(), just reading the sidecar instead of `project.json`. */
     static ProjectLoadResult loadAutosave(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
-                                          TimelineDoc& timeline, PatchDocument& patchDocument);
+                                          TimelineDoc& timeline, PatchDocument& patchDocument, MacroSet& macros);
 
     /** Deletes `<bundleDir>/autosave.json` if present. A no-op if it doesn't exist. Called once a
      *  pending sidecar has been resolved: after the user answers the recovery prompt (either arm),
@@ -129,15 +136,15 @@ public:
     static void discardAutosave(const juce::File& bundleDir);
 
 private:
-    // Shared by save()/saveAutosave(): graphToJSON -> patchDocument.toVar -> "timeline" set LAST.
-    // Identical content either way; only the destination file name differs.
+    // Shared by save()/saveAutosave(): graphToJSON -> patchDocument.toVar -> "timeline"/"macros"
+    // set LAST. Identical content either way; only the destination file name differs.
     static juce::var buildProjectJson(juce::AudioProcessorGraph& graph, const TimelineDoc& timeline,
-                                      PatchDocument& patchDocument);
+                                      PatchDocument& patchDocument, const MacroSet& macros);
 
     // Shared by load()/loadAutosave(): the fixed, all-or-nothing validation order documented on the
     // class, parametrized only on which file to read.
     static ProjectLoadResult loadFromFile(const juce::File& jsonFile, juce::AudioProcessorGraph& graph,
-                                          TimelineDoc& timeline, PatchDocument& patchDocument);
+                                          TimelineDoc& timeline, PatchDocument& patchDocument, MacroSet& macros);
 
     // The logrotate step saveAutosave() runs before writing new content to autosave.json — see the
     // class comment's "Autosave backup history" section. A no-op when maxBackups <= 0.

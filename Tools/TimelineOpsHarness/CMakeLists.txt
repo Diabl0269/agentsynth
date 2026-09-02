@@ -6,6 +6,7 @@ add_executable(TimelineOpsHarness
     # and typeinfo. Same reason Tools/AIPatchHarness and Tools/AIEvalHarness carry these.
     ${CMAKE_SOURCE_DIR}/Source/UI/GraphEditor.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/ModuleComponent.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/MacroCardComponent.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/ModMatrixComponent.cpp
 )
 

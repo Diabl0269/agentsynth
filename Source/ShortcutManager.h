@@ -25,6 +25,12 @@ enum CommandIDs {
     toggleMinimap,
     toggleAiPanel,
     autoArrange,
+    // Wrap/unwrap the selection in a Macro container (P8-12). Two commands, not one toggle: a
+    // toggle would need to inspect the current selection to know which verb to perform, and a
+    // menu row / Settings-tab shortcut list has no notion of "this command's label depends on
+    // what's selected right now" the way autoArrange's single verb does.
+    groupSelection,
+    ungroupSelection,
     toggleLibrary,
     selectAllModules,
     saveSnippet,
@@ -104,6 +110,10 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return toggleAiPanel;
     if (actionId == "autoArrange")
         return autoArrange;
+    if (actionId == "groupSelection")
+        return groupSelection;
+    if (actionId == "ungroupSelection")
+        return ungroupSelection;
     if (actionId == "toggleLibrary")
         return toggleLibrary;
     if (actionId == "selectAllModules")
@@ -412,6 +422,12 @@ public:
         bindings["autoArrange"] = juce::KeyPress('l', juce::ModifierKeys::commandModifier, 0);
         bindings["saveSnippet"] =
             juce::KeyPress('s', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+        // Cmd+G / Cmd+Shift+G — the Cubase/Ableton convention for group/ungroup, and free on both
+        // counts: 'g' appears nowhere else in this table, and no component keyPressed() override
+        // matches it either (P8-12).
+        bindings["groupSelection"] = juce::KeyPress('g', juce::ModifierKeys::commandModifier, 0);
+        bindings["ungroupSelection"] =
+            juce::KeyPress('g', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
 
         // ---- Timeline ----
         // The bare-key DAW conventions. All three are already what TimelinePanelComponent's
@@ -623,6 +639,10 @@ public:
             return "Toggle AI Panel";
         if (actionId == "autoArrange")
             return "Auto Arrange";
+        if (actionId == "groupSelection")
+            return "Group Selection into Macro";
+        if (actionId == "ungroupSelection")
+            return "Ungroup Macro";
         if (actionId == "toggleLibrary")
             return "Toggle Module Library";
         // Kept as "selectAllModules" (both the actionId string and the AppCommands name) so a
@@ -827,9 +847,11 @@ private:
             {"zoomOutHorizontal", ShortcutCategory::General},
             {"zoomInVertical", ShortcutCategory::General},
             {"zoomOutVertical", ShortcutCategory::General},
-            // Graph — the two verbs that mean nothing on any other surface.
+            // Graph — the verbs that mean nothing on any other surface.
             {"autoArrange", ShortcutCategory::Graph},
             {"saveSnippet", ShortcutCategory::Graph},
+            {"groupSelection", ShortcutCategory::Graph},
+            {"ungroupSelection", ShortcutCategory::Graph},
             // Timeline — the panel's own keys (consulted by TimelinePanelComponent /
             // TimelineClipLaneArea) plus the grid commands, which act on the shared snap value.
             {"timelineSnapToggle", ShortcutCategory::Timeline},

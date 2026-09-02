@@ -445,9 +445,11 @@ public:
     // that has to recognise itself in an audio-thread data structure (Track In matching a
     // TimelineSnapshot::TrackInfo::bindingUuid) strcmps against getNodeUuid().
     //
-    // Writers: the three places AIStateMapper writes node->properties["uuid"] — adoptUuidIfTrusted
-    // (trusted apply), graphToJSON's lazy generation, and applySnapshotPreservingNodes. Each
-    // mirrors into the processor immediately after setting the property, so the two never diverge.
+    // Writers: the places AIStateMapper writes node->properties["uuid"] — adoptUuidIfTrusted
+    // (trusted apply), applySnapshotPreservingNodes, and AIStateMapper::ensureNodeUuid's lazy
+    // generation (graphToJSON, and SnippetManager::insertSnippet's P8-12 macro-membership
+    // resolution — a freshly pasted node has none until this runs). Each mirrors into the
+    // processor immediately after setting the property, so the two never diverge.
     //
     // INVARIANT the lock-free read relies on: the uuid only ever transitions EMPTY -> value, and
     // only while the node is not yet audio-visible (graphToJSON/adopt run on a node the caller
