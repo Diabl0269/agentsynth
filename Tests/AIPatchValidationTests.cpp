@@ -210,6 +210,9 @@ std::vector<Case> makeCases() {
         {PatchValidationError::TimelineNotAllowed, "patch carries a root 'timeline' key",
          [] { return juce::JSON::parse(R"({"nodes":[],"connections":[],"timeline":{"tracks":[]}})"); }},
 
+        {PatchValidationError::MacrosNotAllowed, "patch carries a root 'macros' key",
+         [] { return juce::JSON::parse(R"({"nodes":[],"connections":[],"macros":[]})"); }},
+
         {PatchValidationError::InternalModuleNotAllowed, "patch names an internal-only module type",
          [] { return juce::JSON::parse(R"({"nodes":[{"id":1,"type":"Attenuverter"}],"connections":[]})"); }},
     };

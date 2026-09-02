@@ -3,6 +3,7 @@
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
+#include <map>
 #include <memory>
 
 namespace synth {
@@ -49,6 +50,7 @@ enum class PatchValidationError {
     RemoveEntryInvalid,
     RemoveModulationEntryInvalid,
     TimelineNotAllowed,
+    MacrosNotAllowed,
     InternalModuleNotAllowed,
 };
 
@@ -106,6 +108,14 @@ public:
      */
     static juce::var graphToJSON(juce::AudioProcessorGraph& graph);
 
+    /** Returns `node`'s persistent "uuid", generating and persisting a fresh one first if it
+     *  doesn't have one yet — the same lazy-generation graphToJSON above uses, exposed so a
+     *  caller that just created a node (a merge-mode apply assigns none unless `trusted` and the
+     *  source JSON carried one — see applyJSONToGraph) can get a real uuid to key on without
+     *  serialising the whole graph. SnippetManager::insertSnippet's P8-12 macro-membership
+     *  resolution is the reference caller: a freshly pasted node has no uuid until this runs. */
+    static juce::String ensureNodeUuid(juce::AudioProcessorGraph::Node* node);
+
     /**
      * @brief Applies a JSON-compatible juce::var to the graph.
      *
@@ -125,10 +135,17 @@ public:
      *        convenience wires would otherwise splice the inserted group into the surrounding
      *        patch. See SnippetManager::insertSnippet.
      *
+     * @param outIdMap  Optional. When non-null, filled with the same json-id -> live NodeID map the
+     *        function already builds internally to wire connections/modulations (a merge-mode
+     *        apply does not honour the requested id — see SnippetManager::insertSnippet's own
+     *        comment). SnippetManager uses this to carry P8-12 macro membership (keyed by the
+     *        snippet's own node ids) through to the freshly created nodes' real NodeIDs.
+     *
      * @return true if the patch was applied successfully.
      */
     static bool applyJSONToGraph(const juce::var& json, juce::AudioProcessorGraph& graph, bool clearExisting = true,
-                                 bool trusted = false, bool autoConnectNewNodes = true);
+                                 bool trusted = false, bool autoConnectNewNodes = true,
+                                 std::map<int, juce::AudioProcessorGraph::NodeID>* outIdMap = nullptr);
 
     /**
      * @brief Restores one of OUR OWN graphToJSON snapshots by diffing it against the live graph.

@@ -30,6 +30,7 @@
 #include "../PresetManager.h"
 #include "../SnippetManager.h"
 #include "LayoutUtil.h"
+#include "MacroCardComponent.h"
 #include "ModuleComponent.h"
 #include "Theme/AppLookAndFeel.h"
 #include <algorithm>
@@ -476,6 +477,49 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
         cable.isPolyBus = routing.kind == AudioEngine::RoutingKind::PolyBus;
         cable.voiceCount = routing.voiceCount;
         cables.push_back(cable);
+    }
+
+    // ---- Collapsed-macro cable treatment (P8-12) ----
+    //
+    // A collapsed macro hides its member ModuleComponents (setVisible(false) in syncMacroCards),
+    // but their graph edges — and the cables above computed from them — don't know that. A cable
+    // wholly inside one collapsed macro is dropped outright (both endpoints are off-screen, and
+    // there is nothing useful to draw); a cable crossing a collapsed macro's boundary is
+    // re-anchored to the card's own centre point rather than left pointing at a hidden jack.
+    if (!macros.empty()) {
+        // nodeID.uid -> macro id, built once, collapsed macros only.
+        std::unordered_map<uint32_t, const synth::Macro*> collapsedMacroForNode;
+        for (const auto& macro : macros.getAll()) {
+            if (!macro.collapsed)
+                continue;
+            for (const auto& uuid : macro.members) {
+                auto nodeId = resolveMemberNodeId(uuid);
+                if (nodeId.uid != 0)
+                    collapsedMacroForNode[nodeId.uid] = &macro;
+            }
+        }
+
+        if (!collapsedMacroForNode.empty()) {
+            std::vector<VisibleCable> filtered;
+            filtered.reserve(cables.size());
+            for (auto& cable : cables) {
+                auto srcIt = collapsedMacroForNode.find(cable.id.srcUid);
+                auto dstIt = collapsedMacroForNode.find(cable.id.dstUid);
+                const bool srcHidden = srcIt != collapsedMacroForNode.end();
+                const bool dstHidden = dstIt != collapsedMacroForNode.end();
+
+                if (srcHidden && dstHidden && srcIt->second == dstIt->second)
+                    continue; // wholly inside one collapsed macro — nothing on screen to draw
+
+                if (srcHidden)
+                    cable.p1 = srcIt->second->bounds.getCentre().toFloat();
+                if (dstHidden)
+                    cable.p2 = dstIt->second->bounds.getCentre().toFloat();
+
+                filtered.push_back(cable);
+            }
+            cables = std::move(filtered);
+        }
     }
 
     return cables;
@@ -2372,6 +2416,20 @@ void GraphEditor::updateComponents() {
         moduleIndex++;
     }
 
+    // Reconcile macro membership against whatever nodes actually survived — the MacroSet
+    // analogue of pruneSelection() above, and the ONE seam that keeps `macros` from ever
+    // naming a dead node, regardless of which delete/undo/preset-load path got here.
+    {
+        std::vector<juce::String> aliveUuids;
+        for (auto* node : graph.getNodes()) {
+            const juce::String uuid = node->properties["uuid"].toString();
+            if (uuid.isNotEmpty())
+                aliveUuids.push_back(uuid);
+        }
+        macros.retainOnly(aliveUuids);
+    }
+    syncMacroCards();
+
     // Refresh mod matrix to pick up any new/removed attenuverter routings
     // Use callAsync to avoid re-entrancy during graph modification
     // SafePointer guards against the GraphEditor being destroyed before the callback fires
@@ -2813,7 +2871,10 @@ void GraphEditor::mouseUp(const juce::MouseEvent& e) {
 std::vector<synth::LayoutUtil::Box> GraphEditor::collectModuleBoxes(bool selectedOnly, bool excludeSelected) const {
     std::vector<synth::LayoutUtil::Box> boxes;
     for (auto* comp : const_cast<GraphContentComponent&>(content).getModules()) {
-        if (comp == nullptr || comp->getModule() == nullptr)
+        // A hidden member of a collapsed macro is not "on the canvas" as far as marquee
+        // hit-testing or group-drag collision are concerned — the visible collapsed card stands
+        // in for it (see syncMacroCards).
+        if (comp == nullptr || comp->getModule() == nullptr || !comp->isVisible())
             continue;
         const bool isSel = selection.contains(comp->getNodeId());
         if (selectedOnly && !isSel)
@@ -2901,7 +2962,10 @@ void GraphEditor::deleteSelection() {
     auto& graph = audioEngine.getGraph();
 
     // One transaction for the whole group: Cmd+Z must bring back every module at once, not peel
-    // them back one at a time.
+    // them back one at a time. Deleting a collapsed macro card's members (see
+    // deleteMacroAndMembers) flows through here too, so the macro half of the change has to be
+    // captured in the SAME undo step as the graph half — recordGraphAndMacroChange, not
+    // recordStructuralChange. updateComponents() prunes `macros` against whatever survives.
     auto doDelete = [this, ids, &graph] {
         modMatrix.clearRows();
         for (auto id : ids)
@@ -2911,7 +2975,7 @@ void GraphEditor::deleteSelection() {
     };
 
     if (undoManager)
-        undoManager->recordStructuralChange(graph, doDelete);
+        undoManager->recordGraphAndMacroChange(graph, macros, doDelete);
     else
         doDelete();
 
@@ -3027,6 +3091,320 @@ void GraphEditor::cancelSelectionDrag() {
     selectionDragStartPositions.clear();
 }
 
+// ---- Macros (P8-12) ----------------------------------------------------------------------
+
+namespace {
+// The collapsed card's fixed footprint — deliberately independent of however large or scattered
+// the group it stands in for is; that is the whole point of collapsing. Matches a standard
+// module card's width so it sits comfortably on the same grid.
+constexpr int kMacroCardHeight = 90;
+} // namespace
+
+juce::String GraphEditor::nodeUuidFor(juce::AudioProcessorGraph::NodeID nodeId) const {
+    if (auto* node = audioEngine.getGraph().getNodeForId(nodeId))
+        return node->properties["uuid"].toString();
+    return {};
+}
+
+juce::AudioProcessorGraph::NodeID GraphEditor::resolveMemberNodeId(const juce::String& memberUuid) const {
+    for (auto* node : audioEngine.getGraph().getNodes()) {
+        if (node->properties["uuid"].toString() == memberUuid)
+            return node->nodeID;
+    }
+    return {};
+}
+
+void GraphEditor::syncMacroCards() {
+    auto& cards = content.getMacroCards();
+
+    // 1. Remove cards for macros that no longer exist.
+    for (int i = cards.size(); --i >= 0;) {
+        auto* card = cards.getUnchecked(i);
+        if (macros.find(card->getMacroId()) == nullptr) {
+            content.removeChildComponent(card);
+            cards.remove(i);
+        }
+    }
+
+    // 2. Add cards for new macros; every card's bounds/visibility follow its macro's collapsed
+    //    state (bounds are meaningless while expanded — see synth::Macro's comment).
+    for (const auto& macro : macros.getAll()) {
+        MacroCardComponent* card = nullptr;
+        for (auto* c : cards) {
+            if (c->getMacroId() == macro.id) {
+                card = c;
+                break;
+            }
+        }
+        if (card == nullptr) {
+            card = cards.add(new MacroCardComponent(*this, macro.id));
+            content.addAndMakeVisible(card);
+        }
+        card->setBounds(macro.bounds);
+        card->setVisible(macro.collapsed);
+    }
+
+    // 3. A member's own ModuleComponent is hidden exactly while its macro is collapsed — kept
+    //    alive (not removed), so its position keeps tracking a card drag underneath.
+    for (auto* comp : content.getModules()) {
+        if (comp == nullptr)
+            continue;
+        const juce::String uuid = nodeUuidFor(comp->getNodeId());
+        const auto* macro = uuid.isEmpty() ? nullptr : macros.findByMember(uuid);
+        comp->setVisible(macro == nullptr || !macro->collapsed);
+    }
+}
+
+juce::String GraphEditor::groupSelectionIntoMacro() {
+    auto ids = selection.getSelected();
+    if (ids.size() < 2) {
+        if (onStatusMessage)
+            onStatusMessage("Select at least two modules to group into a macro.");
+        return {};
+    }
+
+    std::vector<juce::String> memberUuids;
+    juce::Rectangle<int> groupBounds;
+    for (auto id : ids) {
+        const juce::String uuid = nodeUuidFor(id);
+        if (uuid.isEmpty())
+            continue; // no persistent identity to group by — shouldn't happen for a real module
+
+        if (macros.findByMember(uuid) != nullptr) {
+            // Flat model, deliberately refused rather than silently merging/re-parenting — see
+            // synth::Macro's class comment. A status message, not a silent no-op: Cmd+G doing
+            // nothing with no explanation reads as broken, and a test can only assert "nothing
+            // happened" against a no-op, which is indistinguishable from an actual bug.
+            if (onStatusMessage)
+                onStatusMessage("Can't group: a selected module is already in a macro. Ungroup it first.");
+            return {};
+        }
+        memberUuids.push_back(uuid);
+
+        for (auto* comp : content.getModules()) {
+            if (comp != nullptr && comp->getNodeId() == id) {
+                groupBounds = groupBounds.isEmpty() ? comp->getBounds() : groupBounds.getUnion(comp->getBounds());
+                break;
+            }
+        }
+    }
+
+    if (memberUuids.size() < 2) {
+        if (onStatusMessage)
+            onStatusMessage("Select at least two modules to group into a macro.");
+        return {};
+    }
+
+    synth::Macro macro;
+    macro.name = "Macro";
+    macro.members = memberUuids;
+    macro.collapsed = true;
+    const auto origin = groupBounds.isEmpty() ? juce::Point<int>() : groupBounds.getTopLeft();
+    macro.bounds = juce::Rectangle<int>(origin.x, origin.y, synth::LayoutUtil::kSingleWidth, kMacroCardHeight);
+
+    auto& graph = audioEngine.getGraph();
+    juce::String newId;
+    auto doGroup = [this, macro, &newId] {
+        newId = macros.add(macro).id;
+        updateComponents();
+    };
+
+    if (undoManager)
+        undoManager->recordGraphAndMacroChange(graph, macros, doGroup);
+    else
+        doGroup();
+
+    if (!newId.isEmpty())
+        selectMacro(newId, false);
+
+    repaint();
+    return newId;
+}
+
+void GraphEditor::ungroupSelection() {
+    auto ids = selection.getSelected();
+    std::set<juce::String> macroIdsToRemove;
+    for (auto id : ids) {
+        const juce::String uuid = nodeUuidFor(id);
+        if (uuid.isEmpty())
+            continue;
+        if (auto* m = macros.findByMember(uuid))
+            macroIdsToRemove.insert(m->id);
+    }
+
+    if (macroIdsToRemove.empty()) {
+        if (onStatusMessage)
+            onStatusMessage("Select a macro's modules to ungroup it.");
+        return;
+    }
+
+    auto& graph = audioEngine.getGraph();
+    auto doUngroup = [this, macroIdsToRemove] {
+        std::vector<juce::AudioProcessorGraph::NodeID> newSelection;
+        for (const auto& macroId : macroIdsToRemove) {
+            if (auto* m = macros.find(macroId)) {
+                for (const auto& uuid : m->members) {
+                    auto nodeId = resolveMemberNodeId(uuid);
+                    if (nodeId.uid != 0)
+                        newSelection.push_back(nodeId);
+                }
+            }
+            macros.remove(macroId);
+        }
+        updateComponents();
+        setSelectedNodes(newSelection);
+    };
+
+    if (undoManager)
+        undoManager->recordGraphAndMacroChange(graph, macros, doUngroup);
+    else
+        doUngroup();
+
+    repaint();
+}
+
+void GraphEditor::selectMacro(const juce::String& macroId, bool additive) {
+    auto* m = macros.find(macroId);
+    if (m == nullptr)
+        return;
+
+    std::vector<juce::AudioProcessorGraph::NodeID> memberIds;
+    for (const auto& uuid : m->members) {
+        auto nodeId = resolveMemberNodeId(uuid);
+        if (nodeId.uid != 0)
+            memberIds.push_back(nodeId);
+    }
+
+    applySelectionChange(additive ? synth::ui::unionSelection(selection.getSelected(), memberIds) : memberIds);
+}
+
+bool GraphEditor::isMacroSelected(const juce::String& macroId) const {
+    const auto* m = macros.find(macroId);
+    if (m == nullptr || m->members.empty() || selection.size() != (int)m->members.size())
+        return false;
+
+    for (const auto& uuid : m->members) {
+        auto nodeId = resolveMemberNodeId(uuid);
+        if (nodeId.uid == 0 || !selection.contains(nodeId))
+            return false;
+    }
+    return true;
+}
+
+void GraphEditor::setMacroCollapsed(const juce::String& macroId, bool collapsed) {
+    auto& graph = audioEngine.getGraph();
+    auto doToggle = [this, macroId, collapsed] {
+        auto* m = macros.find(macroId);
+        if (m == nullptr || m->collapsed == collapsed)
+            return;
+
+        if (collapsed) {
+            // Collapsing FROM expanded: seed the card at the current member bounding box's
+            // top-left, sized to the standard card footprint rather than the (possibly huge)
+            // group — that is the whole point of collapsing.
+            juce::Rectangle<int> groupBounds;
+            for (const auto& uuid : m->members) {
+                auto nodeId = resolveMemberNodeId(uuid);
+                for (auto* comp : content.getModules()) {
+                    if (comp != nullptr && comp->getNodeId() == nodeId) {
+                        groupBounds =
+                            groupBounds.isEmpty() ? comp->getBounds() : groupBounds.getUnion(comp->getBounds());
+                        break;
+                    }
+                }
+            }
+            const auto origin = groupBounds.isEmpty() ? m->bounds.getTopLeft() : groupBounds.getTopLeft();
+            m->bounds = juce::Rectangle<int>(origin.x, origin.y, synth::LayoutUtil::kSingleWidth, kMacroCardHeight);
+        }
+        m->collapsed = collapsed;
+        updateComponents();
+    };
+
+    if (undoManager)
+        undoManager->recordGraphAndMacroChange(graph, macros, doToggle);
+    else
+        doToggle();
+
+    repaint();
+}
+
+void GraphEditor::renameMacro(const juce::String& macroId, const juce::String& newName) {
+    auto& graph = audioEngine.getGraph();
+    auto doRename = [this, macroId, newName] {
+        if (auto* m = macros.find(macroId))
+            m->name = newName;
+    };
+
+    if (undoManager)
+        undoManager->recordGraphAndMacroChange(graph, macros, doRename);
+    else
+        doRename();
+
+    syncMacroCards();
+    repaint();
+}
+
+void GraphEditor::setMacroColour(const juce::String& macroId, juce::Colour colour) {
+    auto& graph = audioEngine.getGraph();
+    auto doRecolour = [this, macroId, colour] {
+        if (auto* m = macros.find(macroId))
+            m->colour = colour;
+    };
+
+    if (undoManager)
+        undoManager->recordGraphAndMacroChange(graph, macros, doRecolour);
+    else
+        doRecolour();
+
+    syncMacroCards();
+    repaint();
+}
+
+void GraphEditor::deleteMacroAndMembers(const juce::String& macroId) {
+    auto* m = macros.find(macroId);
+    if (m == nullptr)
+        return;
+
+    std::vector<juce::AudioProcessorGraph::NodeID> memberIds;
+    for (const auto& uuid : m->members) {
+        auto nodeId = resolveMemberNodeId(uuid);
+        if (nodeId.uid != 0)
+            memberIds.push_back(nodeId);
+    }
+
+    // Reuses the single delete-selection path exactly, rather than a parallel "delete a macro"
+    // mutation: selecting every member and calling deleteSelection() gets the same undo/dirty/
+    // timeline-reconcile handling deleting any other multi-selection gets, and
+    // updateComponents() dissolves the now-empty macro as part of that same step.
+    setSelectedNodes(memberIds);
+    deleteSelection();
+}
+
+void GraphEditor::beginMacroCardDrag(const juce::String& macroId) {
+    selectMacro(macroId, false);
+    beginSelectionDrag();
+}
+
+void GraphEditor::dragMacroCardBy(const juce::String&, juce::Point<int> delta) { dragSelectionBy(delta, nullptr); }
+
+void GraphEditor::finalizeMacroCardDrag(const juce::String& macroId, juce::Point<int> newCardTopLeft) {
+    auto& graph = audioEngine.getGraph();
+    auto doFinalize = [this, macroId, newCardTopLeft] {
+        finalizeSelectionDrag();
+        if (auto* m = macros.find(macroId))
+            m->bounds.setPosition(synth::LayoutUtil::snap(newCardTopLeft));
+    };
+
+    if (undoManager)
+        undoManager->recordGraphAndMacroChange(graph, macros, doFinalize);
+    else
+        doFinalize();
+
+    repaintCanvas();
+}
+
+void GraphEditor::cancelMacroCardDrag(const juce::String&) { cancelSelectionDrag(); }
+
 // ---- Snippets ----
 
 juce::Point<int> GraphEditor::estimateSnippetSize(const juce::String& payload) const {
@@ -3065,7 +3443,8 @@ juce::Point<int> GraphEditor::estimateSnippetSize(const juce::String& payload) c
 }
 
 juce::var GraphEditor::extractSelectionSnippet(const juce::String& name) {
-    return synth::SnippetManager::extractSnippet(audioEngine.getGraph(), selection.getSelected(), name);
+    return synth::SnippetManager::extractSnippet(audioEngine.getGraph(), selection.getSelected(), name,
+                                                 /*includeExtraState=*/false, macros);
 }
 
 bool GraphEditor::insertSnippetAt(const juce::var& snippet, juce::Point<int> canvasPos) {
@@ -3076,13 +3455,17 @@ bool GraphEditor::insertSnippetAt(const juce::var& snippet, juce::Point<int> can
     auto dropPos = synth::LayoutUtil::snap(canvasPos);
 
     std::vector<juce::AudioProcessorGraph::NodeID> added;
-    auto doInsert = [this, &graph, &snippet, dropPos, &added] {
-        added = synth::SnippetManager::insertSnippet(snippet, graph, dropPos);
+    std::vector<synth::Macro> addedMacros;
+    auto doInsert = [this, &graph, &snippet, dropPos, &added, &addedMacros] {
+        added =
+            synth::SnippetManager::insertSnippet(snippet, graph, dropPos, /*includeExtraState=*/false, &addedMacros);
+        for (auto& macro : addedMacros)
+            macros.add(macro);
         updateComponents();
     };
 
     if (undoManager)
-        undoManager->recordStructuralChange(graph, doInsert);
+        undoManager->recordGraphAndMacroChange(graph, macros, doInsert);
     else
         doInsert();
 
@@ -3102,16 +3485,19 @@ bool GraphEditor::insertClipboardPayload(const juce::var& payload, juce::Point<i
     auto dropPos = synth::LayoutUtil::snap(canvasPos);
 
     std::vector<juce::AudioProcessorGraph::NodeID> added;
-    auto doInsert = [this, &graph, &payload, dropPos, &added] {
+    std::vector<synth::Macro> addedMacros;
+    auto doInsert = [this, &graph, &payload, dropPos, &added, &addedMacros] {
         // includeExtraState: the payload came from the live graph in this session, so carrying a
         // Sampler's loaded file or a Wavetable's custom table through is both safe and expected —
         // a duplicated Sampler that lost its sample would not be a duplicate.
-        added = synth::SnippetManager::insertSnippet(payload, graph, dropPos, /*includeExtraState=*/true);
+        added = synth::SnippetManager::insertSnippet(payload, graph, dropPos, /*includeExtraState=*/true, &addedMacros);
+        for (auto& macro : addedMacros)
+            macros.add(macro);
         updateComponents();
     };
 
     if (undoManager)
-        undoManager->recordStructuralChange(graph, doInsert);
+        undoManager->recordGraphAndMacroChange(graph, macros, doInsert);
     else
         doInsert();
 
@@ -3131,7 +3517,7 @@ bool GraphEditor::copySelection() {
         return false;
 
     auto payload = synth::SnippetManager::extractSnippet(audioEngine.getGraph(), ids, "Clipboard",
-                                                         /*includeExtraState=*/true);
+                                                         /*includeExtraState=*/true, macros);
     if (synth::SnippetManager::getModuleCount(payload) <= 0)
         return false; // nothing eligible (e.g. only Audio Output was selected) — keep what we had
 
@@ -3164,7 +3550,7 @@ bool GraphEditor::duplicateSelection() {
         return false;
 
     auto& graph = audioEngine.getGraph();
-    auto payload = synth::SnippetManager::extractSnippet(graph, ids, "Duplicate", /*includeExtraState=*/true);
+    auto payload = synth::SnippetManager::extractSnippet(graph, ids, "Duplicate", /*includeExtraState=*/true, macros);
     if (synth::SnippetManager::getModuleCount(payload) <= 0)
         return false;
 
@@ -3311,17 +3697,19 @@ void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId) 
 
     auto& graph = audioEngine.getGraph();
 
-    if (undoManager) {
-        undoManager->recordStructuralChange(graph, [this, nodeId, &graph] {
-            modMatrix.clearRows();
-            graph.removeNode(nodeId);
-            updateComponents();
-        });
-    } else {
+    // updateComponents() below prunes `macros` against whatever nodes survive, so a module that
+    // was a macro member either shrinks or dissolves its macro as part of the SAME undo step —
+    // recordGraphAndMacroChange captures both "before"/"after" snapshots, not just the graph's.
+    auto doDelete = [this, nodeId, &graph] {
         modMatrix.clearRows();
         graph.removeNode(nodeId);
         updateComponents();
-    }
+    };
+
+    if (undoManager)
+        undoManager->recordGraphAndMacroChange(graph, macros, doDelete);
+    else
+        doDelete();
     repaint();
 }
 
@@ -4936,6 +5324,7 @@ void GraphEditor::newPatch() {
         // A fresh patch has no file behind it — preserved keys are per-loaded-file and must
         // never be resurrected into it.
         patchDocument.clear();
+        macros.clear();
         updateComponents(); // reconciles the now-empty view; the empty-canvas hint will show
     };
 

@@ -147,6 +147,8 @@ add_library(Core STATIC
     Source/Branding.h
     Source/GeneralFeedbackStore.cpp
     Source/GeneralFeedbackStore.h
+    Source/MacroSet.cpp
+    Source/MacroSet.h
     Source/PresetManager.cpp
     Source/PresetManager.h
     Source/PatchDocument.cpp
@@ -539,6 +541,8 @@ add_library(AppUI STATIC
     Source/UI/GraphEditor.h
     Source/UI/ModuleComponent.cpp
     Source/UI/ModuleComponent.h
+    Source/UI/MacroCardComponent.cpp
+    Source/UI/MacroCardComponent.h
     Source/UI/FrequencyResponseComponent.h
     Source/UI/FrequencyGrid.h
     Source/UI/EQCurveComponent.h

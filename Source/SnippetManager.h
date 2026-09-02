@@ -1,5 +1,6 @@
 #pragma once
 
+#include "MacroSet.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
 #include <vector>
@@ -70,9 +71,15 @@ public:
      *         to open. The in-memory clipboard has no such exposure — its payload comes straight
      *         from the live graph and never leaves the process — so copy/paste turns it on and a
      *         duplicated Sampler keeps its sample.
+     *  @param macros  Optional (P8-12). A macro is captured into the snippet's own "macros" array
+     *         — using the same node ids as `nodes` below, NOT uuids, since a snippet renumbers
+     *         ids on insert — only when EVERY one of its members is inside `selection`; a macro
+     *         straddling the selection boundary is dropped rather than partially captured, same
+     *         "self-contained" rule connections/modulations already follow.
      */
     static juce::var extractSnippet(juce::AudioProcessorGraph& graph, const std::vector<NodeID>& selection,
-                                    const juce::String& name, bool includeExtraState = false);
+                                    const juce::String& name, bool includeExtraState = false,
+                                    const MacroSet& macros = {});
 
     /** Top-left canvas corner `extractSnippet` normalises `selection` against — the min (x, y) over
      *  every *eligible* selected node, or (0, 0) when the selection holds none.
@@ -103,9 +110,14 @@ public:
 
     /** Inserts `snippet` into `graph` at `dropPos` without disturbing what is already there.
      *  @param includeExtraState  see extractSnippet.
+     *  @param outMacros  Optional (P8-12). When non-null, filled with a fresh synth::Macro per
+     *         macro the snippet carried, membership already resolved to the newly created nodes'
+     *         real (freshly assigned) uuids — ready to hand straight to MacroSet::add(). A macro
+     *         id is regenerated (never reused across a copy), same as node ids are.
      *  @return the node ids added (Attenuverters excluded), empty on rejection/failure. */
     static std::vector<NodeID> insertSnippet(const juce::var& snippet, juce::AudioProcessorGraph& graph,
-                                             juce::Point<int> dropPos, bool includeExtraState = false);
+                                             juce::Point<int> dropPos, bool includeExtraState = false,
+                                             std::vector<Macro>* outMacros = nullptr);
 
     // ---- Snippet metadata ------------------------------------------------------------
 

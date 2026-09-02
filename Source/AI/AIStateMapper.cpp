@@ -336,6 +336,8 @@ juce::String patchValidationErrorName(PatchValidationError error) {
         return "RemoveModulationEntryInvalid";
     case PatchValidationError::TimelineNotAllowed:
         return "TimelineNotAllowed";
+    case PatchValidationError::MacrosNotAllowed:
+        return "MacrosNotAllowed";
     case PatchValidationError::InternalModuleNotAllowed:
         return "InternalModuleNotAllowed";
     }
@@ -472,6 +474,17 @@ PatchValidationResult AIStateMapper::validatePatch(const juce::var& json, const 
         return {false, PatchValidationError::TimelineNotAllowed,
                 "Patch suggestions must not contain a \"timeline\" property - timeline and automation "
                 "data is not accepted from a patch suggestion. Remove it and resend only nodes, "
+                "connections and modulations."};
+
+    // "macros" is reserved the same way: it is app-authored canvas presentation data (P8-12),
+    // never provider output, and its membership is keyed by node uuid — which is itself
+    // trusted-only (adoptUuidIfTrusted below ignores a provider-supplied uuid), so a
+    // provider-authored "macros" key could never resolve to anything real even if it were let
+    // through. Refusing it outright keeps that true regardless of future changes here.
+    if (rootObj->hasProperty("macros"))
+        return {false, PatchValidationError::MacrosNotAllowed,
+                "Patch suggestions must not contain a \"macros\" property - macro grouping is app-authored "
+                "canvas data, not accepted from a patch suggestion. Remove it and resend only nodes, "
                 "connections and modulations."};
 
     if (nodesList && nodesList->size() > kMaxNodes)
@@ -847,6 +860,18 @@ juce::String AIStateMapper::getFactoryTypeName(juce::AudioProcessor* processor) 
     return processor->getName();
 }
 
+juce::String AIStateMapper::ensureNodeUuid(juce::AudioProcessorGraph::Node* node) {
+    if (node == nullptr)
+        return {};
+    juce::String uuid = node->properties["uuid"].toString();
+    if (uuid.isEmpty()) {
+        uuid = juce::Uuid().toDashedString();
+        node->properties.set("uuid", uuid);
+        mirrorUuidIntoProcessor(node, uuid);
+    }
+    return uuid;
+}
+
 juce::var AIStateMapper::graphToJSON(juce::AudioProcessorGraph& graph) {
     juce::DynamicObject::Ptr root = new juce::DynamicObject();
     root->setProperty("schemaVersion", kSchemaVersion);
@@ -862,13 +887,7 @@ juce::var AIStateMapper::graphToJSON(juce::AudioProcessorGraph& graph) {
             // every later save of the same node emits the same string. The integer "id" cannot
             // serve this purpose: merge-mode apply renumbers nodes, so anything holding a
             // long-lived reference (automation lanes, timeline track bindings) keys on the uuid.
-            juce::String uuid = node->properties["uuid"].toString();
-            if (uuid.isEmpty()) {
-                uuid = juce::Uuid().toDashedString();
-                node->properties.set("uuid", uuid);
-                mirrorUuidIntoProcessor(node, uuid);
-            }
-            n->setProperty("uuid", uuid);
+            n->setProperty("uuid", ensureNodeUuid(node));
 
             // User's custom card title, when they renamed it. Deliberately a SEPARATE field from the
             // processor's own name: "type" carries the factory type, and the processor's getName()
@@ -1135,7 +1154,8 @@ void AIStateMapper::applyExtraStateToProcessor(juce::AudioProcessor* processor, 
 }
 
 bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessorGraph& graph, bool clearExisting,
-                                     bool trusted, bool autoConnectNewNodes) {
+                                     bool trusted, bool autoConnectNewNodes,
+                                     std::map<int, juce::AudioProcessorGraph::NodeID>* outIdMap) {
     if (!json.isObject()) {
         juce::Logger::writeToLog("applyJSONToGraph: JSON is not an object.");
         return false;
@@ -1516,6 +1536,9 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
             }
         }
     }
+
+    if (outIdMap != nullptr)
+        *outIdMap = idMap;
 
     return true;
 }

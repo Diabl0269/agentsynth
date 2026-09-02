@@ -103,9 +103,10 @@ TEST_F(ProjectBundleTest, SaveCreatesBundleStructure) {
     TimelineDoc timeline;
     buildSampleTimeline(timeline);
     PatchDocument patchDocument;
+    synth::MacroSet macros;
 
     auto dir = bundleDir("Save");
-    auto result = ProjectBundle::save(dir, graph, timeline, patchDocument);
+    auto result = ProjectBundle::save(dir, graph, timeline, patchDocument, macros);
     ASSERT_TRUE(result.ok) << result.message;
 
     EXPECT_TRUE(dir.isDirectory());
@@ -129,9 +130,10 @@ TEST_F(ProjectBundleTest, RoundTripGraphAndTimeline) {
     TimelineDoc originalTimeline;
     buildSampleTimeline(originalTimeline);
     PatchDocument originalPatchDoc;
+    synth::MacroSet originalMacros;
 
     auto dir = bundleDir("RoundTrip");
-    ASSERT_TRUE(ProjectBundle::save(dir, originalGraph, originalTimeline, originalPatchDoc).ok);
+    ASSERT_TRUE(ProjectBundle::save(dir, originalGraph, originalTimeline, originalPatchDoc, originalMacros).ok);
 
     // save() assigns/persists node uuids via graphToJSON as a side effect — capture AFTER save.
     auto originalJson = synth::AIStateMapper::graphToJSON(originalGraph);
@@ -142,7 +144,8 @@ TEST_F(ProjectBundleTest, RoundTripGraphAndTimeline) {
     juce::AudioProcessorGraph freshGraph;
     TimelineDoc freshTimeline;
     PatchDocument freshPatchDoc;
-    auto result = ProjectBundle::load(dir, freshGraph, freshTimeline, freshPatchDoc);
+    synth::MacroSet freshMacros;
+    auto result = ProjectBundle::load(dir, freshGraph, freshTimeline, freshPatchDoc, freshMacros);
     ASSERT_TRUE(result.ok) << result.message;
 
     EXPECT_EQ(freshGraph.getNumNodes(), originalGraph.getNumNodes());
@@ -186,9 +189,10 @@ TEST_F(ProjectBundleTest, SaveAutosaveWritesSidecarWithoutTouchingProjectJson) {
     TimelineDoc timeline;
     buildSampleTimeline(timeline);
     PatchDocument patchDocument;
+    synth::MacroSet macros;
 
     auto dir = bundleDir("Autosave");
-    ASSERT_TRUE(ProjectBundle::save(dir, graph, timeline, patchDocument).ok);
+    ASSERT_TRUE(ProjectBundle::save(dir, graph, timeline, patchDocument, macros).ok);
     auto projectFile = dir.getChildFile(ProjectBundle::kProjectFileName);
     const auto projectJsonBefore = projectFile.loadFileAsString();
 
@@ -199,7 +203,7 @@ TEST_F(ProjectBundleTest, SaveAutosaveWritesSidecarWithoutTouchingProjectJson) {
     vca2->properties.set("y", 0);
 
     ASSERT_FALSE(ProjectBundle::hasAutosave(dir));
-    const auto result = ProjectBundle::saveAutosave(dir, graph, timeline, patchDocument, /*maxBackups=*/0);
+    const auto result = ProjectBundle::saveAutosave(dir, graph, timeline, patchDocument, macros, /*maxBackups=*/0);
     ASSERT_TRUE(result.ok) << result.message;
 
     EXPECT_TRUE(ProjectBundle::hasAutosave(dir));
@@ -221,11 +225,13 @@ TEST_F(ProjectBundleTest, LoadAutosaveRoundTripsGraphAndTimelineFromTheSidecarOn
     TimelineDoc originalTimeline;
     buildSampleTimeline(originalTimeline);
     PatchDocument originalPatchDoc;
+    synth::MacroSet originalMacros;
 
     auto dir = bundleDir("LoadAutosave");
     dir.createDirectory(); // saveAutosave() requires the bundle directory to already exist.
-    ASSERT_TRUE(
-        ProjectBundle::saveAutosave(dir, originalGraph, originalTimeline, originalPatchDoc, /*maxBackups=*/0).ok);
+    ASSERT_TRUE(ProjectBundle::saveAutosave(dir, originalGraph, originalTimeline, originalPatchDoc, originalMacros,
+                                            /*maxBackups=*/0)
+                    .ok);
     ASSERT_FALSE(dir.getChildFile(ProjectBundle::kProjectFileName).existsAsFile())
         << "saveAutosave must never create project.json";
 
@@ -235,7 +241,8 @@ TEST_F(ProjectBundleTest, LoadAutosaveRoundTripsGraphAndTimelineFromTheSidecarOn
     juce::AudioProcessorGraph freshGraph;
     TimelineDoc freshTimeline;
     PatchDocument freshPatchDoc;
-    const auto result = ProjectBundle::loadAutosave(dir, freshGraph, freshTimeline, freshPatchDoc);
+    synth::MacroSet freshMacros;
+    const auto result = ProjectBundle::loadAutosave(dir, freshGraph, freshTimeline, freshPatchDoc, freshMacros);
     ASSERT_TRUE(result.ok) << result.message;
 
     EXPECT_EQ(freshGraph.getNumNodes(), originalGraph.getNumNodes());
@@ -248,10 +255,11 @@ TEST_F(ProjectBundleTest, DiscardAutosaveRemovesTheSidecarAndIsANoOpWhenAbsent) 
     buildSampleGraph(graph);
     TimelineDoc timeline;
     PatchDocument patchDocument;
+    synth::MacroSet macros;
 
     auto dir = bundleDir("Discard");
-    ASSERT_TRUE(ProjectBundle::save(dir, graph, timeline, patchDocument).ok);
-    ASSERT_TRUE(ProjectBundle::saveAutosave(dir, graph, timeline, patchDocument, /*maxBackups=*/0).ok);
+    ASSERT_TRUE(ProjectBundle::save(dir, graph, timeline, patchDocument, macros).ok);
+    ASSERT_TRUE(ProjectBundle::saveAutosave(dir, graph, timeline, patchDocument, macros, /*maxBackups=*/0).ok);
     ASSERT_TRUE(ProjectBundle::hasAutosave(dir));
 
     ProjectBundle::discardAutosave(dir);
@@ -273,6 +281,7 @@ TEST_F(ProjectBundleTest, SaveAutosaveRotatesPreviousSidecarsIntoNumberedBackups
     buildSampleGraph(graph); // 3 nodes to start
     TimelineDoc timeline;
     PatchDocument patchDocument;
+    synth::MacroSet macros;
     auto dir = bundleDir("Rotate");
     dir.createDirectory();
 
@@ -289,7 +298,7 @@ TEST_F(ProjectBundleTest, SaveAutosaveRotatesPreviousSidecarsIntoNumberedBackups
             extra->properties.set("x", 900 + i);
             extra->properties.set("y", 0);
         }
-        ASSERT_TRUE(ProjectBundle::saveAutosave(dir, graph, timeline, patchDocument, /*maxBackups=*/3).ok);
+        ASSERT_TRUE(ProjectBundle::saveAutosave(dir, graph, timeline, patchDocument, macros, /*maxBackups=*/3).ok);
     }
 
     // Final state: autosave.json = 7 nodes (the last write), autosave-1/2/3 hold the three most
@@ -307,6 +316,7 @@ TEST_F(ProjectBundleTest, MaxBackupsZeroKeepsNoBackupFilesEver) {
     buildSampleGraph(graph);
     TimelineDoc timeline;
     PatchDocument patchDocument;
+    synth::MacroSet macros;
     auto dir = bundleDir("NoBackups");
     dir.createDirectory();
 
@@ -314,7 +324,7 @@ TEST_F(ProjectBundleTest, MaxBackupsZeroKeepsNoBackupFilesEver) {
         auto extra = graph.addNode(std::make_unique<VCAModule>());
         extra->properties.set("x", 900 + i);
         extra->properties.set("y", 0);
-        ASSERT_TRUE(ProjectBundle::saveAutosave(dir, graph, timeline, patchDocument, /*maxBackups=*/0).ok);
+        ASSERT_TRUE(ProjectBundle::saveAutosave(dir, graph, timeline, patchDocument, macros, /*maxBackups=*/0).ok);
     }
 
     EXPECT_TRUE(dir.getChildFile("autosave.json").existsAsFile());
@@ -327,6 +337,7 @@ TEST_F(ProjectBundleTest, DiscardAutosaveLeavesTheNumberedBackupHistoryUntouched
     buildSampleGraph(graph);
     TimelineDoc timeline;
     PatchDocument patchDocument;
+    synth::MacroSet macros;
     auto dir = bundleDir("DiscardKeepsBackups");
     dir.createDirectory();
 
@@ -336,7 +347,7 @@ TEST_F(ProjectBundleTest, DiscardAutosaveLeavesTheNumberedBackupHistoryUntouched
             extra->properties.set("x", 900 + i);
             extra->properties.set("y", 0);
         }
-        ASSERT_TRUE(ProjectBundle::saveAutosave(dir, graph, timeline, patchDocument, /*maxBackups=*/2).ok);
+        ASSERT_TRUE(ProjectBundle::saveAutosave(dir, graph, timeline, patchDocument, macros, /*maxBackups=*/2).ok);
     }
     ASSERT_TRUE(dir.getChildFile("autosave-1.json").existsAsFile());
     ASSERT_TRUE(dir.getChildFile("autosave-2.json").existsAsFile());
@@ -391,7 +402,8 @@ TEST_F(ProjectBundleTest, LoadOrderIsAllOrNothing_BadPatch) {
     ASSERT_FALSE(patchDocument.empty());
     const auto originalStashJson = juce::JSON::toString(patchDocument.toVar(makeKnownOnlyPatch()));
 
-    auto result = ProjectBundle::load(dir, graph, timeline, patchDocument);
+    synth::MacroSet macros;
+    auto result = ProjectBundle::load(dir, graph, timeline, patchDocument, macros);
 
     EXPECT_FALSE(result.ok);
     EXPECT_TRUE(result.message.contains("patch validation")) << result.message;
@@ -447,8 +459,9 @@ TEST_F(ProjectBundleTest, LoadOrderIsAllOrNothing_BadTimeline) {
     const auto originalTimelineJson = juce::JSON::toString(timeline.toVar());
 
     PatchDocument patchDocument;
+    synth::MacroSet macros;
 
-    auto result = ProjectBundle::load(dir, graph, timeline, patchDocument);
+    auto result = ProjectBundle::load(dir, graph, timeline, patchDocument, macros);
 
     EXPECT_FALSE(result.ok);
     EXPECT_TRUE(result.message.contains("timeline validation")) << result.message;
@@ -473,8 +486,9 @@ TEST_F(ProjectBundleTest, MissingTimelineKeyLoadsEmptyDoc) {
     TimelineDoc timeline;
     buildSampleTimeline(timeline); // non-empty beforehand, to prove load empties it
     PatchDocument patchDocument;
+    synth::MacroSet macros;
 
-    auto result = ProjectBundle::load(dir, graph, timeline, patchDocument);
+    auto result = ProjectBundle::load(dir, graph, timeline, patchDocument, macros);
 
     ASSERT_TRUE(result.ok) << result.message;
     EXPECT_TRUE(timeline.isEmpty());
@@ -504,11 +518,12 @@ TEST_F(ProjectBundleTest, UnknownTopLevelKeysSurviveBundleRoundTrip) {
     juce::AudioProcessorGraph graph;
     TimelineDoc timeline;
     PatchDocument patchDocument;
-    ASSERT_TRUE(ProjectBundle::load(dir, graph, timeline, patchDocument).ok);
+    synth::MacroSet macros;
+    ASSERT_TRUE(ProjectBundle::load(dir, graph, timeline, patchDocument, macros).ok);
     ASSERT_FALSE(patchDocument.empty());
 
     auto newDir = bundleDir("UnknownKeysResaved");
-    auto saveResult = ProjectBundle::save(newDir, graph, timeline, patchDocument);
+    auto saveResult = ProjectBundle::save(newDir, graph, timeline, patchDocument, macros);
     ASSERT_TRUE(saveResult.ok) << saveResult.message;
 
     auto resaved = juce::JSON::parse(newDir.getChildFile(ProjectBundle::kProjectFileName));
@@ -540,7 +555,8 @@ TEST_F(ProjectBundleTest, StaleStashedTimelineNeverLeaks) {
     buildSampleTimeline(realTimeline);
 
     auto dir = bundleDir("StaleStash");
-    auto result = ProjectBundle::save(dir, graph, realTimeline, patchDocument);
+    synth::MacroSet macros;
+    auto result = ProjectBundle::save(dir, graph, realTimeline, patchDocument, macros);
     ASSERT_TRUE(result.ok) << result.message;
 
     auto saved = juce::JSON::parse(dir.getChildFile(ProjectBundle::kProjectFileName));
@@ -579,7 +595,8 @@ TEST_F(ProjectBundleTest, UntrustedGateRejectsHandEditedGarbage) {
     juce::AudioProcessorGraph graph;
     TimelineDoc timeline;
     PatchDocument patchDocument;
-    auto result = ProjectBundle::load(dir, graph, timeline, patchDocument);
+    synth::MacroSet macros;
+    auto result = ProjectBundle::load(dir, graph, timeline, patchDocument, macros);
 
     EXPECT_FALSE(result.ok);
     EXPECT_TRUE(result.message.contains("patch validation")) << result.message;
@@ -593,7 +610,8 @@ TEST_F(ProjectBundleTest, IsBundleDetection) {
     buildSampleGraph(graph);
     TimelineDoc timeline;
     PatchDocument patchDocument;
-    ASSERT_TRUE(ProjectBundle::save(properBundle, graph, timeline, patchDocument).ok);
+    synth::MacroSet macros;
+    ASSERT_TRUE(ProjectBundle::save(properBundle, graph, timeline, patchDocument, macros).ok);
     EXPECT_TRUE(ProjectBundle::isBundle(properBundle));
 
     // Wrong extension, otherwise identical contents.

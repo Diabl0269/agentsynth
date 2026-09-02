@@ -446,6 +446,8 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // GraphEditor owns no file dialogs and the sidebar owns no filesystem access, so
     // MainComponent brokers between them.
     graphEditor.onSaveSnippetRequested = [this] { promptSaveSnippet(); };
+    // Macros (P8-12): GraphEditor owns no status bar — see onStatusMessage's own comment.
+    graphEditor.onStatusMessage = [this](const juce::String& msg) { statusBar.showMessage(msg); };
     // Right-click-any-knob -> the automation lane editor. Mirrors onSaveSnippetRequested's
     // shape exactly — GraphEditor owns no TimelineDoc, so it hands the (nodeId, paramId) pair back
     // to the one component that owns both the doc and the graph.
@@ -1528,10 +1530,10 @@ bool MainComponent::saveToFile(const juce::File& file) {
                                         .getChildFile(kRecordingsFolderName);
         synth::AssetManager::adoptRecordingsAssets(timelineDoc, recordingsRoot, file);
 
-        // The bundle carries the graph AND the timeline; PatchDocument comes from the graph editor
-        // so the unknown-top-level-key stash a plain preset load filled is re-merged here too.
-        const auto result =
-            synth::ProjectBundle::save(file, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument());
+        // The bundle carries the graph, timeline AND macros; PatchDocument comes from the graph
+        // editor so the unknown-top-level-key stash a plain preset load filled is re-merged here too.
+        const auto result = synth::ProjectBundle::save(file, audioEngine.getGraph(), timelineDoc,
+                                                       graphEditor.getPatchDocument(), graphEditor.getMacros());
         if (!result.ok) {
             statusBar.showMessage("Save failed: " + result.message);
             return false;
@@ -1620,8 +1622,8 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
     currentBundleDir_ = bundleDir;
     refreshAssetRoots();
 
-    const auto result =
-        synth::ProjectBundle::load(bundleDir, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument());
+    const auto result = synth::ProjectBundle::load(bundleDir, audioEngine.getGraph(), timelineDoc,
+                                                   graphEditor.getPatchDocument(), graphEditor.getMacros());
     // Reconcile the view whatever happened: on failure the load left the graph exactly as it
     // was, and the components still have to come back after the detach above.
     graphEditor.updateComponents();
@@ -1653,7 +1655,7 @@ bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
     refreshAssetRoots();
 
     const auto result = synth::ProjectBundle::loadAutosave(bundleDir, audioEngine.getGraph(), timelineDoc,
-                                                           graphEditor.getPatchDocument());
+                                                           graphEditor.getPatchDocument(), graphEditor.getMacros());
     graphEditor.updateComponents();
     if (!result.ok) {
         currentBundleDir_ = previousBundleDir;
@@ -1737,9 +1739,10 @@ void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
     commands.addArray({AppCommands::openSettings, AppCommands::savePreset, AppCommands::saveProjectAs,
                        AppCommands::exportPatchOnly, AppCommands::openPreset, AppCommands::newPatch, AppCommands::undo,
                        AppCommands::redo, AppCommands::toggleModMatrix, AppCommands::toggleMinimap,
-                       AppCommands::toggleAiPanel, AppCommands::autoArrange, AppCommands::toggleLibrary,
-                       AppCommands::selectAllModules, AppCommands::saveSnippet, AppCommands::copySelection,
-                       AppCommands::pasteSelection, AppCommands::duplicateSelection, AppCommands::cutSelection,
+                       AppCommands::toggleAiPanel, AppCommands::autoArrange, AppCommands::groupSelection,
+                       AppCommands::ungroupSelection, AppCommands::toggleLibrary, AppCommands::selectAllModules,
+                       AppCommands::saveSnippet, AppCommands::copySelection, AppCommands::pasteSelection,
+                       AppCommands::duplicateSelection, AppCommands::cutSelection,
                        // Registered unconditionally alongside togglePlayback below even though only
                        // the timeline surfaces implement it — reported inactive rather than dropping
                        // the row from Settings.
@@ -1858,6 +1861,23 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         result.setInfo("Save Selection as Snippet", "Save the selected modules as a reusable snippet", "Edit", 0);
         result.setActive(graphEditor.getSelectionCount() > 0);
         auto kp = shortcutManager.getBinding("saveSnippet");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    case AppCommands::groupSelection: {
+        result.setInfo("Group Selection into Macro", "Wrap the selected modules in a named Macro container", "Edit", 0);
+        // groupSelectionIntoMacro() itself refuses (with a status message) below two modules or a
+        // nested group — this gate just keeps the menu row from inviting a click that can never
+        // succeed with nothing, or one thing, selected.
+        result.setActive(graphEditor.getSelectionCount() > 1);
+        auto kp = shortcutManager.getBinding("groupSelection");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    case AppCommands::ungroupSelection: {
+        result.setInfo("Ungroup Macro", "Dissolve the macro the selection belongs to, keeping its modules", "Edit", 0);
+        result.setActive(graphEditor.getSelectionCount() > 0);
+        auto kp = shortcutManager.getBinding("ungroupSelection");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
@@ -2067,6 +2087,12 @@ bool MainComponent::perform(const InvocationInfo& info) {
         return true;
     case AppCommands::autoArrange:
         graphEditor.autoArrange();
+        return true;
+    case AppCommands::groupSelection:
+        graphEditor.groupSelectionIntoMacro();
+        return true;
+    case AppCommands::ungroupSelection:
+        graphEditor.ungroupSelection();
         return true;
     case AppCommands::toggleLibrary:
         setLibraryVisible(!isLibraryVisible);
@@ -2960,8 +2986,9 @@ void MainComponent::performAutosave() {
         settings == nullptr
             ? kDefaultAutosaveBackupCount
             : juce::jlimit(0, 50, settings->getIntValue(kAutosaveBackupCountKey, kDefaultAutosaveBackupCount));
-    const auto result = synth::ProjectBundle::saveAutosave(currentBundleDir_, audioEngine.getGraph(), timelineDoc,
-                                                           graphEditor.getPatchDocument(), backupCount);
+    const auto result =
+        synth::ProjectBundle::saveAutosave(currentBundleDir_, audioEngine.getGraph(), timelineDoc,
+                                           graphEditor.getPatchDocument(), graphEditor.getMacros(), backupCount);
     if (result.ok)
         lastAutosavedEditSerial_ = undoManager.getEditSerial();
     else

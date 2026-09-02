@@ -1,11 +1,14 @@
 #include "ProjectBundle.h"
 #include "Branding.h"
 #include "Timeline/TimelineReconciler.h"
+#include <utility>
+#include <vector>
 
 namespace synth {
 
 namespace {
 constexpr const char* kTimelineKey = "timeline";
+constexpr const char* kMacrosKey = "macros";
 } // namespace
 
 bool ProjectBundle::isBundle(const juce::File& dir) {
@@ -17,7 +20,7 @@ bool ProjectBundle::isBundle(const juce::File& dir) {
 }
 
 juce::var ProjectBundle::buildProjectJson(juce::AudioProcessorGraph& graph, const TimelineDoc& timeline,
-                                          PatchDocument& patchDocument) {
+                                          PatchDocument& patchDocument, const MacroSet& macros) {
     auto json = AIStateMapper::graphToJSON(graph);
     // Re-merge whatever unknown top-level keys were stashed on this bundle's last load — mirrors
     // GraphEditor::savePreset. A stale "timeline" among them (e.g. this document started life as a
@@ -26,15 +29,18 @@ juce::var ProjectBundle::buildProjectJson(juce::AudioProcessorGraph& graph, cons
     json = patchDocument.toVar(json);
 
     auto* rootObj = json.getDynamicObject();
-    if (rootObj != nullptr)
-        // Set LAST so a fresh timeline always wins over a stashed one.
+    if (rootObj != nullptr) {
+        // Set LAST so a fresh timeline/macros always wins over a stashed one.
         rootObj->setProperty(kTimelineKey, timeline.toVar());
+        rootObj->setProperty(kMacrosKey, macros.toVar());
+    }
 
     return json;
 }
 
 ProjectLoadResult ProjectBundle::save(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
-                                      const TimelineDoc& timeline, PatchDocument& patchDocument) {
+                                      const TimelineDoc& timeline, PatchDocument& patchDocument,
+                                      const MacroSet& macros) {
     if (!bundleDir.exists() && !bundleDir.createDirectory())
         return {false, "io: could not create bundle directory \"" + bundleDir.getFullPathName() + "\"."};
 
@@ -46,7 +52,7 @@ ProjectLoadResult ProjectBundle::save(const juce::File& bundleDir, juce::AudioPr
     if (!peaksDir.exists() && !peaksDir.createDirectory())
         return {false, "io: could not create \"" + peaksDir.getFullPathName() + "\"."};
 
-    auto json = buildProjectJson(graph, timeline, patchDocument);
+    auto json = buildProjectJson(graph, timeline, patchDocument, macros);
     if (json.getDynamicObject() == nullptr)
         return {false, "io: graphToJSON did not produce a JSON object."};
 
@@ -85,7 +91,7 @@ void ProjectBundle::rotateAutosaveBackups(const juce::File& bundleDir, int maxBa
 
 ProjectLoadResult ProjectBundle::saveAutosave(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
                                               const TimelineDoc& timeline, PatchDocument& patchDocument,
-                                              int maxBackups) {
+                                              const MacroSet& macros, int maxBackups) {
     // No Audio/Peaks directory creation, and no touching project.json — an autosave is a sidecar
     // only. bundleDir itself must already exist (a project with no bundle yet has nowhere to put
     // the sidecar; MainComponent's autosave gate requires ProjectBundle::isBundle(currentBundleDir_)
@@ -93,7 +99,7 @@ ProjectLoadResult ProjectBundle::saveAutosave(const juce::File& bundleDir, juce:
     if (!bundleDir.isDirectory())
         return {false, "io: \"" + bundleDir.getFullPathName() + "\" is not a bundle directory."};
 
-    auto json = buildProjectJson(graph, timeline, patchDocument);
+    auto json = buildProjectJson(graph, timeline, patchDocument, macros);
     if (json.getDynamicObject() == nullptr)
         return {false, "io: graphToJSON did not produce a JSON object."};
 
@@ -112,8 +118,8 @@ bool ProjectBundle::hasAutosave(const juce::File& bundleDir) {
 }
 
 ProjectLoadResult ProjectBundle::loadAutosave(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
-                                              TimelineDoc& timeline, PatchDocument& patchDocument) {
-    return loadFromFile(bundleDir.getChildFile(kAutosaveFileName), graph, timeline, patchDocument);
+                                              TimelineDoc& timeline, PatchDocument& patchDocument, MacroSet& macros) {
+    return loadFromFile(bundleDir.getChildFile(kAutosaveFileName), graph, timeline, patchDocument, macros);
 }
 
 void ProjectBundle::discardAutosave(const juce::File& bundleDir) {
@@ -123,12 +129,12 @@ void ProjectBundle::discardAutosave(const juce::File& bundleDir) {
 }
 
 ProjectLoadResult ProjectBundle::load(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
-                                      TimelineDoc& timeline, PatchDocument& patchDocument) {
-    return loadFromFile(bundleDir.getChildFile(kProjectFileName), graph, timeline, patchDocument);
+                                      TimelineDoc& timeline, PatchDocument& patchDocument, MacroSet& macros) {
+    return loadFromFile(bundleDir.getChildFile(kProjectFileName), graph, timeline, patchDocument, macros);
 }
 
 ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juce::AudioProcessorGraph& graph,
-                                              TimelineDoc& timeline, PatchDocument& patchDocument) {
+                                              TimelineDoc& timeline, PatchDocument& patchDocument, MacroSet& macros) {
     if (!projectFile.existsAsFile())
         return {false, "io: \"" + projectFile.getFullPathName() + "\" does not exist."};
 
@@ -149,7 +155,17 @@ ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juc
         detachedTimelineVar = rootObj->getProperty(kTimelineKey);
         rootObj->removeProperty(kTimelineKey);
     }
-    // From here on `json`/`rootObj` is "the patch" — timeline-stripped.
+
+    // "macros" (P8-12) gets the identical treatment, for the identical reason: validatePatch
+    // refuses any patch carrying it, and a .agsproj's "macros" is this format's own dialect, not
+    // provider output.
+    const bool hasMacrosKey = rootObj->hasProperty(kMacrosKey);
+    juce::var detachedMacrosVar;
+    if (hasMacrosKey) {
+        detachedMacrosVar = rootObj->getProperty(kMacrosKey);
+        rootObj->removeProperty(kMacrosKey);
+    }
+    // From here on `json`/`rootObj` is "the patch" — timeline- and macros-stripped.
 
     // Step 1: the untrusted gate. project.json is a file on disk, hand-editable exactly like a
     // preset or a snippet — a malformed patch is rejected whole, never partially applied.
@@ -169,11 +185,16 @@ ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juc
         return {false,
                 "timeline validation failed: malformed \"timeline\" in \"" + projectFile.getFullPathName() + "\"."};
 
+    // Step 2b: validate "macros" into a LOCAL MacroSet, same all-or-nothing rule.
+    MacroSet localMacros;
+    if (hasMacrosKey && !localMacros.fromVar(detachedMacrosVar))
+        return {false, "macros validation failed: malformed \"macros\" in \"" + projectFile.getFullPathName() + "\"."};
+
     // Both validations passed — only now does anything mutate.
     if (!AIStateMapper::applyJSONToGraph(json, graph, /*clearExisting=*/true, /*trusted=*/true))
         return {false, "io: applyJSONToGraph rejected a patch that had already passed validation."};
 
-    // The timeline-stripped root, so "timeline" is never double-stored in the stash.
+    // The timeline- and macros-stripped root, so neither key is ever double-stored in the stash.
     patchDocument.loadFromVar(json);
 
     // Move the pre-validated timeline state into the live doc. fromVar is all-or-nothing and this
@@ -183,9 +204,25 @@ ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juc
     else
         timeline.clear();
 
+    // Same move for macros — `localMacros` was already proven valid above, so this cannot fail.
+    macros = hasMacrosKey ? std::move(localMacros) : MacroSet();
+
     // A track's bindingUuid or a lane's nodeUuid that no longer resolves to any live node's
     // "uuid" is retained and flagged `orphaned`, never deleted.
     TimelineReconciler::reconcile(timeline, graph);
+
+    // A macro member uuid that doesn't resolve to any live node is dropped outright (macros are
+    // pure presentation, unlike a timeline binding — there's no "orphaned but visible" state
+    // worth keeping); a macro left with none is dissolved.
+    {
+        std::vector<juce::String> aliveUuids;
+        for (auto* node : graph.getNodes()) {
+            const juce::String uuid = node->properties["uuid"].toString();
+            if (uuid.isNotEmpty())
+                aliveUuids.push_back(uuid);
+        }
+        macros.retainOnly(aliveUuids);
+    }
 
     return {true, {}};
 }

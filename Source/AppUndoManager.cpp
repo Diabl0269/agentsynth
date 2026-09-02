@@ -1,5 +1,6 @@
 #include "AppUndoManager.h"
 #include "AI/AIStateMapper.h"
+#include "MacroSet.h"
 #include "Timeline/TimelineDoc.h"
 #include "UI/GraphEditor.h"
 
@@ -156,6 +157,62 @@ private:
     bool firstPerform = true;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TimelineSnapshotAction)
+};
+
+/**
+ * @class MacroSnapshotAction
+ * @brief Undoable action that restores synth::MacroSet state from before/after juce::var
+ *        snapshots. Same shape as TimelineSnapshotAction, for the same reason: a Macro
+ *        group/ungroup/rename/recolour/collapse never touches the graph, so folding it into
+ *        every graph SnapshotAction would inflate every other undo step for no benefit. Pushed
+ *        onto the SAME juce::UndoManager as everything else (see recordGraphAndMacroChange), so
+ *        Cmd+Z stays one chronological stack across the graph and macros.
+ */
+class MacroSnapshotAction : public juce::UndoableAction {
+public:
+    MacroSnapshotAction(synth::MacroSet& macros, const juce::var& beforeState, const juce::var& afterState,
+                        std::function<void()> postRestore)
+        : macros(macros)
+        , beforeState(beforeState)
+        , afterState(afterState)
+        , postRestore(std::move(postRestore)) {}
+
+    bool perform() override {
+        if (firstPerform) {
+            firstPerform = false;
+            return true;
+        }
+        return restore(afterState);
+    }
+
+    bool undo() override { return restore(beforeState); }
+
+    int getSizeInUnits() override {
+        return static_cast<int>(
+            (juce::JSON::toString(beforeState).length() + juce::JSON::toString(afterState).length()));
+    }
+
+private:
+    bool restore(const juce::var& state) {
+        const bool ok = macros.fromVar(state);
+        jassert(ok); // a var this class produced must always be accepted by fromVar
+        // Membership, collapse state and cards all live on GraphEditor's canvas, not just the
+        // model: a group/ungroup/rename/recolour/collapse that pushes ONLY this action (no graph
+        // SnapshotAction alongside it) has no other refresh hook, so this one has to resync
+        // macro cards and member-component visibility itself, same as the graph action's own
+        // postRestore does for the module list.
+        if (postRestore)
+            postRestore();
+        return ok;
+    }
+
+    synth::MacroSet& macros;
+    juce::var beforeState;
+    juce::var afterState;
+    std::function<void()> postRestore;
+    bool firstPerform = true;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MacroSnapshotAction)
 };
 
 /**
@@ -423,6 +480,42 @@ bool AppUndoManager::recordCombinedChange(juce::AudioProcessorGraph& graph, synt
     if (timelineChanged)
         performAction(new TimelineSnapshotAction(
             doc, timelineBefore, timelineAfter, [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); }));
+
+    return true;
+}
+
+bool AppUndoManager::recordGraphAndMacroChange(juce::AudioProcessorGraph& graph, synth::MacroSet& macros,
+                                               const std::function<void()>& mutation) {
+    if (!mutation)
+        return false;
+
+    undoManager.beginNewTransaction();
+
+    const juce::var graphBefore = synth::AIStateMapper::graphToJSON(graph);
+    const juce::var macrosBefore = macros.toVar();
+
+    mutation();
+
+    const juce::var graphAfter = synth::AIStateMapper::graphToJSON(graph);
+    const juce::var macrosAfter = macros.toVar();
+
+    const bool graphChanged = juce::JSON::toString(graphBefore) != juce::JSON::toString(graphAfter);
+    const bool macrosChanged = juce::JSON::toString(macrosBefore) != juce::JSON::toString(macrosAfter);
+
+    if (!graphChanged && !macrosChanged)
+        return false; // neither domain changed: no transaction pushed
+
+    // Both perform() calls land in the same transaction (no beginNewTransaction between them), so a
+    // single undo()/redo() reverts or re-applies whichever of the two actually changed, together.
+    if (graphChanged)
+        performAction(createGraphSnapshotAction(graph, graphBefore, graphAfter));
+    if (macrosChanged) {
+        juce::Component::SafePointer<GraphEditor> ge(graphEditor);
+        performAction(new MacroSnapshotAction(macros, macrosBefore, macrosAfter, [ge] {
+            if (ge)
+                ge->updateComponents();
+        }));
+    }
 
     return true;
 }

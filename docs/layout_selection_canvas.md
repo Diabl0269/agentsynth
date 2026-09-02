@@ -219,6 +219,85 @@ the canvas must not silently destroy whatever text the user had copied, and text
 own copy/paste because JUCE's `TextEditor` consumes Cmd+C/Cmd+V before the key reaches
 `MainComponent::keyPressed`.
 
+### 1.7 Macros (P8-12) — `Source/MacroSet.h`, `Source/UI/MacroCardComponent.{h,cpp}`
+
+A Macro is a named, coloured, collapsible **container**, not a graph feature: `synth::Macro` is
+just an id, a name, a colour, a `collapsed` flag, a card `bounds` rectangle and a list of member
+node uuids. Grouping modules into one adds no port, no edge and no processing — it is a persisted
+selection plus presentation, layered on top of the multi-select system this section already
+describes. Membership is by node **uuid**, the same persistent identity `ModuleBase::setNodeUuid`
+mirrors into the processor, never by `NodeID` — a `NodeID` is only valid for one loaded graph and
+is meaningless once serialised.
+
+The model is deliberately **flat**: a node already in a macro cannot be grouped into a second one,
+and a macro cannot contain another macro. This is a scope decision, not a missing feature — giving
+a Macro its own ports (so it could itself be wired and nested like a sub-patch) is the separate,
+later P8-15. `GraphEditor::groupSelectionIntoMacro()` (Cmd+G) enforces both halves of the contract
+by refusing outright, via `onStatusMessage`, rather than doing something ad hoc: fewer than two
+selected nodes, or any selected node already belonging to a macro. `ungroupSelection()`
+(Cmd+Shift+G) dissolves every macro touched by the current selection, leaving the member modules
+exactly where they are and expanding them back to individual cards; it is a no-op (also surfaced
+via `onStatusMessage`) if the selection touches no macro. Deleting a macro is the opposite of
+ungrouping it: `deleteMacroAndMembers()` removes the macro **and** every one of its member nodes,
+as one step — the right-click "Delete" on a collapsed card, or Delete/Backspace with a macro's
+members as the whole selection.
+
+**Collapse/expand hides members, it doesn't destroy them.** Collapsing a macro
+(`setMacroCollapsed`) sets each member `ModuleComponent` invisible and shows one
+`MacroCardComponent` in its place; the components stay alive so their positions keep tracking a
+card drag, and expanding just reverses the visibility flip. `Macro::bounds` is authoritative only
+while collapsed — nothing reads it once expanded, since a card is deliberately small and
+independent of how far-flung its members are.
+
+Collapsed-macro selection, drag and delete are deliberately **not** a parallel mechanism:
+selecting a macro (`selectMacro`) just populates the ordinary `SelectionModel` with its members, so
+`beginSelectionDrag`/`dragSelectionBy`/`finalizeSelectionDrag` and `deleteSelection` all work
+unchanged on a collapsed macro exactly as they do on any other multi-selection. Dragging the card
+itself (`MacroCardComponent`'s own `ComponentDragger`) reuses that same group-drag path — the
+`beginMacroCardDrag`/`dragMacroCardBy`/`finalizeMacroCardDrag`/`cancelMacroCardDrag` quartet is a
+thin wrapper that resolves the members' rigid-body snap (§1.4) and the card's own position as one
+undo step, rather than a second drag implementation living beside it.
+
+**Cables re-anchor around a collapsed macro.** A collapsed macro hides its members but not their
+graph edges, so `rebuildVisibleCables()` (§3) runs a P8-12 post-process pass right before it
+returns: a cable wholly inside one collapsed macro is dropped from the visible list entirely (both
+endpoints are off-screen), and a cable crossing a collapsed macro's boundary keeps its outside
+endpoint but re-anchors its inside endpoint to `macro.bounds.getCentre()` rather than pointing at a
+hidden jack.
+
+**Undo.** A macro mutation that also changes the graph (delete) goes through
+`AppUndoManager::recordGraphAndMacroChange`, which pushes a graph `SnapshotAction` and/or a
+`MacroSnapshotAction` — only for the domain(s) that actually changed — inside one transaction, so
+one `undo()` restores the nodes and the macro membership together. A macro-only mutation
+(group/ungroup/rename/recolour/collapse) never touches the graph, so only the
+`MacroSnapshotAction` is pushed. Both push onto the same `juce::UndoManager` as every graph and
+timeline change, so Cmd+Z stays one chronological stack across all three domains. Like the graph's
+own `SnapshotAction`, `MacroSnapshotAction` carries a `postRestore` hook that calls
+`GraphEditor::updateComponents()` after every undo/redo, so the canvas — cards, member visibility —
+resyncs; this was a bug fixed during review, since a macro-set restore with no accompanying
+component sync left stale cards on screen.
+
+**Persistence.** `"macros"` is a new reserved top-level `project.json` key, treated **exactly**
+like `"timeline"` already is: detached before `AIStateMapper::validatePatch(trusted=false)` runs
+(which refuses a payload carrying it — `PatchValidationError::MacrosNotAllowed`), validated
+separately and all-or-nothing via `MacroSet::fromVar`, applied only after both that and the
+timeline validation pass, and set **last** on save so the live `MacroSet` — never a stashed value
+— is authoritative. `MacroSet::retainOnly()` prunes member uuids that don't resolve to a live node
+after `TimelineReconciler::reconcile` runs, dissolving any macro left with none — the same
+"validate strictly, apply faithfully" trust-boundary shape §1.5 already describes for snippets, on
+the same reserved-key footing as the timeline.
+
+**Snippets and clipboard round-trip macro membership too.** `SnippetManager::extractSnippet` takes
+the live `MacroSet` and captures a macro into the snippet's own `"macros"` array — a *different*
+reserved key from the project-bundle one above, scoped to the snippet file's own JSON dialect —
+only when **every** one of its members is inside the selection being extracted, the same
+self-contained rule connections and modulations already follow. On the way back in, snippet node
+ids get renumbered (§1.5), so a captured macro's membership travels through
+`AIStateMapper::applyJSONToGraph`'s `outIdMap` param (json-id → live `NodeID`) and
+`SnippetManager::insertSnippet`'s `outMacros` param resolves it to the pasted copies' fresh uuids,
+ready to hand straight to `MacroSet::add()`. Cmd+C/Cmd+V/Cmd+D go through this same path since they
+are, per §1.6, snippets that never reach disk.
+
 ---
 
 ## 2. Collapsible Library Sections

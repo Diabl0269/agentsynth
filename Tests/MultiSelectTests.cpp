@@ -255,6 +255,38 @@ TEST(MultiSelectMarquee, UpdateWithoutBeginIsANoOp) {
     EXPECT_FALSE(selectionContains(editor, a));
 }
 
+// A collapsed macro's hidden members are not on the canvas as far as marquee hit-testing is
+// concerned — collectModuleBoxes() skips !isVisible() components (P8-12). Clicking the visible
+// card is the only way to select a collapsed macro; a marquee over the original footprint must
+// pick up nothing.
+TEST(MultiSelectMarquee, CollapsedMacroMembersAreNotMarqueeSelectable) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 500, 100);
+    // groupSelectionIntoMacro() groups by persistent uuid, which this file's addModuleAt() (unlike
+    // MacroContainerTests.cpp's own helper) does not assign — set one here so grouping succeeds.
+    engine.getGraph().getNodeForId(a)->properties.set("uuid", juce::Uuid().toDashedString());
+    engine.getGraph().getNodeForId(b)->properties.set("uuid", juce::Uuid().toDashedString());
+
+    auto boundsA = boundsOf(editor, a);
+    auto boundsB = boundsOf(editor, b);
+    auto band = boundsA.getUnion(boundsB);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, true);
+
+    editor.beginMarquee(band.getTopLeft(), /*additive=*/false);
+    editor.updateMarquee(band.getBottomRight());
+    editor.endMarquee();
+
+    EXPECT_EQ(editor.getSelectionCount(), 0);
+}
+
 // ============================================================================
 // Group drag
 // ============================================================================

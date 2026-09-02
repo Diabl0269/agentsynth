@@ -2,6 +2,7 @@
 
 #include "../AppUndoManager.h"
 #include "../AudioEngine.h"
+#include "../MacroSet.h"
 #include "../PatchDocument.h"
 #include "../Plugin/Hosting/HostedPluginBackend.h"
 #include "CableColour.h"
@@ -16,6 +17,7 @@
 #include <vector>
 
 class ModuleComponent;
+class MacroCardComponent;
 #include "MinimapComponent.h"
 #include "ModMatrixComponent.h"
 
@@ -137,6 +139,12 @@ public:
      *  MainComponent owns no PatchDocument. */
     synth::PatchDocument& getPatchDocument() noexcept { return patchDocument; }
 
+    /** GraphEditor's live set of Macros for the current patch (see Source/MacroSet.h). Exposed
+     *  for the same reason as getPatchDocument() above: the app's project-bundle save/load path
+     *  (owned by MainComponent/ProjectBundle) needs to reach it, and GraphEditor owns no file
+     *  dialogs of its own. */
+    synth::MacroSet& getMacros() noexcept { return macros; }
+
     // Layout / anti-overlap
     juce::Point<int> resolvePlacement(juce::Point<int> desired, int w, int h, juce::AudioProcessorGraph::NodeID selfId);
 
@@ -234,6 +242,70 @@ public:
      *  finalize on a zero-delta drag would visibly nudge the group). */
     void cancelSelectionDrag();
     bool isSelectionDragActive() const { return selectionDragActive; }
+
+    // ---- Macros (P8-12) ------------------------------------------------------------------
+    //
+    // A Macro is a named, coloured, collapsible container: membership plus presentation, no
+    // graph change (giving a Macro its own ports is the later, separate P8-15). Flat model — a
+    // node already in a macro cannot be grouped into a second one; Cmd+G refuses that with a
+    // status message rather than doing something ad hoc. Membership is by node UUID, so it
+    // survives save/load and undo/redo exactly like everything else in synth::MacroSet.
+    //
+    // Collapsed-macro selection/drag/delete are deliberately NOT a parallel mechanism: selecting
+    // a macro selects its members in the ordinary SelectionModel, so beginSelectionDrag/
+    // dragSelectionBy/finalizeSelectionDrag and deleteSelection all just work, unchanged, on a
+    // collapsed macro's members exactly as they do on any other multi-selection.
+
+    /** Wraps the current selection in a new macro (Cmd+G). Refused via onStatusMessage — no undo
+     *  entry, selection untouched — when fewer than two nodes are selected or any selected node
+     *  already belongs to a macro (nested macros are out of scope for P8-12).
+     *  @return the new macro's id, or an empty string if refused. */
+    juce::String groupSelectionIntoMacro();
+
+    /** Ungroups (Cmd+Shift+G): dissolves every macro that owns at least one currently-selected
+     *  node, keeping their member modules exactly where they are and expanding them back to
+     *  individual cards. Refused via onStatusMessage (no-op) if the selection touches no macro. */
+    void ungroupSelection();
+
+    /** Selects every member of `macroId` — so drag/delete reuse the plain multi-select path
+     *  unchanged — replacing the current selection unless `additive`. No-op if the id is
+     *  unknown. */
+    void selectMacro(const juce::String& macroId, bool additive);
+
+    /** True when every member of `macroId` is selected and nothing else is — the state a click
+     *  on its collapsed card produces. */
+    bool isMacroSelected(const juce::String& macroId) const;
+
+    /** Expands or collapses a macro. Collapsing hides its member ModuleComponents (they stay
+     *  alive, just invisible, so their positions keep tracking a card drag) and shows one card
+     *  in their place; expanding reverses that. No graph change either way. Undoable. */
+    void setMacroCollapsed(const juce::String& macroId, bool collapsed);
+
+    void renameMacro(const juce::String& macroId, const juce::String& newName);
+    void setMacroColour(const juce::String& macroId, juce::Colour colour);
+
+    /** Removes the macro AND every one of its member nodes, as one undo step (right-click "Delete"
+     *  on a collapsed card, or Delete/Backspace while its members are the whole selection). This
+     *  is the "delete a macro deletes its modules" path — ungroupSelection() above is the
+     *  opposite: it keeps the modules. */
+    void deleteMacroAndMembers(const juce::String& macroId);
+
+    /** Status-bar surface for a refused macro action (nested-group Cmd+G, ungroup-with-nothing-
+     *  selected). Owner installs; a no-op by default (e.g. in tests). Mirrors
+     *  onSaveSnippetRequested's ownership split — GraphEditor owns no status bar. */
+    std::function<void(const juce::String&)> onStatusMessage;
+
+    // ---- Macro card drag (MacroCardComponent's own ComponentDragger calls these) ----
+    //
+    // Carries every one of a collapsed macro's (hidden) members along by the card's own drag
+    // delta, reusing beginSelectionDrag/dragSelectionBy/finalizeSelectionDrag exactly as a plain
+    // multi-select drag does — see the "Macros" section comment above.
+    void beginMacroCardDrag(const juce::String& macroId);
+    void dragMacroCardBy(const juce::String& macroId, juce::Point<int> delta);
+    /** Resolves the members' rigid-body snap AND the card's own position as one undo step. */
+    void finalizeMacroCardDrag(const juce::String& macroId, juce::Point<int> newCardTopLeft);
+    /** A press that never moved — mirrors cancelSelectionDrag, no re-resolve. */
+    void cancelMacroCardDrag(const juce::String& macroId);
 
     // ---- Snippets (issue #156) ----
 
@@ -711,12 +783,14 @@ private:
         void resized() override;
 
         juce::OwnedArray<ModuleComponent>& getModules() { return moduleComponents; }
+        juce::OwnedArray<MacroCardComponent>& getMacroCards() { return macroCardComponents; }
 
         float connectionAnimPhase = 0.0f;
 
     private:
         GraphEditor& editor;
         juce::OwnedArray<ModuleComponent> moduleComponents;
+        juce::OwnedArray<MacroCardComponent> macroCardComponents;
     };
 
     AudioEngine& audioEngine;
@@ -865,6 +939,27 @@ private:
     // newer build's data. Per-loaded-file: newPatch() clears it. Only the user preset save/load
     // path (savePreset/loadPreset) touches this — undo/redo, snippets, and AI apply must not.
     synth::PatchDocument patchDocument;
+
+    // ---- Macros (P8-12) ----
+    // Live macro grouping state for the current patch. Serialised by ProjectBundle exactly like
+    // patchDocument/timeline above — GraphEditor owns it, MainComponent/ProjectBundle reach it
+    // via getMacros(). newPatch() clears it, same lifecycle as patchDocument.
+    synth::MacroSet macros;
+
+    /** Syncs macro card components with `macros` and the visibility of their (possibly hidden)
+     *  member ModuleComponents. Called at the end of updateComponents(), the same seam that
+     *  syncs ModuleComponents themselves. */
+    void syncMacroCards();
+
+    /** The NodeID currently backing `memberUuid`, or an invalid NodeID if none does. Macros
+     *  reference members by persistent uuid (Source/CLAUDE.md's uuid-mirroring invariant); this
+     *  is the one place that resolves a macro member back to a live graph node. */
+    juce::AudioProcessorGraph::NodeID resolveMemberNodeId(const juce::String& memberUuid) const;
+
+    /** The persistent "uuid" node property for `nodeId`, or an empty string if the node doesn't
+     *  exist or was never assigned one. */
+    juce::String nodeUuidFor(juce::AudioProcessorGraph::NodeID nodeId) const;
+
     std::vector<AudioEngine::ModulationDisplayInfo> cachedModDisplayInfo;
     std::vector<AudioEngine::ModulationRouting> cachedModRoutings;
 
