@@ -29,6 +29,26 @@ constexpr const char* kPatchFileFilter = "*.json;*.agsproj";
 // prefix such a take's clip assetRef carries — see chooseTakeFiles and ProjectBundle's asset policy.
 constexpr const char* kRecordingsFolderName = "Recordings";
 
+// Subdirectories a saved bundle gets its exports/patch-only snapshots written into by default (P8-5
+// follow-up). Deliberately NOT reserved names on ProjectBundle: unlike Audio/Peaks they carry no
+// asset-integrity contract and AssetManager::cleanUnusedAssets never looks past Audio/, so nesting
+// them inside the bundle is safe - they are just a destination choice, not part of the bundle's
+// asset policy.
+constexpr const char* kExportsFolderName = "Exports";
+constexpr const char* kPatchesFolderName = "Patches";
+
+// The folder a "Export Audio..."/"Export Patch Only..." dialog starts in: <bundle>/<subFolderName>
+// when a real bundle is open (created on demand), otherwise the same Music/AgentSynth root every
+// other save/open dialog defaults to.
+juce::File resolveExportSubdirectory(const juce::File& currentBundleDir, const char* subFolderName) {
+    if (currentBundleDir != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir)) {
+        auto dir = currentBundleDir.getChildFile(subFolderName);
+        dir.createDirectory();
+        return dir;
+    }
+    return synth::ProjectBundle::getDefaultProjectsDirectory();
+}
+
 // Upper bound on the take-number search. A folder with 10000 takes in it is a bug report, not a
 // session, and an unbounded loop on a stat() call is not something a UI click should be able to do.
 constexpr int kMaxTakeNumber = 10000;
@@ -1508,8 +1528,9 @@ void MainComponent::exportPatchOnly(const juce::File& file) {
 }
 
 void MainComponent::promptExportPatchOnly() {
-    fileChooser = std::make_unique<juce::FileChooser>("Export Patch Only",
-                                                      synth::ProjectBundle::getDefaultProjectsDirectory(), "*.json");
+    const auto suggested =
+        resolveExportSubdirectory(currentBundleDir_, kPatchesFolderName).getChildFile(currentPatchName_ + ".json");
+    fileChooser = std::make_unique<juce::FileChooser>("Export Patch Only", suggested, "*.json");
     auto flags = juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles;
     fileChooser->launchAsync(flags, [this](const juce::FileChooser& fc) {
         auto file = fc.getResult();
@@ -1528,10 +1549,11 @@ void MainComponent::promptExportAudio() {
     const double arrangementEndBeat = timelineDoc.getArrangementEndBeat();
     const auto position = audioEngine.getTransport().getPositionSnapshot();
     const bool hasLoopRange = position.looping && position.loopEndPpq > position.loopStartPpq;
+    const bool projectIsSaved = currentBundleDir_ != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir_);
 
-    auto* dialog =
-        new synth::ui::ExportAudioDialog(arrangementEndBeat, hasLoopRange, position.loopStartPpq, position.loopEndPpq,
-                                         synth::ProjectBundle::getDefaultProjectsDirectory());
+    auto* dialog = new synth::ui::ExportAudioDialog(
+        arrangementEndBeat, hasLoopRange, position.loopStartPpq, position.loopEndPpq, position.bpm, projectIsSaved,
+        resolveExportSubdirectory(currentBundleDir_, kExportsFolderName), currentPatchName_);
 
     juce::DialogWindow::LaunchOptions options;
     options.content.setOwned(dialog);
@@ -1864,9 +1886,10 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         break;
     }
     case AppCommands::exportAudio: {
-        // No addDefaultKeypress — not rebindable, same pattern as exportPatchOnly.
         result.setInfo("Export Audio...", "Bounce the arrangement or the current loop range to a WAV or AIFF file",
                        "General", 0);
+        auto kp = shortcutManager.getBinding("exportAudio");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         // Greyed out rather than re-entrant: only one bounce (and one modal progress window) at a
         // time - see isBounceInProgress_.
         result.setActive(!isBounceInProgress_);

@@ -395,11 +395,12 @@ TEST_F(MainComponentTest, CommandManagerHasCommands) {
 #if JUCE_MAC
     expectedCommandCount += 1;
 #endif
-    // exportPatchOnly and exportAudio are the same "no action id string, no keyboard shortcut"
-    // shape as checkForUpdates above (see ShortcutManager.h) — registered unconditionally in
-    // getAllCommands, absent from the shortcut table on purpose, so each needs the same manual +1
-    // here.
-    expectedCommandCount += 2;
+    // exportPatchOnly is the same "no action id string, no keyboard shortcut" shape as
+    // checkForUpdates above (see ShortcutManager.h) — registered unconditionally in
+    // getAllCommands, absent from the shortcut table on purpose, so it needs the same manual +1
+    // here. exportAudio moved OUT of this bucket (P8-5 follow-up: Cmd+Shift+E) and is now counted
+    // through expectedActions above like every other rebindable command.
+    expectedCommandCount += 1;
     EXPECT_EQ(commands.size(), expectedCommandCount);
     for (const auto& actionId : expectedActions)
         EXPECT_TRUE(commands.contains(AppCommands::getCommandForAction(actionId)))
