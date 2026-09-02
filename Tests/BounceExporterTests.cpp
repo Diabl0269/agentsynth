@@ -364,6 +364,35 @@ WavContents readWav(const juce::File& file) {
     return out;
 }
 
+/** Same contract as readWav, opened with JUCE's AIFF reader instead. */
+WavContents readAiff(const juce::File& file) {
+    WavContents out;
+    if (!file.existsAsFile())
+        return out;
+
+    auto input = file.createInputStream();
+    if (input == nullptr)
+        return out;
+
+    juce::AiffAudioFormat aiffFormat;
+    std::unique_ptr<juce::AudioFormatReader> reader(
+        aiffFormat.createReaderFor(input.release(), /*deleteStreamIfOpeningFails=*/true));
+    if (reader == nullptr)
+        return out;
+
+    out.sampleRate = reader->sampleRate;
+    out.bitsPerSample = (int)reader->bitsPerSample;
+    out.numChannels = (int)reader->numChannels;
+    out.usesFloatingPointData = reader->usesFloatingPointData;
+    out.lengthInSamples = reader->lengthInSamples;
+
+    out.audio.setSize((int)reader->numChannels, (int)reader->lengthInSamples);
+    out.audio.clear();
+    reader->read(&out.audio, 0, (int)reader->lengthInSamples, 0, true, true);
+    out.ok = true;
+    return out;
+}
+
 } // namespace
 
 // ============================================================================
@@ -414,6 +443,42 @@ TEST(BounceExporterTest, FloatBitDepthWritesAFloatWav) {
     EXPECT_EQ(wav.bitsPerSample, 32);
     EXPECT_TRUE(wav.usesFloatingPointData) << "bitDepth 32 means an IEEE-float WAV, not 32-bit int";
     EXPECT_EQ(wav.lengthInSamples, (juce::int64)kEightBeatSamples);
+}
+
+TEST(BounceExporterTest, AiffFormatWritesAReadableAiffFile) {
+    Fixture f;
+    ASSERT_TRUE(f.build());
+    ASSERT_TRUE(f.addStandardNotes());
+    f.publish();
+
+    ScopedTempFile out("agentsynth_bounce_format.aiff");
+
+    auto options = defaultOptions();
+    options.format = synth::BounceFormat::Aiff;
+    const auto result = BounceExporter::bounce(f.engine, out.file, options);
+    ASSERT_TRUE(result.ok) << result.message;
+
+    const auto aiff = readAiff(out.file);
+    ASSERT_TRUE(aiff.ok) << "the bounce must open with JUCE's own AIFF reader";
+    EXPECT_EQ(aiff.bitsPerSample, 24);
+    EXPECT_EQ(aiff.numChannels, kNumChannels);
+    EXPECT_EQ(aiff.lengthInSamples, (juce::int64)kEightBeatSamples);
+}
+
+TEST(BounceExporterTest, AiffRejects32BitFloatBeforeAnythingIsWritten) {
+    Fixture f;
+    ASSERT_TRUE(f.build());
+    f.publish();
+
+    ScopedTempFile out("agentsynth_bounce_aiff_float.aiff");
+
+    auto options = defaultOptions();
+    options.format = synth::BounceFormat::Aiff;
+    options.bitDepth = 32;
+    const auto result = BounceExporter::bounce(f.engine, out.file, options);
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(result.message.containsIgnoreCase("aiff")) << result.message;
+    EXPECT_FALSE(out.file.existsAsFile());
 }
 
 // ============================================================================

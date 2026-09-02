@@ -15,6 +15,8 @@ namespace synth {
 // renders through; the transport is the app's own transport, driven through its normal
 // stop/locate/play commands; the modules are the live nodes. What differs from playback is only
 // that nobody is waiting for a device: blocks are produced as fast as the CPU can produce them.
+enum class BounceFormat { Wav, Aiff };
+
 struct BounceOptions {
     // The range to render, in beats, at the transport's current tempo. Half-open in intent but
     // whole-block in practice: the render stops on the first block whose END position reaches
@@ -32,8 +34,12 @@ struct BounceOptions {
     // at this rate for the duration and put back afterwards.
     double sampleRate = 44100.0;
     int blockSize = 512;
-    int bitDepth = 24; // 16 / 24 = integer PCM, 32 = IEEE float
+    int bitDepth = 24; // 16 / 24 = integer PCM, 32 = IEEE float (WAV only - see `format`)
     int numChannels = 2;
+
+    // AIFF has no IEEE-float variant in juce::AiffAudioFormat, so bitDepth 32 is valid only when
+    // format is Wav - validate() rejects the combination rather than silently downgrading it.
+    BounceFormat format = BounceFormat::Wav;
 };
 
 struct BounceResult {
