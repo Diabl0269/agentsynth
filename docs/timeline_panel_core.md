@@ -866,6 +866,11 @@ value this bar remembers between polls:
   `setLoop(start, end, !looping)`. `TransportService`'s own construction default is `[0, 4)`, so "no
   bounds ever set" and "preserve existing bounds" fall out of the same one-line handler — there is
   no separate "default bounds" case to maintain.
+  The loop range gained a second consumer with the Export Audio dialog (see
+  [`docs/architecture.md`](architecture.md)'s bounce/export section): `MainComponent::promptExportAudio`
+  reads the same `loopStartPpq`/`loopEndPpq`/`looping` off a fresh snapshot to decide whether
+  "Current loop range" is even offered as a bounce range, and to seed it when it is. Read-only —
+  the dialog never calls `setLoop` itself, it only offers what is already there.
 - **BPM label** — a `juce::Label` (`setEditable(false, true, false)`, the same double-click-to-edit
   idiom as the track-name label), whose `onTextChange` calls `transport->setBpm()` — always accepted
   (clamped to `[TransportService::kMinBpm, kMaxBpm]` inside the service), so there is no revert case.

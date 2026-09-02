@@ -155,6 +155,8 @@ add_library(Core STATIC
     Source/PatchDocument.h
     Source/ProjectBundle.cpp
     Source/ProjectBundle.h
+    Source/RecentProjects.cpp
+    Source/RecentProjects.h
     Source/SnippetManager.cpp
     Source/SnippetManager.h
     Source/SettingsMigration.cpp
@@ -163,6 +165,10 @@ add_library(Core STATIC
     Source/Transport/BlockTimeInfo.h
     Source/Transport/BounceExporter.cpp
     Source/Transport/BounceExporter.h
+    Source/Transport/BounceRunner.cpp
+    Source/Transport/BounceRunner.h
+    Source/Transport/BounceSession.cpp
+    Source/Transport/BounceSession.h
     Source/Transport/Metronome.cpp
     Source/Transport/Metronome.h
     Source/Transport/OfflineTransportDriver.cpp
@@ -537,6 +543,8 @@ add_library(AppUI STATIC
     Source/UI/PlanBadge.h
     Source/UI/SignInDialog.cpp
     Source/UI/SignInDialog.h
+    Source/UI/ExportAudioDialog.cpp
+    Source/UI/ExportAudioDialog.h
     Source/UI/GraphEditor.cpp
     Source/UI/GraphEditor.h
     Source/UI/ModuleComponent.cpp

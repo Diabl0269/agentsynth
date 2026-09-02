@@ -312,6 +312,14 @@ Marker* TimelineDoc::findMarker(MarkerId id) {
 
 const Track* TimelineDoc::getTrack(TrackId id) const { return findTrack(id); }
 
+double TimelineDoc::getArrangementEndBeat() const noexcept {
+    double endBeat = 0.0;
+    for (const auto& track : tracks)
+        for (const auto& clip : track.clips)
+            endBeat = std::max(endBeat, clip.startBeat + clip.lengthBeats);
+    return endBeat;
+}
+
 const Clip* TimelineDoc::getClip(ClipId id) const { return const_cast<TimelineDoc*>(this)->findClip(id); }
 
 const Track* TimelineDoc::getTrackForClip(ClipId id) const {

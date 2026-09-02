@@ -29,6 +29,26 @@ constexpr const char* kPatchFileFilter = "*.json;*.agsproj";
 // prefix such a take's clip assetRef carries — see chooseTakeFiles and ProjectBundle's asset policy.
 constexpr const char* kRecordingsFolderName = "Recordings";
 
+// Subdirectories a saved bundle gets its exports/patch-only snapshots written into by default (P8-5
+// follow-up). Deliberately NOT reserved names on ProjectBundle: unlike Audio/Peaks they carry no
+// asset-integrity contract and AssetManager::cleanUnusedAssets never looks past Audio/, so nesting
+// them inside the bundle is safe - they are just a destination choice, not part of the bundle's
+// asset policy.
+constexpr const char* kExportsFolderName = "Exports";
+constexpr const char* kPatchesFolderName = "Patches";
+
+// The folder a "Export Audio..."/"Export Patch Only..." dialog starts in: <bundle>/<subFolderName>
+// when a real bundle is open (created on demand), otherwise the same Music/AgentSynth root every
+// other save/open dialog defaults to.
+juce::File resolveExportSubdirectory(const juce::File& currentBundleDir, const char* subFolderName) {
+    if (currentBundleDir != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir)) {
+        auto dir = currentBundleDir.getChildFile(subFolderName);
+        dir.createDirectory();
+        return dir;
+    }
+    return synth::ProjectBundle::getDefaultProjectsDirectory();
+}
+
 // Upper bound on the take-number search. A folder with 10000 takes in it is a bug report, not a
 // session, and an unbounded loop on a stat() call is not something a UI click should be able to do.
 constexpr int kMaxTakeNumber = 10000;
@@ -500,6 +520,9 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         if (pluginBackend != nullptr)
             pluginBackend->setScanService(&pluginScanService);
     }
+    if (auto savedRecentProjects = juce::parseXML(appProperties.getUserSettings()->getValue(kRecentProjectsKey)))
+        recentProjects.loadFromXml(*savedRecentProjects);
+
     moduleLibrary.onScanPluginsRequested = [this] { startPluginScan(); };
     moduleLibrary.onPluginActivated = [this](const synth::PluginIdentity& identity) {
         graphEditor.addHostedPluginAtCanvasPosition(identity, graphEditor.getViewportCentreInCanvasSpace());
@@ -585,10 +608,34 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         }
         menu.addSeparator();
         menu.addItem(1000, "Load from file...");
-        // Capture `presets` by value — the outer local is gone by the time the async callback runs.
-        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&loadButton), [this, presets](int result) {
+
+        // Recent Projects — pruned of anything that vanished from disk since the last time this
+        // menu was built (a moved/deleted bundle), which is also the only time the pruned list
+        // needs re-persisting.
+        if (recentProjects.pruneMissing() > 0)
+            saveRecentProjects();
+        auto recents = recentProjects.getEntries();
+        if (!recents.empty()) {
+            menu.addSeparator();
+            juce::PopupMenu recentMenu;
+            for (int i = 0; i < (int)recents.size(); ++i)
+                recentMenu.addItem(2000 + i, recents[(size_t)i].getFileNameWithoutExtension());
+            menu.addSubMenu("Recent Projects", recentMenu);
+        }
+
+        // Capture `presets`/`recents` by value — the outer locals are gone by the time the async
+        // callback runs.
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&loadButton), [this, presets,
+                                                                                         recents](int result) {
             if (result == 1000) {
                 openPresetFromFile();
+            } else if (result >= 2000) {
+                const auto index = (size_t)(result - 2000);
+                if (index >= recents.size())
+                    return;
+                // Same guard as "Load from file...": the recent project itself is opened through
+                // openFromFile, which re-adds it (moving it back to the front) on success.
+                guardUnsavedChanges("Opening a recent project", [this, file = recents[index]] { openFromFile(file); });
             } else if (result > 0) {
                 // Capture `presets` by value again (the outer local is gone by the time this runs)
                 // and `index` so the guard's continuation still knows which preset was picked.
@@ -1253,6 +1300,13 @@ void MainComponent::timerCallback() {
     // tick, and a take still genuinely in flight must still block it.
     maybeAutosave();
 
+    // Polls BounceRunner's progress onto the dialog's progress bar - on the SAME 10 Hz driver as
+    // everything else here, rather than a second timer just for this. exportDialog_ is a
+    // SafePointer: the dialog can only go away by the user closing the (modal) window, but nothing
+    // stops that from racing a tick.
+    if (isBounceInProgress_ && bounceRunner_ != nullptr && exportDialog_ != nullptr)
+        exportDialog_->reportProgress(bounceRunner_->getProgress());
+
     wasTransportPlaying_ = position.playing;
 
     // Clears the count-in pre-roll's forced-on click once the transport reaches the punch-in
@@ -1503,14 +1557,82 @@ void MainComponent::exportPatchOnly(const juce::File& file) {
 }
 
 void MainComponent::promptExportPatchOnly() {
-    fileChooser = std::make_unique<juce::FileChooser>("Export Patch Only",
-                                                      synth::ProjectBundle::getDefaultProjectsDirectory(), "*.json");
+    const auto suggested =
+        resolveExportSubdirectory(currentBundleDir_, kPatchesFolderName).getChildFile(currentPatchName_ + ".json");
+    fileChooser = std::make_unique<juce::FileChooser>("Export Patch Only", suggested, "*.json");
     auto flags = juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles;
     fileChooser->launchAsync(flags, [this](const juce::FileChooser& fc) {
         auto file = fc.getResult();
         if (file != juce::File{})
             exportPatchOnly(file);
     });
+}
+
+// The offline bounce/export flow (P8-5): show the options dialog, then drive a BounceRunner from
+// what it reports. See Source/Transport/BounceRunner.h and Source/UI/ExportAudioDialog.h for why
+// the render is chunked rather than blocking, and docs/architecture.md for the full design.
+void MainComponent::promptExportAudio() {
+    if (isBounceInProgress_)
+        return; // the command is reported inactive while one is running - see getCommandInfo.
+
+    const double arrangementEndBeat = timelineDoc.getArrangementEndBeat();
+    const auto position = audioEngine.getTransport().getPositionSnapshot();
+    const bool hasLoopRange = position.looping && position.loopEndPpq > position.loopStartPpq;
+    const bool projectIsSaved = currentBundleDir_ != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir_);
+
+    auto* dialog = new synth::ui::ExportAudioDialog(
+        arrangementEndBeat, hasLoopRange, position.loopStartPpq, position.loopEndPpq, position.bpm, projectIsSaved,
+        resolveExportSubdirectory(currentBundleDir_, kExportsFolderName), currentPatchName_);
+
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned(dialog);
+    options.dialogTitle = "Export Audio";
+    options.componentToCentreAround = this;
+    options.useNativeTitleBar = true;
+    options.resizable = false;
+    auto* window = options.launchAsync();
+    exportDialog_ = dialog;
+
+    dialog->onRequestClose = [window] {
+        if (window != nullptr)
+            window->exitModalState(0);
+    };
+    dialog->onCancelRender = [this] {
+        if (bounceRunner_ != nullptr)
+            bounceRunner_->cancel();
+    };
+    dialog->onExport = [this, dialog](synth::BounceOptions bounceOptions, juce::File destination) {
+        // Publish unconditionally right before rendering rather than gate on "was it ever
+        // published": publishTimeline is cheap and always correct to re-call (see its own header
+        // comment), and this makes a stale-binding bug impossible instead of merely detected.
+        publishTimelineAndRebindRecorder();
+
+        isBounceInProgress_ = true;
+        dialog->showProgressPage();
+
+        bounceRunner_ = std::make_unique<synth::BounceRunner>(audioEngine, destination, bounceOptions,
+                                                              [this](synth::BounceResult result) {
+                                                                  isBounceInProgress_ = false;
+                                                                  bounceRunner_.reset();
+                                                                  // exportDialog_ is a SafePointer: if the window was
+                                                                  // somehow closed while the render was still going (a
+                                                                  // bounce keeps running to completion regardless - it
+                                                                  // is owned by MainComponent, not by the dialog), this
+                                                                  // is simply null rather than dangling, and the two
+                                                                  // lines above are still what matters: the flag clears
+                                                                  // and the next Export Audio is not permanently locked
+                                                                  // out.
+                                                                  if (exportDialog_ != nullptr)
+                                                                      exportDialog_->reportComplete(result);
+                                                                  statusBar.showMessage(result.message);
+                                                              });
+    };
+
+    // Genuinely modal, not just visible - New Patch/Open/Load preset/Quit refuse to run while
+    // isBounceInProgress_ is true (see guardUnsavedChanges), but nothing stops the user from
+    // reaching them if the window itself is merely floating. enterModalState's `deleteWhenDismissed`
+    // means the window (and dialog) are freed once exitModalState() runs above.
+    window->enterModalState(true, nullptr, true);
 }
 
 // ---- Save / open: one `.json` preset path, one `.agsproj` bundle path ----
@@ -1545,6 +1667,8 @@ bool MainComponent::saveToFile(const juce::File& file) {
         // A fresh explicit save supersedes any pending autosave sidecar — project.json now carries
         // everything the sidecar would have offered to recover.
         synth::ProjectBundle::discardAutosave(file);
+        recentProjects.addProject(file);
+        saveRecentProjects();
         // Clear BEFORE setCurrentPatchName, which is what fires the title notify — the notify must
         // see the just-saved, clean state.
         markDocumentClean();
@@ -1641,6 +1765,8 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
     // (and rebinds the recorder) against the graph as it now stands.
     reconcileTimelineAfterGraphChange();
     markDocumentClean();
+    recentProjects.addProject(bundleDir);
+    saveRecentProjects();
     setCurrentPatchName(bundleDir.getFileNameWithoutExtension());
     statusBar.showMessage("Loaded: " + bundleDir.getFileNameWithoutExtension());
     return true;
@@ -1675,6 +1801,8 @@ bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
     // autosave should only fire once the user edits further, same as right after an explicit save.
     lastAutosavedEditSerial_ = undoManager.getEditSerial();
     lastAutosaveMs_ = juce::Time::getMillisecondCounter();
+    recentProjects.addProject(bundleDir);
+    saveRecentProjects();
     // setCurrentPatchName() calls notifyDocumentTitleChanged() at its end and nowhere else in this
     // file (see that function's comment) — isDirty_ is set BEFORE this call so the notify's " *"
     // marker reflects the just-restored dirty state, not a stale one.
@@ -1737,12 +1865,12 @@ void MainComponent::paint(juce::Graphics& g) {
 
 void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
     commands.addArray({AppCommands::openSettings, AppCommands::savePreset, AppCommands::saveProjectAs,
-                       AppCommands::exportPatchOnly, AppCommands::openPreset, AppCommands::newPatch, AppCommands::undo,
-                       AppCommands::redo, AppCommands::toggleModMatrix, AppCommands::toggleMinimap,
-                       AppCommands::toggleAiPanel, AppCommands::autoArrange, AppCommands::groupSelection,
-                       AppCommands::ungroupSelection, AppCommands::toggleLibrary, AppCommands::selectAllModules,
-                       AppCommands::saveSnippet, AppCommands::copySelection, AppCommands::pasteSelection,
-                       AppCommands::duplicateSelection, AppCommands::cutSelection,
+                       AppCommands::exportPatchOnly, AppCommands::exportAudio, AppCommands::openPreset,
+                       AppCommands::newPatch, AppCommands::undo, AppCommands::redo, AppCommands::toggleModMatrix,
+                       AppCommands::toggleMinimap, AppCommands::toggleAiPanel, AppCommands::autoArrange,
+                       AppCommands::groupSelection, AppCommands::ungroupSelection, AppCommands::toggleLibrary,
+                       AppCommands::selectAllModules, AppCommands::saveSnippet, AppCommands::copySelection,
+                       AppCommands::pasteSelection, AppCommands::duplicateSelection, AppCommands::cutSelection,
                        // Registered unconditionally alongside togglePlayback below even though only
                        // the timeline surfaces implement it — reported inactive rather than dropping
                        // the row from Settings.
@@ -1790,6 +1918,16 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         // No addDefaultKeypress — not rebindable, same pattern as checkForUpdates.
         result.setInfo("Export Patch Only (.json)...",
                        "Save just the patch, without the timeline, as a plain JSON preset", "General", 0);
+        break;
+    }
+    case AppCommands::exportAudio: {
+        result.setInfo("Export Audio...", "Bounce the arrangement or the current loop range to a WAV or AIFF file",
+                       "General", 0);
+        auto kp = shortcutManager.getBinding("exportAudio");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        // Greyed out rather than re-entrant: only one bounce (and one modal progress window) at a
+        // time - see isBounceInProgress_.
+        result.setActive(!isBounceInProgress_);
         break;
     }
     case AppCommands::openPreset: {
@@ -2061,6 +2199,9 @@ bool MainComponent::perform(const InvocationInfo& info) {
         return true;
     case AppCommands::exportPatchOnly:
         promptExportPatchOnly();
+        return true;
+    case AppCommands::exportAudio:
+        promptExportAudio();
         return true;
     case AppCommands::openPreset:
         openPresetFromFile();
@@ -2357,6 +2498,15 @@ void MainComponent::refreshPluginLibrary() {
 void MainComponent::savePluginScanList() {
     if (auto xml = getPluginScanService().toXml()) {
         appProperties.getUserSettings()->setValue(kPluginScanListKey, xml->toString());
+        appProperties.saveIfNeeded();
+    }
+}
+
+// ---- Recent projects ----
+
+void MainComponent::saveRecentProjects() {
+    if (auto xml = recentProjects.toXml()) {
+        appProperties.getUserSettings()->setValue(kRecentProjectsKey, xml->toString());
         appProperties.saveIfNeeded();
     }
 }
@@ -2958,6 +3108,8 @@ void MainComponent::maybeAutosave() {
         return; // an unsaved project has no bundle to put a sidecar in — inert until first save.
     if (isRecordingActive())
         return;
+    if (isBounceInProgress_)
+        return; // see isBounceInProgress_'s comment - a bounce is chunked over timer ticks now.
 
     auto* settings = appProperties.getUserSettings();
     const bool enabled = settings == nullptr || settings->getBoolValue(kAutosaveEnabledKey, true);
@@ -3000,6 +3152,14 @@ void MainComponent::performAutosave() {
 void MainComponent::guardUnsavedChanges(const juce::String& actionLabel, std::function<void()> proceed) {
     if (!proceed)
         return;
+    if (isBounceInProgress_) {
+        // New Patch/Open/Load preset/Quit all fund through here - none of them may mutate or
+        // replace the graph while BounceRunner's offline driver owns it. Refuse rather than queue:
+        // the export's own progress window is modal, so the user cannot even reach this path
+        // without first cancelling or waiting for it to finish.
+        statusBar.showMessage(actionLabel + " must wait for the export to finish, or cancel it first.");
+        return;
+    }
     if (!isDirty_) {
         proceed();
         return;

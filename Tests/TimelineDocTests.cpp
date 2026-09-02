@@ -164,6 +164,24 @@ TEST_F(TimelineDocTest, UnknownTrackKindIsRejected) {
 
 // ------------------------------------------------------------------ 4. clips --
 
+TEST_F(TimelineDocTest, ArrangementEndBeatIsZeroWithNoClips) {
+    EXPECT_DOUBLE_EQ(doc.getArrangementEndBeat(), 0.0);
+
+    doc.addTrack(TrackKind::Midi, "empty track");
+    EXPECT_DOUBLE_EQ(doc.getArrangementEndBeat(), 0.0);
+}
+
+TEST_F(TimelineDocTest, ArrangementEndBeatIsTheLastClipEndAcrossTracks) {
+    const auto lead = doc.addTrack(TrackKind::Midi, "Lead");
+    const auto bass = doc.addTrack(TrackKind::Midi, "Bass");
+
+    doc.addClip(lead, 0.0, 4.0, "A");  // ends at 4
+    doc.addClip(bass, 2.0, 10.0, "B"); // ends at 12 - the longest
+    doc.addClip(lead, 20.0, 1.0, "C"); // starts late but is short - ends at 21, still the max
+
+    EXPECT_DOUBLE_EQ(doc.getArrangementEndBeat(), 21.0);
+}
+
 TEST_F(TimelineDocTest, ClipsStaySortedByStartBeat) {
     const auto track = doc.addTrack(TrackKind::Midi, "T");
     doc.addClip(track, 8.0, 4.0, "late");

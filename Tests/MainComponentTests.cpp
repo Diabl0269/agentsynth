@@ -396,8 +396,10 @@ TEST_F(MainComponentTest, CommandManagerHasCommands) {
     expectedCommandCount += 1;
 #endif
     // exportPatchOnly is the same "no action id string, no keyboard shortcut" shape as
-    // checkForUpdates above (see ShortcutManager.h) — registered unconditionally in getAllCommands,
-    // absent from the shortcut table on purpose, so it needs the same manual +1 here.
+    // checkForUpdates above (see ShortcutManager.h) — registered unconditionally in
+    // getAllCommands, absent from the shortcut table on purpose, so it needs the same manual +1
+    // here. exportAudio moved OUT of this bucket (P8-5 follow-up: Cmd+Shift+E) and is now counted
+    // through expectedActions above like every other rebindable command.
     expectedCommandCount += 1;
     EXPECT_EQ(commands.size(), expectedCommandCount);
     for (const auto& actionId : expectedActions)

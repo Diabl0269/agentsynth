@@ -14,6 +14,9 @@ enum CommandIDs {
     // touching currentBundleDir_ or the window title. NOT rebindable — same treatment as
     // checkForUpdates below (no action id string, no default binding, no Settings-list row).
     exportPatchOnly,
+    // Offline audio bounce (BounceExporter/BounceRunner) - the whole arrangement or the current
+    // loop range, rendered to WAV/AIFF. Rebindable (Cmd+Shift+E default) - see resetToDefaults().
+    exportAudio,
     openPreset,
     newPatch,
     undo,
@@ -89,6 +92,8 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return savePreset;
     if (actionId == "saveProjectAs")
         return saveProjectAs;
+    if (actionId == "exportAudio")
+        return exportAudio;
     if (actionId == "openPreset")
         return openPreset;
     if (actionId == "newPatch")
@@ -343,6 +348,11 @@ public:
         // never match bare Alt+S.
         bindings["saveProjectAs"] =
             juce::KeyPress('s', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
+        // Cmd+Shift+E, the same chord Logic/Ableton use for bounce/export. Free on both counts: no
+        // other binding in this table uses 'e' with any modifier set, and no keyPressed() override
+        // hardcodes a bare 'e' either.
+        bindings["exportAudio"] =
+            juce::KeyPress('e', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
         bindings["openPreset"] = juce::KeyPress('o', juce::ModifierKeys::commandModifier, 0);
         bindings["newPatch"] = juce::KeyPress('n', juce::ModifierKeys::commandModifier, 0);
         bindings["undo"] = juce::KeyPress('z', juce::ModifierKeys::commandModifier, 0);
@@ -611,6 +621,8 @@ public:
             return "Save Preset";
         if (actionId == "saveProjectAs")
             return "Save Project As";
+        if (actionId == "exportAudio")
+            return "Export Audio";
         if (actionId == "openPreset")
             return "Open Preset";
         if (actionId == "newPatch")
@@ -814,6 +826,7 @@ private:
             {"openSettings", ShortcutCategory::General},
             {"savePreset", ShortcutCategory::General},
             {"saveProjectAs", ShortcutCategory::General},
+            {"exportAudio", ShortcutCategory::General},
             {"openPreset", ShortcutCategory::General},
             {"newPatch", ShortcutCategory::General},
             {"undo", ShortcutCategory::General},

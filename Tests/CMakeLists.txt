@@ -164,12 +164,15 @@ add_executable(Tests
     FeedbackGuardTests.cpp
     OfflineTransportDriverTests.cpp
     BounceExporterTests.cpp
+    BounceRunnerTests.cpp
+    ExportAudioDialogTests.cpp
     MetronomeTests.cpp
     DeviceChangeTests.cpp
     TimelineE2ETests.cpp
     PatchDocumentTests.cpp
     ProjectBundleTests.cpp
     AutosaveTests.cpp
+    RecentProjectsTests.cpp
     AssetManagerTests.cpp
     BrandingTests.cpp
     ../Source/MainComponent.cpp
@@ -184,6 +187,7 @@ add_executable(Tests
     ../Source/Plugin/PluginProcessor.cpp
     ../Source/Plugin/PluginEditor.cpp
     ../Source/UI/GraphEditor.cpp
+    ../Source/UI/ExportAudioDialog.cpp
     ../Source/UI/ModMatrixComponent.cpp
     ../Source/UI/AIChatComponent.cpp
     ../Source/UI/AccountRow.cpp
