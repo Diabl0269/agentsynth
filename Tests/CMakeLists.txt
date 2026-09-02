@@ -169,6 +169,7 @@ add_executable(Tests
     PatchDocumentTests.cpp
     ProjectBundleTests.cpp
     AutosaveTests.cpp
+    RecentProjectsTests.cpp
     AssetManagerTests.cpp
     BrandingTests.cpp
     ../Source/MainComponent.cpp

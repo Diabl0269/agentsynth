@@ -32,4 +32,9 @@ inline juce::PropertiesFile::Options userSettingsOptions() {
  *  the plugin processor restore on startup. */
 inline constexpr const char* kPluginScanListSettingKey = "pluginScanList";
 
+/** The recent-projects list (RecentProjects::toXml) the Load menu's "Recent Projects" section
+ *  shows. Single-owner (MainComponent only — the plugin editor shares the same MainComponent, and
+ *  a hosted plugin never opens its own Load dialog), unlike the scan list above. */
+inline constexpr const char* kRecentProjectsSettingKey = "recentProjects";
+
 } // namespace synth

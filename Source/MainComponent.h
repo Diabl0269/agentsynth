@@ -11,6 +11,7 @@
 #include "Plugin/Hosting/PluginScanService.h"
 #include "PresetManager.h"
 #include "ProjectBundle.h"
+#include "RecentProjects.h"
 #include "ShortcutManager.h"
 #include "SnippetManager.h"
 #include "Timeline/AutomationRecorder.h"
@@ -422,6 +423,18 @@ public:
     /** The settings key the scan list round-trips through — shared with the plugin processor, which
      *  restores the same list. */
     static constexpr const char* kPluginScanListKey = synth::kPluginScanListSettingKey;
+
+    // ---- Recent projects ----
+
+    /** The recent-projects list the Load menu's "Recent Projects" section is built from. Single
+     *  owner (unlike the scan list above) — see kRecentProjectsSettingKey's comment. */
+    synth::RecentProjects& getRecentProjects() noexcept { return recentProjects; }
+
+    /** Writes the recent-projects list into appProperties under "recentProjects". */
+    void saveRecentProjects();
+
+    /** The settings key the recent-projects list round-trips through. */
+    static constexpr const char* kRecentProjectsKey = synth::kRecentProjectsSettingKey;
 
     /** Rebuilds the graph's render sequence so JUCE re-derives its parallel-path delay
      *  compensation from the nodes' CURRENT latencies, then refreshes the status bar's round-trip
@@ -934,6 +947,11 @@ private:
     // editor was built on an external engine (the plugin path: it belongs to the processor, which
     // outlives every editor). Never null.
     synth::PluginScanService* activeScanService = &pluginScanService;
+
+    // The Load menu's "Recent Projects" section — settings-backed, single owner (see
+    // kRecentProjectsSettingKey's comment), restored on startup and rewritten after every
+    // successful bundle save/open.
+    synth::RecentProjects recentProjects;
 
     ShortcutManager shortcutManager;
     juce::ApplicationCommandManager commandManager;
