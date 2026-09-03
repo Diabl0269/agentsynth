@@ -3289,6 +3289,10 @@ namespace {
 // value paint (GraphContentComponent::paint) and hit-testing (macroHullAt) both use, via
 // macroHullBounds below.
 constexpr int kMacroHullMargin = 14;
+// Depth reserved ABOVE the member row for the name chip, so the painted chip never overlaps a
+// member's ModuleComponent (which would swallow the drag). Must stay >= the chip's own height.
+constexpr int kMacroChipHeight = 18;
+constexpr int kMacroChipTopMargin = kMacroChipHeight + 6;
 } // namespace
 
 juce::Rectangle<int> GraphEditor::macroHullBounds(const juce::String& macroId) const {
@@ -3311,7 +3315,19 @@ juce::Rectangle<int> GraphEditor::macroHullBounds(const juce::String& macroId) c
     }
     if (hull.isEmpty())
         return {};
-    return hull.expanded(kMacroHullMargin);
+
+    // The top margin is DEEPER than the other three, and that asymmetry is load-bearing: the name
+    // chip is drawn at the hull's top-left and doubles as the macro's drag handle, but it is
+    // PAINTED, not a component, so it has no z-order of its own. Wherever it overlapped a member's
+    // ModuleComponent, that component won the click and dragged itself instead - the chip showed a
+    // grab cursor and then did nothing, which is exactly the bug
+    // MacroChipDrag.ChipRectNeverOverlapsAMemberModule pins. Reserving kMacroChipTopMargin above
+    // the member row keeps the whole chip on empty canvas, where GraphEditor's own mouse handlers
+    // get it, while still sitting INSIDE the hull so a macro near the top of the canvas cannot
+    // clip its own label off-screen.
+    auto expanded = hull.expanded(kMacroHullMargin);
+    expanded.setTop(hull.getY() - kMacroChipTopMargin);
+    return expanded;
 }
 
 juce::String GraphEditor::macroHullAt(juce::Point<int> canvasPos) const {
@@ -3349,7 +3365,7 @@ juce::Rectangle<int> GraphEditor::macroChipBounds(const juce::String& macroId) c
     // (see GraphContentComponent::paint), so the label needs the extra room to not look crowded.
     // This is the one place that width is computed - paint reads this same rect.
     const int labelW = (int)font.getStringWidthFloat(label) + 28;
-    return juce::Rectangle<int>(hull.getX() + 8, hull.getY(), labelW, 18);
+    return juce::Rectangle<int>(hull.getX() + 8, hull.getY(), labelW, kMacroChipHeight);
 }
 
 juce::String GraphEditor::macroChipAt(juce::Point<int> canvasPos) const {

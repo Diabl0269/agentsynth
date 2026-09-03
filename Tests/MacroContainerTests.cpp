@@ -1093,3 +1093,96 @@ TEST(MacroUndo, TogglingASelectionSpanningTwoMacrosIsOneUndoStep) {
     EXPECT_TRUE(editor.getMacros().find(macroTwo)->collapsed)
         << "the second macro must be restored by the SAME undo step, not a later one";
 }
+
+// ============================================================================
+// Chip drag through the REAL mouse path
+// ============================================================================
+//
+// The chip-drag tests above drive selectMacro/beginSelectionDrag/dragSelectionBy directly, which
+// exercises the API layer BENEATH GraphEditor::mouseDown/mouseDrag/mouseUp. That is exactly the
+// layer a broken hit-test cannot fail in, so those tests stayed green while the gesture was dead
+// on the canvas. These drive synthesised mouse events into GraphEditor itself, the same way
+// GraphEditorTests.cpp and MinimapComponentTests.cpp already do.
+
+namespace {
+
+juce::MouseEvent makeCanvasMouseEvent(juce::Component& comp, juce::Point<int> position, int clicks = 1) {
+    const auto pos = position.toFloat();
+    const auto mods = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier);
+    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos, mods, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                            &comp, &comp, juce::Time::getCurrentTime(), pos, juce::Time::getCurrentTime(), clicks,
+                            false);
+}
+
+} // namespace
+
+TEST(MacroChipDrag, ChipRectNeverOverlapsAMemberModule) {
+    // The chip is painted, not a component, so it has no z-order of its own: wherever it overlaps
+    // a member's ModuleComponent, that component wins the click and drags ITSELF instead of the
+    // macro. The chip must therefore sit entirely clear of every member's bounds.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 300, 300);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 700, 300);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false); // expanded: the hull and chip exist
+
+    const auto chip = editor.macroChipBounds(macroId);
+    ASSERT_FALSE(chip.isEmpty());
+
+    for (auto id : {a, b}) {
+        auto* comp = findComponent(editor, id);
+        ASSERT_NE(comp, nullptr);
+        EXPECT_FALSE(chip.intersects(comp->getBounds()))
+            << "chip " << chip.toString() << " overlaps member " << comp->getBounds().toString()
+            << " - the member's component will swallow clicks in the overlap";
+    }
+}
+
+TEST(MacroChipDrag, PressingAndDraggingTheChipMovesTheMacroThroughTheRealMousePath) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 300, 300);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 700, 300);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    // Canvas coordinates equal GraphEditor-local coordinates only at the identity transform, which
+    // is the freshly constructed editor's state. Assert it rather than assume it - a future default
+    // pan or zoom would otherwise turn this into a silently mis-aimed click that still passes.
+    const auto visible = editor.getVisibleCanvasRect();
+    ASSERT_FLOAT_EQ(visible.getX(), 0.0f);
+    ASSERT_FLOAT_EQ(visible.getY(), 0.0f);
+    ASSERT_FLOAT_EQ(visible.getWidth(), (float)editor.getWidth());
+
+    auto* compA = findComponent(editor, a);
+    auto* compB = findComponent(editor, b);
+    ASSERT_NE(compA, nullptr);
+    ASSERT_NE(compB, nullptr);
+    const auto startA = compA->getPosition();
+    const auto startB = compB->getPosition();
+
+    const auto chipCentre = editor.macroChipBounds(macroId).getCentre();
+    const juce::Point<int> delta(120, 80);
+
+    editor.mouseDown(makeCanvasMouseEvent(editor, chipCentre));
+    editor.mouseDrag(makeCanvasMouseEvent(editor, chipCentre + delta));
+    editor.mouseUp(makeCanvasMouseEvent(editor, chipCentre + delta));
+
+    EXPECT_NE(compA->getPosition(), startA) << "pressing the chip and dragging must move the macro";
+    EXPECT_NE(compB->getPosition(), startB);
+
+    // Rigid body: both members keep their relative offset (finalizeSelectionDrag snaps the group
+    // as a whole, so the absolute delta may be nudged, but the offset between members must not be).
+    EXPECT_EQ(compB->getPosition() - compA->getPosition(), startB - startA);
+}
