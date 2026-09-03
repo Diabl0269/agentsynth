@@ -500,6 +500,114 @@ TEST(MacroCollapse, MacroForNodeFindsTheOwningMacroOnlyWhileGrouped) {
 }
 
 // ============================================================================
+// Group-or-toggle dispatch (P8-14 — Cmd+G, GraphEditor::groupOrToggleSelectionMacros)
+// ============================================================================
+
+TEST(MacroGroupOrToggle, SelectionTouchingNoMacroGroups) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+
+    editor.setSelectedNodes({a, b});
+    ASSERT_TRUE(editor.getMacros().empty());
+
+    editor.groupOrToggleSelectionMacros();
+
+    ASSERT_EQ(editor.getMacros().size(), 1) << "no macro touched -> Cmd+G groups";
+    EXPECT_NE(editor.macroForNode(a), nullptr);
+    EXPECT_NE(editor.macroForNode(b), nullptr);
+}
+
+TEST(MacroGroupOrToggle, SelectionWhollyInsideCollapsedMacroExpandsAndCreatesNoNewMacro) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro(); // collapsed by default
+    ASSERT_FALSE(macroId.isEmpty());
+    ASSERT_TRUE(editor.getMacros().find(macroId)->collapsed);
+
+    editor.setSelectedNodes({a, b}); // wholly inside the one macro
+    editor.groupOrToggleSelectionMacros();
+
+    ASSERT_EQ(editor.getMacros().size(), 1) << "must toggle the existing macro, not create a new one";
+    EXPECT_FALSE(editor.getMacros().find(macroId)->collapsed) << "collapsed selection -> expands";
+}
+
+TEST(MacroGroupOrToggle, SelectionWhollyInsideExpandedMacroCollapsesAndCreatesNoNewMacro) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false); // now expanded
+
+    editor.setSelectedNodes({a, b}); // wholly inside the one macro
+    editor.groupOrToggleSelectionMacros();
+
+    ASSERT_EQ(editor.getMacros().size(), 1) << "must toggle the existing macro, not create a new one";
+    EXPECT_TRUE(editor.getMacros().find(macroId)->collapsed) << "expanded selection -> collapses";
+}
+
+TEST(MacroGroupOrToggle, MixedSelectionTogglesTheMacroAndLeavesLooseModulesAlone) {
+    // The mixed-selection rule: one node already in a macro plus one loose node must toggle the
+    // touched macro and ignore the loose module — NOT group (the flat model has no nested
+    // macros), and NOT refuse (a no-op here reads as broken).
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    auto loose = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 900, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro(); // collapsed by default
+    ASSERT_FALSE(macroId.isEmpty());
+    ASSERT_TRUE(editor.getMacros().find(macroId)->collapsed);
+
+    juce::String lastMessage;
+    editor.onStatusMessage = [&](const juce::String& msg) { lastMessage = msg; };
+
+    editor.setSelectedNodes({a, loose}); // a is grouped, loose is not
+    editor.groupOrToggleSelectionMacros();
+
+    EXPECT_EQ(editor.getMacros().size(), 1) << "must not create a second macro";
+    EXPECT_FALSE(editor.getMacros().find(macroId)->collapsed) << "the touched macro must still toggle";
+    EXPECT_EQ(editor.macroForNode(loose), nullptr) << "the loose module must not be pulled into the macro";
+    EXPECT_FALSE(lastMessage.isEmpty()) << "the mixed-selection outcome must be explained";
+}
+
+TEST(MacroGroupOrToggle, SingleLooseModuleStillRefusesViaGroupSelectionIntoMacro) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 900);
+
+    juce::String lastMessage;
+    editor.onStatusMessage = [&](const juce::String& msg) { lastMessage = msg; };
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 0, 0);
+    editor.selectModule(a, false);
+
+    editor.groupOrToggleSelectionMacros();
+
+    EXPECT_TRUE(editor.getMacros().empty()) << "fewer than two modules must still refuse to group";
+    EXPECT_FALSE(lastMessage.isEmpty());
+}
+
+// ============================================================================
 // Hull (Fix 2/4 — click-to-select and right-click-menu inside an expanded macro)
 // ============================================================================
 

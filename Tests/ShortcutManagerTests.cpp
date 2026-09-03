@@ -811,10 +811,12 @@ TEST_F(ShortcutManagerTest, ActionIds_ContainsUngroupSelection) {
 }
 
 // Both actions need a human-readable, non-empty description for the Settings UI.
+// P8-14: groupSelection (Cmd+G) dispatches to group-or-toggle, so its label is static and must
+// not claim to be only one of the two verbs it now covers.
 TEST_F(ShortcutManagerTest, GetActionDescription_GroupSelectionIsNonEmpty) {
     const auto description = ShortcutManager::getActionDescription("groupSelection");
     EXPECT_FALSE(description.isEmpty());
-    EXPECT_EQ(description, "Group Selection into Macro");
+    EXPECT_EQ(description, "Group / Toggle Macro");
 }
 
 TEST_F(ShortcutManagerTest, GetActionDescription_UngroupSelectionIsNonEmpty) {

@@ -2004,11 +2004,23 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         break;
     }
     case AppCommands::groupSelection: {
-        result.setInfo("Group Selection into Macro", "Wrap the selected modules in a named Macro container", "Edit", 0);
-        // groupSelectionIntoMacro() itself refuses (with a status message) below two modules or a
-        // nested group — this gate just keeps the menu row from inviting a click that can never
-        // succeed with nothing, or one thing, selected.
-        result.setActive(graphEditor.getSelectionCount() > 1);
+        // Static label — Cmd+G now dispatches to whichever verb applies (P8-14,
+        // GraphEditor::groupOrToggleSelectionMacros), so the label can't claim to be only one of
+        // them. Mirrors collapseMacro's "static label covers both directions" reasoning above.
+        result.setInfo("Group / Toggle Macro",
+                       "Group the selection into a new Macro, or toggle collapse/expand if it already touches one",
+                       "Edit", 0);
+        // Active whenever EITHER branch of the dispatch could do something: enough modules to
+        // group, or the selection touches at least one macro to toggle (mirrors collapseMacro's
+        // gate below).
+        bool touchesAnyMacro = false;
+        for (auto nodeId : graphEditor.getSelectedNodes()) {
+            if (graphEditor.macroForNode(nodeId) != nullptr) {
+                touchesAnyMacro = true;
+                break;
+            }
+        }
+        result.setActive(graphEditor.getSelectionCount() > 1 || touchesAnyMacro);
         auto kp = shortcutManager.getBinding("groupSelection");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
@@ -2250,7 +2262,7 @@ bool MainComponent::perform(const InvocationInfo& info) {
         graphEditor.autoArrange();
         return true;
     case AppCommands::groupSelection:
-        graphEditor.groupSelectionIntoMacro();
+        graphEditor.groupOrToggleSelectionMacros();
         return true;
     case AppCommands::ungroupSelection:
         graphEditor.ungroupSelection();

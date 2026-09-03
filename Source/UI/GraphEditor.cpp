@@ -3584,6 +3584,54 @@ void GraphEditor::toggleSelectionMacrosCollapsed() {
     repaint();
 }
 
+void GraphEditor::groupOrToggleSelectionMacros() {
+    // Cmd+G's single entry point (P8-14). "Group" is a strong cross-application convention
+    // (Figma, Illustrator, Sketch, most DAWs), so the key is honoured exactly when it applies —
+    // a selection that is not yet grouped. Once the selection IS in a macro, grouping stops being
+    // a meaningful verb for it (the flat model refuses nested macros anyway — see
+    // groupSelectionIntoMacro's refusal above), so the key is free to mean the thing the user
+    // actually reaches for at that point: toggling the touched macro(s) collapsed/expanded,
+    // exactly like the explicit Cmd+Alt+G binding (toggleSelectionMacrosCollapsed) which is kept
+    // as its own binding on purpose — it's unambiguous when the user wants to be certain, and
+    // removing it would break anyone's saved keybinding.
+    //
+    // Mixed selection (some selected nodes already in a macro, some loose): toggle wins outright.
+    // The touched macros are toggled and the loose modules are silently left out of any grouping
+    // — NOT grouped in with them, and NOT refused — because grouping would either violate the
+    // flat, no-nested-macros model or silently drop the loose modules from the gesture, and a
+    // flat refusal here would read as broken for a shortcut that usually just works. A status
+    // message says what happened instead.
+    auto ids = selection.getSelected();
+    std::set<juce::String> touchedMacroIds;
+    int looseCount = 0;
+    for (auto id : ids) {
+        const juce::String uuid = nodeUuidFor(id);
+        const auto* m = uuid.isEmpty() ? nullptr : macros.findByMember(uuid);
+        if (m != nullptr)
+            touchedMacroIds.insert(m->id);
+        else
+            ++looseCount;
+    }
+
+    if (touchedMacroIds.empty()) {
+        // Nothing selected touches a macro — Cmd+G means exactly what it always meant: group.
+        // groupSelectionIntoMacro() carries its own refusal/status behaviour (fewer than two
+        // modules) unchanged.
+        groupSelectionIntoMacro();
+        return;
+    }
+
+    toggleSelectionMacrosCollapsed();
+
+    if (looseCount > 0 && onStatusMessage) {
+        const juce::String macroWord = touchedMacroIds.size() == 1 ? "macro" : "macros";
+        const juce::String moduleWord = looseCount == 1 ? "module" : "modules";
+        const juce::String verb = looseCount == 1 ? "was" : "were";
+        onStatusMessage("Toggled " + juce::String((int)touchedMacroIds.size()) + " " + macroWord + "; " + moduleWord +
+                        " outside a macro " + verb + " left alone.");
+    }
+}
+
 const synth::Macro* GraphEditor::macroForNode(juce::AudioProcessorGraph::NodeID nodeId) const {
     const juce::String uuid = nodeUuidFor(nodeId);
     if (uuid.isEmpty())
@@ -4083,6 +4131,8 @@ void GraphEditor::showCanvasContextMenu(juce::Point<int> canvasPos) {
 
     const int selectionCount = getSelectionCount();
     if (selectionCount > 1) {
+        // Calls groupSelectionIntoMacro() directly, not the Cmd+G dispatch — see the matching
+        // comment in ModuleComponent.cpp's right-click menu for why.
         m.addItem("Create Macro from " + juce::String(selectionCount) + " Modules", [safeThis] {
             if (safeThis != nullptr)
                 safeThis->groupSelectionIntoMacro();

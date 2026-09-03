@@ -247,8 +247,11 @@ public:
     //
     // A Macro is a named, coloured, collapsible container: membership plus presentation, no
     // graph change (giving a Macro its own ports is the later, separate P8-15). Flat model — a
-    // node already in a macro cannot be grouped into a second one; Cmd+G refuses that with a
-    // status message rather than doing something ad hoc. Membership is by node UUID, so it
+    // node already in a macro cannot be grouped into a second one; groupSelectionIntoMacro()
+    // refuses that directly (a menu item, or Cmd+G when the whole selection is ungrouped) with a
+    // status message rather than doing something ad hoc. Cmd+G itself (P8-14,
+    // groupOrToggleSelectionMacros) never hits that refusal for a selection that already touches
+    // a macro — it toggles instead, see that method's comment. Membership is by node UUID, so it
     // survives save/load and undo/redo exactly like everything else in synth::MacroSet.
     //
     // Collapsed-macro selection/drag/delete are deliberately NOT a parallel mechanism: selecting
@@ -281,6 +284,11 @@ public:
      *
      *  Refused via onStatusMessage (no-op) only when the selection touches NO macro at all. */
     void toggleSelectionMacrosCollapsed();
+
+    /** Cmd+G's single entry point: toggles the macros the selection touches, or groups the
+     *  selection into a new macro when it touches none. See the comment on the implementation
+     *  for why one key carries both verbs. */
+    void groupOrToggleSelectionMacros();
 
     /** Selects every member of `macroId` — so drag/delete reuse the plain multi-select path
      *  unchanged — replacing the current selection unless `additive`. No-op if the id is

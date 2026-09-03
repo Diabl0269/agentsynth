@@ -2661,6 +2661,10 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
                     owner.onSaveSnippetRequested();
             });
             if (selectionCount > 1) {
+                // Deliberately calls groupSelectionIntoMacro() directly, NOT the Cmd+G dispatch
+                // (GraphEditor::groupOrToggleSelectionMacros) — a menu item names one verb
+                // ("Create Macro") and must keep doing exactly what it says, even for a selection
+                // that already touches a macro (where it still refuses, same as always).
                 m.addItem("Create Macro from " + juce::String(selectionCount) + " Modules",
                           [this] { owner.groupSelectionIntoMacro(); });
                 m.addItem("Delete " + juce::String(selectionCount) + " Selected Modules",
