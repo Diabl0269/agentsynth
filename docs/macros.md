@@ -196,27 +196,42 @@ Membership stays keyed by uuid. The port list is derived state in the sense that
 the truth, but the **order and names** are macro-level presentation and belong on the macro,
 next to `name`/`colour`/`bounds`.
 
-### 5.3 Poly and stereo
+### 5.3 Poly and stereo — a port's shape is chosen at creation and then fixed
 
-This is the constraint most likely to be got wrong, so it is stated as a rule:
+This is the constraint most likely to be got wrong, so it is stated as a rule.
 
-**Dual I/O is inherited from channel shape, never per-module registered**
-(`ModuleBase::hasStereoOutputPairShape`), and a second audio leg goes on a dedicated `kRightBase`
-block, never on ch1. An inlet/outlet is a **pass-through**, so it must inherit the shape of what
-it carries rather than declare one:
+**A port node's channel shape is decided when the node is constructed, and is immutable for that
+node's lifetime.** Changing a port from mono to stereo means deleting the port and adding a new
+one — it never means widening a live node. That is not a limitation worked around; it *is*
+invariant (a) applied honestly, because a port node is an ordinary module and the fixed-channel
+rule binds it like every other module.
 
-- A **mono** inlet is 1-in/1-out.
-- A **stereo** inlet is created with the split-block shape (`kRightBase`), so
-  `hasStereoOutputPairShape` reports true for it exactly as it does for an Oscillator or Filter,
-  and the Dual I/O affordance appears on the card the way it appears everywhere else — inherited,
-  not special-cased.
-- A **poly** inlet declares its voice span and marks the lowest raw channel
-  `isPolyGroupHead` in its `LogicalPort` mapping, so a poly-bus wire crossing the boundary is
-  drawn and counted as a poly bus, not N separate cables.
+There is deliberately **no shape inheritance** here. Inheritance is the right rule for Dual I/O on
+a real DSP module (`ModuleBase::hasStereoOutputPairShape` derives it from channel counts, never
+from a per-module registration) and the wrong frame for a node we construct on demand: a port is
+created *before* it is wired, so at construction time there is nothing to inherit from.
 
-The macro boundary must not become a place where shape inheritance is re-derived by hand. If the
-port's shape cannot be inherited from the member it connects to, the port creation is **refused**
-with a status message rather than guessed.
+Shape is therefore an **input to port creation**, supplied one of two ways:
+
+- **From the configure-I/O modal** — the user picks Mono, Stereo or Poly-N when adding the port.
+  This is the primary flow and the plain reading of "open a modal to configure inputs/outputs".
+- **From a cable** — dragging a wire onto a collapsed card's boundary creates a port whose shape
+  is that of the cable being dropped. A convenience path; the shape is genuinely known here.
+
+Given a shape, the node is constructed so that the existing rules produce the right result with
+no special-casing:
+
+- **Mono** — 1-in/1-out.
+- **Stereo** — constructed with the split-block layout so the second audio leg sits on a
+  dedicated `kRightBase` block, never on ch1. `hasStereoOutputPairShape` then reports true for it
+  exactly as it does for an Oscillator or Filter, and the Dual I/O affordance appears through the
+  ordinary inherited path.
+- **Poly-N** — declares its voice span and marks the lowest raw channel `isPolyGroupHead` in its
+  `LogicalPort` mapping, so a poly-bus wire crossing the boundary is drawn and counted as one
+  poly bus rather than N separate cables.
+
+A cable whose shape does not match the port it is dropped on is refused the same way any
+mismatched connection is today — not silently adapted at the boundary.
 
 ### 5.4 Cable rendering across the boundary
 
@@ -234,6 +249,13 @@ straight to an interior member — keeps today's `projectToRectEdge` treatment. 
 disappear and must not be treated as an error: a macro is a grouping first and a black box
 second, and the user is allowed to wire into its guts.
 
+The consequence is worth stating plainly, because it bounds what a macro is:
+**a macro's encapsulation is advisory, not enforced.** Ports are the *intended* interface, not the
+*only* one. A macro is a reusable building block by convention and by what the UI makes easy — it
+is not a sealed unit, and no part of the engine will stop a cable reaching past its boundary.
+Enforcing encapsulation would require the interior to be a genuinely separate graph, which is
+Candidate A and was rejected in §4.
+
 ### 5.5 Latency
 
 An inlet/outlet reports **zero latency** and does no buffering. The macro adds nothing to
@@ -248,10 +270,15 @@ A macro is not a processor and therefore has no `processBlock` and no bypass/mut
 own. "Bypass macro" and "Mute macro" are **fan-out commands** over its members, applied as one
 undo step:
 
-- **Mute macro** → sets `isMuted()` on every member. Each member's own `processBlock` honours the
-  contract as written (`buffer.clear()` then return).
-- **Bypass macro** → sets `isBypassed()` on every member. Each member's own dry pass-through
-  applies.
+- **Mute macro** → `ModuleBase::setMuted(true)` on every member. Each member's own `processBlock`
+  honours the contract as written (`buffer.clear()` then return).
+- **Bypass macro** → `ModuleBase::setBypassed(true)` on every member. Each member's own dry
+  pass-through applies.
+
+Both setters already exist and are **parameter writes** (`setValueNotifyingHost` on
+`bypassedParam` / `mutedParam`), so the fan-out is an ordinary parameter change: it is
+automatable, host-visible and undoable through the paths that already handle parameter changes.
+No new mutation mechanism is introduced.
 
 This is deliberate: the bypass/mute contract is per-module and stated in full in `CLAUDE.md`
 precisely because it is cheap to follow and catastrophic to get wrong. A macro-level
@@ -286,9 +313,16 @@ never resolve to anything real even if it were let through. Refusing it keeps th
 regardless of future changes.
 
 `MacroInlet` and `MacroOutlet` join the internal-only set and get the **same three exclusions**:
-no library row, no replace-menu entry, **never authorable by a model**. `validatePatch` must
-reject a node of either type on the untrusted path, in the same place and the same way it
-rejects the other internal-only types.
+no library row, no replace-menu entry, **never authorable by a model**.
+
+The enforcement point already exists and is cheap: `kNonAuthorableModuleTypes` in
+`AIStateMapper.cpp` is an explicit name set with a reason recorded against each entry, consulted
+by `isInternalOnlyModule`. Registering a module in `moduleFactory` makes it model-authorable **by
+default**, and the resulting allowlist is pinned by
+`AIStateMapperTest.AuthorableModuleTypesGolden` — so adding Macro In / Macro Out to the factory
+(which they need, so our own saves round-trip them) *fails the build* until they are deliberately
+added to the non-authorable set too. P8-15 must add both entries with their reason, not just the
+factory rows.
 
 **This must not be achieved by relaxing anything.** `validatePatch` is the security boundary for
 untrusted model output; the rule stands that validity is fixed on the *generation* side, most
