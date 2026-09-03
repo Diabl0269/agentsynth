@@ -11,6 +11,9 @@
 //   • undo          — a macro-only change (no graph delta) refreshes the canvas on undo/redo
 //   • cables        — a collapsed macro drops internal cables and re-anchors boundary ones
 //   • trust         — an untrusted patch cannot smuggle a "macros" key
+//   • recolour      — P8-14: the shared ColourPickerPopup previews live (no undo) and commits as
+//                     one undo step spanning original -> final colour
+//   • card dbl-click — P8-14: the collapsed card's title row renames in place; elsewhere expands
 
 #include "../Source/AI/AIStateMapper.h"
 #include "../Source/AppUndoManager.h"
@@ -1185,4 +1188,192 @@ TEST(MacroChipDrag, PressingAndDraggingTheChipMovesTheMacroThroughTheRealMousePa
     // Rigid body: both members keep their relative offset (finalizeSelectionDrag snaps the group
     // as a whole, so the absolute delta may be nudged, but the offset between members must not be).
     EXPECT_EQ(compB->getPosition() - compA->getPosition(), startB - startA);
+}
+
+// ============================================================================
+// Recolour (P8-14): "Change Colour..." opens the shared synth::ui::ColourPickerPopup, with a
+// live preview (no undo) and exactly one undo step spanning original -> final colour on commit.
+// ============================================================================
+//
+// promptRecolourMacro launches a real juce::CallOutBox, which never runs in the headless test
+// process. createMacroColourPickerForTest() is the seam that hands back the SAME popup, wired
+// with the SAME onPreview/onCommit callbacks buildMacroColourPicker builds for the real path
+// (mirrors TimelineRulerComponent::createMarkerColourPickerForTest()) -- the tests below drive
+// its preview/commit through ColourPickerPopup's own test seams (setCurrentColourForTest /
+// commitForTest) rather than duplicating the recolour logic here.
+
+TEST(MacroRecolour, PreviewThenCommitToADifferentColourIsOneUndoStepThatRestoresTheOriginal) {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    const auto originalColour = editor.getMacros().find(macroId)->colour;
+    const juce::Colour intermediateColour(0xffaa11bbu);
+    const juce::Colour finalColour(0xff33cc44u);
+    ASSERT_NE(intermediateColour, originalColour);
+    ASSERT_NE(finalColour, originalColour);
+
+    auto popup = editor.createMacroColourPickerForTest(macroId);
+    ASSERT_NE(popup, nullptr);
+
+    const int serialBeforeRecolour = undo.getEditSerial();
+
+    popup->setCurrentColourForTest(intermediateColour); // simulates the user mid-drag
+    EXPECT_EQ(editor.getMacros().find(macroId)->colour, intermediateColour)
+        << "a preview must write straight to the macro";
+    EXPECT_EQ(undo.getEditSerial(), serialBeforeRecolour) << "a preview must not push an undo step";
+
+    popup->setCurrentColourForTest(finalColour); // the drag settles here
+    popup->commitForTest();
+
+    EXPECT_EQ(editor.getMacros().find(macroId)->colour, finalColour);
+    EXPECT_EQ(undo.getEditSerial(), serialBeforeRecolour + 1)
+        << "commit to a different colour must be exactly ONE undo step";
+
+    ASSERT_TRUE(undo.canUndo());
+    undo.undo();
+    EXPECT_EQ(editor.getMacros().find(macroId)->colour, originalColour)
+        << "the single undo step must restore the ORIGINAL colour, not the intermediate preview value";
+}
+
+TEST(MacroRecolour, PreviewThenCommitBackToTheOriginalColourPushesNoUndoEntry) {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    const auto originalColour = editor.getMacros().find(macroId)->colour;
+    const juce::Colour driftedColour(0xffaa11bbu);
+    ASSERT_NE(driftedColour, originalColour);
+
+    auto popup = editor.createMacroColourPickerForTest(macroId);
+    ASSERT_NE(popup, nullptr);
+
+    const int serialBeforeRecolour = undo.getEditSerial();
+
+    popup->setCurrentColourForTest(driftedColour);  // a preview nudges the colour away
+    popup->setCurrentColourForTest(originalColour); // ... and the drag settles back on the original
+    popup->commitForTest();
+
+    EXPECT_EQ(editor.getMacros().find(macroId)->colour, originalColour);
+    EXPECT_EQ(undo.getEditSerial(), serialBeforeRecolour) << "a no-net-change commit must push NO undo entry";
+}
+
+// ============================================================================
+// Collapsed-card double-click (P8-14): title row renames in place (like ModuleComponent's own
+// title), anywhere else on the card still expands.
+// ============================================================================
+
+namespace {
+// Matches MacroCardComponent::getTitleRowBounds() exactly (280x90 card: getLocalBounds().
+// reduced(10, 6), top 20 px, minus the right-hand 28 px chevron reservation) -- a point safely
+// inside x:[10,242) y:[6,26). Kept here rather than exposing the private helper to tests: paint()
+// and mouseDoubleClick() sharing the ONE method is what this whole change is guarding.
+constexpr juce::Point<int> kTitleRowPoint(40, 16);
+constexpr juce::Point<int> kBodyPoint(140, 60); // below the title row, still inside the card
+} // namespace
+
+TEST(MacroCardDoubleClick, TitleRowStartsInlineRenameAndDoesNotExpand) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro(); // collapses by default
+    ASSERT_FALSE(macroId.isEmpty());
+
+    auto* card = editor.getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+    ASSERT_FALSE(card->isRenamingTitle());
+
+    card->mouseDoubleClick(makeCanvasMouseEvent(*card, kTitleRowPoint, 2));
+
+    EXPECT_TRUE(card->isRenamingTitle());
+    ASSERT_NE(editor.getMacros().find(macroId), nullptr);
+    EXPECT_TRUE(editor.getMacros().find(macroId)->collapsed) << "a title-row double-click must not expand the macro";
+
+    card->finishRename(false); // tidy up the open editor before the test ends
+}
+
+TEST(MacroCardDoubleClick, OutsideTitleRowExpandsAndDoesNotRename) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    auto* card = editor.getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+
+    card->mouseDoubleClick(makeCanvasMouseEvent(*card, kBodyPoint, 2));
+
+    EXPECT_FALSE(card->isRenamingTitle());
+    ASSERT_NE(editor.getMacros().find(macroId), nullptr);
+    EXPECT_FALSE(editor.getMacros().find(macroId)->collapsed)
+        << "a double-click outside the title row must still expand, as before";
+}
+
+TEST(MacroCardDoubleClick, TitleRowRenameCancelsAnyArmedCardDragSoMouseUpIsANoOp) {
+    // Regression guard: mouseDown already arms a card drag (dragStartPosition/bodyDragActive/
+    // dragger.startDraggingComponent/owner.beginMacroCardDrag) before a double-click's second
+    // press resolves. If opening the rename editor didn't cancel that drag, this mouseUp would
+    // resolve it as a real (zero-delta) drag -- or worse, leave it armed for whatever gesture
+    // comes next.
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    auto* card = editor.getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+    auto* compA = findComponent(editor, a);
+    auto* compB = findComponent(editor, b);
+    ASSERT_NE(compA, nullptr);
+    ASSERT_NE(compB, nullptr);
+
+    const auto cardStart = card->getPosition();
+    const auto startA = compA->getPosition();
+    const auto startB = compB->getPosition();
+    const int serialBeforeGesture = undo.getEditSerial();
+
+    card->mouseDown(makeCanvasMouseEvent(*card, kTitleRowPoint)); // arms a card drag
+    card->mouseDoubleClick(makeCanvasMouseEvent(*card, kTitleRowPoint, 2));
+    ASSERT_TRUE(card->isRenamingTitle());
+    card->mouseUp(makeCanvasMouseEvent(*card, kTitleRowPoint));
+
+    EXPECT_EQ(card->getPosition(), cardStart) << "no drag should have resolved after the rename opened";
+    EXPECT_EQ(compA->getPosition(), startA);
+    EXPECT_EQ(compB->getPosition(), startB);
+    EXPECT_EQ(undo.getEditSerial(), serialBeforeGesture)
+        << "a stuck drag resolving on mouseUp would push a finalize-drag undo step";
+
+    card->finishRename(false); // tidy up the open editor before the test ends
 }

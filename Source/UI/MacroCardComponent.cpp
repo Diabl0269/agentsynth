@@ -26,8 +26,8 @@ void MacroCardComponent::paint(juce::Graphics& g) {
         return; // editor covers the name; member-count line still reads fine underneath
 
     auto textArea = getLocalBounds().reduced(10, 6);
-    auto titleRow = textArea.removeFromTop(20);
-    titleRow.removeFromRight(28); // leave room for the expand chevron
+    textArea.removeFromTop(20); // the title row itself is drawn via getTitleRowBounds() below
+    const auto titleRow = getTitleRowBounds();
     g.setColour(juce::Colours::white);
     g.setFont(juce::Font(juce::FontOptions(15.0f, juce::Font::bold)));
     g.drawText(macro->name.isNotEmpty() ? macro->name : "Macro", titleRow, juce::Justification::centredLeft);
@@ -90,6 +90,13 @@ juce::Rectangle<float> MacroCardComponent::getExpandButtonBounds() const {
     return juce::Rectangle<float>(getWidth() - kMargin - kSize, kMargin, kSize, kSize);
 }
 
+juce::Rectangle<int> MacroCardComponent::getTitleRowBounds() const {
+    auto textArea = getLocalBounds().reduced(10, 6);
+    auto titleRow = textArea.removeFromTop(20);
+    titleRow.removeFromRight(28); // leave room for the expand chevron - keep it out of the rename hit zone
+    return titleRow;
+}
+
 void MacroCardComponent::mouseDown(const juce::MouseEvent& e) {
     owner.commitAnyOpenTitleRename();
     finishRename(true);
@@ -141,7 +148,27 @@ void MacroCardComponent::mouseUp(const juce::MouseEvent&) {
         owner.cancelMacroCardDrag(macroId);
 }
 
-void MacroCardComponent::mouseDoubleClick(const juce::MouseEvent&) { owner.setMacroCollapsed(macroId, false); }
+void MacroCardComponent::mouseDoubleClick(const juce::MouseEvent& e) {
+    // Double-click on the title row renames in place — the same affordance ModuleComponent gives
+    // its own title. Anywhere else on the card still expands, as before.
+    if (getTitleRowBounds().contains(e.getPosition())) {
+        // mouseDown already armed a card drag (dragStartPosition/bodyDragActive/dragger.
+        // startDraggingComponent/owner.beginMacroCardDrag) before this second press resolves.
+        // Opening the inline editor here — rather than expanding, which used to make the whole
+        // card (and its stuck drag state) go away — leaves this card alive, so the armed drag
+        // must be cancelled explicitly or the next drag anywhere moves this macro instead of
+        // whatever was actually grabbed. Mirrors the equivalent fix on the hull-chip path
+        // (GraphEditor::mouseDoubleClick's macroChipDragId handling).
+        if (bodyDragActive) {
+            owner.cancelMacroCardDrag(macroId);
+            bodyDragActive = false;
+        }
+        beginRename();
+        return;
+    }
+
+    owner.setMacroCollapsed(macroId, false);
+}
 
 void MacroCardComponent::beginRename() {
     finishRename(false);

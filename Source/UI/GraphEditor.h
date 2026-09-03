@@ -6,6 +6,7 @@
 #include "../PatchDocument.h"
 #include "../Plugin/Hosting/HostedPluginBackend.h"
 #include "CableColour.h"
+#include "ColourPickerPopup.h"
 #include "LayoutUtil.h"
 #include "ModuleClipboard.h"
 #include "SelectionModel.h"
@@ -322,6 +323,20 @@ public:
      *  for the case that has no card. */
     void promptRenameMacro(const juce::String& macroId);
 
+    /** Opens the shared synth::ui::ColourPickerPopup over `screenArea` (screen coordinates) for
+     *  `macroId` — the same picker the timeline ruler's marker menu and the track header swatch
+     *  use (TimelineRulerComponent::buildMarkerColourPicker is the exact pattern this mirrors).
+     *  Live preview while the user drags (writes straight to the macro, no undo step, so dragging
+     *  never floods the undo stack); ONE undo step on commit, recorded via setMacroColour so the
+     *  undo restores the ORIGINAL colour rather than the last preview value. A no-op if `macroId`
+     *  doesn't resolve. */
+    void promptRecolourMacro(const juce::String& macroId, juce::Rectangle<int> screenArea);
+
+    /** Where the recolour picker's favourites shelf persists to. Null (the default) means
+     *  in-memory-only favourites, which is what a headless test with no ApplicationProperties
+     *  gets — mirrors TimelineRulerComponent::setPropertiesFile exactly. */
+    void setPropertiesFile(juce::PropertiesFile* props) noexcept { propertiesFile_ = props; }
+
     /** Removes the macro AND every one of its member nodes, as one undo step (right-click "Delete"
      *  on a collapsed card, or Delete/Backspace while its members are the whole selection). This
      *  is the "delete a macro deletes its modules" path — ungroupSelection() above is the
@@ -352,6 +367,13 @@ public:
      *  rebuildVisibleCables() anchors on the card's CURRENT bounds rather than the persisted
      *  `macro.bounds`, which only updates on finalizeMacroCardDrag — see Fix 3/P8-12 follow-up. */
     MacroCardComponent* getMacroCardForTest(const juce::String& macroId);
+
+    /** Builds the recolour popup with the EXACT onPreview/onCommit callbacks promptRecolourMacro
+     *  uses, without launching a juce::CallOutBox — mirrors
+     *  TimelineRulerComponent::createMarkerColourPickerForTest(). Null when `macroId` doesn't
+     *  resolve. Test seam: a headless test drives the returned popup's preview/commit directly
+     *  rather than duplicating the recolour logic. */
+    std::unique_ptr<synth::ui::ColourPickerPopup> createMacroColourPickerForTest(const juce::String& macroId);
 
     /** The shared macro actions menu — right-click a collapsed card or right-click inside an
      *  expanded macro's hull both build this SAME menu (Fix 4/P8-12 follow-up), so the two paths
@@ -1041,6 +1063,11 @@ private:
 
     AppUndoManager* undoManager = nullptr;
 
+    // Where the macro recolour picker's favourites shelf persists to — see setPropertiesFile.
+    // Null (the default) keeps favourites in-memory only, which is what a headless test with no
+    // ApplicationProperties gets.
+    juce::PropertiesFile* propertiesFile_ = nullptr;
+
     // Top-level JSON keys the current build doesn't understand (e.g. a future "timeline"),
     // stashed on load and re-merged on save so re-saving with an older build never destroys a
     // newer build's data. Per-loaded-file: newPatch() clears it. Only the user preset save/load
@@ -1082,9 +1109,10 @@ private:
      *  directly for cable anchoring anywhere else. */
     juce::Rectangle<int> macroCableAnchorBounds(const synth::Macro& macro) const;
 
-    /** The "Change Colour" submenu shared by buildMacroMenu — its own helper only because a
-     *  submenu is built once and attached, never invoked directly. */
-    juce::PopupMenu buildMacroColourSubMenu(const juce::String& macroId);
+    /** Shared by promptRecolourMacro and createMacroColourPickerForTest: builds the popup with
+     *  the real preview/commit wiring, without launching a juce::CallOutBox. Mirrors
+     *  TimelineRulerComponent::buildMarkerColourPicker. Null when `macroId` doesn't resolve. */
+    std::unique_ptr<synth::ui::ColourPickerPopup> buildMacroColourPicker(const juce::String& macroId);
 
     std::vector<AudioEngine::ModulationDisplayInfo> cachedModDisplayInfo;
     std::vector<AudioEngine::ModulationRouting> cachedModRoutings;

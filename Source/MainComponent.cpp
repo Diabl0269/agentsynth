@@ -359,6 +359,11 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     graphEditor.setCableColourMode(synth::ui::loadCableColourMode(*appProperties.getUserSettings()));
     graphEditor.setCableColourOverrides(synth::ui::loadCableColourOverrides(*appProperties.getUserSettings()));
 
+    // Macro recolour picker's favourites shelf (P8-14): the same PropertiesFile the timeline
+    // ruler's marker colour picker persists to (TimelinePanelComponent::setApplicationProperties
+    // -> ruler_.setPropertiesFile), so a favourite saved from one is offered by the other.
+    graphEditor.setPropertiesFile(appProperties.getUserSettings());
+
     // Wavetable browser folder (issue #180): GraphEditor holds the value so every Wavetable
     // card can seed its browser from it, MainComponent owns the ApplicationProperties round
     // trip — the same split as the cable-colour config above.

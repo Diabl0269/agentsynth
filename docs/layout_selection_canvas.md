@@ -329,6 +329,36 @@ inline-`TextEditor` opener (`MacroCardComponent::beginRename`); every other call
 since there is no card to host an inline editor at a hull click. Empty/whitespace-only dialog input
 cancels without renaming.
 
+**"Change Colour..." opens the same shared picker as everywhere else (P8-14).** The menu item calls
+`GraphEditor::promptRecolourMacro(macroId, screenArea)`, which launches `synth::ui::ColourPickerPopup`
+— the same `juce::ColourSelector` + favourites-shelf popup the timeline ruler's marker menu and the
+track header swatch use — rather than a hardcoded swatch list. The anchor rect is re-derived inside
+the menu item's click handler (not captured at menu-build time, since the macro could
+collapse/expand or its card/chip could move in between): the collapsed card's screen bounds, or the
+expanded hull's chip bounds converted to screen space via `content.localAreaToGlobal`. Preview and
+commit follow `TimelineRulerComponent::buildMarkerColourPicker`'s exact split:
+`onPreview` writes `synth::Macro::colour` directly (no undo, so a drag repaints live without
+flooding the undo stack); `onCommit` either restores the captured original colour with no undo entry
+(a no-net-change close) or restores the original first and then re-applies the final colour through
+`setMacroColour` as the one recorded step, so the single undo restores the ORIGINAL colour rather
+than the last preview value. Favourites persist via `GraphEditor::setPropertiesFile`, wired from
+`MainComponent` to the same `juce::PropertiesFile` the ruler's marker picker uses — a `nullptr`
+default keeps favourites in-memory-only, which is what a headless test gets.
+
+**Double-clicking the collapsed card renames or expands, depending on where (P8-14).** A
+double-click on the title row calls `MacroCardComponent::beginRename()` directly — the same inline
+`TextEditor` affordance `ModuleComponent` gives its own title — rather than expanding; a
+double-click anywhere else on the card still expands, as before. `getTitleRowBounds()` is the ONE
+rectangle both `paint()` (what's drawn) and `mouseDoubleClick()` (what's clickable) use, so the two
+can never drift apart — it excludes the top-right expand-chevron's hit zone. Because `mouseDown`
+already arms a card body-drag (`dragStartPosition`/`bodyDragActive`/`dragger.startDraggingComponent`/
+`GraphEditor::beginMacroCardDrag`) before a double-click's second press resolves, opening the rename
+editor first cancels that armed drag (`GraphEditor::cancelMacroCardDrag` + clearing
+`bodyDragActive`) — otherwise the drag stays armed on this now-live card and the next gesture
+anywhere moves the macro instead of whatever was actually grabbed. The expanded hull's chip keeps
+using the modal `promptRenameMacro` dialog (see above) — there is no card there to host an inline
+editor.
+
 **A collapsed card previews its contents.** Below the title/member-count text, the card draws one
 small filled rounded rect per member — the live union of member `ModuleComponent` bounds scaled to
 fit inside the existing 90px card height (`kMacroCardHeight` never changes; `Macro::bounds` is

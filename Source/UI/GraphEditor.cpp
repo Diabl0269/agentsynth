@@ -3788,27 +3788,62 @@ void GraphEditor::promptRenameMacro(const juce::String& macroId) {
                             false);
 }
 
-juce::PopupMenu GraphEditor::buildMacroColourSubMenu(const juce::String& macroId) {
-    // A small named swatch list rather than a full juce::ColourSelector — P8-12 is
-    // visual/organisational scope, and a macro's colour only needs to be distinguishable at a
-    // glance. juce::PopupMenu items don't support arbitrary icons without a custom LookAndFeel
-    // hook, so the swatches are named rather than drawn.
-    static const std::vector<juce::Colour> palette{
-        juce::Colour(0xff5a7dff), juce::Colour(0xffff6b6b), juce::Colour(0xff51cf66), juce::Colour(0xffffa94d),
-        juce::Colour(0xffcc5de8), juce::Colour(0xff22b8cf), juce::Colour(0xfffcc419), juce::Colour(0xff868e96),
-    };
-    static const char* names[] = {"Blue", "Red", "Green", "Orange", "Purple", "Cyan", "Yellow", "Grey"};
+std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::buildMacroColourPicker(const juce::String& macroId) {
+    const auto* macro = macros.find(macroId);
+    if (macro == nullptr)
+        return nullptr;
 
-    juce::PopupMenu colourMenu;
+    // The colour a no-net-change close restores, and what a "keep the final pick" undo step
+    // restores TO — the exact shape TimelineRulerComponent::buildMarkerColourPicker uses.
+    const juce::Colour originalColour = macro->colour;
     juce::Component::SafePointer<GraphEditor> safeThis(this);
-    for (size_t idx = 0; idx < palette.size() && idx < 8; ++idx) {
-        auto colour = palette[idx];
-        colourMenu.addItem(names[idx], [safeThis, macroId, colour] {
-            if (safeThis != nullptr)
-                safeThis->setMacroColour(macroId, colour);
+
+    return std::make_unique<synth::ui::ColourPickerPopup>(
+        originalColour, propertiesFile_,
+        [safeThis, macroId](juce::Colour c) {
+            // Live preview: writes the macro directly, no undo — every drag repaints live. Goes
+            // straight at the macro rather than through setMacroColour, which records an undo
+            // step per call.
+            auto* self = safeThis.getComponent();
+            if (self == nullptr)
+                return;
+            if (auto* m = self->macros.find(macroId))
+                m->colour = c;
+            self->syncMacroCards();
+            self->repaint();
+        },
+        [safeThis, macroId, originalColour](juce::Colour finalColour) {
+            auto* self = safeThis.getComponent();
+            if (self == nullptr)
+                return; // the editor (or its window) is gone — nothing left to restore or undo
+            auto* m = self->macros.find(macroId);
+            if (m == nullptr)
+                return; // the macro was deleted while the popup was open
+            if (finalColour.getARGB() == originalColour.getARGB()) {
+                // No net change: put back exactly what was there (a preview may have nudged it)
+                // and record no undo step.
+                m->colour = originalColour;
+                self->syncMacroCards();
+                self->repaint();
+                return;
+            }
+            // ONE undo step whose undo restores the ORIGINAL colour: silently put the original
+            // back first (outside the recorded mutation, so it does not itself become undoable),
+            // then perform the real edit as the one recorded step.
+            m->colour = originalColour;
+            self->setMacroColour(macroId, finalColour);
         });
-    }
-    return colourMenu;
+}
+
+void GraphEditor::promptRecolourMacro(const juce::String& macroId, juce::Rectangle<int> screenArea) {
+    auto popup = buildMacroColourPicker(macroId);
+    if (popup == nullptr)
+        return;
+    juce::CallOutBox::launchAsynchronously(std::move(popup), screenArea, nullptr);
+}
+
+std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::createMacroColourPickerForTest(const juce::String& macroId) {
+    return buildMacroColourPicker(macroId);
 }
 
 juce::PopupMenu GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> renameAction) {
@@ -3836,7 +3871,29 @@ juce::PopupMenu GraphEditor::buildMacroMenu(const juce::String& macroId, std::fu
                 safeThis->promptRenameMacro(macroId);
         });
 
-    m.addSubMenu("Change Colour", buildMacroColourSubMenu(macroId));
+    // Anchor re-derived NOW, inside the click handler, rather than captured at menu-build time —
+    // the macro could collapse/expand or the card/chip could move between the right-click and the
+    // menu choice (same reasoning as TimelineRulerComponent::openMarkerContextMenu's own comment).
+    m.addItem("Change Colour...", [safeThis, macroId] {
+        auto* self = safeThis.getComponent();
+        if (self == nullptr)
+            return;
+        const auto* liveMacro = self->macros.find(macroId);
+        if (liveMacro == nullptr)
+            return;
+
+        juce::Rectangle<int> anchor;
+        if (liveMacro->collapsed) {
+            if (auto* card = self->getMacroCardForTest(macroId))
+                anchor = card->getScreenBounds();
+        } else {
+            anchor = self->content.localAreaToGlobal(self->macroChipBounds(macroId));
+        }
+        if (anchor.isEmpty())
+            anchor = self->getScreenBounds(); // fallback: nothing resolved, anchor on the editor
+
+        self->promptRecolourMacro(macroId, anchor);
+    });
     m.addSeparator();
     m.addItem("Save as Snippet...", [safeThis] {
         if (safeThis != nullptr && safeThis->onSaveSnippetRequested)

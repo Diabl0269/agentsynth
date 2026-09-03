@@ -53,6 +53,12 @@ private:
      *  then finding your way back into them was a guessing game (double-click, undocumented). */
     juce::Rectangle<float> getExpandButtonBounds() const;
 
+    /** The title row's hit zone, in this card's local bounds — the SAME rectangle paint() draws
+     *  the name into (minus the chevron reservation), so a double-click's rename zone can never
+     *  drift from what is drawn. paint() and mouseDoubleClick() both call this rather than
+     *  computing the rect separately. */
+    juce::Rectangle<int> getTitleRowBounds() const;
+
     GraphEditor& owner;
     juce::String macroId;
 
