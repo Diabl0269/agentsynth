@@ -2667,12 +2667,14 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
                           [this] { owner.deleteSelection(); });
             }
 
-            // An expanded macro's card (the usual way to re-collapse it) doesn't exist while
-            // expanded, so this is the only reachable UI for the trip back until something else
-            // is clicked to select a member.
+            // Cmd+Alt+G's toggle, reachable from a member module's own menu too: an expanded
+            // macro's card (the collapsed card's own menu) doesn't exist while expanded, so this
+            // is the only always-reachable UI for the round trip. Shown for either state now —
+            // toggleSelectionMacrosCollapsed() picks the right direction from the touched
+            // macro's own current state, matching the label offered here.
             if (const auto* macro = owner.macroForNode(nodeId))
-                if (!macro->collapsed)
-                    m.addItem("Collapse Macro", [this] { owner.collapseSelectionMacros(); });
+                m.addItem(macro->collapsed ? "Expand Macro" : "Collapse Macro",
+                          [this] { owner.toggleSelectionMacrosCollapsed(); });
 
             m.addSeparator();
 

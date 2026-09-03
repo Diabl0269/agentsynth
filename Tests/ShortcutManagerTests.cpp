@@ -824,6 +824,37 @@ TEST_F(ShortcutManagerTest, GetActionDescription_UngroupSelectionIsNonEmpty) {
 }
 
 // ---------------------------------------------------------------------------
+// Macro collapse/expand toggle (P8-12 follow-up — GraphEditor::toggleSelectionMacrosCollapsed)
+// ---------------------------------------------------------------------------
+
+// Default binding must stay Cmd+Alt+G — unchanged by the collapse-only -> toggle behaviour
+// change; only the verb behind the same action id/keybinding changed.
+TEST_F(ShortcutManagerTest, CollapseMacroDefaultBindingIsCmdAltG) {
+    const auto kp = manager.getBinding("collapseMacro");
+    EXPECT_EQ(kp.getKeyCode(), 'g');
+    EXPECT_TRUE(kp.getModifiers().isCommandDown());
+    EXPECT_TRUE(kp.getModifiers().isAltDown());
+    EXPECT_FALSE(kp.getModifiers().isShiftDown());
+}
+
+TEST_F(ShortcutManagerTest, GetCommandForAction_ResolvesCollapseMacro) {
+    EXPECT_EQ(AppCommands::getCommandForAction("collapseMacro"), AppCommands::collapseMacro);
+}
+
+TEST_F(ShortcutManagerTest, ActionIds_ContainsCollapseMacro) {
+    EXPECT_TRUE(manager.getActionIds().contains("collapseMacro"));
+}
+
+// The label is now the single static toggle label ("Collapse / Expand Macro") rather than the
+// old collapse-only "Collapse Macro" — the same static label is what makes a toggle safe to be
+// ONE command rather than a collapse/expand pair (see AppCommands::collapseMacro's comment).
+TEST_F(ShortcutManagerTest, GetActionDescription_CollapseMacroIsTheStaticToggleLabel) {
+    const auto description = ShortcutManager::getActionDescription("collapseMacro");
+    EXPECT_FALSE(description.isEmpty());
+    EXPECT_EQ(description, "Collapse / Expand Macro");
+}
+
+// ---------------------------------------------------------------------------
 // Piano roll: scale panel toggle (Ctrl+S)
 // ---------------------------------------------------------------------------
 

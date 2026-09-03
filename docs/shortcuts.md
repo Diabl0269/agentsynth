@@ -150,11 +150,21 @@ even with no mouse involved.
 | Cmd+Shift+S | Save Selection as Snippet |
 | Cmd+G | Group Selection into Macro |
 | Cmd+Shift+G | Ungroup Macro |
+| Cmd+Alt+G | Collapse / Expand Macro (toggle) |
 
-Graph holds only the four verbs that mean nothing on any other surface — auto-arrange,
-save-selection-as-snippet, and now grouping/ungrouping a macro (P8-12) — everything that means the
-same thing everywhere (copy/paste/cut/duplicate/repeat/select-all, both zoom pairs) is General
-instead, so it can route through `resolveEditSurface()`.
+Graph holds only the five verbs that mean nothing on any other surface — auto-arrange,
+save-selection-as-snippet, and grouping/ungrouping/collapsing a macro (P8-12) — everything that
+means the same thing everywhere (copy/paste/cut/duplicate/repeat/select-all, both zoom pairs) is
+General instead, so it can route through `resolveEditSurface()`.
+
+Cmd+Alt+G is a genuine **toggle** (`GraphEditor::toggleSelectionMacrosCollapsed`), not a
+collapse-only command with an expand-only counterpart: it collapses every macro touched by the
+selection that is currently expanded, or expands them if none are (a mixed selection spanning a
+collapsed and an expanded macro collapses both — collapsing always wins). One command works
+because the menu/Settings-list label is a single static string, "Collapse / Expand Macro", that
+reads right regardless of which way the toggle is about to go — unlike Group/Ungroup above, which
+stay two separate commands because grouping and ungrouping have different preconditions and read
+as genuinely different verbs.
 
 ## Timeline
 

@@ -2021,11 +2021,20 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         break;
     }
     case AppCommands::collapseMacro: {
-        result.setInfo("Collapse Macro", "Collapse the expanded macro the selection belongs to, back into a card",
+        result.setInfo("Collapse / Expand Macro", "Toggle the collapsed state of the macro the selection belongs to",
                        "Edit", 0);
-        // collapseSelectionMacros() itself refuses (with a status message) when the selection
-        // touches no expanded macro — same active-gate style as ungroupSelection above.
-        result.setActive(graphEditor.getSelectionCount() > 0);
+        // toggleSelectionMacrosCollapsed() itself refuses (with a status message) when the
+        // selection touches no macro at all — this gate is the more precise "touches ANY macro"
+        // check (not just "there's a selection"), since a plain non-macro selection can never
+        // succeed here either.
+        bool touchesAnyMacro = false;
+        for (auto nodeId : graphEditor.getSelectedNodes()) {
+            if (graphEditor.macroForNode(nodeId) != nullptr) {
+                touchesAnyMacro = true;
+                break;
+            }
+        }
+        result.setActive(touchesAnyMacro);
         auto kp = shortcutManager.getBinding("collapseMacro");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
@@ -2247,7 +2256,7 @@ bool MainComponent::perform(const InvocationInfo& info) {
         graphEditor.ungroupSelection();
         return true;
     case AppCommands::collapseMacro:
-        graphEditor.collapseSelectionMacros();
+        graphEditor.toggleSelectionMacrosCollapsed();
         return true;
     case AppCommands::toggleLibrary:
         setLibraryVisible(!isLibraryVisible);

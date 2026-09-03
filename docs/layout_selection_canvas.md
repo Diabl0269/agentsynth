@@ -258,12 +258,66 @@ itself (`MacroCardComponent`'s own `ComponentDragger`) reuses that same group-dr
 thin wrapper that resolves the members' rigid-body snap (§1.4) and the card's own position as one
 undo step, rather than a second drag implementation living beside it.
 
+**Collapse/expand is a toggle, not a collapse-only command.** Cmd+Alt+G
+(`GraphEditor::toggleSelectionMacrosCollapsed`) gathers every macro that owns at least one
+currently-selected node: if any of them is expanded, it collapses them ALL; otherwise (every
+touched macro is already collapsed) it expands them all. A selection that touches no macro at all
+is refused via `onStatusMessage`, same as `ungroupSelection`. The action id/keybinding
+(`"collapseMacro"`, Cmd+Alt+G) is unchanged from when this shipped as a collapse-only command — one
+command can cover both directions because the label is a single static string, "Collapse / Expand
+Macro", that reads right regardless of which way the toggle is about to go. A member module's own
+right-click menu offers the same toggle as a single item, labelled "Collapse Macro" or "Expand
+Macro" to match the macro's current state.
+
+**An expanded macro's hull is clickable, not just decorative.** `GraphEditor::macroHullBounds`
+computes the same rectangle (the union of live member bounds, expanded by a fixed margin) that
+`GraphContentComponent::paint` draws the dashed outline + name chip around — ONE definition, so
+paint and hit-testing can't drift. `macroHullAt(canvasPos)` returns the (smallest, on overlap)
+expanded macro whose hull contains a point. A left click that lands in the hull's empty space
+(never on a member module's own card, which JUCE routes to that `ModuleComponent` directly)
+selects the whole macro instead of clearing the selection — hooked into the existing
+`pendingEmptyCanvasClick` deferral in `mouseUp` so panning is unaffected. A right click there opens
+`buildMacroMenu` — the SAME menu builder the collapsed card's own right-click uses (see below) —
+after an explicit `selectMacro(id, false)`, since `mouseUp` deliberately preserves whatever was
+selected on a right-click and the menu's Ungroup/Save-as-Snippet items act on the *current
+selection*.
+
+**One shared macro menu, not two that can drift.** `GraphEditor::buildMacroMenu(macroId,
+renameAction)` is the single builder behind the collapsed card's right-click menu and the expanded
+hull's right-click menu: Expand/Collapse, Rename, Change Colour, Save as Snippet, Ungroup, Delete
+Macro & Modules. Rename is the one item that varies by caller — the collapsed card passes its own
+inline-`TextEditor` opener (`MacroCardComponent::beginRename`); every other caller falls back to
+`GraphEditor::promptRenameMacro`'s `juce::AlertWindow` dialog (the same `SafePointer` +
+`ModalCallbackFunction` + callback-owned-`unique_ptr` idiom as `MainComponent::promptSaveSnippet`),
+since there is no card to host an inline editor at a hull click. Empty/whitespace-only dialog input
+cancels without renaming.
+
+**A collapsed card previews its contents.** Below the title/member-count text, the card draws one
+small filled rounded rect per member — the live union of member `ModuleComponent` bounds scaled to
+fit inside the existing 90px card height (`kMacroCardHeight` never changes; `Macro::bounds` is
+persisted, so a taller card would give already-saved macros a second size on the same canvas), each
+box coloured by that member's module category (`GraphEditor::categoryPreviewColour`, the same
+`themeColourForCategory` token the canvas uses elsewhere) so the preview echoes what expanding
+would show. `MacroCardComponent` also implements `juce::TooltipClient`, returning a
+newline-separated (capped) list of member names — `MainComponent`'s already-installed
+`juce::TooltipWindow` shows it on hover, so a collapsed macro's contents are discoverable without
+expanding it.
+
 **Cables re-anchor around a collapsed macro.** A collapsed macro hides its members but not their
 graph edges, so `rebuildVisibleCables()` (§3) runs a P8-12 post-process pass right before it
 returns: a cable wholly inside one collapsed macro is dropped from the visible list entirely (both
 endpoints are off-screen), and a cable crossing a collapsed macro's boundary keeps its outside
-endpoint but re-anchors its inside endpoint to `macro.bounds.getCentre()` rather than pointing at a
-hidden jack.
+endpoint but re-anchors its inside endpoint to the point where the card's edge faces the other
+endpoint (`projectToRectEdge`) rather than pointing at a hidden jack. The rectangle projected
+against is `GraphEditor::macroCableAnchorBounds(macro)` — the LIVE `MacroCardComponent`'s bounds
+while a card exists, not the persisted `macro.bounds`, which `finalizeMacroCardDrag` only writes
+back on drop; anchoring on the stale persisted value left a boundary cable pointing at the card's
+pre-drag position for the whole drag gesture. `GraphEditor::dragMacroCardBy` calls
+`repaintCanvas()` (invalidating the cable cache, same one repaint-per-frame pattern
+`ModuleComponent`'s own body drag uses) so the re-anchored cable is visible immediately rather than
+catching up on the next 30 Hz tick; `MacroCardComponent::mouseDrag` no longer calls
+`getParentComponent()->repaint()` itself, since `dragMacroCardBy` is now the one repaint call for
+the gesture.
 
 **Undo.** A macro mutation that also changes the graph (delete) goes through
 `AppUndoManager::recordGraphAndMacroChange`, which pushes a graph `SnapshotAction` and/or a
