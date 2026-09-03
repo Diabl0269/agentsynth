@@ -267,6 +267,12 @@ public:
      *  individual cards. Refused via onStatusMessage (no-op) if the selection touches no macro. */
     void ungroupSelection();
 
+    /** Collapses (Cmd+Alt+G) every expanded macro that owns at least one currently-selected
+     *  node back into its card — the counterpart to setMacroCollapsed(id, true) that's actually
+     *  reachable once a macro is expanded (its card, and the "Collapse" item on it, don't exist
+     *  then). Refused via onStatusMessage (no-op) if the selection touches no expanded macro. */
+    void collapseSelectionMacros();
+
     /** Selects every member of `macroId` — so drag/delete reuse the plain multi-select path
      *  unchanged — replacing the current selection unless `additive`. No-op if the id is
      *  unknown. */
@@ -275,6 +281,11 @@ public:
     /** True when every member of `macroId` is selected and nothing else is — the state a click
      *  on its collapsed card produces. */
     bool isMacroSelected(const juce::String& macroId) const;
+
+    /** The macro `nodeId` belongs to, or nullptr if it isn't a member of any. Lets a caller that
+     *  only has a node (e.g. ModuleComponent's right-click menu) offer macro-scoped actions
+     *  without reaching into GraphEditor's private uuid-resolution machinery itself. */
+    const synth::Macro* macroForNode(juce::AudioProcessorGraph::NodeID nodeId) const;
 
     /** Expands or collapses a macro. Collapsing hides its member ModuleComponents (they stay
      *  alive, just invisible, so their positions keep tracking a card drag) and shows one card

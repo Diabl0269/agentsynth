@@ -2661,9 +2661,19 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
                     owner.onSaveSnippetRequested();
             });
             if (selectionCount > 1) {
+                m.addItem("Create Macro from " + juce::String(selectionCount) + " Modules",
+                          [this] { owner.groupSelectionIntoMacro(); });
                 m.addItem("Delete " + juce::String(selectionCount) + " Selected Modules",
                           [this] { owner.deleteSelection(); });
             }
+
+            // An expanded macro's card (the usual way to re-collapse it) doesn't exist while
+            // expanded, so this is the only reachable UI for the trip back until something else
+            // is clicked to select a member.
+            if (const auto* macro = owner.macroForNode(nodeId))
+                if (!macro->collapsed)
+                    m.addItem("Collapse Macro", [this] { owner.collapseSelectionMacros(); });
+
             m.addSeparator();
 
             // Bypass toggle (only for actual modules)

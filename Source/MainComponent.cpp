@@ -1868,9 +1868,10 @@ void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
                        AppCommands::exportPatchOnly, AppCommands::exportAudio, AppCommands::openPreset,
                        AppCommands::newPatch, AppCommands::undo, AppCommands::redo, AppCommands::toggleModMatrix,
                        AppCommands::toggleMinimap, AppCommands::toggleAiPanel, AppCommands::autoArrange,
-                       AppCommands::groupSelection, AppCommands::ungroupSelection, AppCommands::toggleLibrary,
-                       AppCommands::selectAllModules, AppCommands::saveSnippet, AppCommands::copySelection,
-                       AppCommands::pasteSelection, AppCommands::duplicateSelection, AppCommands::cutSelection,
+                       AppCommands::groupSelection, AppCommands::ungroupSelection, AppCommands::collapseMacro,
+                       AppCommands::toggleLibrary, AppCommands::selectAllModules, AppCommands::saveSnippet,
+                       AppCommands::copySelection, AppCommands::pasteSelection, AppCommands::duplicateSelection,
+                       AppCommands::cutSelection,
                        // Registered unconditionally alongside togglePlayback below even though only
                        // the timeline surfaces implement it — reported inactive rather than dropping
                        // the row from Settings.
@@ -2016,6 +2017,16 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         result.setInfo("Ungroup Macro", "Dissolve the macro the selection belongs to, keeping its modules", "Edit", 0);
         result.setActive(graphEditor.getSelectionCount() > 0);
         auto kp = shortcutManager.getBinding("ungroupSelection");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    case AppCommands::collapseMacro: {
+        result.setInfo("Collapse Macro", "Collapse the expanded macro the selection belongs to, back into a card",
+                       "Edit", 0);
+        // collapseSelectionMacros() itself refuses (with a status message) when the selection
+        // touches no expanded macro — same active-gate style as ungroupSelection above.
+        result.setActive(graphEditor.getSelectionCount() > 0);
+        auto kp = shortcutManager.getBinding("collapseMacro");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
@@ -2234,6 +2245,9 @@ bool MainComponent::perform(const InvocationInfo& info) {
         return true;
     case AppCommands::ungroupSelection:
         graphEditor.ungroupSelection();
+        return true;
+    case AppCommands::collapseMacro:
+        graphEditor.collapseSelectionMacros();
         return true;
     case AppCommands::toggleLibrary:
         setLibraryVisible(!isLibraryVisible);

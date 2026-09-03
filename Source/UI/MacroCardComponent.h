@@ -40,6 +40,11 @@ private:
     void showContextMenu();
     juce::PopupMenu buildColourSubMenu();
 
+    /** Top-right hit zone for the visible expand chevron — right-click's "Expand" menu item did
+     *  the same thing but nothing on the card *looked* clickable, so grouping fresh modules and
+     *  then finding your way back into them was a guessing game (double-click, undocumented). */
+    juce::Rectangle<float> getExpandButtonBounds() const;
+
     GraphEditor& owner;
     juce::String macroId;
 

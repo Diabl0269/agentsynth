@@ -89,6 +89,38 @@ TEST(MacroWrap, WrapAndUnwrapRoundTrip) {
     EXPECT_NE(engine.getGraph().getNodeForId(b), nullptr);
 }
 
+TEST(MacroWrap, WrapsFreshlyDroppedModulesWithNoUuidYet) {
+    // Reproduces the real "drag two modules onto the canvas and immediately Cmd+G them" path:
+    // GraphEditor::itemDropped never stamps a "uuid" property (only graphToJSON does, lazily, on
+    // first save), so grouping must assign one on the spot rather than silently dropping the
+    // module from membership and reporting "select at least two modules".
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = engine.getGraph().addNode(std::make_unique<OscillatorModule>());
+    a->properties.set("x", 100);
+    a->properties.set("y", 100);
+    auto b = engine.getGraph().addNode(std::make_unique<FilterModule>());
+    b->properties.set("x", 500);
+    b->properties.set("y", 100);
+    editor.updateComponents();
+
+    ASSERT_TRUE(a->properties["uuid"].toString().isEmpty());
+    ASSERT_TRUE(b->properties["uuid"].toString().isEmpty());
+
+    editor.setSelectedNodes({a->nodeID, b->nodeID});
+    EXPECT_EQ(editor.getSelectionCount(), 2);
+
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_EQ(macro->members.size(), 2u);
+    EXPECT_FALSE(a->properties["uuid"].toString().isEmpty());
+    EXPECT_FALSE(b->properties["uuid"].toString().isEmpty());
+}
+
 TEST(MacroWrap, RefusesFewerThanTwoSelected) {
     AudioEngine engine;
     GraphEditor editor(engine);
@@ -356,6 +388,88 @@ TEST(MacroCollapse, CollapsingHidesMembersAndExpandingShowsThemAgain) {
     EXPECT_FALSE(compB->isVisible());
 }
 
+TEST(MacroCollapse, CollapseSelectionMacrosReCollapsesAnExpandedMacro) {
+    // Regression test: once expanded, a macro's card (the only UI that offered "Collapse") no
+    // longer exists on screen — collapseSelectionMacros() is the actual reachable path back
+    // (ModuleComponent's right-click menu and the Cmd+Alt+G shortcut both call it).
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+    ASSERT_FALSE(editor.getMacros().find(macroId)->collapsed);
+
+    // Only one member selected — collapseSelectionMacros must still find and collapse the whole
+    // macro, matching ungroupSelection's "touches at least one selected node" semantics.
+    editor.selectModule(a, false);
+    editor.collapseSelectionMacros();
+
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_TRUE(macro->collapsed);
+}
+
+TEST(MacroCollapse, CollapseSelectionMacrosIsANoOpWithStatusMessageWhenNothingToCollapse) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 900);
+
+    juce::String lastMessage;
+    editor.onStatusMessage = [&](const juce::String& msg) { lastMessage = msg; };
+
+    // Nothing selected at all.
+    editor.collapseSelectionMacros();
+    EXPECT_FALSE(lastMessage.isEmpty());
+
+    // A plain, non-macro module selected.
+    lastMessage.clear();
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 0, 0);
+    editor.selectModule(a, false);
+    editor.collapseSelectionMacros();
+    EXPECT_FALSE(lastMessage.isEmpty());
+
+    // An already-collapsed macro's members selected — nothing left to collapse.
+    lastMessage.clear();
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 300, 0);
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setSelectedNodes({a, b});
+    editor.collapseSelectionMacros();
+    EXPECT_FALSE(lastMessage.isEmpty());
+    EXPECT_TRUE(editor.getMacros().find(macroId)->collapsed);
+}
+
+TEST(MacroCollapse, MacroForNodeFindsTheOwningMacroOnlyWhileGrouped) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 900);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 0, 0);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 300, 0);
+    auto c = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 600, 0);
+
+    EXPECT_EQ(editor.macroForNode(a), nullptr);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    const auto* found = editor.macroForNode(a);
+    ASSERT_NE(found, nullptr);
+    EXPECT_EQ(found->id, macroId);
+    EXPECT_EQ(editor.macroForNode(c), nullptr);
+
+    editor.ungroupSelection();
+    EXPECT_EQ(editor.macroForNode(a), nullptr);
+}
+
 // ============================================================================
 // Undo
 // ============================================================================
@@ -479,8 +593,19 @@ TEST(MacroCable, CollapsedMacroHidesInternalCablesAndReanchorsBoundaryCrossingOn
             sawInternal = true;
         if (cable.id.srcUid == filter.uid && cable.id.dstUid == vca.uid) {
             sawBoundary = true;
-            EXPECT_EQ(cable.p1, macro->bounds.getCentre().toFloat())
-                << "the hidden endpoint must be anchored at the macro card's centre";
+            // Anchored to the point where the ray from the card's centre toward the other
+            // endpoint (vca, to the right) exits the card's rectangle — not floating at a fixed
+            // point unrelated to the rest of the wire. vca sits to the right of the macro card,
+            // so the landing point should be on the boundary and on/right of centre.
+            const auto bounds = macro->bounds.toFloat();
+            const bool onVerticalEdge = juce::approximatelyEqual(cable.p1.x, bounds.getX()) ||
+                                        juce::approximatelyEqual(cable.p1.x, bounds.getRight());
+            const bool onHorizontalEdge = juce::approximatelyEqual(cable.p1.y, bounds.getY()) ||
+                                          juce::approximatelyEqual(cable.p1.y, bounds.getBottom());
+            EXPECT_TRUE(onVerticalEdge || onHorizontalEdge)
+                << "the hidden endpoint must land on the macro card's edge, not float at an arbitrary point";
+            EXPECT_GE(cable.p1.x, bounds.getCentreX())
+                << "the endpoint should face the direction of the module it connects to";
         }
     }
     EXPECT_FALSE(sawInternal) << "a cable wholly inside a collapsed macro must not be drawn";
