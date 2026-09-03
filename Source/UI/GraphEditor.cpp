@@ -791,15 +791,30 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
 
             // A tab overlapping the hull's own top edge, not floating above it — a macro whose
             // members sit near the top of the canvas would otherwise clip the label off-canvas
-            // with nothing to scroll up to.
+            // with nothing to scroll up to. macroChipBounds is the ONE definition of this rect -
+            // hit-testing (GraphEditor::macroChipAt, the chip's drag/rename affordance) must see
+            // exactly what gets painted here, so paint uses the same font macroChipBounds measures
+            // with rather than computing its own width.
             const juce::String label = macro.name.isNotEmpty() ? macro.name : juce::String("Macro");
             g.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
-            const int labelW = (int)g.getCurrentFont().getStringWidthFloat(label) + 16;
-            juce::Rectangle<float> chip((float)hull.getX() + 8.0f, (float)hull.getY(), (float)labelW, 18.0f);
+            const auto chipBounds = editor.macroChipBounds(macro.id);
+            juce::Rectangle<float> chip = chipBounds.toFloat();
             g.setColour(macro.colour.withAlpha(0.85f));
             g.fillRoundedRectangle(chip, 6.0f);
+
+            // Grip affordance: three short vertical lines at the chip's left edge, so it reads as
+            // a drag handle rather than a plain label. Restrained and inside the 18px chip height.
+            g.setColour(juce::Colours::white.withAlpha(0.35f));
+            const float gripX = chip.getX() + 6.0f;
+            const float gripTop = chip.getY() + 5.0f;
+            const float gripBottom = chip.getBottom() - 5.0f;
+            for (int i = 0; i < 3; ++i) {
+                const float x = gripX + (float)i * 3.0f;
+                g.drawLine(x, gripTop, x, gripBottom, 1.0f);
+            }
+
             g.setColour(juce::Colours::white);
-            g.drawText(label, chip, juce::Justification::centred, false);
+            g.drawText(label, chip.withLeft(chip.getX() + 12.0f), juce::Justification::centred, false);
         }
     }
     // ---- End expanded-macro grouping hull ----
@@ -2789,6 +2804,18 @@ synth::ui::MinimapModel GraphEditor::buildMinimapModel() {
 void GraphEditor::mouseMove(const juce::MouseEvent& e) {
     auto localPos = content.getLocalPoint(this, e.getPosition());
 
+    // Hovering an expanded macro's name chip shows a grab cursor, since the chip doubles as a drag
+    // handle. Tracked with its own bool (rather than early-returning) so leaving the chip falls
+    // through to the ordinary cable/canvas cursor logic below instead of getting stuck on the hand
+    // cursor - cheap either way (one hull-list walk), no repaint needed for a cursor-only change.
+    const bool overChip = !macroChipAt(localPos.roundToInt()).isEmpty();
+    if (overChip != hoveringMacroChip) {
+        hoveringMacroChip = overChip;
+        setMouseCursor(overChip ? juce::MouseCursor::DraggingHandCursor : juce::MouseCursor::NormalCursor);
+    }
+    if (overChip)
+        return;
+
     std::optional<CableId> newId;
     if (auto cable = getCableAt(localPos.toFloat()))
         newId = cable->id;
@@ -2807,7 +2834,9 @@ void GraphEditor::mouseMove(const juce::MouseEvent& e) {
 }
 
 void GraphEditor::mouseExit(const juce::MouseEvent&) {
-    if (!hoveredCableId.has_value())
+    const bool wasHoveringChip = hoveringMacroChip;
+    hoveringMacroChip = false;
+    if (!hoveredCableId.has_value() && !wasHoveringChip)
         return;
     hoveredCableId.reset();
     setMouseCursor(juce::MouseCursor::NormalCursor);
@@ -2871,6 +2900,26 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
         pendingEmptyCanvasClick = false;
 
         auto localPos = content.getLocalPoint(this, e.getPosition());
+
+        // Pressing an expanded macro's name chip drags the whole macro as a rigid body - checked
+        // before the attenuverter/empty-canvas-click logic below so the chip wins over whatever
+        // would otherwise be under it (in practice, empty canvas above the hull).
+        //
+        // Shift is excluded deliberately: it is the explicit marquee modifier, and a marquee that
+        // happens to start on a chip should still be a marquee. The chip is a small target, so
+        // letting it swallow Shift+drag would make marquees fail unpredictably near a hull's top
+        // edge. Unmodified drag is the chip's gesture; Shift keeps belonging to the marquee.
+        if (auto macroId = macroChipAt(localPos.roundToInt()); macroId.isNotEmpty() && !e.mods.isShiftDown()) {
+            selectMacro(macroId, false);
+            if (undoManager)
+                undoManager->captureBeforeState(audioEngine.getGraph());
+            beginSelectionDrag();
+            macroChipDragId = macroId;
+            macroChipDragStartCanvasPos = localPos.roundToInt();
+            pendingEmptyCanvasClick = false;
+            return;
+        }
+
         auto attenId = getAttenuverterNodeAt(localPos.toFloat());
         if (attenId.uid != 0) {
             draggingAttenuverterNodeId = attenId;
@@ -2896,6 +2945,17 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
 void GraphEditor::mouseDrag(const juce::MouseEvent& e) {
     if (marqueeActive) {
         updateMarquee(content.getLocalPoint(this, e.getPosition()).roundToInt());
+        return;
+    }
+
+    if (macroChipDragId.isNotEmpty()) {
+        // The delta MUST be computed in CANVAS space (via content.getLocalPoint), not in
+        // GraphEditor-local space the way the pan code below does: `content` carries the zoom
+        // transform, so a raw e.getPosition() delta would make the macro drift at any zoom other
+        // than 1.0 (a delta of N screen pixels is N/zoom canvas pixels).
+        auto canvasPos = content.getLocalPoint(this, e.getPosition()).roundToInt();
+        dragSelectionBy(canvasPos - macroChipDragStartCanvasPos, nullptr);
+        repaintCanvas();
         return;
     }
 
@@ -2928,6 +2988,25 @@ void GraphEditor::mouseDrag(const juce::MouseEvent& e) {
 void GraphEditor::mouseUp(const juce::MouseEvent& e) {
     if (marqueeActive) {
         endMarquee();
+        return;
+    }
+
+    if (macroChipDragId.isNotEmpty()) {
+        const auto canvasPos = content.getLocalPoint(this, e.getPosition()).roundToInt();
+        // isSelectionDragActive() guards a single-member macro (reachable - see
+        // MacroDelete.DeletingDownToOneMemberDoesNotDissolveButDeletingTheLastDoes): beginSelectionDrag
+        // requires >1 recorded member to arm, so a lone member never actually moves even if the
+        // mouse travelled, and finalizing would push a no-delta undo entry that visibly does nothing.
+        const bool moved = isSelectionDragActive() && canvasPos != macroChipDragStartCanvasPos;
+        if (moved) {
+            finalizeSelectionDrag(); // snaps + de-overlaps the group as one rigid body
+            if (undoManager)
+                undoManager->pushSnapshotFromCapture(audioEngine.getGraph());
+        } else {
+            cancelSelectionDrag();
+        }
+        macroChipDragId.clear();
+        repaintCanvas();
         return;
     }
 
@@ -3246,6 +3325,42 @@ juce::String GraphEditor::macroHullAt(juce::Point<int> canvasPos) const {
             continue;
         // Smallest hull wins when hulls overlap — the more specific (smaller) macro is the one
         // the click most plausibly aimed at.
+        const int area = bounds.getWidth() * bounds.getHeight();
+        if (area < bestArea) {
+            bestArea = area;
+            best = macro.id;
+        }
+    }
+    return best;
+}
+
+juce::Rectangle<int> GraphEditor::macroChipBounds(const juce::String& macroId) const {
+    const auto hull = macroHullBounds(macroId);
+    if (hull.isEmpty())
+        return {};
+
+    // Measured with a LOCAL font rather than a juce::Graphics context, so this can be called from
+    // hit-testing (mouseDown/mouseMove) as well as paint - GraphContentComponent::paint uses this
+    // exact same font when it draws the chip, so the drawn rect and the hit rect never diverge.
+    const auto* macro = macros.find(macroId);
+    const juce::String label = (macro != nullptr && macro->name.isNotEmpty()) ? macro->name : juce::String("Macro");
+    juce::Font font(juce::FontOptions(11.0f, juce::Font::bold));
+    // +28, not the original card's +16: paint reserves the left ~12px for the grip-line affordance
+    // (see GraphContentComponent::paint), so the label needs the extra room to not look crowded.
+    // This is the one place that width is computed - paint reads this same rect.
+    const int labelW = (int)font.getStringWidthFloat(label) + 28;
+    return juce::Rectangle<int>(hull.getX() + 8, hull.getY(), labelW, 18);
+}
+
+juce::String GraphEditor::macroChipAt(juce::Point<int> canvasPos) const {
+    juce::String best;
+    int bestArea = std::numeric_limits<int>::max();
+    for (const auto& macro : macros.getAll()) {
+        if (macro.collapsed)
+            continue;
+        const auto bounds = macroChipBounds(macro.id);
+        if (bounds.isEmpty() || !bounds.contains(canvasPos))
+            continue;
         const int area = bounds.getWidth() * bounds.getHeight();
         if (area < bestArea) {
             bestArea = area;
@@ -3997,6 +4112,23 @@ bool GraphEditor::keyPressed(const juce::KeyPress& key) {
 
 void GraphEditor::mouseDoubleClick(const juce::MouseEvent& e) {
     auto localPos = content.getLocalPoint(this, e.getPosition());
+
+    // Double-clicking an expanded macro's name chip renames it - mirrors the collapsed card's own
+    // double-click-to-rename affordance.
+    if (auto macroId = macroChipAt(localPos.roundToInt()); macroId.isNotEmpty()) {
+        // JUCE delivers mouseDown before mouseDoubleClick, so the second click already armed a
+        // chip drag (see mouseDown). The modal rename AlertWindow below can swallow the mouseUp
+        // that would otherwise clear it, leaving macroChipDragId stuck non-empty and the next drag
+        // anywhere on empty canvas moving this macro instead of panning - drop it unconditionally
+        // rather than depending on that mouseUp ever arriving.
+        if (macroChipDragId.isNotEmpty()) {
+            cancelSelectionDrag();
+            macroChipDragId.clear();
+        }
+        promptRenameMacro(macroId);
+        return;
+    }
+
     auto attenId = getAttenuverterNodeAt(localPos.toFloat());
     if (attenId.uid != 0) {
         if (undoManager) {

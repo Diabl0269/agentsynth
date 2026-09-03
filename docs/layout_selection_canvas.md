@@ -282,6 +282,28 @@ after an explicit `selectMacro(id, false)`, since `mouseUp` deliberately preserv
 selected on a right-click and the menu's Ungroup/Save-as-Snippet items act on the *current
 selection*.
 
+**The name chip is the expanded hull's drag handle (P8-14).** `GraphEditor::macroChipBounds`
+computes the chip rectangle the same way `macroHullBounds` computes the hull — the ONE definition
+`GraphContentComponent::paint` draws from and `macroChipAt(canvasPos)` hit-tests against, both using
+the same locally-constructed 11pt bold font so the drawn chip and the hit rect never diverge.
+Pressing the chip (`mouseDown`, checked before the attenuverter/marquee/empty-canvas-click logic)
+selects the macro and starts a group drag through the same `beginSelectionDrag`/`dragSelectionBy`/
+`finalizeSelectionDrag` primitives a multi-select body-drag uses, so the whole macro moves as one
+rigid body and resolves through the same snap/de-overlap pass on release. The per-frame delta is
+computed in CANVAS space (`content.getLocalPoint`), not `GraphEditor`-local space, because the
+canvas carries a zoom transform — a raw screen-pixel delta would make the macro drift at any zoom
+other than 1.0. A press that never moves cancels the drag (`cancelSelectionDrag`) and pushes no undo
+entry, leaving the macro selected; an actual drag is one undo step. Hovering the chip shows
+`DraggingHandCursor` (tracked via a small `hoveringMacroChip` bool so leaving the chip resets the
+cursor rather than sticking), and the chip paints three short grip lines at its left edge so it
+reads as a handle rather than a plain label. Double-clicking the chip calls
+`GraphEditor::promptRenameMacro` directly — the same dialog affordance the hull's right-click menu
+uses — mirroring the collapsed card's own double-click-to-rename. The chip is a small, specific
+target sitting over empty canvas at the hull's top-left, which is exactly why it can be a drag
+handle without stealing the pan gesture: a press anywhere else in the hull's empty space (between or
+around member cards) still falls through to the ordinary pan/empty-canvas-click path described
+above.
+
 **One shared macro menu, not two that can drift.** `GraphEditor::buildMacroMenu(macroId,
 renameAction)` is the single builder behind the collapsed card's right-click menu and the expanded
 hull's right-click menu: Expand/Collapse, Rename, Change Colour, Save as Snippet, Ungroup, Delete

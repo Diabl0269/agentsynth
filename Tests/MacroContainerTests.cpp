@@ -554,6 +554,146 @@ TEST(MacroHull, HullAtHitsInsideAndMissesOutsideAndWhileCollapsed) {
 }
 
 // ============================================================================
+// Chip (P8-14 — the expanded hull's name-chip drag handle)
+// ============================================================================
+
+TEST(MacroChip, ChipBoundsIsEmptyWhileCollapsedAndSitsOnTheHullsTopEdgeWhileExpanded) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro(); // collapses by default
+    ASSERT_FALSE(macroId.isEmpty());
+
+    EXPECT_TRUE(editor.macroChipBounds(macroId).isEmpty()) << "a collapsed macro has no chip";
+    EXPECT_TRUE(editor.macroChipBounds("no-such-macro-id").isEmpty());
+
+    editor.setMacroCollapsed(macroId, false);
+    const auto hull = editor.macroHullBounds(macroId);
+    ASSERT_FALSE(hull.isEmpty());
+
+    const auto chip = editor.macroChipBounds(macroId);
+    ASSERT_FALSE(chip.isEmpty());
+    EXPECT_EQ(chip.getY(), hull.getY()) << "the chip sits on the hull's top edge";
+    EXPECT_GE(chip.getX(), hull.getX()) << "the chip stays within the hull's horizontal span";
+    EXPECT_LE(chip.getRight(), hull.getRight());
+}
+
+TEST(MacroChip, ChipAtHitsInsideAndMissesJustOutsideAndWhileCollapsed) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    // Collapsed: no chip to hit, anywhere.
+    EXPECT_TRUE(editor.macroChipAt({150, 150}).isEmpty());
+
+    editor.setMacroCollapsed(macroId, false);
+    const auto chip = editor.macroChipBounds(macroId);
+    ASSERT_FALSE(chip.isEmpty());
+
+    EXPECT_EQ(editor.macroChipAt(chip.getCentre()), macroId);
+    // Just past the chip's right/bottom edge — still comfortably inside the hull, so a miss here
+    // proves the hit-test is scoped to the chip itself, not the whole hull.
+    EXPECT_TRUE(editor.macroChipAt(juce::Point<int>(chip.getRight() + 5, chip.getBottom() + 5)).isEmpty());
+}
+
+// ============================================================================
+// Chip drag (P8-14 — dragging the chip moves the whole macro as a rigid body)
+// ============================================================================
+
+TEST(MacroChipDrag, DraggingMovesEveryMemberByTheDragDeltaAsARigidBody) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    auto* compA = findComponent(editor, a);
+    auto* compB = findComponent(editor, b);
+    ASSERT_NE(compA, nullptr);
+    ASSERT_NE(compB, nullptr);
+    const auto startA = compA->getPosition();
+    const auto startB = compB->getPosition();
+    const auto startOffset = startB - startA;
+
+    // Synthesizing real mouse events into GraphEditor is not reliable headless (no real OS event
+    // loop/window to deliver them through); drive the same primitives GraphEditor::mouseDown/
+    // mouseDrag/mouseUp use for a chip drag directly instead.
+    editor.selectMacro(macroId, false);
+    editor.beginSelectionDrag();
+    const juce::Point<int> delta(120, 40);
+    editor.dragSelectionBy(delta, nullptr);
+
+    EXPECT_EQ(compA->getPosition(), startA + delta);
+    EXPECT_EQ(compB->getPosition(), startB + delta);
+    EXPECT_EQ(compB->getPosition() - compA->getPosition(), startOffset) << "the group must move as a single rigid body";
+
+    editor.finalizeSelectionDrag();
+    EXPECT_EQ(compB->getPosition() - compA->getPosition(), startOffset)
+        << "finalize applies one uniform snap/de-overlap offset to the whole group, preserving "
+           "relative member positions";
+}
+
+TEST(MacroChipDrag, ChipDragIsOneUndoStep) {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    auto* compA = findComponent(editor, a);
+    auto* compB = findComponent(editor, b);
+    ASSERT_NE(compA, nullptr);
+    ASSERT_NE(compB, nullptr);
+    const auto startA = compA->getPosition();
+    const auto startB = compB->getPosition();
+
+    // Mirrors GraphEditor::mouseDown/mouseDrag/mouseUp's exact sequence for a chip drag
+    // (captureBeforeState before the drag starts, pushSnapshotFromCapture once it finalizes) —
+    // see the comment on the previous test for why this drives the primitives directly rather
+    // than synthesizing mouse events.
+    editor.selectMacro(macroId, false);
+    undo.captureBeforeState(engine.getGraph());
+    editor.beginSelectionDrag();
+    editor.dragSelectionBy({120, 40}, nullptr);
+    editor.finalizeSelectionDrag();
+    undo.pushSnapshotFromCapture(engine.getGraph());
+
+    EXPECT_NE(compA->getPosition(), startA) << "sanity: the drag actually moved something";
+
+    ASSERT_TRUE(undo.canUndo());
+    undo.undo();
+
+    EXPECT_EQ(compA->getPosition(), startA) << "a single undo restores every member's original position";
+    EXPECT_EQ(compB->getPosition(), startB);
+}
+
+// ============================================================================
 // Rename dialog (Fix 5 — the hull menu's AlertWindow affordance)
 // ============================================================================
 

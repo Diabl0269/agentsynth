@@ -330,6 +330,15 @@ public:
      *  wins when hulls overlap. */
     juce::String macroHullAt(juce::Point<int> canvasPos) const;
 
+    /** Canvas-space bounds of an EXPANDED macro's name chip - the tab drawn on the hull's top
+     *  edge, which doubles as the macro's drag handle. Empty rect if the macro is collapsed or
+     *  unknown. The ONE definition: paint and hit-testing must never diverge. */
+    juce::Rectangle<int> macroChipBounds(const juce::String& macroId) const;
+
+    /** The expanded macro whose name chip contains `canvasPos`, or an empty string. Smallest
+     *  chip wins if two ever overlap. */
+    juce::String macroChipAt(juce::Point<int> canvasPos) const;
+
     /** Test accessor: the live MacroCardComponent for `macroId`, or nullptr. Exposed so a test can
      *  move the real card directly (bypassing the drag gesture entirely) to prove
      *  rebuildVisibleCables() anchors on the card's CURRENT bounds rather than the persisted
@@ -997,6 +1006,19 @@ private:
     // True while a click on empty canvas has not yet turned into a pan or marquee drag; a mouseUp
     // in that state is a plain click and clears the selection.
     bool pendingEmptyCanvasClick = false;
+
+    // ---- Expanded-macro chip drag (P8-14) ----
+    // The chip drag reuses beginSelectionDrag/dragSelectionBy/finalizeSelectionDrag exactly like a
+    // plain multi-select body-drag (see ModuleComponent::mouseDrag/mouseUp) - macroChipDragId is
+    // non-empty for the duration of the gesture, and macroChipDragStartCanvasPos is the CANVAS-space
+    // (post-zoom-transform) point the chip was pressed at, so the per-frame delta fed to
+    // dragSelectionBy is correct at any zoom level.
+    juce::String macroChipDragId;
+    juce::Point<int> macroChipDragStartCanvasPos;
+    /** Tracks the DraggingHandCursor set while hovering a chip, so mouseMove/mouseExit can reset it
+     *  on the transition out rather than getting stuck (see mouseMove's cable-hover cursor, which
+     *  this mirrors). */
+    bool hoveringMacroChip = false;
 
     /** Bounding boxes of every rendered module, for marquee hit-testing and group collision. */
     std::vector<synth::LayoutUtil::Box> collectModuleBoxes(bool selectedOnly, bool excludeSelected) const;
