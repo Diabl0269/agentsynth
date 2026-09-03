@@ -89,6 +89,38 @@ TEST(MacroWrap, WrapAndUnwrapRoundTrip) {
     EXPECT_NE(engine.getGraph().getNodeForId(b), nullptr);
 }
 
+TEST(MacroWrap, WrapsFreshlyDroppedModulesWithNoUuidYet) {
+    // Reproduces the real "drag two modules onto the canvas and immediately Cmd+G them" path:
+    // GraphEditor::itemDropped never stamps a "uuid" property (only graphToJSON does, lazily, on
+    // first save), so grouping must assign one on the spot rather than silently dropping the
+    // module from membership and reporting "select at least two modules".
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = engine.getGraph().addNode(std::make_unique<OscillatorModule>());
+    a->properties.set("x", 100);
+    a->properties.set("y", 100);
+    auto b = engine.getGraph().addNode(std::make_unique<FilterModule>());
+    b->properties.set("x", 500);
+    b->properties.set("y", 100);
+    editor.updateComponents();
+
+    ASSERT_TRUE(a->properties["uuid"].toString().isEmpty());
+    ASSERT_TRUE(b->properties["uuid"].toString().isEmpty());
+
+    editor.setSelectedNodes({a->nodeID, b->nodeID});
+    EXPECT_EQ(editor.getSelectionCount(), 2);
+
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_EQ(macro->members.size(), 2u);
+    EXPECT_FALSE(a->properties["uuid"].toString().isEmpty());
+    EXPECT_FALSE(b->properties["uuid"].toString().isEmpty());
+}
+
 TEST(MacroWrap, RefusesFewerThanTwoSelected) {
     AudioEngine engine;
     GraphEditor editor(engine);

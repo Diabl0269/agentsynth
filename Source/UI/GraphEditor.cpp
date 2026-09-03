@@ -3166,7 +3166,11 @@ juce::String GraphEditor::groupSelectionIntoMacro() {
     std::vector<juce::String> memberUuids;
     juce::Rectangle<int> groupBounds;
     for (auto id : ids) {
-        const juce::String uuid = nodeUuidFor(id);
+        // A module freshly dropped onto the canvas has no "uuid" property yet — it's only ever
+        // lazily assigned on first save (synth::AIStateMapper::graphToJSON). Assign it here too,
+        // the same way, so grouping newly-placed modules doesn't drop them from the selection.
+        auto* node = audioEngine.getGraph().getNodeForId(id);
+        const juce::String uuid = node != nullptr ? synth::AIStateMapper::ensureNodeUuid(node) : juce::String();
         if (uuid.isEmpty())
             continue; // no persistent identity to group by — shouldn't happen for a real module
 
@@ -3578,6 +3582,14 @@ void GraphEditor::showCanvasContextMenu(juce::Point<int> canvasPos) {
         if (safeThis != nullptr)
             safeThis->selectAllModules();
     });
+
+    const int selectionCount = getSelectionCount();
+    if (selectionCount > 1) {
+        m.addItem("Create Macro from " + juce::String(selectionCount) + " Modules", [safeThis] {
+            if (safeThis != nullptr)
+                safeThis->groupSelectionIntoMacro();
+        });
+    }
 
     m.showMenuAsync(juce::PopupMenu::Options());
 }

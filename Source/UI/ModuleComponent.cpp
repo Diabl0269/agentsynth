@@ -2661,6 +2661,8 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
                     owner.onSaveSnippetRequested();
             });
             if (selectionCount > 1) {
+                m.addItem("Create Macro from " + juce::String(selectionCount) + " Modules",
+                          [this] { owner.groupSelectionIntoMacro(); });
                 m.addItem("Delete " + juce::String(selectionCount) + " Selected Modules",
                           [this] { owner.deleteSelection(); });
             }
