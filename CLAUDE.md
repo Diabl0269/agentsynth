@@ -109,6 +109,7 @@ Everything else below is a tripwire index. The full rule lives in the named area
 - [`docs/layout.md`](docs/layout.md) — grid/snap/auto-arrange, toolbar & status-bar chrome, width buckets, LayoutUtil API, drag affordance + smart connections
 - [`docs/layout_visuals_animation.md`](docs/layout_visuals_animation.md) — visualizer components, UI rendering performance, animation system (UIAnimation.h, AnimationDriver, PanelSlide, micro-interactions), alignment guides
 - [`docs/layout_selection_canvas.md`](docs/layout_selection_canvas.md) — multi-select + group drag + snippets/clipboard (§1.5), collapsible library sections, cable interaction, minimap overlay
+- [`docs/macros.md`](docs/macros.md) — Macros: the P8-12 presentation-only container, plus the DECIDED Macro I/O model (P8-14) that P8-15 implements — proxy inlet/outlet nodes on a flat graph, and why a container node with an inner graph was rejected
 - [`docs/timeline_panel_core.md`](docs/timeline_panel_core.md) — timeline panel overview, ruler/grid/zoom/snap + markers, track headers/binding chips, playhead, transport bar, metronome, edit-tool strip
 - [`docs/timeline_panel_clips_automation.md`](docs/timeline_panel_clips_automation.md) — clip lanes, piano roll, automation strip, keyboard & focus arbitration
 - [`docs/theming.md`](docs/theming.md) — theme tokens, SVG icons, JSON user themes, LookAndFeel, font limitation
