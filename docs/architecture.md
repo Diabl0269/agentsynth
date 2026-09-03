@@ -103,6 +103,18 @@ This has two consequences a synchronous bounce never had to worry about:
 
 Two smaller P8-5 follow-up fixes: `ExportAudioDialog` now overrides `paint()` to fill `findColour(juce::ResizableWindow::backgroundColourId)` (see [`Source/UI/CLAUDE.md`](../Source/UI/CLAUDE.md)) — without it the window showed through as the OS's default light background regardless of theme, since a plain `juce::Component` paints nothing on its own. And the tail control now has a Seconds/Bars toggle (4/4 assumption, the same one the metronome's downbeat detection uses — this app has no time-signature concept anywhere else) backed by a small `ExpandingRangeSlider` subclass whose text box grows the slider's range instead of clamping a typed value away. Cmd+Shift+E (`"exportAudio"` in `ShortcutManager`) opens the dialog — see [`shortcuts.md`](shortcuts.md).
 
+**The loop range as a range source, decoupled from the loop arm (P8-17).** The dialog's "Range" row offers two radio options — *Whole arrangement*
+(`TimelineDoc::getArrangementEndBeat()`) and *Current loop range* — and the loop locators became the second of these with P8-5. The locators are the
+range source, not a live-loop property: `PositionSnapshot` carries `loopStartPpq`/`loopEndPpq` independently of the `looping` flag (a
+`setLoop(start, end, false)` writes all three), so a merely *disengaged* loop still names a real span. As of P8-17 the *Current loop range* option is
+offered whenever that region is non-degenerate (`loopEndPpq > loopStartPpq`), whether or not looping is armed — `promptExportAudio()` decides it from
+the snapshot's region alone, and `ExportAudioDialog` never sees an arm flag (its `hasLoopRange` constructor argument is the decision, not the flag).
+There is deliberately no auto-fallback to the whole arrangement and no separate "locators unset" state to detect: `TransportService` always carries a
+valid `[start, end)` (its own default is `[0, 4)`), so only a *collapsed* region (`end <= start`) disables the option. The exporter needs no change:
+it already renders whatever `[startBeat, endBeat)` the caller hands in and unloops for the duration, so an armed and a disengaged region at the same
+locators bounce byte-identically — pinned by `BounceExporterTest.LoopRangeWithLoopDisabledBouncesTheLoopSpan` and
+`ArmedLoopBouncesByteIdenticallyToADisengagedOne`.
+
 #### Metronome + count-in
 
 `Source/Transport/Metronome.h/.cpp` (`synth::Metronome`) — a click generator that is a pure audio-thread synth, not a graph module: `AudioEngine` owns one (`metronome_`, exposed via `getMetronome()`) and calls `renderClicks(buffer, transport.getCurrentBlockInfo())` directly from `renderPass`, **after** `mainProcessorGraph.processBlock` and **before** `renderNextBlock`'s master-mute zero-fill.

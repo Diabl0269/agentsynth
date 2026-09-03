@@ -1577,7 +1577,14 @@ void MainComponent::promptExportAudio() {
 
     const double arrangementEndBeat = timelineDoc.getArrangementEndBeat();
     const auto position = audioEngine.getTransport().getPositionSnapshot();
-    const bool hasLoopRange = position.looping && position.loopEndPpq > position.loopStartPpq;
+    // "Current loop range" is offered as a bounce range whenever the loop LOCATORS describe a
+    // non-degenerate region, independent of whether looping is currently ARMED (P8-17). The region
+    // is the source, not the live loop: a disengaged loop still names a real span. TransportService
+    // always carries a valid [start, end) (its own default is [0, 4)), so only a collapsed region
+    // (end <= start) disables the option; there is no separate "locators unset" state to detect. A
+    // bounce renders that span linearly regardless (BounceExporter unloops for the duration and
+    // restores it), so arming state never changes what lands in the file.
+    const bool hasLoopRange = position.loopEndPpq > position.loopStartPpq;
     const bool projectIsSaved = currentBundleDir_ != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir_);
 
     auto* dialog = new synth::ui::ExportAudioDialog(

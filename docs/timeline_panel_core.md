@@ -868,8 +868,13 @@ value this bar remembers between polls:
   no separate "default bounds" case to maintain.
   The loop range gained a second consumer with the Export Audio dialog (see
   [`docs/architecture.md`](architecture.md)'s bounce/export section): `MainComponent::promptExportAudio`
-  reads the same `loopStartPpq`/`loopEndPpq`/`looping` off a fresh snapshot to decide whether
-  "Current loop range" is even offered as a bounce range, and to seed it when it is. Read-only —
+  reads `loopStartPpq`/`loopEndPpq` off a fresh snapshot to decide whether
+  "Current loop range" is offered as a bounce range whenever the region is non-degenerate, and seeded
+   from it when it is selected. As of P8-17 the offer no longer depends on the loop being ARMED — a
+   disengaged loop still names a real span, so the option is available whether or not looping is live
+   (TransportService always carries a valid `[start, end)`, default `[0, 4)`, so there is no separate
+   "locators unset" state to detect); a bounce unloops for the duration and hands the region back.
+   Read-only —
   the dialog never calls `setLoop` itself, it only offers what is already there.
 - **BPM label** — a `juce::Label` (`setEditable(false, true, false)`, the same double-click-to-edit
   idiom as the track-name label), whose `onTextChange` calls `transport->setBpm()` — always accepted
