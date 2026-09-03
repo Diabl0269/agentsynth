@@ -39,15 +39,32 @@ void MacroCardComponent::paint(juce::Graphics& g) {
         return; // editor covers the name; member-count line still reads fine underneath
 
     auto textArea = getLocalBounds().reduced(10, 6);
+    auto titleRow = textArea.removeFromTop(20);
+    titleRow.removeFromRight(28); // leave room for the expand chevron
     g.setColour(juce::Colours::white);
     g.setFont(juce::Font(juce::FontOptions(15.0f, juce::Font::bold)));
-    g.drawText(macro->name.isNotEmpty() ? macro->name : "Macro", textArea.removeFromTop(20),
-               juce::Justification::centredLeft);
+    g.drawText(macro->name.isNotEmpty() ? macro->name : "Macro", titleRow, juce::Justification::centredLeft);
 
     g.setFont(juce::Font(juce::FontOptions(11.0f)));
     g.setColour(juce::Colours::white.withAlpha(0.75f));
     const int n = (int)macro->members.size();
     g.drawText(juce::String(n) + (n == 1 ? " module" : " modules"), textArea, juce::Justification::bottomLeft);
+
+    // Expand chevron — a filled triangle rather than a text glyph, so there's no non-ASCII
+    // string literal to trip check-nonascii-literals.test.sh and no themed icon asset to add for
+    // one small affordance.
+    const auto chevronBounds = getExpandButtonBounds();
+    juce::Path chevron;
+    chevron.addTriangle(chevronBounds.getX() + 3.0f, chevronBounds.getY() + 7.0f, chevronBounds.getRight() - 3.0f,
+                        chevronBounds.getY() + 7.0f, chevronBounds.getCentreX(), chevronBounds.getBottom() - 5.0f);
+    g.setColour(juce::Colours::white.withAlpha(0.85f));
+    g.fillPath(chevron);
+}
+
+juce::Rectangle<float> MacroCardComponent::getExpandButtonBounds() const {
+    constexpr float kSize = 20.0f;
+    constexpr float kMargin = 8.0f;
+    return juce::Rectangle<float>(getWidth() - kMargin - kSize, kMargin, kSize, kSize);
 }
 
 void MacroCardComponent::mouseDown(const juce::MouseEvent& e) {
@@ -58,6 +75,11 @@ void MacroCardComponent::mouseDown(const juce::MouseEvent& e) {
         if (!owner.isMacroSelected(macroId))
             owner.selectMacro(macroId, false);
         showContextMenu();
+        return;
+    }
+
+    if (getExpandButtonBounds().contains(e.position)) {
+        owner.setMacroCollapsed(macroId, false);
         return;
     }
 

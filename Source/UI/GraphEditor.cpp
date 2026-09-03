@@ -263,6 +263,25 @@ synth::ui::ModuleCategory categoryForNode(juce::AudioProcessorGraph::Node* node)
             return synth::ui::categoryFor(mb->getModuleType());
     return synth::ui::ModuleCategory::Utility;
 }
+
+// Where a boundary cable lands on a collapsed macro card: the point where the ray from the
+// card's centre toward the cable's other endpoint exits the card's rectangle. Reads as the cable
+// touching the card's edge (closest to whatever it's connecting to) rather than floating at a
+// fixed point with no relation to the rest of the wire.
+juce::Point<float> projectToRectEdge(juce::Rectangle<int> rect, juce::Point<float> toward) {
+    const auto centre = rect.getCentre().toFloat();
+    const float dx = toward.x - centre.x;
+    const float dy = toward.y - centre.y;
+    if (dx == 0.0f && dy == 0.0f)
+        return centre;
+
+    const float halfW = rect.getWidth() * 0.5f;
+    const float halfH = rect.getHeight() * 0.5f;
+    const float tx = dx != 0.0f ? halfW / std::abs(dx) : std::numeric_limits<float>::infinity();
+    const float ty = dy != 0.0f ? halfH / std::abs(dy) : std::numeric_limits<float>::infinity();
+    const float t = std::min(tx, ty);
+    return centre + juce::Point<float>(dx * t, dy * t);
+}
 } // namespace
 
 const std::vector<GraphEditor::VisibleCable>& GraphEditor::buildVisibleCables() {
@@ -485,7 +504,8 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
     // but their graph edges — and the cables above computed from them — don't know that. A cable
     // wholly inside one collapsed macro is dropped outright (both endpoints are off-screen, and
     // there is nothing useful to draw); a cable crossing a collapsed macro's boundary is
-    // re-anchored to the card's own centre point rather than left pointing at a hidden jack.
+    // re-anchored to the point where the card's edge faces the other endpoint (see
+    // projectToRectEdge) rather than left pointing at a hidden jack or floating at the centre.
     if (!macros.empty()) {
         // nodeID.uid -> macro id, built once, collapsed macros only.
         std::unordered_map<uint32_t, const synth::Macro*> collapsedMacroForNode;
@@ -511,10 +531,12 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
                 if (srcHidden && dstHidden && srcIt->second == dstIt->second)
                     continue; // wholly inside one collapsed macro — nothing on screen to draw
 
+                const auto originalP1 = cable.p1;
+                const auto originalP2 = cable.p2;
                 if (srcHidden)
-                    cable.p1 = srcIt->second->bounds.getCentre().toFloat();
+                    cable.p1 = projectToRectEdge(srcIt->second->bounds, originalP2);
                 if (dstHidden)
-                    cable.p2 = dstIt->second->bounds.getCentre().toFloat();
+                    cable.p2 = projectToRectEdge(dstIt->second->bounds, originalP1);
 
                 filtered.push_back(cable);
             }
@@ -737,6 +759,56 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
         }
     }
     // ---- End cables ----
+
+    // ---- Expanded-macro grouping hull (P8-12 follow-up) ----
+    // A collapsed macro reads as a card; an expanded one left no on-canvas trace that its
+    // members were still grouped — Cmd+G on them again just refused with "already in a macro",
+    // with nothing visible to explain why. Draw a light dashed outline + name chip around the
+    // live union of member bounds so the grouping stays visible while expanded.
+    if (!editor.getMacros().empty()) {
+        std::unordered_map<uint32_t, ModuleComponent*> compByNodeUid;
+        for (auto* comp : editor.getModuleComponents())
+            if (comp != nullptr)
+                compByNodeUid[comp->getNodeId().uid] = comp;
+
+        for (const auto& macro : editor.getMacros().getAll()) {
+            if (macro.collapsed)
+                continue;
+
+            juce::Rectangle<int> hull;
+            for (const auto& uuid : macro.members) {
+                auto nodeId = editor.resolveMemberNodeId(uuid);
+                auto it = compByNodeUid.find(nodeId.uid);
+                if (it == compByNodeUid.end())
+                    continue;
+                hull = hull.isEmpty() ? it->second->getBounds() : hull.getUnion(it->second->getBounds());
+            }
+            if (hull.isEmpty())
+                continue;
+            hull = hull.expanded(14);
+
+            juce::Path outline;
+            outline.addRoundedRectangle(hull.toFloat(), 10.0f);
+            juce::Path dashedOutline;
+            const float dashLengths[] = {6.0f, 4.0f};
+            juce::PathStrokeType(1.5f).createDashedStroke(dashedOutline, outline, dashLengths, 2);
+            g.setColour(macro.colour.withAlpha(0.6f));
+            g.fillPath(dashedOutline);
+
+            // A tab overlapping the hull's own top edge, not floating above it — a macro whose
+            // members sit near the top of the canvas would otherwise clip the label off-canvas
+            // with nothing to scroll up to.
+            const juce::String label = macro.name.isNotEmpty() ? macro.name : juce::String("Macro");
+            g.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
+            const int labelW = (int)g.getCurrentFont().getStringWidthFloat(label) + 16;
+            juce::Rectangle<float> chip((float)hull.getX() + 8.0f, (float)hull.getY(), (float)labelW, 18.0f);
+            g.setColour(macro.colour.withAlpha(0.85f));
+            g.fillRoundedRectangle(chip, 6.0f);
+            g.setColour(juce::Colours::white);
+            g.drawText(label, chip, juce::Justification::centred, false);
+        }
+    }
+    // ---- End expanded-macro grouping hull ----
 
     // Draw Line being dragged
     if (editor.isDraggingConnection) {
@@ -3265,6 +3337,35 @@ void GraphEditor::ungroupSelection() {
         doUngroup();
 
     repaint();
+}
+
+void GraphEditor::collapseSelectionMacros() {
+    auto ids = selection.getSelected();
+    std::set<juce::String> macroIdsToCollapse;
+    for (auto id : ids) {
+        const juce::String uuid = nodeUuidFor(id);
+        if (uuid.isEmpty())
+            continue;
+        if (auto* m = macros.findByMember(uuid))
+            if (!m->collapsed)
+                macroIdsToCollapse.insert(m->id);
+    }
+
+    if (macroIdsToCollapse.empty()) {
+        if (onStatusMessage)
+            onStatusMessage("Select an expanded macro's modules to collapse it.");
+        return;
+    }
+
+    for (const auto& macroId : macroIdsToCollapse)
+        setMacroCollapsed(macroId, true);
+}
+
+const synth::Macro* GraphEditor::macroForNode(juce::AudioProcessorGraph::NodeID nodeId) const {
+    const juce::String uuid = nodeUuidFor(nodeId);
+    if (uuid.isEmpty())
+        return nullptr;
+    return macros.findByMember(uuid);
 }
 
 void GraphEditor::selectMacro(const juce::String& macroId, bool additive) {

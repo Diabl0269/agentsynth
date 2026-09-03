@@ -31,6 +31,10 @@ enum CommandIDs {
     // what's selected right now" the way autoArrange's single verb does.
     groupSelection,
     ungroupSelection,
+    // Re-collapses an already-expanded macro back to its card — the only reachable UI for this
+    // was the collapsed card's own right-click menu, which doesn't exist once expanded (P8-12
+    // follow-up: expanding left no way back short of Undo).
+    collapseMacro,
     toggleLibrary,
     selectAllModules,
     saveSnippet,
@@ -114,6 +118,8 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return groupSelection;
     if (actionId == "ungroupSelection")
         return ungroupSelection;
+    if (actionId == "collapseMacro")
+        return collapseMacro;
     if (actionId == "toggleLibrary")
         return toggleLibrary;
     if (actionId == "selectAllModules")
@@ -428,6 +434,8 @@ public:
         bindings["groupSelection"] = juce::KeyPress('g', juce::ModifierKeys::commandModifier, 0);
         bindings["ungroupSelection"] =
             juce::KeyPress('g', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+        bindings["collapseMacro"] =
+            juce::KeyPress('g', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
 
         // ---- Timeline ----
         // The bare-key DAW conventions. All three are already what TimelinePanelComponent's
@@ -643,6 +651,8 @@ public:
             return "Group Selection into Macro";
         if (actionId == "ungroupSelection")
             return "Ungroup Macro";
+        if (actionId == "collapseMacro")
+            return "Collapse Macro";
         if (actionId == "toggleLibrary")
             return "Toggle Module Library";
         // Kept as "selectAllModules" (both the actionId string and the AppCommands name) so a
@@ -852,6 +862,7 @@ private:
             {"saveSnippet", ShortcutCategory::Graph},
             {"groupSelection", ShortcutCategory::Graph},
             {"ungroupSelection", ShortcutCategory::Graph},
+            {"collapseMacro", ShortcutCategory::Graph},
             // Timeline — the panel's own keys (consulted by TimelinePanelComponent /
             // TimelineClipLaneArea) plus the grid commands, which act on the shared snap value.
             {"timelineSnapToggle", ShortcutCategory::Timeline},
