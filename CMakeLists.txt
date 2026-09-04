@@ -554,6 +554,7 @@ add_library(AppUI STATIC
     Source/UI/ModuleComponent.cpp
     Source/UI/ModuleComponent.h
     Source/UI/MacroCardComponent.cpp
+    Source/UI/MacroPortConfigDialog.cpp
     Source/UI/MacroCardComponent.h
     Source/UI/FrequencyResponseComponent.h
     Source/UI/FrequencyGrid.h

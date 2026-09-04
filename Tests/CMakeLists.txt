@@ -143,6 +143,8 @@ add_executable(Tests
     MacroContainerTests.cpp
     MacroSetTests.cpp
     MacroPortModuleTests.cpp
+    MacroPortConfigDialogTests.cpp
+    MacroPortFlowTests.cpp
     ClipboardTests.cpp
     PanelAnimationAndLoadingTests.cpp
     TimelinePanelTests.cpp
@@ -197,6 +199,7 @@ add_executable(Tests
     ../Source/UI/SignInDialog.cpp
     ../Source/UI/ModuleComponent.cpp
     ../Source/UI/MacroCardComponent.cpp
+    ../Source/UI/MacroPortConfigDialog.cpp
     ../Source/Plugin/Hosting/HostedPluginEditorWindow.cpp
     ../Source/UI/SettingsWindow.cpp
     ../Source/UI/AppearanceSettingsTab.cpp

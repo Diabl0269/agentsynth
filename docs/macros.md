@@ -7,10 +7,10 @@ This document covers two things:
 1. **What shipped (P8-12)** — the presentation-only container that exists today.
 2. **The Macro I/O design (P8-14)** — the decided model for how a Macro gains configurable
    inputs and outputs, which **P8-15 implements**. §3-6 are the design; §7 tracks implementation
-   progress against it and is the accurate record of what actually exists — as of P8-15a, §7
-   items 1-2 (the node types plus `MacroPort`) are built, and nothing in §7 items 3-6 is (no UI
-   creates a port yet, so a Macro Inlet/Outlet is reachable only through direct construction or a
-   hand-built save file today).
+   progress against it and is the accurate record of what actually exists — as of P8-15b, §7
+   items 1-3 and 5 are built (the node types, `MacroPort`, and the "Configure I/O" modal covering
+   add/remove/rename/reorder/shape-change plus the cable-drop convenience); §7 items 4 and 6 are
+   not (no card jacks yet, no bypass/mute fan-out yet).
 
 ---
 
@@ -244,36 +244,55 @@ Shape is therefore an **input to port creation**, supplied one of two ways:
 
 - **From the configure-I/O modal** — the user picks Mono, Stereo or Poly-N when adding the port.
   This is the primary flow and the plain reading of "open a modal to configure inputs/outputs".
-- **From a cable** — dragging a wire onto a collapsed card's boundary creates a port whose shape
-  is that of the cable being dropped. A convenience path; the shape is genuinely known here.
+- **From a cable** — dragging a wire onto a collapsed card's boundary creates a port matching the
+  cable's direction/kind, wired to the EXTERNAL end of the drag. A convenience path; the shape is
+  genuinely known here, from the dragged cable's own poly/stereo fan. **Not yet implemented
+  (P8-15b): the cable-drop path currently always creates Mono** — shape inference from the
+  cable's fan is deferred, not ruled out; a future increment can read it the same way
+  `resolvePolyLink`/`getJackTargets` already do elsewhere in `GraphEditor.cpp`. Until then the
+  modal is the only way to get Stereo/Poly-N. This path never wires anything on the macro's
+  INTERIOR side, regardless of shape inference ever landing — the macro is collapsed, so there is
+  no member visible to pick a target from; only the modal, or a manual cable drawn after expanding
+  the macro, connects a port to a specific member.
+- **From nothing (a bare "Add Input"/"Add Output" in the modal)** — Mono, Stereo or Poly-N, picked
+  explicitly; today the modal is the only way to reach Stereo/Poly-N, since the cable-drop path
+  above is Mono-only for now.
 
 Given a shape, the node is constructed so that the existing rules produce the right result with
 no special-casing:
 
-- **Mono** — 1-in/1-out.
-- **Stereo** — constructed with the split-block layout so the second audio leg sits on a
-  dedicated `kRightBase` block, never on ch1. `hasStereoOutputPairShape` then reports true for it
-  exactly as it does for an Oscillator or Filter, and the Dual I/O affordance appears through the
-  ordinary inherited path.
-- **Poly-N** — declares its voice span and marks the lowest raw channel `isPolyGroupHead` in its
-  `LogicalPort` mapping, so a poly-bus wire crossing the boundary is drawn and counted as one
-  poly bus rather than N separate cables.
+- **Mono** — raw ch0 is the node's one visible jack.
+- **Stereo** — raw ch0 (Left) and a dedicated `kRightBase` raw channel (Right) are the node's two
+  visible jacks — the split-block convention every other stereo-capable module in this codebase
+  follows (never ch1), applied here even though a Macro In/Out has no CV on ch1 to protect,
+  because the convention is about consistency across the codebase, not just this module's own
+  channel layout. Unlike a real DSP module's Dual I/O toggle, there is no runtime collapse/expand
+  affordance: the shape is fixed at creation (§5.3's own rule), so a Stereo port always shows both
+  legs — a toggle that could hide one would itself be a form of "the shape changes after
+  creation," which is exactly what this section rules out. `hasStereoOutputPairShape`/
+  `hasDualIOParameter()` are NOT involved (they key off the module's fixed *raw* channel count,
+  which a Macro In/Out never varies from `kMaxChannels`); `rightAudioLegChannel()` is overridden
+  directly instead, which is what a peer module's own stereo-pair auto-complete
+  (`completeStereoPairConnections`) actually reads.
+- **Poly-N** — every raw channel `0..voiceCount-1` maps to the SAME single visible jack, raw ch0
+  marked `isPolyGroupHead` with `polyVoiceSpan == voiceCount` in its `LogicalPort` mapping, so a
+  poly-bus wire crossing the boundary is drawn and counted as one poly bus rather than N separate
+  cables.
 
 A cable whose shape does not match the port it is dropped on is refused the same way any
 mismatched connection is today — not silently adapted at the boundary.
 
-**Implementation note (P8-15a).** `MacroInletModule`/`MacroOutletModule` already use the
+**Implementation note (P8-15b, done).** `MacroInletModule`/`MacroOutletModule` use the
 declare-a-maximum-and-vary-the-visible-count mechanism `Source/Modules/CLAUDE.md` documents for
-Audio Input and Hosted Plugin, rather than a fixed 1-channel bus: the node always carries
-`kMaxChannels` (8) raw channels, and `getVisibleInput/OutputPortCount()` reports however many are
-actually in play, persisted through `getExtraState()`/`setExtraState()` (trusted-path only, like
-every module's `"state"`) so the choice round-trips. This is what lets §7 item 3 add Stereo/Poly-N
-later as a pure UI change — calling a setter right after construction, or via extra state on
-load — with **no new factory type and no migration for a Macro In/Out already on disk**: today
-the only value anything ever sets is Mono (1), and the mapInputChannel/mapOutputChannel overrides
-that would give Stereo its split-block pairing and Poly-N its single fanned jack (rather than N
-independent mono ones, which is what the inherited default currently produces) do not exist yet
-either — both are still item 3's job.
+Audio Input and Hosted Plugin: the node always carries `kMaxChannels` (8) raw channels for its
+whole lifetime (never renegotiated — invariant (a), honoured exactly), and
+`mapInputChannel`/`mapOutputChannel` overrides (identical in both directions — the node is a
+symmetric pass-through) decide, from a `shape_`/`voiceCount_` pair set ONCE by
+`setPortShape()` right after construction and persisted through `getExtraState()`/
+`setExtraState()` (trusted-path only, like every module's `"state"`), which raw channels are
+active and how they map to visible jacks. This is what let §7 item 3 add Stereo/Poly-N with **no
+new factory type and no migration for a Macro In/Out already on disk**: a pre-P8-15b save has no
+`"shape"` key at all and parses as Mono, exactly the shape it already behaved as.
 
 ### 5.4 Cable rendering across the boundary
 
@@ -390,13 +409,26 @@ In order, each independently shippable:
    MIDI ports, §5.2), its `toVar`/`fromVar` round trip, and its `retainOnly` reconciliation (a
    port whose node died is dropped like any other member — and so is one dropped singly via
    `removeMemberEverywhere`).
-3. The port-creation flow: "Add Input / Add Output" on the macro menu, with shape inherited per
-   §5.3 and refusal-with-status when it cannot be. Also where a port's user-visible name first
-   gets written (§5.1) and where `estimateModuleSize` in `GraphEditor.cpp` needs an entry for the
-   four types, measured against a real rendered card the way Rec Tap/Track In/Track Audio are.
+3. **DONE (P8-15b).** The port-creation flow — folded into ONE "Configure I/O" modal together
+   with item 5 below, per an explicit founder request rather than piecemeal menu actions
+   (`GraphEditor::promptConfigureMacroIO`, `synth::ui::MacroPortConfigDialog`). Picks Mono/Stereo/
+   Poly-N/MIDI at creation (§5.3), writes the port's user-visible name (§5.1), and also covers the
+   "shape from a dropped cable" convenience (`GraphEditor::createMacroPortFromDroppedCable`,
+   Mono-only — see §5.3). `estimateModuleSize` in `GraphEditor.cpp` has an entry for all four
+   types, measured against a real rendered card the way Rec Tap/Track In/Track Audio are
+   (`MacroPortFlow.AllFourTypesAreAbsentFromTheLibraryWithAPinnedSizeEstimate`).
 4. Card jacks: the collapsed card draws one jack per port, and `buildVisibleCables()` anchors
    boundary cables to them (§5.4).
-5. Port rename and reorder.
+5. **DONE (P8-15b).** Port rename and reorder — the same modal as item 3
+   (`GraphEditor::renameMacroPort`/`moveMacroPortOrder`). Reorder is scoped to one direction at a
+   time (inputs against inputs, outputs against outputs), a no-op at either edge. Changing an
+   existing port's SHAPE (Mono/Stereo/Poly-N) is also reached from this modal
+   (`GraphEditor::changeMacroPortShape`): per §5.3's immutability rule this is delete-node +
+   create-node + rewire underneath, landed as ONE undo step
+   (`AppUndoManager`'s `GraphAndMacroSnapshotAction` — see its class comment for why the combined
+   graph+macro restore has to be a single action, not two pushed into one transaction, to get
+   both undo AND redo right). A saved cable on a raw channel the new shape no longer exposes is
+   dropped, not adapted (dropRoutingsOnHiddenJacks' rule, applied honestly).
 6. Bypass/mute fan-out (§5.6).
 
 ## 8. Explicitly out of scope

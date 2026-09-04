@@ -15,6 +15,10 @@
 #include "../Modules/FilterModule.h"
 #include "../Modules/LFOModule.h"
 #include "../Modules/MacroControlModule.h"
+#include "../Modules/MacroInletModule.h"
+#include "../Modules/MacroMidiInletModule.h"
+#include "../Modules/MacroMidiOutletModule.h"
+#include "../Modules/MacroOutletModule.h"
 #include "../Modules/MidiKeyboardModule.h"
 #include "../Modules/NoiseModule.h"
 #include "../Modules/OscillatorModule.h"
@@ -31,6 +35,7 @@
 #include "../SnippetManager.h"
 #include "LayoutUtil.h"
 #include "MacroCardComponent.h"
+#include "MacroPortConfigDialog.h"
 #include "ModuleComponent.h"
 #include "Theme/AppLookAndFeel.h"
 #include <algorithm>
@@ -174,6 +179,19 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         // HostedPluginTest.AbsentFromTheLibraryWithAPinnedSizeEstimate.
         // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
         return {280, 131};
+    if (typeName == "Macro In" || typeName == "Macro Out")
+        // Param-less card (only the inherited bypass, which lives in the header), constructed
+        // Mono by default (one jack a side) — the port-creation flow resizes it to two jacks for
+        // Stereo via the ordinary component re-layout, same as any other jack-count change.
+        // Library-less (the "Configure I/O" modal places it, docs/macros.md §7 item 3). Measured
+        // against the real card by
+        // MacroPortFlow.AllFourTypesAreAbsentFromTheLibraryWithAPinnedSizeEstimate.
+        return {280, 111};
+    if (typeName == "Macro MIDI In" || typeName == "Macro MIDI Out")
+        // One MIDI jack a side, no audio jacks and no body controls — library-less like Track In.
+        // Measured against the real card by
+        // MacroPortFlow.AllFourTypesAreAbsentFromTheLibraryWithAPinnedSizeEstimate.
+        return {280, 106};
     return {280, 360};
 }
 
@@ -1201,6 +1219,7 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
     if (!isDraggingConnection)
         return;
 
+    bool connectedToAModule = false; // gates the macro-card fallback below — unchanged loop otherwise
     for (auto* comp : content.getModules()) {
         auto localPos = comp->getLocalPoint(nullptr, screenPos);
         auto port = comp->getPortForPoint(localPos);
@@ -1236,7 +1255,40 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                 const int srcJack = dragSourceIsInput ? port->index : dragSourceChannel;
                 const int dstJack = dragSourceIsInput ? dragSourceChannel : port->index;
                 connectPorts(realSrc->nodeID, srcJack, realDst->nodeID, dstJack, dragSourceIsMidi, true);
+                connectedToAModule = true;
             }
+        }
+    }
+
+    // "Shape from a dropped cable" convenience (docs/macros.md §5.3, T140): nothing above matched
+    // (no module jack under the cursor), so check whether the release point is over a COLLAPSED
+    // macro's card. No per-port jacks exist to land on yet (T141 draws those); until then, the
+    // whole card is the drop target and a fresh port is created to receive the cable.
+    if (!connectedToAModule && dragSourceModule != nullptr) {
+        for (auto* card : content.getMacroCards()) {
+            if (card == nullptr || !card->isVisible()) // visible exactly while its macro is collapsed
+                continue;
+            const auto cardLocal = card->getLocalPoint(nullptr, screenPos);
+            if (!card->getLocalBounds().contains(cardLocal))
+                continue;
+
+            auto& graph = audioEngine.getGraph();
+            juce::AudioProcessorGraph::Node* srcNode = nullptr;
+            for (auto* n : graph.getNodes())
+                if (n->getProcessor() == dragSourceModule->getModule()) {
+                    srcNode = n;
+                    break;
+                }
+            if (srcNode != nullptr) {
+                // dragSourceIsInput == false: the drag started at an OUTPUT looking for a
+                // destination -> the macro offers an INPUT (MacroInlet/MacroMidiInlet) to receive
+                // it. dragSourceIsInput == true: started at an INPUT looking for a source -> the
+                // macro offers an OUTPUT.
+                const bool newPortIsInput = !dragSourceIsInput;
+                createMacroPortFromDroppedCable(card->getMacroId(), newPortIsInput, dragSourceIsMidi, srcNode->nodeID,
+                                                dragSourceChannel);
+            }
+            break;
         }
     }
 
@@ -3894,6 +3946,13 @@ juce::PopupMenu GraphEditor::buildMacroMenu(const juce::String& macroId, std::fu
 
         self->promptRecolourMacro(macroId, anchor);
     });
+    // Unifies docs/macros.md §7 items 3 (add) and 5 (rename/reorder) into ONE modal per an
+    // explicit founder request, rather than separate "Add Input"/"Add Output"/"Rename..."/
+    // "Reorder" menu items.
+    m.addItem("Configure I/O...", [safeThis, macroId] {
+        if (safeThis != nullptr)
+            safeThis->promptConfigureMacroIO(macroId);
+    });
     m.addSeparator();
     m.addItem("Save as Snippet...", [safeThis] {
         if (safeThis != nullptr && safeThis->onSaveSnippetRequested)
@@ -4027,6 +4086,499 @@ void GraphEditor::finalizeMacroCardDrag(const juce::String& macroId, juce::Point
 }
 
 void GraphEditor::cancelMacroCardDrag(const juce::String&) { cancelSelectionDrag(); }
+
+// ---- Macro I/O (P8-15b, T140): the "Configure I/O" modal + the cable-drop convenience ---------
+
+juce::String GraphEditor::macroPortNodeTypeName(bool isInput, synth::MacroPortKind kind) {
+    if (kind == synth::MacroPortKind::Midi)
+        return isInput ? "Macro MIDI In" : "Macro MIDI Out";
+    return isInput ? "Macro In" : "Macro Out";
+}
+
+juce::String GraphEditor::defaultMacroPortName(bool isInput, synth::MacroPortKind kind) {
+    if (kind == synth::MacroPortKind::Midi)
+        return isInput ? "MIDI In" : "MIDI Out";
+    return isInput ? "Input" : "Output";
+}
+
+int GraphEditor::nextMacroPortOrder(const synth::Macro& macro, bool isInput) {
+    int next = 0;
+    for (const auto& p : macro.ports)
+        if (p.isInput == isInput)
+            next = std::max(next, p.order + 1);
+    return next;
+}
+
+juce::String GraphEditor::addMacroPort(const juce::String& macroId, bool isInput, synth::MacroPortKind kind,
+                                       MacroPortShape shape, int voiceCount, const juce::String& portName) {
+    auto* macro = macros.find(macroId);
+    if (macro == nullptr)
+        return {};
+
+    const juce::String typeName = macroPortNodeTypeName(isInput, kind);
+    auto newProcessor = synth::AIStateMapper::createModule(typeName);
+    if (!newProcessor)
+        return {};
+
+    // Shape is set BEFORE the node is wired into the live graph, honouring §5.3's "decided at
+    // construction, then fixed" rule — meaningless (and skipped) for a MIDI port (§5.1).
+    if (kind == synth::MacroPortKind::AudioCV) {
+        if (auto* inlet = dynamic_cast<MacroInletModule*>(newProcessor.get()))
+            inlet->setPortShape(shape, voiceCount);
+        else if (auto* outlet = dynamic_cast<MacroOutletModule*>(newProcessor.get()))
+            outlet->setPortShape(shape, voiceCount);
+    }
+
+    const auto estSize = estimateModuleSize(typeName);
+    const int portIndex = (int)macro->ports.size();
+    // Stack repeated adds below the card so they don't land on top of each other or the members
+    // (exact placement only matters once the macro is expanded).
+    const auto desired = macro->bounds.getBottomLeft() + juce::Point<int>(0, 20 + portIndex * (estSize.y + 20));
+    const auto placed = resolvePlacement(desired, estSize.x, estSize.y, juce::AudioProcessorGraph::NodeID{});
+
+    const juce::String name = portName.trim().isNotEmpty() ? portName.trim() : defaultMacroPortName(isInput, kind);
+    const int order = nextMacroPortOrder(*macro, isInput);
+
+    auto& graph = audioEngine.getGraph();
+    auto proc = std::make_shared<std::unique_ptr<juce::AudioProcessor>>(std::move(newProcessor));
+    juce::String newUuid;
+    auto doAdd = [this, macroId, proc, placed, isInput, kind, name, order, &newUuid] {
+        if (!*proc)
+            return;
+        auto node = audioEngine.getGraph().addNode(std::move(*proc));
+        if (!node)
+            return;
+        node->properties.set("x", placed.x);
+        node->properties.set("y", placed.y);
+        const juce::String uuid = synth::AIStateMapper::ensureNodeUuid(node);
+        newUuid = uuid;
+
+        auto* m = macros.find(macroId);
+        if (m == nullptr)
+            return; // defensive: the macro shouldn't vanish mid-transaction
+
+        m->members.push_back(uuid);
+        synth::MacroPort port;
+        port.nodeUuid = uuid;
+        port.isInput = isInput;
+        port.name = name;
+        port.order = order;
+        port.kind = kind;
+        m->ports.push_back(port);
+
+        updateComponents();
+    };
+
+    if (undoManager)
+        undoManager->recordGraphAndMacroChange(graph, macros, doAdd);
+    else
+        doAdd();
+
+    repaint();
+    return newUuid;
+}
+
+void GraphEditor::removeMacroPort(const juce::String&, const juce::String& nodeUuid) {
+    const auto nodeId = resolveMemberNodeId(nodeUuid);
+    if (nodeId.uid == 0)
+        return;
+
+    // Reuses the ordinary multi-select delete path exactly, the same way deleteMacroAndMembers
+    // reuses it for a whole macro: identical undo/dirty/timeline-reconcile handling, and
+    // updateComponents() (run from inside deleteSelection's own recordGraphAndMacroChange
+    // transaction) drops the now-orphaned synth::MacroPort via macros.retainOnly() as part of the
+    // SAME undo step — never a separate one.
+    setSelectedNodes({nodeId});
+    deleteSelection();
+}
+
+void GraphEditor::renameMacroPort(const juce::String& macroId, const juce::String& nodeUuid,
+                                  const juce::String& newName) {
+    const auto trimmed = newName.trim();
+    if (trimmed.isEmpty())
+        return; // empty/whitespace-only input cancels without renaming — promptRenameMacro's rule
+
+    auto& graph = audioEngine.getGraph();
+    auto doRename = [this, macroId, nodeUuid, trimmed] {
+        if (auto* m = macros.find(macroId))
+            for (auto& p : m->ports)
+                if (p.nodeUuid == nodeUuid) {
+                    p.name = trimmed;
+                    break;
+                }
+    };
+
+    if (undoManager)
+        undoManager->recordGraphAndMacroChange(graph, macros, doRename);
+    else
+        doRename();
+}
+
+void GraphEditor::moveMacroPortOrder(const juce::String& macroId, const juce::String& nodeUuid, bool moveUp) {
+    auto& graph = audioEngine.getGraph();
+    auto doMove = [this, macroId, nodeUuid, moveUp] {
+        auto* m = macros.find(macroId);
+        if (m == nullptr)
+            return;
+
+        auto selfIt = std::find_if(m->ports.begin(), m->ports.end(),
+                                   [&](const synth::MacroPort& p) { return p.nodeUuid == nodeUuid; });
+        if (selfIt == m->ports.end())
+            return;
+        const bool isInput = selfIt->isInput;
+
+        // Reordering is scoped to one side of the card (inputs against inputs, outputs against
+        // outputs) — the two independent jack stacks it will draw as (T141).
+        std::vector<synth::MacroPort*> group;
+        for (auto& p : m->ports)
+            if (p.isInput == isInput)
+                group.push_back(&p);
+        std::sort(group.begin(), group.end(),
+                  [](const synth::MacroPort* a, const synth::MacroPort* b) { return a->order < b->order; });
+
+        int idx = -1;
+        for (size_t i = 0; i < group.size(); ++i)
+            if (group[i]->nodeUuid == nodeUuid) {
+                idx = (int)i;
+                break;
+            }
+        if (idx < 0)
+            return;
+
+        const int otherIdx = moveUp ? idx - 1 : idx + 1;
+        if (otherIdx < 0 || otherIdx >= (int)group.size())
+            return; // already at the edge of its group — no-op, no undo entry pushed
+
+        std::swap(group[(size_t)idx]->order, group[(size_t)otherIdx]->order);
+    };
+
+    if (undoManager)
+        undoManager->recordGraphAndMacroChange(graph, macros, doMove);
+    else
+        doMove();
+}
+
+juce::String GraphEditor::changeMacroPortShape(const juce::String& macroId, const juce::String& nodeUuid,
+                                               MacroPortShape newShape, int newVoiceCount) {
+    auto* macro = macros.find(macroId);
+    if (macro == nullptr)
+        return {};
+
+    synth::MacroPort* port = nullptr;
+    for (auto& p : macro->ports)
+        if (p.nodeUuid == nodeUuid) {
+            port = &p;
+            break;
+        }
+    if (port == nullptr || port->kind != synth::MacroPortKind::AudioCV)
+        return {}; // MIDI ports have no shape to change (§5.1)
+
+    auto& graph = audioEngine.getGraph();
+    const auto oldNodeId = resolveMemberNodeId(nodeUuid);
+    auto* oldNode = graph.getNodeForId(oldNodeId);
+    if (oldNode == nullptr)
+        return {};
+
+    const bool isInput = port->isInput;
+    const juce::String typeName = macroPortNodeTypeName(isInput, synth::MacroPortKind::AudioCV);
+    const juce::String portName = port->name;
+    const int order = port->order;
+    const int oldX = oldNode->properties.getWithDefault("x", 0);
+    const int oldY = oldNode->properties.getWithDefault("y", 0);
+
+    // Snapshot every raw-channel connection touching the old node, replayed below onto the new
+    // node's matching raw channel ONLY when the NEW shape still exposes that channel as a visible
+    // jack (role == PortRole::Audio). Everything else is dropped — exactly
+    // dropRoutingsOnHiddenJacks' "a jack that disappears takes its cables with it" rule, applied
+    // honestly here rather than silently adapted at the boundary (§5.3's closing rule: a mismatch
+    // is refused, never adapted).
+    struct SavedEdge {
+        juce::AudioProcessorGraph::NodeID otherId;
+        int otherChannel = 0;
+        int myChannel = 0;
+        bool oldNodeIsSource = false;
+    };
+    std::vector<SavedEdge> savedEdges;
+    for (const auto& c : graph.getConnections()) {
+        if (c.source.isMIDI() || c.destination.isMIDI())
+            continue; // an AudioCV port never carries a MIDI edge
+        if (c.source.nodeID == oldNodeId)
+            savedEdges.push_back({c.destination.nodeID, c.destination.channelIndex, c.source.channelIndex, true});
+        else if (c.destination.nodeID == oldNodeId)
+            savedEdges.push_back({c.source.nodeID, c.source.channelIndex, c.destination.channelIndex, false});
+    }
+
+    juce::String newUuid;
+    auto doChange = [this, macroId, nodeUuid, oldNodeId, typeName, newShape, newVoiceCount, portName, order, isInput,
+                     savedEdges, oldX, oldY, &newUuid] {
+        auto& g = audioEngine.getGraph();
+        auto newProcessor = synth::AIStateMapper::createModule(typeName);
+        if (!newProcessor)
+            return;
+        if (auto* inlet = dynamic_cast<MacroInletModule*>(newProcessor.get()))
+            inlet->setPortShape(newShape, newVoiceCount);
+        else if (auto* outlet = dynamic_cast<MacroOutletModule*>(newProcessor.get()))
+            outlet->setPortShape(newShape, newVoiceCount);
+
+        // Same cleanup replaceModule/deleteSelection do before a node leaves the graph.
+        modMatrix.clearRows();
+        g.removeNode(oldNodeId);
+
+        auto node = g.addNode(std::move(newProcessor));
+        if (!node)
+            return;
+        node->properties.set("x", oldX);
+        node->properties.set("y", oldY);
+        const juce::String uuid = synth::AIStateMapper::ensureNodeUuid(node);
+        newUuid = uuid;
+
+        auto* m = macros.find(macroId);
+        if (m != nullptr) {
+            // Rewrite the OLD uuid to the NEW one everywhere it appeared, keeping name/order/
+            // direction exactly as they were — the "one edit" the modal promises, not a delete
+            // followed by a fresh add that merely happens to look the same.
+            for (auto& memberUuid : m->members)
+                if (memberUuid == nodeUuid)
+                    memberUuid = uuid;
+            for (auto& p : m->ports)
+                if (p.nodeUuid == nodeUuid) {
+                    p.nodeUuid = uuid;
+                    p.name = portName;
+                    p.order = order;
+                    p.isInput = isInput;
+                    break;
+                }
+        }
+
+        auto* mb = dynamic_cast<ModuleBase*>(node->getProcessor());
+        for (const auto& e : savedEdges) {
+            if (g.getNodeForId(e.otherId) == nullptr)
+                continue;
+            const bool channelStillActive = mb != nullptr && mb->mapOutputChannel(e.myChannel).role == PortRole::Audio;
+            if (!channelStillActive)
+                continue;
+            if (e.oldNodeIsSource)
+                g.addConnection({{node->nodeID, e.myChannel}, {e.otherId, e.otherChannel}});
+            else
+                g.addConnection({{e.otherId, e.otherChannel}, {node->nodeID, e.myChannel}});
+        }
+
+        updateComponents();
+    };
+
+    if (undoManager)
+        undoManager->recordGraphAndMacroChange(graph, macros, doChange);
+    else
+        doChange();
+
+    repaint();
+    return newUuid;
+}
+
+void GraphEditor::createMacroPortFromDroppedCable(const juce::String& macroId, bool newPortIsInput, bool isMidi,
+                                                  juce::AudioProcessorGraph::NodeID otherNodeId, int otherVisibleJack) {
+    auto* macro = macros.find(macroId);
+    if (macro == nullptr)
+        return;
+
+    const auto kind = isMidi ? synth::MacroPortKind::Midi : synth::MacroPortKind::AudioCV;
+    const juce::String typeName = macroPortNodeTypeName(newPortIsInput, kind);
+    auto newProcessor = synth::AIStateMapper::createModule(typeName);
+    if (!newProcessor)
+        return;
+    if (!isMidi) {
+        // Always Mono — shape inference from the dragged cable's own poly/stereo fan is deferred
+        // (see the class comment on createMacroPortFromDroppedCable); the modal is how a Stereo or
+        // Poly-N port gets created.
+        if (auto* inlet = dynamic_cast<MacroInletModule*>(newProcessor.get()))
+            inlet->setPortShape(MacroPortShape::Mono, 1);
+        else if (auto* outlet = dynamic_cast<MacroOutletModule*>(newProcessor.get()))
+            outlet->setPortShape(MacroPortShape::Mono, 1);
+    }
+
+    const auto estSize = estimateModuleSize(typeName);
+    const int portIndex = (int)macro->ports.size();
+    const auto desired = macro->bounds.getBottomLeft() + juce::Point<int>(0, 20 + portIndex * (estSize.y + 20));
+    const auto placed = resolvePlacement(desired, estSize.x, estSize.y, juce::AudioProcessorGraph::NodeID{});
+
+    const juce::String name = defaultMacroPortName(newPortIsInput, kind);
+    const int order = nextMacroPortOrder(*macro, newPortIsInput);
+
+    auto& graph = audioEngine.getGraph();
+    auto proc = std::make_shared<std::unique_ptr<juce::AudioProcessor>>(std::move(newProcessor));
+    auto doCreate = [this, macroId, proc, placed, newPortIsInput, kind, name, order, isMidi, otherNodeId,
+                     otherVisibleJack] {
+        auto& g = audioEngine.getGraph();
+        if (!*proc)
+            return;
+        auto node = g.addNode(std::move(*proc));
+        if (!node)
+            return;
+        node->properties.set("x", placed.x);
+        node->properties.set("y", placed.y);
+        const juce::String uuid = synth::AIStateMapper::ensureNodeUuid(node);
+
+        auto* m = macros.find(macroId);
+        if (m == nullptr)
+            return;
+        m->members.push_back(uuid);
+        synth::MacroPort port;
+        port.nodeUuid = uuid;
+        port.isInput = newPortIsInput;
+        port.name = name;
+        port.order = order;
+        port.kind = kind;
+        m->ports.push_back(port);
+
+        // Wire the boundary through the SAME connectPorts a completed manual cable-drag uses —
+        // visible-jack-to-visible-jack, so poly/stereo fan resolution and the "mismatched
+        // connection is refused, not adapted" rule (§5.3) are the existing behaviour, not a copy
+        // of it. The new node's port 0 is its only visible jack (Mono, or MIDI's one jack).
+        // recordUndo=false: already inside this method's own recordGraphAndMacroChange
+        // transaction (applySmartSuggestions' own comment states the same rule). Deliberately does
+        // NOT also wire anything on the INTERIOR side — see the class comment.
+        if (g.getNodeForId(otherNodeId) != nullptr) {
+            if (newPortIsInput)
+                connectPorts(otherNodeId, otherVisibleJack, node->nodeID, 0, isMidi, /*recordUndo=*/false);
+            else
+                connectPorts(node->nodeID, 0, otherNodeId, otherVisibleJack, isMidi, /*recordUndo=*/false);
+        }
+
+        updateComponents();
+    };
+
+    if (undoManager)
+        undoManager->recordGraphAndMacroChange(graph, macros, doCreate);
+    else
+        doCreate();
+
+    repaint();
+}
+
+std::vector<synth::ui::MacroPortConfigDialog::PortRow>
+GraphEditor::macroPortRowsForDialog(const juce::String& macroId) const {
+    std::vector<synth::ui::MacroPortConfigDialog::PortRow> rows;
+    const auto* m = macros.find(macroId);
+    if (m == nullptr)
+        return rows;
+
+    auto ports = m->ports;
+    // Inputs before outputs, then each side by its own draw order — matches how a normal module's
+    // jacks read (inputs on the left, outputs on the right) and what the row-reorder buttons above
+    // operate on.
+    std::sort(ports.begin(), ports.end(), [](const synth::MacroPort& a, const synth::MacroPort& b) {
+        if (a.isInput != b.isInput)
+            return a.isInput; // inputs (true) sort first
+        return a.order < b.order;
+    });
+
+    auto& graph = audioEngine.getGraph();
+    for (const auto& p : ports) {
+        synth::ui::MacroPortConfigDialog::PortRow row;
+        row.nodeUuid = p.nodeUuid;
+        row.isInput = p.isInput;
+        row.name = p.name;
+        row.kind = p.kind;
+        if (p.kind == synth::MacroPortKind::AudioCV) {
+            auto nodeId = resolveMemberNodeId(p.nodeUuid);
+            if (auto* node = graph.getNodeForId(nodeId)) {
+                if (auto* inlet = dynamic_cast<MacroInletModule*>(node->getProcessor())) {
+                    row.shape = inlet->getPortShape();
+                    row.voiceCount = inlet->getVoiceCount();
+                } else if (auto* outlet = dynamic_cast<MacroOutletModule*>(node->getProcessor())) {
+                    row.shape = outlet->getPortShape();
+                    row.voiceCount = outlet->getVoiceCount();
+                }
+            }
+        }
+        rows.push_back(row);
+    }
+    return rows;
+}
+
+void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
+    const auto* macro = macros.find(macroId);
+    if (macro == nullptr)
+        return;
+
+    auto* dialog = new synth::ui::MacroPortConfigDialog(macro->name, macroPortRowsForDialog(macroId));
+
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned(dialog);
+    options.dialogTitle = "Configure I/O";
+    options.componentToCentreAround = this;
+    options.useNativeTitleBar = true;
+    options.resizable = false;
+    auto* window = options.launchAsync();
+
+    juce::Component::SafePointer<GraphEditor> safeThis(this);
+    juce::Component::SafePointer<synth::ui::MacroPortConfigDialog> safeDialog(dialog);
+
+    dialog->onRequestClose = [window] {
+        if (window != nullptr)
+            window->exitModalState(0);
+    };
+
+    // Every callback below defers its mutate-then-refresh to the next message-loop tick — a
+    // button's onClick handler calling refreshPorts() synchronously would tear down and rebuild
+    // the very row (and button) that is still inside its own click dispatch, which JUCE does not
+    // support. callAsync sidesteps that exactly like AIChatComponent/ModuleComponent already do
+    // for the same reason.
+    dialog->onAddPort = [safeThis, safeDialog, macroId](bool isInput, synth::MacroPortKind kind, MacroPortShape shape,
+                                                        int voiceCount, const juce::String& name) {
+        juce::MessageManager::callAsync([safeThis, safeDialog, macroId, isInput, kind, shape, voiceCount, name] {
+            auto* self = safeThis.getComponent();
+            if (self == nullptr)
+                return;
+            self->addMacroPort(macroId, isInput, kind, shape, voiceCount, name);
+            if (auto* d = safeDialog.getComponent())
+                d->refreshPorts(self->macroPortRowsForDialog(macroId));
+        });
+    };
+    dialog->onRenamePort = [safeThis, safeDialog, macroId](const juce::String& nodeUuid, const juce::String& name) {
+        juce::MessageManager::callAsync([safeThis, safeDialog, macroId, nodeUuid, name] {
+            auto* self = safeThis.getComponent();
+            if (self == nullptr)
+                return;
+            self->renameMacroPort(macroId, nodeUuid, name);
+            if (auto* d = safeDialog.getComponent())
+                d->refreshPorts(self->macroPortRowsForDialog(macroId));
+        });
+    };
+    dialog->onDeletePort = [safeThis, safeDialog, macroId](const juce::String& nodeUuid) {
+        juce::MessageManager::callAsync([safeThis, safeDialog, macroId, nodeUuid] {
+            auto* self = safeThis.getComponent();
+            if (self == nullptr)
+                return;
+            self->removeMacroPort(macroId, nodeUuid);
+            if (auto* d = safeDialog.getComponent())
+                d->refreshPorts(self->macroPortRowsForDialog(macroId));
+        });
+    };
+    dialog->onReorderPort = [safeThis, safeDialog, macroId](const juce::String& nodeUuid, bool moveUp) {
+        juce::MessageManager::callAsync([safeThis, safeDialog, macroId, nodeUuid, moveUp] {
+            auto* self = safeThis.getComponent();
+            if (self == nullptr)
+                return;
+            self->moveMacroPortOrder(macroId, nodeUuid, moveUp);
+            if (auto* d = safeDialog.getComponent())
+                d->refreshPorts(self->macroPortRowsForDialog(macroId));
+        });
+    };
+    dialog->onChangePortShape = [safeThis, safeDialog, macroId](const juce::String& nodeUuid, MacroPortShape newShape,
+                                                                int newVoiceCount) {
+        juce::MessageManager::callAsync([safeThis, safeDialog, macroId, nodeUuid, newShape, newVoiceCount] {
+            auto* self = safeThis.getComponent();
+            if (self == nullptr)
+                return;
+            self->changeMacroPortShape(macroId, nodeUuid, newShape, newVoiceCount);
+            if (auto* d = safeDialog.getComponent())
+                d->refreshPorts(self->macroPortRowsForDialog(macroId));
+        });
+    };
+
+    window->enterModalState(true, nullptr, true);
+}
 
 // ---- Snippets ----
 

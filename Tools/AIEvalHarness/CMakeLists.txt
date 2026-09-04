@@ -7,6 +7,7 @@ add_executable(AIEvalHarness
     ${CMAKE_SOURCE_DIR}/Source/UI/GraphEditor.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/ModuleComponent.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/MacroCardComponent.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/MacroPortConfigDialog.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/ModMatrixComponent.cpp
 )
 

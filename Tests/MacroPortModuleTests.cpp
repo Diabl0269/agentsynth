@@ -95,29 +95,115 @@ TEST(MacroInletModuleTest, HiddenChannelsAreClearedWhenNotBypassedToo) {
             EXPECT_FLOAT_EQ(buffer.getReadPointer(ch)[i], 0.0f) << "channel " << ch;
 }
 
-TEST(MacroInletModuleTest, ExtraStateRoundTripsTheChosenVisibleChannelCount) {
+TEST(MacroInletModuleTest, ExtraStateRoundTripsTheChosenShapeAndVoiceCount) {
     MacroInletModule inlet;
     ASSERT_EQ(inlet.getVisibleOutputPortCount(), 1); // default: Mono
 
     auto* obj = new juce::DynamicObject();
-    obj->setProperty("channels", 2);
+    obj->setProperty("shape", "poly");
+    obj->setProperty("voices", 4);
     inlet.setExtraState(juce::var(obj));
 
-    EXPECT_EQ(inlet.getVisibleInputPortCount(), 2);
-    EXPECT_EQ(inlet.getVisibleOutputPortCount(), 2);
+    EXPECT_EQ(inlet.getPortShape(), MacroPortShape::Poly);
+    EXPECT_EQ(inlet.getVoiceCount(), 4);
+    EXPECT_EQ(inlet.getVisibleInputPortCount(), 1); // Poly is still ONE visible jack (a fanned bus)
+    EXPECT_EQ(inlet.getVisibleOutputPortCount(), 1);
 
     const juce::var saved = inlet.getExtraState();
     MacroInletModule reloaded;
     reloaded.setExtraState(saved);
-    EXPECT_EQ(reloaded.getVisibleOutputPortCount(), 2);
+    EXPECT_EQ(reloaded.getPortShape(), MacroPortShape::Poly);
+    EXPECT_EQ(reloaded.getVoiceCount(), 4);
 }
 
-TEST(MacroInletModuleTest, ExtraStateClampsToTheDeclaredMaximum) {
+TEST(MacroInletModuleTest, ExtraStateClampsVoiceCountToTheDeclaredMaximum) {
     MacroInletModule inlet;
     auto* obj = new juce::DynamicObject();
-    obj->setProperty("channels", 999);
+    obj->setProperty("shape", "poly");
+    obj->setProperty("voices", 999);
     inlet.setExtraState(juce::var(obj));
-    EXPECT_EQ(inlet.getVisibleOutputPortCount(), MacroInletModule::kMaxChannels);
+    EXPECT_EQ(inlet.getVoiceCount(), MacroInletModule::kMaxChannels);
+}
+
+TEST(MacroInletModuleTest, AbsentShapeKeyParsesAsMono) {
+    // Every P8-15a save (and every hand-built one predating shape/voices) has no "shape" key.
+    MacroInletModule inlet;
+    auto* obj = new juce::DynamicObject();
+    obj->setProperty("voices", 4); // present but irrelevant without a shape saying Poly
+    inlet.setExtraState(juce::var(obj));
+    EXPECT_EQ(inlet.getPortShape(), MacroPortShape::Mono);
+    EXPECT_EQ(inlet.getVisibleOutputPortCount(), 1);
+}
+
+TEST(MacroInletModuleTest, SetPortShapeMonoExposesOnlyRawChannelZero) {
+    MacroInletModule inlet;
+    inlet.setPortShape(MacroPortShape::Mono);
+    EXPECT_EQ(inlet.getVisibleInputPortCount(), 1);
+    EXPECT_EQ(inlet.mapOutputChannel(0).role, PortRole::Audio);
+    EXPECT_EQ(inlet.mapOutputChannel(0).visibleJackIndex, 0);
+    EXPECT_TRUE(inlet.mapOutputChannel(0).isPolyGroupHead);
+    for (int ch = 1; ch < MacroInletModule::kMaxChannels; ++ch)
+        EXPECT_NE(inlet.mapOutputChannel(ch).role, PortRole::Audio) << "channel " << ch;
+}
+
+TEST(MacroInletModuleTest, SetPortShapeStereoExposesChannelZeroAndKRightBaseAsTwoJacks) {
+    MacroInletModule inlet;
+    inlet.setPortShape(MacroPortShape::Stereo);
+    EXPECT_EQ(inlet.getVisibleInputPortCount(), 2);
+    EXPECT_EQ(inlet.getVisibleOutputPortCount(), 2);
+    EXPECT_EQ(inlet.rightAudioLegChannel(), MacroInletModule::kRightBase);
+
+    const auto left = inlet.mapOutputChannel(0);
+    EXPECT_EQ(left.role, PortRole::Audio);
+    EXPECT_EQ(left.visibleJackIndex, 0);
+    EXPECT_TRUE(left.isPolyGroupHead);
+
+    const auto right = inlet.mapOutputChannel(MacroInletModule::kRightBase);
+    EXPECT_EQ(right.role, PortRole::Audio);
+    EXPECT_EQ(right.visibleJackIndex, 1);
+    EXPECT_TRUE(right.isPolyGroupHead);
+
+    // ch1 must stay untouched — the whole point of the split-block convention.
+    EXPECT_NE(inlet.mapOutputChannel(1).role, PortRole::Audio);
+}
+
+TEST(MacroInletModuleTest, SetPortShapePolyFansAllVoicesOntoOneJack) {
+    MacroInletModule inlet;
+    inlet.setPortShape(MacroPortShape::Poly, 4);
+    EXPECT_EQ(inlet.getVisibleInputPortCount(), 1);
+    EXPECT_EQ(inlet.rightAudioLegChannel(), -1); // Poly is not Stereo — no split-block leg
+
+    for (int ch = 0; ch < 4; ++ch) {
+        const auto p = inlet.mapOutputChannel(ch);
+        EXPECT_EQ(p.role, PortRole::Audio) << "channel " << ch;
+        EXPECT_EQ(p.visibleJackIndex, 0) << "channel " << ch;
+        EXPECT_EQ(p.isPolyGroupHead, ch == 0) << "channel " << ch;
+        EXPECT_EQ(p.polyVoiceSpan, 4) << "channel " << ch;
+    }
+    for (int ch = 4; ch < MacroInletModule::kMaxChannels; ++ch)
+        EXPECT_NE(inlet.mapOutputChannel(ch).role, PortRole::Audio) << "channel " << ch;
+}
+
+TEST(MacroInletModuleTest, StereoShapeOnlyClearsInactiveRawChannels) {
+    MacroInletModule inlet;
+    inlet.setPortShape(MacroPortShape::Stereo);
+    inlet.prepareToPlay(kSampleRate, kBlockSize);
+
+    juce::AudioBuffer<float> buffer(MacroInletModule::kMaxChannels, kBlockSize);
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        for (int i = 0; i < kBlockSize; ++i)
+            buffer.getWritePointer(ch)[i] = 0.6f;
+
+    juce::MidiBuffer midi;
+    inlet.processBlock(buffer, midi);
+
+    EXPECT_FLOAT_EQ(buffer.getReadPointer(0)[0], 0.6f);
+    EXPECT_FLOAT_EQ(buffer.getReadPointer(MacroInletModule::kRightBase)[0], 0.6f);
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
+        if (ch == 0 || ch == MacroInletModule::kRightBase)
+            continue;
+        EXPECT_FLOAT_EQ(buffer.getReadPointer(ch)[0], 0.0f) << "channel " << ch;
+    }
 }
 
 TEST(MacroOutletModuleTest, ConstructsAndPassesThroughLikeInlet) {

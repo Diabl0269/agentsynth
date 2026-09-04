@@ -3,11 +3,13 @@
 #include "../AppUndoManager.h"
 #include "../AudioEngine.h"
 #include "../MacroSet.h"
+#include "../Modules/MacroPortShape.h"
 #include "../PatchDocument.h"
 #include "../Plugin/Hosting/HostedPluginBackend.h"
 #include "CableColour.h"
 #include "ColourPickerPopup.h"
 #include "LayoutUtil.h"
+#include "MacroPortConfigDialog.h"
 #include "ModuleClipboard.h"
 #include "SelectionModel.h"
 #include "UIAnimation.h"
@@ -422,6 +424,62 @@ public:
     void finalizeMacroCardDrag(const juce::String& macroId, juce::Point<int> newCardTopLeft);
     /** A press that never moved — mirrors cancelSelectionDrag, no re-resolve. */
     void cancelMacroCardDrag(const juce::String& macroId);
+
+    // ---- Macro I/O (P8-15b, T140): the "Configure I/O" modal + the cable-drop convenience -----
+    //
+    // §7 items 3 and 5 of docs/macros.md, unified into ONE modal per an explicit founder request
+    // rather than piecemeal "Add Input"/"Add Output"/"Rename"/"Reorder" menu actions. Every entry
+    // point below is a single recordGraphAndMacroChange transaction, so add/remove/rename/reorder
+    // and (the one that matters most) a shape change are each exactly one undo step — a shape
+    // change is a delete-node + create-node + rewire landing together, never two undos. -----
+
+    /** Adds a new port to `macroId`: constructs the matching Macro In/Out or Macro MIDI In/Out
+     *  node (never by the module library or replace menu — the same internal-only construction
+     *  every other §5.1 node type gets), gives it `shape`/`voiceCount` (ignored for
+     *  MacroPortKind::Midi, which carries no shape — §5.1), adds it as a macro member, and
+     *  appends a synth::MacroPort fronting it. `shape`/`voiceCount` are set on the node BEFORE it
+     *  is wired into the live graph, honouring §5.3's "decided at construction, then fixed" rule.
+     *  `portName` empty falls back to a direction/kind default ("Input"/"Output"/"MIDI In"/
+     *  "MIDI Out"). Returns the new port's node uuid, or an empty string if `macroId` doesn't
+     *  resolve or the node type failed to construct. */
+    juce::String addMacroPort(const juce::String& macroId, bool isInput, synth::MacroPortKind kind,
+                              MacroPortShape shape, int voiceCount, const juce::String& portName);
+
+    /** Removes the port fronted by `nodeUuid` from `macroId` by deleting its node — reuses the
+     *  ordinary multi-select delete path exactly like deleteMacroAndMembers does for a whole
+     *  macro, so undo/dirty/timeline-reconcile behave identically, and macros.retainOnly() (run
+     *  from updateComponents()) drops the now-orphaned synth::MacroPort as part of the same step. */
+    void removeMacroPort(const juce::String& macroId, const juce::String& nodeUuid);
+
+    /** Renames the port fronted by `nodeUuid`. Empty/whitespace-only `newName` is a no-op (mirrors
+     *  promptRenameMacro's own convention) rather than clearing the name. Touches only `macros` —
+     *  never the graph — so this pushes a MacroSnapshotAction alone. */
+    void renameMacroPort(const juce::String& macroId, const juce::String& nodeUuid, const juce::String& newName);
+
+    /** Moves the port fronted by `nodeUuid` one step earlier/later in its OWN direction's draw
+     *  order (inputs are reordered against other inputs, outputs against other outputs — the two
+     *  sides of the card, §5.4) by swapping `order` with its neighbour. A no-op at either end of
+     *  its group. */
+    void moveMacroPortOrder(const juce::String& macroId, const juce::String& nodeUuid, bool moveUp);
+
+    /** Changes the shape of an existing audio/CV port — the one operation §5.3 calls out as
+     *  needing to read as ONE edit despite being delete-node + create-node + rewire underneath.
+     *  Snapshots every graph connection touching the old node, constructs a fresh node of the
+     *  SAME direction/kind with the NEW shape, removes the old node, replays each saved connection
+     *  onto the new node's matching raw channel ONLY when that channel is still active under the
+     *  new shape (role == PortRole::Audio) — exactly "a jack that disappears takes its cables with
+     *  it" (dropRoutingsOnHiddenJacks' rule), applied honestly rather than silently adapted at the
+     *  boundary (§5.3's closing rule) — then rewrites the macro's member/port entries to the new
+     *  uuid, keeping name/order/direction/kind untouched. A no-op (returns empty) for a MIDI-kind
+     *  port, which has no shape to change (§5.1). Returns the new node's uuid. */
+    juce::String changeMacroPortShape(const juce::String& macroId, const juce::String& nodeUuid,
+                                      MacroPortShape newShape, int newVoiceCount);
+
+    /** Opens the "Configure I/O" modal (MacroPortConfigDialog) for `macroId` — the single entry
+     *  point every port add/remove/rename/reorder/shape-change above is reached through when the
+     *  user drives it from the UI; every method above is independently callable (and tested) with
+     *  no dialog involved. No-op if `macroId` doesn't resolve. */
+    void promptConfigureMacroIO(const juce::String& macroId);
 
     // ---- Snippets (issue #156) ----
 
@@ -1113,6 +1171,38 @@ private:
      *  the real preview/commit wiring, without launching a juce::CallOutBox. Mirrors
      *  TimelineRulerComponent::buildMarkerColourPicker. Null when `macroId` doesn't resolve. */
     std::unique_ptr<synth::ui::ColourPickerPopup> buildMacroColourPicker(const juce::String& macroId);
+
+    // ---- Macro I/O (P8-15b) helpers ----
+
+    /** The module-library type name to construct for a port of this direction/kind — "Macro In"/
+     *  "Macro Out"/"Macro MIDI In"/"Macro MIDI Out" (§5.1). */
+    static juce::String macroPortNodeTypeName(bool isInput, synth::MacroPortKind kind);
+
+    /** Fallback port name when the caller supplies none/blank. */
+    static juce::String defaultMacroPortName(bool isInput, synth::MacroPortKind kind);
+
+    /** One past the highest existing `order` among `macro`'s ports sharing `isInput` (0 if none) —
+     *  a fresh port's draw order, keeping it last on its own side of the card. */
+    static int nextMacroPortOrder(const synth::Macro& macro, bool isInput);
+
+    /** The "shape from a dropped cable" convenience (§5.3): endConnectionDrag calls this when a
+     *  cable is released over a COLLAPSED macro card with no jack underneath it (none exist until
+     *  T141) rather than on another module's port. Creates a Mono (or, for a MIDI-sourced drag,
+     *  MIDI) port sized from the cable's own direction/kind, adds it to `macroId`, and wires the
+     *  EXTERNAL end of the drag straight to the new node's raw channel 0 — all as ONE
+     *  recordGraphAndMacroChange transaction. Deliberately does NOT also wire the new port to any
+     *  interior member: the macro is collapsed, so there is nothing visible to guess a target
+     *  from — see docs/macros.md §5.3. Shape inference from the dragged cable's own poly/stereo
+     *  fan is deferred (T140 report) — this always creates Mono; the modal remains the way to get
+     *  Stereo/Poly-N from this gesture. */
+    void createMacroPortFromDroppedCable(const juce::String& macroId, bool newPortIsInput, bool isMidi,
+                                         juce::AudioProcessorGraph::NodeID otherNodeId, int otherVisibleJack);
+
+    /** Snapshot of `macroId`'s ports for the Configure I/O dialog: inputs before outputs, then
+     *  each side by its own `order` — live shape/voice count read off the actual node for an
+     *  AudioCV port (a MacroPort carries no shape of its own, §5.2). Empty if `macroId` doesn't
+     *  resolve. */
+    std::vector<synth::ui::MacroPortConfigDialog::PortRow> macroPortRowsForDialog(const juce::String& macroId) const;
 
     std::vector<AudioEngine::ModulationDisplayInfo> cachedModDisplayInfo;
     std::vector<AudioEngine::ModulationRouting> cachedModRoutings;
