@@ -11,6 +11,9 @@ This document covers two things:
    built as of P8-15d, and a founder review afterwards produced a further round of presentation
    fixes layered on top without reopening the model itself (§5.3/§5.4, §7 items 3-5): a port no
    longer renders as a full module card, collapsed OR expanded — see "How a port is drawn" below.
+   The same review also added a menu-reachability fix (§5.8): a macro member module's own
+   right-click menu now offers the macro's actions too, not just the collapsed card and the
+   expanded hull.
 
 ---
 
@@ -473,6 +476,52 @@ the plugin already round-trips (`docs/architecture.md`, plugin state format). Th
 
 The one existing rule that still applies: an over-wide hosted plugin is **refused, never
 truncated** — grouping one into a macro changes nothing about that.
+
+### 5.8 The macro menu's reachable entry points
+
+`GraphEditor::buildMacroMenu` is the ONE builder for a macro's own actions (Expand/Collapse,
+Rename, Change Colour, Configure I/O, Bypass/Mute, Save as Snippet, Ungroup, Delete Macro &
+Modules). There are three ways to reach it, all funnelling through it rather than each keeping its
+own copy:
+
+1. **The collapsed card's own right-click** (`MacroCardComponent::showContextMenu`) — the original
+   P8-12 entry point. It pre-selects nothing itself before this fix; it passes its own inline-rename
+   callback as `buildMacroMenu`'s `renameAction` override, which the other two entry points below
+   don't have a card to host. Its "Ungroup"/"Save as Snippet..." semantics change with this fix —
+   see below.
+2. **Right-clicking empty canvas inside an expanded macro's hull** (`GraphEditor::mouseDown` ->
+   `macroHullAt()`), reachable without collapsing first (P8-12 follow-up). This site calls
+   `selectMacro(hullMacroId, false)` before showing the menu — see below for why, and why that call
+   is now redundant but left in place.
+3. **Right-clicking a MEMBER MODULE itself** (`ModuleComponent::buildModuleContextMenu`,
+   founder-review item 4: *"Right clicking a module in the macro should also show the macro
+   options"*) — appends `buildMacroMenu()`'s items as a "Macro: `<name>`" submenu on the module's
+   own right-click menu, when and only when the clicked module resolves to a macro via
+   `MacroSet::findByMember()`. A module in no macro sees no change to its menu at all. This site
+   deliberately does **not** pre-select the macro at click time: a member module's own right-click
+   retargets the *module* selection (so its own Copy/Duplicate/Delete Module items act on what was
+   clicked), and macro-wide selection only happens if and when a macro submenu item is invoked.
+
+Only entry point 2 pre-selected the macro before this fix; entry points 1 and 3 did not. That
+matters because `buildMacroMenu()`'s "Ungroup" and "Save as Snippet..." act on the **current
+selection** (`ungroupSelection()` / `onSaveSnippetRequested`), not on the macro id the menu was
+built for — so `buildMacroMenu()` itself now selects that macro (`selectMacro(macroId, false)`)
+immediately before running either one, rather than leaning on each caller to have pre-selected it.
+This is a real behaviour change for entry point 1 (the collapsed card), not just plumbing for the
+new entry point 3: previously, right-clicking one collapsed card while *other* macros' cards were
+also selected and choosing "Ungroup" would dissolve every selected macro, not just the one
+right-clicked; it now dissolves only the card that was actually clicked, matching what a user
+reading "Ungroup" off that card's own menu would expect. Entry point 2's own `selectMacro()` call —
+`GraphEditor::mouseDown`'s own comment calls it "load-bearing, not cosmetic" because
+`mouseUp` deliberately preserves whatever was selected on a right-click (so the canvas menu's Paste
+keeps working), and without it "Ungroup"/"Save as Snippet..." would silently act on whatever was
+selected before the click — is now redundant, since `buildMacroMenu()` handles that itself; it is
+left untouched here to keep this fix's diff scoped to the actual bug, not to make a UI-visible
+statement. Without this fix, invoking "Ungroup" from a member's macro submenu (entry point 3) while
+a *different* macro's module was also selected would dissolve both macros instead of only the one
+whose submenu was opened — `Tests/MacroContainerTests.cpp`'s
+`MacroMemberContextMenu.UngroupFromTheSubmenuDissolvesTheRightMacroDespiteAMixedSelection` pins
+this exact case.
 
 ---
 

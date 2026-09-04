@@ -1377,3 +1377,172 @@ TEST(MacroCardDoubleClick, TitleRowRenameCancelsAnyArmedCardDragSoMouseUpIsANoOp
 
     card->finishRename(false); // tidy up the open editor before the test ends
 }
+
+// ============================================================================
+// Right-click on a macro MEMBER module also offers the macro (founder-review item 4)
+// ============================================================================
+//
+// GraphEditor::mouseDown already offers the macro's own menu when a right-click lands on EMPTY
+// canvas inside an expanded macro's hull (macroHullAt() -> buildMacroMenu(), with
+// selectMacro(hullMacroId, false) called first because buildMacroMenu()'s "Ungroup"/"Save as
+// Snippet..." act on the CURRENT SELECTION, not the macro id passed in). This section covers the
+// companion path: right-clicking a MEMBER MODULE itself
+// (ModuleComponent::buildModuleContextMenu()), which appends the same buildMacroMenu() items as a
+// "Macro: <name>" submenu when -- and only when -- the clicked module resolves to a macro via
+// MacroSet::findByMember(). Because a member module's own right-click menu must NOT disturb the
+// module selection its OWN items (Copy/Duplicate/Delete Module...) act on, buildMacroMenu() itself
+// was changed to select its macro immediately before running "Ungroup"/"Save as Snippet...",
+// rather than relying on a pre-select from the call site the way the hull path does.
+
+namespace {
+
+juce::MouseEvent makeModuleRightClick(ModuleComponent& comp, juce::Point<int> position) {
+    const auto pos = position.toFloat();
+    const auto mods = juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier);
+    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos, mods, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                            &comp, &comp, juce::Time::getCurrentTime(), pos, juce::Time::getCurrentTime(), 1, false);
+}
+
+/** A point on the card body that is neither a jack nor the header's double-click-to-rename band --
+ *  the ordinary "right-click the body" target every test below uses. */
+juce::Point<int> bodyClickPoint(const ModuleComponent& comp) { return {comp.getWidth() / 2, comp.getHeight() - 10}; }
+
+/** Finds an item anywhere in `menu`, including inside submenus, by its exact text -- the item's
+ *  `.action` is what a real click on it would invoke. Returns nullptr if not found. */
+const juce::PopupMenu::Item* findMenuItemByText(const juce::PopupMenu& menu, const juce::String& text) {
+    juce::PopupMenu::MenuItemIterator it(menu, true);
+    while (it.next()) {
+        if (it.getItem().text == text)
+            return &it.getItem();
+    }
+    return nullptr;
+}
+
+bool anyMenuItemStartsWith(const juce::PopupMenu& menu, const juce::String& prefix) {
+    juce::PopupMenu::MenuItemIterator it(menu, true);
+    while (it.next())
+        if (it.getItem().text.startsWith(prefix))
+            return true;
+    return false;
+}
+
+} // namespace
+
+TEST(MacroMemberContextMenu, ModuleInNoMacroMenuIsUnchanged) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto* comp = findComponent(editor, a);
+    ASSERT_NE(comp, nullptr);
+    ASSERT_EQ(editor.macroForNode(a), nullptr) << "precondition: this module is in no macro";
+
+    comp->mouseDown(makeModuleRightClick(*comp, bodyClickPoint(*comp)));
+    EXPECT_TRUE(editor.isNodeSelected(a)) << "the ordinary right-click retarget must still run";
+
+    const auto menu = comp->buildModuleContextMenu();
+    EXPECT_FALSE(anyMenuItemStartsWith(menu, "Macro: "))
+        << "a module in no macro must see no macro submenu at all -- no change from before this fix";
+    EXPECT_NE(findMenuItemByText(menu, "Delete Module"), nullptr) << "the module's own items are still there";
+}
+
+TEST(MacroMemberContextMenu, RightClickingAMacroMemberOffersTheMacroSubmenu) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false); // expand: members are what get right-clicked
+
+    // Select something OTHER than `a` first, so the retarget below is actually observable.
+    editor.setSelectedNodes({b});
+    ASSERT_FALSE(editor.isNodeSelected(a));
+
+    auto* compA = findComponent(editor, a);
+    ASSERT_NE(compA, nullptr);
+    compA->mouseDown(makeModuleRightClick(*compA, bodyClickPoint(*compA)));
+
+    // Went through the real gesture entry point: mouseDown's own hit-test/retarget logic moved
+    // the selection onto the clicked module, collapsing it off `b`.
+    EXPECT_TRUE(editor.isNodeSelected(a));
+    EXPECT_FALSE(editor.isNodeSelected(b));
+
+    const auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+
+    const auto menu = compA->buildModuleContextMenu();
+    const auto* macroSubmenu = findMenuItemByText(menu, "Macro: " + macro->name);
+    ASSERT_NE(macroSubmenu, nullptr) << "a member module's own menu must offer its macro's options";
+    ASSERT_NE(macroSubmenu->subMenu, nullptr);
+
+    // Spot-check a few of buildMacroMenu()'s own items made it into the submenu, so this can't
+    // silently pass against an empty or unrelated submenu.
+    EXPECT_NE(findMenuItemByText(menu, "Ungroup"), nullptr);
+    EXPECT_NE(findMenuItemByText(menu, "Configure I/O..."), nullptr);
+    EXPECT_NE(findMenuItemByText(menu, "Delete Macro && Modules"), nullptr);
+}
+
+TEST(MacroMemberContextMenu, UngroupFromTheSubmenuDissolvesTheRightMacroDespiteAMixedSelection) {
+    // The load-bearing trap: buildMacroMenu()'s "Ungroup" acts on the CURRENT SELECTION
+    // (ungroupSelection()), not on the macro id it was built for. A member module's right-click
+    // does NOT retarget selection when the clicked module is already part of a multi-selection
+    // (mouseDown's "if (!owner.isNodeSelected(nodeId))" guard skips), so a selection spanning two
+    // macros can genuinely reach the submenu's "Ungroup" unchanged. This must still dissolve only
+    // the ONE macro whose submenu was opened.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a1 = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto a2 = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 300, 100);
+    editor.setSelectedNodes({a1, a2});
+    auto macroA = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroA.isEmpty());
+    editor.setMacroCollapsed(macroA, false);
+
+    auto b1 = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 700, 100);
+    auto b2 = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 900, 100);
+    editor.setSelectedNodes({b1, b2});
+    auto macroB = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroB.isEmpty());
+    editor.setMacroCollapsed(macroB, false);
+
+    // A mixed selection spanning BOTH macros, with b1 (about to be right-clicked) already part of
+    // it -- mouseDown's retarget guard therefore does NOT fire, and the selection at click time
+    // genuinely stays {a1, b1} right through to whichever submenu item gets invoked.
+    editor.setSelectedNodes({a1, b1});
+    ASSERT_TRUE(editor.isNodeSelected(a1));
+    ASSERT_TRUE(editor.isNodeSelected(b1));
+
+    auto* compB1 = findComponent(editor, b1);
+    ASSERT_NE(compB1, nullptr);
+    compB1->mouseDown(makeModuleRightClick(*compB1, bodyClickPoint(*compB1)));
+
+    // Confirms the retarget guard really did skip: selection is exactly as set up above, a
+    // "different module was selected beforehand" (a1, in the OTHER macro).
+    EXPECT_TRUE(editor.isNodeSelected(a1));
+    EXPECT_TRUE(editor.isNodeSelected(b1));
+
+    const auto menu = compB1->buildModuleContextMenu();
+    const auto* ungroupItem = findMenuItemByText(menu, "Ungroup");
+    ASSERT_NE(ungroupItem, nullptr);
+    ASSERT_TRUE(static_cast<bool>(ungroupItem->action));
+
+    ungroupItem->action();
+
+    EXPECT_EQ(editor.getMacros().find(macroB), nullptr)
+        << "the RIGHT macro (B -- the one whose submenu was actually opened) must dissolve";
+    ASSERT_NE(editor.getMacros().find(macroA), nullptr)
+        << "macro A must survive -- a naive graft (no select-before-act) would have ungrouped it "
+           "too, since a1 was still part of the selection at click time";
+    EXPECT_EQ(editor.getMacros().find(macroA)->members.size(), 2u);
+
+    // Ungrouping never deletes member nodes -- all four modules must still be real graph nodes.
+    for (auto id : {a1, a2, b1, b2})
+        EXPECT_NE(engine.getGraph().getNodeForId(id), nullptr);
+}

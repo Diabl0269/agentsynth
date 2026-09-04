@@ -183,6 +183,16 @@ public:
      *  can assert the exact geometry painted without inspecting pixels. */
     static juce::Rectangle<float> outputCardIconBoundsForTest(const synth::theme::AppLookAndFeel& lf);
 
+    /** Builds the same right-click menu mouseDown() shows for a body right-click (Copy/Duplicate/
+     *  Replace with.../Delete Module and, when this module is a macro member, a "Macro: <name>"
+     *  submenu — founder-review item 4, docs/macros.md). Split out of mouseDown() so a test can
+     *  inspect the menu's actual content and invoke an item's action directly: juce::PopupMenu's
+     *  own showMenuAsync() never displays anything headless, so driving a synthesised right-click
+     *  MouseEvent into mouseDown() alone has nothing observable to assert on. Public so a test can
+     *  call it after that same synthesised mouseDown() (the real gesture/hit-test/selection-
+     *  retargeting entry point) rather than skip straight to menu construction. */
+    juce::PopupMenu buildModuleContextMenu();
+
 private:
     // Non-owning: the juce::Component base owns this via setCachedComponentImage(). See
     // ZoomFrozenCachedImage.h — installed instead of setBufferedToImage(true) so a canvas zoom

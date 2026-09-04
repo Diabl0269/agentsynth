@@ -2708,6 +2708,147 @@ void ModuleComponent::parameterGestureChanged(int parameterIndex, bool gestureIs
     }
 }
 
+juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
+    juce::PopupMenu m;
+
+    // Selection actions (issue #156). Offered whenever this module is selected — a
+    // single-module snippet is legal, it is just a group of one.
+    const int selectionCount = owner.getSelectionCount();
+    const juce::String groupSuffix =
+        selectionCount > 1 ? " " + juce::String(selectionCount) + " Modules" : juce::String();
+
+    m.addItem("Copy" + groupSuffix, [this] { owner.copySelection(); });
+    m.addItem("Duplicate" + groupSuffix, [this] { owner.duplicateSelection(); });
+
+    // Paste lands next to whatever was copied, not on this module — pasting on top of the
+    // card the menu was opened from would hide the thing that just arrived.
+    const int clipboardCount = owner.getClipboardModuleCount();
+    juce::PopupMenu::Item paste(clipboardCount > 1 ? "Paste " + juce::String(clipboardCount) + " Modules" : "Paste");
+    paste.setEnabled(clipboardCount > 0);
+    paste.action = [this] { owner.pasteClipboard(); };
+    m.addItem(paste);
+
+    m.addItem(selectionCount > 1 ? "Save Selection as Snippet..." : "Save as Snippet...", [this] {
+        if (owner.onSaveSnippetRequested)
+            owner.onSaveSnippetRequested();
+    });
+    if (selectionCount > 1) {
+        // Deliberately calls groupSelectionIntoMacro() directly, NOT the Cmd+G dispatch
+        // (GraphEditor::groupOrToggleSelectionMacros) — a menu item names one verb
+        // ("Create Macro") and must keep doing exactly what it says, even for a selection
+        // that already touches a macro (where it still refuses, same as always).
+        m.addItem("Create Macro from " + juce::String(selectionCount) + " Modules",
+                  [this] { owner.groupSelectionIntoMacro(); });
+        m.addItem("Delete " + juce::String(selectionCount) + " Selected Modules", [this] { owner.deleteSelection(); });
+    }
+
+    // Cmd+Alt+G's toggle, reachable from a member module's own menu too: an expanded
+    // macro's card (the collapsed card's own menu) doesn't exist while expanded, so this
+    // is the only always-reachable UI for the round trip. Shown for either state now —
+    // toggleSelectionMacrosCollapsed() picks the right direction from the touched
+    // macro's own current state, matching the label offered here.
+    const auto* macro = owner.macroForNode(nodeId);
+    if (macro != nullptr)
+        m.addItem(macro->collapsed ? "Expand Macro" : "Collapse Macro",
+                  [this] { owner.toggleSelectionMacrosCollapsed(); });
+
+    m.addSeparator();
+
+    // Bypass toggle (only for actual modules)
+    if (auto* mod = dynamic_cast<ModuleBase*>(module)) {
+        m.addItem(mod->isBypassed() ? "Enable Module" : "Bypass Module", [this] {
+            if (auto* mod = dynamic_cast<ModuleBase*>(module)) {
+                mod->setBypassed(!mod->isBypassed());
+                repaint();
+            }
+        });
+        m.addSeparator();
+    }
+
+    // "Replace with..." submenu (only for actual modules, not AudioGraphIOProcessor).
+    // Audio Input is a ModuleBase but is still a singleton I/O node: replacing it with an
+    // Oscillator would silently leave the patch with no way to get the device's input in,
+    // and the library row it came from greyed out.
+    if (dynamic_cast<ModuleBase*>(module) != nullptr && !GraphEditor::isSingletonIOModule(module->getName())) {
+        juce::PopupMenu replaceMenu;
+        auto currentType = getType(module);
+
+        struct ModEntry {
+            const char* name;
+            ModuleType type;
+        };
+        struct Category {
+            const char* header;
+            std::vector<ModEntry> modules;
+        };
+        std::vector<Category> categories = {
+            {"Sources",
+             {{"Oscillator", ModuleType::Oscillator},
+              {"Wavetable", ModuleType::Wavetable},
+              {"Noise", ModuleType::Noise},
+              {"Sampler", ModuleType::Sampler},
+              {"LFO", ModuleType::LFO}}},
+            {"Sequencing",
+             {{"Sequencer", ModuleType::Sequencer},
+              {"Poly Sequencer", ModuleType::PolySequencer},
+              {"MIDI Keyboard", ModuleType::MidiKeyboard},
+              {"Poly MIDI", ModuleType::PolyMidi},
+              {"External MIDI", ModuleType::ExternalMidi}}},
+            {"Envelopes & Control",
+             {{"ADSR", ModuleType::ADSR},
+              {"Envelope Follower", ModuleType::EnvelopeFollower},
+              {"VCA", ModuleType::VCA}}},
+            {"Filters", {{"Filter", ModuleType::Filter}, {"Parametric EQ", ModuleType::ParametricEQ}}},
+            {"Modulation FX",
+             {{"Chorus", ModuleType::Chorus},
+              {"Phaser", ModuleType::Phaser},
+              {"Flanger", ModuleType::Flanger},
+              {"Distortion", ModuleType::Distortion},
+              {"Ring Modulator", ModuleType::RingModulator},
+              {"Bitcrusher", ModuleType::Bitcrusher},
+              {"Pitch Shifter", ModuleType::PitchShifter}}},
+            {"Time FX", {{"Delay", ModuleType::Delay}, {"Reverb", ModuleType::Reverb}}},
+            {"Dynamics", {{"Compressor", ModuleType::Compressor}, {"Limiter", ModuleType::Limiter}}},
+            {"Utility",
+             {{"Sample & Hold", ModuleType::SampleHold},
+              {"Comparator", ModuleType::Comparator},
+              {"Math", ModuleType::Math}}},
+        };
+
+        for (auto& cat : categories) {
+            juce::PopupMenu catMenu;
+            bool hasItems = false;
+            for (auto& mod : cat.modules) {
+                if (mod.type == currentType)
+                    continue;
+                juce::String typeName(mod.name);
+                catMenu.addItem(typeName, [this, typeName] { owner.replaceModule(this, typeName); });
+                hasItems = true;
+            }
+            if (hasItems)
+                replaceMenu.addSubMenu(cat.header, catMenu);
+        }
+
+        m.addSubMenu("Replace with...", replaceMenu);
+        m.addSeparator();
+    }
+
+    m.addItem("Delete Module", [this] { owner.deleteModule(this); });
+
+    // Founder-review item 4 (docs/macros.md): this module's own menu also offers the macro it
+    // belongs to, as an appended submenu — never folded into the items above, and never built
+    // when this module is in no macro (a module in no macro sees no change at all). buildMacroMenu
+    // itself now selects THIS macro before running its "Ungroup"/"Save as Snippet..." items (see
+    // its own comment), which is what makes it safe to graft on here without disturbing the module
+    // selection the rest of this menu (Copy/Duplicate/Delete Module, above) acts on: nothing in
+    // THIS method calls selectMacro, so the module retargeted at the top of mouseDown() stays
+    // selected right up until a macro submenu item actually fires.
+    if (macro != nullptr)
+        m.addSubMenu("Macro: " + macro->name, owner.buildMacroMenu(macro->id));
+
+    return m;
+}
+
 void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
     // Clicking anywhere on a card commits an open inline title editor — this card's or another's.
     // FIRST, before the child-control guard below returns, so a press on a knob dismisses it too.
@@ -2785,137 +2926,15 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
         // two-finger tap still open the menu on every platform.
         if (e.mods.isRightButtonDown()) {
             // Right-clicking outside the current selection retargets it to this module, so the
-            // menu always acts on something the user can see is selected.
+            // menu always acts on something the user can see is selected. This has to run BEFORE
+            // buildModuleContextMenu() below reads owner.getSelectionCount() / builds its items,
+            // not folded into that method itself: it is a real side effect of the CLICK, whereas
+            // buildModuleContextMenu() also needs to be callable standalone (from a test) without
+            // repeating a gesture that already happened.
             if (!owner.isNodeSelected(nodeId))
                 owner.selectModule(nodeId, false);
 
-            juce::PopupMenu m;
-
-            // Selection actions (issue #156). Offered whenever this module is selected — a
-            // single-module snippet is legal, it is just a group of one.
-            const int selectionCount = owner.getSelectionCount();
-            const juce::String groupSuffix =
-                selectionCount > 1 ? " " + juce::String(selectionCount) + " Modules" : juce::String();
-
-            m.addItem("Copy" + groupSuffix, [this] { owner.copySelection(); });
-            m.addItem("Duplicate" + groupSuffix, [this] { owner.duplicateSelection(); });
-
-            // Paste lands next to whatever was copied, not on this module — pasting on top of the
-            // card the menu was opened from would hide the thing that just arrived.
-            const int clipboardCount = owner.getClipboardModuleCount();
-            juce::PopupMenu::Item paste(clipboardCount > 1 ? "Paste " + juce::String(clipboardCount) + " Modules"
-                                                           : "Paste");
-            paste.setEnabled(clipboardCount > 0);
-            paste.action = [this] { owner.pasteClipboard(); };
-            m.addItem(paste);
-
-            m.addItem(selectionCount > 1 ? "Save Selection as Snippet..." : "Save as Snippet...", [this] {
-                if (owner.onSaveSnippetRequested)
-                    owner.onSaveSnippetRequested();
-            });
-            if (selectionCount > 1) {
-                // Deliberately calls groupSelectionIntoMacro() directly, NOT the Cmd+G dispatch
-                // (GraphEditor::groupOrToggleSelectionMacros) — a menu item names one verb
-                // ("Create Macro") and must keep doing exactly what it says, even for a selection
-                // that already touches a macro (where it still refuses, same as always).
-                m.addItem("Create Macro from " + juce::String(selectionCount) + " Modules",
-                          [this] { owner.groupSelectionIntoMacro(); });
-                m.addItem("Delete " + juce::String(selectionCount) + " Selected Modules",
-                          [this] { owner.deleteSelection(); });
-            }
-
-            // Cmd+Alt+G's toggle, reachable from a member module's own menu too: an expanded
-            // macro's card (the collapsed card's own menu) doesn't exist while expanded, so this
-            // is the only always-reachable UI for the round trip. Shown for either state now —
-            // toggleSelectionMacrosCollapsed() picks the right direction from the touched
-            // macro's own current state, matching the label offered here.
-            if (const auto* macro = owner.macroForNode(nodeId))
-                m.addItem(macro->collapsed ? "Expand Macro" : "Collapse Macro",
-                          [this] { owner.toggleSelectionMacrosCollapsed(); });
-
-            m.addSeparator();
-
-            // Bypass toggle (only for actual modules)
-            if (auto* mod = dynamic_cast<ModuleBase*>(module)) {
-                m.addItem(mod->isBypassed() ? "Enable Module" : "Bypass Module", [this] {
-                    if (auto* mod = dynamic_cast<ModuleBase*>(module)) {
-                        mod->setBypassed(!mod->isBypassed());
-                        repaint();
-                    }
-                });
-                m.addSeparator();
-            }
-
-            // "Replace with..." submenu (only for actual modules, not AudioGraphIOProcessor).
-            // Audio Input is a ModuleBase but is still a singleton I/O node: replacing it with an
-            // Oscillator would silently leave the patch with no way to get the device's input in,
-            // and the library row it came from greyed out.
-            if (dynamic_cast<ModuleBase*>(module) != nullptr && !GraphEditor::isSingletonIOModule(module->getName())) {
-                juce::PopupMenu replaceMenu;
-                auto currentType = getType(module);
-
-                struct ModEntry {
-                    const char* name;
-                    ModuleType type;
-                };
-                struct Category {
-                    const char* header;
-                    std::vector<ModEntry> modules;
-                };
-                std::vector<Category> categories = {
-                    {"Sources",
-                     {{"Oscillator", ModuleType::Oscillator},
-                      {"Wavetable", ModuleType::Wavetable},
-                      {"Noise", ModuleType::Noise},
-                      {"Sampler", ModuleType::Sampler},
-                      {"LFO", ModuleType::LFO}}},
-                    {"Sequencing",
-                     {{"Sequencer", ModuleType::Sequencer},
-                      {"Poly Sequencer", ModuleType::PolySequencer},
-                      {"MIDI Keyboard", ModuleType::MidiKeyboard},
-                      {"Poly MIDI", ModuleType::PolyMidi},
-                      {"External MIDI", ModuleType::ExternalMidi}}},
-                    {"Envelopes & Control",
-                     {{"ADSR", ModuleType::ADSR},
-                      {"Envelope Follower", ModuleType::EnvelopeFollower},
-                      {"VCA", ModuleType::VCA}}},
-                    {"Filters", {{"Filter", ModuleType::Filter}, {"Parametric EQ", ModuleType::ParametricEQ}}},
-                    {"Modulation FX",
-                     {{"Chorus", ModuleType::Chorus},
-                      {"Phaser", ModuleType::Phaser},
-                      {"Flanger", ModuleType::Flanger},
-                      {"Distortion", ModuleType::Distortion},
-                      {"Ring Modulator", ModuleType::RingModulator},
-                      {"Bitcrusher", ModuleType::Bitcrusher},
-                      {"Pitch Shifter", ModuleType::PitchShifter}}},
-                    {"Time FX", {{"Delay", ModuleType::Delay}, {"Reverb", ModuleType::Reverb}}},
-                    {"Dynamics", {{"Compressor", ModuleType::Compressor}, {"Limiter", ModuleType::Limiter}}},
-                    {"Utility",
-                     {{"Sample & Hold", ModuleType::SampleHold},
-                      {"Comparator", ModuleType::Comparator},
-                      {"Math", ModuleType::Math}}},
-                };
-
-                for (auto& cat : categories) {
-                    juce::PopupMenu catMenu;
-                    bool hasItems = false;
-                    for (auto& mod : cat.modules) {
-                        if (mod.type == currentType)
-                            continue;
-                        juce::String typeName(mod.name);
-                        catMenu.addItem(typeName, [this, typeName] { owner.replaceModule(this, typeName); });
-                        hasItems = true;
-                    }
-                    if (hasItems)
-                        replaceMenu.addSubMenu(cat.header, catMenu);
-                }
-
-                m.addSubMenu("Replace with...", replaceMenu);
-                m.addSeparator();
-            }
-
-            m.addItem("Delete Module", [this] { owner.deleteModule(this); });
-            m.showMenuAsync(juce::PopupMenu::Options());
+            buildModuleContextMenu().showMenuAsync(juce::PopupMenu::Options());
         } else {
             // ---- Selection semantics (issue #156) + Ctrl insert-between ----
             //

@@ -3037,12 +3037,15 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
         // Right-click inside an expanded macro's hull: the same macro actions the collapsed
         // card's own menu offers (Fix 4/P8-12 follow-up), reachable without collapsing first.
         //
-        // The explicit selectMacro() call is load-bearing, not cosmetic: buildMacroMenu's
+        // The explicit selectMacro() call used to be load-bearing, not cosmetic: buildMacroMenu's
         // "Ungroup" and "Save as Snippet..." items act on the CURRENT SELECTION
         // (ungroupSelection()/onSaveSnippetRequested()), and mouseUp deliberately preserves
-        // whatever was selected on a right-click (so the canvas menu's Paste keeps working) —
-        // without selecting the macro here FIRST, those items would silently act on whatever was
-        // selected before this click instead of the macro the user just right-clicked.
+        // whatever was selected on a right-click (so the canvas menu's Paste keeps working) — so
+        // without selecting the macro here FIRST, those items would have silently acted on
+        // whatever was selected before this click instead of the macro the user just right-clicked.
+        // Now redundant — buildMacroMenu selects the macro itself before either item runs
+        // (founder-review item 4, docs/macros.md §5.8, so the same fix also covers a macro
+        // member's own right-click menu) — left in place to keep this fix's diff scoped.
         if (const auto hullMacroId = macroHullAt(canvasPos.roundToInt()); hullMacroId.isNotEmpty()) {
             selectMacro(hullMacroId, false);
             buildMacroMenu(hullMacroId).showMenuAsync(juce::PopupMenu::Options());
@@ -4227,13 +4230,25 @@ juce::PopupMenu GraphEditor::buildMacroMenu(const juce::String& macroId, std::fu
                   });
     }
     m.addSeparator();
-    m.addItem("Save as Snippet...", [safeThis] {
-        if (safeThis != nullptr && safeThis->onSaveSnippetRequested)
+    // These two act on the CURRENT SELECTION (onSaveSnippetRequested / ungroupSelection), not on
+    // macroId directly, so each selects THIS macro immediately before acting — a caller no longer
+    // has to pre-select it (the hull right-click site still does, redundantly but harmlessly, per
+    // its own comment). This is what makes buildMacroMenu correct when grafted onto a member
+    // module's own right-click menu (founder-review item 4): that menu's whole point is to leave
+    // the module selection alone for its OWN items, so without this, invoking either item here
+    // would act on whatever was selected when the menu opened rather than on this macro.
+    m.addItem("Save as Snippet...", [safeThis, macroId] {
+        if (safeThis == nullptr)
+            return;
+        safeThis->selectMacro(macroId, false);
+        if (safeThis->onSaveSnippetRequested)
             safeThis->onSaveSnippetRequested();
     });
-    m.addItem("Ungroup", [safeThis] {
-        if (safeThis != nullptr)
-            safeThis->ungroupSelection();
+    m.addItem("Ungroup", [safeThis, macroId] {
+        if (safeThis == nullptr)
+            return;
+        safeThis->selectMacro(macroId, false);
+        safeThis->ungroupSelection();
     });
     m.addSeparator();
     m.addItem("Delete Macro && Modules", [safeThis, macroId] {
