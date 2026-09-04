@@ -4076,6 +4076,25 @@ juce::PopupMenu GraphEditor::buildMacroMenu(const juce::String& macroId, std::fu
             safeThis->promptConfigureMacroIO(macroId);
     });
     m.addSeparator();
+    // Bypass/mute fan-out (§5.6, T142): each item names the action a click is about to perform,
+    // so a Mixed or fully-off state reads as targeting ON ("Bypass"/"Mute") and a fully-on state
+    // reads as targeting OFF ("Enable"/"Unmute") — the same convergence rule toggleMacroBypassed/
+    // toggleMacroMuted apply. Mute is omitted entirely when no member could possibly honour it
+    // (e.g. a macro made only of Macro In/Out ports), rather than offering a command that can only
+    // ever no-op.
+    m.addItem(macroBypassState(macroId) == MacroToggleState::AllOn ? "Enable Macro" : "Bypass Macro",
+              [safeThis, macroId] {
+                  if (safeThis != nullptr)
+                      safeThis->toggleMacroBypassed(macroId);
+              });
+    if (macroHasMuteEligibleMember(macroId)) {
+        m.addItem(macroMuteState(macroId) == MacroToggleState::AllOn ? "Unmute Macro" : "Mute Macro",
+                  [safeThis, macroId] {
+                      if (safeThis != nullptr)
+                          safeThis->toggleMacroMuted(macroId);
+                  });
+    }
+    m.addSeparator();
     m.addItem("Save as Snippet...", [safeThis] {
         if (safeThis != nullptr && safeThis->onSaveSnippetRequested)
             safeThis->onSaveSnippetRequested();
@@ -4172,6 +4191,160 @@ void GraphEditor::deleteMacroAndMembers(const juce::String& macroId) {
     // updateComponents() dissolves the now-empty macro as part of that same step.
     setSelectedNodes(memberIds);
     deleteSelection();
+}
+
+// ---- Macro bypass/mute (P8-15d, T142, docs/macros.md §5.6) -------------------------------------
+
+std::vector<juce::AudioProcessorGraph::NodeID>
+GraphEditor::resolvedMacroMemberModuleNodes(const juce::String& macroId) const {
+    std::vector<juce::AudioProcessorGraph::NodeID> result;
+    const auto* macro = macros.find(macroId);
+    if (macro == nullptr)
+        return result;
+
+    auto& graph = audioEngine.getGraph();
+    for (const auto& uuid : macro->members) {
+        auto nodeId = resolveMemberNodeId(uuid);
+        if (nodeId.uid == 0)
+            continue;
+        auto* node = graph.getNodeForId(nodeId);
+        if (node != nullptr && dynamic_cast<ModuleBase*>(node->getProcessor()) != nullptr)
+            result.push_back(nodeId);
+    }
+    return result;
+}
+
+bool GraphEditor::macroHasMuteEligibleMember(const juce::String& macroId) const {
+    auto& graph = audioEngine.getGraph();
+    for (auto nodeId : resolvedMacroMemberModuleNodes(macroId)) {
+        auto* node = graph.getNodeForId(nodeId);
+        auto* mb = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
+        if (mb != nullptr && mb->hasMuteParameter())
+            return true;
+    }
+    return false;
+}
+
+GraphEditor::MacroToggleState GraphEditor::macroBypassState(const juce::String& macroId) const {
+    auto& graph = audioEngine.getGraph();
+    bool anyOn = false;
+    bool anyOff = false;
+    for (auto nodeId : resolvedMacroMemberModuleNodes(macroId)) {
+        auto* node = graph.getNodeForId(nodeId);
+        auto* mb = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
+        if (mb == nullptr)
+            continue;
+        (mb->isBypassed() ? anyOn : anyOff) = true;
+    }
+    if (anyOn && anyOff)
+        return MacroToggleState::Mixed;
+    return anyOn ? MacroToggleState::AllOn : MacroToggleState::AllOff;
+}
+
+GraphEditor::MacroToggleState GraphEditor::macroMuteState(const juce::String& macroId) const {
+    auto& graph = audioEngine.getGraph();
+    bool anyOn = false;
+    bool anyOff = false;
+    for (auto nodeId : resolvedMacroMemberModuleNodes(macroId)) {
+        auto* node = graph.getNodeForId(nodeId);
+        auto* mb = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
+        // Skip members with no "muted" parameter (Macro In/Out and their MIDI variants among
+        // them, §7 item 1's note) — they have nothing to report either way.
+        if (mb == nullptr || !mb->hasMuteParameter())
+            continue;
+        (mb->isMuted() ? anyOn : anyOff) = true;
+    }
+    if (anyOn && anyOff)
+        return MacroToggleState::Mixed;
+    return anyOn ? MacroToggleState::AllOn : MacroToggleState::AllOff;
+}
+
+void GraphEditor::setMacroBypassed(const juce::String& macroId, bool bypassed) {
+    const auto memberNodes = resolvedMacroMemberModuleNodes(macroId);
+    if (memberNodes.empty())
+        return;
+
+    // The fan-out is an ORDINARY parameter change (ModuleBase::setBypassed is already
+    // setValueNotifyingHost under the hood, docs/macros.md §5.6) batched into ONE undo step via
+    // the same before/after graph-JSON snapshot applySmartSuggestions uses to land several
+    // connections as one step — never a new mutation mechanism, and never a macro-level
+    // reinterpretation of what bypass means. Each member's own processBlock keeps honouring the
+    // two-branch bypass/mute contract exactly as it does for a per-module toggle.
+    auto& graph = audioEngine.getGraph();
+    auto doBypass = [this, memberNodes, bypassed] {
+        auto& g = audioEngine.getGraph();
+        for (auto nodeId : memberNodes) {
+            auto* node = g.getNodeForId(nodeId);
+            if (auto* mb = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr)
+                mb->setBypassed(bypassed);
+        }
+    };
+
+    if (undoManager)
+        undoManager->recordStructuralChange(graph, doBypass);
+    else
+        doBypass();
+
+    // A collapsed macro's own card is not one of the members whose parameterValueChanged listener
+    // would otherwise schedule this repaint (its members are hidden ModuleComponents, and
+    // MacroCardComponent listens to no parameters) -- it reads macroBypassState() fresh on every
+    // paint, so it has to be told a repaint is due. repaintCanvas() (not a bare repaint()) matches
+    // every other macro-scoped mutation in this file (e.g. finalizeMacroCardDrag).
+    repaintCanvas();
+}
+
+void GraphEditor::setMacroMuted(const juce::String& macroId, bool muted) {
+    if (!macroHasMuteEligibleMember(macroId))
+        return;
+
+    const auto memberNodes = resolvedMacroMemberModuleNodes(macroId);
+    auto& graph = audioEngine.getGraph();
+    auto doMute = [this, memberNodes, muted] {
+        auto& g = audioEngine.getGraph();
+        for (auto nodeId : memberNodes) {
+            auto* node = g.getNodeForId(nodeId);
+            auto* mb = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
+            // A member with no "muted" parameter (ModuleBase::hasMuteParameter()) is left alone
+            // rather than calling setMuted, which dereferences an unset mutedParam unconditionally
+            // — the pre-existing gap §7 item 1 flagged this fan-out would need to guard against.
+            if (mb != nullptr && mb->hasMuteParameter())
+                mb->setMuted(muted);
+        }
+    };
+
+    if (undoManager)
+        undoManager->recordStructuralChange(graph, doMute);
+    else
+        doMute();
+
+    // See setMacroBypassed's matching comment: the collapsed card reads macroMuteState() fresh on
+    // every paint and has no parameter listener of its own to trigger that repaint on its own.
+    repaintCanvas();
+}
+
+void GraphEditor::toggleMacroBypassed(const juce::String& macroId) {
+    if (macros.find(macroId) == nullptr) {
+        if (onStatusMessage)
+            onStatusMessage("Select a macro to bypass or enable it.");
+        return;
+    }
+
+    // Converge toward bypassing everything first (Mixed or AllOff -> bypass all; AllOn -> clear
+    // all) — the same direction toggleSelectionMacrosCollapsed converges a mixed selection
+    // toward collapsed, for the same reason: it is the direction a user reaching for this command
+    // almost always wants, and it makes the command settle rather than oscillate once every
+    // member agrees.
+    setMacroBypassed(macroId, macroBypassState(macroId) != MacroToggleState::AllOn);
+}
+
+void GraphEditor::toggleMacroMuted(const juce::String& macroId) {
+    if (!macroHasMuteEligibleMember(macroId)) {
+        if (onStatusMessage)
+            onStatusMessage("This macro has no member that can be muted.");
+        return;
+    }
+
+    setMacroMuted(macroId, macroMuteState(macroId) != MacroToggleState::AllOn);
 }
 
 void GraphEditor::beginMacroCardDrag(const juce::String& macroId) {

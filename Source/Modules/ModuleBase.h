@@ -404,6 +404,14 @@ public:
     bool isBypassed() const { return bypassedParam->get(); }
     void setBypassed(bool b) { bypassedParam->setValueNotifyingHost(b ? 1.0f : 0.0f); }
 
+    /** Whether this module opted into `addMuteParameter()`. A handful of internal-only node types
+     *  (Track In, Rec Tap, Track Audio; and, as of P8-15, Macro In/Out and their MIDI variants)
+     *  do not — there is nothing for a mute to silence beyond what bypass already covers. Any
+     *  caller fanning `setMuted` out over an arbitrary set of modules (docs/macros.md §5.6's
+     *  macro-level mute) MUST check this first: `isMuted()`/`setMuted()` dereference `mutedParam`
+     *  unconditionally and are only safe once this returns true. */
+    bool hasMuteParameter() const { return mutedParam != nullptr; }
+
     bool isMuted() const { return mutedParam->get(); }
     void setMuted(bool m) { mutedParam->setValueNotifyingHost(m ? 1.0f : 0.0f); }
 

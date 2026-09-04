@@ -345,6 +345,52 @@ public:
      *  opposite: it keeps the modules. */
     void deleteMacroAndMembers(const juce::String& macroId);
 
+    // ---- Macro bypass/mute (P8-15d, T142, docs/macros.md §5.6) -------------------------------
+    //
+    // "Bypass macro" / "Mute macro" are FAN-OUT COMMANDS over a macro's members, not a
+    // macro-level reinterpretation of the contract — a macro has no processBlock and no
+    // bypass/mute state of its own. Each fan-out calls ModuleBase::setBypassed/setMuted (already
+    // parameter writes via setValueNotifyingHost) on every member, so every member's own
+    // processBlock honours the two-branch bypass/mute contract exactly as it already does for a
+    // per-module toggle — there is nothing new to get wrong. The whole fan-out is ONE undo step
+    // (recordStructuralChange, the same before/after graph-JSON snapshot applySmartSuggestions
+    // uses to batch several connections into one step), not one undo per member.
+
+    /** Tri-state read of `macroId`'s members' bypass (or mute) state, feeding §5.6's
+     *  "mixed-state members show an indeterminate indicator" requirement. `Muted` additionally
+     *  skips (does not count as ON or OFF) any member with no "muted" parameter at all
+     *  (ModuleBase::hasMuteParameter() — Macro In/Out and their MIDI variants among them, exactly
+     *  like Track In / Rec Tap / Track Audio) — such a member has nothing to report. A macro that
+     *  resolves to zero queryable members (unknown id, or every member skipped) reads AllOff. */
+    enum class MacroToggleState { AllOff, AllOn, Mixed };
+    MacroToggleState macroBypassState(const juce::String& macroId) const;
+    MacroToggleState macroMuteState(const juce::String& macroId) const;
+
+    /** Sets `ModuleBase::setBypassed(bypassed)` on every member of `macroId`, as one undo step.
+     *  A mixed starting state still lands every member on the SAME target state — that is the
+     *  point of the command (§5.6). No-op (no undo entry) if `macroId` doesn't resolve or has no
+     *  members that are ModuleBase instances. */
+    void setMacroBypassed(const juce::String& macroId, bool bypassed);
+
+    /** Sets `ModuleBase::setMuted(muted)` on every member of `macroId` that HAS a "muted"
+     *  parameter (ModuleBase::hasMuteParameter()) — a member without one is left alone rather
+     *  than crashing on `setMuted`'s unchecked dereference, matching §7 item 1's note that this
+     *  fan-out has to guard against members like Macro In/Out that carry no mute parameter. One
+     *  undo step; a no-op (no undo entry) if `macroId` doesn't resolve or no member is
+     *  mutable-eligible. */
+    void setMacroMuted(const juce::String& macroId, bool muted);
+
+    /** Toggles `macroId`'s bypass state: mirrors toggleSelectionMacrosCollapsed's deterministic
+     *  convergence rule (see its own header comment for the rationale) — `Mixed` or `AllOff`
+     *  converges to bypassing every member; `AllOn` converges to clearing every member. Refused
+     *  via onStatusMessage (no-op) if `macroId` doesn't resolve. */
+    void toggleMacroBypassed(const juce::String& macroId);
+
+    /** Toggles `macroId`'s mute state with the same convergence rule as toggleMacroBypassed,
+     *  computed over mute-eligible members only (see macroMuteState). Refused via onStatusMessage
+     *  (no-op) if `macroId` resolves to no member with a "muted" parameter. */
+    void toggleMacroMuted(const juce::String& macroId);
+
     /** Canvas-space bounds of an EXPANDED macro's grouping hull (the union of its live member
      *  ModuleComponent bounds, expanded by the hull margin), or an empty rect if the macro is
      *  collapsed / unknown / has no resolvable members. The ONE definition — paint and
@@ -1187,6 +1233,19 @@ private:
     /** The persistent "uuid" node property for `nodeId`, or an empty string if the node doesn't
      *  exist or was never assigned one. */
     juce::String nodeUuidFor(juce::AudioProcessorGraph::NodeID nodeId) const;
+
+    /** Every member of `macroId` that currently resolves to a live, ModuleBase-backed graph node,
+     *  in member order (§5.6 bypass/mute fan-out, T142). The ONE place that decides "what counts
+     *  as a fannable member" — macroBypassState/macroMuteState and setMacroBypassed/setMacroMuted
+     *  all read this rather than re-resolving members themselves, so the state a menu item shows
+     *  and the members the command actually touches can never disagree. Empty if `macroId`
+     *  doesn't resolve. */
+    std::vector<juce::AudioProcessorGraph::NodeID> resolvedMacroMemberModuleNodes(const juce::String& macroId) const;
+
+    /** True if at least one of `macroId`'s members has a "muted" parameter
+     *  (ModuleBase::hasMuteParameter()) — used to decide whether a mute fan-out is a real no-op
+     *  (a macro made entirely of Macro In/Out-like nodes) rather than silently doing nothing. */
+    bool macroHasMuteEligibleMember(const juce::String& macroId) const;
 
     /** The rectangle to anchor a collapsed macro's boundary cables against: the LIVE
      *  MacroCardComponent's bounds while its card exists (so a cable tracks the card mid-drag,

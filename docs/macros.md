@@ -459,7 +459,23 @@ In order, each independently shippable:
    graph+macro restore has to be a single action, not two pushed into one transaction, to get
    both undo AND redo right). A saved cable on a raw channel the new shape no longer exposes is
    dropped, not adapted (dropRoutingsOnHiddenJacks' rule, applied honestly).
-6. Bypass/mute fan-out (§5.6).
+6. **DONE (P8-15d).** Bypass/mute fan-out (§5.6): `GraphEditor::setMacroBypassed`/`setMacroMuted`
+   call `ModuleBase::setBypassed`/`setMuted` — already `setValueNotifyingHost` parameter writes —
+   on every member as ONE undo step (`recordStructuralChange`, the same before/after graph-JSON
+   snapshot `applySmartSuggestions` uses to batch several connections into one step); no new
+   mutation mechanism, and every member's own `processBlock` keeps honouring the two-branch
+   bypass/mute contract unchanged. Mute additionally skips (never crashes on) a member with no
+   "muted" parameter (`ModuleBase::hasMuteParameter()` — Macro In/Out and their MIDI variants
+   among them, the pre-existing gap §7 item 1 flagged). `macroBypassState`/`macroMuteState` give
+   the tri-state (`AllOff`/`AllOn`/`Mixed`) read the "mixed-state members show an indeterminate
+   indicator" requirement calls for; the collapsed card (`MacroCardComponent::paint`) draws it as
+   two small badges next to the expand chevron — solid when `AllOn`, half-filled when `Mixed`, and
+   undrawn (matching an un-pressed per-module bypass/mute button) when `AllOff` — read fresh on
+   every paint and explicitly repainted by both setters, since a collapsed card's own members are
+   hidden and it has no parameter listener of its own to notice the change otherwise.
+   `toggleMacroBypassed`/`toggleMacroMuted` (wired into `buildMacroMenu` as "Bypass Macro"/
+   "Mute Macro") converge a `Mixed` or `AllOff` state to ON and an `AllOn` state to OFF, mirroring
+   `toggleSelectionMacrosCollapsed`'s own convergence rule.
 
 ## 8. Explicitly out of scope
 
