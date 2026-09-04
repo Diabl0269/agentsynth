@@ -11,6 +11,9 @@
 //   • undo          — a macro-only change (no graph delta) refreshes the canvas on undo/redo
 //   • cables        — a collapsed macro drops internal cables and re-anchors boundary ones
 //   • trust         — an untrusted patch cannot smuggle a "macros" key
+//   • recolour      — P8-14: the shared ColourPickerPopup previews live (no undo) and commits as
+//                     one undo step spanning original -> final colour
+//   • card dbl-click — P8-14: the collapsed card's title row renames in place; elsewhere expands
 
 #include "../Source/AI/AIStateMapper.h"
 #include "../Source/AppUndoManager.h"
@@ -21,6 +24,7 @@
 #include "../Source/ProjectBundle.h"
 #include "../Source/Timeline/TimelineDoc.h"
 #include "../Source/UI/GraphEditor.h"
+#include "../Source/UI/MacroCardComponent.h"
 #include "../Source/UI/ModuleComponent.h"
 #include <algorithm>
 #include <gtest/gtest.h>
@@ -388,10 +392,12 @@ TEST(MacroCollapse, CollapsingHidesMembersAndExpandingShowsThemAgain) {
     EXPECT_FALSE(compB->isVisible());
 }
 
-TEST(MacroCollapse, CollapseSelectionMacrosReCollapsesAnExpandedMacro) {
+TEST(MacroCollapse, ToggleSelectionMacrosCollapsedRoundTripsExpandedAndCollapsed) {
     // Regression test: once expanded, a macro's card (the only UI that offered "Collapse") no
-    // longer exists on screen — collapseSelectionMacros() is the actual reachable path back
-    // (ModuleComponent's right-click menu and the Cmd+Alt+G shortcut both call it).
+    // longer exists on screen — toggleSelectionMacrosCollapsed() is the actual reachable path
+    // back (ModuleComponent's right-click menu and the Cmd+Alt+G shortcut both call it). Unlike
+    // the old collapse-only command, it must ALSO expand an already-collapsed macro, and a
+    // round trip (toggle, toggle) must return to the original state.
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
@@ -400,22 +406,58 @@ TEST(MacroCollapse, CollapseSelectionMacrosReCollapsesAnExpandedMacro) {
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.groupSelectionIntoMacro(); // grouping collapses by default
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
-    ASSERT_FALSE(editor.getMacros().find(macroId)->collapsed);
+    ASSERT_TRUE(editor.getMacros().find(macroId)->collapsed);
 
-    // Only one member selected — collapseSelectionMacros must still find and collapse the whole
-    // macro, matching ungroupSelection's "touches at least one selected node" semantics.
+    // Collapsed + selection -> expands.
+    editor.setSelectedNodes({a});
+    editor.toggleSelectionMacrosCollapsed();
+    ASSERT_NE(editor.getMacros().find(macroId), nullptr);
+    EXPECT_FALSE(editor.getMacros().find(macroId)->collapsed);
+
+    // Expanded + selection -> collapses (only one member selected — the toggle must still find
+    // and act on the whole macro, matching ungroupSelection's "touches at least one selected
+    // node" semantics).
     editor.selectModule(a, false);
-    editor.collapseSelectionMacros();
-
-    auto* macro = editor.getMacros().find(macroId);
-    ASSERT_NE(macro, nullptr);
-    EXPECT_TRUE(macro->collapsed);
+    editor.toggleSelectionMacrosCollapsed();
+    ASSERT_NE(editor.getMacros().find(macroId), nullptr);
+    EXPECT_TRUE(editor.getMacros().find(macroId)->collapsed) << "round trip must return to collapsed";
 }
 
-TEST(MacroCollapse, CollapseSelectionMacrosIsANoOpWithStatusMessageWhenNothingToCollapse) {
+TEST(MacroCollapse, ToggleSelectionMacrosCollapsedWithMixedSelectionCollapsesBoth) {
+    // A selection spanning one collapsed and one expanded macro must collapse BOTH (the
+    // documented "if any touched macro is expanded, collapse them all" rule) rather than acting
+    // per-macro or refusing.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    auto c = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 900, 100);
+    auto d = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 1300, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroOne = editor.groupSelectionIntoMacro(); // collapsed by default
+    ASSERT_FALSE(macroOne.isEmpty());
+
+    editor.setSelectedNodes({c, d});
+    auto macroTwo = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroTwo.isEmpty());
+    editor.setMacroCollapsed(macroTwo, false); // now expanded
+
+    ASSERT_TRUE(editor.getMacros().find(macroOne)->collapsed);
+    ASSERT_FALSE(editor.getMacros().find(macroTwo)->collapsed);
+
+    editor.setSelectedNodes({a, c}); // one member from each macro
+    editor.toggleSelectionMacrosCollapsed();
+
+    EXPECT_TRUE(editor.getMacros().find(macroOne)->collapsed) << "already-collapsed macro stays collapsed";
+    EXPECT_TRUE(editor.getMacros().find(macroTwo)->collapsed) << "expanded macro must collapse too";
+}
+
+TEST(MacroCollapse, ToggleSelectionMacrosCollapsedIsANoOpWithStatusMessageWhenSelectionTouchesNoMacro) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1200, 900);
@@ -423,27 +465,17 @@ TEST(MacroCollapse, CollapseSelectionMacrosIsANoOpWithStatusMessageWhenNothingTo
     juce::String lastMessage;
     editor.onStatusMessage = [&](const juce::String& msg) { lastMessage = msg; };
 
-    // Nothing selected at all.
-    editor.collapseSelectionMacros();
+    // Nothing selected at all -> refused.
+    editor.toggleSelectionMacrosCollapsed();
     EXPECT_FALSE(lastMessage.isEmpty());
 
-    // A plain, non-macro module selected.
+    // A plain, non-macro module selected -> refused (the selection touches no macro).
     lastMessage.clear();
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 0, 0);
     editor.selectModule(a, false);
-    editor.collapseSelectionMacros();
+    editor.toggleSelectionMacrosCollapsed();
     EXPECT_FALSE(lastMessage.isEmpty());
-
-    // An already-collapsed macro's members selected — nothing left to collapse.
-    lastMessage.clear();
-    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 300, 0);
-    editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
-    ASSERT_FALSE(macroId.isEmpty());
-    editor.setSelectedNodes({a, b});
-    editor.collapseSelectionMacros();
-    EXPECT_FALSE(lastMessage.isEmpty());
-    EXPECT_TRUE(editor.getMacros().find(macroId)->collapsed);
+    EXPECT_TRUE(editor.getMacros().empty()) << "nothing should have been created or changed";
 }
 
 TEST(MacroCollapse, MacroForNodeFindsTheOwningMacroOnlyWhileGrouped) {
@@ -468,6 +500,345 @@ TEST(MacroCollapse, MacroForNodeFindsTheOwningMacroOnlyWhileGrouped) {
 
     editor.ungroupSelection();
     EXPECT_EQ(editor.macroForNode(a), nullptr);
+}
+
+// ============================================================================
+// Group-or-toggle dispatch (P8-14 — Cmd+G, GraphEditor::groupOrToggleSelectionMacros)
+// ============================================================================
+
+TEST(MacroGroupOrToggle, SelectionTouchingNoMacroGroups) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+
+    editor.setSelectedNodes({a, b});
+    ASSERT_TRUE(editor.getMacros().empty());
+
+    editor.groupOrToggleSelectionMacros();
+
+    ASSERT_EQ(editor.getMacros().size(), 1) << "no macro touched -> Cmd+G groups";
+    EXPECT_NE(editor.macroForNode(a), nullptr);
+    EXPECT_NE(editor.macroForNode(b), nullptr);
+}
+
+TEST(MacroGroupOrToggle, SelectionWhollyInsideCollapsedMacroExpandsAndCreatesNoNewMacro) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro(); // collapsed by default
+    ASSERT_FALSE(macroId.isEmpty());
+    ASSERT_TRUE(editor.getMacros().find(macroId)->collapsed);
+
+    editor.setSelectedNodes({a, b}); // wholly inside the one macro
+    editor.groupOrToggleSelectionMacros();
+
+    ASSERT_EQ(editor.getMacros().size(), 1) << "must toggle the existing macro, not create a new one";
+    EXPECT_FALSE(editor.getMacros().find(macroId)->collapsed) << "collapsed selection -> expands";
+}
+
+TEST(MacroGroupOrToggle, SelectionWhollyInsideExpandedMacroCollapsesAndCreatesNoNewMacro) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false); // now expanded
+
+    editor.setSelectedNodes({a, b}); // wholly inside the one macro
+    editor.groupOrToggleSelectionMacros();
+
+    ASSERT_EQ(editor.getMacros().size(), 1) << "must toggle the existing macro, not create a new one";
+    EXPECT_TRUE(editor.getMacros().find(macroId)->collapsed) << "expanded selection -> collapses";
+}
+
+TEST(MacroGroupOrToggle, MixedSelectionTogglesTheMacroAndLeavesLooseModulesAlone) {
+    // The mixed-selection rule: one node already in a macro plus one loose node must toggle the
+    // touched macro and ignore the loose module — NOT group (the flat model has no nested
+    // macros), and NOT refuse (a no-op here reads as broken).
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    auto loose = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 900, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro(); // collapsed by default
+    ASSERT_FALSE(macroId.isEmpty());
+    ASSERT_TRUE(editor.getMacros().find(macroId)->collapsed);
+
+    juce::String lastMessage;
+    editor.onStatusMessage = [&](const juce::String& msg) { lastMessage = msg; };
+
+    editor.setSelectedNodes({a, loose}); // a is grouped, loose is not
+    editor.groupOrToggleSelectionMacros();
+
+    EXPECT_EQ(editor.getMacros().size(), 1) << "must not create a second macro";
+    EXPECT_FALSE(editor.getMacros().find(macroId)->collapsed) << "the touched macro must still toggle";
+    EXPECT_EQ(editor.macroForNode(loose), nullptr) << "the loose module must not be pulled into the macro";
+    EXPECT_FALSE(lastMessage.isEmpty()) << "the mixed-selection outcome must be explained";
+}
+
+TEST(MacroGroupOrToggle, SingleLooseModuleStillRefusesViaGroupSelectionIntoMacro) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 900);
+
+    juce::String lastMessage;
+    editor.onStatusMessage = [&](const juce::String& msg) { lastMessage = msg; };
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 0, 0);
+    editor.selectModule(a, false);
+
+    editor.groupOrToggleSelectionMacros();
+
+    EXPECT_TRUE(editor.getMacros().empty()) << "fewer than two modules must still refuse to group";
+    EXPECT_FALSE(lastMessage.isEmpty());
+}
+
+// ============================================================================
+// Hull (Fix 2/4 — click-to-select and right-click-menu inside an expanded macro)
+// ============================================================================
+
+TEST(MacroHull, HullBoundsIsEmptyWhileCollapsedAndTheMemberUnionWhileExpanded) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro(); // collapses by default
+    ASSERT_FALSE(macroId.isEmpty());
+
+    EXPECT_TRUE(editor.macroHullBounds(macroId).isEmpty()) << "a collapsed macro has no hull";
+    EXPECT_TRUE(editor.macroHullBounds("no-such-macro-id").isEmpty());
+
+    editor.setMacroCollapsed(macroId, false);
+    const auto hull = editor.macroHullBounds(macroId);
+    ASSERT_FALSE(hull.isEmpty());
+
+    auto* compA = findComponent(editor, a);
+    auto* compB = findComponent(editor, b);
+    ASSERT_NE(compA, nullptr);
+    ASSERT_NE(compB, nullptr);
+    EXPECT_TRUE(hull.contains(compA->getBounds())) << "the hull must cover every member's live bounds";
+    EXPECT_TRUE(hull.contains(compB->getBounds()));
+}
+
+TEST(MacroHull, HullAtHitsInsideAndMissesOutsideAndWhileCollapsed) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    // Collapsed: no hull to hit, anywhere.
+    EXPECT_TRUE(editor.macroHullAt({150, 150}).isEmpty());
+
+    editor.setMacroCollapsed(macroId, false);
+    const auto hull = editor.macroHullBounds(macroId);
+    ASSERT_FALSE(hull.isEmpty());
+
+    EXPECT_EQ(editor.macroHullAt(hull.getCentre()), macroId);
+    EXPECT_TRUE(editor.macroHullAt(juce::Point<int>(hull.getX() - 500, hull.getY() - 500)).isEmpty());
+}
+
+// ============================================================================
+// Chip (P8-14 — the expanded hull's name-chip drag handle)
+// ============================================================================
+
+TEST(MacroChip, ChipBoundsIsEmptyWhileCollapsedAndSitsOnTheHullsTopEdgeWhileExpanded) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro(); // collapses by default
+    ASSERT_FALSE(macroId.isEmpty());
+
+    EXPECT_TRUE(editor.macroChipBounds(macroId).isEmpty()) << "a collapsed macro has no chip";
+    EXPECT_TRUE(editor.macroChipBounds("no-such-macro-id").isEmpty());
+
+    editor.setMacroCollapsed(macroId, false);
+    const auto hull = editor.macroHullBounds(macroId);
+    ASSERT_FALSE(hull.isEmpty());
+
+    const auto chip = editor.macroChipBounds(macroId);
+    ASSERT_FALSE(chip.isEmpty());
+    EXPECT_EQ(chip.getY(), hull.getY()) << "the chip sits on the hull's top edge";
+    EXPECT_GE(chip.getX(), hull.getX()) << "the chip stays within the hull's horizontal span";
+    EXPECT_LE(chip.getRight(), hull.getRight());
+}
+
+TEST(MacroChip, ChipAtHitsInsideAndMissesJustOutsideAndWhileCollapsed) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    // Collapsed: no chip to hit, anywhere.
+    EXPECT_TRUE(editor.macroChipAt({150, 150}).isEmpty());
+
+    editor.setMacroCollapsed(macroId, false);
+    const auto chip = editor.macroChipBounds(macroId);
+    ASSERT_FALSE(chip.isEmpty());
+
+    EXPECT_EQ(editor.macroChipAt(chip.getCentre()), macroId);
+    // Just past the chip's right/bottom edge — still comfortably inside the hull, so a miss here
+    // proves the hit-test is scoped to the chip itself, not the whole hull.
+    EXPECT_TRUE(editor.macroChipAt(juce::Point<int>(chip.getRight() + 5, chip.getBottom() + 5)).isEmpty());
+}
+
+// ============================================================================
+// Chip drag (P8-14 — dragging the chip moves the whole macro as a rigid body)
+// ============================================================================
+
+TEST(MacroChipDrag, DraggingMovesEveryMemberByTheDragDeltaAsARigidBody) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    auto* compA = findComponent(editor, a);
+    auto* compB = findComponent(editor, b);
+    ASSERT_NE(compA, nullptr);
+    ASSERT_NE(compB, nullptr);
+    const auto startA = compA->getPosition();
+    const auto startB = compB->getPosition();
+    const auto startOffset = startB - startA;
+
+    // Synthesizing real mouse events into GraphEditor is not reliable headless (no real OS event
+    // loop/window to deliver them through); drive the same primitives GraphEditor::mouseDown/
+    // mouseDrag/mouseUp use for a chip drag directly instead.
+    editor.selectMacro(macroId, false);
+    editor.beginSelectionDrag();
+    const juce::Point<int> delta(120, 40);
+    editor.dragSelectionBy(delta, nullptr);
+
+    EXPECT_EQ(compA->getPosition(), startA + delta);
+    EXPECT_EQ(compB->getPosition(), startB + delta);
+    EXPECT_EQ(compB->getPosition() - compA->getPosition(), startOffset) << "the group must move as a single rigid body";
+
+    editor.finalizeSelectionDrag();
+    EXPECT_EQ(compB->getPosition() - compA->getPosition(), startOffset)
+        << "finalize applies one uniform snap/de-overlap offset to the whole group, preserving "
+           "relative member positions";
+}
+
+TEST(MacroChipDrag, ChipDragIsOneUndoStep) {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    auto* compA = findComponent(editor, a);
+    auto* compB = findComponent(editor, b);
+    ASSERT_NE(compA, nullptr);
+    ASSERT_NE(compB, nullptr);
+    const auto startA = compA->getPosition();
+    const auto startB = compB->getPosition();
+
+    // Mirrors GraphEditor::mouseDown/mouseDrag/mouseUp's exact sequence for a chip drag
+    // (captureBeforeState before the drag starts, pushSnapshotFromCapture once it finalizes) —
+    // see the comment on the previous test for why this drives the primitives directly rather
+    // than synthesizing mouse events.
+    editor.selectMacro(macroId, false);
+    undo.captureBeforeState(engine.getGraph());
+    editor.beginSelectionDrag();
+    editor.dragSelectionBy({120, 40}, nullptr);
+    editor.finalizeSelectionDrag();
+    undo.pushSnapshotFromCapture(engine.getGraph());
+
+    EXPECT_NE(compA->getPosition(), startA) << "sanity: the drag actually moved something";
+
+    ASSERT_TRUE(undo.canUndo());
+    undo.undo();
+
+    EXPECT_EQ(compA->getPosition(), startA) << "a single undo restores every member's original position";
+    EXPECT_EQ(compB->getPosition(), startB);
+}
+
+// ============================================================================
+// Rename dialog (Fix 5 — the hull menu's AlertWindow affordance)
+// ============================================================================
+
+TEST(MacroRename, RenameMacroHasNoEmptyInputGuardOfItsOwnTheDialogCallbackProvidesIt) {
+    // promptRenameMacro() pops a real juce::AlertWindow and enters a real modal state -- calling
+    // it here would hang a headless test run the same way this repo's other AlertWindow-driven
+    // dialogs avoid doing (see PianoRollTests/AutosaveTests' own comments on this). Its
+    // "empty/whitespace-only input cancels without renaming" contract lives entirely in the
+    // dialog's own ModalCallbackFunction (a `typed.isEmpty()` early-return BEFORE ever calling
+    // renameMacro -- see GraphEditor::promptRenameMacro), so it is exercised here at the layer
+    // that IS testable headless: renameMacro() itself takes whatever string it is given, which is
+    // exactly why the guard has to live in the callback rather than in renameMacro.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    ASSERT_EQ(editor.getMacros().find(macroId)->name, juce::String("Macro"));
+
+    // What the dialog's callback does on non-empty trimmed input.
+    editor.renameMacro(macroId, "Filter Chain");
+    EXPECT_EQ(editor.getMacros().find(macroId)->name, juce::String("Filter Chain"));
+
+    // renameMacro alone has no guard against an empty name -- proving the dialog's own
+    // `typed.isEmpty()` check (never reached in this test) is load-bearing, not redundant.
+    editor.renameMacro(macroId, "");
+    EXPECT_TRUE(editor.getMacros().find(macroId)->name.isEmpty())
+        << "renameMacro itself sets whatever it's given; promptRenameMacro's callback is what "
+           "keeps an empty/whitespace-only typed value from ever reaching it";
 }
 
 // ============================================================================
@@ -612,6 +983,55 @@ TEST(MacroCable, CollapsedMacroHidesInternalCablesAndReanchorsBoundaryCrossingOn
     EXPECT_TRUE(sawBoundary) << "a cable crossing the macro boundary must still be drawn";
 }
 
+TEST(MacroCable, BoundaryCableTracksTheLiveCardBoundsBeforeFinalizeMacroCardDrag) {
+    // Fix 3 (P8-12 follow-up): rebuildVisibleCables() used to anchor on the PERSISTED
+    // macro.bounds, which finalizeMacroCardDrag only writes on drop -- so a boundary cable stayed
+    // pointed at the card's pre-drag position for the whole gesture. Moving the live
+    // MacroCardComponent directly (never calling finalizeMacroCardDrag) reproduces "mid-drag"
+    // without needing a real mouse gesture.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto osc = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto filter = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 400, 100);
+    auto vca = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 700, 100);
+
+    ASSERT_TRUE(engine.getGraph().addConnection({{osc, 0}, {filter, 0}}));
+    ASSERT_TRUE(engine.getGraph().addConnection({{filter, 0}, {vca, 0}}));
+
+    editor.setSelectedNodes({osc, filter});
+    auto macroId = editor.groupSelectionIntoMacro(); // collapses by default
+    ASSERT_FALSE(macroId.isEmpty());
+
+    auto* card = editor.getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+
+    const auto movedTopLeft = card->getPosition() + juce::Point<int>(0, 400);
+    card->setTopLeftPosition(movedTopLeft); // NEVER calls finalizeMacroCardDrag
+
+    ASSERT_NE(editor.getMacros().find(macroId)->bounds.getPosition(), movedTopLeft)
+        << "the persisted macro.bounds must NOT have moved yet -- that staleness is exactly what "
+           "Fix 3 has to see past";
+
+    const auto& cables = editor.buildVisibleCables();
+    bool sawBoundary = false;
+    for (const auto& cable : cables) {
+        if (cable.id.srcUid == filter.uid && cable.id.dstUid == vca.uid) {
+            sawBoundary = true;
+            const auto liveBounds = card->getBounds().toFloat();
+            const bool onVerticalEdge = juce::approximatelyEqual(cable.p1.x, liveBounds.getX()) ||
+                                        juce::approximatelyEqual(cable.p1.x, liveBounds.getRight());
+            const bool onHorizontalEdge = juce::approximatelyEqual(cable.p1.y, liveBounds.getY()) ||
+                                          juce::approximatelyEqual(cable.p1.y, liveBounds.getBottom());
+            EXPECT_TRUE(onVerticalEdge || onHorizontalEdge)
+                << "the endpoint must track the card's LIVE (moved) bounds, not the stale persisted "
+                   "macro.bounds";
+        }
+    }
+    ASSERT_TRUE(sawBoundary);
+}
+
 // ============================================================================
 // Trust boundary
 // ============================================================================
@@ -631,4 +1051,329 @@ TEST(MacroTrust, UntrustedPatchWithMacrosKeyIsRefused) {
 
     auto trustedResult = synth::AIStateMapper::validatePatch(json, graph, /*clearExisting=*/false, /*trusted=*/true);
     EXPECT_TRUE(trustedResult.ok) << "the trusted path does not carry this refusal";
+}
+
+TEST(MacroUndo, TogglingASelectionSpanningTwoMacrosIsOneUndoStep) {
+    // One gesture, one undo entry. toggleSelectionMacrosCollapsed used to call setMacroCollapsed
+    // in a loop, and setMacroCollapsed records its own recordGraphAndMacroChange — so a single
+    // Cmd+Alt+G over a selection spanning two macros pushed TWO undo entries and needed two
+    // Cmd+Z to reverse. The undo history should mirror the gesture the user made, not the number
+    // of macros it happened to reach; hence applyMacroCollapsed (the unrecorded mutation) inside
+    // one recorded change.
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    auto c = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 900, 100);
+    auto d = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 1300, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroOne = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroOne.isEmpty());
+    editor.setSelectedNodes({c, d});
+    auto macroTwo = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroTwo.isEmpty());
+
+    // Both start collapsed (groupSelectionIntoMacro collapses by default), so one toggle expands
+    // both -- a single gesture that touches two macros.
+    ASSERT_TRUE(editor.getMacros().find(macroOne)->collapsed);
+    ASSERT_TRUE(editor.getMacros().find(macroTwo)->collapsed);
+
+    editor.setSelectedNodes({a, c}); // one member from each macro
+    editor.toggleSelectionMacrosCollapsed();
+    ASSERT_FALSE(editor.getMacros().find(macroOne)->collapsed);
+    ASSERT_FALSE(editor.getMacros().find(macroTwo)->collapsed);
+
+    // Exactly ONE undo must put both macros back, not one macro per undo.
+    ASSERT_TRUE(undo.canUndo());
+    undo.undo();
+
+    EXPECT_TRUE(editor.getMacros().find(macroOne)->collapsed) << "a single undo must reverse the whole toggle gesture";
+    EXPECT_TRUE(editor.getMacros().find(macroTwo)->collapsed)
+        << "the second macro must be restored by the SAME undo step, not a later one";
+}
+
+// ============================================================================
+// Chip drag through the REAL mouse path
+// ============================================================================
+//
+// The chip-drag tests above drive selectMacro/beginSelectionDrag/dragSelectionBy directly, which
+// exercises the API layer BENEATH GraphEditor::mouseDown/mouseDrag/mouseUp. That is exactly the
+// layer a broken hit-test cannot fail in, so those tests stayed green while the gesture was dead
+// on the canvas. These drive synthesised mouse events into GraphEditor itself, the same way
+// GraphEditorTests.cpp and MinimapComponentTests.cpp already do.
+
+namespace {
+
+juce::MouseEvent makeCanvasMouseEvent(juce::Component& comp, juce::Point<int> position, int clicks = 1) {
+    const auto pos = position.toFloat();
+    const auto mods = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier);
+    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos, mods, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                            &comp, &comp, juce::Time::getCurrentTime(), pos, juce::Time::getCurrentTime(), clicks,
+                            false);
+}
+
+} // namespace
+
+TEST(MacroChipDrag, ChipRectNeverOverlapsAMemberModule) {
+    // The chip is painted, not a component, so it has no z-order of its own: wherever it overlaps
+    // a member's ModuleComponent, that component wins the click and drags ITSELF instead of the
+    // macro. The chip must therefore sit entirely clear of every member's bounds.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 300, 300);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 700, 300);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false); // expanded: the hull and chip exist
+
+    const auto chip = editor.macroChipBounds(macroId);
+    ASSERT_FALSE(chip.isEmpty());
+
+    for (auto id : {a, b}) {
+        auto* comp = findComponent(editor, id);
+        ASSERT_NE(comp, nullptr);
+        EXPECT_FALSE(chip.intersects(comp->getBounds()))
+            << "chip " << chip.toString() << " overlaps member " << comp->getBounds().toString()
+            << " - the member's component will swallow clicks in the overlap";
+    }
+}
+
+TEST(MacroChipDrag, PressingAndDraggingTheChipMovesTheMacroThroughTheRealMousePath) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 300, 300);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 700, 300);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    // Canvas coordinates equal GraphEditor-local coordinates only at the identity transform, which
+    // is the freshly constructed editor's state. Assert it rather than assume it - a future default
+    // pan or zoom would otherwise turn this into a silently mis-aimed click that still passes.
+    const auto visible = editor.getVisibleCanvasRect();
+    ASSERT_FLOAT_EQ(visible.getX(), 0.0f);
+    ASSERT_FLOAT_EQ(visible.getY(), 0.0f);
+    ASSERT_FLOAT_EQ(visible.getWidth(), (float)editor.getWidth());
+
+    auto* compA = findComponent(editor, a);
+    auto* compB = findComponent(editor, b);
+    ASSERT_NE(compA, nullptr);
+    ASSERT_NE(compB, nullptr);
+    const auto startA = compA->getPosition();
+    const auto startB = compB->getPosition();
+
+    const auto chipCentre = editor.macroChipBounds(macroId).getCentre();
+    const juce::Point<int> delta(120, 80);
+
+    editor.mouseDown(makeCanvasMouseEvent(editor, chipCentre));
+    editor.mouseDrag(makeCanvasMouseEvent(editor, chipCentre + delta));
+    editor.mouseUp(makeCanvasMouseEvent(editor, chipCentre + delta));
+
+    EXPECT_NE(compA->getPosition(), startA) << "pressing the chip and dragging must move the macro";
+    EXPECT_NE(compB->getPosition(), startB);
+
+    // Rigid body: both members keep their relative offset (finalizeSelectionDrag snaps the group
+    // as a whole, so the absolute delta may be nudged, but the offset between members must not be).
+    EXPECT_EQ(compB->getPosition() - compA->getPosition(), startB - startA);
+}
+
+// ============================================================================
+// Recolour (P8-14): "Change Colour..." opens the shared synth::ui::ColourPickerPopup, with a
+// live preview (no undo) and exactly one undo step spanning original -> final colour on commit.
+// ============================================================================
+//
+// promptRecolourMacro launches a real juce::CallOutBox, which never runs in the headless test
+// process. createMacroColourPickerForTest() is the seam that hands back the SAME popup, wired
+// with the SAME onPreview/onCommit callbacks buildMacroColourPicker builds for the real path
+// (mirrors TimelineRulerComponent::createMarkerColourPickerForTest()) -- the tests below drive
+// its preview/commit through ColourPickerPopup's own test seams (setCurrentColourForTest /
+// commitForTest) rather than duplicating the recolour logic here.
+
+TEST(MacroRecolour, PreviewThenCommitToADifferentColourIsOneUndoStepThatRestoresTheOriginal) {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    const auto originalColour = editor.getMacros().find(macroId)->colour;
+    const juce::Colour intermediateColour(0xffaa11bbu);
+    const juce::Colour finalColour(0xff33cc44u);
+    ASSERT_NE(intermediateColour, originalColour);
+    ASSERT_NE(finalColour, originalColour);
+
+    auto popup = editor.createMacroColourPickerForTest(macroId);
+    ASSERT_NE(popup, nullptr);
+
+    const int serialBeforeRecolour = undo.getEditSerial();
+
+    popup->setCurrentColourForTest(intermediateColour); // simulates the user mid-drag
+    EXPECT_EQ(editor.getMacros().find(macroId)->colour, intermediateColour)
+        << "a preview must write straight to the macro";
+    EXPECT_EQ(undo.getEditSerial(), serialBeforeRecolour) << "a preview must not push an undo step";
+
+    popup->setCurrentColourForTest(finalColour); // the drag settles here
+    popup->commitForTest();
+
+    EXPECT_EQ(editor.getMacros().find(macroId)->colour, finalColour);
+    EXPECT_EQ(undo.getEditSerial(), serialBeforeRecolour + 1)
+        << "commit to a different colour must be exactly ONE undo step";
+
+    ASSERT_TRUE(undo.canUndo());
+    undo.undo();
+    EXPECT_EQ(editor.getMacros().find(macroId)->colour, originalColour)
+        << "the single undo step must restore the ORIGINAL colour, not the intermediate preview value";
+}
+
+TEST(MacroRecolour, PreviewThenCommitBackToTheOriginalColourPushesNoUndoEntry) {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    const auto originalColour = editor.getMacros().find(macroId)->colour;
+    const juce::Colour driftedColour(0xffaa11bbu);
+    ASSERT_NE(driftedColour, originalColour);
+
+    auto popup = editor.createMacroColourPickerForTest(macroId);
+    ASSERT_NE(popup, nullptr);
+
+    const int serialBeforeRecolour = undo.getEditSerial();
+
+    popup->setCurrentColourForTest(driftedColour);  // a preview nudges the colour away
+    popup->setCurrentColourForTest(originalColour); // ... and the drag settles back on the original
+    popup->commitForTest();
+
+    EXPECT_EQ(editor.getMacros().find(macroId)->colour, originalColour);
+    EXPECT_EQ(undo.getEditSerial(), serialBeforeRecolour) << "a no-net-change commit must push NO undo entry";
+}
+
+// ============================================================================
+// Collapsed-card double-click (P8-14): title row renames in place (like ModuleComponent's own
+// title), anywhere else on the card still expands.
+// ============================================================================
+
+namespace {
+// Matches MacroCardComponent::getTitleRowBounds() exactly (280x90 card: getLocalBounds().
+// reduced(10, 6), top 20 px, minus the right-hand 28 px chevron reservation) -- a point safely
+// inside x:[10,242) y:[6,26). Kept here rather than exposing the private helper to tests: paint()
+// and mouseDoubleClick() sharing the ONE method is what this whole change is guarding.
+constexpr juce::Point<int> kTitleRowPoint(40, 16);
+constexpr juce::Point<int> kBodyPoint(140, 60); // below the title row, still inside the card
+} // namespace
+
+TEST(MacroCardDoubleClick, TitleRowStartsInlineRenameAndDoesNotExpand) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro(); // collapses by default
+    ASSERT_FALSE(macroId.isEmpty());
+
+    auto* card = editor.getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+    ASSERT_FALSE(card->isRenamingTitle());
+
+    card->mouseDoubleClick(makeCanvasMouseEvent(*card, kTitleRowPoint, 2));
+
+    EXPECT_TRUE(card->isRenamingTitle());
+    ASSERT_NE(editor.getMacros().find(macroId), nullptr);
+    EXPECT_TRUE(editor.getMacros().find(macroId)->collapsed) << "a title-row double-click must not expand the macro";
+
+    card->finishRename(false); // tidy up the open editor before the test ends
+}
+
+TEST(MacroCardDoubleClick, OutsideTitleRowExpandsAndDoesNotRename) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    auto* card = editor.getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+
+    card->mouseDoubleClick(makeCanvasMouseEvent(*card, kBodyPoint, 2));
+
+    EXPECT_FALSE(card->isRenamingTitle());
+    ASSERT_NE(editor.getMacros().find(macroId), nullptr);
+    EXPECT_FALSE(editor.getMacros().find(macroId)->collapsed)
+        << "a double-click outside the title row must still expand, as before";
+}
+
+TEST(MacroCardDoubleClick, TitleRowRenameCancelsAnyArmedCardDragSoMouseUpIsANoOp) {
+    // Regression guard: mouseDown already arms a card drag (dragStartPosition/bodyDragActive/
+    // dragger.startDraggingComponent/owner.beginMacroCardDrag) before a double-click's second
+    // press resolves. If opening the rename editor didn't cancel that drag, this mouseUp would
+    // resolve it as a real (zero-delta) drag -- or worse, leave it armed for whatever gesture
+    // comes next.
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    auto* card = editor.getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+    auto* compA = findComponent(editor, a);
+    auto* compB = findComponent(editor, b);
+    ASSERT_NE(compA, nullptr);
+    ASSERT_NE(compB, nullptr);
+
+    const auto cardStart = card->getPosition();
+    const auto startA = compA->getPosition();
+    const auto startB = compB->getPosition();
+    const int serialBeforeGesture = undo.getEditSerial();
+
+    card->mouseDown(makeCanvasMouseEvent(*card, kTitleRowPoint)); // arms a card drag
+    card->mouseDoubleClick(makeCanvasMouseEvent(*card, kTitleRowPoint, 2));
+    ASSERT_TRUE(card->isRenamingTitle());
+    card->mouseUp(makeCanvasMouseEvent(*card, kTitleRowPoint));
+
+    EXPECT_EQ(card->getPosition(), cardStart) << "no drag should have resolved after the rename opened";
+    EXPECT_EQ(compA->getPosition(), startA);
+    EXPECT_EQ(compB->getPosition(), startB);
+    EXPECT_EQ(undo.getEditSerial(), serialBeforeGesture)
+        << "a stuck drag resolving on mouseUp would push a finalize-drag undo step";
+
+    card->finishRename(false); // tidy up the open editor before the test ends
 }

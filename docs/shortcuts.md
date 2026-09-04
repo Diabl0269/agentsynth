@@ -148,13 +148,36 @@ even with no mouse involved.
 |----------|--------|
 | Cmd+L | Auto Arrange |
 | Cmd+Shift+S | Save Selection as Snippet |
-| Cmd+G | Group Selection into Macro |
+| Cmd+G | Group / Toggle Macro |
 | Cmd+Shift+G | Ungroup Macro |
+| Cmd+Alt+G | Collapse / Expand Macro (toggle) |
 
-Graph holds only the four verbs that mean nothing on any other surface — auto-arrange,
-save-selection-as-snippet, and now grouping/ungrouping a macro (P8-12) — everything that means the
-same thing everywhere (copy/paste/cut/duplicate/repeat/select-all, both zoom pairs) is General
-instead, so it can route through `resolveEditSurface()`.
+Graph holds only the five verbs that mean nothing on any other surface — auto-arrange,
+save-selection-as-snippet, and grouping/ungrouping/collapsing a macro (P8-12) — everything that
+means the same thing everywhere (copy/paste/cut/duplicate/repeat/select-all, both zoom pairs) is
+General instead, so it can route through `resolveEditSurface()`.
+
+**Cmd+G is smart (P8-14, `GraphEditor::groupOrToggleSelectionMacros`)**: if the selection touches
+any macro, Cmd+G toggles those macros collapsed/expanded instead of grouping; only a selection that
+touches no macro at all gets grouped into a new one. "Group" is honoured exactly when it's a
+meaningful verb for the selection (the flat model refuses nested macros anyway), and once the
+selection is already in a macro, the key is free to carry the toggle the user reaches for instead.
+A **mixed selection** (some selected modules already in a macro, some not) toggles the touched
+macro(s) and leaves the loose modules alone — it does not fold them into the macro, and it does not
+refuse; the status bar reports how many macros were toggled and that modules outside a macro were
+left alone. Because Cmd+G now covers two verbs depending on selection state, its label/description
+is the single static string "Group / Toggle Macro", same reasoning as Cmd+Alt+G below.
+
+Cmd+Alt+G stays a separate, **always-toggle** binding
+(`GraphEditor::toggleSelectionMacrosCollapsed`) even though Cmd+G now does the same thing for a
+selection that already touches a macro: it is unambiguous when the user wants to be certain they're
+toggling and not grouping, and removing a binding would break anyone's saved keybindings. It
+collapses every macro touched by the selection that is currently expanded, or expands them if none
+are (a mixed selection spanning a collapsed and an expanded macro collapses both — collapsing
+always wins). One command works because the menu/Settings-list label is a single static string,
+"Collapse / Expand Macro", that reads right regardless of which way the toggle is about to go —
+Ungroup above stays its own command because dissolving a macro is a different precondition and a
+genuinely different verb from either grouping or toggling.
 
 ## Timeline
 

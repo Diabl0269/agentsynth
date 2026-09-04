@@ -6,6 +6,7 @@
 #include "../PatchDocument.h"
 #include "../Plugin/Hosting/HostedPluginBackend.h"
 #include "CableColour.h"
+#include "ColourPickerPopup.h"
 #include "LayoutUtil.h"
 #include "ModuleClipboard.h"
 #include "SelectionModel.h"
@@ -247,8 +248,11 @@ public:
     //
     // A Macro is a named, coloured, collapsible container: membership plus presentation, no
     // graph change (giving a Macro its own ports is the later, separate P8-15). Flat model — a
-    // node already in a macro cannot be grouped into a second one; Cmd+G refuses that with a
-    // status message rather than doing something ad hoc. Membership is by node UUID, so it
+    // node already in a macro cannot be grouped into a second one; groupSelectionIntoMacro()
+    // refuses that directly (a menu item, or Cmd+G when the whole selection is ungrouped) with a
+    // status message rather than doing something ad hoc. Cmd+G itself (P8-14,
+    // groupOrToggleSelectionMacros) never hits that refusal for a selection that already touches
+    // a macro — it toggles instead, see that method's comment. Membership is by node UUID, so it
     // survives save/load and undo/redo exactly like everything else in synth::MacroSet.
     //
     // Collapsed-macro selection/drag/delete are deliberately NOT a parallel mechanism: selecting
@@ -267,11 +271,25 @@ public:
      *  individual cards. Refused via onStatusMessage (no-op) if the selection touches no macro. */
     void ungroupSelection();
 
-    /** Collapses (Cmd+Alt+G) every expanded macro that owns at least one currently-selected
-     *  node back into its card — the counterpart to setMacroCollapsed(id, true) that's actually
-     *  reachable once a macro is expanded (its card, and the "Collapse" item on it, don't exist
-     *  then). Refused via onStatusMessage (no-op) if the selection touches no expanded macro. */
-    void collapseSelectionMacros();
+    /** Toggles (Cmd+Alt+G) the collapsed state of every macro that owns at least one
+     *  currently-selected node — a single reversible command rather than a collapse/expand pair
+     *  (see AppCommands::collapseMacro's comment for why a toggle is safe here: the label is
+     *  static, "Collapse / Expand Macro").
+     *
+     *  DETERMINISTIC RULE for a selection that spans more than one macro in different states: if
+     *  ANY of them is expanded, collapse them ALL; otherwise expand them all. That means a mixed
+     *  selection always converges toward "collapsed" first, which is the direction a user reaching
+     *  for this shortcut after selecting a pile of modules almost always wants, and it keeps the
+     *  command idempotent-feeling (pressing it repeatedly settles rather than oscillates once
+     *  every touched macro is collapsed).
+     *
+     *  Refused via onStatusMessage (no-op) only when the selection touches NO macro at all. */
+    void toggleSelectionMacrosCollapsed();
+
+    /** Cmd+G's single entry point: toggles the macros the selection touches, or groups the
+     *  selection into a new macro when it touches none. See the comment on the implementation
+     *  for why one key carries both verbs. */
+    void groupOrToggleSelectionMacros();
 
     /** Selects every member of `macroId` — so drag/delete reuse the plain multi-select path
      *  unchanged — replacing the current selection unless `additive`. No-op if the id is
@@ -295,11 +313,98 @@ public:
     void renameMacro(const juce::String& macroId, const juce::String& newName);
     void setMacroColour(const juce::String& macroId, juce::Colour colour);
 
+    /** Async rename affordance that does NOT depend on a MacroCardComponent existing — used by the
+     *  expanded-macro hull's right-click menu (buildMacroMenu's default "Rename..." handler),
+     *  where there is no card to host an inline `TextEditor`. Mirrors
+     *  MainComponent::promptSaveSnippet's `juce::AlertWindow` idiom exactly (SafePointer +
+     *  ModalCallbackFunction + a unique_ptr taken inside the callback). Prefilled with the
+     *  macro's current name; empty/whitespace-only input cancels without renaming. The collapsed
+     *  card keeps its own nicer inline rename (MacroCardComponent::beginRename) — this is only
+     *  for the case that has no card. */
+    void promptRenameMacro(const juce::String& macroId);
+
+    /** Opens the shared synth::ui::ColourPickerPopup over `screenArea` (screen coordinates) for
+     *  `macroId` — the same picker the timeline ruler's marker menu and the track header swatch
+     *  use (TimelineRulerComponent::buildMarkerColourPicker is the exact pattern this mirrors).
+     *  Live preview while the user drags (writes straight to the macro, no undo step, so dragging
+     *  never floods the undo stack); ONE undo step on commit, recorded via setMacroColour so the
+     *  undo restores the ORIGINAL colour rather than the last preview value. A no-op if `macroId`
+     *  doesn't resolve. */
+    void promptRecolourMacro(const juce::String& macroId, juce::Rectangle<int> screenArea);
+
+    /** Where the recolour picker's favourites shelf persists to. Null (the default) means
+     *  in-memory-only favourites, which is what a headless test with no ApplicationProperties
+     *  gets — mirrors TimelineRulerComponent::setPropertiesFile exactly. */
+    void setPropertiesFile(juce::PropertiesFile* props) noexcept { propertiesFile_ = props; }
+
     /** Removes the macro AND every one of its member nodes, as one undo step (right-click "Delete"
      *  on a collapsed card, or Delete/Backspace while its members are the whole selection). This
      *  is the "delete a macro deletes its modules" path — ungroupSelection() above is the
      *  opposite: it keeps the modules. */
     void deleteMacroAndMembers(const juce::String& macroId);
+
+    /** Canvas-space bounds of an EXPANDED macro's grouping hull (the union of its live member
+     *  ModuleComponent bounds, expanded by the hull margin), or an empty rect if the macro is
+     *  collapsed / unknown / has no resolvable members. The ONE definition — paint and
+     *  hit-testing must never diverge. */
+    juce::Rectangle<int> macroHullBounds(const juce::String& macroId) const;
+
+    /** The expanded macro whose hull contains `canvasPos`, or an empty string. Smallest hull
+     *  wins when hulls overlap. */
+    juce::String macroHullAt(juce::Point<int> canvasPos) const;
+
+    /** Canvas-space bounds of an EXPANDED macro's name chip - the tab drawn on the hull's top
+     *  edge, which doubles as the macro's drag handle. Empty rect if the macro is collapsed or
+     *  unknown. The ONE definition: paint and hit-testing must never diverge. */
+    juce::Rectangle<int> macroChipBounds(const juce::String& macroId) const;
+
+    /** The expanded macro whose name chip contains `canvasPos`, or an empty string. Smallest
+     *  chip wins if two ever overlap. */
+    juce::String macroChipAt(juce::Point<int> canvasPos) const;
+
+    /** Test accessor: the live MacroCardComponent for `macroId`, or nullptr. Exposed so a test can
+     *  move the real card directly (bypassing the drag gesture entirely) to prove
+     *  rebuildVisibleCables() anchors on the card's CURRENT bounds rather than the persisted
+     *  `macro.bounds`, which only updates on finalizeMacroCardDrag — see Fix 3/P8-12 follow-up. */
+    MacroCardComponent* getMacroCardForTest(const juce::String& macroId);
+
+    /** Builds the recolour popup with the EXACT onPreview/onCommit callbacks promptRecolourMacro
+     *  uses, without launching a juce::CallOutBox — mirrors
+     *  TimelineRulerComponent::createMarkerColourPickerForTest(). Null when `macroId` doesn't
+     *  resolve. Test seam: a headless test drives the returned popup's preview/commit directly
+     *  rather than duplicating the recolour logic. */
+    std::unique_ptr<synth::ui::ColourPickerPopup> createMacroColourPickerForTest(const juce::String& macroId);
+
+    /** The shared macro actions menu — right-click a collapsed card or right-click inside an
+     *  expanded macro's hull both build this SAME menu (Fix 4/P8-12 follow-up), so the two paths
+     *  cannot drift apart. Returns an empty menu if `macroId` doesn't resolve.
+     *
+     *  `renameAction`, when supplied, replaces the default "Rename..." item's handler — the
+     *  collapsed card passes its own inline-editor opener (MacroCardComponent::beginRename) here;
+     *  every other caller (the hull menu) leaves it empty and gets promptRenameMacro's dialog,
+     *  since there is no card to host an inline editor there. */
+    juce::PopupMenu buildMacroMenu(const juce::String& macroId, std::function<void()> renameAction = nullptr);
+
+    /** Live bounds + colour category for the currently-resolvable members of `macroId`, in
+     *  member order — the data the collapsed card's content preview (Fix 6/P8-12 follow-up)
+     *  scales into its card. A member uuid that doesn't resolve to a live ModuleComponent is
+     *  skipped rather than drawn as a blank box. */
+    struct MacroMemberPreview {
+        juce::Rectangle<int> bounds;
+        synth::ui::ModuleCategory category = synth::ui::ModuleCategory::Utility;
+    };
+    std::vector<MacroMemberPreview> macroMemberPreviews(const juce::String& macroId) const;
+
+    /** Display names of `macroId`'s members, in order — feeds MacroCardComponent's tooltip so a
+     *  collapsed macro's contents are discoverable without expanding it. */
+    juce::StringArray macroMemberNames(const juce::String& macroId) const;
+
+    /** Theme colour for a module category, matching how the canvas colours cables/cards by
+     *  category (synth::ui::themeColourForCategory) — used by the collapsed card's content
+     *  preview so its boxes read as the same colours expanding the macro would show. Falls back
+     *  to token defaults under the stock LookAndFeel headless tests install, same as
+     *  colourForCable. */
+    juce::Colour categoryPreviewColour(synth::ui::ModuleCategory category) const;
 
     /** Status-bar surface for a refused macro action (nested-group Cmd+G, ungroup-with-nothing-
      *  selected). Owner installs; a no-op by default (e.g. in tests). Mirrors
@@ -932,6 +1037,19 @@ private:
     // in that state is a plain click and clears the selection.
     bool pendingEmptyCanvasClick = false;
 
+    // ---- Expanded-macro chip drag (P8-14) ----
+    // The chip drag reuses beginSelectionDrag/dragSelectionBy/finalizeSelectionDrag exactly like a
+    // plain multi-select body-drag (see ModuleComponent::mouseDrag/mouseUp) - macroChipDragId is
+    // non-empty for the duration of the gesture, and macroChipDragStartCanvasPos is the CANVAS-space
+    // (post-zoom-transform) point the chip was pressed at, so the per-frame delta fed to
+    // dragSelectionBy is correct at any zoom level.
+    juce::String macroChipDragId;
+    juce::Point<int> macroChipDragStartCanvasPos;
+    /** Tracks the DraggingHandCursor set while hovering a chip, so mouseMove/mouseExit can reset it
+     *  on the transition out rather than getting stuck (see mouseMove's cable-hover cursor, which
+     *  this mirrors). */
+    bool hoveringMacroChip = false;
+
     /** Bounding boxes of every rendered module, for marquee hit-testing and group collision. */
     std::vector<synth::LayoutUtil::Box> collectModuleBoxes(bool selectedOnly, bool excludeSelected) const;
 
@@ -944,6 +1062,11 @@ private:
     void applySelectionChange(const std::vector<juce::AudioProcessorGraph::NodeID>& newSelection);
 
     AppUndoManager* undoManager = nullptr;
+
+    // Where the macro recolour picker's favourites shelf persists to — see setPropertiesFile.
+    // Null (the default) keeps favourites in-memory only, which is what a headless test with no
+    // ApplicationProperties gets.
+    juce::PropertiesFile* propertiesFile_ = nullptr;
 
     // Top-level JSON keys the current build doesn't understand (e.g. a future "timeline"),
     // stashed on load and re-merged on save so re-saving with an older build never destroys a
@@ -962,6 +1085,12 @@ private:
      *  syncs ModuleComponents themselves. */
     void syncMacroCards();
 
+    /** The raw collapse/expand mutation, with NO undo recording of its own — so a caller that
+     *  toggles several macros at once (toggleSelectionMacrosCollapsed) can wrap the whole batch
+     *  in ONE recordGraphAndMacroChange instead of one per macro. setMacroCollapsed is the
+     *  single-macro, self-recording wrapper around this. */
+    void applyMacroCollapsed(const juce::String& macroId, bool collapsed);
+
     /** The NodeID currently backing `memberUuid`, or an invalid NodeID if none does. Macros
      *  reference members by persistent uuid (Source/CLAUDE.md's uuid-mirroring invariant); this
      *  is the one place that resolves a macro member back to a live graph node. */
@@ -970,6 +1099,20 @@ private:
     /** The persistent "uuid" node property for `nodeId`, or an empty string if the node doesn't
      *  exist or was never assigned one. */
     juce::String nodeUuidFor(juce::AudioProcessorGraph::NodeID nodeId) const;
+
+    /** The rectangle to anchor a collapsed macro's boundary cables against: the LIVE
+     *  MacroCardComponent's bounds while its card exists (so a cable tracks the card mid-drag,
+     *  before finalizeMacroCardDrag writes the settled position back to `macro.bounds`), falling
+     *  back to the persisted `macro.bounds` when no card component exists (headless tests build a
+     *  MacroSet without ever constructing GraphEditor's card components). The ONE place
+     *  rebuildVisibleCables reads a collapsed macro's position from — do not read `macro.bounds`
+     *  directly for cable anchoring anywhere else. */
+    juce::Rectangle<int> macroCableAnchorBounds(const synth::Macro& macro) const;
+
+    /** Shared by promptRecolourMacro and createMacroColourPickerForTest: builds the popup with
+     *  the real preview/commit wiring, without launching a juce::CallOutBox. Mirrors
+     *  TimelineRulerComponent::buildMarkerColourPicker. Null when `macroId` doesn't resolve. */
+    std::unique_ptr<synth::ui::ColourPickerPopup> buildMacroColourPicker(const juce::String& macroId);
 
     std::vector<AudioEngine::ModulationDisplayInfo> cachedModDisplayInfo;
     std::vector<AudioEngine::ModulationRouting> cachedModRoutings;

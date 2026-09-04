@@ -359,6 +359,11 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     graphEditor.setCableColourMode(synth::ui::loadCableColourMode(*appProperties.getUserSettings()));
     graphEditor.setCableColourOverrides(synth::ui::loadCableColourOverrides(*appProperties.getUserSettings()));
 
+    // Macro recolour picker's favourites shelf (P8-14): the same PropertiesFile the timeline
+    // ruler's marker colour picker persists to (TimelinePanelComponent::setApplicationProperties
+    // -> ruler_.setPropertiesFile), so a favourite saved from one is offered by the other.
+    graphEditor.setPropertiesFile(appProperties.getUserSettings());
+
     // Wavetable browser folder (issue #180): GraphEditor holds the value so every Wavetable
     // card can seed its browser from it, MainComponent owns the ApplicationProperties round
     // trip — the same split as the cable-colour config above.
@@ -2004,11 +2009,23 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         break;
     }
     case AppCommands::groupSelection: {
-        result.setInfo("Group Selection into Macro", "Wrap the selected modules in a named Macro container", "Edit", 0);
-        // groupSelectionIntoMacro() itself refuses (with a status message) below two modules or a
-        // nested group — this gate just keeps the menu row from inviting a click that can never
-        // succeed with nothing, or one thing, selected.
-        result.setActive(graphEditor.getSelectionCount() > 1);
+        // Static label — Cmd+G now dispatches to whichever verb applies (P8-14,
+        // GraphEditor::groupOrToggleSelectionMacros), so the label can't claim to be only one of
+        // them. Mirrors collapseMacro's "static label covers both directions" reasoning above.
+        result.setInfo("Group / Toggle Macro",
+                       "Group the selection into a new Macro, or toggle collapse/expand if it already touches one",
+                       "Edit", 0);
+        // Active whenever EITHER branch of the dispatch could do something: enough modules to
+        // group, or the selection touches at least one macro to toggle (mirrors collapseMacro's
+        // gate below).
+        bool touchesAnyMacro = false;
+        for (auto nodeId : graphEditor.getSelectedNodes()) {
+            if (graphEditor.macroForNode(nodeId) != nullptr) {
+                touchesAnyMacro = true;
+                break;
+            }
+        }
+        result.setActive(graphEditor.getSelectionCount() > 1 || touchesAnyMacro);
         auto kp = shortcutManager.getBinding("groupSelection");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
@@ -2021,11 +2038,20 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         break;
     }
     case AppCommands::collapseMacro: {
-        result.setInfo("Collapse Macro", "Collapse the expanded macro the selection belongs to, back into a card",
+        result.setInfo("Collapse / Expand Macro", "Toggle the collapsed state of the macro the selection belongs to",
                        "Edit", 0);
-        // collapseSelectionMacros() itself refuses (with a status message) when the selection
-        // touches no expanded macro — same active-gate style as ungroupSelection above.
-        result.setActive(graphEditor.getSelectionCount() > 0);
+        // toggleSelectionMacrosCollapsed() itself refuses (with a status message) when the
+        // selection touches no macro at all — this gate is the more precise "touches ANY macro"
+        // check (not just "there's a selection"), since a plain non-macro selection can never
+        // succeed here either.
+        bool touchesAnyMacro = false;
+        for (auto nodeId : graphEditor.getSelectedNodes()) {
+            if (graphEditor.macroForNode(nodeId) != nullptr) {
+                touchesAnyMacro = true;
+                break;
+            }
+        }
+        result.setActive(touchesAnyMacro);
         auto kp = shortcutManager.getBinding("collapseMacro");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
@@ -2241,13 +2267,13 @@ bool MainComponent::perform(const InvocationInfo& info) {
         graphEditor.autoArrange();
         return true;
     case AppCommands::groupSelection:
-        graphEditor.groupSelectionIntoMacro();
+        graphEditor.groupOrToggleSelectionMacros();
         return true;
     case AppCommands::ungroupSelection:
         graphEditor.ungroupSelection();
         return true;
     case AppCommands::collapseMacro:
-        graphEditor.collapseSelectionMacros();
+        graphEditor.toggleSelectionMacrosCollapsed();
         return true;
     case AppCommands::toggleLibrary:
         setLibraryVisible(!isLibraryVisible);

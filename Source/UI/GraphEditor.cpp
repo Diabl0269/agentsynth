@@ -505,7 +505,11 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
     // wholly inside one collapsed macro is dropped outright (both endpoints are off-screen, and
     // there is nothing useful to draw); a cable crossing a collapsed macro's boundary is
     // re-anchored to the point where the card's edge faces the other endpoint (see
-    // projectToRectEdge) rather than left pointing at a hidden jack or floating at the centre.
+    // projectToRectEdge) rather than left pointing at a hidden jack or floating at the centre. The
+    // rectangle projected against is macroCableAnchorBounds(macro) — the LIVE
+    // MacroCardComponent's bounds while a card exists, not the persisted `macro.bounds`, which is
+    // only written back on drop (finalizeMacroCardDrag) and would leave a cable pointing at the
+    // card's pre-drag position for the whole gesture otherwise.
     if (!macros.empty()) {
         // nodeID.uid -> macro id, built once, collapsed macros only.
         std::unordered_map<uint32_t, const synth::Macro*> collapsedMacroForNode;
@@ -534,9 +538,9 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
                 const auto originalP1 = cable.p1;
                 const auto originalP2 = cable.p2;
                 if (srcHidden)
-                    cable.p1 = projectToRectEdge(srcIt->second->bounds, originalP2);
+                    cable.p1 = projectToRectEdge(macroCableAnchorBounds(*srcIt->second), originalP2);
                 if (dstHidden)
-                    cable.p2 = projectToRectEdge(dstIt->second->bounds, originalP1);
+                    cable.p2 = projectToRectEdge(macroCableAnchorBounds(*dstIt->second), originalP1);
 
                 filtered.push_back(cable);
             }
@@ -766,26 +770,16 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     // with nothing visible to explain why. Draw a light dashed outline + name chip around the
     // live union of member bounds so the grouping stays visible while expanded.
     if (!editor.getMacros().empty()) {
-        std::unordered_map<uint32_t, ModuleComponent*> compByNodeUid;
-        for (auto* comp : editor.getModuleComponents())
-            if (comp != nullptr)
-                compByNodeUid[comp->getNodeId().uid] = comp;
-
         for (const auto& macro : editor.getMacros().getAll()) {
             if (macro.collapsed)
                 continue;
 
-            juce::Rectangle<int> hull;
-            for (const auto& uuid : macro.members) {
-                auto nodeId = editor.resolveMemberNodeId(uuid);
-                auto it = compByNodeUid.find(nodeId.uid);
-                if (it == compByNodeUid.end())
-                    continue;
-                hull = hull.isEmpty() ? it->second->getBounds() : hull.getUnion(it->second->getBounds());
-            }
+            // macroHullBounds is the ONE definition of this rectangle — hit-testing
+            // (GraphEditor::macroHullAt, used by mouseDown/mouseUp for hull click-to-select and
+            // the hull's right-click macro menu) must see exactly what gets painted here.
+            const auto hull = editor.macroHullBounds(macro.id);
             if (hull.isEmpty())
                 continue;
-            hull = hull.expanded(14);
 
             juce::Path outline;
             outline.addRoundedRectangle(hull.toFloat(), 10.0f);
@@ -797,15 +791,30 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
 
             // A tab overlapping the hull's own top edge, not floating above it — a macro whose
             // members sit near the top of the canvas would otherwise clip the label off-canvas
-            // with nothing to scroll up to.
+            // with nothing to scroll up to. macroChipBounds is the ONE definition of this rect -
+            // hit-testing (GraphEditor::macroChipAt, the chip's drag/rename affordance) must see
+            // exactly what gets painted here, so paint uses the same font macroChipBounds measures
+            // with rather than computing its own width.
             const juce::String label = macro.name.isNotEmpty() ? macro.name : juce::String("Macro");
             g.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
-            const int labelW = (int)g.getCurrentFont().getStringWidthFloat(label) + 16;
-            juce::Rectangle<float> chip((float)hull.getX() + 8.0f, (float)hull.getY(), (float)labelW, 18.0f);
+            const auto chipBounds = editor.macroChipBounds(macro.id);
+            juce::Rectangle<float> chip = chipBounds.toFloat();
             g.setColour(macro.colour.withAlpha(0.85f));
             g.fillRoundedRectangle(chip, 6.0f);
+
+            // Grip affordance: three short vertical lines at the chip's left edge, so it reads as
+            // a drag handle rather than a plain label. Restrained and inside the 18px chip height.
+            g.setColour(juce::Colours::white.withAlpha(0.35f));
+            const float gripX = chip.getX() + 6.0f;
+            const float gripTop = chip.getY() + 5.0f;
+            const float gripBottom = chip.getBottom() - 5.0f;
+            for (int i = 0; i < 3; ++i) {
+                const float x = gripX + (float)i * 3.0f;
+                g.drawLine(x, gripTop, x, gripBottom, 1.0f);
+            }
+
             g.setColour(juce::Colours::white);
-            g.drawText(label, chip, juce::Justification::centred, false);
+            g.drawText(label, chip.withLeft(chip.getX() + 12.0f), juce::Justification::centred, false);
         }
     }
     // ---- End expanded-macro grouping hull ----
@@ -2795,6 +2804,18 @@ synth::ui::MinimapModel GraphEditor::buildMinimapModel() {
 void GraphEditor::mouseMove(const juce::MouseEvent& e) {
     auto localPos = content.getLocalPoint(this, e.getPosition());
 
+    // Hovering an expanded macro's name chip shows a grab cursor, since the chip doubles as a drag
+    // handle. Tracked with its own bool (rather than early-returning) so leaving the chip falls
+    // through to the ordinary cable/canvas cursor logic below instead of getting stuck on the hand
+    // cursor - cheap either way (one hull-list walk), no repaint needed for a cursor-only change.
+    const bool overChip = !macroChipAt(localPos.roundToInt()).isEmpty();
+    if (overChip != hoveringMacroChip) {
+        hoveringMacroChip = overChip;
+        setMouseCursor(overChip ? juce::MouseCursor::DraggingHandCursor : juce::MouseCursor::NormalCursor);
+    }
+    if (overChip)
+        return;
+
     std::optional<CableId> newId;
     if (auto cable = getCableAt(localPos.toFloat()))
         newId = cable->id;
@@ -2813,7 +2834,9 @@ void GraphEditor::mouseMove(const juce::MouseEvent& e) {
 }
 
 void GraphEditor::mouseExit(const juce::MouseEvent&) {
-    if (!hoveredCableId.has_value())
+    const bool wasHoveringChip = hoveringMacroChip;
+    hoveringMacroChip = false;
+    if (!hoveredCableId.has_value() && !wasHoveringChip)
         return;
     hoveredCableId.reset();
     setMouseCursor(juce::MouseCursor::NormalCursor);
@@ -2850,6 +2873,21 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
             return;
         }
 
+        // Right-click inside an expanded macro's hull: the same macro actions the collapsed
+        // card's own menu offers (Fix 4/P8-12 follow-up), reachable without collapsing first.
+        //
+        // The explicit selectMacro() call is load-bearing, not cosmetic: buildMacroMenu's
+        // "Ungroup" and "Save as Snippet..." items act on the CURRENT SELECTION
+        // (ungroupSelection()/onSaveSnippetRequested()), and mouseUp deliberately preserves
+        // whatever was selected on a right-click (so the canvas menu's Paste keeps working) —
+        // without selecting the macro here FIRST, those items would silently act on whatever was
+        // selected before this click instead of the macro the user just right-clicked.
+        if (const auto hullMacroId = macroHullAt(canvasPos.roundToInt()); hullMacroId.isNotEmpty()) {
+            selectMacro(hullMacroId, false);
+            buildMacroMenu(hullMacroId).showMenuAsync(juce::PopupMenu::Options());
+            return;
+        }
+
         // Nothing under the cursor: the canvas menu, which is how paste is reachable without the
         // keyboard. Right-clicking empty canvas leaves the selection alone (see mouseUp), so a
         // paste from here still knows what was selected.
@@ -2862,6 +2900,26 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
         pendingEmptyCanvasClick = false;
 
         auto localPos = content.getLocalPoint(this, e.getPosition());
+
+        // Pressing an expanded macro's name chip drags the whole macro as a rigid body - checked
+        // before the attenuverter/empty-canvas-click logic below so the chip wins over whatever
+        // would otherwise be under it (in practice, empty canvas above the hull).
+        //
+        // Shift is excluded deliberately: it is the explicit marquee modifier, and a marquee that
+        // happens to start on a chip should still be a marquee. The chip is a small target, so
+        // letting it swallow Shift+drag would make marquees fail unpredictably near a hull's top
+        // edge. Unmodified drag is the chip's gesture; Shift keeps belonging to the marquee.
+        if (auto macroId = macroChipAt(localPos.roundToInt()); macroId.isNotEmpty() && !e.mods.isShiftDown()) {
+            selectMacro(macroId, false);
+            if (undoManager)
+                undoManager->captureBeforeState(audioEngine.getGraph());
+            beginSelectionDrag();
+            macroChipDragId = macroId;
+            macroChipDragStartCanvasPos = localPos.roundToInt();
+            pendingEmptyCanvasClick = false;
+            return;
+        }
+
         auto attenId = getAttenuverterNodeAt(localPos.toFloat());
         if (attenId.uid != 0) {
             draggingAttenuverterNodeId = attenId;
@@ -2887,6 +2945,17 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
 void GraphEditor::mouseDrag(const juce::MouseEvent& e) {
     if (marqueeActive) {
         updateMarquee(content.getLocalPoint(this, e.getPosition()).roundToInt());
+        return;
+    }
+
+    if (macroChipDragId.isNotEmpty()) {
+        // The delta MUST be computed in CANVAS space (via content.getLocalPoint), not in
+        // GraphEditor-local space the way the pan code below does: `content` carries the zoom
+        // transform, so a raw e.getPosition() delta would make the macro drift at any zoom other
+        // than 1.0 (a delta of N screen pixels is N/zoom canvas pixels).
+        auto canvasPos = content.getLocalPoint(this, e.getPosition()).roundToInt();
+        dragSelectionBy(canvasPos - macroChipDragStartCanvasPos, nullptr);
+        repaintCanvas();
         return;
     }
 
@@ -2922,17 +2991,46 @@ void GraphEditor::mouseUp(const juce::MouseEvent& e) {
         return;
     }
 
+    if (macroChipDragId.isNotEmpty()) {
+        const auto canvasPos = content.getLocalPoint(this, e.getPosition()).roundToInt();
+        // isSelectionDragActive() guards a single-member macro (reachable - see
+        // MacroDelete.DeletingDownToOneMemberDoesNotDissolveButDeletingTheLastDoes): beginSelectionDrag
+        // requires >1 recorded member to arm, so a lone member never actually moves even if the
+        // mouse travelled, and finalizing would push a no-delta undo entry that visibly does nothing.
+        const bool moved = isSelectionDragActive() && canvasPos != macroChipDragStartCanvasPos;
+        if (moved) {
+            finalizeSelectionDrag(); // snaps + de-overlaps the group as one rigid body
+            if (undoManager)
+                undoManager->pushSnapshotFromCapture(audioEngine.getGraph());
+        } else {
+            cancelSelectionDrag();
+        }
+        macroChipDragId.clear();
+        repaintCanvas();
+        return;
+    }
+
     if (draggingAttenuverterNodeId.uid != 0 && undoManager) {
         undoManager->pushSnapshotFromCapture(audioEngine.getGraph());
     }
     draggingAttenuverterNodeId = juce::AudioProcessorGraph::NodeID();
 
-    // A press on empty canvas that never turned into a pan is a plain click: deselect.
+    // A press on empty canvas that never turned into a pan is a plain click: deselect — UNLESS it
+    // landed inside an expanded macro's hull (Fix 2/P8-12 follow-up), in which case it selects
+    // that macro instead. Only reachable here at all because a click that landed ON a member
+    // module is consumed by that ModuleComponent's own mouseDown and never reaches the canvas —
+    // this is deliberately just the empty space inside the hull (between/around member cards),
+    // never a drag-to-move-the-macro gesture, so it can't steal the pan gesture.
     if (pendingEmptyCanvasClick) {
         pendingEmptyCanvasClick = false;
         if (e.mods.isPopupMenu())
             return; // right-click keeps the selection so the context menu can act on it
-        clearSelection();
+
+        const auto canvasPos = content.getLocalPoint(this, e.getPosition());
+        if (const auto hullMacroId = macroHullAt(canvasPos); hullMacroId.isNotEmpty())
+            selectMacro(hullMacroId, false);
+        else
+            clearSelection();
     }
 }
 
@@ -3186,6 +3284,122 @@ juce::AudioProcessorGraph::NodeID GraphEditor::resolveMemberNodeId(const juce::S
     return {};
 }
 
+namespace {
+// Margin added around the union of member bounds for the expanded-macro grouping hull — the ONE
+// value paint (GraphContentComponent::paint) and hit-testing (macroHullAt) both use, via
+// macroHullBounds below.
+constexpr int kMacroHullMargin = 14;
+// Depth reserved ABOVE the member row for the name chip, so the painted chip never overlaps a
+// member's ModuleComponent (which would swallow the drag). Must stay >= the chip's own height.
+constexpr int kMacroChipHeight = 18;
+constexpr int kMacroChipTopMargin = kMacroChipHeight + 6;
+} // namespace
+
+juce::Rectangle<int> GraphEditor::macroHullBounds(const juce::String& macroId) const {
+    const auto* macro = macros.find(macroId);
+    if (macro == nullptr || macro->collapsed)
+        return {};
+
+    std::unordered_map<uint32_t, ModuleComponent*> compByNodeUid;
+    for (auto* comp : const_cast<GraphContentComponent&>(content).getModules())
+        if (comp != nullptr)
+            compByNodeUid[comp->getNodeId().uid] = comp;
+
+    juce::Rectangle<int> hull;
+    for (const auto& uuid : macro->members) {
+        auto nodeId = resolveMemberNodeId(uuid);
+        auto it = compByNodeUid.find(nodeId.uid);
+        if (it == compByNodeUid.end())
+            continue;
+        hull = hull.isEmpty() ? it->second->getBounds() : hull.getUnion(it->second->getBounds());
+    }
+    if (hull.isEmpty())
+        return {};
+
+    // The top margin is DEEPER than the other three, and that asymmetry is load-bearing: the name
+    // chip is drawn at the hull's top-left and doubles as the macro's drag handle, but it is
+    // PAINTED, not a component, so it has no z-order of its own. Wherever it overlapped a member's
+    // ModuleComponent, that component won the click and dragged itself instead - the chip showed a
+    // grab cursor and then did nothing, which is exactly the bug
+    // MacroChipDrag.ChipRectNeverOverlapsAMemberModule pins. Reserving kMacroChipTopMargin above
+    // the member row keeps the whole chip on empty canvas, where GraphEditor's own mouse handlers
+    // get it, while still sitting INSIDE the hull so a macro near the top of the canvas cannot
+    // clip its own label off-screen.
+    auto expanded = hull.expanded(kMacroHullMargin);
+    expanded.setTop(hull.getY() - kMacroChipTopMargin);
+    return expanded;
+}
+
+juce::String GraphEditor::macroHullAt(juce::Point<int> canvasPos) const {
+    juce::String best;
+    int bestArea = std::numeric_limits<int>::max();
+    for (const auto& macro : macros.getAll()) {
+        if (macro.collapsed)
+            continue;
+        const auto bounds = macroHullBounds(macro.id);
+        if (bounds.isEmpty() || !bounds.contains(canvasPos))
+            continue;
+        // Smallest hull wins when hulls overlap — the more specific (smaller) macro is the one
+        // the click most plausibly aimed at.
+        const int area = bounds.getWidth() * bounds.getHeight();
+        if (area < bestArea) {
+            bestArea = area;
+            best = macro.id;
+        }
+    }
+    return best;
+}
+
+juce::Rectangle<int> GraphEditor::macroChipBounds(const juce::String& macroId) const {
+    const auto hull = macroHullBounds(macroId);
+    if (hull.isEmpty())
+        return {};
+
+    // Measured with a LOCAL font rather than a juce::Graphics context, so this can be called from
+    // hit-testing (mouseDown/mouseMove) as well as paint - GraphContentComponent::paint uses this
+    // exact same font when it draws the chip, so the drawn rect and the hit rect never diverge.
+    const auto* macro = macros.find(macroId);
+    const juce::String label = (macro != nullptr && macro->name.isNotEmpty()) ? macro->name : juce::String("Macro");
+    juce::Font font(juce::FontOptions(11.0f, juce::Font::bold));
+    // +28, not the original card's +16: paint reserves the left ~12px for the grip-line affordance
+    // (see GraphContentComponent::paint), so the label needs the extra room to not look crowded.
+    // This is the one place that width is computed - paint reads this same rect.
+    const int labelW = (int)font.getStringWidthFloat(label) + 28;
+    return juce::Rectangle<int>(hull.getX() + 8, hull.getY(), labelW, kMacroChipHeight);
+}
+
+juce::String GraphEditor::macroChipAt(juce::Point<int> canvasPos) const {
+    juce::String best;
+    int bestArea = std::numeric_limits<int>::max();
+    for (const auto& macro : macros.getAll()) {
+        if (macro.collapsed)
+            continue;
+        const auto bounds = macroChipBounds(macro.id);
+        if (bounds.isEmpty() || !bounds.contains(canvasPos))
+            continue;
+        const int area = bounds.getWidth() * bounds.getHeight();
+        if (area < bestArea) {
+            bestArea = area;
+            best = macro.id;
+        }
+    }
+    return best;
+}
+
+juce::Rectangle<int> GraphEditor::macroCableAnchorBounds(const synth::Macro& macro) const {
+    for (auto* card : const_cast<GraphContentComponent&>(content).getMacroCards())
+        if (card != nullptr && card->getMacroId() == macro.id)
+            return card->getBounds();
+    return macro.bounds;
+}
+
+MacroCardComponent* GraphEditor::getMacroCardForTest(const juce::String& macroId) {
+    for (auto* card : content.getMacroCards())
+        if (card != nullptr && card->getMacroId() == macroId)
+            return card;
+    return nullptr;
+}
+
 void GraphEditor::syncMacroCards() {
     auto& cards = content.getMacroCards();
 
@@ -3339,26 +3553,99 @@ void GraphEditor::ungroupSelection() {
     repaint();
 }
 
-void GraphEditor::collapseSelectionMacros() {
+void GraphEditor::toggleSelectionMacrosCollapsed() {
     auto ids = selection.getSelected();
-    std::set<juce::String> macroIdsToCollapse;
+    std::set<juce::String> touchedMacroIds;
+    bool anyExpanded = false;
     for (auto id : ids) {
         const juce::String uuid = nodeUuidFor(id);
         if (uuid.isEmpty())
             continue;
-        if (auto* m = macros.findByMember(uuid))
+        if (auto* m = macros.findByMember(uuid)) {
+            touchedMacroIds.insert(m->id);
             if (!m->collapsed)
-                macroIdsToCollapse.insert(m->id);
+                anyExpanded = true;
+        }
     }
 
-    if (macroIdsToCollapse.empty()) {
+    // Refused only when the selection touches NO macro at all — unlike the old collapse-only
+    // command, a selection sitting entirely inside an already-collapsed macro is a legitimate
+    // toggle target (it expands), not a no-op.
+    if (touchedMacroIds.empty()) {
         if (onStatusMessage)
-            onStatusMessage("Select an expanded macro's modules to collapse it.");
+            onStatusMessage("Select a macro's modules to collapse or expand it.");
         return;
     }
 
-    for (const auto& macroId : macroIdsToCollapse)
-        setMacroCollapsed(macroId, true);
+    // DETERMINISTIC RULE (see the header doc comment): if any touched macro is expanded, collapse
+    // them ALL; otherwise every touched macro is already collapsed, so expand them all.
+    const bool targetCollapsed = anyExpanded;
+
+    // ONE undo entry for the whole gesture, not one per macro. Calling setMacroCollapsed in this
+    // loop would record a separate recordGraphAndMacroChange per touched macro, so a single
+    // Cmd+Alt+G over a selection spanning three macros would need three Cmd+Z to undo — the
+    // undo history should mirror the gesture the user made, not the macros it happened to reach.
+    // Hence applyMacroCollapsed (the raw mutation) inside one recorded change.
+    auto& graph = audioEngine.getGraph();
+    auto doToggleAll = [this, touchedMacroIds, targetCollapsed] {
+        for (const auto& macroId : touchedMacroIds)
+            applyMacroCollapsed(macroId, targetCollapsed);
+    };
+
+    if (undoManager)
+        undoManager->recordGraphAndMacroChange(graph, macros, doToggleAll);
+    else
+        doToggleAll();
+
+    repaint();
+}
+
+void GraphEditor::groupOrToggleSelectionMacros() {
+    // Cmd+G's single entry point (P8-14). "Group" is a strong cross-application convention
+    // (Figma, Illustrator, Sketch, most DAWs), so the key is honoured exactly when it applies —
+    // a selection that is not yet grouped. Once the selection IS in a macro, grouping stops being
+    // a meaningful verb for it (the flat model refuses nested macros anyway — see
+    // groupSelectionIntoMacro's refusal above), so the key is free to mean the thing the user
+    // actually reaches for at that point: toggling the touched macro(s) collapsed/expanded,
+    // exactly like the explicit Cmd+Alt+G binding (toggleSelectionMacrosCollapsed) which is kept
+    // as its own binding on purpose — it's unambiguous when the user wants to be certain, and
+    // removing it would break anyone's saved keybinding.
+    //
+    // Mixed selection (some selected nodes already in a macro, some loose): toggle wins outright.
+    // The touched macros are toggled and the loose modules are silently left out of any grouping
+    // — NOT grouped in with them, and NOT refused — because grouping would either violate the
+    // flat, no-nested-macros model or silently drop the loose modules from the gesture, and a
+    // flat refusal here would read as broken for a shortcut that usually just works. A status
+    // message says what happened instead.
+    auto ids = selection.getSelected();
+    std::set<juce::String> touchedMacroIds;
+    int looseCount = 0;
+    for (auto id : ids) {
+        const juce::String uuid = nodeUuidFor(id);
+        const auto* m = uuid.isEmpty() ? nullptr : macros.findByMember(uuid);
+        if (m != nullptr)
+            touchedMacroIds.insert(m->id);
+        else
+            ++looseCount;
+    }
+
+    if (touchedMacroIds.empty()) {
+        // Nothing selected touches a macro — Cmd+G means exactly what it always meant: group.
+        // groupSelectionIntoMacro() carries its own refusal/status behaviour (fewer than two
+        // modules) unchanged.
+        groupSelectionIntoMacro();
+        return;
+    }
+
+    toggleSelectionMacrosCollapsed();
+
+    if (looseCount > 0 && onStatusMessage) {
+        const juce::String macroWord = touchedMacroIds.size() == 1 ? "macro" : "macros";
+        const juce::String moduleWord = looseCount == 1 ? "module" : "modules";
+        const juce::String verb = looseCount == 1 ? "was" : "were";
+        onStatusMessage("Toggled " + juce::String((int)touchedMacroIds.size()) + " " + macroWord + "; " + moduleWord +
+                        " outside a macro " + verb + " left alone.");
+    }
 }
 
 const synth::Macro* GraphEditor::macroForNode(juce::AudioProcessorGraph::NodeID nodeId) const {
@@ -3396,9 +3683,8 @@ bool GraphEditor::isMacroSelected(const juce::String& macroId) const {
     return true;
 }
 
-void GraphEditor::setMacroCollapsed(const juce::String& macroId, bool collapsed) {
-    auto& graph = audioEngine.getGraph();
-    auto doToggle = [this, macroId, collapsed] {
+void GraphEditor::applyMacroCollapsed(const juce::String& macroId, bool collapsed) {
+    {
         auto* m = macros.find(macroId);
         if (m == nullptr || m->collapsed == collapsed)
             return;
@@ -3423,7 +3709,12 @@ void GraphEditor::setMacroCollapsed(const juce::String& macroId, bool collapsed)
         }
         m->collapsed = collapsed;
         updateComponents();
-    };
+    }
+}
+
+void GraphEditor::setMacroCollapsed(const juce::String& macroId, bool collapsed) {
+    auto& graph = audioEngine.getGraph();
+    auto doToggle = [this, macroId, collapsed] { applyMacroCollapsed(macroId, collapsed); };
 
     if (undoManager)
         undoManager->recordGraphAndMacroChange(graph, macros, doToggle);
@@ -3465,6 +3756,223 @@ void GraphEditor::setMacroColour(const juce::String& macroId, juce::Colour colou
     repaint();
 }
 
+void GraphEditor::promptRenameMacro(const juce::String& macroId) {
+    const auto* macro = macros.find(macroId);
+    if (macro == nullptr)
+        return;
+
+    auto* window = new juce::AlertWindow("Rename Macro", "New name:", juce::AlertWindow::NoIcon);
+    window->addTextEditor("name", macro->name, "Macro name:");
+    window->addButton("Rename", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    // SafePointer + a unique_ptr taken inside the callback — MainComponent::promptSaveSnippet's
+    // AlertWindow idiom exactly (see its comment for why the dialog must outlive this call, and
+    // why the AlertWindow is owned inside the callback rather than by a member).
+    juce::Component::SafePointer<GraphEditor> safeThis(this);
+    window->enterModalState(true, juce::ModalCallbackFunction::create([safeThis, window, macroId](int result) {
+                                std::unique_ptr<juce::AlertWindow> owned(window);
+                                if (result != 1)
+                                    return;
+
+                                auto* self = safeThis.getComponent();
+                                if (self == nullptr)
+                                    return;
+
+                                const auto typed = owned->getTextEditorContents("name").trim();
+                                if (typed.isEmpty())
+                                    return; // empty/whitespace-only input cancels without renaming
+
+                                self->renameMacro(macroId, typed);
+                            }),
+                            false);
+}
+
+std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::buildMacroColourPicker(const juce::String& macroId) {
+    const auto* macro = macros.find(macroId);
+    if (macro == nullptr)
+        return nullptr;
+
+    // The colour a no-net-change close restores, and what a "keep the final pick" undo step
+    // restores TO — the exact shape TimelineRulerComponent::buildMarkerColourPicker uses.
+    const juce::Colour originalColour = macro->colour;
+    juce::Component::SafePointer<GraphEditor> safeThis(this);
+
+    return std::make_unique<synth::ui::ColourPickerPopup>(
+        originalColour, propertiesFile_,
+        [safeThis, macroId](juce::Colour c) {
+            // Live preview: writes the macro directly, no undo — every drag repaints live. Goes
+            // straight at the macro rather than through setMacroColour, which records an undo
+            // step per call.
+            auto* self = safeThis.getComponent();
+            if (self == nullptr)
+                return;
+            if (auto* m = self->macros.find(macroId))
+                m->colour = c;
+            self->syncMacroCards();
+            self->repaint();
+        },
+        [safeThis, macroId, originalColour](juce::Colour finalColour) {
+            auto* self = safeThis.getComponent();
+            if (self == nullptr)
+                return; // the editor (or its window) is gone — nothing left to restore or undo
+            auto* m = self->macros.find(macroId);
+            if (m == nullptr)
+                return; // the macro was deleted while the popup was open
+            if (finalColour.getARGB() == originalColour.getARGB()) {
+                // No net change: put back exactly what was there (a preview may have nudged it)
+                // and record no undo step.
+                m->colour = originalColour;
+                self->syncMacroCards();
+                self->repaint();
+                return;
+            }
+            // ONE undo step whose undo restores the ORIGINAL colour: silently put the original
+            // back first (outside the recorded mutation, so it does not itself become undoable),
+            // then perform the real edit as the one recorded step.
+            m->colour = originalColour;
+            self->setMacroColour(macroId, finalColour);
+        });
+}
+
+void GraphEditor::promptRecolourMacro(const juce::String& macroId, juce::Rectangle<int> screenArea) {
+    auto popup = buildMacroColourPicker(macroId);
+    if (popup == nullptr)
+        return;
+    juce::CallOutBox::launchAsynchronously(std::move(popup), screenArea, nullptr);
+}
+
+std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::createMacroColourPickerForTest(const juce::String& macroId) {
+    return buildMacroColourPicker(macroId);
+}
+
+juce::PopupMenu GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> renameAction) {
+    const auto* macro = macros.find(macroId);
+    if (macro == nullptr)
+        return {};
+
+    const bool collapsed = macro->collapsed;
+    juce::Component::SafePointer<GraphEditor> safeThis(this);
+
+    juce::PopupMenu m;
+    m.addItem(collapsed ? "Expand" : "Collapse", [safeThis, macroId, collapsed] {
+        if (safeThis != nullptr)
+            safeThis->setMacroCollapsed(macroId, !collapsed);
+    });
+
+    // The collapsed card passes its own inline-TextEditor opener here; everywhere else (the
+    // expanded hull's right-click menu) there is no card to host that editor, so it falls back to
+    // the AlertWindow dialog.
+    if (renameAction)
+        m.addItem("Rename...", std::move(renameAction));
+    else
+        m.addItem("Rename...", [safeThis, macroId] {
+            if (safeThis != nullptr)
+                safeThis->promptRenameMacro(macroId);
+        });
+
+    // Anchor re-derived NOW, inside the click handler, rather than captured at menu-build time —
+    // the macro could collapse/expand or the card/chip could move between the right-click and the
+    // menu choice (same reasoning as TimelineRulerComponent::openMarkerContextMenu's own comment).
+    m.addItem("Change Colour...", [safeThis, macroId] {
+        auto* self = safeThis.getComponent();
+        if (self == nullptr)
+            return;
+        const auto* liveMacro = self->macros.find(macroId);
+        if (liveMacro == nullptr)
+            return;
+
+        juce::Rectangle<int> anchor;
+        if (liveMacro->collapsed) {
+            if (auto* card = self->getMacroCardForTest(macroId))
+                anchor = card->getScreenBounds();
+        } else {
+            anchor = self->content.localAreaToGlobal(self->macroChipBounds(macroId));
+        }
+        if (anchor.isEmpty())
+            anchor = self->getScreenBounds(); // fallback: nothing resolved, anchor on the editor
+
+        self->promptRecolourMacro(macroId, anchor);
+    });
+    m.addSeparator();
+    m.addItem("Save as Snippet...", [safeThis] {
+        if (safeThis != nullptr && safeThis->onSaveSnippetRequested)
+            safeThis->onSaveSnippetRequested();
+    });
+    m.addItem("Ungroup", [safeThis] {
+        if (safeThis != nullptr)
+            safeThis->ungroupSelection();
+    });
+    m.addSeparator();
+    m.addItem("Delete Macro && Modules", [safeThis, macroId] {
+        if (safeThis != nullptr)
+            safeThis->deleteMacroAndMembers(macroId);
+    });
+
+    return m;
+}
+
+std::vector<GraphEditor::MacroMemberPreview> GraphEditor::macroMemberPreviews(const juce::String& macroId) const {
+    std::vector<MacroMemberPreview> result;
+    const auto* macro = macros.find(macroId);
+    if (macro == nullptr)
+        return result;
+
+    auto& graph = audioEngine.getGraph();
+    for (const auto& uuid : macro->members) {
+        auto nodeId = resolveMemberNodeId(uuid);
+        if (nodeId.uid == 0)
+            continue;
+
+        ModuleComponent* comp = nullptr;
+        for (auto* c : const_cast<GraphContentComponent&>(content).getModules()) {
+            if (c != nullptr && c->getNodeId() == nodeId) {
+                comp = c;
+                break;
+            }
+        }
+        if (comp == nullptr)
+            continue;
+
+        MacroMemberPreview preview;
+        preview.bounds = comp->getBounds();
+        preview.category = categoryForNode(graph.getNodeForId(nodeId));
+        result.push_back(preview);
+    }
+    return result;
+}
+
+juce::StringArray GraphEditor::macroMemberNames(const juce::String& macroId) const {
+    juce::StringArray names;
+    const auto* macro = macros.find(macroId);
+    if (macro == nullptr)
+        return names;
+
+    auto& graph = audioEngine.getGraph();
+    for (const auto& uuid : macro->members) {
+        auto nodeId = resolveMemberNodeId(uuid);
+        if (nodeId.uid == 0)
+            continue;
+        auto* node = graph.getNodeForId(nodeId);
+        names.add(getModuleTitle(nodeId, node != nullptr ? node->getProcessor() : nullptr));
+    }
+    return names;
+}
+
+juce::Colour GraphEditor::categoryPreviewColour(synth::ui::ModuleCategory category) const {
+    // Force the BySourceCategory branch of resolveCableBaseColour regardless of the user's actual
+    // cableColourMode: the task asks for the preview to echo the module's CATEGORY specifically,
+    // and this is also the one call that folds in a user's Appearance Settings category colour
+    // override (cableColourOverrides) -- without it, a customised category palette would make the
+    // collapsed-card preview lie about what expanding the macro shows. CableSignal::Audio is inert
+    // here; the BySourceCategory branch never reads it.
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    static const synth::theme::Colors fallbackColors{};
+    const auto& colors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
+    return synth::ui::resolveCableBaseColour(synth::ui::CableColourMode::BySourceCategory,
+                                             synth::ui::CableSignal::Audio, category, colors, cableColourOverrides);
+}
+
 void GraphEditor::deleteMacroAndMembers(const juce::String& macroId) {
     auto* m = macros.find(macroId);
     if (m == nullptr)
@@ -3490,7 +3998,17 @@ void GraphEditor::beginMacroCardDrag(const juce::String& macroId) {
     beginSelectionDrag();
 }
 
-void GraphEditor::dragMacroCardBy(const juce::String&, juce::Point<int> delta) { dragSelectionBy(delta, nullptr); }
+void GraphEditor::dragMacroCardBy(const juce::String&, juce::Point<int> delta) {
+    dragSelectionBy(delta, nullptr);
+    // Matches ModuleComponent::mouseDrag's own per-frame repaint call exactly (one repaint per
+    // drag tick), but goes through repaintCanvas() rather than a bare Component::repaint(): once
+    // rebuildVisibleCables() anchors a collapsed macro's boundary cables on the LIVE
+    // MacroCardComponent bounds (macroCableAnchorBounds), a bare repaint() would just re-paint
+    // whatever cable geometry is already cached rather than recomputing it against the card's new
+    // position. MacroCardComponent::mouseDrag deliberately does NOT also call
+    // getParentComponent()->repaint() — this is the one repaint call for the gesture.
+    repaintCanvas();
+}
 
 void GraphEditor::finalizeMacroCardDrag(const juce::String& macroId, juce::Point<int> newCardTopLeft) {
     auto& graph = audioEngine.getGraph();
@@ -3686,6 +4204,8 @@ void GraphEditor::showCanvasContextMenu(juce::Point<int> canvasPos) {
 
     const int selectionCount = getSelectionCount();
     if (selectionCount > 1) {
+        // Calls groupSelectionIntoMacro() directly, not the Cmd+G dispatch — see the matching
+        // comment in ModuleComponent.cpp's right-click menu for why.
         m.addItem("Create Macro from " + juce::String(selectionCount) + " Modules", [safeThis] {
             if (safeThis != nullptr)
                 safeThis->groupSelectionIntoMacro();
@@ -3715,6 +4235,23 @@ bool GraphEditor::keyPressed(const juce::KeyPress& key) {
 
 void GraphEditor::mouseDoubleClick(const juce::MouseEvent& e) {
     auto localPos = content.getLocalPoint(this, e.getPosition());
+
+    // Double-clicking an expanded macro's name chip renames it - mirrors the collapsed card's own
+    // double-click-to-rename affordance.
+    if (auto macroId = macroChipAt(localPos.roundToInt()); macroId.isNotEmpty()) {
+        // JUCE delivers mouseDown before mouseDoubleClick, so the second click already armed a
+        // chip drag (see mouseDown). The modal rename AlertWindow below can swallow the mouseUp
+        // that would otherwise clear it, leaving macroChipDragId stuck non-empty and the next drag
+        // anywhere on empty canvas moving this macro instead of panning - drop it unconditionally
+        // rather than depending on that mouseUp ever arriving.
+        if (macroChipDragId.isNotEmpty()) {
+            cancelSelectionDrag();
+            macroChipDragId.clear();
+        }
+        promptRenameMacro(macroId);
+        return;
+    }
+
     auto attenId = getAttenuverterNodeAt(localPos.toFloat());
     if (attenId.uid != 0) {
         if (undoManager) {

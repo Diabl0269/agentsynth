@@ -2661,18 +2661,24 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
                     owner.onSaveSnippetRequested();
             });
             if (selectionCount > 1) {
+                // Deliberately calls groupSelectionIntoMacro() directly, NOT the Cmd+G dispatch
+                // (GraphEditor::groupOrToggleSelectionMacros) — a menu item names one verb
+                // ("Create Macro") and must keep doing exactly what it says, even for a selection
+                // that already touches a macro (where it still refuses, same as always).
                 m.addItem("Create Macro from " + juce::String(selectionCount) + " Modules",
                           [this] { owner.groupSelectionIntoMacro(); });
                 m.addItem("Delete " + juce::String(selectionCount) + " Selected Modules",
                           [this] { owner.deleteSelection(); });
             }
 
-            // An expanded macro's card (the usual way to re-collapse it) doesn't exist while
-            // expanded, so this is the only reachable UI for the trip back until something else
-            // is clicked to select a member.
+            // Cmd+Alt+G's toggle, reachable from a member module's own menu too: an expanded
+            // macro's card (the collapsed card's own menu) doesn't exist while expanded, so this
+            // is the only always-reachable UI for the round trip. Shown for either state now —
+            // toggleSelectionMacrosCollapsed() picks the right direction from the touched
+            // macro's own current state, matching the label offered here.
             if (const auto* macro = owner.macroForNode(nodeId))
-                if (!macro->collapsed)
-                    m.addItem("Collapse Macro", [this] { owner.collapseSelectionMacros(); });
+                m.addItem(macro->collapsed ? "Expand Macro" : "Collapse Macro",
+                          [this] { owner.toggleSelectionMacrosCollapsed(); });
 
             m.addSeparator();
 

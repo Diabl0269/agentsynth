@@ -1,19 +1,6 @@
 #include "MacroCardComponent.h"
 #include "GraphEditor.h"
 
-namespace {
-// A small fixed palette rather than a full colour picker — P8-12 is visual/organisational
-// scope, and a macro's colour only needs to be distinguishable at a glance, not infinitely
-// tunable. Matches the swatch-row idiom used elsewhere in this app's settings UI.
-const std::vector<juce::Colour>& macroColourPalette() {
-    static const std::vector<juce::Colour> palette{
-        juce::Colour(0xff5a7dff), juce::Colour(0xffff6b6b), juce::Colour(0xff51cf66), juce::Colour(0xffffa94d),
-        juce::Colour(0xffcc5de8), juce::Colour(0xff22b8cf), juce::Colour(0xfffcc419), juce::Colour(0xff868e96),
-    };
-    return palette;
-}
-} // namespace
-
 MacroCardComponent::MacroCardComponent(GraphEditor& owner, juce::String macroId)
     : owner(owner)
     , macroId(std::move(macroId)) {
@@ -39,16 +26,52 @@ void MacroCardComponent::paint(juce::Graphics& g) {
         return; // editor covers the name; member-count line still reads fine underneath
 
     auto textArea = getLocalBounds().reduced(10, 6);
-    auto titleRow = textArea.removeFromTop(20);
-    titleRow.removeFromRight(28); // leave room for the expand chevron
+    textArea.removeFromTop(20); // the title row itself is drawn via getTitleRowBounds() below
+    const auto titleRow = getTitleRowBounds();
     g.setColour(juce::Colours::white);
     g.setFont(juce::Font(juce::FontOptions(15.0f, juce::Font::bold)));
     g.drawText(macro->name.isNotEmpty() ? macro->name : "Macro", titleRow, juce::Justification::centredLeft);
 
+    auto countRow = textArea.removeFromBottom(14);
     g.setFont(juce::Font(juce::FontOptions(11.0f)));
     g.setColour(juce::Colours::white.withAlpha(0.75f));
     const int n = (int)macro->members.size();
-    g.drawText(juce::String(n) + (n == 1 ? " module" : " modules"), textArea, juce::Justification::bottomLeft);
+    g.drawText(juce::String(n) + (n == 1 ? " module" : " modules"), countRow, juce::Justification::bottomLeft);
+
+    // ---- Content preview (Fix 6/P8-12 follow-up) ----
+    // A collapsed macro used to be an opaque box with nothing but a name and a count. Draw a
+    // small "minimap" of the member module boxes — their LIVE canvas bounds (still tracking, even
+    // hidden — see syncMacroCards), scaled to fit the strip left between the title and the count
+    // line, one filled rect per member coloured by module CATEGORY so it echoes what expanding
+    // the macro would show. Deliberately drawn INSIDE the existing kMacroCardHeight footprint:
+    // Macro::bounds is persisted, so growing the card would give already-saved macros a second
+    // size on the same canvas.
+    const auto previewArea = textArea.reduced(0, 2);
+    if (!previewArea.isEmpty()) {
+        const auto members = owner.macroMemberPreviews(macroId);
+        juce::Rectangle<int> unionBounds;
+        for (const auto& member : members)
+            unionBounds = unionBounds.isEmpty() ? member.bounds : unionBounds.getUnion(member.bounds);
+
+        if (!unionBounds.isEmpty()) {
+            const float scale = juce::jmin(previewArea.getWidth() / (float)unionBounds.getWidth(),
+                                           previewArea.getHeight() / (float)unionBounds.getHeight());
+            const float scaledW = unionBounds.getWidth() * scale;
+            const float scaledH = unionBounds.getHeight() * scale;
+            const float offsetX = previewArea.getX() + (previewArea.getWidth() - scaledW) * 0.5f;
+            const float offsetY = previewArea.getY() + (previewArea.getHeight() - scaledH) * 0.5f;
+
+            for (const auto& member : members) {
+                juce::Rectangle<float> box((member.bounds.getX() - unionBounds.getX()) * scale + offsetX,
+                                           (member.bounds.getY() - unionBounds.getY()) * scale + offsetY,
+                                           juce::jmax(2.0f, member.bounds.getWidth() * scale),
+                                           juce::jmax(2.0f, member.bounds.getHeight() * scale));
+                g.setColour(owner.categoryPreviewColour(member.category).withAlpha(0.85f));
+                g.fillRoundedRectangle(box, 1.5f);
+            }
+        }
+    }
+    // ---- End content preview ----
 
     // Expand chevron — a filled triangle rather than a text glyph, so there's no non-ASCII
     // string literal to trip check-nonascii-literals.test.sh and no themed icon asset to add for
@@ -65,6 +88,13 @@ juce::Rectangle<float> MacroCardComponent::getExpandButtonBounds() const {
     constexpr float kSize = 20.0f;
     constexpr float kMargin = 8.0f;
     return juce::Rectangle<float>(getWidth() - kMargin - kSize, kMargin, kSize, kSize);
+}
+
+juce::Rectangle<int> MacroCardComponent::getTitleRowBounds() const {
+    auto textArea = getLocalBounds().reduced(10, 6);
+    auto titleRow = textArea.removeFromTop(20);
+    titleRow.removeFromRight(28); // leave room for the expand chevron - keep it out of the rename hit zone
+    return titleRow;
 }
 
 void MacroCardComponent::mouseDown(const juce::MouseEvent& e) {
@@ -101,9 +131,10 @@ void MacroCardComponent::mouseDrag(const juce::MouseEvent& e) {
     if (!bodyDragActive)
         return;
     dragger.dragComponent(this, e, nullptr);
+    // dragMacroCardBy is the one repaint call for this gesture (via GraphEditor::repaintCanvas,
+    // which also invalidates the cable cache so boundary cables track this card mid-drag — see
+    // its own comment for why a bare getParentComponent()->repaint() here would leave them stale).
     owner.dragMacroCardBy(macroId, getPosition() - dragStartPosition);
-    if (auto* p = getParentComponent())
-        p->repaint();
 }
 
 void MacroCardComponent::mouseUp(const juce::MouseEvent&) {
@@ -117,7 +148,27 @@ void MacroCardComponent::mouseUp(const juce::MouseEvent&) {
         owner.cancelMacroCardDrag(macroId);
 }
 
-void MacroCardComponent::mouseDoubleClick(const juce::MouseEvent&) { owner.setMacroCollapsed(macroId, false); }
+void MacroCardComponent::mouseDoubleClick(const juce::MouseEvent& e) {
+    // Double-click on the title row renames in place — the same affordance ModuleComponent gives
+    // its own title. Anywhere else on the card still expands, as before.
+    if (getTitleRowBounds().contains(e.getPosition())) {
+        // mouseDown already armed a card drag (dragStartPosition/bodyDragActive/dragger.
+        // startDraggingComponent/owner.beginMacroCardDrag) before this second press resolves.
+        // Opening the inline editor here — rather than expanding, which used to make the whole
+        // card (and its stuck drag state) go away — leaves this card alive, so the armed drag
+        // must be cancelled explicitly or the next drag anywhere moves this macro instead of
+        // whatever was actually grabbed. Mirrors the equivalent fix on the hull-chip path
+        // (GraphEditor::mouseDoubleClick's macroChipDragId handling).
+        if (bodyDragActive) {
+            owner.cancelMacroCardDrag(macroId);
+            bodyDragActive = false;
+        }
+        beginRename();
+        return;
+    }
+
+    owner.setMacroCollapsed(macroId, false);
+}
 
 void MacroCardComponent::beginRename() {
     finishRename(false);
@@ -154,56 +205,31 @@ void MacroCardComponent::finishRename(bool commit) {
     repaint();
 }
 
-juce::PopupMenu MacroCardComponent::buildColourSubMenu() {
-    // A small named swatch list rather than a full juce::ColourSelector — P8-12 is
-    // visual/organisational scope, and a macro's colour only needs to be distinguishable at a
-    // glance. juce::PopupMenu items don't support arbitrary icons without a custom LookAndFeel
-    // hook, so the swatches are named rather than drawn.
-    juce::PopupMenu colourMenu;
-    static const char* names[] = {"Blue", "Red", "Green", "Orange", "Purple", "Cyan", "Yellow", "Grey"};
-    const auto& palette = macroColourPalette();
+void MacroCardComponent::showContextMenu() {
+    // owner.buildMacroMenu is the ONE shared builder — this card's own right-click menu and the
+    // expanded-macro hull's right-click menu (GraphEditor::mouseDown) both go through it, so they
+    // cannot drift apart (Fix 4/P8-12 follow-up). This card is the one caller that overrides the
+    // default "Rename..." handler: it has a real MacroCardComponent to host the nicer inline
+    // TextEditor rename, which nothing else building this menu has.
     juce::Component::SafePointer<MacroCardComponent> safeThis(this);
-    for (size_t idx = 0; idx < palette.size() && idx < 8; ++idx) {
-        auto colour = palette[idx];
-        colourMenu.addItem(names[idx], [safeThis, colour] {
-            if (safeThis != nullptr)
-                safeThis->owner.setMacroColour(safeThis->macroId, colour);
-        });
-    }
-    return colourMenu;
+    owner
+        .buildMacroMenu(macroId,
+                        [safeThis] {
+                            if (safeThis != nullptr)
+                                safeThis->beginRename();
+                        })
+        .showMenuAsync(juce::PopupMenu::Options());
 }
 
-void MacroCardComponent::showContextMenu() {
-    juce::Component::SafePointer<MacroCardComponent> safeThis(this);
-    const auto* macro = owner.getMacros().find(macroId);
-    if (macro == nullptr)
-        return;
+juce::String MacroCardComponent::getTooltip() {
+    const auto names = owner.macroMemberNames(macroId);
+    constexpr int kMaxNamesShown = 10;
 
-    juce::PopupMenu m;
-    m.addItem(macro->collapsed ? "Expand" : "Collapse", [safeThis] {
-        if (safeThis != nullptr)
-            safeThis->owner.setMacroCollapsed(safeThis->macroId,
-                                              !safeThis->owner.getMacros().find(safeThis->macroId)->collapsed);
-    });
-    m.addItem("Rename...", [safeThis] {
-        if (safeThis != nullptr)
-            safeThis->beginRename();
-    });
-    m.addSubMenu("Change Colour", buildColourSubMenu());
-    m.addSeparator();
-    m.addItem("Save as Snippet...", [safeThis] {
-        if (safeThis != nullptr && safeThis->owner.onSaveSnippetRequested)
-            safeThis->owner.onSaveSnippetRequested();
-    });
-    m.addItem("Ungroup", [safeThis] {
-        if (safeThis != nullptr)
-            safeThis->owner.ungroupSelection();
-    });
-    m.addSeparator();
-    m.addItem("Delete Macro && Modules", [safeThis] {
-        if (safeThis != nullptr)
-            safeThis->owner.deleteMacroAndMembers(safeThis->macroId);
-    });
+    juce::StringArray shown;
+    for (int i = 0; i < names.size() && i < kMaxNamesShown; ++i)
+        shown.add(names[i]);
+    if (names.size() > kMaxNamesShown)
+        shown.add("+" + juce::String(names.size() - kMaxNamesShown) + " more");
 
-    m.showMenuAsync(juce::PopupMenu::Options());
+    return shown.joinIntoString("\n");
 }

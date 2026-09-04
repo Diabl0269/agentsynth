@@ -232,15 +232,30 @@ is meaningless once serialised.
 The model is deliberately **flat**: a node already in a macro cannot be grouped into a second one,
 and a macro cannot contain another macro. This is a scope decision, not a missing feature — giving
 a Macro its own ports (so it could itself be wired and nested like a sub-patch) is the separate,
-later P8-15. `GraphEditor::groupSelectionIntoMacro()` (Cmd+G) enforces both halves of the contract
-by refusing outright, via `onStatusMessage`, rather than doing something ad hoc: fewer than two
-selected nodes, or any selected node already belonging to a macro. `ungroupSelection()`
+later P8-15. `GraphEditor::groupSelectionIntoMacro()` enforces both halves of the contract by
+refusing outright, via `onStatusMessage`, rather than doing something ad hoc: fewer than two
+selected nodes, or any selected node already belonging to a macro. It is called directly by the
+right-click "Create Macro from N Modules" menu item (`ModuleComponent`'s menu and
+`GraphEditor::showCanvasContextMenu`), which always means exactly that verb. `ungroupSelection()`
 (Cmd+Shift+G) dissolves every macro touched by the current selection, leaving the member modules
 exactly where they are and expanding them back to individual cards; it is a no-op (also surfaced
 via `onStatusMessage`) if the selection touches no macro. Deleting a macro is the opposite of
 ungrouping it: `deleteMacroAndMembers()` removes the macro **and** every one of its member nodes,
 as one step — the right-click "Delete" on a collapsed card, or Delete/Backspace with a macro's
 members as the whole selection.
+
+**Cmd+G itself (P8-14) does not call `groupSelectionIntoMacro()` directly** — it goes through
+`GraphEditor::groupOrToggleSelectionMacros()`, the single dispatch point shared by the command
+handler: group the selection into a new macro only when it touches no macro at all; otherwise
+toggle the touched macro(s) collapsed/expanded (`toggleSelectionMacrosCollapsed()`, the same
+behaviour as the standalone Cmd+Alt+G binding) and leave any loose, ungrouped modules in the
+selection untouched. A mixed selection — some selected nodes already in a macro, some not — takes
+the toggle branch: the touched macros toggle, the loose modules are silently excluded from the
+gesture (not folded into the macro, not refused), and a status message names how many macros
+toggled and that modules outside a macro were left alone. This is why the nested-macro refusal
+above is now only reachable via a direct `groupSelectionIntoMacro()` call (the context-menu items,
+or Cmd+G on a selection with no macro members yet) — Cmd+G on a selection that already touches a
+macro never reaches it.
 
 **Collapse/expand hides members, it doesn't destroy them.** Collapsing a macro
 (`setMacroCollapsed`) sets each member `ModuleComponent` invisible and shows one
@@ -258,12 +273,118 @@ itself (`MacroCardComponent`'s own `ComponentDragger`) reuses that same group-dr
 thin wrapper that resolves the members' rigid-body snap (§1.4) and the card's own position as one
 undo step, rather than a second drag implementation living beside it.
 
+**Collapse/expand is a toggle, not a collapse-only command.** Cmd+Alt+G
+(`GraphEditor::toggleSelectionMacrosCollapsed`) gathers every macro that owns at least one
+currently-selected node: if any of them is expanded, it collapses them ALL; otherwise (every
+touched macro is already collapsed) it expands them all. A selection that touches no macro at all
+is refused via `onStatusMessage`, same as `ungroupSelection`. The action id/keybinding
+(`"collapseMacro"`, Cmd+Alt+G) is unchanged from when this shipped as a collapse-only command — one
+command can cover both directions because the label is a single static string, "Collapse / Expand
+Macro", that reads right regardless of which way the toggle is about to go. A member module's own
+right-click menu offers the same toggle as a single item, labelled "Collapse Macro" or "Expand
+Macro" to match the macro's current state.
+
+**An expanded macro's hull is clickable, not just decorative.** `GraphEditor::macroHullBounds`
+computes the same rectangle (the union of live member bounds, expanded by a fixed margin) that
+`GraphContentComponent::paint` draws the dashed outline + name chip around — ONE definition, so
+paint and hit-testing can't drift. `macroHullAt(canvasPos)` returns the (smallest, on overlap)
+expanded macro whose hull contains a point. A left click that lands in the hull's empty space
+(never on a member module's own card, which JUCE routes to that `ModuleComponent` directly)
+selects the whole macro instead of clearing the selection — hooked into the existing
+`pendingEmptyCanvasClick` deferral in `mouseUp` so panning is unaffected. A right click there opens
+`buildMacroMenu` — the SAME menu builder the collapsed card's own right-click uses (see below) —
+after an explicit `selectMacro(id, false)`, since `mouseUp` deliberately preserves whatever was
+selected on a right-click and the menu's Ungroup/Save-as-Snippet items act on the *current
+selection*.
+
+**The name chip is the expanded hull's drag handle (P8-14).** `GraphEditor::macroChipBounds`
+computes the chip rectangle the same way `macroHullBounds` computes the hull — the ONE definition
+`GraphContentComponent::paint` draws from and `macroChipAt(canvasPos)` hit-tests against, both using
+the same locally-constructed 11pt bold font so the drawn chip and the hit rect never diverge.
+Pressing the chip (`mouseDown`, checked before the attenuverter/marquee/empty-canvas-click logic)
+selects the macro and starts a group drag through the same `beginSelectionDrag`/`dragSelectionBy`/
+`finalizeSelectionDrag` primitives a multi-select body-drag uses, so the whole macro moves as one
+rigid body and resolves through the same snap/de-overlap pass on release. The per-frame delta is
+computed in CANVAS space (`content.getLocalPoint`), not `GraphEditor`-local space, because the
+canvas carries a zoom transform — a raw screen-pixel delta would make the macro drift at any zoom
+other than 1.0. A press that never moves cancels the drag (`cancelSelectionDrag`) and pushes no undo
+entry, leaving the macro selected; an actual drag is one undo step. Hovering the chip shows
+`DraggingHandCursor` (tracked via a small `hoveringMacroChip` bool so leaving the chip resets the
+cursor rather than sticking), and the chip paints three short grip lines at its left edge so it
+reads as a handle rather than a plain label. Double-clicking the chip calls
+`GraphEditor::promptRenameMacro` directly — the same dialog affordance the hull's right-click menu
+uses — mirroring the collapsed card's own double-click-to-rename. The chip is a small, specific
+target sitting over empty canvas at the hull's top-left, which is exactly why it can be a drag
+handle without stealing the pan gesture: a press anywhere else in the hull's empty space (between or
+around member cards) still falls through to the ordinary pan/empty-canvas-click path described
+above.
+
+**One shared macro menu, not two that can drift.** `GraphEditor::buildMacroMenu(macroId,
+renameAction)` is the single builder behind the collapsed card's right-click menu and the expanded
+hull's right-click menu: Expand/Collapse, Rename, Change Colour, Save as Snippet, Ungroup, Delete
+Macro & Modules. Rename is the one item that varies by caller — the collapsed card passes its own
+inline-`TextEditor` opener (`MacroCardComponent::beginRename`); every other caller falls back to
+`GraphEditor::promptRenameMacro`'s `juce::AlertWindow` dialog (the same `SafePointer` +
+`ModalCallbackFunction` + callback-owned-`unique_ptr` idiom as `MainComponent::promptSaveSnippet`),
+since there is no card to host an inline editor at a hull click. Empty/whitespace-only dialog input
+cancels without renaming.
+
+**"Change Colour..." opens the same shared picker as everywhere else (P8-14).** The menu item calls
+`GraphEditor::promptRecolourMacro(macroId, screenArea)`, which launches `synth::ui::ColourPickerPopup`
+— the same `juce::ColourSelector` + favourites-shelf popup the timeline ruler's marker menu and the
+track header swatch use — rather than a hardcoded swatch list. The anchor rect is re-derived inside
+the menu item's click handler (not captured at menu-build time, since the macro could
+collapse/expand or its card/chip could move in between): the collapsed card's screen bounds, or the
+expanded hull's chip bounds converted to screen space via `content.localAreaToGlobal`. Preview and
+commit follow `TimelineRulerComponent::buildMarkerColourPicker`'s exact split:
+`onPreview` writes `synth::Macro::colour` directly (no undo, so a drag repaints live without
+flooding the undo stack); `onCommit` either restores the captured original colour with no undo entry
+(a no-net-change close) or restores the original first and then re-applies the final colour through
+`setMacroColour` as the one recorded step, so the single undo restores the ORIGINAL colour rather
+than the last preview value. Favourites persist via `GraphEditor::setPropertiesFile`, wired from
+`MainComponent` to the same `juce::PropertiesFile` the ruler's marker picker uses — a `nullptr`
+default keeps favourites in-memory-only, which is what a headless test gets.
+
+**Double-clicking the collapsed card renames or expands, depending on where (P8-14).** A
+double-click on the title row calls `MacroCardComponent::beginRename()` directly — the same inline
+`TextEditor` affordance `ModuleComponent` gives its own title — rather than expanding; a
+double-click anywhere else on the card still expands, as before. `getTitleRowBounds()` is the ONE
+rectangle both `paint()` (what's drawn) and `mouseDoubleClick()` (what's clickable) use, so the two
+can never drift apart — it excludes the top-right expand-chevron's hit zone. Because `mouseDown`
+already arms a card body-drag (`dragStartPosition`/`bodyDragActive`/`dragger.startDraggingComponent`/
+`GraphEditor::beginMacroCardDrag`) before a double-click's second press resolves, opening the rename
+editor first cancels that armed drag (`GraphEditor::cancelMacroCardDrag` + clearing
+`bodyDragActive`) — otherwise the drag stays armed on this now-live card and the next gesture
+anywhere moves the macro instead of whatever was actually grabbed. The expanded hull's chip keeps
+using the modal `promptRenameMacro` dialog (see above) — there is no card there to host an inline
+editor.
+
+**A collapsed card previews its contents.** Below the title/member-count text, the card draws one
+small filled rounded rect per member — the live union of member `ModuleComponent` bounds scaled to
+fit inside the existing 90px card height (`kMacroCardHeight` never changes; `Macro::bounds` is
+persisted, so a taller card would give already-saved macros a second size on the same canvas), each
+box coloured by that member's module category (`GraphEditor::categoryPreviewColour`, the same
+`themeColourForCategory` token the canvas uses elsewhere) so the preview echoes what expanding
+would show. `MacroCardComponent` also implements `juce::TooltipClient`, returning a
+newline-separated (capped) list of member names — `MainComponent`'s already-installed
+`juce::TooltipWindow` shows it on hover, so a collapsed macro's contents are discoverable without
+expanding it.
+
 **Cables re-anchor around a collapsed macro.** A collapsed macro hides its members but not their
 graph edges, so `rebuildVisibleCables()` (§3) runs a P8-12 post-process pass right before it
 returns: a cable wholly inside one collapsed macro is dropped from the visible list entirely (both
 endpoints are off-screen), and a cable crossing a collapsed macro's boundary keeps its outside
-endpoint but re-anchors its inside endpoint to `macro.bounds.getCentre()` rather than pointing at a
-hidden jack.
+endpoint but re-anchors its inside endpoint to the point where the card's edge faces the other
+endpoint (`projectToRectEdge`) rather than pointing at a hidden jack. The rectangle projected
+against is `GraphEditor::macroCableAnchorBounds(macro)` — the LIVE `MacroCardComponent`'s bounds
+while a card exists, not the persisted `macro.bounds`, which `finalizeMacroCardDrag` only writes
+back on drop; anchoring on the stale persisted value left a boundary cable pointing at the card's
+pre-drag position for the whole drag gesture. `GraphEditor::dragMacroCardBy` calls
+`repaintCanvas()` (invalidating the cable cache, same one repaint-per-frame pattern
+`ModuleComponent`'s own body drag uses) so the re-anchored cable is visible immediately rather than
+catching up on the next 30 Hz tick; `MacroCardComponent::mouseDrag` no longer calls
+`getParentComponent()->repaint()` itself, since `dragMacroCardBy` is now the one repaint call for
+the gesture.
 
 **Undo.** A macro mutation that also changes the graph (delete) goes through
 `AppUndoManager::recordGraphAndMacroChange`, which pushes a graph `SnapshotAction` and/or a

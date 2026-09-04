@@ -25,15 +25,21 @@ enum CommandIDs {
     toggleMinimap,
     toggleAiPanel,
     autoArrange,
-    // Wrap/unwrap the selection in a Macro container (P8-12). Two commands, not one toggle: a
-    // toggle would need to inspect the current selection to know which verb to perform, and a
-    // menu row / Settings-tab shortcut list has no notion of "this command's label depends on
-    // what's selected right now" the way autoArrange's single verb does.
+    // Wrap/unwrap the selection in a Macro container (P8-12). groupSelection (Cmd+G) is smart
+    // (P8-14, GraphEditor::groupOrToggleSelectionMacros): it groups the selection into a new
+    // macro when none of it is already grouped, and otherwise toggles the touched macro(s)
+    // collapsed/expanded — the same verb as collapseMacro below, minus the explicit binding.
+    // ungroupSelection stays its own command: dissolving a macro is never something grouping or
+    // toggling should ever do as a side effect.
     groupSelection,
     ungroupSelection,
-    // Re-collapses an already-expanded macro back to its card — the only reachable UI for this
-    // was the collapsed card's own right-click menu, which doesn't exist once expanded (P8-12
-    // follow-up: expanding left no way back short of Undo).
+    // Collapses an expanded macro back to its card, or expands a collapsed one — a TOGGLE, not
+    // the collapse/expand pair the comment above rules out for group/ungroup. That objection
+    // ("a menu row has no notion of a label that depends on what's selected right now") is
+    // answered here by keeping a single static label ("Collapse / Expand Macro",
+    // getActionDescription below): the label never has to guess which way the toggle is about to
+    // go, so one command covers both directions. Originally shipped collapse-only (P8-12
+    // follow-up: expanding left no way back short of Undo) before this toggle behaviour.
     collapseMacro,
     toggleLibrary,
     selectAllModules,
@@ -648,11 +654,11 @@ public:
         if (actionId == "autoArrange")
             return "Auto Arrange";
         if (actionId == "groupSelection")
-            return "Group Selection into Macro";
+            return "Group / Toggle Macro";
         if (actionId == "ungroupSelection")
             return "Ungroup Macro";
         if (actionId == "collapseMacro")
-            return "Collapse Macro";
+            return "Collapse / Expand Macro";
         if (actionId == "toggleLibrary")
             return "Toggle Module Library";
         // Kept as "selectAllModules" (both the actionId string and the AppCommands name) so a
