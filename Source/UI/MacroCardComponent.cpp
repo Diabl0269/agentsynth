@@ -91,6 +91,24 @@ void MacroCardComponent::paint(juce::Graphics& g) {
         for (const auto& port : owner.macroCardPortLayout(macro->id)) {
             g.setColour(port.kind == synth::MacroPortKind::Midi ? themeColors.audioWire : themeColors.accent);
             g.fillEllipse((float)port.jackPos.x - 5.0f, (float)port.jackPos.y - 5.0f, 10.0f, 10.0f);
+
+            // Port name (founder-review fix F2, item 3/docs/macros.md §7 item 4: "it's not shown
+            // on the module UI... it should be presented"): left-aligned inside the left edge for
+            // an input, right-aligned inside the right edge for an output — mirroring the docked
+            // widget's own left/right convention (§5.3/§5.4) so an expanded and collapsed macro
+            // read a port's name the same way. Elided (drawFittedText, one line) if the card is
+            // too narrow for the full name.
+            if (port.name.isNotEmpty()) {
+                g.setColour(juce::Colours::white.withAlpha(0.85f));
+                g.setFont(juce::Font(juce::FontOptions(9.5f)));
+                const int labelW = juce::jmax(20, getWidth() / 2 - 16);
+                auto labelArea =
+                    port.isInput ? juce::Rectangle<int>(port.jackPos.x + 8, port.jackPos.y - 7, labelW, 14)
+                                 : juce::Rectangle<int>(port.jackPos.x - 8 - labelW, port.jackPos.y - 7, labelW, 14);
+                g.drawFittedText(port.name, labelArea,
+                                 port.isInput ? juce::Justification::centredLeft : juce::Justification::centredRight,
+                                 1);
+            }
         }
     }
 

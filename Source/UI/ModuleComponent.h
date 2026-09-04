@@ -103,6 +103,21 @@ public:
      *  constant so they cannot drift again. */
     static constexpr int kPortGutterHeaderHeight = 38;
 
+    /** Compact docked-widget geometry for the four macro-port types (Macro In/Out, Macro MIDI
+     *  In/Out — P8-15 founder-review fix F2, docs/macros.md §5.3/§5.4). Shared with
+     *  GraphEditor::estimateModuleSize (its own drag-ghost estimate must match the real widget) and
+     *  GraphEditor::dockMacroPortWidgets (the widget's docked position reads its live getWidth/
+     *  getHeight, sized from these), the same "one constant so two files cannot drift apart"
+     *  reasoning kPortGutterHeaderHeight's own comment states. */
+    static constexpr int kMacroPortWidgetWidth = 104;
+    /** y of the first (or only) jack row, and the fixed y a MIDI port's single jack sits at. */
+    static constexpr int kMacroPortWidgetHeaderY = 16;
+    /** Vertical spacing between stacked jack rows — only Stereo (2 visible jacks a side) uses a
+     *  second row; Mono, Poly-N and MIDI are always exactly one row. */
+    static constexpr int kMacroPortWidgetRowStep = 18;
+    /** Clearance reserved below the last jack row. */
+    static constexpr int kMacroPortWidgetBottomPad = 10;
+
     std::optional<Port> getPortForPoint(juce::Point<int> localPoint);
     juce::Point<int> getPortCenter(int index, bool isInput);
 
@@ -290,6 +305,15 @@ private:
 
     void createControls();
     void updateLayout();
+
+    // Compact docked widget for the four macro-port types (P8-15 founder-review fix F2,
+    // docs/macros.md §5.3/§5.4) — no header chrome, no body. layoutMacroPortWidget sizes the
+    // card from the module's own visible jack count (updateLayout's early branch); its actual
+    // canvas POSITION is decided separately, by GraphEditor::dockMacroPortWidgets against the
+    // owning macro's hull. paintMacroPortWidget draws the tinted row, its jacks and the resolved
+    // MacroPort name (paint()'s early branch).
+    void layoutMacroPortWidget();
+    void paintMacroPortWidget(juce::Graphics& g);
 
     /** Right-click-any-knob entry point into the automation lane editor. Attached as a
      *  MouseListener on every generic auto-UI slider (createControls()'s float/int branches) via

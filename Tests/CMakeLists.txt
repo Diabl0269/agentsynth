@@ -146,6 +146,7 @@ add_executable(Tests
     MacroPortConfigDialogTests.cpp
     MacroPortFlowTests.cpp
     MacroCardJackTests.cpp
+    MacroPortWidgetTests.cpp
     MacroBypassMuteTests.cpp
     ClipboardTests.cpp
     PanelAnimationAndLoadingTests.cpp

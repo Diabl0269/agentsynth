@@ -180,18 +180,20 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
         return {280, 131};
     if (typeName == "Macro In" || typeName == "Macro Out")
-        // Param-less card (only the inherited bypass, which lives in the header), constructed
-        // Mono by default (one jack a side) — the port-creation flow resizes it to two jacks for
-        // Stereo via the ordinary component re-layout, same as any other jack-count change.
-        // Library-less (the "Configure I/O" modal places it, docs/macros.md §7 item 3). Measured
-        // against the real card by
+        // Founder-review fix F2 (docs/macros.md §5.3/§7 item 3): no longer a full module card — a
+        // small docked widget (ModuleComponent::layoutMacroPortWidget), constructed Mono by
+        // default (one jack row) — the port-creation flow grows it to two rows for Stereo via the
+        // ordinary component re-layout, same as any other jack-count change. Library-less (the
+        // "Configure I/O" modal places it). Measured against the real card by
         // MacroPortFlow.AllFourTypesAreAbsentFromTheLibraryWithAPinnedSizeEstimate.
-        return {280, 111};
+        return {ModuleComponent::kMacroPortWidgetWidth,
+                ModuleComponent::kMacroPortWidgetHeaderY + ModuleComponent::kMacroPortWidgetBottomPad};
     if (typeName == "Macro MIDI In" || typeName == "Macro MIDI Out")
-        // One MIDI jack a side, no audio jacks and no body controls — library-less like Track In.
-        // Measured against the real card by
-        // MacroPortFlow.AllFourTypesAreAbsentFromTheLibraryWithAPinnedSizeEstimate.
-        return {280, 106};
+        // One MIDI jack row, no audio jacks and no body controls — same compact widget, always
+        // one row (MIDI has no Mono/Stereo/Poly-N shape to grow). Measured against the real card
+        // by MacroPortFlow.AllFourTypesAreAbsentFromTheLibraryWithAPinnedSizeEstimate.
+        return {ModuleComponent::kMacroPortWidgetWidth,
+                ModuleComponent::kMacroPortWidgetHeaderY + ModuleComponent::kMacroPortWidgetBottomPad};
     return {280, 360};
 }
 
@@ -2627,6 +2629,7 @@ void GraphEditor::updateComponents() {
         macros.retainOnly(aliveUuids);
     }
     syncMacroCards();
+    dockMacroPortWidgets();
 
     // Refresh mod matrix to pick up any new/removed attenuverter routings
     // Use callAsync to avoid re-entrancy during graph modification
@@ -3368,6 +3371,16 @@ void GraphEditor::finalizeSelectionDrag() {
         }
     }
 
+    // A WHOLE-macro selection (selectMacro() — chip drag, or Cmd/Shift-selecting a macro's every
+    // member) moves the hull by the same uniform delta+offset every port widget above just moved
+    // by, so it stays consistent for free (macroHullBounds' §5.4 doc). A PARTIAL selection — a
+    // marquee that happens to catch one port widget plus an unrelated module, without the macro's
+    // other members — has no such guarantee: the hull (built from non-port members, selected or
+    // not) may not have moved by that same delta, desyncing the port from its dock. Re-deriving
+    // here (idempotent — a no-op for the whole-macro case, which already agrees) is the P8-15 fix
+    // F2 guard for that gap.
+    dockMacroPortWidgets();
+
     selectionDragActive = false;
     selectionDragStartPositions.clear();
     repaintCanvas();
@@ -3414,6 +3427,19 @@ juce::AudioProcessorGraph::NodeID GraphEditor::resolveMemberNodeId(const juce::S
     return {};
 }
 
+GraphEditor::MacroPortOwner GraphEditor::macroPortOwnerFor(juce::AudioProcessorGraph::NodeID nodeId) const {
+    const juce::String uuid = nodeUuidFor(nodeId);
+    if (uuid.isEmpty())
+        return {};
+    const auto* macro = macros.findByMember(uuid);
+    if (macro == nullptr)
+        return {};
+    for (const auto& p : macro->ports)
+        if (p.nodeUuid == uuid)
+            return {macro, &p};
+    return {macro, nullptr};
+}
+
 namespace {
 // Margin added around the union of member bounds for the expanded-macro grouping hull — the ONE
 // value paint (GraphContentComponent::paint) and hit-testing (macroHullAt) both use, via
@@ -3430,6 +3456,14 @@ juce::Rectangle<int> GraphEditor::macroHullBounds(const juce::String& macroId) c
     if (macro == nullptr || macro->collapsed)
         return {};
 
+    // Port members are EXCLUDED from the union: they dock to this hull's own edge
+    // (dockMacroPortWidgets, P8-15 fix F2), and if they also counted toward the bounds that
+    // DEFINE the hull, docking one would grow the hull, which would push it out again, forever —
+    // the exact feedback loop the fix's own review called out. See this method's header doc.
+    std::set<juce::String> portNodeUuids;
+    for (const auto& p : macro->ports)
+        portNodeUuids.insert(p.nodeUuid);
+
     std::unordered_map<uint32_t, ModuleComponent*> compByNodeUid;
     for (auto* comp : const_cast<GraphContentComponent&>(content).getModules())
         if (comp != nullptr)
@@ -3437,14 +3471,25 @@ juce::Rectangle<int> GraphEditor::macroHullBounds(const juce::String& macroId) c
 
     juce::Rectangle<int> hull;
     for (const auto& uuid : macro->members) {
+        if (portNodeUuids.count(uuid) > 0)
+            continue; // a port's own fronting node — presentation-docked OUTSIDE the hull
         auto nodeId = resolveMemberNodeId(uuid);
         auto it = compByNodeUid.find(nodeId.uid);
         if (it == compByNodeUid.end())
             continue;
         hull = hull.isEmpty() ? it->second->getBounds() : hull.getUnion(it->second->getBounds());
     }
-    if (hull.isEmpty())
-        return {};
+    if (hull.isEmpty()) {
+        // A macro made ENTIRELY of ports (no ordinary member) has nothing left to union. Fall
+        // back to the macro's own persisted `bounds` — the same footprint its collapsed card uses
+        // — so its ports still have an edge to dock against rather than piling up at the canvas
+        // origin. Genuinely empty `bounds` (shouldn't happen: every macro is created with a real
+        // groupBounds by groupSelectionIntoMacro) means there is truly nothing to draw, same as
+        // before this fallback existed.
+        if (macro->bounds.isEmpty())
+            return {};
+        hull = macro->bounds;
+    }
 
     // The top margin is DEEPER than the other three, and that asymmetry is load-bearing: the name
     // chip is drawn at the hull's top-left and doubles as the macro's drag handle, but it is
@@ -3612,6 +3657,58 @@ void GraphEditor::syncMacroCards() {
         const juce::String uuid = nodeUuidFor(comp->getNodeId());
         const auto* macro = uuid.isEmpty() ? nullptr : macros.findByMember(uuid);
         comp->setVisible(macro == nullptr || !macro->collapsed);
+    }
+}
+
+namespace {
+// Docked macro-port widget layout (P8-15 founder-review fix F2, docs/macros.md §5.4). Small and
+// fixed regardless of anything else on the canvas — the widget's own getWidth()/getHeight() (set
+// by ModuleComponent::layoutMacroPortWidget, called from its own updateLayout() before this ever
+// runs) decide how big; this only decides WHERE.
+constexpr int kMacroPortDockGap = 6;     // clearance between a widget's inner edge and the hull
+constexpr int kMacroPortDockMarginY = 8; // clearance below the hull's own top edge for port #0
+constexpr int kMacroPortDockSpacing = 6; // vertical gap between two stacked ports on one side
+} // namespace
+
+void GraphEditor::dockMacroPortWidgets() {
+    std::unordered_map<uint32_t, ModuleComponent*> compByNodeUid;
+    for (auto* comp : content.getModules())
+        if (comp != nullptr)
+            compByNodeUid[comp->getNodeId().uid] = comp;
+
+    auto& graph = audioEngine.getGraph();
+    for (const auto& macro : macros.getAll()) {
+        if (macro.collapsed || macro.ports.empty())
+            continue; // hidden with the rest of its members; the collapsed CARD draws its jacks
+
+        const auto hull = macroHullBounds(macro.id);
+        if (hull.isEmpty())
+            continue;
+
+        auto ports = macro.ports;
+        std::sort(ports.begin(), ports.end(),
+                  [](const synth::MacroPort& a, const synth::MacroPort& b) { return a.order < b.order; });
+
+        int inputY = hull.getY() + kMacroPortDockMarginY;
+        int outputY = hull.getY() + kMacroPortDockMarginY;
+        for (const auto& port : ports) {
+            auto nodeId = resolveMemberNodeId(port.nodeUuid);
+            auto it = compByNodeUid.find(nodeId.uid);
+            if (it == compByNodeUid.end())
+                continue;
+            auto* comp = it->second;
+
+            const int x =
+                port.isInput ? hull.getX() - kMacroPortDockGap - comp->getWidth() : hull.getRight() + kMacroPortDockGap;
+            const int y = port.isInput ? inputY : outputY;
+            (port.isInput ? inputY : outputY) += comp->getHeight() + kMacroPortDockSpacing;
+
+            comp->setTopLeftPosition(x, y);
+            if (auto* node = graph.getNodeForId(nodeId)) {
+                node->properties.set("x", x);
+                node->properties.set("y", y);
+            }
+        }
     }
 }
 
@@ -3867,8 +3964,20 @@ void GraphEditor::applyMacroCollapsed(const juce::String& macroId, bool collapse
             // Collapsing FROM expanded: seed the card at the current member bounding box's
             // top-left, sized to the standard card footprint rather than the (possibly huge)
             // group — that is the whole point of collapsing.
+            //
+            // Port members are EXCLUDED from this union, the same way macroHullBounds() excludes
+            // them (P8-15 fix F2): a port widget is DOCKED outside the hull (to its left/right
+            // edge), so folding it into "the group" here would seed the collapsed card's top-left
+            // ~kMacroPortDockGap+widget-width to the left of where the ordinary members actually
+            // sit, for any macro with even one input port.
+            std::set<juce::String> portNodeUuids;
+            for (const auto& p : m->ports)
+                portNodeUuids.insert(p.nodeUuid);
+
             juce::Rectangle<int> groupBounds;
             for (const auto& uuid : m->members) {
+                if (portNodeUuids.count(uuid) > 0)
+                    continue;
                 auto nodeId = resolveMemberNodeId(uuid);
                 for (auto* comp : content.getModules()) {
                     if (comp != nullptr && comp->getNodeId() == nodeId) {
@@ -4424,12 +4533,13 @@ juce::String GraphEditor::addMacroPort(const juce::String& macroId, bool isInput
             outlet->setPortShape(shape, voiceCount);
     }
 
-    const auto estSize = estimateModuleSize(typeName);
-    const int portIndex = (int)macro->ports.size();
-    // Stack repeated adds below the card so they don't land on top of each other or the members
-    // (exact placement only matters once the macro is expanded).
-    const auto desired = macro->bounds.getBottomLeft() + juce::Point<int>(0, 20 + portIndex * (estSize.y + 20));
-    const auto placed = resolvePlacement(desired, estSize.x, estSize.y, juce::AudioProcessorGraph::NodeID{});
+    // Placement: a port's widget is DOCKED to its macro's hull, derived fresh by
+    // dockMacroPortWidgets() at the end of every updateComponents() pass — including the one
+    // doAdd() below calls. Stacking a fresh node below the (now nonexistent, once ports dock)
+    // card via resolvePlacement() was the pre-F2 free-placement scheme; it is vestigial now, so
+    // this just seeds a harmless position that the SAME updateComponents() call immediately
+    // overrides — there is nothing left to resolvePlacement() against.
+    const auto placed = macro->bounds.getTopLeft();
 
     const juce::String name = portName.trim().isNotEmpty() ? portName.trim() : defaultMacroPortName(isInput, kind);
     const int order = nextMacroPortOrder(*macro, isInput);
@@ -4691,10 +4801,10 @@ void GraphEditor::createMacroPortFromDroppedCable(const juce::String& macroId, b
             outlet->setPortShape(MacroPortShape::Mono, 1);
     }
 
-    const auto estSize = estimateModuleSize(typeName);
-    const int portIndex = (int)macro->ports.size();
-    const auto desired = macro->bounds.getBottomLeft() + juce::Point<int>(0, 20 + portIndex * (estSize.y + 20));
-    const auto placed = resolvePlacement(desired, estSize.x, estSize.y, juce::AudioProcessorGraph::NodeID{});
+    // See addMacroPort's identical comment: dockMacroPortWidgets() (run from doCreate()'s own
+    // updateComponents() below) places the widget for real — this only seeds a harmless position
+    // for the instant before that.
+    const auto placed = macro->bounds.getTopLeft();
 
     const juce::String name = defaultMacroPortName(newPortIsInput, kind);
     const int order = nextMacroPortOrder(*macro, newPortIsInput);
@@ -6712,6 +6822,13 @@ void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
     module->setTopLeftPosition(clear);
     // Persist the snapped/cleared position to graph node properties so it survives reload.
     updateModulePosition(module);
+
+    // A single-module drag inside an expanded macro (not a whole-macro group drag — that already
+    // stays consistent via a uniform selection-drag delta, see dockMacroPortWidgets' own comment)
+    // can move the hull this module contributes to without going through updateComponents(), so
+    // its macro's port widgets would otherwise lag one drag behind. Re-derive now, the same as
+    // every other layout pass (P8-15 fix F2).
+    dockMacroPortWidgets();
 
     // Apply proximity suggestions before the drag-preview teardown clears them. Group drags never
     // reach here with multi-select (finalizeSelectionDrag handles those). Connections join the

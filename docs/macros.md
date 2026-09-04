@@ -7,10 +7,10 @@ This document covers two things:
 1. **What shipped (P8-12)** — the presentation-only container that exists today.
 2. **The Macro I/O design (P8-14)** — the decided model for how a Macro gains configurable
    inputs and outputs, which **P8-15 implements**. §3-6 are the design; §7 tracks implementation
-   progress against it and is the accurate record of what actually exists — as of P8-15c, §7
-   items 1-5 are built (the node types, `MacroPort`, the "Configure I/O" modal covering
-   add/remove/rename/reorder/shape-change plus the cable-drop convenience, and collapsed-card
-   port jacks with boundary-cable anchoring); §7 item 6 is not (no bypass/mute fan-out yet).
+   progress against it and is the accurate record of what actually exists — all six items are
+   built as of P8-15d, and a founder review afterwards produced a further round of presentation
+   fixes layered on top without reopening the model itself (§5.3/§5.4, §7 items 3-5): a port no
+   longer renders as a full module card, collapsed OR expanded — see "How a port is drawn" below.
 
 ---
 
@@ -297,6 +297,15 @@ active and how they map to visible jacks. This is what let §7 item 3 add Stereo
 new factory type and no migration for a Macro In/Out already on disk**: a pre-P8-15b save has no
 `"shape"` key at all and parses as Mono, exactly the shape it already behaved as.
 
+**Rendering (founder-review fix F2, docs/macros.md §7 items 3/4).** A port node is a real
+`ModuleComponent` — selection, hit-testing, cable drag/drop, undo and serialisation all key off
+that, unchanged — but it no longer PAINTS or SIZES like an ordinary module card, expanded or
+collapsed. `ModuleComponent::layoutMacroPortWidget()` sizes it purely from the shape's own visible
+jack count: one row (`kMacroPortWidgetHeaderY + kMacroPortWidgetBottomPad`) for Mono, Poly-N or a
+MIDI port (all of which have exactly one visible jack a side, a MIDI port's fanned Poly-N bus
+included), and a second row (`+ kMacroPortWidgetRowStep`) only for Stereo's two. See §5.4 for
+where that widget is PLACED.
+
 ### 5.4 Cable rendering across the boundary
 
 `buildVisibleCables()` keeps ownership of the whole rule. Generalising what P8-12 already does:
@@ -306,7 +315,7 @@ new factory type and no migration for a Macro In/Out already on disk**: a pre-P8
 | Both endpoints inside one collapsed macro | dropped | dropped (unchanged) |
 | Crosses a collapsed boundary | anchored to the card edge via `projectToRectEdge` | anchored to the **card jack** of the inlet/outlet it passes through |
 | Both endpoints outside | untouched | untouched |
-| Expanded macro | untouched | untouched; inlets/outlets draw as ordinary nodes inside the hull |
+| Expanded macro | untouched | untouched; inlets/outlets draw as the DOCKED port widget (founder-review fix F2, below) rather than an ordinary card |
 
 A cable that crosses a collapsed boundary **without** going through an inlet/outlet — i.e. wired
 straight to an interior member — keeps today's `projectToRectEdge` treatment. That case does not
@@ -345,6 +354,60 @@ that node's own jack. This follows from §1's framing — ungrouping, like group
 presentation-only change to the `MacroSet`, never a graph edit — but is worth stating explicitly
 here because the opposite (the cable silently disappearing) is the more intuitive-sounding
 assumption and is not what happens.
+
+**The docked port widget (founder-review fix F2).** Founder review on the first Macro I/O cut:
+*"We're now creating separate modules for each i/o, instead I had in mind a small widget like i/o
+on the top left/right of the macro box"* — and separately, that a port's chosen name *"is not
+shown on the module UI that's presented; ... it should be presented."* Both are rendering/placement
+fixes, not a model change: the four proxy node types, `MacroPort`, and "a port is a real member of
+its macro" are all exactly as §4/§5.1-§5.3 decided.
+
+- **Presentation.** `ModuleComponent::paintMacroPortWidget()` draws no header chrome and no body —
+  a small row tinted with the owning macro's `colour`, its jack(s) (§5.3's rendering note) and the
+  port's own `MacroPort::name`, resolved LIVE every paint via
+  `GraphEditor::macroPortOwnerFor(nodeId)` (walks the node's uuid to its macro, then to the
+  `MacroPort` fronting it) rather than cached on the node — a rename in the Configure I/O dialog is
+  therefore reflected on the very next repaint, with nothing to invalidate. The same name is drawn
+  next to the matching jack on the COLLAPSED card too (`MacroCardComponent::paint`, reading the
+  identical `name` field off `GraphEditor::macroCardPortLayout`), elided if the card is too narrow —
+  an expanded and a collapsed macro read a port's name the same way.
+- **Placement.** `GraphEditor::dockMacroPortWidgets()` — called at the end of every
+  `updateComponents()` pass, and again after a single-module drag settles (`finalizeModuleDrag`) —
+  positions each EXPANDED macro's port widgets against `macroHullBounds()`: inputs down the LEFT
+  edge, outputs down the RIGHT, both starting near the top, ordered by `MacroPort::order` — the
+  SAME order `macroCardPortLayout()` already uses for the collapsed card, so a port's expanded
+  position and its row in the Configure I/O dialog never disagree. A widget's canvas position is
+  therefore fully DERIVED, never independently dragged — `ModuleComponent::mouseDown` refuses to
+  arm a body drag or a selection-click for a macro-port node (mirroring the Attenuverter's own "no
+  header, nothing to click" early return), so nothing on the canvas can desync it from the hull.
+- **The hull-feedback trap.** `macroHullBounds()` unions only NON-PORT members — a port's own
+  fronting node is excluded, because if it counted toward the bounds that DEFINE the hull, docking
+  it against that hull would grow the hull, which would push it out again, every layout pass. A
+  macro made ENTIRELY of ports (no ordinary member) has nothing left to union; that case falls back
+  to the macro's own persisted `bounds` (the same footprint its collapsed card uses) rather than
+  leaving its ports with no edge to dock against. `applyMacroCollapsed`'s own "seed the collapsed
+  card at the current member bounding box" union (§1's expand/collapse transition) excludes port
+  members for the identical reason — folding a docked-left input widget into that union would seed
+  the collapsed card noticeably left of where the real members sit, growing worse with every
+  additional input port.
+- **Group drag stays consistent, but not for free — `finalizeSelectionDrag()` re-docks
+  explicitly.** A WHOLE-macro drag (the collapsed card, or a selection built through
+  `selectMacro()`) moves every member — ports included — by the identical delta via
+  `beginSelectionDrag`/`dragSelectionBy`/`finalizeSelectionDrag`, exactly as any other multi-select
+  drag; because that delta (and `finalizeSelectionDrag`'s own snap/de-overlap offset) is uniform
+  across the whole group, the hull moves by the same amount the ports just moved by, so their
+  hull-relative offset is preserved automatically in that case. A PARTIAL selection has no such
+  guarantee: a marquee can catch a port widget together with some unrelated module without the
+  macro's other (non-port) members, in which case the hull does not move by the delta the port
+  just moved by — that would desync it. `finalizeSelectionDrag()` therefore calls
+  `dockMacroPortWidgets()` unconditionally at the end (idempotent — a no-op for the whole-macro
+  case, which already agrees; a real correction for the partial-selection case), the same as
+  `updateComponents()`/`finalizeModuleDrag()` above.
+- **Not individually selectable.** A port widget's only UI surface is its jack (cable drag/drop,
+  unchanged) and the Configure I/O dialog (rename/reorder/delete/shape-change, unchanged) — never a
+  canvas click on its body. This was a deliberate scope call, not an oversight: making it
+  selectable would need its own drag suppression logic distinct from "part of a macro-wide
+  selection," for a widget whose whole point is that its position is not the user's to set.
 
 ### 5.5 Latency
 
@@ -438,17 +501,33 @@ In order, each independently shippable:
    MIDI ports, §5.2), its `toVar`/`fromVar` round trip, and its `retainOnly` reconciliation (a
    port whose node died is dropped like any other member — and so is one dropped singly via
    `removeMemberEverywhere`).
-3. **DONE (P8-15b).** The port-creation flow — folded into ONE "Configure I/O" modal together
-   with item 5 below, per an explicit founder request rather than piecemeal menu actions
-   (`GraphEditor::promptConfigureMacroIO`, `synth::ui::MacroPortConfigDialog`). Picks Mono/Stereo/
-   Poly-N/MIDI at creation (§5.3), writes the port's user-visible name (§5.1), and also covers the
-   "shape from a dropped cable" convenience (`GraphEditor::createMacroPortFromDroppedCable`,
-   Mono-only — see §5.3). `estimateModuleSize` in `GraphEditor.cpp` has an entry for all four
-   types, measured against a real rendered card the way Rec Tap/Track In/Track Audio are
-   (`MacroPortFlow.AllFourTypesAreAbsentFromTheLibraryWithAPinnedSizeEstimate`).
-4. **DONE (P8-15c).** Card jacks: the collapsed card draws one jack per port
+3. **DONE (P8-15b; presentation reworked by founder-review fix F2).** The port-creation flow —
+   folded into ONE "Configure I/O" modal together with item 5 below, per an explicit founder
+   request rather than piecemeal menu actions (`GraphEditor::promptConfigureMacroIO`,
+   `synth::ui::MacroPortConfigDialog`). Picks Mono/Stereo/Poly-N/MIDI at creation (§5.3), writes
+   the port's user-visible name (§5.1), and also covers the "shape from a dropped cable"
+   convenience (`GraphEditor::createMacroPortFromDroppedCable`, Mono-only — see §5.3).
+   `estimateModuleSize` in `GraphEditor.cpp` has an entry for all four types, sized to
+   `ModuleComponent`'s compact docked-widget geometry (`kMacroPortWidgetWidth`/
+   `kMacroPortWidgetHeaderY`/`kMacroPortWidgetBottomPad`, §5.3's "Rendering" note) rather than a
+   full 280-wide card — F2 replaced the "real rendered card" this used to measure against, since a
+   port node no longer renders as one (`MacroPortWidget.MonoPortWidgetSizeMatchesEstimateModuleSize`).
+   Placement is no longer free: a newly-created port's widget is DOCKED to its macro's hull the
+   moment `updateComponents()` runs (item 4's "Placement" below), not stacked below the card via
+   `resolvePlacement()` as it briefly was pre-F2.
+4. **DONE (P8-15c); collapsed-card jacks now carry names, and F2 added the expanded-macro
+   equivalent.** Card jacks: the collapsed card draws one jack per port
    (`GraphEditor::macroCardPortLayout`), `buildVisibleCables()` anchors boundary cables to them,
    and a cable dropped exactly on an existing port's jack wires straight into it (§5.4).
+   Founder-review fix F2 (item 3 of that review — "it's not shown on the module UI...it should be
+   presented") added the port's `MacroPort::name` next to its jack on the collapsed card
+   (`MacroCardComponent::paint`, elided if too narrow) and, for an EXPANDED macro, a compact
+   docked widget per port — `GraphEditor::dockMacroPortWidgets()` positions it against
+   `macroHullBounds()` (inputs down the left edge, outputs down the right, ordered by
+   `MacroPort::order`, the same order the collapsed card uses) and
+   `ModuleComponent::paintMacroPortWidget()` draws its name and jack(s), resolved live through
+   `GraphEditor::macroPortOwnerFor()`. See §5.3/§5.4 for the full design and the hull-feedback trap
+   this had to avoid.
 5. **DONE (P8-15b).** Port rename and reorder — the same modal as item 3
    (`GraphEditor::renameMacroPort`/`moveMacroPortOrder`). Reorder is scoped to one direction at a
    time (inputs against inputs, outputs against outputs), a no-op at either edge. Changing an

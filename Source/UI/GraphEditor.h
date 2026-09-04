@@ -148,6 +148,20 @@ public:
      *  dialogs of its own. */
     synth::MacroSet& getMacros() noexcept { return macros; }
 
+    /** The MacroPort `nodeId` fronts, and the macro that owns it, resolved together — the compact
+     *  docked port widget (ModuleComponent's macro-port rendering, P8-15 founder-review fix F2)
+     *  needs both in one lookup: the port's own `name` (fix item 3 — "the name... is not shown on
+     *  the module UI... in the new mode it should be presented") and the macro's `colour` (the
+     *  widget's tint). `macro` is null when `nodeId` doesn't front any macro's port — a docked
+     *  widget only ever exists for a node that does, by construction (every Macro In/Out/MIDI
+     *  In/Out is created by addMacroPort() as a macro member with a matching MacroPort entry), but
+     *  this stays defensive rather than assume the two can never drift apart mid-transaction. */
+    struct MacroPortOwner {
+        const synth::Macro* macro = nullptr;
+        const synth::MacroPort* port = nullptr;
+    };
+    MacroPortOwner macroPortOwnerFor(juce::AudioProcessorGraph::NodeID nodeId) const;
+
     // Layout / anti-overlap
     juce::Point<int> resolvePlacement(juce::Point<int> desired, int w, int h, juce::AudioProcessorGraph::NodeID selfId);
 
@@ -393,8 +407,17 @@ public:
 
     /** Canvas-space bounds of an EXPANDED macro's grouping hull (the union of its live member
      *  ModuleComponent bounds, expanded by the hull margin), or an empty rect if the macro is
-     *  collapsed / unknown / has no resolvable members. The ONE definition — paint and
-     *  hit-testing must never diverge. */
+     *  collapsed / unknown / has no resolvable members. The ONE definition — paint, hit-testing
+     *  AND the docked port-widget layout (dockMacroPortWidgets(), P8-15 fix F2) must never
+     *  diverge.
+     *
+     *  A port's own fronting node (MacroInlet/Outlet or a MIDI variant) is EXCLUDED from the
+     *  union: it docks to this hull's edge (§5.4), and if it also counted toward the bounds that
+     *  DEFINE the hull, docking it would push the hull outward, which would push it out again,
+     *  every layout pass. A macro made ENTIRELY of ports (no ordinary member) therefore has
+     *  nothing left to union — that case falls back to the macro's own persisted `bounds` (the
+     *  same footprint its collapsed card uses) so its ports still have an edge to dock against,
+     *  rather than piling up at the canvas origin. */
     juce::Rectangle<int> macroHullBounds(const juce::String& macroId) const;
 
     /** The expanded macro whose hull contains `canvasPos`, or an empty string. Smallest hull
@@ -1218,6 +1241,21 @@ private:
      *  member ModuleComponents. Called at the end of updateComponents(), the same seam that
      *  syncs ModuleComponents themselves. */
     void syncMacroCards();
+
+    /** Positions every EXPANDED macro's port widgets against macroHullBounds() — inputs down the
+     *  LEFT edge, outputs down the RIGHT, both starting near the top, ordered by MacroPort::order
+     *  (P8-15 founder-review fix F2: docs/macros.md §5.4). Called at the end of every
+     *  updateComponents() (so a structural change, an auto-arrange pass, or a preset load can
+     *  never leave a port widget scattered from a stray graph-node x/y) and again after a
+     *  single-module drag settles (finalizeModuleDrag) — a WHOLE-macro drag needs no extra call
+     *  here: beginSelectionDrag/dragSelectionBy/finalizeSelectionDrag already move a port's
+     *  ModuleComponent by the exact same delta as every other selected member (a port is an
+     *  ordinary member of `macro.members`), so the fixed hull-relative offset this function
+     *  maintains is preserved automatically. A collapsed macro's ports are skipped — hidden along
+     *  with the rest of its members (syncMacroCards), the collapsed CARD draws their jacks
+     *  instead (macroCardPortLayout). Not user-draggable: ModuleComponent::mouseDown refuses to
+     *  arm a body drag for a macro-port node, so nothing ever fights this. */
+    void dockMacroPortWidgets();
 
     /** The raw collapse/expand mutation, with NO undo recording of its own — so a caller that
      *  toggles several macros at once (toggleSelectionMacrosCollapsed) can wrap the whole batch
