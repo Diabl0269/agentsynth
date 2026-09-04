@@ -149,4 +149,52 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MacroPortConfigDialog)
 };
 
+/**
+ * @brief "Create ports for the crossing cables?" modal (founder-review fix F5, docs/macros.md §7
+ * item 6.2) — shown by GraphEditor::requestGroupSelectionIntoMacro() the first time a group has a
+ * cable crossing its would-be boundary and the auto-port preference is still Unset.
+ *
+ * Pure UI, the same split as MacroPortConfigDialog above: no GraphEditor/MacroSet reference of its
+ * own, one intent callback fired on a button press. Deliberately NOT reused as a nested class of
+ * MacroPortConfigDialog — the two dialogs share nothing but a translation unit, and keeping this
+ * one in the same file pair, rather than a new Source/UI cpp/h pair, avoids a five-CMakeLists edit
+ * for a component this small.
+ */
+class MacroAutoPortPromptDialog : public juce::Component {
+public:
+    /** `crossingPortCount` is the number of macro ports Create Ports would splice in (i.e.
+     *  buildMacroPortCrossingPlan().size() — one per distinct internal jack/direction, already
+     *  deduped, NOT a raw cable count: two cables into the same jack share one port and count as
+     *  one here). Only changes the message text; plays no role in the choice itself. */
+    explicit MacroAutoPortPromptDialog(int crossingPortCount);
+    ~MacroAutoPortPromptDialog() override;
+
+    void paint(juce::Graphics& g) override;
+    void resized() override;
+
+    /** Fires exactly once, on either button. `createPorts` true = "Create Ports", false = "Leave
+     *  Cables As Is"; `remember` mirrors the "Remember my choice" toggle's state at the moment of
+     *  the click. The caller (GraphEditor) closes the DialogWindow from this callback — this
+     *  component never closes its own host window. */
+    std::function<void(bool createPorts, bool remember)> onChoice;
+
+    // ---- Test seams: drive the real controls, the same idiom MacroPortConfigDialog's use. ----
+    void setRememberChoiceForTest(bool remember);
+    bool getRememberChoiceForTest() const;
+    void triggerCreatePortsForTest();
+    void triggerLeaveCablesAsIsForTest();
+
+private:
+    juce::Label titleLabel_;
+    juce::Label messageLabel_;
+    juce::ToggleButton rememberToggle_{"Remember my choice"};
+    juce::TextButton createPortsButton_{"Create Ports"};
+    juce::TextButton leaveAsIsButton_{"Leave Cables As Is"};
+
+    static constexpr int kMargin = 16;
+    static constexpr int kWidth = 420;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MacroAutoPortPromptDialog)
+};
+
 } // namespace synth::ui

@@ -279,8 +279,55 @@ public:
     /** Wraps the current selection in a new macro (Cmd+G). Refused via onStatusMessage — no undo
      *  entry, selection untouched — when fewer than two nodes are selected or any selected node
      *  already belongs to a macro (nested macros are out of scope for P8-12).
+     *
+     *  `autoCreatePorts` (founder-review fix F5, docs/macros.md §7 item 6.1): when true, every
+     *  graph connection crossing the new macro's boundary is spliced through a matching
+     *  MacroInlet/MacroOutlet (or MIDI variant) node — disconnect external<->internal, insert the
+     *  port node, reconnect external->port->internal (or the reverse for an outlet) — ALL inside
+     *  this call's one recordGraphAndMacroChange transaction, so a single Cmd+Z undoes the grouping
+     *  and every spliced port together. Default false keeps this method's original behaviour
+     *  (plain grouping, no ports) for every existing caller — see requestGroupSelectionIntoMacro()
+     *  below for the preference-gated, modal-aware entry point real UI gestures should call
+     *  instead.
      *  @return the new macro's id, or an empty string if refused. */
-    juce::String groupSelectionIntoMacro();
+    juce::String groupSelectionIntoMacro(bool autoCreatePorts = false);
+
+    // ---- Macro auto-port preference (founder-review fix F5, docs/macros.md §7 item 6.1/6.2) ----
+    //
+    // Tri-state, not a bool: "ask, then remember" needs a third value beyond on/off. Unset (the
+    // default) means "ask on the next group that has a crossing cable"; the other two mean
+    // "always do X, never ask." Persisted through juce::ApplicationProperties by
+    // PreferencesSettingsTab, mirroring its own key/getter/setter/*ForTest pattern exactly (see
+    // setDefaultDualIOForNewModules for the precedent), and pushed down here via
+    // setMacroAutoPortPreference(). The modal's own "Remember my choice" also persists directly
+    // through propertiesFile_ (see setPropertiesFile) — the same macro recolour favourites use —
+    // since the modal can fire before a Settings window (and therefore a PreferencesSettingsTab)
+    // has ever been constructed.
+
+    enum class MacroAutoPortPreference { Unset, AutoCreatePorts, LeaveCablesAsIs };
+
+    void setMacroAutoPortPreference(MacroAutoPortPreference pref) noexcept { macroAutoPortPreference_ = pref; }
+    MacroAutoPortPreference getMacroAutoPortPreference() const noexcept { return macroAutoPortPreference_; }
+
+    /** True when grouping the CURRENT selection right now would cross at least one graph
+     *  connection — the same predicate requestGroupSelectionIntoMacro() gates its modal on. Pure
+     *  read (does not assign uuids to freshly-dropped modules the way groupSelectionIntoMacro()
+     *  itself does), so it under-counts only for a node that has never been saved/touched before —
+     *  harmless here since it is only a UI gate, and groupSelectionIntoMacro() recomputes the real
+     *  plan with properly-ensured uuids regardless. */
+    bool selectionHasCrossingMacroCable() const;
+
+    /** Cmd+G / right-click "Create Macro" / drag-group-into-macro's real entry point — every UI
+     *  gesture that groups a selection calls THIS, not groupSelectionIntoMacro() directly. Shows
+     *  the auto-port-preference modal ONLY when the preference is Unset AND the selection actually
+     *  has a crossing cable (never interrupts a grouping that has nothing to decide); otherwise
+     *  groups immediately, honouring whatever the preference already says. */
+    void requestGroupSelectionIntoMacro();
+
+    /** Test seam: when set, called INSTEAD of launching the real modal — `respond(createPorts,
+     *  remember)` drives the completion exactly as a real button click would, with no DialogWindow
+     *  or message loop involved. Production code leaves this null. */
+    std::function<void(std::function<void(bool createPorts, bool remember)> respond)> macroAutoPortModalForTest;
 
     /** Ungroups (Cmd+Shift+G): dissolves every macro that owns at least one currently-selected
      *  node, keeping their member modules exactly where they are and expanding them back to
@@ -1330,6 +1377,84 @@ private:
      *  AudioCV port (a MacroPort carries no shape of its own, §5.2). Empty if `macroId` doesn't
      *  resolve. */
     std::vector<synth::ui::MacroPortConfigDialog::PortRow> macroPortRowsForDialog(const juce::String& macroId) const;
+
+    // ---- Auto-create-ports-on-group (founder-review fix F5, docs/macros.md §7 item 6.1) --------
+
+    /** One raw graph connection crossing the would-be macro's boundary, folded into a
+     *  MacroPortCrossingGroup below. `legIndex` is this edge's 0-based position within its group's
+     *  shape: always 0 for Mono; 0=Left/1=Right for Stereo; 0..voiceCount-1 for Poly. */
+    struct MacroPortCrossingEdge {
+        juce::AudioProcessorGraph::NodeID externalNodeId;
+        int externalRawChannel = 0;
+        int internalRawChannel = 0;
+        int legIndex = 0;
+    };
+
+    /** Every crossing connection landing on the SAME (internal node, direction, visible jack) —
+     *  the de-duplication key: two cables into the same internal destination jack (e.g. a
+     *  collapsed stereo pair's two raw legs, or several external sources fanned into one mono
+     *  jack) share ONE port, not N. `isInput` is the resulting MacroPort's own direction: true
+     *  when the internal node is the connection's destination (signal enters the macro, an
+     *  inlet); false when it is the source (an outlet). `shape`/`voiceCount` are read off the
+     *  internal jack's own LogicalPort (mapInputChannel/mapOutputChannel), never defaulted. */
+    struct MacroPortCrossingGroup {
+        juce::AudioProcessorGraph::NodeID internalNodeId;
+        juce::String internalUuid;
+        bool isInput = false;
+        bool isMidi = false;
+        int visibleJack = -1;   // meaningless (and unused for dedup) when isMidi
+        int headRawChannel = 0; // this jack's poly-group-head raw channel; legIndex is offset from it
+        MacroPortShape shape = MacroPortShape::Mono;
+        int voiceCount = 1;
+        std::vector<MacroPortCrossingEdge> edges;
+    };
+
+    /** Reads `graph.getConnections()` the same way rebuildVisibleCables()/AudioEngine's routing
+     *  enumeration does (LogicalPort::visibleJackIndex/isPolyGroupHead/polyVoiceSpan/role, never a
+     *  raw-channel guess) and groups every connection with exactly one endpoint in `memberNodeIds`
+     *  into MacroPortCrossingGroup entries — one per (internal node, direction, jack). A crossing
+     *  connection whose EXTERNAL endpoint is an AttenuverterModule is excluded: retargeting one leg
+     *  of a mod-routing knob onto a fresh port node would desync AudioEngine's DirectCV/
+     *  AttenuverterChain classification from the live graph and drop the knob out of the mod
+     *  matrix — left un-ported instead, consistent with §5.4's "encapsulation is advisory." A
+     *  Dual-I/O-on module's separately-jacked Left/Right crossings are merged into one Stereo
+     *  group via ModuleBase::rightAudioLegChannel() (never jack index 0/1 — Source/Modules/
+     *  CLAUDE.md) when BOTH legs cross. Pure read — does not touch the graph or `macros`.
+     *
+     *  Takes live NodeIDs, not uuids: a module freshly dropped on the canvas has no `"uuid"`
+     *  property yet (only lazily assigned on first save or by groupSelectionIntoMacro() itself),
+     *  so gating the crossing-cable check on resolvable uuids would silently under-detect on the
+     *  most common real path — select two never-saved modules with an external cable and group
+     *  them straight away. NodeIDs are always live the moment a node exists on the canvas. */
+    std::vector<MacroPortCrossingGroup>
+    buildMacroPortCrossingPlan(const std::vector<juce::AudioProcessorGraph::NodeID>& memberNodeIds) const;
+
+    /** Convenience wrapper for callers that already have uuids (groupSelectionIntoMacro(), once it
+     *  has assigned every member a uuid) — resolves each to a NodeID and forwards. NOT used by the
+     *  selection-time crossing-cable check (see the NodeID overload's comment for why). */
+    std::vector<MacroPortCrossingGroup> buildMacroPortCrossingPlan(const std::vector<juce::String>& memberUuids) const;
+
+    /** Splices a port node for every group in `plan` into `macroId` — disconnect external<->
+     *  internal, add the port node (shape/voiceCount from the group, name from
+     *  autoMacroPortName()), reconnect external->port->internal (or the reverse for an outlet),
+     *  exactly the raw channels the original edges used. Called from inside
+     *  groupSelectionIntoMacro(true)'s own recordGraphAndMacroChange transaction — never pushes an
+     *  undo entry of its own. */
+    void spliceMacroPorts(const juce::String& macroId, const std::vector<MacroPortCrossingGroup>& plan);
+
+    /** Default name for an auto-created port: the internal module's own name plus the jack it
+     *  fronts (its getInputPortLabel/getOutputPortLabel at `visibleJack`) — e.g. "Filter Cutoff",
+     *  not "Input 2". `internalMb` may be null (defensive); MIDI ports skip the jack label
+     *  entirely, since a MIDI port has no jack concept to name (§5.1). */
+    static juce::String autoMacroPortName(ModuleBase* internalMb, bool isInput, int visibleJack, bool isMidi);
+
+    /** Launches the real "Create ports for the crossing cables?" modal
+     *  (synth::ui::MacroAutoPortPromptDialog) and calls `respond(createPorts, remember)` once the
+     *  user picks. Only reached from requestGroupSelectionIntoMacro() when
+     *  macroAutoPortModalForTest is unset — see that member's comment. */
+    void showMacroAutoPortModal(std::function<void(bool createPorts, bool remember)> respond);
+
+    MacroAutoPortPreference macroAutoPortPreference_ = MacroAutoPortPreference::Unset;
 
     std::vector<AudioEngine::ModulationDisplayInfo> cachedModDisplayInfo;
     std::vector<AudioEngine::ModulationRouting> cachedModRoutings;

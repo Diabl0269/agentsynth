@@ -13,7 +13,10 @@ This document covers two things:
    longer renders as a full module card, collapsed OR expanded — see "How a port is drawn" below.
    The same review also added a menu-reachability fix (§5.8): a macro member module's own
    right-click menu now offers the macro's actions too, not just the collapsed card and the
-   expanded hull.
+   expanded hull. A further founder-review pass (fix F5, §7 item 7) added the biggest behaviour
+   change since P8-15d: grouping a selection that has a cable crossing its boundary can now
+   auto-create matching ports for those cables instead of leaving them wired straight to an
+   interior member, behind a remembered tri-state preference.
 
 ---
 
@@ -636,6 +639,109 @@ In order, each independently shippable:
    `toggleMacroBypassed`/`toggleMacroMuted` (wired into `buildMacroMenu` as "Bypass Macro"/
    "Mute Macro") converge a `Mixed` or `AllOff` state to ON and an `AllOn` state to OFF, mirroring
    `toggleSelectionMacrosCollapsed`'s own convergence rule.
+7. **DONE (founder-review fix F5).** Auto-create ports for a crossing cable when grouping, behind
+   a remembered preference. Founder verdict: *"When gathering the modules into the macro for the
+   first time, they should automatically create i/o ports for modules that have cables going in or
+   out of the macro,"* and *"There should be a modal asking if you prefer this way, or just leave
+   the cables as is. After the user selects a preference it is saved and he can later change it in
+   the preferences menu."*
+
+   **The preference (`GraphEditor::MacroAutoPortPreference`)** is a TRI-STATE, not a bool — `Unset`
+   (ask on the next group with a crossing cable), `AutoCreatePorts`, `LeaveCablesAsIs` — DEFAULT
+   `Unset`. Persisted through `juce::ApplicationProperties` by `PreferencesSettingsTab` exactly the
+   way it persists its own keys (`"macroAutoCreatePorts"`, one of `"ask"`/`"auto"`/`"leave"`; a
+   getter/setter pair and a `Macro auto-ports:` combo row in the Preferences tab, including "Always
+   ask" to go back). `GraphEditor::requestGroupSelectionIntoMacro()` — what Cmd+G
+   (`groupOrToggleSelectionMacros`), the right-click "Create Macro from N Modules" menu item, and
+   the drag-group canvas menu all call now, instead of `groupSelectionIntoMacro()` directly — shows
+   `synth::ui::MacroAutoPortPromptDialog` (in `MacroPortConfigDialog.{h,cpp}`, alongside the
+   Configure I/O dialog it shares a translation unit with rather than a new `Source/UI/*.cpp` pair)
+   ONLY when the preference is `Unset` AND the selection actually has a crossing connection — a
+   grouping with nothing to decide is never interrupted. Two buttons ("Create Ports" / "Leave
+   Cables As Is") plus a "Remember my choice" toggle (default ON); the choice persists (through
+   `propertiesFile_`, the same seam the macro recolour favourites shelf already uses, since this
+   modal can fire before a Settings window — and therefore a `PreferencesSettingsTab` — has ever
+   been constructed) only when remember is checked, and applies once otherwise. Follows the
+   async-modal idiom already used for Configure I/O (`DialogWindow::LaunchOptions::launchAsync` +
+   a callback, never a blocking modal loop); `GraphEditor::macroAutoPortModalForTest` is a test
+   seam that replaces the real dialog launch with a callback a test drives directly.
+
+   **The crossing-cable gate (`selectionHasCrossingMacroCable`) reads live NodeIDs, never
+   uuids.** A module freshly dropped on the canvas has no `"uuid"` property yet (only lazily
+   assigned on first save, or by `groupSelectionIntoMacro()` itself once it decides to proceed) —
+   gating the check on resolvable uuids would silently under-detect on the single most common real
+   path: drop two never-saved modules, wire one to an existing module, group immediately. So
+   `buildMacroPortCrossingPlan()` takes `std::vector<NodeID>` as its primary overload (a thin
+   `std::vector<juce::String>` uuid-resolving wrapper remains for `groupSelectionIntoMacro`, which
+   by the time it calls it has already assigned every member a uuid). The gate also mirrors
+   `groupSelectionIntoMacro`'s own "already in a macro" refusal (`macros.findByMember`) before
+   computing a plan — a selection that grouping will refuse outright has nothing to decide, so the
+   modal must not ask a question whose answer can never be applied.
+
+   **The splice itself** — `GraphEditor::groupSelectionIntoMacro(bool autoCreatePorts)` (the
+   original zero-crossing-port behaviour is `autoCreatePorts = false`, still the signature every
+   pre-existing caller and test compiles against unchanged). Before the macro exists,
+   `buildMacroPortCrossingPlan()` reads `graph.getConnections()` the same way
+   `rebuildVisibleCables()`/`AudioEngine`'s routing enumeration do — `LogicalPort::role`/
+   `visibleJackIndex`/`isPolyGroupHead`/`polyVoiceSpan`, never a raw-channel guess — and groups
+   every connection with exactly one endpoint among the about-to-be-members into a
+   `MacroPortCrossingGroup`, keyed by **(internal node, direction, visible jack)** — this is the
+   de-duplication key: two cables landing on the same internal jack (a collapsed stereo pair's two
+   raw legs, or several external sources fanned into one jack) share ONE port. A group's shape is
+   read off the jack's own head raw channel, never defaulted: `polyVoiceSpan > 1 && role == Audio`
+   is Stereo; `polyVoiceSpan > 1` otherwise is Poly-N with that exact voice count; anything else is
+   Mono; a MIDI connection is its own group kind entirely, yielding `MacroMidiInlet`/
+   `MacroMidiOutlet`, never an audio port. A Dual-I/O-on module's Left/Right legs sit on two
+   SEPARATE visible jacks rather than one span-2 jack, so a second merge pass folds them into one
+   Stereo group when a crossing connection reaches both — paired via
+   `ModuleBase::rightAudioLegChannel()`, never jack index 0/1 (`Source/Modules/CLAUDE.md`), correct
+   for both the FX-adjacent and split-block (voice module) layouts. `spliceMacroPorts()` then, for
+   each group: disconnects every original external<->internal edge, constructs the port node with
+   the derived shape/kind (named from the internal module's own name plus
+   `getInputPortLabel`/`getOutputPortLabel` at the jack it fronts — "Filter Cutoff", never
+   "Input 2"), adds it as a macro member with a `MacroPort` entry, and reconnects
+   external->port->internal (or the reverse for an outlet) on exactly the raw channels the original
+   edges used. All of this — `macros.add()` AND every splice — runs inside
+   `groupSelectionIntoMacro`'s own ONE `recordGraphAndMacroChange` transaction (splice-before-
+   `updateComponents()`, group-then-add-as-a-second-pass was rejected), so a single Cmd+Z undoes
+   the grouping and every spliced port together.
+
+   **A mod-routing knob's own edge is never spliced.** `AudioEngine::addModRouting` always wraps a
+   single-slot CV routing through a hidden `AttenuverterModule` node; retargeting one leg of that
+   chain onto a fresh port node would desync `AudioEngine`'s `DirectCV`/`AttenuverterChain`
+   classification (keyed on the attenuverter's own node identity) from the live graph and drop the
+   mod knob out of the mod matrix. `buildMacroPortCrossingPlan()` therefore skips any crossing
+   connection whose EXTERNAL endpoint is an `AttenuverterModule` — left wired straight to the
+   interior member with no port, which §5.4 already establishes as an expected outcome ("a macro's
+   encapsulation is advisory, not enforced"), not an error.
+
+   **Hull/card ordering.** `macroHullBounds()`/`applyMacroCollapsed`'s hull-seeding union already
+   excludes port members (§5.4's "hull-feedback trap"), and the collapsed card's own `macro.bounds`
+   is seeded from the ORIGINAL (pre-port) selected members' bounds before any splicing happens — so
+   there is nothing for the splice to retroactively distort. What the splice DOES have to get right
+   is running before `updateComponents()`, which is what lays out the card jacks
+   (`macroCardPortLayout`) and docks the expanded hull's port widgets
+   (`dockMacroPortWidgets`) against however many ports now exist — `groupSelectionIntoMacro` calls
+   `spliceMacroPorts()` and `updateComponents()` in that order, inside the one transaction, never
+   the reverse.
+
+   **OPEN QUESTION, raised for the founder rather than decided silently: what should Ungroup do
+   with an auto-created port?** This fix's answer: **nothing** — `ungroupSelection()` is untouched,
+   and per §5.4 it already dissolves only the `Macro` record, never a member node or its
+   connections, so an auto-created port's fronting node survives ungrouping exactly like any other
+   member, its connections (external->port and port->internal, both) intact; the node's
+   `ModuleComponent` simply becomes visible again as an ordinary card sitting mid-signal-chain.
+   Signal keeps flowing either way, which is the one hard requirement, but a "Macro In"/"Macro Out"
+   box left behind in the middle of a plain patch is a stray artefact a user did not ask for and
+   has no obvious next step for (delete it and reconnect by hand? leave it forever?). The
+   alternative — teach `ungroupSelection()` to splice an AUTO-CREATED port back OUT on ungroup,
+   reconnecting external straight to internal, as one undo step — was NOT implemented here, for two
+   reasons: (1) `MacroPort` carries no provenance field distinguishing "auto-created by this fix"
+   from "added by hand through Configure I/O," so telling them apart would need a new persisted
+   field this stage did not add; (2) it changes what Ungroup means for every macro, not just ones
+   this feature touched. This is exactly the "least surprising, still not obviously right" case the
+   task called out — the current behaviour (ports survive as ordinary members) is what ships;
+   splice-out-on-ungroup is the documented alternative for the founder to weigh in on.
 
 ## 8. Explicitly out of scope
 

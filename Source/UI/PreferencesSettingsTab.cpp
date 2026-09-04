@@ -19,6 +19,59 @@ int comboIdFromMode(GraphEditor::SmartConnectionMode mode) {
     }
 }
 
+// Founder-review fix F5 (docs/macros.md §7 item 6.1/6.2). Duplicated from the constexpr
+// GraphEditor::requestGroupSelectionIntoMacro() writes through propertiesFile_ directly for the
+// "remember my choice" case (that modal can fire before this tab, or any Settings window, has
+// ever been constructed) — the same "one-line string not worth a header dependency" reasoning
+// kNaturalScrollingKey below documents, and the two writers MUST agree on the string values below.
+// DEFAULT "ask" (Unset): a silent default of either auto-creating or dropping cables would change
+// existing behaviour with no warning the first time this ships.
+constexpr const char* kMacroAutoPortPreferenceKey = "macroAutoCreatePorts";
+
+int comboIdFromMacroAutoPortPreference(GraphEditor::MacroAutoPortPreference pref) {
+    switch (pref) {
+    case GraphEditor::MacroAutoPortPreference::AutoCreatePorts:
+        return 2;
+    case GraphEditor::MacroAutoPortPreference::LeaveCablesAsIs:
+        return 3;
+    case GraphEditor::MacroAutoPortPreference::Unset:
+    default:
+        return 1;
+    }
+}
+
+GraphEditor::MacroAutoPortPreference macroAutoPortPreferenceFromComboId(int id) {
+    switch (id) {
+    case 2:
+        return GraphEditor::MacroAutoPortPreference::AutoCreatePorts;
+    case 3:
+        return GraphEditor::MacroAutoPortPreference::LeaveCablesAsIs;
+    case 1:
+    default:
+        return GraphEditor::MacroAutoPortPreference::Unset;
+    }
+}
+
+GraphEditor::MacroAutoPortPreference macroAutoPortPreferenceFromString(const juce::String& s) {
+    if (s == "auto")
+        return GraphEditor::MacroAutoPortPreference::AutoCreatePorts;
+    if (s == "leave")
+        return GraphEditor::MacroAutoPortPreference::LeaveCablesAsIs;
+    return GraphEditor::MacroAutoPortPreference::Unset;
+}
+
+juce::String macroAutoPortPreferenceToString(GraphEditor::MacroAutoPortPreference pref) {
+    switch (pref) {
+    case GraphEditor::MacroAutoPortPreference::AutoCreatePorts:
+        return "auto";
+    case GraphEditor::MacroAutoPortPreference::LeaveCablesAsIs:
+        return "leave";
+    case GraphEditor::MacroAutoPortPreference::Unset:
+    default:
+        return "ask";
+    }
+}
+
 // Settings key for the scroll-direction preference. Duplicated rather than shared with
 // MainComponent::kNaturalScrollingKey (which is what READS it) for the same reason
 // "timelineLoopSelectionArms" is duplicated between here and TimelinePanelComponent: a one-line
@@ -307,6 +360,27 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         juce::CallOutBox::launchAsynchronously(std::move(popup), perModuleDefaultsButton.getScreenBounds(), nullptr);
     };
 
+    addAndMakeVisible(macroAutoPortLabel_);
+    macroAutoPortLabel_.setText("Macro auto-ports:", juce::dontSendNotification);
+    macroAutoPortLabel_.setFont(juce::Font(juce::FontOptions(13.0f)));
+
+    addAndMakeVisible(macroAutoPortCombo_);
+    macroAutoPortCombo_.addItem("Always ask", 1);
+    macroAutoPortCombo_.addItem("Auto-create ports", 2);
+    macroAutoPortCombo_.addItem("Leave cables as is", 3);
+    macroAutoPortCombo_.setTooltip(
+        "When grouping modules that have a cable crossing the new macro's boundary: ask every time "
+        "(the default), always create a matching port for it, or always leave the cable exactly as "
+        "it is.");
+    {
+        const auto pref = macroAutoPortPreferenceFromString(
+            appProperties.getUserSettings()->getValue(kMacroAutoPortPreferenceKey, "ask"));
+        macroAutoPortCombo_.setSelectedId(comboIdFromMacroAutoPortPreference(pref), juce::dontSendNotification);
+    }
+    macroAutoPortCombo_.onChange = [this] {
+        persistMacroAutoPortPreference(macroAutoPortPreferenceFromComboId(macroAutoPortCombo_.getSelectedId()));
+    };
+
     addAndMakeVisible(loopSelectionArmsToggle);
     loopSelectionArmsToggle.setToggleState(
         appProperties.getUserSettings()->getBoolValue("timelineLoopSelectionArms", true), juce::dontSendNotification);
@@ -577,6 +651,19 @@ void PreferencesSettingsTab::resized() {
         pendingDivider = pendingDivider || visible;
     }
 
+    // Group 4b: macro auto-port preference (founder-review fix F5, docs/macros.md §7 item 6.2).
+    {
+        const bool visible = groupMatches({&macroAutoPortLabel_, &macroAutoPortCombo_});
+        setGroupVisible({&macroAutoPortLabel_, &macroAutoPortCombo_}, visible);
+        beginGroup(visible);
+        if (visible) {
+            auto row = bounds.removeFromTop(24);
+            macroAutoPortLabel_.setBounds(row.removeFromLeft(160));
+            macroAutoPortCombo_.setBounds(row.removeFromLeft(220));
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+
     // Group 5: the two loop-locator toggles (no divider between them — see their declaration
     // comments). Grouped for filtering too: they read as one conversation, so a query matching
     // either keeps both rows together rather than splitting a pair that explains itself as a pair.
@@ -677,6 +764,7 @@ void PreferencesSettingsTab::setGraphEditor(GraphEditor* ge) {
     graphEditor->setAlignmentGuidesEnabled(alignmentGuideToggle.getToggleState());
     graphEditor->setDefaultDualIOForNewModules(defaultDualIOToggle.getToggleState());
     graphEditor->setDualIOPerModuleOverrides(dualIOPerModuleOverrides);
+    graphEditor->setMacroAutoPortPreference(macroAutoPortPreferenceFromComboId(macroAutoPortCombo_.getSelectedId()));
 }
 
 GraphEditor::SmartConnectionMode PreferencesSettingsTab::getSmartConnectionMode() const {
@@ -864,6 +952,22 @@ void PreferencesSettingsTab::persistDefaultDualIOForNewModules(bool enabled) {
         // retro-applies — setGraphEditor() and the startup restore must not touch the patch.
         graphEditor->applyDualIOToExistingModules(enabled);
     }
+}
+
+GraphEditor::MacroAutoPortPreference PreferencesSettingsTab::getMacroAutoPortPreference() const {
+    return macroAutoPortPreferenceFromComboId(macroAutoPortCombo_.getSelectedId());
+}
+
+void PreferencesSettingsTab::setMacroAutoPortPreference(GraphEditor::MacroAutoPortPreference pref) {
+    macroAutoPortCombo_.setSelectedId(comboIdFromMacroAutoPortPreference(pref), juce::dontSendNotification);
+    persistMacroAutoPortPreference(pref);
+}
+
+void PreferencesSettingsTab::persistMacroAutoPortPreference(GraphEditor::MacroAutoPortPreference pref) {
+    appProperties.getUserSettings()->setValue(kMacroAutoPortPreferenceKey, macroAutoPortPreferenceToString(pref));
+    appProperties.getUserSettings()->saveIfNeeded();
+    if (graphEditor)
+        graphEditor->setMacroAutoPortPreference(pref);
 }
 
 const std::vector<juce::String>& PreferencesSettingsTab::getDualIOModuleTypes() { return dualIOModuleTypes(); }

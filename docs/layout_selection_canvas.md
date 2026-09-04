@@ -234,9 +234,11 @@ and a macro cannot contain another macro. This is a scope decision, not a missin
 a Macro its own ports (so it could itself be wired and nested like a sub-patch) is the separate,
 later P8-15. `GraphEditor::groupSelectionIntoMacro()` enforces both halves of the contract by
 refusing outright, via `onStatusMessage`, rather than doing something ad hoc: fewer than two
-selected nodes, or any selected node already belonging to a macro. It is called directly by the
-right-click "Create Macro from N Modules" menu item (`ModuleComponent`'s menu and
-`GraphEditor::showCanvasContextMenu`), which always means exactly that verb. `ungroupSelection()`
+selected nodes, or any selected node already belonging to a macro. The right-click "Create Macro
+from N Modules" menu item (`ModuleComponent`'s menu and `GraphEditor::showCanvasContextMenu`)
+calls `GraphEditor::requestGroupSelectionIntoMacro()`, which always means exactly that verb — it
+just wraps `groupSelectionIntoMacro()` with the P8-15 auto-port-preference gate (docs/macros.md §7
+item 6.1/6.2) before delegating to it. `ungroupSelection()`
 (Cmd+Shift+G) dissolves every macro touched by the current selection, leaving the member modules
 exactly where they are and expanding them back to individual cards; it is a no-op (also surfaced
 via `onStatusMessage`) if the selection touches no macro. Deleting a macro is the opposite of
@@ -246,16 +248,16 @@ members as the whole selection.
 
 **Cmd+G itself (P8-14) does not call `groupSelectionIntoMacro()` directly** — it goes through
 `GraphEditor::groupOrToggleSelectionMacros()`, the single dispatch point shared by the command
-handler: group the selection into a new macro only when it touches no macro at all; otherwise
-toggle the touched macro(s) collapsed/expanded (`toggleSelectionMacrosCollapsed()`, the same
-behaviour as the standalone Cmd+Alt+G binding) and leave any loose, ungrouped modules in the
-selection untouched. A mixed selection — some selected nodes already in a macro, some not — takes
-the toggle branch: the touched macros toggle, the loose modules are silently excluded from the
-gesture (not folded into the macro, not refused), and a status message names how many macros
-toggled and that modules outside a macro were left alone. This is why the nested-macro refusal
-above is now only reachable via a direct `groupSelectionIntoMacro()` call (the context-menu items,
-or Cmd+G on a selection with no macro members yet) — Cmd+G on a selection that already touches a
-macro never reaches it.
+handler: group the selection into a new macro only when it touches no macro at all (via
+`requestGroupSelectionIntoMacro()`, same as the context-menu items); otherwise toggle the touched
+macro(s) collapsed/expanded (`toggleSelectionMacrosCollapsed()`, the same behaviour as the
+standalone Cmd+Alt+G binding) and leave any loose, ungrouped modules in the selection untouched. A
+mixed selection — some selected nodes already in a macro, some not — takes the toggle branch: the
+touched macros toggle, the loose modules are silently excluded from the gesture (not folded into
+the macro, not refused), and a status message names how many macros toggled and that modules
+outside a macro were left alone. This is why the nested-macro refusal above is now only reachable
+via a direct `groupSelectionIntoMacro()` call (the context-menu items, or Cmd+G on a selection with
+no macro members yet) — Cmd+G on a selection that already touches a macro never reaches it.
 
 **Collapse/expand hides members, it doesn't destroy them.** Collapsing a macro
 (`setMacroCollapsed`) sets each member `ModuleComponent` invisible and shows one

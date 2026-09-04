@@ -35,6 +35,12 @@ public:
     void setAlignmentGuidesEnabled(bool enabled);
     bool getDefaultDualIOForNewModules() const;
     void setDefaultDualIOForNewModules(bool enabled);
+    // Founder-review fix F5 (docs/macros.md §7 item 6.2): whether grouping a selection with a
+    // crossing cable into a macro auto-creates matching ports, leaves the cables as they are, or
+    // asks every time (the default). "Always ask" here is what lets a user who picked a side once
+    // reconsider — GraphEditor's own modal offers no such way back in, only "remember this choice".
+    GraphEditor::MacroAutoPortPreference getMacroAutoPortPreference() const;
+    void setMacroAutoPortPreference(GraphEditor::MacroAutoPortPreference pref);
     bool isLoopSelectionArmsEnabled() const;
     void setLoopSelectionArmsEnabled(bool enabled);
     bool isDoubleClickSpansLocatorsEnabled() const;
@@ -119,6 +125,7 @@ private:
     void persistDoubleClickPortDisconnect(bool enabled);
     void persistAlignmentGuidesEnabled(bool enabled);
     void persistDefaultDualIOForNewModules(bool enabled);
+    void persistMacroAutoPortPreference(GraphEditor::MacroAutoPortPreference pref);
     void persistLoopSelectionArms(bool enabled);
     void persistDoubleClickSpansLocators(bool enabled);
     void persistNaturalScrolling(bool enabled);
@@ -173,6 +180,11 @@ private:
     // module type that carries the Dual I/O parameter — see buildDualIOPerModuleDefaultsPopup() and
     // the "dualIOPerModuleDefaults" JSON key.
     juce::TextButton perModuleDefaultsButton{"Per-module I/O defaults..."};
+    // Founder-review fix F5 (docs/macros.md §7 item 6.1/6.2): "Always ask" / "Auto-create ports" /
+    // "Leave cables as is" — the tri-state GraphEditor::MacroAutoPortPreference the "Create Macro"
+    // gesture reads before deciding whether to show its own modal.
+    juce::Label macroAutoPortLabel_;
+    juce::ComboBox macroAutoPortCombo_;
     juce::ToggleButton loopSelectionArmsToggle{"Timeline: P (loop selection) also switches looping on"};
     // The other half of the same locator conversation, so it sits in the same group as the row
     // above rather than getting a divider of its own: one is "make the locators from a selection",

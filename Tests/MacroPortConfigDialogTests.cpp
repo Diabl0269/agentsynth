@@ -240,3 +240,63 @@ TEST(MacroPortConfigDialogTest, CloseButtonFiresOnRequestClose) {
 
     EXPECT_TRUE(closed);
 }
+
+// ============================================================================
+// MacroAutoPortPromptDialog (founder-review fix F5, docs/macros.md §7 item 6.2)
+// ============================================================================
+
+using synth::ui::MacroAutoPortPromptDialog;
+
+TEST(MacroAutoPortPromptDialogTest, RememberDefaultsToOn) {
+    MacroAutoPortPromptDialog dialog(3);
+    EXPECT_TRUE(dialog.getRememberChoiceForTest());
+}
+
+TEST(MacroAutoPortPromptDialogTest, CreatePortsFiresTrueWithTheRememberState) {
+    MacroAutoPortPromptDialog dialog(2);
+
+    bool fired = false;
+    bool capturedCreate = false;
+    bool capturedRemember = true;
+    dialog.onChoice = [&](bool createPorts, bool remember) {
+        fired = true;
+        capturedCreate = createPorts;
+        capturedRemember = remember;
+    };
+
+    dialog.setRememberChoiceForTest(false);
+    dialog.triggerCreatePortsForTest();
+
+    ASSERT_TRUE(fired);
+    EXPECT_TRUE(capturedCreate);
+    EXPECT_FALSE(capturedRemember);
+}
+
+TEST(MacroAutoPortPromptDialogTest, LeaveCablesAsIsFiresFalseWithTheRememberState) {
+    MacroAutoPortPromptDialog dialog(1);
+
+    bool fired = false;
+    bool capturedCreate = true;
+    bool capturedRemember = false;
+    dialog.onChoice = [&](bool createPorts, bool remember) {
+        fired = true;
+        capturedCreate = createPorts;
+        capturedRemember = remember;
+    };
+
+    dialog.setRememberChoiceForTest(true);
+    dialog.triggerLeaveCablesAsIsForTest();
+
+    ASSERT_TRUE(fired);
+    EXPECT_FALSE(capturedCreate);
+    EXPECT_TRUE(capturedRemember);
+}
+
+TEST(MacroAutoPortPromptDialogTest, PaintAndResizeDoNotCrash) {
+    MacroAutoPortPromptDialog dialog(4);
+    dialog.setBounds(0, 0, 420, 190);
+    juce::Image image(juce::Image::ARGB, 420, 190, true);
+    juce::Graphics g(image);
+    dialog.paint(g);
+    SUCCEED();
+}

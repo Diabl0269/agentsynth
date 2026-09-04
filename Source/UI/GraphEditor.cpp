@@ -3738,7 +3738,7 @@ void GraphEditor::dockMacroPortWidgets() {
     }
 }
 
-juce::String GraphEditor::groupSelectionIntoMacro() {
+juce::String GraphEditor::groupSelectionIntoMacro(bool autoCreatePorts) {
     auto ids = selection.getSelected();
     if (ids.size() < 2) {
         if (onStatusMessage)
@@ -3782,6 +3782,14 @@ juce::String GraphEditor::groupSelectionIntoMacro() {
         return {};
     }
 
+    // Founder-review fix F5 (docs/macros.md §7 item 6.1): the crossing plan is read off the LIVE
+    // graph now, before the macro exists — resolveMemberNodeId (which buildMacroPortCrossingPlan
+    // uses internally) only knows about macros already in `macros`, so this has to work off the
+    // uuid list directly. Pure read; nothing below mutates the graph until doGroup runs.
+    std::vector<MacroPortCrossingGroup> portPlan;
+    if (autoCreatePorts)
+        portPlan = buildMacroPortCrossingPlan(memberUuids);
+
     synth::Macro macro;
     macro.name = "Macro";
     macro.members = memberUuids;
@@ -3791,8 +3799,13 @@ juce::String GraphEditor::groupSelectionIntoMacro() {
 
     auto& graph = audioEngine.getGraph();
     juce::String newId;
-    auto doGroup = [this, macro, &newId] {
+    auto doGroup = [this, macro, portPlan, &newId] {
         newId = macros.add(macro).id;
+        // Splice BEFORE updateComponents(): the spliced port nodes must exist, and be macro
+        // members, before the card/hull layout that updateComponents() triggers runs against
+        // them — never group-then-add as a second pass.
+        if (!portPlan.empty())
+            spliceMacroPorts(newId, portPlan);
         updateComponents();
     };
 
@@ -3806,6 +3819,82 @@ juce::String GraphEditor::groupSelectionIntoMacro() {
 
     repaint();
     return newId;
+}
+
+bool GraphEditor::selectionHasCrossingMacroCable() const {
+    // NodeID-based (not selectedMemberUuidsReadOnly()-style uuid resolution): a freshly-dropped,
+    // never-saved module has no "uuid" property yet, so gating on resolvable uuids would silently
+    // miss the crossing cable on the single most common real path (select two brand-new modules
+    // wired to an external one, group immediately). buildMacroPortCrossingPlan()'s NodeID overload
+    // needs no uuid at all. See its header comment for the full reasoning.
+    const auto ids = selection.getSelected();
+    if (ids.size() < 2)
+        return false;
+    for (auto id : ids) {
+        const juce::String uuid = nodeUuidFor(id);
+        // Only a module that has already been saved once can have a uuid, and only such a module
+        // can already be a macro member — a selection touching an existing macro is refused
+        // outright by groupSelectionIntoMacro() (see its own guard), so there is nothing to ask
+        // about: mirror that refusal here rather than showing a modal for a grouping that can't
+        // happen.
+        if (uuid.isNotEmpty() && macros.findByMember(uuid) != nullptr)
+            return false;
+    }
+    return !buildMacroPortCrossingPlan(ids).empty();
+}
+
+void GraphEditor::requestGroupSelectionIntoMacro() {
+    const bool hasCrossing = selectionHasCrossingMacroCable();
+
+    if (macroAutoPortPreference_ == MacroAutoPortPreference::Unset && hasCrossing) {
+        juce::Component::SafePointer<GraphEditor> safeThis(this);
+        auto respond = [safeThis](bool createPorts, bool remember) {
+            auto* self = safeThis.getComponent();
+            if (self == nullptr)
+                return;
+            if (remember) {
+                self->macroAutoPortPreference_ =
+                    createPorts ? MacroAutoPortPreference::AutoCreatePorts : MacroAutoPortPreference::LeaveCablesAsIs;
+                // Persisted here (not only through PreferencesSettingsTab) because this modal can
+                // fire before a Settings window — and therefore a PreferencesSettingsTab — has
+                // ever been constructed. Same propertiesFile_ the macro recolour favourites shelf
+                // already persists through (setPropertiesFile); the key matches the constexpr
+                // PreferencesSettingsTab.cpp duplicates for its own read.
+                if (self->propertiesFile_ != nullptr) {
+                    self->propertiesFile_->setValue("macroAutoCreatePorts", createPorts ? "auto" : "leave");
+                    self->propertiesFile_->saveIfNeeded();
+                }
+            }
+            self->groupSelectionIntoMacro(createPorts);
+        };
+        if (macroAutoPortModalForTest)
+            macroAutoPortModalForTest(respond);
+        else
+            showMacroAutoPortModal(respond);
+        return;
+    }
+
+    groupSelectionIntoMacro(macroAutoPortPreference_ == MacroAutoPortPreference::AutoCreatePorts);
+}
+
+void GraphEditor::showMacroAutoPortModal(std::function<void(bool createPorts, bool remember)> respond) {
+    const int crossingCount = (int)buildMacroPortCrossingPlan(selection.getSelected()).size();
+
+    auto* dialog = new synth::ui::MacroAutoPortPromptDialog(crossingCount);
+
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned(dialog);
+    options.dialogTitle = "Macro Ports";
+    options.componentToCentreAround = this;
+    options.useNativeTitleBar = true;
+    options.resizable = false;
+    auto* window = options.launchAsync();
+
+    dialog->onChoice = [window, respond](bool createPorts, bool remember) {
+        if (window != nullptr)
+            window->exitModalState(0);
+        respond(createPorts, remember);
+    };
 }
 
 void GraphEditor::ungroupSelection() {
@@ -3928,9 +4017,10 @@ void GraphEditor::groupOrToggleSelectionMacros() {
 
     if (touchedMacroIds.empty()) {
         // Nothing selected touches a macro — Cmd+G means exactly what it always meant: group.
-        // groupSelectionIntoMacro() carries its own refusal/status behaviour (fewer than two
-        // modules) unchanged.
-        groupSelectionIntoMacro();
+        // requestGroupSelectionIntoMacro() carries its own refusal/status behaviour (fewer than
+        // two modules) unchanged, and additionally gates the auto-port-preference modal (founder-
+        // review fix F5, docs/macros.md §7 item 6.2) when it applies.
+        requestGroupSelectionIntoMacro();
         return;
     }
 
@@ -4549,6 +4639,276 @@ int GraphEditor::nextMacroPortOrder(const synth::Macro& macro, bool isInput) {
         if (p.isInput == isInput)
             next = std::max(next, p.order + 1);
     return next;
+}
+
+// ---- Auto-create-ports-on-group (founder-review fix F5, docs/macros.md §7 item 6.1) -------------
+
+std::vector<GraphEditor::MacroPortCrossingGroup>
+GraphEditor::buildMacroPortCrossingPlan(const std::vector<juce::AudioProcessorGraph::NodeID>& memberNodeIds) const {
+    std::vector<MacroPortCrossingGroup> groups;
+    auto& graph = audioEngine.getGraph();
+
+    std::set<uint32_t> memberUids;
+    for (const auto& id : memberNodeIds)
+        if (id.uid != 0)
+            memberUids.insert(id.uid);
+    if (memberUids.size() < 2)
+        return groups;
+    auto isMember = [&](juce::AudioProcessorGraph::NodeID id) { return memberUids.count(id.uid) != 0; };
+
+    for (const auto& c : graph.getConnections()) {
+        const bool srcInside = isMember(c.source.nodeID);
+        const bool dstInside = isMember(c.destination.nodeID);
+        if (srcInside == dstInside)
+            continue; // both inside (nothing to splice) or both outside (not this macro's concern)
+
+        const bool isMidi = c.source.isMIDI() || c.destination.isMIDI();
+        const auto internalId = srcInside ? c.source.nodeID : c.destination.nodeID;
+        const auto externalId = srcInside ? c.destination.nodeID : c.source.nodeID;
+        const int internalRaw = srcInside ? c.source.channelIndex : c.destination.channelIndex;
+        const int externalRaw = srcInside ? c.destination.channelIndex : c.source.channelIndex;
+        // Signal LEAVING the macro (internal end is the connection's source) -> an outlet
+        // (isInput=false); signal ENTERING it (internal end is the destination) -> an inlet.
+        const bool portIsInput = !srcInside;
+
+        // Founder-review-flagged exclusion: never splice a port into a mod-routing knob's own
+        // edge. AudioEngine::addModRouting always wraps a single-slot CV routing through an
+        // AttenuverterModule node; retargeting one leg of that chain onto a fresh port node would
+        // desync the DirectCV/AttenuverterChain classification rebuildVisibleCables()/AudioEngine
+        // read straight off the attenuverter's own node identity, dropping the mod knob out of the
+        // mod matrix. Left un-ported instead — consistent with §5.4: "a macro's encapsulation is
+        // advisory, not enforced," so a cable straight to an interior member (no port) is an
+        // expected, not an error, outcome.
+        auto* externalNode = graph.getNodeForId(externalId);
+        if (externalNode != nullptr && dynamic_cast<AttenuverterModule*>(externalNode->getProcessor()) != nullptr)
+            continue;
+
+        auto* internalNode = graph.getNodeForId(internalId);
+        if (internalNode == nullptr)
+            continue;
+        auto* internalMb = dynamic_cast<ModuleBase*>(internalNode->getProcessor());
+
+        int visibleJack = -1;
+        int headRaw = internalRaw;
+        MacroPortShape thisShape = MacroPortShape::Mono;
+        int thisSpan = 1;
+        if (!isMidi) {
+            if (internalMb == nullptr)
+                continue; // defensive: a non-ModuleBase node (graph I/O) can't be a macro member
+            const auto p =
+                portIsInput ? internalMb->mapInputChannel(internalRaw) : internalMb->mapOutputChannel(internalRaw);
+            visibleJack = p.visibleJackIndex;
+
+            // The jack's real span/role lives on its HEAD raw channel, not necessarily this one —
+            // a follower channel (e.g. the second leg of a collapsed stereo jack) reports
+            // polyVoiceSpan == 1 on itself. Same technique rebuildVisibleCables()'s
+            // channelExposedOnJack uses to read a jack's full shape.
+            const int totalCh = portIsInput ? internalNode->getProcessor()->getTotalNumInputChannels()
+                                            : internalNode->getProcessor()->getTotalNumOutputChannels();
+            PortRole headRole = p.role;
+            int headSpan = 1;
+            for (int raw = 0; raw < totalCh; ++raw) {
+                const auto hp = portIsInput ? internalMb->mapInputChannel(raw) : internalMb->mapOutputChannel(raw);
+                if (hp.visibleJackIndex == visibleJack && hp.isPolyGroupHead) {
+                    headRaw = raw;
+                    headSpan = std::max(1, hp.polyVoiceSpan);
+                    headRole = hp.role;
+                    break;
+                }
+            }
+            thisSpan = headSpan;
+            thisShape = (headSpan > 1 && headRole == PortRole::Audio) ? MacroPortShape::Stereo
+                        : (headSpan > 1)                              ? MacroPortShape::Poly
+                                                                      : MacroPortShape::Mono;
+        }
+
+        MacroPortCrossingGroup* group = nullptr;
+        for (auto& g : groups) {
+            if (g.internalNodeId == internalId && g.isInput == portIsInput && g.isMidi == isMidi &&
+                (isMidi || g.visibleJack == visibleJack)) {
+                group = &g;
+                break;
+            }
+        }
+        if (group == nullptr) {
+            MacroPortCrossingGroup newGroup;
+            newGroup.internalNodeId = internalId;
+            newGroup.internalUuid = nodeUuidFor(internalId);
+            newGroup.isInput = portIsInput;
+            newGroup.isMidi = isMidi;
+            newGroup.visibleJack = visibleJack;
+            newGroup.headRawChannel = headRaw;
+            newGroup.shape = thisShape;
+            newGroup.voiceCount = thisSpan;
+            groups.push_back(newGroup);
+            group = &groups.back();
+        }
+
+        MacroPortCrossingEdge edge;
+        edge.externalNodeId = externalId;
+        edge.externalRawChannel = externalRaw;
+        edge.internalRawChannel = internalRaw;
+        edge.legIndex = isMidi ? 0 : (internalRaw - group->headRawChannel);
+        group->edges.push_back(edge);
+    }
+
+    // Merge a Dual-I/O-on module's separately-jacked Left/Right crossings into one Stereo group.
+    // A collapsed jack's own two-raw-channel stereo pair is already ONE group above (grouped by
+    // visible jack, span read off the head channel); this handles the OTHER stereo shape — Dual
+    // I/O on puts Left and Right on two DIFFERENT visible jacks, so if a crossing connection
+    // reaches both, two Mono groups would otherwise silently collapse a stereo signal into two
+    // independent mono cables. Pairs legs via ModuleBase::rightAudioLegChannel(), never jack index
+    // 0/1 (Source/Modules/CLAUDE.md) — correct for both the adjacent (FX) and split-block (voice
+    // module) layouts.
+    bool mergedAny = true;
+    while (mergedAny) {
+        mergedAny = false;
+        for (size_t i = 0; i < groups.size() && !mergedAny; ++i) {
+            auto& left = groups[i];
+            if (left.isMidi || left.shape != MacroPortShape::Mono || left.headRawChannel != 0)
+                continue;
+            auto* internalNode = graph.getNodeForId(left.internalNodeId);
+            auto* internalMb =
+                internalNode != nullptr ? dynamic_cast<ModuleBase*>(internalNode->getProcessor()) : nullptr;
+            if (internalMb == nullptr || !internalMb->hasDualIOParameter() || !internalMb->isDualIO())
+                continue;
+            const int rightRaw = internalMb->rightAudioLegChannel();
+            if (rightRaw < 0)
+                continue;
+
+            for (size_t j = 0; j < groups.size(); ++j) {
+                if (j == i)
+                    continue;
+                auto& right = groups[j];
+                if (right.isMidi || right.shape != MacroPortShape::Mono ||
+                    right.internalNodeId != left.internalNodeId || right.isInput != left.isInput ||
+                    right.headRawChannel != rightRaw)
+                    continue;
+
+                for (auto edge : right.edges) {
+                    edge.legIndex = 1;
+                    left.edges.push_back(edge);
+                }
+                left.shape = MacroPortShape::Stereo;
+                left.voiceCount = 1;
+                groups.erase(groups.begin() + (long)j);
+                mergedAny = true;
+                break;
+            }
+        }
+    }
+
+    return groups;
+}
+
+std::vector<GraphEditor::MacroPortCrossingGroup>
+GraphEditor::buildMacroPortCrossingPlan(const std::vector<juce::String>& memberUuids) const {
+    std::vector<juce::AudioProcessorGraph::NodeID> ids;
+    ids.reserve(memberUuids.size());
+    for (const auto& uuid : memberUuids) {
+        const auto id = resolveMemberNodeId(uuid);
+        if (id.uid != 0)
+            ids.push_back(id);
+    }
+    return buildMacroPortCrossingPlan(ids);
+}
+
+void GraphEditor::spliceMacroPorts(const juce::String& macroId, const std::vector<MacroPortCrossingGroup>& plan) {
+    auto* macro = macros.find(macroId);
+    if (macro == nullptr)
+        return;
+    auto& graph = audioEngine.getGraph();
+
+    // The right leg of a Stereo macro port node's own raw layout (docs/macros.md §5.3's
+    // implementation note) — identical on MacroInletModule and MacroOutletModule.
+    constexpr int kMacroPortRightBase = MacroInletModule::kRightBase;
+    static_assert(MacroOutletModule::kRightBase == kMacroPortRightBase,
+                  "MacroInletModule/MacroOutletModule must agree on the Stereo right-leg raw channel");
+
+    for (const auto& group : plan) {
+        // 1. Disconnect every original crossing edge in this group, external<->internal.
+        for (const auto& edge : group.edges) {
+            const int externalChannel =
+                group.isMidi ? juce::AudioProcessorGraph::midiChannelIndex : edge.externalRawChannel;
+            const int internalChannel =
+                group.isMidi ? juce::AudioProcessorGraph::midiChannelIndex : edge.internalRawChannel;
+            const juce::AudioProcessorGraph::Connection c =
+                group.isInput ? juce::AudioProcessorGraph::Connection{{edge.externalNodeId, externalChannel},
+                                                                      {group.internalNodeId, internalChannel}}
+                              : juce::AudioProcessorGraph::Connection{{group.internalNodeId, internalChannel},
+                                                                      {edge.externalNodeId, externalChannel}};
+            graph.removeConnection(c);
+        }
+
+        // 2. Construct the port node with the derived shape/kind, named from the internal module +
+        //    jack it fronts, BEFORE it is wired into the live graph (§5.3's construction-time rule).
+        const auto kind = group.isMidi ? synth::MacroPortKind::Midi : synth::MacroPortKind::AudioCV;
+        const juce::String typeName = macroPortNodeTypeName(group.isInput, kind);
+        auto newProcessor = synth::AIStateMapper::createModule(typeName);
+        if (!newProcessor)
+            continue; // defensive: leave this group's cables disconnected rather than crash
+
+        if (!group.isMidi) {
+            if (auto* inlet = dynamic_cast<MacroInletModule*>(newProcessor.get()))
+                inlet->setPortShape(group.shape, group.voiceCount);
+            else if (auto* outlet = dynamic_cast<MacroOutletModule*>(newProcessor.get()))
+                outlet->setPortShape(group.shape, group.voiceCount);
+        }
+
+        auto* internalNodeForName = graph.getNodeForId(group.internalNodeId);
+        auto* internalMbForName =
+            internalNodeForName != nullptr ? dynamic_cast<ModuleBase*>(internalNodeForName->getProcessor()) : nullptr;
+        const juce::String portName =
+            autoMacroPortName(internalMbForName, group.isInput, group.visibleJack, group.isMidi);
+
+        auto node = graph.addNode(std::move(newProcessor));
+        if (!node)
+            continue;
+        node->properties.set("x", macro->bounds.getX());
+        node->properties.set("y", macro->bounds.getY());
+        const juce::String portUuid = synth::AIStateMapper::ensureNodeUuid(node);
+
+        macro->members.push_back(portUuid);
+        synth::MacroPort mp;
+        mp.nodeUuid = portUuid;
+        mp.isInput = group.isInput;
+        mp.name = portName;
+        mp.order = nextMacroPortOrder(*macro, group.isInput);
+        mp.kind = kind;
+        macro->ports.push_back(mp);
+
+        // 3. Reconnect: external -> port -> internal (an inlet), or internal -> port -> external
+        //    (an outlet), on exactly the raw channels the original edges used.
+        for (const auto& edge : group.edges) {
+            const int portRaw = group.isMidi                            ? 0
+                                : group.shape == MacroPortShape::Stereo ? (edge.legIndex == 0 ? 0 : kMacroPortRightBase)
+                                                                        : edge.legIndex;
+            const int externalChannel =
+                group.isMidi ? juce::AudioProcessorGraph::midiChannelIndex : edge.externalRawChannel;
+            const int internalChannel =
+                group.isMidi ? juce::AudioProcessorGraph::midiChannelIndex : edge.internalRawChannel;
+            const int portChannel = group.isMidi ? juce::AudioProcessorGraph::midiChannelIndex : portRaw;
+
+            if (group.isInput) {
+                graph.addConnection({{edge.externalNodeId, externalChannel}, {node->nodeID, portChannel}});
+                graph.addConnection({{node->nodeID, portChannel}, {group.internalNodeId, internalChannel}});
+            } else {
+                graph.addConnection({{group.internalNodeId, internalChannel}, {node->nodeID, portChannel}});
+                graph.addConnection({{node->nodeID, portChannel}, {edge.externalNodeId, externalChannel}});
+            }
+        }
+    }
+}
+
+juce::String GraphEditor::autoMacroPortName(ModuleBase* internalMb, bool isInput, int visibleJack, bool isMidi) {
+    const juce::String base = internalMb != nullptr ? internalMb->getName() : juce::String("Module");
+    if (isMidi)
+        return base + " MIDI";
+    if (internalMb == nullptr || visibleJack < 0)
+        return base;
+    const juce::String jackLabel =
+        isInput ? internalMb->getInputPortLabel(visibleJack) : internalMb->getOutputPortLabel(visibleJack);
+    return jackLabel.isNotEmpty() ? base + " " + jackLabel : base;
 }
 
 juce::String GraphEditor::addMacroPort(const juce::String& macroId, bool isInput, synth::MacroPortKind kind,
@@ -5199,11 +5559,13 @@ void GraphEditor::showCanvasContextMenu(juce::Point<int> canvasPos) {
 
     const int selectionCount = getSelectionCount();
     if (selectionCount > 1) {
-        // Calls groupSelectionIntoMacro() directly, not the Cmd+G dispatch — see the matching
-        // comment in ModuleComponent.cpp's right-click menu for why.
+        // Calls requestGroupSelectionIntoMacro() directly, not the Cmd+G dispatch — see the
+        // matching comment in ModuleComponent.cpp's right-click menu for why. That entry point
+        // gates the auto-port-preference modal (founder-review fix F5, docs/macros.md §7 item
+        // 6.2) the same way Cmd+G does.
         m.addItem("Create Macro from " + juce::String(selectionCount) + " Modules", [safeThis] {
             if (safeThis != nullptr)
-                safeThis->groupSelectionIntoMacro();
+                safeThis->requestGroupSelectionIntoMacro();
         });
     }
 
