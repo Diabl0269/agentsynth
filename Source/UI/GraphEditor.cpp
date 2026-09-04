@@ -516,21 +516,33 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
         cables.push_back(cable);
     }
 
-    // ---- Collapsed-macro cable treatment (P8-12) ----
+    // ---- Collapsed-macro cable treatment (P8-12, generalized for ports in P8-15c/T141) ----
     //
     // A collapsed macro hides its member ModuleComponents (setVisible(false) in syncMacroCards),
     // but their graph edges — and the cables above computed from them — don't know that. A cable
     // wholly inside one collapsed macro is dropped outright (both endpoints are off-screen, and
     // there is nothing useful to draw); a cable crossing a collapsed macro's boundary is
-    // re-anchored to the point where the card's edge faces the other endpoint (see
-    // projectToRectEdge) rather than left pointing at a hidden jack or floating at the centre. The
-    // rectangle projected against is macroCableAnchorBounds(macro) — the LIVE
+    // re-anchored on the card. Two anchor treatments, per §5.4's table:
+    //   - the hidden endpoint IS one of the macro's own ports (a MacroInlet/Outlet or MIDI
+    //     variant fronting a synth::MacroPort) -> anchor at that port's own jack
+    //     (macroCardPortLayout), so the cable visibly enters/leaves through the port it actually
+    //     passes through;
+    //   - the hidden endpoint is an ordinary interior member wired to past the boundary (no port
+    //     involved) -> keep the pre-P8-15 projectToRectEdge treatment, unchanged: the point where
+    //     the card's edge faces the other endpoint. That case doesn't disappear (§5.4) and must
+    //     not be mistaken for an error.
+    // The rectangle/jack projected against is macroCableAnchorBounds(macro) — the LIVE
     // MacroCardComponent's bounds while a card exists, not the persisted `macro.bounds`, which is
     // only written back on drop (finalizeMacroCardDrag) and would leave a cable pointing at the
     // card's pre-drag position for the whole gesture otherwise.
     if (!macros.empty()) {
         // nodeID.uid -> macro id, built once, collapsed macros only.
         std::unordered_map<uint32_t, const synth::Macro*> collapsedMacroForNode;
+        // nodeID.uid -> that node's own jack position, CARD-LOCAL, for collapsed macros only, and
+        // only for nodes that are themselves a port (macroCardPortLayout already excludes an
+        // interior member with no MacroPort entry, so absence from this map IS the "ordinary
+        // member" case above).
+        std::unordered_map<uint32_t, juce::Point<int>> portJackLocalForNode;
         for (const auto& macro : macros.getAll()) {
             if (!macro.collapsed)
                 continue;
@@ -538,6 +550,11 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
                 auto nodeId = resolveMemberNodeId(uuid);
                 if (nodeId.uid != 0)
                     collapsedMacroForNode[nodeId.uid] = &macro;
+            }
+            for (const auto& port : macroCardPortLayout(macro.id)) {
+                auto nodeId = resolveMemberNodeId(port.nodeUuid);
+                if (nodeId.uid != 0)
+                    portJackLocalForNode[nodeId.uid] = port.jackPos;
             }
         }
 
@@ -555,10 +572,20 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
 
                 const auto originalP1 = cable.p1;
                 const auto originalP2 = cable.p2;
-                if (srcHidden)
-                    cable.p1 = projectToRectEdge(macroCableAnchorBounds(*srcIt->second), originalP2);
-                if (dstHidden)
-                    cable.p2 = projectToRectEdge(macroCableAnchorBounds(*dstIt->second), originalP1);
+                if (srcHidden) {
+                    const auto cardBounds = macroCableAnchorBounds(*srcIt->second);
+                    auto jackIt = portJackLocalForNode.find(cable.id.srcUid);
+                    cable.p1 = jackIt != portJackLocalForNode.end()
+                                   ? (cardBounds.getPosition() + jackIt->second).toFloat()
+                                   : projectToRectEdge(cardBounds, originalP2);
+                }
+                if (dstHidden) {
+                    const auto cardBounds = macroCableAnchorBounds(*dstIt->second);
+                    auto jackIt = portJackLocalForNode.find(cable.id.dstUid);
+                    cable.p2 = jackIt != portJackLocalForNode.end()
+                                   ? (cardBounds.getPosition() + jackIt->second).toFloat()
+                                   : projectToRectEdge(cardBounds, originalP1);
+                }
 
                 filtered.push_back(cable);
             }
@@ -1221,6 +1248,14 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
 
     bool connectedToAModule = false; // gates the macro-card fallback below — unchanged loop otherwise
     for (auto* comp : content.getModules()) {
+        // A hidden member of a collapsed macro is not "on the canvas" as a drop target (same
+        // reasoning as collectModuleBoxes' marquee/group-drag exclusion) — it is kept alive only
+        // so its position tracks the card, and its ORIGINAL bounds (group-bounds top-left, see
+        // groupSelectionIntoMacro) sit directly underneath the card, including its own jacks at
+        // the same left/right inset a card jack now uses (T141). Without this guard a release on
+        // a card jack could hit-test straight through to the hidden member's real jack instead.
+        if (comp == nullptr || !comp->isVisible())
+            continue;
         auto localPos = comp->getLocalPoint(nullptr, screenPos);
         auto port = comp->getPortForPoint(localPos);
 
@@ -1260,10 +1295,8 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
         }
     }
 
-    // "Shape from a dropped cable" convenience (docs/macros.md §5.3, T140): nothing above matched
-    // (no module jack under the cursor), so check whether the release point is over a COLLAPSED
-    // macro's card. No per-port jacks exist to land on yet (T141 draws those); until then, the
-    // whole card is the drop target and a fresh port is created to receive the cable.
+    // Macro card drop (docs/macros.md §5.3/§5.4): nothing above matched (no module jack under the
+    // cursor), so check whether the release point is over a COLLAPSED macro's card.
     if (!connectedToAModule && dragSourceModule != nullptr) {
         for (auto* card : content.getMacroCards()) {
             if (card == nullptr || !card->isVisible()) // visible exactly while its macro is collapsed
@@ -1279,15 +1312,47 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                     srcNode = n;
                     break;
                 }
-            if (srcNode != nullptr) {
-                // dragSourceIsInput == false: the drag started at an OUTPUT looking for a
-                // destination -> the macro offers an INPUT (MacroInlet/MacroMidiInlet) to receive
-                // it. dragSourceIsInput == true: started at an INPUT looking for a source -> the
-                // macro offers an OUTPUT.
-                const bool newPortIsInput = !dragSourceIsInput;
-                createMacroPortFromDroppedCable(card->getMacroId(), newPortIsInput, dragSourceIsMidi, srcNode->nodeID,
-                                                dragSourceChannel);
+            if (srcNode == nullptr)
+                break;
+
+            // dragSourceIsInput == false: the drag started at an OUTPUT looking for a
+            // destination -> the macro offers an INPUT (MacroInlet/MacroMidiInlet) to receive
+            // it. dragSourceIsInput == true: started at an INPUT looking for a source -> the
+            // macro offers an OUTPUT.
+            const bool newPortIsInput = !dragSourceIsInput;
+
+            // T141: an existing port's jack under the cursor wires directly into that port's own
+            // node, rather than always minting a fresh one — "one jack per port" makes a jack a
+            // real, precise drop target, not just the card as a whole. A jack whose direction or
+            // kind doesn't match the drag is refused silently, the same way an ordinary mismatched
+            // module-jack drop is refused a few lines above (§5.3: not silently adapted).
+            // DEFERRED (not this stage): raw channel 0 only, same as createMacroPortFromDroppedCable
+            // below. For a Mono port that IS the port's one visible jack; for an existing Stereo
+            // port this wires the Left leg only and leaves Right unconnected — a card jack
+            // summarises the whole port as one dot (§5.4), so there is no separate "Right" drop
+            // target to land on yet. Widening this to resolvePolyLink-style fan-out for an
+            // existing Stereo/Poly-N port is future work, not a regression: the modal (§7 item 5)
+            // remains the reliable way to wire a non-Mono port completely.
+            if (auto hitPort = macroCardPortForPoint(card->getMacroId(), cardLocal)) {
+                if (hitPort->isInput == newPortIsInput &&
+                    (hitPort->kind == synth::MacroPortKind::Midi) == dragSourceIsMidi) {
+                    const auto portNodeId = resolveMemberNodeId(hitPort->nodeUuid);
+                    if (graph.getNodeForId(portNodeId) != nullptr) {
+                        if (newPortIsInput)
+                            connectPorts(srcNode->nodeID, dragSourceChannel, portNodeId, 0, dragSourceIsMidi, true);
+                        else
+                            connectPorts(portNodeId, 0, srcNode->nodeID, dragSourceChannel, dragSourceIsMidi, true);
+                        connectedToAModule = true;
+                    }
+                }
+                break;
             }
+
+            // No jack under the cursor: fall back to the "shape from a dropped cable" convenience
+            // (§5.3, T140) — the whole card is still a valid drop target, and a fresh Mono port is
+            // created to receive the cable.
+            createMacroPortFromDroppedCable(card->getMacroId(), newPortIsInput, dragSourceIsMidi, srcNode->nodeID,
+                                            dragSourceChannel);
             break;
         }
     }
@@ -3320,6 +3385,19 @@ namespace {
 // the group it stands in for is; that is the whole point of collapsing. Matches a standard
 // module card's width so it sits comfortably on the same grid.
 constexpr int kMacroCardHeight = 90;
+
+// ---- Card jacks (P8-15c, T141, docs/macros.md §7 item 4) ----
+// The vertical band jacks lay out in: below the title row (drawn at local y=6..26,
+// MacroCardComponent::getTitleRowBounds) and above the member-count line (the card's bottom
+// 14px, MacroCardComponent::paint), so a jack never collides with either piece of text.
+constexpr int kMacroCardJackBandTop = 30;
+constexpr int kMacroCardJackBandBottom = kMacroCardHeight - 16;
+// Same inset from the card's left/right edge ModuleComponent's own MIDI jacks use on an
+// identically-wide kSingleWidth card (x=10 / getWidth()-10) — a macro's boundary jacks read like
+// any other module's.
+constexpr int kMacroCardJackInsetX = 10;
+// Click tolerance, matching ModuleComponent::getPortForPoint's own `< 10`.
+constexpr float kMacroCardJackHitRadius = 10.0f;
 } // namespace
 
 juce::String GraphEditor::nodeUuidFor(juce::AudioProcessorGraph::NodeID nodeId) const {
@@ -3443,6 +3521,50 @@ juce::Rectangle<int> GraphEditor::macroCableAnchorBounds(const synth::Macro& mac
         if (card != nullptr && card->getMacroId() == macro.id)
             return card->getBounds();
     return macro.bounds;
+}
+
+std::vector<GraphEditor::MacroCardPort> GraphEditor::macroCardPortLayout(const juce::String& macroId) const {
+    std::vector<MacroCardPort> result;
+    const auto* macro = macros.find(macroId);
+    if (macro == nullptr || macro->ports.empty())
+        return result;
+
+    auto ports = macro->ports;
+    std::sort(ports.begin(), ports.end(),
+              [](const synth::MacroPort& a, const synth::MacroPort& b) { return a.order < b.order; });
+
+    std::vector<const synth::MacroPort*> inputs, outputs;
+    for (const auto& p : ports)
+        (p.isInput ? inputs : outputs).push_back(&p);
+
+    // Evenly spaced within the fixed jack band regardless of count, so N ports on one side never
+    // outgrow the card's fixed footprint — the same "the card stays a fixed size" reasoning
+    // kMacroCardHeight's own comment states for the collapsed card as a whole (§5.4).
+    auto placeSide = [&](const std::vector<const synth::MacroPort*>& side, int x) {
+        const int n = (int)side.size();
+        const int bandHeight = kMacroCardJackBandBottom - kMacroCardJackBandTop;
+        for (int i = 0; i < n; ++i) {
+            const int y = kMacroCardJackBandTop + (bandHeight * (i + 1)) / (n + 1);
+            MacroCardPort port;
+            port.nodeUuid = side[i]->nodeUuid;
+            port.isInput = side[i]->isInput;
+            port.kind = side[i]->kind;
+            port.name = side[i]->name;
+            port.jackPos = {x, y};
+            result.push_back(port);
+        }
+    };
+    placeSide(inputs, kMacroCardJackInsetX);
+    placeSide(outputs, synth::LayoutUtil::kSingleWidth - kMacroCardJackInsetX);
+    return result;
+}
+
+std::optional<GraphEditor::MacroCardPort> GraphEditor::macroCardPortForPoint(const juce::String& macroId,
+                                                                             juce::Point<int> cardLocalPos) const {
+    for (const auto& port : macroCardPortLayout(macroId))
+        if (cardLocalPos.toFloat().getDistanceFrom(port.jackPos.toFloat()) < kMacroCardJackHitRadius)
+            return port;
+    return std::nullopt;
 }
 
 MacroCardComponent* GraphEditor::getMacroCardForTest(const juce::String& macroId) {

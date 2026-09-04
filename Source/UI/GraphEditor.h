@@ -481,6 +481,36 @@ public:
      *  no dialog involved. No-op if `macroId` doesn't resolve. */
     void promptConfigureMacroIO(const juce::String& macroId);
 
+    // ---- Macro card jacks (P8-15c, T141, docs/macros.md §7 item 4) -----------------------------
+
+    /** One port's on-card jack, in the collapsed card's OWN local coordinates (add the live
+     *  card's top-left — macroCableAnchorBounds — for canvas coords). Inputs run down the card's
+     *  left edge, outputs down its right edge, each side ordered by MacroPort::order — the SAME
+     *  order macroPortRowsForDialog sorts by, so a port's jack position and its row in the
+     *  Configure I/O dialog always agree on which port is "first". The ONE layout definition:
+     *  MacroCardComponent::paint(), buildVisibleCables()'s boundary-cable anchoring, and
+     *  endConnectionDrag()'s jack hit-test all read this rather than recomputing it, so the drawn
+     *  dot, the anchored cable and the drop target can never drift apart. */
+    struct MacroCardPort {
+        juce::String nodeUuid;
+        bool isInput = false;
+        synth::MacroPortKind kind = synth::MacroPortKind::AudioCV;
+        juce::String name;
+        juce::Point<int> jackPos; // card-local
+    };
+
+    /** Every port on `macroId`'s collapsed card, laid out. Empty if `macroId` doesn't resolve or
+     *  has no ports yet (a macro with no configured ports draws no jacks — just the plain P8-12
+     *  card). */
+    std::vector<MacroCardPort> macroCardPortLayout(const juce::String& macroId) const;
+
+    /** The port whose jack contains `cardLocalPos` (within the same click tolerance a module's
+     *  own jack uses), or nullopt. `cardLocalPos` is in the card's OWN local coordinates, matching
+     *  MacroCardPort::jackPos — a caller starting from a canvas/screen point converts via the live
+     *  card's bounds first (see endConnectionDrag). */
+    std::optional<MacroCardPort> macroCardPortForPoint(const juce::String& macroId,
+                                                       juce::Point<int> cardLocalPos) const;
+
     // ---- Snippets (issue #156) ----
 
     /** Snippet JSON for the current selection, ready to hand to SnippetManager::saveSnippet. */

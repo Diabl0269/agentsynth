@@ -1,5 +1,6 @@
 #include "MacroCardComponent.h"
 #include "GraphEditor.h"
+#include "Theme/AppLookAndFeel.h"
 
 MacroCardComponent::MacroCardComponent(GraphEditor& owner, juce::String macroId)
     : owner(owner)
@@ -72,6 +73,26 @@ void MacroCardComponent::paint(juce::Graphics& g) {
         }
     }
     // ---- End content preview ----
+
+    // ---- Port jacks (P8-15c, T141: docs/macros.md §7 item 4) ----
+    // One jack per configured port — inputs down the left edge, outputs down the right, from the
+    // SAME owner.macroCardPortLayout() that this card's own hit-testing (endConnectionDrag's jack
+    // check) and buildVisibleCables()'s boundary-cable anchoring both read, so the drawn dot is
+    // never anywhere those two disagree about. Colour matches ModuleComponent::paint's own jack
+    // convention verbatim (its comment: "Audio-signal jacks (MIDI in/out) -> audioWire;
+    // mod-capable input/output jacks -> accent") — audioWire for a MIDI port's jack, accent for an
+    // AudioCV one, not the *Wire-at-a-paint-site the CABLE-colour invariant forbids
+    // (Source/UI/CLAUDE.md): a JACK dot is not a cable, and this follows the one jack-painting
+    // site in the codebase that already makes this exact call.
+    {
+        auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+        static const synth::theme::Colors fallbackColors{};
+        const auto& themeColors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
+        for (const auto& port : owner.macroCardPortLayout(macro->id)) {
+            g.setColour(port.kind == synth::MacroPortKind::Midi ? themeColors.audioWire : themeColors.accent);
+            g.fillEllipse((float)port.jackPos.x - 5.0f, (float)port.jackPos.y - 5.0f, 10.0f, 10.0f);
+        }
+    }
 
     // Expand chevron — a filled triangle rather than a text glyph, so there's no non-ASCII
     // string literal to trip check-nonascii-literals.test.sh and no themed icon asset to add for

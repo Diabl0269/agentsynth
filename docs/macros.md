@@ -7,10 +7,10 @@ This document covers two things:
 1. **What shipped (P8-12)** — the presentation-only container that exists today.
 2. **The Macro I/O design (P8-14)** — the decided model for how a Macro gains configurable
    inputs and outputs, which **P8-15 implements**. §3-6 are the design; §7 tracks implementation
-   progress against it and is the accurate record of what actually exists — as of P8-15b, §7
-   items 1-3 and 5 are built (the node types, `MacroPort`, and the "Configure I/O" modal covering
-   add/remove/rename/reorder/shape-change plus the cable-drop convenience); §7 items 4 and 6 are
-   not (no card jacks yet, no bypass/mute fan-out yet).
+   progress against it and is the accurate record of what actually exists — as of P8-15c, §7
+   items 1-5 are built (the node types, `MacroPort`, the "Configure I/O" modal covering
+   add/remove/rename/reorder/shape-change plus the cable-drop convenience, and collapsed-card
+   port jacks with boundary-cable anchoring); §7 item 6 is not (no bypass/mute fan-out yet).
 
 ---
 
@@ -191,9 +191,12 @@ near-identical pass-through no-ops); it is specifically that a MIDI port carries
 at all — no Mono/Stereo/Poly-N — just `acceptsMidi()`/`producesMidi()`, like `ExternalMidiModule`
 and `PolyMidiModule`.
 
-All four are created by the **macro port flow** (§7 item 3, not yet built), never by the module
-library and never by the replace menu. An inlet/outlet always belongs to exactly one macro; it is
-a member of that macro's `members` list like any other node, and is dissolved with it.
+All four are created by the **macro port flow** (§7 item 3, **done**), never by the module library
+and never by the replace menu. An inlet/outlet always belongs to exactly one macro; it is a member
+of that macro's `members` list like any other node, and is dissolved with it by an action that
+actually deletes members (`GraphEditor::deleteMacroAndMembers`). **Ungrouping is not that
+action** — it dissolves only the `Macro` record (and, with it, the `MacroPort` descriptors), never
+the member nodes or their connections; see §5.4 for what that means for a cable landing on a port.
 
 Each carries a user-visible **port name** ("Pitch In", "Wet Out") — this lives on the macro's own
 `MacroPort` entry (§5.2), not in the node's extra state, since the name is macro-level
@@ -317,6 +320,32 @@ is not a sealed unit, and no part of the engine will stop a cable reaching past 
 Enforcing encapsulation would require the interior to be a genuinely separate graph, which is
 Candidate A and was rejected in §4.
 
+**Implemented (P8-15c).** The collapsed card draws one jack per configured `MacroPort`
+(`GraphEditor::macroCardPortLayout`) — inputs evenly spaced down the left edge, outputs down the
+right, in `order`. That layout is the ONE definition three places read: `MacroCardComponent::paint`
+draws the dot, `GraphEditor::endConnectionDrag` hit-tests a drop against it
+(`macroCardPortForPoint`), and `rebuildVisibleCables()` anchors a boundary cable through a port at
+that same jack instead of `projectToRectEdge`. A cable straight to an interior member keeps
+`projectToRectEdge`, per the table above — the two treatments coexist and are told apart by which
+endpoint node the cable resolves to, a port's fronting node or an ordinary member.
+
+Dropping a cable exactly on an existing port's jack wires straight into that port's node, in place
+of always minting a fresh one; a jack whose direction or kind does not match the drag is refused,
+the same as a mismatched drop on an ordinary module jack. Missing that jack still falls through to
+the whole-card "shape from a dropped cable" convenience (§5.3).
+
+**Ungrouping a macro does not drop a cable landing on one of its ports.** `ungroupSelection()`
+calls `MacroSet::remove`, which only erases the `Macro` record — no member node and no graph
+connection is touched. A port's fronting node (`MacroInlet`/`MacroOutlet` or a MIDI variant) is an
+ordinary member like any other, so it survives ungrouping exactly as the rest of the group does,
+its connections (both the internal pass-through wiring and any external cable wired into it)
+intact; the node's `ModuleComponent` simply becomes visible again (no collapsed card left to hide
+it behind), and the cable that used to anchor at the card jack now renders as an ordinary cable to
+that node's own jack. This follows from §1's framing — ungrouping, like grouping, is a
+presentation-only change to the `MacroSet`, never a graph edit — but is worth stating explicitly
+here because the opposite (the cable silently disappearing) is the more intuitive-sounding
+assumption and is not what happens.
+
 ### 5.5 Latency
 
 An inlet/outlet reports **zero latency** and does no buffering. The macro adds nothing to
@@ -417,8 +446,9 @@ In order, each independently shippable:
    Mono-only — see §5.3). `estimateModuleSize` in `GraphEditor.cpp` has an entry for all four
    types, measured against a real rendered card the way Rec Tap/Track In/Track Audio are
    (`MacroPortFlow.AllFourTypesAreAbsentFromTheLibraryWithAPinnedSizeEstimate`).
-4. Card jacks: the collapsed card draws one jack per port, and `buildVisibleCables()` anchors
-   boundary cables to them (§5.4).
+4. **DONE (P8-15c).** Card jacks: the collapsed card draws one jack per port
+   (`GraphEditor::macroCardPortLayout`), `buildVisibleCables()` anchors boundary cables to them,
+   and a cable dropped exactly on an existing port's jack wires straight into it (§5.4).
 5. **DONE (P8-15b).** Port rename and reorder — the same modal as item 3
    (`GraphEditor::renameMacroPort`/`moveMacroPortOrder`). Reorder is scoped to one direction at a
    time (inputs against inputs, outputs against outputs), a no-op at either edge. Changing an
