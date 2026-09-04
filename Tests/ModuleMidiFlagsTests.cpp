@@ -85,7 +85,18 @@ ExpectedMidiFlags expectedFlagsFor(ModuleType type) {
     case ModuleType::AudioInput:
     case ModuleType::RecordTap:
     case ModuleType::TimelineAudioSource:
+    // A Macro's audio/CV inlet/outlet jack (P8-15): 0 audio-only channels declared as its bus
+    // shape, and it never touches the MIDI buffer either — the whole reason it is a SEPARATE type
+    // from MacroMidiInlet/MacroMidiOutlet rather than one type with a "kind" flag.
+    case ModuleType::MacroInlet:
+    case ModuleType::MacroOutlet:
         return {false, false};
+
+    // ---- A genuine MIDI pass-through: neither reads note/CC semantics nor emits them, but the
+    // unmodified midiMessages buffer flows straight through because nothing touches it ----
+    case ModuleType::MacroMidiInlet:
+    case ModuleType::MacroMidiOutlet:
+        return {true, true};
 
     // HostedPluginModule does not yet override acceptsMidi()/producesMidi() to delegate to the
     // wrapped juce::AudioPluginInstance — it is outside Source/Modules/** (Source/Plugin/Hosting/)
@@ -164,6 +175,10 @@ TEST(ModuleMidiFlagsTest, EveryFactoryModuleMatchesItsExpectedMidiFlags) {
     requiredTypes.insert(ModuleType::TimelineMidiSource);
     requiredTypes.insert(ModuleType::RecordTap);
     requiredTypes.insert(ModuleType::TimelineAudioSource);
+    requiredTypes.insert(ModuleType::MacroInlet);
+    requiredTypes.insert(ModuleType::MacroOutlet);
+    requiredTypes.insert(ModuleType::MacroMidiInlet);
+    requiredTypes.insert(ModuleType::MacroMidiOutlet);
 
     for (auto type : requiredTypes)
         EXPECT_TRUE(seenTypes.count(type) > 0)

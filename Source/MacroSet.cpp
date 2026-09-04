@@ -4,6 +4,42 @@
 
 namespace synth {
 
+juce::var MacroPort::toVar() const {
+    auto* obj = new juce::DynamicObject();
+    obj->setProperty("nodeUuid", nodeUuid);
+    obj->setProperty("isInput", isInput);
+    obj->setProperty("name", name);
+    obj->setProperty("order", order);
+    obj->setProperty("kind", kind == MacroPortKind::Midi ? "midi" : "audioCV");
+    return juce::var(obj);
+}
+
+bool MacroPort::fromVar(const juce::var& v, MacroPort& out) {
+    auto* obj = v.getDynamicObject();
+    if (obj == nullptr)
+        return false;
+
+    MacroPort parsed;
+    parsed.nodeUuid = obj->getProperty("nodeUuid").toString();
+    if (parsed.nodeUuid.isEmpty())
+        return false;
+
+    parsed.isInput = (bool)obj->getProperty("isInput");
+    parsed.name = obj->getProperty("name").toString();
+    parsed.order = (int)obj->getProperty("order");
+
+    const juce::String kindStr = obj->getProperty("kind").toString();
+    if (kindStr == "midi")
+        parsed.kind = MacroPortKind::Midi;
+    else if (kindStr == "audioCV")
+        parsed.kind = MacroPortKind::AudioCV;
+    else
+        return false; // missing or unrecognised "kind" — reject rather than silently default
+
+    out = std::move(parsed);
+    return true;
+}
+
 Macro* MacroSet::find(const juce::String& macroId) {
     for (auto& m : macros_)
         if (m.id == macroId)
@@ -54,6 +90,11 @@ juce::String MacroSet::removeMemberEverywhere(const juce::String& memberUuid) {
 
         const juce::String touchedId = it->id;
         it->members.erase(memberIt);
+        // A port's nodeUuid is always a member (see Macro::ports) — drop the port descriptor
+        // along with the member it fronted, or the invariant no longer holds.
+        it->ports.erase(std::remove_if(it->ports.begin(), it->ports.end(),
+                                       [&](const MacroPort& p) { return p.nodeUuid == memberUuid; }),
+                        it->ports.end());
         if (it->members.empty())
             macros_.erase(it);
         return touchedId;
@@ -71,6 +112,14 @@ bool MacroSet::retainOnly(const std::vector<juce::String>& aliveMemberUuids) {
                                          [&](const juce::String& uuid) { return alive.find(uuid) == alive.end(); }),
                           it->members.end());
         if (it->members.size() != before)
+            changed = true;
+
+        // Same liveness set: a port whose node died is dropped like any other member (P8-15).
+        const auto portsBefore = it->ports.size();
+        it->ports.erase(std::remove_if(it->ports.begin(), it->ports.end(),
+                                       [&](const MacroPort& p) { return alive.find(p.nodeUuid) == alive.end(); }),
+                        it->ports.end());
+        if (it->ports.size() != portsBefore)
             changed = true;
 
         if (it->members.empty()) {
@@ -104,6 +153,11 @@ juce::var MacroSet::toVar() const {
         for (const auto& uuid : m.members)
             memberArr.add(uuid);
         obj->setProperty("members", memberArr);
+
+        juce::Array<juce::var> portArr;
+        for (const auto& p : m.ports)
+            portArr.add(p.toVar());
+        obj->setProperty("ports", portArr);
 
         arr.add(juce::var(obj));
     }
@@ -150,6 +204,28 @@ bool MacroSet::fromVar(const juce::var& state) {
             if (uuid.isEmpty() || !seenMembers.insert(uuid).second)
                 return false; // empty uuid, or claimed by more than one macro (flat model)
             m.members.push_back(uuid);
+        }
+
+        // "ports" is optional (P8-15): every macro saved before this key existed has none, and
+        // that must parse as an empty list rather than reject the whole load.
+        if (obj->hasProperty("ports")) {
+            auto* portsArr = obj->getProperty("ports").getArray();
+            if (portsArr == nullptr)
+                return false;
+
+            for (const auto& portVar : *portsArr) {
+                MacroPort port;
+                if (!MacroPort::fromVar(portVar, port))
+                    return false;
+                m.ports.push_back(std::move(port));
+            }
+
+            // A port's nodeUuid must be one of THIS macro's own members (Macro::ports'
+            // invariant) — checked after both lists are fully parsed so order in the JSON
+            // ("ports" before "members", say) can never matter.
+            for (const auto& port : m.ports)
+                if (std::find(m.members.begin(), m.members.end(), port.nodeUuid) == m.members.end())
+                    return false;
         }
 
         parsed.push_back(std::move(m));

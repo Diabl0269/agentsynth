@@ -236,6 +236,10 @@ add_library(Core STATIC
     Source/Modules/RecordTapModule.h
     Source/Modules/TimelineAudioSourceModule.h
     Source/Modules/TimelineMidiSourceModule.h
+    Source/Modules/MacroInletModule.h
+    Source/Modules/MacroOutletModule.h
+    Source/Modules/MacroMidiInletModule.h
+    Source/Modules/MacroMidiOutletModule.h
     Source/Modules/VisualBuffer.h
     Source/Modules/FX/DelayModule.h
     Source/Modules/FX/DistortionModule.h

@@ -6,8 +6,11 @@ This document covers two things:
 
 1. **What shipped (P8-12)** — the presentation-only container that exists today.
 2. **The Macro I/O design (P8-14)** — the decided model for how a Macro gains configurable
-   inputs and outputs, which **P8-15 implements**. This half is a *design*, not a description of
-   working code; nothing in section 3 onward exists yet.
+   inputs and outputs, which **P8-15 implements**. §3-6 are the design; §7 tracks implementation
+   progress against it and is the accurate record of what actually exists — as of P8-15a, §7
+   items 1-2 (the node types plus `MacroPort`) are built, and nothing in §7 items 3-6 is (no UI
+   creates a port yet, so a Macro Inlet/Outlet is reachable only through direct construction or a
+   hand-built save file today).
 
 ---
 
@@ -166,35 +169,61 @@ addressing question answered first.
 
 ### 5.1 Node types
 
-Two additions to `ModuleType`, both **internal-only** with the same three exclusions as
-`TimelineMidiSource` / `RecordTap` / `TimelineAudioSource`:
+**Four** additions to `ModuleType` (§7 item 1, **implemented**), all **internal-only** with the
+same three exclusions as `TimelineMidiSource` / `RecordTap` / `TimelineAudioSource`: no library
+row, no replace-menu entry, never authorable by a model (`kNonAuthorableModuleTypes`, §6).
 
-- `MacroInlet` — "Macro In". One logical port in, one out; passes its input through unchanged.
-- `MacroOutlet` — "Macro Out". Same, in the other direction.
+- `MacroInlet` — "Macro In". Audio/CV. One logical port in, one out; passes its input through
+  unchanged.
+- `MacroOutlet` — "Macro Out". Audio/CV, the mirror of MacroInlet.
+- `MacroMidiInlet` — "Macro MIDI In". MIDI, zero audio channels.
+- `MacroMidiOutlet` — "Macro MIDI Out". MIDI, the mirror of MacroMidiInlet.
 
-They are created by the **macro port flow**, never by the module library and never by the
-replace menu. An inlet/outlet always belongs to exactly one macro; it is a member of that macro's
-`members` list like any other node, and is dissolved with it.
+MIDI is a **separate pair of node types**, not a "kind" flag on `MacroInlet`/`MacroOutlet` —
+confirmed against the actual `TimelineMidiSourceModule`/`TimelineAudioSourceModule` code (the
+Track In / Track Audio precedent this follows) rather than assumed from the type names. The
+load-bearing reason there is a **construction-time channel-shape difference**:
+`ModuleBase(name, 0, 0)` for a MIDI node vs `ModuleBase(name, N, N)` for an audio/CV one, which a
+single type would have to branch its bus layout on — exactly what the fixed-channel-count
+invariant makes awkward, since the layout is frozen the moment the constructor runs. It is *not*
+because a MIDI `processBlock` and an audio `processBlock` inherently differ (here both bodies are
+near-identical pass-through no-ops); it is specifically that a MIDI port carries no channel shape
+at all — no Mono/Stereo/Poly-N — just `acceptsMidi()`/`producesMidi()`, like `ExternalMidiModule`
+and `PolyMidiModule`.
 
-Each carries a user-visible **port name** ("Pitch In", "Wet Out") in its extra state — this is
-the name that appears on the collapsed card's jack and in the expanded hull's edge label.
+All four are created by the **macro port flow** (§7 item 3, not yet built), never by the module
+library and never by the replace menu. An inlet/outlet always belongs to exactly one macro; it is
+a member of that macro's `members` list like any other node, and is dissolved with it.
+
+Each carries a user-visible **port name** ("Pitch In", "Wet Out") — this lives on the macro's own
+`MacroPort` entry (§5.2), not in the node's extra state, since the name is macro-level
+presentation and the port-creation flow (§7 item 3) is what actually wires a name to a node.
 
 ### 5.2 Port set and ordering
 
-`synth::Macro` gains an ordered list of port descriptors:
+`synth::Macro` gains an ordered list of port descriptors (§7 item 2, **implemented**, including
+`toVar`/`fromVar` and `retainOnly` reconciliation):
 
-```
+```cpp
+enum class MacroPortKind { AudioCV, Midi };
+
 struct MacroPort {
-    juce::String nodeUuid;   // the MacroInlet / MacroOutlet node
+    juce::String nodeUuid;   // the MacroInlet/MacroOutlet (or MIDI variant) node this port fronts
     bool         isInput;
     juce::String name;
     int          order;      // draw order on the card, user-reorderable
+    MacroPortKind kind;      // which pair of node types this port is (§5.1) — kept here too so a
+                             // macro's port list can be rendered with no per-port graph lookup
 };
 ```
 
-Membership stays keyed by uuid. The port list is derived state in the sense that the nodes are
-the truth, but the **order and names** are macro-level presentation and belong on the macro,
-next to `name`/`colour`/`bounds`.
+Membership stays keyed by uuid, and every port's `nodeUuid` must also appear in the owning
+macro's `members` — `MacroSet::fromVar` rejects a saved macro where that does not hold, and
+`retainOnly`/`removeMemberEverywhere` drop a port the moment the member it fronts is removed, by
+either path. The port list is derived state in the sense that the nodes are the truth, but the
+**order, name and kind** are macro-level presentation and belong on the macro, next to
+`name`/`colour`/`bounds`. `"ports"` is optional in a saved macro's JSON — absent parses as no
+ports, which is what every macro saved by P8-12 already looks like.
 
 ### 5.3 Poly and stereo — a port's shape is chosen at creation and then fixed
 
@@ -232,6 +261,19 @@ no special-casing:
 
 A cable whose shape does not match the port it is dropped on is refused the same way any
 mismatched connection is today — not silently adapted at the boundary.
+
+**Implementation note (P8-15a).** `MacroInletModule`/`MacroOutletModule` already use the
+declare-a-maximum-and-vary-the-visible-count mechanism `Source/Modules/CLAUDE.md` documents for
+Audio Input and Hosted Plugin, rather than a fixed 1-channel bus: the node always carries
+`kMaxChannels` (8) raw channels, and `getVisibleInput/OutputPortCount()` reports however many are
+actually in play, persisted through `getExtraState()`/`setExtraState()` (trusted-path only, like
+every module's `"state"`) so the choice round-trips. This is what lets §7 item 3 add Stereo/Poly-N
+later as a pure UI change — calling a setter right after construction, or via extra state on
+load — with **no new factory type and no migration for a Macro In/Out already on disk**: today
+the only value anything ever sets is Mono (1), and the mapInputChannel/mapOutputChannel overrides
+that would give Stereo its split-block pairing and Poly-N its single fanned jack (rather than N
+independent mono ones, which is what the inherited default currently produces) do not exist yet
+either — both are still item 3's job.
 
 ### 5.4 Cable rendering across the boundary
 
@@ -312,17 +354,19 @@ provider-supplied `uuid` is ignored (`adoptUuidIfTrusted`), so provider-authored
 never resolve to anything real even if it were let through. Refusing it keeps that true
 regardless of future changes.
 
-`MacroInlet` and `MacroOutlet` join the internal-only set and get the **same three exclusions**:
-no library row, no replace-menu entry, **never authorable by a model**.
+`MacroInlet`, `MacroOutlet`, `MacroMidiInlet` and `MacroMidiOutlet` join the internal-only set and
+get the **same three exclusions**: no library row, no replace-menu entry, **never authorable by a
+model**. **Done as of P8-15a** (§7 item 1).
 
 The enforcement point already exists and is cheap: `kNonAuthorableModuleTypes` in
 `AIStateMapper.cpp` is an explicit name set with a reason recorded against each entry, consulted
 by `isInternalOnlyModule`. Registering a module in `moduleFactory` makes it model-authorable **by
 default**, and the resulting allowlist is pinned by
-`AIStateMapperTest.AuthorableModuleTypesGolden` — so adding Macro In / Macro Out to the factory
-(which they need, so our own saves round-trip them) *fails the build* until they are deliberately
-added to the non-authorable set too. P8-15 must add both entries with their reason, not just the
-factory rows.
+`AIStateMapperTest.AuthorableModuleTypesGolden` — so adding the four Macro I/O types to the
+factory (which they need, so our own saves round-trip them) *fails the build* until they are
+deliberately added to the non-authorable set too. P8-15a added all four entries with their
+reason, not just the factory rows — this was the golden test's *intended* failure mode, not a
+regression to fix around.
 
 **This must not be achieved by relaxing anything.** `validatePatch` is the security boundary for
 untrusted model output; the rule stands that validity is fixed on the *generation* side, most
@@ -337,12 +381,19 @@ app-side **tool/action** the model invokes — the app authors the macro from a 
 
 In order, each independently shippable:
 
-1. `MacroInlet` / `MacroOutlet` module types + the three internal-only exclusions + the
-   `validatePatch` rejection and its test.
-2. `MacroPort` on `synth::Macro`, its `toVar`/`fromVar` round trip, and its `retainOnly`
-   reconciliation (a port whose node died is dropped like any other member).
+1. **DONE (P8-15a).** `MacroInlet` / `MacroOutlet` / `MacroMidiInlet` / `MacroMidiOutlet` module
+   types + the three internal-only exclusions + the `validatePatch` rejection and its test. Audio/
+   CV vs MIDI is two node-type pairs, not a "kind" flag (§5.1). `MacroInlet`/`MacroOutlet` already
+   use the declare-max/vary-visible channel mechanism (§5.3's implementation note) so a later
+   Stereo/Poly-N does not need a factory or format change.
+2. **DONE (P8-15a).** `MacroPort` on `synth::Macro` (with a `kind` distinguishing audio/CV from
+   MIDI ports, §5.2), its `toVar`/`fromVar` round trip, and its `retainOnly` reconciliation (a
+   port whose node died is dropped like any other member — and so is one dropped singly via
+   `removeMemberEverywhere`).
 3. The port-creation flow: "Add Input / Add Output" on the macro menu, with shape inherited per
-   §5.3 and refusal-with-status when it cannot be.
+   §5.3 and refusal-with-status when it cannot be. Also where a port's user-visible name first
+   gets written (§5.1) and where `estimateModuleSize` in `GraphEditor.cpp` needs an entry for the
+   four types, measured against a real rendered card the way Rec Tap/Track In/Track Audio are.
 4. Card jacks: the collapsed card draws one jack per port, and `buildVisibleCables()` anchors
    boundary cables to them (§5.4).
 5. Port rename and reorder.

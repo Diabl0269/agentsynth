@@ -1161,6 +1161,14 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"LFO", "bipolar, bypassed, glide, level, mode, muted, rateHz, rateSync, retrig, shape"},
         {"Limiter", "bypassed, dualIO, inputGain, muted, release, threshold"},
         {"MIDI Keyboard", "bypassed, octave"},
+        // The four Macro I/O port node types (P8-15): pure pass-throughs, so the inherited
+        // "bypassed" is the whole parameter set — same reasoning as Rec Tap/Track In/Track Audio,
+        // the reference pattern these follow (no "muted": nothing here for it to silence beyond
+        // what bypass already covers).
+        {"Macro In", "bypassed"},
+        {"Macro MIDI In", "bypassed"},
+        {"Macro MIDI Out", "bypassed"},
+        {"Macro Out", "bypassed"},
         {"Macros", "bypassed, macro1, macro10, macro11, macro12, macro13, macro14, macro15, macro16, macro2, macro3, "
                    "macro4, macro5, macro6, macro7, macro8, macro9, macroBipolar, macroCount, muted"},
         {"Math", "bypassed, clip, muted"},
@@ -1293,6 +1301,16 @@ TEST(AIStateMapperTest, AuthorableModuleTypesGolden) {
     // untrusted-unreachable mechanism cover hosting: the type is refused by validatePatch on the
     // untrusted path, not merely omitted from the schema.
     EXPECT_FALSE(actual.contains("Hosted Plugin"));
+    // A Macro's audio/CV inlet/outlet jack (P8-15 Macro I/O). Registered in the factory (our own
+    // saves round-trip one) but never offered to a model, and refused outright by validatePatch on
+    // the untrusted path — its macro membership is keyed by node uuid, which is trusted-only, so a
+    // model-authored one could never resolve to a real macro's port list.
+    EXPECT_FALSE(actual.contains("Macro In"));
+    EXPECT_FALSE(actual.contains("Macro Out"));
+    // A Macro's MIDI inlet/outlet jack — same reasoning as "Macro In"/"Macro Out" from the other
+    // signal type.
+    EXPECT_FALSE(actual.contains("Macro MIDI In"));
+    EXPECT_FALSE(actual.contains("Macro MIDI Out"));
 
     // The schema hands the model exactly this list.
     const juce::var schema = synth::AIStateMapper::getPatchSchema(); // held: the chain below points into it
@@ -1319,6 +1337,10 @@ TEST(AIStateMapperTest, UntrustedPatchRejectsInternalOnlyModuleTypes) {
     internalTypes.add("Track In");
     internalTypes.add("Rec Tap");
     internalTypes.add("Track Audio");
+    internalTypes.add("Macro In");
+    internalTypes.add("Macro Out");
+    internalTypes.add("Macro MIDI In");
+    internalTypes.add("Macro MIDI Out");
 
     for (const auto& type : internalTypes) {
         const juce::var json =

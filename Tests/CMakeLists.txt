@@ -141,6 +141,8 @@ add_executable(Tests
     SnippetManagerTests.cpp
     MultiSelectTests.cpp
     MacroContainerTests.cpp
+    MacroSetTests.cpp
+    MacroPortModuleTests.cpp
     ClipboardTests.cpp
     PanelAnimationAndLoadingTests.cpp
     TimelinePanelTests.cpp
