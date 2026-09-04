@@ -52,6 +52,26 @@ TEST(ExportAudioDialogTest, SelectionIgnoredWhenNoLoopRangeEvenIfToggled) {
     EXPECT_DOUBLE_EQ(options.endBeat, kArrangementEndBeat);
 }
 
+// P8-17: "Current loop range" is a range source decoupled from whether the loop is ARMED. The
+// dialog never sees an arm flag - the caller (promptExportAudio) collapses "locators describe a
+// non-degenerate region" into hasLoopRange_, so a merely-disengaged loop is offered identically to
+// a live one. With an arrangement present, Whole Arrangement is the default, but selecting the loop
+// region must yield the loop span, not the arrangement.
+TEST(ExportAudioDialogTest, LoopRangeUsableWithArrangementRegardlessOfArm) {
+    auto dialog = makeDialog(kArrangementEndBeat, /*hasLoopRange=*/true, kLoopStartBeat, kLoopEndBeat);
+
+    // Default is still Whole Arrangement when clips exist - arming state is never consulted here.
+    const auto defaultOptions = dialog.getOptionsForTest();
+    EXPECT_DOUBLE_EQ(defaultOptions.startBeat, 0.0);
+    EXPECT_DOUBLE_EQ(defaultOptions.endBeat, kArrangementEndBeat);
+
+    // Selecting "Current loop range" yields the loop span, not the arrangement.
+    dialog.setUseSelectionForTest(true);
+    const auto options = dialog.getOptionsForTest();
+    EXPECT_DOUBLE_EQ(options.startBeat, kLoopStartBeat);
+    EXPECT_DOUBLE_EQ(options.endBeat, kLoopEndBeat);
+}
+
 TEST(ExportAudioDialogTest, SwitchingToAiffStepsDownA32BitSelection) {
     auto dialog = makeDialog();
     dialog.setBitDepthForTest(32);

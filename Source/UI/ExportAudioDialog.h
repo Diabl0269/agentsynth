@@ -31,10 +31,13 @@ public:
 class ExportAudioDialog : public juce::Component {
 public:
     // arrangementEndBeat: TimelineDoc::getArrangementEndBeat() - 0.0 ("no clips") disables Whole
-    // Arrangement, since there is no length to bounce. hasLoopRange: the transport is looping AND
-    // loopEndBeat > loopStartBeat - anything else disables Selection rather than passing an empty
-    // range through to fail BounceOptions validation. If both are disabled the Export button stays
-    // disabled too (there is deliberately no third "type a duration" fallback - see
+    // Arrangement, since there is no length to bounce. hasLoopRange: a non-degenerate loop region
+    // exists (loopEndBeat > loopStartBeat), independent of whether looping is currently armed - the
+    // caller (MainComponent::promptExportAudio, P8-17) decides this from the loop LOCATORS alone, so
+    // "Current loop range" is offered as a bounce range whether or not the loop is live. Anything else
+    // (a collapsed region) disables Selection rather than passing an empty range through to fail
+    // BounceOptions validation. If both are disabled the Export button stays disabled too (there is
+    // deliberately no third "type a duration" fallback - see
     // docs/architecture.md's export section). bpm: the transport's current tempo, used only to
     // convert the tail control between seconds and bars (4/4 - this app has no time-signature
     // concept anywhere else either, see TimelineDoc). projectIsSaved: true when the caller has a
