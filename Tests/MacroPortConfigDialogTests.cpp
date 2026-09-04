@@ -141,7 +141,33 @@ TEST(MacroPortConfigDialogTest, MoveUpAndMoveDownFireTheCorrectDirection) {
     EXPECT_FALSE(capturedMoveUp);
 }
 
-TEST(MacroPortConfigDialogTest, ApplyShapeFiresTheRowsChosenShapeAndVoiceCount) {
+// F1 founder-review fix: the per-row "Apply Shape" button is gone — picking a new shape in the
+// combo box commits immediately (still delete+re-add of the node as ONE undo step underneath,
+// per GraphEditor::changeMacroPortShape; only the UI gesture collapsed to one step). So selecting
+// Poly alone must fire onChangePortShape, with no separate "Apply" click.
+TEST(MacroPortConfigDialogTest, SelectingANewShapeCommitsImmediately) {
+    MacroPortConfigDialog dialog("My Macro", twoPorts());
+
+    bool fired = false;
+    juce::String capturedUuid;
+    MacroPortShape capturedShape = MacroPortShape::Mono;
+    dialog.onChangePortShape = [&](const juce::String& uuid, MacroPortShape shape, int) {
+        fired = true;
+        capturedUuid = uuid;
+        capturedShape = shape;
+    };
+
+    dialog.setRowShapeForTest(0, MacroPortShape::Poly);
+
+    ASSERT_TRUE(fired);
+    EXPECT_EQ(capturedUuid, "uuid-in");
+    EXPECT_EQ(capturedShape, MacroPortShape::Poly);
+}
+
+// The voice-count field is a separate commit gesture from the shape combo (typing a number and
+// hitting Return/losing focus, the same idiom the row's name editor already uses) — it re-sends
+// onChangePortShape with the row's CURRENT shape selection and whatever the field now holds.
+TEST(MacroPortConfigDialogTest, VoiceCountCommitsWithTheRowsCurrentShape) {
     MacroPortConfigDialog dialog("My Macro", twoPorts());
 
     juce::String capturedUuid;
@@ -153,13 +179,41 @@ TEST(MacroPortConfigDialogTest, ApplyShapeFiresTheRowsChosenShapeAndVoiceCount) 
         capturedVoices = voices;
     };
 
-    dialog.setRowShapeForTest(0, MacroPortShape::Poly);
-    dialog.setRowVoiceCountForTest(0, 3);
-    dialog.triggerRowApplyShapeForTest(0);
+    dialog.setRowShapeForTest(0, MacroPortShape::Poly); // commits once, with the default voice count
+    dialog.setRowVoiceCountForTest(0, 3);               // just types into the field, no commit yet
+    dialog.commitRowVoiceCountForTest(0);               // simulates Return / focus-lost
 
     EXPECT_EQ(capturedUuid, "uuid-in");
     EXPECT_EQ(capturedShape, MacroPortShape::Poly);
     EXPECT_EQ(capturedVoices, 3);
+}
+
+// A voice-count TextEditor's onFocusLost/onReturnKey fire on every transit through the field, not
+// only on an actual edit (unlike a combo box, which only notifies on a real selection change) — so
+// committing without ever changing the field (e.g. tabbing past it, or pressing Close right after
+// it) must be a no-op. Firing anyway would send onChangePortShape with the SAME (shape, voices)
+// pair GraphEditor::changeMacroPortShape already has, which still deletes and re-creates the
+// port's node — minting a fresh nodeUuid for nothing, in the one subsystem (docs/macros.md §5.2)
+// built entirely on uuid identity.
+TEST(MacroPortConfigDialogTest, VoiceCountCommitDoesNothingWhenNothingChanged) {
+    Row poly;
+    poly.nodeUuid = "uuid-poly";
+    poly.isInput = true;
+    poly.name = "Voice In";
+    poly.kind = MacroPortKind::AudioCV;
+    poly.shape = MacroPortShape::Poly;
+    poly.voiceCount = 4;
+
+    MacroPortConfigDialog dialog("My Macro", {poly});
+
+    bool fired = false;
+    dialog.onChangePortShape = [&](const juce::String&, MacroPortShape, int) { fired = true; };
+
+    // No setRowVoiceCountForTest before this - the field still holds exactly what the row was
+    // constructed with.
+    dialog.commitRowVoiceCountForTest(0);
+
+    EXPECT_FALSE(fired);
 }
 
 TEST(MacroPortConfigDialogTest, RefreshPortsReplacesTheRowListAndResizesRowControls) {

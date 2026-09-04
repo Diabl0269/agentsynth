@@ -10,7 +10,8 @@
 namespace synth::ui {
 
 /**
- * @brief The "Configure I/O" modal for one Macro (P8-15b, T140).
+ * @brief The "Configure I/O" modal for one Macro (P8-15b, T140; redesigned in the F1 founder-review
+ * fix pass).
  *
  * Unifies docs/macros.md §7 items 3 ("Add Input"/"Add Output") and 5 (rename/reorder) into ONE
  * small modal, per an explicit founder request rather than piecemeal menu actions: add/remove/
@@ -23,7 +24,15 @@ namespace synth::ui {
  * own, only a snapshot of PortRow data the caller hands in, and emits intent callbacks the caller
  * executes against the live macro+graph (GraphEditor::promptConfigureMacroIO). That split is what
  * makes this headless-testable — a test constructs it with fixed rows, drives the real controls,
- * and reads back what each button would send, with no AudioEngine/GraphEditor involved at all.
+ * and reads back what each gesture would send, with no AudioEngine/GraphEditor involved at all.
+ *
+ * F1 redesign (founder review item 1): rows group under "Inputs"/"Outputs" section headers, a
+ * MIDI row hides its shape controls entirely rather than showing them disabled, the poly voice
+ * count carries a "Voices" label and only appears when the shape is Poly, Up/Down/Delete are
+ * compact glyph buttons instead of three full-width text buttons, changing a port's shape commits
+ * the moment the combo box (or, for voice count, the number field) changes rather than needing a
+ * separate "Apply Shape" click, and the dialog sizes itself to its content (clamped, with the row
+ * list scrolling past the clamp) instead of a fixed 800px box with dead space below the last row.
  */
 class MacroPortConfigDialog : public juce::Component {
 public:
@@ -76,34 +85,36 @@ public:
     void triggerRowDeleteForTest(int row);
     void triggerRowMoveUpForTest(int row);
     void triggerRowMoveDownForTest(int row);
+    // Selecting a new shape now commits immediately (the combo IS the "Apply Shape" gesture — see
+    // the class comment), so this fires onChangePortShape itself, exactly like a real click would.
     void setRowShapeForTest(int row, MacroPortShape shape);
+    // Only sets the voice-count field's text — matching how typing a number doesn't commit until
+    // the field loses focus / Return, same as the name editor's own commit gesture below.
     void setRowVoiceCountForTest(int row, int voices);
-    void triggerRowApplyShapeForTest(int row);
+    // Simulates the voices editor losing focus / Return: fires onChangePortShape with the row's
+    // CURRENT shape selection and whatever the voices field currently holds.
+    void commitRowVoiceCountForTest(int row);
     void triggerCloseForTest();
 
 private:
-    struct RowControls {
-        juce::Label directionLabel{"directionLabel", juce::String()};
-        juce::TextEditor nameEditor;
-        juce::Label kindLabel{"kindLabel", juce::String()};
-        juce::ComboBox shapeBox;       // AudioCV rows only; disabled/hidden for MIDI
-        juce::TextEditor voicesEditor; // enabled only when shapeBox reads Poly-N
-        juce::TextButton applyShapeButton{"Apply Shape"};
-        juce::TextButton upButton{"Up"};
-        juce::TextButton downButton{"Down"};
-        juce::TextButton deleteButton{"Delete"};
-    };
+    class PortRowComponent; // one row's controls + kind-tinted background; defined in the .cpp
 
     void rebuildRowComponents();
-    void updateVoicesEnablement(RowControls& rc);
     static void populateShapeBox(juce::ComboBox& box);
     static MacroPortShape shapeFromComboIndex(int index);
     static int comboIndexFromShape(MacroPortShape shape);
-    int contentHeightForCurrentRows() const;
+    void updateNewPortVoicesVisibility();
+
+    // Lays out (apply=true) or just measures (apply=false, no component touched) the Inputs/
+    // Outputs sections at the given content width, returning the total height either way — ONE
+    // function so the measurement used to size the dialog can never drift from the layout that
+    // actually runs, which two separate "compute height" / "lay out" functions risked.
+    int layOutOrMeasureRows(bool apply, int width);
+    int idealDialogHeight();
 
     juce::String macroName_;
     std::vector<PortRow> rows_;
-    juce::OwnedArray<RowControls> rowControls_;
+    juce::OwnedArray<PortRowComponent> rowControls_;
 
     juce::Label titleLabel_;
     juce::Label newPortSectionLabel_{"newPortSectionLabel", "Add a port"};
@@ -111,14 +122,29 @@ private:
     juce::ComboBox newDirectionBox_;
     juce::ComboBox newKindBox_;
     juce::ComboBox newShapeBox_;
+    juce::Label newVoicesLabel_{"newVoicesLabel", "Voices"};
     juce::TextEditor newVoicesEditor_;
     juce::TextButton addButton_{"Add"};
     juce::TextButton closeButton_{"Close"};
+    juce::Rectangle<int> addBlockBounds_; // for paint()'s grouping panel behind the block above
+
+    juce::Viewport rowsViewport_;
+    juce::Component rowsContent_;
+    juce::Label inputsHeader_{"inputsHeader", "INPUTS"};
+    juce::Label outputsHeader_{"outputsHeader", "OUTPUTS"};
+    juce::Label inputsEmptyHint_{"inputsEmptyHint", "No inputs yet"};
+    juce::Label outputsEmptyHint_{"outputsEmptyHint", "No outputs yet"};
 
     static constexpr int kRowHeight = 32;
-    static constexpr int kNewPortRowHeight = 34;
-    static constexpr int kMargin = 12;
-    static constexpr int kDialogWidth = 800;
+    static constexpr int kRowGap = 4;
+    static constexpr int kSectionHeaderHeight = 18;
+    static constexpr int kSectionGap = 10;
+    static constexpr int kEmptyHintHeight = 18;
+    static constexpr int kAddRowHeight = 26;
+    static constexpr int kMargin = 14;
+    static constexpr int kDialogWidth = 580;
+    static constexpr int kMinDialogHeight = 300;
+    static constexpr int kMaxDialogHeight = 620;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MacroPortConfigDialog)
 };

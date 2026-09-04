@@ -1,4 +1,5 @@
 #include "MacroPortConfigDialog.h"
+#include "Theme/AppLookAndFeel.h"
 
 namespace synth::ui {
 
@@ -13,6 +14,91 @@ constexpr int kKindMidiId = 2;
 constexpr int kShapeMonoId = 1;
 constexpr int kShapeStereoId = 2;
 constexpr int kShapePolyId = 3;
+
+constexpr int kGlyphButtonSize = 20;
+constexpr int kGlyphButtonGap = 2;
+
+// Sets a combo box's selection and calls its REAL onChange handler directly, rather than via
+// juce::ComboBox's own sendNotification path — that posts through AsyncUpdater, which a headless
+// test's message-less run loop never pumps, so the change would silently never fire. Same idiom
+// triggerRowDeleteForTest's comment already documents for juce::Button::triggerClick(). Every
+// *ForTest seam that flips a combo box goes through this so "drive the real control" also means
+// "and see its real, synchronous side effects" regardless of whether a message loop is running.
+void setComboSelectionForTest(juce::ComboBox& box, int itemId) {
+    box.setSelectedId(itemId, juce::dontSendNotification);
+    if (box.onChange)
+        box.onChange();
+}
+
+// Resolves the live theme's colour tokens, evaluated fresh at every call site (never cached) so a
+// theme switch or this dialog being reparented mid-life is never stale — the same reasoning
+// PreferencesSettingsTab's popup content and MidiDestinationPicker give for the identical
+// dynamic_cast, and why it is done here at PAINT time rather than once at construction (a
+// juce::DialogWindow's content component is not guaranteed to already sit under
+// synth::theme::AppLookAndFeel the moment its constructor runs).
+const synth::theme::Colors& liveThemeColours(const juce::Component& c) {
+    static const synth::theme::Colors fallback{};
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&c.getLookAndFeel()))
+        return lf->getTheme().colors;
+    return fallback;
+}
+
+// A compact icon-style affordance replacing the old full-width "Up"/"Down"/"Delete" text buttons
+// (founder review item 1) — a small square button drawing one glyph as a filled juce::Path, the
+// same "drawn Path, not an SVG asset" idiom MacroCardComponent's own expand chevron already uses,
+// so this adds no new themed icon asset for three small per-row affordances.
+class GlyphButton : public juce::Button {
+public:
+    enum class Glyph { Up, Down, Delete };
+
+    explicit GlyphButton(Glyph glyph)
+        : juce::Button(juce::String())
+        , glyph_(glyph) {}
+
+    void paintButton(juce::Graphics& g, bool highlighted, bool down) override {
+        const auto& c = liveThemeColours(*this);
+        const bool isDelete = glyph_ == Glyph::Delete;
+        const juce::Colour hotColour = isDelete ? c.error : c.accent;
+        auto bounds = getLocalBounds().toFloat();
+
+        if (isEnabled() && (highlighted || down)) {
+            g.setColour(hotColour.withAlpha(down ? 0.28f : 0.15f));
+            g.fillRoundedRectangle(bounds, 4.0f);
+        }
+
+        juce::Colour glyphColour = c.textMuted;
+        if (!isEnabled())
+            glyphColour = c.textDisabled;
+        else if (highlighted || down)
+            glyphColour = hotColour;
+        g.setColour(glyphColour);
+
+        auto inner = bounds.reduced(bounds.getWidth() * 0.3f, bounds.getHeight() * 0.3f);
+        switch (glyph_) {
+        case Glyph::Up: {
+            juce::Path p;
+            p.addTriangle(inner.getX(), inner.getBottom(), inner.getRight(), inner.getBottom(), inner.getCentreX(),
+                          inner.getY());
+            g.fillPath(p);
+            break;
+        }
+        case Glyph::Down: {
+            juce::Path p;
+            p.addTriangle(inner.getX(), inner.getY(), inner.getRight(), inner.getY(), inner.getCentreX(),
+                          inner.getBottom());
+            g.fillPath(p);
+            break;
+        }
+        case Glyph::Delete:
+            g.drawLine(inner.getX(), inner.getY(), inner.getRight(), inner.getBottom(), 1.6f);
+            g.drawLine(inner.getX(), inner.getBottom(), inner.getRight(), inner.getY(), 1.6f);
+            break;
+        }
+    }
+
+private:
+    Glyph glyph_;
+};
 } // namespace
 
 void MacroPortConfigDialog::populateShapeBox(juce::ComboBox& box) {
@@ -41,13 +127,201 @@ int MacroPortConfigDialog::comboIndexFromShape(MacroPortShape shape) {
     }
 }
 
+// One row's controls, grouped in a single Component so it can paint its own kind-tinted
+// background (founder review item 1: "make a MIDI row visually distinct from an audio/CV row") —
+// a faint fill plus a coloured left accent bar, using the SAME jack-colour convention
+// MacroCardComponent's own port dots already use (MIDI -> audioWire, AudioCV -> accent; see that
+// file's paint() comment for why that pairing, counter-intuitive as it reads, is deliberate).
+//
+// Every callback below reaches straight into `owner`'s std::function members rather than storing
+// its own copies — `owner` is the MacroPortConfigDialog that owns this row through
+// rowControls_ (an OwnedArray), so it strictly outlives every row and a bound reference is safe,
+// exactly like the pre-redesign code capturing `this` (the dialog) in each row's lambdas.
+class MacroPortConfigDialog::PortRowComponent : public juce::Component {
+public:
+    PortRowComponent(MacroPortConfigDialog& owner, const PortRow& row)
+        : nodeUuid(row.nodeUuid)
+        , isMidi(row.kind == synth::MacroPortKind::Midi)
+        , upButton(GlyphButton::Glyph::Up)
+        , downButton(GlyphButton::Glyph::Down)
+        , deleteButton(GlyphButton::Glyph::Delete)
+        , owner_(owner)
+        , committedShape_(row.shape)
+        , committedVoices_(juce::jmax(1, row.voiceCount)) {
+        nameEditor.setText(row.name, juce::dontSendNotification);
+        nameEditor.setJustification(juce::Justification::centredLeft);
+        nameEditor.setFont(juce::Font(juce::FontOptions(12.5f)));
+        nameEditor.onFocusLost = [this] {
+            if (owner_.onRenamePort)
+                owner_.onRenamePort(nodeUuid, nameEditor.getText());
+        };
+        nameEditor.onReturnKey = nameEditor.onFocusLost;
+        addAndMakeVisible(nameEditor);
+
+        midiTag.setText("MIDI", juce::dontSendNotification);
+        midiTag.setJustificationType(juce::Justification::centred);
+        midiTag.setFont(juce::Font(juce::FontOptions(10.0f, juce::Font::bold)));
+        midiTag.setVisible(isMidi);
+        addAndMakeVisible(midiTag);
+
+        populateShapeBox(shapeBox);
+        shapeBox.setSelectedId(comboIndexFromShape(row.shape), juce::dontSendNotification);
+        shapeBox.setVisible(!isMidi);
+        // Founder review item 1: the combo box IS the "Apply Shape" gesture now — selecting a new
+        // shape commits immediately (still delete+re-add of the node as ONE undo step underneath,
+        // per GraphEditor::changeMacroPortShape; only the UI gesture collapsed from two steps to
+        // one, per the class comment). maybeCommitShape guards against firing on a no-op (see its
+        // own comment) — load-bearing here because GraphEditor::changeMacroPortShape does not
+        // early-out on an unchanged (shape, voiceCount) pair itself: it always deletes and
+        // re-creates the node, minting a FRESH nodeUuid, in the one subsystem
+        // (docs/macros.md §5.2) that is built entirely on uuid identity.
+        shapeBox.onChange = [this] {
+            updateVoicesVisibility();
+            maybeCommitShape();
+        };
+        addAndMakeVisible(shapeBox);
+
+        voicesLabel.setText("Voices", juce::dontSendNotification);
+        voicesLabel.setJustificationType(juce::Justification::centredRight);
+        voicesLabel.setFont(juce::Font(juce::FontOptions(9.5f)));
+        addAndMakeVisible(voicesLabel);
+
+        voicesEditor.setText(juce::String(committedVoices_), juce::dontSendNotification);
+        voicesEditor.setInputRestrictions(2, "0123456789");
+        voicesEditor.setJustification(juce::Justification::centred);
+        // Unlike a combo box (which only notifies on an actual selection change), onFocusLost/
+        // onReturnKey fire on every transit through the field — tabbing past it, or clicking Close
+        // right after it, loses focus with nothing typed. maybeCommitShape's guard is what keeps
+        // that from re-minting the port's node on a no-op (see its own comment).
+        voicesEditor.onFocusLost = [this] { maybeCommitShape(); };
+        voicesEditor.onReturnKey = voicesEditor.onFocusLost;
+        addAndMakeVisible(voicesEditor);
+
+        upButton.setTooltip("Move up");
+        upButton.onClick = [this] {
+            if (owner_.onReorderPort)
+                owner_.onReorderPort(nodeUuid, /*moveUp=*/true);
+        };
+        addAndMakeVisible(upButton);
+
+        downButton.setTooltip("Move down");
+        downButton.onClick = [this] {
+            if (owner_.onReorderPort)
+                owner_.onReorderPort(nodeUuid, /*moveUp=*/false);
+        };
+        addAndMakeVisible(downButton);
+
+        deleteButton.setTooltip("Delete this port");
+        deleteButton.onClick = [this] {
+            if (owner_.onDeletePort)
+                owner_.onDeletePort(nodeUuid);
+        };
+        addAndMakeVisible(deleteButton);
+
+        updateVoicesVisibility();
+    }
+
+    void updateVoicesVisibility() {
+        const bool poly = !isMidi && shapeFromComboIndex(shapeBox.getSelectedId()) == MacroPortShape::Poly;
+        voicesEditor.setVisible(poly);
+        voicesLabel.setVisible(poly);
+        resized();
+    }
+
+    int currentVoiceCount() const { return juce::jmax(1, voicesEditor.getText().getIntValue()); }
+
+    // Fires onChangePortShape only when the (shape, voiceCount) pair the controls currently read
+    // actually differs from what was last committed — a real juce::ComboBox already only notifies
+    // on an actual selection change, but the voices TextEditor's onFocusLost/onReturnKey do not
+    // have that property (see their call sites' comments), and GraphEditor::changeMacroPortShape
+    // itself has no such guard: it unconditionally deletes and re-creates the node. The committed
+    // pair is updated HERE, synchronously, rather than only once refreshPorts() rebuilds this row
+    // from the graph — GraphEditor wraps onChangePortShape in MessageManager::callAsync, so a
+    // Return keypress immediately followed by a focus-lost (pressing Enter, then clicking Close)
+    // would otherwise queue a second commit against the same stale baseline before the first one's
+    // async round-trip has rebuilt anything.
+    void maybeCommitShape() {
+        const auto newShape = shapeFromComboIndex(shapeBox.getSelectedId());
+        const int newVoices = currentVoiceCount();
+        if (newShape == committedShape_ && newVoices == committedVoices_)
+            return;
+        committedShape_ = newShape;
+        committedVoices_ = newVoices;
+        if (owner_.onChangePortShape)
+            owner_.onChangePortShape(nodeUuid, newShape, newVoices);
+    }
+
+    void resized() override {
+        auto area = getLocalBounds().reduced(6, 3);
+
+        auto placeGlyph = [&](GlyphButton& btn) {
+            btn.setBounds(
+                area.removeFromRight(kGlyphButtonSize).withSizeKeepingCentre(kGlyphButtonSize, kGlyphButtonSize));
+            area.removeFromRight(kGlyphButtonGap);
+        };
+        placeGlyph(deleteButton);
+        placeGlyph(downButton);
+        placeGlyph(upButton);
+        area.removeFromRight(8);
+
+        if (isMidi) {
+            midiTag.setBounds(area.removeFromRight(56));
+        } else {
+            if (voicesEditor.isVisible()) {
+                voicesEditor.setBounds(area.removeFromRight(38));
+                area.removeFromRight(4);
+                voicesLabel.setBounds(area.removeFromRight(42));
+                area.removeFromRight(6);
+            }
+            shapeBox.setBounds(area.removeFromRight(90));
+        }
+        area.removeFromRight(8);
+        nameEditor.setBounds(area);
+    }
+
+    void paint(juce::Graphics& g) override {
+        const auto& c = liveThemeColours(*this);
+        const juce::Colour kindColour = isMidi ? c.audioWire : c.accent;
+        auto bounds = getLocalBounds().toFloat();
+
+        if (isMidi) {
+            g.setColour(c.midiWire.withAlpha(0.08f));
+            g.fillRoundedRectangle(bounds, 5.0f);
+        }
+
+        g.setColour(kindColour.withAlpha(0.6f));
+        g.fillRoundedRectangle(bounds.withWidth(3.0f).reduced(0.0f, 3.0f), 1.5f);
+    }
+
+    juce::String nodeUuid;
+    bool isMidi = false;
+
+    juce::TextEditor nameEditor;
+    juce::Label midiTag{"midiTag", juce::String()};
+    juce::ComboBox shapeBox; // AudioCV rows only; hidden entirely for a MIDI row
+    juce::Label voicesLabel{"voicesLabel", juce::String()};
+    juce::TextEditor voicesEditor; // shown only while shapeBox reads Poly-N
+    GlyphButton upButton;
+    GlyphButton downButton;
+    GlyphButton deleteButton;
+
+private:
+    MacroPortConfigDialog& owner_; // outlives this row: owned by owner_.rowControls_
+    MacroPortShape committedShape_;
+    int committedVoices_;
+};
+
 MacroPortConfigDialog::MacroPortConfigDialog(juce::String macroName, std::vector<PortRow> ports)
     : macroName_(std::move(macroName))
     , rows_(std::move(ports)) {
-    titleLabel_.setText("Configure I/O - " + macroName_, juce::dontSendNotification);
-    titleLabel_.setFont(juce::Font(juce::FontOptions(18.0f, juce::Font::bold)));
+    // Founder review item 1: the window's own native title bar already reads "Configure I/O", so
+    // the in-dialog title no longer repeats it — just the macro's name, which the chrome cannot
+    // show.
+    titleLabel_.setText(macroName_.isNotEmpty() ? macroName_ : "Macro", juce::dontSendNotification);
+    titleLabel_.setFont(juce::Font(juce::FontOptions(17.0f, juce::Font::bold)));
     addAndMakeVisible(titleLabel_);
 
+    newPortSectionLabel_.setFont(juce::Font(juce::FontOptions(11.5f, juce::Font::bold)));
     addAndMakeVisible(newPortSectionLabel_);
 
     newDirectionBox_.addItem("Input", kDirectionInputId);
@@ -59,24 +333,25 @@ MacroPortConfigDialog::MacroPortConfigDialog(juce::String macroName, std::vector
     newKindBox_.addItem("MIDI", kKindMidiId);
     newKindBox_.setSelectedId(kKindAudioCVId, juce::dontSendNotification);
     newKindBox_.onChange = [this] {
-        const bool isMidi = newKindBox_.getSelectedId() == kKindMidiId;
-        newShapeBox_.setEnabled(!isMidi);
-        newVoicesEditor_.setEnabled(!isMidi && newShapeBox_.getSelectedId() == kShapePolyId);
+        newShapeBox_.setVisible(newKindBox_.getSelectedId() != kKindMidiId);
+        updateNewPortVoicesVisibility();
     };
     addAndMakeVisible(newKindBox_);
 
     populateShapeBox(newShapeBox_);
     newShapeBox_.setSelectedId(kShapeMonoId, juce::dontSendNotification);
-    newShapeBox_.onChange = [this] {
-        newVoicesEditor_.setEnabled(newKindBox_.getSelectedId() == kKindAudioCVId &&
-                                    newShapeBox_.getSelectedId() == kShapePolyId);
-    };
+    newShapeBox_.onChange = [this] { updateNewPortVoicesVisibility(); };
     addAndMakeVisible(newShapeBox_);
+
+    newVoicesLabel_.setJustificationType(juce::Justification::centredRight);
+    newVoicesLabel_.setFont(juce::Font(juce::FontOptions(9.5f)));
+    addAndMakeVisible(newVoicesLabel_);
 
     newVoicesEditor_.setText("4", juce::dontSendNotification);
     newVoicesEditor_.setInputRestrictions(2, "0123456789");
-    newVoicesEditor_.setEnabled(false); // Mono is the default shape
+    newVoicesEditor_.setJustification(juce::Justification::centred);
     addAndMakeVisible(newVoicesEditor_);
+    updateNewPortVoicesVisibility(); // Mono is the default shape: starts hidden
 
     newNameEditor_.setTextToShowWhenEmpty("Port name", juce::Colours::grey);
     addAndMakeVisible(newNameEditor_);
@@ -90,154 +365,170 @@ MacroPortConfigDialog::MacroPortConfigDialog(juce::String macroName, std::vector
     };
     addAndMakeVisible(closeButton_);
 
+    addAndMakeVisible(rowsViewport_);
+    rowsViewport_.setViewedComponent(&rowsContent_, false);
+    rowsViewport_.setScrollBarsShown(true, false);
+
+    inputsHeader_.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
+    outputsHeader_.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
+    rowsContent_.addAndMakeVisible(inputsHeader_);
+    rowsContent_.addAndMakeVisible(outputsHeader_);
+
+    inputsEmptyHint_.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::italic)));
+    outputsEmptyHint_.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::italic)));
+    rowsContent_.addAndMakeVisible(inputsEmptyHint_);
+    rowsContent_.addAndMakeVisible(outputsEmptyHint_);
+
     rebuildRowComponents();
-    setSize(kDialogWidth, contentHeightForCurrentRows());
+    setSize(kDialogWidth, idealDialogHeight());
+    resized();
 }
 
 MacroPortConfigDialog::~MacroPortConfigDialog() = default;
 
-void MacroPortConfigDialog::paint(juce::Graphics& g) {
-    g.fillAll(getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId));
+void MacroPortConfigDialog::updateNewPortVoicesVisibility() {
+    const bool isMidi = newKindBox_.getSelectedId() == kKindMidiId;
+    const bool poly = !isMidi && newShapeBox_.getSelectedId() == kShapePolyId;
+    newVoicesEditor_.setVisible(poly);
+    newVoicesLabel_.setVisible(poly);
+}
 
-    g.setColour(juce::Colours::grey.withAlpha(0.4f));
-    // One rule under the "add a port" section, one above the row list — cheap visual grouping,
-    // no theming dependency (this dialog is content-only, hosted in a plain juce::DialogWindow).
-    const int ruleY1 = newPortSectionLabel_.getBottom() + kNewPortRowHeight * 2 + 4;
-    g.drawHorizontalLine(ruleY1, (float)kMargin, (float)(getWidth() - kMargin));
+void MacroPortConfigDialog::paint(juce::Graphics& g) {
+    g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
+
+    const auto& c = liveThemeColours(*this);
+
+    // "Add a port" panel — a faintly bordered, rounded group so the row of controls above the Add
+    // button reads as one tied-together block (founder review item 1) rather than floating loose
+    // above an unrelated Add button.
+    if (!addBlockBounds_.isEmpty()) {
+        g.setColour(c.surface.withAlpha(0.5f));
+        g.fillRoundedRectangle(addBlockBounds_.toFloat(), 8.0f);
+        g.setColour(c.border);
+        g.drawRoundedRectangle(addBlockBounds_.toFloat().reduced(0.5f), 8.0f, 1.0f);
+    }
 }
 
 void MacroPortConfigDialog::resized() {
     auto area = getLocalBounds().reduced(kMargin);
 
-    titleLabel_.setBounds(area.removeFromTop(28));
-    area.removeFromTop(8);
+    titleLabel_.setBounds(area.removeFromTop(24));
+    area.removeFromTop(10);
 
-    newPortSectionLabel_.setBounds(area.removeFromTop(20));
+    auto addBlockArea = area.removeFromTop(8 + kAddRowHeight + 6 + kAddRowHeight + 8);
+    addBlockBounds_ = addBlockArea;
+    auto addBlock = addBlockArea.reduced(8, 8);
 
-    auto newRow1 = area.removeFromTop(kNewPortRowHeight);
-    newDirectionBox_.setBounds(newRow1.removeFromLeft(110));
-    newRow1.removeFromLeft(6);
-    newKindBox_.setBounds(newRow1.removeFromLeft(110));
-    newRow1.removeFromLeft(6);
-    newShapeBox_.setBounds(newRow1.removeFromLeft(90));
-    newRow1.removeFromLeft(6);
-    newVoicesEditor_.setBounds(newRow1.removeFromLeft(50));
+    newPortSectionLabel_.setBounds(addBlock.removeFromTop(kAddRowHeight));
 
-    area.removeFromTop(4);
-    auto newRow2 = area.removeFromTop(kNewPortRowHeight);
-    addButton_.setBounds(newRow2.removeFromRight(80));
+    auto newRow1 = addBlock.removeFromTop(kAddRowHeight);
+    newDirectionBox_.setBounds(newRow1.removeFromLeft(96));
+    newRow1.removeFromLeft(6);
+    newKindBox_.setBounds(newRow1.removeFromLeft(100));
+    newRow1.removeFromLeft(6);
+    if (newShapeBox_.isVisible()) {
+        newShapeBox_.setBounds(newRow1.removeFromLeft(84));
+        newRow1.removeFromLeft(6);
+    }
+    if (newVoicesEditor_.isVisible()) {
+        newVoicesLabel_.setBounds(newRow1.removeFromLeft(40));
+        newRow1.removeFromLeft(4);
+        newVoicesEditor_.setBounds(newRow1.removeFromLeft(38));
+    }
+
+    addBlock.removeFromTop(6);
+    auto newRow2 = addBlock.removeFromTop(kAddRowHeight);
+    addButton_.setBounds(newRow2.removeFromRight(72));
     newRow2.removeFromRight(6);
     newNameEditor_.setBounds(newRow2);
 
-    area.removeFromTop(12); // room for the rule paint() draws just above the row list
+    area.removeFromTop(10);
 
-    for (auto* rc : rowControls_) {
-        auto row = area.removeFromTop(kRowHeight);
-        rc->directionLabel.setBounds(row.removeFromLeft(40));
-        row.removeFromLeft(4);
-        rc->deleteButton.setBounds(row.removeFromRight(60));
-        row.removeFromRight(4);
-        rc->downButton.setBounds(row.removeFromRight(50));
-        row.removeFromRight(4);
-        rc->upButton.setBounds(row.removeFromRight(40));
-        row.removeFromRight(4);
-        rc->applyShapeButton.setBounds(row.removeFromRight(90));
-        row.removeFromRight(4);
-        rc->voicesEditor.setBounds(row.removeFromRight(50));
-        row.removeFromRight(4);
-        rc->shapeBox.setBounds(row.removeFromRight(90));
-        row.removeFromRight(4);
-        rc->kindLabel.setBounds(row.removeFromRight(70));
-        row.removeFromRight(4);
-        rc->nameEditor.setBounds(row);
-        area.removeFromTop(2);
+    auto closeRow = area.removeFromBottom(kAddRowHeight + 6);
+    closeRow.removeFromTop(6);
+    closeButton_.setBounds(closeRow.removeFromRight(84));
+
+    area.removeFromBottom(6);
+    rowsViewport_.setBounds(area);
+    layOutOrMeasureRows(/*apply=*/true, area.getWidth() - 2);
+}
+
+int MacroPortConfigDialog::layOutOrMeasureRows(bool apply, int width) {
+    width = juce::jmax(160, width);
+    int y = 0;
+
+    if (apply)
+        inputsHeader_.setBounds(0, y, width, kSectionHeaderHeight);
+    y += kSectionHeaderHeight;
+
+    bool anyInput = false;
+    for (int i = 0; i < (int)rows_.size(); ++i) {
+        if (!rows_[(size_t)i].isInput)
+            continue;
+        anyInput = true;
+        if (apply)
+            rowControls_[i]->setBounds(0, y, width, kRowHeight);
+        y += kRowHeight + kRowGap;
+    }
+    if (apply)
+        inputsEmptyHint_.setVisible(!anyInput);
+    if (!anyInput) {
+        if (apply)
+            inputsEmptyHint_.setBounds(0, y, width, kEmptyHintHeight);
+        y += kEmptyHintHeight;
     }
 
-    area.removeFromTop(8);
-    closeButton_.setBounds(area.removeFromTop(kNewPortRowHeight).removeFromRight(90));
+    y += kSectionGap;
+    if (apply)
+        outputsHeader_.setBounds(0, y, width, kSectionHeaderHeight);
+    y += kSectionHeaderHeight;
+
+    bool anyOutput = false;
+    for (int i = 0; i < (int)rows_.size(); ++i) {
+        if (rows_[(size_t)i].isInput)
+            continue;
+        anyOutput = true;
+        if (apply)
+            rowControls_[i]->setBounds(0, y, width, kRowHeight);
+        y += kRowHeight + kRowGap;
+    }
+    if (apply)
+        outputsEmptyHint_.setVisible(!anyOutput);
+    if (!anyOutput) {
+        if (apply)
+            outputsEmptyHint_.setBounds(0, y, width, kEmptyHintHeight);
+        y += kEmptyHintHeight;
+    }
+
+    if (apply)
+        rowsContent_.setSize(width, y);
+    return y;
 }
 
-int MacroPortConfigDialog::contentHeightForCurrentRows() const {
-    const int rowsHeight = (int)rowControls_.size() * (kRowHeight + 2);
-    return 28 + 8 + 20 + kNewPortRowHeight + 4 + kNewPortRowHeight + 12 + rowsHeight + 8 + kNewPortRowHeight +
-           kMargin * 2;
-}
-
-void MacroPortConfigDialog::updateVoicesEnablement(RowControls& rc) {
-    rc.voicesEditor.setEnabled(rc.shapeBox.getSelectedId() == kShapePolyId);
+int MacroPortConfigDialog::idealDialogHeight() {
+    const int rowsHeight = layOutOrMeasureRows(/*apply=*/false, kDialogWidth - kMargin * 2 - 2);
+    const int chromeHeight = kMargin * 2                                   // outer margins
+                             + 24 + 10                                     // title + gap
+                             + (8 + kAddRowHeight + 6 + kAddRowHeight + 8) // "Add a port" block
+                             + 10                                          // gap before the row list
+                             + 6 + kAddRowHeight + 6;                      // gap + Close row + gap
+    return juce::jlimit(kMinDialogHeight, kMaxDialogHeight, chromeHeight + rowsHeight);
 }
 
 void MacroPortConfigDialog::rebuildRowComponents() {
     rowControls_.clear();
 
     for (const auto& row : rows_) {
-        auto* rc = new RowControls();
+        auto* rc = new PortRowComponent(*this, row);
         rowControls_.add(rc);
-
-        rc->directionLabel.setText(row.isInput ? "In" : "Out", juce::dontSendNotification);
-        addAndMakeVisible(rc->directionLabel);
-
-        rc->nameEditor.setText(row.name, juce::dontSendNotification);
-        const juce::String uuid = row.nodeUuid;
-        rc->nameEditor.onFocusLost = [this, uuid, rc] {
-            if (onRenamePort)
-                onRenamePort(uuid, rc->nameEditor.getText());
-        };
-        rc->nameEditor.onReturnKey = [this, uuid, rc] {
-            if (onRenamePort)
-                onRenamePort(uuid, rc->nameEditor.getText());
-        };
-        addAndMakeVisible(rc->nameEditor);
-
-        const bool isMidi = row.kind == synth::MacroPortKind::Midi;
-        rc->kindLabel.setText(isMidi ? "MIDI" : "Audio / CV", juce::dontSendNotification);
-        addAndMakeVisible(rc->kindLabel);
-
-        populateShapeBox(rc->shapeBox);
-        rc->shapeBox.setSelectedId(comboIndexFromShape(row.shape), juce::dontSendNotification);
-        rc->shapeBox.setEnabled(!isMidi);
-        rc->shapeBox.onChange = [this, rc] { updateVoicesEnablement(*rc); };
-        addAndMakeVisible(rc->shapeBox);
-
-        rc->voicesEditor.setText(juce::String(row.voiceCount), juce::dontSendNotification);
-        rc->voicesEditor.setInputRestrictions(2, "0123456789");
-        rc->voicesEditor.setEnabled(!isMidi && row.shape == MacroPortShape::Poly);
-        addAndMakeVisible(rc->voicesEditor);
-
-        rc->applyShapeButton.setEnabled(!isMidi); // a MIDI port has no shape to change (§5.1)
-        rc->applyShapeButton.onClick = [this, uuid, rc] {
-            if (!onChangePortShape)
-                return;
-            const auto shape = shapeFromComboIndex(rc->shapeBox.getSelectedId());
-            const int voices = juce::jmax(1, rc->voicesEditor.getText().getIntValue());
-            onChangePortShape(uuid, shape, voices);
-        };
-        addAndMakeVisible(rc->applyShapeButton);
-
-        rc->upButton.onClick = [this, uuid] {
-            if (onReorderPort)
-                onReorderPort(uuid, /*moveUp=*/true);
-        };
-        addAndMakeVisible(rc->upButton);
-
-        rc->downButton.onClick = [this, uuid] {
-            if (onReorderPort)
-                onReorderPort(uuid, /*moveUp=*/false);
-        };
-        addAndMakeVisible(rc->downButton);
-
-        rc->deleteButton.onClick = [this, uuid] {
-            if (onDeletePort)
-                onDeletePort(uuid);
-        };
-        addAndMakeVisible(rc->deleteButton);
+        rowsContent_.addAndMakeVisible(rc);
     }
 }
 
 void MacroPortConfigDialog::refreshPorts(std::vector<PortRow> ports) {
     rows_ = std::move(ports);
     rebuildRowComponents();
-    setSize(kDialogWidth, contentHeightForCurrentRows());
+    setSize(kDialogWidth, idealDialogHeight());
     resized();
     repaint();
 }
@@ -261,16 +552,15 @@ void MacroPortConfigDialog::setNewPortNameForTest(const juce::String& name) {
 }
 
 void MacroPortConfigDialog::setNewPortDirectionForTest(bool isInput) {
-    newDirectionBox_.setSelectedId(isInput ? kDirectionInputId : kDirectionOutputId, juce::sendNotification);
+    setComboSelectionForTest(newDirectionBox_, isInput ? kDirectionInputId : kDirectionOutputId);
 }
 
 void MacroPortConfigDialog::setNewPortKindForTest(synth::MacroPortKind kind) {
-    newKindBox_.setSelectedId(kind == synth::MacroPortKind::Midi ? kKindMidiId : kKindAudioCVId,
-                              juce::sendNotification);
+    setComboSelectionForTest(newKindBox_, kind == synth::MacroPortKind::Midi ? kKindMidiId : kKindAudioCVId);
 }
 
 void MacroPortConfigDialog::setNewPortShapeForTest(MacroPortShape shape) {
-    newShapeBox_.setSelectedId(comboIndexFromShape(shape), juce::sendNotification);
+    setComboSelectionForTest(newShapeBox_, comboIndexFromShape(shape));
 }
 
 void MacroPortConfigDialog::setNewPortVoiceCountForTest(int voices) {
@@ -294,8 +584,8 @@ void MacroPortConfigDialog::setRowNameForTest(int row, const juce::String& name)
 }
 
 void MacroPortConfigDialog::commitRowNameForTest(int row) {
-    if (row >= 0 && row < (int)rowControls_.size() && onRenamePort)
-        onRenamePort(getRowNodeUuidForTest(row), rowControls_[row]->nameEditor.getText());
+    if (row >= 0 && row < (int)rowControls_.size() && rowControls_[row]->nameEditor.onFocusLost)
+        rowControls_[row]->nameEditor.onFocusLost();
 }
 
 void MacroPortConfigDialog::triggerRowDeleteForTest(int row) {
@@ -317,8 +607,10 @@ void MacroPortConfigDialog::triggerRowMoveDownForTest(int row) {
 }
 
 void MacroPortConfigDialog::setRowShapeForTest(int row, MacroPortShape shape) {
+    // setComboSelectionForTest calls shapeBox.onChange directly, which now IS the commit gesture
+    // (see the class comment), so this alone reproduces the real "pick a new shape" click.
     if (row >= 0 && row < (int)rowControls_.size())
-        rowControls_[row]->shapeBox.setSelectedId(comboIndexFromShape(shape), juce::sendNotification);
+        setComboSelectionForTest(rowControls_[row]->shapeBox, comboIndexFromShape(shape));
 }
 
 void MacroPortConfigDialog::setRowVoiceCountForTest(int row, int voices) {
@@ -326,9 +618,9 @@ void MacroPortConfigDialog::setRowVoiceCountForTest(int row, int voices) {
         rowControls_[row]->voicesEditor.setText(juce::String(voices), juce::dontSendNotification);
 }
 
-void MacroPortConfigDialog::triggerRowApplyShapeForTest(int row) {
-    if (row >= 0 && row < (int)rowControls_.size() && rowControls_[row]->applyShapeButton.onClick)
-        rowControls_[row]->applyShapeButton.onClick();
+void MacroPortConfigDialog::commitRowVoiceCountForTest(int row) {
+    if (row >= 0 && row < (int)rowControls_.size() && rowControls_[row]->voicesEditor.onFocusLost)
+        rowControls_[row]->voicesEditor.onFocusLost();
 }
 
 void MacroPortConfigDialog::triggerCloseForTest() {

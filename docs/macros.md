@@ -458,7 +458,17 @@ In order, each independently shippable:
    (`AppUndoManager`'s `GraphAndMacroSnapshotAction` — see its class comment for why the combined
    graph+macro restore has to be a single action, not two pushed into one transaction, to get
    both undo AND redo right). A saved cable on a raw channel the new shape no longer exposes is
-   dropped, not adapted (dropRoutingsOnHiddenJacks' rule, applied honestly).
+   dropped, not adapted (dropRoutingsOnHiddenJacks' rule, applied honestly). **UI redesign
+   (founder-review fix, F1):** the modal's per-row "Apply Shape" button is gone — picking a new
+   shape in the row's combo box, or typing a new poly voice count and pressing Return/losing
+   focus, commits immediately (`MacroPortConfigDialog`'s combo `onChange` / voice-count
+   `onFocusLost` call `onChangePortShape` directly). Only the UI gesture collapsed from two steps
+   to one; the underlying delete+create+rewire is still exactly one undo step as above. Rows also
+   group under "Inputs"/"Outputs" section headers, a MIDI row hides its shape controls entirely
+   (no shape/poly concept applies, §5.1) instead of showing them disabled, the poly voice count is
+   labelled and only shown for a Poly shape, Up/Down/Delete are compact glyph buttons instead of
+   full-width text buttons, and the dialog sizes itself to its content (clamped, with the row list
+   scrolling past the clamp) instead of a fixed-size box.
 6. **DONE (P8-15d).** Bypass/mute fan-out (§5.6): `GraphEditor::setMacroBypassed`/`setMacroMuted`
    call `ModuleBase::setBypassed`/`setMuted` — already `setValueNotifyingHost` parameter writes —
    on every member as ONE undo step (`recordStructuralChange`, the same before/after graph-JSON
