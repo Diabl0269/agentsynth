@@ -302,6 +302,26 @@ juce::Point<float> projectToRectEdge(juce::Rectangle<int> rect, juce::Point<floa
     const float t = std::min(tx, ty);
     return centre + juce::Point<float>(dx * t, dy * t);
 }
+
+// ---- Card jacks (P8-15c, T141, docs/macros.md §7 item 4) ----
+// The collapsed card's fixed footprint — deliberately independent of however large or scattered
+// the group it stands in for is; that is the whole point of collapsing. Matches a standard
+// module card's width so it sits comfortably on the same grid. Hoisted up here (rather than left
+// next to macroCardPortLayout(), where it originally lived) because buildVisibleCables()'s
+// directional edge-anchor treatment (P8-15 fix F3) needs the jack band to clamp a
+// no-port-involved boundary cable's Y into, same as a real port jack's Y is placed in.
+constexpr int kMacroCardHeight = 90;
+// The vertical band jacks lay out in: below the title row (drawn at local y=6..26,
+// MacroCardComponent::getTitleRowBounds) and above the member-count line (the card's bottom
+// 14px, MacroCardComponent::paint), so a jack never collides with either piece of text.
+constexpr int kMacroCardJackBandTop = 30;
+constexpr int kMacroCardJackBandBottom = kMacroCardHeight - 16;
+// Same inset from the card's left/right edge ModuleComponent's own MIDI jacks use on an
+// identically-wide kSingleWidth card (x=10 / getWidth()-10) — a macro's boundary jacks read like
+// any other module's.
+constexpr int kMacroCardJackInsetX = 10;
+// Click tolerance, matching ModuleComponent::getPortForPoint's own `< 10`.
+constexpr float kMacroCardJackHitRadius = 10.0f;
 } // namespace
 
 const std::vector<GraphEditor::VisibleCable>& GraphEditor::buildVisibleCables() {
@@ -530,9 +550,15 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
     //     (macroCardPortLayout), so the cable visibly enters/leaves through the port it actually
     //     passes through;
     //   - the hidden endpoint is an ordinary interior member wired to past the boundary (no port
-    //     involved) -> keep the pre-P8-15 projectToRectEdge treatment, unchanged: the point where
-    //     the card's edge faces the other endpoint. That case doesn't disappear (§5.4) and must
-    //     not be mistaken for an error.
+    //     involved) -> DIRECTIONAL edge anchor (founder-review fix F3): the card's RIGHT edge if
+    //     the macro is the cable's SOURCE (signal leaving it), LEFT edge if it's the DESTINATION
+    //     (signal entering it) -- never a facing-the-other-endpoint projection, which is what put
+    //     both legs of a pass-through wire on the card's TOP edge when the other endpoint happened
+    //     to sit above the card. The Y coordinate still comes from that facing projection (so
+    //     several crossing cables keep spreading vertically instead of collapsing onto one pixel)
+    //     but is clamped into the card's jack band, and X lands exactly on the boundary (not
+    //     inset like a real port jack) so this anchor never sits under a case-(a) port dot on the
+    //     same edge. That case doesn't disappear (§5.4) and must not be mistaken for an error.
     // The rectangle/jack projected against is macroCableAnchorBounds(macro) — the LIVE
     // MacroCardComponent's bounds while a card exists, not the persisted `macro.bounds`, which is
     // only written back on drop (finalizeMacroCardDrag) and would leave a cable pointing at the
@@ -560,6 +586,18 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
             }
         }
 
+        // Case (b)'s directional edge anchor (F3, see the comment above): the facing projection
+        // still decides the Y (so several crossing cables keep distinct heights instead of
+        // stacking), clamped into the same vertical jack band a real port jack lays out in;
+        // X is forced to the card's actual left/right edge -- not the port jacks' inset -- so an
+        // edge anchor and a port dot on the same side never land on the same pixel.
+        auto directionalEdgeAnchor = [](juce::Rectangle<int> cardBounds, juce::Point<float> facing, bool onLeftEdge) {
+            const float y = juce::jlimit((float)(cardBounds.getY() + kMacroCardJackBandTop),
+                                         (float)(cardBounds.getY() + kMacroCardJackBandBottom), facing.y);
+            const float x = onLeftEdge ? (float)cardBounds.getX() : (float)cardBounds.getRight();
+            return juce::Point<float>(x, y);
+        };
+
         if (!collapsedMacroForNode.empty()) {
             std::vector<VisibleCable> filtered;
             filtered.reserve(cables.size());
@@ -577,16 +615,19 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
                 if (srcHidden) {
                     const auto cardBounds = macroCableAnchorBounds(*srcIt->second);
                     auto jackIt = portJackLocalForNode.find(cable.id.srcUid);
-                    cable.p1 = jackIt != portJackLocalForNode.end()
-                                   ? (cardBounds.getPosition() + jackIt->second).toFloat()
-                                   : projectToRectEdge(cardBounds, originalP2);
+                    // Macro is the SOURCE -> signal LEAVES it -> anchor on the RIGHT edge.
+                    cable.p1 =
+                        jackIt != portJackLocalForNode.end()
+                            ? (cardBounds.getPosition() + jackIt->second).toFloat()
+                            : directionalEdgeAnchor(cardBounds, projectToRectEdge(cardBounds, originalP2), false);
                 }
                 if (dstHidden) {
                     const auto cardBounds = macroCableAnchorBounds(*dstIt->second);
                     auto jackIt = portJackLocalForNode.find(cable.id.dstUid);
+                    // Macro is the DESTINATION -> signal ENTERS it -> anchor on the LEFT edge.
                     cable.p2 = jackIt != portJackLocalForNode.end()
                                    ? (cardBounds.getPosition() + jackIt->second).toFloat()
-                                   : projectToRectEdge(cardBounds, originalP1);
+                                   : directionalEdgeAnchor(cardBounds, projectToRectEdge(cardBounds, originalP1), true);
                 }
 
                 filtered.push_back(cable);
@@ -3392,26 +3433,8 @@ void GraphEditor::cancelSelectionDrag() {
 }
 
 // ---- Macros (P8-12) ----------------------------------------------------------------------
-
-namespace {
-// The collapsed card's fixed footprint — deliberately independent of however large or scattered
-// the group it stands in for is; that is the whole point of collapsing. Matches a standard
-// module card's width so it sits comfortably on the same grid.
-constexpr int kMacroCardHeight = 90;
-
-// ---- Card jacks (P8-15c, T141, docs/macros.md §7 item 4) ----
-// The vertical band jacks lay out in: below the title row (drawn at local y=6..26,
-// MacroCardComponent::getTitleRowBounds) and above the member-count line (the card's bottom
-// 14px, MacroCardComponent::paint), so a jack never collides with either piece of text.
-constexpr int kMacroCardJackBandTop = 30;
-constexpr int kMacroCardJackBandBottom = kMacroCardHeight - 16;
-// Same inset from the card's left/right edge ModuleComponent's own MIDI jacks use on an
-// identically-wide kSingleWidth card (x=10 / getWidth()-10) — a macro's boundary jacks read like
-// any other module's.
-constexpr int kMacroCardJackInsetX = 10;
-// Click tolerance, matching ModuleComponent::getPortForPoint's own `< 10`.
-constexpr float kMacroCardJackHitRadius = 10.0f;
-} // namespace
+// (kMacroCardHeight / the card-jack constants live in the anonymous namespace above
+// buildVisibleCables() now — see the comment there.)
 
 juce::String GraphEditor::nodeUuidFor(juce::AudioProcessorGraph::NodeID nodeId) const {
     if (auto* node = audioEngine.getGraph().getNodeForId(nodeId))

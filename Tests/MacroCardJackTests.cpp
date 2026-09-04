@@ -19,6 +19,7 @@
 #include "../Source/UI/ModuleComponent.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <optional>
 
 using NodeID = juce::AudioProcessorGraph::NodeID;
 
@@ -291,6 +292,161 @@ TEST(MacroCardJack, BoundaryCableThroughAPortAnchorsAtItsJackWhileAnInteriorMemb
     }
     EXPECT_TRUE(foundInteriorCable);
     EXPECT_TRUE(foundPortCable);
+}
+
+// ============================================================================
+// Directional edge anchoring for a no-port-involved boundary cable (founder-review fix F3,
+// docs/macros.md §5.4): the card side is chosen by which end of the cable the macro is, not by
+// which edge happens to face the other endpoint. A cable ENTERING the macro (the macro is the
+// cable's destination) anchors on the LEFT edge; a cable LEAVING it (the macro is the source)
+// anchors on the RIGHT edge - regardless of where the external module actually sits.
+// ============================================================================
+
+TEST(MacroCardJack, InteriorMemberCableEnteringMacroAnchorsOnTheLeftEdge) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto m = makeTwoMemberMacro(editor, engine); // a = Oscillator, b = Filter, both interior members
+    ASSERT_TRUE(editor.getMacros().find(m.macroId)->collapsed);
+
+    // External module sits ABOVE the card - under the old facing-projection treatment this would
+    // land the anchor on the card's TOP edge (the exact founder-review complaint). It must not:
+    // the macro is the cable's destination, so it belongs on the LEFT edge regardless.
+    auto extOscId = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 10);
+    editor.connectPorts(extOscId, 0, m.b, 0, /*isMidi=*/false, /*recordUndo=*/false);
+
+    auto* card = editor.getMacroCardForTest(m.macroId);
+    ASSERT_NE(card, nullptr);
+    const auto cardBounds = card->getBounds();
+
+    const auto& cables = editor.buildVisibleCables();
+    bool found = false;
+    for (const auto& cable : cables) {
+        if (cable.id.srcUid == extOscId.uid && cable.id.dstUid == m.b.uid) {
+            found = true;
+            EXPECT_FLOAT_EQ(cable.p2.x, (float)cardBounds.getX())
+                << "a cable entering a collapsed macro must anchor on its LEFT edge, not wherever "
+                   "the external endpoint happens to sit";
+            EXPECT_GE(cable.p2.y, (float)cardBounds.getY())
+                << "the anchor Y must stay clamped inside the card's jack band";
+            EXPECT_LE(cable.p2.y, (float)cardBounds.getBottom());
+        }
+    }
+    EXPECT_TRUE(found);
+}
+
+TEST(MacroCardJack, InteriorMemberCableLeavingMacroAnchorsOnTheRightEdge) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto m = makeTwoMemberMacro(editor, engine); // a = Oscillator, b = Filter, both interior members
+    ASSERT_TRUE(editor.getMacros().find(m.macroId)->collapsed);
+
+    // External module sits ABOVE the card again - same trap as the previous test, opposite
+    // direction: the macro is the cable's SOURCE here, so it must land on the RIGHT edge.
+    auto extSinkId = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 10);
+    editor.connectPorts(m.a, 0, extSinkId, 0, /*isMidi=*/false, /*recordUndo=*/false);
+
+    auto* card = editor.getMacroCardForTest(m.macroId);
+    ASSERT_NE(card, nullptr);
+    const auto cardBounds = card->getBounds();
+
+    const auto& cables = editor.buildVisibleCables();
+    bool found = false;
+    for (const auto& cable : cables) {
+        if (cable.id.srcUid == m.a.uid && cable.id.dstUid == extSinkId.uid) {
+            found = true;
+            EXPECT_FLOAT_EQ(cable.p1.x, (float)cardBounds.getRight())
+                << "a cable leaving a collapsed macro must anchor on its RIGHT edge, not wherever "
+                   "the external endpoint happens to sit";
+            EXPECT_GE(cable.p1.y, (float)cardBounds.getY())
+                << "the anchor Y must stay clamped inside the card's jack band";
+            EXPECT_LE(cable.p1.y, (float)cardBounds.getBottom());
+        }
+    }
+    EXPECT_TRUE(found);
+}
+
+TEST(MacroCardJack, SeveralEdgeAnchoredCablesOnTheSameSideGetDistinctYPositions) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    // Two Filters (both accept an audio input) grouped into one macro, so two independent
+    // interior-member cables can land on the LEFT edge at once.
+    auto filterA = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 100);
+    auto filterB = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    editor.setSelectedNodes({filterA, filterB});
+    const auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    ASSERT_TRUE(editor.getMacros().find(macroId)->collapsed);
+
+    // Two external sources, one well above the card and one well below it, each wired into a
+    // different interior member - both cases enter the macro (dst hidden), so both must land on
+    // the LEFT edge, but at visibly different heights.
+    auto extAbove = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 10);
+    auto extBelow = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 3000);
+    editor.connectPorts(extAbove, 0, filterA, 0, /*isMidi=*/false, /*recordUndo=*/false);
+    editor.connectPorts(extBelow, 0, filterB, 0, /*isMidi=*/false, /*recordUndo=*/false);
+
+    auto* card = editor.getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+    const auto cardBounds = card->getBounds();
+
+    const auto& cables = editor.buildVisibleCables();
+    std::optional<float> yAbove, yBelow;
+    for (const auto& cable : cables) {
+        if (cable.id.srcUid == extAbove.uid && cable.id.dstUid == filterA.uid)
+            yAbove = cable.p2.y;
+        if (cable.id.srcUid == extBelow.uid && cable.id.dstUid == filterB.uid)
+            yBelow = cable.p2.y;
+    }
+    ASSERT_TRUE(yAbove.has_value());
+    ASSERT_TRUE(yBelow.has_value());
+    EXPECT_NE(*yAbove, *yBelow) << "two crossing cables on the same edge must not collapse onto "
+                                   "the same pixel";
+    EXPECT_GE(*yAbove, (float)cardBounds.getY());
+    EXPECT_LE(*yBelow, (float)cardBounds.getBottom());
+}
+
+TEST(MacroCardJack, EdgeAnchoredCableDoesNotLandOnAPortJackOnTheSameSide) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto m = makeTwoMemberMacro(editor, engine); // a = Oscillator, b = Filter, both interior members
+    ASSERT_TRUE(editor.getMacros().find(m.macroId)->collapsed);
+
+    // A real input port (case a) alongside an ordinary interior-member cable (case b) crossing
+    // the SAME left edge - the two treatments must not coincide.
+    const auto inUuid =
+        editor.addMacroPort(m.macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    ASSERT_FALSE(inUuid.isEmpty());
+    const auto portNodeId = nodeIdForUuid(engine, inUuid);
+    auto extForPort = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 100);
+    editor.connectPorts(extForPort, 0, portNodeId, 0, /*isMidi=*/false, /*recordUndo=*/false);
+
+    auto extForInterior = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 150);
+    editor.connectPorts(extForInterior, 0, m.b, 0, /*isMidi=*/false, /*recordUndo=*/false);
+
+    auto* card = editor.getMacroCardForTest(m.macroId);
+    ASSERT_NE(card, nullptr);
+    const auto cardBounds = card->getBounds();
+
+    const auto& cables = editor.buildVisibleCables();
+    std::optional<float> portJackX, edgeAnchorX;
+    for (const auto& cable : cables) {
+        if (cable.id.srcUid == extForPort.uid && cable.id.dstUid == portNodeId.uid)
+            portJackX = cable.p2.x;
+        if (cable.id.srcUid == extForInterior.uid && cable.id.dstUid == m.b.uid)
+            edgeAnchorX = cable.p2.x;
+    }
+    ASSERT_TRUE(portJackX.has_value());
+    ASSERT_TRUE(edgeAnchorX.has_value());
+    EXPECT_FLOAT_EQ(*edgeAnchorX, (float)cardBounds.getX())
+        << "the no-port interior cable anchors exactly on the card edge";
+    EXPECT_NE(*portJackX, *edgeAnchorX)
+        << "a real port's jack (inset from the edge) must not coincide with the directional "
+           "edge anchor used when no port is involved";
 }
 
 // ============================================================================

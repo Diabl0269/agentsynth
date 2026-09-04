@@ -313,14 +313,36 @@ where that widget is PLACED.
 | Case | Today (P8-12) | With ports (P8-15) |
 | --- | --- | --- |
 | Both endpoints inside one collapsed macro | dropped | dropped (unchanged) |
-| Crosses a collapsed boundary | anchored to the card edge via `projectToRectEdge` | anchored to the **card jack** of the inlet/outlet it passes through |
+| Crosses a collapsed boundary, through a port | anchored to the card edge via `projectToRectEdge` | anchored to the **card jack** of the inlet/outlet it passes through |
+| Crosses a collapsed boundary, straight to an interior member (no port) | anchored to the card edge via `projectToRectEdge`, facing the other endpoint | anchored to the card's **left edge if entering** the macro, **right edge if leaving** it (founder-review fix F3, below) — never facing-the-other-endpoint |
 | Both endpoints outside | untouched | untouched |
 | Expanded macro | untouched | untouched; inlets/outlets draw as the DOCKED port widget (founder-review fix F2, below) rather than an ordinary card |
 
 A cable that crosses a collapsed boundary **without** going through an inlet/outlet — i.e. wired
-straight to an interior member — keeps today's `projectToRectEdge` treatment. That case does not
-disappear and must not be treated as an error: a macro is a grouping first and a black box
-second, and the user is allowed to wire into its guts.
+straight to an interior member — keeps landing on the card's edge, but not via `projectToRectEdge`
+any more. That case does not disappear and must not be treated as an error: a macro is a grouping
+first and a black box second, and the user is allowed to wire into its guts.
+
+**Founder-review fix F3: the no-port edge anchor is DIRECTIONAL, not facing.** The original
+`projectToRectEdge` treatment picked whichever edge of the card's rectangle faced the cable's
+other endpoint — a ray from the card's centre toward that endpoint, projected onto the rectangle's
+perimeter. For a member wired straight through the boundary that reads as arbitrary: a founder
+screenshot showed two cables, one entering and one leaving a collapsed macro, both landing on the
+card's TOP edge at a single point, because the other endpoint of each happened to sit above the
+card. The fix keys the edge off the cable's **direction relative to the macro**, exactly like a
+real port jack already does (inputs on the left, outputs on the right):
+
+- the macro is the cable's **source** (signal *leaving* it) → anchor on the card's **right** edge;
+- the macro is the cable's **destination** (signal *entering* it) → anchor on the card's **left**
+  edge.
+
+The Y coordinate is still derived from the old facing projection — `projectToRectEdge` is still
+called, just to read off a Y rather than a full point — so several crossing cables on the same
+side keep spreading vertically instead of collapsing onto one pixel; that Y is then clamped into
+the same vertical jack band a real port's jack lays out in (`kMacroCardJackBandTop`/`Bottom`). X
+lands exactly on the card's boundary (`cardBounds.getX()`/`getRight()`), not inset the way a real
+port jack is (`kMacroCardJackInsetX`), so a no-port edge anchor never sits under a case-(a) port
+dot occupying the same side.
 
 The consequence is worth stating plainly, because it bounds what a macro is:
 **a macro's encapsulation is advisory, not enforced.** Ports are the *intended* interface, not the
@@ -329,13 +351,13 @@ is not a sealed unit, and no part of the engine will stop a cable reaching past 
 Enforcing encapsulation would require the interior to be a genuinely separate graph, which is
 Candidate A and was rejected in §4.
 
-**Implemented (P8-15c).** The collapsed card draws one jack per configured `MacroPort`
-(`GraphEditor::macroCardPortLayout`) — inputs evenly spaced down the left edge, outputs down the
-right, in `order`. That layout is the ONE definition three places read: `MacroCardComponent::paint`
-draws the dot, `GraphEditor::endConnectionDrag` hit-tests a drop against it
-(`macroCardPortForPoint`), and `rebuildVisibleCables()` anchors a boundary cable through a port at
-that same jack instead of `projectToRectEdge`. A cable straight to an interior member keeps
-`projectToRectEdge`, per the table above — the two treatments coexist and are told apart by which
+**Implemented (P8-15c; edge-anchor case redirected by F3).** The collapsed card draws one jack per
+configured `MacroPort` (`GraphEditor::macroCardPortLayout`) — inputs evenly spaced down the left
+edge, outputs down the right, in `order`. That layout is the ONE definition three places read:
+`MacroCardComponent::paint` draws the dot, `GraphEditor::endConnectionDrag` hit-tests a drop
+against it (`macroCardPortForPoint`), and `rebuildVisibleCables()` anchors a boundary cable through
+a port at that same jack. A cable straight to an interior member instead gets the directional edge
+anchor above, per the table above — the two treatments coexist and are told apart by which
 endpoint node the cable resolves to, a port's fronting node or an ordinary member.
 
 Dropping a cable exactly on an existing port's jack wires straight into that port's node, in place
