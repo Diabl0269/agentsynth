@@ -54,6 +54,10 @@ static int midiJackY(juce::AudioProcessor* module) {
     return isMacroPortType(getType(module)) ? ModuleComponent::kMacroPortWidgetHeaderY : 38;
 }
 
+juce::Point<int> ModuleComponent::getMidiPortCenter(bool isOutput) const {
+    return {isOutput ? getWidth() - 10 : 10, midiJackY(module)};
+}
+
 /** True for the graph's terminal audio sink (Audio Output). Mirrors GraphEditor.cpp's
  *  isTerminalAudioSink — detected by TYPE, not by name, so a ModuleBase happening to be titled
  *  "Audio Output" cannot impersonate it. A bare juce::AudioGraphIOProcessor is never a ModuleBase,
@@ -1948,7 +1952,7 @@ void ModuleComponent::paint(juce::Graphics& g) {
                                // MIDI Output (Top Right if produces midi)
     if (module->producesMidi()) {
         g.setColour(audioJackColour);
-        auto p = juce::Point<int>(getWidth() - 10, 38); // Top right, below header
+        auto p = getMidiPortCenter(true);
         g.fillEllipse(p.x - 5, p.y - 5, 10, 10);
         g.setColour(labelColour);
         g.drawText("Midi Out", p.x - 65, p.y - 5, 60, 10, juce::Justification::right, false);
@@ -1956,7 +1960,7 @@ void ModuleComponent::paint(juce::Graphics& g) {
     // MIDI Input (Top Left if accepts midi components)
     if (module->acceptsMidi()) {
         g.setColour(audioJackColour);
-        auto p = juce::Point<int>(10, 38); // Top left near header
+        auto p = getMidiPortCenter(false);
         g.fillEllipse(p.x - 5, p.y - 5, 10, 10);
         g.setColour(labelColour);
         g.drawText("Midi In", p.x + 10, p.y - 5, 60, 10, juce::Justification::left, false);
@@ -2295,7 +2299,7 @@ std::optional<ModuleComponent::Port> ModuleComponent::getPortForPoint(juce::Poin
 
     // Check for MIDI Output at fixed top-right position
     if (module->producesMidi()) {
-        auto p = juce::Point<int>(getWidth() - 10, midiJackY(module)); // Matches paint()
+        auto p = getMidiPortCenter(true); // Matches paint()
         if (localPoint.getDistanceFrom(p) < 10) {
             return Port{{p.x - 5, p.y - 5, 10, 10},
                         juce::AudioProcessorGraph::midiChannelIndex,
@@ -2306,7 +2310,7 @@ std::optional<ModuleComponent::Port> ModuleComponent::getPortForPoint(juce::Poin
 
     // MIDI Input detection (Top Left)
     if (module->acceptsMidi()) {
-        auto p = juce::Point<int>(10, midiJackY(module)); // Top left near header
+        auto p = getMidiPortCenter(false); // Top left near header
         if (localPoint.getDistanceFrom(p) < 10) {
             return Port{
                 {p.x - 5, p.y - 5, 10, 10}, juce::AudioProcessorGraph::midiChannelIndex, true, true}; // MIDI Input

@@ -494,9 +494,12 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
         cable.kind = VisibleCable::Kind::Direct;
         cable.id = {node1->nodeID.uid, connection.source.channelIndex, node2->nodeID.uid,
                     connection.destination.channelIndex, 0};
-        cable.p1 = srcIsMidi ? portPos(srcComp, 0, false) : portPos(srcComp, srcJack, false);
-        // MIDI inputs have no jack of their own; the wire lands on the card's top-left corner.
-        cable.p2 = dstIsMidi ? (dstComp->getBounds().getPosition() + juce::Point<int>(10, 30)).toFloat()
+        // MIDI ports are fixed anchors (top-right/top-left), not part of the audio jack stack —
+        // portPos(..., 0, ...) would land on audio jack 0 instead, which paint() offsets downward
+        // to avoid colliding with the MIDI Out dot (T149).
+        cable.p1 = srcIsMidi ? (srcComp->getBounds().getPosition() + srcComp->getMidiPortCenter(true)).toFloat()
+                             : portPos(srcComp, srcJack, false);
+        cable.p2 = dstIsMidi ? (dstComp->getBounds().getPosition() + dstComp->getMidiPortCenter(false)).toFloat()
                              : portPos(dstComp, dstJack, true);
         cable.signal = (srcIsMidi || dstIsMidi) ? synth::ui::CableSignal::Midi : synth::ui::CableSignal::Audio;
         cable.sourceCategory = categoryForNode(node1);
@@ -934,10 +937,7 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
         if (editor.dragSourceModule) {
             juce::Point<int> p;
             if (editor.dragSourceIsMidi) {
-                if (editor.dragSourceIsInput)
-                    p = juce::Point<int>(10, 30);
-                else
-                    p = editor.dragSourceModule->getPortCenter(0, false);
+                p = editor.dragSourceModule->getMidiPortCenter(!editor.dragSourceIsInput);
             } else {
                 p = editor.dragSourceModule->getPortCenter(editor.dragSourceChannel, editor.dragSourceIsInput);
             }
@@ -2082,10 +2082,8 @@ void GraphEditor::refreshSmartSuggestions() {
         auto jackPoint = [&](bool fromGhost, int jack, bool isInput, bool isMidi) -> juce::Point<float> {
             if (fromGhost)
                 return estimatePortCenter(ghostProc, ghostBounds, jack, isInput, isMidi).toFloat();
-            if (isMidi) {
-                const int x = isInput ? 10 : neighbor->getWidth() - 10;
-                return (neighbor->getBounds().getPosition() + juce::Point<int>(x, 30)).toFloat();
-            }
+            if (isMidi)
+                return (neighbor->getBounds().getPosition() + neighbor->getMidiPortCenter(!isInput)).toFloat();
             return (neighbor->getBounds().getPosition() + neighbor->getPortCenter(jack, isInput)).toFloat();
         };
 

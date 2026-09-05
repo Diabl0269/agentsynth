@@ -132,6 +132,14 @@ public:
     std::optional<Port> getPortForPoint(juce::Point<int> localPoint);
     juce::Point<int> getPortCenter(int index, bool isInput);
 
+    /** Fixed MIDI jack anchor, in local coordinates — MIDI In sits top-left, MIDI Out top-right,
+     *  at kPortGutterHeaderHeight on an ordinary card or kMacroPortWidgetHeaderY on a macro-port
+     *  widget (no header of its own); they don't participate in the ordinary audio jack stack
+     *  getPortCenter lays out. This is the single ground truth paint() and getPortForPoint() both
+     *  read from; anything anchoring a MIDI cable/preview must go through it too, or it drifts
+     *  from the drawn jack the way GraphEditor::rebuildVisibleCables once did (T149). */
+    juce::Point<int> getMidiPortCenter(bool isOutput) const;
+
     /** Re-lays the card after its Dual I/O parameter changed. For an FX pair the raw ch0/ch1 legs
      *  stay put and no cable is touched; for a split-block module (#219) collapsing also hides its
      *  kRightBase leg, so GraphEditor drops the cables left on it — an invisible jack cannot be
