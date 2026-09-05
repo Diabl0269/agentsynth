@@ -22,7 +22,9 @@ This document covers two things:
    only the case where BOTH the real mod source and target are being grouped together stays
    un-ported, since the attenuverter can never itself be a member. That same second pass also
    shrank the docked port widget itself (fix G4, §5.3's "Rendering" note) after founder feedback
-   that it read as a small module rather than a boundary jack.
+   that it read as a small module rather than a boundary jack, and added a visible collapse button
+   to the EXPANDED hull (fix G5, §5.8) — the same asymmetry the P8-12 collapsed card's own expand
+   chevron was built to fix, now closed on the other side of the toggle.
 
 ---
 
@@ -592,6 +594,50 @@ opening it. This is strictly stronger than asserting against a second, separatel
 produced. `MacroMemberContextMenu.RightClickFiresTheContextMenuHookExactlyOnce` guards the wiring
 itself, so a future revert to a direct `showMenuAsync()` call fails there first rather than only as an
 unexplained Linux-only segfault.
+
+### 5.9 The expanded hull's collapse button (founder-review fix G5)
+
+The COLLAPSED card has always drawn a visible expand chevron
+(`MacroCardComponent::getExpandButtonBounds`) precisely because the right-click "Expand" menu item
+alone left nothing on the card that *looked* clickable — a user had to already know the menu
+existed, or find the undocumented double-click, to get back in. The second founder-review pass
+pointed out the identical gap on the other side of the toggle: *"add a button to collapse it -
+currently there's only a button to expand."* An EXPANDED macro's only routes back to collapsed were
+the right-click menu (§5.8) and an undocumented double-click on the name chip
+(`GraphEditor::mouseDoubleClick`'s `macroChipAt` branch, which renames rather than collapses) — and
+the chip itself, while mouse-interactive, reads as a drag handle, not a collapse control.
+
+**The fix mirrors the card's own chevron exactly**, one rung up: `macroCollapseButtonBounds()`
+(`GraphEditor.{h,cpp}`) is the ONE definition of a small square hit zone at the RIGHT end of the
+same top-of-hull row `macroChipBounds()` occupies at the left end — the two together read as one
+row-spanning control, chip on the left for "drag/rename", button on the right for "collapse".
+Painted as a filled `juce::Path` triangle, not a text glyph, for the same reason the card's own
+chevron is (`check-nonascii-literals.test.sh` rejects a chevron character outright) — pointing UP,
+the opposite direction from the card's expand chevron (which points down), so the pair reads as
+opposite ends of one toggle rather than two unrelated icons. `macroCollapseButtonAt()` is the
+matching hit-test, called from `GraphEditor::mouseDown` BEFORE the chip check: the two rectangles
+never actually overlap (the chip's width is a short label plus a fixed pad, comfortably clear of
+the hull's right edge for any real macro), but the button is still checked first and returns
+immediately, so it can never be shadowed by the chip's own drag gesture even in a future geometry
+change. Both are empty (like `macroChipBounds()`) whenever `macroHullBounds()` is — collapsed,
+unknown, or unresolvable — so the button never appears on a collapsed card (which already has its
+own chevron) or for a macro with nothing to draw.
+
+**The click goes through `setMacroCollapsed(macroId, true)`** — the exact same call
+`buildMacroMenu`'s "Collapse" item and the collapsed card's own chevron (`setMacroCollapsed(...,
+false)`) both use, so there is only ever one code path that can flip a macro's collapsed state, and
+it is one `recordGraphAndMacroChange` undo step regardless of which of the three affordances
+triggered it. The button click does not touch selection — matching the card's own chevron handler,
+which also just toggles state and returns — so clicking it while other things are selected leaves
+that selection alone rather than surprising the user with an implicit re-select.
+`Tests/MacroContainerTests.cpp`'s `MacroCollapseButton` suite drives a real synthesised
+`juce::MouseEvent` into `GraphEditor::mouseDown()` (not a direct `setMacroCollapsed()` call — the
+whole point of this fix is the hit-test, which testing the layer beneath `mouseDown()` cannot
+catch, the same rule that already caught a real bug on this branch) and covers: the button
+collapsing the macro and arming neither a selection drag nor a selection change, a click just
+outside its bounds not collapsing, the button and chip never overlapping (including a tight
+two-module macro — the degenerate case a real macro's hull ever gets that narrow), and collapsing
+via the button being one undo step that a single undo re-expands.
 
 ---
 

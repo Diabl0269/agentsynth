@@ -480,6 +480,21 @@ public:
      *  chip wins if two ever overlap. */
     juce::String macroChipAt(juce::Point<int> canvasPos) const;
 
+    /** Canvas-space bounds of an EXPANDED macro's collapse button — a small chevron sitting at
+     *  the RIGHT end of the same top-of-hull row the name chip occupies at the left end
+     *  (founder-review fix G5: "add a button to collapse it - currently there's only a button to
+     *  expand", mirroring MacroCardComponent::getExpandButtonBounds on the collapsed card). Empty
+     *  rect if the macro is collapsed or unknown, exactly like macroChipBounds — collapsing is
+     *  reachable from a COLLAPSED card via its own expand chevron already, so this button only
+     *  ever exists on the other side of that toggle. The ONE definition: paint
+     *  (GraphContentComponent::paint) and hit-testing (macroCollapseButtonAt, used by mouseDown)
+     *  must never diverge. */
+    juce::Rectangle<int> macroCollapseButtonBounds(const juce::String& macroId) const;
+
+    /** The expanded macro whose collapse button contains `canvasPos`, or an empty string.
+     *  Smallest button wins if two ever overlap (mirrors macroChipAt/macroHullAt). */
+    juce::String macroCollapseButtonAt(juce::Point<int> canvasPos) const;
+
     /** Test accessor: the live MacroCardComponent for `macroId`, or nullptr. Exposed so a test can
      *  move the real card directly (bypassing the drag gesture entirely) to prove
      *  rebuildVisibleCables() anchors on the card's CURRENT bounds rather than the persisted

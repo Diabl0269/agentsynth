@@ -903,6 +903,28 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
 
             g.setColour(juce::Colours::white);
             g.drawText(label, chip.withLeft(chip.getX() + 12.0f), juce::Justification::centred, false);
+
+            // Collapse button (founder-review fix G5): the chip's own drag/rename affordance
+            // never looked like "collapse me" — the only routes back to a collapsed card were the
+            // right-click menu and an undocumented double-click. A small button at the OTHER end
+            // of the same row, pointing the opposite way from MacroCardComponent's expand
+            // chevron, reads as the same control in its two states. macroCollapseButtonBounds is
+            // the ONE definition of this rect — hit-testing (GraphEditor::macroCollapseButtonAt,
+            // used by mouseDown) must see exactly what gets painted here.
+            const auto collapseBounds = editor.macroCollapseButtonBounds(macro.id).toFloat();
+            g.setColour(macro.colour.withAlpha(0.85f));
+            g.fillRoundedRectangle(collapseBounds, 4.0f);
+
+            // A filled triangle, not a text glyph, for the same reason the card's expand chevron
+            // is a Path (check-nonascii-literals.test.sh rejects a chevron character outright).
+            // Points UP — the expand chevron points down — so the pair reads as opposite ends of
+            // one toggle.
+            juce::Path collapseChevron;
+            collapseChevron.addTriangle(collapseBounds.getX() + 2.5f, collapseBounds.getBottom() - 3.5f,
+                                        collapseBounds.getRight() - 2.5f, collapseBounds.getBottom() - 3.5f,
+                                        collapseBounds.getCentreX(), collapseBounds.getY() + 2.5f);
+            g.setColour(juce::Colours::white.withAlpha(0.85f));
+            g.fillPath(collapseChevron);
         }
     }
     // ---- End expanded-macro grouping hull ----
@@ -3065,6 +3087,19 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
 
         auto localPos = content.getLocalPoint(this, e.getPosition());
 
+        // Collapse button (founder-review fix G5) - checked BEFORE the chip below, carving its
+        // hit zone out of that row explicitly, even though the two rectangles never actually
+        // overlap (macroCollapseButtonBounds sits at the row's right end, macroChipBounds at its
+        // left). A single click collapses through the SAME setMacroCollapsed the menu's
+        // "Collapse" item uses (one undo step - see applyMacroCollapsed), so there is only ever
+        // one code path that can collapse a macro. Not gated on Shift the way the chip is: the
+        // button is a small fixed target near the hull's top-right corner, not the drag-prone
+        // strip the marquee-vs-chip carve-out below exists for.
+        if (auto macroId = macroCollapseButtonAt(localPos.roundToInt()); macroId.isNotEmpty()) {
+            setMacroCollapsed(macroId, true);
+            return;
+        }
+
         // Pressing an expanded macro's name chip drags the whole macro as a rigid body - checked
         // before the attenuverter/empty-canvas-click logic below so the chip wins over whatever
         // would otherwise be under it (in practice, empty canvas above the hull).
@@ -3576,6 +3611,49 @@ juce::String GraphEditor::macroChipAt(juce::Point<int> canvasPos) const {
         if (macro.collapsed)
             continue;
         const auto bounds = macroChipBounds(macro.id);
+        if (bounds.isEmpty() || !bounds.contains(canvasPos))
+            continue;
+        const int area = bounds.getWidth() * bounds.getHeight();
+        if (area < bestArea) {
+            bestArea = area;
+            best = macro.id;
+        }
+    }
+    return best;
+}
+
+namespace {
+// Size of the collapse button's square hit zone, and its margin from the hull's right edge —
+// mirrors MacroCardComponent::getExpandButtonBounds' own fixed-size-plus-margin shape. Smaller
+// than the card's 20px chevron (kMacroChipHeight is only 18, the full row height available here),
+// so it fits the chip row without growing kMacroChipTopMargin.
+constexpr int kMacroCollapseButtonSize = 14;
+constexpr int kMacroCollapseButtonMargin = 6;
+} // namespace
+
+juce::Rectangle<int> GraphEditor::macroCollapseButtonBounds(const juce::String& macroId) const {
+    const auto hull = macroHullBounds(macroId);
+    if (hull.isEmpty())
+        return {};
+
+    // Vertically centred in the same chip row macroChipBounds occupies (hull.getY() ..
+    // hull.getY() + kMacroChipHeight); horizontally at the row's RIGHT end, mirroring the chip's
+    // own left-end placement so the pair reads as one control spanning the row. The two can never
+    // overlap for any real macro: the chip's width is a short label plus a fixed pad
+    // (macroChipBounds), and macroHullBounds' own margin guarantees at least one member's width of
+    // clearance between the hull's left and right edges.
+    return juce::Rectangle<int>(hull.getRight() - kMacroCollapseButtonMargin - kMacroCollapseButtonSize,
+                                hull.getY() + (kMacroChipHeight - kMacroCollapseButtonSize) / 2,
+                                kMacroCollapseButtonSize, kMacroCollapseButtonSize);
+}
+
+juce::String GraphEditor::macroCollapseButtonAt(juce::Point<int> canvasPos) const {
+    juce::String best;
+    int bestArea = std::numeric_limits<int>::max();
+    for (const auto& macro : macros.getAll()) {
+        if (macro.collapsed)
+            continue;
+        const auto bounds = macroCollapseButtonBounds(macro.id);
         if (bounds.isEmpty() || !bounds.contains(canvasPos))
             continue;
         const int area = bounds.getWidth() * bounds.getHeight();

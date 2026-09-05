@@ -1191,6 +1191,185 @@ TEST(MacroChipDrag, PressingAndDraggingTheChipMovesTheMacroThroughTheRealMousePa
 }
 
 // ============================================================================
+// Collapse button (founder-review fix G5): "add a button to collapse it - currently there's only
+// a button to expand" — a visible affordance on the EXPANDED hull, mirroring
+// MacroCardComponent::getExpandButtonBounds on the collapsed card, at the opposite end of the same
+// top-of-hull row the name chip occupies.
+// ============================================================================
+
+TEST(MacroCollapseButton, BoundsIsEmptyWhileCollapsedAndSitsInsideTheHullClearOfTheChipWhileExpanded) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro(); // collapses by default
+    ASSERT_FALSE(macroId.isEmpty());
+
+    EXPECT_TRUE(editor.macroCollapseButtonBounds(macroId).isEmpty())
+        << "a collapsed macro already has its own expand chevron on the card - no button on the hull";
+    EXPECT_TRUE(editor.macroCollapseButtonBounds("no-such-macro-id").isEmpty());
+
+    editor.setMacroCollapsed(macroId, false);
+    const auto hull = editor.macroHullBounds(macroId);
+    ASSERT_FALSE(hull.isEmpty());
+
+    const auto button = editor.macroCollapseButtonBounds(macroId);
+    ASSERT_FALSE(button.isEmpty());
+    EXPECT_TRUE(hull.contains(button)) << "the button must sit entirely inside the hull";
+
+    const auto chip = editor.macroChipBounds(macroId);
+    ASSERT_FALSE(chip.isEmpty());
+    EXPECT_FALSE(chip.intersects(button))
+        << "chip " << chip.toString() << " overlaps the collapse button " << button.toString();
+}
+
+TEST(MacroCollapseButton, DoesNotOverlapTheChipOrAMemberEvenForATwoModuleMacroPackedTight) {
+    // The degenerate case the founder-review checklist calls out: a small macro made of exactly
+    // two adjacent modules, so the hull is as narrow as a real macro's ever gets. The chip and
+    // button still must not overlap each other, and the button must not land on a member.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 700); // stacked, same X
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    const auto button = editor.macroCollapseButtonBounds(macroId);
+    ASSERT_FALSE(button.isEmpty());
+    const auto chip = editor.macroChipBounds(macroId);
+    ASSERT_FALSE(chip.isEmpty());
+    EXPECT_FALSE(chip.intersects(button));
+
+    for (auto id : {a, b}) {
+        auto* comp = findComponent(editor, id);
+        ASSERT_NE(comp, nullptr);
+        EXPECT_FALSE(button.intersects(comp->getBounds()))
+            << "button " << button.toString() << " overlaps member " << comp->getBounds().toString();
+    }
+}
+
+TEST(MacroCollapseButton, AtHitsInsideAndMissesJustOutsideAndWhileCollapsed) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    EXPECT_TRUE(editor.macroCollapseButtonAt({150, 150}).isEmpty());
+
+    editor.setMacroCollapsed(macroId, false);
+    const auto button = editor.macroCollapseButtonBounds(macroId);
+    ASSERT_FALSE(button.isEmpty());
+
+    EXPECT_EQ(editor.macroCollapseButtonAt(button.getCentre()), macroId);
+    EXPECT_TRUE(
+        editor.macroCollapseButtonAt(juce::Point<int>(button.getRight() + 5, button.getBottom() + 5)).isEmpty());
+}
+
+TEST(MacroCollapseButton, ClickingItCollapsesTheMacroThroughTheRealMousePath) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+    ASSERT_FALSE(editor.getMacros().find(macroId)->collapsed);
+
+    editor.clearSelection();
+    const auto buttonCentre = editor.macroCollapseButtonBounds(macroId).getCentre();
+
+    editor.mouseDown(makeCanvasMouseEvent(editor, buttonCentre));
+
+    ASSERT_NE(editor.getMacros().find(macroId), nullptr);
+    EXPECT_TRUE(editor.getMacros().find(macroId)->collapsed) << "clicking the button must collapse the macro";
+    EXPECT_FALSE(editor.isSelectionDragActive()) << "the button click must not also arm a chip/selection drag";
+    EXPECT_TRUE(editor.getSelectedNodes().empty()) << "the button click must not change the selection as a side effect";
+
+    // The gesture must resolve cleanly on mouseUp too (nothing left armed from the mouseDown that
+    // returned early) — send it and confirm nothing further changes.
+    editor.mouseUp(makeCanvasMouseEvent(editor, buttonCentre));
+    EXPECT_TRUE(editor.getMacros().find(macroId)->collapsed);
+}
+
+TEST(MacroCollapseButton, ClickJustOutsideItDoesNotCollapse) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    const auto button = editor.macroCollapseButtonBounds(macroId);
+    ASSERT_FALSE(button.isEmpty());
+    // Just left of the button, same row (button's own vertical centre) - stays inside the hull
+    // (the button sits comfortably clear of the hull's edges), so a miss here proves the hit-test
+    // is scoped to the button itself rather than the whole hull.
+    const juce::Point<int> justOutside(button.getX() - 5, button.getCentreY());
+    ASSERT_TRUE(editor.macroHullBounds(macroId).contains(justOutside))
+        << "the probe point must still land inside the hull, so a miss proves the hit-test is "
+           "scoped to the button rather than the whole hull";
+
+    editor.mouseDown(makeCanvasMouseEvent(editor, justOutside));
+    editor.mouseUp(makeCanvasMouseEvent(editor, justOutside));
+
+    EXPECT_FALSE(editor.getMacros().find(macroId)->collapsed) << "a click just outside the button must not collapse";
+}
+
+TEST(MacroCollapseButton, CollapseViaTheButtonIsOneUndoStepAndUndoReExpands) {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    const auto buttonCentre = editor.macroCollapseButtonBounds(macroId).getCentre();
+    const int serialBeforeCollapse = undo.getEditSerial();
+
+    editor.mouseDown(makeCanvasMouseEvent(editor, buttonCentre));
+
+    ASSERT_TRUE(editor.getMacros().find(macroId)->collapsed);
+    EXPECT_EQ(undo.getEditSerial(), serialBeforeCollapse + 1)
+        << "collapsing via the button must be exactly ONE undo step";
+
+    ASSERT_TRUE(undo.canUndo());
+    undo.undo();
+
+    EXPECT_FALSE(editor.getMacros().find(macroId)->collapsed) << "the single undo step must re-expand the macro";
+}
+
+// ============================================================================
 // Recolour (P8-14): "Change Colour..." opens the shared synth::ui::ColourPickerPopup, with a
 // live preview (no undo) and exactly one undo step spanning original -> final colour on commit.
 // ============================================================================
