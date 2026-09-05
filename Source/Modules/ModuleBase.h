@@ -79,7 +79,26 @@ enum class ModuleType {
     // list and load UX ship, and never authorable by a model — its "state" carries an opaque
     // byte blob handed straight to third-party code, which is the last thing that should arrive
     // from a model.
-    HostedPlugin
+    HostedPlugin,
+    // Internal-only: a Macro's audio/CV inlet jack (P8-15 Macro I/O; docs/macros.md §5). Created
+    // by the macro port-creation flow, never offered by the library or the replace menu, and
+    // never authorable by a model (kNonAuthorableModuleTypes) — a Macro Inlet only means anything
+    // relative to the macro that created it, which a model has no way to have done. A pure
+    // pass-through with a channel shape fixed at construction (docs/macros.md §5.3).
+    MacroInlet,
+    // Internal-only: a Macro's audio/CV outlet jack. Same exclusions and shape rule as
+    // MacroInlet, mirrored in the other direction.
+    MacroOutlet,
+    // Internal-only: a Macro's MIDI inlet jack. A SEPARATE type from MacroInlet rather than a
+    // "kind" flag on one type — following the TimelineMidiSource/TimelineAudioSource precedent
+    // (Track In vs Track Audio), where the load-bearing reason is a construction-time channel
+    // shape difference: ModuleBase(name, 0, 0) here vs ModuleBase(name, N, N) for MacroInlet, which
+    // a single type would have to branch its fixed bus layout on — exactly what the fixed-channel-
+    // count invariant makes awkward. A MIDI port carries no channel shape at all (no Mono/Stereo/
+    // Poly-N), just acceptsMidi()/producesMidi(), like ExternalMidi/PolyMidi.
+    MacroMidiInlet,
+    // Internal-only: a Macro's MIDI outlet jack. Same reasoning as MacroMidiInlet, mirrored.
+    MacroMidiOutlet
 };
 
 // True for a MIDI-DRIVEN INSTRUMENT type — the shared predicate behind MainComponent's add-track
@@ -384,6 +403,14 @@ public:
 
     bool isBypassed() const { return bypassedParam->get(); }
     void setBypassed(bool b) { bypassedParam->setValueNotifyingHost(b ? 1.0f : 0.0f); }
+
+    /** Whether this module opted into `addMuteParameter()`. A handful of internal-only node types
+     *  (Track In, Rec Tap, Track Audio; and, as of P8-15, Macro In/Out and their MIDI variants)
+     *  do not — there is nothing for a mute to silence beyond what bypass already covers. Any
+     *  caller fanning `setMuted` out over an arbitrary set of modules (docs/macros.md §5.6's
+     *  macro-level mute) MUST check this first: `isMuted()`/`setMuted()` dereference `mutedParam`
+     *  unconditionally and are only safe once this returns true. */
+    bool hasMuteParameter() const { return mutedParam != nullptr; }
 
     bool isMuted() const { return mutedParam->get(); }
     void setMuted(bool m) { mutedParam->setValueNotifyingHost(m ? 1.0f : 0.0f); }

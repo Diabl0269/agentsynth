@@ -216,6 +216,112 @@ private:
 };
 
 /**
+ * @class GraphAndMacroSnapshotAction
+ * @brief Undoable action that restores BOTH graph and synth::MacroSet state together, in ONE
+ *        step, for a mutation that changes both (P8-15b: adding, removing, or changing the shape
+ *        of a Macro I/O port always touches both — a port's node lives in the graph, and its name/
+ *        order/kind live on the macro).
+ *
+ * Deliberately NOT two separate actions (SnapshotAction + MacroSnapshotAction) pushed into one
+ * transaction, which is what an earlier version of recordGraphAndMacroChange did and which a
+ * ChangeShapeIsOneUndoStepAndPreservesCablesOnStillActiveChannels-shaped test caught: JUCE's
+ * UndoManager performs a transaction's actions in FORWARD push order and undoes them in REVERSE
+ * order (juce_UndoManager.cpp's ActionSet::perform/undo), so whichever action's postRestore runs
+ * LAST — and therefore whose MacroSet::retainOnly (fired from GraphEditor::updateComponents)
+ * prunes against the FINAL, correctly-restored graph rather than a stale one — flips between undo
+ * and redo. No fixed two-action push order gets both directions right: a port's macro-side entry
+ * would survive redo but vanish on undo (or the reverse), because `retainOnly` only ever REMOVES a
+ * port whose node isn't (yet) alive in whichever graph state happens to be current at the moment
+ * it runs, and once removed nothing re-adds it — the later action's own `macros.fromVar` fully
+ * replaces the MacroSet's state, but that replacement already carries the missing port forward.
+ *
+ * One action restoring both in a FIXED internal order — graph first, then `macros.fromVar`, then
+ * exactly ONE UI refresh — has no such race, in either direction: by the time `macros.fromVar` and
+ * `postRestore` run, the graph has already settled to its final state for this step.
+ */
+class GraphAndMacroSnapshotAction : public juce::UndoableAction {
+public:
+    GraphAndMacroSnapshotAction(juce::AudioProcessorGraph& graph, synth::MacroSet& macros, const juce::var& graphBefore,
+                                const juce::var& graphAfter, const juce::var& macrosBefore,
+                                const juce::var& macrosAfter, std::function<void()> preRestore,
+                                std::function<void()> postRestore, std::function<void()> beforeRestore,
+                                std::function<void()> afterRestore)
+        : graph(graph)
+        , macros(macros)
+        , graphBefore(graphBefore)
+        , graphAfter(graphAfter)
+        , macrosBefore(macrosBefore)
+        , macrosAfter(macrosAfter)
+        , preRestore(std::move(preRestore))
+        , postRestore(std::move(postRestore))
+        , beforeRestore(std::move(beforeRestore))
+        , afterRestore(std::move(afterRestore)) {}
+
+    bool perform() override {
+        if (firstPerform) {
+            firstPerform = false;
+            return true;
+        }
+        return restore(graphAfter, macrosAfter);
+    }
+
+    bool undo() override { return restore(graphBefore, macrosBefore); }
+
+    int getSizeInUnits() override {
+        return static_cast<int>(juce::JSON::toString(graphBefore).length() + juce::JSON::toString(graphAfter).length() +
+                                juce::JSON::toString(macrosBefore).length() +
+                                juce::JSON::toString(macrosAfter).length());
+    }
+
+private:
+    bool restore(const juce::var& graphState, const juce::var& macrosState) {
+        if (beforeRestore)
+            beforeRestore();
+
+        bool preRestoreFired = false;
+        auto firePreRestore = [this, &preRestoreFired] {
+            if (preRestoreFired)
+                return;
+            preRestoreFired = true;
+            if (preRestore)
+                preRestore();
+        };
+
+        // Graph FIRST — see the class comment. Same node-preserving-then-fallback strategy
+        // SnapshotAction::restore uses.
+        if (!synth::AIStateMapper::applySnapshotPreservingNodes(graphState, graph, firePreRestore)) {
+            firePreRestore();
+            synth::AIStateMapper::applyJSONToGraph(graphState, graph, true, true);
+        }
+
+        // Macros SECOND, now that the graph this snapshot pairs with is the live state — the one
+        // ordering guarantee the whole class exists to provide.
+        const bool macrosOk = macros.fromVar(macrosState);
+        jassert(macrosOk); // a var this class produced must always be accepted by fromVar
+
+        if (postRestore)
+            postRestore();
+        if (afterRestore)
+            afterRestore();
+        return macrosOk;
+    }
+
+    juce::AudioProcessorGraph& graph;
+    synth::MacroSet& macros;
+    juce::var graphBefore;
+    juce::var graphAfter;
+    juce::var macrosBefore;
+    juce::var macrosAfter;
+    std::function<void()> preRestore;
+    std::function<void()> postRestore;
+    std::function<void()> beforeRestore;
+    std::function<void()> afterRestore;
+    bool firstPerform = true;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GraphAndMacroSnapshotAction)
+};
+
+/**
  * @class ParameterChangeAction
  * @brief Undoable action for individual parameter value changes.
  */
@@ -505,12 +611,28 @@ bool AppUndoManager::recordGraphAndMacroChange(juce::AudioProcessorGraph& graph,
     if (!graphChanged && !macrosChanged)
         return false; // neither domain changed: no transaction pushed
 
-    // Both perform() calls land in the same transaction (no beginNewTransaction between them), so a
-    // single undo()/redo() reverts or re-applies whichever of the two actually changed, together.
-    if (graphChanged)
+    juce::Component::SafePointer<GraphEditor> ge(graphEditor);
+
+    if (graphChanged && macrosChanged) {
+        // ONE action restoring both together, not two separate ones pushed into this transaction
+        // — see GraphAndMacroSnapshotAction's own comment for why a fixed two-action push order
+        // cannot get both undo AND redo right when the macro side (MacroSet::retainOnly) prunes
+        // against live graph state. This is the case a Macro I/O port add/remove/shape-change
+        // always hits: the port's node is a graph change, its name/order/kind is a macro change.
+        performAction(new GraphAndMacroSnapshotAction(
+            graph, macros, graphBefore, graphAfter, macrosBefore, macrosAfter,
+            [ge] {
+                if (ge)
+                    ge->detachAllModuleComponents();
+            },
+            [ge] {
+                if (ge)
+                    ge->updateComponents();
+            },
+            [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); }));
+    } else if (graphChanged) {
         performAction(createGraphSnapshotAction(graph, graphBefore, graphAfter));
-    if (macrosChanged) {
-        juce::Component::SafePointer<GraphEditor> ge(graphEditor);
+    } else {
         performAction(new MacroSnapshotAction(macros, macrosBefore, macrosAfter, [ge] {
             if (ge)
                 ge->updateComponents();

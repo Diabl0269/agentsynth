@@ -185,6 +185,15 @@ inline ModuleCategory categoryFor(ModuleType t) noexcept {
     // the time (and the library has no section for it either — it is hidden for now). A future pass
     // can split it on the instance's isInstrument flag once the card can ask.
     case ModuleType::HostedPlugin:
+    // A Macro's inlet/outlet jack (audio/CV or MIDI): plumbing in the same sense Rec Tap is — a
+    // pass-through that exists only to front a boundary, with no DSP role of its own. Card jacks
+    // (P8-15 §7 item 4) are the actual place a Macro port's cable gets coloured; this bucket only
+    // matters for a cable that runs from one of these nodes to somewhere ByModuleCategory-coloured
+    // outside a collapsed card.
+    case ModuleType::MacroInlet:
+    case ModuleType::MacroOutlet:
+    case ModuleType::MacroMidiInlet:
+    case ModuleType::MacroMidiOutlet:
         return ModuleCategory::Utility;
     }
     return ModuleCategory::Utility;

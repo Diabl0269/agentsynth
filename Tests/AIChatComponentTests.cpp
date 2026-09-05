@@ -1110,8 +1110,10 @@ TEST_F(AIChatComponentTest, ThinkingStatusShowsLiveElapsedTime) {
     EXPECT_TRUE(initial.contains("thinking"));
     EXPECT_TRUE(initial.contains("ms") || initial.contains("s"));
 
-    // Let the 500 ms waiting-status timer tick at least once.
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(700);
+    // Let the 500 ms waiting-status timer tick at least once. Deliberately generous (3x the
+    // interval, not a 200 ms sliver above it): a loaded CI runner can easily miss the first tick
+    // inside a tight margin, and this only needs ONE tick to have landed, not a specific one.
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(1500);
 
     ASSERT_TRUE(chatComponent.isWaiting());
     const auto updated = chatComponent.getWaitingStatusText();
@@ -1189,9 +1191,12 @@ TEST_F(AIChatComponentTest, SetRequestTimeoutMsFiresAtConfiguredDurationWithDyna
     chatComponent.triggerSend();
     ASSERT_TRUE(chatComponent.isWaiting());
 
-    // The waiting-status timer ticks every 500 ms (kWaitingStatusIntervalMs); wait past both that
-    // and the configured 700 ms timeout so timerCallback() has a chance to fire the timeout branch.
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(1200);
+    // The waiting-status timer ticks every 500 ms (kWaitingStatusIntervalMs); the tick that can
+    // actually observe "elapsed >= 700" lands at ~1000 ms, which left only ~200 ms of slack for a
+    // loaded CI runner to miss before this flaked (macOS CI, 2026-09-04). Widened generously (well
+    // past several more 500 ms ticks) so the timeout branch has several chances to fire, without
+    // touching the 700 ms timeout constant itself -- the assertion below depends on that exact value.
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(3000);
 
     EXPECT_FALSE(chatComponent.isWaiting());
 

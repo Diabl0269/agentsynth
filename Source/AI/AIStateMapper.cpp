@@ -23,6 +23,10 @@
 #include "../Modules/FilterModule.h"
 #include "../Modules/LFOModule.h"
 #include "../Modules/MacroControlModule.h"
+#include "../Modules/MacroInletModule.h"
+#include "../Modules/MacroMidiInletModule.h"
+#include "../Modules/MacroMidiOutletModule.h"
+#include "../Modules/MacroOutletModule.h"
 #include "../Modules/MathModule.h"
 #include "../Modules/MidiKeyboardModule.h"
 #include "../Modules/ModuleBase.h"
@@ -110,6 +114,15 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     // In the factory so our own saves round-trip a patch that has one; kNonAuthorableModuleTypes
     // below keeps it away from the model.
     {"Track Audio", []() { return std::make_unique<TimelineAudioSourceModule>(); }},
+    // A Macro's audio/CV inlet/outlet jacks (P8-15 Macro I/O). In the factory so our own saves
+    // round-trip a patch that has one; kNonAuthorableModuleTypes below keeps them away from the
+    // model — see docs/macros.md §6.
+    {"Macro In", []() { return std::make_unique<MacroInletModule>(); }},
+    {"Macro Out", []() { return std::make_unique<MacroOutletModule>(); }},
+    // A Macro's MIDI inlet/outlet jacks — a separate type from the audio/CV pair above (see
+    // MacroMidiInletModule's class comment for why), same reason for being in the factory.
+    {"Macro MIDI In", []() { return std::make_unique<MacroMidiInletModule>(); }},
+    {"Macro MIDI Out", []() { return std::make_unique<MacroMidiOutletModule>(); }},
 };
 
 namespace {
@@ -153,6 +166,17 @@ const std::set<juce::String> kNonAuthorableModuleTypes = {
     // (PatchValidationError::InternalModuleNotAllowed) rather than sanitised. Only the app's own
     // load UX may create one.
     "Hosted Plugin",
+    // A Macro's audio/CV inlet/outlet jack (P8-15 Macro I/O; docs/macros.md §6). Membership of
+    // the macro it belongs to is keyed by node uuid, and a provider-supplied uuid is ignored
+    // (adoptUuidIfTrusted) — so a model-authored one could never resolve to a real macro's port
+    // list even if it were let through. The macro's own port-creation flow is the only thing that
+    // may create these.
+    "Macro In",
+    "Macro Out",
+    // A Macro's MIDI inlet/outlet jack. Same reasoning as "Macro In"/"Macro Out" — see
+    // MacroMidiInletModule's class comment for why it is a separate type at all.
+    "Macro MIDI In",
+    "Macro MIDI Out",
 };
 
 bool isInternalOnlyModule(const juce::String& typeName) { return kNonAuthorableModuleTypes.count(typeName) > 0; }
@@ -846,6 +870,14 @@ juce::String AIStateMapper::getFactoryTypeName(juce::AudioProcessor* processor) 
             // The factory key, NOT the hosted plugin's own name: the type identifies the host
             // module, and which plugin it hosts is carried by the node's "state".
             return "Hosted Plugin";
+        case ModuleType::MacroInlet:
+            return "Macro In";
+        case ModuleType::MacroOutlet:
+            return "Macro Out";
+        case ModuleType::MacroMidiInlet:
+            return "Macro MIDI In";
+        case ModuleType::MacroMidiOutlet:
+            return "Macro MIDI Out";
         }
     }
 

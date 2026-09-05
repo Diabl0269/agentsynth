@@ -11,6 +11,7 @@
 #include "ScopeComponent.h"
 #include "ThresholdControlComponent.h"
 #include "WavetableDisplayComponent.h"
+#include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -103,6 +104,31 @@ public:
      *  constant so they cannot drift again. */
     static constexpr int kPortGutterHeaderHeight = 38;
 
+    /** Compact docked-widget geometry for the four macro-port types (Macro In/Out, Macro MIDI
+     *  In/Out — P8-15 founder-review fix F2, docs/macros.md §5.3/§5.4). Shared with
+     *  GraphEditor::estimateModuleSize (its own drag-ghost estimate must match the real widget) and
+     *  GraphEditor::dockMacroPortWidgets (the widget's docked position reads its live getWidth/
+     *  getHeight, sized from these), the same "one constant so two files cannot drift apart"
+     *  reasoning kPortGutterHeaderHeight's own comment states.
+     *
+     *  P8-15 founder-review fix G4 ("make the routing more elegant and sleek, it's currently too
+     *  large"): shrunk from a 104x26(mono) box that read as a small module card to a slim edge
+     *  chip — roughly a 30% cut in drawn area (104x26=2704px^2 -> 92x21=1932px^2, -28.6%; the
+     *  104x44/92x36 Stereo pair lands within a point of the same ratio). The values below are a
+     *  tuned point, not a formula — see paintMacroPortWidget()'s own comment for the matching jack/
+     *  font/corner-radius cuts, and MacroPortWidgetTests.cpp's
+     *  `MacroPortWidgetG4.RealisticPortNameFitsWithinTheWidgetAtFullUnscaledSize` for the
+     *  constraint that actually bounds how far the width could shrink: a realistic port name
+     *  ("Delay 1 Audio") has to still fit un-truncated. */
+    static constexpr int kMacroPortWidgetWidth = 92;
+    /** y of the first (or only) jack row, and the fixed y a MIDI port's single jack sits at. */
+    static constexpr int kMacroPortWidgetHeaderY = 13;
+    /** Vertical spacing between stacked jack rows — only Stereo (2 visible jacks a side) uses a
+     *  second row; Mono, Poly-N and MIDI are always exactly one row. */
+    static constexpr int kMacroPortWidgetRowStep = 15;
+    /** Clearance reserved below the last jack row. */
+    static constexpr int kMacroPortWidgetBottomPad = 8;
+
     std::optional<Port> getPortForPoint(juce::Point<int> localPoint);
     juce::Point<int> getPortCenter(int index, bool isInput);
 
@@ -168,6 +194,39 @@ public:
      *  can assert the exact geometry painted without inspecting pixels. */
     static juce::Rectangle<float> outputCardIconBoundsForTest(const synth::theme::AppLookAndFeel& lf);
 
+    /** Builds the same right-click menu mouseDown() shows for a body right-click (Copy/Duplicate/
+     *  Replace with.../Delete Module and, when this module is a macro member, a "Macro: <name>"
+     *  submenu — founder-review item 4, docs/macros.md). Split out of mouseDown() so a test can
+     *  inspect the menu's actual content and invoke an item's action directly: juce::PopupMenu's
+     *  own showMenuAsync() never displays anything headless, so driving a synthesised right-click
+     *  MouseEvent into mouseDown() alone has nothing observable to assert on. Public so a test can
+     *  call it after that same synthesised mouseDown() (the real gesture/hit-test/selection-
+     *  retargeting entry point) rather than skip straight to menu construction. */
+    juce::PopupMenu buildModuleContextMenu();
+
+    /** The small context menu a macro port node's own body right-click shows instead of
+     *  buildModuleContextMenu() above (founder-review fix G7: "they cannot be removed" — a port
+     *  node previously had NO delete affordance once its macro was gone, and Configure I/O is
+     *  otherwise the only surface for it at all). Always offers "Delete Port". When the port still
+     *  resolves to a live macro (GraphEditor::macroPortOwnerFor) it also offers "Rename Port..."
+     *  and "Configure I/O..." — the two Configure I/O actions this node's own menu can reach
+     *  without the user hunting down a member module first. Split out exactly like
+     *  buildModuleContextMenu() is, for the same headless-test reason (that method's own comment). */
+    juce::PopupMenu buildMacroPortContextMenu();
+
+    /** Replaces what a real body right-click does with the menu buildModuleContextMenu() built --
+     *  in place of the real showMenuAsync() (which opens a real popup and, on a headless Linux CI
+     *  runner with no display, segfaults inside juce::PopupMenu::HelperClasses::MenuWindow --
+     *  Tests/MacroContainerTests.cpp's MacroMemberContextMenu suite hit exactly this). Mirrors
+     *  TimelineTrackHeaderComponent's setOpenMidiDestinationsPickerHookForTest(): defaults to the
+     *  real behaviour, and a null hook restores it rather than leaving the seam disarmed. A test
+     *  installs a capturing hook to inspect the menu the real mouseDown() gesture actually built,
+     *  without ever opening a popup. */
+    void setShowContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
+        showContextMenuHook_ =
+            hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
+    }
+
 private:
     // Non-owning: the juce::Component base owns this via setCachedComponentImage(). See
     // ZoomFrozenCachedImage.h — installed instead of setBufferedToImage(true) so a canvas zoom
@@ -179,6 +238,12 @@ private:
     juce::AudioProcessorGraph::NodeID nodeId;
     GraphEditor& owner;
     juce::ComponentDragger dragger;
+
+    // Set in the constructor to `[](juce::PopupMenu& m) { m.showMenuAsync(...); }`; a test replaces
+    // it via setShowContextMenuHookForTest() so a real right-click mouseDown() can be driven in a
+    // headless test without opening a popup that segfaults with no display (see that setter's
+    // comment).
+    std::function<void(juce::PopupMenu&)> showContextMenuHook_;
 
     // Auto-UI
     juce::OwnedArray<juce::Slider> sliders;
@@ -290,6 +355,15 @@ private:
 
     void createControls();
     void updateLayout();
+
+    // Compact docked widget for the four macro-port types (P8-15 founder-review fix F2,
+    // docs/macros.md §5.3/§5.4) — no header chrome, no body. layoutMacroPortWidget sizes the
+    // card from the module's own visible jack count (updateLayout's early branch); its actual
+    // canvas POSITION is decided separately, by GraphEditor::dockMacroPortWidgets against the
+    // owning macro's hull. paintMacroPortWidget draws the tinted row, its jacks and the resolved
+    // MacroPort name (paint()'s early branch).
+    void layoutMacroPortWidget();
+    void paintMacroPortWidget(juce::Graphics& g);
 
     /** Right-click-any-knob entry point into the automation lane editor. Attached as a
      *  MouseListener on every generic auto-UI slider (createControls()'s float/int branches) via

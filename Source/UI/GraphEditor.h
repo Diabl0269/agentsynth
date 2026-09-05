@@ -3,11 +3,13 @@
 #include "../AppUndoManager.h"
 #include "../AudioEngine.h"
 #include "../MacroSet.h"
+#include "../Modules/MacroPortShape.h"
 #include "../PatchDocument.h"
 #include "../Plugin/Hosting/HostedPluginBackend.h"
 #include "CableColour.h"
 #include "ColourPickerPopup.h"
 #include "LayoutUtil.h"
+#include "MacroPortConfigDialog.h"
 #include "ModuleClipboard.h"
 #include "SelectionModel.h"
 #include "UIAnimation.h"
@@ -146,6 +148,20 @@ public:
      *  dialogs of its own. */
     synth::MacroSet& getMacros() noexcept { return macros; }
 
+    /** The MacroPort `nodeId` fronts, and the macro that owns it, resolved together — the compact
+     *  docked port widget (ModuleComponent's macro-port rendering, P8-15 founder-review fix F2)
+     *  needs both in one lookup: the port's own `name` (fix item 3 — "the name... is not shown on
+     *  the module UI... in the new mode it should be presented") and the macro's `colour` (the
+     *  widget's tint). `macro` is null when `nodeId` doesn't front any macro's port — a docked
+     *  widget only ever exists for a node that does, by construction (every Macro In/Out/MIDI
+     *  In/Out is created by addMacroPort() as a macro member with a matching MacroPort entry), but
+     *  this stays defensive rather than assume the two can never drift apart mid-transaction. */
+    struct MacroPortOwner {
+        const synth::Macro* macro = nullptr;
+        const synth::MacroPort* port = nullptr;
+    };
+    MacroPortOwner macroPortOwnerFor(juce::AudioProcessorGraph::NodeID nodeId) const;
+
     // Layout / anti-overlap
     juce::Point<int> resolvePlacement(juce::Point<int> desired, int w, int h, juce::AudioProcessorGraph::NodeID selfId);
 
@@ -263,8 +279,55 @@ public:
     /** Wraps the current selection in a new macro (Cmd+G). Refused via onStatusMessage — no undo
      *  entry, selection untouched — when fewer than two nodes are selected or any selected node
      *  already belongs to a macro (nested macros are out of scope for P8-12).
+     *
+     *  `autoCreatePorts` (founder-review fix F5, docs/macros.md §7 item 6.1): when true, every
+     *  graph connection crossing the new macro's boundary is spliced through a matching
+     *  MacroInlet/MacroOutlet (or MIDI variant) node — disconnect external<->internal, insert the
+     *  port node, reconnect external->port->internal (or the reverse for an outlet) — ALL inside
+     *  this call's one recordGraphAndMacroChange transaction, so a single Cmd+Z undoes the grouping
+     *  and every spliced port together. Default false keeps this method's original behaviour
+     *  (plain grouping, no ports) for every existing caller — see requestGroupSelectionIntoMacro()
+     *  below for the preference-gated, modal-aware entry point real UI gestures should call
+     *  instead.
      *  @return the new macro's id, or an empty string if refused. */
-    juce::String groupSelectionIntoMacro();
+    juce::String groupSelectionIntoMacro(bool autoCreatePorts = false);
+
+    // ---- Macro auto-port preference (founder-review fix F5, docs/macros.md §7 item 6.1/6.2) ----
+    //
+    // Tri-state, not a bool: "ask, then remember" needs a third value beyond on/off. Unset (the
+    // default) means "ask on the next group that has a crossing cable"; the other two mean
+    // "always do X, never ask." Persisted through juce::ApplicationProperties by
+    // PreferencesSettingsTab, mirroring its own key/getter/setter/*ForTest pattern exactly (see
+    // setDefaultDualIOForNewModules for the precedent), and pushed down here via
+    // setMacroAutoPortPreference(). The modal's own "Remember my choice" also persists directly
+    // through propertiesFile_ (see setPropertiesFile) — the same macro recolour favourites use —
+    // since the modal can fire before a Settings window (and therefore a PreferencesSettingsTab)
+    // has ever been constructed.
+
+    enum class MacroAutoPortPreference { Unset, AutoCreatePorts, LeaveCablesAsIs };
+
+    void setMacroAutoPortPreference(MacroAutoPortPreference pref) noexcept { macroAutoPortPreference_ = pref; }
+    MacroAutoPortPreference getMacroAutoPortPreference() const noexcept { return macroAutoPortPreference_; }
+
+    /** True when grouping the CURRENT selection right now would cross at least one graph
+     *  connection — the same predicate requestGroupSelectionIntoMacro() gates its modal on. Pure
+     *  read (does not assign uuids to freshly-dropped modules the way groupSelectionIntoMacro()
+     *  itself does), so it under-counts only for a node that has never been saved/touched before —
+     *  harmless here since it is only a UI gate, and groupSelectionIntoMacro() recomputes the real
+     *  plan with properly-ensured uuids regardless. */
+    bool selectionHasCrossingMacroCable() const;
+
+    /** Cmd+G / right-click "Create Macro" / drag-group-into-macro's real entry point — every UI
+     *  gesture that groups a selection calls THIS, not groupSelectionIntoMacro() directly. Shows
+     *  the auto-port-preference modal ONLY when the preference is Unset AND the selection actually
+     *  has a crossing cable (never interrupts a grouping that has nothing to decide); otherwise
+     *  groups immediately, honouring whatever the preference already says. */
+    void requestGroupSelectionIntoMacro();
+
+    /** Test seam: when set, called INSTEAD of launching the real modal — `respond(createPorts,
+     *  remember)` drives the completion exactly as a real button click would, with no DialogWindow
+     *  or message loop involved. Production code leaves this null. */
+    std::function<void(std::function<void(bool createPorts, bool remember)> respond)> macroAutoPortModalForTest;
 
     /** Ungroups (Cmd+Shift+G): dissolves every macro that owns at least one currently-selected
      *  node, keeping their member modules exactly where they are and expanding them back to
@@ -343,10 +406,65 @@ public:
      *  opposite: it keeps the modules. */
     void deleteMacroAndMembers(const juce::String& macroId);
 
+    // ---- Macro bypass/mute (P8-15d, T142, docs/macros.md §5.6) -------------------------------
+    //
+    // "Bypass macro" / "Mute macro" are FAN-OUT COMMANDS over a macro's members, not a
+    // macro-level reinterpretation of the contract — a macro has no processBlock and no
+    // bypass/mute state of its own. Each fan-out calls ModuleBase::setBypassed/setMuted (already
+    // parameter writes via setValueNotifyingHost) on every member, so every member's own
+    // processBlock honours the two-branch bypass/mute contract exactly as it already does for a
+    // per-module toggle — there is nothing new to get wrong. The whole fan-out is ONE undo step
+    // (recordStructuralChange, the same before/after graph-JSON snapshot applySmartSuggestions
+    // uses to batch several connections into one step), not one undo per member.
+
+    /** Tri-state read of `macroId`'s members' bypass (or mute) state, feeding §5.6's
+     *  "mixed-state members show an indeterminate indicator" requirement. `Muted` additionally
+     *  skips (does not count as ON or OFF) any member with no "muted" parameter at all
+     *  (ModuleBase::hasMuteParameter() — Macro In/Out and their MIDI variants among them, exactly
+     *  like Track In / Rec Tap / Track Audio) — such a member has nothing to report. A macro that
+     *  resolves to zero queryable members (unknown id, or every member skipped) reads AllOff. */
+    enum class MacroToggleState { AllOff, AllOn, Mixed };
+    MacroToggleState macroBypassState(const juce::String& macroId) const;
+    MacroToggleState macroMuteState(const juce::String& macroId) const;
+
+    /** Sets `ModuleBase::setBypassed(bypassed)` on every member of `macroId`, as one undo step.
+     *  A mixed starting state still lands every member on the SAME target state — that is the
+     *  point of the command (§5.6). No-op (no undo entry) if `macroId` doesn't resolve or has no
+     *  members that are ModuleBase instances. */
+    void setMacroBypassed(const juce::String& macroId, bool bypassed);
+
+    /** Sets `ModuleBase::setMuted(muted)` on every member of `macroId` that HAS a "muted"
+     *  parameter (ModuleBase::hasMuteParameter()) — a member without one is left alone rather
+     *  than crashing on `setMuted`'s unchecked dereference, matching §7 item 1's note that this
+     *  fan-out has to guard against members like Macro In/Out that carry no mute parameter. One
+     *  undo step; a no-op (no undo entry) if `macroId` doesn't resolve or no member is
+     *  mutable-eligible. */
+    void setMacroMuted(const juce::String& macroId, bool muted);
+
+    /** Toggles `macroId`'s bypass state: mirrors toggleSelectionMacrosCollapsed's deterministic
+     *  convergence rule (see its own header comment for the rationale) — `Mixed` or `AllOff`
+     *  converges to bypassing every member; `AllOn` converges to clearing every member. Refused
+     *  via onStatusMessage (no-op) if `macroId` doesn't resolve. */
+    void toggleMacroBypassed(const juce::String& macroId);
+
+    /** Toggles `macroId`'s mute state with the same convergence rule as toggleMacroBypassed,
+     *  computed over mute-eligible members only (see macroMuteState). Refused via onStatusMessage
+     *  (no-op) if `macroId` resolves to no member with a "muted" parameter. */
+    void toggleMacroMuted(const juce::String& macroId);
+
     /** Canvas-space bounds of an EXPANDED macro's grouping hull (the union of its live member
      *  ModuleComponent bounds, expanded by the hull margin), or an empty rect if the macro is
-     *  collapsed / unknown / has no resolvable members. The ONE definition — paint and
-     *  hit-testing must never diverge. */
+     *  collapsed / unknown / has no resolvable members. The ONE definition — paint, hit-testing
+     *  AND the docked port-widget layout (dockMacroPortWidgets(), P8-15 fix F2) must never
+     *  diverge.
+     *
+     *  A port's own fronting node (MacroInlet/Outlet or a MIDI variant) is EXCLUDED from the
+     *  union: it docks to this hull's edge (§5.4), and if it also counted toward the bounds that
+     *  DEFINE the hull, docking it would push the hull outward, which would push it out again,
+     *  every layout pass. A macro made ENTIRELY of ports (no ordinary member) therefore has
+     *  nothing left to union — that case falls back to the macro's own persisted `bounds` (the
+     *  same footprint its collapsed card uses) so its ports still have an edge to dock against,
+     *  rather than piling up at the canvas origin. */
     juce::Rectangle<int> macroHullBounds(const juce::String& macroId) const;
 
     /** The expanded macro whose hull contains `canvasPos`, or an empty string. Smallest hull
@@ -361,6 +479,21 @@ public:
     /** The expanded macro whose name chip contains `canvasPos`, or an empty string. Smallest
      *  chip wins if two ever overlap. */
     juce::String macroChipAt(juce::Point<int> canvasPos) const;
+
+    /** Canvas-space bounds of an EXPANDED macro's collapse button — a small chevron sitting at
+     *  the RIGHT end of the same top-of-hull row the name chip occupies at the left end
+     *  (founder-review fix G5: "add a button to collapse it - currently there's only a button to
+     *  expand", mirroring MacroCardComponent::getExpandButtonBounds on the collapsed card). Empty
+     *  rect if the macro is collapsed or unknown, exactly like macroChipBounds — collapsing is
+     *  reachable from a COLLAPSED card via its own expand chevron already, so this button only
+     *  ever exists on the other side of that toggle. The ONE definition: paint
+     *  (GraphContentComponent::paint) and hit-testing (macroCollapseButtonAt, used by mouseDown)
+     *  must never diverge. */
+    juce::Rectangle<int> macroCollapseButtonBounds(const juce::String& macroId) const;
+
+    /** The expanded macro whose collapse button contains `canvasPos`, or an empty string.
+     *  Smallest button wins if two ever overlap (mirrors macroChipAt/macroHullAt). */
+    juce::String macroCollapseButtonAt(juce::Point<int> canvasPos) const;
 
     /** Test accessor: the live MacroCardComponent for `macroId`, or nullptr. Exposed so a test can
      *  move the real card directly (bypassing the drag gesture entirely) to prove
@@ -385,7 +518,8 @@ public:
      *  since there is no card to host an inline editor there. */
     juce::PopupMenu buildMacroMenu(const juce::String& macroId, std::function<void()> renameAction = nullptr);
 
-    /** Live bounds + colour category for the currently-resolvable members of `macroId`, in
+    /** Live bounds + colour category for the currently-resolvable MODULE members of `macroId`
+     *  (a port node is excluded — founder-review fix G6, docs/macros.md §7 item 4 note), in
      *  member order — the data the collapsed card's content preview (Fix 6/P8-12 follow-up)
      *  scales into its card. A member uuid that doesn't resolve to a live ModuleComponent is
      *  skipped rather than drawn as a blank box. */
@@ -395,8 +529,10 @@ public:
     };
     std::vector<MacroMemberPreview> macroMemberPreviews(const juce::String& macroId) const;
 
-    /** Display names of `macroId`'s members, in order — feeds MacroCardComponent's tooltip so a
-     *  collapsed macro's contents are discoverable without expanding it. */
+    /** Display names of `macroId`'s MODULE members, in order — a port node is excluded
+     *  (founder-review fix G6: a boundary jack is not a module, so it must not appear in this
+     *  list either) — feeds MacroCardComponent's tooltip so a collapsed macro's contents are
+     *  discoverable without expanding it. */
     juce::StringArray macroMemberNames(const juce::String& macroId) const;
 
     /** Theme colour for a module category, matching how the canvas colours cables/cards by
@@ -422,6 +558,113 @@ public:
     void finalizeMacroCardDrag(const juce::String& macroId, juce::Point<int> newCardTopLeft);
     /** A press that never moved — mirrors cancelSelectionDrag, no re-resolve. */
     void cancelMacroCardDrag(const juce::String& macroId);
+
+    // ---- Macro I/O (P8-15b, T140): the "Configure I/O" modal + the cable-drop convenience -----
+    //
+    // §7 items 3 and 5 of docs/macros.md, unified into ONE modal per an explicit founder request
+    // rather than piecemeal "Add Input"/"Add Output"/"Rename"/"Reorder" menu actions. Every entry
+    // point below is a single recordGraphAndMacroChange transaction, so add/remove/rename/reorder
+    // and (the one that matters most) a shape change are each exactly one undo step — a shape
+    // change is a delete-node + create-node + rewire landing together, never two undos. -----
+
+    /** Adds a new port to `macroId`: constructs the matching Macro In/Out or Macro MIDI In/Out
+     *  node (never by the module library or replace menu — the same internal-only construction
+     *  every other §5.1 node type gets), gives it `shape`/`voiceCount` (ignored for
+     *  MacroPortKind::Midi, which carries no shape — §5.1), adds it as a macro member, and
+     *  appends a synth::MacroPort fronting it. `shape`/`voiceCount` are set on the node BEFORE it
+     *  is wired into the live graph, honouring §5.3's "decided at construction, then fixed" rule.
+     *  `portName` empty falls back to a direction/kind default ("Input"/"Output"/"MIDI In"/
+     *  "MIDI Out"). Returns the new port's node uuid, or an empty string if `macroId` doesn't
+     *  resolve or the node type failed to construct. */
+    juce::String addMacroPort(const juce::String& macroId, bool isInput, synth::MacroPortKind kind,
+                              MacroPortShape shape, int voiceCount, const juce::String& portName);
+
+    /** Removes the port fronted by `nodeUuid` from `macroId` by deleting its node — reuses the
+     *  ordinary multi-select delete path exactly like deleteMacroAndMembers does for a whole
+     *  macro, so undo/dirty/timeline-reconcile behave identically, and macros.retainOnly() (run
+     *  from updateComponents()) drops the now-orphaned synth::MacroPort as part of the same step. */
+    void removeMacroPort(const juce::String& macroId, const juce::String& nodeUuid);
+
+    /** Deletes ONE macro port node directly while its macro stays alive — the affordance the port
+     *  node's own context menu offers (ModuleComponent::buildMacroPortContextMenu, founder-review
+     *  fix G7: "they cannot be removed"). Unlike removeMacroPort() above, this SPLICES the
+     *  boundary cable back together (external endpoint(s) reconnected straight to internal
+     *  endpoint(s), on the original raw channels — spliceOutMacroPort's cross product) rather than
+     *  dropping it; removeMacroPort's drop-the-cables behaviour is pinned for the Configure I/O
+     *  "delete this port" action specifically (Tests/MacroPortFlowTests.cpp's
+     *  RemoveDeletesTheNodeAndDropsThePort) and is deliberately left alone. Dissolves the macro
+     *  outright if this was its last member (matching MacroSet::removeMemberEverywhere's own
+     *  "zero members is not a meaningful state" rule). One recordGraphAndMacroChange transaction.
+     *  No-op if `macroId` doesn't resolve or `nodeUuid` isn't one of its ports. */
+    void deleteMacroPortNode(const juce::String& macroId, const juce::String& nodeUuid);
+
+    /** Renames the port fronted by `nodeUuid`. Empty/whitespace-only `newName` is a no-op (mirrors
+     *  promptRenameMacro's own convention) rather than clearing the name. Touches only `macros` —
+     *  never the graph — so this pushes a MacroSnapshotAction alone. */
+    void renameMacroPort(const juce::String& macroId, const juce::String& nodeUuid, const juce::String& newName);
+
+    /** Moves the port fronted by `nodeUuid` one step earlier/later in its OWN direction's draw
+     *  order (inputs are reordered against other inputs, outputs against other outputs — the two
+     *  sides of the card, §5.4) by swapping `order` with its neighbour. A no-op at either end of
+     *  its group. */
+    void moveMacroPortOrder(const juce::String& macroId, const juce::String& nodeUuid, bool moveUp);
+
+    /** Changes the shape of an existing audio/CV port — the one operation §5.3 calls out as
+     *  needing to read as ONE edit despite being delete-node + create-node + rewire underneath.
+     *  Snapshots every graph connection touching the old node, constructs a fresh node of the
+     *  SAME direction/kind with the NEW shape, removes the old node, replays each saved connection
+     *  onto the new node's matching raw channel ONLY when that channel is still active under the
+     *  new shape (role == PortRole::Audio) — exactly "a jack that disappears takes its cables with
+     *  it" (dropRoutingsOnHiddenJacks' rule), applied honestly rather than silently adapted at the
+     *  boundary (§5.3's closing rule) — then rewrites the macro's member/port entries to the new
+     *  uuid, keeping name/order/direction/kind untouched. A no-op (returns empty) for a MIDI-kind
+     *  port, which has no shape to change (§5.1). Returns the new node's uuid. */
+    juce::String changeMacroPortShape(const juce::String& macroId, const juce::String& nodeUuid,
+                                      MacroPortShape newShape, int newVoiceCount);
+
+    /** Opens the "Configure I/O" modal (MacroPortConfigDialog) for `macroId` — the single entry
+     *  point every port add/remove/rename/reorder/shape-change above is reached through when the
+     *  user drives it from the UI; every method above is independently callable (and tested) with
+     *  no dialog involved. No-op if `macroId` doesn't resolve. */
+    void promptConfigureMacroIO(const juce::String& macroId);
+
+    /** Opens a small "Rename Port" AlertWindow for the single port fronted by `nodeUuid` — the
+     *  port node's own context menu's quicker alternative to opening the whole Configure I/O
+     *  modal just to retype one name (founder-review fix G7). Empty/whitespace-only input cancels
+     *  without renaming, same as promptRenameMacro's own convention; the actual mutation is
+     *  renameMacroPort() (already independently tested with no dialog involved). No-op if
+     *  `macroId` doesn't resolve. */
+    void promptRenameMacroPort(const juce::String& macroId, const juce::String& nodeUuid);
+
+    // ---- Macro card jacks (P8-15c, T141, docs/macros.md §7 item 4) -----------------------------
+
+    /** One port's on-card jack, in the collapsed card's OWN local coordinates (add the live
+     *  card's top-left — macroCableAnchorBounds — for canvas coords). Inputs run down the card's
+     *  left edge, outputs down its right edge, each side ordered by MacroPort::order — the SAME
+     *  order macroPortRowsForDialog sorts by, so a port's jack position and its row in the
+     *  Configure I/O dialog always agree on which port is "first". The ONE layout definition:
+     *  MacroCardComponent::paint(), buildVisibleCables()'s boundary-cable anchoring, and
+     *  endConnectionDrag()'s jack hit-test all read this rather than recomputing it, so the drawn
+     *  dot, the anchored cable and the drop target can never drift apart. */
+    struct MacroCardPort {
+        juce::String nodeUuid;
+        bool isInput = false;
+        synth::MacroPortKind kind = synth::MacroPortKind::AudioCV;
+        juce::String name;
+        juce::Point<int> jackPos; // card-local
+    };
+
+    /** Every port on `macroId`'s collapsed card, laid out. Empty if `macroId` doesn't resolve or
+     *  has no ports yet (a macro with no configured ports draws no jacks — just the plain P8-12
+     *  card). */
+    std::vector<MacroCardPort> macroCardPortLayout(const juce::String& macroId) const;
+
+    /** The port whose jack contains `cardLocalPos` (within the same click tolerance a module's
+     *  own jack uses), or nullopt. `cardLocalPos` is in the card's OWN local coordinates, matching
+     *  MacroCardPort::jackPos — a caller starting from a canvas/screen point converts via the live
+     *  card's bounds first (see endConnectionDrag). */
+    std::optional<MacroCardPort> macroCardPortForPoint(const juce::String& macroId,
+                                                       juce::Point<int> cardLocalPos) const;
 
     // ---- Snippets (issue #156) ----
 
@@ -1085,6 +1328,21 @@ private:
      *  syncs ModuleComponents themselves. */
     void syncMacroCards();
 
+    /** Positions every EXPANDED macro's port widgets against macroHullBounds() — inputs down the
+     *  LEFT edge, outputs down the RIGHT, both starting near the top, ordered by MacroPort::order
+     *  (P8-15 founder-review fix F2: docs/macros.md §5.4). Called at the end of every
+     *  updateComponents() (so a structural change, an auto-arrange pass, or a preset load can
+     *  never leave a port widget scattered from a stray graph-node x/y) and again after a
+     *  single-module drag settles (finalizeModuleDrag) — a WHOLE-macro drag needs no extra call
+     *  here: beginSelectionDrag/dragSelectionBy/finalizeSelectionDrag already move a port's
+     *  ModuleComponent by the exact same delta as every other selected member (a port is an
+     *  ordinary member of `macro.members`), so the fixed hull-relative offset this function
+     *  maintains is preserved automatically. A collapsed macro's ports are skipped — hidden along
+     *  with the rest of its members (syncMacroCards), the collapsed CARD draws their jacks
+     *  instead (macroCardPortLayout). Not user-draggable: ModuleComponent::mouseDown refuses to
+     *  arm a body drag for a macro-port node, so nothing ever fights this. */
+    void dockMacroPortWidgets();
+
     /** The raw collapse/expand mutation, with NO undo recording of its own — so a caller that
      *  toggles several macros at once (toggleSelectionMacrosCollapsed) can wrap the whole batch
      *  in ONE recordGraphAndMacroChange instead of one per macro. setMacroCollapsed is the
@@ -1100,6 +1358,19 @@ private:
      *  exist or was never assigned one. */
     juce::String nodeUuidFor(juce::AudioProcessorGraph::NodeID nodeId) const;
 
+    /** Every member of `macroId` that currently resolves to a live, ModuleBase-backed graph node,
+     *  in member order (§5.6 bypass/mute fan-out, T142). The ONE place that decides "what counts
+     *  as a fannable member" — macroBypassState/macroMuteState and setMacroBypassed/setMacroMuted
+     *  all read this rather than re-resolving members themselves, so the state a menu item shows
+     *  and the members the command actually touches can never disagree. Empty if `macroId`
+     *  doesn't resolve. */
+    std::vector<juce::AudioProcessorGraph::NodeID> resolvedMacroMemberModuleNodes(const juce::String& macroId) const;
+
+    /** True if at least one of `macroId`'s members has a "muted" parameter
+     *  (ModuleBase::hasMuteParameter()) — used to decide whether a mute fan-out is a real no-op
+     *  (a macro made entirely of Macro In/Out-like nodes) rather than silently doing nothing. */
+    bool macroHasMuteEligibleMember(const juce::String& macroId) const;
+
     /** The rectangle to anchor a collapsed macro's boundary cables against: the LIVE
      *  MacroCardComponent's bounds while its card exists (so a cable tracks the card mid-drag,
      *  before finalizeMacroCardDrag writes the settled position back to `macro.bounds`), falling
@@ -1113,6 +1384,142 @@ private:
      *  the real preview/commit wiring, without launching a juce::CallOutBox. Mirrors
      *  TimelineRulerComponent::buildMarkerColourPicker. Null when `macroId` doesn't resolve. */
     std::unique_ptr<synth::ui::ColourPickerPopup> buildMacroColourPicker(const juce::String& macroId);
+
+    // ---- Macro I/O (P8-15b) helpers ----
+
+    /** The module-library type name to construct for a port of this direction/kind — "Macro In"/
+     *  "Macro Out"/"Macro MIDI In"/"Macro MIDI Out" (§5.1). */
+    static juce::String macroPortNodeTypeName(bool isInput, synth::MacroPortKind kind);
+
+    /** Fallback port name when the caller supplies none/blank. */
+    static juce::String defaultMacroPortName(bool isInput, synth::MacroPortKind kind);
+
+    /** One past the highest existing `order` among `macro`'s ports sharing `isInput` (0 if none) —
+     *  a fresh port's draw order, keeping it last on its own side of the card. */
+    static int nextMacroPortOrder(const synth::Macro& macro, bool isInput);
+
+    /** The "shape from a dropped cable" convenience (§5.3): endConnectionDrag calls this when a
+     *  cable is released over a COLLAPSED macro card with no jack underneath it (none exist until
+     *  T141) rather than on another module's port. Creates a Mono (or, for a MIDI-sourced drag,
+     *  MIDI) port sized from the cable's own direction/kind, adds it to `macroId`, and wires the
+     *  EXTERNAL end of the drag straight to the new node's raw channel 0 — all as ONE
+     *  recordGraphAndMacroChange transaction. Deliberately does NOT also wire the new port to any
+     *  interior member: the macro is collapsed, so there is nothing visible to guess a target
+     *  from — see docs/macros.md §5.3. Shape inference from the dragged cable's own poly/stereo
+     *  fan is deferred (T140 report) — this always creates Mono; the modal remains the way to get
+     *  Stereo/Poly-N from this gesture. */
+    void createMacroPortFromDroppedCable(const juce::String& macroId, bool newPortIsInput, bool isMidi,
+                                         juce::AudioProcessorGraph::NodeID otherNodeId, int otherVisibleJack);
+
+    /** Snapshot of `macroId`'s ports for the Configure I/O dialog: inputs before outputs, then
+     *  each side by its own `order` — live shape/voice count read off the actual node for an
+     *  AudioCV port (a MacroPort carries no shape of its own, §5.2). Empty if `macroId` doesn't
+     *  resolve. */
+    std::vector<synth::ui::MacroPortConfigDialog::PortRow> macroPortRowsForDialog(const juce::String& macroId) const;
+
+    // ---- Auto-create-ports-on-group (founder-review fix F5, docs/macros.md §7 item 6.1) --------
+
+    /** One raw graph connection crossing the would-be macro's boundary, folded into a
+     *  MacroPortCrossingGroup below. `legIndex` is this edge's 0-based position within its group's
+     *  shape: always 0 for Mono; 0=Left/1=Right for Stereo; 0..voiceCount-1 for Poly. */
+    struct MacroPortCrossingEdge {
+        juce::AudioProcessorGraph::NodeID externalNodeId;
+        int externalRawChannel = 0;
+        int internalRawChannel = 0;
+        int legIndex = 0;
+    };
+
+    /** Every crossing connection landing on the SAME (internal node, direction, visible jack) —
+     *  the de-duplication key: two cables into the same internal destination jack (e.g. a
+     *  collapsed stereo pair's two raw legs, or several external sources fanned into one mono
+     *  jack) share ONE port, not N. `isInput` is the resulting MacroPort's own direction: true
+     *  when the internal node is the connection's destination (signal enters the macro, an
+     *  inlet); false when it is the source (an outlet). `shape`/`voiceCount` are read off the
+     *  internal jack's own LogicalPort (mapInputChannel/mapOutputChannel), never defaulted. */
+    struct MacroPortCrossingGroup {
+        juce::AudioProcessorGraph::NodeID internalNodeId;
+        juce::String internalUuid;
+        bool isInput = false;
+        bool isMidi = false;
+        int visibleJack = -1;   // meaningless (and unused for dedup) when isMidi
+        int headRawChannel = 0; // this jack's poly-group-head raw channel; legIndex is offset from it
+        MacroPortShape shape = MacroPortShape::Mono;
+        int voiceCount = 1;
+        std::vector<MacroPortCrossingEdge> edges;
+    };
+
+    /** Reads `graph.getConnections()` the same way rebuildVisibleCables()/AudioEngine's routing
+     *  enumeration does (LogicalPort::visibleJackIndex/isPolyGroupHead/polyVoiceSpan/role, never a
+     *  raw-channel guess) and groups every connection with exactly one endpoint in `memberNodeIds`
+     *  into MacroPortCrossingGroup entries — one per (internal node, direction, jack). A crossing
+     *  connection whose EXTERNAL endpoint is an AttenuverterModule still gets a port PROVIDED the
+     *  mod chain's other real endpoint isn't ALSO about to become a member (in which case both
+     *  edges are left un-ported — the hidden attenuverter sitting nominally "outside" is then just
+     *  an artefact of its own invisibility, not a real crossing; see the definition's own comment
+     *  for why splicing there is safe against AudioEngine's DirectCV/AttenuverterChain
+     *  classification). A Dual-I/O-on module's separately-jacked Left/Right crossings are merged into one Stereo
+     *  group via ModuleBase::rightAudioLegChannel() (never jack index 0/1 — Source/Modules/
+     *  CLAUDE.md) when BOTH legs cross. Pure read — does not touch the graph or `macros`.
+     *
+     *  Takes live NodeIDs, not uuids: a module freshly dropped on the canvas has no `"uuid"`
+     *  property yet (only lazily assigned on first save or by groupSelectionIntoMacro() itself),
+     *  so gating the crossing-cable check on resolvable uuids would silently under-detect on the
+     *  most common real path — select two never-saved modules with an external cable and group
+     *  them straight away. NodeIDs are always live the moment a node exists on the canvas. */
+    std::vector<MacroPortCrossingGroup>
+    buildMacroPortCrossingPlan(const std::vector<juce::AudioProcessorGraph::NodeID>& memberNodeIds) const;
+
+    /** Convenience wrapper for callers that already have uuids (groupSelectionIntoMacro(), once it
+     *  has assigned every member a uuid) — resolves each to a NodeID and forwards. NOT used by the
+     *  selection-time crossing-cable check (see the NodeID overload's comment for why). */
+    std::vector<MacroPortCrossingGroup> buildMacroPortCrossingPlan(const std::vector<juce::String>& memberUuids) const;
+
+    /** Splices a port node for every group in `plan` into `macroId` — disconnect external<->
+     *  internal, add the port node (shape/voiceCount from the group, name from
+     *  autoMacroPortName()), reconnect external->port->internal (or the reverse for an outlet),
+     *  exactly the raw channels the original edges used. Called from inside
+     *  groupSelectionIntoMacro(true)'s own recordGraphAndMacroChange transaction — never pushes an
+     *  undo entry of its own. */
+    void spliceMacroPorts(const juce::String& macroId, const std::vector<MacroPortCrossingGroup>& plan);
+
+    /** The exact reverse of spliceMacroPorts() for ONE port node (founder-review fix G7,
+     *  docs/macros.md §7): reads every connection currently touching the port node fronted by
+     *  `portNodeUuid`, splits them into the set landing on it (an "in" edge — the port's own
+     *  channel is the DESTINATION channel) and the set leaving it (an "out" edge — the port's own
+     *  channel is the SOURCE channel), then for every port channel shared between an in-edge and
+     *  an out-edge, connects that in-edge's OTHER endpoint directly to that out-edge's OTHER
+     *  endpoint, on the exact raw channels each already carried. This is signal-preserving because
+     *  every port type (MacroInletModule/MacroOutletModule and the MIDI variants) is a verified
+     *  pure per-channel pass-through — mapInputChannel(c) and mapOutputChannel(c) always agree, so
+     *  a signal entering the port on channel c is exactly the signal leaving it on channel c, and
+     *  a MIDI port's single "channel" is always juce::AudioProcessorGraph::midiChannelIndex on
+     *  both sides. Handles fan-in and fan-out: the cross product naturally reconnects every source
+     *  landing on a channel to every destination fed from that same channel (docs/macros.md §5.4's
+     *  "two cables into the same jack share ONE port" rule, run in reverse). A port wired on only
+     *  one side (or neither) contributes no cross-product pairs and simply disappears — nothing to
+     *  reconnect. Removes the port node from the graph (juce::AudioProcessorGraph::removeNode
+     *  already drops its own now-superseded connections) and drops `portNodeUuid` from
+     *  `macro.members`/`macro.ports`. Pure graph+macro mutation — no undo recording of its own;
+     *  every caller (ungroupSelection(), for every port of a dissolving macro; deleteMacroPortNode(),
+     *  for one port while its macro stays alive) wraps this in its own recordGraphAndMacroChange
+     *  transaction. NOT used by removeMacroPort() (Configure I/O's own "delete this port" action),
+     *  which intentionally keeps its drop-the-cables semantics — see deleteMacroPortNode()'s own
+     *  comment for why splicing there is a deliberately deferred proposal, not this stage's call. */
+    void spliceOutMacroPort(synth::Macro& macro, const juce::String& portNodeUuid);
+
+    /** Default name for an auto-created port: the internal module's own name plus the jack it
+     *  fronts (its getInputPortLabel/getOutputPortLabel at `visibleJack`) — e.g. "Filter Cutoff",
+     *  not "Input 2". `internalMb` may be null (defensive); MIDI ports skip the jack label
+     *  entirely, since a MIDI port has no jack concept to name (§5.1). */
+    static juce::String autoMacroPortName(ModuleBase* internalMb, bool isInput, int visibleJack, bool isMidi);
+
+    /** Launches the real "Create ports for the crossing cables?" modal
+     *  (synth::ui::MacroAutoPortPromptDialog) and calls `respond(createPorts, remember)` once the
+     *  user picks. Only reached from requestGroupSelectionIntoMacro() when
+     *  macroAutoPortModalForTest is unset — see that member's comment. */
+    void showMacroAutoPortModal(std::function<void(bool createPorts, bool remember)> respond);
+
+    MacroAutoPortPreference macroAutoPortPreference_ = MacroAutoPortPreference::Unset;
 
     std::vector<AudioEngine::ModulationDisplayInfo> cachedModDisplayInfo;
     std::vector<AudioEngine::ModulationRouting> cachedModRoutings;

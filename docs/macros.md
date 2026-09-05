@@ -6,8 +6,33 @@ This document covers two things:
 
 1. **What shipped (P8-12)** — the presentation-only container that exists today.
 2. **The Macro I/O design (P8-14)** — the decided model for how a Macro gains configurable
-   inputs and outputs, which **P8-15 implements**. This half is a *design*, not a description of
-   working code; nothing in section 3 onward exists yet.
+   inputs and outputs, which **P8-15 implements**. §3-6 are the design; §7 tracks implementation
+   progress against it and is the accurate record of what actually exists — all six items are
+   built as of P8-15d, and a founder review afterwards produced a further round of presentation
+   fixes layered on top without reopening the model itself (§5.3/§5.4, §7 items 3-5): a port no
+   longer renders as a full module card, collapsed OR expanded — see "How a port is drawn" below.
+   The same review also added a menu-reachability fix (§5.8): a macro member module's own
+   right-click menu now offers the macro's actions too, not just the collapsed card and the
+   expanded hull. A further founder-review pass (fix F5, §7 item 7) added the biggest behaviour
+   change since P8-15d: grouping a selection that has a cable crossing its boundary can now
+   auto-create matching ports for those cables instead of leaving them wired straight to an
+   interior member, behind a remembered tri-state preference. A second founder-review pass on that
+   feature (fix G3, §7 item 7) taught the auto-port splice to also handle a crossing modulation/CV
+   cable wrapped in a hidden `AttenuverterModule` node — genuinely external ones now get a port too;
+   only the case where BOTH the real mod source and target are being grouped together stays
+   un-ported, since the attenuverter can never itself be a member. That same second pass also
+   shrank the docked port widget itself (fix G4, §5.3's "Rendering" note) after founder feedback
+   that it read as a small module rather than a boundary jack, and added a visible collapse button
+   to the EXPANDED hull (fix G5, §5.8) — the same asymmetry the P8-12 collapsed card's own expand
+   chevron was built to fix, now closed on the other side of the toggle. That same pass also fixed
+   every user-facing member COUNT/LIST to report modules rather than raw graph membership (fix G6,
+   §7 item 4 note) — a port node is a genuine `Macro::members` entry (load-bearing, per §5.1), but
+   it is not a module the user put in the box, and the two are different quantities. A third
+   founder-review pass, raised after using the shipped feature, decided the one open question the
+   second pass had left for him: **Ungroup now removes every one of a macro's ports and splices
+   the cable each one proxied straight back together** (fix G7, §7 item 8), so Group then Ungroup
+   is a true round trip, and a port node also gained its own right-click "Delete Port" affordance
+   for the case where its macro is otherwise still alive.
 
 ---
 
@@ -166,35 +191,66 @@ addressing question answered first.
 
 ### 5.1 Node types
 
-Two additions to `ModuleType`, both **internal-only** with the same three exclusions as
-`TimelineMidiSource` / `RecordTap` / `TimelineAudioSource`:
+**Four** additions to `ModuleType` (§7 item 1, **implemented**), all **internal-only** with the
+same three exclusions as `TimelineMidiSource` / `RecordTap` / `TimelineAudioSource`: no library
+row, no replace-menu entry, never authorable by a model (`kNonAuthorableModuleTypes`, §6).
 
-- `MacroInlet` — "Macro In". One logical port in, one out; passes its input through unchanged.
-- `MacroOutlet` — "Macro Out". Same, in the other direction.
+- `MacroInlet` — "Macro In". Audio/CV. One logical port in, one out; passes its input through
+  unchanged.
+- `MacroOutlet` — "Macro Out". Audio/CV, the mirror of MacroInlet.
+- `MacroMidiInlet` — "Macro MIDI In". MIDI, zero audio channels.
+- `MacroMidiOutlet` — "Macro MIDI Out". MIDI, the mirror of MacroMidiInlet.
 
-They are created by the **macro port flow**, never by the module library and never by the
-replace menu. An inlet/outlet always belongs to exactly one macro; it is a member of that macro's
-`members` list like any other node, and is dissolved with it.
+MIDI is a **separate pair of node types**, not a "kind" flag on `MacroInlet`/`MacroOutlet` —
+confirmed against the actual `TimelineMidiSourceModule`/`TimelineAudioSourceModule` code (the
+Track In / Track Audio precedent this follows) rather than assumed from the type names. The
+load-bearing reason there is a **construction-time channel-shape difference**:
+`ModuleBase(name, 0, 0)` for a MIDI node vs `ModuleBase(name, N, N)` for an audio/CV one, which a
+single type would have to branch its bus layout on — exactly what the fixed-channel-count
+invariant makes awkward, since the layout is frozen the moment the constructor runs. It is *not*
+because a MIDI `processBlock` and an audio `processBlock` inherently differ (here both bodies are
+near-identical pass-through no-ops); it is specifically that a MIDI port carries no channel shape
+at all — no Mono/Stereo/Poly-N — just `acceptsMidi()`/`producesMidi()`, like `ExternalMidiModule`
+and `PolyMidiModule`.
 
-Each carries a user-visible **port name** ("Pitch In", "Wet Out") in its extra state — this is
-the name that appears on the collapsed card's jack and in the expanded hull's edge label.
+All four are created by the **macro port flow** (§7 item 3, **done**), never by the module library
+and never by the replace menu. An inlet/outlet always belongs to exactly one macro; it is a member
+of that macro's `members` list like any other node, and is dissolved with it by an action that
+actually deletes members (`GraphEditor::deleteMacroAndMembers`). **Ungrouping still never deletes
+an ordinary module** — but as of founder-review fix G7 (§7 item 8) it DOES remove every one of the
+macro's own port nodes, splicing back the cable each one proxied; a port is a boundary jack, not a
+module the user put in the box, and once the boundary (the macro) is gone a port node has no
+meaningful state left to preserve. See §5.4/§7 item 8 for the full splice-out design.
+
+Each carries a user-visible **port name** ("Pitch In", "Wet Out") — this lives on the macro's own
+`MacroPort` entry (§5.2), not in the node's extra state, since the name is macro-level
+presentation and the port-creation flow (§7 item 3) is what actually wires a name to a node.
 
 ### 5.2 Port set and ordering
 
-`synth::Macro` gains an ordered list of port descriptors:
+`synth::Macro` gains an ordered list of port descriptors (§7 item 2, **implemented**, including
+`toVar`/`fromVar` and `retainOnly` reconciliation):
 
-```
+```cpp
+enum class MacroPortKind { AudioCV, Midi };
+
 struct MacroPort {
-    juce::String nodeUuid;   // the MacroInlet / MacroOutlet node
+    juce::String nodeUuid;   // the MacroInlet/MacroOutlet (or MIDI variant) node this port fronts
     bool         isInput;
     juce::String name;
     int          order;      // draw order on the card, user-reorderable
+    MacroPortKind kind;      // which pair of node types this port is (§5.1) — kept here too so a
+                             // macro's port list can be rendered with no per-port graph lookup
 };
 ```
 
-Membership stays keyed by uuid. The port list is derived state in the sense that the nodes are
-the truth, but the **order and names** are macro-level presentation and belong on the macro,
-next to `name`/`colour`/`bounds`.
+Membership stays keyed by uuid, and every port's `nodeUuid` must also appear in the owning
+macro's `members` — `MacroSet::fromVar` rejects a saved macro where that does not hold, and
+`retainOnly`/`removeMemberEverywhere` drop a port the moment the member it fronts is removed, by
+either path. The port list is derived state in the sense that the nodes are the truth, but the
+**order, name and kind** are macro-level presentation and belong on the macro, next to
+`name`/`colour`/`bounds`. `"ports"` is optional in a saved macro's JSON — absent parses as no
+ports, which is what every macro saved by P8-12 already looks like.
 
 ### 5.3 Poly and stereo — a port's shape is chosen at creation and then fixed
 
@@ -211,27 +267,122 @@ a real DSP module (`ModuleBase::hasStereoOutputPairShape` derives it from channe
 from a per-module registration) and the wrong frame for a node we construct on demand: a port is
 created *before* it is wired, so at construction time there is nothing to inherit from.
 
-Shape is therefore an **input to port creation**, supplied one of two ways:
+Shape is therefore an **input to port creation**, supplied one of these ways:
 
 - **From the configure-I/O modal** — the user picks Mono, Stereo or Poly-N when adding the port.
   This is the primary flow and the plain reading of "open a modal to configure inputs/outputs".
-- **From a cable** — dragging a wire onto a collapsed card's boundary creates a port whose shape
-  is that of the cable being dropped. A convenience path; the shape is genuinely known here.
+  `StereoCollapsed` (below) is never one of the choices here — hand-picking a stereo port always
+  means the two-jack `Stereo` shape.
+- **From a cable** — dragging a wire onto a collapsed card's boundary creates a port matching the
+  cable's direction/kind, wired to the EXTERNAL end of the drag. A convenience path; the shape is
+  genuinely known here, from the dragged cable's own poly/stereo fan. **Not yet implemented
+  (P8-15b): the cable-drop path currently always creates Mono** — shape inference from the
+  cable's fan is deferred, not ruled out; a future increment can read it the same way
+  `resolvePolyLink`/`getJackTargets` already do elsewhere in `GraphEditor.cpp`. Until then the
+  modal is the only way to get Stereo/Poly-N. This path never wires anything on the macro's
+  INTERIOR side, regardless of shape inference ever landing — the macro is collapsed, so there is
+  no member visible to pick a target from; only the modal, or a manual cable drawn after expanding
+  the macro, connects a port to a specific member.
+- **From nothing (a bare "Add Input"/"Add Output" in the modal)** — Mono, Stereo or Poly-N, picked
+  explicitly; today the modal is the only way to reach Stereo/Poly-N, since the cable-drop path
+  above is Mono-only for now.
+- **From grouping a selection with a crossing cable** (founder-review fix G2/F5, §7 item 7) — the
+  ONLY source of `StereoCollapsed`. `GraphEditor::buildMacroPortCrossingPlan` derives the shape
+  from the internal jack the crossing cable actually lands on, never from a user choice.
 
 Given a shape, the node is constructed so that the existing rules produce the right result with
 no special-casing:
 
-- **Mono** — 1-in/1-out.
-- **Stereo** — constructed with the split-block layout so the second audio leg sits on a
-  dedicated `kRightBase` block, never on ch1. `hasStereoOutputPairShape` then reports true for it
-  exactly as it does for an Oscillator or Filter, and the Dual I/O affordance appears through the
-  ordinary inherited path.
-- **Poly-N** — declares its voice span and marks the lowest raw channel `isPolyGroupHead` in its
-  `LogicalPort` mapping, so a poly-bus wire crossing the boundary is drawn and counted as one
-  poly bus rather than N separate cables.
+- **Mono** — raw ch0 is the node's one visible jack.
+- **Stereo** — raw ch0 (Left) and a dedicated `kRightBase` raw channel (Right) are the node's two
+  visible jacks — the split-block convention every other stereo-capable module in this codebase
+  follows (never ch1) **when its two legs sit on SEPARATE visible jacks**, applied here even though
+  a Macro In/Out has no CV on ch1 to protect, because the convention is about consistency across
+  the codebase, not just this module's own channel layout. Unlike a real DSP module's Dual I/O
+  toggle, there is no runtime collapse/expand affordance: the shape is fixed at creation (§5.3's
+  own rule), so a Stereo port always shows both legs — a toggle that could hide one would itself be
+  a form of "the shape changes after creation," which is exactly what this section rules out.
+  `hasStereoOutputPairShape`/`hasDualIOParameter()` are NOT involved (they key off the module's
+  fixed *raw* channel count, which a Macro In/Out never varies from `kMaxChannels`);
+  `rightAudioLegChannel()` is overridden directly instead, which is what a peer module's own
+  stereo-pair auto-complete (`completeStereoPairConnections`) actually reads. Reachable ONLY from
+  the Configure I/O modal, and from `buildMacroPortCrossingPlan`'s merge pass for a Dual-I/O-ON
+  crossing (§7 item 7) — both cases where the module being fronted genuinely shows two jacks.
+- **StereoCollapsed** (founder-review fix G2, §7 item 7) — raw ch0 (head, `polyVoiceSpan` 2) and
+  raw ch1 (follower) are CONTIGUOUS and both map to the SAME ONE visible jack. This is the OTHER
+  stereo shape already in this codebase — `ModuleBase::mapStereoPairOutput`'s Dual-I/O-OFF branch,
+  which every FX module (Delay, Reverb, ...) defaults to: one "Audio" jack whose raw ch0/ch1 are a
+  contiguous pair, not two separately-jacked legs. The "never ch1" sentence above governs the
+  two-jack `Stereo` shape, where a separately-jacked right leg on ch1 would collide with the CV
+  ch1 already reserved on the split-block voice modules (Oscillator/Filter/VCA); it does not
+  extend to a COLLAPSED pair, which is the FX pattern every collapsed stereo module in this
+  codebase already uses on ch0/ch1, ports included. Contiguity here is load-bearing, not
+  cosmetic: `GraphEditor::getJackTargets()` and every caller that expands a `JackTarget` walk
+  `rawHeadChannel .. + voiceSpan - 1` assuming adjacency, so a span-2 head at ch0 paired with a
+  follower on the SPLIT-block `kRightBase` (as `Stereo` uses) would make that expansion target
+  ch1 — inactive under this shape — and leave the real second leg's cable unreachable from any
+  jack: audible, but with no jack to unplug it from, exactly the "hidden cable" failure
+  `dropRoutingsOnHiddenJacks`/`dropHiddenRightLegConnections` exist to prevent elsewhere.
+  **Never selectable by hand** — the Configure I/O modal has no entry for it (§5.3's
+  configure-I/O bullet below covers Mono/Stereo/Poly-N only); it exists purely so
+  `GraphEditor::buildMacroPortCrossingPlan` can splice a port that mirrors an internal module's
+  own collapsed jack (a founder-reported bug: grouping FX modules with one "Audio" jack each
+  produced two-jack Stereo ports, mismatching the module they front). A port already carrying
+  this shape still shows as "Stereo" in the Configure I/O modal (it IS a stereo pair), but the
+  modal can never re-select it — picking any shape there, "Stereo" included, is a real,
+  deliberate conversion to the two-jack shape, one undo step like any other shape change (§7
+  item 5).
+- **Poly-N** — every raw channel `0..voiceCount-1` maps to the SAME single visible jack, raw ch0
+  marked `isPolyGroupHead` with `polyVoiceSpan == voiceCount` in its `LogicalPort` mapping, so a
+  poly-bus wire crossing the boundary is drawn and counted as one poly bus rather than N separate
+  cables.
 
 A cable whose shape does not match the port it is dropped on is refused the same way any
 mismatched connection is today — not silently adapted at the boundary.
+
+**Implementation note (P8-15b, done).** `MacroInletModule`/`MacroOutletModule` use the
+declare-a-maximum-and-vary-the-visible-count mechanism `Source/Modules/CLAUDE.md` documents for
+Audio Input and Hosted Plugin: the node always carries `kMaxChannels` (8) raw channels for its
+whole lifetime (never renegotiated — invariant (a), honoured exactly), and
+`mapInputChannel`/`mapOutputChannel` overrides (identical in both directions — the node is a
+symmetric pass-through) decide, from a `shape_`/`voiceCount_` pair set ONCE by
+`setPortShape()` right after construction and persisted through `getExtraState()`/
+`setExtraState()` (trusted-path only, like every module's `"state"`), which raw channels are
+active and how they map to visible jacks. This is what let §7 item 3 add Stereo/Poly-N with **no
+new factory type and no migration for a Macro In/Out already on disk**: a pre-P8-15b save has no
+`"shape"` key at all and parses as Mono, exactly the shape it already behaved as.
+
+**Rendering (founder-review fix F2, docs/macros.md §7 items 3/4).** A port node is a real
+`ModuleComponent` — selection, hit-testing, cable drag/drop, undo and serialisation all key off
+that, unchanged — but it no longer PAINTS or SIZES like an ordinary module card, expanded or
+collapsed. `ModuleComponent::layoutMacroPortWidget()` sizes it purely from the shape's own visible
+jack count: one row (`kMacroPortWidgetHeaderY + kMacroPortWidgetBottomPad`) for Mono, Poly-N,
+`StereoCollapsed` (founder-review fix G2 — deliberately ONE row despite carrying two raw channels,
+§5.3's `StereoCollapsed` bullet) or a MIDI port (all of which have exactly one visible jack a side,
+a MIDI port's fanned Poly-N bus included), and a second row (`+ kMacroPortWidgetRowStep`) only for
+the two-jack `Stereo` shape. See §5.4 for where that widget is PLACED.
+
+**Sizing (founder-review fix G4).** A second founder pass, hands-on with a macro containing a
+Delay and a Reverb, called the widget "too large" next to the modules it fronts. The fix is
+tuning, not redesign: `kMacroPortWidgetWidth`/`kMacroPortWidgetHeaderY`/`kMacroPortWidgetRowStep`/
+`kMacroPortWidgetBottomPad` (`ModuleComponent.h`) shrank from a 104x26 (Mono) box to 92x21 — about
+a 29% cut in drawn area, matched by `paintMacroPortWidget()` drawing a 7px jack dot (was 10px), a
+4px corner radius (was 6px) and a 9.5f name font (was 10.5f). None of that touches
+`getPortForPoint()`'s hit test, which stays the same generous radius every module's jack uses —
+the drawn dot and the clickable target are two different knobs, and a "sleek" pass that shrinks
+both is a worse regression than the one it fixes. The name still fits a realistic port name
+("Delay 1 Audio") at full, unscaled size at the new width; `drawFittedText` (compress-then-ellipsise,
+never mid-glyph clip) is the fallback for a longer name, not the expected path.
+
+**Text inset (post-G4 polish fix).** G4's shrink took the name's own text area (`getLocalBounds()`
+`.reduced(n, 2)` in `paintMacroPortWidget()`) from 16px down to 12px along with everything else,
+but didn't re-derive it against the ALSO-shrunk jack dot: at `n=12`, the 7px dot centred at
+`x=10`/`width-10` has its outer edge at 13.5px from the widget's edge — inside a 12px text area. A
+render through the real theme showed the collision it predicts: on a Mono widget showing
+"Delay 1 Audio", the left dot visibly overlapped the "D", and the text crowded the right dot too.
+The fix widens the inset back to 16 (clearing the dot's outer edge by 2.5px each side) WITHOUT
+moving the dot or the widget's own width/height — `RealisticPortNameFitsWithinTheWidgetAtFullUnscaledSize`
+still holds at the smaller resulting text budget (92 - 2*16 = 60px) for a realistic name at 9.5f.
 
 ### 5.4 Cable rendering across the boundary
 
@@ -240,14 +391,36 @@ mismatched connection is today — not silently adapted at the boundary.
 | Case | Today (P8-12) | With ports (P8-15) |
 | --- | --- | --- |
 | Both endpoints inside one collapsed macro | dropped | dropped (unchanged) |
-| Crosses a collapsed boundary | anchored to the card edge via `projectToRectEdge` | anchored to the **card jack** of the inlet/outlet it passes through |
+| Crosses a collapsed boundary, through a port | anchored to the card edge via `projectToRectEdge` | anchored to the **card jack** of the inlet/outlet it passes through |
+| Crosses a collapsed boundary, straight to an interior member (no port) | anchored to the card edge via `projectToRectEdge`, facing the other endpoint | anchored to the card's **left edge if entering** the macro, **right edge if leaving** it (founder-review fix F3, below) — never facing-the-other-endpoint |
 | Both endpoints outside | untouched | untouched |
-| Expanded macro | untouched | untouched; inlets/outlets draw as ordinary nodes inside the hull |
+| Expanded macro | untouched | untouched; inlets/outlets draw as the DOCKED port widget (founder-review fix F2, below) rather than an ordinary card |
 
 A cable that crosses a collapsed boundary **without** going through an inlet/outlet — i.e. wired
-straight to an interior member — keeps today's `projectToRectEdge` treatment. That case does not
-disappear and must not be treated as an error: a macro is a grouping first and a black box
-second, and the user is allowed to wire into its guts.
+straight to an interior member — keeps landing on the card's edge, but not via `projectToRectEdge`
+any more. That case does not disappear and must not be treated as an error: a macro is a grouping
+first and a black box second, and the user is allowed to wire into its guts.
+
+**Founder-review fix F3: the no-port edge anchor is DIRECTIONAL, not facing.** The original
+`projectToRectEdge` treatment picked whichever edge of the card's rectangle faced the cable's
+other endpoint — a ray from the card's centre toward that endpoint, projected onto the rectangle's
+perimeter. For a member wired straight through the boundary that reads as arbitrary: a founder
+screenshot showed two cables, one entering and one leaving a collapsed macro, both landing on the
+card's TOP edge at a single point, because the other endpoint of each happened to sit above the
+card. The fix keys the edge off the cable's **direction relative to the macro**, exactly like a
+real port jack already does (inputs on the left, outputs on the right):
+
+- the macro is the cable's **source** (signal *leaving* it) → anchor on the card's **right** edge;
+- the macro is the cable's **destination** (signal *entering* it) → anchor on the card's **left**
+  edge.
+
+The Y coordinate is still derived from the old facing projection — `projectToRectEdge` is still
+called, just to read off a Y rather than a full point — so several crossing cables on the same
+side keep spreading vertically instead of collapsing onto one pixel; that Y is then clamped into
+the same vertical jack band a real port's jack lays out in (`kMacroCardJackBandTop`/`Bottom`). X
+lands exactly on the card's boundary (`cardBounds.getX()`/`getRight()`), not inset the way a real
+port jack is (`kMacroCardJackInsetX`), so a no-port edge anchor never sits under a case-(a) port
+dot occupying the same side.
 
 The consequence is worth stating plainly, because it bounds what a macro is:
 **a macro's encapsulation is advisory, not enforced.** Ports are the *intended* interface, not the
@@ -255,6 +428,96 @@ The consequence is worth stating plainly, because it bounds what a macro is:
 is not a sealed unit, and no part of the engine will stop a cable reaching past its boundary.
 Enforcing encapsulation would require the interior to be a genuinely separate graph, which is
 Candidate A and was rejected in §4.
+
+**Implemented (P8-15c; edge-anchor case redirected by F3).** The collapsed card draws one jack per
+configured `MacroPort` (`GraphEditor::macroCardPortLayout`) — inputs evenly spaced down the left
+edge, outputs down the right, in `order`. That layout is the ONE definition three places read:
+`MacroCardComponent::paint` draws the dot, `GraphEditor::endConnectionDrag` hit-tests a drop
+against it (`macroCardPortForPoint`), and `rebuildVisibleCables()` anchors a boundary cable through
+a port at that same jack. A cable straight to an interior member instead gets the directional edge
+anchor above, per the table above — the two treatments coexist and are told apart by which
+endpoint node the cable resolves to, a port's fronting node or an ordinary member.
+
+Dropping a cable exactly on an existing port's jack wires straight into that port's node, in place
+of always minting a fresh one; a jack whose direction or kind does not match the drag is refused,
+the same as a mismatched drop on an ordinary module jack. Missing that jack still falls through to
+the whole-card "shape from a dropped cable" convenience (§5.3).
+
+**Ungrouping a macro removes its ports and splices their cables back together (founder-review fix
+G7, §7 item 8).** This section originally described the opposite — a port's fronting node
+surviving ungroup as an ordinary ex-member, its connections untouched, on the theory that
+ungrouping (like grouping) is purely a `MacroSet` metadata change. A second founder review pass,
+hands-on with the shipped feature, decided otherwise: `ungroupSelection()` now calls
+`GraphEditor::spliceOutMacroPort()` for every one of the macro's ports BEFORE dissolving the
+`Macro` record — disconnecting the port node, reconnecting its external endpoint(s) directly to
+its internal endpoint(s) on the original raw channels (the full cross product, so fan-in/fan-out
+reconnect completely), and removing the node — all inside the SAME undo step as the record's
+removal. A macro's ORDINARY members are still never touched by ungroup; only its ports are. See §7
+item 8 for the full algorithm, the pass-through verification behind it, and why no provenance
+field was needed to treat auto-created and hand-added ports identically.
+
+Because this makes ungroup a genuine graph edit for the first time, it also now runs through the
+same post-mutation path `deleteSelection()` does (`updateComponents()` inside the transaction,
+firing `onGraphStructureChanged` -> the timeline reconcile pass) — see §7 item 8.
+
+**The docked port widget (founder-review fix F2).** Founder review on the first Macro I/O cut:
+*"We're now creating separate modules for each i/o, instead I had in mind a small widget like i/o
+on the top left/right of the macro box"* — and separately, that a port's chosen name *"is not
+shown on the module UI that's presented; ... it should be presented."* Both are rendering/placement
+fixes, not a model change: the four proxy node types, `MacroPort`, and "a port is a real member of
+its macro" are all exactly as §4/§5.1-§5.3 decided.
+
+- **Presentation.** `ModuleComponent::paintMacroPortWidget()` draws no header chrome and no body —
+  a small row tinted with the owning macro's `colour`, its jack(s) (§5.3's rendering note) and the
+  port's own `MacroPort::name`, resolved LIVE every paint via
+  `GraphEditor::macroPortOwnerFor(nodeId)` (walks the node's uuid to its macro, then to the
+  `MacroPort` fronting it) rather than cached on the node — a rename in the Configure I/O dialog is
+  therefore reflected on the very next repaint, with nothing to invalidate. The same name is drawn
+  next to the matching jack on the COLLAPSED card too (`MacroCardComponent::paint`, reading the
+  identical `name` field off `GraphEditor::macroCardPortLayout`), elided if the card is too narrow —
+  an expanded and a collapsed macro read a port's name the same way.
+- **Placement.** `GraphEditor::dockMacroPortWidgets()` — called at the end of every
+  `updateComponents()` pass, and again after a single-module drag settles (`finalizeModuleDrag`) —
+  positions each EXPANDED macro's port widgets against `macroHullBounds()`: inputs down the LEFT
+  edge, outputs down the RIGHT, both starting near the top, ordered by `MacroPort::order` — the
+  SAME order `macroCardPortLayout()` already uses for the collapsed card, so a port's expanded
+  position and its row in the Configure I/O dialog never disagree. A widget's canvas position is
+  therefore fully DERIVED, never independently dragged — `ModuleComponent::mouseDown` refuses to
+  arm a body drag or a selection-click for a macro-port node (mirroring the Attenuverter's own "no
+  header, nothing to click" early return), so nothing on the canvas can desync it from the hull.
+- **The hull-feedback trap.** `macroHullBounds()` unions only NON-PORT members — a port's own
+  fronting node is excluded, because if it counted toward the bounds that DEFINE the hull, docking
+  it against that hull would grow the hull, which would push it out again, every layout pass. A
+  macro made ENTIRELY of ports (no ordinary member) has nothing left to union; that case falls back
+  to the macro's own persisted `bounds` (the same footprint its collapsed card uses) rather than
+  leaving its ports with no edge to dock against. `applyMacroCollapsed`'s own "seed the collapsed
+  card at the current member bounding box" union (§1's expand/collapse transition) excludes port
+  members for the identical reason — folding a docked-left input widget into that union would seed
+  the collapsed card noticeably left of where the real members sit, growing worse with every
+  additional input port.
+- **Group drag stays consistent, but not for free — `finalizeSelectionDrag()` re-docks
+  explicitly.** A WHOLE-macro drag (the collapsed card, or a selection built through
+  `selectMacro()`) moves every member — ports included — by the identical delta via
+  `beginSelectionDrag`/`dragSelectionBy`/`finalizeSelectionDrag`, exactly as any other multi-select
+  drag; because that delta (and `finalizeSelectionDrag`'s own snap/de-overlap offset) is uniform
+  across the whole group, the hull moves by the same amount the ports just moved by, so their
+  hull-relative offset is preserved automatically in that case. A PARTIAL selection has no such
+  guarantee: a marquee can catch a port widget together with some unrelated module without the
+  macro's other (non-port) members, in which case the hull does not move by the delta the port
+  just moved by — that would desync it. `finalizeSelectionDrag()` therefore calls
+  `dockMacroPortWidgets()` unconditionally at the end (idempotent — a no-op for the whole-macro
+  case, which already agrees; a real correction for the partial-selection case), the same as
+  `updateComponents()`/`finalizeModuleDrag()` above.
+- **Not individually selectable or draggable by a LEFT click — but RIGHT-click gets its own menu
+  (founder-review fix G7, §7 item 8).** A port widget's body still refuses any left click (no
+  selection, no drag): making it draggable would need its own suppression logic distinct from
+  "part of a macro-wide selection," for a widget whose whole point is that its position is not the
+  user's to set — `dockMacroPortWidgets()` would just snap it back on the next layout pass anyway.
+  A right click is the one exception: it opens `ModuleComponent::buildMacroPortContextMenu()`
+  ("Delete Port" always; "Rename Port..."/"Configure I/O..." when the port's macro is still alive)
+  rather than nothing — before G7 a port node had no delete affordance of its own at all, and
+  Configure I/O (rename/reorder/delete/shape-change, still there, unchanged) was the only UI
+  surface for it, full stop.
 
 ### 5.5 Latency
 
@@ -299,6 +562,113 @@ the plugin already round-trips (`docs/architecture.md`, plugin state format). Th
 The one existing rule that still applies: an over-wide hosted plugin is **refused, never
 truncated** — grouping one into a macro changes nothing about that.
 
+### 5.8 The macro menu's reachable entry points
+
+`GraphEditor::buildMacroMenu` is the ONE builder for a macro's own actions (Expand/Collapse,
+Rename, Change Colour, Configure I/O, Bypass/Mute, Save as Snippet, Ungroup, Delete Macro &
+Modules). There are three ways to reach it, all funnelling through it rather than each keeping its
+own copy:
+
+1. **The collapsed card's own right-click** (`MacroCardComponent::showContextMenu`) — the original
+   P8-12 entry point. It pre-selects nothing itself before this fix; it passes its own inline-rename
+   callback as `buildMacroMenu`'s `renameAction` override, which the other two entry points below
+   don't have a card to host. Its "Ungroup"/"Save as Snippet..." semantics change with this fix —
+   see below.
+2. **Right-clicking empty canvas inside an expanded macro's hull** (`GraphEditor::mouseDown` ->
+   `macroHullAt()`), reachable without collapsing first (P8-12 follow-up). This site calls
+   `selectMacro(hullMacroId, false)` before showing the menu — see below for why, and why that call
+   is now redundant but left in place.
+3. **Right-clicking a MEMBER MODULE itself** (`ModuleComponent::buildModuleContextMenu`,
+   founder-review item 4: *"Right clicking a module in the macro should also show the macro
+   options"*) — appends `buildMacroMenu()`'s items as a "Macro: `<name>`" submenu on the module's
+   own right-click menu, when and only when the clicked module resolves to a macro via
+   `MacroSet::findByMember()`. A module in no macro sees no change to its menu at all. This site
+   deliberately does **not** pre-select the macro at click time: a member module's own right-click
+   retargets the *module* selection (so its own Copy/Duplicate/Delete Module items act on what was
+   clicked), and macro-wide selection only happens if and when a macro submenu item is invoked.
+
+Only entry point 2 pre-selected the macro before this fix; entry points 1 and 3 did not. That
+matters because `buildMacroMenu()`'s "Ungroup" and "Save as Snippet..." act on the **current
+selection** (`ungroupSelection()` / `onSaveSnippetRequested`), not on the macro id the menu was
+built for — so `buildMacroMenu()` itself now selects that macro (`selectMacro(macroId, false)`)
+immediately before running either one, rather than leaning on each caller to have pre-selected it.
+This is a real behaviour change for entry point 1 (the collapsed card), not just plumbing for the
+new entry point 3: previously, right-clicking one collapsed card while *other* macros' cards were
+also selected and choosing "Ungroup" would dissolve every selected macro, not just the one
+right-clicked; it now dissolves only the card that was actually clicked, matching what a user
+reading "Ungroup" off that card's own menu would expect. Entry point 2's own `selectMacro()` call —
+`GraphEditor::mouseDown`'s own comment calls it "load-bearing, not cosmetic" because
+`mouseUp` deliberately preserves whatever was selected on a right-click (so the canvas menu's Paste
+keeps working), and without it "Ungroup"/"Save as Snippet..." would silently act on whatever was
+selected before the click — is now redundant, since `buildMacroMenu()` handles that itself; it is
+left untouched here to keep this fix's diff scoped to the actual bug, not to make a UI-visible
+statement. Without this fix, invoking "Ungroup" from a member's macro submenu (entry point 3) while
+a *different* macro's module was also selected would dissolve both macros instead of only the one
+whose submenu was opened — `Tests/MacroContainerTests.cpp`'s
+`MacroMemberContextMenu.UngroupFromTheSubmenuDissolvesTheRightMacroDespiteAMixedSelection` pins
+this exact case.
+
+**Testing entry point 3 headlessly.** The `MacroMemberContextMenu` suite drives a real synthesised
+right-click `juce::MouseEvent` into `ModuleComponent::mouseDown()` — the actual gesture/hit-test/
+retarget entry point, not `buildModuleContextMenu()` called cold — because testing the layer beneath
+`mouseDown()` cannot catch a broken hit-test. That real body right-click branch calls
+`juce::PopupMenu::showMenuAsync()`, which opens a genuine popup and, on a headless (no-display) Linux
+CI runner, segfaults inside `juce::PopupMenu::HelperClasses::MenuWindow::getParentArea` — surviving on
+macOS/Windows is exactly why this shipped green locally and red only in CI. `ModuleComponent` fixes
+this with the same seam `TimelineTrackHeaderComponent` already uses for its own non-headless picker:
+a `showContextMenuHook_` member (defaulting to the real `showMenuAsync()` call) that mouseDown()'s
+right-button branch calls instead of showing the menu directly, plus a public
+`setShowContextMenuHookForTest()` a test uses to capture the menu the real gesture built without ever
+opening it. This is strictly stronger than asserting against a second, separately-built
+`buildModuleContextMenu()` call: the test now inspects the exact menu object the click itself
+produced. `MacroMemberContextMenu.RightClickFiresTheContextMenuHookExactlyOnce` guards the wiring
+itself, so a future revert to a direct `showMenuAsync()` call fails there first rather than only as an
+unexplained Linux-only segfault.
+
+### 5.9 The expanded hull's collapse button (founder-review fix G5)
+
+The COLLAPSED card has always drawn a visible expand chevron
+(`MacroCardComponent::getExpandButtonBounds`) precisely because the right-click "Expand" menu item
+alone left nothing on the card that *looked* clickable — a user had to already know the menu
+existed, or find the undocumented double-click, to get back in. The second founder-review pass
+pointed out the identical gap on the other side of the toggle: *"add a button to collapse it -
+currently there's only a button to expand."* An EXPANDED macro's only routes back to collapsed were
+the right-click menu (§5.8) and an undocumented double-click on the name chip
+(`GraphEditor::mouseDoubleClick`'s `macroChipAt` branch, which renames rather than collapses) — and
+the chip itself, while mouse-interactive, reads as a drag handle, not a collapse control.
+
+**The fix mirrors the card's own chevron exactly**, one rung up: `macroCollapseButtonBounds()`
+(`GraphEditor.{h,cpp}`) is the ONE definition of a small square hit zone at the RIGHT end of the
+same top-of-hull row `macroChipBounds()` occupies at the left end — the two together read as one
+row-spanning control, chip on the left for "drag/rename", button on the right for "collapse".
+Painted as a filled `juce::Path` triangle, not a text glyph, for the same reason the card's own
+chevron is (`check-nonascii-literals.test.sh` rejects a chevron character outright) — pointing UP,
+the opposite direction from the card's expand chevron (which points down), so the pair reads as
+opposite ends of one toggle rather than two unrelated icons. `macroCollapseButtonAt()` is the
+matching hit-test, called from `GraphEditor::mouseDown` BEFORE the chip check: the two rectangles
+never actually overlap (the chip's width is a short label plus a fixed pad, comfortably clear of
+the hull's right edge for any real macro), but the button is still checked first and returns
+immediately, so it can never be shadowed by the chip's own drag gesture even in a future geometry
+change. Both are empty (like `macroChipBounds()`) whenever `macroHullBounds()` is — collapsed,
+unknown, or unresolvable — so the button never appears on a collapsed card (which already has its
+own chevron) or for a macro with nothing to draw.
+
+**The click goes through `setMacroCollapsed(macroId, true)`** — the exact same call
+`buildMacroMenu`'s "Collapse" item and the collapsed card's own chevron (`setMacroCollapsed(...,
+false)`) both use, so there is only ever one code path that can flip a macro's collapsed state, and
+it is one `recordGraphAndMacroChange` undo step regardless of which of the three affordances
+triggered it. The button click does not touch selection — matching the card's own chevron handler,
+which also just toggles state and returns — so clicking it while other things are selected leaves
+that selection alone rather than surprising the user with an implicit re-select.
+`Tests/MacroContainerTests.cpp`'s `MacroCollapseButton` suite drives a real synthesised
+`juce::MouseEvent` into `GraphEditor::mouseDown()` (not a direct `setMacroCollapsed()` call — the
+whole point of this fix is the hit-test, which testing the layer beneath `mouseDown()` cannot
+catch, the same rule that already caught a real bug on this branch) and covers: the button
+collapsing the macro and arming neither a selection drag nor a selection change, a click just
+outside its bounds not collapsing, the button and chip never overlapping (including a tight
+two-module macro — the degenerate case a real macro's hull ever gets that narrow), and collapsing
+via the button being one undo step that a single undo re-expands.
+
 ---
 
 ## 6. AI authorability
@@ -312,17 +682,19 @@ provider-supplied `uuid` is ignored (`adoptUuidIfTrusted`), so provider-authored
 never resolve to anything real even if it were let through. Refusing it keeps that true
 regardless of future changes.
 
-`MacroInlet` and `MacroOutlet` join the internal-only set and get the **same three exclusions**:
-no library row, no replace-menu entry, **never authorable by a model**.
+`MacroInlet`, `MacroOutlet`, `MacroMidiInlet` and `MacroMidiOutlet` join the internal-only set and
+get the **same three exclusions**: no library row, no replace-menu entry, **never authorable by a
+model**. **Done as of P8-15a** (§7 item 1).
 
 The enforcement point already exists and is cheap: `kNonAuthorableModuleTypes` in
 `AIStateMapper.cpp` is an explicit name set with a reason recorded against each entry, consulted
 by `isInternalOnlyModule`. Registering a module in `moduleFactory` makes it model-authorable **by
 default**, and the resulting allowlist is pinned by
-`AIStateMapperTest.AuthorableModuleTypesGolden` — so adding Macro In / Macro Out to the factory
-(which they need, so our own saves round-trip them) *fails the build* until they are deliberately
-added to the non-authorable set too. P8-15 must add both entries with their reason, not just the
-factory rows.
+`AIStateMapperTest.AuthorableModuleTypesGolden` — so adding the four Macro I/O types to the
+factory (which they need, so our own saves round-trip them) *fails the build* until they are
+deliberately added to the non-authorable set too. P8-15a added all four entries with their
+reason, not just the factory rows — this was the golden test's *intended* failure mode, not a
+regression to fix around.
 
 **This must not be achieved by relaxing anything.** `validatePatch` is the security boundary for
 untrusted model output; the rule stands that validity is fixed on the *generation* side, most
@@ -337,16 +709,330 @@ app-side **tool/action** the model invokes — the app authors the macro from a 
 
 In order, each independently shippable:
 
-1. `MacroInlet` / `MacroOutlet` module types + the three internal-only exclusions + the
-   `validatePatch` rejection and its test.
-2. `MacroPort` on `synth::Macro`, its `toVar`/`fromVar` round trip, and its `retainOnly`
-   reconciliation (a port whose node died is dropped like any other member).
-3. The port-creation flow: "Add Input / Add Output" on the macro menu, with shape inherited per
-   §5.3 and refusal-with-status when it cannot be.
-4. Card jacks: the collapsed card draws one jack per port, and `buildVisibleCables()` anchors
-   boundary cables to them (§5.4).
-5. Port rename and reorder.
-6. Bypass/mute fan-out (§5.6).
+1. **DONE (P8-15a).** `MacroInlet` / `MacroOutlet` / `MacroMidiInlet` / `MacroMidiOutlet` module
+   types + the three internal-only exclusions + the `validatePatch` rejection and its test. Audio/
+   CV vs MIDI is two node-type pairs, not a "kind" flag (§5.1). `MacroInlet`/`MacroOutlet` already
+   use the declare-max/vary-visible channel mechanism (§5.3's implementation note) so a later
+   Stereo/Poly-N does not need a factory or format change.
+2. **DONE (P8-15a).** `MacroPort` on `synth::Macro` (with a `kind` distinguishing audio/CV from
+   MIDI ports, §5.2), its `toVar`/`fromVar` round trip, and its `retainOnly` reconciliation (a
+   port whose node died is dropped like any other member — and so is one dropped singly via
+   `removeMemberEverywhere`).
+3. **DONE (P8-15b; presentation reworked by founder-review fix F2).** The port-creation flow —
+   folded into ONE "Configure I/O" modal together with item 5 below, per an explicit founder
+   request rather than piecemeal menu actions (`GraphEditor::promptConfigureMacroIO`,
+   `synth::ui::MacroPortConfigDialog`). Picks Mono/Stereo/Poly-N/MIDI at creation (§5.3), writes
+   the port's user-visible name (§5.1), and also covers the "shape from a dropped cable"
+   convenience (`GraphEditor::createMacroPortFromDroppedCable`, Mono-only — see §5.3).
+   `estimateModuleSize` in `GraphEditor.cpp` has an entry for all four types, sized to
+   `ModuleComponent`'s compact docked-widget geometry (`kMacroPortWidgetWidth`/
+   `kMacroPortWidgetHeaderY`/`kMacroPortWidgetBottomPad`, §5.3's "Rendering" note) rather than a
+   full 280-wide card — F2 replaced the "real rendered card" this used to measure against, since a
+   port node no longer renders as one (`MacroPortWidget.MonoPortWidgetSizeMatchesEstimateModuleSize`).
+   Placement is no longer free: a newly-created port's widget is DOCKED to its macro's hull the
+   moment `updateComponents()` runs (item 4's "Placement" below), not stacked below the card via
+   `resolvePlacement()` as it briefly was pre-F2.
+4. **DONE (P8-15c); collapsed-card jacks now carry names, and F2 added the expanded-macro
+   equivalent.** Card jacks: the collapsed card draws one jack per port
+   (`GraphEditor::macroCardPortLayout`), `buildVisibleCables()` anchors boundary cables to them,
+   and a cable dropped exactly on an existing port's jack wires straight into it (§5.4).
+   Founder-review fix F2 (item 3 of that review — "it's not shown on the module UI...it should be
+   presented") added the port's `MacroPort::name` next to its jack on the collapsed card
+   (`MacroCardComponent::paint`, elided if too narrow) and, for an EXPANDED macro, a compact
+   docked widget per port — `GraphEditor::dockMacroPortWidgets()` positions it against
+   `macroHullBounds()` (inputs down the left edge, outputs down the right, ordered by
+   `MacroPort::order`, the same order the collapsed card uses) and
+   `ModuleComponent::paintMacroPortWidget()` draws its name and jack(s), resolved live through
+   `GraphEditor::macroPortOwnerFor()`. See §5.3/§5.4 for the full design and the hull-feedback trap
+   this had to avoid.
+
+   **Founder-review fix G6: the module-count indicator counts modules, not port nodes.** A
+   second founder pass grouped a Delay and a Reverb with a crossing cable on each side — two
+   auto-created ports (§7 item 7) — and the collapsed card's "N modules" line read 4
+   (`Macro::members.size()`, which correctly includes the two port nodes — that is what the
+   invariant in item 1/§5.1 requires) instead of 2. A port is a real, load-bearing member, but it
+   is a boundary jack the macro exposes, not a module the user put in the box; the two are
+   different quantities, and every user-facing count/list must report the module one.
+   `synth::Macro::memberIsPort()`/`moduleMemberCount()` (`MacroSet.h`) are the ONE place that
+   exclusion now lives, and every presentation call site routes through them rather than
+   re-deriving the filter: `MacroCardComponent::getModuleCountText()` (the card's count line —
+   "N modules" with no ports configured, unchanged from before this fix; "N modules, M ports"
+   otherwise, naming the port count rather than silently dropping it from view) and
+   `GraphEditor::macroMemberNames()`/`macroMemberPreviews()` (feeding the tooltip's member-name
+   list and the card's content-preview glyphs respectively — a port no longer appears in either).
+   `Macro::members` itself, and the `MacroPort`/node it fronts, are completely untouched — bounds,
+   group drag, bypass/mute fan-out, undo and serialization all keep reading `members` exactly as
+   before; a test in `Tests/MacroAutoPortTests.cpp` pins that a port's uuid is still a member
+   after this fix, guarding against a future "fix" that tries to make the count line up by
+   removing ports from membership instead. An all-ports macro (no ordinary module members at
+   all — an edge case `MacroPortWidgetTests.cpp` already exercises) reads "0 modules, N ports"
+   and draws no preview glyphs; that is the honest answer, not a bug.
+
+   This is presentation only, and does not change the collapsed card's fixed layout: the count
+   line still lives in the same bottom-14px row (`kMacroCardHeight`'s reservation) it always did.
+   For the port counts grouping normally produces (one crossing group per external connection,
+   typically 1-3 ports per side — the founder's own scenario is one of each), the longer string
+   stays well clear of the jack band above it (`kMacroCardJackBandTop`/`Bottom`) and of both
+   port-name label columns beside it. A macro with enough ports on one side to push its
+   bottom-most jack label down near the count row was already at the limit of that pre-existing
+   layout budget before this fix (`kMacroCardJackBandBottom` sits only 4px above the count row's
+   own top) — this fix does not create that crowding, it only means the text sharing that row
+   with it is occasionally a few characters longer.
+5. **DONE (P8-15b).** Port rename and reorder — the same modal as item 3
+   (`GraphEditor::renameMacroPort`/`moveMacroPortOrder`). Reorder is scoped to one direction at a
+   time (inputs against inputs, outputs against outputs), a no-op at either edge. Changing an
+   existing port's SHAPE (Mono/Stereo/Poly-N) is also reached from this modal
+   (`GraphEditor::changeMacroPortShape`): per §5.3's immutability rule this is delete-node +
+   create-node + rewire underneath, landed as ONE undo step
+   (`AppUndoManager`'s `GraphAndMacroSnapshotAction` — see its class comment for why the combined
+   graph+macro restore has to be a single action, not two pushed into one transaction, to get
+   both undo AND redo right). A saved cable on a raw channel the new shape no longer exposes is
+   dropped, not adapted (dropRoutingsOnHiddenJacks' rule, applied honestly). **UI redesign
+   (founder-review fix, F1):** the modal's per-row "Apply Shape" button is gone — picking a new
+   shape in the row's combo box, or typing a new poly voice count and pressing Return/losing
+   focus, commits immediately (`MacroPortConfigDialog`'s combo `onChange` / voice-count
+   `onFocusLost` call `onChangePortShape` directly). Only the UI gesture collapsed from two steps
+   to one; the underlying delete+create+rewire is still exactly one undo step as above. Rows also
+   group under "Inputs"/"Outputs" section headers, a MIDI row hides its shape controls entirely
+   (no shape/poly concept applies, §5.1) instead of showing them disabled, the poly voice count is
+   labelled and only shown for a Poly shape, Up/Down/Delete are compact glyph buttons instead of
+   full-width text buttons, and the dialog sizes itself to its content (clamped, with the row list
+   scrolling past the clamp) instead of a fixed-size box.
+6. **DONE (P8-15d).** Bypass/mute fan-out (§5.6): `GraphEditor::setMacroBypassed`/`setMacroMuted`
+   call `ModuleBase::setBypassed`/`setMuted` — already `setValueNotifyingHost` parameter writes —
+   on every member as ONE undo step (`recordStructuralChange`, the same before/after graph-JSON
+   snapshot `applySmartSuggestions` uses to batch several connections into one step); no new
+   mutation mechanism, and every member's own `processBlock` keeps honouring the two-branch
+   bypass/mute contract unchanged. Mute additionally skips (never crashes on) a member with no
+   "muted" parameter (`ModuleBase::hasMuteParameter()` — Macro In/Out and their MIDI variants
+   among them, the pre-existing gap §7 item 1 flagged). `macroBypassState`/`macroMuteState` give
+   the tri-state (`AllOff`/`AllOn`/`Mixed`) read the "mixed-state members show an indeterminate
+   indicator" requirement calls for; the collapsed card (`MacroCardComponent::paint`) draws it as
+   two small badges next to the expand chevron — solid when `AllOn`, half-filled when `Mixed`, and
+   undrawn (matching an un-pressed per-module bypass/mute button) when `AllOff` — read fresh on
+   every paint and explicitly repainted by both setters, since a collapsed card's own members are
+   hidden and it has no parameter listener of its own to notice the change otherwise.
+   `toggleMacroBypassed`/`toggleMacroMuted` (wired into `buildMacroMenu` as "Bypass Macro"/
+   "Mute Macro") converge a `Mixed` or `AllOff` state to ON and an `AllOn` state to OFF, mirroring
+   `toggleSelectionMacrosCollapsed`'s own convergence rule.
+7. **DONE (founder-review fix F5).** Auto-create ports for a crossing cable when grouping, behind
+   a remembered preference. Founder verdict: *"When gathering the modules into the macro for the
+   first time, they should automatically create i/o ports for modules that have cables going in or
+   out of the macro,"* and *"There should be a modal asking if you prefer this way, or just leave
+   the cables as is. After the user selects a preference it is saved and he can later change it in
+   the preferences menu."*
+
+   **The preference (`GraphEditor::MacroAutoPortPreference`)** is a TRI-STATE, not a bool — `Unset`
+   (ask on the next group with a crossing cable), `AutoCreatePorts`, `LeaveCablesAsIs` — DEFAULT
+   `Unset`. Persisted through `juce::ApplicationProperties` by `PreferencesSettingsTab` exactly the
+   way it persists its own keys (`"macroAutoCreatePorts"`, one of `"ask"`/`"auto"`/`"leave"`; a
+   getter/setter pair and a `Macro auto-ports:` combo row in the Preferences tab, including "Always
+   ask" to go back). `GraphEditor::requestGroupSelectionIntoMacro()` — what Cmd+G
+   (`groupOrToggleSelectionMacros`), the right-click "Create Macro from N Modules" menu item, and
+   the drag-group canvas menu all call now, instead of `groupSelectionIntoMacro()` directly — shows
+   `synth::ui::MacroAutoPortPromptDialog` (in `MacroPortConfigDialog.{h,cpp}`, alongside the
+   Configure I/O dialog it shares a translation unit with rather than a new `Source/UI/*.cpp` pair)
+   ONLY when the preference is `Unset` AND the selection actually has a crossing connection — a
+   grouping with nothing to decide is never interrupted. Two buttons ("Create Ports" / "Leave
+   Cables As Is") plus a "Remember my choice" toggle (default ON); the choice persists (through
+   `propertiesFile_`, the same seam the macro recolour favourites shelf already uses, since this
+   modal can fire before a Settings window — and therefore a `PreferencesSettingsTab` — has ever
+   been constructed) only when remember is checked, and applies once otherwise. Follows the
+   async-modal idiom already used for Configure I/O (`DialogWindow::LaunchOptions::launchAsync` +
+   a callback, never a blocking modal loop); `GraphEditor::macroAutoPortModalForTest` is a test
+   seam that replaces the real dialog launch with a callback a test drives directly.
+
+   **The crossing-cable gate (`selectionHasCrossingMacroCable`) reads live NodeIDs, never
+   uuids.** A module freshly dropped on the canvas has no `"uuid"` property yet (only lazily
+   assigned on first save, or by `groupSelectionIntoMacro()` itself once it decides to proceed) —
+   gating the check on resolvable uuids would silently under-detect on the single most common real
+   path: drop two never-saved modules, wire one to an existing module, group immediately. So
+   `buildMacroPortCrossingPlan()` takes `std::vector<NodeID>` as its primary overload (a thin
+   `std::vector<juce::String>` uuid-resolving wrapper remains for `groupSelectionIntoMacro`, which
+   by the time it calls it has already assigned every member a uuid). The gate also mirrors
+   `groupSelectionIntoMacro`'s own "already in a macro" refusal (`macros.findByMember`) before
+   computing a plan — a selection that grouping will refuse outright has nothing to decide, so the
+   modal must not ask a question whose answer can never be applied.
+
+   **The splice itself** — `GraphEditor::groupSelectionIntoMacro(bool autoCreatePorts)` (the
+   original zero-crossing-port behaviour is `autoCreatePorts = false`, still the signature every
+   pre-existing caller and test compiles against unchanged). Before the macro exists,
+   `buildMacroPortCrossingPlan()` reads `graph.getConnections()` the same way
+   `rebuildVisibleCables()`/`AudioEngine`'s routing enumeration do — `LogicalPort::role`/
+   `visibleJackIndex`/`isPolyGroupHead`/`polyVoiceSpan`, never a raw-channel guess — and groups
+   every connection with exactly one endpoint among the about-to-be-members into a
+   `MacroPortCrossingGroup`, keyed by **(internal node, direction, visible jack)** — this is the
+   de-duplication key: two cables landing on the same internal jack (a collapsed stereo pair's two
+   raw legs, or several external sources fanned into one jack) share ONE port. A group's shape is
+   read off the jack's own head raw channel, never defaulted: `polyVoiceSpan > 1 && role == Audio`
+   is `StereoCollapsed` — **founder-review fix G2**, corrected from an earlier `Stereo` here: a
+   span-2 head means the internal jack is COLLAPSED (one visible jack for both raw legs, the FX
+   pattern every Delay/Reverb/etc. defaults to), so the port must present that same one jack
+   (§5.3's `StereoCollapsed` bullet), never the two-jack `Stereo` shape a hand-picked Configure
+   I/O choice means — `polyVoiceSpan > 1` otherwise is Poly-N with that exact voice count;
+   anything else is Mono; a MIDI connection is its own group kind entirely, yielding
+   `MacroMidiInlet`/`MacroMidiOutlet`, never an audio port. A Dual-I/O-on module's Left/Right legs
+   sit on two SEPARATE visible jacks rather than one span-2 jack (`polyVoiceSpan == 1` on each, so
+   each starts life as its own Mono group here), so a second merge pass folds them into one
+   `Stereo` group (the two-jack shape, correctly — the module they front genuinely shows two
+   jacks) when a crossing connection reaches both — paired via `ModuleBase::rightAudioLegChannel()`,
+   never jack index 0/1 (`Source/Modules/CLAUDE.md`), correct for the split-block (voice module)
+   layout this merge pass exists for. `spliceMacroPorts()` then, for
+   each group: disconnects every original external<->internal edge, constructs the port node with
+   the derived shape/kind (named from the internal module's own name plus
+   `getInputPortLabel`/`getOutputPortLabel` at the jack it fronts — "Filter Cutoff", never
+   "Input 2"), adds it as a macro member with a `MacroPort` entry, and reconnects
+   external->port->internal (or the reverse for an outlet) on exactly the raw channels the original
+   edges used. All of this — `macros.add()` AND every splice — runs inside
+   `groupSelectionIntoMacro`'s own ONE `recordGraphAndMacroChange` transaction (splice-before-
+   `updateComponents()`, group-then-add-as-a-second-pass was rejected), so a single Cmd+Z undoes
+   the grouping and every spliced port together.
+
+   **A mod-routing knob's edge is spliced when it genuinely crosses the boundary, and left alone
+   when it doesn't (founder-review fix G3).** `AudioEngine::addModRouting` always wraps a
+   single-slot CV routing as source -> attenuverter(ch0) -> destination, and the attenuverter
+   itself can never be a macro member — it never gets a `ModuleComponent`
+   (`GraphEditor::updateComponents()` skips it outright), so it can never be part of a canvas
+   selection. That means a crossing connection whose EXTERNAL endpoint is the attenuverter can mean
+   two different things, told apart by looking at the mod chain's OTHER real endpoint (the
+   attenuverter's other ch0 connection):
+
+   - **Both real endpoints are about to become members** (the user selected the mod source and its
+     target together, e.g. an ADSR and the VCA it drives). The attenuverter sitting nominally
+     "outside" is then only an artefact of its own invisibility, not a real crossing — splicing
+     here would spawn TWO spurious ports (an outlet off the source, an inlet onto the target) for a
+     routing the user is grouping wholly inside the macro. Left un-ported, both edges, exactly like
+     any other fully-internal connection (`MacroAutoPortTests.cpp`'s
+     `ModRoutingWithBothRealEndpointsInsideStaysWhollyInternal`).
+   - **The far endpoint is genuinely external** (or the chain is only half-wired) — this IS a real
+     crossing, and now DOES get a port. `AudioEngine::getModulationRoutings()`'s AttenuverterChain
+     pass is keyed purely on the ATTENUVERTER's own node identity — it walks every
+     `AttenuverterModule` node and reads whichever connections currently sit on its ch0 in/out,
+     never on what those connections point at — so retargeting the attenuverter's own edge onto the
+     new port (with the attenuverter itself standing in as the "external" node for the splice) does
+     NOT desync that classification: the routing still shows up in `getActiveModRoutings()` (the
+     mod matrix), now reporting the port as its source/dest, exactly how any other boundary-crossing
+     cable reports the port it passes through rather than the member further inside. The
+     modulation signal keeps flowing because the port is a pure pass-through, and
+     `buildVisibleCables()` keeps drawing the BOUNDARY segment as ONE `AttenuverterChain`-kind wire
+     (ModCV-coloured, carrying the knob) all the way to the port's own jack — collapsed, that lands
+     on the port's card jack via the same `macroCardPortLayout`/re-anchoring machinery every other
+     ported cable already uses; nothing macro-specific needed adding to either function. The other,
+     wholly-INTERNAL leg (member <-> port, on the outlet's side of the chain) is unaffected by this
+     fix and renders as an ordinary `Direct` (plain Audio-coloured) cable when the macro is
+     EXPANDED — visible only then, since a collapsed macro drops any cable wholly inside it; this
+     was true of every other auto-created port before G3 too, and is not new here.
+     `MacroAutoPortTests.cpp`'s `AttenuverterAdjacentCrossingIsSplicedForAGenuineExternalCrossing`
+     and `AttenuverterAdjacentCrossingSplicedModulationSurvives` prove this holds down to the DSP
+     level (the second renders real blocks through the spliced chain and checks the destination
+     actually receives the modulated signal, and reacts live to an amount-parameter change, not
+     just that a port node exists), and `UndoRestoresAModRoutingCrossingSpliceExactly` covers
+     undo/redo.
+
+     **The mod matrix's own destination combo needed a matching fix.** `MacroInletModule`
+     deliberately declares no `getModulationTargets()` (`GraphEditor::connectPorts()` relies on that
+     empty list to keep a plain cable drop onto a Macro In's jack a plain connection, never
+     auto-wrapped in a fresh attenuverter — `Tests/MacroPortFlowTests.cpp`'s drop-a-cable tests pin
+     that), so a `ModMatrixComponent::ModRow` whose destination is now a spliced port had nothing to
+     resolve its combo selection against and would render blank. Rather than give
+     `MacroInletModule` a real `ModulationTarget` (which would resurrect the auto-wrap problem for
+     every ordinary cable drop, since `connectPorts()` reads that same list), `ModMatrixComponent`'s
+     own combo-population (`destinationCandidatesForCombo`, `Source/UI/ModMatrixComponent.cpp`)
+     substitutes a display-only synthetic target at channel 0 whenever the module has none AND is a
+     `MacroInletModule` — a spliced port from this fix is always Mono with its one active channel at
+     0 (the internal jack an `AttenuverterChain` lands on is never poly-fanned), so channel 0 is the
+     only candidate. `Tests/ModMatrixTests.cpp`'s
+     `DestinationLabelStillResolvesAfterGroupingSplicesAMacroPort` pins the row no longer going
+     blank.
+
+   **Hull/card ordering.** `macroHullBounds()`/`applyMacroCollapsed`'s hull-seeding union already
+   excludes port members (§5.4's "hull-feedback trap"), and the collapsed card's own `macro.bounds`
+   is seeded from the ORIGINAL (pre-port) selected members' bounds before any splicing happens — so
+   there is nothing for the splice to retroactively distort. What the splice DOES have to get right
+   is running before `updateComponents()`, which is what lays out the card jacks
+   (`macroCardPortLayout`) and docks the expanded hull's port widgets
+   (`dockMacroPortWidgets`) against however many ports now exist — `groupSelectionIntoMacro` calls
+   `spliceMacroPorts()` and `updateComponents()` in that order, inside the one transaction, never
+   the reverse.
+
+8. **DONE (founder-review fix G7): Ungroup removes the macro's ports, and a port node is
+   directly deletable.** The item above shipped with an explicit open question for the founder —
+   "what should Ungroup do with an auto-created port?" — recorded as **nothing**: the port's
+   fronting node would survive ungrouping as an ordinary member, connections intact, becoming a
+   stray "Macro In"/"Macro Out" box sitting mid-signal-chain with no delete affordance of its own
+   (Configure I/O — the one surface that could remove it — disappears the instant the macro does,
+   since `promptConfigureMacroIO`'s first line is `macros.find(macroId)`). A second founder review
+   pass, hands-on with the shipped feature, answered it: *"ungroup leaves the macro input/output in
+   place (They should be removed) and they cannot be removed."*
+
+   **The decided rule.** Ungrouping a macro removes every one of its port nodes and splices the
+   ORIGINAL CABLE BACK — external reconnects straight to internal, exactly as it was before
+   grouping — as part of the SAME undo step that removes the `Macro` record. Group then Ungroup is
+   now a true round trip, which is the property this fix is mostly for; §5.4's old "ungrouping does
+   not drop a cable landing on one of its ports" passage above described the pre-G7 behaviour and
+   has been rewritten to match. This applies to EVERY port, auto-created (item 7) and hand-added
+   (item 3) alike — **no provenance field was added**, resolving concern (1) the open question
+   raised: a port exists only to proxy a boundary, so once the boundary (the macro) is gone, a
+   hand-named port is the same kind of orphan as an auto-created one, with no reason to treat them
+   differently. Concern (2) — "it changes what Ungroup means for every macro, not just ones this
+   feature touched" — is exactly the change the founder asked for.
+
+   **The splice-out algorithm (`GraphEditor::spliceOutMacroPort`), the reverse of `spliceMacroPorts`
+   (item 7).** For the port node fronted by one `MacroPort`: read every connection currently
+   touching it, split into the set LANDING on it (the port's own channel is the destination — an
+   "in" edge) and the set LEAVING it (the port's own channel is the source — an "out" edge), then
+   for every port channel shared between an in-edge and an out-edge, connect that in-edge's OTHER
+   endpoint directly to that out-edge's OTHER endpoint, on the exact raw channels each already
+   carried — the full CROSS PRODUCT, so fan-in (two external sources sharing one inlet port, item
+   7's own "share ONE port, not N" dedup rule) and fan-out reconnect completely, not just the first
+   pair. A port wired on only one side (or neither) contributes no pairs and simply disappears —
+   nothing to reconnect. Removing the node then drops its own now-superseded connections for free
+   (`juce::AudioProcessorGraph::removeNode` calls `disconnectNode` before erasing).
+
+   This is signal-preserving because `MacroInlet`/`MacroOutlet` and both MIDI variants are
+   VERIFIED pure per-channel pass-throughs, not assumed to be: `mapInputChannel(c)` and
+   `mapOutputChannel(c)` return the identical `LogicalPort` on both (§5.1/§5.3 — Mono, Stereo's
+   split-block right leg, `StereoCollapsed`'s two-raw-channel single jack, and Poly-N's fanned bus
+   all checked), so whatever enters the port on raw channel `c` is exactly what leaves it on raw
+   channel `c`, on every shape a port can carry. A MIDI port's single "channel" is always
+   `juce::AudioProcessorGraph::midiChannelIndex` on both sides, so the same cross-product logic
+   applies unchanged with no MIDI-specific branch needed.
+
+   **Ungroup reaches the graph-change notification path.** Before this fix, `ungroupSelection()`
+   was metadata-only (`MacroSet::remove` alone) and never needed to call
+   `GraphEditor::updateComponents()`'s post-mutation hooks for correctness. It now removes nodes
+   and rewires connections — a real graph edit — so it calls `updateComponents()` inside the SAME
+   `recordGraphAndMacroChange` transaction that does the splicing, exactly like `deleteSelection()`
+   already does; that in turn fires `onGraphStructureChanged` ->
+   `MainComponent::reconcileTimelineBindingsOnly()`, the seam that keeps a timeline binding from
+   surviving stale, keyed to a now-deleted node's uuid, into the next audio-thread render pass
+   (root `CLAUDE.md`, §8 of `docs/architecture.md`). `MacroAutoPortTests.cpp`'s
+   `ReachesTheGraphStructureChangedNotificationHook` pins this directly.
+
+   **A port node is now directly deletable, right-click.** Before this fix,
+   `ModuleComponent::mouseDown()` refused ANY click on a macro-port node's body (mirroring the
+   Attenuverter's "no header, nothing to click" early return) — so a port had exactly one delete
+   path, Configure I/O, which vanished with its macro. The early return now excludes the RIGHT
+   button only: a port node's body right-click opens a NEW small menu
+   (`ModuleComponent::buildMacroPortContextMenu`) — "Delete Port" always, plus "Rename Port..." (a
+   lightweight `AlertWindow`, `GraphEditor::promptRenameMacroPort` — the quicker alternative to
+   opening the whole Configure I/O modal to retype one name) and "Configure I/O..." when the port
+   still resolves to a live macro. LEFT-click stays exactly as restrictive as before — no
+   selection, no drag — because `dockMacroPortWidgets()` repositions this widget every layout pass
+   regardless; a draggable port would just snap back the moment the user let go, a new broken-
+   feeling gesture inside a fix meant to remove them. Deleting a port this way, while its macro
+   stays alive, shares `spliceOutMacroPort` with ungroup
+   (`GraphEditor::deleteMacroPortNode`) — the cable is spliced back, never dropped, and the macro
+   dissolves outright if this was its last member (mirroring `MacroSet::removeMemberEverywhere`'s
+   own "zero members is not a meaningful state" rule).
+
+   **`GraphEditor::removeMacroPort()` (item 2's Configure I/O "delete this port" action) is
+   deliberately UNCHANGED** — it still reuses the ordinary multi-select delete path and drops the
+   cable rather than splicing it, pinned by
+   `Tests/MacroPortFlowTests.cpp`'s `RemoveDeletesTheNodeAndDropsThePort`. An explicit "delete this
+   port" from a configuration dialog arguably SHOULD drop the cable rather than silently rewire the
+   patch around it; `spliceOutMacroPort` is shared code, not shared semantics, and switching
+   Configure I/O's own delete to splice-back too is a proposal for a future pass, not decided here.
 
 ## 8. Explicitly out of scope
 

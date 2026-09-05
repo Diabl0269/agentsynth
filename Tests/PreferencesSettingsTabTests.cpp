@@ -116,6 +116,57 @@ TEST_F(PreferencesSettingsTabTest, ChangingControlsPersistsAndPushesToEditor) {
     EXPECT_FALSE(editor.getDefaultDualIOForNewModules());
 }
 
+// Founder-review fix F5 (docs/macros.md §7 item 6.2): the macro auto-port preference. Tri-state,
+// DEFAULT "ask" (Unset) — a silent default of either behaviour would change what grouping does the
+// first time this ships with no warning.
+TEST_F(PreferencesSettingsTabTest, MacroAutoPortDefaultsToAskAndDoesNotWriteUntouched) {
+    PreferencesSettingsTab tab(appProperties);
+    EXPECT_EQ(tab.getMacroAutoPortPreference(), GraphEditor::MacroAutoPortPreference::Unset);
+    EXPECT_FALSE(appProperties.getUserSettings()->containsKey("macroAutoCreatePorts"));
+}
+
+TEST_F(PreferencesSettingsTabTest, MacroAutoPortPreferenceRoundTripsThroughApplicationProperties) {
+    {
+        PreferencesSettingsTab tab(appProperties);
+        tab.setMacroAutoPortPreference(GraphEditor::MacroAutoPortPreference::AutoCreatePorts);
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("macroAutoCreatePorts"), "auto");
+    }
+    {
+        // A fresh tab (as a freshly-opened Settings window would build) restores what was written.
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_EQ(tab.getMacroAutoPortPreference(), GraphEditor::MacroAutoPortPreference::AutoCreatePorts);
+
+        tab.setMacroAutoPortPreference(GraphEditor::MacroAutoPortPreference::LeaveCablesAsIs);
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("macroAutoCreatePorts"), "leave");
+    }
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_EQ(tab.getMacroAutoPortPreference(), GraphEditor::MacroAutoPortPreference::LeaveCablesAsIs);
+
+        // "Always ask" is reachable again from the Preferences tab, not just the initial default.
+        tab.setMacroAutoPortPreference(GraphEditor::MacroAutoPortPreference::Unset);
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("macroAutoCreatePorts"), "ask");
+    }
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_EQ(tab.getMacroAutoPortPreference(), GraphEditor::MacroAutoPortPreference::Unset);
+    }
+}
+
+TEST_F(PreferencesSettingsTabTest, MacroAutoPortPreferencePushesToTheGraphEditor) {
+    PreferencesSettingsTab tab(appProperties);
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    tab.setGraphEditor(&editor);
+    ASSERT_EQ(editor.getMacroAutoPortPreference(), GraphEditor::MacroAutoPortPreference::Unset);
+
+    tab.setMacroAutoPortPreference(GraphEditor::MacroAutoPortPreference::AutoCreatePorts);
+    EXPECT_EQ(editor.getMacroAutoPortPreference(), GraphEditor::MacroAutoPortPreference::AutoCreatePorts);
+
+    tab.setMacroAutoPortPreference(GraphEditor::MacroAutoPortPreference::LeaveCablesAsIs);
+    EXPECT_EQ(editor.getMacroAutoPortPreference(), GraphEditor::MacroAutoPortPreference::LeaveCablesAsIs);
+}
+
 // The tests above drive the programmatic setters. This one clicks the actual button, which is what
 // a user does — it is the only thing that exercises the onClick lambda wiring.
 TEST_F(PreferencesSettingsTabTest, ClickingTheToggleReachesTheEditorAndNewModules) {

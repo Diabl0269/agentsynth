@@ -37,6 +37,23 @@ static ModuleType getType(juce::AudioProcessor* module) {
     return ModuleType::Oscillator;
 }
 
+/** The four macro-boundary node types (Macro In/Out, Macro MIDI In/Out — docs/macros.md §5.1),
+ *  which render as the compact docked port widget (P8-15 founder-review fix F2) rather than an
+ *  ordinary module card: no header chrome, no body, a small tinted row docked to their macro's
+ *  hull edge instead of freely placed. See layoutMacroPortWidget()/paintMacroPortWidget(). */
+static bool isMacroPortType(ModuleType t) {
+    return t == ModuleType::MacroInlet || t == ModuleType::MacroOutlet || t == ModuleType::MacroMidiInlet ||
+           t == ModuleType::MacroMidiOutlet;
+}
+
+/** The MIDI jack's fixed y — the generic layout's own "38, below the header" convention, compacted
+ *  for the macro-port widget (which has no header). Shared by paint()'s MIDI dot and
+ *  getPortForPoint()'s MIDI hit-test so the two can never disagree, mirroring every other
+ *  paint/hit-test pairing in this file. */
+static int midiJackY(juce::AudioProcessor* module) {
+    return isMacroPortType(getType(module)) ? ModuleComponent::kMacroPortWidgetHeaderY : 38;
+}
+
 /** True for the graph's terminal audio sink (Audio Output). Mirrors GraphEditor.cpp's
  *  isTerminalAudioSink — detected by TYPE, not by name, so a ModuleBase happening to be titled
  *  "Audio Output" cannot impersonate it. A bare juce::AudioGraphIOProcessor is never a ModuleBase,
@@ -55,11 +72,17 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     , owner(owner)
     , undoManager(undoMgr) {
 
+    showContextMenuHook_ = [](juce::PopupMenu& menu) { menu.showMenuAsync(juce::PopupMenu::Options()); };
+
     if (auto* modBase = dynamic_cast<ModuleBase*>(module)) {
         if (auto* vb = modBase->getVisualBuffer()) {
             // Parametric EQ keeps its VisualBuffer for the spectrum analyser's FFT, but a scope
-            // on top of that analyser is redundant clutter, so it gets no scope UI.
-            if (getType(module) != ModuleType::ExternalMidi && getType(module) != ModuleType::ParametricEQ) {
+            // on top of that analyser is redundant clutter, so it gets no scope UI. A macro-port
+            // widget (P8-15 fix F2) enables a VisualBuffer too (for a future activity LED — none
+            // of the four types draw one today), but "no body" (item 1) rules out a scope toggle
+            // here as firmly as it rules out bypass/mute/delete.
+            if (getType(module) != ModuleType::ExternalMidi && getType(module) != ModuleType::ParametricEQ &&
+                !isMacroPortType(getType(module))) {
                 scopeComponent = std::make_unique<ScopeComponent>(*vb);
                 addAndMakeVisible(scopeComponent.get());
 
@@ -134,7 +157,9 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         addAndMakeVisible(eqPopOutButton.get());
     }
 
-    if (getType(module) != ModuleType::Attenuverter) {
+    // Attenuverter has no header at all; a macro-port widget (P8-15 fix F2) has no header CHROME —
+    // "no module header chrome and no body" — so neither gets bypass/mute/delete/Dual I/O buttons.
+    if (getType(module) != ModuleType::Attenuverter && !isMacroPortType(getType(module))) {
         bypassButton = std::make_unique<juce::DrawableButton>("Bypass", juce::DrawableButton::ImageFitted);
         bypassButton->setClickingTogglesState(true);
         bypassButton->setTooltip("Bypass");
@@ -1479,6 +1504,11 @@ void ModuleComponent::layoutSequencerStepColumn(int step, int colX, int startY) 
 }
 
 void ModuleComponent::updateLayout() {
+    if (isMacroPortType(getType(module))) {
+        layoutMacroPortWidget();
+        return;
+    }
+
     if (getType(module) == ModuleType::Attenuverter) {
         setSize(40, 40);
         if (sliders.size() > 0) {
@@ -1538,6 +1568,27 @@ void ModuleComponent::updateLayout() {
     const int bodyHeight = layoutDefaultContent(/*apply*/ false);
     setSize(cardWidth, std::max(100, bodyHeight));
     resized();
+}
+
+// Compact docked widget for the four macro-port types (P8-15 founder-review fix F2,
+// docs/macros.md §5.3/§5.4): a small, fixed-shape row — no header chrome, no body, no 100px
+// floor a real module card carries. Sized purely from the module's own visible jack count, which
+// for a Mono/Poly-N port (or a MIDI port, no shape at all) is one row on each side (getVisible*
+// PortCount()==1) and for Stereo is two (==2) — MacroInletModule/MacroOutletModule's
+// declare-max/vary-visible mechanism (§5.3's implementation note) already keeps that in sync with
+// the port's shape, so this needs no shape-aware branching of its own.
+void ModuleComponent::layoutMacroPortWidget() {
+    int rows = 1;
+    if (!(module->acceptsMidi() || module->producesMidi())) {
+        int numIns = 0, numOuts = 0;
+        if (auto* mb = dynamic_cast<ModuleBase*>(module)) {
+            numIns = mb->getVisibleInputPortCount();
+            numOuts = mb->getVisibleOutputPortCount();
+        }
+        rows = juce::jmax(1, numIns, numOuts);
+    }
+    const int height = kMacroPortWidgetHeaderY + (rows - 1) * kMacroPortWidgetRowStep + kMacroPortWidgetBottomPad;
+    setSize(kMacroPortWidgetWidth, height);
 }
 
 int ModuleComponent::getContentTopY() {
@@ -1785,6 +1836,11 @@ void ModuleComponent::paint(juce::Graphics& g) {
         return; // Transparent background, no ports, no header
     }
 
+    if (isMacroPortType(getType(module))) {
+        paintMacroPortWidget(g);
+        return; // compact docked widget — no header, no generic port loop, no body
+    }
+
     auto* mod = dynamic_cast<ModuleBase*>(module);
     bool isBypassed = mod && mod->isBypassed();
 
@@ -2004,6 +2060,94 @@ void ModuleComponent::paint(juce::Graphics& g) {
     }
 }
 
+// Compact docked port widget (P8-15 founder-review fix F2, docs/macros.md §5.3/§5.4): a small
+// row tinted with the owning macro's colour, showing the port's own NAME (resolved live through
+// GraphEditor — the name lives on synth::MacroPort, not this node, so a rename in the Configure
+// I/O dialog is reflected the next time this repaints, with nothing to cache or invalidate) and
+// its jack(s). Both directions of the pass-through are drawn (the port's own boundary-facing
+// side, matching MacroPort::isInput — an external cable's landing point — AND the interior side
+// that feeds/is-fed-by a specific member, §5.4's "a manual cable drawn after expanding the
+// macro"): getPortForPoint/getPortCenter are otherwise UNCHANGED for these types (just compacted,
+// see the getPortCenter branch above), so drag/drop keeps working exactly as it does for every
+// other module. Only the interior jack goes unlabelled — the resolved name sits next to the
+// boundary one, mirroring the collapsed card's own left/right convention (item 4).
+//
+// Founder-review fix G4 ("too large" — see kMacroPortWidgetWidth's own comment): the drawn jack
+// shrank from a full module card's 10px dot to 7px, the corner radius from 6 to 4 and the name
+// font from 10.5f to 9.5f, all sized down together with the widget's own width/height so the chip
+// reads as a boundary jack rather than a miniature module. NONE of that touches the actual HIT
+// target: getPortForPoint's `< 10` distance check (unchanged, general to every module) still
+// grabs a click several px off the now-smaller dot — a shrunk drawn jack and a shrunk hit radius
+// are two different knobs, and only the first one turned here
+// (MacroPortWidgetTests.cpp's `HitTestStaysGenerousAroundTheShrunkJackDot`).
+void ModuleComponent::paintMacroPortWidget(juce::Graphics& g) {
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    static const synth::theme::Colors fallbackColors{};
+    const auto& themeColors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
+
+    const auto ownership = owner.macroPortOwnerFor(nodeId);
+    const juce::Colour tint = ownership.macro != nullptr ? ownership.macro->colour : themeColors.accent;
+    const juce::String name =
+        (ownership.port != nullptr && ownership.port->name.isNotEmpty()) ? ownership.port->name : cardTitle();
+    const bool boundaryIsInput = ownership.port != nullptr ? ownership.port->isInput : true;
+
+    auto bounds = getLocalBounds().toFloat();
+    g.setColour(tint.withAlpha(0.22f));
+    g.fillRoundedRectangle(bounds, 4.0f);
+    g.setColour(tint.withAlpha(0.85f));
+    g.drawRoundedRectangle(bounds.reduced(0.75f), 4.0f, 1.0f);
+
+    const juce::Colour audioJackColour = themeColors.audioWire;
+    const juce::Colour jackAccentColour = themeColors.accent;
+    constexpr float kJackRadius = 3.5f; // 7px dot, down from a full card's 10px (fix G4)
+
+    if (module->acceptsMidi() || module->producesMidi()) {
+        if (module->acceptsMidi()) {
+            auto p = getPortCenter(0, true);
+            g.setColour(audioJackColour);
+            g.fillEllipse((float)p.x - kJackRadius, (float)p.y - kJackRadius, kJackRadius * 2.0f, kJackRadius * 2.0f);
+        }
+        if (module->producesMidi()) {
+            auto p = getPortCenter(0, false);
+            g.setColour(audioJackColour);
+            g.fillEllipse((float)p.x - kJackRadius, (float)p.y - kJackRadius, kJackRadius * 2.0f, kJackRadius * 2.0f);
+        }
+    } else {
+        int numIns = 0, numOuts = 0;
+        if (auto* mb = dynamic_cast<ModuleBase*>(module)) {
+            numIns = mb->getVisibleInputPortCount();
+            numOuts = mb->getVisibleOutputPortCount();
+        }
+        for (int i = 0; i < numIns; ++i) {
+            auto p = getPortCenter(i, true);
+            g.setColour(jackAccentColour);
+            g.fillEllipse((float)p.x - kJackRadius, (float)p.y - kJackRadius, kJackRadius * 2.0f, kJackRadius * 2.0f);
+        }
+        for (int i = 0; i < numOuts; ++i) {
+            auto p = getPortCenter(i, false);
+            g.setColour(jackAccentColour);
+            g.fillEllipse((float)p.x - kJackRadius, (float)p.y - kJackRadius, kJackRadius * 2.0f, kJackRadius * 2.0f);
+        }
+    }
+
+    g.setColour(themeColors.textPrimary);
+    g.setFont(juce::Font(juce::FontOptions(9.5f)));
+    // Inset 16, not G4's original 12 (P8-15 founder-review polish fix): a jack dot is drawn at
+    // x=10/width-10 with a 3.5px radius, i.e. its outer edge sits at 13.5px from the widget's own
+    // edge, so a 12px text inset put the name's own text area INSIDE the dot — on a Mono widget
+    // showing a realistic name ("Delay 1 Audio") the left dot visibly overlapped the "D". 16 clears
+    // the dot's outer edge (13.5) by 2.5px on both sides without moving the dot itself or widening
+    // the widget — see MacroPortWidgetTests.cpp's `RealisticPortNameFitsWithinTheWidgetAtFullUnscaledSize`
+    // for the width budget this leaves for the name.
+    auto textArea = getLocalBounds().reduced(16, 2);
+    // drawFittedText never draws outside textArea: it compresses the glyph run horizontally (and,
+    // failing that, ellipsises) rather than clip mid-glyph — the "elide gracefully" requirement —
+    // but at this widget's tuned width a realistic name draws at its natural, unscaled size (see
+    // the test named above), so in practice this is a safety net, not the common case.
+    g.drawFittedText(name, textArea,
+                     boundaryIsInput ? juce::Justification::centredLeft : juce::Justification::centredRight, 1);
+}
+
 std::optional<ModuleComponent::Port> ModuleComponent::getModTargetPortForPoint(juce::Point<int> localPoint) const {
     auto* mod = dynamic_cast<ModuleBase*>(module);
     if (mod == nullptr)
@@ -2068,6 +2212,21 @@ juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
 
     if (getType(module) == ModuleType::Attenuverter) {
         return {getWidth() / 2, getHeight() / 2};
+    }
+
+    // Macro-port widget (P8-15 fix F2): same left-input/right-output convention every other card
+    // uses (x=10 / x=width-10, the same inset macroCardPortLayout's own collapsed-card jacks use —
+    // "a macro's boundary jacks read like any other module's"), just compacted to the widget's own
+    // small header offset/row step instead of a real card's 38/20. A MIDI port's single jack sits
+    // fixed at the header row, mirroring the generic MIDI-jack convention below.
+    if (isMacroPortType(getType(module))) {
+        if (module->acceptsMidi() || module->producesMidi())
+            return {isInput ? 10 : getWidth() - 10, kMacroPortWidgetHeaderY};
+        int visible = 0;
+        if (auto* mb = dynamic_cast<ModuleBase*>(module))
+            visible = isInput ? mb->getVisibleInputPortCount() : mb->getVisibleOutputPortCount();
+        const int clamped = (visible > 0) ? juce::jlimit(0, visible - 1, index) : 0;
+        return {isInput ? 10 : getWidth() - 10, kMacroPortWidgetHeaderY + clamped * kMacroPortWidgetRowStep};
     }
 
     // Macro bank: jacks sit on their macro's row so knob N and jack N line up horizontally.
@@ -2136,7 +2295,7 @@ std::optional<ModuleComponent::Port> ModuleComponent::getPortForPoint(juce::Poin
 
     // Check for MIDI Output at fixed top-right position
     if (module->producesMidi()) {
-        auto p = juce::Point<int>(getWidth() - 10, 38); // Matches paint()
+        auto p = juce::Point<int>(getWidth() - 10, midiJackY(module)); // Matches paint()
         if (localPoint.getDistanceFrom(p) < 10) {
             return Port{{p.x - 5, p.y - 5, 10, 10},
                         juce::AudioProcessorGraph::midiChannelIndex,
@@ -2147,7 +2306,7 @@ std::optional<ModuleComponent::Port> ModuleComponent::getPortForPoint(juce::Poin
 
     // MIDI Input detection (Top Left)
     if (module->acceptsMidi()) {
-        auto p = juce::Point<int>(10, 38); // Top left near header
+        auto p = juce::Point<int>(10, midiJackY(module)); // Top left near header
         if (localPoint.getDistanceFrom(p) < 10) {
             return Port{
                 {p.x - 5, p.y - 5, 10, 10}, juce::AudioProcessorGraph::midiChannelIndex, true, true}; // MIDI Input
@@ -2175,6 +2334,12 @@ std::optional<ModuleComponent::Port> ModuleComponent::getPortForPoint(juce::Poin
 
 void ModuleComponent::resized() {
     if (module == nullptr)
+        return;
+
+    // The compact macro-port widget (P8-15 fix F2) creates no header buttons and no body controls
+    // (see the constructor's isMacroPortType guard and layoutMacroPortWidget) — nothing here needs
+    // positioning.
+    if (isMacroPortType(getType(module)))
         return;
 
     // Header icon buttons: delete (rightmost) → bypass → mute → Dual I/O (when present).
@@ -2566,6 +2731,175 @@ void ModuleComponent::parameterGestureChanged(int parameterIndex, bool gestureIs
     }
 }
 
+juce::PopupMenu ModuleComponent::buildMacroPortContextMenu() {
+    juce::PopupMenu m;
+    const auto ownership = owner.macroPortOwnerFor(nodeId);
+
+    if (ownership.macro != nullptr && ownership.port != nullptr) {
+        const juce::String macroId = ownership.macro->id;
+        const juce::String uuid = ownership.port->nodeUuid;
+        m.addItem("Rename Port...", [this, macroId, uuid] { owner.promptRenameMacroPort(macroId, uuid); });
+        m.addItem("Configure I/O...", [this, macroId] { owner.promptConfigureMacroIO(macroId); });
+        m.addSeparator();
+        // Splices the boundary cable back together rather than dropping it (founder-review fix
+        // G7) — GraphEditor::deleteMacroPortNode, sharing spliceOutMacroPort with ungroup.
+        m.addItem("Delete Port", [this, macroId, uuid] { owner.deleteMacroPortNode(macroId, uuid); });
+    } else {
+        // Defensive: macroPortOwnerFor's own header comment says this shouldn't happen (every
+        // port node is constructed as a macro member with a matching MacroPort entry), but a port
+        // node still needs SOME way out of the graph rather than none at all if it ever does.
+        m.addItem("Delete Port", [this] {
+            owner.setSelectedNodes({nodeId});
+            owner.deleteSelection();
+        });
+    }
+
+    return m;
+}
+
+juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
+    juce::PopupMenu m;
+
+    // Selection actions (issue #156). Offered whenever this module is selected — a
+    // single-module snippet is legal, it is just a group of one.
+    const int selectionCount = owner.getSelectionCount();
+    const juce::String groupSuffix =
+        selectionCount > 1 ? " " + juce::String(selectionCount) + " Modules" : juce::String();
+
+    m.addItem("Copy" + groupSuffix, [this] { owner.copySelection(); });
+    m.addItem("Duplicate" + groupSuffix, [this] { owner.duplicateSelection(); });
+
+    // Paste lands next to whatever was copied, not on this module — pasting on top of the
+    // card the menu was opened from would hide the thing that just arrived.
+    const int clipboardCount = owner.getClipboardModuleCount();
+    juce::PopupMenu::Item paste(clipboardCount > 1 ? "Paste " + juce::String(clipboardCount) + " Modules" : "Paste");
+    paste.setEnabled(clipboardCount > 0);
+    paste.action = [this] { owner.pasteClipboard(); };
+    m.addItem(paste);
+
+    m.addItem(selectionCount > 1 ? "Save Selection as Snippet..." : "Save as Snippet...", [this] {
+        if (owner.onSaveSnippetRequested)
+            owner.onSaveSnippetRequested();
+    });
+    if (selectionCount > 1) {
+        // Deliberately calls requestGroupSelectionIntoMacro() directly, NOT the Cmd+G dispatch
+        // (GraphEditor::groupOrToggleSelectionMacros) — a menu item names one verb
+        // ("Create Macro") and must keep doing exactly what it says, even for a selection
+        // that already touches a macro (where it still refuses, same as always).
+        // requestGroupSelectionIntoMacro() gates the auto-port-preference modal (founder-review
+        // fix F5, docs/macros.md §7 item 6.2) the same way Cmd+G does.
+        m.addItem("Create Macro from " + juce::String(selectionCount) + " Modules",
+                  [this] { owner.requestGroupSelectionIntoMacro(); });
+        m.addItem("Delete " + juce::String(selectionCount) + " Selected Modules", [this] { owner.deleteSelection(); });
+    }
+
+    // Cmd+Alt+G's toggle, reachable from a member module's own menu too: an expanded
+    // macro's card (the collapsed card's own menu) doesn't exist while expanded, so this
+    // is the only always-reachable UI for the round trip. Shown for either state now —
+    // toggleSelectionMacrosCollapsed() picks the right direction from the touched
+    // macro's own current state, matching the label offered here.
+    const auto* macro = owner.macroForNode(nodeId);
+    if (macro != nullptr)
+        m.addItem(macro->collapsed ? "Expand Macro" : "Collapse Macro",
+                  [this] { owner.toggleSelectionMacrosCollapsed(); });
+
+    m.addSeparator();
+
+    // Bypass toggle (only for actual modules)
+    if (auto* mod = dynamic_cast<ModuleBase*>(module)) {
+        m.addItem(mod->isBypassed() ? "Enable Module" : "Bypass Module", [this] {
+            if (auto* mod = dynamic_cast<ModuleBase*>(module)) {
+                mod->setBypassed(!mod->isBypassed());
+                repaint();
+            }
+        });
+        m.addSeparator();
+    }
+
+    // "Replace with..." submenu (only for actual modules, not AudioGraphIOProcessor).
+    // Audio Input is a ModuleBase but is still a singleton I/O node: replacing it with an
+    // Oscillator would silently leave the patch with no way to get the device's input in,
+    // and the library row it came from greyed out.
+    if (dynamic_cast<ModuleBase*>(module) != nullptr && !GraphEditor::isSingletonIOModule(module->getName())) {
+        juce::PopupMenu replaceMenu;
+        auto currentType = getType(module);
+
+        struct ModEntry {
+            const char* name;
+            ModuleType type;
+        };
+        struct Category {
+            const char* header;
+            std::vector<ModEntry> modules;
+        };
+        std::vector<Category> categories = {
+            {"Sources",
+             {{"Oscillator", ModuleType::Oscillator},
+              {"Wavetable", ModuleType::Wavetable},
+              {"Noise", ModuleType::Noise},
+              {"Sampler", ModuleType::Sampler},
+              {"LFO", ModuleType::LFO}}},
+            {"Sequencing",
+             {{"Sequencer", ModuleType::Sequencer},
+              {"Poly Sequencer", ModuleType::PolySequencer},
+              {"MIDI Keyboard", ModuleType::MidiKeyboard},
+              {"Poly MIDI", ModuleType::PolyMidi},
+              {"External MIDI", ModuleType::ExternalMidi}}},
+            {"Envelopes & Control",
+             {{"ADSR", ModuleType::ADSR},
+              {"Envelope Follower", ModuleType::EnvelopeFollower},
+              {"VCA", ModuleType::VCA}}},
+            {"Filters", {{"Filter", ModuleType::Filter}, {"Parametric EQ", ModuleType::ParametricEQ}}},
+            {"Modulation FX",
+             {{"Chorus", ModuleType::Chorus},
+              {"Phaser", ModuleType::Phaser},
+              {"Flanger", ModuleType::Flanger},
+              {"Distortion", ModuleType::Distortion},
+              {"Ring Modulator", ModuleType::RingModulator},
+              {"Bitcrusher", ModuleType::Bitcrusher},
+              {"Pitch Shifter", ModuleType::PitchShifter}}},
+            {"Time FX", {{"Delay", ModuleType::Delay}, {"Reverb", ModuleType::Reverb}}},
+            {"Dynamics", {{"Compressor", ModuleType::Compressor}, {"Limiter", ModuleType::Limiter}}},
+            {"Utility",
+             {{"Sample & Hold", ModuleType::SampleHold},
+              {"Comparator", ModuleType::Comparator},
+              {"Math", ModuleType::Math}}},
+        };
+
+        for (auto& cat : categories) {
+            juce::PopupMenu catMenu;
+            bool hasItems = false;
+            for (auto& mod : cat.modules) {
+                if (mod.type == currentType)
+                    continue;
+                juce::String typeName(mod.name);
+                catMenu.addItem(typeName, [this, typeName] { owner.replaceModule(this, typeName); });
+                hasItems = true;
+            }
+            if (hasItems)
+                replaceMenu.addSubMenu(cat.header, catMenu);
+        }
+
+        m.addSubMenu("Replace with...", replaceMenu);
+        m.addSeparator();
+    }
+
+    m.addItem("Delete Module", [this] { owner.deleteModule(this); });
+
+    // Founder-review item 4 (docs/macros.md): this module's own menu also offers the macro it
+    // belongs to, as an appended submenu — never folded into the items above, and never built
+    // when this module is in no macro (a module in no macro sees no change at all). buildMacroMenu
+    // itself now selects THIS macro before running its "Ungroup"/"Save as Snippet..." items (see
+    // its own comment), which is what makes it safe to graft on here without disturbing the module
+    // selection the rest of this menu (Copy/Duplicate/Delete Module, above) acts on: nothing in
+    // THIS method calls selectMacro, so the module retargeted at the top of mouseDown() stays
+    // selected right up until a macro submenu item actually fires.
+    if (macro != nullptr)
+        m.addSubMenu("Macro: " + macro->name, owner.buildMacroMenu(macro->id));
+
+    return m;
+}
+
 void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
     // Clicking anywhere on a card commits an open inline title editor — this card's or another's.
     // FIRST, before the child-control guard below returns, so a press on a knob dismisses it too.
@@ -2613,6 +2947,22 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
         if (getType(module) == ModuleType::Attenuverter)
             return; // cannot drag
 
+        // Docked macro-port widget (P8-15 fix F2): not individually selectable or draggable via a
+        // LEFT click — its position is fully derived by GraphEditor::dockMacroPortWidgets()
+        // against its macro's hull (docs/macros.md §5.4), and a body drag/select here would fight
+        // that on every layout pass. A WHOLE-macro drag (via the collapsed card, or selecting the
+        // macro through selectMacro()) still carries it along: that path adds every member —
+        // ports included — to the selection directly, never through this component's own
+        // mouseDown, so it is unaffected by this early return.
+        //
+        // RIGHT-click is the one deliberate exception (founder-review fix G7: "they cannot be
+        // removed") — falls through to the right-button branch below, which opens
+        // buildMacroPortContextMenu() instead of the generic module menu, rather than leaving the
+        // port with no delete affordance of its own once its macro is gone (ungroup) or Configure
+        // I/O is otherwise inconvenient to reach.
+        if (isMacroPortType(getType(module)) && !e.mods.isRightButtonDown())
+            return;
+
         // Double-click the HEADER opens the inline rename. Intercepted here, before any drag is
         // armed, exactly like the port double-click above: the first click of the pair has already
         // armed (and its mouseUp disarmed) a body drag, and letting the second click arm another one
@@ -2631,138 +2981,28 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
         // the same press, so the legacy one-button-mouse affordance loses here; right-click and
         // two-finger tap still open the menu on every platform.
         if (e.mods.isRightButtonDown()) {
+            // A docked macro-port widget gets its OWN small menu (Delete, plus Rename/Configure
+            // I/O when its macro is still alive) rather than the generic module menu below — it
+            // has no Copy/Duplicate/Bypass/Replace concept, and is never part of the ordinary
+            // module selection (the early return above), so there is nothing for a selection
+            // retarget to do here either.
+            if (isMacroPortType(getType(module))) {
+                auto menu = buildMacroPortContextMenu();
+                showContextMenuHook_(menu);
+                return;
+            }
+
             // Right-clicking outside the current selection retargets it to this module, so the
-            // menu always acts on something the user can see is selected.
+            // menu always acts on something the user can see is selected. This has to run BEFORE
+            // buildModuleContextMenu() below reads owner.getSelectionCount() / builds its items,
+            // not folded into that method itself: it is a real side effect of the CLICK, whereas
+            // buildModuleContextMenu() also needs to be callable standalone (from a test) without
+            // repeating a gesture that already happened.
             if (!owner.isNodeSelected(nodeId))
                 owner.selectModule(nodeId, false);
 
-            juce::PopupMenu m;
-
-            // Selection actions (issue #156). Offered whenever this module is selected — a
-            // single-module snippet is legal, it is just a group of one.
-            const int selectionCount = owner.getSelectionCount();
-            const juce::String groupSuffix =
-                selectionCount > 1 ? " " + juce::String(selectionCount) + " Modules" : juce::String();
-
-            m.addItem("Copy" + groupSuffix, [this] { owner.copySelection(); });
-            m.addItem("Duplicate" + groupSuffix, [this] { owner.duplicateSelection(); });
-
-            // Paste lands next to whatever was copied, not on this module — pasting on top of the
-            // card the menu was opened from would hide the thing that just arrived.
-            const int clipboardCount = owner.getClipboardModuleCount();
-            juce::PopupMenu::Item paste(clipboardCount > 1 ? "Paste " + juce::String(clipboardCount) + " Modules"
-                                                           : "Paste");
-            paste.setEnabled(clipboardCount > 0);
-            paste.action = [this] { owner.pasteClipboard(); };
-            m.addItem(paste);
-
-            m.addItem(selectionCount > 1 ? "Save Selection as Snippet..." : "Save as Snippet...", [this] {
-                if (owner.onSaveSnippetRequested)
-                    owner.onSaveSnippetRequested();
-            });
-            if (selectionCount > 1) {
-                // Deliberately calls groupSelectionIntoMacro() directly, NOT the Cmd+G dispatch
-                // (GraphEditor::groupOrToggleSelectionMacros) — a menu item names one verb
-                // ("Create Macro") and must keep doing exactly what it says, even for a selection
-                // that already touches a macro (where it still refuses, same as always).
-                m.addItem("Create Macro from " + juce::String(selectionCount) + " Modules",
-                          [this] { owner.groupSelectionIntoMacro(); });
-                m.addItem("Delete " + juce::String(selectionCount) + " Selected Modules",
-                          [this] { owner.deleteSelection(); });
-            }
-
-            // Cmd+Alt+G's toggle, reachable from a member module's own menu too: an expanded
-            // macro's card (the collapsed card's own menu) doesn't exist while expanded, so this
-            // is the only always-reachable UI for the round trip. Shown for either state now —
-            // toggleSelectionMacrosCollapsed() picks the right direction from the touched
-            // macro's own current state, matching the label offered here.
-            if (const auto* macro = owner.macroForNode(nodeId))
-                m.addItem(macro->collapsed ? "Expand Macro" : "Collapse Macro",
-                          [this] { owner.toggleSelectionMacrosCollapsed(); });
-
-            m.addSeparator();
-
-            // Bypass toggle (only for actual modules)
-            if (auto* mod = dynamic_cast<ModuleBase*>(module)) {
-                m.addItem(mod->isBypassed() ? "Enable Module" : "Bypass Module", [this] {
-                    if (auto* mod = dynamic_cast<ModuleBase*>(module)) {
-                        mod->setBypassed(!mod->isBypassed());
-                        repaint();
-                    }
-                });
-                m.addSeparator();
-            }
-
-            // "Replace with..." submenu (only for actual modules, not AudioGraphIOProcessor).
-            // Audio Input is a ModuleBase but is still a singleton I/O node: replacing it with an
-            // Oscillator would silently leave the patch with no way to get the device's input in,
-            // and the library row it came from greyed out.
-            if (dynamic_cast<ModuleBase*>(module) != nullptr && !GraphEditor::isSingletonIOModule(module->getName())) {
-                juce::PopupMenu replaceMenu;
-                auto currentType = getType(module);
-
-                struct ModEntry {
-                    const char* name;
-                    ModuleType type;
-                };
-                struct Category {
-                    const char* header;
-                    std::vector<ModEntry> modules;
-                };
-                std::vector<Category> categories = {
-                    {"Sources",
-                     {{"Oscillator", ModuleType::Oscillator},
-                      {"Wavetable", ModuleType::Wavetable},
-                      {"Noise", ModuleType::Noise},
-                      {"Sampler", ModuleType::Sampler},
-                      {"LFO", ModuleType::LFO}}},
-                    {"Sequencing",
-                     {{"Sequencer", ModuleType::Sequencer},
-                      {"Poly Sequencer", ModuleType::PolySequencer},
-                      {"MIDI Keyboard", ModuleType::MidiKeyboard},
-                      {"Poly MIDI", ModuleType::PolyMidi},
-                      {"External MIDI", ModuleType::ExternalMidi}}},
-                    {"Envelopes & Control",
-                     {{"ADSR", ModuleType::ADSR},
-                      {"Envelope Follower", ModuleType::EnvelopeFollower},
-                      {"VCA", ModuleType::VCA}}},
-                    {"Filters", {{"Filter", ModuleType::Filter}, {"Parametric EQ", ModuleType::ParametricEQ}}},
-                    {"Modulation FX",
-                     {{"Chorus", ModuleType::Chorus},
-                      {"Phaser", ModuleType::Phaser},
-                      {"Flanger", ModuleType::Flanger},
-                      {"Distortion", ModuleType::Distortion},
-                      {"Ring Modulator", ModuleType::RingModulator},
-                      {"Bitcrusher", ModuleType::Bitcrusher},
-                      {"Pitch Shifter", ModuleType::PitchShifter}}},
-                    {"Time FX", {{"Delay", ModuleType::Delay}, {"Reverb", ModuleType::Reverb}}},
-                    {"Dynamics", {{"Compressor", ModuleType::Compressor}, {"Limiter", ModuleType::Limiter}}},
-                    {"Utility",
-                     {{"Sample & Hold", ModuleType::SampleHold},
-                      {"Comparator", ModuleType::Comparator},
-                      {"Math", ModuleType::Math}}},
-                };
-
-                for (auto& cat : categories) {
-                    juce::PopupMenu catMenu;
-                    bool hasItems = false;
-                    for (auto& mod : cat.modules) {
-                        if (mod.type == currentType)
-                            continue;
-                        juce::String typeName(mod.name);
-                        catMenu.addItem(typeName, [this, typeName] { owner.replaceModule(this, typeName); });
-                        hasItems = true;
-                    }
-                    if (hasItems)
-                        replaceMenu.addSubMenu(cat.header, catMenu);
-                }
-
-                m.addSubMenu("Replace with...", replaceMenu);
-                m.addSeparator();
-            }
-
-            m.addItem("Delete Module", [this] { owner.deleteModule(this); });
-            m.showMenuAsync(juce::PopupMenu::Options());
+            auto menu = buildModuleContextMenu();
+            showContextMenuHook_(menu);
         } else {
             // ---- Selection semantics (issue #156) + Ctrl insert-between ----
             //
@@ -2814,8 +3054,8 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
 juce::String ModuleComponent::cardTitle() const { return owner.getModuleTitle(nodeId, module); }
 
 void ModuleComponent::beginTitleRename() {
-    if (module == nullptr || getType(module) == ModuleType::Attenuverter)
-        return;
+    if (module == nullptr || getType(module) == ModuleType::Attenuverter || isMacroPortType(getType(module)))
+        return; // no header, nothing to rename here — Configure I/O renames the PORT (its own name)
 
     // Any editor already open commits first, and that mutates the graph — so nothing may hold state
     // across it. Same ordering as TimelineRulerComponent::beginRenameMarker.

@@ -236,6 +236,10 @@ add_library(Core STATIC
     Source/Modules/RecordTapModule.h
     Source/Modules/TimelineAudioSourceModule.h
     Source/Modules/TimelineMidiSourceModule.h
+    Source/Modules/MacroInletModule.h
+    Source/Modules/MacroOutletModule.h
+    Source/Modules/MacroMidiInletModule.h
+    Source/Modules/MacroMidiOutletModule.h
     Source/Modules/VisualBuffer.h
     Source/Modules/FX/DelayModule.h
     Source/Modules/FX/DistortionModule.h
@@ -550,6 +554,7 @@ add_library(AppUI STATIC
     Source/UI/ModuleComponent.cpp
     Source/UI/ModuleComponent.h
     Source/UI/MacroCardComponent.cpp
+    Source/UI/MacroPortConfigDialog.cpp
     Source/UI/MacroCardComponent.h
     Source/UI/FrequencyResponseComponent.h
     Source/UI/FrequencyGrid.h

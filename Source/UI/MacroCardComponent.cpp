@@ -1,5 +1,6 @@
 #include "MacroCardComponent.h"
 #include "GraphEditor.h"
+#include "Theme/AppLookAndFeel.h"
 
 MacroCardComponent::MacroCardComponent(GraphEditor& owner, juce::String macroId)
     : owner(owner)
@@ -35,8 +36,7 @@ void MacroCardComponent::paint(juce::Graphics& g) {
     auto countRow = textArea.removeFromBottom(14);
     g.setFont(juce::Font(juce::FontOptions(11.0f)));
     g.setColour(juce::Colours::white.withAlpha(0.75f));
-    const int n = (int)macro->members.size();
-    g.drawText(juce::String(n) + (n == 1 ? " module" : " modules"), countRow, juce::Justification::bottomLeft);
+    g.drawText(getModuleCountText(), countRow, juce::Justification::bottomLeft);
 
     // ---- Content preview (Fix 6/P8-12 follow-up) ----
     // A collapsed macro used to be an opaque box with nothing but a name and a count. Draw a
@@ -73,10 +73,86 @@ void MacroCardComponent::paint(juce::Graphics& g) {
     }
     // ---- End content preview ----
 
+    // ---- Port jacks (P8-15c, T141: docs/macros.md §7 item 4) ----
+    // One jack per configured port — inputs down the left edge, outputs down the right, from the
+    // SAME owner.macroCardPortLayout() that this card's own hit-testing (endConnectionDrag's jack
+    // check) and buildVisibleCables()'s boundary-cable anchoring both read, so the drawn dot is
+    // never anywhere those two disagree about. Colour matches ModuleComponent::paint's own jack
+    // convention verbatim (its comment: "Audio-signal jacks (MIDI in/out) -> audioWire;
+    // mod-capable input/output jacks -> accent") — audioWire for a MIDI port's jack, accent for an
+    // AudioCV one, not the *Wire-at-a-paint-site the CABLE-colour invariant forbids
+    // (Source/UI/CLAUDE.md): a JACK dot is not a cable, and this follows the one jack-painting
+    // site in the codebase that already makes this exact call.
+    const auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    static const synth::theme::Colors fallbackColors{};
+    const auto& themeColors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
+    {
+        for (const auto& port : owner.macroCardPortLayout(macro->id)) {
+            g.setColour(port.kind == synth::MacroPortKind::Midi ? themeColors.audioWire : themeColors.accent);
+            g.fillEllipse((float)port.jackPos.x - 5.0f, (float)port.jackPos.y - 5.0f, 10.0f, 10.0f);
+
+            // Port name (founder-review fix F2, item 3/docs/macros.md §7 item 4: "it's not shown
+            // on the module UI... it should be presented"): left-aligned inside the left edge for
+            // an input, right-aligned inside the right edge for an output — mirroring the docked
+            // widget's own left/right convention (§5.3/§5.4) so an expanded and collapsed macro
+            // read a port's name the same way. Elided (drawFittedText, one line) if the card is
+            // too narrow for the full name.
+            if (port.name.isNotEmpty()) {
+                g.setColour(juce::Colours::white.withAlpha(0.85f));
+                g.setFont(juce::Font(juce::FontOptions(9.5f)));
+                const int labelW = juce::jmax(20, getWidth() / 2 - 16);
+                auto labelArea =
+                    port.isInput ? juce::Rectangle<int>(port.jackPos.x + 8, port.jackPos.y - 7, labelW, 14)
+                                 : juce::Rectangle<int>(port.jackPos.x - 8 - labelW, port.jackPos.y - 7, labelW, 14);
+                g.drawFittedText(port.name, labelArea,
+                                 port.isInput ? juce::Justification::centredLeft : juce::Justification::centredRight,
+                                 1);
+            }
+        }
+    }
+
+    const auto chevronBounds = getExpandButtonBounds();
+
+    // Bypass/mute indeterminate indicator (P8-15d, T142, docs/macros.md §5.6): "mixed-state
+    // members show an indeterminate indicator." Two fixed badge slots sit just left of the expand
+    // chevron -- mute nearer the chevron, bypass further out -- so their positions never shift
+    // depending on which is actually drawn (a jumping badge would be worse than a missing one).
+    // AllOff draws nothing (absence == off, matching an un-pressed per-module bypass/mute button);
+    // AllOn is a solid dot; Mixed is a half-filled dot, the usual tri-state-checkbox idiom for
+    // "some, not all" -- read fresh from owner.macroBypassState/macroMuteState on every paint, the
+    // same live-query approach macroCardPortLayout above already uses, so this can never show a
+    // stale state (GraphEditor::setMacroBypassed/setMacroMuted repaint this card explicitly after
+    // every fan-out for exactly that reason -- unlike a member's own header button, this card has
+    // no parameter listener of its own to notice the change).
+    auto paintToggleBadge = [&g](juce::Rectangle<float> bounds, juce::Colour colour,
+                                 GraphEditor::MacroToggleState state) {
+        if (state == GraphEditor::MacroToggleState::AllOff)
+            return;
+
+        g.setColour(colour);
+        if (state == GraphEditor::MacroToggleState::AllOn) {
+            g.fillEllipse(bounds);
+            return;
+        }
+
+        // Mixed: fill only the left half, then outline the whole circle.
+        {
+            juce::Graphics::ScopedSaveState clipGuard(g);
+            g.reduceClipRegion(juce::Rectangle<int>((int)bounds.getX(), (int)bounds.getY(),
+                                                    (int)(bounds.getWidth() * 0.5f) + 1, (int)bounds.getHeight() + 1));
+            g.fillEllipse(bounds);
+        }
+        g.drawEllipse(bounds, 1.2f);
+    };
+
+    // colors.warning is the bypass family (ModMatrixComponent's own bypass toggle uses it);
+    // colors.error is documented as "error / mute" on Theme::Colors itself.
+    paintToggleBadge(getToggleBadgeBounds(false), themeColors.warning, owner.macroBypassState(macro->id));
+    paintToggleBadge(getToggleBadgeBounds(true), themeColors.error, owner.macroMuteState(macro->id));
+
     // Expand chevron — a filled triangle rather than a text glyph, so there's no non-ASCII
     // string literal to trip check-nonascii-literals.test.sh and no themed icon asset to add for
     // one small affordance.
-    const auto chevronBounds = getExpandButtonBounds();
     juce::Path chevron;
     chevron.addTriangle(chevronBounds.getX() + 3.0f, chevronBounds.getY() + 7.0f, chevronBounds.getRight() - 3.0f,
                         chevronBounds.getY() + 7.0f, chevronBounds.getCentreX(), chevronBounds.getBottom() - 5.0f);
@@ -90,10 +166,26 @@ juce::Rectangle<float> MacroCardComponent::getExpandButtonBounds() const {
     return juce::Rectangle<float>(getWidth() - kMargin - kSize, kMargin, kSize, kSize);
 }
 
+juce::Rectangle<float> MacroCardComponent::getToggleBadgeBounds(bool mute) const {
+    const auto chevron = getExpandButtonBounds();
+    const float y = chevron.getCentreY() - kToggleBadgeSize * 0.5f;
+    // The mute (inner) slot sits directly left of the chevron; the bypass (outer) slot sits
+    // directly left of THAT slot, whether or not either is actually drawn (see paint()'s comment
+    // on why the slots are fixed rather than compacted).
+    const float innerSlotX = chevron.getX() - kToggleBadgeGap - kToggleBadgeSize;
+    const float x = mute ? innerSlotX : innerSlotX - kToggleBadgeGap - kToggleBadgeSize;
+    return juce::Rectangle<float>(x, y, kToggleBadgeSize, kToggleBadgeSize);
+}
+
 juce::Rectangle<int> MacroCardComponent::getTitleRowBounds() const {
     auto textArea = getLocalBounds().reduced(10, 6);
     auto titleRow = textArea.removeFromTop(20);
-    titleRow.removeFromRight(28); // leave room for the expand chevron - keep it out of the rename hit zone
+    // Reserve room for the expand chevron AND both bypass/mute badges (getToggleBadgeBounds) —
+    // keeps a long macro name's text from painting under either, and keeps the double-click
+    // rename zone off them too. Derived from getToggleBadgeBounds' own outer edge rather than a
+    // second copy of the "28 + 2 slots" arithmetic, so the two can never drift apart.
+    const int reserve = getWidth() - (int)getToggleBadgeBounds(false).getX();
+    titleRow.removeFromRight(reserve);
     return titleRow;
 }
 
@@ -219,6 +311,33 @@ void MacroCardComponent::showContextMenu() {
                                 safeThis->beginRename();
                         })
         .showMenuAsync(juce::PopupMenu::Options());
+}
+
+juce::String MacroCardComponent::getModuleCountText() const {
+    // Founder review: "the number of modules indicator seems to show more then there are - 4
+    // when i grouped the delay and reverb in the default patch - should have shown 2." The bug
+    // was counting graph MEMBERS (which include the auto-created port nodes for the crossing
+    // cable) instead of MODULES. synth::Macro::moduleMemberCount() is the one place that
+    // exclusion lives now (MacroSet.h) — every other user-facing count/list routes through it or
+    // through memberIsPort(), so this can never drift back out of sync with the tooltip below.
+    //
+    // A plain P8-12 macro with no ports reads exactly as it always did ("2 modules") — the
+    // regression risk this fix has to avoid. A macro that DOES have ports names the port count
+    // alongside it, rather than silently hiding a real quantity: "2 modules, 2 ports" is more
+    // honest than either "4 modules" (the bug) or a bare "2 modules" that pretends the ports
+    // aren't there.
+    const auto* macro = owner.getMacros().find(macroId);
+    if (macro == nullptr)
+        return {};
+
+    const int moduleCount = macro->moduleMemberCount();
+    juce::String text = juce::String(moduleCount) + (moduleCount == 1 ? " module" : " modules");
+
+    const int portCount = (int)macro->ports.size();
+    if (portCount > 0)
+        text << ", " << portCount << (portCount == 1 ? " port" : " ports");
+
+    return text;
 }
 
 juce::String MacroCardComponent::getTooltip() {

@@ -39,11 +39,25 @@ public:
      *  unreadable tooltip. */
     juce::String getTooltip() override;
 
+    /** The card's own "N modules[, M ports]" line (founder-review fix G6, docs/macros.md §7
+     *  item 4 note) — a MODULE count, excluding port nodes, with the port count named alongside
+     *  it (never silently dropped) whenever the macro actually has one. Public so a test can pin
+     *  the exact text against a founder-reported scenario (group 2 modules with a crossing cable
+     *  -> 2 auto-created ports -> must read "2 modules", never "4 modules"), the same accessor
+     *  pattern getTooltip() above already uses. Empty if `macroId` doesn't resolve. */
+    juce::String getModuleCountText() const;
+
     /** Opens the inline rename editor over the card. Public so a test can drive it without
      *  synthesising a right-click + menu selection. */
     void beginRename();
     void finishRename(bool commit);
     bool isRenamingTitle() const noexcept { return nameEditor != nullptr; }
+
+    /** Test accessors for the private layout functions below — so a test can assert the title
+     *  row (and its double-click rename zone) never overlaps a bypass/mute badge slot, without
+     *  duplicating either rectangle's arithmetic (P8-15d, T142). */
+    juce::Rectangle<float> getToggleBadgeBoundsForTest(bool mute) const { return getToggleBadgeBounds(mute); }
+    juce::Rectangle<int> getTitleRowBoundsForTest() const { return getTitleRowBounds(); }
 
 private:
     void showContextMenu();
@@ -52,6 +66,19 @@ private:
      *  the same thing but nothing on the card *looked* clickable, so grouping fresh modules and
      *  then finding your way back into them was a guessing game (double-click, undocumented). */
     juce::Rectangle<float> getExpandButtonBounds() const;
+
+    /** One bypass/mute indeterminate-indicator badge's bounds (P8-15d, T142, docs/macros.md
+     *  §5.6), just left of the expand chevron — `mute=false` is the outer (bypass) slot, `true`
+     *  the inner (mute) slot nearer the chevron. Purely a function of `getExpandButtonBounds()`,
+     *  so paint() and getTitleRowBounds() (which reserves room for both slots so a long macro
+     *  name can never paint under them) read the SAME rectangles a test can assert against —
+     *  the same "one layout definition" principle macroCardPortLayout applies to port jacks. */
+    juce::Rectangle<float> getToggleBadgeBounds(bool mute) const;
+
+    // Shared by getToggleBadgeBounds() and getTitleRowBounds() so the badge size/spacing can
+    // never drift between where a badge is drawn and how much of the title row is reserved for it.
+    static constexpr float kToggleBadgeSize = 8.0f;
+    static constexpr float kToggleBadgeGap = 5.0f;
 
     /** The title row's hit zone, in this card's local bounds — the SAME rectangle paint() draws
      *  the name into (minus the chevron reservation), so a double-click's rename zone can never
