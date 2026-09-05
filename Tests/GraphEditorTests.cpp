@@ -4591,6 +4591,51 @@ TEST_F(GraphEditorTest, GhostPortEstimateMatchesTheRealJackCentre) {
     }
 }
 
+TEST_F(GraphEditorTest, MidiCableAnchorsOnTheDrawnJackNotTheAudioPortStack) {
+    // T149: buildVisibleCables() anchored a MIDI wire's source at portPos(comp, 0, false) — audio
+    // output jack 0, which paint() offsets DOWN by kPortStep to dodge the MIDI Out dot — instead of
+    // the fixed MIDI Out dot itself, so the cable left from below the jack it claimed to leave from.
+    // The destination leg carried a second, independent drift: a stale y=30 literal instead of
+    // ModuleComponent::kPortGutterHeaderHeight (the same 30-vs-38 drift GhostPortEstimateMatches...
+    // already guards for ghost previews).
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1000, 700);
+
+    auto& graph = engine.getGraph();
+    auto seqNode = graph.addNode(std::make_unique<SequencerModule>());
+    seqNode->properties.set("x", 100);
+    seqNode->properties.set("y", 100);
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    oscNode->properties.set("x", 500);
+    oscNode->properties.set("y", 100);
+
+    ASSERT_TRUE(graph.addConnection({{seqNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
+                                     {oscNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex}}));
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    auto* seqComp = findModuleComp(editor, seqNode->getProcessor());
+    auto* oscComp = findModuleComp(editor, oscNode->getProcessor());
+    ASSERT_NE(seqComp, nullptr);
+    ASSERT_NE(oscComp, nullptr);
+
+    const auto& cables = editor.buildVisibleCables();
+    const GraphEditor::VisibleCable* midiCable = nullptr;
+    for (const auto& c : cables) {
+        if (c.signal == synth::ui::CableSignal::Midi) {
+            midiCable = &c;
+            break;
+        }
+    }
+    ASSERT_NE(midiCable, nullptr) << "the Sequencer->Oscillator MIDI connection did not produce a visible cable";
+
+    const auto expectedSrc = (seqComp->getBounds().getPosition() + seqComp->getMidiPortCenter(true)).toFloat();
+    const auto expectedDst = (oscComp->getBounds().getPosition() + oscComp->getMidiPortCenter(false)).toFloat();
+    EXPECT_EQ(midiCable->p1, expectedSrc) << "MIDI cable source did not land on the drawn MIDI Out dot";
+    EXPECT_EQ(midiCable->p2, expectedDst) << "MIDI cable destination did not land on the drawn MIDI In dot";
+}
+
 TEST_F(GraphEditorTest, SmartConnectionPreviewLegsLandOnTheRealDestinationJack) {
     // End-to-end version of the above: the previewed leg's destination endpoint must sit on the
     // destination card's actual jack dot, not floating over its label row.
