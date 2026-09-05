@@ -1088,13 +1088,21 @@ In order, each independently shippable:
    directly on the plain module (or the existing port, if that's what it resolved to) — never a
    second port. **Mono only** — the same scope cut `createMacroPortFromDroppedCable` (§5.3, item 3)
    already applies to its own cable-drop convenience; no inference from the dragged cable's poly/
-   stereo fan. **Skipped entirely for a connection that would route through a hidden
-   `AttenuverterModule`** — `GraphEditor::connectionWouldRouteAsModulationCV` mirrors
-   `connectPorts()`'s own CV/mod-routing detection (`resolvePolyLink` -> single-voice ->
-   destination's `getModulationTargets()`) so a Serum-style knob-drop crossing a macro boundary
-   still just wraps in an attenuverter, exactly as it does outside a macro — item 7's own G3 fix
-   (splicing a port into a *grouping-time* mod chain) is a different code path (`spliceMacroPorts`)
-   and is unaffected. **Wiring wires BOTH sides of every minted port** — unlike
+   stereo fan. **A mod/CV-routed drag is handled by the SAME mint-and-wire path as a plain audio
+   drag (T155, 2026-09-05)** — no separate scope cut, no mirrored CV-detection helper. The v1 cut
+   (`connectionWouldRouteAsModulationCV`, which bailed out before minting anything) was live-tested
+   and found unnecessarily narrow, so it was deleted outright. `connectPorts()`'s own existing
+   CV/mod-routing detection (`resolvePolyLink` -> single-voice -> destination's
+   `getModulationTargets()`, unchanged by T155) naturally wraps whichever leg's real endpoint is a
+   genuine modulation-target parameter (Pitch, Cutoff, a knob-drop target, ...) in a hidden
+   `AttenuverterModule` via `addModRouting()` — exactly as it already does for a plain, non-macro CV
+   connection. A freshly-minted `MacroInletModule`/`MacroOutletModule` is never itself a modulation
+   target (an existing invariant — the attenuverter node itself can also never be a macro member,
+   §2/§7 item 7), so wiring `member<->port` can never accidentally attract the wrap; only the LAST
+   leg wired — the one whose destination is the real modulation target — is ever a candidate, same
+   as it always was. This exactly mirrors item 7's own G3 fix for the grouping-time path
+   (`spliceMacroPorts`), which was never in scope-cut in the first place. **Wiring wires BOTH sides
+   of every minted port** — unlike
    `createMacroPortFromDroppedCable`, which deliberately wires only the external side because a
    collapsed macro has no visible interior to wire to (§5.3); here the macro is necessarily
    EXPANDED (both endpoints are real, visible `ModuleComponent`s, which a collapsed macro's hidden
