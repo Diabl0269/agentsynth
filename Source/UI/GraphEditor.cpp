@@ -5898,51 +5898,19 @@ void GraphEditor::mouseDoubleClick(const juce::MouseEvent& e) {
 }
 
 juce::AudioProcessorGraph::NodeID GraphEditor::getAttenuverterNodeAt(juce::Point<float> localPos) {
-    auto& graph = audioEngine.getGraph();
-    for (auto& connection : graph.getConnections()) {
-        auto* node1 = graph.getNodeForId(connection.source.nodeID);
-        auto* node2 = graph.getNodeForId(connection.destination.nodeID);
-
-        if (!node1 || !node2)
+    // Reuses buildVisibleCables()'s own AttenuverterChain geometry (T144) rather than re-deriving
+    // source/dest positions from raw graph connections: that duplicate computation used the raw
+    // channel index (not mapOutputChannel/mapInputChannel's visible-jack mapping) and never ran the
+    // collapsed-macro re-anchoring pass, so it silently drifted off the actually-painted knob the
+    // moment either endpoint was a macro port node -- exactly the two-macro crossing this hit-test
+    // exists to serve. See the class comment above CableId/VisibleCable for why a cable's identity
+    // and geometry must only ever come from this one place.
+    for (const auto& cable : buildVisibleCables()) {
+        if (cable.kind != VisibleCable::Kind::AttenuverterChain)
             continue;
-
-        // An attenuverter always has a source connection into its port 0
-        if (dynamic_cast<AttenuverterModule*>(node2->getProcessor()) != nullptr) {
-            juce::AudioProcessorGraph::Node* realDstNode = nullptr;
-            int realDstPort = 0;
-            // Find the output connection FROM this attenuverter
-            for (auto& c : graph.getConnections()) {
-                if (c.source.nodeID == node2->nodeID) {
-                    realDstNode = graph.getNodeForId(c.destination.nodeID);
-                    realDstPort = c.destination.channelIndex;
-                    break;
-                }
-            }
-
-            if (realDstNode) {
-                juce::Point<int> p1, p2;
-                bool found1 = false, found2 = false;
-                for (auto* comp : content.getModules()) {
-                    if (comp->getModule() == node1->getProcessor()) {
-                        auto localP = comp->getPortCenter(connection.source.channelIndex, false);
-                        p1 = comp->getBounds().getPosition() + localP;
-                        found1 = true;
-                    }
-                    if (comp->getModule() == realDstNode->getProcessor()) {
-                        auto localP = comp->getPortCenter(realDstPort, true);
-                        p2 = comp->getBounds().getPosition() + localP;
-                        found2 = true;
-                    }
-                }
-
-                if (found1 && found2) {
-                    auto mid = (p1 + p2) / 2;
-                    if (juce::Point<float>(mid.toFloat().x, mid.toFloat().y).getDistanceFrom(localPos) <= 15.0f) {
-                        return node2->nodeID;
-                    }
-                }
-            }
-        }
+        const auto mid = (cable.p1 + cable.p2) / 2.0f;
+        if (mid.getDistanceFrom(localPos) <= 15.0f)
+            return juce::AudioProcessorGraph::NodeID{cable.id.attenUid};
     }
     return {};
 }

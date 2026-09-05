@@ -136,6 +136,28 @@ bool hasMidiConnection(AudioEngine& engine, NodeID srcId, NodeID dstId) {
                          juce::AudioProcessorGraph::midiChannelIndex);
 }
 
+// Hand-built MouseEvent, same pattern as GraphEditorTests.cpp's makeGraphEditorMouseEvent — no OS
+// mouse source exists headlessly, but MouseInputSource is copyable and Desktop always exposes one.
+// `position` is in GraphEditor-LOCAL (screen) coordinates, the same space GraphEditor::mouseDown
+// converts via content.getLocalPoint() before doing any canvas-space hit-testing.
+juce::MouseEvent makeEditorMouseEvent(juce::Component& comp, juce::Point<float> position, int clicks = 1) {
+    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), position,
+                            juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                            &comp, &comp, juce::Time::getCurrentTime(), position, juce::Time::getCurrentTime(), clicks,
+                            false);
+}
+
+// Inverse of GraphEditorTests.cpp's screenToCanvas: a cable's p1/p2 (and therefore its painted
+// knob midpoint) are in CANVAS coordinates, but a MouseEvent fed into GraphEditor itself must be in
+// GraphEditor-local (screen) coordinates -- getVisibleCanvasRect() is the one linear map between
+// the two (zoom + pan), so a mouse-driven test has to go through it rather than assume 1:1.
+juce::Point<float> canvasToEditorLocal(const GraphEditor& editor, juce::Point<float> canvasPt) {
+    const auto rect = editor.getVisibleCanvasRect();
+    const auto w = static_cast<float>(editor.getWidth());
+    const auto h = static_cast<float>(editor.getHeight());
+    return {(canvasPt.x - rect.getX()) / rect.getWidth() * w, (canvasPt.y - rect.getY()) / rect.getHeight() * h};
+}
+
 NodeID nodeIdForUuid(AudioEngine& engine, const juce::String& uuid) {
     for (auto* node : engine.getGraph().getNodes())
         if (node->properties["uuid"].toString() == uuid)
@@ -751,6 +773,124 @@ TEST(MacroAutoPort, UndoRestoresAModRoutingCrossingSpliceExactly) {
     EXPECT_EQ(redone[0].attenuverterNodeID, attenId);
     EXPECT_EQ(redone[0].sourceNodeID, source);
     EXPECT_NE(redone[0].destNodeID, dest) << "redo's destination is the port again, not the original module";
+}
+
+// ---- T144: the amount knob for a mod route crossing TWO macro boundaries -----------------
+// Founder review round 3, item 1. A mod chain source->attenuverter->dest, each real endpoint
+// grouped into its OWN macro (so the attenuverter sits between an outlet port on one macro and an
+// inlet port on another — the reported screenshot's exact topology), left the on-canvas knob
+// completely unclickable: GraphEditor::getAttenuverterNodeAt re-derived the chain's source/dest
+// positions from raw graph connections (raw channel index into ModuleComponent::getPortCenter, no
+// mapOutputChannel/mapInputChannel visible-jack mapping, and no collapsed-macro re-anchoring) — an
+// independent geometry computation from the one buildVisibleCables()/paint() actually use, so it
+// silently drifted ~300px off the real knob position the moment either endpoint became a macro
+// port node, in EVERY collapse state including both macros fully expanded. It now reuses
+// buildVisibleCables()'s own AttenuverterChain cable, so hit-testing can never disagree with what
+// is painted (docs/macros.md §7 item 7's fix note).
+TEST(MacroAutoPort, TwoMacroCrossingKnobHitTestMatchesPaintedGeometryInEveryCollapseState) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto source = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Source", 100, 100);
+    auto other1 = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Other1", 100, 300);
+    auto dest = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Dest", 700, 100);
+    auto other2 = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Other2", 700, 300);
+    const auto attenId = engine.addModRouting(source, 0, dest, 0); // source -> atten -> dest
+    ASSERT_TRUE(attenId.uid != 0);
+
+    editor.setSelectedNodes({source, other1});
+    const auto macroA = editor.groupSelectionIntoMacro(true);
+    ASSERT_FALSE(macroA.isEmpty());
+    ASSERT_EQ(editor.getMacros().find(macroA)->ports.size(), 1u) << "source's crossing gets an outlet port";
+
+    editor.setSelectedNodes({dest, other2});
+    const auto macroB = editor.groupSelectionIntoMacro(true);
+    ASSERT_FALSE(macroB.isEmpty());
+    ASSERT_EQ(editor.getMacros().find(macroB)->ports.size(), 1u) << "dest's crossing gets an inlet port";
+
+    // The graph-level chain is intact regardless of UI state: port -> atten -> port.
+    auto active = engine.getActiveModRoutings();
+    ASSERT_EQ(active.size(), 1u);
+    EXPECT_EQ(active[0].attenuverterNodeID, attenId);
+
+    auto assertKnobIsClickableAtItsPaintedMidpoint = [&](const char* label) {
+        const GraphEditor::VisibleCable* chain = nullptr;
+        for (const auto& c : editor.buildVisibleCables())
+            if (c.kind == GraphEditor::VisibleCable::Kind::AttenuverterChain)
+                chain = &c;
+        ASSERT_NE(chain, nullptr) << label << ": no AttenuverterChain cable is even painted";
+        const auto mid = (chain->p1 + chain->p2) / 2.0f;
+        EXPECT_EQ(editor.getAttenuverterNodeAt(mid), attenId)
+            << label << ": clicking the exact spot the knob is painted at must hit the attenuverter";
+    };
+
+    assertKnobIsClickableAtItsPaintedMidpoint("both expanded");
+
+    editor.setMacroCollapsed(macroA, true);
+    editor.updateComponents();
+    assertKnobIsClickableAtItsPaintedMidpoint("macro A collapsed");
+
+    editor.setMacroCollapsed(macroB, true);
+    editor.updateComponents();
+    assertKnobIsClickableAtItsPaintedMidpoint("both collapsed");
+}
+
+// The end-to-end proof: a REAL mouse drag on the knob (not just a NodeID lookup) must actually
+// change the attenuverter's amount, and a real double-click on it must delete the routing — the
+// same two gestures a user has, both of which go through getAttenuverterNodeAt. Driving synthesized
+// MouseEvents into GraphEditor itself, rather than calling the hit-test function directly, catches
+// the case where the hit-test is right but the gesture wiring above it silently no-ops.
+TEST(MacroAutoPort, TwoMacroCrossingKnobRespondsToARealMouseDrag) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto source = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Source", 100, 100);
+    auto other1 = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Other1", 100, 300);
+    auto dest = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Dest", 700, 100);
+    auto other2 = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Other2", 700, 300);
+    const auto attenId = engine.addModRouting(source, 0, dest, 0);
+    ASSERT_TRUE(attenId.uid != 0);
+
+    editor.setSelectedNodes({source, other1});
+    ASSERT_FALSE(editor.groupSelectionIntoMacro(true).isEmpty());
+    editor.setSelectedNodes({dest, other2});
+    const auto macroB = editor.groupSelectionIntoMacro(true);
+    ASSERT_FALSE(macroB.isEmpty());
+
+    editor.setMacroCollapsed(macroB, true); // the realistic case: macros collapsed to hide detail
+    editor.updateComponents();
+
+    const GraphEditor::VisibleCable* chain = nullptr;
+    for (const auto& c : editor.buildVisibleCables())
+        if (c.kind == GraphEditor::VisibleCable::Kind::AttenuverterChain)
+            chain = &c;
+    ASSERT_NE(chain, nullptr);
+    // chain->p1/p2 are CANVAS coordinates (what buildVisibleCables()/paint() use); a MouseEvent fed
+    // into GraphEditor itself needs GraphEditor-local (screen) coordinates -- canvasToEditorLocal
+    // is the one place that conversion happens, mirroring what mouseDown does internally in reverse.
+    const auto knobCanvasPos = (chain->p1 + chain->p2) / 2.0f;
+    const auto knobPos = canvasToEditorLocal(editor, knobCanvasPos);
+
+    auto* attenProc = engine.getGraph().getNodeForId(attenId)->getProcessor();
+    auto* amountParam = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(attenProc, "amount"));
+    ASSERT_NE(amountParam, nullptr);
+    // addModRouting starts amount at its +1 ceiling (source -> atten(amount=1) -> dest) -- pull it
+    // to the middle first so an upward drag has room to register a real increase.
+    amountParam->setValueNotifyingHost(amountParam->convertTo0to1(0.0f));
+    const float before = amountParam->get();
+
+    editor.mouseDown(makeEditorMouseEvent(editor, knobPos));
+    editor.mouseDrag(makeEditorMouseEvent(editor, knobPos + juce::Point<float>(0.0f, -40.0f))); // drag up
+    editor.mouseUp(makeEditorMouseEvent(editor, knobPos + juce::Point<float>(0.0f, -40.0f)));
+
+    EXPECT_GT(amountParam->get(), before) << "dragging the knob up on a two-macro crossing must raise the amount";
+
+    // Double-click on the same knob deletes the routing outright — proves the second gesture that
+    // shares this hit-test (mouseDoubleClick) survives the fix too.
+    editor.mouseDoubleClick(makeEditorMouseEvent(editor, knobPos));
+    EXPECT_TRUE(engine.getActiveModRoutings().empty()) << "double-clicking the knob must delete the routing";
 }
 
 // ============================================================================

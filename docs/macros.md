@@ -929,6 +929,34 @@ In order, each independently shippable:
      just that a port node exists), and `UndoRestoresAModRoutingCrossingSpliceExactly` covers
      undo/redo.
 
+     **T144 (founder review round 3): the knob went dead when the chain crossed TWO macro
+     boundaries, not one.** Grouping the source side into its own macro and the destination side
+     into a SEPARATE macro leaves the attenuverter sandwiched between an outlet port on one macro
+     and an inlet port on another — each splice above runs independently and correctly (the graph
+     is genuinely `port -> atten -> port`, and `buildVisibleCables()`'s pass 1 draws it as one
+     `AttenuverterChain` cable with the knob at its midpoint exactly as designed). The reported bug
+     was never a gap in this design — the founder's three framings ("on the port widget", "in the
+     mod matrix only", "a synthetic inline control") all presupposed the on-canvas cable-midpoint
+     knob couldn't represent a two-macro crossing at all. It can, and does, once painted; what
+     could not be clicked was `GraphEditor::getAttenuverterNodeAt`, the hit-test both the drag-to-
+     adjust gesture and the double-click-to-delete gesture share. It re-derived the chain's two real
+     endpoints straight from `graph.getConnections()` and `ModuleComponent::getPortCenter()` with
+     the RAW channel index (never `mapOutputChannel`/`mapInputChannel`'s visible-jack mapping) and
+     no collapsed-macro re-anchoring — a second, independent geometry computation from the one
+     `buildVisibleCables()`/`paint()` actually use, in violation of the class comment above
+     `GraphEditor::CableId` that exists specifically to rule this out. Once either endpoint became a
+     macro port node the two computations diverged by roughly 300px, in EVERY collapse state
+     including both macros fully expanded (measured directly against `buildVisibleCables()`'s own
+     painted midpoint before this fix) — so the knob rendered in the right place and clicking it
+     did nothing, matching "no amount knob and does not work at all" exactly.
+     `getAttenuverterNodeAt` now searches `buildVisibleCables()` for the `AttenuverterChain` cable
+     and hit-tests its own `(p1+p2)/2` midpoint, so it can never disagree with what is painted.
+     `MacroAutoPortTests.cpp`'s `TwoMacroCrossingKnobHitTestMatchesPaintedGeometryInEveryCollapseState`
+     pins the geometry across all three collapse states, and
+     `TwoMacroCrossingKnobRespondsToARealMouseDrag` drives a real `mouseDown`/`mouseDrag`/`mouseUp`
+     and a real `mouseDoubleClick` into `GraphEditor` itself to prove both gestures work end to end,
+     not just that the NodeID lookup succeeds.
+
      **The mod matrix's own destination combo needed a matching fix.** `MacroInletModule`
      deliberately declares no `getModulationTargets()` (`GraphEditor::connectPorts()` relies on that
      empty list to keep a plain cable drop onto a Macro In's jack a plain connection, never
