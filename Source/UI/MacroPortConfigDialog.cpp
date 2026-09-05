@@ -118,6 +118,14 @@ MacroPortShape MacroPortConfigDialog::shapeFromComboIndex(int itemId) {
 int MacroPortConfigDialog::comboIndexFromShape(MacroPortShape shape) {
     switch (shape) {
     case MacroPortShape::Stereo:
+    // StereoCollapsed is auto-derived-only (MacroPortShape.h) and never a choice this combo box
+    // offers (populateShapeBox has no entry for it), but an EXISTING auto-created port can still
+    // show up in this dialog, and it genuinely IS a stereo pair — display it as "Stereo" rather
+    // than falling through to the Mono default below. Because shapeFromComboIndex() can never
+    // produce StereoCollapsed, any real interaction with this row (even re-picking "Stereo") is a
+    // deliberate, explicit shape choice and correctly converts it to the two-jack Stereo shape —
+    // that is the intended behaviour, not a display bug.
+    case MacroPortShape::StereoCollapsed:
         return kShapeStereoId;
     case MacroPortShape::Poly:
         return kShapePolyId;

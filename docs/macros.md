@@ -249,10 +249,12 @@ a real DSP module (`ModuleBase::hasStereoOutputPairShape` derives it from channe
 from a per-module registration) and the wrong frame for a node we construct on demand: a port is
 created *before* it is wired, so at construction time there is nothing to inherit from.
 
-Shape is therefore an **input to port creation**, supplied one of two ways:
+Shape is therefore an **input to port creation**, supplied one of these ways:
 
 - **From the configure-I/O modal** — the user picks Mono, Stereo or Poly-N when adding the port.
   This is the primary flow and the plain reading of "open a modal to configure inputs/outputs".
+  `StereoCollapsed` (below) is never one of the choices here — hand-picking a stereo port always
+  means the two-jack `Stereo` shape.
 - **From a cable** — dragging a wire onto a collapsed card's boundary creates a port matching the
   cable's direction/kind, wired to the EXTERNAL end of the drag. A convenience path; the shape is
   genuinely known here, from the dragged cable's own poly/stereo fan. **Not yet implemented
@@ -266,6 +268,9 @@ Shape is therefore an **input to port creation**, supplied one of two ways:
 - **From nothing (a bare "Add Input"/"Add Output" in the modal)** — Mono, Stereo or Poly-N, picked
   explicitly; today the modal is the only way to reach Stereo/Poly-N, since the cable-drop path
   above is Mono-only for now.
+- **From grouping a selection with a crossing cable** (founder-review fix G2/F5, §7 item 7) — the
+  ONLY source of `StereoCollapsed`. `GraphEditor::buildMacroPortCrossingPlan` derives the shape
+  from the internal jack the crossing cable actually lands on, never from a user choice.
 
 Given a shape, the node is constructed so that the existing rules produce the right result with
 no special-casing:
@@ -273,16 +278,42 @@ no special-casing:
 - **Mono** — raw ch0 is the node's one visible jack.
 - **Stereo** — raw ch0 (Left) and a dedicated `kRightBase` raw channel (Right) are the node's two
   visible jacks — the split-block convention every other stereo-capable module in this codebase
-  follows (never ch1), applied here even though a Macro In/Out has no CV on ch1 to protect,
-  because the convention is about consistency across the codebase, not just this module's own
-  channel layout. Unlike a real DSP module's Dual I/O toggle, there is no runtime collapse/expand
-  affordance: the shape is fixed at creation (§5.3's own rule), so a Stereo port always shows both
-  legs — a toggle that could hide one would itself be a form of "the shape changes after
-  creation," which is exactly what this section rules out. `hasStereoOutputPairShape`/
-  `hasDualIOParameter()` are NOT involved (they key off the module's fixed *raw* channel count,
-  which a Macro In/Out never varies from `kMaxChannels`); `rightAudioLegChannel()` is overridden
-  directly instead, which is what a peer module's own stereo-pair auto-complete
-  (`completeStereoPairConnections`) actually reads.
+  follows (never ch1) **when its two legs sit on SEPARATE visible jacks**, applied here even though
+  a Macro In/Out has no CV on ch1 to protect, because the convention is about consistency across
+  the codebase, not just this module's own channel layout. Unlike a real DSP module's Dual I/O
+  toggle, there is no runtime collapse/expand affordance: the shape is fixed at creation (§5.3's
+  own rule), so a Stereo port always shows both legs — a toggle that could hide one would itself be
+  a form of "the shape changes after creation," which is exactly what this section rules out.
+  `hasStereoOutputPairShape`/`hasDualIOParameter()` are NOT involved (they key off the module's
+  fixed *raw* channel count, which a Macro In/Out never varies from `kMaxChannels`);
+  `rightAudioLegChannel()` is overridden directly instead, which is what a peer module's own
+  stereo-pair auto-complete (`completeStereoPairConnections`) actually reads. Reachable ONLY from
+  the Configure I/O modal, and from `buildMacroPortCrossingPlan`'s merge pass for a Dual-I/O-ON
+  crossing (§7 item 7) — both cases where the module being fronted genuinely shows two jacks.
+- **StereoCollapsed** (founder-review fix G2, §7 item 7) — raw ch0 (head, `polyVoiceSpan` 2) and
+  raw ch1 (follower) are CONTIGUOUS and both map to the SAME ONE visible jack. This is the OTHER
+  stereo shape already in this codebase — `ModuleBase::mapStereoPairOutput`'s Dual-I/O-OFF branch,
+  which every FX module (Delay, Reverb, ...) defaults to: one "Audio" jack whose raw ch0/ch1 are a
+  contiguous pair, not two separately-jacked legs. The "never ch1" sentence above governs the
+  two-jack `Stereo` shape, where a separately-jacked right leg on ch1 would collide with the CV
+  ch1 already reserved on the split-block voice modules (Oscillator/Filter/VCA); it does not
+  extend to a COLLAPSED pair, which is the FX pattern every collapsed stereo module in this
+  codebase already uses on ch0/ch1, ports included. Contiguity here is load-bearing, not
+  cosmetic: `GraphEditor::getJackTargets()` and every caller that expands a `JackTarget` walk
+  `rawHeadChannel .. + voiceSpan - 1` assuming adjacency, so a span-2 head at ch0 paired with a
+  follower on the SPLIT-block `kRightBase` (as `Stereo` uses) would make that expansion target
+  ch1 — inactive under this shape — and leave the real second leg's cable unreachable from any
+  jack: audible, but with no jack to unplug it from, exactly the "hidden cable" failure
+  `dropRoutingsOnHiddenJacks`/`dropHiddenRightLegConnections` exist to prevent elsewhere.
+  **Never selectable by hand** — the Configure I/O modal has no entry for it (§5.3's
+  configure-I/O bullet below covers Mono/Stereo/Poly-N only); it exists purely so
+  `GraphEditor::buildMacroPortCrossingPlan` can splice a port that mirrors an internal module's
+  own collapsed jack (a founder-reported bug: grouping FX modules with one "Audio" jack each
+  produced two-jack Stereo ports, mismatching the module they front). A port already carrying
+  this shape still shows as "Stereo" in the Configure I/O modal (it IS a stereo pair), but the
+  modal can never re-select it — picking any shape there, "Stereo" included, is a real,
+  deliberate conversion to the two-jack shape, one undo step like any other shape change (§7
+  item 5).
 - **Poly-N** — every raw channel `0..voiceCount-1` maps to the SAME single visible jack, raw ch0
   marked `isPolyGroupHead` with `polyVoiceSpan == voiceCount` in its `LogicalPort` mapping, so a
   poly-bus wire crossing the boundary is drawn and counted as one poly bus rather than N separate
@@ -307,10 +338,11 @@ new factory type and no migration for a Macro In/Out already on disk**: a pre-P8
 `ModuleComponent` — selection, hit-testing, cable drag/drop, undo and serialisation all key off
 that, unchanged — but it no longer PAINTS or SIZES like an ordinary module card, expanded or
 collapsed. `ModuleComponent::layoutMacroPortWidget()` sizes it purely from the shape's own visible
-jack count: one row (`kMacroPortWidgetHeaderY + kMacroPortWidgetBottomPad`) for Mono, Poly-N or a
-MIDI port (all of which have exactly one visible jack a side, a MIDI port's fanned Poly-N bus
-included), and a second row (`+ kMacroPortWidgetRowStep`) only for Stereo's two. See §5.4 for
-where that widget is PLACED.
+jack count: one row (`kMacroPortWidgetHeaderY + kMacroPortWidgetBottomPad`) for Mono, Poly-N,
+`StereoCollapsed` (founder-review fix G2 — deliberately ONE row despite carrying two raw channels,
+§5.3's `StereoCollapsed` bullet) or a MIDI port (all of which have exactly one visible jack a side,
+a MIDI port's fanned Poly-N bus included), and a second row (`+ kMacroPortWidgetRowStep`) only for
+the two-jack `Stereo` shape. See §5.4 for where that widget is PLACED.
 
 ### 5.4 Cable rendering across the boundary
 
@@ -706,13 +738,19 @@ In order, each independently shippable:
    de-duplication key: two cables landing on the same internal jack (a collapsed stereo pair's two
    raw legs, or several external sources fanned into one jack) share ONE port. A group's shape is
    read off the jack's own head raw channel, never defaulted: `polyVoiceSpan > 1 && role == Audio`
-   is Stereo; `polyVoiceSpan > 1` otherwise is Poly-N with that exact voice count; anything else is
-   Mono; a MIDI connection is its own group kind entirely, yielding `MacroMidiInlet`/
-   `MacroMidiOutlet`, never an audio port. A Dual-I/O-on module's Left/Right legs sit on two
-   SEPARATE visible jacks rather than one span-2 jack, so a second merge pass folds them into one
-   Stereo group when a crossing connection reaches both — paired via
-   `ModuleBase::rightAudioLegChannel()`, never jack index 0/1 (`Source/Modules/CLAUDE.md`), correct
-   for both the FX-adjacent and split-block (voice module) layouts. `spliceMacroPorts()` then, for
+   is `StereoCollapsed` — **founder-review fix G2**, corrected from an earlier `Stereo` here: a
+   span-2 head means the internal jack is COLLAPSED (one visible jack for both raw legs, the FX
+   pattern every Delay/Reverb/etc. defaults to), so the port must present that same one jack
+   (§5.3's `StereoCollapsed` bullet), never the two-jack `Stereo` shape a hand-picked Configure
+   I/O choice means — `polyVoiceSpan > 1` otherwise is Poly-N with that exact voice count;
+   anything else is Mono; a MIDI connection is its own group kind entirely, yielding
+   `MacroMidiInlet`/`MacroMidiOutlet`, never an audio port. A Dual-I/O-on module's Left/Right legs
+   sit on two SEPARATE visible jacks rather than one span-2 jack (`polyVoiceSpan == 1` on each, so
+   each starts life as its own Mono group here), so a second merge pass folds them into one
+   `Stereo` group (the two-jack shape, correctly — the module they front genuinely shows two
+   jacks) when a crossing connection reaches both — paired via `ModuleBase::rightAudioLegChannel()`,
+   never jack index 0/1 (`Source/Modules/CLAUDE.md`), correct for the split-block (voice module)
+   layout this merge pass exists for. `spliceMacroPorts()` then, for
    each group: disconnects every original external<->internal edge, constructs the port node with
    the derived shape/kind (named from the internal module's own name plus
    `getInputPortLabel`/`getOutputPortLabel` at the jack it fronts — "Filter Cutoff", never

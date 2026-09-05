@@ -164,6 +164,41 @@ TEST(MacroPortConfigDialogTest, SelectingANewShapeCommitsImmediately) {
     EXPECT_EQ(capturedShape, MacroPortShape::Poly);
 }
 
+// StereoCollapsed (founder-review fix G2) is auto-derived only and never a choice this dialog's
+// combo box offers, but an existing auto-created port can still show up here as a row — it
+// genuinely IS a stereo pair, so it must display as "Stereo" (comboIndexFromShape), not fall back
+// to "Mono". Because the combo can never itself produce StereoCollapsed, any real interaction with
+// that row — even re-picking the same-looking "Stereo" entry — is a deliberate shape choice and
+// correctly converts the port to the two-jack Stereo shape (a real change, not a no-op), which is
+// exactly what maybeCommitShape's committedShape_ != newShape guard does here.
+TEST(MacroPortConfigDialogTest, StereoCollapsedRowDisplaysAsStereoAndPickingStereoCommitsARealConversion) {
+    Row collapsed;
+    collapsed.nodeUuid = "uuid-collapsed";
+    collapsed.isInput = false;
+    collapsed.name = "Reverb Audio";
+    collapsed.kind = MacroPortKind::AudioCV;
+    collapsed.shape = MacroPortShape::StereoCollapsed;
+    collapsed.voiceCount = 1;
+
+    MacroPortConfigDialog dialog("My Macro", {collapsed});
+    ASSERT_EQ(dialog.getRowCountForTest(), 1);
+
+    bool fired = false;
+    juce::String capturedUuid;
+    MacroPortShape capturedShape = MacroPortShape::Mono;
+    dialog.onChangePortShape = [&](const juce::String& uuid, MacroPortShape shape, int) {
+        fired = true;
+        capturedUuid = uuid;
+        capturedShape = shape;
+    };
+
+    dialog.setRowShapeForTest(0, MacroPortShape::Stereo);
+
+    ASSERT_TRUE(fired) << "picking Stereo on a StereoCollapsed row must commit, not no-op";
+    EXPECT_EQ(capturedUuid, "uuid-collapsed");
+    EXPECT_EQ(capturedShape, MacroPortShape::Stereo); // the dialog never emits StereoCollapsed itself
+}
+
 // The voice-count field is a separate commit gesture from the shape combo (typing a number and
 // hitting Return/losing focus, the same idiom the row's name editor already uses) — it re-sends
 // onChangePortShape with the row's CURRENT shape selection and whatever the field now holds.

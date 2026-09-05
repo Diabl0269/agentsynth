@@ -4717,7 +4717,14 @@ GraphEditor::buildMacroPortCrossingPlan(const std::vector<juce::AudioProcessorGr
                 }
             }
             thisSpan = headSpan;
-            thisShape = (headSpan > 1 && headRole == PortRole::Audio) ? MacroPortShape::Stereo
+            // headSpan > 1 with Audio role is a COLLAPSED stereo jack (an FX module's single
+            // "Audio" jack fanning both raw legs, docs/macros.md §5.3/§7 item 7) — the port must
+            // present the SAME one visible jack the module does (MacroPortShape::StereoCollapsed),
+            // never the two-jack MacroPortShape::Stereo a hand-picked Configure I/O choice means.
+            // A Dual-I/O-ON module's separately-jacked Left/Right pair never reaches this branch:
+            // each leg is its own visible jack with headSpan == 1 here, so it starts life as two
+            // Mono groups and only becomes Stereo in the merge pass below.
+            thisShape = (headSpan > 1 && headRole == PortRole::Audio) ? MacroPortShape::StereoCollapsed
                         : (headSpan > 1)                              ? MacroPortShape::Poly
                                                                       : MacroPortShape::Mono;
         }

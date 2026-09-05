@@ -184,8 +184,9 @@ TEST(MacroAutoPort, MonoCrossingCreatesAnInletAndAnOutlet) {
     }
     ASSERT_NE(dynamic_cast<MacroInletModule*>(engine.getGraph().getNodeForId(inNode)->getProcessor()), nullptr);
     ASSERT_NE(dynamic_cast<MacroOutletModule*>(engine.getGraph().getNodeForId(outNode)->getProcessor()), nullptr);
-    EXPECT_EQ(dynamic_cast<MacroInletModule*>(engine.getGraph().getNodeForId(inNode)->getProcessor())->getPortShape(),
-              MacroPortShape::Mono);
+    auto* inletMb = dynamic_cast<MacroInletModule*>(engine.getGraph().getNodeForId(inNode)->getProcessor());
+    EXPECT_EQ(inletMb->getPortShape(), MacroPortShape::Mono);
+    EXPECT_EQ(inletMb->getVisibleInputPortCount(), 1); // no regression: a genuinely mono crossing stays one jack
 
     EXPECT_TRUE(hasConnection(engine, cin, 0, inNode, 0));
     EXPECT_TRUE(hasConnection(engine, inNode, 0, a, 0));
@@ -233,10 +234,12 @@ TEST(MacroAutoPort, TwoCablesIntoTheSameInternalJackShareOnePort) {
 }
 
 // ============================================================================
-// Stereo: a collapsed jack's own two-raw-channel span
+// Collapsed stereo: a collapsed jack's own two-raw-channel span must produce a port
+// presenting the SAME one visible jack the module does (founder-review fix G2) — never the
+// two-jack MacroPortShape::Stereo a hand-picked Configure I/O choice means.
 // ============================================================================
 
-TEST(MacroAutoPort, CollapsedStereoOutputCrossingCreatesAStereoOutlet) {
+TEST(MacroAutoPort, CollapsedStereoOutputCrossingCreatesAOneJackStereoCollapsedOutlet) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
@@ -245,7 +248,8 @@ TEST(MacroAutoPort, CollapsedStereoOutputCrossingCreatesAStereoOutlet) {
     auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
     auto extL = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "ExtL", 700, 60);
     auto extR = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "ExtR", 700, 160);
-    // Reverb defaults to Dual I/O OFF (collapsed): raw ch0/ch1 are ONE "Audio" jack, span 2.
+    // Reverb defaults to Dual I/O OFF (collapsed): raw ch0/ch1 are ONE "Audio" jack, span 2 — same
+    // as the founder's screenshot (a single "Audio" jack on DELAY/REVERB either side).
     engine.getGraph().addConnection({{reverb, 0}, {extL, 0}});
     engine.getGraph().addConnection({{reverb, 1}, {extR, 0}});
 
@@ -261,14 +265,60 @@ TEST(MacroAutoPort, CollapsedStereoOutputCrossingCreatesAStereoOutlet) {
     const auto portNode = theOneNewPortNode(engine, before);
     auto* outlet = dynamic_cast<MacroOutletModule*>(engine.getGraph().getNodeForId(portNode)->getProcessor());
     ASSERT_NE(outlet, nullptr);
-    EXPECT_EQ(outlet->getPortShape(), MacroPortShape::Stereo);
+    EXPECT_EQ(outlet->getPortShape(), MacroPortShape::StereoCollapsed);
+    // The bug this fix closes: the port must present exactly as many VISIBLE jacks as the
+    // internal jack it fronts (docs/macros.md). Reverb's own jack is ONE jack; so must this be.
+    EXPECT_EQ(outlet->getVisibleInputPortCount(), 1);
+    EXPECT_EQ(outlet->getVisibleOutputPortCount(), 1);
 
+    // ...while still carrying BOTH raw channels — a channel-dropping "fix" must fail this.
     EXPECT_TRUE(hasConnection(engine, reverb, 0, portNode, 0));
     EXPECT_TRUE(hasConnection(engine, portNode, 0, extL, 0));
-    EXPECT_TRUE(hasConnection(engine, reverb, 1, portNode, MacroOutletModule::kRightBase));
-    EXPECT_TRUE(hasConnection(engine, portNode, MacroOutletModule::kRightBase, extR, 0));
+    EXPECT_TRUE(hasConnection(engine, reverb, 1, portNode, 1));
+    EXPECT_TRUE(hasConnection(engine, portNode, 1, extR, 0));
     EXPECT_FALSE(hasConnection(engine, reverb, 0, extL, 0));
     EXPECT_FALSE(hasConnection(engine, reverb, 1, extR, 0));
+}
+
+// Audio actually flows through the spliced port, both channels, so a channel-dropping "fix"
+// cannot pass by only checking connection topology.
+TEST(MacroAutoPort, CollapsedStereoOutletPassesBothChannelsOfAudio) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto reverb = addModuleAt(editor, engine, std::make_unique<ReverbModule>(), "Reverb", 400, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
+    auto extL = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "ExtL", 700, 60);
+    auto extR = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "ExtR", 700, 160);
+    engine.getGraph().addConnection({{reverb, 0}, {extL, 0}});
+    engine.getGraph().addConnection({{reverb, 1}, {extR, 0}});
+
+    const auto before = allNodeIds(engine);
+    editor.setSelectedNodes({reverb, b});
+    const auto macroId = editor.groupSelectionIntoMacro(true);
+    ASSERT_FALSE(macroId.isEmpty());
+    juce::ignoreUnused(macroId);
+
+    const auto portNode = theOneNewPortNode(engine, before);
+    auto* outlet = dynamic_cast<MacroOutletModule*>(engine.getGraph().getNodeForId(portNode)->getProcessor());
+    ASSERT_NE(outlet, nullptr);
+
+    constexpr int kBlockSize = 64;
+    outlet->prepareToPlay(48000.0, kBlockSize);
+    juce::AudioBuffer<float> buffer(MacroOutletModule::kMaxChannels, kBlockSize);
+    buffer.clear();
+    for (int i = 0; i < kBlockSize; ++i) {
+        buffer.getWritePointer(0)[i] = 0.4f;  // Left, from Reverb ch0
+        buffer.getWritePointer(1)[i] = -0.6f; // Right, from Reverb ch1
+    }
+    juce::MidiBuffer midi;
+    outlet->processBlock(buffer, midi);
+
+    EXPECT_GT(buffer.getRMSLevel(0, 0, kBlockSize), 0.0f) << "left channel went silent through the spliced port";
+    EXPECT_GT(buffer.getRMSLevel(1, 0, kBlockSize), 0.0f) << "right channel went silent through the spliced port";
+    EXPECT_FLOAT_EQ(buffer.getReadPointer(0)[0], 0.4f);
+    EXPECT_FLOAT_EQ(buffer.getReadPointer(1)[0], -0.6f);
 }
 
 // ============================================================================
@@ -302,6 +352,10 @@ TEST(MacroAutoPort, SeparatelyJackedLeftRightCrossingsMergeIntoOneStereoInlet) {
     auto* inlet = dynamic_cast<MacroInletModule*>(engine.getGraph().getNodeForId(portNode)->getProcessor());
     ASSERT_NE(inlet, nullptr);
     EXPECT_EQ(inlet->getPortShape(), MacroPortShape::Stereo);
+    // Filter shows TWO jacks when Dual I/O is on, so the port must too — unlike the collapsed
+    // (StereoCollapsed) case above, which is deliberately one jack for a different internal shape.
+    EXPECT_EQ(inlet->getVisibleInputPortCount(), 2);
+    EXPECT_EQ(inlet->getVisibleOutputPortCount(), 2);
 
     EXPECT_TRUE(hasConnection(engine, extL, 0, portNode, 0));
     EXPECT_TRUE(hasConnection(engine, portNode, 0, filter, 0));
@@ -340,6 +394,7 @@ TEST(MacroAutoPort, PolyCrossingCreatesAPolyInletWithTheRightVoiceCount) {
     ASSERT_NE(inlet, nullptr);
     EXPECT_EQ(inlet->getPortShape(), MacroPortShape::Poly);
     EXPECT_EQ(inlet->getVoiceCount(), 8);
+    EXPECT_EQ(inlet->getVisibleInputPortCount(), 1); // no regression: Poly-N stays one fanned jack
 
     for (int v = 0; v < 8; ++v) {
         EXPECT_TRUE(hasConnection(engine, ext, v, portNode, v)) << "voice " << v;

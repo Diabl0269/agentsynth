@@ -167,6 +167,83 @@ TEST(MacroInletModuleTest, SetPortShapeStereoExposesChannelZeroAndKRightBaseAsTw
     EXPECT_NE(inlet.mapOutputChannel(1).role, PortRole::Audio);
 }
 
+// StereoCollapsed (founder-review fix G2, docs/macros.md §5.3/§7 item 7): auto-derived only,
+// produced when a crossing cable lands on an ordinary module's own COLLAPSED stereo jack (e.g. an
+// FX module's single "Audio" jack). The port must present the SAME one visible jack that internal
+// jack does, while still carrying both raw channels — never the two-jack MacroPortShape::Stereo a
+// hand-picked Configure I/O choice means.
+TEST(MacroInletModuleTest, SetPortShapeStereoCollapsedExposesOneJackCarryingBothRawChannels) {
+    MacroInletModule inlet;
+    inlet.setPortShape(MacroPortShape::StereoCollapsed);
+    EXPECT_EQ(inlet.getVisibleInputPortCount(), 1);
+    EXPECT_EQ(inlet.getVisibleOutputPortCount(), 1);
+    EXPECT_EQ(inlet.rightAudioLegChannel(), 1); // contiguous with ch0, unlike Stereo's kRightBase
+
+    const auto head = inlet.mapOutputChannel(0);
+    EXPECT_EQ(head.role, PortRole::Audio);
+    EXPECT_EQ(head.visibleJackIndex, 0);
+    EXPECT_TRUE(head.isPolyGroupHead);
+    EXPECT_EQ(head.polyVoiceSpan, 2);
+
+    const auto follower = inlet.mapOutputChannel(1);
+    EXPECT_EQ(follower.role, PortRole::Audio);
+    EXPECT_EQ(follower.visibleJackIndex, 0); // SAME jack as the head, not a second one
+    EXPECT_FALSE(follower.isPolyGroupHead);
+
+    // Both directions map identically (symmetric pass-through).
+    EXPECT_EQ(inlet.mapInputChannel(0).visibleJackIndex, 0);
+    EXPECT_EQ(inlet.mapInputChannel(1).visibleJackIndex, 0);
+
+    for (int ch = 2; ch < MacroInletModule::kMaxChannels; ++ch)
+        EXPECT_NE(inlet.mapOutputChannel(ch).role, PortRole::Audio) << "channel " << ch;
+}
+
+TEST(MacroInletModuleTest, StereoCollapsedShapeExtraStateRoundTrips) {
+    MacroInletModule inlet;
+    inlet.setPortShape(MacroPortShape::StereoCollapsed);
+    const juce::var saved = inlet.getExtraState();
+
+    MacroInletModule reloaded;
+    reloaded.setExtraState(saved);
+    EXPECT_EQ(reloaded.getPortShape(), MacroPortShape::StereoCollapsed);
+    EXPECT_EQ(reloaded.getVisibleOutputPortCount(), 1);
+    EXPECT_EQ(reloaded.mapOutputChannel(1).role, PortRole::Audio);
+}
+
+TEST(MacroInletModuleTest, StereoCollapsedShapeOnlyClearsInactiveRawChannels) {
+    MacroInletModule inlet;
+    inlet.setPortShape(MacroPortShape::StereoCollapsed);
+    inlet.prepareToPlay(kSampleRate, kBlockSize);
+
+    juce::AudioBuffer<float> buffer(MacroInletModule::kMaxChannels, kBlockSize);
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        for (int i = 0; i < kBlockSize; ++i)
+            buffer.getWritePointer(ch)[i] = 0.6f;
+
+    juce::MidiBuffer midi;
+    inlet.processBlock(buffer, midi);
+
+    EXPECT_FLOAT_EQ(buffer.getReadPointer(0)[0], 0.6f);
+    EXPECT_FLOAT_EQ(buffer.getReadPointer(1)[0], 0.6f);
+    for (int ch = 2; ch < buffer.getNumChannels(); ++ch)
+        EXPECT_FLOAT_EQ(buffer.getReadPointer(ch)[0], 0.0f) << "channel " << ch;
+}
+
+TEST(MacroOutletModuleTest, SetPortShapeStereoCollapsedExposesOneJackCarryingBothRawChannels) {
+    MacroOutletModule outlet;
+    outlet.setPortShape(MacroPortShape::StereoCollapsed);
+    EXPECT_EQ(outlet.getVisibleInputPortCount(), 1);
+    EXPECT_EQ(outlet.getVisibleOutputPortCount(), 1);
+    EXPECT_EQ(outlet.rightAudioLegChannel(), 1);
+
+    EXPECT_EQ(outlet.mapOutputChannel(0).visibleJackIndex, 0);
+    EXPECT_TRUE(outlet.mapOutputChannel(0).isPolyGroupHead);
+    EXPECT_EQ(outlet.mapOutputChannel(0).polyVoiceSpan, 2);
+    EXPECT_EQ(outlet.mapOutputChannel(1).visibleJackIndex, 0);
+    EXPECT_FALSE(outlet.mapOutputChannel(1).isPolyGroupHead);
+    EXPECT_EQ(outlet.mapOutputChannel(1).role, PortRole::Audio);
+}
+
 TEST(MacroInletModuleTest, SetPortShapePolyFansAllVoicesOntoOneJack) {
     MacroInletModule inlet;
     inlet.setPortShape(MacroPortShape::Poly, 4);

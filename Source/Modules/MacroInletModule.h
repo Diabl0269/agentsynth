@@ -115,7 +115,14 @@ public:
     LogicalPort mapOutputChannel(int rawChannel) const override { return mapChannelForShape(rawChannel); }
 
     int rightAudioLegChannel() const override {
-        return shape_.load(std::memory_order_relaxed) == MacroPortShape::Stereo ? kRightBase : -1;
+        switch (shape_.load(std::memory_order_relaxed)) {
+        case MacroPortShape::Stereo:
+            return kRightBase;
+        case MacroPortShape::StereoCollapsed:
+            return 1; // contiguous with ch0, like a collapsed FX module's own right leg
+        default:
+            return -1;
+        }
     }
 
     // ---- Port-creation flow API (P8-15b, docs/macros.md §7 item 3). Called exactly ONCE, by
@@ -161,8 +168,13 @@ private:
             return 2;
         case MacroPortShape::Mono:
         case MacroPortShape::Poly:
+        case MacroPortShape::StereoCollapsed:
         default:
-            return 1; // Mono and Poly are both a single visible jack (Poly's is a fanned bus)
+            // Mono and Poly are both a single visible jack (Poly's is a fanned bus).
+            // StereoCollapsed is ALSO one visible jack, on purpose (MacroPortShape.h's class
+            // comment) — it carries two raw channels but mirrors an ordinary collapsed FX jack,
+            // which shows one "Audio" jack for both legs.
+            return 1;
         }
     }
 
@@ -178,6 +190,23 @@ private:
                 p.visibleJackIndex = 1;
                 p.role = PortRole::Audio;
                 p.isPolyGroupHead = true;
+            }
+            break;
+        case MacroPortShape::StereoCollapsed:
+            // Mirrors ModuleBase::mapStereoPairOutput's collapsed (Dual I/O off) branch exactly:
+            // ONE visible jack, raw ch0 the poly-group head with span 2 (both legs), raw ch1 the
+            // silent follower — contiguous, unlike Stereo's split-block ch0/kRightBase pair, since
+            // GraphEditor's JackTarget expansion assumes rawHeadChannel..+span-1 is adjacent.
+            if (rawChannel == 0) {
+                p.visibleJackIndex = 0;
+                p.role = PortRole::Audio;
+                p.isPolyGroupHead = true;
+                p.polyVoiceSpan = 2;
+            } else if (rawChannel == 1) {
+                p.visibleJackIndex = 0;
+                p.role = PortRole::Audio;
+                p.isPolyGroupHead = false;
+                p.polyVoiceSpan = 1;
             }
             break;
         case MacroPortShape::Poly: {

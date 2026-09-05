@@ -66,7 +66,14 @@ public:
     LogicalPort mapOutputChannel(int rawChannel) const override { return mapChannelForShape(rawChannel); }
 
     int rightAudioLegChannel() const override {
-        return shape_.load(std::memory_order_relaxed) == MacroPortShape::Stereo ? kRightBase : -1;
+        switch (shape_.load(std::memory_order_relaxed)) {
+        case MacroPortShape::Stereo:
+            return kRightBase;
+        case MacroPortShape::StereoCollapsed:
+            return 1; // contiguous with ch0, like a collapsed FX module's own right leg
+        default:
+            return -1;
+        }
     }
 
     void setPortShape(MacroPortShape shape, int voiceCount = 1) {
@@ -100,7 +107,10 @@ private:
             return 2;
         case MacroPortShape::Mono:
         case MacroPortShape::Poly:
+        case MacroPortShape::StereoCollapsed:
         default:
+            // See MacroInletModule::visibleJackCount() — StereoCollapsed is deliberately one
+            // visible jack even though it carries two raw channels (MacroPortShape.h).
             return 1;
         }
     }
@@ -117,6 +127,21 @@ private:
                 p.visibleJackIndex = 1;
                 p.role = PortRole::Audio;
                 p.isPolyGroupHead = true;
+            }
+            break;
+        case MacroPortShape::StereoCollapsed:
+            // See MacroInletModule::mapChannelForShape() — mirrors
+            // ModuleBase::mapStereoPairOutput's collapsed branch: one jack, contiguous ch0/ch1.
+            if (rawChannel == 0) {
+                p.visibleJackIndex = 0;
+                p.role = PortRole::Audio;
+                p.isPolyGroupHead = true;
+                p.polyVoiceSpan = 2;
+            } else if (rawChannel == 1) {
+                p.visibleJackIndex = 0;
+                p.role = PortRole::Audio;
+                p.isPolyGroupHead = false;
+                p.polyVoiceSpan = 1;
             }
             break;
         case MacroPortShape::Poly: {
