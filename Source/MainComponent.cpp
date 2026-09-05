@@ -1934,9 +1934,10 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         break;
     }
     case AppCommands::exportPatchOnly: {
-        // No addDefaultKeypress — not rebindable, same pattern as checkForUpdates.
         result.setInfo("Export Patch Only (.json)...",
                        "Save just the patch, without the timeline, as a plain JSON preset", "General", 0);
+        auto kp = shortcutManager.getBinding("exportPatchOnly");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
     case AppCommands::exportAudio: {
