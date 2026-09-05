@@ -5171,33 +5171,6 @@ bool GraphEditor::nodeIsMacroPort(juce::AudioProcessorGraph::NodeID nodeId) cons
     return m != nullptr && m->memberIsPort(uuid);
 }
 
-bool GraphEditor::connectionWouldRouteAsModulationCV(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
-                                                     juce::AudioProcessorGraph::NodeID dstId, int dstJack,
-                                                     bool isMidi) const {
-    // Mirrors connectPorts()'s own isCV computation (~line 1262) exactly — see this method's own
-    // header comment for why it is a separate mirrored function rather than a shared refactor.
-    if (isMidi)
-        return false;
-    auto& graph = audioEngine.getGraph();
-    auto* srcNode = graph.getNodeForId(srcId);
-    auto* dstNode = graph.getNodeForId(dstId);
-    if (srcNode == nullptr || dstNode == nullptr)
-        return false;
-
-    auto* srcModuleBase = dynamic_cast<ModuleBase*>(srcNode->getProcessor());
-    auto* dstModuleBase = dynamic_cast<ModuleBase*>(dstNode->getProcessor());
-    const PolyLink link = resolvePolyLink(srcModuleBase, srcJack, dstModuleBase, dstJack);
-
-    if (link.voiceCount != 1 || dstModuleBase == nullptr ||
-        carriesStructuralSignal(srcModuleBase, link.sourceRawChannel))
-        return false;
-
-    for (const auto& t : dstModuleBase->getModulationTargets())
-        if (t.channelIndex == link.destRawChannel)
-            return true;
-    return false;
-}
-
 juce::AudioProcessorGraph::NodeID
 GraphEditor::mintMacroPortForAutoCreate(const juce::String& macroId, bool isInput, bool isMidi,
                                         juce::AudioProcessorGraph::NodeID internalNodeId, int internalVisibleJack) {
@@ -5244,12 +5217,12 @@ GraphEditor::mintMacroPortForAutoCreate(const juce::String& macroId, bool isInpu
 
 bool GraphEditor::maybeAutoCreateMacroPortsForDrag(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
                                                    juce::AudioProcessorGraph::NodeID dstId, int dstJack, bool isMidi) {
-    // Scope cut: a connection connectPorts() would itself wrap in a hidden AttenuverterModule
-    // never gets an auto-created port here — computed BEFORE any node is minted, so a mod-routed
-    // drag falls straight through to the caller's own plain connectPorts() call, unaffected.
-    if (connectionWouldRouteAsModulationCV(srcId, srcJack, dstId, dstJack, isMidi))
-        return false;
-
+    // T155: a mod/CV-routed drag goes through this SAME mint-and-wire path as a plain audio drag —
+    // no separate scope cut. connectPorts() (below) has its own CV detection (isCV, from the real
+    // destination's getModulationTargets()) and wraps that leg in a hidden AttenuverterModule via
+    // addModRouting() exactly as it always has; a freshly-minted MacroInletModule/MacroOutletModule
+    // is never itself a modulation target, so only the leg whose real endpoint is the genuine
+    // mod-target parameter can ever attract the wrap (docs/macros.md §7 item 9).
     const juce::String srcUuid = nodeUuidFor(srcId);
     const juce::String dstUuid = nodeUuidFor(dstId);
     auto* srcMacro = srcUuid.isNotEmpty() ? macros.findByMember(srcUuid) : nullptr;

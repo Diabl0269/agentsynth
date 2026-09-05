@@ -1536,17 +1536,6 @@ private:
      *  jack". */
     bool nodeIsMacroPort(juce::AudioProcessorGraph::NodeID nodeId) const;
 
-    /** Mirrors connectPorts()'s own CV/mod-routing detection (resolvePolyLink -> single-voice ->
-     *  destination's getModulationTargets()) WITHOUT performing the connection — endConnectionDrag
-     *  calls this before deciding whether to auto-create a macro port, so a cable that connectPorts
-     *  would itself wrap in a hidden AttenuverterModule is never given a port (§5.3/§7 item 9's
-     *  scope cut: a mod-routed drag falls straight through to the plain connectPorts call). Keep in
-     *  sync with connectPorts' own isCV computation by construction — this exists specifically so
-     *  the auto-create check can run BEFORE any node is minted, which connectPorts itself never
-     *  needs to do. */
-    bool connectionWouldRouteAsModulationCV(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
-                                            juce::AudioProcessorGraph::NodeID dstId, int dstJack, bool isMidi) const;
-
     /** Constructs one new Mono (or MIDI) macro port node on `macroId`, adds it to
      *  `macro.members`/`macro.ports` (named via autoMacroPortName() off `internalNodeId`'s own
      *  jack at `internalVisibleJack`, the same naming spliceMacroPorts() uses for a grouping-time
@@ -1568,15 +1557,17 @@ private:
      *  all — "not a member" covers both "an ordinary member of the same macro" (nothing crosses,
      *  wire directly) and "already a port of the same macro" (wire straight into the existing jack,
      *  never mint a second one) in one check, since a port's own uuid is always also a `members`
-     *  entry (MacroSet's own invariant). Skips entirely (returns false, minting nothing) for a
-     *  connection connectionWouldRouteAsModulationCV() flags. When it proceeds, wires BOTH legs of
-     *  every port it mints (member<->port on the interior side, port<->port or port<->member on
-     *  the exterior leg) as ONE recordGraphAndMacroChange transaction and calls updateComponents()
-     *  inside it, mirroring createMacroPortFromDroppedCable's own transaction shape. Always Mono —
-     *  no shape inference from the drag, the same scope cut createMacroPortFromDroppedCable already
-     *  applies. Returns true if it minted 0, 1 or 2 ports and wired the final connection itself (the
-     *  caller must NOT also call connectPorts for this drag); false means neither endpoint needed a
-     *  port (or the mod-CV scope cut fired) and the caller should connect normally. */
+     *  entry (MacroSet's own invariant). A mod/CV-routed drag is NOT special-cased (T155) — it goes
+     *  through this same mint-and-wire path, and connectPorts()'s own CV detection wraps whichever
+     *  leg's real endpoint is a genuine modulation target in a hidden AttenuverterModule, exactly as
+     *  it would outside a macro. When it proceeds, wires BOTH legs of every port it mints
+     *  (member<->port on the interior side, port<->port or port<->member on the exterior leg) as
+     *  ONE recordGraphAndMacroChange transaction and calls updateComponents() inside it, mirroring
+     *  createMacroPortFromDroppedCable's own transaction shape. Always Mono — no shape inference
+     *  from the drag, the same scope cut createMacroPortFromDroppedCable already applies. Returns
+     *  true if it minted 0, 1 or 2 ports and wired the final connection itself (the caller must NOT
+     *  also call connectPorts for this drag); false means neither endpoint needed a port and the
+     *  caller should connect normally. */
     bool maybeAutoCreateMacroPortsForDrag(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
                                           juce::AudioProcessorGraph::NodeID dstId, int dstJack, bool isMidi);
 
