@@ -31,6 +31,13 @@ public:
     void setSmartConnectionMode(GraphEditor::SmartConnectionMode mode);
     bool isDoubleClickPortDisconnectEnabled() const;
     void setDoubleClickPortDisconnectEnabled(bool enabled);
+    // T148 (docs/macros.md §7 item 9): plain on/off, unlike getMacroAutoPortPreference() below —
+    // these are brand-new automations shipped ON by default, with a plain escape hatch, not a
+    // replacement for pre-existing silent behaviour (which is why that one is a tri-state "ask").
+    bool isMacroAutoCreatePortsOnDragEnabled() const;
+    void setMacroAutoCreatePortsOnDragEnabled(bool enabled);
+    bool isMacroAutoDeletePortsOnLastCableEnabled() const;
+    void setMacroAutoDeletePortsOnLastCableEnabled(bool enabled);
     bool isAlignmentGuidesEnabled() const;
     void setAlignmentGuidesEnabled(bool enabled);
     bool getDefaultDualIOForNewModules() const;
@@ -123,6 +130,8 @@ public:
 private:
     void persistSmartConnectionMode(GraphEditor::SmartConnectionMode mode);
     void persistDoubleClickPortDisconnect(bool enabled);
+    void persistMacroAutoCreatePortsOnDrag(bool enabled);
+    void persistMacroAutoDeletePortsOnLastCable(bool enabled);
     void persistAlignmentGuidesEnabled(bool enabled);
     void persistDefaultDualIOForNewModules(bool enabled);
     void persistMacroAutoPortPreference(GraphEditor::MacroAutoPortPreference pref);
@@ -185,6 +194,12 @@ private:
     // gesture reads before deciding whether to show its own modal.
     juce::Label macroAutoPortLabel_;
     juce::ComboBox macroAutoPortCombo_;
+    // T148 (docs/macros.md §7 item 9): plain on/off toggles, ON by default — see their getter/
+    // setter declarations above for why these are a different shape from macroAutoPortCombo_.
+    juce::ToggleButton macroAutoCreatePortsOnDragToggle{"Auto-create macro ports when dragging a cable across a "
+                                                        "boundary"};
+    juce::ToggleButton macroAutoDeletePortsOnLastCableToggle{"Auto-delete macro ports when their last cable is "
+                                                             "removed"};
     juce::ToggleButton loopSelectionArmsToggle{"Timeline: P (loop selection) also switches looping on"};
     // The other half of the same locator conversation, so it sits in the same group as the row
     // above rather than getting a divider of its own: one is "make the locators from a selection",

@@ -381,6 +381,33 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         persistMacroAutoPortPreference(macroAutoPortPreferenceFromComboId(macroAutoPortCombo_.getSelectedId()));
     };
 
+    // T148 (docs/macros.md §7 item 9): auto-create/auto-delete are plain on/off, unlike the
+    // tri-state preference above — that one defaults to "ask" because it replaced pre-existing
+    // silent behaviour; these two are brand-new automations the founder asked to ship ON by
+    // default, with a plain escape hatch. Same idiom as doubleClickDisconnectToggle above.
+    addAndMakeVisible(macroAutoCreatePortsOnDragToggle);
+    macroAutoCreatePortsOnDragToggle.setToggleState(
+        appProperties.getUserSettings()->getBoolValue("macroAutoCreatePortsOnDrag", true), juce::dontSendNotification);
+    macroAutoCreatePortsOnDragToggle.setTooltip(
+        "When on (the default), dragging a cable across an expanded macro's boundary automatically "
+        "creates a matching Mono port and wires it, instead of connecting straight through to the "
+        "interior member.");
+    macroAutoCreatePortsOnDragToggle.onClick = [this] {
+        persistMacroAutoCreatePortsOnDrag(macroAutoCreatePortsOnDragToggle.getToggleState());
+    };
+
+    addAndMakeVisible(macroAutoDeletePortsOnLastCableToggle);
+    macroAutoDeletePortsOnLastCableToggle.setToggleState(
+        appProperties.getUserSettings()->getBoolValue("macroAutoDeletePortsOnLastCable", true),
+        juce::dontSendNotification);
+    macroAutoDeletePortsOnLastCableToggle.setTooltip(
+        "When on (the default), a macro port is automatically removed once its last cable is "
+        "disconnected. When off, a cable-less port stays in place until removed by hand (Configure "
+        "I/O or the port's own right-click Delete Port).");
+    macroAutoDeletePortsOnLastCableToggle.onClick = [this] {
+        persistMacroAutoDeletePortsOnLastCable(macroAutoDeletePortsOnLastCableToggle.getToggleState());
+    };
+
     addAndMakeVisible(loopSelectionArmsToggle);
     loopSelectionArmsToggle.setToggleState(
         appProperties.getUserSettings()->getBoolValue("timelineLoopSelectionArms", true), juce::dontSendNotification);
@@ -664,6 +691,19 @@ void PreferencesSettingsTab::resized() {
         pendingDivider = pendingDivider || visible;
     }
 
+    // Group 4c: T148 macro auto-create/auto-delete toggles (docs/macros.md §7 item 9). No divider
+    // between them — same "reads as one pair" reasoning as the loop-locator pair below.
+    {
+        const bool visible = groupMatches({&macroAutoCreatePortsOnDragToggle, &macroAutoDeletePortsOnLastCableToggle});
+        setGroupVisible({&macroAutoCreatePortsOnDragToggle, &macroAutoDeletePortsOnLastCableToggle}, visible);
+        beginGroup(visible);
+        if (visible) {
+            macroAutoCreatePortsOnDragToggle.setBounds(bounds.removeFromTop(24));
+            macroAutoDeletePortsOnLastCableToggle.setBounds(bounds.removeFromTop(24));
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+
     // Group 5: the two loop-locator toggles (no divider between them — see their declaration
     // comments). Grouped for filtering too: they read as one conversation, so a query matching
     // either keeps both rows together rather than splitting a pair that explains itself as a pair.
@@ -765,6 +805,8 @@ void PreferencesSettingsTab::setGraphEditor(GraphEditor* ge) {
     graphEditor->setDefaultDualIOForNewModules(defaultDualIOToggle.getToggleState());
     graphEditor->setDualIOPerModuleOverrides(dualIOPerModuleOverrides);
     graphEditor->setMacroAutoPortPreference(macroAutoPortPreferenceFromComboId(macroAutoPortCombo_.getSelectedId()));
+    graphEditor->setAutoCreateMacroPortsOnDragEnabled(macroAutoCreatePortsOnDragToggle.getToggleState());
+    graphEditor->setAutoDeleteMacroPortsOnLastCableEnabled(macroAutoDeletePortsOnLastCableToggle.getToggleState());
 }
 
 GraphEditor::SmartConnectionMode PreferencesSettingsTab::getSmartConnectionMode() const {
@@ -783,6 +825,24 @@ bool PreferencesSettingsTab::isDoubleClickPortDisconnectEnabled() const {
 void PreferencesSettingsTab::setDoubleClickPortDisconnectEnabled(bool enabled) {
     doubleClickDisconnectToggle.setToggleState(enabled, juce::dontSendNotification);
     persistDoubleClickPortDisconnect(enabled);
+}
+
+bool PreferencesSettingsTab::isMacroAutoCreatePortsOnDragEnabled() const {
+    return macroAutoCreatePortsOnDragToggle.getToggleState();
+}
+
+void PreferencesSettingsTab::setMacroAutoCreatePortsOnDragEnabled(bool enabled) {
+    macroAutoCreatePortsOnDragToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistMacroAutoCreatePortsOnDrag(enabled);
+}
+
+bool PreferencesSettingsTab::isMacroAutoDeletePortsOnLastCableEnabled() const {
+    return macroAutoDeletePortsOnLastCableToggle.getToggleState();
+}
+
+void PreferencesSettingsTab::setMacroAutoDeletePortsOnLastCableEnabled(bool enabled) {
+    macroAutoDeletePortsOnLastCableToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistMacroAutoDeletePortsOnLastCable(enabled);
 }
 
 bool PreferencesSettingsTab::isAlignmentGuidesEnabled() const { return alignmentGuideToggle.getToggleState(); }
@@ -924,6 +984,20 @@ void PreferencesSettingsTab::persistAlignmentGuidesEnabled(bool enabled) {
     appProperties.getUserSettings()->saveIfNeeded();
     if (graphEditor)
         graphEditor->setAlignmentGuidesEnabled(enabled);
+}
+
+void PreferencesSettingsTab::persistMacroAutoCreatePortsOnDrag(bool enabled) {
+    appProperties.getUserSettings()->setValue("macroAutoCreatePortsOnDrag", enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+    if (graphEditor)
+        graphEditor->setAutoCreateMacroPortsOnDragEnabled(enabled);
+}
+
+void PreferencesSettingsTab::persistMacroAutoDeletePortsOnLastCable(bool enabled) {
+    appProperties.getUserSettings()->setValue("macroAutoDeletePortsOnLastCable", enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+    if (graphEditor)
+        graphEditor->setAutoDeleteMacroPortsOnLastCableEnabled(enabled);
 }
 
 bool PreferencesSettingsTab::isPianoRollKeyLabelModeAll() const { return pianoRollKeyLabelsToggle.getToggleState(); }

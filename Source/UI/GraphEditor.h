@@ -740,6 +740,20 @@ public:
     void setDoubleClickPortDisconnectEnabled(bool enabled) { doubleClickPortDisconnectEnabled = enabled; }
     bool getDoubleClickPortDisconnectEnabled() const noexcept { return doubleClickPortDisconnectEnabled; }
 
+    // T148 (docs/macros.md §7 item 9): auto-create a macro port when a dragged cable crosses a
+    // macro boundary. On by default; a Preferences toggle (PreferencesSettingsTab,
+    // "macroAutoCreatePortsOnDrag") lets a user turn this specific automation off, leaving
+    // endConnectionDrag's plain connectPorts() behaviour exactly as it was before T148.
+    void setAutoCreateMacroPortsOnDragEnabled(bool enabled) { autoCreateMacroPortsOnDragEnabled = enabled; }
+    bool getAutoCreateMacroPortsOnDragEnabled() const noexcept { return autoCreateMacroPortsOnDragEnabled; }
+
+    // T148 (docs/macros.md §7 item 9): auto-delete a macro port once its last cable is removed.
+    // On by default; a Preferences toggle (PreferencesSettingsTab,
+    // "macroAutoDeletePortsOnLastCable") lets a user turn this off, leaving a cable-less port in
+    // place until it is removed by hand (Configure I/O or the port's own right-click Delete Port).
+    void setAutoDeleteMacroPortsOnLastCableEnabled(bool enabled) { autoDeleteMacroPortsOnLastCableEnabled = enabled; }
+    bool getAutoDeleteMacroPortsOnLastCableEnabled() const noexcept { return autoDeleteMacroPortsOnLastCableEnabled; }
+
     // Default jack layout for newly created modules that expose the Dual I/O parameter.
     // false (default): one collapsed "Audio" jack. true: split Left/Right by default.
     void setDefaultDualIOForNewModules(bool enabled) { defaultDualIOForNewModules = enabled; }
@@ -1513,6 +1527,74 @@ private:
      *  entirely, since a MIDI port has no jack concept to name (§5.1). */
     static juce::String autoMacroPortName(ModuleBase* internalMb, bool isInput, int visibleJack, bool isMidi);
 
+    // ---- Auto-create-port-on-drag / auto-delete-on-last-cable (T148, docs/macros.md §7 item 9) ----
+
+    /** True if `nodeId` resolves to a live macro member that itself fronts one of that macro's
+     *  ports (synth::Macro::memberIsPort) — false for an ordinary member, a node in no macro, or a
+     *  node with no uuid yet. The one place both endConnectionDrag's auto-create rule and
+     *  disconnectCable/disconnectPort's auto-delete gate decide "is this endpoint a boundary
+     *  jack". */
+    bool nodeIsMacroPort(juce::AudioProcessorGraph::NodeID nodeId) const;
+
+    /** Mirrors connectPorts()'s own CV/mod-routing detection (resolvePolyLink -> single-voice ->
+     *  destination's getModulationTargets()) WITHOUT performing the connection — endConnectionDrag
+     *  calls this before deciding whether to auto-create a macro port, so a cable that connectPorts
+     *  would itself wrap in a hidden AttenuverterModule is never given a port (§5.3/§7 item 9's
+     *  scope cut: a mod-routed drag falls straight through to the plain connectPorts call). Keep in
+     *  sync with connectPorts' own isCV computation by construction — this exists specifically so
+     *  the auto-create check can run BEFORE any node is minted, which connectPorts itself never
+     *  needs to do. */
+    bool connectionWouldRouteAsModulationCV(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
+                                            juce::AudioProcessorGraph::NodeID dstId, int dstJack, bool isMidi) const;
+
+    /** Constructs one new Mono (or MIDI) macro port node on `macroId`, adds it to
+     *  `macro.members`/`macro.ports` (named via autoMacroPortName() off `internalNodeId`'s own
+     *  jack at `internalVisibleJack`, the same naming spliceMacroPorts() uses for a grouping-time
+     *  splice), and returns its NodeID — or an invalid NodeID if `macroId` doesn't resolve or the
+     *  node couldn't be constructed. Pure mint: does NOT wire either leg — the caller
+     *  (maybeAutoCreateMacroPortsForDrag) does that with its own connectPorts() calls, since unlike
+     *  createMacroPortFromDroppedCable this path always wires BOTH sides of the new port. No undo
+     *  recording of its own — the caller wraps this in its own recordGraphAndMacroChange
+     *  transaction, exactly like spliceMacroPorts()/addMacroPort(). */
+    juce::AudioProcessorGraph::NodeID mintMacroPortForAutoCreate(const juce::String& macroId, bool isInput, bool isMidi,
+                                                                 juce::AudioProcessorGraph::NodeID internalNodeId,
+                                                                 int internalVisibleJack);
+
+    /** The endpoint-needs-a-port rule (docs/macros.md §7 item 9), applied to a completed cable-drag
+     *  between two real jacks (srcId/srcJack the drag's resolved source, dstId/dstJack its resolved
+     *  destination — same NodeID/jack pair endConnectionDrag was about to hand straight to
+     *  connectPorts()). An endpoint needs a NEW port on its own macro iff it is an ORDINARY member
+     *  there (memberIsPort() false) and the OTHER endpoint is not a member of that same macro at
+     *  all — "not a member" covers both "an ordinary member of the same macro" (nothing crosses,
+     *  wire directly) and "already a port of the same macro" (wire straight into the existing jack,
+     *  never mint a second one) in one check, since a port's own uuid is always also a `members`
+     *  entry (MacroSet's own invariant). Skips entirely (returns false, minting nothing) for a
+     *  connection connectionWouldRouteAsModulationCV() flags. When it proceeds, wires BOTH legs of
+     *  every port it mints (member<->port on the interior side, port<->port or port<->member on
+     *  the exterior leg) as ONE recordGraphAndMacroChange transaction and calls updateComponents()
+     *  inside it, mirroring createMacroPortFromDroppedCable's own transaction shape. Always Mono —
+     *  no shape inference from the drag, the same scope cut createMacroPortFromDroppedCable already
+     *  applies. Returns true if it minted 0, 1 or 2 ports and wired the final connection itself (the
+     *  caller must NOT also call connectPorts for this drag); false means neither endpoint needed a
+     *  port (or the mod-CV scope cut fired) and the caller should connect normally. */
+    bool maybeAutoCreateMacroPortsForDrag(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
+                                          juce::AudioProcessorGraph::NodeID dstId, int dstJack, bool isMidi);
+
+    /** The auto-delete half of T148 (docs/macros.md §7 item 9), the reverse of the auto-create
+     *  above: after a mutation has removed a connection that may have touched a macro port, call
+     *  this on every node the mutation touched. No-op unless `nodeId` resolves to a live macro
+     *  member that fronts one of that macro's ports (nodeIsMacroPort()) AND the port now has ZERO
+     *  connections left in the graph — checked here, not assumed by the caller, so a port with one
+     *  of its two legs still wired survives. When both hold, splices the port out
+     *  (spliceOutMacroPort(), the exact same helper ungroupSelection()/deleteMacroPortNode() use)
+     *  and dissolves the macro too if that was its last member, mirroring
+     *  MacroSet::removeMemberEverywhere's own "zero members is not a meaningful state" rule. Pure
+     *  graph+macro mutation, no undo recording of its own — every caller
+     *  (disconnectCable/disconnectPort) wraps this in its own recordGraphAndMacroChange
+     *  transaction, upgraded from the plain recordStructuralChange those two use for an ordinary
+     *  (non-macro-port) disconnect. */
+    void autoDeleteOrphanedMacroPort(juce::AudioProcessorGraph::NodeID nodeId);
+
     /** Launches the real "Create ports for the crossing cables?" modal
      *  (synth::ui::MacroAutoPortPromptDialog) and calls `respond(createPorts, remember)` once the
      *  user picks. Only reached from requestGroupSelectionIntoMacro() when
@@ -1548,6 +1630,8 @@ private:
     // Alignment guides toggle (UI Phase 7 - Item 4)
     bool alignmentGuidesEnabled = true;
     bool doubleClickPortDisconnectEnabled = true;
+    bool autoCreateMacroPortsOnDragEnabled = true;
+    bool autoDeleteMacroPortsOnLastCableEnabled = true;
     bool defaultDualIOForNewModules = false;
     std::map<juce::String, bool> dualIOPerModuleOverrides;
 
