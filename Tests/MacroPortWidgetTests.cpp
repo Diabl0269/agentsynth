@@ -442,3 +442,125 @@ TEST(MacroPortWidget, MonoPortWidgetSizeMatchesEstimateModuleSize) {
     EXPECT_EQ(comp->getWidth(), estimate.x);
     EXPECT_EQ(comp->getHeight(), estimate.y);
 }
+
+// ============================================================================
+// Founder-review fix G4 ("make the routing more elegant and sleek, it's currently too large"):
+// the widget got smaller, but geometry self-consistency, hit-test generosity and name legibility
+// all have to survive the shrink.
+// ============================================================================
+
+TEST(MacroPortWidgetG4, GeometryIsSelfConsistentForMonoStereoPolyAndMidi) {
+    // For every shape the widget can take: the widget's own height must derive exactly from its
+    // visible jack-row count (layoutMacroPortWidget's formula), and every drawn jack row
+    // (getPortCenter) must land strictly inside the widget's own bounds — a shrink that trims
+    // padding too far would push the last row's dot into the border or past it.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    struct Case {
+        const char* label;
+        synth::MacroPortKind kind;
+        MacroPortShape shape;
+        int voiceCount;
+        int expectedRows;
+    };
+    const Case cases[] = {
+        {"Mono", synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, 1},
+        {"Stereo", synth::MacroPortKind::AudioCV, MacroPortShape::Stereo, 1, 2},
+        {"Poly-4", synth::MacroPortKind::AudioCV, MacroPortShape::Poly, 4, 1},
+        {"Midi", synth::MacroPortKind::Midi, MacroPortShape::Mono, 1, 1},
+    };
+
+    for (const auto& c : cases) {
+        const auto uuid = editor.addMacroPort(macroId, /*isInput=*/true, c.kind, c.shape, c.voiceCount, c.label);
+        ASSERT_FALSE(uuid.isEmpty()) << c.label;
+        auto* comp = findComponent(editor, nodeIdForUuid(engine, uuid));
+        ASSERT_NE(comp, nullptr) << c.label;
+
+        const int expectedHeight = ModuleComponent::kMacroPortWidgetHeaderY +
+                                   (c.expectedRows - 1) * ModuleComponent::kMacroPortWidgetRowStep +
+                                   ModuleComponent::kMacroPortWidgetBottomPad;
+        EXPECT_EQ(comp->getWidth(), ModuleComponent::kMacroPortWidgetWidth) << c.label;
+        EXPECT_EQ(comp->getHeight(), expectedHeight) << c.label;
+
+        const bool isMidi = c.kind == synth::MacroPortKind::Midi;
+        for (int row = 0; row < c.expectedRows; ++row) {
+            const auto p = isMidi ? comp->getPortCenter(0, true) : comp->getPortCenter(row, true);
+            EXPECT_GE(p.y, 0) << c.label << " row " << row;
+            EXPECT_LT(p.y, comp->getHeight()) << c.label << " row " << row << " jack falls outside the widget";
+            EXPECT_GE(p.x, 0) << c.label << " row " << row;
+            EXPECT_LT(p.x, comp->getWidth()) << c.label << " row " << row;
+        }
+    }
+}
+
+TEST(MacroPortWidgetG4, EstimateModuleSizeMatchesTheRealWidgetForEveryPortTypeName) {
+    // The anti-drift test the kPortGutterHeaderHeight comment wishes had existed, for the other
+    // geometry pair that can drift apart: GraphEditor's own drag-ghost estimate vs the real,
+    // freshly-constructed (Mono/one-row) widget, for all four type names at once.
+    for (const juce::String& typeName : {"Macro In", "Macro Out", "Macro MIDI In", "Macro MIDI Out"}) {
+        auto processor = synth::AIStateMapper::createModule(typeName);
+        ASSERT_NE(processor, nullptr) << typeName;
+
+        AudioEngine engine;
+        GraphEditor editor(engine);
+        ModuleComponent comp(processor.get(), NodeID(1), editor);
+
+        const auto estimate = GraphEditor::estimateModuleSize(typeName);
+        EXPECT_EQ(estimate.x, comp.getWidth()) << typeName;
+        EXPECT_EQ(estimate.y, comp.getHeight()) << typeName;
+    }
+}
+
+TEST(MacroPortWidgetG4, HitTestStaysGenerousAroundTheShrunkJackDot) {
+    // The drawn dot shrank to a 7px diameter (fix G4), but getPortForPoint's hit test is a fixed
+    // "< 10" distance check, general to every module's jack, and untouched by this fix. Prove a
+    // click dead on-centre AND a few pixels off in every direction all still resolve to the same
+    // jack — a click that only lands within the drawn dot's own tiny radius would be a regression
+    // a "sleek" pass could introduce without meaning to.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    const auto uuid =
+        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    ASSERT_FALSE(uuid.isEmpty());
+    auto* comp = findComponent(editor, nodeIdForUuid(engine, uuid));
+    ASSERT_NE(comp, nullptr);
+
+    const auto centre = comp->getPortCenter(0, true);
+    const juce::Point<int> offsets[] = {{0, 0}, {4, 0}, {-4, 0}, {0, 4}, {0, -4}, {3, -3}, {-3, 3}};
+    for (const auto& offset : offsets) {
+        const auto probe = centre + offset;
+        auto port = comp->getPortForPoint(probe);
+        ASSERT_TRUE(port.has_value()) << "offset (" << offset.x << ", " << offset.y << ")";
+        EXPECT_TRUE(port->isInput);
+        EXPECT_EQ(port->index, 0);
+    }
+}
+
+TEST(MacroPortWidgetG4, RealisticPortNameFitsWithinTheWidgetAtFullUnscaledSize) {
+    // A shrink that quietly forces every longer name into drawFittedText's compress-or-ellipsise
+    // fallback would technically satisfy "never overflow the bounds" (drawFittedText guarantees
+    // that structurally) while still costing the founder the port-name legibility he asked for in
+    // the first review pass. This checks the STRONGER property: at the widget's tuned width, a
+    // realistic name like "Delay 1 Audio" measures narrower than the available text area at the
+    // widget's own (unscaled) 9.5f font, so paintMacroPortWidget draws it at full size, not
+    // shrunk.
+    const juce::String realisticName = "Delay 1 Audio";
+    const juce::Font nameFont(juce::FontOptions(9.5f));
+    const float textWidth = juce::GlyphArrangement::getStringWidth(nameFont, realisticName);
+
+    // Mirrors paintMacroPortWidget's own `getLocalBounds().reduced(12, 2)` textArea inset.
+    const int availableWidth = ModuleComponent::kMacroPortWidgetWidth - 2 * 12;
+    EXPECT_LE(textWidth, (float)availableWidth)
+        << "\"" << realisticName << "\" no longer fits the docked widget at full size; widen "
+        << "kMacroPortWidgetWidth rather than let it silently shrink";
+}

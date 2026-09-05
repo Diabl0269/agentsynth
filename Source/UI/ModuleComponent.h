@@ -109,15 +109,25 @@ public:
      *  GraphEditor::estimateModuleSize (its own drag-ghost estimate must match the real widget) and
      *  GraphEditor::dockMacroPortWidgets (the widget's docked position reads its live getWidth/
      *  getHeight, sized from these), the same "one constant so two files cannot drift apart"
-     *  reasoning kPortGutterHeaderHeight's own comment states. */
-    static constexpr int kMacroPortWidgetWidth = 104;
+     *  reasoning kPortGutterHeaderHeight's own comment states.
+     *
+     *  P8-15 founder-review fix G4 ("make the routing more elegant and sleek, it's currently too
+     *  large"): shrunk from a 104x26(mono) box that read as a small module card to a slim edge
+     *  chip — roughly a 30% cut in drawn area (104x26=2704px^2 -> 92x21=1932px^2, -28.6%; the
+     *  104x44/92x36 Stereo pair lands within a point of the same ratio). The values below are a
+     *  tuned point, not a formula — see paintMacroPortWidget()'s own comment for the matching jack/
+     *  font/corner-radius cuts, and MacroPortWidgetTests.cpp's
+     *  `MacroPortWidgetG4.RealisticPortNameFitsWithinTheWidgetAtFullUnscaledSize` for the
+     *  constraint that actually bounds how far the width could shrink: a realistic port name
+     *  ("Delay 1 Audio") has to still fit un-truncated. */
+    static constexpr int kMacroPortWidgetWidth = 92;
     /** y of the first (or only) jack row, and the fixed y a MIDI port's single jack sits at. */
-    static constexpr int kMacroPortWidgetHeaderY = 16;
+    static constexpr int kMacroPortWidgetHeaderY = 13;
     /** Vertical spacing between stacked jack rows — only Stereo (2 visible jacks a side) uses a
      *  second row; Mono, Poly-N and MIDI are always exactly one row. */
-    static constexpr int kMacroPortWidgetRowStep = 18;
+    static constexpr int kMacroPortWidgetRowStep = 15;
     /** Clearance reserved below the last jack row. */
-    static constexpr int kMacroPortWidgetBottomPad = 10;
+    static constexpr int kMacroPortWidgetBottomPad = 8;
 
     std::optional<Port> getPortForPoint(juce::Point<int> localPoint);
     juce::Point<int> getPortCenter(int index, bool isInput);

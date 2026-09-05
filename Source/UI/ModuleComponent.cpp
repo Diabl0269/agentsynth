@@ -2071,6 +2071,15 @@ void ModuleComponent::paint(juce::Graphics& g) {
 // see the getPortCenter branch above), so drag/drop keeps working exactly as it does for every
 // other module. Only the interior jack goes unlabelled — the resolved name sits next to the
 // boundary one, mirroring the collapsed card's own left/right convention (item 4).
+//
+// Founder-review fix G4 ("too large" — see kMacroPortWidgetWidth's own comment): the drawn jack
+// shrank from a full module card's 10px dot to 7px, the corner radius from 6 to 4 and the name
+// font from 10.5f to 9.5f, all sized down together with the widget's own width/height so the chip
+// reads as a boundary jack rather than a miniature module. NONE of that touches the actual HIT
+// target: getPortForPoint's `< 10` distance check (unchanged, general to every module) still
+// grabs a click several px off the now-smaller dot — a shrunk drawn jack and a shrunk hit radius
+// are two different knobs, and only the first one turned here
+// (MacroPortWidgetTests.cpp's `HitTestStaysGenerousAroundTheShrunkJackDot`).
 void ModuleComponent::paintMacroPortWidget(juce::Graphics& g) {
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     static const synth::theme::Colors fallbackColors{};
@@ -2084,23 +2093,24 @@ void ModuleComponent::paintMacroPortWidget(juce::Graphics& g) {
 
     auto bounds = getLocalBounds().toFloat();
     g.setColour(tint.withAlpha(0.22f));
-    g.fillRoundedRectangle(bounds, 6.0f);
+    g.fillRoundedRectangle(bounds, 4.0f);
     g.setColour(tint.withAlpha(0.85f));
-    g.drawRoundedRectangle(bounds.reduced(0.75f), 6.0f, 1.2f);
+    g.drawRoundedRectangle(bounds.reduced(0.75f), 4.0f, 1.0f);
 
     const juce::Colour audioJackColour = themeColors.audioWire;
     const juce::Colour jackAccentColour = themeColors.accent;
+    constexpr float kJackRadius = 3.5f; // 7px dot, down from a full card's 10px (fix G4)
 
     if (module->acceptsMidi() || module->producesMidi()) {
         if (module->acceptsMidi()) {
             auto p = getPortCenter(0, true);
             g.setColour(audioJackColour);
-            g.fillEllipse((float)p.x - 5.0f, (float)p.y - 5.0f, 10.0f, 10.0f);
+            g.fillEllipse((float)p.x - kJackRadius, (float)p.y - kJackRadius, kJackRadius * 2.0f, kJackRadius * 2.0f);
         }
         if (module->producesMidi()) {
             auto p = getPortCenter(0, false);
             g.setColour(audioJackColour);
-            g.fillEllipse((float)p.x - 5.0f, (float)p.y - 5.0f, 10.0f, 10.0f);
+            g.fillEllipse((float)p.x - kJackRadius, (float)p.y - kJackRadius, kJackRadius * 2.0f, kJackRadius * 2.0f);
         }
     } else {
         int numIns = 0, numOuts = 0;
@@ -2111,18 +2121,22 @@ void ModuleComponent::paintMacroPortWidget(juce::Graphics& g) {
         for (int i = 0; i < numIns; ++i) {
             auto p = getPortCenter(i, true);
             g.setColour(jackAccentColour);
-            g.fillEllipse((float)p.x - 5.0f, (float)p.y - 5.0f, 10.0f, 10.0f);
+            g.fillEllipse((float)p.x - kJackRadius, (float)p.y - kJackRadius, kJackRadius * 2.0f, kJackRadius * 2.0f);
         }
         for (int i = 0; i < numOuts; ++i) {
             auto p = getPortCenter(i, false);
             g.setColour(jackAccentColour);
-            g.fillEllipse((float)p.x - 5.0f, (float)p.y - 5.0f, 10.0f, 10.0f);
+            g.fillEllipse((float)p.x - kJackRadius, (float)p.y - kJackRadius, kJackRadius * 2.0f, kJackRadius * 2.0f);
         }
     }
 
     g.setColour(themeColors.textPrimary);
-    g.setFont(juce::Font(juce::FontOptions(10.5f)));
-    auto textArea = getLocalBounds().reduced(16, 2);
+    g.setFont(juce::Font(juce::FontOptions(9.5f)));
+    auto textArea = getLocalBounds().reduced(12, 2);
+    // drawFittedText never draws outside textArea: it compresses the glyph run horizontally (and,
+    // failing that, ellipsises) rather than clip mid-glyph — the "elide gracefully" requirement —
+    // but at this widget's tuned width a realistic name draws at its natural, unscaled size (see
+    // the test named above), so in practice this is a safety net, not the common case.
     g.drawFittedText(name, textArea,
                      boundaryIsInput ? juce::Justification::centredLeft : juce::Justification::centredRight, 1);
 }

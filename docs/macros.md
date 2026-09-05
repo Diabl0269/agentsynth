@@ -20,7 +20,9 @@ This document covers two things:
    feature (fix G3, §7 item 7) taught the auto-port splice to also handle a crossing modulation/CV
    cable wrapped in a hidden `AttenuverterModule` node — genuinely external ones now get a port too;
    only the case where BOTH the real mod source and target are being grouped together stays
-   un-ported, since the attenuverter can never itself be a member.
+   un-ported, since the attenuverter can never itself be a member. That same second pass also
+   shrank the docked port widget itself (fix G4, §5.3's "Rendering" note) after founder feedback
+   that it read as a small module rather than a boundary jack.
 
 ---
 
@@ -347,6 +349,18 @@ jack count: one row (`kMacroPortWidgetHeaderY + kMacroPortWidgetBottomPad`) for 
 §5.3's `StereoCollapsed` bullet) or a MIDI port (all of which have exactly one visible jack a side,
 a MIDI port's fanned Poly-N bus included), and a second row (`+ kMacroPortWidgetRowStep`) only for
 the two-jack `Stereo` shape. See §5.4 for where that widget is PLACED.
+
+**Sizing (founder-review fix G4).** A second founder pass, hands-on with a macro containing a
+Delay and a Reverb, called the widget "too large" next to the modules it fronts. The fix is
+tuning, not redesign: `kMacroPortWidgetWidth`/`kMacroPortWidgetHeaderY`/`kMacroPortWidgetRowStep`/
+`kMacroPortWidgetBottomPad` (`ModuleComponent.h`) shrank from a 104x26 (Mono) box to 92x21 — about
+a 29% cut in drawn area, matched by `paintMacroPortWidget()` drawing a 7px jack dot (was 10px), a
+4px corner radius (was 6px) and a 9.5f name font (was 10.5f). None of that touches
+`getPortForPoint()`'s hit test, which stays the same generous radius every module's jack uses —
+the drawn dot and the clickable target are two different knobs, and a "sleek" pass that shrinks
+both is a worse regression than the one it fixes. The name still fits a realistic port name
+("Delay 1 Audio") at full, unscaled size at the new width; `drawFittedText` (compress-then-ellipsise,
+never mid-glyph clip) is the fallback for a longer name, not the expected path.
 
 ### 5.4 Cable rendering across the boundary
 
