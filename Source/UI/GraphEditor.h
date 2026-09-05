@@ -1413,11 +1413,12 @@ private:
      *  enumeration does (LogicalPort::visibleJackIndex/isPolyGroupHead/polyVoiceSpan/role, never a
      *  raw-channel guess) and groups every connection with exactly one endpoint in `memberNodeIds`
      *  into MacroPortCrossingGroup entries — one per (internal node, direction, jack). A crossing
-     *  connection whose EXTERNAL endpoint is an AttenuverterModule is excluded: retargeting one leg
-     *  of a mod-routing knob onto a fresh port node would desync AudioEngine's DirectCV/
-     *  AttenuverterChain classification from the live graph and drop the knob out of the mod
-     *  matrix — left un-ported instead, consistent with §5.4's "encapsulation is advisory." A
-     *  Dual-I/O-on module's separately-jacked Left/Right crossings are merged into one Stereo
+     *  connection whose EXTERNAL endpoint is an AttenuverterModule still gets a port PROVIDED the
+     *  mod chain's other real endpoint isn't ALSO about to become a member (in which case both
+     *  edges are left un-ported — the hidden attenuverter sitting nominally "outside" is then just
+     *  an artefact of its own invisibility, not a real crossing; see the definition's own comment
+     *  for why splicing there is safe against AudioEngine's DirectCV/AttenuverterChain
+     *  classification). A Dual-I/O-on module's separately-jacked Left/Right crossings are merged into one Stereo
      *  group via ModuleBase::rightAudioLegChannel() (never jack index 0/1 — Source/Modules/
      *  CLAUDE.md) when BOTH legs cross. Pure read — does not touch the graph or `macros`.
      *

@@ -3,8 +3,10 @@
 #include "../Source/Modules/AttenuverterModule.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/LFOModule.h"
+#include "../Source/Modules/MacroInletModule.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Modules/VCAModule.h"
+#include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/ModMatrixComponent.h"
 #include <gtest/gtest.h>
 
@@ -668,4 +670,57 @@ TEST_F(ModMatrixTest, GroupedDestinationLabelIncludesModuleName) {
     juce::String label = matrix.getRowDestComboTextForTest(0);
     EXPECT_TRUE(label.contains(filterName)) << "label was: " << label;
     EXPECT_TRUE(label.contains("Cutoff")) << "label was: " << label;
+}
+
+// founder-review fix G3 (docs/macros.md §7 item 7): grouping a module that is the destination of a
+// mod routing now splices a MacroInletModule in as that routing's dest. MacroInletModule declares
+// no getModulationTargets() (a plain cable drop onto its jack must never auto-wrap into a new
+// attenuverter -- Tests/MacroPortFlowTests.cpp), so the destination combo needs a way to still
+// resolve and show something for a row landing there, instead of going blank/unselectable.
+TEST_F(ModMatrixTest, DestinationLabelStillResolvesAfterGroupingSplicesAMacroPort) {
+    auto& graph = engine.getGraph();
+    graph.clear();
+
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto lfoNode = graph.addNode(std::make_unique<LFOModule>());
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    auto otherNode = graph.addNode(std::make_unique<FilterModule>()); // second member, no crossing of its own
+    ASSERT_NE(lfoNode, nullptr);
+    ASSERT_NE(filterNode, nullptr);
+    ASSERT_NE(otherNode, nullptr);
+
+    lfoNode->properties.set("x", 100);
+    lfoNode->properties.set("y", 100);
+    filterNode->properties.set("x", 400);
+    filterNode->properties.set("y", 100);
+    otherNode->properties.set("x", 400);
+    otherNode->properties.set("y", 300);
+    editor.updateComponents();
+
+    engine.addModRouting(lfoNode->nodeID, 0, filterNode->nodeID, 1); // LFO -> atten -> Filter Cutoff
+
+    editor.setSelectedNodes({filterNode->nodeID, otherNode->nodeID});
+    const auto macroId = editor.groupSelectionIntoMacro(true);
+    ASSERT_FALSE(macroId.isEmpty());
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    ASSERT_EQ(macro->ports.size(), 1u) << "Filter's mod-routed crossing gets a port";
+
+    // The mod routing's destination is now the spliced port, not Filter directly.
+    auto active = engine.getActiveModRoutings();
+    ASSERT_EQ(active.size(), 1u);
+    auto* portNode = graph.getNodeForId(active[0].destNodeID);
+    ASSERT_NE(portNode, nullptr);
+    ASSERT_NE(dynamic_cast<MacroInletModule*>(portNode->getProcessor()), nullptr);
+
+    ModMatrixComponent matrix(engine);
+    matrix.setBounds(0, 0, 600, 400);
+    matrix.updateRowsFromGraph();
+
+    juce::String label = matrix.getRowDestComboTextForTest(0);
+    EXPECT_FALSE(label.isEmpty()) << "the destination combo must not go blank once the routing's "
+                                     "destination is a spliced macro port";
+    EXPECT_TRUE(label.contains("Macro In")) << "label was: " << label;
 }

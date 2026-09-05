@@ -4671,17 +4671,62 @@ GraphEditor::buildMacroPortCrossingPlan(const std::vector<juce::AudioProcessorGr
         // (isInput=false); signal ENTERING it (internal end is the destination) -> an inlet.
         const bool portIsInput = !srcInside;
 
-        // Founder-review-flagged exclusion: never splice a port into a mod-routing knob's own
-        // edge. AudioEngine::addModRouting always wraps a single-slot CV routing through an
-        // AttenuverterModule node; retargeting one leg of that chain onto a fresh port node would
-        // desync the DirectCV/AttenuverterChain classification rebuildVisibleCables()/AudioEngine
-        // read straight off the attenuverter's own node identity, dropping the mod knob out of the
-        // mod matrix. Left un-ported instead — consistent with §5.4: "a macro's encapsulation is
-        // advisory, not enforced," so a cable straight to an interior member (no port) is an
-        // expected, not an error, outcome.
+        // A crossing connection whose EXTERNAL endpoint is an AttenuverterModule needs one more
+        // check before it can be treated like any other crossing (founder review: "mod
+        // connections don't get routed - they should"). AudioEngine::addModRouting always wraps a
+        // single-slot CV routing as source -> attenuverter(ch0) -> destination, and the
+        // attenuverter itself can NEVER be a macro member — it never gets a ModuleComponent
+        // (GraphEditor::updateComponents() skips it outright), so it can never be part of a canvas
+        // selection. So when this crossing's external node is an attenuverter, the mod chain's
+        // OTHER endpoint — the attenuverter's own other ch0 connection — decides what is actually
+        // happening:
+        //
+        //  - That far endpoint is ALSO about to become a member (the user selected both the real
+        //    mod source and its real target together, e.g. an ADSR and the VCA it drives). The
+        //    hidden attenuverter sitting nominally "outside" is then just an artefact of its own
+        //    invisibility, not a real boundary crossing — splicing here would spawn TWO spurious
+        //    ports (an outlet off the source, an inlet onto the target) for a routing the user is
+        //    grouping wholly inside the macro. Left un-ported, both edges, exactly like any other
+        //    fully-internal connection (MacroAutoPortTests.cpp's
+        //    ModRoutingWithBothRealEndpointsInsideStaysWhollyInternal pins this).
+        //  - The far endpoint is genuinely external (or the chain is only half-wired) — this IS a
+        //    real crossing. Splicing a port here does NOT desync AudioEngine's DirectCV/
+        //    AttenuverterChain classification: `getModulationRoutings()`'s AttenuverterChain pass
+        //    is keyed purely on the ATTENUVERTER's own node identity (it walks every
+        //    AttenuverterModule node and reads whichever connections currently sit on its ch0 in/
+        //    out), never on what is wired to the other end. Retargeting the attenuverter's own
+        //    edge onto the new port — with the attenuverter itself standing in as the "external"
+        //    node for the splice below — keeps the knob in the mod matrix (`getActiveModRoutings`
+        //    still reports it, now with the port as the reported source/dest, matching how any
+        //    other boundary-crossing cable reports the port it passes through) and keeps the
+        //    modulation signal flowing, since the port is a pure pass-through.
         auto* externalNode = graph.getNodeForId(externalId);
-        if (externalNode != nullptr && dynamic_cast<AttenuverterModule*>(externalNode->getProcessor()) != nullptr)
-            continue;
+        if (externalNode != nullptr && dynamic_cast<AttenuverterModule*>(externalNode->getProcessor()) != nullptr) {
+            juce::AudioProcessorGraph::NodeID farNode;
+            bool foundFar = false;
+            // AudioEngine::addModRouting always uses channel 0 on both of the attenuverter's ch0
+            // in/out edges (mirrors AudioEngine::getModulationRoutings' own hardcoded "channel 0"
+            // convention when it walks an attenuverter's connections) — the far side of THIS
+            // connection's leg is the attenuverter's other ch0 edge. This holds even for a
+            // mod-of-mod chain (one attenuverter's Amount CV, ch1, driven by another): the ONLY
+            // things that ever wire directly into an attenuverter are AudioEngine::addModRouting
+            // and ModMatrixComponent::ModRow::comboBoxChanged, and both always source that wire
+            // from ANOTHER attenuverter's ch0 output — a genuinely selectable (member-eligible)
+            // module can therefore never land on an attenuverter's ch1 directly, so the crossing
+            // edge examined here is always on ch0 on the attenuverter side too.
+            for (const auto& oc : graph.getConnections()) {
+                if (portIsInput ? (oc.destination.nodeID == externalId && oc.destination.channelIndex == 0)
+                                : (oc.source.nodeID == externalId && oc.source.channelIndex == 0)) {
+                    farNode = portIsInput ? oc.source.nodeID : oc.destination.nodeID;
+                    foundFar = true;
+                    break;
+                }
+            }
+            if (foundFar && isMember(farNode))
+                continue; // both real endpoints of this mod chain are members; nothing crosses
+            // else: fall through and splice exactly like any other crossing, treating the
+            // attenuverter itself as the external node.
+        }
 
         auto* internalNode = graph.getNodeForId(internalId);
         if (internalNode == nullptr)

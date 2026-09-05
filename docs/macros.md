@@ -16,7 +16,11 @@ This document covers two things:
    expanded hull. A further founder-review pass (fix F5, §7 item 7) added the biggest behaviour
    change since P8-15d: grouping a selection that has a cable crossing its boundary can now
    auto-create matching ports for those cables instead of leaving them wired straight to an
-   interior member, behind a remembered tri-state preference.
+   interior member, behind a remembered tri-state preference. A second founder-review pass on that
+   feature (fix G3, §7 item 7) taught the auto-port splice to also handle a crossing modulation/CV
+   cable wrapped in a hidden `AttenuverterModule` node — genuinely external ones now get a port too;
+   only the case where BOTH the real mod source and target are being grouped together stays
+   un-ported, since the attenuverter can never itself be a member.
 
 ---
 
@@ -761,14 +765,62 @@ In order, each independently shippable:
    `updateComponents()`, group-then-add-as-a-second-pass was rejected), so a single Cmd+Z undoes
    the grouping and every spliced port together.
 
-   **A mod-routing knob's own edge is never spliced.** `AudioEngine::addModRouting` always wraps a
-   single-slot CV routing through a hidden `AttenuverterModule` node; retargeting one leg of that
-   chain onto a fresh port node would desync `AudioEngine`'s `DirectCV`/`AttenuverterChain`
-   classification (keyed on the attenuverter's own node identity) from the live graph and drop the
-   mod knob out of the mod matrix. `buildMacroPortCrossingPlan()` therefore skips any crossing
-   connection whose EXTERNAL endpoint is an `AttenuverterModule` — left wired straight to the
-   interior member with no port, which §5.4 already establishes as an expected outcome ("a macro's
-   encapsulation is advisory, not enforced"), not an error.
+   **A mod-routing knob's edge is spliced when it genuinely crosses the boundary, and left alone
+   when it doesn't (founder-review fix G3).** `AudioEngine::addModRouting` always wraps a
+   single-slot CV routing as source -> attenuverter(ch0) -> destination, and the attenuverter
+   itself can never be a macro member — it never gets a `ModuleComponent`
+   (`GraphEditor::updateComponents()` skips it outright), so it can never be part of a canvas
+   selection. That means a crossing connection whose EXTERNAL endpoint is the attenuverter can mean
+   two different things, told apart by looking at the mod chain's OTHER real endpoint (the
+   attenuverter's other ch0 connection):
+
+   - **Both real endpoints are about to become members** (the user selected the mod source and its
+     target together, e.g. an ADSR and the VCA it drives). The attenuverter sitting nominally
+     "outside" is then only an artefact of its own invisibility, not a real crossing — splicing
+     here would spawn TWO spurious ports (an outlet off the source, an inlet onto the target) for a
+     routing the user is grouping wholly inside the macro. Left un-ported, both edges, exactly like
+     any other fully-internal connection (`MacroAutoPortTests.cpp`'s
+     `ModRoutingWithBothRealEndpointsInsideStaysWhollyInternal`).
+   - **The far endpoint is genuinely external** (or the chain is only half-wired) — this IS a real
+     crossing, and now DOES get a port. `AudioEngine::getModulationRoutings()`'s AttenuverterChain
+     pass is keyed purely on the ATTENUVERTER's own node identity — it walks every
+     `AttenuverterModule` node and reads whichever connections currently sit on its ch0 in/out,
+     never on what those connections point at — so retargeting the attenuverter's own edge onto the
+     new port (with the attenuverter itself standing in as the "external" node for the splice) does
+     NOT desync that classification: the routing still shows up in `getActiveModRoutings()` (the
+     mod matrix), now reporting the port as its source/dest, exactly how any other boundary-crossing
+     cable reports the port it passes through rather than the member further inside. The
+     modulation signal keeps flowing because the port is a pure pass-through, and
+     `buildVisibleCables()` keeps drawing the BOUNDARY segment as ONE `AttenuverterChain`-kind wire
+     (ModCV-coloured, carrying the knob) all the way to the port's own jack — collapsed, that lands
+     on the port's card jack via the same `macroCardPortLayout`/re-anchoring machinery every other
+     ported cable already uses; nothing macro-specific needed adding to either function. The other,
+     wholly-INTERNAL leg (member <-> port, on the outlet's side of the chain) is unaffected by this
+     fix and renders as an ordinary `Direct` (plain Audio-coloured) cable when the macro is
+     EXPANDED — visible only then, since a collapsed macro drops any cable wholly inside it; this
+     was true of every other auto-created port before G3 too, and is not new here.
+     `MacroAutoPortTests.cpp`'s `AttenuverterAdjacentCrossingIsSplicedForAGenuineExternalCrossing`
+     and `AttenuverterAdjacentCrossingSplicedModulationSurvives` prove this holds down to the DSP
+     level (the second renders real blocks through the spliced chain and checks the destination
+     actually receives the modulated signal, and reacts live to an amount-parameter change, not
+     just that a port node exists), and `UndoRestoresAModRoutingCrossingSpliceExactly` covers
+     undo/redo.
+
+     **The mod matrix's own destination combo needed a matching fix.** `MacroInletModule`
+     deliberately declares no `getModulationTargets()` (`GraphEditor::connectPorts()` relies on that
+     empty list to keep a plain cable drop onto a Macro In's jack a plain connection, never
+     auto-wrapped in a fresh attenuverter — `Tests/MacroPortFlowTests.cpp`'s drop-a-cable tests pin
+     that), so a `ModMatrixComponent::ModRow` whose destination is now a spliced port had nothing to
+     resolve its combo selection against and would render blank. Rather than give
+     `MacroInletModule` a real `ModulationTarget` (which would resurrect the auto-wrap problem for
+     every ordinary cable drop, since `connectPorts()` reads that same list), `ModMatrixComponent`'s
+     own combo-population (`destinationCandidatesForCombo`, `Source/UI/ModMatrixComponent.cpp`)
+     substitutes a display-only synthetic target at channel 0 whenever the module has none AND is a
+     `MacroInletModule` — a spliced port from this fix is always Mono with its one active channel at
+     0 (the internal jack an `AttenuverterChain` lands on is never poly-fanned), so channel 0 is the
+     only candidate. `Tests/ModMatrixTests.cpp`'s
+     `DestinationLabelStillResolvesAfterGroupingSplicesAMacroPort` pins the row no longer going
+     blank.
 
    **Hull/card ordering.** `macroHullBounds()`/`applyMacroCollapsed`'s hull-seeding union already
    excludes port members (§5.4's "hull-feedback trap"), and the collapsed card's own `macro.bounds`

@@ -1,8 +1,28 @@
 #include "ModMatrixComponent.h"
 #include "../Modules/AttenuverterModule.h"
+#include "../Modules/MacroInletModule.h"
 #include "Theme/AppLookAndFeel.h"
 #include <algorithm>
 #include <map>
+
+namespace {
+// MacroInletModule deliberately declares NO getModulationTargets() — GraphEditor::connectPorts()
+// relies on that empty list to keep a plain cable drop onto a Macro In's jack a plain connection,
+// never auto-wrapped in a fresh attenuverter (Tests/MacroPortFlowTests.cpp's drop-a-cable tests
+// pin that). Founder-review fix G3 (docs/macros.md §7 item 7) can still splice a MacroInletModule
+// in as the DESTINATION of an EXISTING AttenuverterChain crossing a macro boundary, so this row's
+// destination combo needs something to show and match against — without changing what the module
+// declares globally (which would resurrect the auto-wrap problem for ordinary drops). Display-only:
+// this never becomes a real ModulationTarget the module advertises anywhere else. A spliced port is
+// always Mono with its one active raw channel at 0 (docs/macros.md §5.3/§7 item 7 — the internal
+// jack an AttenuverterChain lands on is never poly-fanned), so channel 0 is the only candidate.
+std::vector<ModulationTarget> destinationCandidatesForCombo(ModuleBase* module) {
+    auto targets = module->getModulationTargets();
+    if (targets.empty() && dynamic_cast<MacroInletModule*>(module) != nullptr)
+        targets.push_back({"In", 0});
+    return targets;
+}
+} // namespace
 
 ModMatrixComponent::ModMatrixComponent(AudioEngine& engine, AppUndoManager* undoMgr)
     : audioEngine(engine)
@@ -454,7 +474,7 @@ void ModMatrixComponent::ModRow::populateCombos() {
                     sourceCombo.addItem(label, itemId);
                 }
 
-                auto targets = module->getModulationTargets();
+                auto targets = destinationCandidatesForCombo(module);
                 for (const auto& target : targets) {
                     int itemId = (int)((node->nodeID.uid << 8) | (uint32_t)target.channelIndex);
                     destCombo.addItem(displayName + ": " + target.name, itemId);
@@ -497,7 +517,7 @@ void ModMatrixComponent::ModRow::populateCombos() {
                     sourceItems++;
                 }
 
-                auto targets = module->getModulationTargets();
+                auto targets = destinationCandidatesForCombo(module);
                 if (!targets.empty()) {
                     juce::PopupMenu instDestSub;
                     for (const auto& target : targets) {

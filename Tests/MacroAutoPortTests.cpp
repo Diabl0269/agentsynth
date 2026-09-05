@@ -9,6 +9,7 @@
 // PreferencesSettingsTabTests.cpp.
 
 #include "../Source/AppUndoManager.h"
+#include "../Source/Modules/AttenuverterModule.h"
 #include "../Source/Modules/FX/ReverbModule.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/MacroInletModule.h"
@@ -16,6 +17,7 @@
 #include "../Source/Modules/MacroMidiOutletModule.h"
 #include "../Source/Modules/MacroOutletModule.h"
 #include "../Source/UI/GraphEditor.h"
+#include <atomic>
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -62,6 +64,48 @@ private:
         }
         return p;
     }
+};
+
+// A constant-output source for the mod-routing behavioural test below: outputs `value_` on
+// channel 0 regardless of input, so the test's expected value at the far end of the spliced chain
+// is a fixed number rather than an LFO's time-varying phase.
+class TestConstantModule : public ModuleBase {
+public:
+    explicit TestConstantModule(float value)
+        : ModuleBase("TestConstant", 1, 1)
+        , value_(value) {}
+    void prepareToPlay(double, int) override {}
+    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override {
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch) {
+            buffer.clear(ch, 0, buffer.getNumSamples());
+            if (ch == 0)
+                for (int i = 0; i < buffer.getNumSamples(); ++i)
+                    buffer.setSample(0, i, value_);
+        }
+    }
+    ModuleType getModuleType() const override { return ModuleType::Math; }
+
+private:
+    float value_;
+};
+
+// A CV probe: records the last sample it saw on its own channel 0 input, so a test can confirm a
+// modulation signal ACTUALLY reached the far side of a spliced port, not just that the port node
+// exists and the graph edges look right.
+class TestCvProbeModule : public ModuleBase {
+public:
+    TestCvProbeModule()
+        : ModuleBase("TestProbe", 1, 1) {}
+    void prepareToPlay(double, int) override {}
+    void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override {
+        if (buffer.getNumChannels() > 0 && buffer.getNumSamples() > 0)
+            lastSample_.store(buffer.getReadPointer(0)[buffer.getNumSamples() - 1], std::memory_order_relaxed);
+    }
+    ModuleType getModuleType() const override { return ModuleType::Math; }
+    float lastSample() const { return lastSample_.load(std::memory_order_relaxed); }
+
+private:
+    std::atomic<float> lastSample_{0.0f};
 };
 
 NodeID addModuleAt(GraphEditor& editor, AudioEngine& engine, std::unique_ptr<juce::AudioProcessor> processor,
@@ -448,10 +492,15 @@ TEST(MacroAutoPort, MidiCrossingCreatesMidiInletAndOutletNodes) {
 }
 
 // ============================================================================
-// A mod-routing knob's own edge is left alone (never spliced into a port)
+// A mod-routing knob's edge: spliced when the crossing is genuine, left alone when it isn't
+// (founder-review fix G3: "I noticed mod connections don't get routed - they should")
 // ============================================================================
 
-TEST(MacroAutoPort, AttenuverterAdjacentCrossingIsNeverSpliced) {
+// The genuinely-external case: the mod routing's SOURCE (and therefore its attenuverter) are
+// outside the group; only the TARGET is being grouped. Mirrors the original (pre-G3) pinned test's
+// setup exactly, but now expects a port instead of a bare pass-through -- the founder's own
+// complaint was precisely this shape of crossing.
+TEST(MacroAutoPort, AttenuverterAdjacentCrossingIsSplicedForAGenuineExternalCrossing) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
@@ -460,7 +509,7 @@ TEST(MacroAutoPort, AttenuverterAdjacentCrossingIsNeverSpliced) {
     auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
     auto source = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Source", 100, 100);
     auto ext2 = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Ext2", 100, 300);
-    const auto attenId = engine.addModRouting(source, 0, a, 0); // source -> atten -> A
+    const auto attenId = engine.addModRouting(source, 0, a, 0); // source -> atten -> A, all external but A
     ASSERT_TRUE(attenId.uid != 0);
     engine.getGraph().addConnection({{ext2, 0}, {b, 0}}); // a genuine plain crossing, for contrast
 
@@ -470,13 +519,229 @@ TEST(MacroAutoPort, AttenuverterAdjacentCrossingIsNeverSpliced) {
     ASSERT_FALSE(macroId.isEmpty());
 
     auto* macro = editor.getMacros().find(macroId);
-    ASSERT_EQ(macro->ports.size(), 1u) << "only B's plain crossing gets a port; A's mod-routed one does not";
+    ASSERT_EQ(macro->ports.size(), 2u) << "both A's mod-routed crossing and B's plain crossing now get a port";
     EXPECT_TRUE(macro->ports[0].isInput);
+    EXPECT_TRUE(macro->ports[1].isInput);
+    EXPECT_EQ(engine.getGraph().getNodes().size(), before.size() + 2) << "one port node each, for A and B";
 
-    // The attenuverter chain is untouched -- both of its edges survive exactly as they were.
+    // Find A's port (fronted node feeding A directly) versus B's port (fronted node feeding B).
+    NodeID portForA, portForB;
+    for (auto* node : engine.getGraph().getNodes()) {
+        if (std::find(before.begin(), before.end(), node->nodeID) != before.end())
+            continue; // pre-existing node
+        if (hasConnection(engine, node->nodeID, 0, a, 0))
+            portForA = node->nodeID;
+        else if (hasConnection(engine, node->nodeID, 0, b, 0))
+            portForB = node->nodeID;
+    }
+    ASSERT_TRUE(portForA.uid != 0);
+    ASSERT_TRUE(portForB.uid != 0);
+    auto* inletForA = dynamic_cast<MacroInletModule*>(engine.getGraph().getNodeForId(portForA)->getProcessor());
+    auto* inletForB = dynamic_cast<MacroInletModule*>(engine.getGraph().getNodeForId(portForB)->getProcessor());
+    ASSERT_NE(inletForA, nullptr);
+    ASSERT_NE(inletForB, nullptr);
+    // A mono ModCV target (the only shape addModRouting's single-slot channel-0 chain ever lands
+    // on) must produce a mono port -- the one-jack-per-CV-mod-jack rule stage G2 established.
+    EXPECT_EQ(inletForA->getPortShape(), MacroPortShape::Mono);
+    EXPECT_EQ(inletForB->getPortShape(), MacroPortShape::Mono);
+
+    // The attenuverter chain's own two edges are retargeted onto the port on its downstream side —
+    // the original direct atten->A edge is gone, but the attenuverter node itself, and its upstream
+    // edge from the real source, are untouched.
     EXPECT_TRUE(hasConnection(engine, source, 0, attenId, 0));
-    EXPECT_TRUE(hasConnection(engine, attenId, 0, a, 0));
-    EXPECT_EQ(engine.getGraph().getNodes().size(), before.size() + 1) << "exactly one port node, for B only";
+    EXPECT_TRUE(hasConnection(engine, attenId, 0, portForA, 0));
+    EXPECT_TRUE(hasConnection(engine, portForA, 0, a, 0));
+    EXPECT_FALSE(hasConnection(engine, attenId, 0, a, 0)) << "the direct edge was disconnected by the splice";
+
+    EXPECT_TRUE(hasConnection(engine, ext2, 0, portForB, 0));
+    EXPECT_TRUE(hasConnection(engine, portForB, 0, b, 0));
+
+    // Still classified as a single mod routing, listed in the mod matrix, now reporting the port
+    // as its destination -- exactly how any other boundary-crossing cable reports the port it
+    // passes through rather than the member further inside.
+    auto active = engine.getActiveModRoutings();
+    ASSERT_EQ(active.size(), 1u);
+    EXPECT_EQ(active[0].attenuverterNodeID, attenId);
+    EXPECT_EQ(active[0].sourceNodeID, source);
+    EXPECT_EQ(active[0].destNodeID, portForA);
+
+    // buildVisibleCables() still draws the whole chain as ONE AttenuverterChain-kind, ModCV-coloured
+    // wire, now landing on the port's own jack (Source/UI/CLAUDE.md: a cable is not a graph edge,
+    // enumerate only through buildVisibleCables()).
+    const auto& cables = editor.buildVisibleCables();
+    bool foundChain = false;
+    for (const auto& c : cables) {
+        if (c.kind == GraphEditor::VisibleCable::Kind::AttenuverterChain && c.id.attenUid == attenId.uid) {
+            foundChain = true;
+            EXPECT_EQ(c.signal, synth::ui::CableSignal::ModCV);
+            EXPECT_EQ(c.id.dstUid, portForA.uid) << "the chain's visible endpoint is now the port, not A directly";
+        }
+    }
+    EXPECT_TRUE(foundChain);
+}
+
+// The fully-internal case: BOTH the mod routing's real source and its real target are being
+// grouped together. The hidden attenuverter node can never itself be a macro member (it never gets
+// a ModuleComponent), so it is nominally "outside" no matter what -- but splicing here would spawn
+// two spurious ports for a routing the user is grouping wholly inside the macro. This is the one
+// sub-case G3 deliberately leaves un-ported; this test pins that as the CURRENT, intended
+// behaviour (docs/macros.md §7 item 7).
+TEST(MacroAutoPort, ModRoutingWithBothRealEndpointsInsideStaysWhollyInternal) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto source = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Source", 100, 100);
+    auto dest = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Dest", 400, 100);
+    const auto attenId = engine.addModRouting(source, 0, dest, 0); // source -> atten -> dest
+    ASSERT_TRUE(attenId.uid != 0);
+
+    const auto before = allNodeIds(engine);
+    editor.setSelectedNodes({source, dest});
+    const auto macroId = editor.groupSelectionIntoMacro(true);
+    ASSERT_FALSE(macroId.isEmpty());
+
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_EQ(macro->ports.size(), 0u) << "both real endpoints of the mod chain are members; the hidden "
+                                          "attenuverter sitting nominally outside must not spawn two "
+                                          "spurious ports for what is really a fully internal routing";
+    EXPECT_EQ(engine.getGraph().getNodes().size(), before.size()) << "no port nodes were created";
+
+    // Both original edges survive untouched.
+    EXPECT_TRUE(hasConnection(engine, source, 0, attenId, 0));
+    EXPECT_TRUE(hasConnection(engine, attenId, 0, dest, 0));
+
+    auto active = engine.getActiveModRoutings();
+    ASSERT_EQ(active.size(), 1u);
+    EXPECT_EQ(active[0].sourceNodeID, source);
+    EXPECT_EQ(active[0].destNodeID, dest);
+}
+
+// The behavioural proof: a genuinely-crossing mod routing must not just LOOK spliced -- the
+// modulation signal must still actually reach the destination through atten -> port -> dest, and
+// changing the attenuverter's own amount must still be audible at the far end. A test that only
+// asserted "a port node now exists" could pass while the modulation had silently gone dead.
+TEST(MacroAutoPort, AttenuverterAdjacentCrossingSplicedModulationSurvives) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    constexpr float kSourceValue = 0.6f;
+    auto source = addModuleAt(editor, engine, std::make_unique<TestConstantModule>(kSourceValue), "Source", 100, 100);
+    auto dest = addModuleAt(editor, engine, std::make_unique<TestCvProbeModule>(), "Dest", 400, 100);
+    auto other = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Other", 400, 300);
+
+    const auto attenId = engine.addModRouting(source, 0, dest, 0); // source -> atten(amount=1) -> dest
+    ASSERT_TRUE(attenId.uid != 0);
+
+    editor.setSelectedNodes({dest, other});
+    const auto macroId = editor.groupSelectionIntoMacro(true);
+    ASSERT_FALSE(macroId.isEmpty());
+
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_EQ(macro->ports.size(), 1u) << "Dest's mod-routed crossing gets a port; Other has no crossing at all";
+    ASSERT_TRUE(macro->ports[0].isInput);
+
+    NodeID portNode;
+    for (auto* node : engine.getGraph().getNodes())
+        if (node->properties["uuid"].toString() == macro->ports[0].nodeUuid)
+            portNode = node->nodeID;
+    ASSERT_TRUE(portNode.uid != 0);
+    ASSERT_NE(dynamic_cast<MacroInletModule*>(engine.getGraph().getNodeForId(portNode)->getProcessor()), nullptr);
+
+    EXPECT_TRUE(hasConnection(engine, attenId, 0, portNode, 0));
+    EXPECT_TRUE(hasConnection(engine, portNode, 0, dest, 0));
+    EXPECT_FALSE(hasConnection(engine, attenId, 0, dest, 0));
+
+    auto* probe = dynamic_cast<TestCvProbeModule*>(engine.getGraph().getNodeForId(dest)->getProcessor());
+    ASSERT_NE(probe, nullptr);
+    auto* attenProc = engine.getGraph().getNodeForId(attenId)->getProcessor();
+    ASSERT_NE(attenProc, nullptr);
+    auto* amountParam = dynamic_cast<juce::AudioParameterFloat*>(attenProc->getParameters()[1]);
+    ASSERT_NE(amountParam, nullptr);
+
+    constexpr double kSampleRate = 44100.0;
+    constexpr int kBlockSize = 64;
+    auto& graph = engine.getGraph();
+    graph.setPlayConfigDetails(0, 0, kSampleRate, kBlockSize);
+    graph.prepareToPlay(kSampleRate, kBlockSize);
+    juce::MidiBuffer midi;
+
+    // addModRouting already set amount to 1.0 -- the constant source's value should reach the probe
+    // unchanged through atten -> port -> dest.
+    for (int i = 0; i < 4; ++i) {
+        juce::AudioBuffer<float> buf(1, kBlockSize);
+        buf.clear();
+        graph.processBlock(buf, midi);
+    }
+    EXPECT_NEAR(probe->lastSample(), kSourceValue, 0.01f)
+        << "the modulation signal must still reach the destination through the spliced port";
+
+    // Zeroing the attenuverter's amount silences the signal reaching the destination -- proves the
+    // reading above reflects a LIVE signal path, not a stale/cached value. AttenuverterModule
+    // smooths the amount change over 0.01s (prepareToPlay's smoothedAmount.reset), so render enough
+    // blocks to clear the ramp with a generous margin (well over 3-4x the 0.01s time constant).
+    amountParam->setValueNotifyingHost(amountParam->convertTo0to1(0.0f));
+    for (int i = 0; i < 60; ++i) {
+        juce::AudioBuffer<float> buf(1, kBlockSize);
+        buf.clear();
+        graph.processBlock(buf, midi);
+    }
+    EXPECT_NEAR(probe->lastSample(), 0.0f, 0.01f) << "the amount knob must still control the destination live";
+
+    graph.releaseResources();
+}
+
+// Undo of the grouping (and its splice) must restore the mod routing exactly -- a half-restored
+// mod chain would be a data-loss bug, not just a cosmetic one.
+TEST(MacroAutoPort, UndoRestoresAModRoutingCrossingSpliceExactly) {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+
+    auto source = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Source", 100, 100);
+    auto dest = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Dest", 400, 100);
+    auto other = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Other", 400, 300);
+    const auto attenId = engine.addModRouting(source, 0, dest, 0);
+    ASSERT_TRUE(attenId.uid != 0);
+
+    const int nodesBefore = engine.getGraph().getNodes().size();
+
+    editor.setSelectedNodes({dest, other});
+    const auto macroId = editor.groupSelectionIntoMacro(true);
+    ASSERT_FALSE(macroId.isEmpty());
+    ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u);
+    EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore + 1);
+    EXPECT_FALSE(hasConnection(engine, attenId, 0, dest, 0));
+
+    ASSERT_TRUE(undo.canUndo());
+    undo.undo();
+
+    EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore) << "undo removed the macro AND the spliced port";
+    EXPECT_EQ(editor.getMacros().size(), 0);
+    EXPECT_TRUE(hasConnection(engine, attenId, 0, dest, 0)) << "the original mod-routing edge is restored exactly";
+    EXPECT_TRUE(hasConnection(engine, source, 0, attenId, 0)) << "the attenuverter's other edge was never touched";
+
+    auto restored = engine.getActiveModRoutings();
+    ASSERT_EQ(restored.size(), 1u) << "the routing is still exactly one attenuverter chain, not lost or duplicated";
+    EXPECT_EQ(restored[0].attenuverterNodeID, attenId);
+    EXPECT_EQ(restored[0].sourceNodeID, source);
+    EXPECT_EQ(restored[0].destNodeID, dest);
+
+    ASSERT_TRUE(undo.canRedo());
+    undo.redo();
+
+    EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore + 1);
+    ASSERT_EQ(editor.getMacros().size(), 1);
+    EXPECT_FALSE(hasConnection(engine, attenId, 0, dest, 0)) << "redo re-splices; the direct edge stays gone";
+    auto redone = engine.getActiveModRoutings();
+    ASSERT_EQ(redone.size(), 1u);
+    EXPECT_EQ(redone[0].attenuverterNodeID, attenId);
+    EXPECT_EQ(redone[0].sourceNodeID, source);
+    EXPECT_NE(redone[0].destNodeID, dest) << "redo's destination is the port again, not the original module";
 }
 
 // ============================================================================
