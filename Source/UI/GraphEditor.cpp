@@ -675,20 +675,43 @@ void GraphEditor::setCableColourOverrides(const synth::ui::CableColourOverrides&
 void GraphEditor::disconnectCable(const VisibleCable& cable) {
     auto& graph = audioEngine.getGraph();
 
+    // T148 (docs/macros.md §7 item 9): both cable kinds populate id.srcUid/dstUid with the REAL
+    // logical endpoints — for an AttenuverterChain that's the true mod source/destination the
+    // chain proxies, never the hidden attenuverter itself (buildVisibleCables() constructs it
+    // that way, and G3's own splice logic already treats them as such). Decide BEFORE mutating
+    // whether removing this cable can leave a macro port with no connections left, so the right
+    // undo transaction is chosen up front. Gated on autoDeleteMacroPortsOnLastCableEnabled
+    // (Preferences) — off, this is always false and both branches below fall through to their
+    // original graph-only recordStructuralChange path, unchanged.
+    const juce::AudioProcessorGraph::NodeID srcId{cable.id.srcUid};
+    const juce::AudioProcessorGraph::NodeID dstId{cable.id.dstUid};
+    const bool touchesMacroPort =
+        autoDeleteMacroPortsOnLastCableEnabled && (nodeIsMacroPort(srcId) || nodeIsMacroPort(dstId));
+
     // An attenuverter chain is a hidden node plus its two edges — removing the routing takes all
     // of it, which is also what double-clicking the knob does.
     if (cable.kind == VisibleCable::Kind::AttenuverterChain) {
         const juce::AudioProcessorGraph::NodeID attenId{cable.id.attenUid};
-        if (undoManager)
-            undoManager->recordStructuralChange(graph, [this, attenId] { audioEngine.removeModRouting(attenId); });
-        else
-            audioEngine.removeModRouting(attenId);
+        auto removeChain = [this, attenId] { audioEngine.removeModRouting(attenId); };
+        if (touchesMacroPort) {
+            auto doMutation = [this, removeChain, srcId, dstId] {
+                removeChain();
+                autoDeleteOrphanedMacroPort(srcId);
+                autoDeleteOrphanedMacroPort(dstId);
+                updateComponents();
+            };
+            if (undoManager)
+                undoManager->recordGraphAndMacroChange(graph, macros, doMutation);
+            else
+                doMutation();
+        } else if (undoManager) {
+            undoManager->recordStructuralChange(graph, removeChain);
+        } else {
+            removeChain();
+        }
         repaintCanvas();
         return;
     }
-
-    const juce::AudioProcessorGraph::NodeID srcId{cable.id.srcUid};
-    const juce::AudioProcessorGraph::NodeID dstId{cable.id.dstUid};
 
     // Expand audio/poly fans via resolvePolyLink so a collapsed stereo (or poly voice) cable that
     // only drew its head edge still removes every raw channel the user-visible wire owns.
@@ -725,10 +748,22 @@ void GraphEditor::disconnectCable(const VisibleCable& cable) {
         graph.removeConnection(c);
     };
 
-    if (undoManager)
+    if (touchesMacroPort) {
+        auto doMutation = [this, removeEdges, srcId, dstId] {
+            removeEdges();
+            autoDeleteOrphanedMacroPort(srcId);
+            autoDeleteOrphanedMacroPort(dstId);
+            updateComponents();
+        };
+        if (undoManager)
+            undoManager->recordGraphAndMacroChange(graph, macros, doMutation);
+        else
+            doMutation();
+    } else if (undoManager) {
         undoManager->recordStructuralChange(graph, removeEdges);
-    else
+    } else {
         removeEdges();
+    }
 
     hoveredCableId.reset();
     repaintCanvas();
@@ -1354,7 +1389,16 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                 auto* realDst = dragSourceIsInput ? srcNode : dstNode;
                 const int srcJack = dragSourceIsInput ? port->index : dragSourceChannel;
                 const int dstJack = dragSourceIsInput ? dragSourceChannel : port->index;
-                connectPorts(realSrc->nodeID, srcJack, realDst->nodeID, dstJack, dragSourceIsMidi, true);
+                // T148 (docs/macros.md §7 item 9): if this completed drag crosses a macro
+                // boundary (an EXPANDED macro's member on one side, something outside that same
+                // macro on the other — the collapsed-card drop above is a different code path),
+                // mint and wire a matching port instead of the plain direct connection. Gated by
+                // autoCreateMacroPortsOnDragEnabled (Preferences); when it handles the drag it
+                // returns true and the plain connectPorts below is skipped entirely.
+                if (!autoCreateMacroPortsOnDragEnabled ||
+                    !maybeAutoCreateMacroPortsForDrag(realSrc->nodeID, srcJack, realDst->nodeID, dstJack,
+                                                      dragSourceIsMidi))
+                    connectPorts(realSrc->nodeID, srcJack, realDst->nodeID, dstJack, dragSourceIsMidi, true);
                 connectedToAModule = true;
             }
         }
@@ -5117,6 +5161,176 @@ juce::String GraphEditor::autoMacroPortName(ModuleBase* internalMb, bool isInput
     return jackLabel.isNotEmpty() ? base + " " + jackLabel : base;
 }
 
+// ---- Auto-create-port-on-drag / auto-delete-on-last-cable (T148, docs/macros.md §7 item 9) -----
+
+bool GraphEditor::nodeIsMacroPort(juce::AudioProcessorGraph::NodeID nodeId) const {
+    const juce::String uuid = nodeUuidFor(nodeId);
+    if (uuid.isEmpty())
+        return false;
+    const auto* m = macros.findByMember(uuid);
+    return m != nullptr && m->memberIsPort(uuid);
+}
+
+bool GraphEditor::connectionWouldRouteAsModulationCV(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
+                                                     juce::AudioProcessorGraph::NodeID dstId, int dstJack,
+                                                     bool isMidi) const {
+    // Mirrors connectPorts()'s own isCV computation (~line 1262) exactly — see this method's own
+    // header comment for why it is a separate mirrored function rather than a shared refactor.
+    if (isMidi)
+        return false;
+    auto& graph = audioEngine.getGraph();
+    auto* srcNode = graph.getNodeForId(srcId);
+    auto* dstNode = graph.getNodeForId(dstId);
+    if (srcNode == nullptr || dstNode == nullptr)
+        return false;
+
+    auto* srcModuleBase = dynamic_cast<ModuleBase*>(srcNode->getProcessor());
+    auto* dstModuleBase = dynamic_cast<ModuleBase*>(dstNode->getProcessor());
+    const PolyLink link = resolvePolyLink(srcModuleBase, srcJack, dstModuleBase, dstJack);
+
+    if (link.voiceCount != 1 || dstModuleBase == nullptr ||
+        carriesStructuralSignal(srcModuleBase, link.sourceRawChannel))
+        return false;
+
+    for (const auto& t : dstModuleBase->getModulationTargets())
+        if (t.channelIndex == link.destRawChannel)
+            return true;
+    return false;
+}
+
+juce::AudioProcessorGraph::NodeID
+GraphEditor::mintMacroPortForAutoCreate(const juce::String& macroId, bool isInput, bool isMidi,
+                                        juce::AudioProcessorGraph::NodeID internalNodeId, int internalVisibleJack) {
+    auto* macro = macros.find(macroId);
+    if (macro == nullptr)
+        return {};
+
+    const auto kind = isMidi ? synth::MacroPortKind::Midi : synth::MacroPortKind::AudioCV;
+    const juce::String typeName = macroPortNodeTypeName(isInput, kind);
+    auto newProcessor = synth::AIStateMapper::createModule(typeName);
+    if (!newProcessor)
+        return {};
+    if (!isMidi) {
+        // Always Mono — the same scope cut createMacroPortFromDroppedCable already applies (§5.3):
+        // no inference from the dragged cable's own poly/stereo fan.
+        if (auto* inlet = dynamic_cast<MacroInletModule*>(newProcessor.get()))
+            inlet->setPortShape(MacroPortShape::Mono, 1);
+        else if (auto* outlet = dynamic_cast<MacroOutletModule*>(newProcessor.get()))
+            outlet->setPortShape(MacroPortShape::Mono, 1);
+    }
+
+    auto& graph = audioEngine.getGraph();
+    auto* internalNode = graph.getNodeForId(internalNodeId);
+    auto* internalMb = internalNode != nullptr ? dynamic_cast<ModuleBase*>(internalNode->getProcessor()) : nullptr;
+
+    auto node = graph.addNode(std::move(newProcessor));
+    if (!node)
+        return {};
+    node->properties.set("x", macro->bounds.getX());
+    node->properties.set("y", macro->bounds.getY());
+    const juce::String uuid = synth::AIStateMapper::ensureNodeUuid(node);
+
+    macro->members.push_back(uuid);
+    synth::MacroPort mp;
+    mp.nodeUuid = uuid;
+    mp.isInput = isInput;
+    mp.name = autoMacroPortName(internalMb, isInput, internalVisibleJack, isMidi);
+    mp.order = nextMacroPortOrder(*macro, isInput);
+    mp.kind = kind;
+    macro->ports.push_back(mp);
+
+    return node->nodeID;
+}
+
+bool GraphEditor::maybeAutoCreateMacroPortsForDrag(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
+                                                   juce::AudioProcessorGraph::NodeID dstId, int dstJack, bool isMidi) {
+    // Scope cut: a connection connectPorts() would itself wrap in a hidden AttenuverterModule
+    // never gets an auto-created port here — computed BEFORE any node is minted, so a mod-routed
+    // drag falls straight through to the caller's own plain connectPorts() call, unaffected.
+    if (connectionWouldRouteAsModulationCV(srcId, srcJack, dstId, dstJack, isMidi))
+        return false;
+
+    const juce::String srcUuid = nodeUuidFor(srcId);
+    const juce::String dstUuid = nodeUuidFor(dstId);
+    auto* srcMacro = srcUuid.isNotEmpty() ? macros.findByMember(srcUuid) : nullptr;
+    auto* dstMacro = dstUuid.isNotEmpty() ? macros.findByMember(dstUuid) : nullptr;
+
+    // An endpoint needs a NEW port on its own macro iff it is an ORDINARY member there (not
+    // already a port itself) and the OTHER endpoint is not a member of that same macro at all —
+    // "not a member" covers both "an ordinary member of the same macro" (nothing crosses, wire
+    // directly) and "already a port of the same macro" (wire straight into the existing jack,
+    // never mint a second one), since a port's own uuid is always also a `members` entry
+    // (MacroSet's own invariant).
+    const bool srcNeedsPort = srcMacro != nullptr && !srcMacro->memberIsPort(srcUuid) && !srcMacro->hasMember(dstUuid);
+    const bool dstNeedsPort = dstMacro != nullptr && !dstMacro->memberIsPort(dstUuid) && !dstMacro->hasMember(srcUuid);
+
+    if (!srcNeedsPort && !dstNeedsPort)
+        return false;
+
+    auto& graph = audioEngine.getGraph();
+    const juce::String srcMacroId = srcNeedsPort ? srcMacro->id : juce::String();
+    const juce::String dstMacroId = dstNeedsPort ? dstMacro->id : juce::String();
+
+    auto doMutation = [this, srcId, srcJack, dstId, dstJack, isMidi, srcMacroId, dstMacroId, srcNeedsPort,
+                       dstNeedsPort] {
+        auto effectiveSrc = srcId;
+        int effectiveSrcJack = srcJack;
+        auto effectiveDst = dstId;
+        int effectiveDstJack = dstJack;
+
+        if (srcNeedsPort) {
+            const auto portId = mintMacroPortForAutoCreate(srcMacroId, /*isInput=*/false, isMidi, srcId, srcJack);
+            if (portId.uid != 0) {
+                connectPorts(srcId, srcJack, portId, 0, isMidi, /*recordUndo=*/false);
+                effectiveSrc = portId;
+                effectiveSrcJack = 0;
+            }
+        }
+        if (dstNeedsPort) {
+            const auto portId = mintMacroPortForAutoCreate(dstMacroId, /*isInput=*/true, isMidi, dstId, dstJack);
+            if (portId.uid != 0) {
+                connectPorts(portId, 0, dstId, dstJack, isMidi, /*recordUndo=*/false);
+                effectiveDst = portId;
+                effectiveDstJack = 0;
+            }
+        }
+
+        // The final leg: direct member<->member if neither side needed a port (never actually
+        // reached — see the early return above), member<->port if only one side did, or
+        // port<->port for a genuine cross-macro-boundary crossing.
+        connectPorts(effectiveSrc, effectiveSrcJack, effectiveDst, effectiveDstJack, isMidi, /*recordUndo=*/false);
+        updateComponents();
+    };
+
+    if (undoManager)
+        undoManager->recordGraphAndMacroChange(graph, macros, doMutation);
+    else
+        doMutation();
+
+    return true;
+}
+
+void GraphEditor::autoDeleteOrphanedMacroPort(juce::AudioProcessorGraph::NodeID nodeId) {
+    if (!autoDeleteMacroPortsOnLastCableEnabled)
+        return;
+
+    const juce::String uuid = nodeUuidFor(nodeId);
+    if (uuid.isEmpty())
+        return;
+    auto* m = macros.findByMember(uuid);
+    if (m == nullptr || !m->memberIsPort(uuid))
+        return;
+
+    auto& graph = audioEngine.getGraph();
+    for (const auto& c : graph.getConnections())
+        if (c.source.nodeID == nodeId || c.destination.nodeID == nodeId)
+            return; // still has at least one cable — survives
+
+    spliceOutMacroPort(*m, uuid);
+    if (m->members.empty())
+        macros.remove(m->id); // MacroSet::removeMemberEverywhere's own "zero members" rule
+}
+
 juce::String GraphEditor::addMacroPort(const juce::String& macroId, bool isInput, synth::MacroPortKind kind,
                                        MacroPortShape shape, int voiceCount, const juce::String& portName) {
     auto* macro = macros.find(macroId);
@@ -6162,7 +6376,36 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
         targetChannels.push_back(portIndex);
     }
 
-    auto doDisconnect = [this, &graph, nodeId, targetChannels, isInput] {
+    // T148 (docs/macros.md §7 item 9): decide BEFORE mutating whether this disconnect can leave a
+    // macro port cableless — nodeId's own jack, or the far end of any plain (non-attenuverter)
+    // connection about to be removed. Only then does the transaction upgrade to
+    // recordGraphAndMacroChange; an ordinary disconnect keeps the existing graph-only
+    // recordStructuralChange path exactly as before. Gated on
+    // autoDeleteMacroPortsOnLastCableEnabled (Preferences) — off, this is always false.
+    bool touchesMacroPort = autoDeleteMacroPortsOnLastCableEnabled && nodeIsMacroPort(nodeId);
+    if (autoDeleteMacroPortsOnLastCableEnabled && !touchesMacroPort) {
+        auto isTargetChannelPrescan = [&targetChannels](int channel) {
+            return std::find(targetChannels.begin(), targetChannels.end(), channel) != targetChannels.end();
+        };
+        for (auto& c : graph.getConnections()) {
+            juce::AudioProcessorGraph::NodeID farNode;
+            if (isInput && c.destination.nodeID == nodeId && isTargetChannelPrescan(c.destination.channelIndex))
+                farNode = c.source.nodeID;
+            else if (!isInput && c.source.nodeID == nodeId && isTargetChannelPrescan(c.source.channelIndex))
+                farNode = c.destination.nodeID;
+            else
+                continue;
+            if (nodeIsMacroPort(farNode)) {
+                touchesMacroPort = true;
+                break;
+            }
+        }
+    }
+
+    // Same connection-removal logic either way — the macro-port branch below just also collects
+    // which nodes were touched, for the auto-delete scan run afterwards.
+    std::vector<juce::AudioProcessorGraph::NodeID> touchedNodes;
+    auto doDisconnect = [this, &graph, nodeId, targetChannels, isInput, &touchedNodes] {
         std::vector<juce::AudioProcessorGraph::Connection> toRemove;
         auto isTargetChannel = [&targetChannels](int channel) {
             return std::find(targetChannels.begin(), targetChannels.end(), channel) != targetChannels.end();
@@ -6174,8 +6417,10 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
                     if (auto* srcNode = graph.getNodeForId(c.source.nodeID)) {
                         if (dynamic_cast<AttenuverterModule*>(srcNode->getProcessor()) != nullptr)
                             audioEngine.removeModRouting(srcNode->nodeID);
-                        else
+                        else {
                             toRemove.push_back(c);
+                            touchedNodes.push_back(c.source.nodeID);
+                        }
                     }
                 }
             } else {
@@ -6183,8 +6428,10 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
                     if (auto* dstNode = graph.getNodeForId(c.destination.nodeID)) {
                         if (dynamic_cast<AttenuverterModule*>(dstNode->getProcessor()) != nullptr)
                             audioEngine.removeModRouting(dstNode->nodeID);
-                        else
+                        else {
                             toRemove.push_back(c);
+                            touchedNodes.push_back(c.destination.nodeID);
+                        }
                     }
                 }
             }
@@ -6193,7 +6440,19 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
             graph.removeConnection(c);
     };
 
-    if (undoManager) {
+    if (touchesMacroPort) {
+        auto doDisconnectAndPrune = [this, doDisconnect, nodeId, &touchedNodes] {
+            doDisconnect();
+            touchedNodes.push_back(nodeId);
+            for (auto touched : touchedNodes)
+                autoDeleteOrphanedMacroPort(touched);
+            updateComponents();
+        };
+        if (undoManager)
+            undoManager->recordGraphAndMacroChange(graph, macros, doDisconnectAndPrune);
+        else
+            doDisconnectAndPrune();
+    } else if (undoManager) {
         undoManager->recordStructuralChange(graph, doDisconnect);
     } else {
         doDisconnect();

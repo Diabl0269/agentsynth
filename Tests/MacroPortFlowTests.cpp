@@ -21,11 +21,13 @@
 #include "../Source/AI/AIStateMapper.h"
 #include "../Source/AppUndoManager.h"
 #include "../Source/Modules/FilterModule.h"
+#include "../Source/Modules/LFOModule.h"
 #include "../Source/Modules/MacroInletModule.h"
 #include "../Source/Modules/MacroMidiOutletModule.h"
 #include "../Source/Modules/MacroOutletModule.h"
 #include "../Source/Modules/MidiKeyboardModule.h"
 #include "../Source/Modules/OscillatorModule.h"
+#include "../Source/Modules/WavetableOscillatorModule.h"
 #include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/MacroCardComponent.h"
 #include "../Source/UI/ModuleComponent.h"
@@ -74,6 +76,15 @@ juce::String makeTwoMemberMacro(GraphEditor& editor, AudioEngine& engine) {
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     editor.setSelectedNodes({a, b});
     return editor.groupSelectionIntoMacro();
+}
+
+/** The live ModuleComponent for `id`, or nullptr — the same lookup every drag-based test below
+ *  needs to resolve a NodeID to something endConnectionDrag's own jack hit-test loop can see. */
+ModuleComponent* compFor(GraphEditor& editor, NodeID id) {
+    for (auto* c : editor.getModuleComponents())
+        if (c != nullptr && c->getNodeId() == id)
+            return c;
+    return nullptr;
 }
 
 } // namespace
@@ -457,4 +468,327 @@ TEST(MacroPortFlow, AllFourTypesAreAbsentFromTheLibraryWithAPinnedSizeEstimate) 
         EXPECT_EQ(estimate.x, comp.getWidth()) << typeName;
         EXPECT_EQ(estimate.y, comp.getHeight()) << typeName;
     }
+}
+
+// ============================================================================
+// T148 (docs/macros.md §7 item 9): auto-create a macro port when a dragged cable crosses an
+// EXPANDED macro's boundary — the counterpart to the collapsed-card drop convenience above, which
+// only fires when there is no jack under the cursor. All jack-to-jack, so both endpoints are real,
+// visible ModuleComponents this time (no MacroCardComponent involved).
+// ============================================================================
+
+TEST(MacroPortFlow, DraggingFromAnExpandedMacroMemberToAnExternalModuleAutoCreatesAnOutletAndWiresBothLegs) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto oscMember = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto filterMember = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 400);
+    editor.setSelectedNodes({oscMember, filterMember});
+    const auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false); // expand: members become real, visible ModuleComponents
+
+    auto* memberComp = compFor(editor, oscMember);
+    ASSERT_NE(memberComp, nullptr);
+    ASSERT_TRUE(memberComp->isVisible());
+
+    auto extFilter = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 900, 100);
+    auto* extComp = compFor(editor, extFilter);
+    ASSERT_NE(extComp, nullptr);
+
+    const int nodesBefore = engine.getGraph().getNodes().size();
+
+    // Oscillator's audio OUTPUT (jack 0, the member) -> the external Filter's audio INPUT (jack 0).
+    editor.beginConnectionDrag(memberComp, 0, /*isInput=*/false, /*isMidi=*/false, {0, 0});
+    editor.endConnectionDrag(extComp->getBounds().getPosition() + extComp->getPortCenter(0, /*isInput=*/true));
+
+    EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore + 1) << "exactly one new outlet port node";
+
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    ASSERT_EQ(macro->ports.size(), 1u);
+    EXPECT_FALSE(macro->ports[0].isInput);
+    EXPECT_EQ(macro->ports[0].kind, synth::MacroPortKind::AudioCV);
+
+    const auto portId = nodeIdForUuid(engine, macro->ports[0].nodeUuid);
+    ASSERT_TRUE(portId.uid != 0);
+    EXPECT_TRUE(hasConnection(engine, oscMember, 0, portId, 0)) << "interior leg: member -> port";
+    EXPECT_TRUE(hasConnection(engine, portId, 0, extFilter, 0)) << "exterior leg: port -> external";
+    EXPECT_FALSE(hasConnection(engine, oscMember, 0, extFilter, 0)) << "the direct cable must not also exist";
+}
+
+TEST(MacroPortFlow, DraggingFromAnExternalModuleToAnExpandedMacroMemberAutoCreatesAnInletAndWiresBothLegs) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto oscMember = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto filterMember = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 400);
+    editor.setSelectedNodes({oscMember, filterMember});
+    const auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    auto* memberComp = compFor(editor, filterMember);
+    ASSERT_NE(memberComp, nullptr);
+
+    auto extOsc = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 100);
+    auto* extComp = compFor(editor, extOsc);
+    ASSERT_NE(extComp, nullptr);
+
+    const int nodesBefore = engine.getGraph().getNodes().size();
+
+    // External Oscillator's OUTPUT (jack 0) -> the member Filter's audio INPUT (jack 0).
+    editor.beginConnectionDrag(extComp, 0, /*isInput=*/false, /*isMidi=*/false, {0, 0});
+    editor.endConnectionDrag(memberComp->getBounds().getPosition() + memberComp->getPortCenter(0, /*isInput=*/true));
+
+    EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore + 1) << "exactly one new inlet port node";
+
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    ASSERT_EQ(macro->ports.size(), 1u);
+    EXPECT_TRUE(macro->ports[0].isInput);
+
+    const auto portId = nodeIdForUuid(engine, macro->ports[0].nodeUuid);
+    ASSERT_TRUE(portId.uid != 0);
+    EXPECT_TRUE(hasConnection(engine, extOsc, 0, portId, 0)) << "exterior leg: external -> port";
+    EXPECT_TRUE(hasConnection(engine, portId, 0, filterMember, 0)) << "interior leg: port -> member";
+}
+
+TEST(MacroPortFlow, DraggingBetweenMembersOfTwoDifferentMacrosCreatesAPortOnEachWithAPortToPortConnection) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    // Macro X: an Oscillator (the drag source) plus a filler member (min-2 rule).
+    auto oscX = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto fillerX = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 400);
+    editor.setSelectedNodes({oscX, fillerX});
+    const auto macroXId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroXId.isEmpty());
+    editor.setMacroCollapsed(macroXId, false);
+
+    // Macro Y: a Filter (the drag destination) plus a filler member.
+    auto filterY = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 900, 100);
+    auto fillerY = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 400);
+    editor.setSelectedNodes({filterY, fillerY});
+    const auto macroYId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroYId.isEmpty());
+    editor.setMacroCollapsed(macroYId, false);
+
+    auto* oscXComp = compFor(editor, oscX);
+    auto* filterYComp = compFor(editor, filterY);
+    ASSERT_NE(oscXComp, nullptr);
+    ASSERT_NE(filterYComp, nullptr);
+
+    const int nodesBefore = engine.getGraph().getNodes().size();
+
+    editor.beginConnectionDrag(oscXComp, 0, /*isInput=*/false, /*isMidi=*/false, {0, 0});
+    editor.endConnectionDrag(filterYComp->getBounds().getPosition() + filterYComp->getPortCenter(0, /*isInput=*/true));
+
+    EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore + 2) << "one outlet on X, one inlet on Y";
+
+    auto* macroX = editor.getMacros().find(macroXId);
+    auto* macroY = editor.getMacros().find(macroYId);
+    ASSERT_NE(macroX, nullptr);
+    ASSERT_NE(macroY, nullptr);
+    ASSERT_EQ(macroX->ports.size(), 1u);
+    ASSERT_EQ(macroY->ports.size(), 1u);
+    EXPECT_FALSE(macroX->ports[0].isInput) << "X gets an outlet";
+    EXPECT_TRUE(macroY->ports[0].isInput) << "Y gets an inlet";
+
+    const auto outletId = nodeIdForUuid(engine, macroX->ports[0].nodeUuid);
+    const auto inletId = nodeIdForUuid(engine, macroY->ports[0].nodeUuid);
+    EXPECT_TRUE(hasConnection(engine, oscX, 0, outletId, 0)) << "X's interior leg";
+    EXPECT_TRUE(hasConnection(engine, outletId, 0, inletId, 0)) << "the port-to-port boundary leg";
+    EXPECT_TRUE(hasConnection(engine, inletId, 0, filterY, 0)) << "Y's interior leg";
+}
+
+TEST(MacroPortFlow, DraggingBetweenTwoMembersOfTheSameMacroCreatesAPlainDirectConnectionRegressionGuard) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto oscMember = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto filterMember = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    editor.setSelectedNodes({oscMember, filterMember});
+    const auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    auto* oscComp = compFor(editor, oscMember);
+    auto* filterComp = compFor(editor, filterMember);
+    ASSERT_NE(oscComp, nullptr);
+    ASSERT_NE(filterComp, nullptr);
+
+    const int nodesBefore = engine.getGraph().getNodes().size();
+
+    editor.beginConnectionDrag(oscComp, 0, /*isInput=*/false, /*isMidi=*/false, {0, 0});
+    editor.endConnectionDrag(filterComp->getBounds().getPosition() + filterComp->getPortCenter(0, /*isInput=*/true));
+
+    EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore) << "no port minted for a same-macro connection";
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_TRUE(macro->ports.empty());
+    EXPECT_TRUE(hasConnection(engine, oscMember, 0, filterMember, 0)) << "plain direct connection instead";
+}
+
+TEST(MacroPortFlow, DraggingToAnExistingPortDirectlyDoesNotMintASecondPortRegressionGuard) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    editor.setMacroCollapsed(macroId, false);
+
+    const auto portUuid =
+        editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    ASSERT_FALSE(portUuid.isEmpty());
+    const auto portId = nodeIdForUuid(engine, portUuid);
+    ASSERT_TRUE(portId.uid != 0);
+    auto* portComp = compFor(editor, portId);
+    ASSERT_NE(portComp, nullptr);
+
+    auto extOsc = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 900);
+    auto* extComp = compFor(editor, extOsc);
+    ASSERT_NE(extComp, nullptr);
+
+    const int nodesBefore = engine.getGraph().getNodes().size();
+
+    // Drag straight onto the existing inlet port's own jack (isInput on the port side).
+    editor.beginConnectionDrag(extComp, 0, /*isInput=*/false, /*isMidi=*/false, {0, 0});
+    editor.endConnectionDrag(portComp->getBounds().getPosition() + portComp->getPortCenter(0, /*isInput=*/true));
+
+    EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore) << "no second port minted";
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    ASSERT_EQ(macro->ports.size(), 1u) << "still just the one hand-added port";
+    EXPECT_TRUE(hasConnection(engine, extOsc, 0, portId, 0)) << "wired straight into the existing port";
+}
+
+TEST(MacroPortFlow, ModCVConnectionThroughAnAttenuverterAcrossABoundaryDoesNotAutoCreateAPort) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    // LFO is the macro member (the drag source); a Filter fills the min-2 rule.
+    auto lfoMember = addModuleAt(editor, engine, std::make_unique<LFOModule>(), 100, 100);
+    auto fillerMember = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 400);
+    editor.setSelectedNodes({lfoMember, fillerMember});
+    const auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    auto* lfoComp = compFor(editor, lfoMember);
+    ASSERT_NE(lfoComp, nullptr);
+
+    // External Wavetable Oscillator: its "Position" slider is a real modulation target, the same
+    // Serum-style knob-drop DroppingACableOnAKnobCreatesAModRouting (GraphEditorTests.cpp) exercises.
+    auto extWt = addModuleAt(editor, engine, std::make_unique<WavetableOscillatorModule>(), 900, 100);
+    auto* extComp = compFor(editor, extWt);
+    ASSERT_NE(extComp, nullptr);
+
+    juce::Slider* position = nullptr;
+    for (auto* child : extComp->getChildren())
+        if (auto* s = dynamic_cast<juce::Slider*>(child))
+            if (s->getComponentID() == "Position")
+                position = s;
+    ASSERT_NE(position, nullptr);
+
+    const auto knobPoint = extComp->getBounds().getPosition() + position->getBounds().getCentre();
+    const int nodesBefore = engine.getGraph().getNodes().size();
+
+    editor.beginConnectionDrag(lfoComp, 0, /*isInput=*/false, /*isMidi=*/false, {0, 0});
+    editor.endConnectionDrag(knobPoint);
+
+    // One new node — the hidden AttenuverterModule the mod routing always wraps a single-slot CV
+    // connection in — and NOT a macro port: the scope cut (docs/macros.md §7 item 9) means a
+    // connection connectPorts() would itself route through an attenuverter never gets ported.
+    EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore + 1) << "only the attenuverter, no port";
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_TRUE(macro->ports.empty());
+
+    bool routed = false;
+    for (const auto& r : engine.getModulationRoutings())
+        if (r.sourceNodeID == lfoMember)
+            routed = true;
+    EXPECT_TRUE(routed) << "the mod routing itself must still have been made";
+}
+
+TEST(MacroPortFlow, TheWholeAutoCreateSequenceIsOneUndoStep) {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+
+    auto oscMember = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto filterMember = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 400);
+    editor.setSelectedNodes({oscMember, filterMember});
+    const auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    auto* memberComp = compFor(editor, oscMember);
+    ASSERT_NE(memberComp, nullptr);
+    auto extFilter = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 900, 100);
+    auto* extComp = compFor(editor, extFilter);
+    ASSERT_NE(extComp, nullptr);
+
+    const int nodesBefore = engine.getGraph().getNodes().size();
+
+    editor.beginConnectionDrag(memberComp, 0, /*isInput=*/false, /*isMidi=*/false, {0, 0});
+    editor.endConnectionDrag(extComp->getBounds().getPosition() + extComp->getPortCenter(0, /*isInput=*/true));
+
+    ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u);
+    EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore + 1);
+
+    ASSERT_TRUE(undo.canUndo());
+    undo.undo();
+
+    EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore) << "a single Cmd+Z removed the port node too";
+    EXPECT_TRUE(editor.getMacros().find(macroId)->ports.empty());
+    EXPECT_FALSE(hasConnection(engine, oscMember, 0, extFilter, 0)) << "no leftover cable from the mint-and-wire";
+
+    ASSERT_TRUE(undo.canRedo());
+    undo.redo();
+
+    EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore + 1);
+    ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u);
+    const auto portId = nodeIdForUuid(engine, editor.getMacros().find(macroId)->ports[0].nodeUuid);
+    EXPECT_TRUE(hasConnection(engine, oscMember, 0, portId, 0));
+    EXPECT_TRUE(hasConnection(engine, portId, 0, extFilter, 0));
+}
+
+TEST(MacroPortFlow, AutoCreateOnDragDisabledPreferenceLeavesTheOriginalBehaviourRegressionGuard) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    editor.setAutoCreateMacroPortsOnDragEnabled(false);
+
+    auto oscMember = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto filterMember = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 400);
+    editor.setSelectedNodes({oscMember, filterMember});
+    const auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    auto* memberComp = compFor(editor, oscMember);
+    ASSERT_NE(memberComp, nullptr);
+    auto extFilter = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 900, 100);
+    auto* extComp = compFor(editor, extFilter);
+    ASSERT_NE(extComp, nullptr);
+
+    const int nodesBefore = engine.getGraph().getNodes().size();
+
+    editor.beginConnectionDrag(memberComp, 0, /*isInput=*/false, /*isMidi=*/false, {0, 0});
+    editor.endConnectionDrag(extComp->getBounds().getPosition() + extComp->getPortCenter(0, /*isInput=*/true));
+
+    EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore) << "the toggle off means no port is minted";
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_TRUE(macro->ports.empty());
+    EXPECT_TRUE(hasConnection(engine, oscMember, 0, extFilter, 0)) << "plain direct connection instead";
 }

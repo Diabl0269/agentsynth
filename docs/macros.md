@@ -32,7 +32,11 @@ This document covers two things:
    second pass had left for him: **Ungroup now removes every one of a macro's ports and splices
    the cable each one proxied straight back together** (fix G7, §7 item 8), so Group then Ungroup
    is a true round trip, and a port node also gained its own right-click "Delete Port" affordance
-   for the case where its macro is otherwise still alive.
+   for the case where its macro is otherwise still alive. Founder-review item P8-29 (T148, §7 item
+   9) then extended auto-porting past grouping time: dragging a cable across an EXPANDED macro's
+   boundary now mints and fully wires a matching port on the fly, and a port whose last cable is
+   disconnected (`disconnectCable`/`disconnectPort`) is now auto-deleted, dissolving its macro too
+   if it was the last member — both behaviours are Preferences toggles, default ON.
 
 ---
 
@@ -1061,6 +1065,97 @@ In order, each independently shippable:
    port" from a configuration dialog arguably SHOULD drop the cable rather than silently rewire the
    patch around it; `spliceOutMacroPort` is shared code, not shared semantics, and switching
    Configure I/O's own delete to splice-back too is a proposal for a future pass, not decided here.
+
+9. **DONE (T148, founder-review item P8-29).** Auto-create a macro port on a boundary-crossing
+   cable-DRAG (the counterpart to item 7's grouping-time splice), and auto-delete a port once its
+   last cable is removed. Both are togglable in Preferences, independent of each other and of the
+   tri-state `macroAutoPortPreference_` above — see the end of this item for why they are a plain
+   on/off, not a third tri-state.
+
+   **Auto-create (`GraphEditor::maybeAutoCreateMacroPortsForDrag`, called from
+   `endConnectionDrag`).** The module-jack hit-test loop that resolves a completed drag to two real
+   jacks (also covers the Serum-style knob-drop fallback — same call site) now runs this check
+   before falling back to a plain `connectPorts()`. The **endpoint-needs-a-port rule**, applied
+   independently to each of the drag's two resolved endpoints: an endpoint needs a NEW port on its
+   own macro iff (a) it resolves to an ORDINARY member of that macro (`memberIsPort()` false — a
+   drag landing exactly on an EXISTING port's own jack never mints a second one), and (b) the OTHER
+   endpoint is not a member of that same macro at all, ordinary member or port alike — "not a
+   member" is one `Macro::hasMember()` check, since a port's own uuid is always also a `members`
+   entry (§5.1's invariant). Two members of the SAME macro dragged together therefore wire straight
+   through, exactly as before this feature; two members of DIFFERENT macros each mint their own
+   port (an outlet on the source's macro, an inlet on the destination's), wired port-to-port for the
+   boundary leg. When only one endpoint needs a port, the OTHER leg of the final connection lands
+   directly on the plain module (or the existing port, if that's what it resolved to) — never a
+   second port. **Mono only** — the same scope cut `createMacroPortFromDroppedCable` (§5.3, item 3)
+   already applies to its own cable-drop convenience; no inference from the dragged cable's poly/
+   stereo fan. **Skipped entirely for a connection that would route through a hidden
+   `AttenuverterModule`** — `GraphEditor::connectionWouldRouteAsModulationCV` mirrors
+   `connectPorts()`'s own CV/mod-routing detection (`resolvePolyLink` -> single-voice ->
+   destination's `getModulationTargets()`) so a Serum-style knob-drop crossing a macro boundary
+   still just wraps in an attenuverter, exactly as it does outside a macro — item 7's own G3 fix
+   (splicing a port into a *grouping-time* mod chain) is a different code path (`spliceMacroPorts`)
+   and is unaffected. **Wiring wires BOTH sides of every minted port** — unlike
+   `createMacroPortFromDroppedCable`, which deliberately wires only the external side because a
+   collapsed macro has no visible interior to wire to (§5.3); here the macro is necessarily
+   EXPANDED (both endpoints are real, visible `ModuleComponent`s, which a collapsed macro's hidden
+   members are not), so the interior leg is wired too. The whole mint-and-wire sequence — up to two
+   new port nodes, up to three `connectPorts(..., recordUndo=false)` calls, one `updateComponents()`
+   — runs inside ONE `recordGraphAndMacroChange` transaction, so a single Cmd+Z undoes all of it
+   together, the same pattern `createMacroPortFromDroppedCable`/`spliceMacroPorts` already use.
+
+   **Auto-delete (`GraphEditor::autoDeleteOrphanedMacroPort`, called from `disconnectCable` and
+   `disconnectPort`).** When a mutation drops a connection touching a macro port node down to ZERO
+   remaining connections, the port is spliced out (`spliceOutMacroPort`, the same helper
+   `ungroupSelection()`/`deleteMacroPortNode()` already share) and the macro dissolved too if that
+   was its last member — mirroring `MacroSet::removeMemberEverywhere`'s own "zero members is not a
+   meaningful state" rule. A port with one of its two legs still wired (or one of several fan-in/
+   fan-out connections still wired) survives; only reaching zero triggers the splice. **Hooked at
+   exactly two explicit user-gesture call sites**, each checked BEFORE mutating so the right undo
+   transaction is chosen up front:
+     - `GraphEditor::disconnectCable` — upgraded from its existing graph-only
+       `recordStructuralChange` to `recordGraphAndMacroChange` ONLY when at least one of the cable's
+       two logical endpoints (`cable.id.srcUid`/`dstUid` — the REAL endpoints even for an
+       `AttenuverterChain` cable, never the hidden attenuverter itself) resolves to a macro port; an
+       ordinary cable's removal is byte-identical to before this feature.
+     - `GraphEditor::disconnectPort` — same treatment, upgraded only when the clicked jack's own
+       node or the far end of any connection about to be removed resolves to a macro port.
+   **Deliberately NOT hooked: `deleteSelection`/`deleteModule`/`requestDeleteModule`.** All three
+   already use `recordGraphAndMacroChange` (so nesting a macro mutation inside them would not by
+   itself break undo/redo), but they were left alone in this pass: deleting an ORDINARY member can
+   also strand a different port cableless (the member was the port's only remaining connection), and
+   none of this item's own tests exercise that path — extending the auto-delete scan to whole-node
+   deletion is real additional design (which nodes to scan when several are deleted at once,
+   interaction with the batch `modMatrix.clearRows()` those functions already do) that this item
+   did not sign up for. Filed as a follow-up rather than guessed at here.
+
+   **Both behaviours are Preferences toggles, plain on/off, DEFAULT ON** —
+   `GraphEditor::setAutoCreateMacroPortsOnDragEnabled`/`setAutoDeleteMacroPortsOnLastCableEnabled`,
+   persisted by `PreferencesSettingsTab` under `"macroAutoCreatePortsOnDrag"` /
+   `"macroAutoDeletePortsOnLastCable"` respectively, each independent of the other and of the
+   grouping-time `macroAutoPortPreference_` tri-state above. Deliberately NOT a third tri-state:
+   `macroAutoPortPreference_` defaults to "ask" because it replaced pre-existing SILENT behaviour
+   (a crossing cable at group time used to always wire straight to the interior member with no
+   port) and asking once lets a user pick a side knowingly; these two are brand-new automations the
+   founder asked to ship as the default behaviour, with a plain escape hatch for the user who wants
+   the pre-T148 wire-straight-through / leave-a-cableless-port behaviour instead — there is no
+   pre-existing silent default to protect a user's expectation of. Off, `endConnectionDrag`'s
+   boundary-crossing branch and `disconnectCable`/`disconnectPort`'s zero-connections check are
+   both no-ops, reproducing the exact pre-T148 code paths.
+
+   **Rendering is unaffected — confirmed, not assumed.** Both directions of this feature reuse
+   existing port/cable machinery outright: a drag-minted port is the same `MacroInletModule`/
+   `MacroOutletModule` node §5.1/§5.3 already describe, laid out by the same
+   `dockMacroPortWidgets()`/`macroCardPortLayout()` every other port uses; the cable it's wired with
+   goes through the same `connectPorts()`/`buildVisibleCables()` path as any other connection. A
+   splice-out on auto-delete is the identical `spliceOutMacroPort()` call `deleteMacroPortNode()`
+   already made, so the resulting graph and macro state (and therefore every render/anchor rule in
+   §5.4) is indistinguishable from a port deleted that way today. Nothing in §5.4's table changes.
+
+   **§5.3 update:** Mono-via-drag is now a SECOND route to an auto-created port alongside the
+   group-time splice (item 7) — both are Mono-only, both read the drag/crossing's direction to
+   decide inlet vs outlet, neither infers Stereo/Poly-N. Poly-N and Stereo remain reachable only
+   from the Configure I/O modal (or, for `StereoCollapsed`, only from the grouping-time merge pass,
+   §5.3's own bullet) — this item does not change that.
 
 ## 8. Explicitly out of scope
 

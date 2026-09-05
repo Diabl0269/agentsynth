@@ -32,6 +32,42 @@ TEST_F(PreferencesSettingsTabTest, DefaultsToNewAndUnwiredAndDoubleClickOn) {
     EXPECT_EQ(tab.getSmartConnectionMode(), GraphEditor::SmartConnectionMode::NewAndUnwired);
     EXPECT_TRUE(tab.isDoubleClickPortDisconnectEnabled());
     EXPECT_FALSE(tab.getDefaultDualIOForNewModules());
+    // T148 (docs/macros.md §7 item 9): both default ON, unlike the tri-state
+    // getMacroAutoPortPreference() default of "ask" — see its own getter/setter comments.
+    EXPECT_TRUE(tab.isMacroAutoCreatePortsOnDragEnabled());
+    EXPECT_TRUE(tab.isMacroAutoDeletePortsOnLastCableEnabled());
+}
+
+// Mirrors DoubleClickSpansLocatorsDefaultsOnAndRoundTrips for the two T148 toggles: default ON,
+// each persisted under its own key, reading the default must not write it, a fresh tab restores
+// what was written.
+TEST_F(PreferencesSettingsTabTest, MacroAutoCreateAndAutoDeleteTogglesDefaultOnAndRoundTrip) {
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_TRUE(tab.isMacroAutoCreatePortsOnDragEnabled());
+        EXPECT_TRUE(tab.isMacroAutoDeletePortsOnLastCableEnabled());
+        EXPECT_FALSE(appProperties.getUserSettings()->containsKey("macroAutoCreatePortsOnDrag"));
+        EXPECT_FALSE(appProperties.getUserSettings()->containsKey("macroAutoDeletePortsOnLastCable"));
+
+        tab.setMacroAutoCreatePortsOnDragEnabled(false);
+        tab.setMacroAutoDeletePortsOnLastCableEnabled(false);
+        EXPECT_FALSE(tab.isMacroAutoCreatePortsOnDragEnabled());
+        EXPECT_FALSE(tab.isMacroAutoDeletePortsOnLastCableEnabled());
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("macroAutoCreatePortsOnDrag"), "0");
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("macroAutoDeletePortsOnLastCable"), "0");
+    }
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_FALSE(tab.isMacroAutoCreatePortsOnDragEnabled());
+        EXPECT_FALSE(tab.isMacroAutoDeletePortsOnLastCableEnabled());
+        tab.setMacroAutoCreatePortsOnDragEnabled(true);
+        tab.setMacroAutoDeletePortsOnLastCableEnabled(true);
+    }
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_TRUE(tab.isMacroAutoCreatePortsOnDragEnabled());
+        EXPECT_TRUE(tab.isMacroAutoDeletePortsOnLastCableEnabled());
+    }
 }
 
 // The double-click-spans-locators preference: DEFAULT ON, persisted under its own key, and read at
@@ -82,11 +118,15 @@ TEST_F(PreferencesSettingsTabTest, LoadsPersistedValues) {
     appProperties.getUserSettings()->setValue("smartConnectionMode", "Off");
     appProperties.getUserSettings()->setValue("doubleClickPortDisconnect", "0");
     appProperties.getUserSettings()->setValue("defaultDualIOForNewModules", "1");
+    appProperties.getUserSettings()->setValue("macroAutoCreatePortsOnDrag", "0");
+    appProperties.getUserSettings()->setValue("macroAutoDeletePortsOnLastCable", "0");
 
     PreferencesSettingsTab tab(appProperties);
     EXPECT_EQ(tab.getSmartConnectionMode(), GraphEditor::SmartConnectionMode::Off);
     EXPECT_FALSE(tab.isDoubleClickPortDisconnectEnabled());
     EXPECT_TRUE(tab.getDefaultDualIOForNewModules());
+    EXPECT_FALSE(tab.isMacroAutoCreatePortsOnDragEnabled());
+    EXPECT_FALSE(tab.isMacroAutoDeletePortsOnLastCableEnabled());
 }
 
 TEST_F(PreferencesSettingsTabTest, ChangingControlsPersistsAndPushesToEditor) {
@@ -114,6 +154,23 @@ TEST_F(PreferencesSettingsTabTest, ChangingControlsPersistsAndPushesToEditor) {
     tab.setDefaultDualIOForNewModules(false);
     EXPECT_EQ(appProperties.getUserSettings()->getValue("defaultDualIOForNewModules"), "0");
     EXPECT_FALSE(editor.getDefaultDualIOForNewModules());
+
+    // T148 (docs/macros.md §7 item 9): a toggle flip must reach the live GraphEditor immediately.
+    tab.setMacroAutoCreatePortsOnDragEnabled(false);
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("macroAutoCreatePortsOnDrag"), "0");
+    EXPECT_FALSE(editor.getAutoCreateMacroPortsOnDragEnabled());
+
+    tab.setMacroAutoCreatePortsOnDragEnabled(true);
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("macroAutoCreatePortsOnDrag"), "1");
+    EXPECT_TRUE(editor.getAutoCreateMacroPortsOnDragEnabled());
+
+    tab.setMacroAutoDeletePortsOnLastCableEnabled(false);
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("macroAutoDeletePortsOnLastCable"), "0");
+    EXPECT_FALSE(editor.getAutoDeleteMacroPortsOnLastCableEnabled());
+
+    tab.setMacroAutoDeletePortsOnLastCableEnabled(true);
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("macroAutoDeletePortsOnLastCable"), "1");
+    EXPECT_TRUE(editor.getAutoDeleteMacroPortsOnLastCableEnabled());
 }
 
 // Founder-review fix F5 (docs/macros.md §7 item 6.2): the macro auto-port preference. Tri-state,
@@ -278,6 +335,8 @@ TEST_F(PreferencesSettingsTabTest, SetGraphEditorPushesCurrentValues) {
     appProperties.getUserSettings()->setValue("smartConnectionMode", "NewOnly");
     appProperties.getUserSettings()->setValue("doubleClickPortDisconnect", "0");
     appProperties.getUserSettings()->setValue("defaultDualIOForNewModules", "1");
+    appProperties.getUserSettings()->setValue("macroAutoCreatePortsOnDrag", "0");
+    appProperties.getUserSettings()->setValue("macroAutoDeletePortsOnLastCable", "0");
 
     PreferencesSettingsTab tab(appProperties);
     AudioEngine engine;
@@ -285,11 +344,15 @@ TEST_F(PreferencesSettingsTabTest, SetGraphEditorPushesCurrentValues) {
     ASSERT_EQ(editor.getSmartConnectionMode(), GraphEditor::SmartConnectionMode::NewAndUnwired);
     ASSERT_TRUE(editor.getDoubleClickPortDisconnectEnabled());
     ASSERT_FALSE(editor.getDefaultDualIOForNewModules());
+    ASSERT_TRUE(editor.getAutoCreateMacroPortsOnDragEnabled());
+    ASSERT_TRUE(editor.getAutoDeleteMacroPortsOnLastCableEnabled());
 
     tab.setGraphEditor(&editor);
     EXPECT_EQ(editor.getSmartConnectionMode(), GraphEditor::SmartConnectionMode::NewOnly);
     EXPECT_FALSE(editor.getDoubleClickPortDisconnectEnabled());
     EXPECT_TRUE(editor.getDefaultDualIOForNewModules());
+    EXPECT_FALSE(editor.getAutoCreateMacroPortsOnDragEnabled());
+    EXPECT_FALSE(editor.getAutoDeleteMacroPortsOnLastCableEnabled());
 }
 
 // Moved from AppearanceSettingsTab; persistence key ("alignmentGuidesEnabled") is unchanged so
