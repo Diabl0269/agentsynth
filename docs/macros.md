@@ -374,6 +374,16 @@ both is a worse regression than the one it fixes. The name still fits a realisti
 ("Delay 1 Audio") at full, unscaled size at the new width; `drawFittedText` (compress-then-ellipsise,
 never mid-glyph clip) is the fallback for a longer name, not the expected path.
 
+**Text inset (post-G4 polish fix).** G4's shrink took the name's own text area (`getLocalBounds()`
+`.reduced(n, 2)` in `paintMacroPortWidget()`) from 16px down to 12px along with everything else,
+but didn't re-derive it against the ALSO-shrunk jack dot: at `n=12`, the 7px dot centred at
+`x=10`/`width-10` has its outer edge at 13.5px from the widget's edge — inside a 12px text area. A
+render through the real theme showed the collision it predicts: on a Mono widget showing
+"Delay 1 Audio", the left dot visibly overlapped the "D", and the text crowded the right dot too.
+The fix widens the inset back to 16 (clearing the dot's outer edge by 2.5px each side) WITHOUT
+moving the dot or the widget's own width/height — `RealisticPortNameFitsWithinTheWidgetAtFullUnscaledSize`
+still holds at the smaller resulting text budget (92 - 2*16 = 60px) for a realistic name at 9.5f.
+
 ### 5.4 Cable rendering across the boundary
 
 `buildVisibleCables()` keeps ownership of the whole rule. Generalising what P8-12 already does:

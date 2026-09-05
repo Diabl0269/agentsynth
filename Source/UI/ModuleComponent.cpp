@@ -2132,7 +2132,14 @@ void ModuleComponent::paintMacroPortWidget(juce::Graphics& g) {
 
     g.setColour(themeColors.textPrimary);
     g.setFont(juce::Font(juce::FontOptions(9.5f)));
-    auto textArea = getLocalBounds().reduced(12, 2);
+    // Inset 16, not G4's original 12 (P8-15 founder-review polish fix): a jack dot is drawn at
+    // x=10/width-10 with a 3.5px radius, i.e. its outer edge sits at 13.5px from the widget's own
+    // edge, so a 12px text inset put the name's own text area INSIDE the dot — on a Mono widget
+    // showing a realistic name ("Delay 1 Audio") the left dot visibly overlapped the "D". 16 clears
+    // the dot's outer edge (13.5) by 2.5px on both sides without moving the dot itself or widening
+    // the widget — see MacroPortWidgetTests.cpp's `RealisticPortNameFitsWithinTheWidgetAtFullUnscaledSize`
+    // for the width budget this leaves for the name.
+    auto textArea = getLocalBounds().reduced(16, 2);
     // drawFittedText never draws outside textArea: it compresses the glyph run horizontally (and,
     // failing that, ellipsises) rather than clip mid-glyph — the "elide gracefully" requirement —
     // but at this widget's tuned width a realistic name draws at its natural, unscaled size (see

@@ -559,8 +559,8 @@ TEST(MacroPortWidgetG4, RealisticPortNameFitsWithinTheWidgetAtFullUnscaledSize) 
     const juce::Font nameFont(juce::FontOptions(9.5f));
     const float textWidth = juce::GlyphArrangement::getStringWidth(nameFont, realisticName);
 
-    // Mirrors paintMacroPortWidget's own `getLocalBounds().reduced(12, 2)` textArea inset.
-    const int availableWidth = ModuleComponent::kMacroPortWidgetWidth - 2 * 12;
+    // Mirrors paintMacroPortWidget's own `getLocalBounds().reduced(16, 2)` textArea inset.
+    const int availableWidth = ModuleComponent::kMacroPortWidgetWidth - 2 * 16;
     EXPECT_LE(textWidth, (float)availableWidth)
         << "\"" << realisticName << "\" no longer fits the docked widget at full size; widen "
         << "kMacroPortWidgetWidth rather than let it silently shrink";
