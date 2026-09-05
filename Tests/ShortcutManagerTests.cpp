@@ -924,6 +924,79 @@ TEST_F(ShortcutManagerTest, SnapIsJAndQuantiseIsQOnBothSurfacesWithoutColliding)
 }
 
 // ---------------------------------------------------------------------------
+// Export Patch Only (P8-20 / T133) -- the Cmd+Shift+P shortcut that saves just the patch as a
+// legacy .json via GraphEditor::savePreset. The AppCommands entry and its File-menu row shipped with
+// P8-5; this section pins the rebindable default binding P8-20 adds -- until then exportPatchOnly
+// followed the checkForUpdates "menu-only, no chord" treatment (no action id, no binding).
+// ---------------------------------------------------------------------------
+
+// 'p' is free under any modifier set: the bare 'p' is the timeline's loop-selection surface key,
+// which carries no modifiers and is matched with exact modifier equality, so it can never steal the
+// chord, and no component keyPressed() override hardcodes Cmd+Shift+P. It pairs with Export Audio
+// (Cmd+Shift+E) as a Cmd+Shift "export" family.
+TEST_F(ShortcutManagerTest, ExportPatchOnlyDefaultBindingIsCmdShiftP) {
+    auto kp = manager.getBinding("exportPatchOnly");
+    EXPECT_EQ(kp.getKeyCode(), 'p');
+    EXPECT_TRUE(kp.getModifiers().isCommandDown());
+    EXPECT_TRUE(kp.getModifiers().isShiftDown());
+    EXPECT_FALSE(kp.getModifiers().isAltDown());
+#if JUCE_MAC
+    EXPECT_FALSE(kp.getModifiers().isCtrlDown());
+#endif
+}
+
+// T133's "resolves to the export action": the binding must answer its own command unambiguously.
+TEST_F(ShortcutManagerTest, GetActionForKeyPress_ResolvesCmdShiftPToExportPatchOnly) {
+    auto kp = manager.getBinding("exportPatchOnly");
+    ASSERT_TRUE(kp.isValid());
+    auto matches = manager.getActionsForKeyPress(kp);
+    EXPECT_EQ(matches.size(), 1) << "the Export Patch Only chord must be unambiguous";
+    EXPECT_EQ(matches[0], "exportPatchOnly");
+    EXPECT_EQ(manager.getActionForKeyPress(kp), "exportPatchOnly");
+}
+
+// The dispatch half: MainComponent::perform() sends this id to promptExportPatchOnly(), so it must
+// map to a REAL command id (a surface action would resolve to kNoCommand instead).
+TEST_F(ShortcutManagerTest, GetCommandForAction_ResolvesExportPatchOnlyToTheCommand) {
+    EXPECT_EQ(AppCommands::getCommandForAction("exportPatchOnly"), AppCommands::exportPatchOnly);
+}
+
+// "exportPatchOnly" must be a registered action id -- that is what makes it appear in the Settings
+// shortcut list and be rebindable at all.
+TEST_F(ShortcutManagerTest, ActionIds_ContainsExportPatchOnly) {
+    EXPECT_TRUE(manager.getActionIds().contains("exportPatchOnly"));
+}
+
+// A human-readable, non-empty description for the Settings row.
+TEST_F(ShortcutManagerTest, GetActionDescription_ExportPatchOnlyIsNonEmpty) {
+    auto description = ShortcutManager::getActionDescription("exportPatchOnly");
+    EXPECT_FALSE(description.isEmpty());
+    EXPECT_EQ(description, "Export Patch Only");
+}
+
+// T133's "does not collide": within its (General) category nothing else owns Cmd+Shift+P, and the
+// rhyming export/save chords stay distinct -- Export Audio shares the Cmd+Shift modifier set on a
+// different letter, Save Project As is Cmd+Opt+S, and Save Snippet is a Graph-category action so it
+// is out of scope for a General conflict probe.
+TEST_F(ShortcutManagerTest, ExportPatchOnlyDoesNotCollideWithNeighbouringChords) {
+    auto bounce = manager.getBinding("exportPatchOnly"); // Cmd+Shift+P (General)
+    EXPECT_EQ(ShortcutManager::getCategory("exportPatchOnly"), ShortcutCategory::General);
+
+    // No other General action answers to this chord -- that is precisely "does not collide".
+    EXPECT_TRUE(manager.getConflictingAction("exportPatchOnly", bounce).isEmpty())
+        << "some other General action shares Cmd+Shift+P with Export Patch Only";
+
+    // The nearest rhyming chords -- keep one letter or one modifier apart and distinct.
+    EXPECT_NE(bounce, manager.getBinding("exportAudio")) << "Cmd+Shift+P vs Cmd+Shift+E";
+    EXPECT_NE(bounce, manager.getBinding("saveProjectAs")) << "Cmd+Shift+P vs Cmd+Opt+S";
+
+    // saveSnippet (Cmd+Shift+S) rhymes hardest by modifier set but is a Graph-category action, so
+    // out of scope for a General conflict probe; it coexists by construction.
+    EXPECT_EQ(ShortcutManager::getCategory("saveSnippet"), ShortcutCategory::Graph);
+    EXPECT_NE(bounce, manager.getBinding("saveSnippet")) << "Cmd+Shift+P vs Cmd+Shift+S";
+}
+
+// ---------------------------------------------------------------------------
 // shortcutHintFor — the shared tooltip-hint helper every dynamic shortcut hint routes through.
 // ---------------------------------------------------------------------------
 

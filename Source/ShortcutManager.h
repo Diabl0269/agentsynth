@@ -11,8 +11,9 @@ enum CommandIDs {
     // to the remembered bundle" default. Rebindable (Cmd+Opt+S) — see resetToDefaults().
     saveProjectAs,
     // Legacy patch-only export: writes a plain `.json` via GraphEditor::savePreset directly, never
-    // touching currentBundleDir_ or the window title. NOT rebindable — same treatment as
-    // checkForUpdates below (no action id string, no default binding, no Settings-list row).
+    // touching currentBundleDir_ or the window title -- a SIDE export, not "the project got
+    // saved". Rebindable since P8-20 with a Cmd+Shift+P default (see resetToDefaults()); until
+    // then it kept the checkForUpdates treatment (a menu-only item with no chord and no row).
     exportPatchOnly,
     // Offline audio bounce (BounceExporter/BounceRunner) - the whole arrangement or the current
     // loop range, rendered to WAV/AIFF. Rebindable (Cmd+Shift+E default) - see resetToDefaults().
@@ -104,6 +105,8 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return saveProjectAs;
     if (actionId == "exportAudio")
         return exportAudio;
+    if (actionId == "exportPatchOnly")
+        return exportPatchOnly;
     if (actionId == "openPreset")
         return openPreset;
     if (actionId == "newPatch")
@@ -365,6 +368,13 @@ public:
         // hardcodes a bare 'e' either.
         bindings["exportAudio"] =
             juce::KeyPress('e', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+        // Cmd+Shift+P: 'p' appears nowhere else in this table under any modifier set -- the bare
+        // 'p' is the timeline's loop-selection surface key, which carries no modifiers and is matched
+        // with exact modifier equality, so it can never steal the chord, and no component keyPressed()
+        // override hardcodes Cmd+Shift+P either. It forms a Cmd+Shift "export" pair with Export Audio
+        // (Cmd+Shift+E); 'P' reads as "Patch".
+        bindings["exportPatchOnly"] =
+            juce::KeyPress('p', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
         bindings["openPreset"] = juce::KeyPress('o', juce::ModifierKeys::commandModifier, 0);
         bindings["newPatch"] = juce::KeyPress('n', juce::ModifierKeys::commandModifier, 0);
         bindings["undo"] = juce::KeyPress('z', juce::ModifierKeys::commandModifier, 0);
@@ -637,6 +647,8 @@ public:
             return "Save Project As";
         if (actionId == "exportAudio")
             return "Export Audio";
+        if (actionId == "exportPatchOnly")
+            return "Export Patch Only";
         if (actionId == "openPreset")
             return "Open Preset";
         if (actionId == "newPatch")
@@ -843,6 +855,7 @@ private:
             {"savePreset", ShortcutCategory::General},
             {"saveProjectAs", ShortcutCategory::General},
             {"exportAudio", ShortcutCategory::General},
+            {"exportPatchOnly", ShortcutCategory::General},
             {"openPreset", ShortcutCategory::General},
             {"newPatch", ShortcutCategory::General},
             {"undo", ShortcutCategory::General},

@@ -395,12 +395,10 @@ TEST_F(MainComponentTest, CommandManagerHasCommands) {
 #if JUCE_MAC
     expectedCommandCount += 1;
 #endif
-    // exportPatchOnly is the same "no action id string, no keyboard shortcut" shape as
-    // checkForUpdates above (see ShortcutManager.h) — registered unconditionally in
-    // getAllCommands, absent from the shortcut table on purpose, so it needs the same manual +1
-    // here. exportAudio moved OUT of this bucket (P8-5 follow-up: Cmd+Shift+E) and is now counted
-    // through expectedActions above like every other rebindable command.
-    expectedCommandCount += 1;
+    // exportPatchOnly (Cmd+Shift+P, P8-20) joined exportAudio (Cmd+Shift+E, P8-5) as a rebindable
+    // action with a default binding, so both are now counted through expectedActions above; the old
+    // manual `+= 1` for exportPatchOnly no longer applies -- only checkForUpdates (mac, above) is
+    // still a menu-only command with no shortcut-table entry.
     EXPECT_EQ(commands.size(), expectedCommandCount);
     for (const auto& actionId : expectedActions)
         EXPECT_TRUE(commands.contains(AppCommands::getCommandForAction(actionId)))
@@ -414,6 +412,7 @@ TEST_F(MainComponentTest, CommandManagerHasCommands) {
     EXPECT_TRUE(commands.contains(AppCommands::copySelection));
     EXPECT_TRUE(commands.contains(AppCommands::pasteSelection));
     EXPECT_TRUE(commands.contains(AppCommands::duplicateSelection));
+    EXPECT_TRUE(commands.contains(AppCommands::exportPatchOnly));
 
     // Every registered command must resolve real info (name + category), or the native menu bar
     // renders a blank row.
