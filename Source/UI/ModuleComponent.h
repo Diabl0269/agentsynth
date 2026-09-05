@@ -11,6 +11,7 @@
 #include "ScopeComponent.h"
 #include "ThresholdControlComponent.h"
 #include "WavetableDisplayComponent.h"
+#include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -193,6 +194,19 @@ public:
      *  retargeting entry point) rather than skip straight to menu construction. */
     juce::PopupMenu buildModuleContextMenu();
 
+    /** Replaces what a real body right-click does with the menu buildModuleContextMenu() built --
+     *  in place of the real showMenuAsync() (which opens a real popup and, on a headless Linux CI
+     *  runner with no display, segfaults inside juce::PopupMenu::HelperClasses::MenuWindow --
+     *  Tests/MacroContainerTests.cpp's MacroMemberContextMenu suite hit exactly this). Mirrors
+     *  TimelineTrackHeaderComponent's setOpenMidiDestinationsPickerHookForTest(): defaults to the
+     *  real behaviour, and a null hook restores it rather than leaving the seam disarmed. A test
+     *  installs a capturing hook to inspect the menu the real mouseDown() gesture actually built,
+     *  without ever opening a popup. */
+    void setShowContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
+        showContextMenuHook_ =
+            hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
+    }
+
 private:
     // Non-owning: the juce::Component base owns this via setCachedComponentImage(). See
     // ZoomFrozenCachedImage.h — installed instead of setBufferedToImage(true) so a canvas zoom
@@ -204,6 +218,12 @@ private:
     juce::AudioProcessorGraph::NodeID nodeId;
     GraphEditor& owner;
     juce::ComponentDragger dragger;
+
+    // Set in the constructor to `[](juce::PopupMenu& m) { m.showMenuAsync(...); }`; a test replaces
+    // it via setShowContextMenuHookForTest() so a real right-click mouseDown() can be driven in a
+    // headless test without opening a popup that segfaults with no display (see that setter's
+    // comment).
+    std::function<void(juce::PopupMenu&)> showContextMenuHook_;
 
     // Auto-UI
     juce::OwnedArray<juce::Slider> sliders;

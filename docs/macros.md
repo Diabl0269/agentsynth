@@ -526,6 +526,23 @@ whose submenu was opened — `Tests/MacroContainerTests.cpp`'s
 `MacroMemberContextMenu.UngroupFromTheSubmenuDissolvesTheRightMacroDespiteAMixedSelection` pins
 this exact case.
 
+**Testing entry point 3 headlessly.** The `MacroMemberContextMenu` suite drives a real synthesised
+right-click `juce::MouseEvent` into `ModuleComponent::mouseDown()` — the actual gesture/hit-test/
+retarget entry point, not `buildModuleContextMenu()` called cold — because testing the layer beneath
+`mouseDown()` cannot catch a broken hit-test. That real body right-click branch calls
+`juce::PopupMenu::showMenuAsync()`, which opens a genuine popup and, on a headless (no-display) Linux
+CI runner, segfaults inside `juce::PopupMenu::HelperClasses::MenuWindow::getParentArea` — surviving on
+macOS/Windows is exactly why this shipped green locally and red only in CI. `ModuleComponent` fixes
+this with the same seam `TimelineTrackHeaderComponent` already uses for its own non-headless picker:
+a `showContextMenuHook_` member (defaulting to the real `showMenuAsync()` call) that mouseDown()'s
+right-button branch calls instead of showing the menu directly, plus a public
+`setShowContextMenuHookForTest()` a test uses to capture the menu the real gesture built without ever
+opening it. This is strictly stronger than asserting against a second, separately-built
+`buildModuleContextMenu()` call: the test now inspects the exact menu object the click itself
+produced. `MacroMemberContextMenu.RightClickFiresTheContextMenuHookExactlyOnce` guards the wiring
+itself, so a future revert to a direct `showMenuAsync()` call fails there first rather than only as an
+unexplained Linux-only segfault.
+
 ---
 
 ## 6. AI authorability

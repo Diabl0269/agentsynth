@@ -1429,6 +1429,10 @@ bool anyMenuItemStartsWith(const juce::PopupMenu& menu, const juce::String& pref
 } // namespace
 
 TEST(MacroMemberContextMenu, ModuleInNoMacroMenuIsUnchanged) {
+    // A real right-click mouseDown() would otherwise call PopupMenu::showMenuAsync(), which opens
+    // a real popup and segfaults on a headless (no-display) Linux CI runner --
+    // setShowContextMenuHookForTest() intercepts the menu mouseDown() actually built instead, so
+    // this drives the real gesture without ever opening one.
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
@@ -1438,13 +1442,15 @@ TEST(MacroMemberContextMenu, ModuleInNoMacroMenuIsUnchanged) {
     ASSERT_NE(comp, nullptr);
     ASSERT_EQ(editor.macroForNode(a), nullptr) << "precondition: this module is in no macro";
 
+    juce::PopupMenu capturedMenu;
+    comp->setShowContextMenuHookForTest([&capturedMenu](juce::PopupMenu& m) { capturedMenu = m; });
+
     comp->mouseDown(makeModuleRightClick(*comp, bodyClickPoint(*comp)));
     EXPECT_TRUE(editor.isNodeSelected(a)) << "the ordinary right-click retarget must still run";
 
-    const auto menu = comp->buildModuleContextMenu();
-    EXPECT_FALSE(anyMenuItemStartsWith(menu, "Macro: "))
+    EXPECT_FALSE(anyMenuItemStartsWith(capturedMenu, "Macro: "))
         << "a module in no macro must see no macro submenu at all -- no change from before this fix";
-    EXPECT_NE(findMenuItemByText(menu, "Delete Module"), nullptr) << "the module's own items are still there";
+    EXPECT_NE(findMenuItemByText(capturedMenu, "Delete Module"), nullptr) << "the module's own items are still there";
 }
 
 TEST(MacroMemberContextMenu, RightClickingAMacroMemberOffersTheMacroSubmenu) {
@@ -1465,6 +1471,10 @@ TEST(MacroMemberContextMenu, RightClickingAMacroMemberOffersTheMacroSubmenu) {
 
     auto* compA = findComponent(editor, a);
     ASSERT_NE(compA, nullptr);
+
+    juce::PopupMenu capturedMenu;
+    compA->setShowContextMenuHookForTest([&capturedMenu](juce::PopupMenu& m) { capturedMenu = m; });
+
     compA->mouseDown(makeModuleRightClick(*compA, bodyClickPoint(*compA)));
 
     // Went through the real gesture entry point: mouseDown's own hit-test/retarget logic moved
@@ -1475,16 +1485,15 @@ TEST(MacroMemberContextMenu, RightClickingAMacroMemberOffersTheMacroSubmenu) {
     const auto* macro = editor.getMacros().find(macroId);
     ASSERT_NE(macro, nullptr);
 
-    const auto menu = compA->buildModuleContextMenu();
-    const auto* macroSubmenu = findMenuItemByText(menu, "Macro: " + macro->name);
+    const auto* macroSubmenu = findMenuItemByText(capturedMenu, "Macro: " + macro->name);
     ASSERT_NE(macroSubmenu, nullptr) << "a member module's own menu must offer its macro's options";
     ASSERT_NE(macroSubmenu->subMenu, nullptr);
 
     // Spot-check a few of buildMacroMenu()'s own items made it into the submenu, so this can't
     // silently pass against an empty or unrelated submenu.
-    EXPECT_NE(findMenuItemByText(menu, "Ungroup"), nullptr);
-    EXPECT_NE(findMenuItemByText(menu, "Configure I/O..."), nullptr);
-    EXPECT_NE(findMenuItemByText(menu, "Delete Macro && Modules"), nullptr);
+    EXPECT_NE(findMenuItemByText(capturedMenu, "Ungroup"), nullptr);
+    EXPECT_NE(findMenuItemByText(capturedMenu, "Configure I/O..."), nullptr);
+    EXPECT_NE(findMenuItemByText(capturedMenu, "Delete Macro && Modules"), nullptr);
 }
 
 TEST(MacroMemberContextMenu, UngroupFromTheSubmenuDissolvesTheRightMacroDespiteAMixedSelection) {
@@ -1521,6 +1530,10 @@ TEST(MacroMemberContextMenu, UngroupFromTheSubmenuDissolvesTheRightMacroDespiteA
 
     auto* compB1 = findComponent(editor, b1);
     ASSERT_NE(compB1, nullptr);
+
+    juce::PopupMenu capturedMenu;
+    compB1->setShowContextMenuHookForTest([&capturedMenu](juce::PopupMenu& m) { capturedMenu = m; });
+
     compB1->mouseDown(makeModuleRightClick(*compB1, bodyClickPoint(*compB1)));
 
     // Confirms the retarget guard really did skip: selection is exactly as set up above, a
@@ -1528,8 +1541,7 @@ TEST(MacroMemberContextMenu, UngroupFromTheSubmenuDissolvesTheRightMacroDespiteA
     EXPECT_TRUE(editor.isNodeSelected(a1));
     EXPECT_TRUE(editor.isNodeSelected(b1));
 
-    const auto menu = compB1->buildModuleContextMenu();
-    const auto* ungroupItem = findMenuItemByText(menu, "Ungroup");
+    const auto* ungroupItem = findMenuItemByText(capturedMenu, "Ungroup");
     ASSERT_NE(ungroupItem, nullptr);
     ASSERT_TRUE(static_cast<bool>(ungroupItem->action));
 
@@ -1545,4 +1557,28 @@ TEST(MacroMemberContextMenu, UngroupFromTheSubmenuDissolvesTheRightMacroDespiteA
     // Ungrouping never deletes member nodes -- all four modules must still be real graph nodes.
     for (auto id : {a1, a2, b1, b2})
         EXPECT_NE(engine.getGraph().getNodeForId(id), nullptr);
+}
+
+TEST(MacroMemberContextMenu, RightClickFiresTheContextMenuHookExactlyOnce) {
+    // Regression guard for the seam itself (docs/macros.md): a real right-click body mouseDown()
+    // must hand its menu to showContextMenuHook_ exactly once, rather than calling
+    // PopupMenu::showMenuAsync() directly -- the latter opens a real popup and segfaults on a
+    // headless (no-display) Linux CI runner. This pins the wiring so a future revert back to a
+    // direct showMenuAsync() call fails here first, instead of only as an unexplained CI segfault.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto* comp = findComponent(editor, a);
+    ASSERT_NE(comp, nullptr);
+
+    int hookCallCount = 0;
+    comp->setShowContextMenuHookForTest([&hookCallCount](juce::PopupMenu&) { ++hookCallCount; });
+
+    comp->mouseDown(makeModuleRightClick(*comp, bodyClickPoint(*comp)));
+
+    EXPECT_EQ(hookCallCount, 1) << "a right-click body mouseDown() must build and hand off exactly "
+                                   "one context menu, never zero (a dropped gesture) or more than "
+                                   "one (a real popup opened alongside the hook)";
 }

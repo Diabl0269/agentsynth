@@ -72,6 +72,8 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     , owner(owner)
     , undoManager(undoMgr) {
 
+    showContextMenuHook_ = [](juce::PopupMenu& menu) { menu.showMenuAsync(juce::PopupMenu::Options()); };
+
     if (auto* modBase = dynamic_cast<ModuleBase*>(module)) {
         if (auto* vb = modBase->getVisualBuffer()) {
             // Parametric EQ keeps its VisualBuffer for the spectrum analyser's FFT, but a scope
@@ -2936,7 +2938,8 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
             if (!owner.isNodeSelected(nodeId))
                 owner.selectModule(nodeId, false);
 
-            buildModuleContextMenu().showMenuAsync(juce::PopupMenu::Options());
+            auto menu = buildModuleContextMenu();
+            showContextMenuHook_(menu);
         } else {
             // ---- Selection semantics (issue #156) + Ctrl insert-between ----
             //
