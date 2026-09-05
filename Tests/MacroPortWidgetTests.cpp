@@ -13,6 +13,7 @@
 //               a MIDI port's widget carries a MIDI jack at the compact header position
 
 #include "../Source/AI/AIStateMapper.h"
+#include "../Source/AppUndoManager.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/MacroInletModule.h"
 #include "../Source/Modules/OscillatorModule.h"
@@ -563,4 +564,216 @@ TEST(MacroPortWidgetG4, RealisticPortNameFitsWithinTheWidgetAtFullUnscaledSize) 
     EXPECT_LE(textWidth, (float)availableWidth)
         << "\"" << realisticName << "\" no longer fits the docked widget at full size; widen "
         << "kMacroPortWidgetWidth rather than let it silently shrink";
+}
+
+// ============================================================================
+// A port node's own right-click context menu (founder-review fix G7: "they cannot be removed" —
+// a port node had NO delete affordance at all once its macro was gone, and Configure I/O was
+// otherwise the ONE surface for it). Every test drives a REAL synthesised juce::MouseEvent into
+// the real ModuleComponent::mouseDown() (memory/test-the-real-mouse-path-for-ui-gestures) and
+// intercepts the menu via setShowContextMenuHookForTest() rather than letting a real
+// PopupMenu::showMenuAsync() open — that segfaults on a headless (no-display) Linux CI runner
+// (Tests/MacroContainerTests.cpp's MacroMemberContextMenu suite hit exactly this; G1 added the
+// hook for this reason). No test here ever lets a real AlertWindow/DialogWindow open either — the
+// Rename/Configure I/O items are asserted present by NAME, never invoked, since both open one.
+// ============================================================================
+
+namespace {
+
+juce::MouseEvent makePortRightClick(juce::Component& comp, juce::Point<int> position) {
+    const auto pos = position.toFloat();
+    const auto mods = juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier);
+    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos, mods, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                            &comp, &comp, juce::Time::getCurrentTime(), pos, juce::Time::getCurrentTime(), 1, false);
+}
+
+juce::MouseEvent makePortLeftClick(juce::Component& comp, juce::Point<int> position) {
+    const auto pos = position.toFloat();
+    const auto mods = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier);
+    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos, mods, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                            &comp, &comp, juce::Time::getCurrentTime(), pos, juce::Time::getCurrentTime(), 1, false);
+}
+
+const juce::PopupMenu::Item* findMenuItemByText(const juce::PopupMenu& menu, const juce::String& text) {
+    juce::PopupMenu::MenuItemIterator it(menu, true);
+    while (it.next())
+        if (it.getItem().text == text)
+            return &it.getItem();
+    return nullptr;
+}
+
+bool hasConnection(AudioEngine& engine, NodeID srcId, int srcCh, NodeID dstId, int dstCh) {
+    for (const auto& c : engine.getGraph().getConnections())
+        if (c.source.nodeID == srcId && c.source.channelIndex == srcCh && c.destination.nodeID == dstId &&
+            c.destination.channelIndex == dstCh)
+            return true;
+    return false;
+}
+
+juce::Point<int> centreOf(const juce::Component& comp) { return {comp.getWidth() / 2, comp.getHeight() / 2}; }
+
+} // namespace
+
+TEST(MacroPortContextMenu, RightClickOffersRenameConfigureAndDeleteWhileTheMacroIsAlive) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    const auto uuid =
+        editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    ASSERT_FALSE(uuid.isEmpty());
+    auto* comp = findComponent(editor, nodeIdForUuid(engine, uuid));
+    ASSERT_NE(comp, nullptr);
+
+    juce::PopupMenu capturedMenu;
+    comp->setShowContextMenuHookForTest([&capturedMenu](juce::PopupMenu& m) { capturedMenu = m; });
+
+    comp->mouseDown(makePortRightClick(*comp, centreOf(*comp)));
+
+    EXPECT_NE(findMenuItemByText(capturedMenu, "Rename Port..."), nullptr);
+    EXPECT_NE(findMenuItemByText(capturedMenu, "Configure I/O..."), nullptr);
+    EXPECT_NE(findMenuItemByText(capturedMenu, "Delete Port"), nullptr);
+}
+
+TEST(MacroPortContextMenu, RightClickStillWorksAfterItsMacroIsGoneRegressionForTheBugItself) {
+    // The exact scenario the founder's second complaint names: a port that survives its macro
+    // (before this fix, ungroup left it in place) had no delete path at all — Configure I/O was
+    // the ONE surface, and promptConfigureMacroIO()'s very first line is `macros.find(macroId)`,
+    // which is nullptr the instant the macro is gone. After G7 no ORPHAN port should exist in
+    // practice (ungroup removes them), but the menu's own defensive fallback is still real
+    // behaviour worth pinning: a port node with no resolvable macro still offers Delete.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    editor.setMacroCollapsed(macroId, false);
+    const auto uuid =
+        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    ASSERT_FALSE(uuid.isEmpty());
+    const auto portId = nodeIdForUuid(engine, uuid);
+    auto* comp = findComponent(editor, portId);
+    ASSERT_NE(comp, nullptr);
+
+    // Simulate the port outliving its macro record directly (macros.remove, bypassing
+    // spliceOutMacroPort — deliberately a raw metadata removal, to exercise the menu's own
+    // defensive branch rather than re-testing ungroup's own splice-out).
+    editor.getMacros().remove(macroId);
+    ASSERT_EQ(editor.macroPortOwnerFor(portId).macro, nullptr);
+
+    juce::PopupMenu capturedMenu;
+    comp->setShowContextMenuHookForTest([&capturedMenu](juce::PopupMenu& m) { capturedMenu = m; });
+    comp->mouseDown(makePortRightClick(*comp, centreOf(*comp)));
+
+    EXPECT_EQ(findMenuItemByText(capturedMenu, "Rename Port..."), nullptr) << "no macro left to rename a port on";
+    EXPECT_EQ(findMenuItemByText(capturedMenu, "Configure I/O..."), nullptr);
+    const auto* deleteItem = findMenuItemByText(capturedMenu, "Delete Port");
+    ASSERT_NE(deleteItem, nullptr) << "Delete must still be offered even with no macro to resolve";
+
+    ASSERT_TRUE((bool)deleteItem->action);
+    deleteItem->action();
+    EXPECT_EQ(engine.getGraph().getNodeForId(portId), nullptr) << "the fallback path still deletes the node";
+}
+
+TEST(MacroPortContextMenu, LeftClickOnAPortBodyIsStillANoOp) {
+    // The G7 fix relaxes the early return ONLY for the right button — a left click must remain a
+    // no-op (no selection, no drag): dockMacroPortWidgets() repositions this widget every layout
+    // pass, so a draggable port would snap straight back the moment the user let go.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    editor.setMacroCollapsed(macroId, false);
+    const auto uuid =
+        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    auto* comp = findComponent(editor, nodeIdForUuid(engine, uuid));
+    ASSERT_NE(comp, nullptr);
+
+    ASSERT_FALSE(editor.isNodeSelected(comp->getNodeId()));
+    comp->mouseDown(makePortLeftClick(*comp, centreOf(*comp)));
+    EXPECT_FALSE(editor.isNodeSelected(comp->getNodeId())) << "a left click on a port body must not select it";
+}
+
+TEST(MacroPortContextMenu, DeleteFromTheMenuSplicesTheCableBackAndRemovesTheNode) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    const auto uuid =
+        editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    ASSERT_FALSE(uuid.isEmpty());
+    const auto portId = nodeIdForUuid(engine, uuid);
+
+    // `a` is an Oscillator (a pure source, no audio input jack); the internal destination for an
+    // INLET port must actually accept audio, so this wires to `b` (the Filter) instead.
+    auto ext = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 100);
+    editor.connectPorts(ext, 0, portId, 0, /*isMidi=*/false, /*recordUndo=*/false);
+    editor.connectPorts(portId, 0, b, 0, /*isMidi=*/false, /*recordUndo=*/false);
+    ASSERT_TRUE(hasConnection(engine, ext, 0, portId, 0));
+    ASSERT_TRUE(hasConnection(engine, portId, 0, b, 0));
+
+    auto* comp = findComponent(editor, portId);
+    ASSERT_NE(comp, nullptr);
+
+    juce::PopupMenu capturedMenu;
+    comp->setShowContextMenuHookForTest([&capturedMenu](juce::PopupMenu& m) { capturedMenu = m; });
+    comp->mouseDown(makePortRightClick(*comp, centreOf(*comp)));
+
+    const auto* deleteItem = findMenuItemByText(capturedMenu, "Delete Port");
+    ASSERT_NE(deleteItem, nullptr);
+    ASSERT_TRUE((bool)deleteItem->action);
+    deleteItem->action();
+
+    EXPECT_EQ(engine.getGraph().getNodeForId(portId), nullptr) << "the port node itself is gone";
+    EXPECT_TRUE(hasConnection(engine, ext, 0, b, 0)) << "the cable is spliced back, not dropped";
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr) << "two real modules keep the macro alive";
+    EXPECT_TRUE(macro->ports.empty());
+}
+
+TEST(MacroPortContextMenu, DeletingThePortNodeDirectlyIsOneUndoStep) {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    const auto uuid = editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    ASSERT_FALSE(uuid.isEmpty());
+    const auto portId = nodeIdForUuid(engine, uuid);
+    // `a` is an Oscillator (no audio input jack) -- wire the port to `b` (the Filter) instead.
+    auto ext = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 100);
+    editor.connectPorts(ext, 0, portId, 0, false, false);
+    editor.connectPorts(portId, 0, b, 0, false, false);
+
+    editor.deleteMacroPortNode(macroId, uuid);
+    EXPECT_EQ(engine.getGraph().getNodeForId(portId), nullptr);
+    EXPECT_TRUE(hasConnection(engine, ext, 0, b, 0));
+
+    ASSERT_TRUE(undo.canUndo());
+    undo.undo();
+
+    EXPECT_NE(engine.getGraph().getNodeForId(portId), nullptr) << "one undo brings back the port node...";
+    EXPECT_TRUE(hasConnection(engine, ext, 0, portId, 0)) << "...and its original cable...";
+    EXPECT_TRUE(hasConnection(engine, portId, 0, b, 0));
+    EXPECT_FALSE(hasConnection(engine, ext, 0, b, 0))
+        << "...replacing the spliced direct cable, not coexisting with it";
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_EQ(macro->ports.size(), 1u);
 }

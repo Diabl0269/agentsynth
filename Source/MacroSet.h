@@ -123,8 +123,13 @@ public:
      *  stored copy — stable until the next mutating call. */
     Macro& add(Macro macro);
 
-    /** Removes the macro. Does NOT touch its former members' graph nodes — ungrouping is purely
-     *  a metadata change. */
+    /** Removes the macro. Does NOT touch its former members' graph nodes itself — this call is
+     *  purely a metadata change, same as every other MacroSet mutator. GraphEditor::
+     *  ungroupSelection() (founder-review fix G7, docs/macros.md §7 item 8) is the caller that
+     *  gives "ungroup" its full user-facing meaning: it splices every one of the macro's PORT
+     *  nodes back out (GraphEditor::spliceOutMacroPort) — removing them and reconnecting the
+     *  cable each proxied — before ever calling this, so by the time `remove()` runs, only
+     *  ordinary member nodes (untouched, exactly as this method's own contract says) are left. */
     bool remove(const juce::String& macroId);
 
     /** Removes `memberUuid` from whichever macro contains it (no-op if it is in none), also

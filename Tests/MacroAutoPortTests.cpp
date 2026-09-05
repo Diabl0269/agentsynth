@@ -136,6 +136,13 @@ bool hasMidiConnection(AudioEngine& engine, NodeID srcId, NodeID dstId) {
                          juce::AudioProcessorGraph::midiChannelIndex);
 }
 
+NodeID nodeIdForUuid(AudioEngine& engine, const juce::String& uuid) {
+    for (auto* node : engine.getGraph().getNodes())
+        if (node->properties["uuid"].toString() == uuid)
+            return node->nodeID;
+    return {};
+}
+
 // The one new-port node a group produced, asserting there is exactly one. Most tests below add
 // exactly one crossing group, so this is the common case; tests that expect more resolve nodes by
 // direction/kind explicitly instead.
@@ -806,6 +813,231 @@ TEST(MacroAutoPort, GroupingAndSplicedPortsIsOneUndoStep) {
     }
     EXPECT_TRUE(foundInlet);
     EXPECT_TRUE(foundOutlet);
+}
+
+// ============================================================================
+// Ungroup removes the macro's ports and splices the cable back (founder-review fix G7,
+// docs/macros.md §7): "ungroup leaves the macro input/output in place (They should be removed)".
+// Group then Ungroup must be a true round trip — every port node gone, every boundary cable it
+// proxied reconnected external<->internal directly, on the original raw channels.
+// ============================================================================
+
+TEST(MacroUngroupPorts, RemovesTheAutoCreatedPortsAndSplicesTheCablesBack) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
+    auto cin = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Cin", 100, 100);
+    auto cout = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Cout", 700, 300);
+    engine.getGraph().addConnection({{cin, 0}, {a, 0}});
+    engine.getGraph().addConnection({{b, 0}, {cout, 0}});
+
+    const int nodesBefore = engine.getGraph().getNodes().size();
+
+    editor.setSelectedNodes({a, b});
+    const auto macroId = editor.groupSelectionIntoMacro(true);
+    ASSERT_FALSE(macroId.isEmpty());
+    ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 2u);
+    EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore + 2);
+    EXPECT_FALSE(hasConnection(engine, cin, 0, a, 0));
+    EXPECT_FALSE(hasConnection(engine, b, 0, cout, 0));
+
+    editor.setSelectedNodes({a, b});
+    editor.ungroupSelection();
+
+    EXPECT_TRUE(editor.getMacros().empty()) << "the macro record itself is gone";
+    EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore)
+        << "both port nodes are removed — ungroup no longer leaves them behind";
+    EXPECT_TRUE(hasConnection(engine, cin, 0, a, 0))
+        << "the inlet's boundary cable is spliced straight back, on the original channels";
+    EXPECT_TRUE(hasConnection(engine, b, 0, cout, 0)) << "same for the outlet's";
+}
+
+TEST(MacroUngroupPorts, UndoRoundTripRestoresTheActualLiveSignalPath) {
+    // Node/cable counts matching is not enough — this renders a real block through the chain
+    // before and after each step, per the task's own "assert the round trip BEHAVIOURALLY"
+    // instruction.
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+
+    constexpr float kSourceValue = 0.42f;
+    auto source = addModuleAt(editor, engine, std::make_unique<TestConstantModule>(kSourceValue), "Source", 100, 100);
+    auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
+    auto probe = addModuleAt(editor, engine, std::make_unique<TestCvProbeModule>(), "Probe", 700, 100);
+    // A second, unconnected member: groupSelectionIntoMacro's min-2 rule, without giving `a` a
+    // second crossing of its own to confuse the two edges under test.
+    auto spare = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Spare", 400, 400);
+
+    engine.getGraph().addConnection({{source, 0}, {a, 0}}); // will cross -> an inlet port
+    engine.getGraph().addConnection({{a, 0}, {probe, 0}});  // will cross -> an outlet port
+
+    auto renderAndReadProbe = [&]() -> float {
+        constexpr double kSampleRate = 44100.0;
+        constexpr int kBlockSize = 64;
+        auto& graph = engine.getGraph();
+        graph.setPlayConfigDetails(0, 0, kSampleRate, kBlockSize);
+        graph.prepareToPlay(kSampleRate, kBlockSize);
+        juce::MidiBuffer midi;
+        for (int i = 0; i < 4; ++i) {
+            juce::AudioBuffer<float> buf(1, kBlockSize);
+            buf.clear();
+            graph.processBlock(buf, midi);
+        }
+        graph.releaseResources();
+        auto* p = dynamic_cast<TestCvProbeModule*>(engine.getGraph().getNodeForId(probe)->getProcessor());
+        return p != nullptr ? p->lastSample() : -1.0f;
+    };
+
+    editor.setSelectedNodes({a, spare});
+    const auto macroId = editor.groupSelectionIntoMacro(true);
+    ASSERT_FALSE(macroId.isEmpty());
+    ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 2u);
+    EXPECT_NEAR(renderAndReadProbe(), kSourceValue, 0.001f)
+        << "signal flows through the auto-spliced inlet/outlet ports before ungroup";
+
+    editor.setSelectedNodes({a});
+    editor.ungroupSelection();
+    ASSERT_TRUE(editor.getMacros().empty());
+    EXPECT_NEAR(renderAndReadProbe(), kSourceValue, 0.001f)
+        << "the direct cable ungroup spliced back still carries the signal";
+
+    ASSERT_TRUE(undo.canUndo());
+    undo.undo();
+
+    ASSERT_EQ(editor.getMacros().size(), 1u) << "undo restores the macro AND its ports together, one step";
+    EXPECT_EQ(editor.getMacros().getAll()[0].ports.size(), 2u);
+    EXPECT_NEAR(renderAndReadProbe(), kSourceValue, 0.001f)
+        << "the original signal path is actually LIVE again through the re-spliced ports after "
+           "undo, not just node/cable counts matching";
+}
+
+TEST(MacroUngroupPorts, SplicesTheFullCrossProductForFanInAndFanOut) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    // Fan-in: two external sources into ONE internal jack share one inlet port
+    // (buildMacroPortCrossingPlan's own "share ONE port, not N" dedup rule).
+    auto src1 = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Src1", 100, 100);
+    auto src2 = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Src2", 100, 300);
+    auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 200);
+    engine.getGraph().addConnection({{src1, 0}, {a, 0}});
+    engine.getGraph().addConnection({{src2, 0}, {a, 0}});
+
+    // Fan-out (the mirror): ONE internal source out to two external destinations shares one
+    // outlet port.
+    auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 500);
+    auto dst1 = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Dst1", 700, 400);
+    auto dst2 = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Dst2", 700, 600);
+    engine.getGraph().addConnection({{b, 0}, {dst1, 0}});
+    engine.getGraph().addConnection({{b, 0}, {dst2, 0}});
+
+    editor.setSelectedNodes({a, b});
+    const auto macroId = editor.groupSelectionIntoMacro(true);
+    ASSERT_FALSE(macroId.isEmpty());
+    ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 2u);
+
+    editor.setSelectedNodes({a, b});
+    editor.ungroupSelection();
+
+    EXPECT_TRUE(editor.getMacros().empty());
+    EXPECT_TRUE(hasConnection(engine, src1, 0, a, 0)) << "fan-in: BOTH original sources reconnect";
+    EXPECT_TRUE(hasConnection(engine, src2, 0, a, 0));
+    EXPECT_TRUE(hasConnection(engine, b, 0, dst1, 0)) << "fan-out: BOTH original destinations reconnect";
+    EXPECT_TRUE(hasConnection(engine, b, 0, dst2, 0));
+}
+
+TEST(MacroUngroupPorts, RemovesAHandAddedPortTooNoProvenanceDistinctionNeeded) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
+    editor.setSelectedNodes({a, b});
+    const auto macroId = editor.groupSelectionIntoMacro(); // no crossing -> no auto-created ports
+    ASSERT_FALSE(macroId.isEmpty());
+    ASSERT_TRUE(editor.getMacros().find(macroId)->ports.empty());
+
+    const auto uuid = editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV,
+                                          MacroPortShape::Mono, 1, "Hand Added");
+    ASSERT_FALSE(uuid.isEmpty());
+    const auto portId = nodeIdForUuid(engine, uuid);
+    ASSERT_TRUE(portId.uid != 0);
+
+    auto ext = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Ext", 100, 100);
+    engine.getGraph().addConnection({{ext, 0}, {portId, 0}});
+    engine.getGraph().addConnection({{portId, 0}, {b, 0}});
+
+    editor.setSelectedNodes({a});
+    editor.ungroupSelection();
+
+    EXPECT_TRUE(editor.getMacros().empty());
+    EXPECT_EQ(engine.getGraph().getNodeForId(portId), nullptr)
+        << "a hand-added port (via Configure I/O) is removed on ungroup exactly like an "
+           "auto-created one — no provenance field, no different treatment";
+    EXPECT_TRUE(hasConnection(engine, ext, 0, b, 0)) << "its cable is spliced back the same way too";
+}
+
+TEST(MacroUngroupPorts, AMacroWithNoPortsUngroupsExactlyAsBeforeRegressionGuard) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
+    const int nodesBefore = engine.getGraph().getNodes().size();
+
+    editor.setSelectedNodes({a, b});
+    const auto macroId = editor.groupSelectionIntoMacro(true); // no crossing cable -> no ports
+    ASSERT_FALSE(macroId.isEmpty());
+    ASSERT_TRUE(editor.getMacros().find(macroId)->ports.empty());
+    EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore);
+
+    editor.setSelectedNodes({a, b});
+    editor.ungroupSelection();
+
+    EXPECT_TRUE(editor.getMacros().empty());
+    EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore) << "nothing was ever spliced, nothing to remove";
+    EXPECT_NE(engine.getGraph().getNodeForId(a), nullptr);
+    EXPECT_NE(engine.getGraph().getNodeForId(b), nullptr);
+}
+
+// The CRITICAL trap this fix's own task spec calls out by name: ungroup used to be metadata-only
+// and plausibly never reached the graph-change notification path. Now it removes nodes and
+// rewires connections, so it MUST reach the same reconcile/notification seam every other graph
+// mutation does (GraphEditor::onGraphStructureChanged -> MainComponent's
+// reconcileTimelineBindingsOnly), or a timeline binding/automation lane keyed to a now-deleted
+// port node's uuid survives stale into the next audio-thread render pass.
+TEST(MacroUngroupPorts, ReachesTheGraphStructureChangedNotificationHook) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
+    auto cin = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Cin", 100, 100);
+    engine.getGraph().addConnection({{cin, 0}, {a, 0}});
+
+    editor.setSelectedNodes({a, b});
+    const auto macroId = editor.groupSelectionIntoMacro(true);
+    ASSERT_FALSE(macroId.isEmpty());
+    ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u);
+
+    int fireCount = 0;
+    editor.onGraphStructureChanged = [&] { ++fireCount; };
+
+    editor.setSelectedNodes({a});
+    editor.ungroupSelection();
+
+    EXPECT_GE(fireCount, 1) << "ungrouping a macro with ports removes nodes and rewires connections -- it MUST fire "
+                               "onGraphStructureChanged (mirroring deleteSelection's own updateComponents() call), or "
+                               "MainComponent never runs its post-graph-change reconcile pass for this path";
 }
 
 // ============================================================================

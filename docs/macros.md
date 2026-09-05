@@ -27,7 +27,12 @@ This document covers two things:
    chevron was built to fix, now closed on the other side of the toggle. That same pass also fixed
    every user-facing member COUNT/LIST to report modules rather than raw graph membership (fix G6,
    §7 item 4 note) — a port node is a genuine `Macro::members` entry (load-bearing, per §5.1), but
-   it is not a module the user put in the box, and the two are different quantities.
+   it is not a module the user put in the box, and the two are different quantities. A third
+   founder-review pass, raised after using the shipped feature, decided the one open question the
+   second pass had left for him: **Ungroup now removes every one of a macro's ports and splices
+   the cable each one proxied straight back together** (fix G7, §7 item 8), so Group then Ungroup
+   is a true round trip, and a port node also gained its own right-click "Delete Port" affordance
+   for the case where its macro is otherwise still alive.
 
 ---
 
@@ -211,9 +216,11 @@ and `PolyMidiModule`.
 All four are created by the **macro port flow** (§7 item 3, **done**), never by the module library
 and never by the replace menu. An inlet/outlet always belongs to exactly one macro; it is a member
 of that macro's `members` list like any other node, and is dissolved with it by an action that
-actually deletes members (`GraphEditor::deleteMacroAndMembers`). **Ungrouping is not that
-action** — it dissolves only the `Macro` record (and, with it, the `MacroPort` descriptors), never
-the member nodes or their connections; see §5.4 for what that means for a cable landing on a port.
+actually deletes members (`GraphEditor::deleteMacroAndMembers`). **Ungrouping still never deletes
+an ordinary module** — but as of founder-review fix G7 (§7 item 8) it DOES remove every one of the
+macro's own port nodes, splicing back the cable each one proxied; a port is a boundary jack, not a
+module the user put in the box, and once the boundary (the macro) is gone a port node has no
+meaningful state left to preserve. See §5.4/§7 item 8 for the full splice-out design.
 
 Each carries a user-visible **port name** ("Pitch In", "Wet Out") — this lives on the macro's own
 `MacroPort` entry (§5.2), not in the node's extra state, since the name is macro-level
@@ -426,17 +433,22 @@ of always minting a fresh one; a jack whose direction or kind does not match the
 the same as a mismatched drop on an ordinary module jack. Missing that jack still falls through to
 the whole-card "shape from a dropped cable" convenience (§5.3).
 
-**Ungrouping a macro does not drop a cable landing on one of its ports.** `ungroupSelection()`
-calls `MacroSet::remove`, which only erases the `Macro` record — no member node and no graph
-connection is touched. A port's fronting node (`MacroInlet`/`MacroOutlet` or a MIDI variant) is an
-ordinary member like any other, so it survives ungrouping exactly as the rest of the group does,
-its connections (both the internal pass-through wiring and any external cable wired into it)
-intact; the node's `ModuleComponent` simply becomes visible again (no collapsed card left to hide
-it behind), and the cable that used to anchor at the card jack now renders as an ordinary cable to
-that node's own jack. This follows from §1's framing — ungrouping, like grouping, is a
-presentation-only change to the `MacroSet`, never a graph edit — but is worth stating explicitly
-here because the opposite (the cable silently disappearing) is the more intuitive-sounding
-assumption and is not what happens.
+**Ungrouping a macro removes its ports and splices their cables back together (founder-review fix
+G7, §7 item 8).** This section originally described the opposite — a port's fronting node
+surviving ungroup as an ordinary ex-member, its connections untouched, on the theory that
+ungrouping (like grouping) is purely a `MacroSet` metadata change. A second founder review pass,
+hands-on with the shipped feature, decided otherwise: `ungroupSelection()` now calls
+`GraphEditor::spliceOutMacroPort()` for every one of the macro's ports BEFORE dissolving the
+`Macro` record — disconnecting the port node, reconnecting its external endpoint(s) directly to
+its internal endpoint(s) on the original raw channels (the full cross product, so fan-in/fan-out
+reconnect completely), and removing the node — all inside the SAME undo step as the record's
+removal. A macro's ORDINARY members are still never touched by ungroup; only its ports are. See §7
+item 8 for the full algorithm, the pass-through verification behind it, and why no provenance
+field was needed to treat auto-created and hand-added ports identically.
+
+Because this makes ungroup a genuine graph edit for the first time, it also now runs through the
+same post-mutation path `deleteSelection()` does (`updateComponents()` inside the transaction,
+firing `onGraphStructureChanged` -> the timeline reconcile pass) — see §7 item 8.
 
 **The docked port widget (founder-review fix F2).** Founder review on the first Macro I/O cut:
 *"We're now creating separate modules for each i/o, instead I had in mind a small widget like i/o
@@ -486,11 +498,16 @@ its macro" are all exactly as §4/§5.1-§5.3 decided.
   `dockMacroPortWidgets()` unconditionally at the end (idempotent — a no-op for the whole-macro
   case, which already agrees; a real correction for the partial-selection case), the same as
   `updateComponents()`/`finalizeModuleDrag()` above.
-- **Not individually selectable.** A port widget's only UI surface is its jack (cable drag/drop,
-  unchanged) and the Configure I/O dialog (rename/reorder/delete/shape-change, unchanged) — never a
-  canvas click on its body. This was a deliberate scope call, not an oversight: making it
-  selectable would need its own drag suppression logic distinct from "part of a macro-wide
-  selection," for a widget whose whole point is that its position is not the user's to set.
+- **Not individually selectable or draggable by a LEFT click — but RIGHT-click gets its own menu
+  (founder-review fix G7, §7 item 8).** A port widget's body still refuses any left click (no
+  selection, no drag): making it draggable would need its own suppression logic distinct from
+  "part of a macro-wide selection," for a widget whose whole point is that its position is not the
+  user's to set — `dockMacroPortWidgets()` would just snap it back on the next layout pass anyway.
+  A right click is the one exception: it opens `ModuleComponent::buildMacroPortContextMenu()`
+  ("Delete Port" always; "Rename Port..."/"Configure I/O..." when the port's macro is still alive)
+  rather than nothing — before G7 a port node had no delete affordance of its own at all, and
+  Configure I/O (rename/reorder/delete/shape-change, still there, unchanged) was the only UI
+  surface for it, full stop.
 
 ### 5.5 Latency
 
@@ -928,23 +945,84 @@ In order, each independently shippable:
    `spliceMacroPorts()` and `updateComponents()` in that order, inside the one transaction, never
    the reverse.
 
-   **OPEN QUESTION, raised for the founder rather than decided silently: what should Ungroup do
-   with an auto-created port?** This fix's answer: **nothing** — `ungroupSelection()` is untouched,
-   and per §5.4 it already dissolves only the `Macro` record, never a member node or its
-   connections, so an auto-created port's fronting node survives ungrouping exactly like any other
-   member, its connections (external->port and port->internal, both) intact; the node's
-   `ModuleComponent` simply becomes visible again as an ordinary card sitting mid-signal-chain.
-   Signal keeps flowing either way, which is the one hard requirement, but a "Macro In"/"Macro Out"
-   box left behind in the middle of a plain patch is a stray artefact a user did not ask for and
-   has no obvious next step for (delete it and reconnect by hand? leave it forever?). The
-   alternative — teach `ungroupSelection()` to splice an AUTO-CREATED port back OUT on ungroup,
-   reconnecting external straight to internal, as one undo step — was NOT implemented here, for two
-   reasons: (1) `MacroPort` carries no provenance field distinguishing "auto-created by this fix"
-   from "added by hand through Configure I/O," so telling them apart would need a new persisted
-   field this stage did not add; (2) it changes what Ungroup means for every macro, not just ones
-   this feature touched. This is exactly the "least surprising, still not obviously right" case the
-   task called out — the current behaviour (ports survive as ordinary members) is what ships;
-   splice-out-on-ungroup is the documented alternative for the founder to weigh in on.
+8. **DONE (founder-review fix G7): Ungroup removes the macro's ports, and a port node is
+   directly deletable.** The item above shipped with an explicit open question for the founder —
+   "what should Ungroup do with an auto-created port?" — recorded as **nothing**: the port's
+   fronting node would survive ungrouping as an ordinary member, connections intact, becoming a
+   stray "Macro In"/"Macro Out" box sitting mid-signal-chain with no delete affordance of its own
+   (Configure I/O — the one surface that could remove it — disappears the instant the macro does,
+   since `promptConfigureMacroIO`'s first line is `macros.find(macroId)`). A second founder review
+   pass, hands-on with the shipped feature, answered it: *"ungroup leaves the macro input/output in
+   place (They should be removed) and they cannot be removed."*
+
+   **The decided rule.** Ungrouping a macro removes every one of its port nodes and splices the
+   ORIGINAL CABLE BACK — external reconnects straight to internal, exactly as it was before
+   grouping — as part of the SAME undo step that removes the `Macro` record. Group then Ungroup is
+   now a true round trip, which is the property this fix is mostly for; §5.4's old "ungrouping does
+   not drop a cable landing on one of its ports" passage above described the pre-G7 behaviour and
+   has been rewritten to match. This applies to EVERY port, auto-created (item 7) and hand-added
+   (item 3) alike — **no provenance field was added**, resolving concern (1) the open question
+   raised: a port exists only to proxy a boundary, so once the boundary (the macro) is gone, a
+   hand-named port is the same kind of orphan as an auto-created one, with no reason to treat them
+   differently. Concern (2) — "it changes what Ungroup means for every macro, not just ones this
+   feature touched" — is exactly the change the founder asked for.
+
+   **The splice-out algorithm (`GraphEditor::spliceOutMacroPort`), the reverse of `spliceMacroPorts`
+   (item 7).** For the port node fronted by one `MacroPort`: read every connection currently
+   touching it, split into the set LANDING on it (the port's own channel is the destination — an
+   "in" edge) and the set LEAVING it (the port's own channel is the source — an "out" edge), then
+   for every port channel shared between an in-edge and an out-edge, connect that in-edge's OTHER
+   endpoint directly to that out-edge's OTHER endpoint, on the exact raw channels each already
+   carried — the full CROSS PRODUCT, so fan-in (two external sources sharing one inlet port, item
+   7's own "share ONE port, not N" dedup rule) and fan-out reconnect completely, not just the first
+   pair. A port wired on only one side (or neither) contributes no pairs and simply disappears —
+   nothing to reconnect. Removing the node then drops its own now-superseded connections for free
+   (`juce::AudioProcessorGraph::removeNode` calls `disconnectNode` before erasing).
+
+   This is signal-preserving because `MacroInlet`/`MacroOutlet` and both MIDI variants are
+   VERIFIED pure per-channel pass-throughs, not assumed to be: `mapInputChannel(c)` and
+   `mapOutputChannel(c)` return the identical `LogicalPort` on both (§5.1/§5.3 — Mono, Stereo's
+   split-block right leg, `StereoCollapsed`'s two-raw-channel single jack, and Poly-N's fanned bus
+   all checked), so whatever enters the port on raw channel `c` is exactly what leaves it on raw
+   channel `c`, on every shape a port can carry. A MIDI port's single "channel" is always
+   `juce::AudioProcessorGraph::midiChannelIndex` on both sides, so the same cross-product logic
+   applies unchanged with no MIDI-specific branch needed.
+
+   **Ungroup reaches the graph-change notification path.** Before this fix, `ungroupSelection()`
+   was metadata-only (`MacroSet::remove` alone) and never needed to call
+   `GraphEditor::updateComponents()`'s post-mutation hooks for correctness. It now removes nodes
+   and rewires connections — a real graph edit — so it calls `updateComponents()` inside the SAME
+   `recordGraphAndMacroChange` transaction that does the splicing, exactly like `deleteSelection()`
+   already does; that in turn fires `onGraphStructureChanged` ->
+   `MainComponent::reconcileTimelineBindingsOnly()`, the seam that keeps a timeline binding from
+   surviving stale, keyed to a now-deleted node's uuid, into the next audio-thread render pass
+   (root `CLAUDE.md`, §8 of `docs/architecture.md`). `MacroAutoPortTests.cpp`'s
+   `ReachesTheGraphStructureChangedNotificationHook` pins this directly.
+
+   **A port node is now directly deletable, right-click.** Before this fix,
+   `ModuleComponent::mouseDown()` refused ANY click on a macro-port node's body (mirroring the
+   Attenuverter's "no header, nothing to click" early return) — so a port had exactly one delete
+   path, Configure I/O, which vanished with its macro. The early return now excludes the RIGHT
+   button only: a port node's body right-click opens a NEW small menu
+   (`ModuleComponent::buildMacroPortContextMenu`) — "Delete Port" always, plus "Rename Port..." (a
+   lightweight `AlertWindow`, `GraphEditor::promptRenameMacroPort` — the quicker alternative to
+   opening the whole Configure I/O modal to retype one name) and "Configure I/O..." when the port
+   still resolves to a live macro. LEFT-click stays exactly as restrictive as before — no
+   selection, no drag — because `dockMacroPortWidgets()` repositions this widget every layout pass
+   regardless; a draggable port would just snap back the moment the user let go, a new broken-
+   feeling gesture inside a fix meant to remove them. Deleting a port this way, while its macro
+   stays alive, shares `spliceOutMacroPort` with ungroup
+   (`GraphEditor::deleteMacroPortNode`) — the cable is spliced back, never dropped, and the macro
+   dissolves outright if this was its last member (mirroring `MacroSet::removeMemberEverywhere`'s
+   own "zero members is not a meaningful state" rule).
+
+   **`GraphEditor::removeMacroPort()` (item 2's Configure I/O "delete this port" action) is
+   deliberately UNCHANGED** — it still reuses the ordinary multi-select delete path and drops the
+   cable rather than splicing it, pinned by
+   `Tests/MacroPortFlowTests.cpp`'s `RemoveDeletesTheNodeAndDropsThePort`. An explicit "delete this
+   port" from a configuration dialog arguably SHOULD drop the cable rather than silently rewire the
+   patch around it; `spliceOutMacroPort` is shared code, not shared semantics, and switching
+   Configure I/O's own delete to splice-back too is a proposal for a future pass, not decided here.
 
 ## 8. Explicitly out of scope
 

@@ -585,6 +585,19 @@ public:
      *  from updateComponents()) drops the now-orphaned synth::MacroPort as part of the same step. */
     void removeMacroPort(const juce::String& macroId, const juce::String& nodeUuid);
 
+    /** Deletes ONE macro port node directly while its macro stays alive — the affordance the port
+     *  node's own context menu offers (ModuleComponent::buildMacroPortContextMenu, founder-review
+     *  fix G7: "they cannot be removed"). Unlike removeMacroPort() above, this SPLICES the
+     *  boundary cable back together (external endpoint(s) reconnected straight to internal
+     *  endpoint(s), on the original raw channels — spliceOutMacroPort's cross product) rather than
+     *  dropping it; removeMacroPort's drop-the-cables behaviour is pinned for the Configure I/O
+     *  "delete this port" action specifically (Tests/MacroPortFlowTests.cpp's
+     *  RemoveDeletesTheNodeAndDropsThePort) and is deliberately left alone. Dissolves the macro
+     *  outright if this was its last member (matching MacroSet::removeMemberEverywhere's own
+     *  "zero members is not a meaningful state" rule). One recordGraphAndMacroChange transaction.
+     *  No-op if `macroId` doesn't resolve or `nodeUuid` isn't one of its ports. */
+    void deleteMacroPortNode(const juce::String& macroId, const juce::String& nodeUuid);
+
     /** Renames the port fronted by `nodeUuid`. Empty/whitespace-only `newName` is a no-op (mirrors
      *  promptRenameMacro's own convention) rather than clearing the name. Touches only `macros` —
      *  never the graph — so this pushes a MacroSnapshotAction alone. */
@@ -614,6 +627,14 @@ public:
      *  user drives it from the UI; every method above is independently callable (and tested) with
      *  no dialog involved. No-op if `macroId` doesn't resolve. */
     void promptConfigureMacroIO(const juce::String& macroId);
+
+    /** Opens a small "Rename Port" AlertWindow for the single port fronted by `nodeUuid` — the
+     *  port node's own context menu's quicker alternative to opening the whole Configure I/O
+     *  modal just to retype one name (founder-review fix G7). Empty/whitespace-only input cancels
+     *  without renaming, same as promptRenameMacro's own convention; the actual mutation is
+     *  renameMacroPort() (already independently tested with no dialog involved). No-op if
+     *  `macroId` doesn't resolve. */
+    void promptRenameMacroPort(const juce::String& macroId, const juce::String& nodeUuid);
 
     // ---- Macro card jacks (P8-15c, T141, docs/macros.md §7 item 4) -----------------------------
 
@@ -1460,6 +1481,31 @@ private:
      *  groupSelectionIntoMacro(true)'s own recordGraphAndMacroChange transaction — never pushes an
      *  undo entry of its own. */
     void spliceMacroPorts(const juce::String& macroId, const std::vector<MacroPortCrossingGroup>& plan);
+
+    /** The exact reverse of spliceMacroPorts() for ONE port node (founder-review fix G7,
+     *  docs/macros.md §7): reads every connection currently touching the port node fronted by
+     *  `portNodeUuid`, splits them into the set landing on it (an "in" edge — the port's own
+     *  channel is the DESTINATION channel) and the set leaving it (an "out" edge — the port's own
+     *  channel is the SOURCE channel), then for every port channel shared between an in-edge and
+     *  an out-edge, connects that in-edge's OTHER endpoint directly to that out-edge's OTHER
+     *  endpoint, on the exact raw channels each already carried. This is signal-preserving because
+     *  every port type (MacroInletModule/MacroOutletModule and the MIDI variants) is a verified
+     *  pure per-channel pass-through — mapInputChannel(c) and mapOutputChannel(c) always agree, so
+     *  a signal entering the port on channel c is exactly the signal leaving it on channel c, and
+     *  a MIDI port's single "channel" is always juce::AudioProcessorGraph::midiChannelIndex on
+     *  both sides. Handles fan-in and fan-out: the cross product naturally reconnects every source
+     *  landing on a channel to every destination fed from that same channel (docs/macros.md §5.4's
+     *  "two cables into the same jack share ONE port" rule, run in reverse). A port wired on only
+     *  one side (or neither) contributes no cross-product pairs and simply disappears — nothing to
+     *  reconnect. Removes the port node from the graph (juce::AudioProcessorGraph::removeNode
+     *  already drops its own now-superseded connections) and drops `portNodeUuid` from
+     *  `macro.members`/`macro.ports`. Pure graph+macro mutation — no undo recording of its own;
+     *  every caller (ungroupSelection(), for every port of a dissolving macro; deleteMacroPortNode(),
+     *  for one port while its macro stays alive) wraps this in its own recordGraphAndMacroChange
+     *  transaction. NOT used by removeMacroPort() (Configure I/O's own "delete this port" action),
+     *  which intentionally keeps its drop-the-cables semantics — see deleteMacroPortNode()'s own
+     *  comment for why splicing there is a deliberately deferred proposal, not this stage's call. */
+    void spliceOutMacroPort(synth::Macro& macro, const juce::String& portNodeUuid);
 
     /** Default name for an auto-created port: the internal module's own name plus the jack it
      *  fronts (its getInputPortLabel/getOutputPortLabel at `visibleJack`) — e.g. "Filter Cutoff",

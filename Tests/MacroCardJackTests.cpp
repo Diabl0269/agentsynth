@@ -450,11 +450,19 @@ TEST(MacroCardJack, EdgeAnchoredCableDoesNotLandOnAPortJackOnTheSameSide) {
 }
 
 // ============================================================================
-// Ungrouping a macro whose port has an external cable landing on it (docs/macros.md §5.4 doc
-// duty for T141): confirms the actual behaviour rather than assuming it, per the task spec.
+// Ungrouping a macro whose port has cables landing on it (docs/macros.md §5.4/§7): the founder's
+// second-pass review decided this ("ungroup leaves the macro input/output in place (They should
+// be removed)"). REWRITTEN from the OLD (now rejected) behaviour this test used to pin — a port
+// node surviving ungroup, with its cable untouched, on the theory that ungroup is purely
+// presentation-only. That is still true for a macro's REAL modules, but no longer for its ports:
+// a port exists only to proxy a boundary, and once the boundary (the macro) is gone, a port node
+// is an orphan with no meaningful state, not a module the user actually grouped. The decided rule
+// (founder-review fix G7): ungroup removes every one of the macro's port nodes and splices the
+// cable each one proxied straight back together — external reconnects directly to internal,
+// exactly as it was before grouping — so Group then Ungroup is a true round trip.
 // ============================================================================
 
-TEST(MacroCardJack, UngroupingPreservesAnExternalCableIntoAPort) {
+TEST(MacroCardJack, UngroupingRemovesThePortAndSplicesTheExternalCableToTheInternalModule) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
@@ -466,28 +474,59 @@ TEST(MacroCardJack, UngroupingPreservesAnExternalCableIntoAPort) {
     ASSERT_FALSE(inUuid.isEmpty());
     const auto portNodeId = nodeIdForUuid(engine, inUuid);
 
+    // Both sides of the boundary this port proxies: an external source wired IN, and the port
+    // wired to an internal member — a hand-added port via Configure I/O (addMacroPort), not an
+    // auto-created one, on purpose: the decided rule applies to both alike, with no provenance
+    // distinction (docs/macros.md §7).
     auto extOscId = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 900);
     editor.connectPorts(extOscId, 0, portNodeId, 0, /*isMidi=*/false, /*recordUndo=*/false);
+    editor.connectPorts(portNodeId, 0, m.b, 0, /*isMidi=*/false, /*recordUndo=*/false);
     ASSERT_TRUE(hasConnection(engine, extOscId, 0, portNodeId, 0));
+    ASSERT_TRUE(hasConnection(engine, portNodeId, 0, m.b, 0));
 
     // Ungroup by selecting a member and calling the same entry point Cmd+Shift+G drives
-    // (GraphEditor::ungroupSelection) — MacroSet::remove only erases the macro RECORD
-    // (Source/MacroSet.cpp): it deletes no graph node and no graph connection, so the port's
-    // fronting node (portNodeId) stays exactly where it was, still wired.
+    // (GraphEditor::ungroupSelection).
     editor.setSelectedNodes({m.a});
     editor.ungroupSelection();
 
     ASSERT_EQ(editor.getMacros().find(m.macroId), nullptr) << "the macro record itself is gone";
-    EXPECT_NE(editor.getAudioEngine().getGraph().getNodeForId(portNodeId), nullptr)
-        << "the port's own node (MacroInlet) is an ordinary member, not deleted by ungroup";
-    EXPECT_TRUE(hasConnection(engine, extOscId, 0, portNodeId, 0))
-        << "ungrouping is a presentation-only change (docs/macros.md section 1) - the boundary "
-           "cable, a real graph edge, is untouched and is NOT dropped, contrary to a naive "
-           "assumption";
+    EXPECT_EQ(editor.getAudioEngine().getGraph().getNodeForId(portNodeId), nullptr)
+        << "the port's own node (MacroInlet) is REMOVED by ungroup — it is not an ordinary member "
+           "left behind, contrary to the old behaviour this test used to pin";
+    EXPECT_FALSE(hasConnection(engine, extOscId, 0, portNodeId, 0)) << "the port's own edges are gone with it";
+    EXPECT_FALSE(hasConnection(engine, portNodeId, 0, m.b, 0));
+    EXPECT_TRUE(hasConnection(engine, extOscId, 0, m.b, 0))
+        << "the boundary cable the port proxied is spliced straight back together — external "
+           "connects directly to the internal module it used to reach through the port, on the "
+           "same channels — so Group then Ungroup is a true round trip (docs/macros.md §7)";
 
-    // Now rendered as an ordinary cable to the (no-longer-collapsed, no-longer-hidden) port
-    // node's own jack - not the special collapsed-card anchoring, since there is no macro left.
-    auto* portComp = findComponent(editor, portNodeId);
-    ASSERT_NE(portComp, nullptr);
-    EXPECT_TRUE(portComp->isVisible()) << "no macro left to hide it";
+    // No ModuleComponent left for a node that no longer exists.
+    EXPECT_EQ(findComponent(editor, portNodeId), nullptr);
+}
+
+TEST(MacroCardJack, UngroupingDropsAOneSidedPortWithNothingToSpliceBackTo) {
+    // A port wired on only ONE side (here: an external source landing on it, nothing wired out of
+    // it internally) has no cross-product pair to reconnect — it just disappears, per the
+    // splice-out algorithm's own rule.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto m = makeTwoMemberMacro(editor, engine);
+
+    const auto inUuid =
+        editor.addMacroPort(m.macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    ASSERT_FALSE(inUuid.isEmpty());
+    const auto portNodeId = nodeIdForUuid(engine, inUuid);
+
+    auto extOscId = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 900);
+    editor.connectPorts(extOscId, 0, portNodeId, 0, /*isMidi=*/false, /*recordUndo=*/false);
+    ASSERT_TRUE(hasConnection(engine, extOscId, 0, portNodeId, 0));
+
+    editor.setSelectedNodes({m.a});
+    editor.ungroupSelection();
+
+    EXPECT_EQ(editor.getAudioEngine().getGraph().getNodeForId(portNodeId), nullptr);
+    EXPECT_FALSE(hasConnection(engine, extOscId, 0, portNodeId, 0));
+    // Nothing else to assert: there was no internal endpoint for this half-wired port to splice
+    // to, so it simply disappears — extOscId is left with no connection at all, not a spurious one.
 }

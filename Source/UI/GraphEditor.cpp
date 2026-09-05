@@ -3996,12 +3996,29 @@ void GraphEditor::ungroupSelection() {
     auto doUngroup = [this, macroIdsToRemove] {
         std::vector<juce::AudioProcessorGraph::NodeID> newSelection;
         for (const auto& macroId : macroIdsToRemove) {
-            if (auto* m = macros.find(macroId)) {
-                for (const auto& uuid : m->members) {
-                    auto nodeId = resolveMemberNodeId(uuid);
-                    if (nodeId.uid != 0)
-                        newSelection.push_back(nodeId);
-                }
+            auto* m = macros.find(macroId);
+            if (m == nullptr) {
+                continue; // defensive: shouldn't happen mid-transaction
+            }
+
+            // Founder review, second pass: "ungroup leaves the macro input/output in place (They
+            // should be removed)". Splice every one of this macro's ports back out FIRST — auto-
+            // created and hand-added alike, no provenance distinction needed (spliceOutMacroPort's
+            // own header comment) — restoring the external<->internal wiring each one proxied,
+            // before falling through to the plain-module behaviour below. Iterate a COPY: each
+            // call mutates m->ports/m->members as it goes.
+            const auto portsToSplice = m->ports;
+            for (const auto& port : portsToSplice)
+                spliceOutMacroPort(*m, port.nodeUuid);
+
+            // Ungrouping is still presentation-only for the macro's real modules (docs/macros.md
+            // section 1/section 4): every member left in m->members at this point is an ordinary
+            // module, never deleted, never disconnected — only the macro record itself (below) and
+            // the ports just spliced above are removed.
+            for (const auto& uuid : m->members) {
+                auto nodeId = resolveMemberNodeId(uuid);
+                if (nodeId.uid != 0)
+                    newSelection.push_back(nodeId);
             }
             macros.remove(macroId);
         }
@@ -5041,6 +5058,56 @@ void GraphEditor::spliceMacroPorts(const juce::String& macroId, const std::vecto
     }
 }
 
+void GraphEditor::spliceOutMacroPort(synth::Macro& macro, const juce::String& portNodeUuid) {
+    const auto nodeId = resolveMemberNodeId(portNodeUuid);
+    if (nodeId.uid != 0) {
+        auto& graph = audioEngine.getGraph();
+
+        // Every connection currently touching the port, split by which side of it they land on.
+        // `portChannel` is the port node's OWN channel index for that edge — the axis the cross
+        // product below groups on, since MacroInlet/MacroOutlet's per-channel pass-through
+        // guarantee (this method's header comment) is exactly "whatever entered on channel c
+        // leaves on channel c".
+        struct InEdge {
+            juce::AudioProcessorGraph::NodeID otherNode;
+            int otherChannel = 0;
+            int portChannel = 0;
+        };
+        struct OutEdge {
+            juce::AudioProcessorGraph::NodeID otherNode;
+            int otherChannel = 0;
+            int portChannel = 0;
+        };
+        std::vector<InEdge> ins;
+        std::vector<OutEdge> outs;
+        for (const auto& c : graph.getConnections()) {
+            if (c.destination.nodeID == nodeId)
+                ins.push_back({c.source.nodeID, c.source.channelIndex, c.destination.channelIndex});
+            else if (c.source.nodeID == nodeId)
+                outs.push_back({c.destination.nodeID, c.destination.channelIndex, c.source.channelIndex});
+        }
+
+        for (const auto& in : ins)
+            for (const auto& out : outs)
+                if (in.portChannel == out.portChannel)
+                    graph.addConnection({{in.otherNode, in.otherChannel}, {out.otherNode, out.otherChannel}});
+
+        // Same cleanup every other node-removal site in this file performs first (deleteSelection,
+        // requestDeleteModule, changeMacroPortShape's own node swap): removeNode() drops the port's
+        // own connections as part of removing it (juce::AudioProcessorGraph::removeNode calls
+        // connections.disconnectNode() before erasing the node), so nothing above needs an explicit
+        // removeConnection pass — including the edges left unmatched by the cross product above
+        // (a port wired on only one side simply disappears here, with nothing to reconnect).
+        modMatrix.clearRows();
+        graph.removeNode(nodeId);
+    }
+
+    macro.members.erase(std::remove(macro.members.begin(), macro.members.end(), portNodeUuid), macro.members.end());
+    macro.ports.erase(std::remove_if(macro.ports.begin(), macro.ports.end(),
+                                     [&](const synth::MacroPort& p) { return p.nodeUuid == portNodeUuid; }),
+                      macro.ports.end());
+}
+
 juce::String GraphEditor::autoMacroPortName(ModuleBase* internalMb, bool isInput, int visibleJack, bool isMidi) {
     const juce::String base = internalMb != nullptr ? internalMb->getName() : juce::String("Module");
     if (isMidi)
@@ -5134,6 +5201,38 @@ void GraphEditor::removeMacroPort(const juce::String&, const juce::String& nodeU
     // SAME undo step — never a separate one.
     setSelectedNodes({nodeId});
     deleteSelection();
+}
+
+void GraphEditor::deleteMacroPortNode(const juce::String& macroId, const juce::String& nodeUuid) {
+    auto* macro = macros.find(macroId);
+    if (macro == nullptr || !macro->memberIsPort(nodeUuid))
+        return;
+
+    auto& graph = audioEngine.getGraph();
+
+    // Founder review, second pass: a port node had no delete affordance at all (Configure I/O's
+    // own "delete this port" was the ONE surface, and it disappears the instant the macro does —
+    // exactly when ungroup needs it most). This is the new one: the port node's own context menu
+    // (ModuleComponent::buildMacroPortContextMenu). Splices the cable back — spliceOutMacroPort,
+    // the same helper ungroupSelection() uses for every port of a dissolving macro — rather than
+    // dropping it like removeMacroPort() above; see deleteMacroPortNode()'s own header comment for
+    // why removeMacroPort's semantics are deliberately left alone.
+    auto doDelete = [this, macroId, nodeUuid] {
+        auto* m = macros.find(macroId);
+        if (m == nullptr)
+            return; // defensive: shouldn't happen mid-transaction
+        spliceOutMacroPort(*m, nodeUuid);
+        if (m->members.empty())
+            macros.remove(macroId); // matches MacroSet::removeMemberEverywhere's own zero-members rule
+        updateComponents();
+    };
+
+    if (undoManager)
+        undoManager->recordGraphAndMacroChange(graph, macros, doDelete);
+    else
+        doDelete();
+
+    repaint();
 }
 
 void GraphEditor::renameMacroPort(const juce::String& macroId, const juce::String& nodeUuid,
@@ -5522,6 +5621,44 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
     };
 
     window->enterModalState(true, nullptr, true);
+}
+
+void GraphEditor::promptRenameMacroPort(const juce::String& macroId, const juce::String& nodeUuid) {
+    const auto* macro = macros.find(macroId);
+    if (macro == nullptr)
+        return;
+
+    juce::String currentName;
+    for (const auto& p : macro->ports)
+        if (p.nodeUuid == nodeUuid)
+            currentName = p.name;
+
+    // promptRenameMacro's own AlertWindow idiom exactly (see its comment for the ownership/
+    // lifetime reasoning) — the port node's own context menu's quicker alternative to opening the
+    // whole Configure I/O modal just to retype one name.
+    auto* window = new juce::AlertWindow("Rename Port", "New name:", juce::AlertWindow::NoIcon);
+    window->addTextEditor("name", currentName, "Port name:");
+    window->addButton("Rename", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    juce::Component::SafePointer<GraphEditor> safeThis(this);
+    window->enterModalState(true,
+                            juce::ModalCallbackFunction::create([safeThis, window, macroId, nodeUuid](int result) {
+                                std::unique_ptr<juce::AlertWindow> owned(window);
+                                if (result != 1)
+                                    return;
+
+                                auto* self = safeThis.getComponent();
+                                if (self == nullptr)
+                                    return;
+
+                                const auto typed = owned->getTextEditorContents("name").trim();
+                                if (typed.isEmpty())
+                                    return; // empty/whitespace-only input cancels without renaming
+
+                                self->renameMacroPort(macroId, nodeUuid, typed);
+                            }),
+                            false);
 }
 
 // ---- Snippets ----

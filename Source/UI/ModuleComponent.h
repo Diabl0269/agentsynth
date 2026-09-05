@@ -204,6 +204,16 @@ public:
      *  retargeting entry point) rather than skip straight to menu construction. */
     juce::PopupMenu buildModuleContextMenu();
 
+    /** The small context menu a macro port node's own body right-click shows instead of
+     *  buildModuleContextMenu() above (founder-review fix G7: "they cannot be removed" — a port
+     *  node previously had NO delete affordance once its macro was gone, and Configure I/O is
+     *  otherwise the only surface for it at all). Always offers "Delete Port". When the port still
+     *  resolves to a live macro (GraphEditor::macroPortOwnerFor) it also offers "Rename Port..."
+     *  and "Configure I/O..." — the two Configure I/O actions this node's own menu can reach
+     *  without the user hunting down a member module first. Split out exactly like
+     *  buildModuleContextMenu() is, for the same headless-test reason (that method's own comment). */
+    juce::PopupMenu buildMacroPortContextMenu();
+
     /** Replaces what a real body right-click does with the menu buildModuleContextMenu() built --
      *  in place of the real showMenuAsync() (which opens a real popup and, on a headless Linux CI
      *  runner with no display, segfaults inside juce::PopupMenu::HelperClasses::MenuWindow --

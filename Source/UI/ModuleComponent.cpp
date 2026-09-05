@@ -2724,6 +2724,32 @@ void ModuleComponent::parameterGestureChanged(int parameterIndex, bool gestureIs
     }
 }
 
+juce::PopupMenu ModuleComponent::buildMacroPortContextMenu() {
+    juce::PopupMenu m;
+    const auto ownership = owner.macroPortOwnerFor(nodeId);
+
+    if (ownership.macro != nullptr && ownership.port != nullptr) {
+        const juce::String macroId = ownership.macro->id;
+        const juce::String uuid = ownership.port->nodeUuid;
+        m.addItem("Rename Port...", [this, macroId, uuid] { owner.promptRenameMacroPort(macroId, uuid); });
+        m.addItem("Configure I/O...", [this, macroId] { owner.promptConfigureMacroIO(macroId); });
+        m.addSeparator();
+        // Splices the boundary cable back together rather than dropping it (founder-review fix
+        // G7) — GraphEditor::deleteMacroPortNode, sharing spliceOutMacroPort with ungroup.
+        m.addItem("Delete Port", [this, macroId, uuid] { owner.deleteMacroPortNode(macroId, uuid); });
+    } else {
+        // Defensive: macroPortOwnerFor's own header comment says this shouldn't happen (every
+        // port node is constructed as a macro member with a matching MacroPort entry), but a port
+        // node still needs SOME way out of the graph rather than none at all if it ever does.
+        m.addItem("Delete Port", [this] {
+            owner.setSelectedNodes({nodeId});
+            owner.deleteSelection();
+        });
+    }
+
+    return m;
+}
+
 juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
     juce::PopupMenu m;
 
@@ -2914,15 +2940,20 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
         if (getType(module) == ModuleType::Attenuverter)
             return; // cannot drag
 
-        // Docked macro-port widget (P8-15 fix F2): not individually selectable or draggable — its
-        // position is fully derived by GraphEditor::dockMacroPortWidgets() against its macro's
-        // hull (docs/macros.md §5.4), and a body drag/select here would fight that on every
-        // layout pass. A WHOLE-macro drag (via the collapsed card, or selecting the macro through
-        // selectMacro()) still carries it along: that path adds every member — ports included —
-        // to the selection directly, never through this component's own mouseDown, so it is
-        // unaffected by this early return. Configure I/O (rename/reorder/delete/shape-change) is
-        // the one UI surface for this node, same as before this fix.
-        if (isMacroPortType(getType(module)))
+        // Docked macro-port widget (P8-15 fix F2): not individually selectable or draggable via a
+        // LEFT click — its position is fully derived by GraphEditor::dockMacroPortWidgets()
+        // against its macro's hull (docs/macros.md §5.4), and a body drag/select here would fight
+        // that on every layout pass. A WHOLE-macro drag (via the collapsed card, or selecting the
+        // macro through selectMacro()) still carries it along: that path adds every member —
+        // ports included — to the selection directly, never through this component's own
+        // mouseDown, so it is unaffected by this early return.
+        //
+        // RIGHT-click is the one deliberate exception (founder-review fix G7: "they cannot be
+        // removed") — falls through to the right-button branch below, which opens
+        // buildMacroPortContextMenu() instead of the generic module menu, rather than leaving the
+        // port with no delete affordance of its own once its macro is gone (ungroup) or Configure
+        // I/O is otherwise inconvenient to reach.
+        if (isMacroPortType(getType(module)) && !e.mods.isRightButtonDown())
             return;
 
         // Double-click the HEADER opens the inline rename. Intercepted here, before any drag is
@@ -2943,6 +2974,17 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
         // the same press, so the legacy one-button-mouse affordance loses here; right-click and
         // two-finger tap still open the menu on every platform.
         if (e.mods.isRightButtonDown()) {
+            // A docked macro-port widget gets its OWN small menu (Delete, plus Rename/Configure
+            // I/O when its macro is still alive) rather than the generic module menu below — it
+            // has no Copy/Duplicate/Bypass/Replace concept, and is never part of the ordinary
+            // module selection (the early return above), so there is nothing for a selection
+            // retarget to do here either.
+            if (isMacroPortType(getType(module))) {
+                auto menu = buildMacroPortContextMenu();
+                showContextMenuHook_(menu);
+                return;
+            }
+
             // Right-clicking outside the current selection retargets it to this module, so the
             // menu always acts on something the user can see is selected. This has to run BEFORE
             // buildModuleContextMenu() below reads owner.getSelectionCount() / builds its items,
