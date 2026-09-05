@@ -11,8 +11,11 @@
 //                                  last member (a port node) dies, keeps a port whose node is
 //                                  still alive untouched
 //   • MacroSet::removeMemberEverywhere — drops a port when its fronting member is removed singly
+//   • Macro::memberIsPort/moduleMemberCount — the user-facing MODULE count excludes port nodes
+//                                  (founder-review fix G6) without touching members.size() itself
 
 #include "MacroSet.h"
+#include <algorithm>
 #include <gtest/gtest.h>
 
 using synth::Macro;
@@ -296,4 +299,73 @@ TEST(MacroSetPortReconciliation, RemoveMemberEverywhereDropsThePortItFronted) {
     const Macro& r = set.getAll()[0];
     EXPECT_EQ((int)r.members.size(), 1);
     EXPECT_TRUE(r.ports.empty());
+}
+
+// ---------------------------------------------------------------------------------------------
+// Macro::memberIsPort / Macro::moduleMemberCount (founder-review fix G6, docs/macros.md §7 item
+// 4 note): "the number of modules indicator seems to show more than there are - 4 when i
+// grouped the delay and reverb in the default patch - should have shown 2." members.size()
+// counts port nodes as members (correctly - see the class comment on synth::Macro); the
+// user-facing MODULE count must not.
+// ---------------------------------------------------------------------------------------------
+
+TEST(MacroModuleCount, PlainGroupingWithNoPortsReportsMembersSizeUnchanged) {
+    // The regression risk called out explicitly: a macro with no ports (the plain P8-12
+    // grouping case, and the most common one in the existing test suite) must not have its count
+    // disturbed by this fix at all.
+    Macro m;
+    m.id = "m1";
+    m.members = {"a", "b"};
+
+    EXPECT_EQ(m.moduleMemberCount(), 2);
+    EXPECT_FALSE(m.memberIsPort("a"));
+    EXPECT_FALSE(m.memberIsPort("b"));
+}
+
+TEST(MacroModuleCount, FounderScenarioTwoModulesTwoAutoCreatedPortsCountsAsTwoModules) {
+    // The founder's exact reproduction: two real modules (Delay, Reverb) grouped with a crossing
+    // cable on each side auto-creates two port nodes. members.size() is honestly 4 (both ports
+    // ARE members - that invariant is load-bearing, see the guard test below); the user-facing
+    // module count must read 2.
+    Macro m;
+    m.id = "m1";
+    m.members = {"delay-uuid", "reverb-uuid", "inlet-uuid", "outlet-uuid"};
+    m.ports = {makePort("inlet-uuid", true, "In", 0), makePort("outlet-uuid", false, "Out", 0)};
+
+    EXPECT_EQ((int)m.members.size(), 4) << "members must still contain the port nodes";
+    EXPECT_EQ(m.moduleMemberCount(), 2) << "the MODULE count must exclude the port nodes";
+}
+
+TEST(MacroModuleCount, HandAddedPortViaConfigureIODoesNotInflateTheCount) {
+    // There is no provenance distinction between an auto-created port and one added by hand
+    // through Configure I/O — both are just entries in `ports`, so both must be excluded the
+    // same way.
+    Macro m;
+    m.id = "m1";
+    m.members = {"delay-uuid", "hand-added-inlet"};
+    m.ports = {makePort("hand-added-inlet", true, "Extra In", 0)};
+
+    EXPECT_EQ(m.moduleMemberCount(), 1);
+}
+
+TEST(MacroModuleCount, DeletingAPortUpdatesTheCount) {
+    Macro m;
+    m.id = "m1";
+    m.members = {"delay-uuid", "reverb-uuid", "inlet-uuid", "outlet-uuid"};
+    m.ports = {makePort("inlet-uuid", true, "In", 0), makePort("outlet-uuid", false, "Out", 0)};
+    ASSERT_EQ(m.moduleMemberCount(), 2);
+
+    // Deleting a port removes both its `ports` entry and its member uuid - exactly what
+    // MacroSet::removeMemberEverywhere / the port-deletion flow in GraphEditor does.
+    m.ports.erase(m.ports.begin() + 1);
+    m.members.erase(std::find(m.members.begin(), m.members.end(), juce::String("outlet-uuid")));
+
+    EXPECT_EQ((int)m.members.size(), 3);
+    EXPECT_EQ(m.moduleMemberCount(), 2) << "removing an outlet must not change the module count";
+
+    m.ports.erase(m.ports.begin());
+    m.members.erase(std::find(m.members.begin(), m.members.end(), juce::String("inlet-uuid")));
+
+    EXPECT_EQ((int)m.members.size(), 2);
+    EXPECT_EQ(m.moduleMemberCount(), 2) << "with no ports left, the module count equals member count";
 }

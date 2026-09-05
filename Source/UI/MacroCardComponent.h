@@ -39,6 +39,14 @@ public:
      *  unreadable tooltip. */
     juce::String getTooltip() override;
 
+    /** The card's own "N modules[, M ports]" line (founder-review fix G6, docs/macros.md §7
+     *  item 4 note) — a MODULE count, excluding port nodes, with the port count named alongside
+     *  it (never silently dropped) whenever the macro actually has one. Public so a test can pin
+     *  the exact text against a founder-reported scenario (group 2 modules with a crossing cable
+     *  -> 2 auto-created ports -> must read "2 modules", never "4 modules"), the same accessor
+     *  pattern getTooltip() above already uses. Empty if `macroId` doesn't resolve. */
+    juce::String getModuleCountText() const;
+
     /** Opens the inline rename editor over the card. Public so a test can drive it without
      *  synthesising a right-click + menu selection. */
     void beginRename();

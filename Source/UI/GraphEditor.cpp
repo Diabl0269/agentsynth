@@ -4435,6 +4435,12 @@ std::vector<GraphEditor::MacroMemberPreview> GraphEditor::macroMemberPreviews(co
 
     auto& graph = audioEngine.getGraph();
     for (const auto& uuid : macro->members) {
+        // A port node is a boundary jack, not a module to preview (founder-review fix G6) — the
+        // content preview draws one glyph per module the user actually grouped, matching the
+        // "N modules" count text below it (MacroCardComponent::getModuleCountText).
+        if (macro->memberIsPort(uuid))
+            continue;
+
         auto nodeId = resolveMemberNodeId(uuid);
         if (nodeId.uid == 0)
             continue;
@@ -4465,6 +4471,11 @@ juce::StringArray GraphEditor::macroMemberNames(const juce::String& macroId) con
 
     auto& graph = audioEngine.getGraph();
     for (const auto& uuid : macro->members) {
+        // Same exclusion as macroMemberPreviews above (founder-review fix G6): the tooltip lists
+        // the modules the user grouped, not the boundary-jack nodes a crossing cable spliced in.
+        if (macro->memberIsPort(uuid))
+            continue;
+
         auto nodeId = resolveMemberNodeId(uuid);
         if (nodeId.uid == 0)
             continue;

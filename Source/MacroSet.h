@@ -75,6 +75,28 @@ struct Macro {
     bool hasMember(const juce::String& memberUuid) const {
         return std::find(members.begin(), members.end(), memberUuid) != members.end();
     }
+
+    /** True if `memberUuid` fronts one of this macro's ports (a MacroInlet/MacroOutlet or MIDI
+     *  variant node) rather than being an ordinary module the user grouped. Presentation-only —
+     *  it answers "is this member a boundary jack", nothing more; `members` itself, and every
+     *  consumer that reads it for bounds/group-drag/bypass-mute/undo/serialization, is completely
+     *  untouched by this (founder-review fix G6, docs/macros.md §7 item 4 note). */
+    bool memberIsPort(const juce::String& memberUuid) const {
+        return std::any_of(ports.begin(), ports.end(), [&](const MacroPort& p) { return p.nodeUuid == memberUuid; });
+    }
+
+    /** The user-facing MODULE count: `members.size()` minus the members that are actually port
+     *  nodes (founder-review fix G6). Grouping N modules with a crossing cable can splice in
+     *  inlet/outlet nodes that are genuine members (they must be, for bounds/drag/undo to work —
+     *  see the class comment above and docs/macros.md §5.1), but a port is a boundary jack the
+     *  macro exposes, not a module the user put in the box — those are different quantities, and
+     *  every user-facing count/list must report the first one, not `members.size()`. This is the
+     *  ONE place that filter lives; route every presentation call site through it (or through
+     *  memberIsPort() for a list) rather than re-deriving the same exclusion. */
+    int moduleMemberCount() const {
+        return (int)std::count_if(members.begin(), members.end(),
+                                  [&](const juce::String& uuid) { return !memberIsPort(uuid); });
+    }
 };
 
 /** GraphEditor's live set of macros for the current patch — owned and serialised exactly like

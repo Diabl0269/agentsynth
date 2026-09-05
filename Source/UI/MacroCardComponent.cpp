@@ -36,8 +36,7 @@ void MacroCardComponent::paint(juce::Graphics& g) {
     auto countRow = textArea.removeFromBottom(14);
     g.setFont(juce::Font(juce::FontOptions(11.0f)));
     g.setColour(juce::Colours::white.withAlpha(0.75f));
-    const int n = (int)macro->members.size();
-    g.drawText(juce::String(n) + (n == 1 ? " module" : " modules"), countRow, juce::Justification::bottomLeft);
+    g.drawText(getModuleCountText(), countRow, juce::Justification::bottomLeft);
 
     // ---- Content preview (Fix 6/P8-12 follow-up) ----
     // A collapsed macro used to be an opaque box with nothing but a name and a count. Draw a
@@ -312,6 +311,33 @@ void MacroCardComponent::showContextMenu() {
                                 safeThis->beginRename();
                         })
         .showMenuAsync(juce::PopupMenu::Options());
+}
+
+juce::String MacroCardComponent::getModuleCountText() const {
+    // Founder review: "the number of modules indicator seems to show more then there are - 4
+    // when i grouped the delay and reverb in the default patch - should have shown 2." The bug
+    // was counting graph MEMBERS (which include the auto-created port nodes for the crossing
+    // cable) instead of MODULES. synth::Macro::moduleMemberCount() is the one place that
+    // exclusion lives now (MacroSet.h) — every other user-facing count/list routes through it or
+    // through memberIsPort(), so this can never drift back out of sync with the tooltip below.
+    //
+    // A plain P8-12 macro with no ports reads exactly as it always did ("2 modules") — the
+    // regression risk this fix has to avoid. A macro that DOES have ports names the port count
+    // alongside it, rather than silently hiding a real quantity: "2 modules, 2 ports" is more
+    // honest than either "4 modules" (the bug) or a bare "2 modules" that pretends the ports
+    // aren't there.
+    const auto* macro = owner.getMacros().find(macroId);
+    if (macro == nullptr)
+        return {};
+
+    const int moduleCount = macro->moduleMemberCount();
+    juce::String text = juce::String(moduleCount) + (moduleCount == 1 ? " module" : " modules");
+
+    const int portCount = (int)macro->ports.size();
+    if (portCount > 0)
+        text << ", " << portCount << (portCount == 1 ? " port" : " ports");
+
+    return text;
 }
 
 juce::String MacroCardComponent::getTooltip() {

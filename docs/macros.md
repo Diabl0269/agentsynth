@@ -24,7 +24,10 @@ This document covers two things:
    shrank the docked port widget itself (fix G4, §5.3's "Rendering" note) after founder feedback
    that it read as a small module rather than a boundary jack, and added a visible collapse button
    to the EXPANDED hull (fix G5, §5.8) — the same asymmetry the P8-12 collapsed card's own expand
-   chevron was built to fix, now closed on the other side of the toggle.
+   chevron was built to fix, now closed on the other side of the toggle. That same pass also fixed
+   every user-facing member COUNT/LIST to report modules rather than raw graph membership (fix G6,
+   §7 item 4 note) — a port node is a genuine `Macro::members` entry (load-bearing, per §5.1), but
+   it is not a module the user put in the box, and the two are different quantities.
 
 ---
 
@@ -715,6 +718,39 @@ In order, each independently shippable:
    `ModuleComponent::paintMacroPortWidget()` draws its name and jack(s), resolved live through
    `GraphEditor::macroPortOwnerFor()`. See §5.3/§5.4 for the full design and the hull-feedback trap
    this had to avoid.
+
+   **Founder-review fix G6: the module-count indicator counts modules, not port nodes.** A
+   second founder pass grouped a Delay and a Reverb with a crossing cable on each side — two
+   auto-created ports (§7 item 7) — and the collapsed card's "N modules" line read 4
+   (`Macro::members.size()`, which correctly includes the two port nodes — that is what the
+   invariant in item 1/§5.1 requires) instead of 2. A port is a real, load-bearing member, but it
+   is a boundary jack the macro exposes, not a module the user put in the box; the two are
+   different quantities, and every user-facing count/list must report the module one.
+   `synth::Macro::memberIsPort()`/`moduleMemberCount()` (`MacroSet.h`) are the ONE place that
+   exclusion now lives, and every presentation call site routes through them rather than
+   re-deriving the filter: `MacroCardComponent::getModuleCountText()` (the card's count line —
+   "N modules" with no ports configured, unchanged from before this fix; "N modules, M ports"
+   otherwise, naming the port count rather than silently dropping it from view) and
+   `GraphEditor::macroMemberNames()`/`macroMemberPreviews()` (feeding the tooltip's member-name
+   list and the card's content-preview glyphs respectively — a port no longer appears in either).
+   `Macro::members` itself, and the `MacroPort`/node it fronts, are completely untouched — bounds,
+   group drag, bypass/mute fan-out, undo and serialization all keep reading `members` exactly as
+   before; a test in `Tests/MacroAutoPortTests.cpp` pins that a port's uuid is still a member
+   after this fix, guarding against a future "fix" that tries to make the count line up by
+   removing ports from membership instead. An all-ports macro (no ordinary module members at
+   all — an edge case `MacroPortWidgetTests.cpp` already exercises) reads "0 modules, N ports"
+   and draws no preview glyphs; that is the honest answer, not a bug.
+
+   This is presentation only, and does not change the collapsed card's fixed layout: the count
+   line still lives in the same bottom-14px row (`kMacroCardHeight`'s reservation) it always did.
+   For the port counts grouping normally produces (one crossing group per external connection,
+   typically 1-3 ports per side — the founder's own scenario is one of each), the longer string
+   stays well clear of the jack band above it (`kMacroCardJackBandTop`/`Bottom`) and of both
+   port-name label columns beside it. A macro with enough ports on one side to push its
+   bottom-most jack label down near the count row was already at the limit of that pre-existing
+   layout budget before this fix (`kMacroCardJackBandBottom` sits only 4px above the count row's
+   own top) — this fix does not create that crowding, it only means the text sharing that row
+   with it is occasionally a few characters longer.
 5. **DONE (P8-15b).** Port rename and reorder — the same modal as item 3
    (`GraphEditor::renameMacroPort`/`moveMacroPortOrder`). Reorder is scoped to one direction at a
    time (inputs against inputs, outputs against outputs), a no-op at either edge. Changing an

@@ -518,7 +518,8 @@ public:
      *  since there is no card to host an inline editor there. */
     juce::PopupMenu buildMacroMenu(const juce::String& macroId, std::function<void()> renameAction = nullptr);
 
-    /** Live bounds + colour category for the currently-resolvable members of `macroId`, in
+    /** Live bounds + colour category for the currently-resolvable MODULE members of `macroId`
+     *  (a port node is excluded — founder-review fix G6, docs/macros.md §7 item 4 note), in
      *  member order — the data the collapsed card's content preview (Fix 6/P8-12 follow-up)
      *  scales into its card. A member uuid that doesn't resolve to a live ModuleComponent is
      *  skipped rather than drawn as a blank box. */
@@ -528,8 +529,10 @@ public:
     };
     std::vector<MacroMemberPreview> macroMemberPreviews(const juce::String& macroId) const;
 
-    /** Display names of `macroId`'s members, in order — feeds MacroCardComponent's tooltip so a
-     *  collapsed macro's contents are discoverable without expanding it. */
+    /** Display names of `macroId`'s MODULE members, in order — a port node is excluded
+     *  (founder-review fix G6: a boundary jack is not a module, so it must not appear in this
+     *  list either) — feeds MacroCardComponent's tooltip so a collapsed macro's contents are
+     *  discoverable without expanding it. */
     juce::StringArray macroMemberNames(const juce::String& macroId) const;
 
     /** Theme colour for a module category, matching how the canvas colours cables/cards by

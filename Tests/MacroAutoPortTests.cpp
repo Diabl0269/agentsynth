@@ -10,6 +10,7 @@
 
 #include "../Source/AppUndoManager.h"
 #include "../Source/Modules/AttenuverterModule.h"
+#include "../Source/Modules/FX/DelayModule.h"
 #include "../Source/Modules/FX/ReverbModule.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/MacroInletModule.h"
@@ -17,6 +18,7 @@
 #include "../Source/Modules/MacroMidiOutletModule.h"
 #include "../Source/Modules/MacroOutletModule.h"
 #include "../Source/UI/GraphEditor.h"
+#include "../Source/UI/MacroCardComponent.h"
 #include <atomic>
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -804,6 +806,170 @@ TEST(MacroAutoPort, GroupingAndSplicedPortsIsOneUndoStep) {
     }
     EXPECT_TRUE(foundInlet);
     EXPECT_TRUE(foundOutlet);
+}
+
+// ============================================================================
+// Presentation (founder-review fix G6, docs/macros.md §7 item 4 note): the module-count
+// indicator, the tooltip's member list and the content preview must count/list MODULES, never
+// the port nodes a crossing cable spliced in — members.size() itself stays untouched.
+// ============================================================================
+
+TEST(MacroAutoPort, PresentationCountExcludesAutoCreatedPortsFounderScenario) {
+    // The founder's exact reproduction: "the number of modules indicator seems to show more then
+    // there are - 4 when i grouped the delay and reverb in the default patch - should have shown
+    // 2." Delay -> Reverb, each with a crossing stereo connection on its outward-facing side (both
+    // default to Dual I/O OFF, so each crossing collapses into ONE port, same as the founder's
+    // screenshot) -> 2 real modules + 2 auto-created port nodes = 4 members, but 2 modules.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto delay = addModuleAt(editor, engine, std::make_unique<DelayModule>(), "Delay", 400, 100);
+    auto reverb = addModuleAt(editor, engine, std::make_unique<ReverbModule>(), "Reverb", 400, 300);
+    auto cinL = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "CinL", 100, 60);
+    auto cinR = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "CinR", 100, 160);
+    auto coutL = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "CoutL", 700, 260);
+    auto coutR = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "CoutR", 700, 360);
+    engine.getGraph().addConnection({{cinL, 0}, {delay, 0}});
+    engine.getGraph().addConnection({{cinR, 0}, {delay, 1}});
+    engine.getGraph().addConnection({{delay, 0}, {reverb, 0}});
+    engine.getGraph().addConnection({{delay, 1}, {reverb, 1}});
+    engine.getGraph().addConnection({{reverb, 0}, {coutL, 0}});
+    engine.getGraph().addConnection({{reverb, 1}, {coutR, 0}});
+
+    editor.setSelectedNodes({delay, reverb});
+    const auto macroId = editor.groupSelectionIntoMacro(true);
+    ASSERT_FALSE(macroId.isEmpty());
+
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    ASSERT_EQ(macro->ports.size(), 2u) << "one collapsed-stereo inlet feeding Delay, one outlet after Reverb";
+    ASSERT_EQ((int)macro->members.size(), 4) << "the founder's literal '4' — members.size() itself is correct";
+
+    // The fix: the user-facing MODULE count must read 2, not members.size()'s 4.
+    EXPECT_EQ(macro->moduleMemberCount(), 2);
+
+    const auto* card = editor.getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr) << "groupSelectionIntoMacro leaves the macro collapsed by default";
+    EXPECT_EQ(card->getModuleCountText(), "2 modules, 2 ports")
+        << "honest about both quantities, never a bare '2' that hides the ports entirely";
+
+    // Guard (do not remove): a port node must STILL be a real member — this is the invariant the
+    // whole feature (bounds/group-drag/bypass-mute/undo/serialization) depends on. A future "fix"
+    // that removes ports from `members` to make the count line up is the wrong fix.
+    for (const auto& p : macro->ports)
+        EXPECT_TRUE(macro->hasMember(p.nodeUuid)) << "port node " << p.nodeUuid << " must remain a member";
+}
+
+TEST(MacroAutoPort, PresentationTooltipListsModulesNotPortNodes) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Delay", 400, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Reverb", 400, 300);
+    auto cin = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Cin", 100, 100);
+    auto cout = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Cout", 700, 300);
+    engine.getGraph().addConnection({{cin, 0}, {a, 0}});
+    engine.getGraph().addConnection({{b, 0}, {cout, 0}});
+
+    editor.setSelectedNodes({a, b});
+    const auto macroId = editor.groupSelectionIntoMacro(true);
+    ASSERT_FALSE(macroId.isEmpty());
+    ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 2u);
+
+    auto* card = editor.getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+    const auto tooltip = card->getTooltip();
+    EXPECT_TRUE(tooltip.contains("Delay"));
+    EXPECT_TRUE(tooltip.contains("Reverb"));
+    EXPECT_FALSE(tooltip.contains("Macro In")) << "a port node's own module name must not appear in the member list";
+    EXPECT_FALSE(tooltip.contains("Macro Out"));
+}
+
+TEST(MacroAutoPort, PresentationCountIsUnchangedForAPlainMacroWithNoPorts) {
+    // Regression guard: the plain P8-12 grouping case (no crossing cable, no ports at all) —
+    // the most common case in the existing suite — must read exactly as it always did.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
+
+    editor.setSelectedNodes({a, b});
+    const auto macroId = editor.groupSelectionIntoMacro(true); // no crossing cable -> no ports
+    ASSERT_FALSE(macroId.isEmpty());
+
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_TRUE(macro->ports.empty());
+    EXPECT_EQ(macro->moduleMemberCount(), 2);
+
+    const auto* card = editor.getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+    EXPECT_EQ(card->getModuleCountText(), "2 modules");
+}
+
+TEST(MacroAutoPort, PresentationCountUpdatesWhenAPortIsDeleted) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
+    auto cin = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Cin", 100, 100);
+    auto cout = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Cout", 700, 300);
+    engine.getGraph().addConnection({{cin, 0}, {a, 0}});
+    engine.getGraph().addConnection({{b, 0}, {cout, 0}});
+
+    editor.setSelectedNodes({a, b});
+    const auto macroId = editor.groupSelectionIntoMacro(true);
+    ASSERT_FALSE(macroId.isEmpty());
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_EQ(macro->ports.size(), 2u);
+    ASSERT_EQ(macro->moduleMemberCount(), 2);
+
+    const juce::String outletUuid = macro->ports[0].isInput ? macro->ports[1].nodeUuid : macro->ports[0].nodeUuid;
+    editor.removeMacroPort(macroId, outletUuid);
+
+    macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_EQ(macro->ports.size(), 1u);
+    EXPECT_EQ(macro->moduleMemberCount(), 2) << "deleting a port must never touch the MODULE count";
+
+    const auto* card = editor.getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+    EXPECT_EQ(card->getModuleCountText(), "2 modules, 1 port");
+}
+
+TEST(MacroAutoPort, PresentationCountExcludesAHandAddedPortViaConfigureIO) {
+    // There is no provenance distinction between an auto-created port and one added by hand
+    // through Configure I/O — both must be excluded from the module count the same way.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
+    editor.setSelectedNodes({a, b});
+    const auto macroId = editor.groupSelectionIntoMacro(); // no auto-ports
+    ASSERT_FALSE(macroId.isEmpty());
+    ASSERT_TRUE(editor.getMacros().find(macroId)->ports.empty());
+
+    const auto portUuid = editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV,
+                                              MacroPortShape::Mono, 1, "Extra In");
+    ASSERT_FALSE(portUuid.isEmpty());
+
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_EQ(macro->ports.size(), 1u);
+    EXPECT_EQ((int)macro->members.size(), 3);
+    EXPECT_EQ(macro->moduleMemberCount(), 2) << "a hand-added port must not inflate the module count";
+
+    const auto* card = editor.getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+    EXPECT_EQ(card->getModuleCountText(), "2 modules, 1 port");
 }
 
 // ============================================================================
