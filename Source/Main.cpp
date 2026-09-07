@@ -186,6 +186,10 @@ private:
                     menu.addCommandItem(&cm, AppCommands::exportPatchOnly);
                     menu.addCommandItem(&cm, AppCommands::exportAudio);
                     menu.addSeparator();
+                    // P8-31: project and patch open as separate menu items - Open Project (.agsproj
+                    // bundle, the rebindable Cmd+O) and Open Patch (.json preset, menu-only). addCommandItem
+                    // pulls each label + keypress from getCommandInfo.
+                    menu.addCommandItem(&cm, AppCommands::openProject);
                     menu.addCommandItem(&cm, AppCommands::openPreset);
                     menu.addSeparator();
                     menu.addCommandItem(&cm, AppCommands::openSettings);

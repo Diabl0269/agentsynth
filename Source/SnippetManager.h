@@ -114,10 +114,14 @@ public:
      *         macro the snippet carried, membership already resolved to the newly created nodes'
      *         real (freshly assigned) uuids — ready to hand straight to MacroSet::add(). A macro
      *         id is regenerated (never reused across a copy), same as node ids are.
+     *   @param trustedPayload  When true (a patch loaded from the user's own file system), the
+     *  payload is validated and applied on the trusted path: untrusted-only refusals (a node
+     * "state" blob, a top-level "macros"/"timeline" key) are permitted, so a Sampler's loaded
+     *  file and the patch's own macro groups carry as on a full patch load.
      *  @return the node ids added (Attenuverters excluded), empty on rejection/failure. */
     static std::vector<NodeID> insertSnippet(const juce::var& snippet, juce::AudioProcessorGraph& graph,
                                              juce::Point<int> dropPos, bool includeExtraState = false,
-                                             std::vector<Macro>* outMacros = nullptr);
+                                             std::vector<Macro>* outMacros = nullptr, bool trustedPayload = false);
 
     // ---- Snippet metadata ------------------------------------------------------------
 

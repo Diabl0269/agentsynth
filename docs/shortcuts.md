@@ -29,7 +29,8 @@ when reasoning about a key that "does nothing."
 | Cmd+Opt+S | Save Project As — always prompts for a new location |
 | Cmd+Shift+E | Export Audio — opens the Export Audio dialog (bounce the arrangement or the current loop range to WAV/AIFF, see [`architecture.md`](architecture.md#bounceexport)). Greyed out while a bounce is already running |
 | Cmd+Shift+P | Export Patch Only — saves just the patch (a legacy `.json` via `GraphEditor::savePreset`) without the timeline or bundle, never touching the window title. Rebindable since P8-20 |
-| Cmd+O | Open Preset (file picker) |
+| Cmd+O | Open Project - a `.agsproj` bundle (patch + timeline). P8-31 split this from the former combined "Load from file..." chooser; it took Cmd+O from the old combined open, which is now the menu-only "Open Patch" |
+| (menu only) | Open Patch - a plain `.json` preset (graph only). A menu-only `AppCommands::openPreset` (the Load icon's **Patches** submenu and the top-bar **File** menu), with no default shortcut, like `checkForUpdates` |
 | Cmd+Z | Undo |
 | Cmd+Shift+Z | Redo |
 | Cmd+M | Toggle Mod Matrix |

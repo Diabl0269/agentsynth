@@ -65,6 +65,12 @@ public:
     /** Pans so `canvasPoint` sits at the centre of the visible area. Zoom is unchanged. */
     void centreViewOn(juce::Point<float> canvasPoint);
 
+    /** P8-31: scroll + zoom the viewport so every module component is on-screen, clamped to the
+     *  same [0.1, 2.0] range as wheel zoom. Called after a patch is loaded so the just-loaded
+     *  modules are not left off-screen at their saved coordinates; a no-op when there are no
+     *  modules or the editor has no area yet. */
+    void fitViewToModules();
+
     /** Multiplies zoom around the centre of the visible area, clamped to the same [0.1, 2.0]
      *  range as wheel zoom, so the point under the centre stays put. */
     void zoomAroundCentre(float wheelDelta);
@@ -126,7 +132,7 @@ public:
 
     // Preset Management
     void savePreset(juce::File file);
-    void loadPreset(juce::File file);
+    void loadPreset(juce::File file, bool append = false);
     // Loads a factory preset by index. Detaches existing module components (stopping their scope timers)
     // BEFORE the graph is cleared, so no ScopeComponent reads a freed VisualBuffer. Returns true if loaded.
     bool loadFactoryPreset(int index);

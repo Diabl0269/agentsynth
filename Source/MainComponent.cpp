@@ -612,45 +612,56 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         juce::PopupMenu menu;
         auto presets = synth::PresetManager::getPresetList();
         auto categories = synth::PresetManager::getCategories();
-        for (const auto& cat : categories) {
-            juce::PopupMenu subMenu;
-            for (int i = 0; i < presets.size(); ++i) {
-                if (presets[i].category == cat)
-                    subMenu.addItem(i + 1, presets[i].name);
-            }
-            menu.addSubMenu(cat, subMenu);
-        }
-        menu.addSeparator();
-        menu.addItem(1000, "Load from file...");
-
-        // Recent Projects — pruned of anything that vanished from disk since the last time this
-        // menu was built (a moved/deleted bundle), which is also the only time the pruned list
-        // needs re-persisting.
+        // Recent projects, pruned of anything that vanished from disk since the last build (a moved
+        // or deleted bundle) — this is also the only time the pruned list needs re-persisting — so
+        // it is gathered first regardless of where it is shown.
         if (recentProjects.pruneMissing() > 0)
             saveRecentProjects();
         auto recents = recentProjects.getEntries();
-        if (!recents.empty()) {
-            menu.addSeparator();
-            juce::PopupMenu recentMenu;
-            for (int i = 0; i < (int)recents.size(); ++i)
-                recentMenu.addItem(2000 + i, recents[(size_t)i].getFileNameWithoutExtension());
-            menu.addSubMenu("Recent Projects", recentMenu);
+
+        // P8-31: the flat "Open Project / Open Patch / Recent Projects" layout made a patch and a
+        // whole project indistinguishable. Split the menu into two first-level entries: PATCHES holds
+        // the default (factory) patches plus "Open a patch…"; PROJECTS holds the recent projects plus
+        // "Open a project…". The leaf item ids (preset index, 1000/1001, 2000+) and the callback
+        // below are unchanged, so nesting the submenus is purely presentational.
+        juce::PopupMenu patchesSubmenu;
+        for (const auto& cat : categories) {
+            juce::PopupMenu catSubmenu;
+            for (int i = 0; i < presets.size(); ++i) {
+                if (presets[i].category == cat)
+                    catSubmenu.addItem(i + 1, presets[i].name);
+            }
+            if (catSubmenu.getNumItems() > 0)
+                patchesSubmenu.addSubMenu(cat, catSubmenu);
         }
+        patchesSubmenu.addSeparator();
+        patchesSubmenu.addItem(1001, "Open Patch...");
+
+        juce::PopupMenu projectsSubmenu;
+        for (int i = 0; i < (int)recents.size(); ++i)
+            projectsSubmenu.addItem(2000 + i, recents[(size_t)i].getFileNameWithoutExtension());
+        if (recents.size() > 0)
+            projectsSubmenu.addSeparator();
+        projectsSubmenu.addItem(1000, "Open Project...");
+
+        menu.addSubMenu("Patches", patchesSubmenu);
+        menu.addSubMenu("Projects", projectsSubmenu);
 
         // Capture `recents` by value — the outer local is gone by the time the async callback
         // runs. `presets` no longer needs capturing here — loadPresetGuarded() below fetches its
         // own copy (same reasoning as launchOpenPresetChooser not needing the menu's own list).
         menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&loadButton), [this, recents](int result) {
             if (result == 1000) {
+                openProjectFromFile();
+            } else if (result == 1001) {
                 openPresetFromFile();
             } else if (result >= 2000) {
                 const auto index = (size_t)(result - 2000);
                 if (index >= recents.size())
                     return;
-                // Same guard as "Load from file...": the recent project itself is opened through
-                // openFromFile, which re-adds it (moving it back to the front) on success. Shared
-                // with the welcome screen's recent-project rows (T114/P8-10) — see
-                // openRecentProjectGuarded.
+                // Same guard as "Open Project...": the recent project itself is opened through
+                // openRecentProjectGuarded (shared with the welcome screen's recent-project rows,
+                // T114/P8-10), which re-adds it (moving it back to the front) on success.
                 openRecentProjectGuarded(recents[index]);
             } else if (result > 0) {
                 // Shared with the welcome screen's "Open our default project" button (T114/P8-10)
@@ -1119,7 +1130,9 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
             commandManager.invokeDirectly(AppCommands::newPatch, true);
         };
         welcomeScreen_->onOpenDefaultProject = [this] { loadPresetGuarded(0); };
-        welcomeScreen_->onOpenExistingProject = [this] { openPresetFromFile(); };
+        // P8-31: the welcome screen's "Open an existing project…" button opens a whole .agsproj
+        // project (patch + timeline), so it routes through the project half, not the patch half.
+        welcomeScreen_->onOpenExistingProject = [this] { openProjectFromFile(); };
         welcomeScreen_->onOpenRecentProject = [this](const juce::File& file) { openRecentProjectGuarded(file); };
         welcomeScreen_->onWhatsNewRequested = [this] {
             // Deliberately does NOT hide the welcome screen — the user should be able to read
@@ -1581,17 +1594,50 @@ void MainComponent::openRecentProjectGuarded(const juce::File& file) {
 
 // Guards BEFORE the dialog opens — the chooser itself is the post-guard half, below.
 void MainComponent::openPresetFromFile() {
-    guardUnsavedChanges("Opening another project", [this] { launchOpenPresetChooser(); });
+    // P8-31: no top-level guard here. Loading a patch first offers to REPLACE or APPEND onto the
+    // current patch; only the destructive REPLACE arm guards unsaved changes (an append keeps them),
+    // so the guard lives inside the Replace branch, reached after the user picked a file.
+    launchOpenPresetChooser();
 }
 
+void MainComponent::openProjectFromFile() {
+    guardUnsavedChanges("Opening a project", [this] { launchOpenProjectChooser(); });
+}
+
+// P8-31: the patch half - a plain `.json` preset, an ordinary file pick (never a directory). Once
+// the user has chosen a file, promptPatchLoadMode asks whether to REPLACE the current patch or add
+// the loaded one on top of it; openFromFile() branches on that flag.
 void MainComponent::launchOpenPresetChooser() {
-    fileChooser = std::make_unique<juce::FileChooser>(
-        "Load Preset", synth::ProjectBundle::getDefaultProjectsDirectory(), kPatchFileFilter);
-    // A `.agsproj` bundle is a DIRECTORY, not a file, so the browser has to allow picking one; a
-    // plain `.json` preset is still an ordinary file pick. openFromFile() branches on what comes
-    // back, so the two cases never depend on which flag the platform's dialog honoured.
+    fileChooser = std::make_unique<juce::FileChooser>("Load Patch", synth::ProjectBundle::getDefaultProjectsDirectory(),
+                                                      "*.json");
     auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
-    flags |= juce::FileBrowserComponent::canSelectDirectories;
+    fileChooser->launchAsync(flags, [this](const juce::FileChooser& fc) {
+        auto file = fc.getResult();
+        if (file != juce::File{})
+            promptPatchLoadMode([this, file](PatchLoadMode mode) {
+                switch (mode) {
+                case PatchLoadMode::Cancel:
+                    return;
+                case PatchLoadMode::Append: // keep the current patch, add on top
+                    openFromFile(file, /*append=*/true);
+                    return;
+                case PatchLoadMode::Replace: // destructive, so guard unsaved changes
+                default:
+                    guardUnsavedChanges("Replacing the patch", [this, file] { openFromFile(file, /*append=*/false); });
+                }
+            });
+    });
+}
+
+// P8-31: the project half - a `.agsproj` bundle is a DIRECTORY (project.json + Audio/ + Peaks/),
+// so the browser must let the user pick a directory.
+void MainComponent::launchOpenProjectChooser() {
+    // Empty filter: an extension filter (e.g. `*.agsproj`) would make a macOS NSOpenPanel restrict
+    // selection to that file name and refuse to let the user pick the folder itself. No filter lets
+    // the OS list directories; openFromFile() is the one gate that validates the pick is a bundle.
+    fileChooser = std::make_unique<juce::FileChooser>(
+        "Load Project", synth::ProjectBundle::getDefaultProjectsDirectory(), juce::String());
+    auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories;
     fileChooser->launchAsync(flags, [this](const juce::FileChooser& fc) {
         auto file = fc.getResult();
         if (file != juce::File{})
@@ -1773,7 +1819,7 @@ bool MainComponent::saveToFile(const juce::File& file) {
     return true;
 }
 
-bool MainComponent::openFromFile(const juce::File& file) {
+bool MainComponent::openFromFile(const juce::File& file, bool append) {
     statusBar.showMessage("Loading preset...");
 
     if (file.isDirectory() || file.getFileExtension() == synth::ProjectBundle::kBundleExtension) {
@@ -1803,7 +1849,7 @@ bool MainComponent::openFromFile(const juce::File& file) {
     }
 
     ProgrammaticApplyScope guard(*this);
-    graphEditor.loadPreset(file);
+    graphEditor.loadPreset(file, append);
     reconcileTimelineAfterGraphChange();
     // A legacy patch is not a bundle, so the document that is now open has no bundle to resave to;
     // leaving the previous bundle's path installed would make the next Cmd+S overwrite a project
@@ -1814,9 +1860,10 @@ bool MainComponent::openFromFile(const juce::File& file) {
     markDocumentClean();
     setCurrentPatchName(file.getFileNameWithoutExtension());
     statusBar.showMessage("Loaded: " + file.getFileNameWithoutExtension());
-    // T114/P8-10: covers the welcome screen's "Open an existing project" plain-.json path. The
-    // bundle path above returns through loadBundleFromFile/loadAutosaveFromFile instead, which each
-    // have their own call on their own success tail.
+    // T114/P8-10 + P8-31: covers the plain-.json patch load (the menu-only "Open Patch") that still
+    // routes through this tail when the welcome screen is up. The "Open an existing project" button now
+    // opens a .agsproj bundle, which returns through loadBundleFromFile/loadAutosaveFromFile instead,
+    // each with its own call on its own success tail.
     hideWelcomeScreen();
     return true;
 }
@@ -1954,6 +2001,37 @@ void MainComponent::promptAutosaveRecovery(std::function<void(AutosaveRecoveryCh
     });
 }
 
+// P8-31: ask whether loading a patch should REPLACE the current one or ADD it on top of it.
+// Mirrors promptUnsavedChanges' three-button async shape: the FIRST .withButton ("Add on top")
+// returns 1, the next ("Replace") returns 2, and "Cancel" AND a dismissed/closed window return 0,
+// so the non-destructive Cancel arm is the safe fallback for a keyboard-closed window.
+void MainComponent::promptPatchLoadMode(std::function<void(PatchLoadMode)> onChoice) {
+    if (patchLoadPrompt) {
+        patchLoadPrompt(std::move(onChoice));
+        return;
+    }
+
+    auto options = juce::MessageBoxOptions()
+                       .withIconType(juce::MessageBoxIconType::QuestionIcon)
+                       .withTitle("Load Patch")
+                       .withMessage("Replace the current patch, or add this one on top of it?")
+                       .withButton("Add on top")
+                       .withButton("Replace")
+                       .withButton("Cancel");
+    // ASYNC, never a modal loop - a headless run has no message loop to answer a real modal.
+    juce::Component::SafePointer<MainComponent> safeThis(this);
+    juce::AlertWindow::showAsync(options, [safeThis, onChoice](int result) {
+        if (safeThis.getComponent() == nullptr)
+            return;
+        PatchLoadMode mode = PatchLoadMode::Cancel;
+        if (result == 1)
+            mode = PatchLoadMode::Append;
+        else if (result == 2)
+            mode = PatchLoadMode::Replace;
+        onChoice(mode);
+    });
+}
+
 //==============================================================================
 void MainComponent::paint(juce::Graphics& g) {
     // (Our component is opaque, so we must completely fill the background with a
@@ -1964,12 +2042,12 @@ void MainComponent::paint(juce::Graphics& g) {
 void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
     commands.addArray({AppCommands::openSettings, AppCommands::savePreset, AppCommands::saveProjectAs,
                        AppCommands::exportPatchOnly, AppCommands::exportAudio, AppCommands::openPreset,
-                       AppCommands::newPatch, AppCommands::undo, AppCommands::redo, AppCommands::toggleModMatrix,
-                       AppCommands::toggleMinimap, AppCommands::toggleAiPanel, AppCommands::autoArrange,
-                       AppCommands::groupSelection, AppCommands::ungroupSelection, AppCommands::collapseMacro,
-                       AppCommands::toggleLibrary, AppCommands::selectAllModules, AppCommands::saveSnippet,
-                       AppCommands::copySelection, AppCommands::pasteSelection, AppCommands::duplicateSelection,
-                       AppCommands::cutSelection,
+                       AppCommands::openProject, AppCommands::newPatch, AppCommands::undo, AppCommands::redo,
+                       AppCommands::toggleModMatrix, AppCommands::toggleMinimap, AppCommands::toggleAiPanel,
+                       AppCommands::autoArrange, AppCommands::groupSelection, AppCommands::ungroupSelection,
+                       AppCommands::collapseMacro, AppCommands::toggleLibrary, AppCommands::selectAllModules,
+                       AppCommands::saveSnippet, AppCommands::copySelection, AppCommands::pasteSelection,
+                       AppCommands::duplicateSelection, AppCommands::cutSelection,
                        // Registered unconditionally alongside togglePlayback below even though only
                        // the timeline surfaces implement it — reported inactive rather than dropping
                        // the row from Settings.
@@ -2035,10 +2113,17 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         result.setActive(!isBounceInProgress_);
         break;
     }
-    case AppCommands::openPreset: {
-        result.setInfo("Open Preset", "Open a preset file", "General", 0);
-        auto kp = shortcutManager.getBinding("openPreset");
+    case AppCommands::openProject: {
+        // P8-31: the rebindable Cmd+O open is the WHOLE PROJECT (.agsproj bundle).
+        result.setInfo("Open Project", "Open a project (.agsproj bundle: patch + timeline)", "General", 0);
+        auto kp = shortcutManager.getBinding("openProject");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+        // P8-31: the Patch open is menu-only, like checkForUpdates - no rebindable action-id, so no
+        // default keypress and no Settings row; it asks whether to replace or add onto the patch.
+    case AppCommands::openPreset: {
+        result.setInfo("Open Patch", "Open a patch (.json preset; replace or add onto the patch)", "General", 0);
         break;
     }
     case AppCommands::newPatch: {
@@ -2353,6 +2438,9 @@ bool MainComponent::perform(const InvocationInfo& info) {
         return true;
     case AppCommands::openPreset:
         openPresetFromFile();
+        return true;
+    case AppCommands::openProject:
+        openProjectFromFile();
         return true;
     case AppCommands::newPatch:
         guardUnsavedChanges("New Patch", [this] { newPatch(); });
@@ -3048,7 +3136,7 @@ void MainComponent::applyToolbarIcons() {
     // Text: cleared in narrow mode; stateful for the toggles in wide mode.
     newButton.setButtonText(iconOnly ? "" : "New");
     saveButton.setButtonText(iconOnly ? "" : "Save");
-    loadButton.setButtonText(iconOnly ? "" : "Load Presets");
+    loadButton.setButtonText(iconOnly ? "" : "Load");
     settingsButton.setButtonText(iconOnly ? "" : "Settings");
     undoButton.setButtonText(iconOnly ? "" : "Undo");
     redoButton.setButtonText(iconOnly ? "" : "Redo");
@@ -3072,7 +3160,7 @@ void MainComponent::applyToolbarIcons() {
 
     newButton.setTooltip(hint("New patch", "newPatch"));
     saveButton.setTooltip(hint("Save preset", "savePreset"));
-    loadButton.setTooltip(hint("Load preset", "openPreset"));
+    loadButton.setTooltip(hint("Load a patch or project", "openProject"));
     settingsButton.setTooltip(hint("Open settings", "openSettings"));
     feedbackButton.setTooltip("Send feedback");
     undoButton.setTooltip(hint("Undo", "undo"));
