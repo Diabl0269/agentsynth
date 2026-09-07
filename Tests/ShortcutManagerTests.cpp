@@ -58,7 +58,7 @@ protected:
 TEST_F(ShortcutManagerTest, DefaultBindingsCorrect) {
     EXPECT_EQ(manager.getBinding("openSettings").getKeyCode(), ',');
     EXPECT_EQ(manager.getBinding("savePreset").getKeyCode(), 's');
-    EXPECT_EQ(manager.getBinding("openPreset").getKeyCode(), 'o');
+    EXPECT_EQ(manager.getBinding("openProject").getKeyCode(), 'o');
     EXPECT_EQ(manager.getBinding("undo").getKeyCode(), 'z');
     EXPECT_EQ(manager.getBinding("redo").getKeyCode(), 'z');
     EXPECT_TRUE(manager.getBinding("redo").getModifiers().isShiftDown());
@@ -733,7 +733,7 @@ TEST_F(ShortcutManagerTest, KeyPressToDisplayString_Formats) {
 TEST_F(ShortcutManagerTest, GetActionDescription_Works) {
     EXPECT_EQ(ShortcutManager::getActionDescription("openSettings"), "Open Settings");
     EXPECT_EQ(ShortcutManager::getActionDescription("savePreset"), "Save Preset");
-    EXPECT_EQ(ShortcutManager::getActionDescription("openPreset"), "Open Preset");
+    EXPECT_EQ(ShortcutManager::getActionDescription("openProject"), "Open Project");
     EXPECT_EQ(ShortcutManager::getActionDescription("undo"), "Undo");
     EXPECT_EQ(ShortcutManager::getActionDescription("redo"), "Redo");
 }

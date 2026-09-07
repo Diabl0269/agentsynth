@@ -1293,6 +1293,25 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                     int oldId = nObj->getProperty("id");
                     juce::String type = nObj->getProperty("type");
 
+                    // Audio Output is a per-graph singleton (like Audio Input): on a MERGE into an
+                    // existing graph, adopt the graph's current output instead of spawning a second
+                    // one. The loaded patch's feed then re-points to it (the connection phase resolves
+                    // this node's id to the existing output via idMap), so the surrounding sound is
+                    // not orphaned to a dead, unconnected output. On a full clear (REPLACE) no output
+                    // exists yet, so this is a no-op and the patch's own output is created as usual.
+                    if (!clearExisting && type == "Audio Output") {
+                        juce::AudioProcessorGraph::Node* existingOutput = nullptr;
+                        for (auto* node : graph.getNodes())
+                            if (node->getProcessor() != nullptr && node->getProcessor()->getName() == "Audio Output") {
+                                existingOutput = node;
+                                break;
+                            }
+                        if (existingOutput != nullptr) {
+                            idMap[oldId] = existingOutput->nodeID;
+                            continue; // reuse the existing output; skip creating a second one
+                        }
+                    }
+
                     // In merge mode, check if this node already exists
                     if (!clearExisting && idMap.count(oldId)) {
                         auto existingNodeId = idMap[oldId];

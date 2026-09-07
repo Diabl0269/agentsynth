@@ -409,7 +409,7 @@ juce::var SnippetManager::prepareForInsert(const juce::var& snippet, juce::Point
 std::vector<SnippetManager::NodeID> SnippetManager::insertSnippet(const juce::var& snippet,
                                                                   juce::AudioProcessorGraph& graph,
                                                                   juce::Point<int> dropPos, bool includeExtraState,
-                                                                  std::vector<Macro>* outMacros) {
+                                                                  std::vector<Macro>* outMacros, bool trustedPayload) {
     auto prepared = prepareForInsert(snippet, dropPos, nextFreeIdBase(graph), includeExtraState);
 
     auto* preparedObj = prepared.getDynamicObject();
@@ -444,13 +444,19 @@ std::vector<SnippetManager::NodeID> SnippetManager::insertSnippet(const juce::va
         strippedMacros = preparedObj->getProperty("macros");
         preparedObj->removeProperty("macros");
     }
-    auto validation = AIStateMapper::validatePatch(prepared, graph, /*clearExisting=*/false, /*trusted=*/false,
-                                                   /*allowInternalModuleTypes=*/true);
-    if (hadMacros)
+    if (!trustedPayload) {
+        auto validation = AIStateMapper::validatePatch(prepared, graph, /*clearExisting=*/false,
+                                                       /*trusted=*/false, /*allowInternalModuleTypes=*/true);
+        if (hadMacros)
+            preparedObj->setProperty("macros", strippedMacros);
+        if (!validation.ok) {
+            juce::Logger::writeToLog("SnippetManager::insertSnippet: snippet rejected - " + validation.message);
+            return {};
+        }
+    } else if (hadMacros) {
+        // Trusted path skips the untrusted validator (which refuses "macros"/"state"); the strip
+        // above was made only for it, so restore the key here rather than leaving it removed.
         preparedObj->setProperty("macros", strippedMacros);
-    if (!validation.ok) {
-        juce::Logger::writeToLog("SnippetManager::insertSnippet: snippet rejected - " + validation.message);
-        return {};
     }
 
     std::set<juce::uint32> before;

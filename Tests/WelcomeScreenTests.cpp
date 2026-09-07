@@ -7,7 +7,7 @@
 // guardUnsavedChanges/openFromFile's own dialogs (unsavedChangesPrompt / a real FileChooser), so:
 //   * Install mc.unsavedChangesPrompt BEFORE anything can reach the guard on a DIRTY document.
 //   * Never click getOpenExistingButtonForTest() with an answer that would continue into
-//     launchOpenPresetChooser() — that opens a real native FileChooser.
+//     launchOpenProjectChooser() — that opens a real native FileChooser.
 //   * showWhatsNewDialog()/AppCommands::whatsNew are never invoked from a test — they open a real
 //     modal juce::AlertWindow.
 
@@ -217,8 +217,8 @@ TEST_F(WelcomeScreenTest, OpenDefaultButton_LoadsFactoryPresetZeroAndHidesWelcom
 }
 
 // Never lets a real FileChooser open (see the file-header safety rule): with no answer supplied,
-// the guard's dialog stays "open" and launchOpenPresetChooser() is never reached.
-TEST_F(WelcomeScreenTest, OpenExistingButton_InvokesTheSameGuardedPathAsOpenPreset) {
+// the guard's dialog stays "open" and launchOpenProjectChooser() is never reached.
+TEST_F(WelcomeScreenTest, OpenExistingButton_InvokesTheSameGuardedPathAsOpenProject) {
     MainComponent mc(std::make_unique<MockProvider>());
     mc.setSize(1600, 900);
     mc.getAudioEngine().suspendDeviceCallback();
@@ -232,7 +232,7 @@ TEST_F(WelcomeScreenTest, OpenExistingButton_InvokesTheSameGuardedPathAsOpenPres
     pumpMessageLoop();
 
     EXPECT_EQ(prompt.calls, 1);
-    EXPECT_EQ(prompt.lastLabel, "Opening another project") << "the same label openPresetFromFile() always uses";
+    EXPECT_EQ(prompt.lastLabel, "Opening a project") << "the same label openProjectFromFile() uses";
     EXPECT_TRUE(mc.getWelcomeScreenForTest()->isVisible()) << "no dialog has resolved yet";
 }
 

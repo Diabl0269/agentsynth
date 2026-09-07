@@ -18,7 +18,12 @@ enum CommandIDs {
     // Offline audio bounce (BounceExporter/BounceRunner) - the whole arrangement or the current
     // loop range, rendered to WAV/AIFF. Rebindable (Cmd+Shift+E default) - see resetToDefaults().
     exportAudio,
+    // P8-31 split the former single "Load from file..." browser into two menu entry points:
+    // a whole `.agsproj` project and a plain `.json` patch. openProject is the rebindable Cmd+O
+    // open (a project); openPreset is a menu-only patch open. Loading a patch asks whether to
+    // replace the current one or add the loaded one on top of it.
     openPreset,
+    openProject,
     newPatch,
     undo,
     redo,
@@ -117,8 +122,8 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return exportAudio;
     if (actionId == "exportPatchOnly")
         return exportPatchOnly;
-    if (actionId == "openPreset")
-        return openPreset;
+    if (actionId == "openProject")
+        return openProject;
     if (actionId == "newPatch")
         return newPatch;
     if (actionId == "undo")
@@ -385,7 +390,7 @@ public:
         // (Cmd+Shift+E); 'P' reads as "Patch".
         bindings["exportPatchOnly"] =
             juce::KeyPress('p', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
-        bindings["openPreset"] = juce::KeyPress('o', juce::ModifierKeys::commandModifier, 0);
+        bindings["openProject"] = juce::KeyPress('o', juce::ModifierKeys::commandModifier, 0);
         bindings["newPatch"] = juce::KeyPress('n', juce::ModifierKeys::commandModifier, 0);
         bindings["undo"] = juce::KeyPress('z', juce::ModifierKeys::commandModifier, 0);
         bindings["redo"] =
@@ -659,8 +664,8 @@ public:
             return "Export Audio";
         if (actionId == "exportPatchOnly")
             return "Export Patch Only";
-        if (actionId == "openPreset")
-            return "Open Preset";
+        if (actionId == "openProject")
+            return "Open Project";
         if (actionId == "newPatch")
             return "New Patch";
         if (actionId == "undo")
@@ -866,7 +871,7 @@ private:
             {"saveProjectAs", ShortcutCategory::General},
             {"exportAudio", ShortcutCategory::General},
             {"exportPatchOnly", ShortcutCategory::General},
-            {"openPreset", ShortcutCategory::General},
+            {"openProject", ShortcutCategory::General},
             {"newPatch", ShortcutCategory::General},
             {"undo", ShortcutCategory::General},
             {"redo", ShortcutCategory::General},

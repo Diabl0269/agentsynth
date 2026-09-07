@@ -271,6 +271,10 @@ public:
      *  exercising that path drives autosaveRecoveryPrompt directly, the same idiom
      *  unsavedChangesPrompt uses. */
     bool openProjectForTest(const juce::File& file) { return openFromFile(file); }
+    // P8-31: reaches openFromFile's PATCH branch with an explicit load mode, so a test can drive the
+    // replace-vs-append behaviour without a native file chooser (`append == true` adds onto the live
+    // graph; false replaces it).
+    bool openPatchForTest(const juce::File& file, bool append) { return openFromFile(file, append); }
     /** Runs performAutosave()'s exact gate check once, synchronously — the same call
      *  timerCallback() makes on every tick, exposed so a test can drive it without a real
      *  juce::Timer. */
@@ -363,6 +367,15 @@ public:
      *  when set it REPLACES the real async juce::AlertWindow. */
     std::function<void(std::function<void(AutosaveRecoveryChoice)> onChoice)> autosaveRecoveryPrompt;
 
+    /** The choice the user makes when opening a `.json` patch (P8-31): replace the current patch,
+     *  add the loaded one on top of it, or cancel the open. */
+    enum class PatchLoadMode { Replace, Append, Cancel };
+
+    /** Test/automation seam for the patch load-mode prompt, same idiom as unsavedChangesPrompt and
+     *  autosaveRecoveryPrompt: when set it REPLACES the real async juce::AlertWindow. The load only
+     *  happens when the seam fires a non-Cancel choice. */
+    std::function<void(std::function<void(PatchLoadMode)> onChoice)> patchLoadPrompt;
+
     /** True once an undo-able edit has happened since the last save/load - see changeListenerCallback's
      *  AppUndoManager branch. Deliberately NOT reset by undoing back to the state that was saved -
      *  see the dirty-state section of docs/architecture.md for why a false "clean" is the dangerous
@@ -380,7 +393,13 @@ public:
     // Mirrors the loadButton factory-preset call site exactly (load + patch-name update), so
     // tests can verify the patch-name side effect without driving the async PopupMenu.
     void simulateLoadFactoryPresetForTest(int index);
+    // P8-31: the patch half. Opens a `.json` preset, then asks whether to REPLACE the current
+    // patch or ADD the loaded one on top of it (promptPatchLoadMode, the patchLoadPrompt seam).
     void openPresetFromFile();
+    // P8-31: the whole-project half of the Load menu. openPresetFromFile opens a plain `.json`
+    // patch; this opens a `.agsproj` bundle (graph + timeline) by letting the user select a
+    // DIRECTORY (the bundle's folder). Same async shape, and the guard runs before the chooser.
+    void openProjectFromFile();
     synth::AIIntegrationService& getAiServiceForTest() { return aiService; }
 
     // ---- Snippets (issue #156) ----
@@ -632,7 +651,7 @@ private:
     // Returns whether the save actually succeeded — guardUnsavedChanges' Save arm only continues
     // past a save that returned true.
     bool saveToFile(const juce::File& file);
-    bool openFromFile(const juce::File& file);
+    bool openFromFile(const juce::File& file, bool append = false);
     // The actual bundle load (graph + timeline from `<bundleDir>/project.json`), extracted out of
     // openFromFile's bundle branch so the autosave-recovery continuation below can also reach it on
     // the Discard arm without duplicating the load/reconcile/markDocumentClean sequence.
@@ -650,6 +669,9 @@ private:
     // The real dialog behind the has-autosave branch of openFromFile, same async/test-hook shape as
     // promptUnsavedChanges below.
     void promptAutosaveRecovery(std::function<void(AutosaveRecoveryChoice)> onChoice);
+    // Ask whether to replace the current patch or add the loaded one on top of it (P8-31). Same
+    // async/test-hook shape as promptAutosaveRecovery; routes through the patchLoadPrompt seam when set.
+    void promptPatchLoadMode(std::function<void(PatchLoadMode)> onChoice);
     // Cmd+S's actual decision: resave silently to the remembered bundle when one is open and
     // `forceChooser` is false, otherwise prompt (defaulting the suggested name to `.agsproj`, which
     // is what steers a first save toward the bundle format instead of the legacy plain preset).
@@ -692,6 +714,10 @@ private:
     // guardUnsavedChanges can run BEFORE the dialog opens rather than after the user has already
     // picked a file.
     void launchOpenPresetChooser();
+    // P8-31: the post-guard half of openProjectFromFile() — patches open a `.json` FILE, projects
+    // open a `.agsproj` DIRECTORY, so each gets its own chooser (and its own filter + selection
+    // mode) rather than one combined `.json;*.agsproj` browser that conflated the two.
+    void launchOpenProjectChooser();
 
     // ChangeListener (juce::ChangeListener override) — called when ThemeManager broadcasts.
     // Implements the 3-step re-skin pass: applyTheme → sendLookAndFeelChangeMessage → repaint.

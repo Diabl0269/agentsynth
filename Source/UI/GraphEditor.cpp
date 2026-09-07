@@ -3026,6 +3026,59 @@ synth::ui::MinimapModel GraphEditor::buildMinimapModel() {
     return model;
 }
 
+void GraphEditor::fitViewToModules() {
+    // P8-31: after loading a patch, bring every module on-screen. A loaded patch keeps its saved
+    // coordinates, which often fall outside the current viewport; fitting the view shows the result
+    // of the load instead of leaving the user staring at an empty region of the canvas.
+    auto model = buildMinimapModel(); // one pass over modules + cables, already non-null-filtered
+
+    const float margin = 40.0f;
+    float x1 = 0.0f, y1 = 0.0f, x2 = 0.0f, y2 = 0.0f;
+    bool haveBox = false;
+    for (const auto& n : model.nodes) {
+        const auto& b = n.bounds;
+        if (b.getWidth() < 1.0f || b.getHeight() < 1.0f)
+            continue;
+        if (!haveBox) {
+            x1 = b.getX();
+            y1 = b.getY();
+            x2 = b.getRight();
+            y2 = b.getBottom();
+        } else {
+            x1 = juce::jmin(x1, b.getX());
+            y1 = juce::jmin(y1, b.getY());
+            x2 = juce::jmax(x2, b.getRight());
+            y2 = juce::jmax(y2, b.getBottom());
+        }
+        haveBox = true;
+    }
+    if (!haveBox)
+        return; // no placed modules to fit
+
+    x1 -= margin;
+    y1 -= margin;
+    x2 += margin;
+    y2 += margin;
+    juce::Rectangle<float> box{x1, y1, x2 - x1, y2 - y1};
+
+    juce::Rectangle<float> view = getLocalBounds().toFloat(); // == viewport when the editor fills its parent
+    if (view.getWidth() < 1.0f || view.getHeight() < 1.0f)
+        return; // not laid out yet; a later paint/resize will settle the view
+
+    float scale = juce::jmin(view.getWidth() / box.getWidth(), view.getHeight() / box.getHeight());
+    const float kMinZoom = 0.1f; // matches the wheel-zoom clamp in contentWheelPositionChanged
+    const float kMaxZoom = 2.0f;
+    scale = juce::jlimit(kMinZoom, kMaxZoom, scale);
+    zoomLevel = scale;
+    // Centre the (expanded) box within the viewport. screen = content * scale + panOffset.
+    float targetCenterX = view.getX() + view.getWidth() * 0.5f;
+    float targetCenterY = view.getY() + view.getHeight() * 0.5f;
+    float boxCenterX = box.getX() + box.getWidth() * 0.5f;
+    float boxCenterY = box.getY() + box.getHeight() * 0.5f;
+    panOffset = {(targetCenterX - boxCenterX * scale), (targetCenterY - boxCenterY * scale)};
+    updateTransform();
+}
+
 void GraphEditor::mouseMove(const juce::MouseEvent& e) {
     auto localPos = content.getLocalPoint(this, e.getPosition());
 
@@ -7826,25 +7879,67 @@ void GraphEditor::newPatch() {
     repaint();
 }
 
-void GraphEditor::loadPreset(juce::File file) {
+void GraphEditor::loadPreset(juce::File file, bool append) {
     auto json = juce::JSON::parse(file);
     if (!json.isObject()) {
         juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Load Failed",
                                                "Could not parse preset file.");
         return;
     }
-    // Stash any top-level keys this build doesn't understand (e.g. a future "timeline") before
-    // applyJSONToGraph — it only ever looks at the known patch keys, so this is the one place
-    // that sees the raw root object.
-    patchDocument.loadFromVar(json);
-    // Detach before applyJSONToGraph clears the graph (see loadFactoryPreset — avoids scope-timer UAF).
-    detachAllModuleComponents();
-    // The user picked this file from their own filesystem — trusted, unlike an AI-authored patch.
-    if (synth::AIStateMapper::applyJSONToGraph(json, audioEngine.getGraph(), true, /*trusted=*/true)) {
-        updateComponents();
-    } else {
-        updateComponents(); // reconcile view to whatever state the graph is in after a failed apply
-        juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Load Failed",
-                                               "Could not apply preset to graph.");
+    auto& graph = audioEngine.getGraph();
+
+    if (append) {
+        // "Add on top": the loaded patch is a self-contained sub-graph, so drop it through the
+        // same machinery a pasted group uses. prepareForInsert renumbers its node ids to a free
+        // base, so it COEXISTS with - and never matches-and-overwrites - the current patch; its Audio
+        // Output is deduped onto the graph's existing one (see applyJSONToGraph); and it is a
+        // trusted user file, so it is inserted on the trusted path, which carries the patch's "state"
+        // (a loaded Sampler, a Wavetable table) the untrusted validator a dropped snippet runs would
+        // refuse. The whole thing is one undo batch, and the freshly added modules are left selected so
+        // the user can nudge the dropped group right away; the view is then fit to show the result.
+        std::vector<juce::AudioProcessorGraph::NodeID> added;
+        std::vector<synth::Macro> addedMacros;
+        auto doInsert = [this, &graph, &json, &added, &addedMacros] {
+            detachAllModuleComponents(); // stops scope timers before the graph is mutated
+            added = synth::SnippetManager::insertSnippet(json, graph, juce::Point<int>(),
+                                                         /*includeExtraState=*/true, &addedMacros,
+                                                         /*trustedPayload=*/true);
+            for (auto& macro : addedMacros)
+                macros.add(macro);
+            updateComponents(); // reconcile the view, prune stale macros against surviving nodes
+        };
+        if (undoManager)
+            undoManager->recordGraphAndMacroChange(graph, macros, doInsert);
+        else
+            doInsert();
+
+        if (added.empty()) {
+            juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Load Failed",
+                                                   "Could not apply preset to graph.");
+            return;
+        }
+        // Leave the imported modules selected and bring the (kept-coordinates) group on-screen.
+        applySelectionChange(added);
+        fitViewToModules();
+        repaint();
+        return;
     }
+
+    // REPLACE: rebuild the graph from scratch. Preserving each node's saved uid (the
+    // applyJSONToGraph trusted path) keeps ids stable across an undo/redo, and wrapping the whole
+    // rebuild in an undo batch is what makes the load reversible at all: an unwrapped clear+rebuild
+    // left the history unaware of the swap, so a following redo had nothing to restore.
+    auto doReplace = [this, &graph, &json] {
+        detachAllModuleComponents(); // stops scope timers before the graph is cleared
+        const bool ok = synth::AIStateMapper::applyJSONToGraph(json, graph, /*clearExisting=*/true, /*trusted=*/true);
+        if (ok)
+            patchDocument.loadFromVar(json); // preserve per-file unknown keys (a trusted load)
+        updateComponents();                  // reconcile the view to whatever state the graph is in
+    };
+    if (undoManager)
+        undoManager->recordGraphAndMacroChange(graph, macros, doReplace);
+    else
+        doReplace();
+    fitViewToModules();
+    repaint();
 }

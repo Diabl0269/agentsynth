@@ -400,10 +400,15 @@ TEST_F(MainComponentTest, CommandManagerHasCommands) {
     // UNCONDITIONALLY rather than mac-only — neither needs OS integration, only
     // ownedAudioEngine != nullptr, which is true for every MainComponent this test constructs.
     expectedCommandCount += 2;
+    // openPreset (P8-31) is a menu-only command: patch-load is reached via the Load menu/chooser, so
+    // only openProject took the rebindable Cmd+O binding. openPreset is still registered in
+    // getAllCommands so the menu can invoke it but, like checkForUpdates, has no shortcut-table
+    // entry, so the action-filtered count above omits it.
+    expectedCommandCount += 1; // openPreset is menu-only (analogous to checkForUpdates)
     // exportPatchOnly (Cmd+Shift+P, P8-20) joined exportAudio (Cmd+Shift+E, P8-5) as a rebindable
     // action with a default binding, so both are now counted through expectedActions above; the old
-    // manual `+= 1` for exportPatchOnly no longer applies -- only checkForUpdates (mac) and
-    // showWelcomeScreen/whatsNew (above) are still menu-only commands with no shortcut-table entry.
+    // manual `+= 1` for exportPatchOnly no longer applies -- only checkForUpdates (mac), showWelcomeScreen/whatsNew and
+    // openPreset (above) are still menu-only commands with no shortcut-table entry.
     EXPECT_EQ(commands.size(), expectedCommandCount);
     for (const auto& actionId : expectedActions)
         EXPECT_TRUE(commands.contains(AppCommands::getCommandForAction(actionId)))
@@ -1000,7 +1005,78 @@ TEST_F(MainComponentTest, SavingFromThePromptWritesTheProjectThenRunsTheAction) 
 // The guard must run before the file chooser opens, not after the user has already picked a file.
 // NOTE: this prompt is deliberately left UNANSWERED — answering Discard here would call
 // launchOpenPresetChooser() and open a real native dialog, hanging the run.
-TEST_F(MainComponentTest, OpeningAnotherProjectAsksBeforeTheChooserOpens) {
+
+TEST_F(MainComponentTest, LoadingAPatchAppendsOnTopWhileReplacingDiscards) {
+    MainComponent source(std::make_unique<MockProvider>());
+    source.setSize(1600, 900);
+    source.getAudioEngine().suspendDeviceCallback();
+    auto& srcEditor = source.getGraphEditor();
+    srcEditor.itemDropped(juce::DragAndDropTarget::SourceDetails(juce::String("VCA"), &srcEditor, {300, 300}));
+    ASSERT_GT(source.getAudioEngine().getGraph().getNumNodes(), 0);
+    const auto patchFile = tempRoot.getChildFile("AppendSource.json");
+    source.saveProjectForTest(patchFile);
+    ASSERT_TRUE(patchFile.existsAsFile());
+    const int sourceNodes = source.getAudioEngine().getGraph().getNumNodes();
+
+    // APPEND: the loaded VCA lives alongside a pre-existing Oscillator.
+    {
+        MainComponent mc(std::make_unique<MockProvider>());
+        mc.setSize(1600, 900);
+        mc.getAudioEngine().suspendDeviceCallback();
+        auto& editor = mc.getGraphEditor();
+        editor.itemDropped(juce::DragAndDropTarget::SourceDetails(juce::String("Oscillator"), &editor, {100, 100}));
+        const int withSeed = mc.getAudioEngine().getGraph().getNumNodes();
+        ASSERT_GT(withSeed, 0);
+        EXPECT_TRUE(mc.openPatchForTest(patchFile, /*append=*/true));
+        EXPECT_GT(mc.getAudioEngine().getGraph().getNumNodes(), withSeed)
+            << "adding on top must keep the seed and add the loaded module, not replace it";
+    }
+
+    // REPLACE: the loaded patch discards the seed, leaving exactly its own modules.
+    {
+        MainComponent mc(std::make_unique<MockProvider>());
+        mc.setSize(1600, 900);
+        mc.getAudioEngine().suspendDeviceCallback();
+        auto& editor = mc.getGraphEditor();
+        editor.itemDropped(juce::DragAndDropTarget::SourceDetails(juce::String("Oscillator"), &editor, {100, 100}));
+        EXPECT_TRUE(mc.openPatchForTest(patchFile, /*append=*/false));
+        EXPECT_EQ(mc.getAudioEngine().getGraph().getNumNodes(), sourceNodes)
+            << "replacing must load exactly the source patch, discarding the seed";
+    }
+}
+
+TEST_F(MainComponentTest, LoadingAPatchFitsTheNewlyLoadedModulesIntoView) {
+    MainComponent source(std::make_unique<MockProvider>());
+    source.setSize(1600, 900);
+    source.getAudioEngine().suspendDeviceCallback();
+    auto& srcEditor = source.getGraphEditor();
+    srcEditor.itemDropped(juce::DragAndDropTarget::SourceDetails(juce::String("VCA"), &srcEditor, {300, 300}));
+    srcEditor.itemDropped(juce::DragAndDropTarget::SourceDetails(juce::String("LFO"), &srcEditor, {700, 700}));
+    const auto patchFile = tempRoot.getChildFile("FitSource.json");
+    source.saveProjectForTest(patchFile);
+    ASSERT_TRUE(patchFile.existsAsFile());
+
+    // A narrow view the loaded patch's saved layout cannot fill the way it was arranged on screen.
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(500, 300);
+    mc.getAudioEngine().suspendDeviceCallback();
+
+    EXPECT_TRUE(mc.openPatchForTest(patchFile, /*append=*/false));
+    auto& graph = mc.getAudioEngine().getGraph();
+    ASSERT_GT(graph.getNumNodes(), 0);
+
+    // Every module must now fall within the editor's visible canvas rect: fitViewToModules scrolls +
+    // zooms to show them all rather than leaving the loaded patch off-screen.
+    auto model = mc.getGraphEditor().buildMinimapModel();
+    ASSERT_GE(model.nodes.size(), 2u);
+    for (const auto& n : model.nodes)
+        EXPECT_TRUE(model.viewport.contains(n.bounds))
+            << "the loaded patch must be fit into the visible canvas, not left off-screen";
+}
+
+// P8-31: the WHOLE-PROJECT half of the split Load menu guards under "Opening a project", routing
+// through openProjectFromFile() just as the patch path routes through openPresetFromFile().
+TEST_F(MainComponentTest, OpeningAProjectAsksBeforeTheChooserOpens) {
     MainComponent mc(std::make_unique<MockProvider>());
     mc.setSize(1600, 900);
     mc.getAudioEngine().suspendDeviceCallback();
@@ -1009,12 +1085,59 @@ TEST_F(MainComponentTest, OpeningAnotherProjectAsksBeforeTheChooserOpens) {
 
     makeDirty(mc);
 
-    ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::openPreset, false));
+    ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::openProject, false));
 
     EXPECT_EQ(prompt.calls, 1);
-    EXPECT_EQ(prompt.lastLabel, "Opening another project");
+    EXPECT_EQ(prompt.lastLabel, "Opening a project");
 }
 
+// P8-31 / bug #2: importing a patch onto an existing one (the "Add on top" arm) must be one reversible
+// undo step - undo returns to the pre-import patch, redo restores the imported modules. An unwrapped
+// clear-and-rebuild left the history unaware of the swap, so a following redo had nothing to restore.
+TEST_F(MainComponentTest, AddingAPatchOnTopIsOneReversibleUndoStep) {
+    MainComponent source(std::make_unique<MockProvider>());
+    source.setSize(1600, 900);
+    source.getAudioEngine().suspendDeviceCallback();
+    auto& srcEditor = source.getGraphEditor();
+    srcEditor.itemDropped(juce::DragAndDropTarget::SourceDetails(juce::String("VCA"), &srcEditor, {300, 300}));
+    srcEditor.itemDropped(juce::DragAndDropTarget::SourceDetails(juce::String("LFO"), &srcEditor, {700, 700}));
+    const auto patchFile = tempRoot.getChildFile("UndoSource.json");
+    source.saveProjectForTest(patchFile);
+    ASSERT_TRUE(patchFile.existsAsFile());
+    const int sourceNodes = source.getAudioEngine().getGraph().getNumNodes();
+
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& editor = mc.getGraphEditor();
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto& um = mc.getUndoManager();
+
+    // Seed a module, then add the loaded patch on top of it.
+    editor.itemDropped(juce::DragAndDropTarget::SourceDetails(juce::String("Oscillator"), &editor, {100, 100}));
+    const int seedCount = graph.getNumNodes();
+    ASSERT_GT(seedCount, 0);
+    const int preSerial = um.getEditSerial();
+
+    EXPECT_TRUE(mc.openPatchForTest(patchFile, /*append=*/true));
+    const int afterAppend = graph.getNumNodes();
+    // The append must ADD the source patch on top of the seed, not replace it.
+    EXPECT_GT(afterAppend, seedCount) << "append must add the imported modules on top, not overwrite the current patch";
+    EXPECT_GT(um.getEditSerial(), preSerial) << "the import must register as an undo step";
+
+    // Undo returns to the pre-import patch (just the seed).
+    EXPECT_TRUE(um.undo());
+    EXPECT_EQ(graph.getNumNodes(), seedCount) << "undoing the import must return the graph to its pre-import state";
+
+    // Redo restores the imported modules - the direction that broke when the swap went undrawn.
+    EXPECT_TRUE(um.canRedo());
+    EXPECT_TRUE(um.redo());
+    EXPECT_EQ(graph.getNumNodes(), afterAppend) << "redoing must restore the imported patch that undo removed";
+}
+
+// P8-31: the mode prompt that openPresetFromFile reaches after a file is chosen. Headless runs have
+// no message loop to answer a real AlertWindow, so the test drives patchLoadPrompt straight and asserts
+// it routes to the chosen load mode - Cancel, Append and Replace each must reach the callback.
 // The mechanism Main.cpp's quit path uses, exercised directly: AppApplication itself is not
 // constructible in a headless run, so this is what stands in for the quit test.
 TEST_F(MainComponentTest, TheGuardRunsACleanDocumentsActionImmediately) {
