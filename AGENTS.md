@@ -1,6 +1,6 @@
-# AGENTS.md
+# CLAUDE.md
 
-Guidance for AI coding agents in this repository. Keep this file **lean** — it is always loaded, so it holds only commands, conventions, and a tripwire index of the critical traps. The rules themselves live in per-directory `CLAUDE.md` files (`Source/`, `Source/Modules/`, `Source/Timeline/`, `Source/AI/`, `Source/UI/`, `Source/Plugin/`, `.github/`), auto-loaded when you work under that directory; the mechanism and history live in `docs/` (map below). When you change behavior, update the relevant doc, not this file — docs must never go stale, so treat updating them as part of the change itself, not a follow-up.
+Guidance for Claude Code (claude.ai/code) in this repository. Keep this file **lean** — it is always loaded, so it holds only commands, conventions, and a tripwire index of the critical traps. The rules themselves live in per-directory `CLAUDE.md` files (`Source/`, `Source/Modules/`, `Source/Timeline/`, `Source/AI/`, `Source/UI/`, `Source/Plugin/`, `.github/`), auto-loaded when you work under that directory; the mechanism and history live in `docs/` (map below). When you change behavior, update the relevant doc, not this file — docs must never go stale, so treat updating them as part of the change itself, not a follow-up.
 
 ## Project
 
@@ -26,10 +26,11 @@ cmake --build build --target Tests
 # Coverage  (threshold 85%)
 bash scripts/coverage.sh
 
-# CI script tests (both run in the Lint job; no compiler, no network, ~1s each)
+# CI script tests (all run in the Lint job; no compiler, no network, ~1s each)
 bash scripts/tests/ci-cache-check.test.sh          # cache health check (also runs after every CI build)
 bash scripts/tests/ci-install-linux-deps.test.sh   # Linux apt install + mirror failover
-bash scripts/tests/check-nonascii-literals.test.sh # no non-ASCII bytes in string literals
+bash scripts/tests/check-nonascii-literals.test.sh # no raw/escaped non-ASCII in string literals (fromUTF8/CharPointer_UTF8 exempt)
+bash scripts/tests/utf8-literal-check.test.sh      # non-ASCII \x escape wrapping (also runs directly in the Lint job)
 
 # Git hooks  (run once per clone — NOT auto-installed)
 bash scripts/install-hooks.sh   # pre-commit: clang-format lint;  pre-push: lint + Release build + tests
@@ -44,7 +45,7 @@ See [`docs/testing.md`](docs/testing.md) for the full build/test/CI/hooks refere
 Every implementation plan **must** include:
 
 1. A **Tests** section — list new test cases, the test file, and what each verifies.
-2. A **Docs Updates** section — list which docs (`docs/testing.md`, `AGENTS.md`, etc.) need updating.
+2. A **Docs Updates** section — list which docs (`docs/testing.md`, `CLAUDE.md`, etc.) need updating.
 
 ## Critical invariants (break these and you ship bugs)
 
@@ -64,6 +65,8 @@ Everything else below is a tripwire index. The full rule lives in the named area
 - Timeline data crosses threads only via `EpochExchange`: opened once per render pass, published snapshot-first/bindings-second, republished after any graph change. → [`docs/architecture.md`](docs/architecture.md)
 - `MainComponent` owns the app's live `TimelineDoc`; every graph change must reach `MainComponent::timelineChanged` / the reconcile pass (hook inventory: [`docs/architecture.md` §8](docs/architecture.md)); a binding is never re-established automatically. → [`docs/timeline_panel_core.md §3`](docs/timeline_panel_core.md)
 - Every node-uuid write mirrors into the processor via `ModuleBase::setNodeUuid`; written once, never rewritten. → [`docs/architecture.md`](docs/architecture.md)
+- Every document-replacing action goes through `MainComponent::guardUnsavedChanges` (async — hand it the work, never do it then ask), and any path that replaces the document with something that is not a bundle drops `currentBundleDir_`. → [`docs/architecture.md`](docs/architecture.md)
+- Autosave writes a sidecar (`autosave.json`), never `project.json`, and rotates a configurable number of numbered backups; gates on edit-serial movement (not `isDirty_`) and never fires during a recording take or a bounce. → [`docs/architecture.md`](docs/architecture.md)
 - No non-ASCII bytes in a `Source/` string literal — `juce::String`'s `const char*` ctor decodes as Latin-1, so `"Rename…"` (or its hex-escape spelling) ships mojibake; use ASCII or `juce::CharPointer_UTF8`/`String::fromUTF8`. Guarded by `scripts/tests/check-nonascii-literals.test.sh`. → [`docs/testing.md`](docs/testing.md)
 
 **Modules & channels** (`Source/Modules/CLAUDE.md`):
@@ -80,7 +83,7 @@ Everything else below is a tripwire index. The full rule lives in the named area
 **AI & trust boundaries** (`Source/AI/CLAUDE.md`):
 
 - `applyJSONToGraph` merge mode auto-connects new nodes; exact-sub-graph callers pass `autoConnectNewNodes=false`. → [`docs/layout_selection_canvas.md §1.5`](docs/layout_selection_canvas.md)
-- Patch-format reserved fields stay reserved (`"timeline"` refused untrusted; flat scalar params; `uuid` trusted-only). → [`docs/AI_Engine.md`](docs/AI_Engine.md)
+- Patch-format reserved fields stay reserved (`"timeline"` and `"macros"` (P8-12) both refused untrusted; flat scalar params; `uuid` trusted-only). → [`docs/AI_Engine.md`](docs/AI_Engine.md) · [`docs/layout_selection_canvas.md §1.7`](docs/layout_selection_canvas.md)
 - Conversation-history persistence is resolved server-side from the entitlement, never trusted from a client header. → [`docs/AI_Engine_providers_accounts.md §1`](docs/AI_Engine_providers_accounts.md)
 - Persist a rotated refresh token before using the access token that came with it (`AccountService::completeSignIn` is the funnel). → [`docs/AI_Engine_providers_accounts.md §5`](docs/AI_Engine_providers_accounts.md)
 - Installing an AI provider after construction requires calling `refreshModels()` again, or every `/api/chat` gets a 400. → [`docs/AI_Engine.md`](docs/AI_Engine.md)
@@ -106,6 +109,7 @@ Everything else below is a tripwire index. The full rule lives in the named area
 - [`docs/layout.md`](docs/layout.md) — grid/snap/auto-arrange, toolbar & status-bar chrome, width buckets, LayoutUtil API, drag affordance + smart connections
 - [`docs/layout_visuals_animation.md`](docs/layout_visuals_animation.md) — visualizer components, UI rendering performance, animation system (UIAnimation.h, AnimationDriver, PanelSlide, micro-interactions), alignment guides
 - [`docs/layout_selection_canvas.md`](docs/layout_selection_canvas.md) — multi-select + group drag + snippets/clipboard (§1.5), collapsible library sections, cable interaction, minimap overlay
+- [`docs/macros.md`](docs/macros.md) — Macros: the P8-12 presentation-only container, plus the DECIDED Macro I/O model (P8-14) that P8-15 implements — proxy inlet/outlet nodes on a flat graph, and why a container node with an inner graph was rejected
 - [`docs/timeline_panel_core.md`](docs/timeline_panel_core.md) — timeline panel overview, ruler/grid/zoom/snap + markers, track headers/binding chips, playhead, transport bar, metronome, edit-tool strip
 - [`docs/timeline_panel_clips_automation.md`](docs/timeline_panel_clips_automation.md) — clip lanes, piano roll, automation strip, keyboard & focus arbitration
 - [`docs/theming.md`](docs/theming.md) — theme tokens, SVG icons, JSON user themes, LookAndFeel, font limitation
