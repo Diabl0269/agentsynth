@@ -242,8 +242,8 @@ struct MacroPort {
     juce::String nodeUuid;   // the MacroInlet/MacroOutlet (or MIDI variant) node this port fronts
     bool         isInput;
     juce::String name;
-    int          order;      // draw order on the card, user-reorderable (drag OR the Up/Down
-                             // glyph buttons — T152/T153, §7 item 5)
+    int          order;      // draw order on the card, user-reorderable (drag OR Cmd+Up/Cmd+Down
+                             // on a row control — T152/T153, §7 item 5)
     MacroPortKind kind;      // which pair of node types this port is (§5.1) — kept here too so a
                              // macro's port list can be rendered with no per-port graph lookup
     std::optional<juce::Colour> colour; // T152; unset (every pre-T152 save) falls back to the
@@ -815,8 +815,9 @@ In order, each independently shippable:
    Every row now also has a small drag handle (left of the name field) that reorders it within its
    own direction group by an arbitrary number of slots in one gesture
    (`GraphEditor::reorderMacroPortToIndex`, backing `MacroPortConfigDialog::onReorderPortTo`) — the
-   Up/Down glyph buttons from F1 above are the keyboard-accessible fallback and were deliberately
-   left in place, not replaced (T153 depends on them staying reachable). `onReorderPortTo`'s index
+   Up/Down glyph buttons from F1 above stayed in place at the time as the keyboard-accessible
+   fallback (T153 depended on them staying reachable); **round 4 below removes them** once drag was
+   confirmed working, replacing them with a Cmd+Up/Cmd+Down chord. `onReorderPortTo`'s index
    is scoped to the dragged row's own direction (there is no `isInput` argument it could carry a
    cross-direction move through at all), which is what makes "can't drag an input into the output
    section" structural rather than a value `reorderMacroPortToIndex` has to reject. Unlike
@@ -852,8 +853,8 @@ In order, each independently shippable:
      `showMacroAutoPortModal`'s launch sites makes the dialog's own override the ONE Escape route —
      `juce::DialogWindow`'s default (a `Button` shortcut on the native close button, a *different*
      dispatch path than the `keyPressed` bubble) would otherwise race it.
-   - **Arrow-Up/Down moves focus between rows** — wired on the row's colour swatch and its
-     Up/Down/Delete glyph buttons only (`GlyphButton`/`PortColourSwatch::onVerticalArrow` ->
+   - **Arrow-Up/Down moves focus between rows** — wired on the row's colour swatch and Delete
+     glyph button only (`GlyphButton`/`PortColourSwatch::onVerticalArrow` ->
      `MacroPortConfigDialog::moveRowFocus`), never on the shape combo box or a text field, since
      those already have their own meaning for up/down (change the selected item; move the text
      cursor) that this must not shadow. Moves to the SAME control on the row immediately
@@ -882,6 +883,36 @@ In order, each independently shippable:
      audited and needed no change — it has no `TextEditor`, and its destructor already calls
      `AccountService::cancelSignIn()` unconditionally to cover exactly this "closed by some path
      that skips my own Cancel button" case.
+
+   **DONE (founder review round 4 — real-build testing of T152/T153): three fixes.**
+   1. **Up/Down glyph buttons removed.** Now that drag-to-reorder was confirmed working live, the
+      per-row Up/Down buttons were pure clutter. Keyboard-accessible reordering survives as a
+      **Cmd+Up/Cmd+Down chord** on a row's remaining controls (colour swatch, Delete button) —
+      `GlyphButton`/`PortColourSwatch::keyPressed` check the command modifier FIRST and fire
+      `onReorderPort` (the same callback the buttons used), falling through to the pre-existing
+      bare-arrow row-navigation check only when it isn't held. This matches the app's existing
+      convention of the command modifier for editing-type actions (Cmd+D duplicate, Cmd+R repeat —
+      docs/shortcuts.md) and is dialog-local key handling, not a `ShortcutManager` action.
+   2. **Keyboard focus is now visible.** Diagnosed by reading `juce::Button::paint()`
+      (`juce_Button.cpp`): it hands `paintButton()` only `isOver()`/`isDown()`, never keyboard-focus
+      state, so `GlyphButton`/`PortColourSwatch` — both custom `paintButton` overrides — never drew
+      anything different when Tab'd to. Both now check `hasKeyboardFocus(true)` and draw an accent
+      outline, reusing `AppLookAndFeel::drawTextEditorOutline`/`drawComboBox`'s own "accent when
+      focused, same border weight" convention rather than inventing a new style.
+      `AppLookAndFeel::drawButtonBackground` got the identical fix, so every plain `juce::TextButton`
+      app-wide (including this dialog's Add/Close buttons) now shows focus too —
+      `LookAndFeel_V4`'s default drew none. Every repaint is the free one JUCE's own
+      `Button::focusGained`/`focusLost` already trigger; no new timer (Source/UI/CLAUDE.md).
+   3. **The "Add a port" panel's Add button/name field were invisible.** Diagnosed with a headless
+      `createComponentSnapshot` PNG (docs/testing.md's smoke-test pattern) before any fix was
+      attempted: the panel's second content row (name field + Add button) was entirely absent from
+      the render, while the first row (direction/kind/shape combos) painted fine. Root cause:
+      `resized()`'s `addBlockArea` budgeted height for only 2 of the panel's 3 rows (label +
+      newRow1), so newRow2 was squeezed to zero height — a layout bug, not colour/contrast. Fixed
+      by computing the panel's height from all 3 rows in one `kAddBlockHeight` constant, used by
+      both `resized()` and `idealDialogHeight()` so they can never drift apart again (the same
+      "one function, never two" reasoning `layOutOrMeasureRows` already documents for the row
+      list).
 6. **DONE (P8-15d).** Bypass/mute fan-out (§5.6): `GraphEditor::setMacroBypassed`/`setMacroMuted`
    call `ModuleBase::setBypassed`/`setMuted` — already `setValueNotifyingHost` parameter writes —
    on every member as ONE undo step (`recordStructuralChange`, the same before/after graph-JSON

@@ -8,10 +8,11 @@ namespace {
 constexpr int kDirectionInputId = 1;
 constexpr int kDirectionOutputId = 2;
 
-// T153: Up/Down on a control that opts in (the row's colour swatch and its Up/Down/Delete glyph
-// buttons — see MacroPortConfigDialog::moveRowFocus's comment for why arrow navigation is scoped
-// to only those) reports itself as an arrow key rather than the caller re-deriving KeyPress
-// comparisons at every one of the four call sites.
+// T153: Up/Down on a control that opts in (the row's colour swatch and Delete glyph button — see
+// MacroPortConfigDialog::moveRowFocus's comment for why arrow navigation is scoped to only those)
+// reports itself as an arrow key rather than the caller re-deriving KeyPress comparisons at every
+// call site. GlyphButton/PortColourSwatch::keyPressed also check the command modifier themselves
+// (founder review round 4's Cmd+Up/Cmd+Down reorder chord) before falling through to this.
 bool isVerticalArrowKey(const juce::KeyPress& key, bool& outMoveDown) {
     if (key.isKeyCode(juce::KeyPress::downKey)) {
         outMoveDown = true;
@@ -61,22 +62,34 @@ const synth::theme::Colors& liveThemeColours(const juce::Component& c) {
     return fallback;
 }
 
-// A compact icon-style affordance replacing the old full-width "Up"/"Down"/"Delete" text buttons
-// (founder review item 1) — a small square button drawing one glyph as a filled juce::Path, the
-// same "drawn Path, not an SVG asset" idiom MacroCardComponent's own expand chevron already uses,
-// so this adds no new themed icon asset for three small per-row affordances.
+// Same live/fallback split as liveThemeColours, for the border-width metric the focus-ring paint
+// below needs (founder review round 4) — kept as a separate accessor rather than widening
+// liveThemeColours's return type, since every existing call site only ever wanted colours.
+const synth::theme::Metrics& liveThemeMetrics(const juce::Component& c) {
+    static const synth::theme::Metrics fallback{};
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&c.getLookAndFeel()))
+        return lf->getTheme().metrics;
+    return fallback;
+}
+
+// A compact icon-style affordance replacing the old full-width "Delete" text button (founder
+// review item 1) — a small square button drawing an X as a couple of strokes, the same "drawn
+// Path/lines, not an SVG asset" idiom MacroCardComponent's own expand chevron already uses. Used
+// to also draw Up/Down triangles for the per-row reorder buttons removed in founder review round
+// 4 (Cmd+Up/Cmd+Down on this same button is the keyboard-accessible replacement — see
+// PortRowComponent's onReorderChord wiring below); Delete is the only glyph left.
 class GlyphButton : public juce::Button {
 public:
-    enum class Glyph { Up, Down, Delete };
+    enum class Glyph { Delete };
 
     explicit GlyphButton(Glyph glyph)
         : juce::Button(juce::String())
         , glyph_(glyph) {}
 
     void paintButton(juce::Graphics& g, bool highlighted, bool down) override {
+        juce::ignoreUnused(glyph_); // only one glyph remains; kept for a future affordance to reuse
         const auto& c = liveThemeColours(*this);
-        const bool isDelete = glyph_ == Glyph::Delete;
-        const juce::Colour hotColour = isDelete ? c.error : c.accent;
+        const juce::Colour hotColour = c.error;
         auto bounds = getLocalBounds().toFloat();
 
         if (isEnabled() && (highlighted || down)) {
@@ -92,43 +105,48 @@ public:
         g.setColour(glyphColour);
 
         auto inner = bounds.reduced(bounds.getWidth() * 0.3f, bounds.getHeight() * 0.3f);
-        switch (glyph_) {
-        case Glyph::Up: {
-            juce::Path p;
-            p.addTriangle(inner.getX(), inner.getBottom(), inner.getRight(), inner.getBottom(), inner.getCentreX(),
-                          inner.getY());
-            g.fillPath(p);
-            break;
-        }
-        case Glyph::Down: {
-            juce::Path p;
-            p.addTriangle(inner.getX(), inner.getY(), inner.getRight(), inner.getY(), inner.getCentreX(),
-                          inner.getBottom());
-            g.fillPath(p);
-            break;
-        }
-        case Glyph::Delete:
-            g.drawLine(inner.getX(), inner.getY(), inner.getRight(), inner.getBottom(), 1.6f);
-            g.drawLine(inner.getX(), inner.getBottom(), inner.getRight(), inner.getY(), 1.6f);
-            break;
+        g.drawLine(inner.getX(), inner.getY(), inner.getRight(), inner.getBottom(), 1.6f);
+        g.drawLine(inner.getX(), inner.getBottom(), inner.getRight(), inner.getY(), 1.6f);
+
+        // Founder review round 4: keyboard-focus indicator. juce::Button::paint() only ever hands
+        // paintButton() isOver()/isDown() (juce_Button.cpp), never keyboard-focus state, so a
+        // Tab'd-to-but-not-hovered button painted with no visible change at all — confirmed by
+        // reading Button::paint()'s call site rather than assumed. Reuses AppLookAndFeel::
+        // drawTextEditorOutline/drawComboBox's own "accent outline when focused" convention.
+        if (hasKeyboardFocus(true) || forceFocusRingForTest) {
+            const auto& m = liveThemeMetrics(*this);
+            g.setColour(c.accent);
+            g.drawRoundedRectangle(bounds.reduced(m.borderWidth * 0.5f), 4.0f, m.borderWidth);
         }
     }
 
-    // T153: the Up/Down/Delete buttons are the keyboard-accessible reorder/delete fallback (they
-    // already get Tab/Return/Space for free from juce::Button) — this adds Up/Down-arrow FOCUS
-    // navigation between rows on top, wired by PortRowComponent to
-    // MacroPortConfigDialog::moveRowFocus. Returning false when nothing is wired (or the key isn't
-    // an arrow) falls through to Button::keyPressed so Return/Space keep triggering the click.
+    // T153: the Delete button is the keyboard-accessible delete fallback (it already gets Tab/
+    // Return/Space for free from juce::Button) — this adds Up/Down-arrow FOCUS navigation between
+    // rows on top, wired by PortRowComponent to MacroPortConfigDialog::moveRowFocus. Founder
+    // review round 4: Cmd+Up/Cmd+Down is checked FIRST and fires onReorderChord instead (the
+    // keyboard-accessible replacement for the removed per-row Up/Down buttons) — a bare arrow
+    // still only moves focus, since that's already its established meaning here. Returning false
+    // when nothing is wired (or the key isn't an arrow) falls through to Button::keyPressed so
+    // Return/Space keep triggering the click.
     bool keyPressed(const juce::KeyPress& key) override {
         bool moveDown = false;
-        if (onVerticalArrow && isVerticalArrowKey(key, moveDown)) {
-            onVerticalArrow(moveDown);
-            return true;
+        if (isVerticalArrowKey(key, moveDown)) {
+            if (key.getModifiers().isCommandDown()) {
+                if (onReorderChord) {
+                    onReorderChord(moveDown);
+                    return true;
+                }
+            } else if (onVerticalArrow) {
+                onVerticalArrow(moveDown);
+                return true;
+            }
         }
         return juce::Button::keyPressed(key);
     }
 
     std::function<void(bool moveDown)> onVerticalArrow;
+    std::function<void(bool moveDown)> onReorderChord; // founder review round 4 (Cmd+Up/Cmd+Down)
+    bool forceFocusRingForTest = false;                // founder review round 4 test seam
 
 private:
     Glyph glyph_;
@@ -150,8 +168,13 @@ public:
         g.setColour(colour);
         g.fillRoundedRectangle(bounds, 3.0f);
         const auto& c = liveThemeColours(*this);
-        g.setColour(c.border.withAlpha(highlighted || down ? 0.9f : 0.45f));
-        g.drawRoundedRectangle(bounds, 3.0f, highlighted || down ? 1.4f : 1.0f);
+        // Founder review round 4: same "no visible focus state" bug as GlyphButton (see its own
+        // comment for the confirmed root cause) — accent replaces the normal border colour when
+        // focused, matching AppLookAndFeel's own "accent when focused" convention.
+        const bool focused = hasKeyboardFocus(true) || forceFocusRingForTest;
+        g.setColour(focused ? c.accent : c.border.withAlpha(highlighted || down ? 0.9f : 0.45f));
+        g.drawRoundedRectangle(bounds, 3.0f,
+                               focused ? liveThemeMetrics(*this).borderWidth : (highlighted || down ? 1.4f : 1.0f));
     }
 
     // Mirrors ColourPickerPopup::FavouriteSwatchButton's own override exactly (see its comment):
@@ -165,11 +188,22 @@ public:
         juce::Button::mouseDown(e);
     }
 
+    // Founder review round 4: Cmd+Up/Cmd+Down is checked first and fires onReorderChord (the
+    // keyboard-accessible replacement for the removed per-row Up/Down buttons); a bare arrow
+    // still only moves focus via onVerticalArrow, its pre-existing meaning — see GlyphButton's
+    // identical override for the full reasoning.
     bool keyPressed(const juce::KeyPress& key) override {
         bool moveDown = false;
-        if (onVerticalArrow && isVerticalArrowKey(key, moveDown)) {
-            onVerticalArrow(moveDown);
-            return true;
+        if (isVerticalArrowKey(key, moveDown)) {
+            if (key.getModifiers().isCommandDown()) {
+                if (onReorderChord) {
+                    onReorderChord(moveDown);
+                    return true;
+                }
+            } else if (onVerticalArrow) {
+                onVerticalArrow(moveDown);
+                return true;
+            }
         }
         return juce::Button::keyPressed(key);
     }
@@ -177,13 +211,15 @@ public:
     juce::Colour colour{juce::Colours::grey};
     std::function<void()> onRightClick;
     std::function<void(bool moveDown)> onVerticalArrow;
+    std::function<void(bool moveDown)> onReorderChord; // founder review round 4 (Cmd+Up/Cmd+Down)
+    bool forceFocusRingForTest = false;                // founder review round 4 test seam
 };
 
 // T152: the drag-to-reorder handle — a small grip icon to the left of the name editor. Deliberately
-// a plain juce::Component, not a juce::Button: dragging is mouse-only by design (the Up/Down glyph
-// buttons above are the keyboard-accessible fallback per the class comment, so this handle never
-// needs to be a tab stop), and a plain Component sidesteps Button's own click-vs-drag heuristics
-// entirely rather than fighting them.
+// a plain juce::Component, not a juce::Button: dragging is mouse-only by design (Cmd+Up/Cmd+Down on
+// the colour swatch or Delete button is the keyboard-accessible fallback, founder review round 4,
+// so this handle never needs to be a tab stop), and a plain Component sidesteps Button's own
+// click-vs-drag heuristics entirely rather than fighting them.
 class DragHandle
     : public juce::Component
     , public juce::SettableTooltipClient {
@@ -281,8 +317,6 @@ public:
     PortRowComponent(MacroPortConfigDialog& owner, const PortRow& row)
         : nodeUuid(row.nodeUuid)
         , isMidi(row.kind == synth::MacroPortKind::Midi)
-        , upButton(GlyphButton::Glyph::Up)
-        , downButton(GlyphButton::Glyph::Down)
         , deleteButton(GlyphButton::Glyph::Delete)
         , owner_(owner)
         , committedShape_(row.shape)
@@ -361,43 +395,36 @@ public:
         colourSwatch.onVerticalArrow = [this](bool moveDown) {
             owner_.moveRowFocus(*this, MacroPortConfigDialog::RowControl::Colour, moveDown);
         };
+        // Founder review round 4: Cmd+Up/Cmd+Down on the colour swatch reorders this port — the
+        // keyboard-accessible replacement for the removed per-row Up/Down buttons.
+        colourSwatch.onReorderChord = [this](bool moveDown) {
+            if (owner_.onReorderPort)
+                owner_.onReorderPort(nodeUuid, /*moveUp=*/!moveDown);
+        };
         addAndMakeVisible(colourSwatch);
 
-        // T152: the drag-to-reorder handle. Up/Down below stay fully functional as the keyboard
-        // fallback — this is an ADDITIONAL, mouse-only gesture, never a replacement.
-        dragHandle.setTooltip("Drag to reorder (or use the Up/Down buttons)");
+        // T152: the drag-to-reorder handle. Cmd+Up/Cmd+Down on the colour swatch or Delete button
+        // below stays fully functional as the keyboard fallback (founder review round 4) — this
+        // is an ADDITIONAL, mouse-only gesture, never a replacement.
+        dragHandle.setTooltip("Drag to reorder (or Cmd+Up/Cmd+Down on a focused control)");
         dragHandle.onDragStart = [this] { owner_.beginRowDrag(*this); };
         dragHandle.onDragMove = [this](juce::Point<int> screenPos) { owner_.updateRowDrag(*this, screenPos); };
         dragHandle.onDragEnd = [this] { owner_.endRowDrag(*this); };
         addAndMakeVisible(dragHandle);
 
-        upButton.setTooltip("Move up");
-        upButton.onClick = [this] {
-            if (owner_.onReorderPort)
-                owner_.onReorderPort(nodeUuid, /*moveUp=*/true);
-        };
-        upButton.onVerticalArrow = [this](bool moveDown) {
-            owner_.moveRowFocus(*this, MacroPortConfigDialog::RowControl::Up, moveDown);
-        };
-        addAndMakeVisible(upButton);
-
-        downButton.setTooltip("Move down");
-        downButton.onClick = [this] {
-            if (owner_.onReorderPort)
-                owner_.onReorderPort(nodeUuid, /*moveUp=*/false);
-        };
-        downButton.onVerticalArrow = [this](bool moveDown) {
-            owner_.moveRowFocus(*this, MacroPortConfigDialog::RowControl::Down, moveDown);
-        };
-        addAndMakeVisible(downButton);
-
-        deleteButton.setTooltip("Delete this port");
+        deleteButton.setTooltip("Delete this port (Cmd+Up/Cmd+Down to reorder)");
         deleteButton.onClick = [this] {
             if (owner_.onDeletePort)
                 owner_.onDeletePort(nodeUuid);
         };
         deleteButton.onVerticalArrow = [this](bool moveDown) {
             owner_.moveRowFocus(*this, MacroPortConfigDialog::RowControl::Delete, moveDown);
+        };
+        // Founder review round 4: Cmd+Up/Cmd+Down on the delete button reorders this port — the
+        // keyboard-accessible replacement for the removed per-row Up/Down buttons.
+        deleteButton.onReorderChord = [this](bool moveDown) {
+            if (owner_.onReorderPort)
+                owner_.onReorderPort(nodeUuid, /*moveUp=*/!moveDown);
         };
         addAndMakeVisible(deleteButton);
 
@@ -525,8 +552,6 @@ public:
             area.removeFromRight(kGlyphButtonGap);
         };
         placeGlyph(deleteButton);
-        placeGlyph(downButton);
-        placeGlyph(upButton);
         area.removeFromRight(8);
 
         if (isMidi) {
@@ -582,8 +607,6 @@ public:
     juce::TextEditor voicesEditor; // shown only while shapeBox reads Poly-N
     PortColourSwatch colourSwatch; // T152
     DragHandle dragHandle;         // T152
-    GlyphButton upButton;
-    GlyphButton downButton;
     GlyphButton deleteButton;
 
 private:
@@ -724,7 +747,7 @@ void MacroPortConfigDialog::resized() {
     titleLabel_.setBounds(area.removeFromTop(24));
     area.removeFromTop(10);
 
-    auto addBlockArea = area.removeFromTop(8 + kAddRowHeight + 6 + kAddRowHeight + 8);
+    auto addBlockArea = area.removeFromTop(kAddBlockHeight);
     addBlockBounds_ = addBlockArea;
     auto addBlock = addBlockArea.reduced(8, 8);
 
@@ -816,11 +839,11 @@ int MacroPortConfigDialog::layOutOrMeasureRows(bool apply, int width) {
 
 int MacroPortConfigDialog::idealDialogHeight() {
     const int rowsHeight = layOutOrMeasureRows(/*apply=*/false, kDialogWidth - kMargin * 2 - 2);
-    const int chromeHeight = kMargin * 2                                   // outer margins
-                             + 24 + 10                                     // title + gap
-                             + (8 + kAddRowHeight + 6 + kAddRowHeight + 8) // "Add a port" block
-                             + 10                                          // gap before the row list
-                             + 6 + kAddRowHeight + 6;                      // gap + Close row + gap
+    const int chromeHeight = kMargin * 2              // outer margins
+                             + 24 + 10                // title + gap
+                             + kAddBlockHeight        // "Add a port" block
+                             + 10                     // gap before the row list
+                             + 6 + kAddRowHeight + 6; // gap + Close row + gap
     return juce::jlimit(kMinDialogHeight, kMaxDialogHeight, chromeHeight + rowsHeight);
 }
 
@@ -941,12 +964,6 @@ void MacroPortConfigDialog::moveRowFocus(PortRowComponent& from, RowControl targ
     case RowControl::Colour:
         target_->colourSwatch.grabKeyboardFocus();
         break;
-    case RowControl::Up:
-        target_->upButton.grabKeyboardFocus();
-        break;
-    case RowControl::Down:
-        target_->downButton.grabKeyboardFocus();
-        break;
     case RowControl::Delete:
         target_->deleteButton.grabKeyboardFocus();
         break;
@@ -1014,16 +1031,6 @@ void MacroPortConfigDialog::triggerRowDeleteForTest(int row) {
     // running message loop would never see it fire.
     if (row >= 0 && row < (int)rowControls_.size() && rowControls_[row]->deleteButton.onClick)
         rowControls_[row]->deleteButton.onClick();
-}
-
-void MacroPortConfigDialog::triggerRowMoveUpForTest(int row) {
-    if (row >= 0 && row < (int)rowControls_.size() && rowControls_[row]->upButton.onClick)
-        rowControls_[row]->upButton.onClick();
-}
-
-void MacroPortConfigDialog::triggerRowMoveDownForTest(int row) {
-    if (row >= 0 && row < (int)rowControls_.size() && rowControls_[row]->downButton.onClick)
-        rowControls_[row]->downButton.onClick();
 }
 
 void MacroPortConfigDialog::setRowShapeForTest(int row, MacroPortShape shape) {
@@ -1101,23 +1108,40 @@ int MacroPortConfigDialog::computeArrowNavigationTargetRowForTest(int fromRow, b
     return arrowNavigationTargetRow(fromRow, moveDown);
 }
 
-bool MacroPortConfigDialog::simulateRowControlArrowKeyForTest(int row, RowControl control, bool moveDown) {
+bool MacroPortConfigDialog::simulateRowControlArrowKeyForTest(int row, RowControl control, bool moveDown,
+                                                              bool withCommandModifier) {
     if (row < 0 || row >= (int)rowControls_.size())
         return false;
-    const auto key = juce::KeyPress(moveDown ? juce::KeyPress::downKey : juce::KeyPress::upKey);
+    const auto mods =
+        withCommandModifier ? juce::ModifierKeys(juce::ModifierKeys::commandModifier) : juce::ModifierKeys();
+    const auto key = juce::KeyPress(moveDown ? juce::KeyPress::downKey : juce::KeyPress::upKey, mods, 0);
     auto* rc = rowControls_[row];
     switch (control) {
     case RowControl::Colour:
         return rc->colourSwatch.keyPressed(key);
-    case RowControl::Up:
-        return rc->upButton.keyPressed(key);
-    case RowControl::Down:
-        return rc->downButton.keyPressed(key);
     case RowControl::Delete:
         return rc->deleteButton.keyPressed(key);
     }
     return false;
 }
+
+// ---- Founder review round 4 test seams: focus-visibility regression coverage ------------------
+
+void MacroPortConfigDialog::setRowFocusRingForcedForTest(int row, bool forced) {
+    if (row < 0 || row >= (int)rowControls_.size())
+        return;
+    rowControls_[row]->deleteButton.forceFocusRingForTest = forced;
+    rowControls_[row]->deleteButton.repaint();
+}
+
+juce::Image MacroPortConfigDialog::renderRowDeleteButtonForTest(int row) const {
+    if (row < 0 || row >= (int)rowControls_.size())
+        return {};
+    auto& btn = rowControls_[row]->deleteButton;
+    return btn.createComponentSnapshot(btn.getLocalBounds());
+}
+
+juce::Rectangle<int> MacroPortConfigDialog::getAddButtonBoundsForTest() const { return addButton_.getBounds(); }
 
 // ---- MacroAutoPortPromptDialog (founder-review fix F5, docs/macros.md §7 item 6.2) -------------
 

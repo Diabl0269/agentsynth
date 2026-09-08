@@ -37,13 +37,13 @@ namespace synth::ui {
  * list scrolling past the clamp) instead of a fixed 800px box with dead space below the last row.
  *
  * Founder review round 3 (T152/item 3.3, T152/item 3.4): a row is now also drag-reorderable (the
- * Up/Down glyph buttons STAY as the keyboard-accessible fallback — T153 depends on them still
- * being reachable/operable — drag is an ADDITIONAL gesture, not a replacement), and each row's
- * kind-tinted left-edge bar is now a real clickable swatch that opens a colour picker to set a
- * per-port colour (`onChangePortColour`), right-click resets to the kind-tint default. Both
- * gestures are structurally confined to one direction (inputs against inputs, outputs against
- * outputs) the same way `onReorderPort` already was: `onReorderPortTo`'s index is scoped to the
- * dragged row's OWN direction group, so there is no way to express "become an output" through it.
+ * Up/Down glyph buttons stayed as the keyboard-accessible fallback at the time — see the round 4
+ * note below for why they're gone now), and each row's kind-tinted left-edge bar is now a real
+ * clickable swatch that opens a colour picker to set a per-port colour (`onChangePortColour`),
+ * right-click resets to the kind-tint default. Both gestures are structurally confined to one
+ * direction (inputs against inputs, outputs against outputs) the same way `onReorderPort` already
+ * was: `onReorderPortTo`'s index is scoped to the dragged row's OWN direction group, so there is
+ * no way to express "become an output" through it.
  *
  * Founder review round 3 (T153): keyboard accessibility. Tab order follows JUCE's default
  * top-to-bottom/left-to-right traversal (every real control here already `setWantsKeyboardFocus`s
@@ -52,10 +52,35 @@ namespace synth::ui {
  * field), and Escape closes the dialog via the SAME path the Close button uses
  * (`onRequestClose`) — including committing whatever rename/shape edit currently has focus, since
  * that is a pre-existing side effect of losing focus during teardown, not something Escape does
- * differently from Close. Arrow-Up/Down on a row's colour swatch or Up/Down/Delete button moves
- * keyboard focus to the same control on the row above/below (never wraps), which does not
- * conflict with a ComboBox's or TextEditor's own arrow-key handling since those controls are not
- * where this is wired.
+ * differently from Close. Arrow-Up/Down on a row's colour swatch or Delete button moves keyboard
+ * focus to the same control on the row above/below (never wraps), which does not conflict with a
+ * ComboBox's or TextEditor's own arrow-key handling since those controls are not where this is
+ * wired.
+ *
+ * Founder review round 4 (real-build testing of T152/T153): three fixes.
+ * (1) The per-row Up/Down glyph buttons are REMOVED — now that drag-to-reorder is confirmed
+ * working, they were pure visual clutter. Keyboard-accessible reordering (the whole point of
+ * T153) survives as a Cmd+Up/Cmd+Down chord on the row's remaining controls (colour swatch,
+ * Delete button) — `GlyphButton`/`PortColourSwatch::keyPressed` check the command modifier BEFORE
+ * falling through to the bare-arrow row-navigation check above, so a bare arrow still only moves
+ * focus (it already means that) and Cmd+arrow is the new reorder trigger, matching the app's
+ * existing convention of the command modifier for editing-type actions (Cmd+D duplicate, Cmd+R
+ * repeat — docs/shortcuts.md). This is dialog-local key handling, not a ShortcutManager action.
+ * (2) Keyboard focus was invisible everywhere in this dialog: `juce::Button::paint()` passes
+ * `paintButton` only `isOver()`/`isDown()` (juce_Button.cpp), never keyboard-focus state, so the
+ * custom `GlyphButton`/`PortColourSwatch` classes never drew anything different when focused.
+ * Both now check `hasKeyboardFocus(true)` and draw an accent outline, reusing
+ * `AppLookAndFeel::drawTextEditorOutline`/`drawComboBox`'s own "accent when focused" convention;
+ * `AppLookAndFeel::drawButtonBackground` got the same treatment for every plain `juce::TextButton`
+ * in the app (including this dialog's Add/Close buttons), which had no focus indication either
+ * (`LookAndFeel_V4`'s default draws none). Every repaint here is the free one JUCE's own
+ * `Button::focusGained`/`focusLost` already trigger — no timer, per Source/UI/CLAUDE.md.
+ * (3) The "Add a port" panel's Add button/name field were invisible: `resized()`'s
+ * `addBlockArea` budgeted height for only 2 of the panel's 3 rows (label + newRow1), so newRow2
+ * (name field + Add button) was squeezed to zero height. Fixed by computing the panel's height
+ * from all 3 rows in `kAddBlockHeight`, used by both `resized()` and `idealDialogHeight()` so
+ * they can never drift apart again (the same reasoning `layOutOrMeasureRows` already documents
+ * for the row list).
  */
 class MacroPortConfigDialog : public juce::Component {
 public:
@@ -83,8 +108,9 @@ public:
         onAddPort;
     std::function<void(const juce::String& nodeUuid, const juce::String& newName)> onRenamePort;
     std::function<void(const juce::String& nodeUuid)> onDeletePort;
-    /** `moveUp` true moves the port one step earlier in its own direction's draw order. Stays the
-     *  keyboard-accessible fallback (T153) now that dragging also exists — never removed. */
+    /** `moveUp` true moves the port one step earlier in its own direction's draw order. The
+     *  keyboard-accessible route to this (T153) is Cmd+Up/Cmd+Down on a row's colour swatch or
+     *  Delete button (founder review round 4 — replaced the removed per-row Up/Down buttons). */
     std::function<void(const juce::String& nodeUuid, bool moveUp)> onReorderPort;
     /** T152 drag-to-reorder: fired once a drag ends on a new slot. `newIndexInGroup` is 0-based
      *  within the dragged row's OWN direction group (inputs vs outputs) — there is no way to
@@ -124,8 +150,6 @@ public:
     void setRowNameForTest(int row, const juce::String& name);
     void commitRowNameForTest(int row); // simulates the editor losing focus / Return
     void triggerRowDeleteForTest(int row);
-    void triggerRowMoveUpForTest(int row);
-    void triggerRowMoveDownForTest(int row);
     // Selecting a new shape now commits immediately (the combo IS the "Apply Shape" gesture — see
     // the class comment), so this fires onChangePortShape itself, exactly like a real click would.
     void setRowShapeForTest(int row, MacroPortShape shape);
@@ -173,16 +197,35 @@ public:
     void simulateNewPortNameEscapeForTest();
     // Simulates Return in the "Add a port" name field — the keyboard equivalent of clicking Add.
     void simulateNewPortNameReturnForTest();
-    // Arrow-Up/Down navigation between rows' matching control (Colour swatch, Up/Down/Delete
-    // glyph buttons — the non-text, non-combo controls; see moveRowFocus()'s own comment for why
-    // arrow navigation is scoped to only these). computeArrowNavigationTargetRowForTest exercises
-    // the bounds-computing logic directly rather than via real grabKeyboardFocus(), which requires
-    // an on-screen peer this headless test has none of (Component::isShowing() gates it).
-    enum class RowControl { Colour, Up, Down, Delete };
+    // Arrow-Up/Down navigation between rows' matching control (Colour swatch, Delete glyph
+    // button — the non-text, non-combo controls; see moveRowFocus()'s own comment for why arrow
+    // navigation is scoped to only these). computeArrowNavigationTargetRowForTest exercises the
+    // bounds-computing logic directly rather than via real grabKeyboardFocus(), which requires an
+    // on-screen peer this headless test has none of (Component::isShowing() gates it).
+    enum class RowControl { Colour, Delete };
     int computeArrowNavigationTargetRowForTest(int fromRow, bool moveDown) const;
     // Exercises GlyphButton/PortColourSwatch's own keyPressed() override end to end: presses the
-    // given key on the given row's control and reports whether IT (not the dialog) consumed it.
-    bool simulateRowControlArrowKeyForTest(int row, RowControl control, bool moveDown);
+    // given key (Up/Down, or Cmd+Up/Cmd+Down when withCommandModifier is true) on the given row's
+    // control and reports whether IT (not the dialog) consumed it. A bare arrow moves row focus
+    // (moveRowFocus); Cmd+arrow fires onReorderPort instead (founder review round 4, replacing the
+    // removed per-row Up/Down buttons) — the modifier is what disambiguates the two.
+    bool simulateRowControlArrowKeyForTest(int row, RowControl control, bool moveDown,
+                                           bool withCommandModifier = false);
+
+    // ---- Founder review round 4 test seams: focus-visibility regression coverage -----------
+    // Forces the given row's Delete button to paint its focus ring regardless of real keyboard
+    // focus — grabKeyboardFocus() can't be exercised headlessly (see the comment above), so this
+    // is the same "bypass the mouse/focus plumbing, drive the real paint path" idiom every other
+    // *ForTest seam in this file already uses.
+    void setRowFocusRingForcedForTest(int row, bool forced);
+    // Snapshots just the given row's Delete button (createComponentSnapshot over its own local
+    // bounds) — paired with setRowFocusRingForcedForTest to prove the focused/unfocused paint
+    // output actually differs.
+    juce::Image renderRowDeleteButtonForTest(int row) const;
+    // The "Add a port" Add button's real laid-out bounds — a zero/near-zero height here is exactly
+    // the founder-reported "button doesn't visibly appear" bug (a layout miscalculation, not a
+    // colour bug; see the class comment's round 4 note).
+    juce::Rectangle<int> getAddButtonBoundsForTest() const;
 
 private:
     class PortRowComponent; // one row's controls + kind-tinted background; defined in the .cpp
@@ -248,6 +291,12 @@ private:
     static constexpr int kSectionGap = 10;
     static constexpr int kEmptyHintHeight = 18;
     static constexpr int kAddRowHeight = 26;
+    // The "Add a port" panel's total content height: section label + newRow1 + a 6px gap +
+    // newRow2, plus 8px of top/bottom inner padding each — computed ONCE so resized() (which lays
+    // out) and idealDialogHeight() (which measures) can never drift apart the way they did before
+    // round 4 (the panel was budgeted for only 2 of its 3 rows, so newRow2 — the name field and
+    // Add button — got squeezed to zero height and effectively vanished).
+    static constexpr int kAddBlockHeight = 8 + kAddRowHeight + kAddRowHeight + 6 + kAddRowHeight + 8;
     static constexpr int kMargin = 14;
     static constexpr int kDialogWidth = 580;
     static constexpr int kMinDialogHeight = 300;
