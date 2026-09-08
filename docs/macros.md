@@ -841,7 +841,14 @@ In order, each independently shippable:
    Cables As Is") plus a "Remember my choice" toggle (default ON); the choice persists (through
    `propertiesFile_`, the same seam the macro recolour favourites shelf already uses, since this
    modal can fire before a Settings window — and therefore a `PreferencesSettingsTab` — has ever
-   been constructed) only when remember is checked, and applies once otherwise. Follows the
+   been constructed) only when remember is checked, and applies once otherwise. The write alone is
+   useless without a matching read: the tri-state is restored at launch by
+   `PreferencesSettingsTab::loadMacroAutoPortPreference()` called from `MainComponent`'s
+   constructor — the same startup-restore pass as `loadDualIOPerModuleOverrides()` and the two T148
+   on/off automations above it — so a "Remember my choice" survives a relaunch instead of the
+   modal re-asking every session (the pre-fix bug: the write path and
+   `PreferencesSettingsTab::setGraphEditor()` only ever pushed the value once Settings opened, so
+   a fresh launch left the editor `Unset`) (T147). Follows the
    async-modal idiom already used for Configure I/O (`DialogWindow::LaunchOptions::launchAsync` +
    a callback, never a blocking modal loop); `GraphEditor::macroAutoPortModalForTest` is a test
    seam that replaces the real dialog launch with a callback a test drives directly.

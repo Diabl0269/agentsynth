@@ -1100,6 +1100,14 @@ std::map<juce::String, bool> PreferencesSettingsTab::loadDualIOPerModuleOverride
     return overrides;
 }
 
+GraphEditor::MacroAutoPortPreference
+PreferencesSettingsTab::loadMacroAutoPortPreference(juce::ApplicationProperties& props) {
+    // Reading with the "ask" default must not create the key, matching every other "not yet
+    // touched" preference's discipline in this file; macroAutoPortPreferenceFromString treats any
+    // unknown value as Unset, so a stale/garbage entry degrades to the safe asking default too.
+    return macroAutoPortPreferenceFromString(props.getUserSettings()->getValue(kMacroAutoPortPreferenceKey, "ask"));
+}
+
 std::optional<bool> PreferencesSettingsTab::getDualIOOverrideForType(const juce::String& moduleType) const {
     auto it = dualIOPerModuleOverrides.find(moduleType);
     return it != dualIOPerModuleOverrides.end() ? std::optional<bool>(it->second) : std::nullopt;

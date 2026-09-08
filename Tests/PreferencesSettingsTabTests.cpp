@@ -759,6 +759,32 @@ TEST_F(PreferencesSettingsTabTest, LoadDualIOPerModuleOverridesParsesWithoutATab
     EXPECT_EQ(overrides.count("Delay"), 0u);
 }
 
+// T147: the macro auto-port boundary tri-state's ApplicationProperties round-trip. A "Remember my
+// choice" from the modal writes "macroAutoCreatePorts"; on a relaunch MainComponent restores it via
+// loadMacroAutoPortPreference() (independent of any tab — the tab's setGraphEditor only runs when
+// Settings opens), so the modal must not re-ask. Pins the parser that restore relies on, including
+// the safe defaults: an absent key, and a stale/garbage value, both degrade to Unset (keep asking).
+TEST_F(PreferencesSettingsTabTest, LoadMacroAutoPortPreferenceParsesWithoutATabInstance) {
+    // A never-touched key must restore to Unset (ask), never silently auto-create or drop cables.
+    EXPECT_EQ(PreferencesSettingsTab::loadMacroAutoPortPreference(appProperties),
+              GraphEditor::MacroAutoPortPreference::Unset);
+
+    appProperties.getUserSettings()->setValue("macroAutoCreatePorts", "auto");
+    EXPECT_EQ(PreferencesSettingsTab::loadMacroAutoPortPreference(appProperties),
+              GraphEditor::MacroAutoPortPreference::AutoCreatePorts)
+        << "the modal's create-ports choice must survive a relaunch";
+
+    appProperties.getUserSettings()->setValue("macroAutoCreatePorts", "leave");
+    EXPECT_EQ(PreferencesSettingsTab::loadMacroAutoPortPreference(appProperties),
+              GraphEditor::MacroAutoPortPreference::LeaveCablesAsIs)
+        << "the modal's leave-as-is choice must survive a relaunch";
+
+    // A stale/garbage value degrades to the safe ask default rather than trusting it.
+    appProperties.getUserSettings()->setValue("macroAutoCreatePorts", "nonsense");
+    EXPECT_EQ(PreferencesSettingsTab::loadMacroAutoPortPreference(appProperties),
+              GraphEditor::MacroAutoPortPreference::Unset);
+}
+
 // ---- Round 3 follow-up: live search filter -----------------------------------------------------
 
 namespace {

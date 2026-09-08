@@ -99,6 +99,16 @@ public:
     // "defaultDualIOForNewModules" itself rather than waiting for Settings to be opened once.
     static std::map<juce::String, bool> loadDualIOPerModuleOverrides(juce::ApplicationProperties& props);
 
+    // Parses the "macroAutoCreatePorts" tri-state preference ("ask" / "auto" / "leave") straight
+    // from ApplicationProperties, independent of any PreferencesSettingsTab instance — the same
+    // startup-restore role as loadDualIOPerModuleOverrides() above. MainComponent calls it at
+    // construction so a "Remember my choice" from the macro auto-port modal the previous session
+    // survives a relaunch: without this the editor's macroAutoPortPreference_ stays Unset on a
+    // fresh launch (the tri-state is otherwise only pushed when Settings opens, via
+    // setGraphEditor), and the modal re-asks every session. "ask" (or an unknown/absent key) maps
+    // to Unset — the safe default that keeps asking, matching the tab's own combo default.
+    static GraphEditor::MacroAutoPortPreference loadMacroAutoPortPreference(juce::ApplicationProperties& props);
+
     // Test seam for the "Per-module I/O defaults..." popup: builds the exact content component the
     // button's onClick hands to a juce::CallOutBox, without launching the CallOutBox itself (which
     // needs real screen coordinates and, like every other control in this tab, cannot be driven

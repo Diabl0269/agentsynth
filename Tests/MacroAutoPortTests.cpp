@@ -20,6 +20,7 @@
 #include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/MacroCardComponent.h"
 #include "../Source/UI/ModuleComponent.h"
+#include "../Source/UI/PreferencesSettingsTab.h"
 #include <atomic>
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -1483,6 +1484,73 @@ TEST(MacroAutoPort, ModalRememberPersistsThePreference) {
     ASSERT_EQ(editor.getMacros().size(), 1);
     EXPECT_TRUE(editor.getMacros().getAll()[0].ports.empty());
     EXPECT_TRUE(hasConnection(engine, ext, 0, a, 0));
+}
+
+// T147: the actual bug — the modal's "Remember my choice" wrote to the properties file but a fresh
+// launch never read it back, so the modal re-asked every session. This exercises the complete
+// round trip the way a relaunch does: the modal's write path persists the choice through the
+// editor's properties file, then a SECOND, freshly-constructed editor gets the restored preference
+// exactly the way MainComponent's constructor does (loadMacroAutoPortPreference), and the modal
+// must no longer fire on a crossing grouping. Covers both sides without a real relaunch.
+TEST(MacroAutoPort, RememberedChoiceSurvivesAReload) {
+    // Isolated storage so the round trip never touches the developer's real settings; the same
+    // PropertiesFile the editor persists through is the one the loader reads back from.
+    juce::ApplicationProperties appProperties;
+    {
+        juce::PropertiesFile::Options options;
+        options.applicationName = "MacroAutoPortReloadTest";
+        options.filenameSuffix = "reload";
+        options.storageFormat = juce::PropertiesFile::storeAsXML;
+        appProperties.setStorageParameters(options);
+    }
+
+    // --- Session 1: the modal's "auto-create + remember it" write path persists the choice. ---
+    {
+        AudioEngine engine;
+        GraphEditor editor(engine);
+        editor.setSize(1600, 1200);
+        editor.setPropertiesFile(appProperties.getUserSettings());
+        auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
+        auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
+        auto ext = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Ext", 100, 100);
+        engine.getGraph().addConnection({{ext, 0}, {a, 0}});
+
+        std::function<void(bool, bool)> capturedRespond;
+        editor.macroAutoPortModalForTest = [&](std::function<void(bool, bool)> respond) { capturedRespond = respond; };
+        editor.setSelectedNodes({a, b});
+        editor.requestGroupSelectionIntoMacro();
+        ASSERT_TRUE((bool)capturedRespond);
+        capturedRespond(true, true); // "Create Ports" + "Remember my choice"
+
+        EXPECT_EQ(editor.getMacroAutoPortPreference(), GraphEditor::MacroAutoPortPreference::AutoCreatePorts);
+        // The persistence itself: the write path must have actually stored the value under its key.
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("macroAutoCreatePorts"), "auto");
+    }
+
+    // --- Session 2: a fresh editor restored the way MainComponent's constructor restores it. ---
+    {
+        AudioEngine engine;
+        GraphEditor editor(engine);
+        editor.setSize(1600, 1200);
+        // Exactly the call MainComponent makes on launch: load the tri-state and apply it.
+        editor.setMacroAutoPortPreference(PreferencesSettingsTab::loadMacroAutoPortPreference(appProperties));
+        EXPECT_EQ(editor.getMacroAutoPortPreference(), GraphEditor::MacroAutoPortPreference::AutoCreatePorts)
+            << "a fresh session must have restored the remembered choice";
+
+        auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
+        auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
+        auto ext = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Ext", 100, 100);
+        engine.getGraph().addConnection({{ext, 0}, {a, 0}});
+
+        bool modalShown = false;
+        editor.macroAutoPortModalForTest = [&](std::function<void(bool, bool)>) { modalShown = true; };
+        editor.setSelectedNodes({a, b});
+        editor.requestGroupSelectionIntoMacro();
+
+        EXPECT_FALSE(modalShown) << "the remembered choice must suppress the modal on relaunch (T147)";
+        ASSERT_EQ(editor.getMacros().size(), 1);
+        EXPECT_EQ(editor.getMacros().getAll()[0].ports.size(), 1u);
+    }
 }
 
 TEST(MacroAutoPort, PreferenceAutoCreatePortsSkipsTheModal) {
