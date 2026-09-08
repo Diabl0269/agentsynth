@@ -11,6 +11,10 @@ juce::var MacroPort::toVar() const {
     obj->setProperty("name", name);
     obj->setProperty("order", order);
     obj->setProperty("kind", kind == MacroPortKind::Midi ? "midi" : "audioCV");
+    // Omitted entirely when unset, matching how "ports" itself is omitted on a pre-P8-15 macro —
+    // absence, not a sentinel value, is what "no custom colour" looks like on disk.
+    if (colour.has_value())
+        obj->setProperty("colour", colour->toString()); // same encoding as Macro::colour above
     return juce::var(obj);
 }
 
@@ -35,6 +39,13 @@ bool MacroPort::fromVar(const juce::var& v, MacroPort& out) {
         parsed.kind = MacroPortKind::AudioCV;
     else
         return false; // missing or unrecognised "kind" — reject rather than silently default
+
+    // "colour" is decorative-only (unlike kind/nodeUuid above), so it is the one field here that
+    // does NOT follow the all-or-nothing rule: absent (every pre-T152 save) or present-but-not-a-
+    // string both just leave it unset rather than rejecting the whole port over a cosmetic field.
+    const juce::var colourVar = obj->getProperty("colour");
+    if (colourVar.isString() && colourVar.toString().isNotEmpty())
+        parsed.colour = juce::Colour::fromString(colourVar.toString());
 
     out = std::move(parsed);
     return true;

@@ -8,6 +8,22 @@ namespace {
 constexpr int kDirectionInputId = 1;
 constexpr int kDirectionOutputId = 2;
 
+// T153: Up/Down on a control that opts in (the row's colour swatch and its Up/Down/Delete glyph
+// buttons — see MacroPortConfigDialog::moveRowFocus's comment for why arrow navigation is scoped
+// to only those) reports itself as an arrow key rather than the caller re-deriving KeyPress
+// comparisons at every one of the four call sites.
+bool isVerticalArrowKey(const juce::KeyPress& key, bool& outMoveDown) {
+    if (key.isKeyCode(juce::KeyPress::downKey)) {
+        outMoveDown = true;
+        return true;
+    }
+    if (key.isKeyCode(juce::KeyPress::upKey)) {
+        outMoveDown = false;
+        return true;
+    }
+    return false;
+}
+
 constexpr int kKindAudioCVId = 1;
 constexpr int kKindMidiId = 2;
 
@@ -17,6 +33,8 @@ constexpr int kShapePolyId = 3;
 
 constexpr int kGlyphButtonSize = 20;
 constexpr int kGlyphButtonGap = 2;
+constexpr int kColourSwatchSize = 16; // T152
+constexpr int kDragHandleWidth = 14;  // T152
 
 // Sets a combo box's selection and calls its REAL onChange handler directly, rather than via
 // juce::ComboBox's own sendNotification path — that posts through AsyncUpdater, which a headless
@@ -96,8 +114,121 @@ public:
         }
     }
 
+    // T153: the Up/Down/Delete buttons are the keyboard-accessible reorder/delete fallback (they
+    // already get Tab/Return/Space for free from juce::Button) — this adds Up/Down-arrow FOCUS
+    // navigation between rows on top, wired by PortRowComponent to
+    // MacroPortConfigDialog::moveRowFocus. Returning false when nothing is wired (or the key isn't
+    // an arrow) falls through to Button::keyPressed so Return/Space keep triggering the click.
+    bool keyPressed(const juce::KeyPress& key) override {
+        bool moveDown = false;
+        if (onVerticalArrow && isVerticalArrowKey(key, moveDown)) {
+            onVerticalArrow(moveDown);
+            return true;
+        }
+        return juce::Button::keyPressed(key);
+    }
+
+    std::function<void(bool moveDown)> onVerticalArrow;
+
 private:
     Glyph glyph_;
+};
+
+// T152: the row's kind-tinted left-edge bar is now a real clickable swatch (founder review round
+// 3, item 3.4) instead of a plain painted rectangle — left-click opens a synth::ui::
+// ColourPickerPopup (the same favourites-shelf picker TimelineTrackHeaderComponent's track colour
+// swatch and AppearanceSettingsTab's note swatches already use), right-click resets to the
+// kind-tint default. `colour` is what actually PAINTS (custom colour, or the kind tint fallback);
+// PortRowComponent is the one that decides which of those it currently is.
+class PortColourSwatch : public juce::Button {
+public:
+    PortColourSwatch()
+        : juce::Button("portColourSwatch") {}
+
+    void paintButton(juce::Graphics& g, bool highlighted, bool down) override {
+        auto bounds = getLocalBounds().toFloat().reduced(0.5f);
+        g.setColour(colour);
+        g.fillRoundedRectangle(bounds, 3.0f);
+        const auto& c = liveThemeColours(*this);
+        g.setColour(c.border.withAlpha(highlighted || down ? 0.9f : 0.45f));
+        g.drawRoundedRectangle(bounds, 3.0f, highlighted || down ? 1.4f : 1.0f);
+    }
+
+    // Mirrors ColourPickerPopup::FavouriteSwatchButton's own override exactly (see its comment):
+    // a right-click must reset to default, not ALSO fire onClick the way a plain Button would.
+    void mouseDown(const juce::MouseEvent& e) override {
+        if (e.mods.isPopupMenu()) {
+            if (onRightClick)
+                onRightClick();
+            return;
+        }
+        juce::Button::mouseDown(e);
+    }
+
+    bool keyPressed(const juce::KeyPress& key) override {
+        bool moveDown = false;
+        if (onVerticalArrow && isVerticalArrowKey(key, moveDown)) {
+            onVerticalArrow(moveDown);
+            return true;
+        }
+        return juce::Button::keyPressed(key);
+    }
+
+    juce::Colour colour{juce::Colours::grey};
+    std::function<void()> onRightClick;
+    std::function<void(bool moveDown)> onVerticalArrow;
+};
+
+// T152: the drag-to-reorder handle — a small grip icon to the left of the name editor. Deliberately
+// a plain juce::Component, not a juce::Button: dragging is mouse-only by design (the Up/Down glyph
+// buttons above are the keyboard-accessible fallback per the class comment, so this handle never
+// needs to be a tab stop), and a plain Component sidesteps Button's own click-vs-drag heuristics
+// entirely rather than fighting them.
+class DragHandle
+    : public juce::Component
+    , public juce::SettableTooltipClient {
+public:
+    void paint(juce::Graphics& g) override {
+        const auto& c = liveThemeColours(*this);
+        const juce::Colour grip = dragging_ ? c.accent : (isMouseOver() ? c.textPrimary.withAlpha(0.85f) : c.textMuted);
+        g.setColour(grip);
+        auto bounds = getLocalBounds().toFloat();
+        const float w = bounds.getWidth() * 0.7f;
+        const float x = bounds.getCentreX() - w * 0.5f;
+        for (int i = 0; i < 3; ++i) {
+            const float y = bounds.getY() + bounds.getHeight() * (0.26f + 0.24f * (float)i);
+            g.drawLine(x, y, x + w, y, 1.5f);
+        }
+    }
+
+    void mouseEnter(const juce::MouseEvent&) override { repaint(); }
+    void mouseExit(const juce::MouseEvent&) override { repaint(); }
+
+    void mouseDown(const juce::MouseEvent&) override {
+        dragging_ = true;
+        repaint();
+        if (onDragStart)
+            onDragStart();
+    }
+
+    void mouseDrag(const juce::MouseEvent& e) override {
+        if (onDragMove)
+            onDragMove(e.getScreenPosition());
+    }
+
+    void mouseUp(const juce::MouseEvent&) override {
+        dragging_ = false;
+        repaint();
+        if (onDragEnd)
+            onDragEnd();
+    }
+
+    std::function<void()> onDragStart;
+    std::function<void(juce::Point<int> screenPos)> onDragMove;
+    std::function<void()> onDragEnd;
+
+private:
+    bool dragging_ = false;
 };
 } // namespace
 
@@ -164,6 +295,16 @@ public:
                 owner_.onRenamePort(nodeUuid, nameEditor.getText());
         };
         nameEditor.onReturnKey = nameEditor.onFocusLost;
+        // T153: Escape closes the WHOLE modal (docs/macros.md's decision on this — see the class
+        // comment) rather than just reverting this field's edit, matching Close's own behaviour
+        // exactly (a focus-loss side effect during teardown commits whatever text is here, the
+        // same as clicking Close already does — Escape does not discard anything Close wouldn't).
+        // Wired here (rather than relying on the bubble MacroPortConfigDialog::keyPressed catches)
+        // because juce::TextEditor consumes Escape itself before it ever bubbles.
+        nameEditor.onEscapeKey = [this] {
+            if (owner_.onRequestClose)
+                owner_.onRequestClose();
+        };
         addAndMakeVisible(nameEditor);
 
         midiTag.setText("MIDI", juce::dontSendNotification);
@@ -203,12 +344,40 @@ public:
         // that from re-minting the port's node on a no-op (see its own comment).
         voicesEditor.onFocusLost = [this] { maybeCommitShape(); };
         voicesEditor.onReturnKey = voicesEditor.onFocusLost;
+        voicesEditor.onEscapeKey = [this] { // same T153 reasoning as nameEditor's onEscapeKey above
+            if (owner_.onRequestClose)
+                owner_.onRequestClose();
+        };
         addAndMakeVisible(voicesEditor);
+
+        // T152: the per-port colour swatch — left-click opens a ColourPickerPopup, right-click
+        // resets to the kind-tint default. Starts from whatever the row was constructed with
+        // (nullopt for every pre-T152 port), never anything the dialog invents.
+        customColour = row.colour;
+        colourSwatch.colour = customColour.value_or(kindTintColour());
+        colourSwatch.setTooltip("Port colour (right-click to reset)");
+        colourSwatch.onClick = [this] { showColourPicker(); };
+        colourSwatch.onRightClick = [this] { commitColour(std::nullopt); };
+        colourSwatch.onVerticalArrow = [this](bool moveDown) {
+            owner_.moveRowFocus(*this, MacroPortConfigDialog::RowControl::Colour, moveDown);
+        };
+        addAndMakeVisible(colourSwatch);
+
+        // T152: the drag-to-reorder handle. Up/Down below stay fully functional as the keyboard
+        // fallback — this is an ADDITIONAL, mouse-only gesture, never a replacement.
+        dragHandle.setTooltip("Drag to reorder (or use the Up/Down buttons)");
+        dragHandle.onDragStart = [this] { owner_.beginRowDrag(*this); };
+        dragHandle.onDragMove = [this](juce::Point<int> screenPos) { owner_.updateRowDrag(*this, screenPos); };
+        dragHandle.onDragEnd = [this] { owner_.endRowDrag(*this); };
+        addAndMakeVisible(dragHandle);
 
         upButton.setTooltip("Move up");
         upButton.onClick = [this] {
             if (owner_.onReorderPort)
                 owner_.onReorderPort(nodeUuid, /*moveUp=*/true);
+        };
+        upButton.onVerticalArrow = [this](bool moveDown) {
+            owner_.moveRowFocus(*this, MacroPortConfigDialog::RowControl::Up, moveDown);
         };
         addAndMakeVisible(upButton);
 
@@ -217,6 +386,9 @@ public:
             if (owner_.onReorderPort)
                 owner_.onReorderPort(nodeUuid, /*moveUp=*/false);
         };
+        downButton.onVerticalArrow = [this](bool moveDown) {
+            owner_.moveRowFocus(*this, MacroPortConfigDialog::RowControl::Down, moveDown);
+        };
         addAndMakeVisible(downButton);
 
         deleteButton.setTooltip("Delete this port");
@@ -224,9 +396,94 @@ public:
             if (owner_.onDeletePort)
                 owner_.onDeletePort(nodeUuid);
         };
+        deleteButton.onVerticalArrow = [this](bool moveDown) {
+            owner_.moveRowFocus(*this, MacroPortConfigDialog::RowControl::Delete, moveDown);
+        };
         addAndMakeVisible(deleteButton);
 
         updateVoicesVisibility();
+    }
+
+    juce::Colour kindTintColour() const {
+        const auto& c = liveThemeColours(*this);
+        return isMidi ? c.audioWire : c.accent;
+    }
+
+    // The ONE commit path for a colour change — the picker's onCommit, the swatch's right-click
+    // reset, and setRowColourForTest/resetRowColourForTest (via the dialog) all land here, so they
+    // can never disagree about what "committing a colour" actually updates.
+    void commitColour(std::optional<juce::Colour> newColour) {
+        customColour = newColour;
+        colourSwatch.colour = customColour.value_or(kindTintColour());
+        colourSwatch.repaint();
+        if (owner_.onChangePortColour)
+            owner_.onChangePortColour(nodeUuid, newColour);
+    }
+
+    // Shared by the real swatch click and createRowColourPickerForTest — mirrors
+    // TimelineTrackHeaderComponent::buildColourPicker's own split. onPreview is LOCAL-only (just
+    // repaints the swatch) — committing on every drag tick would push a recordGraphAndMacroChange
+    // undo entry per pixel of slider movement; the real commit fires once, when the popup closes,
+    // exactly like the shape combo's own "commits immediately [on a real, discrete choice]" rule,
+    // not on every intermediate value.
+    //
+    // Both callbacks capture SafePointers, NEVER a raw `this` — the popup they're attached to
+    // outlives a single click dispatch (it lives inside a juce::CallOutBox until the user closes
+    // it), and this row can be destroyed underneath it at any point in between: any OTHER
+    // GraphEditor callback wired on this same dialog (onRenamePort, onChangePortShape, ...) runs
+    // via MessageManager::callAsync and unconditionally calls refreshPorts() -> rebuildRowComponents()
+    // -> rowControls_.clear(), so simply focusing a different field and then opening this row's
+    // picker is enough to have that async rebuild land while the CallOutBox is still open. The two
+    // callbacks deliberately use DIFFERENT SafePointer targets: onPreview is purely cosmetic (this
+    // row's own swatch), so it no-ops once the row is gone — nothing left to preview. onCommit
+    // must still land the user's actual pick even if THIS row died in the meantime (their edit
+    // should not be silently discarded just because a rebuild raced the callout), so it goes
+    // through the DIALOG (which outlives any one row) plus the port's uuid captured by value,
+    // straight to onChangePortColour — never through commitColour(), which needs a live `this`.
+    std::unique_ptr<synth::ui::ColourPickerPopup> buildColourPicker() {
+        juce::Component::SafePointer<PortRowComponent> safeRow(this);
+        juce::Component::SafePointer<MacroPortConfigDialog> safeDialog(&owner_);
+        const juce::String uuid = nodeUuid;
+        return std::make_unique<synth::ui::ColourPickerPopup>(
+            colourSwatch.colour, owner_.colourPickerProps_,
+            [safeRow](juce::Colour c) {
+                if (auto* row = safeRow.getComponent()) {
+                    row->colourSwatch.colour = c;
+                    row->colourSwatch.repaint();
+                }
+            },
+            [safeDialog, uuid](juce::Colour c) {
+                if (auto* dialog = safeDialog.getComponent())
+                    if (dialog->onChangePortColour)
+                        dialog->onChangePortColour(uuid, c);
+            });
+    }
+
+    void showColourPicker() {
+        juce::CallOutBox::launchAsynchronously(buildColourPicker(), colourSwatch.getScreenBounds(), nullptr);
+    }
+
+    // The real drag-end path (DragHandle::onDragEnd -> MacroPortConfigDialog::endRowDrag) and
+    // dragRowToIndexInGroupForTest both call this — one place that turns "a target index" into
+    // the onReorderPortTo callback.
+    void commitDragTo(int newIndexInGroup) {
+        if (owner_.onReorderPortTo)
+            owner_.onReorderPortTo(nodeUuid, newIndexInGroup);
+    }
+
+    // Whether this row currently carries a user-set colour (as opposed to just displaying the
+    // kind-tint fallback) — read by getRowHasCustomColourForTest rather than the dialog's own
+    // `rows_` snapshot, which is only refreshed on the next refreshPorts() round trip and would
+    // otherwise read stale immediately after a same-tick commitColour().
+    bool hasCustomColourForTest() const { return customColour.has_value(); }
+
+    // -1 = none, 0 = insertion point is ABOVE this row, 1 = BELOW it. Purely visual — repaints
+    // only on an actual change, matching Source/UI/CLAUDE.md's "no unconditional repaint" rule.
+    void setDropIndicator(int position) {
+        if (dropIndicatorPosition_ != position) {
+            dropIndicatorPosition_ = position;
+            repaint();
+        }
     }
 
     void updateVoicesVisibility() {
@@ -284,12 +541,20 @@ public:
             shapeBox.setBounds(area.removeFromRight(90));
         }
         area.removeFromRight(8);
+
+        // T152: colour swatch, then the drag handle, on the left — replacing the old painted
+        // kind-tint bar that used to occupy this same edge (paint() below no longer draws it).
+        colourSwatch.setBounds(
+            area.removeFromLeft(kColourSwatchSize).withSizeKeepingCentre(kColourSwatchSize, kColourSwatchSize));
+        area.removeFromLeft(4);
+        dragHandle.setBounds(area.removeFromLeft(kDragHandleWidth));
+        area.removeFromLeft(6);
+
         nameEditor.setBounds(area);
     }
 
     void paint(juce::Graphics& g) override {
         const auto& c = liveThemeColours(*this);
-        const juce::Colour kindColour = isMidi ? c.audioWire : c.accent;
         auto bounds = getLocalBounds().toFloat();
 
         if (isMidi) {
@@ -297,8 +562,14 @@ public:
             g.fillRoundedRectangle(bounds, 5.0f);
         }
 
-        g.setColour(kindColour.withAlpha(0.6f));
-        g.fillRoundedRectangle(bounds.withWidth(3.0f).reduced(0.0f, 3.0f), 1.5f);
+        // T152: drag insertion indicator — a thin accent line at the edge the dragged row would
+        // land next to. Drawn here (not by MacroPortConfigDialog/rowsContent_) so it always tracks
+        // this row's own live bounds with no separate geometry computation to drift out of sync.
+        if (dropIndicatorPosition_ >= 0) {
+            g.setColour(c.accent);
+            auto local = getLocalBounds();
+            g.fillRect(dropIndicatorPosition_ == 0 ? local.removeFromTop(2) : local.removeFromBottom(2));
+        }
     }
 
     juce::String nodeUuid;
@@ -309,6 +580,8 @@ public:
     juce::ComboBox shapeBox; // AudioCV rows only; hidden entirely for a MIDI row
     juce::Label voicesLabel{"voicesLabel", juce::String()};
     juce::TextEditor voicesEditor; // shown only while shapeBox reads Poly-N
+    PortColourSwatch colourSwatch; // T152
+    DragHandle dragHandle;         // T152
     GlyphButton upButton;
     GlyphButton downButton;
     GlyphButton deleteButton;
@@ -317,6 +590,8 @@ private:
     MacroPortConfigDialog& owner_; // outlives this row: owned by owner_.rowControls_
     MacroPortShape committedShape_;
     int committedVoices_;
+    std::optional<juce::Colour> customColour; // T152; nullopt = falls back to kindTintColour()
+    int dropIndicatorPosition_ = -1;          // T152; -1 none, 0 above, 1 below
 };
 
 MacroPortConfigDialog::MacroPortConfigDialog(juce::String macroName, std::vector<PortRow> ports)
@@ -358,10 +633,22 @@ MacroPortConfigDialog::MacroPortConfigDialog(juce::String macroName, std::vector
     newVoicesEditor_.setText("4", juce::dontSendNotification);
     newVoicesEditor_.setInputRestrictions(2, "0123456789");
     newVoicesEditor_.setJustification(juce::Justification::centred);
+    newVoicesEditor_.onReturnKey = [this] { triggerAddPortForTest(); }; // T153, same as newNameEditor_
+    newVoicesEditor_.onEscapeKey = [this] {
+        if (onRequestClose)
+            onRequestClose();
+    };
     addAndMakeVisible(newVoicesEditor_);
     updateNewPortVoicesVisibility(); // Mono is the default shape: starts hidden
 
     newNameEditor_.setTextToShowWhenEmpty("Port name", juce::Colours::grey);
+    // T153: Return commits the in-progress "Add a port" field the same way it already does for a
+    // row's rename/voices fields — pressing Return here is the keyboard equivalent of clicking Add.
+    newNameEditor_.onReturnKey = [this] { triggerAddPortForTest(); };
+    newNameEditor_.onEscapeKey = [this] { // same "Escape closes the whole modal" decision as elsewhere
+        if (onRequestClose)
+            onRequestClose();
+    };
     addAndMakeVisible(newNameEditor_);
 
     addButton_.onClick = [this] { triggerAddPortForTest(); };
@@ -393,6 +680,20 @@ MacroPortConfigDialog::MacroPortConfigDialog(juce::String macroName, std::vector
 }
 
 MacroPortConfigDialog::~MacroPortConfigDialog() = default;
+
+// T153: the bubble-up path — reached whenever the currently-focused control does not itself
+// consume the key (a ComboBox or a GlyphButton/PortColourSwatch with no unhandled arrow, or
+// nothing focused at all). A juce::TextEditor consumes Escape/Return itself before either ever
+// gets here (TextEditor::keyPressed returns true for both), which is why every TextEditor above
+// ALSO gets its own onEscapeKey wired directly rather than relying on this alone.
+bool MacroPortConfigDialog::keyPressed(const juce::KeyPress& key) {
+    if (key == juce::KeyPress::escapeKey) {
+        if (onRequestClose)
+            onRequestClose();
+        return true;
+    }
+    return false;
+}
 
 void MacroPortConfigDialog::updateNewPortVoicesVisibility() {
     const bool isMidi = newKindBox_.getSelectedId() == kKindMidiId;
@@ -541,6 +842,117 @@ void MacroPortConfigDialog::refreshPorts(std::vector<PortRow> ports) {
     repaint();
 }
 
+// ---- T152 drag-to-reorder ----------------------------------------------------------------------
+// beginRowDrag/updateRowDrag/endRowDrag implement the real mouse path (DragHandle wires straight
+// to these); the *ForTest seams below call PortRowComponent::commitDragTo directly instead of
+// synthesizing a mouseDown/mouseDrag/mouseUp sequence, the same "drive the real controls, skip the
+// mouse plumbing" idiom every other *ForTest seam in this file already uses.
+
+void MacroPortConfigDialog::beginRowDrag(PortRowComponent& row) {
+    draggingNodeUuid_ = row.nodeUuid;
+    dragDropIndexInGroup_ = -1; // recomputed on the first updateRowDrag; -1 = "no move yet"
+}
+
+void MacroPortConfigDialog::updateRowDrag(PortRowComponent& row, juce::Point<int> screenPos) {
+    if (row.nodeUuid != draggingNodeUuid_)
+        return; // defensive: only the row that started the drag drives it
+
+    const int draggedIndex = rowControls_.indexOf(&row);
+    if (draggedIndex < 0)
+        return;
+    const bool isInput = rows_[(size_t)draggedIndex].isInput;
+    const int localY = rowsContent_.getLocalPoint(nullptr, screenPos).y;
+
+    // Count how many OTHER rows in the same direction group sit above the drop point — that count
+    // IS the dragged row's new index once it is removed from and reinserted into that group,
+    // exactly the index reorderMacroPortToIndex (GraphEditor.cpp) expects. Excluding the dragged
+    // row itself (rather than comparing against its own, unmoving on-screen position) is what
+    // makes this work with the row staying visually in place during the drag, instead of needing
+    // to follow the cursor like a real "lift and carry" drag would.
+    int dropIndex = 0;
+    int firstOtherInGroup = -1, lastOtherInGroup = -1;
+    for (int i = 0; i < rowControls_.size(); ++i) {
+        if (i == draggedIndex || rows_[(size_t)i].isInput != isInput)
+            continue;
+        if (firstOtherInGroup < 0)
+            firstOtherInGroup = i;
+        lastOtherInGroup = i;
+        if (localY > rowControls_[i]->getBounds().getCentreY())
+            ++dropIndex;
+    }
+    dragDropIndexInGroup_ = dropIndex;
+
+    // Visual feedback: the two rows straddling the drop point get an insertion-line indicator;
+    // every other row (including the dragged one) clears it. Computed fresh each call rather than
+    // diffed against the previous call — setDropIndicator() itself is the repaint-only-on-change
+    // guard, so this stays cheap.
+    for (int i = 0; i < rowControls_.size(); ++i) {
+        if (i == draggedIndex || rows_[(size_t)i].isInput != isInput) {
+            rowControls_[i]->setDropIndicator(-1);
+            continue;
+        }
+        int otherRank = 0; // this row's rank among the OTHER rows in its group, top to bottom
+        for (int j = firstOtherInGroup; j <= lastOtherInGroup; ++j) {
+            if (j == draggedIndex || rows_[(size_t)j].isInput != isInput)
+                continue;
+            if (j == i)
+                break;
+            ++otherRank;
+        }
+        if (otherRank == dropIndex)
+            rowControls_[i]->setDropIndicator(0); // the drop lands just above this row
+        else if (otherRank == dropIndex - 1)
+            rowControls_[i]->setDropIndicator(1); // the drop lands just below this row
+        else
+            rowControls_[i]->setDropIndicator(-1);
+    }
+}
+
+void MacroPortConfigDialog::endRowDrag(PortRowComponent& row) {
+    clearDragIndicators();
+    if (row.nodeUuid == draggingNodeUuid_ && dragDropIndexInGroup_ >= 0)
+        row.commitDragTo(dragDropIndexInGroup_);
+    draggingNodeUuid_ = {};
+    dragDropIndexInGroup_ = -1;
+}
+
+void MacroPortConfigDialog::clearDragIndicators() {
+    for (auto* rc : rowControls_)
+        rc->setDropIndicator(-1);
+}
+
+// ---- T153 keyboard row navigation ---------------------------------------------------------------
+
+int MacroPortConfigDialog::arrowNavigationTargetRow(int fromRow, bool moveDown) const {
+    const int target = fromRow + (moveDown ? 1 : -1);
+    return (target >= 0 && target < rowControls_.size()) ? target : -1;
+}
+
+void MacroPortConfigDialog::moveRowFocus(PortRowComponent& from, RowControl target, bool moveDown) {
+    const int fromIndex = rowControls_.indexOf(&from);
+    if (fromIndex < 0)
+        return;
+    const int toIndex = arrowNavigationTargetRow(fromIndex, moveDown);
+    if (toIndex < 0)
+        return; // at either end of the list — no wraparound (see the header's own comment)
+
+    auto* target_ = rowControls_[toIndex];
+    switch (target) {
+    case RowControl::Colour:
+        target_->colourSwatch.grabKeyboardFocus();
+        break;
+    case RowControl::Up:
+        target_->upButton.grabKeyboardFocus();
+        break;
+    case RowControl::Down:
+        target_->downButton.grabKeyboardFocus();
+        break;
+    case RowControl::Delete:
+        target_->deleteButton.grabKeyboardFocus();
+        break;
+    }
+}
+
 // ---- Test seams -------------------------------------------------------------------------------
 
 juce::String MacroPortConfigDialog::getRowNodeUuidForTest(int row) const {
@@ -636,6 +1048,77 @@ void MacroPortConfigDialog::triggerCloseForTest() {
         closeButton_.onClick();
 }
 
+// ---- T152 test seams: drag-to-reorder + per-port colour -----------------------------------
+
+void MacroPortConfigDialog::dragRowToIndexInGroupForTest(int row, int newIndexInGroup) {
+    if (row >= 0 && row < (int)rowControls_.size())
+        rowControls_[row]->commitDragTo(newIndexInGroup);
+}
+
+juce::Colour MacroPortConfigDialog::getRowDisplayColourForTest(int row) const {
+    return (row >= 0 && row < (int)rowControls_.size()) ? rowControls_[row]->colourSwatch.colour
+                                                        : juce::Colours::transparentBlack;
+}
+
+bool MacroPortConfigDialog::getRowHasCustomColourForTest(int row) const {
+    return (row >= 0 && row < (int)rowControls_.size()) && rowControls_[row]->hasCustomColourForTest();
+}
+
+void MacroPortConfigDialog::setRowColourForTest(int row, juce::Colour colour) {
+    if (row >= 0 && row < (int)rowControls_.size())
+        rowControls_[row]->commitColour(colour);
+}
+
+void MacroPortConfigDialog::resetRowColourForTest(int row) {
+    if (row >= 0 && row < (int)rowControls_.size())
+        rowControls_[row]->commitColour(std::nullopt);
+}
+
+std::unique_ptr<synth::ui::ColourPickerPopup> MacroPortConfigDialog::createRowColourPickerForTest(int row) {
+    if (row < 0 || row >= (int)rowControls_.size())
+        return nullptr;
+    return rowControls_[row]->buildColourPicker();
+}
+
+// ---- T153 test seams: keyboard accessibility -----------------------------------------------
+
+void MacroPortConfigDialog::simulateRowNameEscapeForTest(int row) {
+    if (row >= 0 && row < (int)rowControls_.size() && rowControls_[row]->nameEditor.onEscapeKey)
+        rowControls_[row]->nameEditor.onEscapeKey();
+}
+
+void MacroPortConfigDialog::simulateNewPortNameEscapeForTest() {
+    if (newNameEditor_.onEscapeKey)
+        newNameEditor_.onEscapeKey();
+}
+
+void MacroPortConfigDialog::simulateNewPortNameReturnForTest() {
+    if (newNameEditor_.onReturnKey)
+        newNameEditor_.onReturnKey();
+}
+
+int MacroPortConfigDialog::computeArrowNavigationTargetRowForTest(int fromRow, bool moveDown) const {
+    return arrowNavigationTargetRow(fromRow, moveDown);
+}
+
+bool MacroPortConfigDialog::simulateRowControlArrowKeyForTest(int row, RowControl control, bool moveDown) {
+    if (row < 0 || row >= (int)rowControls_.size())
+        return false;
+    const auto key = juce::KeyPress(moveDown ? juce::KeyPress::downKey : juce::KeyPress::upKey);
+    auto* rc = rowControls_[row];
+    switch (control) {
+    case RowControl::Colour:
+        return rc->colourSwatch.keyPressed(key);
+    case RowControl::Up:
+        return rc->upButton.keyPressed(key);
+    case RowControl::Down:
+        return rc->downButton.keyPressed(key);
+    case RowControl::Delete:
+        return rc->deleteButton.keyPressed(key);
+    }
+    return false;
+}
+
 // ---- MacroAutoPortPromptDialog (founder-review fix F5, docs/macros.md §7 item 6.2) -------------
 
 MacroAutoPortPromptDialog::MacroAutoPortPromptDialog(int crossingPortCount) {
@@ -668,6 +1151,17 @@ MacroAutoPortPromptDialog::MacroAutoPortPromptDialog(int crossingPortCount) {
 }
 
 MacroAutoPortPromptDialog::~MacroAutoPortPromptDialog() = default;
+
+// T153: see the class comment for the decision — Escape == "Leave Cables As Is", remember forced
+// to false regardless of the toggle's current state.
+bool MacroAutoPortPromptDialog::keyPressed(const juce::KeyPress& key) {
+    if (key == juce::KeyPress::escapeKey) {
+        if (onChoice)
+            onChoice(/*createPorts=*/false, /*remember=*/false);
+        return true;
+    }
+    return false;
+}
 
 void MacroAutoPortPromptDialog::paint(juce::Graphics& g) {
     g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));

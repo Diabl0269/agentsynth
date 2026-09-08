@@ -142,6 +142,68 @@ TEST(ExportAudioDialogTest, ProgressPageReflectsReportedFractionAndCompletion) {
     EXPECT_FALSE(closeRequested);
 }
 
+// ---- T153: keyboard accessibility sweep ----
+
+TEST(ExportAudioDialogTest, EscapeOnTheOptionsPageFiresOnRequestClose) {
+    auto dialog = makeDialog();
+    bool closed = false;
+    dialog.onRequestClose = [&] { closed = true; };
+
+    dialog.simulateEscapeKeyForTest();
+
+    EXPECT_TRUE(closed);
+}
+
+// A bounce in flight must not be silently orphaned by Escape - it has to route to onCancelRender,
+// never onRequestClose (which would just hide the dialog while BounceRunner keeps rendering).
+TEST(ExportAudioDialogTest, EscapeOnTheProgressPageDuringARenderFiresOnCancelRenderNotOnRequestClose) {
+    auto dialog = makeDialog();
+    dialog.showProgressPage();
+
+    bool cancelRenderFired = false;
+    bool closeRequested = false;
+    dialog.onCancelRender = [&] { cancelRenderFired = true; };
+    dialog.onRequestClose = [&] { closeRequested = true; };
+
+    dialog.simulateEscapeKeyForTest();
+
+    EXPECT_TRUE(cancelRenderFired);
+    EXPECT_FALSE(closeRequested);
+}
+
+// Once a render finishes, reportComplete() repurposes the same button into "Close" - Escape must
+// follow that switch and fire onRequestClose instead.
+TEST(ExportAudioDialogTest, EscapeOnTheProgressPageAfterCompletionFiresOnRequestClose) {
+    auto dialog = makeDialog();
+    dialog.showProgressPage();
+    BounceResult result;
+    result.ok = true;
+    result.message = "Bounced 100 samples.";
+    dialog.reportComplete(result);
+
+    bool cancelRenderFired = false;
+    bool closeRequested = false;
+    dialog.onCancelRender = [&] { cancelRenderFired = true; };
+    dialog.onRequestClose = [&] { closeRequested = true; };
+
+    dialog.simulateEscapeKeyForTest();
+
+    EXPECT_TRUE(closeRequested);
+    EXPECT_FALSE(cancelRenderFired);
+}
+
+// juce::TextEditor consumes Escape itself before it would ever bubble to keyPressed() - the file
+// name field needs its own route to the same page-aware handler.
+TEST(ExportAudioDialogTest, EscapeFromTheFileNameFieldAlsoFiresOnRequestClose) {
+    auto dialog = makeDialog();
+    bool closed = false;
+    dialog.onRequestClose = [&] { closed = true; };
+
+    dialog.simulateFileNameFieldEscapeForTest();
+
+    EXPECT_TRUE(closed);
+}
+
 // ---- P8-5 follow-up: destination folder + file name field ----
 
 TEST(ExportAudioDialogTest, DestinationDefaultsToTheGivenFolderAndFileNameBase) {

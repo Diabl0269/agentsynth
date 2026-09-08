@@ -88,6 +88,9 @@ ExportAudioDialog::ExportAudioDialog(double arrangementEndBeat, bool hasLoopRang
 
     fileNameEditor_.setText(initialFileNameBase, juce::dontSendNotification);
     fileNameEditor_.onTextChange = [this] { updateFileNameFromEditor(); };
+    // T153: juce::TextEditor consumes Escape itself before it would ever bubble to keyPressed()
+    // below, so this field needs its own route to the exact same page-aware handler.
+    fileNameEditor_.onEscapeKey = [this] { handleEscapeRequested(); };
     destinationLabel_.setText(destination_.getParentDirectory().getFullPathName(), juce::dontSendNotification);
     chooseDestinationButton_.onClick = [this] { chooseDestinationFolder(); };
 
@@ -120,6 +123,27 @@ ExportAudioDialog::ExportAudioDialog(double arrangementEndBeat, bool hasLoopRang
 }
 
 ExportAudioDialog::~ExportAudioDialog() = default;
+
+bool ExportAudioDialog::keyPressed(const juce::KeyPress& key) {
+    if (key == juce::KeyPress::escapeKey) {
+        handleEscapeRequested();
+        return true;
+    }
+    return false;
+}
+
+void ExportAudioDialog::handleEscapeRequested() {
+    if (progressPage_.isVisible()) {
+        // A render is (or was) in flight — Cancel/Close on the progress page already reads the
+        // right action for whichever state that button is currently in (reportComplete() retexts
+        // it to "Close" and rewires onClick to onRequestClose; see its own comment), so route
+        // there instead of duplicating that state machine.
+        if (progressCancelButton_.onClick)
+            progressCancelButton_.onClick();
+    } else if (onRequestClose) {
+        onRequestClose();
+    }
+}
 
 void ExportAudioDialog::updateExportButtonEnablement() {
     exportButton_.setEnabled(wholeArrangementButton_.isEnabled() || selectionButton_.isEnabled());
@@ -239,6 +263,11 @@ void ExportAudioDialog::setTailUnitBarsForTest(bool bars) {
 }
 
 void ExportAudioDialog::setTailValueForTest(double value) { tailSlider_.setValue(value, juce::dontSendNotification); }
+
+void ExportAudioDialog::simulateFileNameFieldEscapeForTest() {
+    if (fileNameEditor_.onEscapeKey)
+        fileNameEditor_.onEscapeKey();
+}
 
 juce::File ExportAudioDialog::uniquifyExistingFile(const juce::File& file) {
     // Strip a trailing " <digits>" from the base name first, so a second collision produces

@@ -69,6 +69,69 @@ TEST(MacroPortSerialization, ToVarFromVarRoundTripsMidiPort) {
     EXPECT_EQ(parsed.kind, MacroPortKind::Midi);
 }
 
+// T152: MacroPort::colour is decorative, optional persistence — unset by default, round-trips
+// when set, and (unlike kind/nodeUuid) never rejects the whole port when absent or malformed.
+
+TEST(MacroPortSerialization, ColourRoundTripsWhenSet) {
+    MacroPort original = makePort("node-3", true, "Cutoff In", 1, MacroPortKind::AudioCV);
+    original.colour = juce::Colour(0xff4fc1ff);
+
+    const juce::var v = original.toVar();
+    MacroPort parsed;
+    ASSERT_TRUE(MacroPort::fromVar(v, parsed));
+
+    ASSERT_TRUE(parsed.colour.has_value());
+    EXPECT_EQ(*parsed.colour, juce::Colour(0xff4fc1ff));
+}
+
+TEST(MacroPortSerialization, ColourDefaultsToUnsetAndOmitsTheKeyEntirely) {
+    const MacroPort original = makePort("node-4", false, "Wet Out", 0, MacroPortKind::AudioCV);
+    ASSERT_FALSE(original.colour.has_value());
+
+    auto* obj = original.toVar().getDynamicObject();
+    ASSERT_NE(obj, nullptr);
+    EXPECT_FALSE(obj->hasProperty("colour")) << "unset colour must be OMITTED, not written as a sentinel";
+
+    MacroPort parsed;
+    ASSERT_TRUE(MacroPort::fromVar(original.toVar(), parsed));
+    EXPECT_FALSE(parsed.colour.has_value());
+}
+
+// Back-compat: every port saved before T152 has no "colour" key at all — must still load fine,
+// with colour left unset (falls back to the kind tint everywhere it is displayed).
+TEST(MacroPortSerialization, PreT152SavedPortWithNoColourKeyLoadsFineAndColourStaysUnset) {
+    auto* obj = new juce::DynamicObject();
+    obj->setProperty("nodeUuid", "node-5");
+    obj->setProperty("isInput", true);
+    obj->setProperty("name", "Legacy In");
+    obj->setProperty("order", 0);
+    obj->setProperty("kind", "audioCV");
+    // Deliberately no "colour" property at all — this is exactly what MacroPort::toVar() produced
+    // before T152 added the field.
+
+    MacroPort parsed;
+    ASSERT_TRUE(MacroPort::fromVar(juce::var(obj), parsed));
+    EXPECT_EQ(parsed.nodeUuid, "node-5");
+    EXPECT_FALSE(parsed.colour.has_value());
+}
+
+// A malformed "colour" value (wrong type) is decorative-only, so it must NOT reject the whole
+// port the way a malformed "kind" does — it just leaves colour unset.
+TEST(MacroPortSerialization, MalformedColourValueDoesNotRejectTheWholePort) {
+    auto* obj = new juce::DynamicObject();
+    obj->setProperty("nodeUuid", "node-6");
+    obj->setProperty("isInput", false);
+    obj->setProperty("name", "Odd Colour");
+    obj->setProperty("order", 0);
+    obj->setProperty("kind", "audioCV");
+    obj->setProperty("colour", 12345); // not a string
+
+    MacroPort parsed;
+    ASSERT_TRUE(MacroPort::fromVar(juce::var(obj), parsed));
+    EXPECT_EQ(parsed.nodeUuid, "node-6");
+    EXPECT_FALSE(parsed.colour.has_value());
+}
+
 TEST(MacroPortSerialization, FromVarRejectsNonObject) {
     MacroPort out;
     EXPECT_FALSE(MacroPort::fromVar(juce::var(42), out));

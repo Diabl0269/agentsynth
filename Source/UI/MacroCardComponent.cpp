@@ -82,13 +82,18 @@ void MacroCardComponent::paint(juce::Graphics& g) {
     // mod-capable input/output jacks -> accent") — audioWire for a MIDI port's jack, accent for an
     // AudioCV one, not the *Wire-at-a-paint-site the CABLE-colour invariant forbids
     // (Source/UI/CLAUDE.md): a JACK dot is not a cable, and this follows the one jack-painting
-    // site in the codebase that already makes this exact call.
+    // site in the codebase that already makes this exact call. T152: a port with a user colour
+    // (set from the Configure I/O modal's swatch) draws its jack in THAT colour instead — still
+    // never a *Wire token read at a paint site, since the fallback is the only place this reads
+    // one, and only when the port has no custom colour of its own.
     const auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     static const synth::theme::Colors fallbackColors{};
     const auto& themeColors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
     {
         for (const auto& port : owner.macroCardPortLayout(macro->id)) {
-            g.setColour(port.kind == synth::MacroPortKind::Midi ? themeColors.audioWire : themeColors.accent);
+            const juce::Colour kindTint =
+                port.kind == synth::MacroPortKind::Midi ? themeColors.audioWire : themeColors.accent;
+            g.setColour(port.colour.value_or(kindTint));
             g.fillEllipse((float)port.jackPos.x - 5.0f, (float)port.jackPos.y - 5.0f, 10.0f, 10.0f);
 
             // Port name (founder-review fix F2, item 3/docs/macros.md §7 item 4: "it's not shown

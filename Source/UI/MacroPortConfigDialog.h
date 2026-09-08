@@ -2,9 +2,11 @@
 
 #include "../MacroSet.h"
 #include "../Modules/MacroPortShape.h"
+#include "ColourPickerPopup.h" // juce::PropertiesFile (juce_data_structures) + ColourPickerPopup itself (T152)
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace synth::ui {
@@ -33,6 +35,27 @@ namespace synth::ui {
  * the moment the combo box (or, for voice count, the number field) changes rather than needing a
  * separate "Apply Shape" click, and the dialog sizes itself to its content (clamped, with the row
  * list scrolling past the clamp) instead of a fixed 800px box with dead space below the last row.
+ *
+ * Founder review round 3 (T152/item 3.3, T152/item 3.4): a row is now also drag-reorderable (the
+ * Up/Down glyph buttons STAY as the keyboard-accessible fallback — T153 depends on them still
+ * being reachable/operable — drag is an ADDITIONAL gesture, not a replacement), and each row's
+ * kind-tinted left-edge bar is now a real clickable swatch that opens a colour picker to set a
+ * per-port colour (`onChangePortColour`), right-click resets to the kind-tint default. Both
+ * gestures are structurally confined to one direction (inputs against inputs, outputs against
+ * outputs) the same way `onReorderPort` already was: `onReorderPortTo`'s index is scoped to the
+ * dragged row's OWN direction group, so there is no way to express "become an output" through it.
+ *
+ * Founder review round 3 (T153): keyboard accessibility. Tab order follows JUCE's default
+ * top-to-bottom/left-to-right traversal (every real control here already `setWantsKeyboardFocus`s
+ * by default — Button/ComboBox/TextEditor all do), Return commits whichever text field currently
+ * has focus (unchanged — already true for rename/voices, and now also the "Add a port" name
+ * field), and Escape closes the dialog via the SAME path the Close button uses
+ * (`onRequestClose`) — including committing whatever rename/shape edit currently has focus, since
+ * that is a pre-existing side effect of losing focus during teardown, not something Escape does
+ * differently from Close. Arrow-Up/Down on a row's colour swatch or Up/Down/Delete button moves
+ * keyboard focus to the same control on the row above/below (never wraps), which does not
+ * conflict with a ComboBox's or TextEditor's own arrow-key handling since those controls are not
+ * where this is wired.
  */
 class MacroPortConfigDialog : public juce::Component {
 public:
@@ -43,6 +66,7 @@ public:
         synth::MacroPortKind kind = synth::MacroPortKind::AudioCV;
         MacroPortShape shape = MacroPortShape::Mono; // meaningless when kind == Midi
         int voiceCount = 1;                          // meaningless unless shape == Poly
+        std::optional<juce::Colour> colour;          // T152; unset falls back to the kind tint
     };
 
     MacroPortConfigDialog(juce::String macroName, std::vector<PortRow> ports);
@@ -59,12 +83,29 @@ public:
         onAddPort;
     std::function<void(const juce::String& nodeUuid, const juce::String& newName)> onRenamePort;
     std::function<void(const juce::String& nodeUuid)> onDeletePort;
-    /** `moveUp` true moves the port one step earlier in its own direction's draw order. */
+    /** `moveUp` true moves the port one step earlier in its own direction's draw order. Stays the
+     *  keyboard-accessible fallback (T153) now that dragging also exists — never removed. */
     std::function<void(const juce::String& nodeUuid, bool moveUp)> onReorderPort;
+    /** T152 drag-to-reorder: fired once a drag ends on a new slot. `newIndexInGroup` is 0-based
+     *  within the dragged row's OWN direction group (inputs vs outputs) — there is no way to
+     *  express a cross-direction move through this signature, which is what keeps the "can't drag
+     *  an input into the output section" constraint structural rather than a runtime check. */
+    std::function<void(const juce::String& nodeUuid, int newIndexInGroup)> onReorderPortTo;
     std::function<void(const juce::String& nodeUuid, MacroPortShape newShape, int newVoiceCount)> onChangePortShape;
+    /** T152 per-port colour: `newColour` is nullopt when the user resets to the kind-tint default
+     *  (the swatch's right-click), otherwise the colour just picked. */
+    std::function<void(const juce::String& nodeUuid, std::optional<juce::Colour> newColour)> onChangePortColour;
     std::function<void()> onRequestClose;
 
+    /** Favourites shelf storage for the per-row colour picker (T152) — shares the same
+     *  ApplicationProperties key every other ColourPickerPopup caller uses. Optional: nullptr
+     *  (the default, and what every test gets) means in-memory-only favourites for this dialog's
+     *  lifetime, exactly like ColourPickerPopup's own nullptr contract. */
+    void setColourPickerPropertiesFile(juce::PropertiesFile* props) noexcept { colourPickerProps_ = props; }
+
     void refreshPorts(std::vector<PortRow> ports);
+
+    bool keyPressed(const juce::KeyPress& key) override;
 
     // ---- Test seams: drive the REAL controls and read back the real row state, the same idiom
     // ExportAudioDialog's *ForTest methods use. ----
@@ -96,6 +137,53 @@ public:
     void commitRowVoiceCountForTest(int row);
     void triggerCloseForTest();
 
+    // ---- T152 test seams: drag-to-reorder + per-port colour --------------------------------
+    // Fires onReorderPortTo directly with the given target index — the same thing a real drag's
+    // mouseUp does (MacroPortConfigDialog::endRowDrag calls this exact row method), without
+    // needing to synthesize mouseDown/mouseDrag/mouseUp sequences to exercise the commit path.
+    void dragRowToIndexInGroupForTest(int row, int newIndexInGroup);
+    // The colour a row's swatch currently displays — the custom colour if one is set, otherwise
+    // whatever kind tint it falls back to.
+    juce::Colour getRowDisplayColourForTest(int row) const;
+    bool getRowHasCustomColourForTest(int row) const;
+    // Simulates picking a colour and closing the picker — fires onChangePortColour immediately,
+    // matching the shape combo's "commits immediately" idiom rather than needing a real
+    // juce::CallOutBox + juce::ColourSelector round trip in a headless test.
+    void setRowColourForTest(int row, juce::Colour colour);
+    // Simulates the swatch's right-click reset gesture — fires onChangePortColour(nodeUuid,
+    // std::nullopt).
+    void resetRowColourForTest(int row);
+    // Builds the REAL juce::ColourSelector-backed popup a click on this row's swatch would show,
+    // without going through a live juce::CallOutBox — exercises the exact onPreview/onCommit
+    // lambdas (and their SafePointer guards) rather than the simplified setRowColourForTest
+    // shortcut above. Pair with ColourPickerPopup::commitForTest(). Returns null for an
+    // out-of-range row.
+    std::unique_ptr<synth::ui::ColourPickerPopup> createRowColourPickerForTest(int row);
+
+    // ---- T153 test seams: keyboard accessibility ------------------------------------------
+    // Simulates Escape reaching the dialog (bubbled up from whatever child currently has focus,
+    // or pressed with nothing focused) — see the keyPressed() override for why every TextEditor
+    // ALSO needs its own onEscapeKey wired rather than relying on this bubble alone.
+    void simulateEscapeKeyForTest() { keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)); }
+    // Simulates a TextEditor's onEscapeKey firing directly — TextEditor::escapePressed() posts an
+    // async command message in real use, which a headless test's message-less run loop never
+    // pumps, so driving the wired lambda directly (the same idiom setComboSelectionForTest's
+    // comment documents for onChange) is what actually exercises the close path.
+    void simulateRowNameEscapeForTest(int row);
+    void simulateNewPortNameEscapeForTest();
+    // Simulates Return in the "Add a port" name field — the keyboard equivalent of clicking Add.
+    void simulateNewPortNameReturnForTest();
+    // Arrow-Up/Down navigation between rows' matching control (Colour swatch, Up/Down/Delete
+    // glyph buttons — the non-text, non-combo controls; see moveRowFocus()'s own comment for why
+    // arrow navigation is scoped to only these). computeArrowNavigationTargetRowForTest exercises
+    // the bounds-computing logic directly rather than via real grabKeyboardFocus(), which requires
+    // an on-screen peer this headless test has none of (Component::isShowing() gates it).
+    enum class RowControl { Colour, Up, Down, Delete };
+    int computeArrowNavigationTargetRowForTest(int fromRow, bool moveDown) const;
+    // Exercises GlyphButton/PortColourSwatch's own keyPressed() override end to end: presses the
+    // given key on the given row's control and reports whether IT (not the dialog) consumed it.
+    bool simulateRowControlArrowKeyForTest(int row, RowControl control, bool moveDown);
+
 private:
     class PortRowComponent; // one row's controls + kind-tinted background; defined in the .cpp
 
@@ -104,6 +192,25 @@ private:
     static MacroPortShape shapeFromComboIndex(int index);
     static int comboIndexFromShape(MacroPortShape shape);
     void updateNewPortVoicesVisibility();
+
+    // ---- T152 drag-to-reorder plumbing (real mouse path; the *ForTest seams above bypass this
+    // and call PortRowComponent::commitDragTo directly) ----
+    void beginRowDrag(PortRowComponent& row);
+    void updateRowDrag(PortRowComponent& row, juce::Point<int> screenPos);
+    void endRowDrag(PortRowComponent& row);
+    void clearDragIndicators();
+
+    // Moves keyboard focus from `target` on `from` to the same control on the row immediately
+    // above/below it in `rowControls_` — deliberately does NOT wrap past either end (an arrow key
+    // running off the end of the list should do nothing, not jump to the opposite side) and
+    // deliberately does NOT stop at the input/output boundary (this is plain focus navigation,
+    // not a reorder — crossing sections to reach a port is exactly what a sighted user's eye
+    // already does scanning down the column of rows).
+    void moveRowFocus(PortRowComponent& from, RowControl target, bool moveDown);
+    // The row index arrow-navigation from `fromRow` would land on, or -1 at either end of the
+    // list (no wraparound) — the one place this bounds math lives, shared by moveRowFocus() and
+    // computeArrowNavigationTargetRowForTest() so they can never disagree.
+    int arrowNavigationTargetRow(int fromRow, bool moveDown) const;
 
     // Lays out (apply=true) or just measures (apply=false, no component touched) the Inputs/
     // Outputs sections at the given content width, returning the total height either way — ONE
@@ -146,6 +253,14 @@ private:
     static constexpr int kMinDialogHeight = 300;
     static constexpr int kMaxDialogHeight = 620;
 
+    juce::PropertiesFile* colourPickerProps_ = nullptr; // T152; see setColourPickerPropertiesFile
+
+    // T152 drag state — empty/-1 whenever no drag is in progress. Only ever set from within a
+    // single beginRowDrag/updateRowDrag/endRowDrag sequence (one at a time: JUCE delivers mouse
+    // events to at most one dragged component).
+    juce::String draggingNodeUuid_;
+    int dragDropIndexInGroup_ = -1;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MacroPortConfigDialog)
 };
 
@@ -159,6 +274,19 @@ private:
  * MacroPortConfigDialog — the two dialogs share nothing but a translation unit, and keeping this
  * one in the same file pair, rather than a new Source/UI cpp/h pair, avoids a five-CMakeLists edit
  * for a component this small.
+ *
+ * T153 (founder review round 3): Escape used to be a silent no-op here — GraphEditor::
+ * showMacroAutoPortModal launches this in a juce::DialogWindow whose default
+ * `escapeKeyTriggersCloseButton` just hides the window (Component::setVisible(false)) without
+ * ever calling `onChoice`, so `respond` never ran: no macro got created, and no status message
+ * explained why. DECISION: Escape now behaves exactly like "Leave Cables As Is" — the least
+ * surprising reading of "close/cancel without creating a port, same as clicking away," since the
+ * user already asked to group these modules (Cmd+G or the menu item got them here); this modal is
+ * only deciding a secondary refinement (whether to also auto-create boundary ports), and Escape
+ * aborting the WHOLE grouping would be the surprising outcome, not this one. `remember` is always
+ * forced to false on the Escape path regardless of the toggle's current state (it defaults ON),
+ * so an reflexive Escape press can never silently pin "always leave cables as-is" as a permanent
+ * preference the way a deliberate button click legitimately can.
  */
 class MacroAutoPortPromptDialog : public juce::Component {
 public:
@@ -172,9 +300,12 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
 
-    /** Fires exactly once, on either button. `createPorts` true = "Create Ports", false = "Leave
-     *  Cables As Is"; `remember` mirrors the "Remember my choice" toggle's state at the moment of
-     *  the click. The caller (GraphEditor) closes the DialogWindow from this callback — this
+    bool keyPressed(const juce::KeyPress& key) override;
+
+    /** Fires exactly once, on either button (or Escape — see the class comment's T153 decision).
+     *  `createPorts` true = "Create Ports", false = "Leave Cables As Is"; `remember` mirrors the
+     *  "Remember my choice" toggle's state at the moment of the click (always false on the Escape
+     *  path). The caller (GraphEditor) closes the DialogWindow from this callback — this
      *  component never closes its own host window. */
     std::function<void(bool createPorts, bool remember)> onChoice;
 
@@ -183,6 +314,7 @@ public:
     bool getRememberChoiceForTest() const;
     void triggerCreatePortsForTest();
     void triggerLeaveCablesAsIsForTest();
+    void simulateEscapeKeyForTest() { keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)); }
 
 private:
     juce::Label titleLabel_;

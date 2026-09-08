@@ -3795,6 +3795,7 @@ std::vector<GraphEditor::MacroCardPort> GraphEditor::macroCardPortLayout(const j
             port.kind = side[i]->kind;
             port.name = side[i]->name;
             port.jackPos = {x, y};
+            port.colour = side[i]->colour; // T152; MacroCardComponent falls back to the kind tint
             result.push_back(port);
         }
     };
@@ -4061,6 +4062,12 @@ void GraphEditor::showMacroAutoPortModal(std::function<void(bool createPorts, bo
     options.componentToCentreAround = this;
     options.useNativeTitleBar = true;
     options.resizable = false;
+    // T153: the dialog's own keyPressed() override is the ONE Escape route (see its class comment
+    // for the "Escape == Leave Cables As Is" decision) — juce::DialogWindow's own default Escape
+    // handling (a Button shortcut dispatched on a DIFFERENT path than the keyPressed bubble our
+    // override sits on) would otherwise race it and just hide the window with `onChoice` never
+    // firing, which is the exact "no macro, no status message" bug this fixes.
+    options.escapeKeyTriggersCloseButton = false;
     auto* window = options.launchAsync();
 
     dialog->onChoice = [window, respond](bool createPorts, bool remember) {
@@ -5495,6 +5502,24 @@ void GraphEditor::renameMacroPort(const juce::String& macroId, const juce::Strin
         doRename();
 }
 
+void GraphEditor::changeMacroPortColour(const juce::String& macroId, const juce::String& nodeUuid,
+                                        std::optional<juce::Colour> newColour) {
+    auto& graph = audioEngine.getGraph();
+    auto doChange = [this, macroId, nodeUuid, newColour] {
+        if (auto* m = macros.find(macroId))
+            for (auto& p : m->ports)
+                if (p.nodeUuid == nodeUuid) {
+                    p.colour = newColour;
+                    break;
+                }
+    };
+
+    if (undoManager)
+        undoManager->recordGraphAndMacroChange(graph, macros, doChange);
+    else
+        doChange();
+}
+
 void GraphEditor::moveMacroPortOrder(const juce::String& macroId, const juce::String& nodeUuid, bool moveUp) {
     auto& graph = audioEngine.getGraph();
     auto doMove = [this, macroId, nodeUuid, moveUp] {
@@ -5531,6 +5556,61 @@ void GraphEditor::moveMacroPortOrder(const juce::String& macroId, const juce::St
             return; // already at the edge of its group — no-op, no undo entry pushed
 
         std::swap(group[(size_t)idx]->order, group[(size_t)otherIdx]->order);
+    };
+
+    if (undoManager)
+        undoManager->recordGraphAndMacroChange(graph, macros, doMove);
+    else
+        doMove();
+}
+
+void GraphEditor::reorderMacroPortToIndex(const juce::String& macroId, const juce::String& nodeUuid,
+                                          int newIndexInGroup) {
+    auto& graph = audioEngine.getGraph();
+    auto doMove = [this, macroId, nodeUuid, newIndexInGroup] {
+        auto* m = macros.find(macroId);
+        if (m == nullptr)
+            return;
+
+        auto selfIt = std::find_if(m->ports.begin(), m->ports.end(),
+                                   [&](const synth::MacroPort& p) { return p.nodeUuid == nodeUuid; });
+        if (selfIt == m->ports.end())
+            return;
+        const bool isInput = selfIt->isInput;
+
+        // Same one-side scoping moveMacroPortOrder uses above — there is no isInput parameter on
+        // this method at all, which is what makes "can't drag an input into the output section"
+        // structural rather than a value this function has to validate.
+        std::vector<synth::MacroPort*> group;
+        for (auto& p : m->ports)
+            if (p.isInput == isInput)
+                group.push_back(&p);
+        std::sort(group.begin(), group.end(),
+                  [](const synth::MacroPort* a, const synth::MacroPort* b) { return a->order < b->order; });
+
+        int idx = -1;
+        for (size_t i = 0; i < group.size(); ++i)
+            if (group[i]->nodeUuid == nodeUuid) {
+                idx = (int)i;
+                break;
+            }
+        if (idx < 0)
+            return;
+
+        const int clampedTarget = juce::jlimit(0, (int)group.size() - 1, newIndexInGroup);
+        if (clampedTarget == idx)
+            return; // dropped back where it started — no-op, no undo entry pushed
+
+        auto* moved = group[(size_t)idx];
+        group.erase(group.begin() + idx);
+        group.insert(group.begin() + clampedTarget, moved);
+
+        // A drag can move a port an arbitrary number of places in one gesture (unlike moveUp/
+        // moveDown's adjacent swap), so renumber the whole group sequentially rather than trying
+        // to patch individual `order` values — the only way to GUARANTEE a consistent, gap-free
+        // order after an arbitrary-distance move.
+        for (size_t i = 0; i < group.size(); ++i)
+            group[i]->order = (int)i;
     };
 
     if (undoManager)
@@ -5760,6 +5840,7 @@ GraphEditor::macroPortRowsForDialog(const juce::String& macroId) const {
         row.isInput = p.isInput;
         row.name = p.name;
         row.kind = p.kind;
+        row.colour = p.colour; // T152
         if (p.kind == synth::MacroPortKind::AudioCV) {
             auto nodeId = resolveMemberNodeId(p.nodeUuid);
             if (auto* node = graph.getNodeForId(nodeId)) {
@@ -5783,6 +5864,7 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
         return;
 
     auto* dialog = new synth::ui::MacroPortConfigDialog(macro->name, macroPortRowsForDialog(macroId));
+    dialog->setColourPickerPropertiesFile(propertiesFile_); // T152; nullptr is fine (in-memory favs)
 
     juce::DialogWindow::LaunchOptions options;
     options.content.setOwned(dialog);
@@ -5790,6 +5872,11 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
     options.componentToCentreAround = this;
     options.useNativeTitleBar = true;
     options.resizable = false;
+    // T153: same reasoning as showMacroAutoPortModal above — the dialog's own keyPressed()
+    // override (Escape -> onRequestClose) is the ONE Escape route, not competing with
+    // juce::DialogWindow's default (which would just hide the window on a different dispatch
+    // path, bypassing onRequestClose and every commit-on-close side effect it triggers).
+    options.escapeKeyTriggersCloseButton = false;
     auto* window = options.launchAsync();
 
     juce::Component::SafePointer<GraphEditor> safeThis(this);
@@ -5846,6 +5933,16 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
                 d->refreshPorts(self->macroPortRowsForDialog(macroId));
         });
     };
+    dialog->onReorderPortTo = [safeThis, safeDialog, macroId](const juce::String& nodeUuid, int newIndexInGroup) {
+        juce::MessageManager::callAsync([safeThis, safeDialog, macroId, nodeUuid, newIndexInGroup] {
+            auto* self = safeThis.getComponent();
+            if (self == nullptr)
+                return;
+            self->reorderMacroPortToIndex(macroId, nodeUuid, newIndexInGroup);
+            if (auto* d = safeDialog.getComponent())
+                d->refreshPorts(self->macroPortRowsForDialog(macroId));
+        });
+    };
     dialog->onChangePortShape = [safeThis, safeDialog, macroId](const juce::String& nodeUuid, MacroPortShape newShape,
                                                                 int newVoiceCount) {
         juce::MessageManager::callAsync([safeThis, safeDialog, macroId, nodeUuid, newShape, newVoiceCount] {
@@ -5853,6 +5950,17 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
             if (self == nullptr)
                 return;
             self->changeMacroPortShape(macroId, nodeUuid, newShape, newVoiceCount);
+            if (auto* d = safeDialog.getComponent())
+                d->refreshPorts(self->macroPortRowsForDialog(macroId));
+        });
+    };
+    dialog->onChangePortColour = [safeThis, safeDialog, macroId](const juce::String& nodeUuid,
+                                                                 std::optional<juce::Colour> newColour) {
+        juce::MessageManager::callAsync([safeThis, safeDialog, macroId, nodeUuid, newColour] {
+            auto* self = safeThis.getComponent();
+            if (self == nullptr)
+                return;
+            self->changeMacroPortColour(macroId, nodeUuid, newColour);
             if (auto* d = safeDialog.getComponent())
                 d->refreshPorts(self->macroPortRowsForDialog(macroId));
         });

@@ -145,6 +145,34 @@ TEST(MacroCardJack, InputsLayOutDownTheLeftEdgeAndOutputsDownTheRightEdgeInOrder
         EXPECT_TRUE(card->getLocalBounds().contains(p.jackPos)) << p.nodeUuid;
 }
 
+// T152: a port's user colour (set from the Configure I/O modal's swatch) flows through to the
+// card's own jack layout, which is what MacroCardComponent::paint reads to colour the drawn dot —
+// unset by default (falls back to the kind tint there, not this layout struct's concern).
+TEST(MacroCardJack, LayoutCarriesThePortsUserColourAndDefaultsToUnset) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto m = makeTwoMemberMacro(editor, engine);
+    const auto in0 = editor.addMacroPort(m.macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV,
+                                         MacroPortShape::Mono, 1, "In A");
+    ASSERT_FALSE(in0.isEmpty());
+
+    auto findPort = [&]() -> std::optional<GraphEditor::MacroCardPort> {
+        for (const auto& p : editor.macroCardPortLayout(m.macroId))
+            if (p.nodeUuid == in0)
+                return p;
+        return std::nullopt;
+    };
+
+    ASSERT_TRUE(findPort().has_value());
+    EXPECT_FALSE(findPort()->colour.has_value());
+
+    editor.changeMacroPortColour(m.macroId, in0, juce::Colour(0xffaa33ff));
+    ASSERT_TRUE(findPort().has_value());
+    ASSERT_TRUE(findPort()->colour.has_value());
+    EXPECT_EQ(*findPort()->colour, juce::Colour(0xffaa33ff));
+}
+
 // ============================================================================
 // Jack hit-test through the REAL mouse path (ModuleComponent::mouseDown/mouseUp)
 // ============================================================================
