@@ -459,7 +459,13 @@ void AppLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& butto
     g.setColour(fill);
     g.fillRoundedRectangle(bounds, m.pillRadius);
 
-    g.setColour(c.border);
+    // Founder review round 4 (T152/T153 macro Configure I/O dialog testing): a juce::TextButton
+    // had no visible keyboard-focus indicator anywhere in the app — LookAndFeel_V4's default draws
+    // none, and Button::paint() only ever passes this function isOver()/isDown()
+    // (juce_Button.cpp), never focus state. Reuses drawTextEditorOutline/drawComboBox's own
+    // "accent outline when focused, same border weight" convention rather than inventing a new
+    // style, so every plain TextButton in the app (not just this one dialog) now shows focus.
+    g.setColour(button.hasKeyboardFocus(true) ? c.accent : c.border);
     g.drawRoundedRectangle(bounds, m.pillRadius, m.borderWidth);
 }
 

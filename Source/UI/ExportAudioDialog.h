@@ -53,6 +53,15 @@ public:
 
     void paint(juce::Graphics& g) override;
     void resized() override;
+    // T153 keyboard accessibility sweep: Escape triggers whichever cancel/close action the
+    // currently-visible page shows (onRequestClose on the options page, onCancelRender on the
+    // progress page — NOT onRequestClose there, since that would just hide the window while a
+    // BounceRunner keeps rendering unseen in the background). Wired here rather than relying
+    // solely on juce::DialogWindow's own default Escape handling because (a) that default cannot
+    // distinguish the two pages at all, and (b) juce::TextEditor (fileNameEditor_) consumes
+    // Escape itself before it would ever bubble there anyway — see the .cpp for the matching
+    // onEscapeKey wiring this needed.
+    bool keyPressed(const juce::KeyPress& key) override;
 
     // Fires once, when Export is pressed with a usable range. The caller is expected to call
     // showProgressPage() (directly or via reportProgress/reportComplete) once the render starts.
@@ -89,8 +98,16 @@ public:
     // target unit, exactly like a real click on tailUnitBox_) then setting the value.
     void setTailUnitBarsForTest(bool bars);
     void setTailValueForTest(double value);
+    void simulateEscapeKeyForTest() { keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)); }
+    // TextEditor::escapePressed() posts an async command message in real use (never delivered in
+    // a headless test with no message loop), so this drives the wired fileNameEditor_.onEscapeKey
+    // lambda directly instead — same idiom simulateEscapeKeyForTest above uses for keyPressed().
+    void simulateFileNameFieldEscapeForTest();
 
 private:
+    // The one place Escape (from keyPressed() above, or fileNameEditor_'s own onEscapeKey) routes
+    // to — page-aware, per the keyPressed() comment.
+    void handleEscapeRequested();
     void updateBitDepthChoicesForFormat();
     void chooseDestinationFolder();
     void updateFileNameFromEditor();

@@ -1779,6 +1779,11 @@ void MainComponent::promptExportAudio() {
     options.componentToCentreAround = this;
     options.useNativeTitleBar = true;
     options.resizable = false;
+    // T153: ExportAudioDialog's own keyPressed() override is the ONE Escape route (page-aware —
+    // it must route to onCancelRender, not onRequestClose, while a bounce is in flight; see its
+    // own comment) — not juce::DialogWindow's default, which cannot tell the two pages apart and
+    // would silently orphan a running render.
+    options.escapeKeyTriggersCloseButton = false;
     auto* window = options.launchAsync();
     exportDialog_ = dialog;
 

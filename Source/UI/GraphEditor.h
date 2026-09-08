@@ -612,8 +612,17 @@ public:
     /** Moves the port fronted by `nodeUuid` one step earlier/later in its OWN direction's draw
      *  order (inputs are reordered against other inputs, outputs against other outputs — the two
      *  sides of the card, §5.4) by swapping `order` with its neighbour. A no-op at either end of
-     *  its group. */
+     *  its group. The keyboard-accessible fallback (T153) for reorderMacroPortToIndex below — kept
+     *  independently callable and tested, never removed. */
     void moveMacroPortOrder(const juce::String& macroId, const juce::String& nodeUuid, bool moveUp);
+
+    /** T152 drag-to-reorder: moves the port fronted by `nodeUuid` to `newIndexInGroup` (0-based,
+     *  clamped) within its OWN direction group — same scoping as moveMacroPortOrder above, just
+     *  able to move more than one slot in a single step (what a drag can do that Up/Down can't).
+     *  Unlike moveMacroPortOrder's pairwise swap, this RENUMBERS the whole group's `order` fields
+     *  sequentially afterward — the only way to guarantee a consistent, gap-free order after an
+     *  arbitrary-distance move. A no-op (no undo entry) if the port is already at that index. */
+    void reorderMacroPortToIndex(const juce::String& macroId, const juce::String& nodeUuid, int newIndexInGroup);
 
     /** Changes the shape of an existing audio/CV port — the one operation §5.3 calls out as
      *  needing to read as ONE edit despite being delete-node + create-node + rewire underneath.
@@ -627,6 +636,12 @@ public:
      *  port, which has no shape to change (§5.1). Returns the new node's uuid. */
     juce::String changeMacroPortShape(const juce::String& macroId, const juce::String& nodeUuid,
                                       MacroPortShape newShape, int newVoiceCount);
+
+    /** T152: sets (or, with nullopt, clears back to the kind-tint default) the user colour for the
+     *  port fronted by `nodeUuid`. Touches only `macros` — never the graph — so this pushes a
+     *  MacroSnapshotAction alone, the same as renameMacroPort. */
+    void changeMacroPortColour(const juce::String& macroId, const juce::String& nodeUuid,
+                               std::optional<juce::Colour> newColour);
 
     /** Opens the "Configure I/O" modal (MacroPortConfigDialog) for `macroId` — the single entry
      *  point every port add/remove/rename/reorder/shape-change above is reached through when the
@@ -657,7 +672,9 @@ public:
         bool isInput = false;
         synth::MacroPortKind kind = synth::MacroPortKind::AudioCV;
         juce::String name;
-        juce::Point<int> jackPos; // card-local
+        juce::Point<int> jackPos;           // card-local
+        std::optional<juce::Colour> colour; // T152; unset -> MacroCardComponent falls back to
+                                            // the same kind tint it always painted the jack with
     };
 
     /** Every port on `macroId`'s collapsed card, laid out. Empty if `macroId` doesn't resolve or

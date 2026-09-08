@@ -6,6 +6,7 @@
 // API these callbacks are meant to reach are covered separately in Tests/MacroPortFlowTests.cpp.
 
 #include "../Source/UI/MacroPortConfigDialog.h"
+#include "../Source/UI/Theme/AppLookAndFeel.h"
 #include <gtest/gtest.h>
 
 using synth::MacroPortKind;
@@ -120,25 +121,6 @@ TEST(MacroPortConfigDialogTest, DeleteButtonFiresWithTheRowsUuid) {
     dialog.triggerRowDeleteForTest(1);
 
     EXPECT_EQ(capturedUuid, "uuid-out");
-}
-
-TEST(MacroPortConfigDialogTest, MoveUpAndMoveDownFireTheCorrectDirection) {
-    MacroPortConfigDialog dialog("My Macro", twoPorts());
-
-    juce::String capturedUuid;
-    bool capturedMoveUp = false;
-    dialog.onReorderPort = [&](const juce::String& uuid, bool moveUp) {
-        capturedUuid = uuid;
-        capturedMoveUp = moveUp;
-    };
-
-    dialog.triggerRowMoveUpForTest(0);
-    EXPECT_EQ(capturedUuid, "uuid-in");
-    EXPECT_TRUE(capturedMoveUp);
-
-    dialog.triggerRowMoveDownForTest(1);
-    EXPECT_EQ(capturedUuid, "uuid-out");
-    EXPECT_FALSE(capturedMoveUp);
 }
 
 // F1 founder-review fix: the per-row "Apply Shape" button is gone — picking a new shape in the
@@ -277,6 +259,207 @@ TEST(MacroPortConfigDialogTest, CloseButtonFiresOnRequestClose) {
 }
 
 // ============================================================================
+// T152: drag-to-reorder (item 3.3) — the constraint under test is structural: onReorderPortTo's
+// index is scoped to the dragged row's OWN direction group, so there is no argument that could
+// ever mean "become an output" — GraphEditor::reorderMacroPortToIndex (MacroPortFlowTests.cpp)
+// covers the other half: that the resulting `order` values never touch the opposite group.
+// ============================================================================
+
+TEST(MacroPortConfigDialogTest, DragReorderFiresOnReorderPortToWithTheRowsUuidAndTargetIndex) {
+    MacroPortConfigDialog dialog("My Macro", twoPorts());
+
+    juce::String capturedUuid;
+    int capturedIndex = -1;
+    dialog.onReorderPortTo = [&](const juce::String& uuid, int index) {
+        capturedUuid = uuid;
+        capturedIndex = index;
+    };
+
+    dialog.dragRowToIndexInGroupForTest(1, 0); // drag "uuid-out" (the lone output) to index 0
+
+    EXPECT_EQ(capturedUuid, "uuid-out");
+    EXPECT_EQ(capturedIndex, 0);
+}
+
+TEST(MacroPortConfigDialogTest, DraggingAnInputRowNeverFiresForTheOutputRowAndViceVersa) {
+    MacroPortConfigDialog dialog("My Macro", twoPorts()); // row 0 = input, row 1 = output
+
+    std::vector<juce::String> capturedUuids;
+    dialog.onReorderPortTo = [&](const juce::String& uuid, int) { capturedUuids.push_back(uuid); };
+
+    dialog.dragRowToIndexInGroupForTest(0, 0); // the input row's own (single-member) group
+
+    ASSERT_EQ(capturedUuids.size(), 1u);
+    EXPECT_EQ(capturedUuids[0], "uuid-in") << "dragging the input row must never report the output row's uuid";
+}
+
+// ============================================================================
+// T152: per-port colour (item 3.4)
+// ============================================================================
+
+TEST(MacroPortConfigDialogTest, RowWithNoColourDisplaysTheKindTintByDefault) {
+    MacroPortConfigDialog dialog("My Macro", twoPorts());
+    EXPECT_FALSE(dialog.getRowHasCustomColourForTest(0));
+    // The exact tint colour depends on the live theme/LookAndFeel (absent here, so the fallback
+    // theme applies) — the load-bearing assertion is "no custom colour", covered above; toVar/
+    // fromVar's own round-trip tests (MacroSetTests.cpp) pin the persisted representation.
+}
+
+TEST(MacroPortConfigDialogTest, SettingAColourFiresOnChangePortColourAndUpdatesTheSwatch) {
+    MacroPortConfigDialog dialog("My Macro", twoPorts());
+
+    juce::String capturedUuid;
+    std::optional<juce::Colour> capturedColour;
+    dialog.onChangePortColour = [&](const juce::String& uuid, std::optional<juce::Colour> c) {
+        capturedUuid = uuid;
+        capturedColour = c;
+    };
+
+    dialog.setRowColourForTest(0, juce::Colour(0xffff0000));
+
+    ASSERT_TRUE(capturedColour.has_value());
+    EXPECT_EQ(capturedUuid, "uuid-in");
+    EXPECT_EQ(*capturedColour, juce::Colour(0xffff0000));
+    EXPECT_TRUE(dialog.getRowHasCustomColourForTest(0));
+    EXPECT_EQ(dialog.getRowDisplayColourForTest(0), juce::Colour(0xffff0000));
+}
+
+TEST(MacroPortConfigDialogTest, ResettingAColourFiresOnChangePortColourWithNulloptAndFallsBackToTheTint) {
+    MacroPortConfigDialog dialog("My Macro", twoPorts());
+    dialog.setRowColourForTest(0, juce::Colour(0xffff0000));
+    const juce::Colour tintBeforeReset = [&] {
+        // Capture what the tint fallback actually is by resetting and reading the swatch back.
+        dialog.resetRowColourForTest(0);
+        return dialog.getRowDisplayColourForTest(0);
+    }();
+    EXPECT_FALSE(dialog.getRowHasCustomColourForTest(0));
+
+    bool fired = false;
+    std::optional<juce::Colour> capturedColour = juce::Colour(0xff123456);
+    dialog.onChangePortColour = [&](const juce::String&, std::optional<juce::Colour> c) {
+        fired = true;
+        capturedColour = c;
+    };
+    dialog.setRowColourForTest(0, juce::Colour(0xff00ff00));
+    dialog.resetRowColourForTest(0);
+
+    ASSERT_TRUE(fired);
+    EXPECT_FALSE(capturedColour.has_value());
+    EXPECT_FALSE(dialog.getRowHasCustomColourForTest(0));
+    EXPECT_EQ(dialog.getRowDisplayColourForTest(0), tintBeforeReset);
+}
+
+// Regression test for a lifetime bug caught in review: the popup buildColourPicker() returns
+// outlives a single click dispatch (a real one lives inside a juce::CallOutBox until the user
+// closes it), and any OTHER row-mutating callback firing while it's open (a rename's onFocusLost,
+// a shape change, ...) rebuilds every row component out from under it via refreshPorts() ->
+// rebuildRowComponents() -> rowControls_.clear(). The picker's onCommit callback must still land
+// the user's pick on the dialog (never crash by reaching into the now-destroyed row) even when
+// that race happens between opening the picker and closing it.
+TEST(MacroPortConfigDialogTest, ColourPickerCommitSurvivesTheRowBeingRebuiltWhileItIsOpen) {
+    MacroPortConfigDialog dialog("My Macro", twoPorts());
+
+    auto picker = dialog.createRowColourPickerForTest(0);
+    ASSERT_NE(picker, nullptr);
+
+    // Simulate the async rebuild any other GraphEditor callback triggers while the popup is still
+    // open: refreshPorts() destroys and recreates every PortRowComponent, including row 0's, whose
+    // `this` the still-open picker's callbacks must not touch.
+    dialog.refreshPorts(twoPorts());
+
+    juce::String capturedUuid;
+    std::optional<juce::Colour> capturedColour;
+    dialog.onChangePortColour = [&](const juce::String& uuid, std::optional<juce::Colour> c) {
+        capturedUuid = uuid;
+        capturedColour = c;
+    };
+
+    // Must not crash, and the pick must still land on the dialog via the surviving row uuid —
+    // even though the row that opened the picker is long gone.
+    picker->commitForTest();
+
+    ASSERT_TRUE(capturedColour.has_value());
+    EXPECT_EQ(capturedUuid, "uuid-in");
+}
+
+// ============================================================================
+// T153: keyboard accessibility
+// ============================================================================
+
+TEST(MacroPortConfigDialogTest, EscapeClosesTheDialogWhenNothingHasFocus) {
+    MacroPortConfigDialog dialog("My Macro", twoPorts());
+    bool closed = false;
+    dialog.onRequestClose = [&] { closed = true; };
+
+    dialog.simulateEscapeKeyForTest();
+
+    EXPECT_TRUE(closed);
+}
+
+// TextEditor consumes Escape itself before it ever bubbles to the dialog's own keyPressed() —
+// every row's name field is wired with its OWN onEscapeKey for exactly this reason (see the
+// class comment's T153 section), and this drives that wired lambda directly (the same idiom
+// commitRowNameForTest already uses for onFocusLost).
+TEST(MacroPortConfigDialogTest, EscapeFromARowsNameFieldAlsoClosesTheDialog) {
+    MacroPortConfigDialog dialog("My Macro", twoPorts());
+    bool closed = false;
+    dialog.onRequestClose = [&] { closed = true; };
+
+    dialog.simulateRowNameEscapeForTest(0);
+
+    EXPECT_TRUE(closed);
+}
+
+TEST(MacroPortConfigDialogTest, EscapeFromTheNewPortNameFieldAlsoClosesTheDialog) {
+    MacroPortConfigDialog dialog("My Macro", {});
+    bool closed = false;
+    dialog.onRequestClose = [&] { closed = true; };
+
+    dialog.simulateNewPortNameEscapeForTest();
+
+    EXPECT_TRUE(closed);
+}
+
+// Return in the "Add a port" name field is the keyboard equivalent of clicking Add.
+TEST(MacroPortConfigDialogTest, ReturnInTheNewPortNameFieldCommitsAnAdd) {
+    MacroPortConfigDialog dialog("My Macro", {});
+    bool fired = false;
+    dialog.onAddPort = [&](bool, MacroPortKind, MacroPortShape, int, const juce::String&) { fired = true; };
+
+    dialog.setNewPortNameForTest("Return Test");
+    dialog.simulateNewPortNameReturnForTest();
+
+    EXPECT_TRUE(fired);
+}
+
+TEST(MacroPortConfigDialogTest, ArrowDownNavigationTargetsTheNextRowAndStopsAtTheEnd) {
+    Row a = twoPorts()[0];
+    Row b = twoPorts()[1];
+    Row c;
+    c.nodeUuid = "uuid-out2";
+    c.isInput = false;
+    c.name = "Wet Out 2";
+    MacroPortConfigDialog dialog("My Macro", {a, b, c});
+    ASSERT_EQ(dialog.getRowCountForTest(), 3);
+
+    EXPECT_EQ(dialog.computeArrowNavigationTargetRowForTest(0, /*moveDown=*/true), 1);
+    EXPECT_EQ(dialog.computeArrowNavigationTargetRowForTest(1, /*moveDown=*/true), 2);
+    EXPECT_EQ(dialog.computeArrowNavigationTargetRowForTest(2, /*moveDown=*/true), -1)
+        << "no wraparound past the last row";
+    EXPECT_EQ(dialog.computeArrowNavigationTargetRowForTest(0, /*moveDown=*/false), -1)
+        << "no wraparound past the first row";
+}
+
+TEST(MacroPortConfigDialogTest, ArrowKeyOnARowsDeleteButtonIsConsumedByTheButtonItself) {
+    MacroPortConfigDialog dialog("My Macro", twoPorts());
+    // Consumed (returns true) means GlyphButton's own keyPressed() override handled it via
+    // onVerticalArrow rather than falling through to Button::keyPressed (which would only react
+    // to Return/Space) — proving the wiring in the constructor actually reaches the override.
+    EXPECT_TRUE(
+        dialog.simulateRowControlArrowKeyForTest(0, MacroPortConfigDialog::RowControl::Delete, /*moveDown=*/true));
+}
+
+// ============================================================================
 // MacroAutoPortPromptDialog (founder-review fix F5, docs/macros.md §7 item 6.2)
 // ============================================================================
 
@@ -334,4 +517,138 @@ TEST(MacroAutoPortPromptDialogTest, PaintAndResizeDoNotCrash) {
     juce::Graphics g(image);
     dialog.paint(g);
     SUCCEED();
+}
+
+// ============================================================================
+// Founder review round 4 (real-build testing of T152/T153): Up/Down buttons removed, keyboard
+// reorder now Cmd+Up/Cmd+Down; keyboard-focus visibility; "Add a port" panel layout bug.
+// ============================================================================
+
+namespace {
+bool imagesHaveIdenticalPixels(const juce::Image& a, const juce::Image& b) {
+    if (a.getWidth() != b.getWidth() || a.getHeight() != b.getHeight())
+        return false;
+    for (int y = 0; y < a.getHeight(); ++y)
+        for (int x = 0; x < a.getWidth(); ++x)
+            if (a.getPixelAt(x, y) != b.getPixelAt(x, y))
+                return false;
+    return true;
+}
+} // namespace
+
+// Diagnosed via Component::createComponentSnapshot rendered to a PNG (docs/testing.md's
+// `createComponentSnapshot` smoke-test pattern): the "Add a port" panel's addBlockArea budgeted
+// height for only 2 of its 3 rows (section label + newRow1), so newRow2 — the name field AND the
+// Add button — was squeezed to zero height and effectively vanished, matching the founder's report
+// of a button that "doesn't appear" but still works via Tab+Return. Root cause was the layout
+// arithmetic in resized(), not colour/contrast.
+TEST(MacroPortConfigDialogTest, AddButtonHasNonTrivialVisibleBounds) {
+    MacroPortConfigDialog dialog("My Macro", {});
+    auto bounds = dialog.getAddButtonBoundsForTest();
+    EXPECT_GT(bounds.getWidth(), 20);
+    // The zero-height regression this guards against would fail this at height == 0; 20px leaves
+    // headroom below the real ~26px row height without hardcoding the dialog's private constant.
+    EXPECT_GT(bounds.getHeight(), 20);
+}
+
+TEST(MacroPortConfigDialogTest, AddButtonRegionPaintsVisibleContentInFullDialogSnapshot) {
+    MacroPortConfigDialog dialog("My Macro", {});
+    synth::theme::AppLookAndFeel lf;
+    dialog.setLookAndFeel(&lf);
+    dialog.setBounds(0, 0, dialog.getWidth(), dialog.getHeight());
+
+    auto img = dialog.createComponentSnapshot(dialog.getLocalBounds());
+    auto bounds = dialog.getAddButtonBoundsForTest();
+    ASSERT_GT(bounds.getHeight(), 0);
+
+    // The button's fill/border/text must actually differ from the dialog's own background at the
+    // button's own centre — proving it paints something there, not merely that it occupies space.
+    auto centre = bounds.getCentre();
+    auto buttonPixel = img.getPixelAt(centre.x, centre.y);
+    auto bgPixel = img.getPixelAt(2, 2); // top-left corner, outside every control
+    EXPECT_NE(buttonPixel, bgPixel);
+
+    dialog.setLookAndFeel(nullptr);
+}
+
+// GlyphButton/PortColourSwatch::paintButton only ever receives isOver()/isDown() from
+// juce::Button::paint() (confirmed by reading juce_Button.cpp), never keyboard-focus state, so
+// nothing distinguished a focused row control from an unfocused one. grabKeyboardFocus() can't be
+// exercised headlessly (Component::isShowing() gates it), so this drives the forced-flag seam
+// that bypasses real focus tracking and exercises the same paint path.
+TEST(MacroPortConfigDialogTest, FocusedRowControlPaintsVisiblyDifferentlyFromUnfocused) {
+    MacroPortConfigDialog dialog("My Macro", twoPorts());
+    // The real theme, not GlyphButton's fallback Colors{}/Metrics{} struct defaults — a fallback
+    // where accent happened to equal textMuted would let this pass on ring GEOMETRY alone, never
+    // catching a same-colour regression in the real app.
+    synth::theme::AppLookAndFeel lf;
+    dialog.setLookAndFeel(&lf);
+
+    auto unfocused = dialog.renderRowDeleteButtonForTest(0);
+    ASSERT_GT(unfocused.getWidth(), 0);
+
+    dialog.setRowFocusRingForcedForTest(0, true);
+    auto focused = dialog.renderRowDeleteButtonForTest(0);
+    ASSERT_GT(focused.getWidth(), 0);
+
+    EXPECT_FALSE(imagesHaveIdenticalPixels(unfocused, focused));
+
+    dialog.setRowFocusRingForcedForTest(0, false);
+    auto unfocusedAgain = dialog.renderRowDeleteButtonForTest(0);
+    EXPECT_TRUE(imagesHaveIdenticalPixels(unfocused, unfocusedAgain));
+
+    dialog.setLookAndFeel(nullptr);
+}
+
+// The per-row Up/Down glyph buttons are gone (drag-to-reorder is confirmed working, so they were
+// pure clutter); Cmd+Up/Cmd+Down on the row's remaining controls (colour swatch, Delete button) is
+// the keyboard-accessible replacement, firing the same onReorderPort the buttons used to.
+TEST(MacroPortConfigDialogTest, CmdArrowOnDeleteButtonFiresReorderWithTheCorrectDirection) {
+    MacroPortConfigDialog dialog("My Macro", twoPorts());
+
+    juce::String capturedUuid;
+    bool capturedMoveUp = false;
+    dialog.onReorderPort = [&](const juce::String& uuid, bool moveUp) {
+        capturedUuid = uuid;
+        capturedMoveUp = moveUp;
+    };
+
+    EXPECT_TRUE(dialog.simulateRowControlArrowKeyForTest(0, MacroPortConfigDialog::RowControl::Delete,
+                                                         /*moveDown=*/false, /*withCommandModifier=*/true));
+    EXPECT_EQ(capturedUuid, "uuid-in");
+    EXPECT_TRUE(capturedMoveUp);
+
+    EXPECT_TRUE(dialog.simulateRowControlArrowKeyForTest(1, MacroPortConfigDialog::RowControl::Delete,
+                                                         /*moveDown=*/true, /*withCommandModifier=*/true));
+    EXPECT_EQ(capturedUuid, "uuid-out");
+    EXPECT_FALSE(capturedMoveUp);
+}
+
+TEST(MacroPortConfigDialogTest, CmdArrowOnColourSwatchAlsoFiresReorder) {
+    MacroPortConfigDialog dialog("My Macro", twoPorts());
+
+    juce::String capturedUuid;
+    bool capturedMoveUp = false;
+    dialog.onReorderPort = [&](const juce::String& uuid, bool moveUp) {
+        capturedUuid = uuid;
+        capturedMoveUp = moveUp;
+    };
+
+    EXPECT_TRUE(dialog.simulateRowControlArrowKeyForTest(0, MacroPortConfigDialog::RowControl::Colour,
+                                                         /*moveDown=*/false, /*withCommandModifier=*/true));
+    EXPECT_EQ(capturedUuid, "uuid-in");
+    EXPECT_TRUE(capturedMoveUp);
+}
+
+// A bare (unmodified) Up/Down on a row control must keep doing row-FOCUS navigation, not reorder —
+// bare arrows already mean "move focus to the row above/below" (moveRowFocus), so the command
+// modifier is what disambiguates the two meanings, never the bare key alone.
+TEST(MacroPortConfigDialogTest, BareArrowOnARowControlDoesRowNavigationNotReorder) {
+    MacroPortConfigDialog dialog("My Macro", twoPorts());
+    bool reorderFired = false;
+    dialog.onReorderPort = [&](const juce::String&, bool) { reorderFired = true; };
+
+    EXPECT_TRUE(dialog.simulateRowControlArrowKeyForTest(0, MacroPortConfigDialog::RowControl::Delete,
+                                                         /*moveDown=*/true, /*withCommandModifier=*/false));
+    EXPECT_FALSE(reorderFired);
 }

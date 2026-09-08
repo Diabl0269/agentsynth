@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <juce_core/juce_core.h>
 #include <juce_graphics/juce_graphics.h>
+#include <optional>
 #include <vector>
 
 namespace synth {
@@ -27,12 +28,22 @@ struct MacroPort {
     int order = 0;         // draw order on the card, user-reorderable
     MacroPortKind kind = MacroPortKind::AudioCV;
 
+    // Per-port user colour (T152/founder review round 3, item 3.4), set from the Configure I/O
+    // modal's row swatch. nullopt (the default, and what every pre-T152 saved patch parses as) means
+    // "unset" — every reader falls back to the existing kind tint (accent for AudioCV, audioWire for
+    // Midi, the same colours PortRowComponent/MacroCardComponent already paint jacks with) rather
+    // than a hard-coded colour, so an un-coloured port looks exactly as it always has.
+    std::optional<juce::Colour> colour;
+
     juce::var toVar() const;
 
     /** All-or-nothing, mirroring Macro/MacroSet's own fromVar: a malformed entry (not an object,
      *  an empty nodeUuid, an unrecognised "kind") leaves `out` untouched and returns false, so a
      *  caller parsing a whole macro's port list can reject it as one unit rather than accept a
-     *  partially-parsed port. */
+     *  partially-parsed port. The optional "colour" key is the one exception to that strictness:
+     *  it is decorative only (never load-bearing like nodeUuid/kind), so an absent key parses as
+     *  unset (back-compat with every pre-T152 save) and a present-but-malformed value is likewise
+     *  just ignored rather than rejecting the whole port over a cosmetic field. */
     static bool fromVar(const juce::var& v, MacroPort& out);
 };
 
