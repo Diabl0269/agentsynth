@@ -19,7 +19,8 @@ class ModuleLibraryComponent
     : public juce::Component
     , public juce::DragAndDropContainer
     , public juce::SettableTooltipClient
-    , private juce::ScrollBar::Listener {
+    , private juce::ScrollBar::Listener
+    , private juce::KeyListener {
 public:
     /** What a row in the sidebar is, which decides how it paints and what a click does. */
     enum class RowKind {
@@ -109,12 +110,23 @@ public:
         };
         addAndMakeVisible(searchEditor);
         applySearchEditorColours();
+        // T160: intercepts Up/Down/Return ahead of the editor's own keyPressed — see
+        // Source/UI/CLAUDE.md-adjacent notes below on why a KeyListener rather than an override is
+        // required here (ComponentPeer::handleKeyPress runs a component's key LISTENERS before its
+        // own keyPressed, and TextEditor::moveCaretUp/Down unconditionally return true for a
+        // single-line editor via moveCaretToStartOfLine/EndOfLine, so an override on this component
+        // would never see them while real focus sits in searchEditor). Deliberately does NOT
+        // intercept Left/Right or Tab: Left/Right must keep moving the text caret while the user is
+        // still editing the query, and Tab must keep bubbling untouched to MainComponent's
+        // focusNextRegion cycle (see keyPressed(KeyPress, Component*) below).
+        searchEditor.addKeyListener(this);
     }
 
     ~ModuleLibraryComponent() override {
         // The animator's callbacks capture `this`, so it must not outlive us.
         if (vblankUpdater.has_value())
             collapseAnim.stop(*vblankUpdater);
+        searchEditor.removeKeyListener(this);
         verticalScrollBar.removeListener(this);
         // helpCallOutBox_ holds a non-owning reference to *helpPopup_ (see the help-popover
         // section below) — end its modal state before either member starts tearing down, purely
@@ -134,6 +146,7 @@ public:
         snippets.addArray(newSnippets);
         rebuildEntries();
         clampHoverToVisibleRow();
+        clampKeyboardFocusToVisibleRow();
         updateScrollBar();
         repaint();
     }
@@ -183,6 +196,13 @@ public:
 
     bool isSearchActive() const { return normalisedSearchQuery(searchQuery).isNotEmpty(); }
 
+    /** T160: grabs keyboard focus on the search field specifically — the destination
+     *  `AppCommands::focusLibrarySearch` (Cmd+F) needs, distinct from `FocusRegionRegistry`'s
+     *  region-root focus (Cmd+Shift+L lands on `this`, not the search field; see FocusRegion.h /
+     *  docs/shortcuts.md's Focus regions section). The caller (MainComponent) is responsible for
+     *  opening the Library first if it is closed, mirroring every other direct-focus shortcut. */
+    void focusSearchField() { searchEditor.grabKeyboardFocus(); }
+
     // -------------------------------------------------------------------------
     // Plugins
     //
@@ -201,6 +221,7 @@ public:
         plugins = newPlugins;
         rebuildEntries();
         clampHoverToVisibleRow();
+        clampKeyboardFocusToVisibleRow();
         updateScrollBar();
         repaint();
     }
@@ -214,9 +235,22 @@ public:
      *  sensible canvas position. Dragging goes through the DragAndDrop payload instead. */
     std::function<void(const synth::PluginIdentity&)> onPluginActivated;
 
+    /** T160: fired by Enter-to-insert on a keyboard-focused Module row. Module rows had NO
+     *  click-to-add path before this — mouseDown() starts a drag immediately for them (see below),
+     *  so mouseUp()/activateRow() was never reached for RowKind::Module until now. The owner adds
+     *  the module at a sensible canvas position, mirroring onPluginActivated. Never fired for a
+     *  disabled (already-in-patch singleton) row — see isEntryEnabled(). */
+    std::function<void(const juce::String&)> onModuleActivated;
+
+    /** T160: fired by Enter-to-insert on a keyboard-focused Snippet row — same "no prior
+     *  click-to-add path" gap as onModuleActivated above. Snippet rows are never gated by
+     *  isModuleAvailable, so unlike onModuleActivated this fires unconditionally. */
+    std::function<void(const juce::String&)> onSnippetActivated;
+
     /** Performs the click action for the row at `index`: fires the scan request for the Action row,
-     *  or onPluginActivated for a Plugin row. No-op for anything else. Public so the behaviour is
-     *  reachable without synthesising mouse events. */
+     *  onPluginActivated for a Plugin row, or (T160) onModuleActivated/onSnippetActivated for a
+     *  Module/Snippet row. No-op for anything else. Public so the behaviour is reachable without
+     *  synthesising mouse events — this is also what keyPressed()'s Enter-to-insert calls. */
     void activateRow(int index) {
         if (index < 0 || index >= (int)entries.size())
             return;
@@ -227,8 +261,17 @@ public:
                 onScanPluginsRequested();
             return;
         }
-        if (entry.kind == RowKind::Plugin && onPluginActivated)
+        if (entry.kind == RowKind::Plugin && onPluginActivated) {
             onPluginActivated(identityForEntry(entry));
+            return;
+        }
+        if (entry.kind == RowKind::Module) {
+            if (isEntryEnabled(index) && onModuleActivated)
+                onModuleActivated(entry.text);
+            return;
+        }
+        if (entry.kind == RowKind::Snippet && onSnippetActivated)
+            onSnippetActivated(entry.text);
     }
 
     /** The identity a Plugin row stands for; an invalid identity for any other row. */
@@ -314,6 +357,7 @@ public:
         // launch would look like the sidebar collapsing by itself.
         snapSectionProgressToTargets();
         clampHoverToVisibleRow();
+        clampKeyboardFocusToVisibleRow();
         updateScrollBar();
         repaint();
     }
@@ -354,6 +398,7 @@ public:
             collapseAnim.stop(*vblankUpdater);
         snapSectionProgressToTargets();
         clampHoverToVisibleRow();
+        clampKeyboardFocusToVisibleRow();
         updateScrollBar();
         repaint();
     }
@@ -854,6 +899,22 @@ public:
                                juce::Justification::centredRight);
                 }
             }
+
+            // T160: keyboard-focus outline — a distinct treatment from the hover fill above (an
+            // outline rather than a translucent fill, so the two never read as the same state when a
+            // mouse hover and a keyboard focus land on different rows at once). A second pass over
+            // `rows` rather than folding into the switch above, so it applies uniformly to every row
+            // kind (including Header/SubHeader, which `continue` out of that switch early) without
+            // threading an extra branch through each one.
+            if (keyboardFocusedIndex >= 0) {
+                for (const auto& row : rows) {
+                    if (row.entryIndex != keyboardFocusedIndex)
+                        continue;
+                    g.setColour(accentColour.withAlpha(0.9f));
+                    g.drawRect(0, row.y, contentWidth, row.height, 1);
+                    break;
+                }
+            }
         }
 
         // ---- Pinned chrome: the search field is a child TextEditor in the top 32 px; the
@@ -1042,6 +1103,157 @@ public:
     }
 
     // -------------------------------------------------------------------------
+    // Keyboard navigation (T160)
+    //
+    // Two entry points feed the same three handlers below, because keyboard focus can genuinely be
+    // in two different places: `this` itself (Cmd+Shift+L / Tab-cycle land here, per FocusRegion.h)
+    // or `searchEditor` (Cmd+F, via focusSearchField()). keyPressed() below only ever runs while
+    // `this` holds real focus; the searchEditor case is handled by the KeyListener override further
+    // down, registered on searchEditor in the constructor, because a single-line juce::TextEditor's
+    // own keyPressed() UNCONDITIONALLY consumes Up/Down/Return itself (moveCaretUp/Down collapse to
+    // moveCaretToStartOfLine/EndOfLine for a single-line editor, and moveCaretWithTransaction always
+    // returns true) — they never bubble out, so intercepting them ahead of the editor via a key
+    // listener is the only way to reach row navigation from the search field at all.
+    // -------------------------------------------------------------------------
+
+    bool keyPressed(const juce::KeyPress& key) override {
+        if (key.isKeyCode(juce::KeyPress::upKey))
+            return moveKeyboardFocus(-1);
+        if (key.isKeyCode(juce::KeyPress::downKey))
+            return moveKeyboardFocus(1);
+        if (key.isKeyCode(juce::KeyPress::leftKey))
+            return handleFoldKey(true);
+        if (key.isKeyCode(juce::KeyPress::rightKey))
+            return handleFoldKey(false);
+        if (key == juce::KeyPress::returnKey)
+            return handleEnterKey();
+        return false;
+    }
+
+private:
+    /** The KeyListener half of the scheme above — see the class comment. Only Up/Down/Return are
+     *  intercepted; Left/Right are deliberately left alone so the caret still moves through the
+     *  typed query, and Tab is left alone so it keeps bubbling to MainComponent's focusNextRegion
+     *  cycle untouched (TextEditor's own keyPressed already returns false for Tab — tabKeyUsed
+     *  defaults false and no key-function table entry claims it — so no explicit handling is needed
+     *  here to keep that path open; a listener that intercepted it would be the one thing that could
+     *  break it). Ignores every originatingComponent except searchEditor, since KeyListener
+     *  notifications for a key pressed anywhere else in this component's subtree would otherwise
+     *  double up with keyPressed() above once ancestor bubbling reaches `this`. */
+    bool keyPressed(const juce::KeyPress& key, juce::Component* originatingComponent) override {
+        if (originatingComponent != &searchEditor)
+            return false;
+        if (key.isKeyCode(juce::KeyPress::upKey))
+            return moveKeyboardFocus(-1);
+        if (key.isKeyCode(juce::KeyPress::downKey))
+            return moveKeyboardFocus(1);
+        // Only once a row is already keyboard-focused — otherwise Return keeps its normal
+        // (consumed, no-op) TextEditor behaviour, since the query has nothing to insert yet.
+        if (key == juce::KeyPress::returnKey && keyboardFocusedIndex >= 0)
+            return handleEnterKey();
+        return false;
+    }
+
+    /** Every visible row Up/Down can land on and Enter can activate — every kind except EmptyHint
+     *  (a non-interactive placeholder with nothing to do). Includes Header/SubHeader, unlike
+     *  isInteractiveEntry(), because Left/Right needs to be able to fold/expand a section from the
+     *  keyboard the same way clicking its chevron does. */
+    bool isKeyboardNavigableEntry(int index) const {
+        return index >= 0 && index < (int)entries.size() && entries[(size_t)index].kind != RowKind::EmptyHint;
+    }
+
+    std::vector<int> navigableEntryIndices() const {
+        std::vector<int> result;
+        for (const auto& row : buildRows())
+            if (isKeyboardNavigableEntry(row.entryIndex))
+                result.push_back(row.entryIndex);
+        return result;
+    }
+
+    /** Moves keyboardFocusedIndex by `delta` steps (+1/-1) through the currently visible navigable
+     *  rows, clamped at either end (no wraparound — landing back at the opposite end of a long,
+     *  scrolled list would be disorienting). Starting from no focus (-1) lands on the first row for
+     *  a downward move, the last for an upward one, matching the natural "search, then arrow down
+     *  into the results" flow. Always returns true when there is anything to navigate, so the key
+     *  never bubbles into stray behaviour elsewhere (a bare Up/Down reaching MainComponent would
+     *  currently be a no-op, but relying on that would be fragile). */
+    bool moveKeyboardFocus(int delta) {
+        const auto navigable = navigableEntryIndices();
+        if (navigable.empty())
+            return false;
+
+        int pos = -1;
+        for (size_t i = 0; i < navigable.size(); ++i) {
+            if (navigable[i] == keyboardFocusedIndex) {
+                pos = (int)i;
+                break;
+            }
+        }
+
+        const int next = (pos < 0) ? (delta > 0 ? 0 : (int)navigable.size() - 1)
+                                   : juce::jlimit(0, (int)navigable.size() - 1, pos + delta);
+        keyboardFocusedIndex = navigable[(size_t)next];
+        scrollKeyboardFocusIntoView();
+        repaint();
+        return true;
+    }
+
+    /** Left/Right on a focused section (Sub)Header folds/expands it via the SAME
+     *  setSectionCollapsed() a mouse click on its chevron already calls — no parallel mechanism.
+     *  LOCKED decision (T160 scope): a no-op, not a bubble-worthy miss, when the focused row is
+     *  anything else ("a focused child row"), so Left/Right never surprises the user by doing
+     *  nothing visible AND letting the key leak to some unrelated global binding. */
+    bool handleFoldKey(bool collapse) {
+        if (keyboardFocusedIndex < 0 || keyboardFocusedIndex >= (int)entries.size())
+            return false;
+        const auto& entry = entries[(size_t)keyboardFocusedIndex];
+        if (entry.kind == RowKind::Header) {
+            setSectionCollapsed(entry.text, collapse);
+            return true;
+        }
+        if (entry.kind == RowKind::SubHeader) {
+            setSectionCollapsed(subsectionKey(entry.section, entry.text), collapse);
+            return true;
+        }
+        return false;
+    }
+
+    /** Enter-to-insert: activates whichever row is currently keyboard-focused via the same
+     *  activateRow() the mouse path (mouseUp) already calls — see onModuleActivated/
+     *  onSnippetActivated for what is genuinely NEW behaviour here versus what activateRow already
+     *  did for Action/Plugin rows. */
+    bool handleEnterKey() {
+        if (keyboardFocusedIndex < 0)
+            return false;
+        activateRow(keyboardFocusedIndex);
+        return true;
+    }
+
+    /** Scrolls just enough to bring the keyboard-focused row fully into the viewport below the
+     *  pinned chrome — this sidebar is hand-scrolled (scrollOffset + a juce::ScrollBar), not a real
+     *  juce::Viewport, so unlike T161's track headers there is no free auto-scroll here; arrow
+     *  navigation has to drive it explicitly or it walks focus off screen with nothing visible
+     *  moving. No-op if the row is already fully visible. */
+    void scrollKeyboardFocusIntoView() {
+        if (keyboardFocusedIndex < 0)
+            return;
+        for (const auto& row : buildRows()) {
+            if (row.entryIndex != keyboardFocusedIndex)
+                continue;
+            const int viewportTop = kPinnedChromeHeight;
+            const int viewportBottom = getHeight();
+            const int rowTop = row.y - scrollOffset;
+            const int rowBottom = rowTop + row.height;
+            if (rowTop < viewportTop)
+                setScrollOffset(scrollOffset - (viewportTop - rowTop));
+            else if (rowBottom > viewportBottom)
+                setScrollOffset(scrollOffset + (rowBottom - viewportBottom));
+            return;
+        }
+    }
+
+public:
+    // -------------------------------------------------------------------------
     // Test / inspection helpers
     // -------------------------------------------------------------------------
 
@@ -1086,6 +1298,26 @@ public:
 
     /** Returns the currently hovered entry index, or -1 when nothing is hovered. */
     int getHoveredIndex() const noexcept { return hoveredIndex; }
+
+    /** T160: the entry index Up/Down keyboard navigation has landed on, or -1. */
+    int getKeyboardFocusedIndex() const noexcept { return keyboardFocusedIndex; }
+
+    /** T160 test seam: drives the same state moveKeyboardFocus()/keyPressed() would, without a
+     *  real native peer — see FocusRegion.h's own comment on why this test suite can never create
+     *  one for grabKeyboardFocus() to require. Clamped exactly like a real navigation move so a test
+     *  can't put the component into a state real navigation never could. */
+    void setKeyboardFocusedIndexForTest(int index) {
+        keyboardFocusedIndex = isKeyboardNavigableEntry(index) ? index : -1;
+        clampKeyboardFocusToVisibleRow();
+        repaint();
+    }
+
+    /** T160 test seam: drives the private KeyListener::keyPressed(key, &searchEditor) overload a
+     *  real native peer would invoke while the search field has focus — see the class comment on
+     *  the keyboard-navigation section for why that path can't be reached by giving searchEditor
+     *  real focus and calling its own keyPressed() headlessly (that call would exercise
+     *  juce::TextEditor's own key handling, not the interception this seam targets). */
+    bool simulateSearchFieldKeyPressForTest(const juce::KeyPress& key) { return keyPressed(key, &searchEditor); }
 
     /** Total number of entries (headers + items), collapsed or not. */
     int getEntryCount() const noexcept { return (int)entries.size(); }
@@ -1353,6 +1585,7 @@ private:
         if (!isShowing()) {
             snapSectionProgressToTargets();
             clampHoverToVisibleRow();
+            clampKeyboardFocusToVisibleRow();
             updateScrollBar();
             repaint();
             return;
@@ -1389,6 +1622,7 @@ private:
             [this] {
                 snapSectionProgressToTargets();
                 clampHoverToVisibleRow();
+                clampKeyboardFocusToVisibleRow();
                 updateScrollBar();
                 repaint();
             });
@@ -1509,11 +1743,35 @@ private:
         hoveredIndex = -1;
     }
 
+    /** T160 sibling of clampHoverToVisibleRow() above, for keyboardFocusedIndex — called from every
+     *  site that calls that one, so a snippet save, plugin scan, search-query change, or collapse
+     *  animation finishing can never leave keyboard focus parked on a row that just left the visible
+     *  set (Enter-to-insert on a hidden entry would otherwise silently activate the wrong module). */
+    void clampKeyboardFocusToVisibleRow() {
+        if (keyboardFocusedIndex < 0)
+            return;
+        // Unlike clampHoverToVisibleRow(), also re-checks the KIND at that index, not just
+        // visibility: rebuildEntries() can shrink the entry list (a snippet delete removes its row
+        // entirely, sliding every later index down), so the same numeric index can end up occupied
+        // by a different, non-navigable row (typically the "No snippets yet" EmptyHint) after a
+        // rebuild — that row is still visible, so a plain visibility check alone would leave
+        // keyboardFocusedIndex silently pointing at it.
+        if (!isKeyboardNavigableEntry(keyboardFocusedIndex)) {
+            keyboardFocusedIndex = -1;
+            return;
+        }
+        for (const auto& row : buildRows())
+            if (row.entryIndex == keyboardFocusedIndex)
+                return;
+        keyboardFocusedIndex = -1;
+    }
+
     void applySearchQuery(const juce::String& text) {
         if (searchQuery == text)
             return;
         searchQuery = text;
         clampHoverToVisibleRow();
+        clampKeyboardFocusToVisibleRow();
         // New filters should show the first match, not leave the view parked halfway down a list
         // that just shrank.
         scrollOffset = 0;
@@ -1755,7 +2013,13 @@ private:
     juce::Array<synth::SnippetInfo> snippets;
     std::vector<synth::PluginIdentity> plugins;
     std::set<juce::String> collapsedSections;
-    int hoveredIndex = -1;          // -1 = no hover; updated on mouseMove/mouseExit only
+    int hoveredIndex = -1; // -1 = no hover; updated on mouseMove/mouseExit only
+    // T160: -1 = nothing keyboard-focused. Mirrors hoveredIndex's shape but is driven entirely by
+    // keyPressed()/the searchEditor KeyListener, never by the mouse — the two are independent
+    // visual states (see paint()'s separate outline for this one). Clamped at every site that
+    // clamps hoveredIndex (clampHoverToVisibleRow's call sites) so a snippet save, plugin scan, or
+    // collapse animation completing can never leave it pointing at a row that is no longer visible.
+    int keyboardFocusedIndex = -1;
     int pressedIndex = -1;          // row whose click is pending a mouseUp (Action / Plugin rows only)
     bool topStripHovered = false;   // hover state for the collapse-all chrome
     bool helpButtonHovered = false; // hover state for the "?" help button sharing that row

@@ -454,8 +454,35 @@ TEST_F(FocusRegionMainComponentTest, CmdShiftLOnAnAlreadyOpenLibraryLeavesItOpen
     EXPECT_TRUE(mc.isLibraryConfiguredVisible()) << "a Focus Library on an already-open sidebar must not close it";
 }
 
-// Cmd+Shift+T/L are NOT suppressed by the welcome screen -- only Tab-cycling is (per the task's own
-// scope: "Suppress ALL TAB CYCLING while welcomeScreen_ is visible").
+// T160: Cmd+F opens the Library first if it is closed, exactly like Cmd+Shift+L above -- but it
+// lands on the search field specifically (ModuleLibraryComponent::focusSearchField), not the
+// region root, which is not observable headlessly (no native peer to grab real focus against; see
+// FocusRegion.h's own comment on that constraint). "Opens if closed" is the one effect this test
+// suite CAN observe end-to-end, so it is what's asserted here -- Tests/ModuleLibraryKeyboardNavTests.cpp
+// covers the search-field-focused keyboard behaviour this shortcut is FOR.
+TEST_F(FocusRegionMainComponentTest, CmdFOpensTheLibraryIfClosedThenDispatches) {
+    writePref("librarySidebarVisible", "0"); // override this fixture's usual "starts open" baseline
+    MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    ASSERT_FALSE(mc.isLibraryConfiguredVisible());
+
+    const auto binding = mc.getShortcutManager().getBinding("focusLibrarySearch");
+    ASSERT_TRUE(binding.isValid());
+    EXPECT_TRUE(mc.keyPressed(binding));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50); // see the Cmd+Shift+T test's comment
+    EXPECT_TRUE(mc.isLibraryConfiguredVisible()) << "Cmd+F must open a closed Library sidebar";
+}
+
+TEST_F(FocusRegionMainComponentTest, CmdFOnAnAlreadyOpenLibraryLeavesItOpen) {
+    MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    ASSERT_TRUE(mc.isLibraryConfiguredVisible()) << "SetUp forced librarySidebarVisible=1";
+
+    EXPECT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::focusLibrarySearch, false));
+    EXPECT_TRUE(mc.isLibraryConfiguredVisible())
+        << "a Focus Library Search on an already-open sidebar must not close it";
+}
+
+// Cmd+Shift+T/L/Cmd+F are NOT suppressed by the welcome screen -- only Tab-cycling is (per the
+// task's own scope: "Suppress ALL TAB CYCLING while welcomeScreen_ is visible").
 TEST_F(FocusRegionMainComponentTest, DirectFocusShortcutsAreNotSuppressedByTheWelcomeScreen) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
     ASSERT_NE(mc.getWelcomeScreenForTest(), nullptr);
@@ -463,4 +490,5 @@ TEST_F(FocusRegionMainComponentTest, DirectFocusShortcutsAreNotSuppressedByTheWe
 
     EXPECT_TRUE(commandIsActive(mc, AppCommands::focusTimeline));
     EXPECT_TRUE(commandIsActive(mc, AppCommands::focusLibrary));
+    EXPECT_TRUE(commandIsActive(mc, AppCommands::focusLibrarySearch));
 }
