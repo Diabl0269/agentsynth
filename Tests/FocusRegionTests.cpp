@@ -278,8 +278,9 @@ protected:
         guard_.emplace(juce::StringArray{"showWelcomeScreenAtLaunch", "librarySidebarVisible", "timelinePanelVisible",
                                          "aiPanelVisible"});
         // A known baseline every test in this fixture starts from: welcome screen hidden (out of the
-        // way for the Tab-cycle/registration tests), Library open, Canvas always open, Timeline/AI
-        // Panel/Mod Matrix closed -- i.e. exactly "library" + "canvas" open at construction.
+        // way for the Tab-cycle/registration tests), Library open, Toolbar/Canvas always open,
+        // Timeline/AI Panel/Mod Matrix closed -- i.e. exactly "toolbar" + "library" + "canvas" open
+        // at construction.
         writePref("showWelcomeScreenAtLaunch", "0");
         writePref("librarySidebarVisible", "1");
         writePref("timelinePanelVisible", "0");
@@ -291,17 +292,18 @@ private:
     std::optional<PersistedKeysGuard> guard_;
 };
 
-// The registry MainComponent builds must be exactly the five T159 phase-1 regions, in the
-// documented Tab-cycle order (Library, Canvas, Timeline, AI Panel, Mod Matrix).
-TEST_F(FocusRegionMainComponentTest, RegistersExactlyTheFiveDocumentedRegionsInOrder) {
+// The registry MainComponent builds must be exactly the six T159 phase-1 regions, in the
+// documented Tab-cycle order (Toolbar, Library, Canvas, Timeline, AI Panel, Mod Matrix).
+TEST_F(FocusRegionMainComponentTest, RegistersExactlyTheSixDocumentedRegionsInOrder) {
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
     juce::StringArray ids;
     for (const auto& region : mc.getFocusRegionsForTest().getRegions())
         ids.add(region.id);
-    EXPECT_EQ(ids, juce::StringArray({"library", "canvas", "timeline", "aiPanel", "modMatrix"}));
+    EXPECT_EQ(ids, juce::StringArray({"toolbar", "library", "canvas", "timeline", "aiPanel", "modMatrix"}));
 
     // Every region's root must actually be the live component it claims to wrap.
     auto& regs = mc.getFocusRegionsForTest();
+    EXPECT_EQ(regs.findById("toolbar")->root, &mc.getToolbar());
     EXPECT_EQ(regs.findById("canvas")->root, &mc.getGraphEditor());
     EXPECT_EQ(regs.findById("timeline")->root, &mc.getTimelinePanel());
     EXPECT_EQ(regs.findById("aiPanel")->root, &mc.getAiChatComponent());
@@ -347,16 +349,18 @@ TEST_F(FocusRegionMainComponentTest, TabCycleOnlyVisitsOpenRegionsAndWraps) {
     ASSERT_FALSE(mc.isAiPanelConfiguredVisible());
     ASSERT_FALSE(mc.getGraphEditor().isModMatrixVisible());
 
-    // Only "library" and "canvas" are open -- everything else is skipped.
+    // "toolbar", "library" and "canvas" are open (Toolbar has no closed state, same as Canvas) --
+    // everything else is skipped.
+    EXPECT_EQ(regs.nextOpenRegionId("toolbar", true), "library");
     EXPECT_EQ(regs.nextOpenRegionId("library", true), "canvas");
-    EXPECT_EQ(regs.nextOpenRegionId("canvas", true), "library") << "wraps forward, skipping the three closed ones";
-    EXPECT_EQ(regs.nextOpenRegionId("library", false), "canvas") << "wraps backward too";
+    EXPECT_EQ(regs.nextOpenRegionId("canvas", true), "toolbar") << "wraps forward, skipping the three closed ones";
+    EXPECT_EQ(regs.nextOpenRegionId("toolbar", false), "canvas") << "wraps backward too";
 
     // Opening the timeline (via the real command, not a fake) adds it at its registered position.
     ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::focusTimeline, false));
     ASSERT_TRUE(mc.isTimelineConfiguredVisible());
     EXPECT_EQ(regs.nextOpenRegionId("canvas", true), "timeline");
-    EXPECT_EQ(regs.nextOpenRegionId("timeline", true), "library") << "wraps back to the top";
+    EXPECT_EQ(regs.nextOpenRegionId("timeline", true), "toolbar") << "wraps back to the top";
 }
 
 // Tab and Shift+Tab dispatch successfully (there is always at least Library+Canvas open) when the

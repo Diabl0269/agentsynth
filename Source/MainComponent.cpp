@@ -1173,9 +1173,13 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // ---- T159: focus-region registry ---------------------------------------------------------
     // Registered unconditionally (app AND plugin path — the plugin has every one of these panels
     // too, just no welcomeScreen_) after every region root above is fully constructed and wired.
-    // Order matches the Tab-cycle order docs/shortcuts.md documents: Library, Canvas, Timeline, AI
-    // Panel, Mod Matrix. Wraps the getters/toggles that already exist rather than migrating them to
-    // a new unified visibility enum — see Source/UI/FocusRegion.h's own header comment.
+    // Order matches the Tab-cycle order docs/shortcuts.md documents: Toolbar, Library, Canvas,
+    // Timeline, AI Panel, Mod Matrix. Wraps the getters/toggles that already exist rather than
+    // migrating them to a new unified visibility enum — see Source/UI/FocusRegion.h's own header
+    // comment.
+    // The toolbar is chrome, always visible in both the app and plugin editor -- no closed state,
+    // same as the canvas below, and no direct-focus shortcut targets it (Tab-cycling only).
+    focusRegions_.addRegion({"toolbar", &toolbar, nullptr, nullptr});
     focusRegions_.addRegion(
         {"library", &moduleLibrary, [this] { return isLibraryVisible; }, [this] { setLibraryVisible(true); }});
     // The canvas has no closed state at all -- null isOpen/open, so it is always in the open list.

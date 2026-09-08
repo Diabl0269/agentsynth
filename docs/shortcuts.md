@@ -50,7 +50,7 @@ when reasoning about a key that "does nothing."
 | Cmd+- | Zoom Out |
 | Cmd+Shift+= | Zoom In Vertically |
 | Cmd+Shift+- | Zoom Out Vertically |
-| Tab / Shift+Tab | Focus Next / Previous Region — cycles keyboard focus between whichever of the app's focus regions are currently OPEN (Library, Canvas, Timeline, AI Panel, Mod Matrix); wraps at both ends. See [**Focus regions**](#focus-regions) below |
+| Tab / Shift+Tab | Focus Next / Previous Region — cycles keyboard focus between whichever of the app's focus regions are currently OPEN (Toolbar, Library, Canvas, Timeline, AI Panel, Mod Matrix); wraps at both ends. See [**Focus regions**](#focus-regions) below |
 | Cmd+Shift+T | Focus Timeline — opens the Timeline panel first if it's closed, then focuses it |
 | Cmd+Shift+L | Focus Library — opens the Module Library sidebar first if it's closed, then focuses it |
 
@@ -85,10 +85,10 @@ first of a 3-part epic — T160 (arrow-key navigation within the module library)
 timeline track headers, plus M/S/R) build on top of it without changing the registry itself. A
 `synth::ui::FocusRegionRegistry` is a plain member of `MainComponent` (never a `Desktop`-global
 singleton — a host process can run multiple plugin instances, and a future separate-window
-mixer/timeline would need its own registry), populated with five regions once every root component
-exists: **Library** (`isLibraryVisible`), **Canvas** (always open — the `graphEditor`), **Timeline**
-(`isTimelineVisible`), **AI Panel** (`isAiPanelVisible`) and **Mod Matrix**
-(`graphEditor.isModMatrixVisible()`).
+mixer/timeline would need its own registry), populated with six regions once every root component
+exists: **Toolbar** (always open — the top strip), **Library** (`isLibraryVisible`), **Canvas**
+(always open — the `graphEditor`), **Timeline** (`isTimelineVisible`), **AI Panel**
+(`isAiPanelVisible`) and **Mod Matrix** (`graphEditor.isModMatrixVisible()`).
 
 - **Tab / Shift+Tab cycle OPEN regions only** — a closed region is skipped entirely, never opened,
   by the cycle itself (`FocusRegionRegistry::cycleFocus`/`nextOpenRegionId`). Suppressed completely
@@ -100,7 +100,7 @@ exists: **Library** (`isLibraryVisible`), **Canvas** (always open — the `graph
   screen. Neither is suppressed by the welcome screen.
 - **Cmd+Shift+M is deliberately NOT used for a Library shortcut** — `Cmd+M` already owns "Toggle Mod
   Matrix", and the bare letter is reserved for a future Mixer-focus shortcut once a Mixer exists.
-- **Every region root explicitly wants keyboard focus** — each of the five roots calls
+- **Every region root explicitly wants keyboard focus** — each of the six roots calls
   `setWantsKeyboardFocus(true)` in its constructor, so `grabKeyboardFocus()` always lands
   deterministically on the root itself. Without this, JUCE would instead descend into whichever
   child happens to sort first by Y/X position (not by which child actually wants focus) — fragile to
@@ -114,17 +114,22 @@ exists: **Library** (`isLibraryVisible`), **Canvas** (always open — the `graph
   so the two focus regions nest rather than sit side by side. `FocusRegionRegistry::regionContaining`
   resolves this to the most specific match (Mod Matrix, not Canvas) whenever real focus sits inside
   it, so Tab-cycling and the outline both track the right one.
-- **Visual indicator** — a region's root component paints a solid ~2px outline in the theme's
-  `accent` colour (`docs/theming.md`) whenever it or a descendant holds keyboard focus
-  (`hasKeyboardFocus(true)`), via the shared `synth::ui::paintFocusRegionOutline` helper every one of
-  the five roots calls from its own `paintOverChildren` override — never plain `paint()`, since each
-  root's children (module images, the ruler/clip-lane/transport tiling, the chat message view, the
-  mod-row viewport) fill wall-to-wall to the root's own edge and would otherwise paint over a border
-  drawn earlier in `paint()`. GraphEditor also skips its own outline while the nested Mod Matrix has
-  focus, so the two regions never double-paint. Nothing repaints on its own when focus moves
-  (`Component::focusGained`/`focusLost` are no-op virtuals for most widgets), so `MainComponent` is a
-  `juce::FocusChangeListener` and repaints every region root on `globalFocusChanged` — event-driven,
-  never a per-tick timer.
+- **Visual indicator** — a region's root component paints a translucent outline (55% alpha) in the
+  theme's `accent` colour (`docs/theming.md`), at the theme's normal border weight (1px in every
+  built-in theme, `theme.metrics.borderWidth`) rather than an arbitrary heavier one, whenever it or a
+  descendant holds keyboard focus (`hasKeyboardFocus(true)`) — deliberately softer than the same
+  `accent`-outline treatment on a small control (ComboBox/TextEditor), since a hard-edged fully-opaque
+  rect around an entire panel reads as much heavier than the identical treatment on a button. Painted
+  via the shared `synth::ui::paintFocusRegionOutline` helper every one of the six roots calls from its
+  own `paintOverChildren` override — never plain `paint()`, since each root's children (module images,
+  the ruler/clip-lane/transport tiling, the chat message view, the mod-row viewport) fill wall-to-wall
+  to the root's own edge and would otherwise paint over a border drawn earlier in `paint()` (the
+  Toolbar has no children of its own — buttons are direct children of `MainComponent` — so this makes
+  no practical difference there, but it uses the same override for consistency). GraphEditor also
+  skips its own outline while the nested Mod Matrix has focus, so the two regions never double-paint.
+  Nothing repaints on its own when focus moves (`Component::focusGained`/`focusLost` are no-op
+  virtuals for most widgets), so `MainComponent` is a `juce::FocusChangeListener` and repaints every
+  region root on `globalFocusChanged` — event-driven, never a per-tick timer.
 - **Out of scope for T159** — no arrow-key navigation WITHIN a region (T160/T161's job), and no
   canvas/graph module-to-module navigation (deferred indefinitely, not part of this epic).
 

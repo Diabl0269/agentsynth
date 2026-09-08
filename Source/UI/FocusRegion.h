@@ -145,11 +145,13 @@ private:
     std::vector<FocusRegion> regions_;
 };
 
-// The theme's one "selected/focused" token (docs/theming.md's `accent`), painted as a solid ~2px
-// outline around `comp`'s own bounds whenever it or a descendant holds keyboard focus
-// (`hasKeyboardFocus(true)`) — the visual half of T159, shared by every focus-region root's paint()
-// rather than each one reinventing it. Mirrors the "accent when focused" treatment
-// AppLookAndFeel already applies to ComboBox/TextEditor outlines. Event-driven, not a per-tick
+// The theme's one "selected/focused" token (docs/theming.md's `accent`), painted as a translucent
+// outline (55% alpha, at the theme's normal border weight) around `comp`'s own bounds whenever it or
+// a descendant holds keyboard focus (`hasKeyboardFocus(true)`) — the visual half of T159, shared by
+// every focus-region root's paint() rather than each one reinventing it. Softer than the "accent when
+// focused" treatment AppLookAndFeel already applies to ComboBox/TextEditor outlines (solid, full
+// alpha), deliberately: that reads fine around a small control but is too heavy around an entire
+// panel. Event-driven, not a per-tick
 // timer — but `Component::focusGained`/`focusLost`/`focusOfChildComponentChanged` are no-op virtuals
 // by default, so nothing repaints a region root just because focus moved into or out of it. The
 // repaint trigger lives in MainComponent, which is a `juce::FocusChangeListener` and repaints every
@@ -159,10 +161,19 @@ inline void paintFocusRegionOutline(juce::Component& comp, juce::Graphics& g) {
     if (!comp.hasKeyboardFocus(true))
         return;
     juce::Colour colour = juce::Colours::orange;
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&comp.getLookAndFeel()))
+    float thickness = 1.0f;
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&comp.getLookAndFeel())) {
         colour = lf->getTheme().colors.accent;
-    g.setColour(colour);
-    g.drawRect(comp.getLocalBounds(), 2);
+        thickness = lf->getTheme().metrics.borderWidth; // the app's normal border weight (1px in
+                                                        // every built-in theme), not an arbitrary one
+    }
+    // A hard-edged, fully-opaque rect around a whole panel reads as much heavier than the same
+    // treatment on a small control (ComboBox/TextEditor), so this is deliberately softer than that
+    // precedent: translucent, at the theme's normal border weight, inset by half so the stroke
+    // doesn't clip against the component's own edge (mirrors AppLookAndFeel::drawTextEditorOutline's
+    // 0.5px inset convention).
+    g.setColour(colour.withAlpha(0.55f));
+    g.drawRect(comp.getLocalBounds().toFloat().reduced(thickness * 0.5f), thickness);
 }
 
 } // namespace synth::ui
