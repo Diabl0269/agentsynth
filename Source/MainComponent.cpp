@@ -346,6 +346,12 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // Per-module overrides of the default above (Preferences → "Per-module I/O defaults..."),
     // same new-modules-only scope as the toggle just above — no patch to retro-apply here either.
     graphEditor.setDualIOPerModuleOverrides(PreferencesSettingsTab::loadDualIOPerModuleOverrides(appProperties));
+    // Macro auto-port boundary tri-state (founder-review F5): restored the SAME way as the two
+    // on/off macro automations and the Dual I/O overrides above, so a "Remember my choice" from the
+    // auto-port modal the previous session survives a relaunch. Without this the editor's tri-state
+    // is only ever pushed when the Settings window opens (PreferencesSettingsTab::setGraphEditor),
+    // so a fresh launch left it Unset and the modal re-asked every session (T147).
+    graphEditor.setMacroAutoPortPreference(PreferencesSettingsTab::loadMacroAutoPortPreference(appProperties));
 
     // Minimap overlay visibility (issue #159), defaults to visible.
     const bool minimapVisible = appProperties.getUserSettings()->getBoolValue("minimapVisible", true);
