@@ -547,6 +547,22 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     moduleLibrary.onPluginActivated = [this](const synth::PluginIdentity& identity) {
         graphEditor.addHostedPluginAtCanvasPosition(identity, graphEditor.getViewportCentreInCanvasSpace());
     };
+    // T160: Enter-to-insert on a keyboard-focused Module/Snippet row — the click-to-add path those
+    // two row kinds never had before (mouseDown starts a drag for them immediately; see
+    // ModuleLibraryComponent's own comment on onModuleActivated/onSnippetActivated). Both land at
+    // the viewport centre, mirroring onPluginActivated above and the "drop with no cursor position"
+    // fallback GraphEditor::itemDropped already uses.
+    moduleLibrary.onModuleActivated = [this](const juce::String& name) {
+        graphEditor.addModuleAtCanvasPosition(name, graphEditor.getViewportCentreInCanvasSpace(), {});
+    };
+    moduleLibrary.onSnippetActivated = [this](const juce::String& name) {
+        if (!graphEditor.snippetProvider)
+            return;
+        auto snippet = graphEditor.snippetProvider(name);
+        if (!snippet.isObject())
+            return;
+        graphEditor.insertSnippetAt(snippet, graphEditor.getViewportCentreInCanvasSpace());
+    };
     refreshPluginLibrary();
     // Register commands for the macOS native menu bar (Edit→Undo shows Cmd+Z).
     // Do NOT add commandManager.getKeyMappings() as a KeyListener — it intercepts
@@ -2129,7 +2145,7 @@ void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
     // T159: registered unconditionally, like every command above — getCommandInfo reports the two
     // Tab-cycle actions inactive while the welcome screen is up front rather than dropping them.
     commands.addArray({AppCommands::focusNextRegion, AppCommands::focusPrevRegion, AppCommands::focusTimeline,
-                       AppCommands::focusLibrary});
+                       AppCommands::focusLibrary, AppCommands::focusLibrarySearch});
     // T114/P8-10: unconditional (unlike checkForUpdates below) — neither command needs OS
     // integration, only ownedAudioEngine != nullptr, which getCommandInfo enforces via setActive()
     // and which is fixed for this MainComponent instance's whole lifetime.
@@ -2489,6 +2505,13 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
+    case AppCommands::focusLibrarySearch: {
+        result.setInfo("Focus Library Search", "Open (if needed) and focus the Module Library's search field",
+                       "General", 0);
+        auto kp = shortcutManager.getBinding("focusLibrarySearch");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
     case AppCommands::showWelcomeScreen: {
         result.setInfo("Show Welcome Screen", "Reopen the welcome screen", "Help", 0);
         // Registered unconditionally (see getAllCommands), but only ever meaningful on the app
@@ -2816,6 +2839,14 @@ bool MainComponent::perform(const InvocationInfo& info) {
         return true;
     case AppCommands::focusLibrary:
         focusRegions_.focusRegionById("library");
+        return true;
+    case AppCommands::focusLibrarySearch:
+        // Deliberately NOT focusRegions_.focusRegionById("library") — that grabs the region ROOT
+        // (moduleLibrary itself, per FocusRegion.h's contract), and this shortcut's whole point is to
+        // land on the search field specifically. Same "open if closed" behaviour as focusLibrary.
+        if (!isLibraryVisible)
+            setLibraryVisible(true);
+        moduleLibrary.focusSearchField();
         return true;
     case AppCommands::showWelcomeScreen:
         showWelcomeScreen();

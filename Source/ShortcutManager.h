@@ -110,7 +110,12 @@ enum CommandIDs {
     focusNextRegion,
     focusPrevRegion,
     focusTimeline,
-    focusLibrary
+    focusLibrary,
+    // T160: opens the Library (if closed) and grabs focus on its search field specifically, rather
+    // than the region root focusLibrary lands on — see ModuleLibraryComponent::focusSearchField and
+    // docs/shortcuts.md's Focus regions section for why those are two different destinations. Same
+    // General/command-dispatched treatment as the other three Focus* actions above.
+    focusLibrarySearch
 };
 
 /** What getCommandForAction() answers for a SURFACE action — an id that is rebindable and appears
@@ -209,6 +214,8 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return focusTimeline;
     if (actionId == "focusLibrary")
         return focusLibrary;
+    if (actionId == "focusLibrarySearch")
+        return focusLibrarySearch;
     // Every SURFACE action lands here — see kNoCommand.
     return kNoCommand;
 }
@@ -493,6 +500,11 @@ public:
             juce::KeyPress('t', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
         bindings["focusLibrary"] =
             juce::KeyPress('l', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+        // T160: bare Cmd+F — free on both counts (no other binding uses 'f' with Cmd, and no
+        // component keyPressed() override hardcodes it; the only existing 'f' binding is bare,
+        // unmodified 'f' for timelineFollowPlayheadToggle, a different chord entirely). Cmd+F reads
+        // as "find" the way it does in almost every app, which is exactly what this does.
+        bindings["focusLibrarySearch"] = juce::KeyPress('f', juce::ModifierKeys::commandModifier, 0);
 
         // ---- Graph ----
         bindings["autoArrange"] = juce::KeyPress('l', juce::ModifierKeys::commandModifier, 0);
@@ -764,6 +776,8 @@ public:
             return "Focus Timeline";
         if (actionId == "focusLibrary")
             return "Focus Library";
+        if (actionId == "focusLibrarySearch")
+            return "Focus Library Search";
         if (actionId == "timelineSnapToggle")
             return "Toggle Snap";
         if (actionId == "timelineToggleLoop")
@@ -942,6 +956,7 @@ private:
             {"focusPrevRegion", ShortcutCategory::General},
             {"focusTimeline", ShortcutCategory::General},
             {"focusLibrary", ShortcutCategory::General},
+            {"focusLibrarySearch", ShortcutCategory::General},
             // Graph — the verbs that mean nothing on any other surface.
             {"autoArrange", ShortcutCategory::Graph},
             {"saveSnippet", ShortcutCategory::Graph},
