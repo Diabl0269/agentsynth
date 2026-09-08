@@ -66,6 +66,10 @@ public:
     ~TimelinePanelComponent() override;
 
     void paint(juce::Graphics& g) override;
+    // T159: focus-region outline (Source/UI/FocusRegion.h), drawn OVER children -- the ruler, track
+    // header viewport, transport bar and clip lane area all tile wall-to-wall against this panel's
+    // own edge, so an outline painted at the end of paint() would sit UNDER them and never show.
+    void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
 
     // Wheel = horizontal scroll; Cmd+wheel (Ctrl on platforms without a Cmd key — mods.isCommandDown()

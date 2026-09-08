@@ -1169,6 +1169,35 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         // new child is safe.
         resized();
     }
+
+    // ---- T159: focus-region registry ---------------------------------------------------------
+    // Registered unconditionally (app AND plugin path — the plugin has every one of these panels
+    // too, just no welcomeScreen_) after every region root above is fully constructed and wired.
+    // Order matches the Tab-cycle order docs/shortcuts.md documents: Library, Canvas, Timeline, AI
+    // Panel, Mod Matrix. Wraps the getters/toggles that already exist rather than migrating them to
+    // a new unified visibility enum — see Source/UI/FocusRegion.h's own header comment.
+    focusRegions_.addRegion(
+        {"library", &moduleLibrary, [this] { return isLibraryVisible; }, [this] { setLibraryVisible(true); }});
+    // The canvas has no closed state at all -- null isOpen/open, so it is always in the open list.
+    focusRegions_.addRegion({"canvas", &graphEditor, nullptr, nullptr});
+    focusRegions_.addRegion({"timeline", &timelinePanel, [this] { return isTimelineVisible; },
+                             [this] {
+                                 if (!isTimelineVisible && toggleTimelineButton.onClick)
+                                     toggleTimelineButton.onClick();
+                             }});
+    focusRegions_.addRegion({"aiPanel", &aiChatComponent, [this] { return isAiPanelVisible; },
+                             [this] {
+                                 if (!isAiPanelVisible && toggleAiPanelButton.onClick)
+                                     toggleAiPanelButton.onClick();
+                             }});
+    // No `open` callback: T159 wires no direct-focus shortcut to the Mod Matrix (out of scope per
+    // the task), and Tab-cycling never opens a closed region — see FocusRegionRegistry::cycleFocus.
+    focusRegions_.addRegion(
+        {"modMatrix", &graphEditor.getModMatrix(), [this] { return graphEditor.isModMatrixVisible(); }, nullptr});
+
+    // Repaint whichever region gains/loses focus — see FocusRegion.h's comment on
+    // paintFocusRegionOutline for why nothing repaints on its own. Removed in the destructor.
+    juce::Desktop::getInstance().addFocusChangeListener(this);
 }
 
 void MainComponent::applyStoredDualIOPreferenceToPatch() {
@@ -1213,6 +1242,11 @@ juce::String MainComponent::computeOutputDeviceInfoText() const {
 }
 
 MainComponent::~MainComponent() {
+    // Pairs with the addFocusChangeListener(this) at the end of initialiseCommon(). Desktop is a
+    // process-global broadcaster that outlives this component, so an unremoved listener would call
+    // back into freed memory on the very next focus change anywhere in the process.
+    juce::Desktop::getInstance().removeFocusChangeListener(this);
+
     // Every plugin editor window must die before the graph/engine below do — see
     // HostedPluginWindowManager's class comment (this explicit call is one of two independent
     // safeguards; declaration order is the other).
@@ -1325,6 +1359,17 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
     // Re-tint the toolbar / status-bar icons from the already-retinted IconLibrary cache.
     applyToolbarIcons();
     repaint();
+}
+
+// T159: fires on EVERY keyboard-focus change in the process, not just ones inside our own regions
+// (a focus change elsewhere, e.g. a native file-chooser, still reaches here) — cheap to over-fire
+// since this is just repaint() calls on a handful of components, and correctness needs both the
+// region losing focus and the one gaining it repainted (a still-focused root never calls repaint()
+// on its own, since Component::focusGained/focusLost are no-op virtuals for most components).
+void MainComponent::globalFocusChanged(juce::Component*) {
+    for (const auto& region : focusRegions_.getRegions())
+        if (region.root != nullptr)
+            region.root->repaint();
 }
 
 void MainComponent::timerCallback() {
@@ -2072,6 +2117,10 @@ void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
                        AppCommands::snapCyclePrev, AppCommands::snapCycleNext, AppCommands::zoomInHorizontal,
                        AppCommands::zoomOutHorizontal, AppCommands::zoomInVertical, AppCommands::zoomOutVertical});
     commands.add(AppCommands::toggleTimelinePanel);
+    // T159: registered unconditionally, like every command above — getCommandInfo reports the two
+    // Tab-cycle actions inactive while the welcome screen is up front rather than dropping them.
+    commands.addArray({AppCommands::focusNextRegion, AppCommands::focusPrevRegion, AppCommands::focusTimeline,
+                       AppCommands::focusLibrary});
     // T114/P8-10: unconditional (unlike checkForUpdates below) — neither command needs OS
     // integration, only ownedAudioEngine != nullptr, which getCommandInfo enforces via setActive()
     // and which is fixed for this MainComponent instance's whole lifetime.
@@ -2400,6 +2449,37 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
+    case AppCommands::focusNextRegion: {
+        result.setInfo("Focus Next Region",
+                       "Move keyboard focus to the next open panel (Library, Canvas, Timeline, AI Panel, Mod "
+                       "Matrix)",
+                       "General", 0);
+        // T159: suppressed while the launch overlay is up front — every region it would cycle to is
+        // sitting behind it, so there is nowhere useful for Tab to land.
+        result.setActive(welcomeScreen_ == nullptr || !welcomeScreen_->isVisible());
+        auto kp = shortcutManager.getBinding("focusNextRegion");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    case AppCommands::focusPrevRegion: {
+        result.setInfo("Focus Previous Region", "Move keyboard focus to the previous open panel", "General", 0);
+        result.setActive(welcomeScreen_ == nullptr || !welcomeScreen_->isVisible());
+        auto kp = shortcutManager.getBinding("focusPrevRegion");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    case AppCommands::focusTimeline: {
+        result.setInfo("Focus Timeline", "Open (if needed) and focus the Timeline panel", "General", 0);
+        auto kp = shortcutManager.getBinding("focusTimeline");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    case AppCommands::focusLibrary: {
+        result.setInfo("Focus Library", "Open (if needed) and focus the Module Library", "General", 0);
+        auto kp = shortcutManager.getBinding("focusLibrary");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
     case AppCommands::showWelcomeScreen: {
         result.setInfo("Show Welcome Screen", "Reopen the welcome screen", "Help", 0);
         // Registered unconditionally (see getAllCommands), but only ever meaningful on the app
@@ -2715,6 +2795,18 @@ bool MainComponent::perform(const InvocationInfo& info) {
     }
     case AppCommands::toggleTimelinePanel:
         toggleTimelineButton.triggerClick();
+        return true;
+    case AppCommands::focusNextRegion:
+        focusRegions_.cycleFocus(true);
+        return true;
+    case AppCommands::focusPrevRegion:
+        focusRegions_.cycleFocus(false);
+        return true;
+    case AppCommands::focusTimeline:
+        focusRegions_.focusRegionById("timeline");
+        return true;
+    case AppCommands::focusLibrary:
+        focusRegions_.focusRegionById("library");
         return true;
     case AppCommands::showWelcomeScreen:
         showWelcomeScreen();

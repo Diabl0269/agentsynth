@@ -163,6 +163,7 @@ add_executable(Tests
     MidiDestinationPickerTests.cpp
     ModuleMidiFlagsTests.cpp
     FocusArbitrationTests.cpp
+    FocusRegionTests.cpp
     AutomationEditorTests.cpp
     TimelineTransportBarTests.cpp
     TimelineViewStateTests.cpp

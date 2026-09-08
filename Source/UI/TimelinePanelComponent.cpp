@@ -2,6 +2,7 @@
 #include "../AppUndoManager.h"
 #include "../ShortcutManager.h"
 #include "../Transport/TransportService.h"
+#include "FocusRegion.h"
 #include "ScrollPolicy.h"
 #include "Theme/AppLookAndFeel.h"
 #include "UIAnimation.h"
@@ -100,6 +101,14 @@ juce::String toolActionIdFor(synth::ui::EditTool tool) { return "timelineTool" +
 
 //==============================================================================
 TimelinePanelComponent::TimelinePanelComponent() {
+    // T159: makes grabKeyboardFocus() on THIS component (the "timeline" focus region's root)
+    // succeed deterministically, rather than depending on JUCE's position-ordered descent into
+    // children finding a focus-wanting one. This is deliberately separate from the clip-lane-area
+    // and piano-roll's OWN grabKeyboardFocus() calls on mouseDown (docs/shortcuts.md's edit-surface
+    // routing) — those still work exactly as before; Cmd+Shift+T / Tab just land on the panel root
+    // itself rather than wherever positional descent happened to end up.
+    setWantsKeyboardFocus(true);
+
     addAndMakeVisible(ruler_);
 
     addAndMakeVisible(addTrackButton_);
@@ -1849,6 +1858,10 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
         }
     }
 }
+
+// T159: focus-region outline (Source/UI/FocusRegion.h) -- see the paintOverChildren declaration's
+// comment in the header for why this can't just be tacked onto the end of paint() above.
+void TimelinePanelComponent::paintOverChildren(juce::Graphics& g) { synth::ui::paintFocusRegionOutline(*this, g); }
 
 //==============================================================================
 // ---- Top-edge resize handle ----

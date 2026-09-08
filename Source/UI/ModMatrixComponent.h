@@ -29,6 +29,10 @@ public:
     ~ModMatrixComponent() override;
 
     void paint(juce::Graphics& g) override;
+    // T159: focus-region outline (Source/UI/FocusRegion.h), drawn OVER children -- the row viewport
+    // tiles wall-to-wall against this component's own edge, so an outline painted at the end of
+    // paint() would sit UNDER it and never show.
+    void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
     void timerCallback() override;
 

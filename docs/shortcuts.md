@@ -1,8 +1,8 @@
 # Keyboard Shortcuts
 
 Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/ShortcutsSettingsTab.h/.cpp`).
-`ShortcutManager` (`Source/ShortcutManager.h`) registers **63 actions** across four categories —
-**General** (25, app-wide or routed per focused editor), **Graph** (4), **Timeline** (22) and
+`ShortcutManager` (`Source/ShortcutManager.h`) registers **67 actions** across four categories —
+**General** (29, app-wide or routed per focused editor), **Graph** (4), **Timeline** (22) and
 **Piano Roll** (12) — every one of them rebindable, including keys that used to be hardcoded:
 nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the six tool
 digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
@@ -50,6 +50,9 @@ when reasoning about a key that "does nothing."
 | Cmd+- | Zoom Out |
 | Cmd+Shift+= | Zoom In Vertically |
 | Cmd+Shift+- | Zoom Out Vertically |
+| Tab / Shift+Tab | Focus Next / Previous Region — cycles keyboard focus between whichever of the app's focus regions are currently OPEN (Library, Canvas, Timeline, AI Panel, Mod Matrix); wraps at both ends. See [**Focus regions**](#focus-regions) below |
+| Cmd+Shift+T | Focus Timeline — opens the Timeline panel first if it's closed, then focuses it |
+| Cmd+Shift+L | Focus Library — opens the Module Library sidebar first if it's closed, then focuses it |
 
 Cmd+T and Space are always active — the timeline is GA (see [`timeline_panel_core.md §1`](timeline_panel_core.md)). The grid
 and zoom commands below are inactive whenever the panel itself isn't open (`isTimelineVisible`),
@@ -74,6 +77,56 @@ Paste, Duplicate and Cut are marked **inactive** when there is nothing to act on
 an empty clipboard on the acting surface — see below), which greys the menu row and makes
 `ApplicationCommandTarget::tryToInvoke` refuse the key outright; Repeat is inactive with no
 selection AND always inactive on the Graph surface.
+
+### Focus regions
+
+**T159** added a general-purpose keyboard focus-region framework (`Source/UI/FocusRegion.h`),
+first of a 3-part epic — T160 (arrow-key navigation within the module library) and T161 (within
+timeline track headers, plus M/S/R) build on top of it without changing the registry itself. A
+`synth::ui::FocusRegionRegistry` is a plain member of `MainComponent` (never a `Desktop`-global
+singleton — a host process can run multiple plugin instances, and a future separate-window
+mixer/timeline would need its own registry), populated with five regions once every root component
+exists: **Library** (`isLibraryVisible`), **Canvas** (always open — the `graphEditor`), **Timeline**
+(`isTimelineVisible`), **AI Panel** (`isAiPanelVisible`) and **Mod Matrix**
+(`graphEditor.isModMatrixVisible()`).
+
+- **Tab / Shift+Tab cycle OPEN regions only** — a closed region is skipped entirely, never opened,
+  by the cycle itself (`FocusRegionRegistry::cycleFocus`/`nextOpenRegionId`). Suppressed completely
+  (both actions report inactive, so the key falls through unhandled) while the launch welcome screen
+  overlay (`welcomeScreen_`) is on screen — every region it would cycle to is sitting behind it.
+- **Cmd+Shift+T/L OPEN a closed target first, then focus it** — the opposite rule from Tab-cycling,
+  and deliberate: a direct-focus shortcut is a request to go somewhere specific, so it is allowed to
+  get you there even if that panel was closed; Tab-cycling only ever moves between what's already on
+  screen. Neither is suppressed by the welcome screen.
+- **Cmd+Shift+M is deliberately NOT used for a Library shortcut** — `Cmd+M` already owns "Toggle Mod
+  Matrix", and the bare letter is reserved for a future Mixer-focus shortcut once a Mixer exists.
+- **Every region root explicitly wants keyboard focus** — each of the five roots calls
+  `setWantsKeyboardFocus(true)` in its constructor, so `grabKeyboardFocus()` always lands
+  deterministically on the root itself. Without this, JUCE would instead descend into whichever
+  child happens to sort first by Y/X position (not by which child actually wants focus) — fragile to
+  depend on for a container whose row layout can change, and liable to silently focus nothing at all
+  if that positional chain ends at a non-focusable leaf. One consequence worth calling out: Cmd+Shift+L
+  lands on the Library container itself, not the search box, and Cmd+Shift+T lands on the Timeline
+  panel root rather than the clip lane area — `resolveEditSurface()` (below) still reports `Graph`
+  immediately afterwards, so Cmd+C still acts on the canvas until the user clicks (or T161 adds
+  keyboard) into the clip lanes specifically.
+- **Mod Matrix nests inside Canvas** — `ModMatrixComponent` is a child component of `GraphEditor`,
+  so the two focus regions nest rather than sit side by side. `FocusRegionRegistry::regionContaining`
+  resolves this to the most specific match (Mod Matrix, not Canvas) whenever real focus sits inside
+  it, so Tab-cycling and the outline both track the right one.
+- **Visual indicator** — a region's root component paints a solid ~2px outline in the theme's
+  `accent` colour (`docs/theming.md`) whenever it or a descendant holds keyboard focus
+  (`hasKeyboardFocus(true)`), via the shared `synth::ui::paintFocusRegionOutline` helper every one of
+  the five roots calls from its own `paintOverChildren` override — never plain `paint()`, since each
+  root's children (module images, the ruler/clip-lane/transport tiling, the chat message view, the
+  mod-row viewport) fill wall-to-wall to the root's own edge and would otherwise paint over a border
+  drawn earlier in `paint()`. GraphEditor also skips its own outline while the nested Mod Matrix has
+  focus, so the two regions never double-paint. Nothing repaints on its own when focus moves
+  (`Component::focusGained`/`focusLost` are no-op virtuals for most widgets), so `MainComponent` is a
+  `juce::FocusChangeListener` and repaints every region root on `globalFocusChanged` — event-driven,
+  never a per-tick timer.
+- **Out of scope for T159** — no arrow-key navigation WITHIN a region (T160/T161's job), and no
+  canvas/graph module-to-module navigation (deferred indefinitely, not part of this epic).
 
 ### Surface routing: who Cmd+C/V/D/X/R and Cmd+A act on
 
@@ -357,10 +410,10 @@ onto 1–6. Shipping one of the missing three later costs no rebind: the digit i
 
 ## Command vs surface actions
 
-The 63 actions split into two kinds, and telling them apart is the key to reasoning about "why
+The 67 actions split into two kinds, and telling them apart is the key to reasoning about "why
 doesn't this key do anything":
 
-- **Command-dispatched** (39 actions) — every General action, all four Graph actions, and the Timeline
+- **Command-dispatched** (43 actions) — every General action, all four Graph actions, and the Timeline
   category's eight grid-set + two grid-cycle commands. `AppCommands::getCommandForAction(actionId)`
   returns a real `juce::CommandID` for these; `MainComponent` implements
   `ApplicationCommandTarget`, so they appear in the native menu bar, drive toolbar tooltip text, and

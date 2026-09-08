@@ -3,6 +3,7 @@
 #include "../Plugin/Hosting/HostedPluginBackend.h"
 #include "../ShortcutManager.h"
 #include "../SnippetManager.h"
+#include "FocusRegion.h"
 #include "ModuleLibraryHelpPopup.h"
 #include "Theme/AppLookAndFeel.h"
 #include "UIAnimation.h"
@@ -77,6 +78,14 @@ public:
         // collapse-all strip). Without this, clicking anywhere in the parent would cause the
         // searchEditor child to gain focus, clearing its placeholder text.
         setMouseClickGrabsKeyboardFocus(false);
+        // T159: makes grabKeyboardFocus() on THIS component (the "library" focus region's root)
+        // succeed deterministically. juce::Component::grabKeyboardFocusInternal only takes the
+        // focus itself when wantsKeyboardFocusFlag is set; otherwise it descends into children by
+        // Y/X position (NOT by which child wants focus), which is a fragile thing to depend on for
+        // a container whose row layout can change. Orthogonal to setMouseClickGrabsKeyboardFocus
+        // above — that flag is checked first and separately, so mouse clicks on the panel's own
+        // custom-painted rows still never steal focus from the search box.
+        setWantsKeyboardFocus(true);
 
         // addChildComponent, not addAndMakeVisible: updateScrollBar() owns the visibility, so the bar
         // only appears once the rows actually outgrow the panel.
@@ -877,6 +886,12 @@ public:
                        juce::Justification::centredRight);
         }
     }
+
+    // T159: focus-region outline (Source/UI/FocusRegion.h), drawn OVER children like GraphEditor's
+    // own outline -- paint() alone isn't enough here: the scrollable row content and the top strip
+    // tile right up to the panel's own edge, so an outline drawn at the end of paint() would sit
+    // UNDER whatever gets painted next and never actually show.
+    void paintOverChildren(juce::Graphics& g) override { synth::ui::paintFocusRegionOutline(*this, g); }
 
     // -------------------------------------------------------------------------
     // Mouse events

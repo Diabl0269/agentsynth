@@ -1,6 +1,7 @@
 #include "AIChatComponent.h"
 #include "../AI/PatchDiff.h"
 #include "../Branding.h"
+#include "FocusRegion.h"
 #include <cmath>
 #include <thread>
 
@@ -596,6 +597,10 @@ private:
 AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::ApplicationProperties& props)
     : aiService(service)
     , appProperties(props) {
+    // T159: makes grabKeyboardFocus() on THIS component (the "aiPanel" focus region's root) succeed
+    // deterministically rather than depending on JUCE's position-ordered descent into children
+    // finding a focus-wanting one (see the identical comment in ModuleLibraryComponent's ctor).
+    setWantsKeyboardFocus(true);
 
 #ifdef NDEBUG
     juce::Logger::writeToLog("AIChatComponent initialized (Release)");
@@ -1090,6 +1095,10 @@ void AIChatComponent::paint(juce::Graphics& g) {
         g.fillAll(juce::Colours::darkgrey.darker(0.5f));
     }
 }
+
+// T159: focus-region outline (Source/UI/FocusRegion.h) -- see the paintOverChildren declaration's
+// comment in the header for why this can't just be tacked onto the end of paint() above.
+void AIChatComponent::paintOverChildren(juce::Graphics& g) { synth::ui::paintFocusRegionOutline(*this, g); }
 
 bool AIChatComponent::shouldUseStructuredOutput(const juce::String& text, const juce::StringArray& moduleTypeNames) {
     // Any real module/effect type name (Chorus, Distortion, Oscillator, ...) means the user is

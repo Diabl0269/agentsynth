@@ -21,6 +21,7 @@
 #include "Transport/BounceRunner.h"
 #include "UI/AIChatComponent.h"
 #include "UI/ExportAudioDialog.h"
+#include "UI/FocusRegion.h"
 #include "UI/GraphEditor.h"
 #include "UI/ModuleLibraryComponent.h"
 #include "UI/StatusBarComponent.h"
@@ -50,7 +51,11 @@ class MainComponent
     // the audio thread on every edit (timelineChanged) and the thing the track headers ask to
     // create/re-bind/delete their Track In nodes (TrackHeaderHost).
     , private synth::TimelineDoc::Listener
-    , private synth::ui::TrackHeaderHost {
+    , private synth::ui::TrackHeaderHost
+    // T159: repaints a focus-region root's accent outline when keyboard focus moves into or out of
+    // it. Component::focusGained/focusLost are no-op virtuals for most components, so this listener
+    // is the one thing that actually triggers the repaint (see FocusRegion.h's paint helper).
+    , private juce::FocusChangeListener {
 public:
     // Primary ctor: receives injected ThemeManager and LookAndFeel from Main.cpp.
     // provider is optional (nullptr → reads saved provider pref from appProperties).
@@ -326,6 +331,9 @@ public:
     // (the panel-slide tests read its bounds mid-slide).
     synth::AIChatComponent& getAiChatComponent() { return aiChatComponent; }
     ShortcutManager& getShortcutManager() { return shortcutManager; }
+    // T159: the registry itself is plain-old-data/pure-logic (see FocusRegion.h), so tests exercise
+    // it directly rather than through a maze of test-only wrapper methods here.
+    synth::ui::FocusRegionRegistry& getFocusRegionsForTest() { return focusRegions_; }
     void simulateNewPatchClick() {
         if (newButton.onClick)
             newButton.onClick();
@@ -723,6 +731,12 @@ private:
     // Implements the 3-step re-skin pass: applyTheme → sendLookAndFeelChangeMessage → repaint.
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
 
+    // FocusChangeListener (juce::FocusChangeListener override) — fires on every keyboard-focus
+    // change anywhere in the process. Repaints every registered focus-region root so T159's accent
+    // outline (FocusRegion.h's paintFocusRegionOutline) tracks focus moving into or out of it; see
+    // FocusRegion.h's comment on paintFocusRegionOutline for why this listener is needed at all.
+    void globalFocusChanged(juce::Component* focusedComponent) override;
+
     // Shared initialisation body called from both constructors after appProperties is set up.
     void initialiseCommon(std::unique_ptr<synth::AIProvider> provider, synth::AIProviderRegistry registry);
 
@@ -1037,6 +1051,13 @@ private:
 
     // Consulted first by resolveEditSurface(); std::nullopt means "use real focus".
     std::optional<EditSurface> editSurfaceOverrideForTest_;
+
+    // T159: the focus-region registry (Source/UI/FocusRegion.h) — a plain member, not a
+    // Desktop-global singleton, so a future separate-window mixer/timeline gets its own instance.
+    // Populated once in initialiseCommon() after every region root exists; wraps the same
+    // isLibraryVisible/isTimelineVisible/isAiPanelVisible/isModMatrixVisible getters the toolbar
+    // toggles already use rather than migrating them to a new unified enum.
+    synth::ui::FocusRegionRegistry focusRegions_;
 
 #if JUCE_MAC || JUCE_WINDOWS
     synth::update::UpdateManager updateManager;
