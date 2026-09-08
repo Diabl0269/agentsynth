@@ -1,8 +1,8 @@
 # Keyboard Shortcuts
 
 Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/ShortcutsSettingsTab.h/.cpp`).
-`ShortcutManager` (`Source/ShortcutManager.h`) registers **67 actions** across four categories —
-**General** (29, app-wide or routed per focused editor), **Graph** (4), **Timeline** (22) and
+`ShortcutManager` (`Source/ShortcutManager.h`) registers **69 actions** across four categories —
+**General** (30, app-wide or routed per focused editor), **Graph** (5), **Timeline** (22) and
 **Piano Roll** (12) — every one of them rebindable, including keys that used to be hardcoded:
 nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the six tool
 digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
@@ -52,7 +52,8 @@ when reasoning about a key that "does nothing."
 | Cmd+Shift+- | Zoom Out Vertically |
 | Tab / Shift+Tab | Focus Next / Previous Region — cycles keyboard focus between whichever of the app's focus regions are currently OPEN (Toolbar, Library, Canvas, Timeline, AI Panel, Mod Matrix); wraps at both ends. See [**Focus regions**](#focus-regions) below |
 | Cmd+Shift+T | Focus Timeline — opens the Timeline panel first if it's closed, then focuses it |
-| Cmd+Shift+L | Focus Library — opens the Module Library sidebar first if it's closed, then focuses it |
+| Cmd+Shift+L | Focus Library — opens the Module Library sidebar first if it's closed, then focuses it (lands on the sidebar container, not the search field — see Cmd+F below) |
+| Cmd+F | Focus Library Search — opens the Module Library first if it's closed, then focuses its search field specifically. See [**Library keyboard navigation (T160)**](#library-keyboard-navigation-t160) below |
 
 Cmd+T and Space are always active — the timeline is GA (see [`timeline_panel_core.md §1`](timeline_panel_core.md)). The grid
 and zoom commands below are inactive whenever the panel itself isn't open (`isTimelineVisible`),
@@ -132,6 +133,58 @@ exists: **Toolbar** (always open — the top strip), **Library** (`isLibraryVisi
   region root on `globalFocusChanged` — event-driven, never a per-tick timer.
 - **Out of scope for T159** — no arrow-key navigation WITHIN a region (T160/T161's job), and no
   canvas/graph module-to-module navigation (deferred indefinitely, not part of this epic).
+
+### Library keyboard navigation (T160)
+
+**T160** builds arrow-key navigation WITHIN the Library region on top of T159's framework, plus a
+new direct-focus shortcut for the search field specifically (`Cmd+F`, distinct from `Cmd+Shift+L`'s
+region-root destination). `ModuleLibraryComponent` had zero keyboard handling before this — it is a
+hand-rolled, not-a-`Viewport` component (drag-and-drop constraint, see
+[`layout_selection_canvas.md §2`](layout_selection_canvas.md)), so this is new keyboard subsystem
+work, not a rewire of something that already listened for keys.
+
+- **Two different focus destinations feed the same navigation** — `Cmd+Shift+L` / Tab-cycling land
+  real keyboard focus on `ModuleLibraryComponent` itself; `Cmd+F` lands it on the search field (a
+  child `juce::TextEditor`). Both reach the same Up/Down/Left/Right/Enter handling: the component's
+  own `keyPressed()` override for the first case, a `juce::KeyListener` registered on the search
+  field for the second — required because a single-line `TextEditor` unconditionally consumes
+  Up/Down/Return itself (`moveCaretUp`/`moveCaretDown` collapse to
+  `moveCaretToStartOfLine`/`EndOfLine` for a single-line editor, and JUCE's own
+  `moveCaretWithTransaction` always returns `true`), so they never bubble out on their own.
+  `ComponentPeer::handleKeyPress` runs a component's key LISTENERS before its own `keyPressed`,
+  which is what makes interception possible ahead of the editor.
+- **Up/Down walk every visible navigable row** — draggable rows (Module/Snippet/Plugin), the Action
+  row ("Scan for plugins..."), AND Header/SubHeader rows (so Left/Right below has something to
+  fold), skipping only the non-interactive `EmptyHint` placeholder. Clamped at both ends, no
+  wraparound. Starting with nothing focused, Down lands on the first row and Up on the last — typing
+  a query in the search field and pressing Down immediately starts browsing the results.
+- **Left/Right fold/expand a focused (Sub)Header** via the exact same `setSectionCollapsed()` a
+  mouse click on its chevron already calls. LOCKED decision: a no-op on any other focused row kind
+  ("a focused child row"), not a bubble — and, from the search field specifically, Left/Right are
+  never intercepted at all (they keep moving the text caret through the typed query; folding a
+  section as a side effect of editing text would be a surprising behaviour).
+- **Enter-to-insert is genuinely new behaviour**, not a rewire — Module and Snippet rows had NO
+  click-to-add path before T160 (`mouseDown` starts a drag immediately for them), so Enter on a
+  keyboard-focused row is the first way to add one without dragging. Fires
+  `onModuleActivated`/`onSnippetActivated` (new callbacks paralleling `onPluginActivated`); the
+  Action and Plugin rows keep firing their existing callbacks via the same `activateRow()` the mouse
+  path already used. A disabled (already-in-patch singleton) Module row inserts nothing.
+- **Tab is deliberately left alone everywhere** — `TextEditor` already never consumes it
+  (`tabKeyUsed` defaults `false`, no key-function table entry claims it), so it keeps bubbling to
+  `MainComponent`'s `focusNextRegion` cycle with no special-case code required; the risk this task's
+  own notes flagged ("Tab needs the same explicit allowance [as Escape/Return]") turned out to be
+  the INVERSE — the new Up/Down/Enter interception is what needed care not to also catch Tab.
+- **Scrolling is manual, unlike T161** — the sidebar is hand-scrolled (`scrollOffset` + a
+  `juce::ScrollBar`), not a real `juce::Viewport`, so arrow navigation calls
+  `scrollKeyboardFocusIntoView()` itself rather than getting auto-scroll for free.
+- **Keyboard focus is clamped like hover, plus one more check** — `keyboardFocusedIndex` is
+  re-validated at every site that already clamps `hoveredIndex` (a snippet save, a plugin scan, a
+  collapse animation finishing, a search-query change), AND checked against the row's *kind* at that
+  index, not just its visibility — a shrinking entry list (deleting a snippet) can leave a different,
+  non-navigable row (the "No snippets yet" `EmptyHint`) occupying the same numeric index.
+- **Visual** — a focused row gets a solid 1px accent-coloured outline, distinct from the existing
+  translucent hover fill, so a mouse hover and a keyboard focus on different rows never read as the
+  same state.
 
 ### Surface routing: who Cmd+C/V/D/X/R and Cmd+A act on
 

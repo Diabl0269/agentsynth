@@ -1084,6 +1084,43 @@ TEST_F(ShortcutManagerTest, FocusRegionActionsDoNotCollideWithAnyExistingGeneral
 }
 
 // ---------------------------------------------------------------------------
+// T160: focusLibrarySearch — opens the Library search field specifically, distinct from
+// focusLibrary's region-root destination. See Tests/ModuleLibraryComponentTests.cpp for the
+// keyboard row-navigation this unlocks once focus lands in the field.
+// ---------------------------------------------------------------------------
+
+TEST_F(ShortcutManagerTest, FocusLibrarySearchDefaultBindingIsCmdF) {
+    auto kp = manager.getBinding("focusLibrarySearch");
+    EXPECT_EQ(kp.getKeyCode(), 'f');
+    EXPECT_TRUE(kp.getModifiers().isCommandDown());
+    EXPECT_FALSE(kp.getModifiers().isShiftDown());
+    EXPECT_FALSE(kp.getModifiers().isAltDown());
+}
+
+TEST_F(ShortcutManagerTest, GetCommandForAction_ResolvesFocusLibrarySearch) {
+    EXPECT_EQ(AppCommands::getCommandForAction("focusLibrarySearch"), AppCommands::focusLibrarySearch);
+}
+
+TEST_F(ShortcutManagerTest, ActionIds_ContainsFocusLibrarySearch) {
+    EXPECT_TRUE(manager.getActionIds().contains("focusLibrarySearch"));
+}
+
+TEST_F(ShortcutManagerTest, GetActionDescription_FocusLibrarySearchIsNonEmpty) {
+    EXPECT_EQ(ShortcutManager::getActionDescription("focusLibrarySearch"), "Focus Library Search");
+}
+
+TEST_F(ShortcutManagerTest, FocusLibrarySearchIsGeneralCategory) {
+    EXPECT_EQ(ShortcutManager::getCategory("focusLibrarySearch"), ShortcutCategory::General);
+}
+
+TEST_F(ShortcutManagerTest, FocusLibrarySearchDoesNotCollideWithAnyExistingGeneralBinding) {
+    auto binding = manager.getBinding("focusLibrarySearch");
+    ASSERT_TRUE(binding.isValid());
+    EXPECT_TRUE(manager.getConflictingAction("focusLibrarySearch", binding).isEmpty())
+        << "focusLibrarySearch collides with " << manager.getConflictingAction("focusLibrarySearch", binding);
+}
+
+// ---------------------------------------------------------------------------
 // shortcutHintFor — the shared tooltip-hint helper every dynamic shortcut hint routes through.
 // ---------------------------------------------------------------------------
 
