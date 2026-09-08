@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <vector>
 
 class PreferencesSettingsTabTest : public ::testing::Test {
 protected:
@@ -26,6 +27,27 @@ protected:
 
     juce::ApplicationProperties appProperties;
 };
+
+// T157: the preference groups now live inside the tab's scroll view - a juce::Viewport whose owned
+// component (a ContentHost) holds the rows - so a control is no longer a DIRECT child of the tab.
+// These tests walk the whole component tree, mirroring how the Keyboard Shortcuts tab's rows live
+// inside their own scrolled host.
+namespace {
+std::vector<juce::Component*> descendantsOf(juce::Component& root) {
+    std::vector<juce::Component*> out;
+    std::vector<juce::Component*> stack;
+    for (auto* c : root.getChildren())
+        stack.push_back(c);
+    while (!stack.empty()) {
+        juce::Component* c = stack.back();
+        stack.pop_back();
+        out.push_back(c);
+        for (auto* ch : c->getChildren())
+            stack.push_back(ch);
+    }
+    return out;
+}
+} // namespace
 
 TEST_F(PreferencesSettingsTabTest, DefaultsToNewAndUnwiredAndDoubleClickOn) {
     PreferencesSettingsTab tab(appProperties);
@@ -235,7 +257,7 @@ TEST_F(PreferencesSettingsTabTest, ClickingTheToggleReachesTheEditorAndNewModule
     tab.setGraphEditor(&editor);
 
     juce::ToggleButton* dualToggle = nullptr;
-    for (auto* child : tab.getChildren())
+    for (auto* child : descendantsOf(tab))
         if (auto* tb = dynamic_cast<juce::ToggleButton*>(child))
             if (tb->getButtonText().containsIgnoreCase("Split"))
                 dualToggle = tb;
@@ -411,7 +433,7 @@ TEST_F(PreferencesSettingsTabTest, ClickingPianoRollKeyLabelsToggleReachesPersis
     tab.setSize(500, 460);
 
     juce::ToggleButton* labelToggle = nullptr;
-    for (auto* child : tab.getChildren())
+    for (auto* child : descendantsOf(tab))
         if (auto* tb = dynamic_cast<juce::ToggleButton*>(child))
             if (tb->getButtonText().containsIgnoreCase("Label every key"))
                 labelToggle = tb;
@@ -557,7 +579,7 @@ TEST_F(PreferencesSettingsTabTest, PerModuleButtonIsEnabledAndPopupReflectsPersi
     tab.setDualIOOverrideForType("Filter", false);
 
     juce::TextButton* perModuleButton = nullptr;
-    for (auto* child : tab.getChildren())
+    for (auto* child : descendantsOf(tab))
         if (auto* btn = dynamic_cast<juce::TextButton*>(child))
             if (btn->getButtonText().containsIgnoreCase("Per-module"))
                 perModuleButton = btn;
@@ -643,7 +665,7 @@ TEST_F(PreferencesSettingsTabTest, DualIOGroupIsOneLineWithADividerBelow) {
 
     juce::ToggleButton* dualToggle = nullptr;
     juce::TextButton* perModuleButton = nullptr;
-    for (auto* child : tab.getChildren()) {
+    for (auto* child : descendantsOf(tab)) {
         if (auto* tb = dynamic_cast<juce::ToggleButton*>(child))
             if (tb->getButtonText().containsIgnoreCase("Split"))
                 dualToggle = tb;
@@ -741,7 +763,7 @@ TEST_F(PreferencesSettingsTabTest, LoadDualIOPerModuleOverridesParsesWithoutATab
 
 namespace {
 juce::ToggleButton* findToggleByText(PreferencesSettingsTab& tab, const juce::String& text) {
-    for (auto* child : tab.getChildren())
+    for (auto* child : descendantsOf(tab))
         if (auto* tb = dynamic_cast<juce::ToggleButton*>(child))
             if (tb->getButtonText().containsIgnoreCase(text))
                 return tb;
@@ -890,7 +912,7 @@ TEST_F(PreferencesSettingsTabTest, ZoomScrollIsAPlainCheckboxNotADropdown) {
     ASSERT_NE(toggle, nullptr) << "round 6 reverts the dropdown back to this checkbox";
 
     // The round-5 dropdown's row label and combo must be gone, not left alongside the checkbox.
-    for (auto* child : tab.getChildren()) {
+    for (auto* child : descendantsOf(tab)) {
         if (auto* l = dynamic_cast<juce::Label*>(child))
             EXPECT_NE(l->getText(), "Zoom direction:") << "the dropdown's row label must not survive the revert";
         if (auto* combo = dynamic_cast<juce::ComboBox*>(child))
@@ -960,7 +982,7 @@ TEST_F(PreferencesSettingsTabTest, ZoomScrollStringsUseThePlatformModifierNameNo
     EXPECT_TRUE(toggle->getTooltip().contains(platformCommandKeyName()));
 
     juce::Label* hint = nullptr;
-    for (auto* child : tab.getChildren())
+    for (auto* child : descendantsOf(tab))
         if (auto* l = dynamic_cast<juce::Label*>(child))
             if (l->getText().contains("wheel zoom"))
                 hint = l;
@@ -982,7 +1004,7 @@ TEST_F(PreferencesSettingsTabTest, HintLabelsGetTwoLinesOfHeightAndNeverSqueezeH
 
     juce::Label* naturalHint = nullptr;
     juce::Label* zoomHint = nullptr;
-    for (auto* child : tab.getChildren()) {
+    for (auto* child : descendantsOf(tab)) {
         if (auto* l = dynamic_cast<juce::Label*>(child)) {
             if (l->getText().containsIgnoreCase("graph canvas pans"))
                 naturalHint = l;
@@ -1071,4 +1093,27 @@ TEST_F(PreferencesSettingsTabTest, ClickingTheAutosaveToggleWritesTheSetting) {
     EXPECT_EQ(appProperties.getUserSettings()->getValue("autosaveEnabled"), "0");
     tab.setAutosaveEnabled(true);
     EXPECT_EQ(appProperties.getUserSettings()->getValue("autosaveEnabled"), "1");
+}
+// T157: when the window is too short to show every group, the group stack lives inside a scroll
+// view, so the bottom rows stay reachable via a scrollbar instead of being clipped out (the bug the
+// tab used to have). A window tall enough to hold the whole stack does not overflow; a short window
+// does. Overflow is a function of the window height versus the group stack, independent of the live
+// search filter.
+TEST_F(PreferencesSettingsTabTest, ContentScrollsWhenItOutgrowsTheWindow) {
+    PreferencesSettingsTab tab(appProperties);
+
+    tab.setSize(600, 1500);
+    EXPECT_FALSE(tab.contentOverflowsViewportForTest())
+        << "a window tall enough for every group keeps the content host inside the viewport";
+
+    tab.setSize(600, 140);
+    EXPECT_TRUE(tab.contentOverflowsViewportForTest())
+        << "a window shorter than the group stack makes the content host outgrow the viewport";
+
+    // Scrolling off-screen is not the same as being filtered out: when the window is short and the
+    // search is empty, every group is still present in the component tree, so a top and a middle
+    // group are both still findable.
+    ASSERT_FALSE(descendantsOf(tab).empty()) << "the group controls must survive a short window";
+    EXPECT_NE(findToggleByText(tab, "Split"), nullptr) << "a top group is never dropped";
+    EXPECT_NE(findToggleByText(tab, "Show Alignment Guides"), nullptr) << "a middle group is never dropped";
 }
