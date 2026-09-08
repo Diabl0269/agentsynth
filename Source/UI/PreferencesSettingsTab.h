@@ -112,6 +112,11 @@ public:
     // assert one falls where the Dual I/O row ends without reaching into paint() itself.
     const std::vector<juce::Rectangle<int>>& getDividerBoundsForTest() const { return dividerBounds; }
 
+    // Test-seam for T157: is the scrolled content taller than the visible viewport (i.e. is a
+    // vertical scrollbar active)? Answers "does this tab clip its bottom groups" without reaching
+    // into layoutContent. True when a window is too short to show every group, false when they fit.
+    bool contentOverflowsViewportForTest() const { return contentHost.getHeight() > contentViewport.getHeight(); }
+
     // Live filter across every preference row's label/tooltip text (round 3 follow-up item 2).
     // Setting the real searchField's text would also work, but that posts an async notification in
     // a real run — this drives the exact same code path (applySearchFilter) synchronously, the same
@@ -161,6 +166,19 @@ private:
     // not contain it (case-insensitive), collapsing the vertical gap and any now-orphaned divider.
     // Called from resized() and from every place searchQuery changes.
     void applySearchFilter(const juce::String& query);
+
+    // Lays the preference groups into the viewport's content host, top-down in content coordinates,
+    // accumulating a running height the host is sized to. This is what makes a vertical scrollbar
+    // appear when the groups outgrow the window: exactly the structure ShortcutsSettingsTab uses for
+    // its rows. Sliced out of resized() so a search filter can re-run just this content pass
+    // (applySearchFilter -> resized -> layoutContent) without re-laying the pinned chrome.
+    void layoutContent(int contentWidth);
+
+    // Paints the group-separator hairlines. Called by ContentHost::paint (the viewport's viewed
+    // component), so the rules scroll along with the groups they separate — same owner-delegation
+    // idiom ShortcutsSettingsTab::RowsHost uses for its section chrome. Paints in the host's own
+    // content coordinates, which is exactly the space layoutContent lays the dividers into.
+    void paintContent(juce::Graphics&);
 
     juce::ApplicationProperties& appProperties;
     GraphEditor* graphEditor{nullptr}; // weak, owned by MainComponent
@@ -248,6 +266,23 @@ private:
     // re-persists the whole map — small enough (one bool per module type) that there is no reason
     // to diff and write just the changed key.
     std::map<juce::String, bool> dualIOPerModuleOverrides;
+
+    // The scrolled content: every preference group below is a child of this bare host, held by
+    // contentViewport, so a vertical scrollbar shows when the group stack outgrows the window
+    // instead of the lower groups getting clipped (T157). Its paint() delegates the hairline
+    // dividers back to the owner (see paintContent) — the same structure ShortcutsSettingsTab's
+    // RowsHost uses for its section chrome.
+    struct ContentHost : juce::Component {
+        explicit ContentHost(PreferencesSettingsTab& o)
+            : owner(o) {
+            setWantsKeyboardFocus(false);
+        }
+        void paint(juce::Graphics& g) override { owner.paintContent(g); }
+        PreferencesSettingsTab& owner;
+    };
+
+    juce::Viewport contentViewport;
+    ContentHost contentHost{*this};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PreferencesSettingsTab)
 };

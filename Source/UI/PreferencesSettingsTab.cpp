@@ -302,11 +302,19 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         }
     };
 
-    addAndMakeVisible(smartConnectionLabel);
+    // The preference groups live inside a scroll view's content host, exactly as the Keyboard
+    // Shortcuts tab keeps its rows: the title and the search field stay pinned above the scroll
+    // region, but the groups scroll when they outgrow the window instead of getting clipped (T157).
+    // contentHost's own size is computed in layoutContent; the viewport gives it a vertical scrollbar.
+    addAndMakeVisible(contentViewport);
+    contentViewport.setViewedComponent(&contentHost, false);
+    contentViewport.setScrollBarsShown(true, false);
+
+    contentHost.addAndMakeVisible(smartConnectionLabel);
     smartConnectionLabel.setText("Smart connections:", juce::dontSendNotification);
     smartConnectionLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
 
-    addAndMakeVisible(smartConnectionCombo);
+    contentHost.addAndMakeVisible(smartConnectionCombo);
     smartConnectionCombo.addItem("Off", 1);
     smartConnectionCombo.addItem("New modules only", 2);
     smartConnectionCombo.addItem("When main I/O is free", 3);
@@ -326,7 +334,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         persistSmartConnectionMode(modeFromComboId(smartConnectionCombo.getSelectedId()));
     };
 
-    addAndMakeVisible(doubleClickDisconnectToggle);
+    contentHost.addAndMakeVisible(doubleClickDisconnectToggle);
     doubleClickDisconnectToggle.setToggleState(
         appProperties.getUserSettings()->getBoolValue("doubleClickPortDisconnect", true), juce::dontSendNotification);
     doubleClickDisconnectToggle.setTooltip(
@@ -335,13 +343,13 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         persistDoubleClickPortDisconnect(doubleClickDisconnectToggle.getToggleState());
     };
 
-    addAndMakeVisible(alignmentGuideToggle);
+    contentHost.addAndMakeVisible(alignmentGuideToggle);
     alignmentGuideToggle.setToggleState(appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true),
                                         juce::dontSendNotification);
     alignmentGuideToggle.setTooltip("Shows snap/alignment guides on the canvas while dragging a module.");
     alignmentGuideToggle.onClick = [this] { persistAlignmentGuidesEnabled(alignmentGuideToggle.getToggleState()); };
 
-    addAndMakeVisible(defaultDualIOToggle);
+    contentHost.addAndMakeVisible(defaultDualIOToggle);
     defaultDualIOToggle.setToggleState(
         appProperties.getUserSettings()->getBoolValue("defaultDualIOForNewModules", false), juce::dontSendNotification);
     defaultDualIOToggle.setTooltip("Splits the audio jacks on every stereo-capable module - FX, Voice Mixer output, "
@@ -351,7 +359,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
 
     dualIOPerModuleOverrides = loadDualIOPerModuleOverrides(appProperties);
 
-    addAndMakeVisible(perModuleDefaultsButton);
+    contentHost.addAndMakeVisible(perModuleDefaultsButton);
     perModuleDefaultsButton.setTooltip(
         "Per-module overrides of the Split Left/Right default above - Follow global, Always on, or Always off for "
         "each module type. Applies to modules created after the change, same as the toggle.");
@@ -360,11 +368,11 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         juce::CallOutBox::launchAsynchronously(std::move(popup), perModuleDefaultsButton.getScreenBounds(), nullptr);
     };
 
-    addAndMakeVisible(macroAutoPortLabel_);
+    contentHost.addAndMakeVisible(macroAutoPortLabel_);
     macroAutoPortLabel_.setText("Macro auto-ports:", juce::dontSendNotification);
     macroAutoPortLabel_.setFont(juce::Font(juce::FontOptions(13.0f)));
 
-    addAndMakeVisible(macroAutoPortCombo_);
+    contentHost.addAndMakeVisible(macroAutoPortCombo_);
     macroAutoPortCombo_.addItem("Always ask", 1);
     macroAutoPortCombo_.addItem("Auto-create ports", 2);
     macroAutoPortCombo_.addItem("Leave cables as is", 3);
@@ -385,7 +393,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     // tri-state preference above — that one defaults to "ask" because it replaced pre-existing
     // silent behaviour; these two are brand-new automations the founder asked to ship ON by
     // default, with a plain escape hatch. Same idiom as doubleClickDisconnectToggle above.
-    addAndMakeVisible(macroAutoCreatePortsOnDragToggle);
+    contentHost.addAndMakeVisible(macroAutoCreatePortsOnDragToggle);
     macroAutoCreatePortsOnDragToggle.setToggleState(
         appProperties.getUserSettings()->getBoolValue("macroAutoCreatePortsOnDrag", true), juce::dontSendNotification);
     macroAutoCreatePortsOnDragToggle.setTooltip(
@@ -396,7 +404,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         persistMacroAutoCreatePortsOnDrag(macroAutoCreatePortsOnDragToggle.getToggleState());
     };
 
-    addAndMakeVisible(macroAutoDeletePortsOnLastCableToggle);
+    contentHost.addAndMakeVisible(macroAutoDeletePortsOnLastCableToggle);
     macroAutoDeletePortsOnLastCableToggle.setToggleState(
         appProperties.getUserSettings()->getBoolValue("macroAutoDeletePortsOnLastCable", true),
         juce::dontSendNotification);
@@ -408,7 +416,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         persistMacroAutoDeletePortsOnLastCable(macroAutoDeletePortsOnLastCableToggle.getToggleState());
     };
 
-    addAndMakeVisible(loopSelectionArmsToggle);
+    contentHost.addAndMakeVisible(loopSelectionArmsToggle);
     loopSelectionArmsToggle.setToggleState(
         appProperties.getUserSettings()->getBoolValue("timelineLoopSelectionArms", true), juce::dontSendNotification);
     loopSelectionArmsToggle.setTooltip(
@@ -416,7 +424,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         "looping on. When off, P only places the locators (use L to toggle looping).");
     loopSelectionArmsToggle.onClick = [this] { persistLoopSelectionArms(loopSelectionArmsToggle.getToggleState()); };
 
-    addAndMakeVisible(doubleClickSpansLocatorsToggle);
+    contentHost.addAndMakeVisible(doubleClickSpansLocatorsToggle);
     // DEFAULT TRUE, same idiom as the rows above.
     doubleClickSpansLocatorsToggle.setToggleState(
         appProperties.getUserSettings()->getBoolValue(kTimelineDoubleClickSpansLocatorsKey, true),
@@ -429,7 +437,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         persistDoubleClickSpansLocators(doubleClickSpansLocatorsToggle.getToggleState());
     };
 
-    addAndMakeVisible(naturalScrollingToggle);
+    contentHost.addAndMakeVisible(naturalScrollingToggle);
     // DEFAULT TRUE: "natural" is the juce::Viewport convention every scrolling surface in the app
     // already follows, so an install that never touches this preference behaves exactly as before.
     naturalScrollingToggle.setToggleState(appProperties.getUserSettings()->getBoolValue(kNaturalScrollingKey, true),
@@ -438,13 +446,13 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
                                       "off to invert the wheel and trackpad in the timeline and the piano roll.");
     naturalScrollingToggle.onClick = [this] { persistNaturalScrolling(naturalScrollingToggle.getToggleState()); };
 
-    addAndMakeVisible(naturalScrollingHint);
+    contentHost.addAndMakeVisible(naturalScrollingHint);
     naturalScrollingHint.setText("Affects the timeline and the piano roll. The graph canvas pans instead of "
                                  "scrolling and is unaffected.",
                                  juce::dontSendNotification);
     styleMutedHintLabel(naturalScrollingHint);
 
-    addAndMakeVisible(zoomScrollUpZoomsInToggle);
+    contentHost.addAndMakeVisible(zoomScrollUpZoomsInToggle);
     // DEFAULT TRUE, and deliberately the same idiom as the row above: "up zooms in" is what both
     // wheel-zoom surfaces already did, so nobody's gesture changes until they ask for it here.
     //
@@ -463,7 +471,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         persistZoomScrollUpZoomsIn(zoomScrollUpZoomsInToggle.getToggleState());
     };
 
-    addAndMakeVisible(zoomScrollUpZoomsInHint);
+    contentHost.addAndMakeVisible(zoomScrollUpZoomsInHint);
     // One line (round 6): short enough that styleMutedHintLabel's two-line-tall box (kept from
     // round 5's layout fix) never needs the second line, but the taller box is harmless and keeping
     // it means this row and naturalScrollingHint above it stay pixel-identical in height.
@@ -472,7 +480,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
                                     juce::dontSendNotification);
     styleMutedHintLabel(zoomScrollUpZoomsInHint);
 
-    addAndMakeVisible(pianoRollKeyLabelsToggle);
+    contentHost.addAndMakeVisible(pianoRollKeyLabelsToggle);
     // DEFAULT TRUE ("all"): matches PianoRollComponent::KeyLabelMode::AllNotes, its own default,
     // so an install that never opens this tab sees no change.
     pianoRollKeyLabelsToggle.setToggleState(
@@ -483,7 +491,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         persistPianoRollKeyLabelMode(pianoRollKeyLabelsToggle.getToggleState());
     };
 
-    addAndMakeVisible(autosaveEnabledToggle);
+    contentHost.addAndMakeVisible(autosaveEnabledToggle);
     // DEFAULT TRUE: autosave is a safety net, not an opt-in — see kAutosaveEnabledKey above.
     autosaveEnabledToggle.setToggleState(appProperties.getUserSettings()->getBoolValue(kAutosaveEnabledKey, true),
                                          juce::dontSendNotification);
@@ -492,11 +500,11 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
                                      "saved file.");
     autosaveEnabledToggle.onClick = [this] { persistAutosaveEnabled(autosaveEnabledToggle.getToggleState()); };
 
-    addAndMakeVisible(autosaveIntervalLabel);
+    contentHost.addAndMakeVisible(autosaveIntervalLabel);
     autosaveIntervalLabel.setText("Every:", juce::dontSendNotification);
     autosaveIntervalLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
 
-    addAndMakeVisible(autosaveIntervalEditor);
+    contentHost.addAndMakeVisible(autosaveIntervalEditor);
     autosaveIntervalEditor.setMultiLine(false);
     autosaveIntervalEditor.setReturnKeyStartsNewLine(false);
     autosaveIntervalEditor.setSelectAllWhenFocused(true);
@@ -520,15 +528,15 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     autosaveIntervalEditor.onReturnKey = commitAutosaveInterval;
     autosaveIntervalEditor.onFocusLost = commitAutosaveInterval;
 
-    addAndMakeVisible(autosaveIntervalUnitLabel);
+    contentHost.addAndMakeVisible(autosaveIntervalUnitLabel);
     autosaveIntervalUnitLabel.setText("min", juce::dontSendNotification);
     autosaveIntervalUnitLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
 
-    addAndMakeVisible(autosaveBackupCountLabel);
+    contentHost.addAndMakeVisible(autosaveBackupCountLabel);
     autosaveBackupCountLabel.setText("Keep:", juce::dontSendNotification);
     autosaveBackupCountLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
 
-    addAndMakeVisible(autosaveBackupCountEditor);
+    contentHost.addAndMakeVisible(autosaveBackupCountEditor);
     autosaveBackupCountEditor.setMultiLine(false);
     autosaveBackupCountEditor.setReturnKeyStartsNewLine(false);
     autosaveBackupCountEditor.setSelectAllWhenFocused(true);
@@ -548,14 +556,20 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     autosaveBackupCountEditor.onReturnKey = commitAutosaveBackupCount;
     autosaveBackupCountEditor.onFocusLost = commitAutosaveBackupCount;
 
-    addAndMakeVisible(autosaveBackupCountUnitLabel);
+    contentHost.addAndMakeVisible(autosaveBackupCountUnitLabel);
     autosaveBackupCountUnitLabel.setText("backups", juce::dontSendNotification);
     autosaveBackupCountUnitLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
 }
 
 void PreferencesSettingsTab::paint(juce::Graphics& g) {
     g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
+}
 
+// Painted by ContentHost (the viewport's viewed component), so the group-separator hairlines scroll
+// along with the groups they separate - the same owner-delegation idiom ShortcutsSettingsTab's
+// RowsHost uses for its section chrome. Runs in the host's own content coordinates, exactly the
+// space layoutContent lays each divider into.
+void PreferencesSettingsTab::paintContent(juce::Graphics& g) {
     // Group separators. Drawn from the text colour at low alpha rather than a theme token so the
     // rule stays legible on both light and dark themes without needing one of its own.
     g.setColour(findColour(juce::Label::textColourId).withAlpha(kDividerAlpha));
@@ -565,20 +579,31 @@ void PreferencesSettingsTab::paint(juce::Graphics& g) {
 
 void PreferencesSettingsTab::resized() {
     auto bounds = getLocalBounds().reduced(12);
-    dividerBounds.clear();
 
+    // Title and the search field stay pinned above the scroll view - the controls that decide
+    // WHICH groups are on screen must never scroll out of reach, exactly as the Keyboard
+    // Shortcuts tab keeps its own title/search/collapse strip out of its scrolled region.
     titleLabel.setBounds(bounds.removeFromTop(28));
     bounds.removeFromTop(8);
     searchField.setBounds(bounds.removeFromTop(26));
     bounds.removeFromTop(12);
 
+    // Everything below is scrolled content: the viewport clips it and shows a vertical scrollbar
+    // when it overflows (T157). Rows are laid out to the viewport width minus its scrollbar
+    // gutter, so a control never runs under the thumb; reserving the gutter unconditionally
+    // keeps the layout independent of whether the bar shows this very pass.
+    contentViewport.setBounds(bounds);
+    layoutContent(juce::jmax(0, contentViewport.getWidth() - contentViewport.getScrollBarThickness()));
+}
+
+void PreferencesSettingsTab::layoutContent(int contentWidth) {
+    dividerBounds.clear();
+
     // ---- Live filter (round 3 follow-up item 2) --------------------------------------------
     //
-    // Each of the groups below is a "row" for filtering purposes — the same grouping the dividers
-    // already draw, so filtering never needs a finer-grained concept of "row" than what the layout
-    // already treats as one block. A group matches when ANY of its components' button text, label
-    // text or tooltip contains the query (case-insensitive); an empty query matches everything, so
-    // an untouched search field reproduces the exact bounds this function always produced.
+    // Each of the groups below is a row for filtering purposes: a group matches when ANY of its
+    // components button/label/tooltip text contains the query (case-insensitive); an empty query
+    // matches everything, so an untouched search field reproduces the usual bounds.
     const juce::String query = searchQuery;
 
     auto textOf = [](juce::Component& c) {
@@ -610,15 +635,16 @@ void PreferencesSettingsTab::resized() {
             c->setVisible(visible);
     };
 
-    // Each group that wants a divider after it sets pendingDivider = true; the divider is only
-    // actually drawn once a LATER group turns out to be visible (beginGroup below), so a filtered-
-    // out group in between never leaves an orphan hairline over empty space, and the first/last
-    // visible group never gets a leading/trailing one either.
+    // Each group is laid out top-down in CONTENT coordinates, accumulating a running y; the
+    // host's total height (set at the end) is whatever the visible groups need, and the viewport
+    // scrolls when that exceeds the visible area. addDivider reserves a hairline between two
+    // visible groups, in the same content space.
+    int y = 0;
     bool pendingDivider = false;
-    auto addDivider = [this, &bounds] {
-        bounds.removeFromTop(10);
-        dividerBounds.push_back(bounds.removeFromTop(1));
-        bounds.removeFromTop(10);
+    auto addDivider = [&] {
+        y += 10;
+        dividerBounds.push_back(juce::Rectangle<int>{0, y, contentWidth, 1});
+        y += 11;
     };
     auto beginGroup = [&](bool visible) {
         if (visible && pendingDivider)
@@ -633,9 +659,10 @@ void PreferencesSettingsTab::resized() {
         setGroupVisible({&smartConnectionLabel, &smartConnectionCombo}, visible);
         beginGroup(visible);
         if (visible) {
-            auto smartRow = bounds.removeFromTop(24);
+            juce::Rectangle<int> smartRow(0, y, contentWidth, 24);
             smartConnectionLabel.setBounds(smartRow.removeFromLeft(160));
             smartConnectionCombo.setBounds(smartRow.removeFromLeft(220));
+            y += 24;
         }
         pendingDivider = pendingDivider || visible;
     }
@@ -645,8 +672,10 @@ void PreferencesSettingsTab::resized() {
         const bool visible = groupMatches({&doubleClickDisconnectToggle});
         setGroupVisible({&doubleClickDisconnectToggle}, visible);
         beginGroup(visible);
-        if (visible)
-            doubleClickDisconnectToggle.setBounds(bounds.removeFromTop(24));
+        if (visible) {
+            doubleClickDisconnectToggle.setBounds({0, y, contentWidth, 24});
+            y += 24;
+        }
         pendingDivider = pendingDivider || visible;
     }
 
@@ -655,72 +684,73 @@ void PreferencesSettingsTab::resized() {
         const bool visible = groupMatches({&alignmentGuideToggle});
         setGroupVisible({&alignmentGuideToggle}, visible);
         beginGroup(visible);
-        if (visible)
-            alignmentGuideToggle.setBounds(bounds.removeFromTop(24));
+        if (visible) {
+            alignmentGuideToggle.setBounds({0, y, contentWidth, 24});
+            y += 24;
+        }
         pendingDivider = pendingDivider || visible;
     }
 
-    // Group 4: Dual I/O (one line, one row — see the toggle's declaration comment). The button is
-    // sized to its own text via changeWidthToFitText rather than a fixed guess, so the toggle keeps
-    // as much of the row as it can for its own (longer) label.
+    // Group 4: Dual I/O (one line, one row - see the toggle's declaration comment).
     {
         const bool visible = groupMatches({&defaultDualIOToggle, &perModuleDefaultsButton});
         setGroupVisible({&defaultDualIOToggle, &perModuleDefaultsButton}, visible);
         beginGroup(visible);
         if (visible) {
-            auto dualIORow = bounds.removeFromTop(24);
+            juce::Rectangle<int> dualIORow(0, y, contentWidth, 24);
             perModuleDefaultsButton.changeWidthToFitText(24);
             const int buttonWidth = juce::jmax(perModuleDefaultsButton.getWidth(), 160);
             perModuleDefaultsButton.setBounds(dualIORow.removeFromRight(buttonWidth));
             dualIORow.removeFromRight(12);
             defaultDualIOToggle.setBounds(dualIORow);
+            y += 24;
         }
         pendingDivider = pendingDivider || visible;
     }
 
-    // Group 4b: macro auto-port preference (founder-review fix F5, docs/macros.md §7 item 6.2).
+    // Group 4b: macro auto-port preference (founder-review fix F5).
     {
         const bool visible = groupMatches({&macroAutoPortLabel_, &macroAutoPortCombo_});
         setGroupVisible({&macroAutoPortLabel_, &macroAutoPortCombo_}, visible);
         beginGroup(visible);
         if (visible) {
-            auto row = bounds.removeFromTop(24);
+            juce::Rectangle<int> row(0, y, contentWidth, 24);
             macroAutoPortLabel_.setBounds(row.removeFromLeft(160));
             macroAutoPortCombo_.setBounds(row.removeFromLeft(220));
+            y += 24;
         }
         pendingDivider = pendingDivider || visible;
     }
 
-    // Group 4c: T148 macro auto-create/auto-delete toggles (docs/macros.md §7 item 9). No divider
-    // between them — same "reads as one pair" reasoning as the loop-locator pair below.
+    // Group 4c: T148 macro auto-create/auto-delete toggles.
     {
         const bool visible = groupMatches({&macroAutoCreatePortsOnDragToggle, &macroAutoDeletePortsOnLastCableToggle});
         setGroupVisible({&macroAutoCreatePortsOnDragToggle, &macroAutoDeletePortsOnLastCableToggle}, visible);
         beginGroup(visible);
         if (visible) {
-            macroAutoCreatePortsOnDragToggle.setBounds(bounds.removeFromTop(24));
-            macroAutoDeletePortsOnLastCableToggle.setBounds(bounds.removeFromTop(24));
+            macroAutoCreatePortsOnDragToggle.setBounds({0, y, contentWidth, 24});
+            y += 24;
+            macroAutoDeletePortsOnLastCableToggle.setBounds({0, y, contentWidth, 24});
+            y += 24;
         }
         pendingDivider = pendingDivider || visible;
     }
 
-    // Group 5: the two loop-locator toggles (no divider between them — see their declaration
-    // comments). Grouped for filtering too: they read as one conversation, so a query matching
-    // either keeps both rows together rather than splitting a pair that explains itself as a pair.
+    // Group 5: the two loop-locator toggles (no divider between them).
     {
         const bool visible = groupMatches({&loopSelectionArmsToggle, &doubleClickSpansLocatorsToggle});
         setGroupVisible({&loopSelectionArmsToggle, &doubleClickSpansLocatorsToggle}, visible);
         beginGroup(visible);
         if (visible) {
-            loopSelectionArmsToggle.setBounds(bounds.removeFromTop(24));
-            bounds.removeFromTop(10);
-            doubleClickSpansLocatorsToggle.setBounds(bounds.removeFromTop(24));
+            loopSelectionArmsToggle.setBounds({0, y, contentWidth, 24});
+            y += 34;
+            doubleClickSpansLocatorsToggle.setBounds({0, y, contentWidth, 24});
+            y += 24;
         }
         pendingDivider = pendingDivider || visible;
     }
 
-    // Group 6: the two wheel-direction toggles + their hints (no divider between them, same
-    // "reads as one conversation" reasoning as group 5).
+    // Group 6: the two wheel-direction toggles + their hints.
     {
         const bool visible = groupMatches(
             {&naturalScrollingToggle, &naturalScrollingHint, &zoomScrollUpZoomsInToggle, &zoomScrollUpZoomsInHint});
@@ -729,14 +759,15 @@ void PreferencesSettingsTab::resized() {
             visible);
         beginGroup(visible);
         if (visible) {
-            naturalScrollingToggle.setBounds(bounds.removeFromTop(24));
-            // Indented under the toggle it explains, so the hint reads as a caption rather than as
-            // another preference row. kHintHeight (not a single line's worth): round 5 fix for both
-            // hints in this group — see styleMutedHintLabel.
-            naturalScrollingHint.setBounds(bounds.removeFromTop(kHintHeight).withTrimmedLeft(24));
-            bounds.removeFromTop(10);
-            zoomScrollUpZoomsInToggle.setBounds(bounds.removeFromTop(24));
-            zoomScrollUpZoomsInHint.setBounds(bounds.removeFromTop(kHintHeight).withTrimmedLeft(24));
+            naturalScrollingToggle.setBounds({0, y, contentWidth, 24});
+            y += 24;
+            // Indented under the toggle it explains, so the hint reads as a caption.
+            naturalScrollingHint.setBounds({24, y, contentWidth - 24, kHintHeight});
+            y += kHintHeight + 10;
+            zoomScrollUpZoomsInToggle.setBounds({0, y, contentWidth, 24});
+            y += 24;
+            zoomScrollUpZoomsInHint.setBounds({24, y, contentWidth - 24, kHintHeight});
+            y += kHintHeight;
         }
         pendingDivider = pendingDivider || visible;
     }
@@ -746,14 +777,14 @@ void PreferencesSettingsTab::resized() {
         const bool visible = groupMatches({&pianoRollKeyLabelsToggle});
         setGroupVisible({&pianoRollKeyLabelsToggle}, visible);
         beginGroup(visible);
-        if (visible)
-            pianoRollKeyLabelsToggle.setBounds(bounds.removeFromTop(24));
+        if (visible) {
+            pianoRollKeyLabelsToggle.setBounds({0, y, contentWidth, 24});
+            y += 24;
+        }
         pendingDivider = pendingDivider || visible;
     }
 
-    // Group 8: autosave (last — no divider after it, filtered or not). One single row: the toggle,
-    // then "Every: [field] min", then "Keep: [field] backups" — three independent statements read
-    // together as one line rather than stacked as separate rows.
+    // Group 8: autosave (last - no divider after it).
     {
         const std::initializer_list<juce::Component*> autosaveComps = {
             &autosaveEnabledToggle,       &autosaveIntervalLabel,    &autosaveIntervalEditor,
@@ -763,7 +794,7 @@ void PreferencesSettingsTab::resized() {
         setGroupVisible(autosaveComps, visible);
         beginGroup(visible);
         if (visible) {
-            auto row = bounds.removeFromTop(24);
+            juce::Rectangle<int> row(0, y, contentWidth, 24);
             autosaveEnabledToggle.setBounds(row.removeFromLeft(90));
             row.removeFromLeft(16);
             autosaveIntervalLabel.setBounds(row.removeFromLeft(40));
@@ -777,8 +808,15 @@ void PreferencesSettingsTab::resized() {
             autosaveBackupCountEditor.setBounds(row.removeFromLeft(36));
             row.removeFromLeft(4);
             autosaveBackupCountUnitLabel.setBounds(row.removeFromLeft(55));
+            y += 24;
         }
     }
+
+    // Size the content host to whatever the visible groups consumed; the viewport scrolls it
+    // (T157). Width spans the full viewport so the dividers reach the edges; the scrollbar
+    // gutter is already excluded from contentWidth.
+    contentHost.setBounds(0, 0, juce::jmax(contentWidth, contentViewport.getWidth()), juce::jmax(y, 1));
+    contentHost.repaint();
 }
 
 void PreferencesSettingsTab::applySearchFilter(const juce::String& query) {
