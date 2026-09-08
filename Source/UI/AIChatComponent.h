@@ -41,6 +41,10 @@ public:
 
     void resized() override;
     void paint(juce::Graphics& g) override;
+    // T159: focus-region outline (Source/UI/FocusRegion.h), drawn OVER children -- the message view
+    // and input field tile wall-to-wall against this panel's own edge, so an outline painted at the
+    // end of paint() would sit UNDER them and never show.
+    void paintOverChildren(juce::Graphics& g) override;
 
     // Escape cancels an in-flight request. Reached by bubbling: while waiting, the read-only
     // inputField holds focus and does not consume Escape, so the press walks up to us.

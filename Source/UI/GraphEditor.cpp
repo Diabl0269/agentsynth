@@ -33,6 +33,7 @@
 #include "../Plugin/Hosting/HostedPluginModule.h"
 #include "../PresetManager.h"
 #include "../SnippetManager.h"
+#include "FocusRegion.h"
 #include "LayoutUtil.h"
 #include "MacroCardComponent.h"
 #include "MacroPortConfigDialog.h"
@@ -2764,6 +2765,19 @@ void GraphEditor::paint(juce::Graphics& g) {
 }
 
 void GraphEditor::paintOverChildren(juce::Graphics& g) {
+    // T159: the canvas's focus-region outline, drawn OVER children (unlike the other four focus
+    // regions' paint()) so a module's own image-cached body can never occlude it. Ahead of the
+    // empty-canvas early return below, since the outline must show regardless of whether the canvas
+    // has any modules in it.
+    //
+    // Mod Matrix is a CHILD component of the canvas (its own focus region nests inside this one —
+    // see FocusRegionRegistry::regionContaining), so `hasKeyboardFocus(true)` here is also true
+    // while focus is inside the Mod Matrix. Skip the canvas's own outline in that case so the two
+    // regions never paint two accent rectangles for one focus location; the Mod Matrix paints its
+    // own outline in ModMatrixComponent::paint().
+    if (!modMatrix.hasKeyboardFocus(true))
+        synth::ui::paintFocusRegionOutline(*this, g);
+
     // ---- Empty-canvas first-run hint ----
     // Drawn here (OUTER, untransformed GraphEditor local coordinates) so it is ALWAYS
     // centred in the visible viewport regardless of pan/zoom on the inner canvas.

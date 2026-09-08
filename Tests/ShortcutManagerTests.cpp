@@ -997,6 +997,93 @@ TEST_F(ShortcutManagerTest, ExportPatchOnlyDoesNotCollideWithNeighbouringChords)
 }
 
 // ---------------------------------------------------------------------------
+// T159: the focus-region framework's four new General actions — Tab/Shift+Tab cycling plus the two
+// direct-focus shortcuts. See Source/UI/FocusRegion.h for the registry these dispatch into and
+// Tests/FocusRegionTests.cpp for the registry's own logic tests.
+// ---------------------------------------------------------------------------
+
+TEST_F(ShortcutManagerTest, FocusNextRegionDefaultBindingIsBareTab) {
+    auto kp = manager.getBinding("focusNextRegion");
+    EXPECT_EQ(kp.getKeyCode(), juce::KeyPress::tabKey);
+    EXPECT_TRUE(kp.getModifiers().isCommandDown() == false && kp.getModifiers().isShiftDown() == false &&
+                kp.getModifiers().isAltDown() == false && kp.getModifiers().isCtrlDown() == false)
+        << "bare Tab, no modifiers";
+}
+
+TEST_F(ShortcutManagerTest, FocusPrevRegionDefaultBindingIsShiftTab) {
+    auto kp = manager.getBinding("focusPrevRegion");
+    EXPECT_EQ(kp.getKeyCode(), juce::KeyPress::tabKey);
+    EXPECT_TRUE(kp.getModifiers().isShiftDown());
+    EXPECT_FALSE(kp.getModifiers().isCommandDown());
+}
+
+TEST_F(ShortcutManagerTest, FocusTimelineDefaultBindingIsCmdShiftT) {
+    auto kp = manager.getBinding("focusTimeline");
+    EXPECT_EQ(kp.getKeyCode(), 't');
+    EXPECT_TRUE(kp.getModifiers().isCommandDown());
+    EXPECT_TRUE(kp.getModifiers().isShiftDown());
+    EXPECT_FALSE(kp.getModifiers().isAltDown());
+}
+
+TEST_F(ShortcutManagerTest, FocusLibraryDefaultBindingIsCmdShiftL) {
+    auto kp = manager.getBinding("focusLibrary");
+    EXPECT_EQ(kp.getKeyCode(), 'l');
+    EXPECT_TRUE(kp.getModifiers().isCommandDown());
+    EXPECT_TRUE(kp.getModifiers().isShiftDown());
+    EXPECT_FALSE(kp.getModifiers().isAltDown());
+}
+
+TEST_F(ShortcutManagerTest, GetCommandForAction_ResolvesTheFourFocusRegionActions) {
+    EXPECT_EQ(AppCommands::getCommandForAction("focusNextRegion"), AppCommands::focusNextRegion);
+    EXPECT_EQ(AppCommands::getCommandForAction("focusPrevRegion"), AppCommands::focusPrevRegion);
+    EXPECT_EQ(AppCommands::getCommandForAction("focusTimeline"), AppCommands::focusTimeline);
+    EXPECT_EQ(AppCommands::getCommandForAction("focusLibrary"), AppCommands::focusLibrary);
+}
+
+TEST_F(ShortcutManagerTest, ActionIds_ContainsTheFourFocusRegionActions) {
+    EXPECT_TRUE(manager.getActionIds().contains("focusNextRegion"));
+    EXPECT_TRUE(manager.getActionIds().contains("focusPrevRegion"));
+    EXPECT_TRUE(manager.getActionIds().contains("focusTimeline"));
+    EXPECT_TRUE(manager.getActionIds().contains("focusLibrary"));
+}
+
+TEST_F(ShortcutManagerTest, GetActionDescription_FocusRegionActionsAreNonEmpty) {
+    EXPECT_EQ(ShortcutManager::getActionDescription("focusNextRegion"), "Focus Next Region");
+    EXPECT_EQ(ShortcutManager::getActionDescription("focusPrevRegion"), "Focus Previous Region");
+    EXPECT_EQ(ShortcutManager::getActionDescription("focusTimeline"), "Focus Timeline");
+    EXPECT_EQ(ShortcutManager::getActionDescription("focusLibrary"), "Focus Library");
+}
+
+TEST_F(ShortcutManagerTest, FocusRegionActionsAreGeneralCategory) {
+    EXPECT_EQ(ShortcutManager::getCategory("focusNextRegion"), ShortcutCategory::General);
+    EXPECT_EQ(ShortcutManager::getCategory("focusPrevRegion"), ShortcutCategory::General);
+    EXPECT_EQ(ShortcutManager::getCategory("focusTimeline"), ShortcutCategory::General);
+    EXPECT_EQ(ShortcutManager::getCategory("focusLibrary"), ShortcutCategory::General);
+}
+
+// The collision check the task's own acceptance criteria calls out explicitly: none of the four new
+// chords collide with anything already in the (General) table, including each other and the
+// deliberately-NOT-reused Cmd+M (toggleModMatrix, reserved so a future Mixer-focus shortcut can use
+// Cmd+Shift+M without a clash).
+TEST_F(ShortcutManagerTest, FocusRegionActionsDoNotCollideWithAnyExistingGeneralBinding) {
+    for (const auto* actionId : {"focusNextRegion", "focusPrevRegion", "focusTimeline", "focusLibrary"}) {
+        auto binding = manager.getBinding(actionId);
+        ASSERT_TRUE(binding.isValid()) << actionId << " has no default binding";
+        EXPECT_TRUE(manager.getConflictingAction(actionId, binding).isEmpty())
+            << actionId << " collides with " << manager.getConflictingAction(actionId, binding);
+    }
+
+    // Cmd+Shift+M is reserved (not bound to anything by T159) — Cmd+M already owns toggleModMatrix,
+    // and the plain letter is left for a future Mixer-focus shortcut.
+    const auto cmdShiftM =
+        juce::KeyPress('m', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+    EXPECT_NE(manager.getBinding("focusLibrary"), cmdShiftM);
+    EXPECT_NE(manager.getBinding("focusTimeline"), cmdShiftM);
+    for (const auto& actionId : manager.getActionIds())
+        EXPECT_NE(manager.getBinding(actionId), cmdShiftM) << actionId << " must not claim the reserved Cmd+Shift+M";
+}
+
+// ---------------------------------------------------------------------------
 // shortcutHintFor — the shared tooltip-hint helper every dynamic shortcut hint routes through.
 // ---------------------------------------------------------------------------
 

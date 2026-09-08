@@ -841,8 +841,15 @@ TEST(PluginScanTest, SubHeaderTogglesIndependentlyOfHeader) {
     // The sub-header row itself never disappears — only its own header can hide it.
     EXPECT_GT(library.getRowCentreY(vst3SubHeader), 0);
 
-    // No focus-grabbing side effect (regression guard for #232).
-    EXPECT_FALSE(library.getWantsKeyboardFocus());
+    // No focus-grabbing side effect (regression guard for #232): a click on the sub-header must not
+    // move real keyboard focus onto the searchEditor child, clearing its placeholder text. #232's
+    // actual fix is setMouseClickGrabsKeyboardFocus(false) on the panel, asserted directly here.
+    // (Since T159, the panel DOES call setWantsKeyboardFocus(true) on itself -- deliberately, so a
+    // direct/programmatic grabKeyboardFocus() lands deterministically on the panel root for the
+    // "library" focus region -- but that flag is orthogonal to the click path #232 fixed: JUCE
+    // checks setMouseClickGrabsKeyboardFocus first and unconditionally, before it ever looks at
+    // wantsKeyboardFocus, so this panel's own flag staying false is what actually keeps a click safe.)
+    EXPECT_FALSE(library.getMouseClickGrabsKeyboardFocus());
 }
 
 TEST(PluginScanTest, SubHeaderCollapseSurvivesCollapseAll) {

@@ -18,6 +18,8 @@
 // colour when the themed LnF is absent (test runner has no themed LnF installed).
 class ToolbarComponent : public juce::Component {
 public:
+    ToolbarComponent();
+
     // Logical slot order — matches the left group [Library..AutoArrange] + right group
     // [ToggleMinimap, ToggleModMatrix, ToggleAiPanel, ToggleTimeline, ToggleTheme]. NumSlots is
     // the array size. Feedback sits immediately after Settings (same group — icon-only,
@@ -54,6 +56,11 @@ public:
     bool isNarrowMode() const noexcept { return narrowMode_; }
 
     void paint(juce::Graphics& g) override;
+    // T159: focus-region outline (Source/UI/FocusRegion.h). This component owns no children of its
+    // own (the buttons are direct children of MainComponent, see the class comment above), so
+    // paintOverChildren vs. appending to paint() makes no practical difference here -- used anyway
+    // for consistency with the other five focus-region roots.
+    void paintOverChildren(juce::Graphics& g) override;
 
 private:
     std::array<juce::DrawableButton*, NumSlots> buttons_{};

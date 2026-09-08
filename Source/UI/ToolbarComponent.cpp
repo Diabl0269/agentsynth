@@ -1,7 +1,17 @@
 #include "ToolbarComponent.h"
+#include "FocusRegion.h"
 #include "Theme/AppLookAndFeel.h"
 
 // ---------------------------------------------------------------------------
+ToolbarComponent::ToolbarComponent() {
+    // T159: makes grabKeyboardFocus() on THIS component (the "toolbar" focus region's root) succeed
+    // deterministically rather than depending on JUCE's position-ordered descent into children --
+    // see the identical comment in ModuleLibraryComponent's ctor. This component owns no children of
+    // its own (the buttons are direct children of MainComponent), so there is nothing for descent to
+    // find anyway; opting in here is what makes a grab land on the toolbar itself instead of failing.
+    setWantsKeyboardFocus(true);
+}
+
 void ToolbarComponent::setButtons(std::array<juce::DrawableButton*, NumSlots> btns) { buttons_ = btns; }
 
 // ---------------------------------------------------------------------------
@@ -159,3 +169,8 @@ void ToolbarComponent::paint(juce::Graphics& g) {
         prevRight = bounds.getRight();
     }
 }
+
+// T159: focus-region outline (Source/UI/FocusRegion.h) -- see the paintOverChildren declaration's
+// comment in the header for why this component uses the same convention as the other five region
+// roots despite owning no children of its own.
+void ToolbarComponent::paintOverChildren(juce::Graphics& g) { synth::ui::paintFocusRegionOutline(*this, g); }

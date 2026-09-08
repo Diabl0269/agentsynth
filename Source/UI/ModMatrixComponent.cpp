@@ -1,6 +1,7 @@
 #include "ModMatrixComponent.h"
 #include "../Modules/AttenuverterModule.h"
 #include "../Modules/MacroInletModule.h"
+#include "FocusRegion.h"
 #include "Theme/AppLookAndFeel.h"
 #include <algorithm>
 #include <map>
@@ -27,6 +28,13 @@ std::vector<ModulationTarget> destinationCandidatesForCombo(ModuleBase* module) 
 ModMatrixComponent::ModMatrixComponent(AudioEngine& engine, AppUndoManager* undoMgr)
     : audioEngine(engine)
     , undoManager(undoMgr) {
+    // T159: makes grabKeyboardFocus() on THIS component (the "modMatrix" focus region's root)
+    // succeed deterministically rather than depending on JUCE's position-ordered descent into
+    // children finding a focus-wanting one (see the identical comment in ModuleLibraryComponent's
+    // ctor). Also matters here because this component nests INSIDE the "canvas" region (it is a
+    // child of GraphEditor) — see FocusRegionRegistry::regionContaining's nesting note.
+    setWantsKeyboardFocus(true);
+
     addAndMakeVisible(viewport);
     viewport.setViewedComponent(&contentContainer);
 
@@ -118,6 +126,10 @@ void ModMatrixComponent::paint(juce::Graphics& g) {
                    true);
     }
 }
+
+// T159: focus-region outline (Source/UI/FocusRegion.h) -- see the paintOverChildren declaration's
+// comment in the header for why this can't just be tacked onto the end of paint() above.
+void ModMatrixComponent::paintOverChildren(juce::Graphics& g) { synth::ui::paintFocusRegionOutline(*this, g); }
 
 void ModMatrixComponent::resized() {
     auto area = getLocalBounds();

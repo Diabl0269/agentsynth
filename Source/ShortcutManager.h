@@ -101,7 +101,16 @@ enum CommandIDs {
     // Build-time, no-network "What's New" dialog (Feature 2 of T114/P8-10) — see the root
     // CMakeLists.txt's WhatsNewData.h generation and MainComponent::showWhatsNewDialog. Same
     // unconditional-registration, no-chord treatment as showWelcomeScreen above.
-    whatsNew
+    whatsNew,
+    // T159: the focus-region framework (see Source/UI/FocusRegion.h and docs/shortcuts.md). Tab and
+    // Shift+Tab cycle keyboard focus between whichever of the app's regions are currently OPEN
+    // (Library/Canvas/Timeline/AI Panel/Mod Matrix); the two Focus* commands open their target
+    // region first if it is closed, then focus it. All four are General, like every other
+    // command-dispatched action routed through MainComponent::keyPressed's existing loop.
+    focusNextRegion,
+    focusPrevRegion,
+    focusTimeline,
+    focusLibrary
 };
 
 /** What getCommandForAction() answers for a SURFACE action — an id that is rebindable and appears
@@ -192,6 +201,14 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return zoomInVertical;
     if (actionId == "zoomOutVertical")
         return zoomOutVertical;
+    if (actionId == "focusNextRegion")
+        return focusNextRegion;
+    if (actionId == "focusPrevRegion")
+        return focusPrevRegion;
+    if (actionId == "focusTimeline")
+        return focusTimeline;
+    if (actionId == "focusLibrary")
+        return focusLibrary;
     // Every SURFACE action lands here — see kNoCommand.
     return kNoCommand;
 }
@@ -455,6 +472,28 @@ public:
         bindings["zoomOutVertical"] =
             juce::KeyPress('-', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
 
+        // T159: Tab/Shift+Tab cycle keyboard focus between the app's currently OPEN focus regions
+        // (Library, Canvas, Timeline, AI Panel, Mod Matrix — see Source/UI/FocusRegion.h; a closed
+        // region is skipped, never opened, by the cycle itself). Bare Tab is free to claim: this
+        // codebase has never customized it (no KeyPress::tabKey/FocusTraverser/setExplicitFocusOrder
+        // usage anywhere before T159) — the only prior behaviour was JUCE's own generic
+        // ComponentPeer::handleKeyPress fallback (a sibling-order focus jump with no notion of these
+        // regions, triggered only when nothing else claims the key), which registering Tab here
+        // deliberately supersedes with a well-defined region cycle.
+        bindings["focusNextRegion"] = juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::noModifiers, 0);
+        bindings["focusPrevRegion"] = juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::shiftModifier, 0);
+        // Direct-focus shortcuts OPEN a closed target region before focusing it (unlike Tab-cycling
+        // above, which only ever visits what's already open). Cmd+Shift+M is deliberately NOT used
+        // for Library: Cmd+M already owns "Toggle Mod Matrix", and 'm' is reserved for a future
+        // Mixer-focus shortcut. Free on both counts against the rest of this table: no other binding
+        // uses 't' or 'l' with Cmd+Shift (toggleTimelinePanel is bare Cmd+T; autoArrange is bare
+        // Cmd+L, a different category entirely), and no component keyPressed() override hardcodes
+        // either chord.
+        bindings["focusTimeline"] =
+            juce::KeyPress('t', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+        bindings["focusLibrary"] =
+            juce::KeyPress('l', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+
         // ---- Graph ----
         bindings["autoArrange"] = juce::KeyPress('l', juce::ModifierKeys::commandModifier, 0);
         bindings["saveSnippet"] =
@@ -717,6 +756,14 @@ public:
             return "Zoom In Vertically";
         if (actionId == "zoomOutVertical")
             return "Zoom Out Vertically";
+        if (actionId == "focusNextRegion")
+            return "Focus Next Region";
+        if (actionId == "focusPrevRegion")
+            return "Focus Previous Region";
+        if (actionId == "focusTimeline")
+            return "Focus Timeline";
+        if (actionId == "focusLibrary")
+            return "Focus Library";
         if (actionId == "timelineSnapToggle")
             return "Toggle Snap";
         if (actionId == "timelineToggleLoop")
@@ -891,6 +938,10 @@ private:
             {"zoomOutHorizontal", ShortcutCategory::General},
             {"zoomInVertical", ShortcutCategory::General},
             {"zoomOutVertical", ShortcutCategory::General},
+            {"focusNextRegion", ShortcutCategory::General},
+            {"focusPrevRegion", ShortcutCategory::General},
+            {"focusTimeline", ShortcutCategory::General},
+            {"focusLibrary", ShortcutCategory::General},
             // Graph — the verbs that mean nothing on any other surface.
             {"autoArrange", ShortcutCategory::Graph},
             {"saveSnippet", ShortcutCategory::Graph},
