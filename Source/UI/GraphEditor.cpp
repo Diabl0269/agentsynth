@@ -6097,10 +6097,43 @@ void GraphEditor::changeMacroPortColour(const juce::String& macroId, const juce:
     else
         doChange();
 
-    // Mirror setMacroColour: a macro-set change is not itself a graph change, so nothing repaints
-    // the canvas on its own — force one so the new colour reaches both the collapsed card's jacks
-    // and any expanded docked widget that fronts this port (T162's whole point).
-    repaint();
+    // T165: force the two surfaces that show a port's jack to repaint — a port-colour change is
+    // a macro-set change, not a graph/structural change, so neither has a listener that would
+    // notice it on its own (before this a bare canvas repaint reached the card but not the docked
+    // widget, so the widget "only showed the new colour after a collapse/expand").
+    repaintMacroPortColourTargets(macroId, nodeUuid);
+}
+
+GraphEditor::MacroPortRecolourTargets GraphEditor::repaintMacroPortColourTargets(const juce::String& macroId,
+                                                                                 const juce::String& nodeUuid) {
+    MacroPortRecolourTargets targets;
+
+    // The collapsed card draws EVERY port's jack, so it alone must repaint to show the new colour.
+    for (auto* card : content.getMacroCards())
+        if (card != nullptr && card->getMacroId() == macroId) {
+            targets.card = card;
+            break;
+        }
+
+    // When the macro is expanded the port fronts a docked ModuleComponent whose paintMacroPortWidget
+    // reads the colour (T162's resolveMacroPortJackColour seam); when collapsed that component is
+    // hidden while folded, so a repaint of it is a harmless no-op until expanded; the widget still
+    // resolves, so its first expand-time paint reads the colour. Null only fronts a uuid that maps to
+    // no component.
+    auto nodeId = resolveMemberNodeId(nodeUuid);
+    if (nodeId.uid != 0)
+        for (auto* comp : content.getModules())
+            if (comp != nullptr && comp->getNodeId() == nodeId) {
+                targets.widget = comp;
+                break;
+            }
+
+    if (targets.card != nullptr)
+        targets.card->repaint();
+    if (targets.widget != nullptr)
+        targets.widget->repaint();
+
+    return targets;
 }
 
 void GraphEditor::moveMacroPortOrder(const juce::String& macroId, const juce::String& nodeUuid, bool moveUp) {
