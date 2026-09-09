@@ -6,6 +6,7 @@ MacroCardComponent::MacroCardComponent(GraphEditor& owner, juce::String macroId)
     : owner(owner)
     , macroId(std::move(macroId)) {
     setInterceptsMouseClicks(true, false);
+    showContextMenuHook_ = [](juce::PopupMenu& menu) { menu.showMenuAsync(juce::PopupMenu::Options()); };
 }
 
 MacroCardComponent::~MacroCardComponent() { finishRename(false); }
@@ -199,9 +200,13 @@ void MacroCardComponent::mouseDown(const juce::MouseEvent& e) {
     finishRename(true);
 
     if (e.mods.isRightButtonDown()) {
+        // T138: captured BEFORE the reselect below, which otherwise destroys any external batch
+        // the user picked before right-clicking this card — see buildMacroMenu's own comment on
+        // addCandidateSelection.
+        const auto priorSelection = owner.getSelectedNodes();
         if (!owner.isMacroSelected(macroId))
             owner.selectMacro(macroId, false);
-        showContextMenu();
+        showContextMenu(priorSelection);
         return;
     }
 
@@ -302,20 +307,23 @@ void MacroCardComponent::finishRename(bool commit) {
     repaint();
 }
 
-void MacroCardComponent::showContextMenu() {
+void MacroCardComponent::showContextMenu(const std::vector<juce::AudioProcessorGraph::NodeID>& priorSelection) {
     // owner.buildMacroMenu is the ONE shared builder — this card's own right-click menu and the
     // expanded-macro hull's right-click menu (GraphEditor::mouseDown) both go through it, so they
     // cannot drift apart (Fix 4/P8-12 follow-up). This card is the one caller that overrides the
     // default "Rename..." handler: it has a real MacroCardComponent to host the nicer inline
-    // TextEditor rename, which nothing else building this menu has.
+    // TextEditor rename, which nothing else building this menu has. `priorSelection` (T138) is
+    // whatever was selected right before mouseDown's own reselect — see buildMacroMenu's
+    // addCandidateSelection comment.
     juce::Component::SafePointer<MacroCardComponent> safeThis(this);
-    owner
-        .buildMacroMenu(macroId,
-                        [safeThis] {
-                            if (safeThis != nullptr)
-                                safeThis->beginRename();
-                        })
-        .showMenuAsync(juce::PopupMenu::Options());
+    auto menu = owner.buildMacroMenu(
+        macroId,
+        [safeThis] {
+            if (safeThis != nullptr)
+                safeThis->beginRename();
+        },
+        &priorSelection);
+    showContextMenuHook_(menu);
 }
 
 juce::String MacroCardComponent::getModuleCountText() const {

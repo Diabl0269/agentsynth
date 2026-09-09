@@ -340,6 +340,34 @@ public:
      *  individual cards. Refused via onStatusMessage (no-op) if the selection touches no macro. */
     void ungroupSelection();
 
+    /** T138: adds every uuid in `memberUuids` to the EXISTING macro `macroId` — the incremental
+     *  counterpart to groupSelectionIntoMacro(), for a macro that already exists (buildMacroMenu's
+     *  "Add Selection to Macro" item is the one caller). Mirrors groupSelectionIntoMacro's own flat-
+     *  model refusal exactly: if ANY uuid already belongs to a DIFFERENT macro, the whole call is
+     *  refused via onStatusMessage (no undo entry, nothing added) rather than adding the rest and
+     *  skipping the bad one. A uuid already a member of THIS macro is silently skipped (nothing to
+     *  do). Deliberately does not touch ports or cables — a newly-added member's existing
+     *  connections to nodes outside the macro simply become an ordinary, un-ported boundary
+     *  crossing, rendered by buildVisibleCables()'s existing directional edge-anchor rule
+     *  (docs/macros.md §5.4); Configure I/O remains the way to turn one into a named port, exactly
+     *  as it already is for any other un-ported crossing cable. One recordGraphAndMacroChange undo
+     *  step. */
+    void addSelectionToMacro(const juce::String& macroId, const std::vector<juce::String>& memberUuids);
+
+    /** T138: removes every uuid in `memberUuids` from macro `macroId` via
+     *  MacroSet::removeMemberEverywhere, one member at a time — the incremental counterpart to
+     *  ungroupSelection() for removing SOME rather than ALL of a macro's members (buildMacroMenu's
+     *  "Remove from Macro" item is the one caller). A port's uuid in the list is silently skipped —
+     *  ports have their own delete affordance (ModuleComponent::buildMacroPortContextMenu) and
+     *  removing one through this path would desync Macro::ports without splicing its cable back.
+     *  Dissolves the macro if removing its last ordinary member also drops its last port-fronted
+     *  member (removeMemberEverywhere's own "zero members" rule). Like ungroupSelection(), never
+     *  splices or reconnects a removed member's cables — matching the precedent that only PORT
+     *  nodes are ever spliced on membership change, ordinary members never are; a cable to a
+     *  remaining member simply starts rendering as an ordinary boundary crossing. One
+     *  recordGraphAndMacroChange undo step. */
+    void removeSelectionFromMacro(const juce::String& macroId, const std::vector<juce::String>& memberUuids);
+
     /** Toggles (Cmd+Alt+G) the collapsed state of every macro that owns at least one
      *  currently-selected node — a single reversible command rather than a collapse/expand pair
      *  (see AppCommands::collapseMacro's comment for why a toggle is safe here: the label is
@@ -521,8 +549,23 @@ public:
      *  `renameAction`, when supplied, replaces the default "Rename..." item's handler — the
      *  collapsed card passes its own inline-editor opener (MacroCardComponent::beginRename) here;
      *  every other caller (the hull menu) leaves it empty and gets promptRenameMacro's dialog,
-     *  since there is no card to host an inline editor there. */
-    juce::PopupMenu buildMacroMenu(const juce::String& macroId, std::function<void()> renameAction = nullptr);
+     *  since there is no card to host an inline editor there.
+     *
+     *  `addCandidateSelection` (T138): both the collapsed card's own right-click
+     *  (MacroCardComponent::mouseDown) and the expanded hull's empty-space right-click
+     *  (GraphEditor::mouseDown's macroHullAt branch) call selectMacro(macroId, false) BEFORE this
+     *  method ever runs, so by the time it reads the CURRENT selection, any external batch the
+     *  user picked before right-clicking is already gone — replaced by the macro's own members.
+     *  Both call sites therefore capture the selection themselves right before that reselect and
+     *  pass it here; "Add Selection to Macro" is computed against THIS list (falling back to the
+     *  current live selection only when null — the ModuleComponent member-submenu graft, whose own
+     *  narrower retarget-if-not-already-selected never destroys an external batch the same way).
+     *  "Remove from Macro" always reads the CURRENT live selection regardless — after either
+     *  reselect it correctly equals the macro's own members, which is exactly what removal should
+     *  see. */
+    juce::PopupMenu
+    buildMacroMenu(const juce::String& macroId, std::function<void()> renameAction = nullptr,
+                   const std::vector<juce::AudioProcessorGraph::NodeID>* addCandidateSelection = nullptr);
 
     /** Live bounds + colour category for the currently-resolvable MODULE members of `macroId`
      *  (a port node is excluded — founder-review fix G6, docs/macros.md §7 item 4 note), in

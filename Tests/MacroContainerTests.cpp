@@ -412,6 +412,185 @@ TEST(MacroDelete, UngroupSelectionKeepsTheModulesInTheGraph) {
 }
 
 // ============================================================================
+// Membership (T138): Add Selection to Macro / Remove from Macro -- the incremental
+// counterparts to groupSelectionIntoMacro()/ungroupSelection() for an EXISTING macro.
+// ============================================================================
+
+TEST(MacroMembership, AddSelectionToMacroAddsALooseModuleAsANewOrdinaryMember) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    auto c = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 900, 100);
+    auto uuidC = uuidOf(engine, c);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    editor.addSelectionToMacro(macroId, {uuidC});
+
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_EQ(macro->members.size(), 3u);
+    EXPECT_TRUE(macro->hasMember(uuidC));
+}
+
+TEST(MacroMembership, AddSelectionToMacroRefusesWhenAUuidIsAlreadyInAnotherMacroAndAddsNothing) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    editor.setSelectedNodes({a, b});
+    auto macroA = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroA.isEmpty());
+
+    auto c = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 900, 100);
+    auto d = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 1300, 100);
+    editor.setSelectedNodes({c, d});
+    auto macroB = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroB.isEmpty());
+
+    auto uuidC = uuidOf(engine, c); // already a member of macroB
+    auto loose = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 1700, 100);
+    auto uuidLoose = uuidOf(engine, loose);
+
+    juce::String lastMessage;
+    editor.onStatusMessage = [&](const juce::String& msg) { lastMessage = msg; };
+
+    editor.addSelectionToMacro(macroA, {uuidLoose, uuidC});
+
+    EXPECT_FALSE(lastMessage.isEmpty()) << "must refuse with a status message, not a silent no-op";
+    auto* macro = editor.getMacros().find(macroA);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_EQ(macro->members.size(), 2u) << "the whole call must be refused -- the loose module must "
+                                            "not be added either, matching groupSelectionIntoMacro's own "
+                                            "all-or-nothing refusal";
+    EXPECT_FALSE(macro->hasMember(uuidLoose));
+
+    auto* otherMacro = editor.getMacros().find(macroB);
+    ASSERT_NE(otherMacro, nullptr);
+    EXPECT_EQ(otherMacro->members.size(), 2u) << "macroB must be untouched";
+}
+
+TEST(MacroMembership, AddSelectionToMacroIsOneUndoStep) {
+    AudioEngine engine;
+    AppUndoManager undoManager;
+    GraphEditor editor(engine, &undoManager);
+    undoManager.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    auto c = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 900, 100);
+    auto uuidC = uuidOf(engine, c);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    undoManager.clearUndoHistory();
+
+    editor.addSelectionToMacro(macroId, {uuidC});
+    ASSERT_TRUE(editor.getMacros().find(macroId)->hasMember(uuidC));
+
+    ASSERT_TRUE(undoManager.canUndo());
+    undoManager.undo();
+    EXPECT_FALSE(editor.getMacros().find(macroId)->hasMember(uuidC)) << "a single undo must fully revert the add";
+
+    undoManager.redo();
+    EXPECT_TRUE(editor.getMacros().find(macroId)->hasMember(uuidC));
+}
+
+TEST(MacroMembership, RemoveSelectionFromMacroShrinksTheMacroWithoutDissolvingIt) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    auto c = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 900, 100);
+    auto uuidA = uuidOf(engine, a);
+
+    editor.setSelectedNodes({a, b, c});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    editor.removeSelectionFromMacro(macroId, {uuidA});
+
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_EQ(macro->members.size(), 2u);
+    EXPECT_FALSE(macro->hasMember(uuidA));
+    EXPECT_NE(engine.getGraph().getNodeForId(a), nullptr) << "remove-from-macro never deletes the module itself";
+}
+
+TEST(MacroMembership, RemoveSelectionFromMacroDissolvesOnTheLastMember) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    auto uuidA = uuidOf(engine, a);
+    auto uuidB = uuidOf(engine, b);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    editor.removeSelectionFromMacro(macroId, {uuidA, uuidB});
+
+    EXPECT_EQ(editor.getMacros().find(macroId), nullptr);
+    EXPECT_TRUE(editor.getMacros().empty());
+    EXPECT_NE(engine.getGraph().getNodeForId(a), nullptr);
+    EXPECT_NE(engine.getGraph().getNodeForId(b), nullptr);
+}
+
+TEST(MacroMembership, RemoveSelectionFromMacroSkipsAPortUuidRatherThanDesyncingMacroPorts) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    // Stands in for a real MacroInlet/MacroOutlet node -- updateComponents() reconciles macro
+    // membership against LIVE graph node uuids (macros.retainOnly()), so a synthetic uuid with no
+    // backing node would just get silently pruned as an orphan the moment doRemove() below calls
+    // it, independent of removeSelectionFromMacro's own skip-a-port logic under test here.
+    auto portNode = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 900, 100);
+    auto portUuid = uuidOf(engine, portNode);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    // Hand-crafts a MacroPort entry fronting that real node, mirroring the one invariant
+    // removeSelectionFromMacro relies on (every port's nodeUuid is also a `members` entry) --
+    // exercising the skip rule needs only MacroSet's own data, not a real spliced MacroInlet node.
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    macro->members.push_back(portUuid);
+    synth::MacroPort port;
+    port.nodeUuid = portUuid;
+    port.isInput = true;
+    port.name = "Test In";
+    macro->ports.push_back(port);
+
+    const auto uuidB = uuidOf(engine, b);
+    editor.removeSelectionFromMacro(macroId, {portUuid, uuidB});
+
+    macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_TRUE(macro->hasMember(portUuid)) << "a port must never be pulled out by this generic path -- "
+                                               "it has its own delete affordance";
+    EXPECT_FALSE(macro->hasMember(uuidB)) << "the ordinary member must still be removed";
+}
+
+// ============================================================================
 // Collapse
 // ============================================================================
 
@@ -1816,4 +1995,147 @@ TEST(MacroMemberContextMenu, RightClickFiresTheContextMenuHookExactlyOnce) {
     EXPECT_EQ(hookCallCount, 1) << "a right-click body mouseDown() must build and hand off exactly "
                                    "one context menu, never zero (a dropped gesture) or more than "
                                    "one (a real popup opened alongside the hook)";
+}
+
+// ============================================================================
+// Membership menu gating (T138): buildMacroMenu() captures the selection at BUILD time (before
+// any item's own handler can move it), then shows "Add Selection to Macro" only when that
+// captured selection has something addable, and "Remove from Macro" only when it has something
+// removable -- see the capture comment at the top of buildMacroMenu() itself.
+// ============================================================================
+
+TEST(MacroMembershipMenu, AddItemAppearsOnlyWhenSelectionHasSomethingToAddAndActsOnItWhenInvoked) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    // Nothing else selected -- the collapsed card's own right-click (entry point 1) does NOT touch
+    // selection, so whatever was selected before the click is still what buildMacroMenu() sees.
+    editor.setSelectedNodes({a, b}); // exactly the macro's own members -- nothing addable
+    EXPECT_EQ(findMenuItemByText(editor.buildMacroMenu(macroId), "Add Selection to Macro"), nullptr);
+
+    auto c = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 900, 100);
+    auto uuidC = uuidOf(engine, c);
+    editor.setSelectedNodes({c});
+    const auto menu = editor.buildMacroMenu(macroId); // named, so pointers into it outlive this call
+    const auto* addItem = findMenuItemByText(menu, "Add Selection to Macro");
+    ASSERT_NE(addItem, nullptr) << "a loose module in the current selection makes the item appear";
+    ASSERT_TRUE(static_cast<bool>(addItem->action));
+
+    addItem->action();
+
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_TRUE(macro->hasMember(uuidC));
+}
+
+TEST(MacroMembershipMenu, RemoveItemAppearsOnlyWhenSelectionHasAMemberAndActsOnItWhenInvoked) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    auto loose = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 900, 100);
+    editor.setSelectedNodes({loose}); // touches no member of this macro -- nothing removable
+    EXPECT_EQ(findMenuItemByText(editor.buildMacroMenu(macroId), "Remove from Macro"), nullptr);
+
+    auto uuidA = uuidOf(engine, a);
+    editor.setSelectedNodes({a});
+    const auto menu = editor.buildMacroMenu(macroId); // named, so pointers into it outlive this call
+    const auto* removeItem = findMenuItemByText(menu, "Remove from Macro");
+    ASSERT_NE(removeItem, nullptr);
+    ASSERT_TRUE(static_cast<bool>(removeItem->action));
+
+    removeItem->action();
+
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_FALSE(macro->hasMember(uuidA));
+    EXPECT_EQ(macro->members.size(), 1u);
+}
+
+TEST(MacroMembershipMenu, RemoveItemLabelPluralizesForAMultiMemberSelection) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    auto c = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 900, 100);
+    editor.setSelectedNodes({a, b, c});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    editor.setSelectedNodes({a, b});
+    const auto menu = editor.buildMacroMenu(macroId);
+    EXPECT_EQ(findMenuItemByText(menu, "Remove from Macro"), nullptr);
+    EXPECT_NE(findMenuItemByText(menu, "Remove Selection from Macro"), nullptr);
+}
+
+namespace {
+juce::MouseEvent makeCardRightClick(MacroCardComponent& comp, juce::Point<int> position) {
+    const auto pos = position.toFloat();
+    const auto mods = juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier);
+    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos, mods, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                            &comp, &comp, juce::Time::getCurrentTime(), pos, juce::Time::getCurrentTime(), 1, false);
+}
+} // namespace
+
+// Regression guard for a real bug found via live GUI testing (2026-09-10): MacroCardComponent's
+// own real right-click handler calls owner.selectMacro(macroId, false) BEFORE building the menu
+// (mouseDown's "if (!owner.isMacroSelected(macroId))" guard), which silently clobbers any OTHER
+// selection the user made before right-clicking. Calling GraphEditor::buildMacroMenu() directly
+// with setSelectedNodes() already set (as every other MacroMembershipMenu test above does) can
+// never catch this -- it bypasses the real mouseDown()/reselect entirely, which is exactly why the
+// earlier version of this feature shipped with "Add Selection to Macro" unreachable from the
+// card's own right-click despite passing every one of those direct-call tests. This test drives
+// the REAL gesture instead, the same "test the real mouse path" rule MacroMemberContextMenu's own
+// suite already follows for ModuleComponent's right-click.
+TEST(MacroMembershipMenu, AddItemSurvivesTheRealCardRightClickDespiteItsOwnReselect) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    auto loose = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 900, 100);
+    auto uuidLoose = uuidOf(engine, loose);
+    editor.setSelectedNodes({loose}); // the external batch the card's own reselect must not lose
+
+    auto* card = editor.getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+
+    juce::PopupMenu capturedMenu;
+    card->setShowContextMenuHookForTest([&capturedMenu](juce::PopupMenu& m) { capturedMenu = m; });
+
+    card->mouseDown(makeCardRightClick(*card, {10, 10}));
+
+    // Sanity: the real gesture's own reselect really did fire and clobber the live selection --
+    // proving this test would have caught a naive "just read selection.getSelected()" fix.
+    EXPECT_FALSE(editor.isNodeSelected(loose));
+
+    const auto* addItem = findMenuItemByText(capturedMenu, "Add Selection to Macro");
+    ASSERT_NE(addItem, nullptr) << "the pre-reselect selection must still reach buildMacroMenu";
+    ASSERT_TRUE(static_cast<bool>(addItem->action));
+
+    addItem->action();
+
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_TRUE(macro->hasMember(uuidLoose));
 }

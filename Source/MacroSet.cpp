@@ -93,6 +93,14 @@ bool MacroSet::remove(const juce::String& macroId) {
     return macros_.size() != before;
 }
 
+bool MacroSet::addMember(const juce::String& macroId, const juce::String& memberUuid) {
+    auto* macro = find(macroId);
+    if (macro == nullptr || macro->hasMember(memberUuid))
+        return false;
+    macro->members.push_back(memberUuid);
+    return true;
+}
+
 juce::String MacroSet::removeMemberEverywhere(const juce::String& memberUuid) {
     for (auto it = macros_.begin(); it != macros_.end(); ++it) {
         auto memberIt = std::find(it->members.begin(), it->members.end(), memberUuid);

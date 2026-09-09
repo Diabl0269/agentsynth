@@ -143,6 +143,13 @@ public:
      *  ordinary member nodes (untouched, exactly as this method's own contract says) are left. */
     bool remove(const juce::String& macroId);
 
+    /** Adds `memberUuid` to `macroId`'s membership. No-op (returns false) if the macro doesn't
+     *  exist or the uuid is already one of its members. Deliberately does NOT check whether the
+     *  uuid belongs to a DIFFERENT macro — the flat model's "already in a macro" refusal is the
+     *  caller's job (GraphEditor::addSelectionToMacro), mirroring how groupSelectionIntoMacro does
+     *  its own findByMember() check before ever touching MacroSet. */
+    bool addMember(const juce::String& macroId, const juce::String& memberUuid);
+
     /** Removes `memberUuid` from whichever macro contains it (no-op if it is in none), also
      *  dropping any port that fronted it (P8-15) — a port's nodeUuid is always a member, so this
      *  keeps that invariant true after a single-member removal too, not only after retainOnly().

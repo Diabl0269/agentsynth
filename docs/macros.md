@@ -577,9 +577,9 @@ truncated** — grouping one into a macro changes nothing about that.
 ### 5.8 The macro menu's reachable entry points
 
 `GraphEditor::buildMacroMenu` is the ONE builder for a macro's own actions (Expand/Collapse,
-Rename, Change Colour, Configure I/O, Bypass/Mute, Save as Snippet, Ungroup, Delete Macro &
-Modules). There are three ways to reach it, all funnelling through it rather than each keeping its
-own copy:
+Rename, Change Colour, Configure I/O, Bypass/Mute, Save as Snippet, Ungroup, Add Selection to
+Macro, Remove from Macro, Delete Macro & Modules). There are three ways to reach it, all funnelling
+through it rather than each keeping its own copy:
 
 1. **The collapsed card's own right-click** (`MacroCardComponent::showContextMenu`) — the original
    P8-12 entry point. It pre-selects nothing itself before this fix; it passes its own inline-rename
@@ -636,6 +636,69 @@ opening it. This is strictly stronger than asserting against a second, separatel
 produced. `MacroMemberContextMenu.RightClickFiresTheContextMenuHookExactlyOnce` guards the wiring
 itself, so a future revert to a direct `showMenuAsync()` call fails there first rather than only as an
 unexplained Linux-only segfault.
+
+**T138: "Add Selection to Macro" / "Remove from Macro" — changing membership without ungroup +
+regroup.** Before this, the only way to change who is in a macro was to ungroup it (dissolving the
+record) and group again. `GraphEditor::addSelectionToMacro`/`removeSelectionFromMacro` are the
+incremental counterparts to `groupSelectionIntoMacro`/`ungroupSelection` for a macro that already
+exists, and `buildMacroMenu` offers them as two more items, right after "Ungroup".
+
+- **"Add Selection to Macro" is computed from a candidate list captured BEFORE either call site's
+  own forced reselect, never from the selection `buildMacroMenu` sees when it actually runs.** The
+  first cut of this feature read `selection.getSelected()` inside `buildMacroMenu` itself and
+  shipped with "Add Selection to Macro" silently unreachable from BOTH real entry points — caught
+  only by live GUI testing (2026-09-10), because every test up to that point called
+  `buildMacroMenu()` directly with `setSelectedNodes()` already set, which never exercises the real
+  mouseDown()/reselect sequence a live click goes through. Both the collapsed card's own
+  right-click (`MacroCardComponent::mouseDown`) and the expanded hull's empty-space right-click
+  (`GraphEditor::mouseDown`'s `macroHullAt` branch) call `selectMacro(macroId, false)` **before**
+  showing the menu at all (a UX nicety — the card/hull highlights what you're about to act on) — by
+  the time `buildMacroMenu` runs, "the current selection" is already just this macro's own members,
+  and any external batch the user picked before right-clicking is gone. The fix:
+  `buildMacroMenu(macroId, renameAction, addCandidateSelection)` takes an optional third parameter,
+  a `const std::vector<NodeID>*` — both call sites capture `getSelectedNodes()` themselves, one line
+  before their own `selectMacro`/`isMacroSelected` reselect, and pass the address through. "Remove
+  from Macro" is unaffected and still reads the CURRENT live selection directly (correct either way
+  — after either reselect it equals the macro's own members, exactly what removal should see). The
+  `ModuleComponent` member-submenu graft (entry point 3) passes no override at all and falls back to
+  the live selection, since its own retarget-if-not-already-selected never destroys an external
+  batch the same way, and "Add" barely applies there regardless (the clicked module is already this
+  macro's member). `MacroCardComponent` gained a `setShowContextMenuHookForTest` seam identical to
+  `ModuleComponent`'s own (same headless-CI-segfault reason), and
+  `MacroMembershipMenu.AddItemSurvivesTheRealCardRightClickDespiteItsOwnReselect` drives the real
+  gesture end-to-end — asserting the reselect actually fired (proving the test would catch a naive
+  fix) before checking the item survived it.
+- **Each item is omitted, not shown disabled, when it would have nothing to do** — mirroring
+  "Mute Macro"'s own precedent of omitting a command that can only ever no-op. "Add Selection to
+  Macro" needs the captured selection to contain at least one uuid not already a member of THIS
+  macro; "Remove from Macro" needs at least one ordinary (non-port) member of THIS macro in it.
+  The label pluralizes ("Remove Selection from Macro") when more than one member is being removed.
+- **Ports are never touched by either path.** A port's uuid in the selection is excluded from
+  "Remove from Macro" entirely (it is skipped by `removeSelectionFromMacro`, not merely hidden from
+  the count) — a port is a boundary jack with its own delete affordance
+  (`ModuleComponent::buildMacroPortContextMenu`), and pulling it out of `members` here without also
+  removing its `MacroPort` entry and splicing its cable back would desync the "every port's
+  nodeUuid is a member" invariant `MacroSet::fromVar` enforces on load.
+- **Neither path auto-creates or auto-removes a port for a cable the membership change newly
+  crosses or newly makes interior.** This was deliberately cut from scope rather than reusing
+  `buildMacroPortCrossingPlan`/`spliceMacroPorts` (the grouping-time splice, §7 item 7): unlike
+  grouping a brand-new selection, changing an EXISTING macro's membership can make the crossing set
+  change in **both directions** at once — a newly-added member's cable to an already-interior
+  member stops crossing, which the existing auto-delete-on-zero-connections check
+  (`autoDeleteOrphanedMacroPort`) does not cover, since the port itself may still have other live
+  connections. Getting that right needs its own design pass, not a same-PR bolt-on; see the T138
+  follow-up ticket. Until then, a newly-added member's external cables render as an ordinary
+  un-ported boundary crossing (the existing directional edge-anchor rule above), and a removed
+  member's cable to a remaining member does the same — exactly the precedent `ungroupSelection`
+  already set for ordinary members (only PORT nodes are ever spliced on a membership change).
+  Configure I/O remains the manual way to turn either into a named port.
+- **One `recordGraphAndMacroChange` undo step per gesture**, matching every other macro mutation.
+
+`Tests/MacroContainerTests.cpp`'s `MacroMembership` suite covers `addSelectionToMacro`/
+`removeSelectionFromMacro` directly (add, all-or-nothing refusal when a uuid is already in another
+macro, shrink vs. dissolve-on-last-member, the port-skip rule, one undo step); `MacroMembershipMenu`
+covers the menu's own gating (item appears/is omitted, the plural label, the item's `action`
+invoking the real mutation).
 
 ### 5.9 The expanded hull's collapse button (founder-review fix G5)
 

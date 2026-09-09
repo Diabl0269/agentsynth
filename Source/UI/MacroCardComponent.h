@@ -2,8 +2,11 @@
 
 #include "../AppUndoManager.h"
 #include "../MacroSet.h"
+#include <functional>
+#include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <vector>
 
 class GraphEditor; // Forward declaration
 
@@ -59,8 +62,27 @@ public:
     juce::Rectangle<float> getToggleBadgeBoundsForTest(bool mute) const { return getToggleBadgeBounds(mute); }
     juce::Rectangle<int> getTitleRowBoundsForTest() const { return getTitleRowBounds(); }
 
+    /** Replaces what a real right-click does with the menu showContextMenu() built — in place of
+     *  the real showMenuAsync() (which opens a real popup and, on a headless Linux CI runner with
+     *  no display, segfaults inside juce::PopupMenu::HelperClasses::MenuWindow — the exact issue
+     *  ModuleComponent::setShowContextMenuHookForTest's own comment documents). A null hook
+     *  restores the real behaviour rather than leaving the seam disarmed. A test installs a
+     *  capturing hook to inspect the menu the real mouseDown() gesture actually built — including
+     *  the T138 addCandidateSelection it was passed — without ever opening a popup. */
+    void setShowContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
+        showContextMenuHook_ =
+            hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
+    }
+
 private:
-    void showContextMenu();
+    /** `priorSelection` (T138): whatever was selected right before mouseDown's own reselect —
+     *  see GraphEditor::buildMacroMenu's addCandidateSelection comment for why this must be
+     *  captured by the caller rather than read fresh in here. */
+    void showContextMenu(const std::vector<juce::AudioProcessorGraph::NodeID>& priorSelection);
+
+    // Set in the constructor to `[](juce::PopupMenu& m) { m.showMenuAsync(...); }`; a test replaces
+    // it via setShowContextMenuHookForTest() — see that setter's comment.
+    std::function<void(juce::PopupMenu&)> showContextMenuHook_;
 
     /** Top-right hit zone for the visible expand chevron — right-click's "Expand" menu item did
      *  the same thing but nothing on the card *looked* clickable, so grouping fresh modules and

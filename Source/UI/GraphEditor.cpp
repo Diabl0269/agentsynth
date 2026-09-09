@@ -3178,8 +3178,12 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
         // (founder-review item 4, docs/macros.md §5.8, so the same fix also covers a macro
         // member's own right-click menu) — left in place to keep this fix's diff scoped.
         if (const auto hullMacroId = macroHullAt(canvasPos.roundToInt()); hullMacroId.isNotEmpty()) {
+            // T138: captured BEFORE the reselect above, which otherwise destroys any external
+            // batch the user picked before right-clicking this hull — see buildMacroMenu's own
+            // comment on addCandidateSelection.
+            const auto priorSelection = getSelectedNodes();
             selectMacro(hullMacroId, false);
-            buildMacroMenu(hullMacroId).showMenuAsync(juce::PopupMenu::Options());
+            buildMacroMenu(hullMacroId, nullptr, &priorSelection).showMenuAsync(juce::PopupMenu::Options());
             return;
         }
 
@@ -4015,6 +4019,66 @@ juce::String GraphEditor::groupSelectionIntoMacro(bool autoCreatePorts) {
     return newId;
 }
 
+void GraphEditor::addSelectionToMacro(const juce::String& macroId, const std::vector<juce::String>& memberUuids) {
+    const auto* macro = macros.find(macroId);
+    if (macro == nullptr || memberUuids.empty())
+        return;
+
+    // Same flat-model refusal groupSelectionIntoMacro() applies: abort the WHOLE add rather than
+    // adding the rest and silently skipping the uuid that's already spoken for.
+    for (const auto& uuid : memberUuids) {
+        if (!macro->hasMember(uuid) && macros.findByMember(uuid) != nullptr) {
+            if (onStatusMessage)
+                onStatusMessage("Can't add: a selected module is already in a macro. Ungroup it first.");
+            return;
+        }
+    }
+
+    auto& graph = audioEngine.getGraph();
+    auto doAdd = [this, macroId, memberUuids] {
+        for (const auto& uuid : memberUuids)
+            macros.addMember(macroId, uuid);
+        updateComponents();
+    };
+
+    if (undoManager)
+        undoManager->recordGraphAndMacroChange(graph, macros, doAdd);
+    else
+        doAdd();
+
+    repaint();
+}
+
+void GraphEditor::removeSelectionFromMacro(const juce::String& macroId, const std::vector<juce::String>& memberUuids) {
+    const auto* macro = macros.find(macroId);
+    if (macro == nullptr || memberUuids.empty())
+        return;
+
+    // Ports have their own delete affordance (ModuleComponent::buildMacroPortContextMenu) — pulling
+    // one out of `members` here would desync Macro::ports (every port's nodeUuid must be a member)
+    // without splicing its cable back the way that affordance does.
+    std::vector<juce::String> toRemove;
+    for (const auto& uuid : memberUuids)
+        if (macro->hasMember(uuid) && !macro->memberIsPort(uuid))
+            toRemove.push_back(uuid);
+    if (toRemove.empty())
+        return;
+
+    auto& graph = audioEngine.getGraph();
+    auto doRemove = [this, toRemove] {
+        for (const auto& uuid : toRemove)
+            macros.removeMemberEverywhere(uuid);
+        updateComponents();
+    };
+
+    if (undoManager)
+        undoManager->recordGraphAndMacroChange(graph, macros, doRemove);
+    else
+        doRemove();
+
+    repaint();
+}
+
 bool GraphEditor::selectionHasCrossingMacroCable() const {
     // NodeID-based (not selectedMemberUuidsReadOnly()-style uuid resolution): a freshly-dropped,
     // never-saved module has no "uuid" property yet, so gating on resolvable uuids would silently
@@ -4462,13 +4526,50 @@ std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::createMacroColourPick
     return buildMacroColourPicker(macroId);
 }
 
-juce::PopupMenu GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> renameAction) {
+juce::PopupMenu
+GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> renameAction,
+                            const std::vector<juce::AudioProcessorGraph::NodeID>* addCandidateSelection) {
     const auto* macro = macros.find(macroId);
     if (macro == nullptr)
         return {};
 
     const bool collapsed = macro->collapsed;
     juce::Component::SafePointer<GraphEditor> safeThis(this);
+
+    // T138: "Add Selection to Macro" is computed from `addCandidateSelection` when the caller
+    // supplied one — both the collapsed card's own right-click (MacroCardComponent::mouseDown) and
+    // the expanded hull's empty-space right-click (GraphEditor::mouseDown's macroHullAt branch)
+    // call selectMacro(macroId, false) BEFORE this method ever runs, which means by the time this
+    // reads the CURRENT selection it is already just the macro's own members — any external batch
+    // the user picked before right-clicking is gone. Both call sites capture the selection
+    // themselves right before that reselect and pass it in here. Falls back to the current live
+    // selection when null (the ModuleComponent member-submenu graft, whose own narrower
+    // retarget-if-not-already-selected never destroys an external batch the same way, and where
+    // "Add" barely applies anyway since the clicked module is already this macro's member).
+    std::vector<juce::String> addableUuids;
+    const auto& addCandidates = addCandidateSelection != nullptr ? *addCandidateSelection : selection.getSelected();
+    for (auto id : addCandidates) {
+        const juce::String uuid = nodeUuidFor(id);
+        if (uuid.isNotEmpty() && !macro->hasMember(uuid))
+            addableUuids.push_back(uuid);
+    }
+
+    // "Remove from Macro" always reads the CURRENT live selection — after either forced reselect
+    // above it correctly equals the macro's own members, which is exactly what removal should see;
+    // unaffected by the add-candidate capture, since removing never needs to see PAST selection.
+    std::vector<juce::String> removableUuids;
+    for (auto id : selection.getSelected()) {
+        const juce::String uuid = nodeUuidFor(id);
+        if (uuid.isEmpty())
+            continue;
+        if (macro->hasMember(uuid)) {
+            // A port is a boundary jack, not a module the user put in the box (docs/macros.md
+            // §5.1) — it has its own "Delete Port" affordance and must never be pulled out of
+            // `members` by this generic path.
+            if (!macro->memberIsPort(uuid))
+                removableUuids.push_back(uuid);
+        }
+    }
 
     juce::PopupMenu m;
     m.addItem(collapsed ? "Expand" : "Collapse", [safeThis, macroId, collapsed] {
@@ -4557,6 +4658,23 @@ juce::PopupMenu GraphEditor::buildMacroMenu(const juce::String& macroId, std::fu
         safeThis->selectMacro(macroId, false);
         safeThis->ungroupSelection();
     });
+    // T138: unlike the two items above, these act on the captured selection (addableUuids/
+    // removableUuids), not on whatever is selected at click time — see the capture comment above.
+    // Omitted entirely (not shown disabled) when there is nothing they could do, matching "Mute
+    // Macro"'s own precedent of omitting a command that can only ever no-op.
+    if (!addableUuids.empty()) {
+        m.addItem("Add Selection to Macro", [safeThis, macroId, addableUuids] {
+            if (safeThis != nullptr)
+                safeThis->addSelectionToMacro(macroId, addableUuids);
+        });
+    }
+    if (!removableUuids.empty()) {
+        m.addItem(removableUuids.size() == 1 ? "Remove from Macro" : "Remove Selection from Macro",
+                  [safeThis, macroId, removableUuids] {
+                      if (safeThis != nullptr)
+                          safeThis->removeSelectionFromMacro(macroId, removableUuids);
+                  });
+    }
     m.addSeparator();
     m.addItem("Delete Macro && Modules", [safeThis, macroId] {
         if (safeThis != nullptr)
