@@ -140,6 +140,17 @@ dedupedBindingOptions(const std::vector<std::pair<juce::String, juce::String>>& 
     return options;
 }
 
+// T166: hand-built MouseEvent, same pattern as TimelinePanelTests.cpp's makeClickEvent/
+// makeDragEvent — no OS event queue reaches a headless test, so mouseDown/mouseDrag/mouseUp are
+// driven directly with events carrying exactly the position/mouseDownPosition pair the row's own
+// threshold check (e.getDistanceFromDragStart()) reads.
+juce::MouseEvent makeRowMouseEvent(juce::Component& comp, juce::Point<float> position, juce::Point<float> mouseDownPos,
+                                   juce::ModifierKeys mods = juce::ModifierKeys()) {
+    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), position, mods, 0.0f, 0.0f, 0.0f, 0.0f,
+                            0.0f, &comp, &comp, juce::Time::getCurrentTime(), mouseDownPos,
+                            juce::Time::getCurrentTime(), 1, false);
+}
+
 // A doc + one track + a header wired to a stub host — the shape every test below needs.
 struct HeaderFixture {
     explicit HeaderFixture(TrackKind kind = TrackKind::Midi) {
@@ -385,6 +396,65 @@ TEST(TimelineTrackHeaderTest, NameEditWritesThroughToTheDoc) {
     f.header->getNameLabel().setText("Bassline", juce::sendNotificationSync);
     EXPECT_EQ(f.track()->name, "Bassline");
     EXPECT_EQ(f.host->editCalls, 1);
+}
+
+// =============================================================================
+// 4b. T166: whole-row drag-to-reorder — the row's own threshold/callback contract, independent
+// of TimelinePanelComponent (which owns turning these screen positions into an actual reorder;
+// see TimelinePanelTests.cpp's own drag test for that half).
+// =============================================================================
+
+TEST(TimelineTrackHeaderTest, PlainClickNeverFiresARowDrag) {
+    HeaderFixture f;
+    int started = 0, dragged = 0, ended = 0;
+    f.header->onRowDragStarted = [&](int) { ++started; };
+    f.header->onRowDragged = [&](int) { ++dragged; };
+    f.header->onRowDragEnded = [&](int) { ++ended; };
+
+    f.header->mouseDown(makeRowMouseEvent(*f.header, {80.0f, 28.0f}, {80.0f, 28.0f}));
+    f.header->mouseUp(makeRowMouseEvent(*f.header, {80.0f, 28.0f}, {80.0f, 28.0f}));
+
+    EXPECT_EQ(started, 0);
+    EXPECT_EQ(dragged, 0);
+    EXPECT_EQ(ended, 0);
+}
+
+TEST(TimelineTrackHeaderTest, JitterBelowTheThresholdNeverStartsADrag) {
+    HeaderFixture f;
+    int started = 0, ended = 0;
+    f.header->onRowDragStarted = [&](int) { ++started; };
+    f.header->onRowDragEnded = [&](int) { ++ended; };
+
+    f.header->mouseDown(makeRowMouseEvent(*f.header, {80.0f, 28.0f}, {80.0f, 28.0f}));
+    // 2 px of movement: below kRowDragThreshold (4 px).
+    f.header->mouseDrag(makeRowMouseEvent(*f.header, {80.0f, 30.0f}, {80.0f, 28.0f}));
+    f.header->mouseUp(makeRowMouseEvent(*f.header, {80.0f, 30.0f}, {80.0f, 28.0f}));
+
+    EXPECT_EQ(started, 0) << "a click that merely jittered must never commit to a reorder drag";
+    EXPECT_EQ(ended, 0);
+}
+
+TEST(TimelineTrackHeaderTest, DragPastTheThresholdFiresStartedThenDraggedThenEndedWithScreenY) {
+    HeaderFixture f;
+    std::vector<int> started, dragged, ended;
+    f.header->onRowDragStarted = [&](int y) { started.push_back(y); };
+    f.header->onRowDragged = [&](int y) { dragged.push_back(y); };
+    f.header->onRowDragEnded = [&](int y) { ended.push_back(y); };
+
+    f.header->mouseDown(makeRowMouseEvent(*f.header, {80.0f, 20.0f}, {80.0f, 20.0f}));
+    // header has no parent, so its own screen position is (0,0) — screenY == local Y.
+    f.header->mouseDrag(makeRowMouseEvent(*f.header, {80.0f, 60.0f}, {80.0f, 20.0f})); // 40 px: past threshold
+    ASSERT_EQ(started.size(), 1u);
+    EXPECT_EQ(started.front(), 60);
+    EXPECT_TRUE(dragged.empty()) << "the crossing move itself is the START, not a DRAGGED";
+
+    f.header->mouseDrag(makeRowMouseEvent(*f.header, {80.0f, 90.0f}, {80.0f, 20.0f}));
+    ASSERT_EQ(dragged.size(), 1u);
+    EXPECT_EQ(dragged.front(), 90);
+
+    f.header->mouseUp(makeRowMouseEvent(*f.header, {80.0f, 90.0f}, {80.0f, 20.0f}));
+    ASSERT_EQ(ended.size(), 1u);
+    EXPECT_EQ(ended.front(), 90);
 }
 
 // =============================================================================

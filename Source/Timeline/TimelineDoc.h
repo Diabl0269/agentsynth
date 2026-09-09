@@ -340,6 +340,12 @@ public:
     TrackId addTrack(TrackKind kind, const juce::String& name);
     // Removes the track and everything on it. The id is retired, never reissued.
     bool removeTrack(TrackId id);
+    // Moves the track to newIndex in tracks[] — display/serialization order only; the track's id,
+    // clips, lanes and binding are untouched, and nothing downstream (the audio-thread snapshot,
+    // TimelineClipLaneArea) keys a track by its position, only by id/uuid, so this is safe to call
+    // at any time. newIndex is clamped to [0, tracks.size() - 1]. No-op (no revision bump, no
+    // notification) when id doesn't resolve or is already at newIndex.
+    bool moveTrack(TrackId id, int newIndex);
     bool setTrackName(TrackId id, const juce::String& name);
     bool setTrackColour(TrackId id, juce::uint32 colourArgb);
     bool setTrackMuted(TrackId id, bool muted);

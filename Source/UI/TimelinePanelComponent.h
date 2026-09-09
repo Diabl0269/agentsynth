@@ -467,6 +467,11 @@ public:
      *  menus use (applyBindingMenuChoice / applyContextMenuChoice). Anything else is ignored. */
     void applyAddTrackMenuChoice(int menuId);
     juce::Viewport& getTrackHeaderViewport() noexcept { return trackHeaderViewport_; }
+    // T166: the Viewport's content component — a pixel-level test seam for the track-reorder drop
+    // indicator (TrackHeaderList::paintOverChildren), which a synthesized-event drag can otherwise
+    // only assert through side effects (the eventual doc mutation), never through what actually
+    // got painted. See createComponentSnapshot() at the call site.
+    juce::Component& getTrackHeaderListForTest() noexcept { return trackHeaderList_; }
     int getTrackHeaderCount() const noexcept { return trackHeaderList_.headers.size(); }
     /** Header for the track at `index` in the doc's track order, or nullptr when out of range. */
     TimelineTrackHeaderComponent* getTrackHeaderAt(int index) const noexcept {
@@ -528,6 +533,21 @@ private:
     // writer in this class already treats as ground truth (see syncTrackScroll()).
     void ensureTrackVisible(int index);
     int focusedTrackIndex_ = -1;
+
+    // ---- T166: track-reorder drag (whole-row drag — see TimelineTrackHeaderComponent::
+    // onRowDragStarted's own comment for why the row hands us raw screen Y instead of computing an
+    // insertion index itself: it doesn't know where its siblings are, trackHeaderList_.headers is
+    // the ordered list and this panel is the one place that owns it). ----
+    synth::TrackId draggingTrackId_; // invalid (default) when no drag is in progress
+    int dragInsertionIndex_ = -1;    // boundary (0..headerCount) the drag would drop at; -1 = none
+    void beginTrackDrag(synth::TrackId trackId, int screenY);
+    void updateTrackDrag(int screenY);
+    void endTrackDrag(int screenY);
+    // Screen Y -> a BOUNDARY index in [0, headerCount] ("insert before row N"), rounded to the
+    // nearest row edge. Shared by updateTrackDrag (live drop-indicator position) and endTrackDrag
+    // (the actual drop target), which is why this returns a boundary rather than a resting index —
+    // endTrackDrag is the one place that converts a boundary into TimelineDoc::moveTrack's target.
+    int trackDropBoundaryForScreenY(int screenY) const;
 
     // ---- Automation strip ----
     // A header's "A" button click lands here. The header itself never knows open/closed state, so
@@ -603,8 +623,24 @@ private:
     void parentHierarchyChanged() override;
 
     // The Viewport's content: a plain container whose height is (track count * row height).
+    //
+    // T166: also draws the track-reorder drop indicator, in paintOverChildren() rather than
+    // paint() — the header rows are children painted AFTER this component, and each fills its
+    // own bounds (TimelineTrackHeaderComponent::paint()'s g.fillAll(colours.surface)), so a line
+    // drawn in paint() would be painted over at every interior row boundary. Same trap this file
+    // already documents twice (TimelineTrackHeaderComponent::paintOverChildren,
+    // TimelinePanelComponent::paintOverChildren). Needs the owner's drag state
+    // (dragInsertionIndex_) and row height, so this holds a reference to the owning panel — same
+    // pattern as ResizeHandle above (nested classes have access to the enclosing class's private
+    // members since C++11, so this compiles without exposing that state publicly).
     struct TrackHeaderList : juce::Component {
+        explicit TrackHeaderList(TimelinePanelComponent& owner)
+            : owner_(owner) {}
+        void paintOverChildren(juce::Graphics& g) override;
         juce::OwnedArray<TimelineTrackHeaderComponent> headers;
+
+    private:
+        TimelinePanelComponent& owner_;
     };
 
     // The top-edge grab strip (see kResizeHandleHeight). Added LAST in the constructor so it wins
@@ -796,7 +832,7 @@ private:
         }
     };
     HeaderViewport trackHeaderViewport_;
-    TrackHeaderList trackHeaderList_;
+    TrackHeaderList trackHeaderList_{*this};
 
     // The strip's own copy of the undo manager (record-mode/lane-picker edits made directly
     // by this panel, as opposed to automationEditor_'s edits, which it holds its own copy for).
