@@ -1249,14 +1249,28 @@ In order, each independently shippable:
        ordinary cable's removal is byte-identical to before this feature.
      - `GraphEditor::disconnectPort` — same treatment, upgraded only when the clicked jack's own
        node or the far end of any connection about to be removed resolves to a macro port.
-   **Deliberately NOT hooked: `deleteSelection`/`deleteModule`/`requestDeleteModule`.** All three
-   already use `recordGraphAndMacroChange` (so nesting a macro mutation inside them would not by
-   itself break undo/redo), but they were left alone in this pass: deleting an ORDINARY member can
-   also strand a different port cableless (the member was the port's only remaining connection), and
-   none of this item's own tests exercise that path — extending the auto-delete scan to whole-node
-   deletion is real additional design (which nodes to scan when several are deleted at once,
-   interaction with the batch `modMatrix.clearRows()` those functions already do) that this item
-   did not sign up for. Filed as a follow-up rather than guessed at here.
+   **Also hooked (T154): `deleteSelection`/`deleteModule`/`requestDeleteModule`.** Deleting an
+   ORDINARY member can strand a *different* port cableless (the member was that port's only
+   remaining connection), which the original two call sites above can't catch since neither the
+   port nor its cable is directly involved in the gesture. `GraphEditor::macroPortDeletionNeighbors`
+   is the batch-deletion counterpart: called BEFORE any node in the batch is removed from the graph,
+   it walks the live connection list and returns every node OUTSIDE the deletion set that has a
+   direct connection to a node INSIDE it. `deleteSelection`/`deleteModule`/`requestDeleteModule`
+   already always use `recordGraphAndMacroChange` (unlike `disconnectCable`/`disconnectPort`, which
+   upgrade from `recordStructuralChange` only when a macro port is actually touched), so there is no
+   undo-transaction decision to make here — only which nodes to check once the batch removal
+   completes. After `removeNode` runs for every id in the batch, `autoDeleteOrphanedMacroPort` runs
+   once per captured candidate, exactly the same self-checking primitive `disconnectCable`/
+   `disconnectPort` already call: it no-ops for anything that isn't a live macro port, or that still
+   has a connection surviving elsewhere. This is deliberately **single-hop**, matching the original
+   two call sites' own scope — splicing out a candidate here can itself strand a second port that was
+   wired only to the first (two ports can be directly wired port-to-port for a cross-macro-boundary
+   crossing, see `maybeAutoCreateMacroPortsForDrag` above), and that second port is not chased;
+   nothing in this feature cascades beyond one hop. `modMatrix.clearRows()` needed no
+   special interaction handling for any of this — it's `rows.clear(); repaint();`, a blunt UI-state
+   clear with no node-scoping of its own, so it stays exactly where it already ran (once, at the top
+   of each function's undo-transaction lambda) and tolerates being called ahead of an auto-delete
+   sweep with no changes.
 
    **Both behaviours are Preferences toggles, plain on/off, DEFAULT ON** —
    `GraphEditor::setAutoCreateMacroPortsOnDragEnabled`/`setAutoDeleteMacroPortsOnLastCableEnabled`,

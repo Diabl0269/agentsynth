@@ -1599,9 +1599,13 @@ TEST(MacroAutoPort, PreferenceLeaveCablesAsIsSkipsTheModal) {
 // ============================================================================
 // T148 (docs/macros.md §7 item 9): auto-delete a macro port once its last cable is gone — the
 // reverse of the auto-create-on-group behaviour above. GraphEditor::disconnectCable and
-// disconnectPort are the two explicit user-gesture call sites hooked. requestDeleteModule is used
-// below only as ordinary setup (stripping a macro down to just its port) — it is deliberately NOT
-// one of the hooked call sites (see this feature's PR notes / docs/macros.md §7 item 9).
+// disconnectPort are the two explicit user-gesture call sites hooked. T154 extends the same
+// auto-delete primitive (autoDeleteOrphanedMacroPort) to whole-node deletion —
+// deleteSelection/deleteModule/requestDeleteModule — via GraphEditor::macroPortDeletionNeighbors,
+// which captures every node OUTSIDE a batch deletion with a live connection INTO it before the
+// batch removal runs, then sweeps those candidates afterwards. requestDeleteModule is used below
+// both as ordinary setup (stripping a macro down to just its port, as before) and, further down, as
+// one of the hooked call sites in its own right.
 // ============================================================================
 
 namespace {
@@ -1831,6 +1835,208 @@ TEST(MacroAutoPortDelete, DisabledPreferenceLeavesACablelessPortInPlaceRegressio
     ASSERT_NE(portComp, nullptr);
     editor.disconnectPort(portComp, 0, /*isInput=*/true, /*isMidi=*/false);
 
+    EXPECT_NE(engine.getGraph().getNodeForId(portId), nullptr)
+        << "the toggle off means a cable-less port survives instead of being auto-deleted";
+    ASSERT_FALSE(editor.getMacros().empty());
+    EXPECT_TRUE(editor.getMacros().find(macroId)->memberIsPort(portUuid));
+}
+
+// ============================================================================
+// T154 (docs/macros.md §7 item 9's follow-up): the same auto-delete primitive, now also swept
+// after a whole-node deletion (deleteSelection/deleteModule/requestDeleteModule) via
+// GraphEditor::macroPortDeletionNeighbors.
+// ============================================================================
+
+TEST(MacroAutoPortDelete, DeletingAnOrdinaryMemberViaRequestDeleteModuleStrandsAndSweepsThePortWhileTheMacroSurvives) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
+    editor.setSelectedNodes({a, b});
+    const auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    const auto portUuid =
+        editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    ASSERT_FALSE(portUuid.isEmpty());
+    const auto portId = nodeIdForUuid(engine, portUuid);
+    ASSERT_TRUE(portId.uid != 0);
+    // The port's only connection is its interior leg into `a` — no exterior cable at all, so
+    // deleting `a` alone drops the port to zero connections.
+    engine.getGraph().addConnection({{portId, 0}, {a, 0}});
+    ASSERT_EQ(editor.getMacros().find(macroId)->members.size(), 3u); // a, b, port
+
+    editor.requestDeleteModule(a);
+
+    EXPECT_EQ(engine.getGraph().getNodeForId(portId), nullptr) << "stranded port is spliced out";
+    ASSERT_NE(editor.getMacros().find(macroId), nullptr) << "b is still a member -> macro survives";
+    EXPECT_EQ(editor.getMacros().find(macroId)->members.size(), 1u);
+    EXPECT_FALSE(editor.getMacros().find(macroId)->memberIsPort(portUuid));
+}
+
+TEST(MacroAutoPortDelete, ABatchDeletionDoesNotTreatAConnectionBetweenTwoDeletedNodesAsAStrandingCandidate) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
+    editor.setSelectedNodes({a, b});
+    const auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    const auto portUuid =
+        editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    ASSERT_FALSE(portUuid.isEmpty());
+    const auto portId = nodeIdForUuid(engine, portUuid);
+    ASSERT_TRUE(portId.uid != 0);
+    // Two connections: port -> a (crosses INTO the batch, a real candidate) and a -> b (BOTH
+    // endpoints are inside the batch, so it must not surface `b` as a stranding candidate at all —
+    // the exclusion branch macroPortDeletionNeighbors() itself relies on).
+    engine.getGraph().addConnection({{portId, 0}, {a, 0}});
+    engine.getGraph().addConnection({{a, 0}, {b, 0}});
+
+    editor.setSelectedNodes({a, b});
+    editor.deleteSelection();
+
+    EXPECT_EQ(engine.getGraph().getNodeForId(a), nullptr);
+    EXPECT_EQ(engine.getGraph().getNodeForId(b), nullptr);
+    EXPECT_EQ(engine.getGraph().getNodeForId(portId), nullptr) << "the port -> a leg still strands the port";
+    EXPECT_TRUE(editor.getMacros().empty()) << "both real members and the port are gone";
+}
+
+TEST(MacroAutoPortDelete, DeletingTheLastOrdinaryMemberViaDeleteSelectionStrandsThePortAndDissolvesTheMacroToo) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
+    editor.setSelectedNodes({a, b});
+    const auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    // Strip to just `a` (ordinary setup, mirrors the T148 tests above).
+    editor.requestDeleteModule(b);
+    ASSERT_EQ(editor.getMacros().find(macroId)->members.size(), 1u);
+
+    const auto portUuid =
+        editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    ASSERT_FALSE(portUuid.isEmpty());
+    const auto portId = nodeIdForUuid(engine, portUuid);
+    ASSERT_TRUE(portId.uid != 0);
+    engine.getGraph().addConnection({{portId, 0}, {a, 0}});          // the port's ONLY connection
+    ASSERT_EQ(editor.getMacros().find(macroId)->members.size(), 2u); // a, port
+
+    editor.setSelectedNodes({a});
+    editor.deleteSelection();
+
+    EXPECT_EQ(engine.getGraph().getNodeForId(a), nullptr);
+    EXPECT_EQ(engine.getGraph().getNodeForId(portId), nullptr) << "stranded port is spliced out";
+    EXPECT_TRUE(editor.getMacros().empty()) << "the port was the macro's last remaining member";
+}
+
+TEST(MacroAutoPortDelete, FanOutPortWithASurvivingConnectionIsNotSweptJustBecauseOneNeighborWasDeletedInTheSameBatch) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
+    editor.setSelectedNodes({a, b});
+    const auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    editor.requestDeleteModule(b); // strip to just `a`, ordinary setup
+    ASSERT_EQ(editor.getMacros().find(macroId)->members.size(), 1u);
+
+    const auto portUuid =
+        editor.addMacroPort(macroId, /*isInput=*/false, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "Out");
+    ASSERT_FALSE(portUuid.isEmpty());
+    const auto portId = nodeIdForUuid(engine, portUuid);
+    ASSERT_TRUE(portId.uid != 0);
+    auto ext = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Ext", 700, 100);
+    engine.getGraph().addConnection({{a, 0}, {portId, 0}});   // interior leg -> `a`, about to be deleted
+    engine.getGraph().addConnection({{portId, 0}, {ext, 0}}); // exterior leg -> `ext`, survives
+
+    editor.requestDeleteModule(a);
+
+    EXPECT_NE(engine.getGraph().getNodeForId(portId), nullptr)
+        << "the exterior leg still lives -> the port is not swept";
+    EXPECT_TRUE(hasConnection(engine, portId, 0, ext, 0));
+    ASSERT_NE(editor.getMacros().find(macroId), nullptr);
+    EXPECT_TRUE(editor.getMacros().find(macroId)->memberIsPort(portUuid));
+}
+
+TEST(MacroAutoPortDelete, AutoDeleteViaDeleteSelectionIsOneUndoStepAndUndoRestoresTheMemberAndThePort) {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
+    const auto aUuid = engine.getGraph().getNodeForId(a)->properties["uuid"].toString();
+    auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
+    editor.setSelectedNodes({a, b});
+    const auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    editor.requestDeleteModule(b); // strip to just `a`, ordinary setup
+    ASSERT_EQ(editor.getMacros().find(macroId)->members.size(), 1u);
+
+    const auto portUuid =
+        editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    ASSERT_FALSE(portUuid.isEmpty());
+    const auto portId = nodeIdForUuid(engine, portUuid);
+    engine.getGraph().addConnection({{portId, 0}, {a, 0}}); // the port's ONLY connection
+
+    editor.setSelectedNodes({a});
+    editor.deleteSelection();
+
+    ASSERT_EQ(engine.getGraph().getNodeForId(a), nullptr);
+    ASSERT_EQ(engine.getGraph().getNodeForId(portId), nullptr);
+    ASSERT_TRUE(editor.getMacros().empty());
+
+    ASSERT_TRUE(undo.canUndo());
+    undo.undo();
+
+    const auto restoredA = nodeIdForUuid(engine, aUuid);
+    EXPECT_TRUE(restoredA.uid != 0) << "one Cmd+Z restores the deleted member";
+    const auto restoredPortId = nodeIdForUuid(engine, portUuid);
+    EXPECT_TRUE(restoredPortId.uid != 0) << "and the auto-deleted port too";
+    ASSERT_EQ(editor.getMacros().size(), 1u) << "and the macro record it dissolved";
+    EXPECT_TRUE(editor.getMacros().getAll()[0].memberIsPort(portUuid));
+    EXPECT_TRUE(hasConnection(engine, restoredPortId, 0, restoredA, 0));
+}
+
+TEST(MacroAutoPortDelete, DisabledPreferenceLeavesACablelessPortInPlaceAfterDeleteSelectionRegressionGuard) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    editor.setAutoDeleteMacroPortsOnLastCableEnabled(false);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
+    editor.setSelectedNodes({a, b});
+    const auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    editor.requestDeleteModule(b); // strip to just `a`, ordinary setup
+    ASSERT_EQ(editor.getMacros().find(macroId)->members.size(), 1u);
+
+    const auto portUuid =
+        editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    ASSERT_FALSE(portUuid.isEmpty());
+    const auto portId = nodeIdForUuid(engine, portUuid);
+    engine.getGraph().addConnection({{portId, 0}, {a, 0}}); // the port's ONLY connection
+
+    editor.setSelectedNodes({a});
+    editor.deleteSelection();
+
+    EXPECT_EQ(engine.getGraph().getNodeForId(a), nullptr);
     EXPECT_NE(engine.getGraph().getNodeForId(portId), nullptr)
         << "the toggle off means a cable-less port survives instead of being auto-deleted";
     ASSERT_FALSE(editor.getMacros().empty());
