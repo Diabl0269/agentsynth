@@ -320,14 +320,12 @@ public:
         , deleteButton(GlyphButton::Glyph::Delete)
         , owner_(owner)
         , committedShape_(row.shape)
-        , committedVoices_(juce::jmax(1, row.voiceCount)) {
+        , committedVoices_(juce::jmax(1, row.voiceCount))
+        , committedName_(row.name) {
         nameEditor.setText(row.name, juce::dontSendNotification);
         nameEditor.setJustification(juce::Justification::centredLeft);
         nameEditor.setFont(juce::Font(juce::FontOptions(12.5f)));
-        nameEditor.onFocusLost = [this] {
-            if (owner_.onRenamePort)
-                owner_.onRenamePort(nodeUuid, nameEditor.getText());
-        };
+        nameEditor.onFocusLost = [this] { maybeCommitName(); };
         nameEditor.onReturnKey = nameEditor.onFocusLost;
         // T153: Escape closes the WHOLE modal (docs/macros.md's decision on this — see the class
         // comment) rather than just reverting this field's edit, matching Close's own behaviour
@@ -335,10 +333,7 @@ public:
         // same as clicking Close already does — Escape does not discard anything Close wouldn't).
         // Wired here (rather than relying on the bubble MacroPortConfigDialog::keyPressed catches)
         // because juce::TextEditor consumes Escape itself before it ever bubbles.
-        nameEditor.onEscapeKey = [this] {
-            if (owner_.onRequestClose)
-                owner_.onRequestClose();
-        };
+        nameEditor.onEscapeKey = [this] { owner_.requestClose(); };
         addAndMakeVisible(nameEditor);
 
         midiTag.setText("MIDI", juce::dontSendNotification);
@@ -379,8 +374,7 @@ public:
         voicesEditor.onFocusLost = [this] { maybeCommitShape(); };
         voicesEditor.onReturnKey = voicesEditor.onFocusLost;
         voicesEditor.onEscapeKey = [this] { // same T153 reasoning as nameEditor's onEscapeKey above
-            if (owner_.onRequestClose)
-                owner_.onRequestClose();
+            owner_.requestClose();
         };
         addAndMakeVisible(voicesEditor);
 
@@ -543,6 +537,38 @@ public:
             owner_.onChangePortShape(nodeUuid, newShape, newVoices);
     }
 
+    // T150: the close-time analogue of maybeCommitShape(), for the voices field only — NOT a
+    // blanket "call maybeCommitShape() for every row on close." Re-deriving "the current shape"
+    // from shapeBox at close time is unsafe for a StereoCollapsed row: the combo has no item id
+    // of its own for StereoCollapsed (comboIndexFromShape maps it to kShapeStereoId, the same id
+    // Stereo uses — see that function's comment), so shapeFromComboIndex(shapeBox.getSelectedId())
+    // reads back plain Stereo for a collapsed row even when the user never touched the combo.
+    // Calling maybeCommitShape() unconditionally here would silently convert every untouched
+    // StereoCollapsed port into a real two-jack Stereo port (a GraphEditor::changeMacroPortShape
+    // delete+recreate, complete with a fresh uuid and dropped cables) just from opening and
+    // closing the dialog. Voices only matters while the row is showing Poly (the only shape that
+    // makes voicesEditor visible at all, and Poly can never be the lossy StereoCollapsed case), so
+    // gating on isVisible() keeps this reachable only through the one path that's actually safe to
+    // re-derive from the combo's current selection.
+    void maybeCommitVoicesOnClose() {
+        if (voicesEditor.isVisible())
+            maybeCommitShape();
+    }
+
+    // T150: mirrors maybeCommitShape()'s exact guard style. Rename previously fired
+    // owner_.onRenamePort unconditionally from onFocusLost/onReturnKey, with no protection
+    // against firing twice for the same text (once from a real edit, once more if requestClose()
+    // below also calls this on a row nothing changed on) — the guard here is what makes calling
+    // this unconditionally from requestClose() for every row safe.
+    void maybeCommitName() {
+        const auto newName = nameEditor.getText();
+        if (newName == committedName_)
+            return;
+        committedName_ = newName;
+        if (owner_.onRenamePort)
+            owner_.onRenamePort(nodeUuid, newName);
+    }
+
     void resized() override {
         auto area = getLocalBounds().reduced(6, 3);
 
@@ -613,6 +639,7 @@ private:
     MacroPortConfigDialog& owner_; // outlives this row: owned by owner_.rowControls_
     MacroPortShape committedShape_;
     int committedVoices_;
+    juce::String committedName_;              // T150; see maybeCommitName()
     std::optional<juce::Colour> customColour; // T152; nullopt = falls back to kindTintColour()
     int dropIndicatorPosition_ = -1;          // T152; -1 none, 0 above, 1 below
 };
@@ -657,10 +684,7 @@ MacroPortConfigDialog::MacroPortConfigDialog(juce::String macroName, std::vector
     newVoicesEditor_.setInputRestrictions(2, "0123456789");
     newVoicesEditor_.setJustification(juce::Justification::centred);
     newVoicesEditor_.onReturnKey = [this] { triggerAddPortForTest(); }; // T153, same as newNameEditor_
-    newVoicesEditor_.onEscapeKey = [this] {
-        if (onRequestClose)
-            onRequestClose();
-    };
+    newVoicesEditor_.onEscapeKey = [this] { requestClose(); };
     addAndMakeVisible(newVoicesEditor_);
     updateNewPortVoicesVisibility(); // Mono is the default shape: starts hidden
 
@@ -669,18 +693,14 @@ MacroPortConfigDialog::MacroPortConfigDialog(juce::String macroName, std::vector
     // row's rename/voices fields — pressing Return here is the keyboard equivalent of clicking Add.
     newNameEditor_.onReturnKey = [this] { triggerAddPortForTest(); };
     newNameEditor_.onEscapeKey = [this] { // same "Escape closes the whole modal" decision as elsewhere
-        if (onRequestClose)
-            onRequestClose();
+        requestClose();
     };
     addAndMakeVisible(newNameEditor_);
 
     addButton_.onClick = [this] { triggerAddPortForTest(); };
     addAndMakeVisible(addButton_);
 
-    closeButton_.onClick = [this] {
-        if (onRequestClose)
-            onRequestClose();
-    };
+    closeButton_.onClick = [this] { requestClose(); };
     addAndMakeVisible(closeButton_);
 
     addAndMakeVisible(rowsViewport_);
@@ -711,11 +731,41 @@ MacroPortConfigDialog::~MacroPortConfigDialog() = default;
 // ALSO gets its own onEscapeKey wired directly rather than relying on this alone.
 bool MacroPortConfigDialog::keyPressed(const juce::KeyPress& key) {
     if (key == juce::KeyPress::escapeKey) {
-        if (onRequestClose)
-            onRequestClose();
+        requestClose();
         return true;
     }
     return false;
+}
+
+// T150: force any in-flight row-editor edit (rename, voice count) to commit before the dialog
+// closes. TextEditor::focusLost() posts an async command message rather than calling
+// onFocusLost synchronously (juce_TextEditor.cpp) — Close's own mouseDown already grabbed
+// keyboard focus away from whichever row editor had it (Component::internalMouseDown always
+// does this), so that editor's onFocusLost is already QUEUED but has not run yet by the time
+// onRequestClose would fire. Racing onRequestClose (which tears the dialog down) against that
+// queued async commit is exactly the founder-reported bug: the rename either never lands or
+// lands late, after the dialog already looks closed. Calling each row's own commit method
+// directly and synchronously here — the same idiom every *ForTest commit seam in this file
+// already uses — sidesteps the race entirely. maybeCommitName()/maybeCommitVoicesOnClose() are
+// both no-ops when nothing actually changed (or nothing is eligible to have changed), so it is
+// safe to call this unconditionally for every row regardless of which one (if any) currently has
+// focus. Deliberately NOT maybeCommitShape() directly — see maybeCommitVoicesOnClose()'s own
+// comment for why re-deriving "the current shape" from the combo at close time is unsafe for a
+// StereoCollapsed row.
+//
+// Safe against rowControls_ being torn down mid-loop only because every real onRenamePort/
+// onChangePortShape (GraphEditor::promptConfigureMacroIO) defers its refreshPorts()/
+// rebuildRowComponents() through MessageManager::callAsync rather than calling it synchronously
+// from inside the callback — an invariant that file's own wiring comment states explicitly. A
+// callback that broke that invariant (e.g. a test firing refreshPorts() synchronously) would
+// leave `rc` dangling for the rest of this loop.
+void MacroPortConfigDialog::requestClose() {
+    for (auto* rc : rowControls_) {
+        rc->maybeCommitName();
+        rc->maybeCommitVoicesOnClose();
+    }
+    if (onRequestClose)
+        onRequestClose();
 }
 
 void MacroPortConfigDialog::updateNewPortVoicesVisibility() {

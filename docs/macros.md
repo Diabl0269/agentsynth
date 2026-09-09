@@ -851,8 +851,8 @@ In order, each independently shippable:
      ever bubble — `TextEditorKeyMapper`/`consumeEscAndReturnKeys` — so relying on the bubble alone
      would silently do nothing while a name/voices field has focus). Escape follows the exact same
      path as clicking Close (`onRequestClose`) — including committing whatever rename/shape edit
-     currently has focus, since that is a pre-existing side effect of losing focus during teardown
-     that clicking Close already has too; Escape does not invent a separate "discard" semantic.
+     currently has focus (see the T150 note directly below for how that commit actually happens);
+     Escape does not invent a separate "discard" semantic.
      `options.escapeKeyTriggersCloseButton = false` at both `promptConfigureMacroIO` and
      `showMacroAutoPortModal`'s launch sites makes the dialog's own override the ONE Escape route —
      `juce::DialogWindow`'s default (a `Button` shortcut on the native close button, a *different*
@@ -864,6 +864,26 @@ In order, each independently shippable:
      cursor) that this must not shadow. Moves to the SAME control on the row immediately
      above/below (no wraparound past either end); crosses the input/output boundary freely — this
      is plain focus navigation, not a reorder.
+   - **FIXED (T150, founder bug report): a rename typed right before Close didn't apply.**
+     `nameEditor.onFocusLost` was the only path a rename reached `onRenamePort` through, and real
+     `juce::TextEditor::focusLost()` posts an async command message rather than calling
+     `onFocusLost` synchronously — Close's own `mouseDown` already grabs keyboard focus away from
+     the name editor (queuing that async commit) before the old code fired `onRequestClose`
+     directly and tore the dialog down, so the queued commit either never ran or ran too late,
+     after the dialog already looked closed. **Fix:** every close path (Close button, all four
+     `onEscapeKey` sites, the `keyPressed` Escape bubble) now funnels through one new
+     `MacroPortConfigDialog::requestClose()`, which synchronously calls each row's
+     `maybeCommitName()` before firing `onRequestClose` — no more racing an async message.
+     `maybeCommitName()` mirrors `maybeCommitShape()`'s existing no-op-on-unchanged-text guard
+     (`committedName_`), so calling it unconditionally on every row on every close is safe.
+     Deliberately **not** a matching unconditional `maybeCommitShape()` sweep: `shapeBox` has no
+     combo item of its own for `StereoCollapsed` (`comboIndexFromShape` maps it to the same id as
+     `Stereo`, §5.3 above), so re-deriving "the current shape" from the combo at close time would
+     silently reclassify every untouched `StereoCollapsed` port as `Stereo` — a real
+     `changeMacroPortShape` delete+recreate — just from opening and closing the dialog. Voices only
+     matters while a row shows Poly (never the lossy `StereoCollapsed` case), so `requestClose()`
+     calls a narrower `maybeCommitVoicesOnClose()` (commits only when `voicesEditor.isVisible()`)
+     instead of the full shape re-derivation.
    - **The known related gap: Esc on the macro auto-port boundary modal
      (`MacroAutoPortPromptDialog`) was a silent no-op** — `DialogWindow`'s default Escape handling
      (`setVisible(false)`) closed the window without ever calling `onChoice`, so

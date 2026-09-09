@@ -50,12 +50,29 @@ namespace synth::ui {
  * by default — Button/ComboBox/TextEditor all do), Return commits whichever text field currently
  * has focus (unchanged — already true for rename/voices, and now also the "Add a port" name
  * field), and Escape closes the dialog via the SAME path the Close button uses
- * (`onRequestClose`) — including committing whatever rename/shape edit currently has focus, since
- * that is a pre-existing side effect of losing focus during teardown, not something Escape does
- * differently from Close. Arrow-Up/Down on a row's colour swatch or Delete button moves keyboard
- * focus to the same control on the row above/below (never wraps), which does not conflict with a
- * ComboBox's or TextEditor's own arrow-key handling since those controls are not where this is
- * wired.
+ * (`onRequestClose`, via `requestClose()` — see the T150 paragraph below for what that path
+ * actually does) — including committing whatever rename/shape edit currently has focus, not
+ * something Escape does differently from Close. Arrow-Up/Down on a row's colour swatch or Delete
+ * button moves keyboard focus to the same control on the row above/below (never wraps), which
+ * does not conflict with a ComboBox's or TextEditor's own arrow-key handling since those controls
+ * are not where this is wired.
+ *
+ * T150 (founder bug report): a rename typed immediately before clicking Close did not apply.
+ * `nameEditor.onFocusLost` was rename's only path to `onRenamePort`, but real
+ * `juce::TextEditor::focusLost()` posts an ASYNC command message rather than calling
+ * `onFocusLost` synchronously (juce_TextEditor.cpp) — Close's own `mouseDown` already grabs
+ * keyboard focus away from the name editor (queuing that async commit) before the dialog used to
+ * fire `onRequestClose` directly and tear itself down, so the queued commit either never ran or
+ * ran too late, after the dialog already looked closed. Every close path (Close button, all
+ * `onEscapeKey` sites, the `keyPressed` Escape bubble) now funnels through `requestClose()`
+ * instead of firing `onRequestClose` directly: it synchronously commits each row's rename
+ * (`PortRowComponent::maybeCommitName()`, guarded against firing on unchanged text the same way
+ * `maybeCommitShape()` already is) before the dialog tears down, sidestepping the async race
+ * entirely. Deliberately NOT a matching `maybeCommitShape()` sweep — `shapeBox` has no combo item
+ * of its own for `StereoCollapsed` (`comboIndexFromShape` maps it to the same id as `Stereo`), so
+ * re-deriving "the current shape" from the combo at close time would silently reclassify every
+ * untouched `StereoCollapsed` port as `Stereo`; `maybeCommitVoicesOnClose()` commits only the
+ * voices field, and only while the row is showing Poly (never the lossy `StereoCollapsed` case).
  *
  * Founder review round 4 (real-build testing of T152/T153): three fixes.
  * (1) The per-row Up/Down glyph buttons are REMOVED — now that drag-to-reorder is confirmed
@@ -235,6 +252,11 @@ private:
     static MacroPortShape shapeFromComboIndex(int index);
     static int comboIndexFromShape(MacroPortShape shape);
     void updateNewPortVoicesVisibility();
+
+    // T150: the ONE gate every close path (Close button, Escape from any row/field, Escape
+    // bubbled to the dialog itself) now goes through instead of firing onRequestClose directly —
+    // see the .cpp definition for the async-focus-loss race this closes.
+    void requestClose();
 
     // ---- T152 drag-to-reorder plumbing (real mouse path; the *ForTest seams above bypass this
     // and call PortRowComponent::commitDragTo directly) ----

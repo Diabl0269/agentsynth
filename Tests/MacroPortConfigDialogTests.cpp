@@ -258,6 +258,71 @@ TEST(MacroPortConfigDialogTest, CloseButtonFiresOnRequestClose) {
     EXPECT_TRUE(closed);
 }
 
+// T150: founder-reported regression — renaming a port then closing the dialog without any
+// intervening focus-loss/Return did not apply the new name. Root cause: juce::TextEditor::
+// focusLost() posts an async command message rather than calling onFocusLost synchronously, and
+// Close's own mouseDown grabs keyboard focus away from the name editor (queuing that async
+// commit) before onRequestClose tears the dialog down — so the commit either never landed or
+// landed too late. requestClose() now forces every row's rename (and shape/voice) edit to commit
+// synchronously before onRequestClose fires. setRowNameForTest deliberately does NOT simulate
+// focus-loss/Return first — going straight to Close is the exact repro.
+TEST(MacroPortConfigDialogTest, RenameFollowedImmediatelyByCloseAppliesExactlyOnce) {
+    MacroPortConfigDialog dialog("My Macro", twoPorts());
+
+    int renameCallCount = 0;
+    juce::String capturedUuid, capturedName;
+    dialog.onRenamePort = [&](const juce::String& uuid, const juce::String& name) {
+        ++renameCallCount;
+        capturedUuid = uuid;
+        capturedName = name;
+    };
+    bool closed = false;
+    dialog.onRequestClose = [&] { closed = true; };
+
+    dialog.setRowNameForTest(0, "Cutoff In");
+    dialog.triggerCloseForTest();
+
+    EXPECT_EQ(renameCallCount, 1);
+    EXPECT_EQ(capturedUuid, "uuid-in");
+    EXPECT_EQ(capturedName, "Cutoff In");
+    EXPECT_TRUE(closed);
+
+    // A second close (nothing changed since the first commit) must not re-fire the rename against
+    // the same unchanged text.
+    dialog.triggerCloseForTest();
+    EXPECT_EQ(renameCallCount, 1);
+}
+
+// T150 regression guard: requestClose()'s per-row commit sweep must NOT re-derive a row's shape
+// from shapeBox and diff it against committedShape_ the way maybeCommitShape() does everywhere
+// else. comboIndexFromShape maps StereoCollapsed to the same combo item id as plain Stereo (the
+// combo has no separate entry for it), so shapeFromComboIndex(shapeBox.getSelectedId()) always
+// reads back Stereo for a StereoCollapsed row, even with nothing touched. Simply opening and
+// closing Configure I/O on an untouched StereoCollapsed port must never fire onChangePortShape —
+// that would silently convert it to a real two-jack Stereo port (delete+recreate, fresh uuid,
+// dropped cables) via GraphEditor::changeMacroPortShape.
+TEST(MacroPortConfigDialogTest, ClosingWithAnUntouchedStereoCollapsedRowNeverChangesItsShape) {
+    Row collapsed;
+    collapsed.nodeUuid = "uuid-collapsed";
+    collapsed.isInput = false;
+    collapsed.name = "Reverb Audio";
+    collapsed.kind = MacroPortKind::AudioCV;
+    collapsed.shape = MacroPortShape::StereoCollapsed;
+    collapsed.voiceCount = 1;
+
+    MacroPortConfigDialog dialog("My Macro", {collapsed});
+
+    bool shapeChanged = false;
+    dialog.onChangePortShape = [&](const juce::String&, MacroPortShape, int) { shapeChanged = true; };
+    bool closed = false;
+    dialog.onRequestClose = [&] { closed = true; };
+
+    dialog.triggerCloseForTest();
+
+    EXPECT_FALSE(shapeChanged);
+    EXPECT_TRUE(closed);
+}
+
 // ============================================================================
 // T152: drag-to-reorder (item 3.3) — the constraint under test is structural: onReorderPortTo's
 // index is scoped to the dragged row's OWN direction group, so there is no argument that could
