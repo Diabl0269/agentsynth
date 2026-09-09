@@ -32,8 +32,13 @@ bash scripts/tests/ci-install-linux-deps.test.sh   # Linux apt install + mirror 
 bash scripts/tests/check-nonascii-literals.test.sh # no raw/escaped non-ASCII in string literals (fromUTF8/CharPointer_UTF8 exempt)
 bash scripts/tests/utf8-literal-check.test.sh      # non-ASCII \x escape wrapping (also runs directly in the Lint job)
 
+# Reproduce CI locally (lint + build every CMake target CI builds + full test suite; prints the
+# built app bundle path on success). Single source of truth for "what CI will check" — also what
+# the pre-push hook runs.
+bash scripts/ci-local.sh          # add --open to launch the built app on macOS afterward
+
 # Git hooks  (run once per clone — NOT auto-installed)
-bash scripts/install-hooks.sh   # pre-commit: clang-format lint;  pre-push: lint + Release build + tests
+bash scripts/install-hooks.sh   # pre-commit: clang-format lint;  pre-push: scripts/ci-local.sh
 # clang-format is pinned (.clang-format-version) — match CI locally:
 pip install "clang-format==$(cat .clang-format-version)"
 ```

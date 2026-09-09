@@ -77,15 +77,15 @@ cmake --build build --target Tests
 ```
 
 ### Build and Test (Release)
-A pre-push git hook automatically runs clang-format lint check + Release build + tests before every push. Install it with:
+A pre-push git hook automatically runs the full local CI reproduction (`scripts/ci-local.sh`: lint + build every CMake target CI builds + the full test suite) before every push. Install it with:
 ```bash
 bash scripts/install-hooks.sh
 ```
-The first push configures the `build-release` directory; subsequent pushes do fast incremental rebuilds. This catches UB/segfaults that only manifest with optimizations enabled (Debug mode hides use-after-free by zero-initializing memory).
+The first push configures the `build-ci-local` directory; subsequent pushes do fast incremental rebuilds. Building in Release mode catches UB/segfaults that only manifest with optimizations enabled (Debug mode hides use-after-free by zero-initializing memory).
 
 To run manually:
 ```bash
-bash scripts/pre-push-release-test.sh
+bash scripts/ci-local.sh
 ```
 
 ### Check Coverage

@@ -616,7 +616,9 @@ bash scripts/install-hooks.sh
 Two hooks are registered:
 
 - **pre-commit** (`scripts/pre-commit-lint.sh`): runs `clang-format --dry-run --Werror` on staged `Source/` and `Tests/` C/C++ files. Fast; mirrors the CI Lint job. Also warns if the local `clang-format` version differs from the pin in `.clang-format-version`.
-- **pre-push** (`scripts/pre-push-release-test.sh`): runs clang-format lint on all C/C++ sources, then a Release build + full test suite. The first push configures the `build-release/` directory; subsequent pushes are fast incremental rebuilds. This catches UB and segfaults that Debug mode hides (zero-initialized memory masks use-after-free). Also warns if the local `clang-format` version differs from the pin in `.clang-format-version`.
+- **pre-push** (`scripts/ci-local.sh`): the full local CI reproduction — see [Local CI reproduction](#local-ci-reproduction) below. The first push configures the `build-ci-local/` directory; subsequent pushes are fast incremental rebuilds (ccache + Ninja are picked up automatically when installed).
+
+If you installed the hooks before this change, re-run `bash scripts/install-hooks.sh` — the generated `pre-push` hook is a static file and still points at the old `scripts/pre-push-release-test.sh`, which no longer exists.
 
 Bypass a single invocation with `--no-verify`:
 
@@ -628,8 +630,8 @@ git push --no-verify
 Run manually at any time:
 
 ```bash
-bash scripts/pre-commit-lint.sh        # lint staged files
-bash scripts/pre-push-release-test.sh  # lint + Release build + tests
+bash scripts/pre-commit-lint.sh  # lint staged files
+bash scripts/ci-local.sh         # everything the pre-push hook runs
 ```
 
 **clang-format version note:** clang-format is pinned via the PyPI `clang-format` wheel to the version recorded in `.clang-format-version`. CI installs that exact version with `pip install "clang-format==$(cat .clang-format-version)"` (after `actions/setup-python`), so CI and the local hooks run the identical binary — eliminating "hook passes locally but CI fails" drift. Install or update locally with the same command:
@@ -637,6 +639,28 @@ bash scripts/pre-push-release-test.sh  # lint + Release build + tests
 ```bash
 pip install "clang-format==$(cat .clang-format-version)"
 ```
+
+### Local CI reproduction
+
+`scripts/ci-local.sh` is the single source of truth for "what CI will check, run locally" — it is what the pre-push hook runs, and what a developer can run by hand to get the same signal without waiting on a CI round-trip. It reproduces `.github/workflows/ci.yml`'s `Lint` job plus this machine's platform build-and-test job:
+
+```bash
+bash scripts/ci-local.sh          # run every check
+bash scripts/ci-local.sh --open   # ...then `open` the built app bundle on macOS
+bash scripts/ci-local.sh --help   # usage
+```
+
+What it does, in order (fast checks first, so a lint failure doesn't wait on a full build):
+
+1. `clang-format --dry-run --Werror` over `Source/` `Tests/` `Tools/` — the Lint job's "Check Formatting" step, exactly. **Check-only, never `-i`** — a violation fails loudly instead of being silently rewritten.
+2. `bash scripts/utf8-literal-check.sh` against the real tree — the Lint job's "Check for un-decoded UTF-8 escapes" step, run directly rather than only via its unit test.
+3. Every `scripts/tests/*.test.sh` (globbed, so a newly added one is picked up automatically without editing this script) — as of this writing `ci-cache-check`, `ci-install-linux-deps`, `check-nonascii-literals`, `ai-eval-ratchet`, `utf8-literal-check`. `check-nonascii-literals.test.sh`'s last case scans the real `Source/` tree itself, so this also covers the Lint job's ASCII-literal gate on live code, not just the checker's fixtures.
+4. Configure `build-ci-local/` with `-DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=ON -DENABLE_AI_HARNESS=ON` (matching the macOS/Windows build-and-test jobs) and build with a plain `cmake --build` — every target those jobs build (`Core`, `AppUI`, `AgentSynth`, `AgentSynthPlugin`, `Tests`), the same way a missing `CMakeLists.txt` entry shows up in CI. ccache and Ninja are picked up automatically when installed (see the `find_program(CCACHE_PROGRAM ccache)` block at the top of `CMakeLists.txt`), so a second run is an incremental rebuild, not a cold one.
+5. Run the full suite: `build-ci-local/Tests/Tests`.
+
+On success it prints the path to the built `Agent Synth.app` bundle under `build-ci-local/` (found the same way `build-artifacts.yml` locates it for packaging) so a green terminal isn't the only thing you're left with — you can open and try the real app. `--open` does that automatically (macOS only; a no-op notice on other platforms, since the flag also needs to be safe to leave off in a headless/CI-like run).
+
+**Deliberately not reproduced**, all covered elsewhere: the Ubuntu coverage gate (`bash scripts/coverage.sh`, a separate opt-in — see [above](#build)), the label-gated ASAN job (opt-in per PR via the `run-asan` label, not something to run on every push), and actual cross-platform compilation (this only exercises the toolchain installed on the machine it runs on — Linux/Windows failures still need CI or a VM).
 
 ## CI Pipeline
 
