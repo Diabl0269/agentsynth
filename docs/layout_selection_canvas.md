@@ -421,6 +421,22 @@ ids get renumbered (§1.5), so a captured macro's membership travels through
 ready to hand straight to `MacroSet::add()`. Cmd+C/Cmd+V/Cmd+D go through this same path since they
 are, per §1.6, snippets that never reach disk.
 
+**Configured I/O (P8-15 `Macro::ports`) travels with the macro, not separately (T117).** Each
+macro entry's `"ports"` array is keyed by the same snippet node id as `"members"` — never by
+`nodeUuid`, since a snippet renumbers ids on insert — and is built FROM the same resolved
+member map `outMacros` populates, never independently: a port whose underlying node failed to
+resolve (or was outside the selection, which can't happen for a fully-contained macro but is
+guarded anyway) is dropped along with it. This is load-bearing, not defensive style —
+`MacroSet::fromVar` rejects the **whole** macro set if any port's `nodeUuid` isn't one of its own
+macro's `members` (§1.7), so a mismatched pairing here would not surface until the next
+project/snippet round-trip, as a silent "every macro vanished" failure. One thing does NOT travel
+through a `.agsnip` file: a port's channel shape (Mono/Stereo/Poly, `MacroPortShape`) rides on the
+underlying `MacroInlet`/`MacroOutlet` node's `getExtraState()`, which is trusted-path only
+(root `CLAUDE.md`) — `includeExtraState=false` (Save as Snippet) resets it to Mono on reload, the
+same way a Sampler's loaded file or a Wavetable's custom table is dropped from a saved snippet.
+Copy/paste/duplicate pass `includeExtraState=true` (the payload never leaves the process) and keep
+the shape, same as they keep a Sampler's sample.
+
 ---
 
 ## 2. Collapsible Library Sections

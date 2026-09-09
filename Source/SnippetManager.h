@@ -75,7 +75,12 @@ public:
      *         — using the same node ids as `nodes` below, NOT uuids, since a snippet renumbers
      *         ids on insert — only when EVERY one of its members is inside `selection`; a macro
      *         straddling the selection boundary is dropped rather than partially captured, same
-     *         "self-contained" rule connections/modulations already follow.
+     *         "self-contained" rule connections/modulations already follow. A macro's configured
+     *         boundary jacks (P8-15 `Macro::ports`) travel with it, keyed by the same snippet node
+     *         id as `members` — a channel shape set on a port's underlying MacroInlet/MacroOutlet
+     *         node (Mono/Stereo/Poly) rides as that node's extra state, so it follows the same
+     *         `includeExtraState` rule as a Sampler's loaded file and resets to Mono when read back
+     *         from an on-disk `.agsnip` (untrusted), same as everything else `state` gates.
      */
     static juce::var extractSnippet(juce::AudioProcessorGraph& graph, const std::vector<NodeID>& selection,
                                     const juce::String& name, bool includeExtraState = false,
@@ -113,7 +118,10 @@ public:
      *  @param outMacros  Optional (P8-12). When non-null, filled with a fresh synth::Macro per
      *         macro the snippet carried, membership already resolved to the newly created nodes'
      *         real (freshly assigned) uuids — ready to hand straight to MacroSet::add(). A macro
-     *         id is regenerated (never reused across a copy), same as node ids are.
+     *         id is regenerated (never reused across a copy), same as node ids are. Configured
+     *         ports (P8-15) resolve the same way; a port whose member failed to resolve is dropped
+     *         with it, so the returned macro can never violate MacroSet's "every port's nodeUuid is
+     *         one of this macro's own members" invariant.
      *   @param trustedPayload  When true (a patch loaded from the user's own file system), the
      *  payload is validated and applied on the trusted path: untrusted-only refusals (a node
      * "state" blob, a top-level "macros"/"timeline" key) are permitted, so a Sampler's loaded

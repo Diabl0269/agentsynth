@@ -261,6 +261,62 @@ TEST(MacroSnippet, ExtractAndInsertSucceedsAndCreatesANewMacroWithFreshUuids) {
             << "the pasted copy must get fresh uuids, not reuse the originals";
 }
 
+TEST(MacroSnippet, ConfiguredPortSurvivesDuplicateAndSaveAsSnippet) {
+    // T117: a macro's configured I/O (P8-15) used to be dropped by SnippetManager::extractSnippet/
+    // insertSnippet — the boundary jack's underlying MacroInlet node travelled through as an
+    // ordinary member (nothing excludes it), but the MacroPort entry naming it as a jack did not,
+    // so a duplicated or snippet-round-tripped macro silently lost its port and fell back to
+    // looking like a plain, unconfigured group. Exercises the real user paths (Duplicate and Save
+    // as Snippet), not SnippetManager's functions directly.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    auto portUuid = editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono,
+                                        1, "Pitch In");
+    ASSERT_FALSE(portUuid.isEmpty());
+
+    auto* original = editor.getMacros().find(macroId);
+    ASSERT_NE(original, nullptr);
+    ASSERT_EQ(original->ports.size(), 1u);
+
+    // ---- Duplicate ----
+    editor.selectMacro(macroId, false);
+    ASSERT_EQ(editor.getSelectionCount(), 3) << "the macro now has 3 members: a, b, and the port's inlet node";
+    ASSERT_TRUE(editor.duplicateSelection());
+
+    const synth::Macro* duplicated = nullptr;
+    for (const auto& m : editor.getMacros().getAll())
+        if (m.id != macroId)
+            duplicated = &m;
+    ASSERT_NE(duplicated, nullptr);
+    ASSERT_EQ(duplicated->ports.size(), 1u) << "duplicate must keep the configured port, not just the raw members";
+    EXPECT_EQ(duplicated->ports[0].name, "Pitch In");
+    EXPECT_TRUE(duplicated->ports[0].isInput);
+    EXPECT_NE(duplicated->ports[0].nodeUuid, portUuid) << "must front the copy's own node";
+    const juce::String duplicatedId = duplicated->id; // copy before the next mutation may reallocate MacroSet
+
+    // ---- Save as Snippet / insert ----
+    editor.selectMacro(macroId, false);
+    auto snippet = editor.extractSelectionSnippet("PortedMacro");
+    ASSERT_TRUE(editor.insertSnippetAt(snippet, {1400, 900}));
+
+    const synth::Macro* pasted = nullptr;
+    for (const auto& m : editor.getMacros().getAll())
+        if (m.id != macroId && m.id != duplicatedId)
+            pasted = &m;
+    ASSERT_NE(pasted, nullptr);
+    ASSERT_EQ(pasted->ports.size(), 1u) << "Save as Snippet must keep the configured port too";
+    EXPECT_EQ(pasted->ports[0].name, "Pitch In");
+}
+
 // ============================================================================
 // Delete
 // ============================================================================
