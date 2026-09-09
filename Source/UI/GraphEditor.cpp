@@ -5532,6 +5532,11 @@ void GraphEditor::changeMacroPortColour(const juce::String& macroId, const juce:
         undoManager->recordGraphAndMacroChange(graph, macros, doChange);
     else
         doChange();
+
+    // Mirror setMacroColour: a macro-set change is not itself a graph change, so nothing repaints
+    // the canvas on its own — force one so the new colour reaches both the collapsed card's jacks
+    // and any expanded docked widget that fronts this port (T162's whole point).
+    repaint();
 }
 
 void GraphEditor::moveMacroPortOrder(const juce::String& macroId, const juce::String& nodeUuid, bool moveUp) {

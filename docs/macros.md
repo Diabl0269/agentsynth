@@ -833,7 +833,11 @@ In order, each independently shippable:
    std::nullopt)`). The colour flows through to `GraphEditor::macroCardPortLayout`'s
    `MacroCardPort::colour` too, so a coloured port's jack dot on the *collapsed* card matches the
    colour picked in the modal — unset still falls back to the same kind tint
-   (`MacroCardComponent::paint`) it always used. See §5.2 for the field's persistence.
+   (`MacroCardComponent::paint`) it always used — and, since T162, the expanded docked widget
+    (`ModuleComponent::paintMacroPortWidget`, via `ModuleComponent::resolveMacroPortJackColour`) now
+    reads it there too, so an expanded widget and its own collapsed card read a coloured port's jack
+    identically (before T162 the widget still drew the kind tint for a coloured port — the mismatch
+     this task closes). See §5.2 for the `colour` field's persistence.
 
    **DONE (T153, founder review round 3, item 3 second half): keyboard accessibility.** Every
    real control in the Configure I/O modal already gets Tab/Return/Space for free from

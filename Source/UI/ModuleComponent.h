@@ -27,6 +27,10 @@ namespace synth::theme {
 class AppLookAndFeel; // Forward declaration — see Theme/AppLookAndFeel.h
 }
 
+namespace synth {
+struct MacroPort; // Forward declaration — see ../MacroSet.h
+}
+
 class ModuleComponent
     : public juce::Component
     , public juce::Timer
@@ -55,6 +59,18 @@ public:
     // Safely detach from the processor before graph rebuild.
     // Removes listeners, destroys attachments, stops timer, nulls module pointer.
     void detachFromProcessor();
+
+    /** T162: the colour a docked macro-port widget paints its own jack dot with. A port user
+     *  colour (synth::MacroPort::colour, set from the Configure I/O modal's swatch) wins when it
+     *  is set; otherwise the kind tint passes through — audioWire for a MIDI jack, accent for an
+     *  Audio/CV jack — the EXACT fallback MacroCardComponent::paint already uses, so an expanded
+     *  docked widget and a collapsed card read a port's jack identically (a custom colour, or —
+     *  with none — the same tint). `port` is the boundary port the node fronts (from
+     *  owner.macroPortOwnerFor); null (a docked widget whose port entry has drifted away, which
+     *  by construction shouldn't happen) just means "unset", i.e. the kind tint. Side-effect-free
+     *  and static so a test can pin the propagation without capturing pixels — paintMacroPortWidget
+     *  is the only caller. */
+    static juce::Colour resolveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint);
 
     /** Re-measures the card after its VISIBLE PORT COUNT changed for a reason that is not a
      *  parameter gesture — today only Audio Input, whose jacks follow the audio device. Same three
