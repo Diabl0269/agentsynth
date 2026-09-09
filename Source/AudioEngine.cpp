@@ -715,9 +715,20 @@ void AudioEngine::createDefaultPatch() {
 }
 
 void AudioEngine::handleIncomingMidiMessage(juce::MidiInput* source, const juce::MidiMessage& message) {
+    // The external-MIDI interlock: a bounce sets this before a single sample renders and this is
+    // the ONE place every delivery path (real hardware, and a direct test call) converges, so a
+    // note arriving here is dropped rather than reaching ExternalMidiModule's own collector. See
+    // suspendExternalMidi()'s comment for why this is a flag checked here rather than detaching
+    // the underlying juce::MidiInput.
+    if (externalMidiSuspended_.load(std::memory_order_acquire))
+        return;
+
     for (auto* node : mainProcessorGraph.getNodes()) {
         if (auto* extMidi = dynamic_cast<ExternalMidiModule*>(node->getProcessor())) {
-            if (source->getName() == extMidi->getName()) {
+            // source == nullptr only from a test driving this path directly (see
+            // Tests/DeviceChangeTests.cpp, Tests/BounceExporterTests.cpp) — real MIDI input
+            // callbacks always hand back the device that called them.
+            if (source != nullptr && source->getName() == extMidi->getName()) {
                 extMidi->pushMidiMessage(message);
             }
         }

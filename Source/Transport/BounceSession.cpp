@@ -75,6 +75,21 @@ struct BounceSession::MetronomeGuard {
     JUCE_DECLARE_NON_COPYABLE(MetronomeGuard)
 };
 
+// Real hardware MIDI keeps arriving on its own driver thread throughout a bounce — there is no
+// device callback to suspend it from, so this pairs with suspendDeviceCallback/resumeDeviceCallback
+// to close that hole too. See AudioEngine::suspendExternalMidi()'s comment.
+struct BounceSession::ExternalMidiGuard {
+    explicit ExternalMidiGuard(AudioEngine& engineIn) noexcept
+        : engine(engineIn) {
+        engine.suspendExternalMidi();
+    }
+    ~ExternalMidiGuard() noexcept { engine.resumeExternalMidi(); }
+
+    AudioEngine& engine;
+
+    JUCE_DECLARE_NON_COPYABLE(ExternalMidiGuard)
+};
+
 BounceSession::BounceSession(AudioEngine& engine, const juce::File& outFile, const BounceOptions& options,
                              const BounceExporter::ProgressCallback& progress)
     : engine_(engine)
@@ -112,6 +127,10 @@ BounceSession::BounceSession(AudioEngine& engine, const juce::File& outFile, con
     // Take the graph off the device (Standalone with a live device); a Hosted engine reports false
     // and is used as-is.
     deviceWasAttached_ = engine_.suspendDeviceCallback();
+
+    // A no-op in Hosted mode (nothing ever opens hardware MIDI there) and cheap regardless — see
+    // ExternalMidiGuard above and AudioEngine::suspendExternalMidi().
+    externalMidiGuard_ = std::make_unique<ExternalMidiGuard>(engine_);
 
     // Constructing the driver re-prepares the whole graph at the render format.
     driver_ = std::make_unique<OfflineTransportDriver>(engine_, options_.sampleRate, options_.blockSize,
@@ -174,6 +193,11 @@ void BounceSession::restoreTransportAndEngine() {
     transport.locateBeat(beforePpq_);
     if (driver_ != nullptr)
         driver_->streamBlocks(1, {});
+
+    // Resumes external MIDI delivery here — explicitly, not left to ~BounceSession() — since this
+    // can run mid-object-lifetime (the two constructor failure branches call it directly, not just
+    // finish()).
+    externalMidiGuard_.reset();
 
     if (deviceWasAttached_)
         engine_.resumeDeviceCallback(); // re-prepares at the DEVICE's rate; see AudioEngine.h

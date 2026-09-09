@@ -78,9 +78,15 @@ public:
     //
     // Non-render-safe modules: every offline block gets an EMPTY juce::MidiBuffer and the engine's
     // MIDI collector is never drained offline, so live-input modules contribute silence by
-    // definition. Exception: ExternalMidiModule keeps its own collector fed straight from
-    // AudioEngine::handleIncomingMidiMessage, so a note played on a physical keyboard during a
-    // bounce can still land in the file. Don't play while you bounce.
+    // definition. ExternalMidiModule is the one module that doesn't wait for that: it is fed
+    // straight from AudioEngine::handleIncomingMidiMessage, on whatever thread the OS's MIDI driver
+    // calls it from — independent of the device callback suspendDeviceCallback detaches. bounce()
+    // therefore also calls AudioEngine::suspendExternalMidi() for the duration (see BounceSession's
+    // ExternalMidiGuard), so a note played on a physical keyboard during a bounce is dropped rather
+    // than landing in the file. The one residual gap: a message the driver thread had already
+    // queued a moment before the interlock engaged can still drain into ExternalMidiModule on the
+    // render's first block — narrowed to that single race, not eliminated, because flushing a
+    // juce::MidiMessageCollector from the message thread isn't part of its contract.
     //
     // Streamed audio clips: a bounce renders as fast as the CPU allows, which is far faster than
     // AudioClipStreamer's prefetch thread refills a ring — and re-preparing the engine at the render

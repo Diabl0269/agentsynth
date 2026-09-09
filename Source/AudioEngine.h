@@ -110,6 +110,20 @@ public:
     // the graph — callers must not do that by hand. A no-op in Hosted mode or if already attached.
     void resumeDeviceCallback();
 
+    // ---- External MIDI interlock (Standalone only) ----
+    // suspendDeviceCallback() detaches the AUDIO callback only: a hardware MIDI input keeps
+    // calling handleIncomingMidiMessage from its own driver thread throughout a bounce, with no
+    // device callback to detach it from. Stopping the underlying juce::MidiInput objects instead
+    // would only narrow that race against a callback already in flight, not close it, and would
+    // toggle real hardware ports mid-render for no benefit — so the interlock is a flag
+    // handleIncomingMidiMessage checks itself, on whatever thread calls it. See
+    // synth::BounceSession, which pairs this with suspendDeviceCallback/resumeDeviceCallback for
+    // the duration of a render. ANY THREAD may read isExternalMidiSuspended(); only the message
+    // thread calls the setters.
+    bool isExternalMidiSuspended() const noexcept { return externalMidiSuspended_.load(std::memory_order_acquire); }
+    void suspendExternalMidi() noexcept { externalMidiSuspended_.store(true, std::memory_order_release); }
+    void resumeExternalMidi() noexcept { externalMidiSuspended_.store(false, std::memory_order_release); }
+
     // Voice count / mute API (§4.2)
     struct VoiceInfo {
         int activeVoices = 0;
@@ -503,6 +517,8 @@ private:
     std::int64_t feedbackGuardConsecutiveSamples_ = 0;
     // Off by default — see setAutomationSlicingEnabled().
     std::atomic<bool> automationSlicingEnabled_{false};
+    // Off by default — see suspendExternalMidi()/isExternalMidiSuspended().
+    std::atomic<bool> externalMidiSuspended_{false};
     // Borrowed, never owned. Set by setMidiCaptureSink(); read once per callback in
     // renderNextBlock. Null default means capture is a no-op with no caller having to check.
     std::atomic<synth::MidiRecorder*> midiCaptureSink_{nullptr};
