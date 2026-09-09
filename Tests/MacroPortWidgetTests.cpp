@@ -777,3 +777,117 @@ TEST(MacroPortContextMenu, DeletingThePortNodeDirectlyIsOneUndoStep) {
     ASSERT_NE(macro, nullptr);
     EXPECT_EQ(macro->ports.size(), 1u);
 }
+
+// ============================================================================
+// Per-port colour reaches the docked widget's own jack (T162)
+// ============================================================================
+// The macro's OWN colour tints the whole widget's card, but a single port's user colour (the
+// Configure I/O modal's swatch, T152) was reaching the collapsed card's jack (MacroCardComponent)
+// and NOT the expanded docked widget (ModuleComponent::paintMacroPortWidget) — this pins that the
+// widget reads it too, off ModuleComponent::resolveMacroPortJackColour, which is the ONE place
+// paint and the test both go (so the test verifies what the paint reads, matching this file's own
+// "assert the data the paint reads" philosophy rather than capturing pixels).
+
+TEST(MacroPortWidget, UncolouredAudioCVPaintsItsJackInTheAccentTint) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    const auto uuid =
+        editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    ASSERT_FALSE(uuid.isEmpty());
+    auto* comp = findComponent(editor, nodeIdForUuid(engine, uuid));
+    ASSERT_NE(comp, nullptr);
+
+    // Resolve the same port the widget's paintMacroPortWidget reads for this node.
+    const GraphEditor::MacroPortOwner ownership = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid));
+    ASSERT_NE(ownership.port, nullptr);
+    ASSERT_FALSE(ownership.port->colour.has_value()) << "a fresh port carries no user colour";
+
+    // Unset -> the kind tint passes straight through, whatever tint (accent) is offered.
+    juce::Colour accent(0xff00cc33);
+    EXPECT_EQ(ModuleComponent::resolveMacroPortJackColour(ownership.port, accent), accent);
+}
+
+TEST(MacroPortWidget, UserColouredPortOverrideTheTintOnTheDockedWidget) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    const auto uuid =
+        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    ASSERT_FALSE(uuid.isEmpty());
+
+    const juce::Colour userColour(0xff123456);
+    editor.changeMacroPortColour(macroId, uuid, userColour);
+
+    auto* comp = findComponent(editor, nodeIdForUuid(engine, uuid));
+    ASSERT_NE(comp, nullptr);
+    const GraphEditor::MacroPortOwner ownership = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid));
+    ASSERT_NE(ownership.port, nullptr);
+    ASSERT_TRUE(ownership.port->colour.has_value());
+    EXPECT_EQ(*ownership.port->colour, userColour);
+
+    // A set user colour wins over the kind tint, no matter which tint the paint passes (accent or
+    // audioWire) — that is the whole point of T162: the dot recolours to the user's choice.
+    EXPECT_EQ(ModuleComponent::resolveMacroPortJackColour(ownership.port, juce::Colour(0xff00cc33)), userColour);
+    EXPECT_EQ(ModuleComponent::resolveMacroPortJackColour(ownership.port, juce::Colour(0xff123456)), userColour);
+}
+
+TEST(MacroPortWidget, UserColouredMidiPortWinsOnTheMidiJackTint) {
+    // The MIDI branch falls back to audioWire (not accent); a user colour still overrides that.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    const auto uuid =
+        editor.addMacroPort(macroId, true, synth::MacroPortKind::Midi, MacroPortShape::Mono, 1, "MIDI In");
+    ASSERT_FALSE(uuid.isEmpty());
+    editor.changeMacroPortColour(macroId, uuid, juce::Colour(0xffabcdef));
+
+    const GraphEditor::MacroPortOwner ownership = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid));
+    ASSERT_NE(ownership.port, nullptr);
+    ASSERT_TRUE(ownership.port->colour.has_value());
+    // Unset-tint fallback is the audioWire branch's own (accent here proves the override is tint-agnostic).
+    EXPECT_EQ(ModuleComponent::resolveMacroPortJackColour(ownership.port, juce::Colour(0xff00cc33)),
+              juce::Colour(0xffabcdef));
+}
+
+TEST(MacroPortWidget, ClearingAPortColourFallsBackToTheKindTintAgain) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    const auto uuid =
+        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    ASSERT_FALSE(uuid.isEmpty());
+
+    juce::Colour accent(0xff00cc33);
+    editor.changeMacroPortColour(macroId, uuid, juce::Colour(0xff123456));
+    ASSERT_TRUE(editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port->colour.has_value());
+
+    // Resetting (the swatch's right-click) clears the user colour -> the tint returns.
+    editor.changeMacroPortColour(macroId, uuid, std::nullopt);
+    const GraphEditor::MacroPortOwner ownership = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid));
+    ASSERT_FALSE(ownership.port->colour.has_value());
+    EXPECT_EQ(ModuleComponent::resolveMacroPortJackColour(ownership.port, accent), accent);
+}
+
+TEST(MacroPortWidget, ANullPortFallsBackToTheKindTint) {
+    // Defensive: a docked widget whose port entry has drifted away (which by construction shouldn't
+    // happen) is exactly "unset" -> the kind tint, never a crash on a null port.
+    juce::Colour tint(0xff00cc33);
+    EXPECT_EQ(ModuleComponent::resolveMacroPortJackColour(nullptr, tint), tint);
+}

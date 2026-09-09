@@ -2105,15 +2105,22 @@ void ModuleComponent::paintMacroPortWidget(juce::Graphics& g) {
     const juce::Colour jackAccentColour = themeColors.accent;
     constexpr float kJackRadius = 3.5f; // 7px dot, down from a full card's 10px (fix G4)
 
+    // T162: a port with a user colour (MacroPort::colour, set from the Configure I/O modal's swatch)
+    // paints its dot in THAT colour; otherwise the kind tint (audioWire for MIDI, accent for
+    // AudioCV) — the same fallback the collapsed card's MacroCardComponent::paint uses, so an
+    // expanded docked widget and a collapsed card read a port's jack identically.
+    const juce::Colour midiJackColour = resolveMacroPortJackColour(ownership.port, audioJackColour);
+    const juce::Colour cvJackColour = resolveMacroPortJackColour(ownership.port, jackAccentColour);
+
     if (module->acceptsMidi() || module->producesMidi()) {
         if (module->acceptsMidi()) {
             auto p = getPortCenter(0, true);
-            g.setColour(audioJackColour);
+            g.setColour(midiJackColour);
             g.fillEllipse((float)p.x - kJackRadius, (float)p.y - kJackRadius, kJackRadius * 2.0f, kJackRadius * 2.0f);
         }
         if (module->producesMidi()) {
             auto p = getPortCenter(0, false);
-            g.setColour(audioJackColour);
+            g.setColour(midiJackColour);
             g.fillEllipse((float)p.x - kJackRadius, (float)p.y - kJackRadius, kJackRadius * 2.0f, kJackRadius * 2.0f);
         }
     } else {
@@ -2124,12 +2131,12 @@ void ModuleComponent::paintMacroPortWidget(juce::Graphics& g) {
         }
         for (int i = 0; i < numIns; ++i) {
             auto p = getPortCenter(i, true);
-            g.setColour(jackAccentColour);
+            g.setColour(cvJackColour);
             g.fillEllipse((float)p.x - kJackRadius, (float)p.y - kJackRadius, kJackRadius * 2.0f, kJackRadius * 2.0f);
         }
         for (int i = 0; i < numOuts; ++i) {
             auto p = getPortCenter(i, false);
-            g.setColour(jackAccentColour);
+            g.setColour(cvJackColour);
             g.fillEllipse((float)p.x - kJackRadius, (float)p.y - kJackRadius, kJackRadius * 2.0f, kJackRadius * 2.0f);
         }
     }
@@ -2150,6 +2157,13 @@ void ModuleComponent::paintMacroPortWidget(juce::Graphics& g) {
     // the test named above), so in practice this is a safety net, not the common case.
     g.drawFittedText(name, textArea,
                      boundaryIsInput ? juce::Justification::centredLeft : juce::Justification::centredRight, 1);
+}
+
+juce::Colour ModuleComponent::resolveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint) {
+    // A port user colour wins when set; unset (the default, and every pre-T152 save) falls back to
+    // the kind tint — a null port (a docked widget whose port entry has drifted away, which by
+    // construction shouldn't happen) is exactly the same "unset", i.e. the kind tint too.
+    return (port != nullptr) ? port->colour.value_or(kindTint) : kindTint;
 }
 
 std::optional<ModuleComponent::Port> ModuleComponent::getModTargetPortForPoint(juce::Point<int> localPoint) const {
