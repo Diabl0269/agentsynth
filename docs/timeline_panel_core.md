@@ -614,6 +614,53 @@ for double-click rename); the row's `focusOfChildComponentChanged()` override re
 (and for the binding chip), since `hasKeyboardFocus(true)` — what the outline below checks — includes
 descendants.
 
+**Whole-row drag-to-reorder (T166).** `TimelineDoc::moveTrack(id, newIndex)` moves a track within
+`tracks[]` — display/serialization order only; the id, clips, lanes and binding travel with it.
+It's safe to call at any time: nothing downstream keys a track by its position, only by id/uuid
+(`TimelineClipLaneArea` re-derives order from `doc_->getTracks()` fresh at every layout/paint/hit-test
+call rather than caching it, and the audio-thread snapshot — `TimelineSnapshot::TrackInfo` — matches
+a MIDI source module to its track by `bindingUuid`, never by index). Clamped to `[0, tracks.size() -
+1]`; a no-op (no revision bump, no notification) when the id doesn't resolve or is already there.
+
+The drag surface is deliberately the WHOLE row, not a small dedicated handle (a handle was judged too
+fiddly a target) — everything except the interactive children (name label, swatch, `M`/`S`/`R`/`A`
+buttons, binding chip; each intercepts its own `mouseDown`) starts a drag. `TimelineTrackHeaderComponent`
+stays sibling-blind about it, exactly like `onFocusMoveRequested` above: `mouseDrag()` only commits to a
+drag once the pointer has moved `kRowDragThreshold` (4 px) past `mouseDown` — below that, it's a plain
+click-to-select — and from then on hands raw **screen** Y positions up through `onRowDragStarted` /
+`onRowDragged` / `onRowDragEnded`, the same "compare against something that isn't this component" idiom
+`TimelinePanelComponent::ResizeHandle::desiredHeightFor` already uses for its own drag. `TimelinePanelComponent`
+is the one place that can turn a Y position into "between which two tracks", since it owns the ordered
+header list (`trackHeaderList_.headers`): `trackDropBoundaryForScreenY()` converts via
+`trackHeaderList_.getLocalPoint(nullptr, ...)` (a null source component means "the point is already in
+screen coordinates" — see the JUCE doc comment) and rounds to the nearest row BOUNDARY (0..headerCount)
+so the live drop indicator (`TrackHeaderList::paintOverChildren()`, a 2px accent line — over children
+because the header rows are children painted AFTER this component and each fills its own bounds, so a
+line drawn in `paint()` would be painted over at every interior boundary; the same trap this file
+documents twice already, see **Visual indicator** below and `TimelinePanelComponent::paintOverChildren`)
+reads as "insert here between these two rows", not "replace this row". `endTrackDrag()` converts that
+boundary into `moveTrack`'s target index (`dropBoundary > fromIndex ? dropBoundary - 1 : dropBoundary`
+— the track's own old slot already vacated the array below it, so only a boundary ABOVE the old index
+needs the `-1` correction) and drives the mutation through `trackHeaderHost_->performTrackEdit()`,
+falling back to calling `TimelineDoc::moveTrack` directly when no host is installed — the same
+convention `TimelineTrackHeaderComponent::performEdit()` already follows, so a panel driven straight
+against a doc (every ungated panel-level test in `TimelinePanelTests.cpp`) still works.
+
+**Ordering hazard — read before touching this code.** A reorder changes which `TrackId` sits at each
+index, which makes `syncTrackHeaders()`'s "rebuild only when the SET of tracks changed" check trip
+(same ids, different order at each slot) and rebuild the ENTIRE header column — destroying every
+`TimelineTrackHeaderComponent`, *including the one whose `mouseUp()` is still on the call stack* that
+triggered the mutation in the first place (`mouseUp` → `onRowDragEnded` → `endTrackDrag` →
+`performTrackEdit` → `moveTrack` → `timelineChanged` → `syncTrackHeaders()`, all synchronous). Both
+`TimelineTrackHeaderComponent::mouseUp()` and `TimelinePanelComponent::endTrackDrag()` are written so
+every member write happens BEFORE the call that can trigger this, and nothing follows it — see the
+`ORDERING HAZARD` comment on `onRowDragEnded` in `TimelineTrackHeaderComponent.h` and the matching
+comment in `endTrackDrag()`. `TimelinePanelTests.cpp`'s
+`WholeRowDragReordersTracksAndSurvivesTheHeaderRebuildMidGesture` drives a real drag through this exact
+path (with no host, the worst case: the mutation runs with no extra indirection) specifically to pin it.
+`DropIndicatorPaintsOverTheRowsNotUnderThem` separately pins the paint-order trap above by rendering the
+header column mid-drag with a real theme installed and asserting the accent line is actually visible.
+
 **Visual indicator.** `paintOverChildren()` calls `synth::ui::paintFocusRegionOutline` on itself —
 the exact same helper (and treatment: translucent `accent`, theme border weight) every T159 focus
 region ROOT already uses, reused verbatim one nesting level deeper: a track header row is a real

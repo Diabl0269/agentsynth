@@ -181,6 +181,10 @@ public:
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
     void mouseDown(const juce::MouseEvent& e) override;
+    // T166: whole-row drag-to-reorder (see onRowDragStarted below for why this row only ever
+    // reports raw screen positions rather than trying to reorder anything itself).
+    void mouseDrag(const juce::MouseEvent& e) override;
+    void mouseUp(const juce::MouseEvent& e) override;
     // Re-derives every colour this component bakes via setColour (the binding chip, M/S/R active
     // states) from the newly-installed LookAndFeel — see applyThemeDerivedColours(). Without this,
     // a theme switch left the chip and the M/S/R active colours frozen on whatever theme was
@@ -254,6 +258,32 @@ public:
     // single automation strip) works out whether that means "open this track's lane" or "close the
     // strip that's already showing it".
     std::function<void(synth::TrackId)> onAutomationToggleRequested;
+
+    // ---- T166: whole-row drag-to-reorder -----------------------------------------
+    //
+    // "Whole row" on purpose: a small dedicated handle is too fiddly a target for dragging a track
+    // (see the ticket) — everything except the interactive children (name label, swatch, M/S/R/A
+    // buttons, binding chip; each is its own child Component and intercepts its own mouseDown) is a
+    // drag surface. This row is deliberately sibling-blind (it never sees the other rows or the
+    // scroll state — see the class comment), so it hands raw SCREEN Y positions up rather than
+    // computing an insertion index itself; TimelinePanelComponent (which owns the ordered header
+    // list) is the one place that can turn a Y position into "between which two tracks". Modelled
+    // on ResizeHandle's own screen-coordinate drag in TimelinePanelComponent.h.
+    //
+    // Fired once a background mouseDrag crosses a small pixel threshold past mouseDown — a plain
+    // click (select) or a click that lands on a child component never reaches here.
+    std::function<void(int screenY)> onRowDragStarted;
+    // Fired on every further mouseDrag once a drag is underway.
+    std::function<void(int screenY)> onRowDragged;
+    // Fired from mouseUp, but ONLY when a drag was actually underway (never for a plain click).
+    //
+    // ORDERING HAZARD: this is the last thing mouseUp does, and for good reason. The mutation this
+    // callback triggers (TimelinePanelComponent::endTrackDrag -> TimelineDoc::moveTrack) changes
+    // which TrackId sits at which index, which makes TimelinePanelComponent::syncTrackHeaders()
+    // rebuild the ENTIRE header column — destroying this very row from inside its own mouseUp
+    // stack frame. Every write this component makes to its own state must happen BEFORE this call;
+    // nothing may touch `this` after it returns.
+    std::function<void(int screenY)> onRowDragEnded;
 
     /** The chip menu's contents, in menu-id order (option i has menu id i + 1). Exposed so tests
      *  drive the choice without a juce::PopupMenu, which never runs headlessly. */
@@ -383,6 +413,10 @@ private:
 
     juce::Colour resolvedColour_{juce::Colours::grey};
     bool chipWarning_ = false;
+    // T166: true from the moment a background mouseDrag crosses the reorder threshold (see
+    // onRowDragStarted) until the matching mouseUp. Reset to false BEFORE onRowDragEnded fires —
+    // see that callback's own ordering-hazard comment.
+    bool draggingRow_ = false;
     // Set in resized(); the kind badge itself is drawn straight from track()->kind in paint(), so
     // this is only a hit-rect for tests, not a cache of the badge's text.
     juce::Rectangle<int> kindBadgeBounds_;

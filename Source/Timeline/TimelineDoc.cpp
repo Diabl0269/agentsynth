@@ -388,6 +388,28 @@ bool TimelineDoc::removeTrack(TrackId id) {
     });
 }
 
+bool TimelineDoc::moveTrack(TrackId id, int newIndex) {
+    auto* track = findTrack(id);
+    if (track == nullptr)
+        return false;
+
+    const int oldIndex = (int)(track - tracks.data());
+    const int clampedIndex = juce::jlimit(0, (int)tracks.size() - 1, newIndex);
+    if (clampedIndex == oldIndex)
+        return true; // already there: no revision bump, no notification
+
+    return applyMutation([&] {
+        // Erase-then-insert AT clampedIndex (not adjusted for the erase) is deliberate: removing
+        // the track from oldIndex never changes where an index BELOW oldIndex points, and inserting
+        // at clampedIndex in the now-shorter vector already lands one slot earlier than it would
+        // have pre-erase, which is exactly the compensation a target index ABOVE oldIndex needs.
+        Track moved = std::move(tracks[(size_t)oldIndex]);
+        tracks.erase(tracks.begin() + oldIndex);
+        tracks.insert(tracks.begin() + clampedIndex, std::move(moved));
+        return true;
+    });
+}
+
 bool TimelineDoc::setTrackName(TrackId id, const juce::String& name) {
     auto* track = findTrack(id);
     if (track == nullptr)

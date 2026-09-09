@@ -1262,6 +1262,12 @@ void TimelinePanelComponent::syncTrackHeaders() {
 
     trackHeaderList_.headers.clear();
     focusedTrackIndex_ = -1;
+    // T166: a drag's OWN completion (endTrackDrag) already clears these before this rebuild ever
+    // runs — this is for the other case, some UNRELATED mutation (e.g. an AI patch apply) landing
+    // mid-drag: without this, a rebuild would orphan the drop indicator against a header column
+    // it no longer describes, and it would paint forever (nothing left to fire onRowDragEnded).
+    draggingTrackId_ = {};
+    dragInsertionIndex_ = -1;
     for (const auto& track : tracks) {
         auto* header =
             trackHeaderList_.headers.add(new TimelineTrackHeaderComponent(*doc_, track.id, trackHeaderHost_));
@@ -1276,6 +1282,12 @@ void TimelinePanelComponent::syncTrackHeaders() {
         // focusGained() round trip.
         header->onSelectRequested = [this, trackId] { setFocusedTrack(trackId); };
         header->onFocusMoveRequested = [this](int direction) { moveFocusedTrack(direction); };
+        // T166: whole-row drag-to-reorder — see TimelineTrackHeaderComponent::onRowDragStarted's
+        // own comment for the division of labour (the row detects the gesture, this panel resolves
+        // screen Y against the ordered header list).
+        header->onRowDragStarted = [this, trackId](int screenY) { beginTrackDrag(trackId, screenY); };
+        header->onRowDragged = [this](int screenY) { updateTrackDrag(screenY); };
+        header->onRowDragEnded = [this](int screenY) { endTrackDrag(screenY); };
         if (trackId == previouslyFocusedTrackId)
             focusedTrackIndex_ = trackHeaderList_.headers.size() - 1;
         trackHeaderList_.addAndMakeVisible(header);
@@ -1346,6 +1358,103 @@ void TimelinePanelComponent::ensureTrackVisible(int index) {
         scrollTrackRows((double)(rowTop - viewTop));
     else if (rowBottom > viewTop + viewHeight)
         scrollTrackRows((double)(rowBottom - (viewTop + viewHeight)));
+}
+
+int TimelinePanelComponent::trackDropBoundaryForScreenY(int screenY) const {
+    const int count = trackHeaderList_.headers.size();
+    if (count == 0)
+        return 0;
+    // getLocalPoint with a null source component treats the point as already being in SCREEN
+    // coordinates (see its own JUCE doc comment) — the same "compare against something that isn't
+    // this row" idiom ResizeHandle::desiredHeightFor uses, just resolved against the list instead
+    // of the panel.
+    const int localY = trackHeaderList_.getLocalPoint(nullptr, juce::Point<int>(0, screenY)).y;
+    const int rowHeight = currentRowHeight();
+    if (rowHeight <= 0)
+        return 0;
+    // Rounds to the NEAREST row boundary (not the row the pointer is over) so the drop indicator
+    // reads as "insert here between these two rows" rather than "replace this row".
+    return juce::jlimit(0, count, (localY + rowHeight / 2) / rowHeight);
+}
+
+void TimelinePanelComponent::beginTrackDrag(synth::TrackId trackId, int screenY) {
+    draggingTrackId_ = trackId;
+    dragInsertionIndex_ = trackDropBoundaryForScreenY(screenY);
+    trackHeaderList_.repaint();
+}
+
+void TimelinePanelComponent::updateTrackDrag(int screenY) {
+    if (!draggingTrackId_.isValid())
+        return;
+    const int newBoundary = trackDropBoundaryForScreenY(screenY);
+    if (newBoundary == dragInsertionIndex_)
+        return;
+    dragInsertionIndex_ = newBoundary;
+    trackHeaderList_.repaint();
+}
+
+void TimelinePanelComponent::endTrackDrag(int screenY) {
+    if (!draggingTrackId_.isValid())
+        return;
+
+    // Read everything drag-related out of member state and reset it FIRST: performTrackEdit below
+    // fires TimelineDoc::Listener::timelineChanged synchronously, which drives syncTrackHeaders(),
+    // which — for an actual reorder — rebuilds trackHeaderList_.headers from scratch (see its own
+    // "rebuild only when the SET of tracks changed" comment; a reorder changes the id at each
+    // index, so it counts). That destroys every TimelineTrackHeaderComponent, INCLUDING the one
+    // whose mouseUp is still on the call stack below this function (see
+    // TimelineTrackHeaderComponent::onRowDragEnded's own ordering-hazard comment) — so this panel's
+    // own state must already be consistent before that happens, not after.
+    const synth::TrackId trackId = draggingTrackId_;
+    const int dropBoundary = trackDropBoundaryForScreenY(screenY);
+    draggingTrackId_ = {};
+    dragInsertionIndex_ = -1;
+    trackHeaderList_.repaint();
+
+    if (doc_ == nullptr)
+        return;
+    const auto& tracks = doc_->getTracks();
+    int fromIndex = -1;
+    for (int i = 0; i < (int)tracks.size(); ++i) {
+        if (tracks[(size_t)i].id == trackId) {
+            fromIndex = i;
+            break;
+        }
+    }
+    if (fromIndex < 0)
+        return; // the dragged track is gone (deleted mid-drag) — nothing to move
+
+    // dropBoundary is "insert before row N" counted in the array WITH the dragged track still in
+    // it; TimelineDoc::moveTrack wants the track's final resting index. Below its own old slot the
+    // boundary already IS that index; above it, removing the track shifts everything after it down
+    // by one, so the boundary overshoots by exactly one.
+    const int targetIndex = dropBoundary > fromIndex ? dropBoundary - 1 : dropBoundary;
+
+    // Same no-host fallback TimelineTrackHeaderComponent::performEdit uses — a panel driven
+    // directly against a doc (no MainComponent/undo wiring) still works, e.g. every ungated
+    // panel-level test in TimelinePanelTests.cpp.
+    auto mutate = [this, trackId, targetIndex] { doc_->moveTrack(trackId, targetIndex); };
+    if (trackHeaderHost_ != nullptr)
+        trackHeaderHost_->performTrackEdit(mutate);
+    else
+        mutate();
+}
+
+void TimelinePanelComponent::TrackHeaderList::paintOverChildren(juce::Graphics& g) {
+    if (owner_.dragInsertionIndex_ < 0)
+        return;
+
+    const int rowHeight = owner_.currentRowHeight();
+    // Clamped so the full 2px line stays visible at both the top boundary (0) and the bottom one
+    // (getHeight()), rather than being clipped in half by this component's own edge.
+    const int centreY = juce::jlimit(1, std::max(1, getHeight() - 1), owner_.dragInsertionIndex_ * rowHeight);
+
+    juce::Colour line = juce::Colours::white;
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        line = lf->getTheme().colors.accent;
+
+    g.setColour(line);
+    g.fillRect(0, centreY - 1, getWidth(), 2);
 }
 
 void TimelinePanelComponent::setApplicationProperties(juce::ApplicationProperties* props) {

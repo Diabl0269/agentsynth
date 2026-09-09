@@ -26,6 +26,10 @@ constexpr int kToggleWidth = 24;
 // left them still touching.
 constexpr int kToggleGap = 4;
 constexpr int kRowPadding = 3;
+// T166: pixel distance a background mouseDrag must cross before it commits to a track-reorder
+// drag rather than staying a plain click-to-select — small enough to feel immediate, large enough
+// that an ordinary click's jitter never starts one.
+constexpr float kRowDragThreshold = 4.0f;
 // Narrowed from 34 now that the badge draws a themed icon rather than "MIDI"/"AUD"/"AUTO" text —
 // the icon needs far less width than the longest label did, and the freed space goes to the name.
 constexpr int kKindBadgeWidth = 20;
@@ -479,6 +483,7 @@ void TimelineTrackHeaderComponent::mouseDown(const juce::MouseEvent& e) {
         showContextMenu();
         return;
     }
+    draggingRow_ = false; // a fresh gesture; see mouseDrag's threshold check
     // T161: click-to-select — the comment this replaces reserved a plain click for exactly this.
     // grabKeyboardFocus() is what makes a subsequent Up/Down or M/S/R keystroke route here in the
     // real app; onSelectRequested tells the panel directly (see its own comment for why that can't
@@ -486,6 +491,40 @@ void TimelineTrackHeaderComponent::mouseDown(const juce::MouseEvent& e) {
     grabKeyboardFocus();
     if (onSelectRequested)
         onSelectRequested();
+}
+
+void TimelineTrackHeaderComponent::mouseDrag(const juce::MouseEvent& e) {
+    if (e.mods.isPopupMenu())
+        return;
+
+    if (!draggingRow_) {
+        // T166: small threshold so an ordinary click's few pixels of jitter never starts a drag —
+        // see onRowDragStarted's own comment for why this row (rather than the panel) owns the
+        // threshold check: it's the one component that actually sees the raw gesture.
+        if (e.getDistanceFromDragStart() < kRowDragThreshold)
+            return;
+        draggingRow_ = true;
+        setMouseCursor(juce::MouseCursor::DraggingHandCursor);
+        if (onRowDragStarted)
+            onRowDragStarted(e.getScreenPosition().y);
+        return;
+    }
+
+    if (onRowDragged)
+        onRowDragged(e.getScreenPosition().y);
+}
+
+void TimelineTrackHeaderComponent::mouseUp(const juce::MouseEvent& e) {
+    if (!draggingRow_)
+        return; // a plain click that never crossed the threshold — nothing to finish
+
+    // Every member write happens BEFORE onRowDragEnded — see that callback's own ordering-hazard
+    // comment: it can (and normally does) destroy this component before this function returns.
+    draggingRow_ = false;
+    setMouseCursor(juce::MouseCursor::NormalCursor);
+    const int screenY = e.getScreenPosition().y;
+    if (onRowDragEnded)
+        onRowDragEnded(screenY); // may destroy `this` — nothing may follow this call
 }
 
 //==============================================================================
