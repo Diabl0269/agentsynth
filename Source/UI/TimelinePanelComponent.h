@@ -475,6 +475,15 @@ public:
                    : nullptr;
     }
 
+    // ---- T161: focused track (ephemeral UI state — NOT on TimelineDoc, never touches undo/reconcile) ----
+    //
+    // Which track header row currently holds keyboard focus, as an index into the doc's track order
+    // (-1 = none). The row itself is the real focus target (TimelineTrackHeaderComponent::
+    // setWantsKeyboardFocus); this index exists so Up/Down and the auto-scroll below have somewhere
+    // to read "where am I" without walking the component tree asking each row whether it
+    // hasKeyboardFocus(true) (which is also unreliable headlessly with no native peer).
+    int getFocusedTrackIndexForTest() const noexcept { return focusedTrackIndex_; }
+
 protected:
     /** Opens the "+ Track" button's menu (MIDI Track / Audio Track / Add Marker). The default
      *  implementation shows a real `juce::PopupMenu` via `showMenuAsync`.
@@ -497,6 +506,28 @@ private:
     // refreshes the existing ones in place (a mute toggle must not destroy and re-create rows).
     void syncTrackHeaders();
     void layoutTrackHeaders();
+
+    // ---- T161: focused track index -------------------------------------------
+    // The index a track header row's onSelectRequested (click) reports lands here directly —
+    // resolved from a TrackId rather than trusting a captured loop index, so it stays correct even
+    // if track order/set changed between the header being built and the click landing.
+    void setFocusedTrack(synth::TrackId id);
+    // onFocusMoveRequested's destination: `direction` is -1 (Up) or +1 (Down). Nothing focused yet
+    // starts at row 0 either direction (there is no "current position" for a relative step to be
+    // relative TO); otherwise CLAMPS at the ends rather than wrapping, matching cycleSnapValue's own
+    // "a held key parks at the end" rule. Grabs real focus on the destination row (best-effort — a
+    // no-op without a native peer, same as every other grabKeyboardFocus() call in this app) and
+    // scrolls it into view.
+    void moveFocusedTrack(int direction);
+    // Scrolls the shared trackScrollY (via scrollTrackRows, which already clamps and syncs both
+    // columns) just enough to bring row `index` fully inside the header viewport's visible window.
+    // Computed against viewState_.trackScrollY + trackHeaderViewport_.getMaximumVisibleHeight()
+    // rather than trackHeaderViewport_.getViewArea() — the latter is a cached snapshot
+    // (lastVisibleArea) that is only correct after a layout round trip and reads zero-height before
+    // the panel has ever been sized, where trackScrollY is the one value every other scroll/zoom
+    // writer in this class already treats as ground truth (see syncTrackScroll()).
+    void ensureTrackVisible(int index);
+    int focusedTrackIndex_ = -1;
 
     // ---- Automation strip ----
     // A header's "A" button click lands here. The header itself never knows open/closed state, so

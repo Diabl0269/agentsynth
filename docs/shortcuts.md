@@ -1,8 +1,8 @@
 # Keyboard Shortcuts
 
 Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/ShortcutsSettingsTab.h/.cpp`).
-`ShortcutManager` (`Source/ShortcutManager.h`) registers **69 actions** across four categories —
-**General** (30, app-wide or routed per focused editor), **Graph** (5), **Timeline** (22) and
+`ShortcutManager` (`Source/ShortcutManager.h`) registers **72 actions** across four categories —
+**General** (30, app-wide or routed per focused editor), **Graph** (5), **Timeline** (25) and
 **Piano Roll** (12) — every one of them rebindable, including keys that used to be hardcoded:
 nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the six tool
 digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
@@ -82,8 +82,9 @@ selection AND always inactive on the Graph surface.
 ### Focus regions
 
 **T159** added a general-purpose keyboard focus-region framework (`Source/UI/FocusRegion.h`),
-first of a 3-part epic — T160 (arrow-key navigation within the module library) and T161 (within
-timeline track headers, plus M/S/R) build on top of it without changing the registry itself. A
+first of a 3-part epic — T160 (arrow-key navigation within the module library) and T161 (Up/Down +
+M/S/R within timeline track header rows, below) build on top of it without changing the registry
+itself. A
 `synth::ui::FocusRegionRegistry` is a plain member of `MainComponent` (never a `Desktop`-global
 singleton — a host process can run multiple plugin instances, and a future separate-window
 mixer/timeline would need its own registry), populated with six regions once every root component
@@ -109,8 +110,11 @@ exists: **Toolbar** (always open — the top strip), **Library** (`isLibraryVisi
   if that positional chain ends at a non-focusable leaf. One consequence worth calling out: Cmd+Shift+L
   lands on the Library container itself, not the search box, and Cmd+Shift+T lands on the Timeline
   panel root rather than the clip lane area — `resolveEditSurface()` (below) still reports `Graph`
-  immediately afterwards, so Cmd+C still acts on the canvas until the user clicks (or T161 adds
-  keyboard) into the clip lanes specifically.
+  immediately afterwards, so Cmd+C still acts on the canvas until the user clicks into the clip lanes
+  specifically. A bare **Down** on the panel root DOES seed keyboard focus into the track-header
+  column (T161, below) — the one direct keyboard path out of the region root this epic adds; reaching
+  the clip lanes themselves by keyboard alone stays out of scope (T158's locked "track headers only"
+  decision).
 - **Mod Matrix nests inside Canvas** — `ModMatrixComponent` is a child component of `GraphEditor`,
   so the two focus regions nest rather than sit side by side. `FocusRegionRegistry::regionContaining`
   resolves this to the most specific match (Mod Matrix, not Canvas) whenever real focus sits inside
@@ -133,6 +137,12 @@ exists: **Toolbar** (always open — the top strip), **Library** (`isLibraryVisi
   region root on `globalFocusChanged` — event-driven, never a per-tick timer.
 - **Out of scope for T159** — no arrow-key navigation WITHIN a region (T160/T161's job), and no
   canvas/graph module-to-module navigation (deferred indefinitely, not part of this epic).
+- **T161's row outline is a second, per-row instance of the SAME visual language, not a variant** —
+  `TimelineTrackHeaderComponent::paintOverChildren` calls `paintFocusRegionOutline` on itself exactly
+  the way each region root's own override does, just one nesting level deeper (a row is not a region
+  root; the Timeline region root stays the panel). Both outlines CAN paint at once (the panel's own
+  softer region border, plus the focused row's identical treatment around just that row) — deliberate,
+  the same double-outline T160 already ships for a focused row inside the Library region.
 
 ### Library keyboard navigation (T160)
 
@@ -311,6 +321,33 @@ and, for the loop-selection key, `TimelineClipLaneArea::keyPressed()` too):
 | Option+1 | Jump to Locator 1 — parks the cursor on the LEFT loop locator (`timelineJumpToLocator1`) |
 | Option+2 | Jump to Locator 2 — the RIGHT loop locator (`timelineJumpToLocator2`) |
 
+**Track header focus (T161)** — `TimelineTrackHeaderComponent` is now itself a real focusable leaf
+(`setWantsKeyboardFocus(true)`, matching the clip lane area/piano roll's own pattern), scoped to TRACK
+HEADERS ONLY per T158's locked decision — the clip/automation lanes are untouched. A click on a row
+(anywhere that isn't the name label or a control — see below) or a bare **Down** on the Timeline
+region root focuses it; Up/Down then walk sibling rows, clamped at the ends (never wrapping, the same
+rule `cycleSnapValue` uses for the grid). The focused row is `TimelinePanelComponent::
+focusedTrackIndex_` — ephemeral UI state, deliberately **not** on `TimelineDoc` (it never touches
+undo/reconcile/persistence) — and auto-scrolls into view through the SAME `trackScrollY`/`scrollTrackRows`
+plumbing the mouse wheel and vertical zoom already use, via `ensureTrackVisible()`.
+
+| Shortcut | Action |
+|----------|--------|
+| ↑ / ↓ | Move focus to the previous/next track header row (not rebindable — arrow-key row navigation isn't a `ShortcutManager` action anywhere else in this app either, see T160's `ModuleLibraryComponent` precedent) |
+| M | Mute Focused Track (`timelineMuteFocusedTrack`) — flips `Track::muted` on whichever row holds focus, through the exact same `performTrackEdit` one-undo-step path the M **button** already used |
+| S | Solo Focused Track (`timelineSoloFocusedTrack`) — `Track::soloed`, same path |
+| R | Arm Focused Track (`timelineArmFocusedTrack`) — `Track::armed`, same path |
+
+M/S/R are rebindable, Timeline category, bare-letter defaults matching the J/L/P/F convention — free
+on all three (no other binding in this table is a BARE, unmodified m/s/r; every existing use of those
+letters carries a modifier). **Naming, deliberately not "Mute"/"Solo"/"Arm":** `timelineToolMute`
+(bare **7**) already reads "Mute Tool" in the Settings list — a different key (a digit) so there is no
+BINDING collision, but the Settings search matches description text too, so these three are "Mute/
+Solo/Arm **Focused Track**" to keep the two rows from reading as the same feature when a search
+narrows to "mute". A row's own keyboard-focus outline reuses `paintFocusRegionOutline` verbatim (see
+the Focus regions section above) — same colour/alpha/thickness as a whole region root's, just painted
+around one row via the row's own `paintOverChildren`.
+
 **Snap toggles MAGNETISM, not the grid.** Turning snap off stops edits being pulled onto the
 division; it does **not** change which grid lines are drawn. Paint sites read
 `TimelineViewState::divisionBeatsRaw()` (the chosen division, whatever the switch says) and only
@@ -335,9 +372,9 @@ Pinned by `ShortcutManagerTest.APersistedCommandBindingShadowsASurfaceActionOnTh
 
 **Reachability: a surface action needs focus inside its own panel — except these two.** A surface
 action only runs if the focused component is inside the owning panel's subtree, because that is how
-JUCE bubbles an unhandled key. Under the timeline panel the only things that take keyboard focus are
-the clip lane area and the piano roll — **not** the ruler, the track headers or the transport bar. So
-setting the locators by dragging the ruler (the obvious way to do it) left focus on the canvas and
+JUCE bubbles an unhandled key. Under the timeline panel, the things that take keyboard focus are the
+clip lane area, the piano roll, and — as of T161 — each track header row; the ruler and the transport
+bar still do not. So setting the locators by dragging the ruler (the obvious way to do it) left focus on the canvas and
 the keystroke died in `MainComponent::keyPressed`, which only dispatches commands.
 `MainComponent::keyPressed` therefore ends with a **last-chance forward** of a two-id whitelist
 (`forwardsToTimelinePanel`) back into `TimelinePanelComponent::keyPressed`. Deliberately a whitelist
@@ -468,18 +505,19 @@ onto 1–6. Shipping one of the missing three later costs no rebind: the digit i
 
 ## Command vs surface actions
 
-The 67 actions split into two kinds, and telling them apart is the key to reasoning about "why
+The 72 actions split into two kinds, and telling them apart is the key to reasoning about "why
 doesn't this key do anything":
 
-- **Command-dispatched** (43 actions) — every General action, all four Graph actions, and the Timeline
+- **Command-dispatched** (45 actions) — every General action, all five Graph actions, and the Timeline
   category's eight grid-set + two grid-cycle commands. `AppCommands::getCommandForAction(actionId)`
   returns a real `juce::CommandID` for these; `MainComponent` implements
   `ApplicationCommandTarget`, so they appear in the native menu bar, drive toolbar tooltip text, and
   their enabled/disabled state is whatever `getCommandInfo` reports.
-- **Surface-resolved** (24 actions) — the timeline panel's own keys (`timelineSnapToggle`,
+- **Surface-resolved** (27 actions) — the timeline panel's own keys (`timelineSnapToggle`,
   `timelineToggleLoop`, `timelineLoopSelection`, `timelineFollowPlayheadToggle`, the six
-  `timelineTool*` digits, and the two `timelineJumpToLocator*` keys) plus every piano roll action.
-  `AppCommands::getCommandForAction` returns `AppCommands::kNoCommand` (`0`,
+  `timelineTool*` digits, and the two `timelineJumpToLocator*` keys), the three T161 track-header
+  keys (`timelineMuteFocusedTrack`/`timelineSoloFocusedTrack`/`timelineArmFocusedTrack`), and every
+  piano roll action. `AppCommands::getCommandForAction` returns `AppCommands::kNoCommand` (`0`,
   `juce::ApplicationCommandManager`'s own "not a command" value) for every one of these — they are
   never dispatched through the command manager at all. Instead, the owning component's own
   `keyPressed()` calls a small `matchesAction(key, actionId, fallback)` helper that reads

@@ -11,6 +11,9 @@ namespace juce {
 class ApplicationProperties; // forward declaration — only a pointer crosses this header
 } // namespace juce
 
+class ShortcutManager; // forward declaration (Source/ShortcutManager.h) — same non-owning,
+                       // may-stay-null pointer pattern as TimelinePanelComponent's own copy.
+
 // TimelineTrackHeaderComponent — one row in the timeline panel's track-header column.
 //
 // Owns no timeline state: the TimelineDoc is the truth for every value it shows (name, colour,
@@ -171,6 +174,11 @@ public:
     void refreshFromDoc();
 
     void paint(juce::Graphics& g) override;
+    // T161: the per-row keyboard-focus outline (see setWantsKeyboardFocus below) — painted OVER
+    // children for the same reason TimelinePanelComponent's own region-outline override is: the
+    // colour swatch and the M/S/R/A toggles sit flush against this row's left/right edges, so an
+    // outline drawn in paint() would be hidden under them.
+    void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
     void mouseDown(const juce::MouseEvent& e) override;
     // Re-derives every colour this component bakes via setColour (the binding chip, M/S/R active
@@ -178,6 +186,47 @@ public:
     // a theme switch left the chip and the M/S/R active colours frozen on whatever theme was
     // active at the last refreshFromDoc() call.
     void lookAndFeelChanged() override;
+
+    // ---- T161: keyboard focus + M/S/R shortcuts -------------------------------
+    //
+    // A row is a real focusable leaf (setWantsKeyboardFocus(true) in the constructor, matching
+    // TimelineClipLaneArea/PianoRollComponent's own pattern) rather than a virtual row painted by
+    // one big component (contrast ModuleLibraryComponent's T160 row nav) — TimelineTrackHeaderComponent
+    // already IS one-component-per-track. Up/Down and M/S/R only ever reach keyPressed() below while
+    // THIS row genuinely holds real OS keyboard focus, by JUCE's own key-dispatch rule — no extra
+    // "am I the focused one" guard is needed or wanted (see docs/timeline_panel_core.md §3).
+    bool keyPressed(const juce::KeyPress& key) override;
+    // The four toggle buttons opt OUT of taking focus for themselves (juce::Button opts in by
+    // default) — otherwise clicking M/S/R/A would silently move real focus off the row and onto the
+    // button, exactly the trap TimelinePanelComponent's own tool-strip buttons avoid the same way.
+    // nameLabel_ is deliberately excluded: it needs its own focus machinery for double-click rename.
+    void focusGained(juce::Component::FocusChangeType cause) override;
+    void focusLost(juce::Component::FocusChangeType cause) override;
+    // Because the toggle buttons opt out of focus (see above) this fires only for the name label
+    // (mid-rename) and the binding chip — repaints the row's outline either way, since
+    // hasKeyboardFocus(true) (what paintOverChildren checks) includes descendants.
+    void focusOfChildComponentChanged(juce::Component::FocusChangeType cause) override;
+
+    /** Non-owning; may stay null (falls back to the hardcoded bare m/s/r defaults, same contract as
+     *  every other surface-resolved key in this app). Forwarded by TimelinePanelComponent to every
+     *  header it owns (setShortcutManager both propagates to existing rows and is re-applied to a
+     *  freshly built one in syncTrackHeaders()). */
+    void setShortcutManager(ShortcutManager* manager) { shortcuts_ = manager; }
+
+    /** Fired from keyPressed() on a bare Up/Down that this row claims (direction -1/+1) — the row
+     *  cannot move focus to a sibling itself (it is deliberately host/graph/panel-free), so it hands
+     *  the direction back for TimelinePanelComponent::moveFocusedTrack to resolve. Always returns
+     *  true from keyPressed() regardless of whether this is wired (a row built directly, e.g. by a
+     *  test, still "owns" the key while it has focus). */
+    std::function<void(int direction)> onFocusMoveRequested;
+
+    /** Fired from mouseDown() on anything that isn't a right-click (a background click, or one that
+     *  lands on the row rather than being consumed by a child) — deliberately a callback rather than
+     *  relying on the real focusGained() notification round-trip: grabKeyboardFocus() is a best-effort
+     *  no-op without a native peer (headless tests included — see docs/shortcuts.md's Focus regions
+     *  section), so TimelinePanelComponent::focusedTrackIndex_ has to be told directly rather than
+     *  waiting on an OS focus event that may never arrive. */
+    std::function<void()> onSelectRequested;
 
     // ---- Binding chip ---------------------------------------------------------
     // The chip shows the bound node's name; it turns amber when the track is UNBOUND (never had a
@@ -272,6 +321,12 @@ private:
     // Routes a doc mutation through the host (one undo step). Falls back to running it directly
     // when there is no host, so a header built for a test is still functional.
     void performEdit(const std::function<void()>& mutation);
+    // T161: read-flip-write for M/S/R, shared by the toggle buttons' own onClick and keyPressed()'s
+    // bare m/s/r — one path so a button click and a keystroke can never disagree about what
+    // "toggle" means. No-op when the track is gone (mid-delete race).
+    void toggleMuted();
+    void toggleSoloed();
+    void toggleArmed();
     // Position of this track in the doc's track list — the index resolveTrackColour falls back to
     // for a track that has never been coloured. -1 when the track is gone.
     int trackIndex() const;
@@ -301,9 +356,17 @@ private:
     // having been called with a LookAndFeel already installed).
     void applyThemeDerivedColours();
 
+    // T161: bare m/s/r resolution — the same "unset binding has no key at all, once a manager is
+    // installed" contract every other surface action in this app follows. See matchesAction().
+    bool matchesAction(const juce::KeyPress& key, const juce::String& actionId, const juce::KeyPress& fallback) const;
+
     synth::TimelineDoc& doc_;
     synth::TrackId trackId_;
     TrackHeaderHost* host_ = nullptr;
+    // Non-owning; may stay null. LIFETIME: unlike TimelinePanelComponent's own copy of this pointer,
+    // this component never subscribes as a juce::ChangeListener on it (no cached tooltip to
+    // refresh), so there is no matching teardown-ordering hazard to document here.
+    ShortcutManager* shortcuts_ = nullptr;
 
     // Set in the constructor to `[this] { openMidiDestinationsPicker(); }`; a test replaces it via
     // setOpenMidiDestinationsPickerHookForTest() so applyBindingMenuChoice(kMidiDestinationsMenuId)

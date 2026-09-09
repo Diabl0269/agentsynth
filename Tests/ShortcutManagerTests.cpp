@@ -44,6 +44,10 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "timelineJumpToLocator1",
         "timelineJumpToLocator2",
         // TimelineClipLaneArea::keyPressed (its P shares timelineLoopSelection with the panel)
+        // TimelineTrackHeaderComponent::keyPressed (T161)
+        "timelineMuteFocusedTrack",
+        "timelineSoloFocusedTrack",
+        "timelineArmFocusedTrack",
     };
     return ids;
 }
@@ -1118,6 +1122,69 @@ TEST_F(ShortcutManagerTest, FocusLibrarySearchDoesNotCollideWithAnyExistingGener
     ASSERT_TRUE(binding.isValid());
     EXPECT_TRUE(manager.getConflictingAction("focusLibrarySearch", binding).isEmpty())
         << "focusLibrarySearch collides with " << manager.getConflictingAction("focusLibrarySearch", binding);
+}
+
+// ---------------------------------------------------------------------------
+// T161: timelineMuteFocusedTrack / timelineSoloFocusedTrack / timelineArmFocusedTrack — bare m/s/r,
+// Timeline category, resolved by TimelineTrackHeaderComponent::keyPressed for whichever track header
+// row currently holds keyboard focus. See Tests/TimelineTrackFocusTests.cpp for the row/panel-level
+// behaviour these unlock. Deliberately not AppCommands/getCommandForAction entries — same pure
+// "surface action" shape as timelineSnapToggle/timelineToggleLoop above.
+// ---------------------------------------------------------------------------
+
+TEST_F(ShortcutManagerTest, TimelineMuteFocusedTrackDefaultBindingIsBareM) {
+    auto kp = manager.getBinding("timelineMuteFocusedTrack");
+    EXPECT_EQ(kp.getKeyCode(), 'm');
+    EXPECT_TRUE(kp.getModifiers() == juce::ModifierKeys());
+}
+
+TEST_F(ShortcutManagerTest, TimelineSoloFocusedTrackDefaultBindingIsBareS) {
+    auto kp = manager.getBinding("timelineSoloFocusedTrack");
+    EXPECT_EQ(kp.getKeyCode(), 's');
+    EXPECT_TRUE(kp.getModifiers() == juce::ModifierKeys());
+}
+
+TEST_F(ShortcutManagerTest, TimelineArmFocusedTrackDefaultBindingIsBareR) {
+    auto kp = manager.getBinding("timelineArmFocusedTrack");
+    EXPECT_EQ(kp.getKeyCode(), 'r');
+    EXPECT_TRUE(kp.getModifiers() == juce::ModifierKeys());
+}
+
+TEST_F(ShortcutManagerTest, TimelineFocusedTrackActionsAreRegistered) {
+    EXPECT_TRUE(manager.getActionIds().contains("timelineMuteFocusedTrack"));
+    EXPECT_TRUE(manager.getActionIds().contains("timelineSoloFocusedTrack"));
+    EXPECT_TRUE(manager.getActionIds().contains("timelineArmFocusedTrack"));
+}
+
+TEST_F(ShortcutManagerTest, TimelineFocusedTrackActionDescriptionsAreDistinctFromTheMuteTool) {
+    EXPECT_EQ(ShortcutManager::getActionDescription("timelineMuteFocusedTrack"), "Mute Focused Track");
+    EXPECT_EQ(ShortcutManager::getActionDescription("timelineSoloFocusedTrack"), "Solo Focused Track");
+    EXPECT_EQ(ShortcutManager::getActionDescription("timelineArmFocusedTrack"), "Arm Focused Track");
+    // The naming-collision risk these names exist to avoid — a Settings search for "mute" must not
+    // read the tool-mode row and the track-toggle row as the same feature.
+    EXPECT_EQ(ShortcutManager::getActionDescription("timelineToolMute"), "Mute Tool");
+}
+
+TEST_F(ShortcutManagerTest, TimelineFocusedTrackActionsAreTimelineCategory) {
+    EXPECT_EQ(ShortcutManager::getCategory("timelineMuteFocusedTrack"), ShortcutCategory::Timeline);
+    EXPECT_EQ(ShortcutManager::getCategory("timelineSoloFocusedTrack"), ShortcutCategory::Timeline);
+    EXPECT_EQ(ShortcutManager::getCategory("timelineArmFocusedTrack"), ShortcutCategory::Timeline);
+}
+
+TEST_F(ShortcutManagerTest, TimelineFocusedTrackActionsDoNotCollideWithAnyExistingTimelineBinding) {
+    for (const char* actionId : {"timelineMuteFocusedTrack", "timelineSoloFocusedTrack", "timelineArmFocusedTrack"}) {
+        const auto binding = manager.getBinding(actionId);
+        ASSERT_TRUE(binding.isValid());
+        EXPECT_TRUE(manager.getConflictingAction(actionId, binding).isEmpty())
+            << actionId << " collides with " << manager.getConflictingAction(actionId, binding);
+    }
+}
+
+TEST_F(ShortcutManagerTest, GetCommandForAction_TimelineFocusedTrackActionsHaveNoCommand) {
+    // Pure surface actions: MainComponent never dispatches these through ApplicationCommandManager.
+    EXPECT_EQ(AppCommands::getCommandForAction("timelineMuteFocusedTrack"), AppCommands::kNoCommand);
+    EXPECT_EQ(AppCommands::getCommandForAction("timelineSoloFocusedTrack"), AppCommands::kNoCommand);
+    EXPECT_EQ(AppCommands::getCommandForAction("timelineArmFocusedTrack"), AppCommands::kNoCommand);
 }
 
 // ---------------------------------------------------------------------------

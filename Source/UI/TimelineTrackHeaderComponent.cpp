@@ -1,11 +1,19 @@
 #include "TimelineTrackHeaderComponent.h"
+#include "../ShortcutManager.h"
 #include "ColourPickerPopup.h"
+#include "FocusRegion.h"
 #include "Theme/AppLookAndFeel.h"
 #include "TrackColour.h"
 
 namespace synth::ui {
 
 namespace {
+
+// T161: the hardcoded fallback for a bare m/s/r action when no ShortcutManager is installed — same
+// idiom as TimelinePanelComponent's own plainKey() (duplicated rather than shared; see
+// TimelinePanelComponent::matchesAction's own comment on why this three-line check is copied per
+// surface rather than factored out).
+juce::KeyPress plainKey(int character) { return juce::KeyPress(character, juce::ModifierKeys::noModifiers, 0); }
 
 constexpr int kSwatchWidth = 8;
 // Widened from 20 (laid out edge-to-edge, no gap): the four M/S/R/A toggles read as one fused
@@ -101,6 +109,10 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     , trackId_(trackId)
     , host_(host) {
     setComponentID("timelineTrackHeader");
+    // T161: makes this row a real focus target (Up/Down between rows, M/S/R for the row that holds
+    // focus) — same setWantsKeyboardFocus(true) pattern TimelineClipLaneArea/PianoRollComponent
+    // already use for the surfaces they own.
+    setWantsKeyboardFocus(true);
 
     addAndMakeVisible(colourSwatch_);
     colourSwatch_.setComponentID("trackColourSwatch");
@@ -115,7 +127,9 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     addAndMakeVisible(nameLabel_);
     nameLabel_.setComponentID("trackNameLabel");
     nameLabel_.setTooltip("Double-click to rename this track");
-    // Double-click to rename — a single click must stay free for selecting the track row later.
+    // Double-click to rename — a single click must stay free for selecting the track row (T161's
+    // mouseDown()/onSelectRequested; a click that lands on the label itself doesn't reach this row's
+    // own mouseDown, but a click anywhere else on the row does).
     nameLabel_.setEditable(false, true, false);
     nameLabel_.onTextChange = [this] {
         const juce::String newName = nameLabel_.getText();
@@ -127,33 +141,22 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
         button.setComponentID(componentId);
         button.setClickingTogglesState(false); // the doc is the truth; refreshFromDoc sets the state
         button.onClick = onClick;
+        // T161: juce::Button opts INTO keyboard focus by default, and a click grabs it — without
+        // this, clicking M/S/R would silently move real focus off the row and onto the button,
+        // leaving the row's own focusGained/focusLost (and TimelinePanelComponent::focusedTrackIndex_,
+        // which they keep in sync) stale. Same fix TimelinePanelComponent's own tool-strip buttons
+        // already apply for the identical reason.
+        button.setWantsKeyboardFocus(false);
+        button.setMouseClickGrabsKeyboardFocus(false);
     };
 
-    setUpToggle(muteButton_, "trackMuteButton", [this] {
-        const auto* t = track();
-        if (t == nullptr)
-            return;
-        const bool next = !t->muted;
-        performEdit([this, next] { doc_.setTrackMuted(trackId_, next); });
-    });
+    setUpToggle(muteButton_, "trackMuteButton", [this] { toggleMuted(); });
     muteButton_.setTooltip("Mute this track");
-    setUpToggle(soloButton_, "trackSoloButton", [this] {
-        const auto* t = track();
-        if (t == nullptr)
-            return;
-        const bool next = !t->soloed;
-        performEdit([this, next] { doc_.setTrackSoloed(trackId_, next); });
-    });
+    setUpToggle(soloButton_, "trackSoloButton", [this] { toggleSoloed(); });
     soloButton_.setTooltip("Solo this track");
     // Arm flips document state only. Arming is not recording: the record button (and the
     // MidiRecorder::startRecording call behind it) lives on the transport bar.
-    setUpToggle(armButton_, "trackArmButton", [this] {
-        const auto* t = track();
-        if (t == nullptr)
-            return;
-        const bool next = !t->armed;
-        performEdit([this, next] { doc_.setTrackArmed(trackId_, next); });
-    });
+    setUpToggle(armButton_, "trackArmButton", [this] { toggleArmed(); });
     armButton_.setTooltip("Arm this track for recording");
 
     // Automation open/close: a plain click button, not a toggle — the header never knows whether the
@@ -163,6 +166,10 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     automationButton_.setComponentID("trackHeaderAutomationButton");
     automationButton_.setClickingTogglesState(false);
     automationButton_.setTooltip("Show/hide this track's automation lane");
+    // T161: same focus opt-out as the M/S/R toggles above (see setUpToggle) — this button isn't
+    // built through that lambda since it isn't a doc-state toggle.
+    automationButton_.setWantsKeyboardFocus(false);
+    automationButton_.setMouseClickGrabsKeyboardFocus(false);
     automationButton_.onClick = [this] {
         if (onAutomationToggleRequested)
             onAutomationToggleRequested(trackId_);
@@ -206,6 +213,30 @@ void TimelineTrackHeaderComponent::performEdit(const std::function<void()>& muta
         host_->performTrackEdit(mutation);
     else
         mutation();
+}
+
+void TimelineTrackHeaderComponent::toggleMuted() {
+    const auto* t = track();
+    if (t == nullptr)
+        return;
+    const bool next = !t->muted;
+    performEdit([this, next] { doc_.setTrackMuted(trackId_, next); });
+}
+
+void TimelineTrackHeaderComponent::toggleSoloed() {
+    const auto* t = track();
+    if (t == nullptr)
+        return;
+    const bool next = !t->soloed;
+    performEdit([this, next] { doc_.setTrackSoloed(trackId_, next); });
+}
+
+void TimelineTrackHeaderComponent::toggleArmed() {
+    const auto* t = track();
+    if (t == nullptr)
+        return;
+    const bool next = !t->armed;
+    performEdit([this, next] { doc_.setTrackArmed(trackId_, next); });
 }
 
 std::unique_ptr<synth::ui::ColourPickerPopup> TimelineTrackHeaderComponent::buildColourPicker() {
@@ -435,11 +466,77 @@ void TimelineTrackHeaderComponent::paint(juce::Graphics& g) {
     }
 }
 
+void TimelineTrackHeaderComponent::paintOverChildren(juce::Graphics& g) {
+    // T161: reuses T159's region-root outline verbatim (same colour/alpha/thickness) rather than a
+    // bespoke treatment — a track header row is now a real focusable leaf exactly the way a region
+    // root is, just nested one level deeper (see docs/timeline_panel_core.md §3).
+    synth::ui::paintFocusRegionOutline(*this, g);
+}
+
 //==============================================================================
 void TimelineTrackHeaderComponent::mouseDown(const juce::MouseEvent& e) {
-    if (e.mods.isPopupMenu())
+    if (e.mods.isPopupMenu()) {
         showContextMenu();
+        return;
+    }
+    // T161: click-to-select — the comment this replaces reserved a plain click for exactly this.
+    // grabKeyboardFocus() is what makes a subsequent Up/Down or M/S/R keystroke route here in the
+    // real app; onSelectRequested tells the panel directly (see its own comment for why that can't
+    // wait on a real focusGained() round trip).
+    grabKeyboardFocus();
+    if (onSelectRequested)
+        onSelectRequested();
 }
+
+//==============================================================================
+bool TimelineTrackHeaderComponent::matchesAction(const juce::KeyPress& key, const juce::String& actionId,
+                                                 const juce::KeyPress& fallback) const {
+    if (shortcuts_ == nullptr)
+        return key == fallback;
+    return ShortcutManager::keyPressMatches(shortcuts_->getBinding(actionId), key);
+}
+
+bool TimelineTrackHeaderComponent::keyPressed(const juce::KeyPress& key) {
+    // Up/Down move focus to the previous/next row — this component owns neither the sibling list
+    // nor the shared scroll state, so it just reports the direction (see onFocusMoveRequested's own
+    // comment). Deliberately NOT a ShortcutManager action (arrow-key row navigation isn't rebindable
+    // anywhere else in this app either — see ModuleLibraryComponent's T160 precedent).
+    if (key.isKeyCode(juce::KeyPress::upKey)) {
+        if (onFocusMoveRequested)
+            onFocusMoveRequested(-1);
+        return true;
+    }
+    if (key.isKeyCode(juce::KeyPress::downKey)) {
+        if (onFocusMoveRequested)
+            onFocusMoveRequested(1);
+        return true;
+    }
+
+    // M/S/R toggle THIS row's track — rebindable, bare-letter defaults matching the J/L/P/F
+    // convention. With no ShortcutManager installed (headless embeddings, or a test that never
+    // calls setShortcutManager) these fall back to the hardcoded bare letters.
+    if (matchesAction(key, "timelineMuteFocusedTrack", plainKey('m'))) {
+        toggleMuted();
+        return true;
+    }
+    if (matchesAction(key, "timelineSoloFocusedTrack", plainKey('s'))) {
+        toggleSoloed();
+        return true;
+    }
+    if (matchesAction(key, "timelineArmFocusedTrack", plainKey('r'))) {
+        toggleArmed();
+        return true;
+    }
+
+    // Everything else (J/L/P/F, the tool digits, Escape...) is not this row's to claim — it bubbles
+    // to TimelinePanelComponent::keyPressed exactly like it already does from the clip lane area and
+    // the piano roll.
+    return false;
+}
+
+void TimelineTrackHeaderComponent::focusGained(juce::Component::FocusChangeType) { repaint(); }
+void TimelineTrackHeaderComponent::focusLost(juce::Component::FocusChangeType) { repaint(); }
+void TimelineTrackHeaderComponent::focusOfChildComponentChanged(juce::Component::FocusChangeType) { repaint(); }
 
 //==============================================================================
 std::vector<TrackHeaderHost::BindingOption> TimelineTrackHeaderComponent::collectBindingOptions() const {

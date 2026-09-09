@@ -561,6 +561,21 @@ public:
         // same reason `pianoRollNavPrevNote` stores an arrow plus altModifier.
         bindings["timelineJumpToLocator1"] = juce::KeyPress('1', juce::ModifierKeys::altModifier, 0);
         bindings["timelineJumpToLocator2"] = juce::KeyPress('2', juce::ModifierKeys::altModifier, 0);
+        // T161: bare m/s/r toggle Mute/Solo/Arm on whichever track header row currently holds
+        // keyboard focus (TimelineTrackHeaderComponent::keyPressed) — the same J/L/P/F "bare letter,
+        // panel-scoped surface action" convention as the block above, just resolved one component
+        // deeper (the row itself, not the panel). Free on all three: no other binding in this table
+        // uses a BARE (unmodified) m/s/r — 'm' elsewhere is always Cmd+M (toggleModMatrix), 's'
+        // elsewhere is always Cmd/Cmd+Alt/Cmd+Shift/Alt/Ctrl+S, and 'r' elsewhere is always Cmd+R
+        // (repeatSelection) — and modifier equality is exact, so none of those can ever match a bare
+        // press. `timelineToolMute` (bare 7, "Mute Tool") is the one real naming-adjacency risk: it
+        // is a different KEY (a digit, not a letter) so there is no binding collision, but the
+        // Settings search matches DESCRIPTION text too, so these are named "Mute/Solo/Arm Focused
+        // Track" rather than bare "Mute"/"Solo"/"Arm" to keep the two rows from reading as the same
+        // feature in a filtered list.
+        bindings["timelineMuteFocusedTrack"] = juce::KeyPress('m', juce::ModifierKeys::noModifiers, 0);
+        bindings["timelineSoloFocusedTrack"] = juce::KeyPress('s', juce::ModifierKeys::noModifiers, 0);
+        bindings["timelineArmFocusedTrack"] = juce::KeyPress('r', juce::ModifierKeys::noModifiers, 0);
 
         // REAL ctrlModifier, not commandModifier. On macOS the Ctrl+digit space is genuinely free
         // (Cmd+digit is reserved by hosts and by the native menu bar), which is what the user asked
@@ -804,6 +819,15 @@ public:
             return "Jump to Locator 1";
         if (actionId == "timelineJumpToLocator2")
             return "Jump to Locator 2";
+        // T161: deliberately NOT "Mute"/"Solo"/"Arm" — the Settings tab's search matches this text,
+        // and "timelineToolMute" is already "Mute Tool" (a bare-7 edit-tool mode, unrelated). Spelling
+        // out "Focused Track" keeps the two from reading as the same feature in a filtered list.
+        if (actionId == "timelineMuteFocusedTrack")
+            return "Mute Focused Track";
+        if (actionId == "timelineSoloFocusedTrack")
+            return "Solo Focused Track";
+        if (actionId == "timelineArmFocusedTrack")
+            return "Arm Focused Track";
         // Labelled with the same note values the snap combo shows ("1", "1/2", …) rather than
         // "Whole"/"Half", so the shortcut list and the selector name the grid identically.
         if (actionId == "snapSetWhole")
@@ -977,6 +1001,9 @@ private:
             {"timelineToolDraw", ShortcutCategory::Timeline},
             {"timelineJumpToLocator1", ShortcutCategory::Timeline},
             {"timelineJumpToLocator2", ShortcutCategory::Timeline},
+            {"timelineMuteFocusedTrack", ShortcutCategory::Timeline},
+            {"timelineSoloFocusedTrack", ShortcutCategory::Timeline},
+            {"timelineArmFocusedTrack", ShortcutCategory::Timeline},
             {"snapSetWhole", ShortcutCategory::Timeline},
             {"snapSetHalf", ShortcutCategory::Timeline},
             {"snapSetQuarter", ShortcutCategory::Timeline},
