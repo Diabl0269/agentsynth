@@ -14,13 +14,14 @@ exec "$(git rev-parse --show-toplevel)/scripts/pre-commit-lint.sh"
 EOF
 chmod +x "$HOOK_DIR/pre-commit"
 
-# pre-push: clang-format lint + Release build + tests.
+# pre-push: full local CI reproduction (scripts/ci-local.sh) — lint + build every CMake target
+# CI builds + the full test suite, so what CI checks is checked here before the push, not after.
 cat > "$HOOK_DIR/pre-push" << 'EOF'
 #!/bin/bash
-exec "$(git rev-parse --show-toplevel)/scripts/pre-push-release-test.sh"
+exec "$(git rev-parse --show-toplevel)/scripts/ci-local.sh"
 EOF
 chmod +x "$HOOK_DIR/pre-push"
 
 echo "Installed git hooks:"
-echo "  pre-commit -> scripts/pre-commit-lint.sh        (clang-format lint, staged files)"
-echo "  pre-push   -> scripts/pre-push-release-test.sh  (lint + Release build + tests)"
+echo "  pre-commit -> scripts/pre-commit-lint.sh  (clang-format lint, staged files)"
+echo "  pre-push   -> scripts/ci-local.sh         (full local CI reproduction: lint + build + tests)"
