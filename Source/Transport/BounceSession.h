@@ -70,6 +70,8 @@ private:
 
     struct MetronomeGuard;
     std::unique_ptr<MetronomeGuard> metronomeGuard_;
+    struct ExternalMidiGuard;
+    std::unique_ptr<ExternalMidiGuard> externalMidiGuard_;
     std::unique_ptr<OfflineTransportDriver> driver_;
     std::unique_ptr<juce::TemporaryFile> temporary_;
     std::unique_ptr<juce::AudioFormatWriter> writer_;

@@ -50,7 +50,7 @@ using MarkerId = detail::TimelineId<detail::MarkerIdTag>;
 // build understands.
 enum class TrackKind : int {
     Midi = 0,
-    Audio = 1,      // reserved — the model accepts it, nothing renders it yet
+    Audio = 1,      // streamed Track Audio clips (TimelineAudioSourceModule) — see docs/modules.md
     Automation = 2, // reserved: lanes may live on their own track row later
 };
 
