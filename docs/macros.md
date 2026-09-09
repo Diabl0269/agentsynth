@@ -981,6 +981,29 @@ In order, each independently shippable:
     identically (before T162 the widget still drew the kind tint for a coloured port — the mismatch
      this task closes). See §5.2 for the `colour` field's persistence.
 
+   **DONE (T165, founder review, real-time re-colour):** T162 made the collapsed card AND the expanded
+   docked widget both *paint* a port's user colour, but a port-colour change is a **macro-set** change, not
+   a graph or structural change, so neither surface has a listener that would notice it on its own — the
+   old code did a bare canvas `repaint()`, which reached the card but **not** the port's docked
+   `ModuleComponent` (its jack "only showed the new colour after a collapse/expand", which re-runs the
+   layout and forces a fresh paint). `GraphEditor::changeMacroPortColour` now calls
+   `GraphEditor::repaintMacroPortColourTargets(macroId, nodeUuid)` after recording the change, which
+   repaints **both** surfaces in real time — the live collapsed `MacroCardComponent` (found via
+   `content.getMacroCards()` + `getMacroId()`, so it is correct whether the macro is folded or not) and the
+   port's own docked `ModuleComponent` (found via `resolveMemberNodeId(nodeUuid)` +
+   `content.getModules()`, mirroring `setMacroBypassed`/`setMacroMuted`, which force their card repaint
+   after a member-level fan-out). The port node persists even while its macro is collapsed (its widget
+   just goes hidden), so the widget is always found — a repaint of the hidden widget is a harmless no-op
+   until the macro is expanded, at which point its first paint already reads the new colour. The method
+   returns the (possibly-null) `MacroPortRecolourTargets{card, widget}` it targeted for the same reason
+   `getMacroCardForTest` exists — a headless test cannot observe a `repaint()` (a no-op with no window;
+   `StatusBarTests`' gated-repaint precedent), so the observable seam is "did the fix reach the two paint
+   surfaces?", not "did a frame paint?". Covered by `MacroPortWidget.{ExpandsRecolourReachesBothTheCardAndTheDockedWidget,
+   EveryPortKindReachesItsDockedWidget, CollapsedRecolourStillTargetsTheCardAndTheHiddenWidget,
+   MissingMacroIdReachesNoSurfacesAndDoesNotCrash, ChangeMacroPortColourIsOneUndoStep}`. **No data change** —
+   this is a paint-timing fix on top of T162, so §5/§5.2 persistence and the undo step are unchanged
+   (one `MacroSnapshotAction`, like every port-metadatum edit).
+
    **DONE (T153, founder review round 3, item 3 second half): keyboard accessibility.** Every
    real control in the Configure I/O modal already gets Tab/Return/Space for free from
    `juce::Button`/`juce::ComboBox`/`juce::TextEditor`'s own defaults, so the fixes needed were

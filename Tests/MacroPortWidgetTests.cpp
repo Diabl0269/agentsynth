@@ -891,3 +891,155 @@ TEST(MacroPortWidget, ANullPortFallsBackToTheKindTint) {
     juce::Colour tint(0xff00cc33);
     EXPECT_EQ(ModuleComponent::resolveMacroPortJackColour(nullptr, tint), tint);
 }
+
+// ============================================================================
+// A port-colour change repaints BOTH surfaces in real time (T165)
+// ============================================================================
+// T162 made the docked widget (ModuleComponent::paintMacroPortWidget) and the collapsed card
+// (MacroCardComponent::paint) BOTH read a port's user colour, but a port-colour change is only a
+// macro-set mutation, so neither surface has a listener to notice it: the T165 report is that the
+// jack "only shows the new colour after a collapse/expand", which re-runs the layout and forces a
+// fresh paint. changeMacroPortColour now forces a repaint of BOTH surfaces itself, via
+// repaintMacroPortColourTargets() - the seam these tests pin. As StatusBarTests' gated-repaint
+// comment notes, a headless test cannot intercept Component::repaint() (a no-op with no window), so
+// the testable proof is that the fix reaches the two correct paint surfaces: the live collapsed card
+// and the port's own docked ModuleComponent.
+
+TEST(MacroPortWidget, ExpandsRecolourReachesBothTheCardAndTheDockedWidget) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    const auto uuid =
+        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    ASSERT_FALSE(uuid.isEmpty());
+
+    const juce::Colour userColour(0xff123456);
+    editor.changeMacroPortColour(macroId, uuid, userColour);
+
+    // The two surfaces the change must land on: the real collapsed card and the port's own docked
+    // widget (found regardless of collapse state - the port node persists, just hidden when the
+    // macro is folded, which is the harmless hidden-widget repaint).
+    auto targets = editor.repaintMacroPortColourTargets(macroId, uuid);
+    ASSERT_NE(targets.card, nullptr);
+    ASSERT_NE(targets.widget, nullptr);
+
+    // They are the SAME components the rest of the codebase reaches for this macro/port - the fix
+    // hit the real paint surfaces, not a fabricated target.
+    EXPECT_EQ(targets.card, editor.getMacroCardForTest(macroId)) << "the card must be the macro's own live card";
+    EXPECT_EQ(targets.widget, findComponent(editor, nodeIdForUuid(engine, uuid)))
+        << "the widget must be this port's own docked ModuleComponent";
+
+    // And the data paint reads is the new colour, so the forced repaint actually shows it.
+    const GraphEditor::MacroPortOwner ownership = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid));
+    ASSERT_NE(ownership.port, nullptr);
+    EXPECT_EQ(*ownership.port->colour, userColour);
+    EXPECT_EQ(ModuleComponent::resolveMacroPortJackColour(ownership.port, juce::Colour(0xff00cc33)), userColour);
+}
+
+TEST(MacroPortWidget, EveryPortKindReachesItsDockedWidget) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    // A MIDI input and a stereo Audio output must each resolve to their own widget plus the shared
+    // card, never falling through to a null on the MIDI branch or the wide-shape branch.
+    const auto midiUuid =
+        editor.addMacroPort(macroId, true, synth::MacroPortKind::Midi, MacroPortShape::Mono, 1, "MIDI In");
+    const auto stereoUuid =
+        editor.addMacroPort(macroId, false, synth::MacroPortKind::AudioCV, MacroPortShape::Stereo, 2, "Out A");
+    ASSERT_FALSE(midiUuid.isEmpty());
+    ASSERT_FALSE(stereoUuid.isEmpty());
+
+    // One check reused for both ports so a wide-shape and a MIDI port are proved identically,
+    // without a tuple that would drag in <utility>.
+    auto check = [&](const juce::String& portUuid, juce::Colour colour) {
+        editor.changeMacroPortColour(macroId, portUuid, colour);
+
+        auto targets = editor.repaintMacroPortColourTargets(macroId, portUuid);
+        EXPECT_NE(targets.card, nullptr);
+        EXPECT_NE(targets.widget, nullptr);
+        EXPECT_EQ(targets.card, editor.getMacroCardForTest(macroId));
+        EXPECT_EQ(targets.widget, findComponent(editor, nodeIdForUuid(engine, portUuid)));
+        // The paint data this forced repaint reads is the port's own colour, not its neighbour's.
+        EXPECT_EQ(editor.macroPortOwnerFor(nodeIdForUuid(engine, portUuid)).port->colour, colour);
+    };
+    check(midiUuid, juce::Colour(0xff112233));
+    check(stereoUuid, juce::Colour(0xff445566));
+}
+
+TEST(MacroPortWidget, CollapsedRecolourStillTargetsTheCardAndTheHiddenWidget) {
+    // The collapse/expand symptom in T165: even before expanding, the card must be the surface that
+    // shows the colour, and the (currently hidden) docked widget is still found so that when the user
+    // expands, its first paint already reads the new colour without a manual fold/unfold dance.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    // NOTE: left COLLAPSED on purpose.
+
+    const auto uuid =
+        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    ASSERT_FALSE(uuid.isEmpty());
+    editor.changeMacroPortColour(macroId, uuid, juce::Colour(0xff123456));
+
+    auto targets = editor.repaintMacroPortColourTargets(macroId, uuid);
+    EXPECT_NE(targets.card, nullptr) << "the collapsed card is the one surface that must repaint";
+    EXPECT_EQ(targets.card, editor.getMacroCardForTest(macroId));
+    // The port node persists while folded, so its widget is still found (and hidden) rather than null.
+    EXPECT_EQ(targets.widget, findComponent(editor, nodeIdForUuid(engine, uuid)));
+}
+
+TEST(MacroPortWidget, MissingMacroIdReachesNoSurfacesAndDoesNotCrash) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    // A non-resolving macroId: no card, no widget, no crash - the guards short-circuit cleanly.
+    auto targets = editor.repaintMacroPortColourTargets(juce::Uuid().toDashedString(), juce::Uuid().toDashedString());
+    EXPECT_EQ(targets.card, nullptr);
+    EXPECT_EQ(targets.widget, nullptr);
+
+    // And the colour change itself is a guarded no-op for a missing macro.
+    EXPECT_NO_THROW(editor.changeMacroPortColour(juce::Uuid().toDashedString(), juce::Uuid().toDashedString(),
+                                                 juce::Colour(0xff123456)));
+}
+
+TEST(MacroPortWidget, ChangeMacroPortColourIsOneUndoStep) {
+    // T165 rides on the same single recorded undo step as the T162 data path; one recolor is one
+    // undo entry, and after undo the same live surfaces still resolve for a subsequent recolor.
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    const auto uuid =
+        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    ASSERT_FALSE(uuid.isEmpty());
+
+    editor.changeMacroPortColour(macroId, uuid, juce::Colour(0xff123456));
+    ASSERT_TRUE(editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port->colour.has_value());
+
+    // The recolor recorded exactly one undo step (the colour only mutates `macros`, so a
+    // MacroSnapshotAction, like every other T152/T162 port-metadatum edit).
+    ASSERT_TRUE(undo.canUndo());
+    undo.undo();
+    EXPECT_FALSE(editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port->colour.has_value())
+        << "undo cleared the user colour";
+
+    // And the repaint targets still resolve to the same live surfaces after the round trip.
+    editor.changeMacroPortColour(macroId, uuid, juce::Colour(0xffabcdef));
+    auto targets = editor.repaintMacroPortColourTargets(macroId, uuid);
+    EXPECT_EQ(targets.widget, findComponent(editor, nodeIdForUuid(engine, uuid)));
+}
