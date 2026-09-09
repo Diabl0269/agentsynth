@@ -3443,11 +3443,17 @@ void GraphEditor::deleteSelection() {
     // them back one at a time. Deleting a collapsed macro card's members (see
     // deleteMacroAndMembers) flows through here too, so the macro half of the change has to be
     // captured in the SAME undo step as the graph half — recordGraphAndMacroChange, not
-    // recordStructuralChange. updateComponents() prunes `macros` against whatever survives.
+    // recordStructuralChange. updateComponents() prunes `macros` against whatever survives. T154:
+    // this batch can also strand a DIFFERENT macro port that isn't itself being deleted (an
+    // ordinary member was that port's only remaining connection) — macroPortDeletionNeighbors()
+    // captures the candidates before removal, then autoDeleteOrphanedMacroPort sweeps them after.
     auto doDelete = [this, ids, &graph] {
         modMatrix.clearRows();
+        const auto portNeighbors = macroPortDeletionNeighbors(ids); // T154: capture BEFORE removal
         for (auto id : ids)
             graph.removeNode(id);
+        for (auto n : portNeighbors)
+            autoDeleteOrphanedMacroPort(n);
         selection.clear();
         updateComponents();
     };
@@ -5378,6 +5384,23 @@ void GraphEditor::autoDeleteOrphanedMacroPort(juce::AudioProcessorGraph::NodeID 
         macros.remove(m->id); // MacroSet::removeMemberEverywhere's own "zero members" rule
 }
 
+std::vector<juce::AudioProcessorGraph::NodeID>
+GraphEditor::macroPortDeletionNeighbors(const std::vector<juce::AudioProcessorGraph::NodeID>& deletedIds) const {
+    const auto isBeingDeleted = [&](juce::AudioProcessorGraph::NodeID id) {
+        return std::find(deletedIds.begin(), deletedIds.end(), id) != deletedIds.end();
+    };
+    std::vector<juce::AudioProcessorGraph::NodeID> neighbors;
+    for (const auto& c : audioEngine.getGraph().getConnections()) {
+        if (isBeingDeleted(c.source.nodeID) && !isBeingDeleted(c.destination.nodeID))
+            neighbors.push_back(c.destination.nodeID);
+        else if (isBeingDeleted(c.destination.nodeID) && !isBeingDeleted(c.source.nodeID))
+            neighbors.push_back(c.source.nodeID);
+    }
+    std::sort(neighbors.begin(), neighbors.end(), [](auto a, auto b) { return a.uid < b.uid; });
+    neighbors.erase(std::unique(neighbors.begin(), neighbors.end()), neighbors.end());
+    return neighbors;
+}
+
 juce::String GraphEditor::addMacroPort(const juce::String& macroId, bool isInput, synth::MacroPortKind kind,
                                        MacroPortShape shape, int voiceCount, const juce::String& portName) {
     auto* macro = macros.find(macroId);
@@ -6318,9 +6341,15 @@ void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId) 
     // updateComponents() below prunes `macros` against whatever nodes survive, so a module that
     // was a macro member either shrinks or dissolves its macro as part of the SAME undo step —
     // recordGraphAndMacroChange captures both "before"/"after" snapshots, not just the graph's.
+    // T154: deleting this single node can also strand a DIFFERENT macro port wired only to it —
+    // see macroPortDeletionNeighbors()'s comment. deleteModule(ModuleComponent*) resolves a NodeID
+    // and delegates here, so it's covered too.
     auto doDelete = [this, nodeId, &graph] {
         modMatrix.clearRows();
+        const auto portNeighbors = macroPortDeletionNeighbors({nodeId}); // T154: capture BEFORE removal
         graph.removeNode(nodeId);
+        for (auto n : portNeighbors)
+            autoDeleteOrphanedMacroPort(n);
         updateComponents();
     };
 

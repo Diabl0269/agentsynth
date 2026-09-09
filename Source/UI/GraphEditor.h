@@ -1609,6 +1609,22 @@ private:
      *  (non-macro-port) disconnect. */
     void autoDeleteOrphanedMacroPort(juce::AudioProcessorGraph::NodeID nodeId);
 
+    /** T154 (docs/macros.md §7 item 9's follow-up): the auto-delete-orphaned-port scan's candidate
+     *  list for a BATCH node deletion. deleteSelection/deleteModule/requestDeleteModule already
+     *  always use recordGraphAndMacroChange (unlike disconnectCable/disconnectPort, which upgrade
+     *  from recordStructuralChange only when a macro port is actually touched), so there is no
+     *  undo-transaction gate to decide here — only which nodes to check afterwards. MUST be called
+     *  BEFORE the nodes in `deletedIds` are removed from the graph, so their still-live connections
+     *  can be walked: a candidate is any node NOT itself in `deletedIds` that has a direct
+     *  connection to one that is. Deliberately single-hop, matching disconnectCable/disconnectPort's
+     *  own scope (T148): if splicing out a candidate here strands a SECOND port that was wired only
+     *  to the first (two ports CAN be directly wired port-to-port for a cross-macro-boundary
+     *  crossing — maybeAutoCreateMacroPortsForDrag above), that second port is not chased. Nothing
+     *  in this feature chases multi-hop cascades. Deduplicated; order does not matter to the
+     *  caller. */
+    std::vector<juce::AudioProcessorGraph::NodeID>
+    macroPortDeletionNeighbors(const std::vector<juce::AudioProcessorGraph::NodeID>& deletedIds) const;
+
     /** Launches the real "Create ports for the crossing cables?" modal
      *  (synth::ui::MacroAutoPortPromptDialog) and calls `respond(createPorts, remember)` once the
      *  user picks. Only reached from requestGroupSelectionIntoMacro() when
