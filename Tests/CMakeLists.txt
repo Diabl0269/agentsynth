@@ -157,6 +157,7 @@ add_executable(Tests
     TimelinePanelTests.cpp
     TimelinePlayheadTests.cpp
     TimelineTrackHeaderTests.cpp
+    TimelineTrackFocusTests.cpp
     TimelineClipLaneTests.cpp
     PianoRollTests.cpp
     MusicalScaleTests.cpp

@@ -376,6 +376,11 @@ void TimelinePanelComponent::setShortcutManager(ShortcutManager* manager) {
     if (shortcuts_ != nullptr)
         shortcuts_->addChangeListener(this);
     refreshShortcutTooltips();
+    // T161: every existing track header row resolves its own bare m/s/r through this SAME manager —
+    // a freshly built header (syncTrackHeaders()'s rebuild branch) gets it there instead, since it
+    // isn't a constructor parameter.
+    for (auto* header : trackHeaderList_.headers)
+        header->setShortcutManager(shortcuts_);
 }
 
 void TimelinePanelComponent::changeListenerCallback(juce::ChangeBroadcaster*) { refreshShortcutTooltips(); }
@@ -986,6 +991,18 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
         return true;
     }
 
+    // T161: bare Down on the PANEL ROOT itself seeds keyboard focus into the track-header column.
+    // Cmd+Shift+T / Tab land here (docs/shortcuts.md's Focus regions section — every region root
+    // wants its own focus, deterministically), not on any row, so without this a keyboard-only user
+    // could never reach a track header at all. Scoped to REAL focus being on THIS exact component
+    // (never "focus is somewhere in the panel") so it can't steal an arrow key the clip lane or piano
+    // roll haven't claimed for themselves — those two still own every other keystroke that reaches
+    // this method by bubbling up from wherever real focus actually is.
+    if (key.isKeyCode(juce::KeyPress::downKey) && juce::Component::getCurrentlyFocusedComponent() == this) {
+        moveFocusedTrack(1);
+        return true;
+    }
+
     // Number keys pick a tool, BEFORE the letter keys below.
     //
     // With a ShortcutManager installed each digit is one rebindable action ("timelineToolSplit" and
@@ -1234,15 +1251,33 @@ void TimelinePanelComponent::syncTrackHeaders() {
         return;
     }
 
+    // T161: preserve WHICH TRACK is focused across the rebuild (by id, never by index — the whole
+    // point of resolving by id is that a track deleted ABOVE the focused one must not silently hand
+    // focus to whatever track now sits at the old numeric index). Invalid (default-constructed) when
+    // nothing was focused, and the loop below never matches an invalid id against a real track.
+    const synth::TrackId previouslyFocusedTrackId =
+        juce::isPositiveAndBelow(focusedTrackIndex_, trackHeaderList_.headers.size())
+            ? trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->getTrackId()
+            : synth::TrackId();
+
     trackHeaderList_.headers.clear();
+    focusedTrackIndex_ = -1;
     for (const auto& track : tracks) {
         auto* header =
             trackHeaderList_.headers.add(new TimelineTrackHeaderComponent(*doc_, track.id, trackHeaderHost_));
+        header->setShortcutManager(shortcuts_);
         // The header only ever reports "the A button was clicked" — this panel is the one that
         // knows whether the strip is already open on this track's lane, so it's the one that
         // decides open vs. close.
         const auto trackId = track.id;
         header->onAutomationToggleRequested = [this, trackId](synth::TrackId) { toggleAutomationForTrack(trackId); };
+        // T161: click-to-select and Up/Down between rows — see the two callbacks' own doc comments
+        // in TimelineTrackHeaderComponent.h for why these are explicit callbacks rather than a real
+        // focusGained() round trip.
+        header->onSelectRequested = [this, trackId] { setFocusedTrack(trackId); };
+        header->onFocusMoveRequested = [this](int direction) { moveFocusedTrack(direction); };
+        if (trackId == previouslyFocusedTrackId)
+            focusedTrackIndex_ = trackHeaderList_.headers.size() - 1;
         trackHeaderList_.addAndMakeVisible(header);
     }
     layoutTrackHeaders();
@@ -1276,6 +1311,41 @@ void TimelinePanelComponent::layoutTrackHeaders() {
     trackHeaderList_.setSize(width, std::max(count * rowHeight, trackHeaderViewport_.getMaximumVisibleHeight()));
     for (int i = 0; i < count; ++i)
         trackHeaderList_.headers.getUnchecked(i)->setBounds(0, i * rowHeight, width, rowHeight);
+}
+
+void TimelinePanelComponent::setFocusedTrack(synth::TrackId id) {
+    for (int i = 0; i < trackHeaderList_.headers.size(); ++i) {
+        if (trackHeaderList_.headers.getUnchecked(i)->getTrackId() == id) {
+            focusedTrackIndex_ = i;
+            return;
+        }
+    }
+    focusedTrackIndex_ = -1; // id no longer resolves (deleted between the click and this call)
+}
+
+void TimelinePanelComponent::moveFocusedTrack(int direction) {
+    const int count = trackHeaderList_.headers.size();
+    if (count == 0)
+        return;
+    focusedTrackIndex_ = focusedTrackIndex_ < 0 ? 0 : juce::jlimit(0, count - 1, focusedTrackIndex_ + direction);
+    // Best-effort: without a native peer (headless tests) this is a harmless no-op, same as every
+    // other grabKeyboardFocus() call in this codebase (see TimelineClipLaneArea's own mouseDown).
+    trackHeaderList_.headers.getUnchecked(focusedTrackIndex_)->grabKeyboardFocus();
+    ensureTrackVisible(focusedTrackIndex_);
+}
+
+void TimelinePanelComponent::ensureTrackVisible(int index) {
+    if (!juce::isPositiveAndBelow(index, trackHeaderList_.headers.size()))
+        return;
+    const int rowHeight = currentRowHeight();
+    const int rowTop = index * rowHeight;
+    const int rowBottom = rowTop + rowHeight;
+    const int viewTop = (int)std::llround(viewState_.trackScrollY);
+    const int viewHeight = trackHeaderViewport_.getMaximumVisibleHeight();
+    if (rowTop < viewTop)
+        scrollTrackRows((double)(rowTop - viewTop));
+    else if (rowBottom > viewTop + viewHeight)
+        scrollTrackRows((double)(rowBottom - (viewTop + viewHeight)));
 }
 
 void TimelinePanelComponent::setApplicationProperties(juce::ApplicationProperties* props) {

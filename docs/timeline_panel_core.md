@@ -567,6 +567,69 @@ and nothing else — arming is not recording; the record button and `MidiRecorde
 live on the transport bar (§5, below), which looks for the first `armed` track when it starts a
 take.
 
+**Keyboard focus + M/S/R (T161).** A row is now a real focus target —
+`setWantsKeyboardFocus(true)` in the constructor, the same pattern `TimelineClipLaneArea`/
+`PianoRollComponent` already use for the surfaces they own — with a `keyPressed()` override that
+resolves bare **M**/**S**/**R** (`timelineMuteFocusedTrack`/`timelineSoloFocusedTrack`/
+`timelineArmFocusedTrack`, rebindable, Timeline category — see
+[`shortcuts.md`](shortcuts.md#timeline)) into exactly the same `toggleMuted()`/`toggleSoloed()`/
+`toggleArmed()` → `performEdit()` path the M/S/R **buttons**' own `onClick` calls, so a keystroke and
+a click can never disagree about what "toggle" means or about the undo step it produces. Up/Down are
+NOT `ShortcutManager` actions (arrow-key row navigation isn't rebindable anywhere else in this app
+either); the row reports a direction via `onFocusMoveRequested` instead, since it owns neither the
+sibling list nor the shared scroll state to act on it itself.
+
+`TimelinePanelComponent::focusedTrackIndex_` is the model — an index into the doc's track order,
+**deliberately not a field on `TimelineDoc`**: this is ephemeral UI state that must never touch
+undo, reconcile or persistence. Two callbacks keep it in sync, both explicit rather than riding a
+real `focusGained()` notification: `onSelectRequested` (a plain click — see `mouseDown()`) and
+`onFocusMoveRequested` (Up/Down, resolved by `TimelinePanelComponent::moveFocusedTrack`, which clamps
+at both ends rather than wrapping — the same rule `cycleSnapValue` uses for the grid — and starts at
+row 0 either direction when nothing was focused yet). Explicit callbacks rather than a focus-event
+round trip because `grabKeyboardFocus()` is a best-effort no-op without a native OS peer (every
+headless test in this codebase, `FocusArbitrationTest::SurfaceResolverRealFocus` documents the same
+constraint), so the model has to be told directly instead of waiting for an event that may never fire
+in that environment. `moveFocusedTrack` still calls `grabKeyboardFocus()` on the destination row
+regardless (harmless where it's a no-op, and what makes the NEXT real keystroke route there when a
+peer does exist), and calls `TimelinePanelComponent::ensureTrackVisible()`, which scrolls the SAME
+`viewState_.trackScrollY` (via `scrollTrackRows`, already clamped) every other vertical scroll/zoom
+writer in this class treats as ground truth — never `trackHeaderViewport_.getViewArea()`, which is
+only a cached snapshot of the last layout pass. `syncTrackHeaders()`'s rebuild branch preserves
+`focusedTrackIndex_` **by `TrackId`**, not by numeric index, across a track add/remove/reorder — a
+track deleted ABOVE the focused one must not silently hand focus to whatever now sits at the old
+index; the focused track's id is resolved back to whatever new index it occupies, or cleared to `-1`
+if it was the one removed. The `sameTracks` refresh-in-place branch (a rename, a mute click, a
+re-bind) never touches `focusedTrackIndex_` at all, since the track SET didn't change.
+
+**Click-to-select.** `mouseDown()` on anything that isn't a right-click now calls
+`grabKeyboardFocus()` and fires `onSelectRequested` — the behaviour a comment on `nameLabel_`
+reserved a plain click for before this landed (double-click still renames; a plain click on the LABEL
+itself doesn't reach the row's own `mouseDown()`, but a click anywhere else on the row does). The
+four toggle buttons (`M`/`S`/`R`/`A`) opt OUT of taking focus for themselves
+(`setWantsKeyboardFocus(false)` + `setMouseClickGrabsKeyboardFocus(false)`) — `juce::Button` opts IN
+by default, and without this a click on one of them would silently move real focus off the row and
+onto the button, going stale the same way `TimelinePanelComponent`'s own tool-strip buttons would
+without the identical fix. `nameLabel_` is deliberately excluded (it needs its own focus machinery
+for double-click rename); the row's `focusOfChildComponentChanged()` override repaints for that case
+(and for the binding chip), since `hasKeyboardFocus(true)` — what the outline below checks — includes
+descendants.
+
+**Visual indicator.** `paintOverChildren()` calls `synth::ui::paintFocusRegionOutline` on itself —
+the exact same helper (and treatment: translucent `accent`, theme border weight) every T159 focus
+region ROOT already uses, reused verbatim one nesting level deeper: a track header row is a real
+focusable leaf, just not a region root itself (the Timeline region's root stays the panel). Painted
+over children, not in `paint()`, for the same reason `TimelinePanelComponent`'s own region outline is
+— the colour swatch and the M/S/R/A toggles sit flush against the row's left/right edges, so an
+outline drawn underneath them would be invisible along those edges.
+
+**Reaching a row by keyboard alone.** Cmd+Shift+T / Tab land on the Timeline region ROOT (the panel),
+never on a row — so `TimelinePanelComponent::keyPressed()` treats a bare **Down** specially when real
+focus is on the panel root itself (`getCurrentlyFocusedComponent() == this`, never a looser "focus is
+somewhere in the panel" check): it seeds `focusedTrackIndex_` at row 0. Scoped this tightly so it can
+never steal an arrow key the clip lane area or piano roll haven't yet claimed for themselves — every
+other keystroke that reaches this method still does so by bubbling up from wherever real focus
+actually is.
+
 **Kind-badge icon.** The `"MIDI"`/`"AUD"`/`"AUTO"` text is the fallback: when a themed
 `AppLookAndFeel` is installed and the corresponding asset is linked in, `paint()` draws
 `Icon::TrackMidi`/`TrackAudio`/`TrackAutomation` (`kindBadgeIcon(TrackKind)`) instead — the same
