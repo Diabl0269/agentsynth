@@ -20,10 +20,12 @@
 //                        macroCardPortLayout applies to port jacks)
 
 #include "../Source/AppUndoManager.h"
+#include "../Source/Modules/ChannelStripModule.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/MacroInletModule.h"
 #include "../Source/Modules/MacroOutletModule.h"
 #include "../Source/Modules/OscillatorModule.h"
+#include "../Source/Modules/TimelineMidiSourceModule.h"
 #include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/MacroCardComponent.h"
 #include <gtest/gtest.h>
@@ -93,6 +95,31 @@ TEST(MacroBypassMute, SetMacroBypassedSetsEveryMember) {
 
     EXPECT_TRUE(moduleAt(engine, a)->isBypassed());
     EXPECT_TRUE(moduleAt(engine, b)->isBypassed());
+}
+
+// A channel macro (one containing a Channel Strip, docs/mixer.md §5.5): Bypass means "bypass the
+// inserts" -- the source and the strip are skipped -- while Mute still includes the strip.
+TEST(MacroBypassMute, ChannelMacroBypassSkipsSourceAndStripButMuteIncludesTheStrip) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    const auto source = addModuleAt(editor, engine, std::make_unique<TimelineMidiSourceModule>(), 100, 100);
+    const auto insert = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    const auto strip = addModuleAt(editor, engine, std::make_unique<ChannelStripModule>(), 900, 100);
+    editor.setSelectedNodes({source, insert, strip});
+    const auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    editor.setMacroBypassed(macroId, true);
+    EXPECT_TRUE(moduleAt(engine, insert)->isBypassed()) << "the insert goes dry";
+    EXPECT_FALSE(moduleAt(engine, source)->isBypassed()) << "the source keeps producing";
+    EXPECT_FALSE(moduleAt(engine, strip)->isBypassed()) << "the strip keeps passing signal";
+    EXPECT_EQ(editor.macroBypassState(macroId), GraphEditor::MacroToggleState::AllOn)
+        << "the tri-state reads over the same members the fan-out touches";
+
+    editor.setMacroMuted(macroId, true);
+    EXPECT_TRUE(moduleAt(engine, strip)->isMuted()) << "muting a channel mutes its strip";
+    EXPECT_TRUE(moduleAt(engine, insert)->isMuted());
 }
 
 TEST(MacroBypassMute, SetMacroMutedSetsEveryMember) {

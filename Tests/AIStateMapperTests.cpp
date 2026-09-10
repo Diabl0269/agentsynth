@@ -1145,6 +1145,9 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Audio Input", "bypassed"},
         {"Audio Output", ""},
         {"Bitcrusher", "bypassed, depth, dither, dualIO, mix, muted, outputLevel, rate"},
+        // The mixer's strip (P9-2). Solo is deliberately NOT here: it is a render-time gate kept
+        // in trusted extra state, never a parameter (docs/mixer.md §5.3).
+        {"Channel Strip", "bypassed, gain, muted, pan"},
         {"Chorus", "bypassed, centreDelay, depth, dualIO, feedback, mix, muted, outputLevel, rate"},
         {"Comparator", "bypassed, muted, trigThreshold"},
         {"Compressor", "attack, bypassed, dualIO, makeupGain, muted, ratio, release, threshold"},
@@ -1171,6 +1174,8 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Macro Out", "bypassed"},
         {"Macros", "bypassed, macro1, macro10, macro11, macro12, macro13, macro14, macro15, macro16, macro2, macro3, "
                    "macro4, macro5, macro6, macro7, macro8, macro9, macroBipolar, macroCount, muted"},
+        // The mix bus (P9-2): a fader and a mute, no pan.
+        {"Master", "bypassed, gain, muted"},
         {"Math", "bypassed, clip, muted"},
         {"Midi Input", ""},
         {"Mod Slot", "amount, bypassed"},
@@ -1311,6 +1316,10 @@ TEST(AIStateMapperTest, AuthorableModuleTypesGolden) {
     // signal type.
     EXPECT_FALSE(actual.contains("Macro MIDI In"));
     EXPECT_FALSE(actual.contains("Macro MIDI Out"));
+    // The mixer's strip and bus (P9-2, docs/mixer.md §6). "The AI can build a channel" is an
+    // app-side action the model invokes, never a node it writes.
+    EXPECT_FALSE(actual.contains("Channel Strip"));
+    EXPECT_FALSE(actual.contains("Master"));
 
     // The schema hands the model exactly this list.
     const juce::var schema = synth::AIStateMapper::getPatchSchema(); // held: the chain below points into it
@@ -1341,6 +1350,8 @@ TEST(AIStateMapperTest, UntrustedPatchRejectsInternalOnlyModuleTypes) {
     internalTypes.add("Macro Out");
     internalTypes.add("Macro MIDI In");
     internalTypes.add("Macro MIDI Out");
+    internalTypes.add("Channel Strip");
+    internalTypes.add("Master");
 
     for (const auto& type : internalTypes) {
         const juce::var json =

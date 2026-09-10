@@ -55,6 +55,8 @@ add_executable(Tests
     MidiClipFileTests.cpp
     PeaksFileTests.cpp
     RecordTapTests.cpp
+    ChannelStripTests.cpp
+    MixerSoloTests.cpp
     LatencyAlignmentTests.cpp
     AudioClipPlaybackTests.cpp
     HostedPluginTests.cpp

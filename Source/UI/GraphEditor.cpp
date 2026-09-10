@@ -44,6 +44,7 @@
 #include <functional>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <set>
 #include <tuple>
 #include <unordered_map>
@@ -4861,11 +4862,42 @@ bool GraphEditor::macroHasMuteEligibleMember(const juce::String& macroId) const 
     return false;
 }
 
+namespace {
+// The members a macro's Bypass fan-out touches. For an ordinary macro that is every member. For a
+// CHANNEL macro — one containing a Channel Strip — the source node(s) and the strip itself are
+// skipped (docs/mixer.md §5.5): "bypass" on a channel means "bypass the inserts", so the chain's
+// effects go dry while the source keeps producing and the strip keeps passing signal. Mute has no
+// such carve-out — muting a channel macro mutes the strip too.
+std::vector<juce::AudioProcessorGraph::NodeID>
+bypassFanOutMembers(juce::AudioProcessorGraph& graph, std::vector<juce::AudioProcessorGraph::NodeID> members) {
+    auto typeOf = [&graph](juce::AudioProcessorGraph::NodeID nodeId) -> std::optional<ModuleType> {
+        auto* node = graph.getNodeForId(nodeId);
+        auto* mb = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
+        return mb != nullptr ? std::optional<ModuleType>(mb->getModuleType()) : std::nullopt;
+    };
+    const bool isChannelMacro = std::any_of(members.begin(), members.end(),
+                                            [&](auto nodeId) { return typeOf(nodeId) == ModuleType::ChannelStrip; });
+    if (!isChannelMacro)
+        return members;
+    members.erase(std::remove_if(members.begin(), members.end(),
+                                 [&](auto nodeId) {
+                                     const auto type = typeOf(nodeId);
+                                     return type == ModuleType::ChannelStrip ||
+                                            type == ModuleType::TimelineMidiSource ||
+                                            type == ModuleType::TimelineAudioSource;
+                                 }),
+                  members.end());
+    return members;
+}
+} // namespace
+
 GraphEditor::MacroToggleState GraphEditor::macroBypassState(const juce::String& macroId) const {
     auto& graph = audioEngine.getGraph();
     bool anyOn = false;
     bool anyOff = false;
-    for (auto nodeId : resolvedMacroMemberModuleNodes(macroId)) {
+    // Reports over exactly the members the fan-out below toggles, so a channel macro whose inserts
+    // are all bypassed reads AllOn even though its strip and source never are.
+    for (auto nodeId : bypassFanOutMembers(graph, resolvedMacroMemberModuleNodes(macroId))) {
         auto* node = graph.getNodeForId(nodeId);
         auto* mb = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
         if (mb == nullptr)
@@ -4896,7 +4928,8 @@ GraphEditor::MacroToggleState GraphEditor::macroMuteState(const juce::String& ma
 }
 
 void GraphEditor::setMacroBypassed(const juce::String& macroId, bool bypassed) {
-    const auto memberNodes = resolvedMacroMemberModuleNodes(macroId);
+    // A channel macro skips its source and strip — see bypassFanOutMembers.
+    const auto memberNodes = bypassFanOutMembers(audioEngine.getGraph(), resolvedMacroMemberModuleNodes(macroId));
     if (memberNodes.empty())
         return;
 

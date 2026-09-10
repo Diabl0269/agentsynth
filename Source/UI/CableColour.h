@@ -194,6 +194,10 @@ inline ModuleCategory categoryFor(ModuleType t) noexcept {
     case ModuleType::MacroOutlet:
     case ModuleType::MacroMidiInlet:
     case ModuleType::MacroMidiOutlet:
+    // The mixer's strip and bus: level, balance and a sum — plumbing with a fader, no DSP role a
+    // category colour would say anything about.
+    case ModuleType::ChannelStrip:
+    case ModuleType::Master:
         return ModuleCategory::Utility;
     }
     return ModuleCategory::Utility;

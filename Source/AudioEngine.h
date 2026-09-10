@@ -144,6 +144,22 @@ public:
     void setInputMonitoringEnabled(bool enabled) noexcept;
     bool isInputMonitoringEnabled() const noexcept;
 
+    // ---- Mixer solo gate (docs/mixer.md §5.3) ----
+    // The engine owns "how many ChannelStrips are soloed?". MESSAGE THREAD: recounted by scanning
+    // the graph — refreshSoloGate() runs inside publishTimeline(), which every graph change already
+    // has to call, so a deleted/replaced/undone soloed strip can never leave the mix stuck silent.
+    // Any path that changes the graph WITHOUT reaching publishTimeline (the plugin's
+    // setStateInformation) calls refreshSoloGate() itself. The audio thread reads the count once
+    // per render pass and publishes "any soloed?" to TransportService::setMixerSoloActiveForBlock.
+    //
+    // setChannelStripSoloed() is the one call a UI should make: it flips the strip's own flag and
+    // recounts, ordered so no render pass ever sees the gate closed with nothing soloed. Returns
+    // false when `node` is not a Channel Strip in this graph. Not undoable and not a parameter
+    // write, by design (§5.3).
+    void refreshSoloGate();
+    bool setChannelStripSoloed(juce::AudioProcessorGraph::NodeID node, bool soloed);
+    int getSoloedStripCount() const noexcept { return soloedStripCount_.load(std::memory_order_relaxed); }
+
     // The feedback guard's one-shot report: true if the guard tripped since the last call, false
     // otherwise — and an atomic exchange back to false in the same call, so a caller that polls
     // (MainComponent's 10 Hz timer) consumes a trip exactly once however many ticks pass before it
@@ -503,6 +519,9 @@ private:
     // the message thread by isInputMonitoringEnabled(). Default false: with nothing ever calling
     // setInputMonitoringEnabled(true), this is exactly today's silent-input behaviour.
     std::atomic<bool> inputMonitoringEnabled_{false};
+    // Soloed ChannelStrip count. Message-thread writes (refreshSoloGate / setChannelStripSoloed),
+    // audio-thread reads (renderPass). See refreshSoloGate().
+    std::atomic<int> soloedStripCount_{0};
     // Set true by the guard (audio thread) on a trip; consumed (and reset) by
     // consumeFeedbackGuardTripped() (message thread poll).
     std::atomic<bool> feedbackGuardTripped_{false};

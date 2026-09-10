@@ -90,6 +90,9 @@ ExpectedMidiFlags expectedFlagsFor(ModuleType type) {
     // from MacroMidiInlet/MacroMidiOutlet rather than one type with a "kind" flag.
     case ModuleType::MacroInlet:
     case ModuleType::MacroOutlet:
+    // The mixer's strip and bus (P9-2): audio in, audio out, no MIDI either way.
+    case ModuleType::ChannelStrip:
+    case ModuleType::Master:
         return {false, false};
 
     // ---- A genuine MIDI pass-through: neither reads note/CC semantics nor emits them, but the

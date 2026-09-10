@@ -120,6 +120,22 @@ The timeline's clock and the headless render harness built on it. No audio devic
 | `MidiArmedPathUnchanged` | an armed MIDI track records exactly as the recorder left it — no tap is created at the click or by the poll, and the committed clip has notes and an empty `assetRef` |
 | `AudioRecordWithoutAnAudioOutputIsRefused` | no master bus ⇒ refused with a status message, no tap, no clip, and the transport is **not** started |
 
+### Mixer channel tests (32 tests)
+
+`Tests/ChannelStripTests.cpp` and `Tests/MixerSoloTests.cpp` — the P9-2 `Channel Strip` / `Master` nodes and the solo gate ([`mixer.md`](mixer.md)). Headless. **Module-level** tests (`ChannelStripTest`, `MasterModuleTest`) drive the processors directly, with a bare `synth::TransportService` on the playhead when the gate matters. **Engine-level** `MixerSoloTest` cases build a hosted `AudioEngine` rig (two strips into Master's Mix, one constant source into Direct) and render through it, so the per-block gate is exercised exactly as the engine publishes it. The `MasterSplice*` cases give their bare graph `setPlayConfigDetails(2, 2, ...)` first — without it Audio Output has zero channels and every connection into it is silently refused. Channel macro bypass is covered by `MacroBypassMute.ChannelMacroBypassSkipsSourceAndStripButMuteIncludesTheStrip`.
+
+| What it covers | |
+|-------|-------|
+| `ChannelStripTest.*Pan*` / `Gain*` | balance-law pan (unity centre, mono feeds both legs, only the far leg attenuates); gain in dB with the -60 dB floor as true silence |
+| `ReservedChannelsAreClearedEveryBlock` | ch1..3 between the legs never leak |
+| `Bypass*` / `MuteClears` | bypass is dry (a bypassed mono strip still feeds both legs), mute clears — two branches |
+| `MeterReportsTheLastBlocksPostFaderPeakWithoutConsumingIt` | the meter is a plain per-block store, readable twice |
+| `ShapeIsFixedOnceWritten` / `ShapeLocksOnceTheStripIsLive` / `ExtraStateRoundTripsShapeAndSolo` / `JackMap*` | mono/stereo is fixed for the strip's lifetime; shape + solo round-trip through trusted extra state; the right leg sits on `kRightBase` |
+| `MasterModuleTest.*` | Direct summed into Mix before the fader; bypass is a unity sum; four labelled inputs and no Dual I/O toggle |
+| `MixerSoloTest` gate cases | a non-soloed strip (bypassed too) and Master's Direct go silent while any strip is soloed; no transport means no gating; solo never writes a mute parameter |
+| `DeletingASoloedStripReleasesTheGateAtPublishTimeline` / `UndoRedoAcrossAGraphRebuildSettlesTheGate` | the count is recounted from the graph, so the mix is never stuck silent |
+| `MasterSplice*` / `MasterIsASingleton` / `MasterGoesInFrontOfAnExistingRecTap` / `MasterSpliceNeedsAnOutput` | one undo step; strips re-route to Mix, everything else to Direct; at most one Master; spliced ahead of the Rec Tap; refused with no output |
+
 ### Audio clip playback tests (24 tests)
 
 `Tests/AudioClipPlaybackTests.cpp`. Five layers. Playback tests render through `synth::OfflineTransportDriver` exactly the way `TimelineE2ETests.cpp` does, but assert **bit-exact sample content** rather than RMS windows, which two things make possible: the test WAV is 32-bit IEEE float carrying exactly-representable values (`n / 65536`), and the streamer's prefetch thread is **paused** (`setPrefetchPausedForTest`) and driven by `pumpForTest()` from the render loop's per-block callback. There is no sleep and no "eventually the ring fills" wait anywhere in the file.
