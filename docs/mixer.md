@@ -246,9 +246,13 @@ and strip, or a shared node feeding more than one channel — the column instead
 list read-only with an "Edit on canvas" link, rather than presenting a branching chain as if it
 were a reorderable list.
 
-### 5.7 Lane presets
+### 5.7 Track presets
 
-**"Channel template" and "track preset" are one concept: the lane preset.** A lane preset is
+**Naming.** The product says **track** everywhere, in the UI and in this doc. "Lane" stays reserved
+for what it already means in this codebase: the clip and automation lanes *inside* a track
+(`docs/timeline_panel_clips_automation.md`).
+
+**"Channel template" and "track preset" are one concept: the track preset.** A track preset is
 `{ track kind, channel chain, strip settings, optional clips }`. Every track kind — **Audio**;
 **Instrument** (which also covers a MIDI track that alone drives an instrument, per the link rule
 in §5.2) — has its own default preset.
@@ -258,6 +262,11 @@ in §5.2) — has its own default preset.
   default in a dropdown.
 - **Creating a track.** The `+ Track` control lists available presets grouped by type, so a new
   track can start from any saved preset, not only the type's default.
+- **Reusing a saved preset.** Defaults only decide what a plain `+ Track -> Audio` /
+  `+ Track -> Instrument` creates. Any saved preset can be inserted at any time regardless of the
+  defaults: `+ Track` lists every saved preset grouped by type, and "Insert track preset from
+  file..." loads one saved anywhere on disk. Saving a preset never changes a default unless the
+  user also picks "Set as default".
 - **What a saved preset carries beyond the box.** Saving or exporting a track's channel must also
   capture every module **outside** the channel's macro that feeds it through a port — a shared LFO
   is the running example (§5.8). The save walks upstream transitively through modulation/CV/MIDI
@@ -359,14 +368,14 @@ All four decisions from the P9-1 proposal are settled. Each is recorded here wit
 chosen and its refinement; the design in §5 already reflects these in full. The rejected
 alternatives are kept as one line each for the record.
 
-**D1 — Should every lane be a channel? Chosen: channels follow audio (§5.2).** Audio and
+**D1 — Should every track be a channel? Chosen: channels follow audio (§5.2).** Audio and
 instrument tracks get a channel automatically; a MIDI track playing a shared instrument uses that
 instrument's channel instead of getting its own. Refined with the auto-create-on-connect workflow,
 the track/channel link rule (name sync, live colour sync, M/S drive), and the channel chip.
 *Rejected: every track owns a channel (duplicates shared instruments); every track gets a column
 (two kinds of column to learn).*
 
-**D2 — What happens to modules a lane shares with others when it becomes a channel? Chosen: keep
+**D2 — What happens to modules a track shares with others when it becomes a channel? Chosen: keep
 them shared (§5.8).** Exclusive modules move into the box; a shared module stays outside via an
 auto-created port; a merge point becomes its own bus channel. Refined so that saving or exporting a
 channel also captures every outside module that feeds it, walked upstream transitively and stopped
@@ -375,7 +384,7 @@ everything shared (breaks phase/CPU/shared-reverb sanity the instant you click);
 dialog on every conversion).*
 
 **D3 — What goes in a new channel by default? Chosen: EQ -> Compressor, added bypassed.** Refined
-by merging "channel template" and "track preset" into one **lane preset** concept — per-track-kind
+by merging "channel template" and "track preset" into one **track preset** concept — per-track-kind
 default, saved and set from the track header or the channel menu, listed in Preferences -> Mixer
 and in the `+ Track` control (§5.7). *Rejected: EQ -> Compressor live at neutral settings (CPU cost
 on every channel regardless of use); empty (no baseline at all).*
@@ -431,10 +440,10 @@ Main line, in dependency order:
      docked panel in a headless test; keyboard focus in one detached window does not leak into the
      other; switching the placement preference moves the panel without losing its state.
 
-6. **P9-7 (T176) — Lane presets.** Save/set-default from the track header and channel menu,
+6. **P9-7 (T176) — Track presets.** Save/set-default from the track header and channel menu,
    Preferences -> Mixer defaults, `+ Track` preset listing, the outside-module walk-and-copy rule
    (§5.7).
-   - Tests: a lane preset round-trips through `validatePatch(trusted=false)` before a trusted
+   - Tests: a track preset round-trips through `validatePatch(trusted=false)` before a trusted
      apply; a hand-edited preset containing a `"timeline"` key is refused; a preset whose channel
      depends on an outside shared module imports with a fresh copy of that module wired to the
      same ports, not a reference to the original.
@@ -448,7 +457,7 @@ Side tracks (each independent of the main line beyond its own listed dependency)
   implementation (a send is a tap on a strip feeding a bus channel, per §9, but the mechanism
   itself isn't specified here).
 - **P9-10 (T179) — EQ curve thumbnail on mixer columns.** After P9-5.
-- **P9-11 (T180) — Gate module.** No dependency on the rest of P9; only needed if a default lane
+- **P9-11 (T180) — Gate module.** No dependency on the rest of P9; only needed if a default track
   preset (§5.7/§7 D3) should include one.
 - **T181 — Mixer accessibility**, in the Accessibility epic: column navigation, the existing
   rebindable M/S keys acting on the focused column, fader nudge, screen-reader labels for faders
