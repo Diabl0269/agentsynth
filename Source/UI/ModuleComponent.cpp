@@ -2105,12 +2105,16 @@ void ModuleComponent::paintMacroPortWidget(juce::Graphics& g) {
     const juce::Colour jackAccentColour = themeColors.accent;
     constexpr float kJackRadius = 3.5f; // 7px dot, down from a full card's 10px (fix G4)
 
-    // T162: a port with a user colour (MacroPort::colour, set from the Configure I/O modal's swatch)
-    // paints its dot in THAT colour; otherwise the kind tint (audioWire for MIDI, accent for
-    // AudioCV) — the same fallback the collapsed card's MacroCardComponent::paint uses, so an
-    // expanded docked widget and a collapsed card read a port's jack identically.
-    const juce::Colour midiJackColour = resolveMacroPortJackColour(ownership.port, audioJackColour);
-    const juce::Colour cvJackColour = resolveMacroPortJackColour(ownership.port, jackAccentColour);
+    // T162/T165: a port with a user colour (MacroPort::colour, set from the Configure I/O modal's
+    // swatch) paints its dot in THAT colour; otherwise the kind tint (audioWire for MIDI, accent
+    // for AudioCV) — the same fallback the collapsed card's MacroCardComponent::paint uses, so an
+    // expanded docked widget and a collapsed card read a port's jack identically. T165: resolve via
+    // effectiveMacroPortJackColour (NOT resolveMacroPortJackColour) so an in-progress live preview
+    // from the open ColourPickerPopup wins over the stored colour, mirroring the card's preview-first
+    // branch -- a docked widget that read only the stored colour would update its jack only on commit
+    // ("after closing the modal"), the exact symptom this closes.
+    const juce::Colour midiJackColour = effectiveMacroPortJackColour(ownership.port, audioJackColour);
+    const juce::Colour cvJackColour = effectiveMacroPortJackColour(ownership.port, jackAccentColour);
 
     if (module->acceptsMidi() || module->producesMidi()) {
         if (module->acceptsMidi()) {

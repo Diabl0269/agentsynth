@@ -1035,8 +1035,19 @@ In order, each independently shippable:
    PreviewThenCommitIsOneUndoStepAndShowsStoredColour, ColourPickerFiresOnPreviewThenCommitsOnce}`.
    No data / undo change beyond T165: the preview is view-layer only, and the commit is the same single
     `MacroSnapshotAction` as before.
+    - **Founder re-report (“even worse — only updates after closing the modal”).** A live preview had been
+   wired end-to-end (the picker's `onPreview` arms `portColourPreview_` on both surfaces, `paint()` reads
+     it preview-first) but the *docked* `ModuleComponent::paintMacroPortWidget` was painting through
+     `resolveMacroPortJackColour` (the committed-colour path) instead of `effectiveMacroPortJackColour` (the
+     preview-first path), so a docked widget ignored the armed preview and showed its jack update only once
+     the pick committed to `MacroPort::colour` on close — exactly the “only after closing the modal” symptom.
+     The fix is to paint through `effectiveMacroPortJackColour` (the same resolver the card's preview-first
+     branch and the test seam use), so the docked widget tracks the open selector in real time just like the
+     card. `ModuleComponent::effectiveMacroPortJackColour` (and its test seam, asserted in the
+   `MacroPortWidget.*` cases) now guard the exact paint path — a headless test cannot observe a
+   repaint, so the guarantee is "the paint path resolves the preview", not "a frame painted".
 
-   **DONE (T153, founder review round 3, item 3 second half): keyboard accessibility.** Every
+    **DONE (T153, founder review round 3, item 3 second half): keyboard accessibility.** Every
    real control in the Configure I/O modal already gets Tab/Return/Space for free from
    `juce::Button`/`juce::ComboBox`/`juce::TextEditor`'s own defaults, so the fixes needed were
    narrower than a full rewrite:
