@@ -94,7 +94,11 @@ void MacroCardComponent::paint(juce::Graphics& g) {
         for (const auto& port : owner.macroCardPortLayout(macro->id)) {
             const juce::Colour kindTint =
                 port.kind == synth::MacroPortKind::Midi ? themeColors.audioWire : themeColors.accent;
-            g.setColour(port.colour.value_or(kindTint));
+            // T165: an armed live preview (the open picker's port, preview-first) wins over the
+            // stored port colour; T152's stored user colour next; else the kind tint -- the same
+            // fallback the collapsed card always painted the jack with.
+            const bool previewed = portColourPreview_.has_value() && portColourPreview_->first == port.nodeUuid;
+            g.setColour(previewed ? portColourPreview_->second : port.colour.value_or(kindTint));
             g.fillEllipse((float)port.jackPos.x - 5.0f, (float)port.jackPos.y - 5.0f, 10.0f, 10.0f);
 
             // Port name (founder-review fix F2, item 3/docs/macros.md §7 item 4: "it's not shown
@@ -370,4 +374,30 @@ juce::String MacroCardComponent::getTooltip() {
         shown.add("+" + juce::String(names.size() - kMaxNamesShown) + " more");
 
     return shown.joinIntoString("\n");
+}
+
+// ---- T165 live jack-colour preview (view-layer only; never the stored MacroPort::colour) -------
+void MacroCardComponent::setPortColourPreview(const juce::String& nodeUuid, juce::Colour c) {
+    portColourPreview_ = {nodeUuid, c};
+}
+
+void MacroCardComponent::clearPortColourPreview(const juce::String& nodeUuid) {
+    // Only clear when this entry actually matches the node we're told to clear — a stale clear for a
+    // different port (one the picker is no longer previewing) must not wipe a fresh preview.
+    if (portColourPreview_ && portColourPreview_->first == nodeUuid)
+        portColourPreview_.reset();
+}
+
+bool MacroCardComponent::hasPortColourPreviewForTest(const juce::String& nodeUuid) const {
+    return portColourPreview_.has_value() && portColourPreview_->first == nodeUuid;
+}
+
+juce::Colour MacroCardComponent::resolvePortJackColourForTest(const juce::String& nodeUuid,
+                                                              const std::optional<juce::Colour>& stored,
+                                                              juce::Colour kindTint) const {
+    // Mirrors paint()'s preview-first branch exactly: the armed preview (for THIS node) wins, else
+    // the stored user colour, else the kind tint.
+    if (portColourPreview_.has_value() && portColourPreview_->first == nodeUuid)
+        return portColourPreview_->second;
+    return stored.value_or(kindTint);
 }

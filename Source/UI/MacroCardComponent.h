@@ -6,6 +6,8 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <optional>
+#include <utility>
 #include <vector>
 
 class GraphEditor; // Forward declaration
@@ -74,6 +76,25 @@ public:
             hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
     }
 
+    /** T165 live preview of ONE port's jack colour on this collapsed card, shown in real time while
+     *  the Configure I/O picker is open without waiting for the pick to commit. View-layer ONLY — it
+     *  is never written to the stored `synth::MacroPort::colour`, so a live preview pushes no undo
+     *  step and dirties no data (the property T152's "commit once on close" needs to avoid a
+     *  `recordGraphAndMacroChange` entry per pixel of slider movement). Keyed by the port's `nodeUuid`
+     *  because a card draws all its macro's ports at once; the single open picker previews one of them,
+     *  so `set`/`clear` carry a `nodeUuid`. Armed by `GraphEditor::previewMacroPortColour` on every
+     *  picker tick, cleared by `GraphEditor::clearMacroPortColourPreview` when the pick commits or the
+     *  picker closes. Unarmed by default. */
+    void setPortColourPreview(const juce::String& nodeUuid, juce::Colour c);
+    void clearPortColourPreview(const juce::String& nodeUuid);
+
+    // Test seams: is `nodeUuid`'s jack preview armed, and what colour will paint() use for it
+    // (mirrors paint()'s preview-first branch so a headless test can assert "the card tracks the
+    // live pick" without capturing pixels).
+    bool hasPortColourPreviewForTest(const juce::String& nodeUuid) const;
+    juce::Colour resolvePortJackColourForTest(const juce::String& nodeUuid, const std::optional<juce::Colour>& stored,
+                                              juce::Colour kindTint) const;
+
 private:
     /** `priorSelection` (T138): whatever was selected right before mouseDown's own reselect —
      *  see GraphEditor::buildMacroMenu's addCandidateSelection comment for why this must be
@@ -116,6 +137,11 @@ private:
     bool bodyDragActive = false;
 
     std::unique_ptr<juce::TextEditor> nameEditor;
+
+    // T165 live jack-colour preview for the single open picker's port. A pair (nodeUuid -> colour)
+    // rather than a map because only one picker (one port) is ever open at a time, so a single
+    // optional entry is correct and needs no container/hash. view-layer only (see setPortColourPreview).
+    std::optional<std::pair<juce::String, juce::Colour>> portColourPreview_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MacroCardComponent)
 };

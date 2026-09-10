@@ -1043,3 +1043,231 @@ TEST(MacroPortWidget, ChangeMacroPortColourIsOneUndoStep) {
     auto targets = editor.repaintMacroPortColourTargets(macroId, uuid);
     EXPECT_EQ(targets.widget, findComponent(editor, nodeIdForUuid(engine, uuid)));
 }
+
+// --------------------------------------------------------------------------------------------
+// T165 (continuation): a macro port's configured colour updates in REAL TIME on both surfaces as
+// the Configure I/O picker's selector moves — the same live-preview behaviour the timeline track
+// colour has — WITHOUT a per-pixel undo step. The preview is a view-layer-only override (a
+// transient on the docked ModuleComponent and per-port on the collapsed MacroCardComponent); the
+// stored `synth::MacroPort::colour` is written exactly once, on pick COMMIT (onClose).
+//
+// The seam, exactly as T162's commit repaint: no public repaint-count API in JUCE, so a test
+// asserts the TARGETS and the RESOLVED COLOUR (via resolve/effective seams) rather than repaint()
+// having painted. The three guarantees asserted below:
+//   (1) previewMacroPortColour arms BOTH surfaces and repaints them, but writes NO stored colour,
+//       pushes NO undo step, and dirties NO data;
+//   (2) the docked ModuleComponent's jack paint uses the preview while armed, and the collapsed
+//       card does per-port;
+//   (3) the pick COMMIT writes the stored colour once, clears the preview, and leaves the jack
+//       showing the now-stored colour (preview-clear == store, so the colour never glitches).
+// --------------------------------------------------------------------------------------------
+
+TEST(MacroPortWidget, PreviewArmsBothSurfacesButWritesNoStoredColourAndNoUndo) {
+    // Expanded so a docked ModuleComponent fronts the port; a macro is collapsed-then-expanded, so
+    // the card AND the docked widget both exist to receive the live preview.
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    const auto uuid =
+        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    ASSERT_FALSE(uuid.isEmpty());
+
+    auto* card = editor.getMacroCardForTest(macroId);
+    auto* widget = findComponent(editor, nodeIdForUuid(engine, uuid));
+    auto* port = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
+    ASSERT_NE(card, nullptr);
+    ASSERT_NE(widget, nullptr);
+    ASSERT_NE(port, nullptr);
+    const bool hadUndo = undo.canUndo();
+    ASSERT_FALSE(port->colour.has_value()); // uncoloured port — the preview is what should win
+
+    // Arm the live preview, the way the picker's onPreview would on every selector tick.
+    const juce::Colour preview(0xffaa5500);
+    editor.previewMacroPortColour(macroId, uuid, preview);
+
+    // (1) Both surfaces now resolve to the preview colour — and no data was written, no undo pushed.
+    EXPECT_TRUE(card->hasPortColourPreviewForTest(uuid));
+    EXPECT_EQ(card->resolvePortJackColourForTest(uuid, port->colour, juce::Colour(0xff000000)), preview);
+    EXPECT_TRUE(widget->hasPortColourPreviewForTest());
+    EXPECT_EQ(widget->effectiveMacroPortJackColour(port, juce::Colour(0xff000000)), preview);
+    EXPECT_FALSE(port->colour.has_value());
+    EXPECT_EQ(undo.canUndo(), hadUndo) << "a live preview must push no undo entry";
+
+    // A second tick overwrites the armed colour (idempotent), still writing no data.
+    editor.previewMacroPortColour(macroId, uuid, juce::Colours::cyan);
+    EXPECT_EQ(widget->effectiveMacroPortJackColour(port, juce::Colour(0xff000000)), juce::Colours::cyan);
+    EXPECT_FALSE(port->colour.has_value());
+    EXPECT_EQ(undo.canUndo(), hadUndo);
+}
+
+TEST(MacroPortWidget, DockedWidgetResolvesPreviewThenStoredThenKindTint) {
+    // The docked ModuleComponent's jack paint source, exactly ModuleComponent::effectiveMacroPortJackColour:
+    // a live preview wins, else the committed user colour, else the kind tint — so a committed colour
+    // takes over the moment its preview is cleared, and an uncoloured port shows the tint.
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+    const auto uuid =
+        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    ASSERT_FALSE(uuid.isEmpty());
+    auto* widget = findComponent(editor, nodeIdForUuid(engine, uuid));
+    ASSERT_NE(widget, nullptr);
+
+    auto* port = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
+    ASSERT_FALSE(port->colour.has_value());
+    EXPECT_FALSE(widget->hasPortColourPreviewForTest());
+    const juce::Colour kindTint(0xff00cc33);
+    EXPECT_EQ(widget->effectiveMacroPortJackColour(port, kindTint), kindTint)
+        << "no preview, no stored: the tint is the paint source";
+    // A live preview overrides even the kind tint.
+    editor.previewMacroPortColour(macroId, uuid, juce::Colours::orange);
+    EXPECT_TRUE(widget->hasPortColourPreviewForTest());
+    EXPECT_EQ(widget->effectiveMacroPortJackColour(port, juce::Colour(0xff00cc33)), juce::Colours::orange);
+
+    // Committing the pick stores the colour AND clears the preview in one step, so the jack now
+    // resolves to the stored colour — no glitch, because preview and store converged on one value.
+    editor.changeMacroPortColour(macroId, uuid, juce::Colours::cyan);
+    EXPECT_FALSE(widget->hasPortColourPreviewForTest());
+    auto* committedPort = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
+    ASSERT_TRUE(committedPort->colour.has_value());
+    EXPECT_EQ(widget->effectiveMacroPortJackColour(committedPort, juce::Colour(0xff00cc33)), juce::Colours::cyan);
+}
+
+TEST(MacroPortWidget, CollapsedCardPreviewIsScopedToOnePort) {
+    // The collapsed card previews ONE port at a time: a clear addressed at a different node must not
+    // wipe the live preview (a stale picker for another port closing mid-drag is a no-op), and a
+    // clear for the port's own node disarms it back to stored-or-tint.
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    // Left collapsed on purpose — the card is the live collapsed surface here.
+    const auto uuid =
+        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    ASSERT_FALSE(uuid.isEmpty());
+    auto* card = editor.getMacroCardForTest(macroId);
+    auto* port = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
+    ASSERT_NE(card, nullptr);
+    ASSERT_NE(port, nullptr);
+
+    editor.previewMacroPortColour(macroId, uuid, juce::Colours::orange);
+    EXPECT_TRUE(card->hasPortColourPreviewForTest(uuid));
+    EXPECT_EQ(card->resolvePortJackColourForTest(uuid, port->colour, juce::Colour(0xff000000)), juce::Colours::orange);
+
+    // A clear addressed at a node the card isn't previewing keeps the armed one.
+    card->clearPortColourPreview(juce::Uuid().toDashedString());
+    EXPECT_TRUE(card->hasPortColourPreviewForTest(uuid));
+
+    // A clear for the port's own node disarms it back to stored-or-tint.
+    card->clearPortColourPreview(uuid);
+    EXPECT_FALSE(card->hasPortColourPreviewForTest(uuid));
+    EXPECT_EQ(card->resolvePortJackColourForTest(uuid, port->colour, juce::Colour(0xff00cc33)),
+              juce::Colour(0xff00cc33));
+}
+
+TEST(MacroPortWidget, PreviewThenCommitIsOneUndoStepAndShowsStoredColour) {
+    // The end-to-end guarantee behind T165: many preview ticks push zero undo steps and write no
+    // data; the single commit pushes exactly one undo step and stores the colour, leaving the jack
+    // showing it (preview-clear == store, so the colour never glitches).
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+    const auto uuid =
+        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    ASSERT_FALSE(uuid.isEmpty());
+    auto* widget = findComponent(editor, nodeIdForUuid(engine, uuid));
+    ASSERT_NE(widget, nullptr);
+
+    auto* port = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
+    const bool hadUndo = undo.canUndo();
+
+    // A drag: several live preview ticks — no data written, no undo step.
+    editor.previewMacroPortColour(macroId, uuid, juce::Colours::red);
+    editor.previewMacroPortColour(macroId, uuid, juce::Colours::green);
+    editor.previewMacroPortColour(macroId, uuid, juce::Colours::blue);
+    EXPECT_EQ(widget->effectiveMacroPortJackColour(port, juce::Colour(0xff000000)), juce::Colours::blue);
+    EXPECT_FALSE(port->colour.has_value());
+    EXPECT_EQ(undo.canUndo(), hadUndo) << "a drag of preview ticks must push no undo entry";
+
+    // The commit: exactly one undo step, the colour stored, and the identical preview cleared.
+    editor.changeMacroPortColour(macroId, uuid, juce::Colours::blue);
+    auto* committedPort = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
+    ASSERT_TRUE(committedPort->colour.has_value());
+    EXPECT_EQ(committedPort->colour.value(), juce::Colours::blue);
+    EXPECT_FALSE(widget->hasPortColourPreviewForTest());
+    EXPECT_EQ(widget->effectiveMacroPortJackColour(committedPort, juce::Colour(0xff000000)), juce::Colours::blue);
+    EXPECT_TRUE(undo.canUndo()) << "the single commit must push exactly one undo step";
+}
+
+TEST(MacroPortWidget, ColourPickerFiresOnPreviewThenCommitsOnce) {
+    // The picker's own wiring, as GraphEditor::promptConfigureMacroIO wires it: onPreview (a live
+    // tick) previews without committing, and onCommit (on close) commits exactly once — the split
+    // that keeps a slider drag undo-free while the jack still tracks the pick in real time.
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+    const auto uuid =
+        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    ASSERT_FALSE(uuid.isEmpty());
+    auto* widget = findComponent(editor, nodeIdForUuid(engine, uuid));
+    ASSERT_NE(widget, nullptr);
+
+    auto* port = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
+    const bool hadUndo = undo.canUndo();
+
+    synth::ui::MacroPortConfigDialog dialog(
+        juce::String("Macro"),
+        {synth::ui::MacroPortConfigDialog::PortRow{uuid, true, "In A", synth::MacroPortKind::AudioCV,
+                                                   MacroPortShape::Mono, 1, port->colour}});
+    int previews = 0;
+    dialog.onPreviewPortColour = [&](const juce::String& u, juce::Colour c) {
+        ++previews;
+        editor.previewMacroPortColour(macroId, u, c);
+    };
+    dialog.onChangePortColour = [&](const juce::String& u, std::optional<juce::Colour> c) {
+        editor.changeMacroPortColour(macroId, u, c);
+    };
+
+    auto picker = dialog.createRowColourPickerForTest(0);
+    ASSERT_NE(picker, nullptr);
+
+    // A slider drag drives the popup with several live preview ticks — each previews, none commits.
+    picker->setCurrentColourForTest(juce::Colour(0xff111111));
+    picker->setCurrentColourForTest(juce::Colour(0xff222222));
+    EXPECT_EQ(previews, 2) << "each tick must fire onPreview";
+    EXPECT_EQ(widget->effectiveMacroPortJackColour(port, juce::Colour(0xff000000)), juce::Colour(0xff222222));
+    EXPECT_FALSE(port->colour.has_value());
+    EXPECT_EQ(undo.canUndo(), hadUndo);
+
+    // Closing the popup fires onCommit exactly once: one undo step, the colour stored, preview cleared.
+    picker->commitForTest();
+    auto* committedPort = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
+    ASSERT_TRUE(committedPort->colour.has_value());
+    EXPECT_EQ(committedPort->colour.value(), juce::Colour(0xff222222));
+    ASSERT_TRUE(undo.canUndo());
+    EXPECT_FALSE(widget->hasPortColourPreviewForTest());
+}

@@ -1004,6 +1004,38 @@ In order, each independently shippable:
    this is a paint-timing fix on top of T162, so §5/§5.2 persistence and the undo step are unchanged
    (one `MacroSnapshotAction`, like every port-metadatum edit).
 
+   **DONE (T165 continuation, founder request: live colour preview):** T165 closed the first symptom —
+   a committed re-colour now repaints BOTH surfaces via `repaintMacroPortColourTargets`. But the picker
+   still only *committed* once, on close: while the user dragged the selector the jack did not move. T152
+   deliberately kept the picker "commit-once" because `changeMacroPortColour` records a `MacroSnapshotAction`,
+   so a per-tick commit is a per-pixel undo step. The fix keeps that property AND adds live feedback, exactly
+   like the timeline track colour: the picker's `onPreview` (fired on every selector tick / favourite click)
+   now drives a **view-layer-only** preview, and the single `onCommit` (on close) still writes the stored
+   `MacroPort::colour`.
+   - **View-layer preview, not data.** A live preview lives only on the two paint surfaces: a single
+     `std::optional<juce::Colour>` on `ModuleComponent` (one open picker previews one port) and a per-port
+     `std::optional<std::pair<juce::String, juce::Colour>>` on `MacroCardComponent` (a card draws every
+     port's jack at once, so the preview is keyed by the port's `nodeUuid`). Neither ever writes
+     `MacroPort::colour`, so a drag pushes **no** undo step and dirties no data. `ModuleComponent::paintMacroPortWidget`
+     and `MacroCardComponent::paint` now resolve the jack colour **preview-first** (via
+     `ModuleComponent::effectiveMacroPortJackColour` / `MacroCardComponent::resolvePortJackColourForTest`),
+     falling back to the stored colour, then the kind tint.
+   - **Wiring.** `MacroPortConfigDialog` gained an `onPreviewPortColour` callback (distinct from
+     `onChangePortColour`); `buildColourPicker` fires it on every preview, `GraphEditor::promptConfigureMacroIO`
+     routes it to `GraphEditor::previewMacroPortColour(macroId, nodeUuid, colour)`, which arms the preview on
+     both surfaces and repaints them via the shared `findMacroPortRecolourTargets` — the very same lookup the
+     commit path uses, so a preview and its commit can never target different surfaces.
+   - **The preview is disarmed at the data boundary.** `changeMacroPortColour` now ends with
+     `clearMacroPortColourPreview` (which resolves + repaints the same two surfaces), so **every** path that
+     commits a colour — not just the modal — disarms the armed preview in the same call. Because the committed
+     colour equals the preview that was armed, the jack shows the stored colour continuously, so it never
+     glitches when the last preview tick gives way to the commit.
+   Covered by `MacroPortWidget.{PreviewArmsBothSurfacesButWritesNoStoredColourAndNoUndo,
+   DockedWidgetResolvesPreviewThenStoredThenKindTint, CollapsedCardPreviewIsScopedToOnePort,
+   PreviewThenCommitIsOneUndoStepAndShowsStoredColour, ColourPickerFiresOnPreviewThenCommitsOnce}`.
+   No data / undo change beyond T165: the preview is view-layer only, and the commit is the same single
+    `MacroSnapshotAction` as before.
+
    **DONE (T153, founder review round 3, item 3 second half): keyboard accessibility.** Every
    real control in the Configure I/O modal already gets Tab/Return/Space for free from
    `juce::Button`/`juce::ComboBox`/`juce::TextEditor`'s own defaults, so the fixes needed were

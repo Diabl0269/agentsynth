@@ -2166,6 +2166,16 @@ juce::Colour ModuleComponent::resolveMacroPortJackColour(const synth::MacroPort*
     return (port != nullptr) ? port->colour.value_or(kindTint) : kindTint;
 }
 
+juce::Colour ModuleComponent::effectiveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint) const {
+    // T165: the armed live preview wins and ignores the kind tint (one picked colour drives both a
+    // MIDI and a CV jack); otherwise it is exactly the stored-colour resolution the static
+    // resolveMacroPortJackColour performs. Mirrors paintMacroPortWidget's own branch so a headless
+    // test can assert "the jack tracks the live pick" without capturing pixels.
+    if (portColourPreview_.has_value())
+        return *portColourPreview_;
+    return resolveMacroPortJackColour(port, kindTint);
+}
+
 std::optional<ModuleComponent::Port> ModuleComponent::getModTargetPortForPoint(juce::Point<int> localPoint) const {
     auto* mod = dynamic_cast<ModuleBase*>(module);
     if (mod == nullptr)

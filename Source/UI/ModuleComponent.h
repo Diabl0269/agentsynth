@@ -16,6 +16,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+#include <optional>
 
 class GraphEditor; // Forward declaration
 
@@ -71,6 +72,27 @@ public:
      *  and static so a test can pin the propagation without capturing pixels — paintMacroPortWidget
      *  is the only caller. */
     static juce::Colour resolveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint);
+
+    /** T165 live preview. While the Configure I/O picker is open, the user's in-progress jack
+     *  colour is shown in real time on the two surfaces that paint that jack — this docked widget
+     *  AND its own collapsed card — WITHOUT waiting for the pick to be committed. View-layer ONLY:
+     *  it is never written to the stored `synth::MacroPort::colour`, so a live preview pushes no
+     *  undo step and dirties no data — the exact property T152's "commit once on close" design
+     *  required to avoid a `recordGraphAndMacroChange` entry per pixel of slider movement. Armed by
+     *  `GraphEditor::previewMacroPortColour` on every picker tick, cleared by
+     *  `GraphEditor::clearMacroPortColourPreview` when the pick commits (or the picker closes). A
+     *  preview overrides BOTH the audio and CV jacks with the single picked colour, ignoring each
+     *  jack's own kind tint — that is the whole point of one picked colour. Unarmed by default. */
+    void setPortColourPreview(juce::Colour c) { portColourPreview_ = c; }
+    void clearPortColourPreview() { portColourPreview_.reset(); }
+
+    // Test seam: the colour `paintMacroPortWidget` will actually use for a jack, factoring in the
+    // armed preview (which wins, ignoring the kind tint — see setPortColourPreview). Mirrors the
+    // instance's own paint branch so a headless test can assert "the jack tracks the live pick" by
+    // calling this, exactly as StatusBarTests' gated-repaint precedent avoids intercepting
+    // Component::repaint (a no-op with no window). `port` is the boundary port the node fronts.
+    juce::Colour effectiveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint) const;
+    bool hasPortColourPreviewForTest() const noexcept { return portColourPreview_.has_value(); }
 
     /** Re-measures the card after its VISIBLE PORT COUNT changed for a reason that is not a
      *  parameter gesture — today only Audio Input, whose jacks follow the audio device. Same three
@@ -260,6 +282,7 @@ private:
 
     juce::AudioProcessor* module;
     juce::AudioProcessorGraph::NodeID nodeId;
+    std::optional<juce::Colour> portColourPreview_; // T165 live jack-colour preview; view-layer only
     GraphEditor& owner;
     juce::ComponentDragger dragger;
 
