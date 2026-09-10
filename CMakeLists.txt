@@ -238,6 +238,9 @@ add_library(Core STATIC
     Source/SnippetManager.h
     Source/SettingsMigration.cpp
     Source/SettingsMigration.h
+    # Mixer
+    Source/Mixer/MasterSplice.cpp
+    Source/Mixer/MasterSplice.h
     # Transport
     Source/Transport/BlockTimeInfo.h
     Source/Transport/BounceExporter.cpp
@@ -317,6 +320,8 @@ add_library(Core STATIC
     Source/Modules/MacroOutletModule.h
     Source/Modules/MacroMidiInletModule.h
     Source/Modules/MacroMidiOutletModule.h
+    Source/Modules/ChannelStripModule.h
+    Source/Modules/MasterModule.h
     Source/Modules/VisualBuffer.h
     Source/Modules/FX/DelayModule.h
     Source/Modules/FX/DistortionModule.h

@@ -886,6 +886,8 @@ const std::vector<std::pair<juce::String, const char*>> kDualIOOptOuts = {
                    "two unrelated CV jacks per side, and no audio output at all"},
     {"Rec Tap", "a hidden recording tap: its two channels are the take's capture pair, wired by the "
                 "record flow rather than patched, and it has no card to put a jack toggle on"},
+    {"Master", "the mix bus: its four inputs are two stereo BLOCKS (Mix L/R and Direct L/R), not an FX "
+               "pair plus CV, so a collapsed 'Audio' jack over ch0/ch1 would misdescribe it"},
 };
 
 // Modules that declare a second audio leg the shape rule cannot see (their own kRightBase block, or

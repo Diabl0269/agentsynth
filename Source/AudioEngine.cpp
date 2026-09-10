@@ -2,6 +2,7 @@
 #include "Modules/ADSRModule.h"
 #include "Modules/AttenuverterModule.h"
 #include "Modules/AudioInputModule.h"
+#include "Modules/ChannelStripModule.h"
 #include "Modules/ExternalMidiModule.h"
 #include "Modules/FX/DelayModule.h"
 #include "Modules/FX/DistortionModule.h"
@@ -175,6 +176,11 @@ void AudioEngine::shutdown() {
 }
 
 void AudioEngine::publishTimeline(const synth::TimelineDoc& doc) {
+    // Every graph change already has to reach this call (docs/architecture.md §8), which makes it
+    // the one place the mixer's soloed-strip count can be kept honest: a deleted, replaced or
+    // undone soloed strip must never leave the whole mix gated silent.
+    refreshSoloGate();
+
     auto snapshot = synth::TimelineSnapshot::buildFrom(doc);
 
     // The snapshot's address is stable across the move into publish() (unique_ptr moves the
@@ -623,6 +629,48 @@ void AudioEngine::setTransportEnabled(bool enabled) noexcept {
 
 bool AudioEngine::isTransportEnabled() const noexcept { return transportEnabled_.load(std::memory_order_relaxed); }
 
+namespace {
+// Soloed strips in `graph`, treating `overrideNode` (if valid) as having solo state
+// `overrideSoloed` instead of whatever its flag says right now.
+int countSoloedStrips(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID overrideNode = {},
+                      bool overrideSoloed = false) {
+    int count = 0;
+    for (auto* node : graph.getNodes()) {
+        if (node == nullptr)
+            continue;
+        auto* strip = dynamic_cast<ChannelStripModule*>(node->getProcessor());
+        if (strip == nullptr)
+            continue;
+        const bool soloed = node->nodeID == overrideNode ? overrideSoloed : strip->isSoloed();
+        if (soloed)
+            ++count;
+    }
+    return count;
+}
+} // namespace
+
+void AudioEngine::refreshSoloGate() {
+    soloedStripCount_.store(countSoloedStrips(mainProcessorGraph), std::memory_order_relaxed);
+}
+
+bool AudioEngine::setChannelStripSoloed(juce::AudioProcessorGraph::NodeID nodeId, bool soloed) {
+    auto* node = mainProcessorGraph.getNodeForId(nodeId);
+    auto* strip = node != nullptr ? dynamic_cast<ChannelStripModule*>(node->getProcessor()) : nullptr;
+    if (strip == nullptr)
+        return false;
+
+    // Ordered so no render pass sees "gate closed, nothing soloed" (every strip silent for a
+    // block): soloing raises the strip's flag BEFORE the count; un-soloing drops the count first.
+    if (soloed) {
+        strip->setSoloed(true);
+        refreshSoloGate();
+    } else {
+        soloedStripCount_.store(countSoloedStrips(mainProcessorGraph, nodeId, false), std::memory_order_relaxed);
+        strip->setSoloed(false);
+    }
+    return true;
+}
+
 void AudioEngine::setInputMonitoringEnabled(bool enabled) noexcept {
     inputMonitoringEnabled_.store(enabled, std::memory_order_relaxed);
 }
@@ -943,6 +991,10 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // every module — and the feedback guard below — agree on the same answer this pass.
     const bool monitoringEnabledThisPass = inputMonitoringEnabled_.load(std::memory_order_relaxed);
     transport.setInputMonitoringEnabledForBlock(monitoringEnabledThisPass);
+
+    // The mixer solo gate, same carrier and same once-per-pass rule: every strip and Master's
+    // Direct input read one answer for the whole pass. See refreshSoloGate().
+    transport.setMixerSoloActiveForBlock(soloedStripCount_.load(std::memory_order_relaxed) > 0);
 
     mainProcessorGraph.processBlock(buffer, midiMessages);
 

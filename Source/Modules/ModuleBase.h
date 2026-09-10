@@ -98,7 +98,14 @@ enum class ModuleType {
     // Poly-N), just acceptsMidi()/producesMidi(), like ExternalMidi/PolyMidi.
     MacroMidiInlet,
     // Internal-only: a Macro's MIDI outlet jack. Same reasoning as MacroMidiInlet, mirrored.
-    MacroMidiOutlet
+    MacroMidiOutlet,
+    // Internal-only: the end of one mixer channel — gain, balance pan, mute, and a solo flag the
+    // engine counts (docs/mixer.md §5). Created by the channel-creation flows, never offered by
+    // the library or the replace menu, never authorable by a model (kNonAuthorableModuleTypes).
+    ChannelStrip,
+    // Internal-only: the mix bus every strip feeds, spliced in front of Rec Tap / Audio Output
+    // when the first channel is created (docs/mixer.md §5.1). Same exclusions as ChannelStrip.
+    Master
 };
 
 // True for a MIDI-DRIVEN INSTRUMENT type — the shared predicate behind MainComponent's add-track

@@ -564,6 +564,14 @@ get wrong.
 A macro whose members are in mixed bypass states shows an indeterminate indicator; the command
 sets them all to the same state.
 
+**Channel macros (P9-2, [`docs/mixer.md`](mixer.md) §5.5).** When a macro contains a
+`Channel Strip`, the **Bypass** fan-out skips the strip and the source node(s) (Track In, Track
+Audio) — "bypass" on a channel means "bypass the inserts": the chain's effects go dry while the
+source keeps producing and the strip keeps passing signal. `macroBypassState` reports over the
+same reduced member set, so a channel whose inserts are all bypassed reads fully on. **Mute** has
+no such carve-out: muting a channel macro mutes the strip too. The filter is
+`bypassFanOutMembers` in `GraphEditor.cpp`.
+
 ### 5.7 Hosted plugin
 
 Nothing macro-specific. Because the graph stays flat and macros are canvas presentation, a macro

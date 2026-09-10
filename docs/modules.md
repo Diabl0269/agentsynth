@@ -499,6 +499,30 @@ Changing `Knobs` resizes the module in place, anchored at its top-left, at `Layo
 
 ---
 
+## Channel Strip Module (Mixer Channel, Hidden)
+
+`Source/Modules/ChannelStripModule.h`. The end of one mixer channel (P9-2; the design lives in [`docs/mixer.md`](mixer.md) §5). The mixer enumerates these; a column's fader, pan, mute and solo drive one.
+
+- **Ports**: fixed 5 raw channels a side — Left on ch0, Right on `kRightBase` = 4 (the split-block convention, never ch1; the same `kRightBase` the Macro In/Out port nodes use). ch1–3 are **reserved** (future gain/pan CV) and cleared every block. Output is **always stereo**; the input is **Mono** (one `In` jack on ch0, feeding both output legs) or **Stereo** (`Left`/`Right`). No MIDI. The (5, 5) shape inherits no Dual I/O toggle.
+- **Shape is fixed at creation** (§5.4): written once by `setShape()` (the channel-creation flow) or a trusted `setExtraState`, and locked from then on and from the first `prepareToPlay`. A later different shape is refused — changing width means replacing the strip.
+- **Parameters**: `gain` (dB, −60…+12, default 0; the −60 floor is silence), `pan` (−1…+1, the shared `ModuleBase::panGains` balance law — unity at centre), `muted`. Gain/pan are smoothed over 20 ms.
+- **Solo is not a parameter.** `setSoloed`/`isSoloed` is an atomic flag persisted in extra state (`{"shape": "mono"|"stereo", "solo": bool}`); the engine counts soloed strips and every non-soloed strip outputs silence while the count is nonzero — see [`architecture.md` § Mixer solo gate](architecture.md). Change it through `AudioEngine::setChannelStripSoloed`.
+- **Bypass** is dry (no gain/pan; a mono strip still feeds both legs); **mute** clears — two branches. The solo gate applies in both the dry and the normal branch: a bypassed non-soloed strip must not leak into a soloed mix.
+- **Meter**: `getMeterPeak(leg)` — the last block's post-fader peak, a plain store (not consume-on-read) so the mixer column and a track header's channel chip can both read it.
+- **Internal-only**, the same three exclusions as Rec Tap; in `kNonAuthorableModuleTypes` (§6). Cable-colour category: **Utility**.
+
+## Master Module (Mix Bus, Hidden)
+
+`Source/Modules/MasterModule.h`. The mix bus every channel strip feeds, spliced in front of Rec Tap / Audio Output by `synth::ensureMasterNode` when the first channel is created (see [`architecture.md` § Audio recording](architecture.md) for the splice).
+
+- **Ports**: 4 in — `Mix L`/`Mix R` (ch0/1, where strips land) and `Direct L`/`Direct R` (ch2/3, whatever went straight to the output before the splice); 2 out, `Left`/`Right`. No MIDI. Opts out of the inherited Dual I/O toggle (`StereoAudio::None`): its inputs are two stereo blocks, not an FX pair plus CV.
+- **Parameters**: `gain` (dB, −60…+12), `muted`. Direct is summed into Mix **before** the fader.
+- **Direct is gated while any strip is soloed** — it is not a channel, so a soloed mix silences it.
+- **Bypass** is a unity sum of Mix + Direct (dropping Direct would silence every unchanneled cable); **mute** clears. Meter as for Channel Strip.
+- **Internal-only**, a singleton by construction, same exclusions as Channel Strip.
+
+---
+
 ## Track Audio Module (Timeline Audio Source, Hidden)
 
 `Source/Modules/TimelineAudioSourceModule.h`. One node per timeline **audio** track: it plays that track's audio clips by **streaming them off disk**, so everything downstream is an ordinary stereo signal that neither knows nor cares that a timeline exists. The twin of Track In, for the other kind of track.

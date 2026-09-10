@@ -4,6 +4,7 @@
 #include "../Modules/ADSRModule.h"
 #include "../Modules/AttenuverterModule.h"
 #include "../Modules/AudioInputModule.h"
+#include "../Modules/ChannelStripModule.h"
 #include "../Modules/ExternalMidiModule.h"
 #include "../Modules/FX/ChorusModule.h"
 
@@ -27,6 +28,7 @@
 #include "../Modules/MacroMidiInletModule.h"
 #include "../Modules/MacroMidiOutletModule.h"
 #include "../Modules/MacroOutletModule.h"
+#include "../Modules/MasterModule.h"
 #include "../Modules/MathModule.h"
 #include "../Modules/MidiKeyboardModule.h"
 #include "../Modules/ModuleBase.h"
@@ -123,6 +125,11 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     // MacroMidiInletModule's class comment for why), same reason for being in the factory.
     {"Macro MIDI In", []() { return std::make_unique<MacroMidiInletModule>(); }},
     {"Macro MIDI Out", []() { return std::make_unique<MacroMidiOutletModule>(); }},
+    // The mixer's channel strip and mix bus (P9-2; docs/mixer.md §5.1). In the factory so our own
+    // saves round-trip a patch that has them; kNonAuthorableModuleTypes below keeps them away from
+    // the model — see docs/mixer.md §6.
+    {"Channel Strip", []() { return std::make_unique<ChannelStripModule>(); }},
+    {"Master", []() { return std::make_unique<MasterModule>(); }},
 };
 
 namespace {
@@ -177,6 +184,14 @@ const std::set<juce::String> kNonAuthorableModuleTypes = {
     // MacroMidiInletModule's class comment for why it is a separate type at all.
     "Macro MIDI In",
     "Macro MIDI Out",
+    // The mixer's channel strip (docs/mixer.md §6). A strip's meaning is the channel the app built
+    // around it — its shape, its place at the end of a chain, the track it may be linked to — and
+    // its solo flag rides in trusted extra state. "The AI can build a channel" is an app-side
+    // action the model invokes, never a patch node it writes directly.
+    "Channel Strip",
+    // The mix bus. A singleton spliced in front of the output by the app (synth::ensureMasterNode);
+    // a model-authored second Master would split the mix and defeat the solo gate on Direct.
+    "Master",
 };
 
 bool isInternalOnlyModule(const juce::String& typeName) { return kNonAuthorableModuleTypes.count(typeName) > 0; }
@@ -878,6 +893,10 @@ juce::String AIStateMapper::getFactoryTypeName(juce::AudioProcessor* processor) 
             return "Macro MIDI In";
         case ModuleType::MacroMidiOutlet:
             return "Macro MIDI Out";
+        case ModuleType::ChannelStrip:
+            return "Channel Strip";
+        case ModuleType::Master:
+            return "Master";
         }
     }
 

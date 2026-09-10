@@ -145,6 +145,16 @@ public:
     void setInputMonitoringEnabledForBlock(bool enabled) noexcept { inputMonitoringEnabledForBlock = enabled; }
     bool isInputMonitoringEnabledForBlock() const noexcept { return inputMonitoringEnabledForBlock; }
 
+    // -- This block's MIXER SOLO flag ------------------------------------------
+    // "Is any ChannelStrip soloed?" (docs/mixer.md §5.3), carried exactly like the input-monitoring
+    // flag above: AudioEngine owns the count (AudioEngine::refreshSoloGate, message thread), reads it
+    // once per render pass and parks the answer here BEFORE the graph runs, so every strip and
+    // Master's Direct input agree on the same answer for the whole pass. Audio thread only; not
+    // reset at the end of the pass. Defaults to false — no transport (a foreign host, a bare unit
+    // test) means no solo gating, which is also what an app with no soloed strip gets.
+    void setMixerSoloActiveForBlock(bool active) noexcept { mixerSoloActiveForBlock = active; }
+    bool isMixerSoloActiveForBlock() const noexcept { return mixerSoloActiveForBlock; }
+
     // -- Any-thread reads ----------------------------------------------------
     struct PositionSnapshot {
         double ppq = 0.0;
@@ -217,6 +227,9 @@ private:
 
     // Audio thread only; see setInputMonitoringEnabledForBlock.
     bool inputMonitoringEnabledForBlock = false;
+
+    // Audio thread only; see setMixerSoloActiveForBlock.
+    bool mixerSoloActiveForBlock = false;
 
     // -- Command FIFO (message thread -> audio thread) ------------------------
     static constexpr int kFifoCapacity = 256;

@@ -1,8 +1,10 @@
 # Mixer
 
-**Status: DECIDED 2026-09-10 (founder sign-off on D1-D4).** Nothing is implemented yet — no
-`ChannelStrip` node, no `Master` node, no mixer panel exist in the codebase yet. This document
-records the decided design; §8 is the implementation order that turns it into code. The visual
+**Status: DECIDED 2026-09-10 (founder sign-off on D1-D4). P9-2 implemented** — the
+`ChannelStrip` and `Master` nodes, the engine-owned solo gate and the Master splice exist (engine
+only; §8 item 1 records how). Nothing creates a channel yet (P9-3) and there is no mixer panel
+(P9-5). This document records the decided design; §8 is the implementation order that turns it
+into code. The visual
 proposal that led to this decision (canvas diagram, mixer panel mock, the four decision cards)
 lived in a separate page shown to the founder, not in this repo.
 
@@ -404,7 +406,21 @@ Accessibility epic (P9 side track T181, §8/§9) rather than shipping inside P9.
 
 Main line, in dependency order:
 
-1. **P9-2 (T172) — `ChannelStrip` + `Master` + the solo gate.** Engine only.
+1. **P9-2 (T172) — `ChannelStrip` + `Master` + the solo gate.** Engine only. **DONE.** How it
+   landed (module detail in [`docs/modules.md`](modules.md), engine detail in
+   [`docs/architecture.md`](architecture.md) § Mixer solo gate):
+   - *Strip layout*: 5 raw channels a side, Left ch0 / Right `kRightBase` = 4, ch1–3 reserved;
+     params `gain` (dB), `pan`, `muted`; shape + solo in extra state.
+   - *Master layout*: Mix L/R on ch0/1, Direct L/R on ch2/3; Direct summed in before the fader;
+     bypass is a unity sum that keeps Direct.
+   - *§5.3's open detail, resolved*: an engine-owned atomic count, recounted on the message
+     thread by scanning the graph inside `publishTimeline` (so a deleted/undone soloed strip
+     cannot leave the mix stuck), carried per render pass on `TransportService` like the
+     input-monitoring flag.
+   - *Solo applies to a bypassed strip too* — bypass is the strip's own gain/pan going dry, the
+     gate is layered on top; otherwise the strip's card bypass would leak into a soloed mix.
+   - *The splice* is `synth::ensureMasterNode` (Core, `Source/Mixer/MasterSplice.h`); nothing
+     calls it yet — P9-3's channel creation does.
    - `Tests/ChannelStripTests.cpp`: pan balance law is unity at centre for both mono and stereo
      shapes; bypass/mute follow the two-branch contract; shape is fixed at construction and
      rejects a later width change.
