@@ -442,11 +442,14 @@ public:
     }
 
     // Shared by the real swatch click and createRowColourPickerForTest — mirrors
-    // TimelineTrackHeaderComponent::buildColourPicker's own split. onPreview is LOCAL-only (just
-    // repaints the swatch) — committing on every drag tick would push a recordGraphAndMacroChange
-    // undo entry per pixel of slider movement; the real commit fires once, when the popup closes,
-    // exactly like the shape combo's own "commits immediately [on a real, discrete choice]" rule,
-    // not on every intermediate value.
+    // TimelineTrackHeaderComponent::buildColourPicker's own split. onPreview drives a LIVE,
+    // view-layer-only colour preview on BOTH surfaces that paint the jack -- this row's swatch
+    // AND the macro port's jack on the docked ModuleComponent and its collapsed MacroCardComponent
+    // (via onPreviewPortColour, T165) -- so the jack tracks the selector in real time. It still
+    // COMMITs nothing: a preview never writes MacroPort::colour, so a drag pushes no recordGraph
+    // entry per pixel of slider movement (the T152 property); the real commit fires once, when the
+    // popup closes, exactly like the shape combo's own "commits immediately [on a real, discrete
+    // choice]" rule, not on every intermediate value.
     //
     // Both callbacks capture SafePointers, NEVER a raw `this` — the popup they're attached to
     // outlives a single click dispatch (it lives inside a juce::CallOutBox until the user closes
@@ -455,8 +458,9 @@ public:
     // via MessageManager::callAsync and unconditionally calls refreshPorts() -> rebuildRowComponents()
     // -> rowControls_.clear(), so simply focusing a different field and then opening this row's
     // picker is enough to have that async rebuild land while the CallOutBox is still open. The two
-    // callbacks deliberately use DIFFERENT SafePointer targets: onPreview is purely cosmetic (this
-    // row's own swatch), so it no-ops once the row is gone — nothing left to preview. onCommit
+    // callbacks deliberately use DIFFERENT SafePointer targets: onPreview is view-layer only (this
+    // row's swatch plus a non-mutating preview of the jack via onPreviewPortColour), so it no-ops
+    // once the row is gone -- nothing left to preview. onCommit
     // must still land the user's actual pick even if THIS row died in the meantime (their edit
     // should not be silently discarded just because a rebuild raced the callout), so it goes
     // through the DIALOG (which outlives any one row) plus the port's uuid captured by value,
@@ -467,10 +471,20 @@ public:
         const juce::String uuid = nodeUuid;
         return std::make_unique<synth::ui::ColourPickerPopup>(
             colourSwatch.colour, owner_.colourPickerProps_,
-            [safeRow](juce::Colour c) {
+            [safeRow, safeDialog, uuid](juce::Colour c) {
                 if (auto* row = safeRow.getComponent()) {
                     row->colourSwatch.colour = c;
                     row->colourSwatch.repaint();
+                    // T165: also preview this port's jack on BOTH surfaces (the docked widget and the
+                    // collapsed card) live, so the jack tracks the pick in real time. View-layer only
+                    // (a preview, never a MacroPort::colour write -- onCommit below owns the commit),
+                    // so a drag pushes no undo step exactly like T152. Captured via safeDialog because
+                    // the popup outlives one click dispatch just like onCommit; onPreviewPortColour is
+                    // optional and is skipped unchanged when unset (the default in a standalone test).
+                    if (auto* dialog = safeDialog.getComponent()) {
+                        if (dialog->onPreviewPortColour)
+                            dialog->onPreviewPortColour(uuid, c);
+                    }
                 }
             },
             [safeDialog, uuid](juce::Colour c) {

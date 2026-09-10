@@ -712,11 +712,13 @@ public:
     juce::String changeMacroPortShape(const juce::String& macroId, const juce::String& nodeUuid,
                                       MacroPortShape newShape, int newVoiceCount);
 
-    /** T152: sets (or, with nullopt, clears back to the kind-tint default) the user colour for the
-     *  port fronted by `nodeUuid`. Touches only `macros` — never the graph — so this pushes a
+    /** T152/T165: sets (or, with nullopt, clears back to the kind-tint default) the user colour for
+     *  the port fronted by `nodeUuid`. Touches only `macros` — never the graph — so this pushes a
      *  MacroSnapshotAction alone, the same as renameMacroPort. After recording the change it also
-     *  forces a repaint of the two surfaces that show a port's jack — the collapsed card and the
-     *  port's own docked widget — via repaintMacroPortColourTargets(). */
+     *  disarms any armed live preview and repaints the two surfaces that show a port's jack — the
+     *  collapsed card and the port's own docked widget — via `clearMacroPortColourPreview` (which
+     *  resolves those very surfaces through `findMacroPortRecolourTargets`), so the jack shows the
+     *  just-stored colour that the preview converged on. */
     void changeMacroPortColour(const juce::String& macroId, const juce::String& nodeUuid,
                                std::optional<juce::Colour> newColour);
 
@@ -744,6 +746,30 @@ public:
      *  test (see StatusBarTests' gated-repaint precedent), so this is the observable seam for "does a port
      *  re-colour in real time?". */
     MacroPortRecolourTargets repaintMacroPortColourTargets(const juce::String& macroId, const juce::String& nodeUuid);
+
+    /** T165 live preview. Arms a VIEW-LAYER-ONLY preview of `nodeUuid`'s jack colour on the two
+     *  surfaces that paint that jack — the collapsed MacroCardComponent (via its per-port preview,
+     *  keyed by nodeUuid) and the docked ModuleComponent (via its single port preview) — and repaints
+     *  them, so the jack tracks the Configure I/O selector in real time. It never writes
+     *  `MacroPort::colour` (hence pushes no undo step and dirties no data): the picked colour is
+     *  only COMMITTED to the stored value by `changeMacroPortColour`, which also disarms this via
+     *  `clearMacroPortColourPreview` below. Driven by `MacroPortConfigDialog::onPreviewPortColour`
+     *  on every selector tick. Resolves the very same two surfaces as `repaintMacroPortColourTargets` through the
+     *  shared `findMacroPortRecolourTargets`, so a preview and the commit that follows can never
+     *  target different surfaces. Idempotent; a null target (no live card, or a uuid that fronts no
+     *  component) is a no-op. */
+    void previewMacroPortColour(const juce::String& macroId, const juce::String& nodeUuid, juce::Colour colour);
+
+    /** T165: disarms the live preview armed by `previewMacroPortColour` on both surfaces so the jack
+     *  falls back to the now-stored `MacroPort::colour` (called when the pick commits or the picker
+     *  closes). A never-armed preview is a harmless no-op.
+     */
+    void clearMacroPortColourPreview(const juce::String& macroId, const juce::String& nodeUuid);
+
+    /** T165: the shared lookup both the commit repaint and the live preview run through, so a commit
+     *  and a preview can never target different surfaces. Public so a test can assert a preview and a
+     *  commit reach the identical card+widget. */
+    MacroPortRecolourTargets findMacroPortRecolourTargets(const juce::String& macroId, const juce::String& nodeUuid);
 
     /** Opens the "Configure I/O" modal (MacroPortConfigDialog) for `macroId` — the single entry
      *  point every port add/remove/rename/reorder/shape-change above is reached through when the
