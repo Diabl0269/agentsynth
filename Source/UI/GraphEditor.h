@@ -346,12 +346,13 @@ public:
      *  model refusal exactly: if ANY uuid already belongs to a DIFFERENT macro, the whole call is
      *  refused via onStatusMessage (no undo entry, nothing added) rather than adding the rest and
      *  skipping the bad one. A uuid already a member of THIS macro is silently skipped (nothing to
-     *  do). Deliberately does not touch ports or cables — a newly-added member's existing
-     *  connections to nodes outside the macro simply become an ordinary, un-ported boundary
-     *  crossing, rendered by buildVisibleCables()'s existing directional edge-anchor rule
-     *  (docs/macros.md §5.4); Configure I/O remains the way to turn one into a named port, exactly
-     *  as it already is for any other un-ported crossing cable. One recordGraphAndMacroChange undo
-     *  step. */
+     *  do). Auto-creates/deletes ports the same way groupSelectionIntoMacro(true) does at creation
+     *  time, generalized to an incremental join (buildMacroPortCrossingPlanForNewMembers,
+     *  macroPortsThatBecomeInteriorOnAdd — see their own header comments): a newly-added member's
+     *  cable to a node outside the combined macro gets a fresh port; an existing port that the join
+     *  makes wholly interior (the added member was already wired straight into it from outside) is
+     *  spliced back out. One recordGraphAndMacroChange undo step covering membership + both port
+     *  passes. */
     void addSelectionToMacro(const juce::String& macroId, const std::vector<juce::String>& memberUuids);
 
     /** T138: removes every uuid in `memberUuids` from macro `macroId` via
@@ -361,12 +362,21 @@ public:
      *  ports have their own delete affordance (ModuleComponent::buildMacroPortContextMenu) and
      *  removing one through this path would desync Macro::ports without splicing its cable back.
      *  Dissolves the macro if removing its last ordinary member also drops its last port-fronted
-     *  member (removeMemberEverywhere's own "zero members" rule). Like ungroupSelection(), never
-     *  splices or reconnects a removed member's cables — matching the precedent that only PORT
-     *  nodes are ever spliced on membership change, ordinary members never are; a cable to a
-     *  remaining member simply starts rendering as an ordinary boundary crossing. One
-     *  recordGraphAndMacroChange undo step. */
+     *  member (removeMemberEverywhere's own "zero members" rule). Auto-creates a port for any cable
+     *  a departing member leaves crossing into a remaining member (buildMacroPortCrossingPlanForRemovedMembers
+     *  — see its header comment), spliced in BEFORE the membership removal itself so the boundary
+     *  is already correct if this call also happens to dissolve the macro. One
+     *  recordGraphAndMacroChange undo step covering both the splice and the membership change. */
     void removeSelectionFromMacro(const juce::String& macroId, const std::vector<juce::String>& memberUuids);
+
+    /** T138: `nodeId`'s uuid, resolved to `removeSelectionFromMacro(macro->id, {uuid})` — the
+     *  top-level "Remove from Macro" item ModuleComponent::buildModuleContextMenu grafts onto a
+     *  member module's own menu, one level up from the nested "Macro: <name>" submenu's own
+     *  "Remove from Macro" item (buildModuleContextMenu never gained a way to read GraphEditor's
+     *  private uuid-resolution machinery itself — this is that one exposed seam, mirroring
+     *  macroForNode()'s own reason for existing). A no-op if `nodeId` has no uuid or isn't an
+     *  ordinary member of any macro. */
+    void removeNodeFromMacro(juce::AudioProcessorGraph::NodeID nodeId);
 
     /** Toggles (Cmd+Alt+G) the collapsed state of every macro that owns at least one
      *  currently-selected node — a single reversible command rather than a collapse/expand pair
@@ -401,16 +411,6 @@ public:
      *  only has a node (e.g. ModuleComponent's right-click menu) offer macro-scoped actions
      *  without reaching into GraphEditor's private uuid-resolution machinery itself. */
     const synth::Macro* macroForNode(juce::AudioProcessorGraph::NodeID nodeId) const;
-
-    /** True if `priorSelection` contains at least one node that isn't already a member of
-     *  `macroId` — i.e. there's something for "Add Selection to Macro" to act on. A right-click
-     *  entry point calls this BEFORE its own forced `selectMacro()` nicety to decide whether to
-     *  skip that reselect: forcing it when there's an addable candidate would silently swap the
-     *  visible selection border onto the macro's own members, leaving no visual cue for what
-     *  "Add Selection to Macro" is about to insert (T138, found via live testing 2026-09-10 —
-     *  see docs/macros.md §5.8). */
-    bool selectionHasMacroAddCandidate(const juce::String& macroId,
-                                       const std::vector<juce::AudioProcessorGraph::NodeID>& priorSelection) const;
 
     /** Expands or collapses a macro. Collapsing hides its member ModuleComponents (they stay
      *  alive, just invisible, so their positions keep tracking a card drag) and shows one card
@@ -1571,6 +1571,45 @@ private:
      *  groupSelectionIntoMacro(true)'s own recordGraphAndMacroChange transaction — never pushes an
      *  undo entry of its own. */
     void spliceMacroPorts(const juce::String& macroId, const std::vector<MacroPortCrossingGroup>& plan);
+
+    /** T138: the crossing plan for `addedUuids` joining the ALREADY-EXISTING macro `macroId` —
+     *  addSelectionToMacro()'s auto-port counterpart to groupSelectionIntoMacro's own
+     *  buildMacroPortCrossingPlan(memberUuids) call at creation time. Differs from a plain
+     *  buildMacroPortCrossingPlan(existingOrdinaryMembers + addedUuids) call in two ways a bare
+     *  reuse would get wrong: (1) only groups whose internal node is one of `addedUuids` survive —
+     *  a group fronting an already-established member reflects a pre-existing un-ported crossing
+     *  this add didn't create, and addSelectionToMacro's own contract already leaves that alone;
+     *  (2) an edge whose external endpoint is one of `macroId`'s OWN existing ports is dropped —
+     *  the added member was already wired straight into the macro's boundary jack from outside, so
+     *  that port becoming redundant (both its ends now interior) is macroPortsThatBecomeInteriorOnAdd's
+     *  job, never a second port minted in front of the first. Empty if `macroId` doesn't resolve. */
+    std::vector<MacroPortCrossingGroup>
+    buildMacroPortCrossingPlanForNewMembers(const juce::String& macroId,
+                                            const std::vector<juce::String>& addedUuids) const;
+
+    /** T138: existing ports of `macroId` that would have ZERO remaining external connections once
+     *  `addedUuids` join it — i.e. every cable still touching the port would, after the add, land
+     *  on a node that's now interior (an existing ordinary member or one of `addedUuids`). Each
+     *  returned port uuid is safe to spliceOutMacroPort(): the port existed only to front a
+     *  crossing that the add just turned into an ordinary interior connection. A port with at least
+     *  one cable to a node that stays genuinely external is never returned — splicing it out would
+     *  silently drop that cable (spliceOutMacroPort's own "wired on only one side... disappears"
+     *  behaviour), which is only safe when torn down alongside the rest of a dissolving macro
+     *  (ungroupSelection), not here. */
+    std::vector<juce::String> macroPortsThatBecomeInteriorOnAdd(const juce::String& macroId,
+                                                                const std::vector<juce::String>& addedUuids) const;
+
+    /** T138: the crossing plan for `removedUuids` leaving the macro `macroId` —
+     *  removeSelectionFromMacro()'s auto-port counterpart. Computed off the REMAINING ordinary
+     *  members (existing members minus `removedUuids`, minus this macro's own ports) as the
+     *  "inside" set, so an edge to a departing member now reads as a genuine crossing; then filtered
+     *  to keep only edges whose external endpoint is actually one of `removedUuids` — otherwise a
+     *  remaining member's PRE-EXISTING, already-ported connection (external<->port) would look like
+     *  a brand-new crossing too (its port is excluded from the "inside" set the same as any other
+     *  port) and get double-ported. Empty if `macroId` doesn't resolve. */
+    std::vector<MacroPortCrossingGroup>
+    buildMacroPortCrossingPlanForRemovedMembers(const juce::String& macroId,
+                                                const std::vector<juce::String>& removedUuids) const;
 
     /** The exact reverse of spliceMacroPorts() for ONE port node (founder-review fix G7,
      *  docs/macros.md §7): reads every connection currently touching the port node fronted by

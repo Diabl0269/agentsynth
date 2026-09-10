@@ -53,6 +53,13 @@ juce::String uuidOf(AudioEngine& engine, NodeID id) {
     return node != nullptr ? node->properties["uuid"].toString() : juce::String();
 }
 
+NodeID nodeIdForUuid(AudioEngine& engine, const juce::String& uuid) {
+    for (auto* node : engine.getGraph().getNodes())
+        if (node->properties["uuid"].toString() == uuid)
+            return node->nodeID;
+    return {};
+}
+
 ModuleComponent* findComponent(GraphEditor& editor, NodeID id) {
     for (auto* comp : editor.getModuleComponents())
         if (comp != nullptr && comp->getNodeId() == id)
@@ -588,6 +595,185 @@ TEST(MacroMembership, RemoveSelectionFromMacroSkipsAPortUuidRatherThanDesyncingM
     EXPECT_TRUE(macro->hasMember(portUuid)) << "a port must never be pulled out by this generic path -- "
                                                "it has its own delete affordance";
     EXPECT_FALSE(macro->hasMember(uuidB)) << "the ordinary member must still be removed";
+}
+
+// ----------------------------------------------------------------------------
+// T138 second live-testing round (2026-09-10): auto-create/delete ports on Add/Remove Selection
+// to/from Macro, matching what groupSelectionIntoMacro(true)/ungroupSelection() already do at
+// whole-macro creation/dissolution time. Reported live as "I remove a module from a macro, but its
+// connection still remains, and the output of that module still goes into the macro connection" --
+// the cable itself was always fine (an un-ported boundary crossing is a supported state), but it
+// never got a proper port the way a from-scratch grouping would have given it.
+// ----------------------------------------------------------------------------
+
+TEST(MacroMembership, RemoveSelectionFromMacroCreatesAPortForTheNewlyCrossingCable) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    ASSERT_TRUE(engine.getGraph().addConnection({{a, 0}, {b, 0}})); // wholly interior while both are members
+    auto uuidA = uuidOf(engine, a);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro(); // no auto-ports at creation (default false)
+    ASSERT_FALSE(macroId.isEmpty());
+    ASSERT_TRUE(editor.getMacros().find(macroId)->ports.empty());
+
+    editor.removeSelectionFromMacro(macroId, {uuidA});
+
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_FALSE(macro->hasMember(uuidA)) << "a removed member never stays a member";
+    ASSERT_EQ(macro->ports.size(), 1u) << "b's now-external cable to the departed a must get a real "
+                                          "boundary port, not just render as an un-ported crossing";
+    const auto& port = macro->ports.front();
+    EXPECT_TRUE(port.isInput) << "signal flows a -> b, so b's boundary jack is an inlet";
+
+    NodeID portId;
+    for (auto* node : engine.getGraph().getNodes())
+        if (node->properties["uuid"].toString() == port.nodeUuid)
+            portId = node->nodeID;
+    ASSERT_NE(portId.uid, 0u);
+
+    auto hasConn = [&](NodeID src, int srcCh, NodeID dst, int dstCh) {
+        for (const auto& c : engine.getGraph().getConnections())
+            if (c.source.nodeID == src && c.source.channelIndex == srcCh && c.destination.nodeID == dst &&
+                c.destination.channelIndex == dstCh)
+                return true;
+        return false;
+    };
+    EXPECT_TRUE(hasConn(a, 0, portId, 0)) << "a (now external) feeds the new port";
+    EXPECT_TRUE(hasConn(portId, 0, b, 0)) << "the port feeds b (still a member), preserving the signal path";
+    EXPECT_FALSE(hasConn(a, 0, b, 0)) << "the original direct cable was spliced, not left dangling alongside the port";
+}
+
+TEST(MacroMembership, AddSelectionToMacroCreatesAPortForTheNewCrossingCable) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    auto c = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 900, 100);    // about to join
+    auto ext = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 1300, 100); // stays outside
+    ASSERT_TRUE(engine.getGraph().addConnection({{c, 0}, {ext, 0}}));
+    auto uuidC = uuidOf(engine, c);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    ASSERT_TRUE(editor.getMacros().find(macroId)->ports.empty());
+
+    editor.addSelectionToMacro(macroId, {uuidC});
+
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_TRUE(macro->hasMember(uuidC));
+    ASSERT_EQ(macro->ports.size(), 1u) << "c's pre-existing cable to ext is now a real boundary crossing "
+                                          "and must get a port, not just render un-ported";
+    const auto& port = macro->ports.front();
+    EXPECT_FALSE(port.isInput) << "signal flows c -> ext, so c's boundary jack is an outlet";
+
+    NodeID portId;
+    for (auto* node : engine.getGraph().getNodes())
+        if (node->properties["uuid"].toString() == port.nodeUuid)
+            portId = node->nodeID;
+    ASSERT_NE(portId.uid, 0u);
+
+    auto hasConn = [&](NodeID src, int srcCh, NodeID dst, int dstCh) {
+        for (const auto& c2 : engine.getGraph().getConnections())
+            if (c2.source.nodeID == src && c2.source.channelIndex == srcCh && c2.destination.nodeID == dst &&
+                c2.destination.channelIndex == dstCh)
+                return true;
+        return false;
+    };
+    EXPECT_TRUE(hasConn(c, 0, portId, 0)) << "the newly-interior c feeds the new port";
+    EXPECT_TRUE(hasConn(portId, 0, ext, 0)) << "the port feeds the still-external ext";
+    EXPECT_FALSE(hasConn(c, 0, ext, 0))
+        << "the original direct cable was spliced, not left dangling alongside the port";
+}
+
+TEST(MacroMembership, AddSelectionToMacroSplicesOutAnExistingPortTheJoiningMemberMakesInterior) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    // b starts alone in the macro, wired to `outside` -- groupSelectionIntoMacro(true) gives that
+    // crossing a real port immediately.
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    auto outside = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 900, 100); // about to join too
+    ASSERT_TRUE(engine.getGraph().addConnection({{outside, 0}, {b, 0}}));
+    auto uuidOutside = uuidOf(engine, outside);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro(true);
+    ASSERT_FALSE(macroId.isEmpty());
+    ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u) << "the crossing to `outside` got a real port";
+    const auto portUuidBefore = editor.getMacros().find(macroId)->ports.front().nodeUuid;
+
+    // Now `outside` itself joins the SAME macro -- its own connection to b's port is no longer a
+    // real external boundary at all (both ends interior), so that port must be spliced back out
+    // into a plain direct b<->outside connection, not left as a redundant double-port.
+    editor.addSelectionToMacro(macroId, {uuidOutside});
+
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_TRUE(macro->hasMember(uuidOutside));
+    EXPECT_TRUE(macro->ports.empty()) << "the now-redundant port must be spliced out, not left as a "
+                                         "no-op double-port in front of a now-interior connection";
+    EXPECT_EQ(nodeIdForUuid(engine, portUuidBefore).uid, 0u) << "the old port node itself must be gone";
+
+    bool sawDirect = false;
+    for (const auto& c : engine.getGraph().getConnections())
+        if (c.source.nodeID == outside && c.source.channelIndex == 0 && c.destination.nodeID == b &&
+            c.destination.channelIndex == 0)
+            sawDirect = true;
+    EXPECT_TRUE(sawDirect) << "outside and b must end up connected directly, with the port's two "
+                              "edges cross-connected the way spliceOutMacroPort always does";
+}
+
+TEST(MacroMembership, RemoveSelectionFromMacroWithASplicedPortIsOneUndoStep) {
+    AudioEngine engine;
+    AppUndoManager undoManager;
+    GraphEditor editor(engine, &undoManager);
+    undoManager.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    ASSERT_TRUE(engine.getGraph().addConnection({{a, 0}, {b, 0}}));
+    auto uuidA = uuidOf(engine, a);
+
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    undoManager.clearUndoHistory();
+
+    editor.removeSelectionFromMacro(macroId, {uuidA});
+    ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u) << "sanity: this call really did splice a port";
+
+    ASSERT_TRUE(undoManager.canUndo());
+    undoManager.undo();
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_TRUE(macro->hasMember(uuidA)) << "one undo must restore both the membership AND the splice";
+    EXPECT_TRUE(macro->ports.empty()) << "one undo must also remove the port the removal had created";
+
+    bool sawDirect = false;
+    for (const auto& c : engine.getGraph().getConnections())
+        if (c.source.nodeID == a && c.source.channelIndex == 0 && c.destination.nodeID == b &&
+            c.destination.channelIndex == 0)
+            sawDirect = true;
+    EXPECT_TRUE(sawDirect) << "the original direct a->b cable must be back too";
+
+    undoManager.redo();
+    macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_FALSE(macro->hasMember(uuidA));
+    EXPECT_EQ(macro->ports.size(), 1u);
 }
 
 // ============================================================================
@@ -1997,6 +2183,50 @@ TEST(MacroMemberContextMenu, RightClickFiresTheContextMenuHookExactlyOnce) {
                                    "one (a real popup opened alongside the hook)";
 }
 
+TEST(MacroMemberContextMenu, TopLevelRemoveFromMacroItemActsOnThisModuleAloneRegardlessOfSelection) {
+    // T138 second live-testing round (2026-09-10): a user's first instinct was "right-click the
+    // module and remove it from the macro", not "open its macro's own nested submenu" -- this
+    // pins the top-level escape hatch buildModuleContextMenu() now grafts on directly, one level up
+    // from "Macro: <name>" -> "Remove from Macro".
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    auto c = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 900, 100);
+    auto uuidA = uuidOf(engine, a);
+
+    editor.setSelectedNodes({a, b, c});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    // The whole macro is selected -- if this item read live selection the way the nested submenu's
+    // own "Remove Selection from Macro" does, it would remove all three. It must not: it targets
+    // ONLY the module whose card was actually right-clicked.
+    ASSERT_TRUE(editor.isNodeSelected(b));
+    ASSERT_TRUE(editor.isNodeSelected(c));
+
+    auto* compA = findComponent(editor, a);
+    ASSERT_NE(compA, nullptr);
+
+    juce::PopupMenu capturedMenu;
+    compA->setShowContextMenuHookForTest([&capturedMenu](juce::PopupMenu& m) { capturedMenu = m; });
+    compA->mouseDown(makeModuleRightClick(*compA, bodyClickPoint(*compA)));
+
+    const auto* item = findMenuItemByText(capturedMenu, "Remove from Macro");
+    ASSERT_NE(item, nullptr) << "a top-level item must exist, not just the nested submenu's own copy";
+    ASSERT_TRUE(static_cast<bool>(item->action));
+
+    item->action();
+
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_FALSE(macro->hasMember(uuidA)) << "only the right-clicked module leaves the macro";
+    EXPECT_EQ(macro->members.size(), 2u) << "b and c must both still be members";
+}
+
 // ============================================================================
 // Membership menu gating (T138): buildMacroMenu() captures the selection at BUILD time (before
 // any item's own handler can move it), then shows "Add Selection to Macro" only when that
@@ -2125,13 +2355,15 @@ TEST(MacroMembershipMenu, AddItemAndSelectionBorderBothSurviveTheRealCardRightCl
 
     card->mouseDown(makeCardRightClick(*card, {10, 10}));
 
-    // T138 live-testing follow-up (2026-09-10): the reselect is now SKIPPED whenever the prior
-    // selection has something addable (selectionHasMacroAddCandidate), specifically so the user
-    // still sees `loose`'s own selection border while the menu is open -- forcing it here would
-    // silently swap the border onto the macro's own members with no visual cue for what "Add
-    // Selection to Macro" is about to insert, which is the exact confusion a live user hit even
-    // though the menu item itself worked correctly. See CardRightClickStillReselectsMacroWhen
-    // NothingExternalIsAddable below for the case where the reselect must still fire.
+    // T138 live-testing follow-up (2026-09-10): the reselect is now SKIPPED whenever there was ANY
+    // prior selection, specifically so the user still sees `loose`'s own selection border while the
+    // menu is open -- forcing it here would silently swap the border onto the macro's own members
+    // with no visual cue for what "Add Selection to Macro" is about to insert, which is the exact
+    // confusion a live user hit even though the menu item itself worked correctly. See
+    // CardRightClickStillReselectsMacroWhenNothingWasSelected below for the case where the reselect
+    // must still fire, and RemoveSelectionFromMacroSurvivesTheRealCardRightClickWithAPartialSubset
+    // for the second round this generalized fix was needed for (a subset of the macro's OWN
+    // members, picked for a targeted removal, used to get force-reselected to ALL members too).
     EXPECT_TRUE(editor.isNodeSelected(loose));
 
     const auto* addItem = findMenuItemByText(capturedMenu, "Add Selection to Macro");
@@ -2151,7 +2383,7 @@ TEST(MacroMembershipMenu, AddItemAndSelectionBorderBothSurviveTheRealCardRightCl
     EXPECT_TRUE(macro->hasMember(uuidLoose));
 }
 
-TEST(MacroMembershipMenu, CardRightClickStillReselectsMacroWhenNothingExternalIsAddable) {
+TEST(MacroMembershipMenu, CardRightClickStillReselectsMacroWhenNothingWasSelected) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
@@ -2172,9 +2404,56 @@ TEST(MacroMembershipMenu, CardRightClickStillReselectsMacroWhenNothingExternalIs
 
     card->mouseDown(makeCardRightClick(*card, {10, 10}));
 
-    // Nothing addable was selected beforehand, so the old "highlight what you're about to act
+    // Nothing at all was selected beforehand, so the old "highlight what you're about to act
     // on" reselect must still fire -- this is what lets "Remove Selection from Macro" and
     // "Ungroup" find the macro's own members via live selection when nothing else was selected.
     EXPECT_TRUE(editor.isMacroSelected(macroId));
     EXPECT_NE(findMenuItemByText(capturedMenu, "Remove Selection from Macro"), nullptr);
+}
+
+TEST(MacroMembershipMenu, RemoveSelectionFromMacroSurvivesTheRealCardRightClickWithAPartialSubset) {
+    // T138 second live-testing round (2026-09-10): reported live as "if I select one module and
+    // then right-click, it just auto-selects all of the modules in the macro. So if I click remove
+    // selected from macro, it just removes all of the modules". A partial subset of a macro's OWN
+    // members is exactly as "non-empty" as an outside module -- the generalized fix (skip the
+    // reselect whenever there was ANY prior selection, not just an addable one) has to cover this
+    // case too, or a targeted single-member removal is unreachable from the card's own right-click.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    auto c = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 900, 100);
+    auto uuidA = uuidOf(engine, a);
+
+    editor.setSelectedNodes({a, b, c});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    editor.setSelectedNodes({a}); // deliberately just ONE of the macro's own three members
+
+    auto* card = editor.getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+
+    juce::PopupMenu capturedMenu;
+    card->setShowContextMenuHookForTest([&capturedMenu](juce::PopupMenu& m) { capturedMenu = m; });
+
+    card->mouseDown(makeCardRightClick(*card, {10, 10}));
+
+    // The forced reselect must NOT have clobbered the subset back to all three members.
+    EXPECT_TRUE(editor.isNodeSelected(a));
+    EXPECT_FALSE(editor.isNodeSelected(b));
+    EXPECT_FALSE(editor.isNodeSelected(c));
+
+    const auto* item = findMenuItemByText(capturedMenu, "Remove from Macro");
+    ASSERT_NE(item, nullptr) << "singular label -- exactly one module was captured, not all three";
+    ASSERT_TRUE(static_cast<bool>(item->action));
+    item->action();
+
+    auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr);
+    EXPECT_FALSE(macro->hasMember(uuidA)) << "only the captured subset leaves the macro";
+    EXPECT_EQ(macro->members.size(), 2u) << "b and c must both still be members -- the exact bug "
+                                            "reported was this removing ALL THREE instead";
 }

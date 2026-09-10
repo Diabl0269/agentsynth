@@ -2820,6 +2820,19 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
     if (macro != nullptr)
         m.addItem(macro->collapsed ? "Expand Macro" : "Collapse Macro",
                   [this] { owner.toggleSelectionMacrosCollapsed(); });
+    // T138: a top-level escape hatch for the single most common macro-membership gesture — right-
+    // click a member module you want OUT, without hunting for the nested "Macro: <name>" submenu's
+    // own "Remove from Macro" item (found via live testing 2026-09-10: a user's first instinct was
+    // "right-click the module and remove it from the macro", not "open its macro's own submenu").
+    // Acts on THIS module alone via removeNodeFromMacro(nodeId), never the live selection — so it
+    // behaves the same whether or not this module happens to be selected, unlike the submenu's own
+    // item (which reads live selection, correctly retargeted to just this module by mouseDown()
+    // above before this menu was ever built). Never reached for a port module in the first place —
+    // mouseDown() routes isMacroPortType(getType(module)) to buildMacroPortContextMenu() instead,
+    // this method's own early-return above — so `macro != nullptr` here always means an ordinary
+    // member.
+    if (macro != nullptr)
+        m.addItem("Remove from Macro", [this] { owner.removeNodeFromMacro(nodeId); });
 
     m.addSeparator();
 
