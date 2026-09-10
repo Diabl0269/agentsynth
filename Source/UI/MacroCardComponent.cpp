@@ -202,9 +202,12 @@ void MacroCardComponent::mouseDown(const juce::MouseEvent& e) {
     if (e.mods.isRightButtonDown()) {
         // T138: captured BEFORE the reselect below, which otherwise destroys any external batch
         // the user picked before right-clicking this card — see buildMacroMenu's own comment on
-        // addCandidateSelection.
+        // addCandidateSelection. Skip the reselect entirely when that batch has something
+        // addable: forcing it would swap the visible selection border onto the macro's own
+        // members right as the menu opens, leaving no visual cue for what "Add Selection to
+        // Macro" is about to insert (found via live testing, 2026-09-10).
         const auto priorSelection = owner.getSelectedNodes();
-        if (!owner.isMacroSelected(macroId))
+        if (!owner.selectionHasMacroAddCandidate(macroId, priorSelection) && !owner.isMacroSelected(macroId))
             owner.selectMacro(macroId, false);
         showContextMenu(priorSelection);
         return;

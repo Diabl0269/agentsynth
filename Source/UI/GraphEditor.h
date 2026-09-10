@@ -402,6 +402,16 @@ public:
      *  without reaching into GraphEditor's private uuid-resolution machinery itself. */
     const synth::Macro* macroForNode(juce::AudioProcessorGraph::NodeID nodeId) const;
 
+    /** True if `priorSelection` contains at least one node that isn't already a member of
+     *  `macroId` — i.e. there's something for "Add Selection to Macro" to act on. A right-click
+     *  entry point calls this BEFORE its own forced `selectMacro()` nicety to decide whether to
+     *  skip that reselect: forcing it when there's an addable candidate would silently swap the
+     *  visible selection border onto the macro's own members, leaving no visual cue for what
+     *  "Add Selection to Macro" is about to insert (T138, found via live testing 2026-09-10 —
+     *  see docs/macros.md §5.8). */
+    bool selectionHasMacroAddCandidate(const juce::String& macroId,
+                                       const std::vector<juce::AudioProcessorGraph::NodeID>& priorSelection) const;
+
     /** Expands or collapses a macro. Collapsing hides its member ModuleComponents (they stay
      *  alive, just invisible, so their positions keep tracking a card drag) and shows one card
      *  in their place; expanding reverses that. No graph change either way. Undoable. */

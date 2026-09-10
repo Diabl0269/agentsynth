@@ -3180,9 +3180,12 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
         if (const auto hullMacroId = macroHullAt(canvasPos.roundToInt()); hullMacroId.isNotEmpty()) {
             // T138: captured BEFORE the reselect above, which otherwise destroys any external
             // batch the user picked before right-clicking this hull — see buildMacroMenu's own
-            // comment on addCandidateSelection.
+            // comment on addCandidateSelection. Skip the reselect when that batch has something
+            // addable, for the same reason as MacroCardComponent::mouseDown's own right-click
+            // branch — see selectionHasMacroAddCandidate's doc comment.
             const auto priorSelection = getSelectedNodes();
-            selectMacro(hullMacroId, false);
+            if (!selectionHasMacroAddCandidate(hullMacroId, priorSelection))
+                selectMacro(hullMacroId, false);
             buildMacroMenu(hullMacroId, nullptr, &priorSelection).showMenuAsync(juce::PopupMenu::Options());
             return;
         }
@@ -4526,6 +4529,19 @@ std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::createMacroColourPick
     return buildMacroColourPicker(macroId);
 }
 
+bool GraphEditor::selectionHasMacroAddCandidate(
+    const juce::String& macroId, const std::vector<juce::AudioProcessorGraph::NodeID>& priorSelection) const {
+    const auto* macro = macros.find(macroId);
+    if (macro == nullptr)
+        return false;
+    for (auto id : priorSelection) {
+        const juce::String uuid = nodeUuidFor(id);
+        if (uuid.isNotEmpty() && !macro->hasMember(uuid))
+            return true;
+    }
+    return false;
+}
+
 juce::PopupMenu
 GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> renameAction,
                             const std::vector<juce::AudioProcessorGraph::NodeID>* addCandidateSelection) {
@@ -4539,10 +4555,12 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
     // T138: "Add Selection to Macro" is computed from `addCandidateSelection` when the caller
     // supplied one — both the collapsed card's own right-click (MacroCardComponent::mouseDown) and
     // the expanded hull's empty-space right-click (GraphEditor::mouseDown's macroHullAt branch)
-    // call selectMacro(macroId, false) BEFORE this method ever runs, which means by the time this
-    // reads the CURRENT selection it is already just the macro's own members — any external batch
-    // the user picked before right-clicking is gone. Both call sites capture the selection
-    // themselves right before that reselect and pass it in here. Falls back to the current live
+    // call selectMacro(macroId, false) BEFORE this method ever runs *when the prior selection has
+    // nothing addable* (selectionHasMacroAddCandidate) — which means by the time this reads the
+    // CURRENT selection it may already be just the macro's own members, with any external batch
+    // the user picked before right-clicking gone. Both call sites capture the selection themselves
+    // right before that conditional reselect and pass it in here, so this always sees the true
+    // pre-click batch regardless of whether the reselect ran. Falls back to the current live
     // selection when null (the ModuleComponent member-submenu graft, whose own narrower
     // retarget-if-not-already-selected never destroys an external batch the same way, and where
     // "Add" barely applies anyway since the clicked module is already this macro's member).

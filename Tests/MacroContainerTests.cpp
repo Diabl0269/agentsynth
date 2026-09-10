@@ -2102,7 +2102,7 @@ juce::MouseEvent makeCardRightClick(MacroCardComponent& comp, juce::Point<int> p
 // card's own right-click despite passing every one of those direct-call tests. This test drives
 // the REAL gesture instead, the same "test the real mouse path" rule MacroMemberContextMenu's own
 // suite already follows for ModuleComponent's right-click.
-TEST(MacroMembershipMenu, AddItemSurvivesTheRealCardRightClickDespiteItsOwnReselect) {
+TEST(MacroMembershipMenu, AddItemAndSelectionBorderBothSurviveTheRealCardRightClick) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
@@ -2125,17 +2125,56 @@ TEST(MacroMembershipMenu, AddItemSurvivesTheRealCardRightClickDespiteItsOwnResel
 
     card->mouseDown(makeCardRightClick(*card, {10, 10}));
 
-    // Sanity: the real gesture's own reselect really did fire and clobber the live selection --
-    // proving this test would have caught a naive "just read selection.getSelected()" fix.
-    EXPECT_FALSE(editor.isNodeSelected(loose));
+    // T138 live-testing follow-up (2026-09-10): the reselect is now SKIPPED whenever the prior
+    // selection has something addable (selectionHasMacroAddCandidate), specifically so the user
+    // still sees `loose`'s own selection border while the menu is open -- forcing it here would
+    // silently swap the border onto the macro's own members with no visual cue for what "Add
+    // Selection to Macro" is about to insert, which is the exact confusion a live user hit even
+    // though the menu item itself worked correctly. See CardRightClickStillReselectsMacroWhen
+    // NothingExternalIsAddable below for the case where the reselect must still fire.
+    EXPECT_TRUE(editor.isNodeSelected(loose));
 
     const auto* addItem = findMenuItemByText(capturedMenu, "Add Selection to Macro");
     ASSERT_NE(addItem, nullptr) << "the pre-reselect selection must still reach buildMacroMenu";
     ASSERT_TRUE(static_cast<bool>(addItem->action));
+
+    // With the reselect skipped, live selection is still just `loose` -- so "Remove Selection
+    // from Macro" (which reads live selection, not the captured candidate) must NOT appear; a
+    // pure "add" gesture has nothing of the macro's own to remove.
+    EXPECT_EQ(findMenuItemByText(capturedMenu, "Remove Selection from Macro"), nullptr);
+    EXPECT_EQ(findMenuItemByText(capturedMenu, "Remove from Macro"), nullptr);
 
     addItem->action();
 
     auto* macro = editor.getMacros().find(macroId);
     ASSERT_NE(macro, nullptr);
     EXPECT_TRUE(macro->hasMember(uuidLoose));
+}
+
+TEST(MacroMembershipMenu, CardRightClickStillReselectsMacroWhenNothingExternalIsAddable) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    editor.setSelectedNodes({a, b});
+    auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+
+    editor.setSelectedNodes({}); // nothing selected -- the plain "click a fresh card" case
+
+    auto* card = editor.getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr);
+
+    juce::PopupMenu capturedMenu;
+    card->setShowContextMenuHookForTest([&capturedMenu](juce::PopupMenu& m) { capturedMenu = m; });
+
+    card->mouseDown(makeCardRightClick(*card, {10, 10}));
+
+    // Nothing addable was selected beforehand, so the old "highlight what you're about to act
+    // on" reselect must still fire -- this is what lets "Remove Selection from Macro" and
+    // "Ungroup" find the macro's own members via live selection when nothing else was selected.
+    EXPECT_TRUE(editor.isMacroSelected(macroId));
+    EXPECT_NE(findMenuItemByText(capturedMenu, "Remove Selection from Macro"), nullptr);
 }

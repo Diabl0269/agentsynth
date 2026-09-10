@@ -665,9 +665,20 @@ exists, and `buildMacroMenu` offers them as two more items, right after "Ungroup
   batch the same way, and "Add" barely applies there regardless (the clicked module is already this
   macro's member). `MacroCardComponent` gained a `setShowContextMenuHookForTest` seam identical to
   `ModuleComponent`'s own (same headless-CI-segfault reason), and
-  `MacroMembershipMenu.AddItemSurvivesTheRealCardRightClickDespiteItsOwnReselect` drives the real
-  gesture end-to-end — asserting the reselect actually fired (proving the test would catch a naive
-  fix) before checking the item survived it.
+  `MacroMembershipMenu.AddItemAndSelectionBorderBothSurviveTheRealCardRightClick` drives the real
+  gesture end-to-end.
+- **The forced reselect itself is skipped whenever the prior selection has something addable**
+  (`GraphEditor::selectionHasMacroAddCandidate`) — found via a *second* round of live GUI testing
+  the same day: the fix above made the menu item work, but the reselect still ran first and swapped
+  the visible selection border onto the macro's own members right as the menu opened, so a user
+  right-clicking with an external module selected saw no visual cue for what "Add Selection to
+  Macro" was about to insert (reported as "the module doesn't seem selected"). Both call sites now
+  check `selectionHasMacroAddCandidate(macroId, priorSelection)` before calling
+  `selectMacro`/checking `isMacroSelected`, so a pure "add" gesture leaves the user's own selection
+  and its border untouched; the reselect still fires when nothing addable was selected (the plain
+  "right-click a fresh card" case `CardRightClickStillReselectsMacroWhenNothingExternalIsAddable`
+  pins), since that's what lets "Remove Selection from Macro"/"Ungroup" find the macro's own
+  members via live selection.
 - **Each item is omitted, not shown disabled, when it would have nothing to do** — mirroring
   "Mute Macro"'s own precedent of omitting a command that can only ever no-op. "Add Selection to
   Macro" needs the captured selection to contain at least one uuid not already a member of THIS
