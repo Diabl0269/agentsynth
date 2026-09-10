@@ -161,6 +161,9 @@ const std::vector<ModuleConfig>& moduleConfigs() {
         {/*factoryName*/ "Voice Mixer", false, "", 1},
         {/*factoryName*/ "Attenuverter", false, "", 1},
         {/*factoryName*/ "Mod Slot", false, "", 1}, // the same AttenuverterModule under its UI name
+        // ch0 = L, ch4 = R (kRightBase); the reserved ch1..3 are cleared by the strip itself.
+        {/*factoryName*/ "Channel Strip", false, "", 5},
+        {/*factoryName*/ "Master", false, "", 4}, // Mix L/R + Direct L/R, summed before the fader
 
         // ---- FX ------------------------------------------------------------------------------
         {/*factoryName*/ "Delay", false, "", 2},
