@@ -606,12 +606,17 @@ private:
     // failure). Called INSIDE the caller's undo transaction — it opens none of its own.
     juce::String createTrackInNode();
 
-    // Twin of createTrackInNode(): a "Track Audio" node with a fresh uuid, wired stereo into
-    // the master bus — the Rec Tap when one is spliced in, otherwise the Audio Output node directly,
-    // so the two orderings compose (adding an audio track before or after the first take both end up
-    // with the track's audio flowing THROUGH the tap). Returns its uuid, empty on failure. Called
-    // INSIDE the caller's undo transaction.
-    juce::String createTrackAudioNode();
+    // Twin of createTrackInNode(): a "Track Audio" node with a fresh uuid. Returns its uuid, empty on
+    // failure. Called INSIDE the caller's undo transaction.
+    //
+    // `wireDirectlyToMasterBus` (T173a): true (the default) wires the node stereo straight into the
+    // master bus — the Rec Tap when one is spliced in, otherwise the Audio Output node directly, so
+    // the two orderings compose (adding an audio track before or after the first take both end up
+    // with the track's audio flowing THROUGH the tap) — the behaviour createAndBindTrackInNode()'s
+    // ad hoc single-node rebind still wants. false leaves the node's output unwired, for a caller
+    // that is about to wire it into a full channel chain instead of straight to the bus
+    // (addAudioTrack(), via synth::buildDefaultAudioChannel).
+    juce::String createTrackAudioNode(bool wireDirectlyToMasterBus = true);
 
     // Points the engine's AudioClipStreamer at the current document's asset roots: the open
     // bundle directory (invalid when the project has never been saved) plus the app-data Recordings

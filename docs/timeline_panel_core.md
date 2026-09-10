@@ -822,17 +822,32 @@ node uuid):
    rule — `ModuleBase` returns `true` for every module in the app;
 4. bind the track to the new node's uuid and give it the palette colour for its index.
 
-**The Audio entry** mirrors it exactly (one compound step, track added first, factory-created node,
-uuid minted and mirrored, placed at the left edge, an `Audio` track named `Audio N` bound to it with
-its palette colour), with one difference in step 3: the auto-wire target is never ambiguous,
-because the master
-bus is a singleton — but there are **two** possible sinks and the order matters. If a
-`Rec Tap` has already been spliced in front of Audio Output, wiring straight to the output would
-route the track **around** the tap and quietly leave it out of every subsequent take, so
-`createTrackAudioNode()` prefers the tap when one exists and falls back to Audio Output otherwise.
-That makes both orderings compose: a track added *before* the first take is re-spliced by
-`ensureMasterRecordTap()`, and one added *after* it lands on the tap directly. Both channels are
-wired (`0 → 0`, `1 → 1`).
+**The Audio entry** (T173a) now builds a **whole mixer channel**, not just a `Track Audio` node —
+see [`docs/mixer.md` §8 item 2](mixer.md) for the full design. Steps 1-2 are the same as the MIDI
+entry (doc side first, so `kMaxTracks` refuses before any node is created; factory-created node,
+uuid minted and mirrored, placed at the left edge), but everything downstream of step 2 is
+different, and it is all still ONE undo step — `AppUndoManager::recordGraphTimelineAndMacroChange`,
+which extends `recordCombinedChange`'s graph+timeline transaction with a third domain, the macro
+set:
+
+1. `createTrackAudioNode(wireDirectlyToMasterBus=false)` creates the `Track Audio` node **unwired**
+   — the direct-to-master-bus auto-wire the MIDI-entry-style flow used before T173a is now only
+   `createAndBindTrackInNode()`'s behaviour (its ad hoc single-node rebind from the binding chip);
+2. `synth::buildDefaultAudioChannel` (Core, `Source/Mixer/ChannelFlows.h`) wires the node into the
+   factory default chain — `Track Audio -> Parametric EQ (bypassed) -> Compressor (bypassed) ->
+   Channel Strip (Stereo)` — then splices Master (`synth::spliceMasterNode`, reusing the existing
+   singleton after the first channel; the same "Rec Tap when spliced, else Audio Output" target
+   `createTrackAudioNode()`'s old direct wire used) and wires the strip into Master's Mix input;
+3. `GraphEditor::addMacroForMembers` boxes `{Track Audio, EQ, Compressor, Channel Strip}` into ONE
+   collapsed macro named after the track. **Master stays outside the macro**, and the
+   Strip -> Master cable is left a plain graph edge, deliberately never a macro port — see
+   `docs/mixer.md`'s §8 item 2 for why (the Mix-vs-Direct classification `spliceMasterNode` does
+   would break behind a `MacroOutlet`);
+4. bind the track to the `Track Audio` node's uuid and give it the palette colour for its index —
+   same as every other entry.
+
+`GraphEditor::updateComponents()` runs **inside** the transaction's mutation (not after), so
+`MacroSet::retainOnly()` sees every node above still alive when it reconciles macro membership.
 
 **Delete track** (right-click a header) is the same compound step in reverse: the track and its
 bound `Track In` / `Track Audio` node go together, and come back together.

@@ -2,6 +2,7 @@
 #include "AI/AIProviderRegistry.h"
 #include "AI/AIStateMapper.h"
 #include "Branding.h"
+#include "Mixer/ChannelFlows.h"
 #include "Modules/TimelineAudioSourceModule.h"
 #include "Modules/TimelineMidiSourceModule.h" // auditionTrackNote pushes into the bound Track In node
 #include "Plugin/Hosting/HostedPluginModule.h"
@@ -39,6 +40,11 @@ constexpr const char* kRecordingsFolderName = "Recordings";
 // asset policy.
 constexpr const char* kExportsFolderName = "Exports";
 constexpr const char* kPatchesFolderName = "Patches";
+
+// Gap (T173a) between a freshly-created audio channel's macro card and a newly-spliced Master, on
+// top of the card's own width (synth::LayoutUtil::kSingleWidth) — purely cosmetic, and only used the
+// first time (Master is a singleton afterwards; see MainComponent::addAudioTrack).
+constexpr int kMasterGapAfterMacroX = 40;
 
 // The folder a "Export Audio..."/"Export Patch Only..." dialog starts in: <bundle>/<subFolderName>
 // when a real bundle is open (created on demand), otherwise the same Music/AgentSynth root every
@@ -4045,7 +4051,7 @@ juce::String MainComponent::createTrackInNode() {
     return uuid;
 }
 
-juce::String MainComponent::createTrackAudioNode() {
+juce::String MainComponent::createTrackAudioNode(bool wireDirectlyToMasterBus) {
     auto& graph = audioEngine.getGraph();
 
     // Through the factory, for the same reason createTrackInNode() is: that is what makes the node
@@ -4078,20 +4084,23 @@ juce::String MainComponent::createTrackAudioNode() {
     // straight to the output would route this track AROUND the tap and quietly leave it out of every
     // subsequent take. Preferring the tap when one exists makes the two orderings compose: an audio
     // track added before the first take is re-spliced by ensureMasterRecordTap(), and one added
-    // after it lands on the tap directly.
-    juce::AudioProcessorGraph::Node* sink = nullptr;
-    for (auto* other : graph.getNodes())
-        if (other != nullptr && dynamic_cast<RecordTapModule*>(other->getProcessor()) != nullptr)
-            sink = other;
-    if (sink == nullptr)
+    // after it lands on the tap directly. Skipped when the caller is about to wire this node into a
+    // full channel chain instead (see the header comment).
+    if (wireDirectlyToMasterBus) {
+        juce::AudioProcessorGraph::Node* sink = nullptr;
         for (auto* other : graph.getNodes())
-            if (other != nullptr && other->getProcessor() != nullptr &&
-                other->getProcessor()->getName() == "Audio Output")
+            if (other != nullptr && dynamic_cast<RecordTapModule*>(other->getProcessor()) != nullptr)
                 sink = other;
+        if (sink == nullptr)
+            for (auto* other : graph.getNodes())
+                if (other != nullptr && other->getProcessor() != nullptr &&
+                    other->getProcessor()->getName() == "Audio Output")
+                    sink = other;
 
-    if (sink != nullptr)
-        for (int channel = 0; channel < TimelineAudioSourceModule::kNumChannels; ++channel)
-            graph.addConnection({{node->nodeID, channel}, {sink->nodeID, channel}});
+        if (sink != nullptr)
+            for (int channel = 0; channel < TimelineAudioSourceModule::kNumChannels; ++channel)
+                graph.addConnection({{node->nodeID, channel}, {sink->nodeID, channel}});
+    }
 
     graphEditor.updateComponents();
     return uuid;
@@ -4448,24 +4457,65 @@ void MainComponent::addMidiTrack() {
 
 void MainComponent::addAudioTrack() {
     const int index = (int)timelineDoc.getTracks().size();
+    juce::String trackName; // set inside the mutation; read afterwards for the status message
 
-    // The exact mirror of addMidiTrack(): ONE compound undo step covering the Track Audio node, its
-    // auto-wire into the master bus, the track, its binding and its colour, so a single Cmd+Z
-    // removes all of it.
-    const bool pushed = undoManager.recordCombinedChange(audioEngine.getGraph(), timelineDoc, [this, index] {
-        // Doc side FIRST, for the reason addMidiTrack() spells out: a node created before the
-        // kMaxTracks refusal would be left orphaned in the graph.
-        const auto trackId = timelineDoc.addTrack(synth::TrackKind::Audio, "Audio " + juce::String(index + 1));
-        if (!trackId.isValid())
-            return; // at kMaxTracks: nothing added, and no node created
-        const juce::String uuid = createTrackAudioNode();
-        if (uuid.isNotEmpty())
-            timelineDoc.setTrackBinding(trackId, uuid);
-        timelineDoc.setTrackColour(trackId, synth::ui::trackPaletteColour(index).getARGB());
-    });
+    // T173a: "+ Track -> Audio Track" now creates a WHOLE mixer channel in ONE undo step — Track
+    // Audio -> Parametric EQ (bypassed) -> Compressor (bypassed) -> Channel Strip (Stereo) -> Master
+    // (Mix), with {Track Audio, EQ, Compressor, Strip} boxed into one collapsed macro named after the
+    // track, plus the track/binding/colour exactly like addMidiTrack()'s single compound step. A
+    // single Cmd+Z removes every bit of it.
+    //
+    // Master stays OUTSIDE the macro, and the Strip -> Master cable is left a PLAIN graph edge, never
+    // a macro port: synth::spliceMasterNode/synth::ensureMasterNode (Source/Mixer/MasterSplice.h)
+    // classify a re-routed feed as Mix vs Direct by checking whether the connection's SOURCE NODE is
+    // itself a ChannelStripModule. A MacroOutlet sitting between the strip and Master would make the
+    // source node a MacroOutlet instead, defeating that check — which the later "Create channels"
+    // subtask depends on.
+    const bool pushed = undoManager.recordGraphTimelineAndMacroChange(
+        audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(), [this, index, &trackName] {
+            // Doc side FIRST, for the reason addMidiTrack() spells out: a node created before the
+            // kMaxTracks refusal would be left orphaned in the graph.
+            trackName = "Audio " + juce::String(index + 1);
+            const auto trackId = timelineDoc.addTrack(synth::TrackKind::Audio, trackName);
+            if (!trackId.isValid())
+                return; // at kMaxTracks: nothing added, no node created, no macro
+
+            // Unwired (T173a): buildDefaultAudioChannel below wires it into the chain instead of
+            // straight to the master bus.
+            const juce::String trackAudioUuid = createTrackAudioNode(/*wireDirectlyToMasterBus=*/false);
+            if (trackAudioUuid.isEmpty())
+                return;
+            timelineDoc.setTrackBinding(trackId, trackAudioUuid);
+            timelineDoc.setTrackColour(trackId, synth::ui::trackPaletteColour(index).getARGB());
+
+            auto* trackAudioNode = findNodeByUuid(trackAudioUuid);
+            if (trackAudioNode == nullptr)
+                return;
+            const auto trackAudioPosition =
+                juce::Point<int>(static_cast<int>(trackAudioNode->properties.getWithDefault("x", 0)),
+                                 static_cast<int>(trackAudioNode->properties.getWithDefault("y", 0)));
+            // Only used when this is the first channel (Master is a singleton otherwise) — right of
+            // where the collapsed macro card will sit.
+            const auto masterPosition =
+                trackAudioPosition.translated(synth::LayoutUtil::kSingleWidth + kMasterGapAfterMacroX, 0);
+
+            const auto channel =
+                synth::buildDefaultAudioChannel(audioEngine.getGraph(), *trackAudioNode, masterPosition);
+            if (channel.stripUuid.isEmpty())
+                return; // a factory/addNode failure partway — see buildDefaultAudioChannel's contract
+
+            // Box {Track Audio, EQ, Compressor, Strip} into ONE collapsed macro named after the
+            // track. Master is deliberately NOT a member — see this method's own comment above.
+            graphEditor.addMacroForMembers({trackAudioUuid, channel.eqUuid, channel.compressorUuid, channel.stripUuid},
+                                           trackName, trackAudioPosition);
+
+            // Inside the mutation, not after: MacroSet::retainOnly() (run by updateComponents())
+            // must see every node above still alive to keep the macro's membership.
+            graphEditor.updateComponents();
+        });
 
     reconcileTimelineAfterGraphChange();
-    statusBar.showMessage(pushed ? "Added Audio " + juce::String(index + 1) : "Could not add a track");
+    statusBar.showMessage(pushed ? "Added " + trackName : "Could not add a track");
 }
 
 // The automation strip lane picker's "Add lane..." entries — the minimal creation surface

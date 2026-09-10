@@ -4024,6 +4024,26 @@ juce::String GraphEditor::groupSelectionIntoMacro(bool autoCreatePorts) {
     return newId;
 }
 
+juce::String GraphEditor::addMacroForMembers(const std::vector<juce::String>& memberUuids, const juce::String& name,
+                                             juce::Point<int> origin) {
+    if (memberUuids.empty())
+        return {};
+
+    // Same flat-model refusal groupSelectionIntoMacro() applies: a member already claimed by another
+    // macro aborts the whole call rather than silently re-parenting it.
+    for (const auto& uuid : memberUuids)
+        if (macros.findByMember(uuid) != nullptr)
+            return {};
+
+    synth::Macro macro;
+    macro.name = name;
+    macro.members = memberUuids;
+    macro.collapsed = true;
+    macro.bounds = juce::Rectangle<int>(origin.x, origin.y, synth::LayoutUtil::kSingleWidth, kMacroCardHeight);
+
+    return macros.add(macro).id;
+}
+
 void GraphEditor::addSelectionToMacro(const juce::String& macroId, const std::vector<juce::String>& memberUuids) {
     const auto* macro = macros.find(macroId);
     if (macro == nullptr || memberUuids.empty())

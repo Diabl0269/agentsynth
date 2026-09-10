@@ -161,6 +161,32 @@ public:
                                    const std::function<void()>& mutation);
 
     /**
+     * @brief Records a mutation that may touch the graph, the TimelineDoc, AND a synth::MacroSet all
+     *        in ONE undo step (the canonical case: T173a's "+ Track -> Audio Track", which creates a
+     *        Track Audio node plus its default insert chain (graph), the new track (timeline), and
+     *        the collapsed macro boxing the chain under the track's name (macros), all as a single
+     *        gesture a single Cmd+Z has to remove entirely).
+     *
+     * Same shape as recordCombinedChange / recordGraphAndMacroChange: begins one transaction,
+     * captures all three "before" states, runs the mutation once, captures all three "after" states,
+     * then pushes whichever action(s) the changed domain(s) need. The graph+macro half is pushed
+     * through the SAME pushGraphAndMacroActions() helper recordGraphAndMacroChange uses, so a
+     * graph+macro combination that needs the single GraphAndMacroSnapshotAction (see that class's own
+     * comment for why a fixed two-action push order can't get both undo AND redo right there) gets it
+     * here too; a TimelineSnapshotAction follows if the timeline changed, exactly as
+     * recordCombinedChange pushes its own. No beginNewTransaction between the pushes, so one
+     * undo()/redo() reverts or re-applies every domain that changed, together.
+     *
+     * @param graph Reference to the audio processor graph.
+     * @param doc Reference to the timeline document. Same lifetime contract as recordTimelineChange.
+     * @param macros Reference to the macro set.
+     * @param mutation Lambda that performs the combined mutation.
+     * @return true if any domain changed and a transaction was pushed, false if none did.
+     */
+    bool recordGraphTimelineAndMacroChange(juce::AudioProcessorGraph& graph, synth::TimelineDoc& doc,
+                                           synth::MacroSet& macros, const std::function<void()>& mutation);
+
+    /**
      * @brief Hooks fired around EVERY restore this manager performs on undo/redo — the graph's
      *        SnapshotAction and the timeline's TimelineSnapshotAction alike.
      *
@@ -249,6 +275,15 @@ private:
     // graph half of recordCombinedChange all share, so it isn't duplicated three times.
     juce::UndoableAction* createGraphSnapshotAction(juce::AudioProcessorGraph& graph, const juce::var& beforeState,
                                                     const juce::var& afterState);
+
+    // The graph+macro push logic recordGraphAndMacroChange and recordGraphTimelineAndMacroChange both
+    // need, factored out so it isn't duplicated: picks GraphAndMacroSnapshotAction when both domains
+    // changed, createGraphSnapshotAction()/MacroSnapshotAction when only one did, and pushes nothing
+    // when neither did (callers only call this when at least one of graphChanged/macrosChanged holds).
+    void pushGraphAndMacroActions(juce::AudioProcessorGraph& graph, synth::MacroSet& macros,
+                                  const juce::var& graphBefore, const juce::var& graphAfter,
+                                  const juce::var& macrosBefore, const juce::var& macrosAfter, bool graphChanged,
+                                  bool macrosChanged);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AppUndoManager)
 };
