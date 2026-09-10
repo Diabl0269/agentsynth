@@ -3178,8 +3178,16 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
         // (founder-review item 4, docs/macros.md §5.8, so the same fix also covers a macro
         // member's own right-click menu) — left in place to keep this fix's diff scoped.
         if (const auto hullMacroId = macroHullAt(canvasPos.roundToInt()); hullMacroId.isNotEmpty()) {
-            selectMacro(hullMacroId, false);
-            buildMacroMenu(hullMacroId).showMenuAsync(juce::PopupMenu::Options());
+            // T138: captured BEFORE the reselect above, which otherwise destroys any external
+            // batch (or a partial subset of this macro's own members, picked for a targeted
+            // "Remove Selection from Macro") the user chose before right-clicking this hull —
+            // see buildMacroMenu's own comment on addCandidateSelection, and
+            // MacroCardComponent::mouseDown's matching right-click branch. Only reselect when
+            // there was NO prior selection at all.
+            const auto priorSelection = getSelectedNodes();
+            if (priorSelection.empty())
+                selectMacro(hullMacroId, false);
+            buildMacroMenu(hullMacroId, nullptr, &priorSelection).showMenuAsync(juce::PopupMenu::Options());
             return;
         }
 
@@ -4015,6 +4023,113 @@ juce::String GraphEditor::groupSelectionIntoMacro(bool autoCreatePorts) {
     return newId;
 }
 
+void GraphEditor::addSelectionToMacro(const juce::String& macroId, const std::vector<juce::String>& memberUuids) {
+    const auto* macro = macros.find(macroId);
+    if (macro == nullptr || memberUuids.empty())
+        return;
+
+    // Same flat-model refusal groupSelectionIntoMacro() applies: abort the WHOLE add rather than
+    // adding the rest and silently skipping the uuid that's already spoken for.
+    for (const auto& uuid : memberUuids) {
+        if (!macro->hasMember(uuid) && macros.findByMember(uuid) != nullptr) {
+            if (onStatusMessage)
+                onStatusMessage("Can't add: a selected module is already in a macro. Ungroup it first.");
+            return;
+        }
+    }
+
+    // T138: uuids genuinely new to THIS macro — the ones the port-crossing plan below cares about;
+    // a uuid already a member of macroId is silently skipped by addMember() below same as always,
+    // and contributes no new crossing (its ports, if any, are already correct).
+    std::vector<juce::String> toAdd;
+    for (const auto& uuid : memberUuids)
+        if (!macro->hasMember(uuid))
+            toAdd.push_back(uuid);
+
+    // Computed off the PRE-add graph/macro state — pure reads, no mutation yet. See
+    // buildMacroPortCrossingPlanForNewMembers/macroPortsThatBecomeInteriorOnAdd's own header
+    // comments for what each one covers (new crossings created by the join; existing ports the
+    // join makes redundant).
+    const auto addPlan = buildMacroPortCrossingPlanForNewMembers(macroId, toAdd);
+    const auto portsToSpliceOut = macroPortsThatBecomeInteriorOnAdd(macroId, toAdd);
+
+    auto& graph = audioEngine.getGraph();
+    auto doAdd = [this, macroId, memberUuids, addPlan, portsToSpliceOut] {
+        for (const auto& uuid : memberUuids)
+            macros.addMember(macroId, uuid);
+        if (!addPlan.empty())
+            spliceMacroPorts(macroId, addPlan);
+        // Splice-out AFTER splice-in: a port this add makes redundant is never one addPlan just
+        // created (addPlan only fronts brand-new members, never macroId's own existing ports), so
+        // the two never race — but ordering them this way keeps every port mutation for this one
+        // undo step grouped by "what's new" then "what's now redundant", matching the header
+        // comments' own order.
+        for (const auto& portUuid : portsToSpliceOut) {
+            if (auto* liveMacro = macros.find(macroId))
+                spliceOutMacroPort(*liveMacro, portUuid);
+        }
+        updateComponents();
+    };
+
+    if (undoManager)
+        undoManager->recordGraphAndMacroChange(graph, macros, doAdd);
+    else
+        doAdd();
+
+    repaint();
+}
+
+void GraphEditor::removeSelectionFromMacro(const juce::String& macroId, const std::vector<juce::String>& memberUuids) {
+    const auto* macro = macros.find(macroId);
+    if (macro == nullptr || memberUuids.empty())
+        return;
+
+    // Ports have their own delete affordance (ModuleComponent::buildMacroPortContextMenu) — pulling
+    // one out of `members` here would desync Macro::ports (every port's nodeUuid must be a member)
+    // without splicing its cable back the way that affordance does.
+    std::vector<juce::String> toRemove;
+    for (const auto& uuid : memberUuids)
+        if (macro->hasMember(uuid) && !macro->memberIsPort(uuid))
+            toRemove.push_back(uuid);
+    if (toRemove.empty())
+        return;
+
+    // T138: a cable from a departing member to one that's staying is about to become a real
+    // boundary crossing — computed off the PRE-remove graph, before anything moves. See
+    // buildMacroPortCrossingPlanForRemovedMembers's own header comment.
+    const auto removePlan = buildMacroPortCrossingPlanForRemovedMembers(macroId, toRemove);
+
+    auto& graph = audioEngine.getGraph();
+    auto doRemove = [this, macroId, toRemove, removePlan] {
+        // Splice BEFORE the membership removal below: spliceMacroPorts needs macros.find(macroId)
+        // to still resolve, and removeMemberEverywhere can dissolve the macro record outright if
+        // this drops its last member (MacroSet's own "zero members" rule) — doing it last means
+        // that dissolve, if it happens, always comes after the boundary is already correct.
+        if (!removePlan.empty())
+            spliceMacroPorts(macroId, removePlan);
+        for (const auto& uuid : toRemove)
+            macros.removeMemberEverywhere(uuid);
+        updateComponents();
+    };
+
+    if (undoManager)
+        undoManager->recordGraphAndMacroChange(graph, macros, doRemove);
+    else
+        doRemove();
+
+    repaint();
+}
+
+void GraphEditor::removeNodeFromMacro(juce::AudioProcessorGraph::NodeID nodeId) {
+    const juce::String uuid = nodeUuidFor(nodeId);
+    if (uuid.isEmpty())
+        return;
+    const auto* macro = macros.findByMember(uuid);
+    if (macro == nullptr)
+        return;
+    removeSelectionFromMacro(macro->id, {uuid});
+}
+
 bool GraphEditor::selectionHasCrossingMacroCable() const {
     // NodeID-based (not selectedMemberUuidsReadOnly()-style uuid resolution): a freshly-dropped,
     // never-saved module has no "uuid" property yet, so gating on resolvable uuids would silently
@@ -4462,13 +4577,52 @@ std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::createMacroColourPick
     return buildMacroColourPicker(macroId);
 }
 
-juce::PopupMenu GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> renameAction) {
+juce::PopupMenu
+GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> renameAction,
+                            const std::vector<juce::AudioProcessorGraph::NodeID>* addCandidateSelection) {
     const auto* macro = macros.find(macroId);
     if (macro == nullptr)
         return {};
 
     const bool collapsed = macro->collapsed;
     juce::Component::SafePointer<GraphEditor> safeThis(this);
+
+    // T138: "Add Selection to Macro" is computed from `addCandidateSelection` when the caller
+    // supplied one — both the collapsed card's own right-click (MacroCardComponent::mouseDown) and
+    // the expanded hull's empty-space right-click (GraphEditor::mouseDown's macroHullAt branch)
+    // call selectMacro(macroId, false) BEFORE this method ever runs *only when the prior selection
+    // was completely empty* — which means by the time this reads the CURRENT selection it may
+    // already be just the macro's own members, with any external batch (or a member subset picked
+    // for removal) the user had before right-clicking gone. Both call sites capture the selection
+    // themselves right before that conditional reselect and pass it in here, so this always sees
+    // the true pre-click batch regardless of whether the reselect ran. Falls back to the current
+    // live selection when null (the ModuleComponent member-submenu graft, whose own narrower
+    // retarget-if-not-already-selected never destroys an external batch the same way, and where
+    // "Add" barely applies anyway since the clicked module is already this macro's member).
+    std::vector<juce::String> addableUuids;
+    const auto& addCandidates = addCandidateSelection != nullptr ? *addCandidateSelection : selection.getSelected();
+    for (auto id : addCandidates) {
+        const juce::String uuid = nodeUuidFor(id);
+        if (uuid.isNotEmpty() && !macro->hasMember(uuid))
+            addableUuids.push_back(uuid);
+    }
+
+    // "Remove from Macro" always reads the CURRENT live selection — after either forced reselect
+    // above it correctly equals the macro's own members, which is exactly what removal should see;
+    // unaffected by the add-candidate capture, since removing never needs to see PAST selection.
+    std::vector<juce::String> removableUuids;
+    for (auto id : selection.getSelected()) {
+        const juce::String uuid = nodeUuidFor(id);
+        if (uuid.isEmpty())
+            continue;
+        if (macro->hasMember(uuid)) {
+            // A port is a boundary jack, not a module the user put in the box (docs/macros.md
+            // §5.1) — it has its own "Delete Port" affordance and must never be pulled out of
+            // `members` by this generic path.
+            if (!macro->memberIsPort(uuid))
+                removableUuids.push_back(uuid);
+        }
+    }
 
     juce::PopupMenu m;
     m.addItem(collapsed ? "Expand" : "Collapse", [safeThis, macroId, collapsed] {
@@ -4557,6 +4711,23 @@ juce::PopupMenu GraphEditor::buildMacroMenu(const juce::String& macroId, std::fu
         safeThis->selectMacro(macroId, false);
         safeThis->ungroupSelection();
     });
+    // T138: unlike the two items above, these act on the captured selection (addableUuids/
+    // removableUuids), not on whatever is selected at click time — see the capture comment above.
+    // Omitted entirely (not shown disabled) when there is nothing they could do, matching "Mute
+    // Macro"'s own precedent of omitting a command that can only ever no-op.
+    if (!addableUuids.empty()) {
+        m.addItem("Add Selection to Macro", [safeThis, macroId, addableUuids] {
+            if (safeThis != nullptr)
+                safeThis->addSelectionToMacro(macroId, addableUuids);
+        });
+    }
+    if (!removableUuids.empty()) {
+        m.addItem(removableUuids.size() == 1 ? "Remove from Macro" : "Remove Selection from Macro",
+                  [safeThis, macroId, removableUuids] {
+                      if (safeThis != nullptr)
+                          safeThis->removeSelectionFromMacro(macroId, removableUuids);
+                  });
+    }
     m.addSeparator();
     m.addItem("Delete Macro && Modules", [safeThis, macroId] {
         if (safeThis != nullptr)
@@ -4880,8 +5051,13 @@ GraphEditor::buildMacroPortCrossingPlan(const std::vector<juce::AudioProcessorGr
     for (const auto& id : memberNodeIds)
         if (id.uid != 0)
             memberUids.insert(id.uid);
-    if (memberUids.size() < 2)
-        return groups;
+    // No `size() < 2` floor: groupSelectionIntoMacro() already refuses a selection of fewer than
+    // two modules before it ever gets here (its own, earlier check), but the incremental add/
+    // remove callers (buildMacroPortCrossingPlanForNewMembers/ForRemovedMembers, T138) legitimately
+    // need a crossing plan for a one-member "inside" set — e.g. removing one of a macro's two
+    // ordinary members leaves exactly one remaining member whose newly-external cable still needs
+    // a port. The loop below is correct for any size, including 0 or 1: a connection with both
+    // ends outside `memberUids` is skipped either way.
     auto isMember = [&](juce::AudioProcessorGraph::NodeID id) { return memberUids.count(id.uid) != 0; };
 
     for (const auto& c : graph.getConnections()) {
@@ -5178,6 +5354,136 @@ void GraphEditor::spliceMacroPorts(const juce::String& macroId, const std::vecto
             }
         }
     }
+}
+
+// ---- Auto-create/delete ports on incremental Add/Remove Selection to/from Macro (T138) -----------
+
+std::vector<GraphEditor::MacroPortCrossingGroup>
+GraphEditor::buildMacroPortCrossingPlanForNewMembers(const juce::String& macroId,
+                                                     const std::vector<juce::String>& addedUuids) const {
+    const auto* macro = macros.find(macroId);
+    if (macro == nullptr || addedUuids.empty())
+        return {};
+
+    std::vector<juce::AudioProcessorGraph::NodeID> insideIds;
+    for (const auto& uuid : macro->members)
+        if (!macro->memberIsPort(uuid)) {
+            const auto id = resolveMemberNodeId(uuid);
+            if (id.uid != 0)
+                insideIds.push_back(id);
+        }
+    std::set<uint32_t> addedUids;
+    for (const auto& uuid : addedUuids) {
+        const auto id = resolveMemberNodeId(uuid);
+        if (id.uid != 0) {
+            insideIds.push_back(id);
+            addedUids.insert(id.uid);
+        }
+    }
+
+    auto plan = buildMacroPortCrossingPlan(insideIds);
+
+    // Only groups fronting a NEWLY added member are this add's own work — see this method's header
+    // comment for why a group fronting an already-established member is left untouched.
+    plan.erase(
+        std::remove_if(plan.begin(), plan.end(),
+                       [&](const MacroPortCrossingGroup& g) { return addedUids.count(g.internalNodeId.uid) == 0; }),
+        plan.end());
+
+    // Drop any edge whose external endpoint is one of macroId's OWN existing ports — see this
+    // method's header comment; macroPortsThatBecomeInteriorOnAdd handles that port instead.
+    for (auto& g : plan)
+        g.edges.erase(std::remove_if(g.edges.begin(), g.edges.end(),
+                                     [&](const MacroPortCrossingEdge& e) {
+                                         const juce::String extUuid = nodeUuidFor(e.externalNodeId);
+                                         return extUuid.isNotEmpty() && macro->memberIsPort(extUuid);
+                                     }),
+                      g.edges.end());
+    plan.erase(
+        std::remove_if(plan.begin(), plan.end(), [](const MacroPortCrossingGroup& g) { return g.edges.empty(); }),
+        plan.end());
+    return plan;
+}
+
+std::vector<juce::String>
+GraphEditor::macroPortsThatBecomeInteriorOnAdd(const juce::String& macroId,
+                                               const std::vector<juce::String>& addedUuids) const {
+    const auto* macro = macros.find(macroId);
+    if (macro == nullptr || addedUuids.empty())
+        return {};
+
+    std::set<juce::String> interiorAfterAdd;
+    for (const auto& uuid : macro->members)
+        if (!macro->memberIsPort(uuid))
+            interiorAfterAdd.insert(uuid);
+    for (const auto& uuid : addedUuids)
+        interiorAfterAdd.insert(uuid);
+
+    auto& graph = audioEngine.getGraph();
+    std::vector<juce::String> result;
+    for (const auto& port : macro->ports) {
+        const auto portId = resolveMemberNodeId(port.nodeUuid);
+        if (portId.uid == 0)
+            continue;
+        bool anyEdge = false;
+        bool anyExternal = false;
+        for (const auto& c : graph.getConnections()) {
+            juce::AudioProcessorGraph::NodeID other;
+            if (c.source.nodeID == portId)
+                other = c.destination.nodeID;
+            else if (c.destination.nodeID == portId)
+                other = c.source.nodeID;
+            else
+                continue;
+            anyEdge = true;
+            const juce::String otherUuid = nodeUuidFor(other);
+            if (otherUuid.isEmpty() || interiorAfterAdd.count(otherUuid) == 0) {
+                anyExternal = true;
+                break;
+            }
+        }
+        if (anyEdge && !anyExternal)
+            result.push_back(port.nodeUuid);
+    }
+    return result;
+}
+
+std::vector<GraphEditor::MacroPortCrossingGroup>
+GraphEditor::buildMacroPortCrossingPlanForRemovedMembers(const juce::String& macroId,
+                                                         const std::vector<juce::String>& removedUuids) const {
+    const auto* macro = macros.find(macroId);
+    if (macro == nullptr || removedUuids.empty())
+        return {};
+
+    std::set<juce::String> removedSet(removedUuids.begin(), removedUuids.end());
+    std::vector<juce::AudioProcessorGraph::NodeID> remainingIds;
+    for (const auto& uuid : macro->members)
+        if (!macro->memberIsPort(uuid) && removedSet.count(uuid) == 0) {
+            const auto id = resolveMemberNodeId(uuid);
+            if (id.uid != 0)
+                remainingIds.push_back(id);
+        }
+
+    auto plan = buildMacroPortCrossingPlan(remainingIds);
+
+    // Keep only edges whose external endpoint is actually one of the departing members — see this
+    // method's header comment for why a remaining member's pre-existing, already-ported connection
+    // would otherwise look like a brand-new crossing too.
+    std::set<uint32_t> removedUids;
+    for (const auto& uuid : removedUuids) {
+        const auto id = resolveMemberNodeId(uuid);
+        if (id.uid != 0)
+            removedUids.insert(id.uid);
+    }
+    for (auto& g : plan)
+        g.edges.erase(std::remove_if(
+                          g.edges.begin(), g.edges.end(),
+                          [&](const MacroPortCrossingEdge& e) { return removedUids.count(e.externalNodeId.uid) == 0; }),
+                      g.edges.end());
+    plan.erase(
+        std::remove_if(plan.begin(), plan.end(), [](const MacroPortCrossingGroup& g) { return g.edges.empty(); }),
+        plan.end());
+    return plan;
 }
 
 void GraphEditor::spliceOutMacroPort(synth::Macro& macro, const juce::String& portNodeUuid) {
