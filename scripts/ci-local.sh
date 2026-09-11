@@ -28,7 +28,9 @@
 #      `cmake --build` -- Core, AppUI, AgentSynth, AgentSynthPlugin, Tests -- into
 #      build-ci-local/. ccache and Ninja are picked up automatically when present (see the
 #      top of CMakeLists.txt), so repeat runs are incremental.
-#   5. Run the full suite: build-ci-local/Tests/Tests.
+#   5. Dev-sign the built app bundle with scripts/dev-sign-app.sh (macOS only -- not a CI check,
+#      but the point where a local build exists to sign; see that script's header for why).
+#   6. Run the full suite: build-ci-local/Tests/Tests.
 #
 # NOT reproduced here (deliberately -- see docs/testing.md): the Ubuntu coverage gate
 # (a separate opt-in, `bash scripts/coverage.sh`), the label-gated ASAN job, and actual
@@ -149,7 +151,23 @@ JOBS="$( (command -v nproc >/dev/null 2>&1 && nproc) || sysctl -n hw.ncpu 2>/dev
 # understand a raw `-jN` passed through to the native tool.
 cmake --build "$BUILD_DIR" --parallel "$JOBS"
 
-# --- 5. Run the full test suite -----------------------------------------------------------------
+# --- 5. Dev-sign the app bundle (macOS only, before tests so a signing failure surfaces early) --
+step "Dev-sign app bundle (stable TCC identity)"
+# `|| true`: under `set -o pipefail`, `head -n 1` closing the pipe after its first line can make
+# `find` see SIGPIPE and exit non-zero, which -- since this is a plain assignment, not `local` --
+# would trip `set -e` and abort the whole script here instead of just leaving APP_PATH empty.
+APP_PATH="$( (find "$BUILD_DIR" -name "Agent Synth.app" -type d 2>/dev/null || true) | head -n 1)"
+if [ "$(uname)" = "Darwin" ]; then
+    if [ -n "$APP_PATH" ]; then
+        bash scripts/dev-sign-app.sh "$APP_PATH" || fail "scripts/dev-sign-app.sh failed (see above)."
+    else
+        echo "ci-local: WARNING could not find 'Agent Synth.app' under $BUILD_DIR -- skipping dev-sign."
+    fi
+else
+    echo "ci-local: not macOS, skipping dev-sign."
+fi
+
+# --- 6. Run the full test suite -----------------------------------------------------------------
 step "Run tests"
 TESTS_BIN="$BUILD_DIR/Tests/Tests"
 if [ ! -x "$TESTS_BIN" ]; then
@@ -160,7 +178,6 @@ fi
 # --- Done: point at a build the user can actually launch ---------------------------------------
 step "All checks passed"
 
-APP_PATH="$(find "$BUILD_DIR" -name "Agent Synth.app" -type d 2>/dev/null | head -n 1)"
 if [ -n "$APP_PATH" ]; then
     echo "App bundle: $APP_PATH"
     if [ "$OPEN_APP" = true ]; then
