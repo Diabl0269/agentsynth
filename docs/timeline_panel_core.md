@@ -787,12 +787,16 @@ Picking one calls `TimelineDoc::setTrackBinding` as one undoable step, then reco
 
 **"+ Track"** (it used to read `"+ MIDI Track"` and added one outright until audio tracks existed,
 and carries the tooltip *"Add a MIDI or Audio track"* so the two-item menu isn't a surprise)
-opens a menu — **MIDI Track** / **Audio Track**, then a separator and **Add Marker** — whose ids are
-`TimelinePanelComponent::kAddMidiTrackMenuId` / `kAddAudioTrackMenuId` / `kAddMarkerMenuId`. The two
-track entries land on `TrackHeaderHost` (`addMidiTrack()` / `addAudioTrack()`), and
-`TimelinePanelComponent::applyAddTrackMenuChoice(id)` is the headless seam — the same split the
-binding and context menus use, since a `juce::PopupMenu` never runs in the test binary.
-`MainComponent::simulateAddMidiTrackClick()` / `simulateAddAudioTrackClick()` call straight into it.
+opens a menu — **MIDI Track** / **Audio Track**, an **Instrument Track** submenu (**Oscillator** /
+**Wavetable** / **Sampler**), then a separator and **Add Marker** — whose ids are
+`TimelinePanelComponent::kAddMidiTrackMenuId` / `kAddAudioTrackMenuId` /
+`kAddInstrumentOscillatorMenuId` / `kAddInstrumentWavetableMenuId` / `kAddInstrumentSamplerMenuId` /
+`kAddMarkerMenuId`. The MIDI/Audio entries land on `TrackHeaderHost` (`addMidiTrack()` /
+`addAudioTrack()`); each Instrument submenu entry calls `addInstrumentTrack(instrumentModuleType)`
+with its module type string. `TimelinePanelComponent::applyAddTrackMenuChoice(id)` is the headless
+seam for all of them — the same split the binding and context menus use, since a `juce::PopupMenu`
+never runs in the test binary. `MainComponent::simulateAddMidiTrackClick()` /
+`simulateAddAudioTrackClick()` / `simulateAddInstrumentTrackClick(menuId)` call straight into it.
 
 **Add Marker** sits below a separator because it is **not a track**: it adds no header row and no
 graph node, it drops a flag on the ruler (see *Markers* under §2 above). It shares this menu
@@ -848,6 +852,37 @@ set:
 
 `GraphEditor::updateComponents()` runs **inside** the transaction's mutation (not after), so
 `MacroSet::retainOnly()` sees every node above still alive when it reconciles macro membership.
+
+**The Instrument entries** (T183) are the MIDI-track mirror of the Audio entry above — a `Track In`
+feeding a chosen instrument, then the same factory default chain — see
+[`docs/mixer.md` §8 item 2](mixer.md) for the full design. The picker offers exactly the
+audio-producing MIDI instruments (**Oscillator**, **Wavetable**, **Sampler**) — deliberately not
+every module the MIDI entry's own auto-wire search above recognises as "MIDI-driven": Poly MIDI
+outputs CV/gate and Sequencer/Poly Sequencer generate MIDI, none of them audio. One undo step
+(`AppUndoManager::recordGraphTimelineAndMacroChange`, `MainComponent::addInstrumentTrack`):
+
+1. add a `Midi` track (doc side first, same `kMaxTracks` ordering reason as every other entry) —
+   **T183 kept this a `TrackKind::Midi` track rather than adding a new kind**: it is exactly what
+   the MIDI entry's own auto-wire (step 3 above) already produces once a cable is drawn by hand,
+   this flow just draws that cable and builds the channel automatically (see `docs/mixer.md` §5.2's
+   table note);
+2. create the `Track In` node (same factory/uuid/placement idiom as the MIDI entry), then the
+   chosen instrument to its right, and wire `Track In -> instrument` on the MIDI channel — always
+   unambiguous, since the instrument was just created for this track alone;
+3. a poly instrument's raw ch0-7 (up to 8 simultaneous voices) cannot feed
+   `buildDefaultAudioChannel` directly, which wants one stereo pair — `synth::
+   addVoiceMixerForPolyInstrument` (Core, `Source/Mixer/ChannelFlows.h`) sums them into a Voice
+   Mixer first when the instrument's own `poly` parameter is on (docs/mixer.md §5.4/§5.8). A
+   factory-created instrument defaults to poly OFF, so this is a no-op on the golden path today;
+4. `synth::buildDefaultAudioChannel` wires the instrument (or the Voice Mixer, if step 3 created
+   one) into the same `Parametric EQ (bypassed) -> Compressor (bypassed) -> Channel Strip (Stereo)`
+   chain the Audio entry uses, then splices Master. A split-block instrument (Oscillator/Wavetable,
+   whose right leg is never ch1) passes its own `ModuleBase::rightAudioLegChannel()` as
+   `buildDefaultAudioChannel`'s new `sourceRightChannel` parameter instead of the ch1 default;
+5. `GraphEditor::addMacroForMembers` boxes `{Track In, instrument, [Voice Mixer if any], EQ,
+   Compressor, Strip}` into ONE collapsed macro named after the track, the same way the Audio
+   entry's macro is built — Master stays outside it, for the same reason;
+6. bind the track to the `Track In` node's uuid and give it the palette colour for its index.
 
 **Delete track** (right-click a header) is the same compound step in reverse: the track and its
 bound `Track In` / `Track Audio` node go together, and come back together.

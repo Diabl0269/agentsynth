@@ -262,6 +262,9 @@ public:
     void simulateAddAudioTrackClick() {
         timelinePanel.applyAddTrackMenuChoice(synth::ui::TimelinePanelComponent::kAddAudioTrackMenuId);
     }
+    /** T183 (P9-3b): drives the Instrument submenu's headless seam directly, by menu id, so a test
+     *  can pick which of the three instrument entries to simulate. */
+    void simulateAddInstrumentTrackClick(int menuId) { timelinePanel.applyAddTrackMenuChoice(menuId); }
     /** Exactly what the Save dialog's callback runs: a name ending in `.agsproj` writes a project
      *  bundle (graph + timeline), anything else writes a plain `.json` preset. */
     bool saveProjectForTest(const juce::File& file) { return saveToFile(file); }
@@ -591,6 +594,7 @@ private:
     void performTrackEdit(const std::function<void()>& mutation) override;
     void addMidiTrack() override;
     void addAudioTrack() override;
+    void addInstrumentTrack(const juce::String& instrumentModuleType) override;
     std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> getAvailablePluginLaneOptions() const override;
     synth::LaneId addPluginAutomationLane(const synth::ui::TrackHeaderHost::PluginLaneOption& option) override;
     // The colour picker's favourites shelf persists here — the only TrackHeaderHost override

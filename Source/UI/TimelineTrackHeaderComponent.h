@@ -78,6 +78,12 @@ struct TrackHeaderHost {
      *  addMidiTrack(). */
     virtual void addAudioTrack() = 0;
 
+    /** The "+ Track" button's Instrument submenu (T183/P9-3b): `instrumentModuleType` ("Oscillator",
+     *  "Wavetable" or "Sampler") wired as Track In -> instrument -> default chain (EQ/Compressor
+     *  bypassed -> Channel Strip Stereo) -> Master, plus a Midi-kind track bound to the Track In, as
+     *  ONE compound undo step — the exact mirror of addAudioTrack(). */
+    virtual void addInstrumentTrack(const juce::String& instrumentModuleType) = 0;
+
     /** One hosted-plugin instance parameter with no automation lane yet — the automation
      *  strip's lane picker "Add lane..." entries. `paramId` is the value a created lane would carry
      *  (a real stable id, or the synthetic "legacy:<index>" form — see
