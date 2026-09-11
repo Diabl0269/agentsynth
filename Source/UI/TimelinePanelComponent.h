@@ -425,6 +425,12 @@ public:
     // It shares this menu because "+ Track" is where a user reaches for "add something to the
     // arrangement", and a second button for one item would not earn its pixels.
     static constexpr int kAddMarkerMenuId = 3;
+    // T183 (P9-3b): the Instrument submenu's three audio-producing MIDI instrument choices — see
+    // TrackHeaderHost::addInstrumentTrack's own comment for why the set is exactly these three (not
+    // every isMidiInstrumentType() member: Poly MIDI/Sequencer/Poly Sequencer don't produce audio).
+    static constexpr int kAddInstrumentOscillatorMenuId = 4;
+    static constexpr int kAddInstrumentWavetableMenuId = 5;
+    static constexpr int kAddInstrumentSamplerMenuId = 6;
 
     /** Adds a marker at the transport's current position, named "Marker N", coloured from the
      *  theme (see defaultMarkerColourArgb) — ONE recordTimelineChange when an undo manager is

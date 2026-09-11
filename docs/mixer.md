@@ -1,11 +1,14 @@
 # Mixer
 
-**Status: DECIDED 2026-09-10 (founder sign-off on D1-D4). P9-2 implemented, P9-3's audio-track
-flow implemented (T173a)** — the `ChannelStrip` and `Master` nodes, the engine-owned solo gate and
-the Master splice exist (engine only; §8 item 1 records how), and "+ Track -> Audio Track" now
-builds the factory default channel end to end (§8 item 2). The other P9-3 flows (Instrument track,
-MIDI-track auto-channel-on-connect, "Make channel", "Create channels" for existing projects) are
-still follow-ups, and there is no mixer panel yet (P9-5). This document records the decided design;
+**Status: DECIDED 2026-09-10 (founder sign-off on D1-D4). P9-2 implemented, P9-3's audio-track and
+instrument-track flows implemented (T173a, T183)** — the `ChannelStrip` and `Master` nodes, the
+engine-owned solo gate and the Master splice exist (engine only; §8 item 1 records how), "+ Track ->
+Audio Track" builds the factory default channel end to end (§8 item 2), and "+ Track -> Instrument"
+does the same ahead of a chosen instrument (§8 item 2, T183) — see §5.2's table note for why that
+one stays a `TrackKind::Midi` track rather than the "(new track kind)" this doc originally called
+for. The other P9-3 flows (MIDI-track auto-channel-on-connect, "Make channel", "Create channels" for
+existing projects) are still follow-ups, and there is no mixer panel yet (P9-5). This document
+records the decided design;
 §8 is the implementation order that turns it into code. The visual
 proposal that led to this decision (canvas diagram, mixer panel mock, the four decision cards)
 lived in a separate page shown to the founder, not in this repo.
@@ -139,7 +142,7 @@ one level upstream of it.
 | Track kind | Own channel? | What gets created |
 | --- | --- | --- |
 | Audio track | Yes, automatic | Track Audio -> default modules -> strip, boxed as one channel when the track is added. |
-| Instrument track (new track kind) | Yes, automatic | Track In -> the chosen instrument -> default modules -> strip, in one step. |
+| Instrument track | Yes, automatic | Track In -> the chosen instrument -> default modules -> strip, in one step. |
 | MIDI track into an existing instrument | No | Nothing new is created. Its notes play into that instrument's channel; the strip's UI lists the track under its "tracks" line. |
 
 Audio and instrument tracks each automatically get a channel; a MIDI track routed to an instrument
@@ -147,6 +150,15 @@ another track already drives does not get a second one — it feeds the existing
 a shared sampler three ways (or triple-counting its CPU/sound) if every track insisted on its own
 channel is the failure this avoids; Cubase draws the same line (MIDI tracks carry no audio channel
 of their own, instrument tracks do).
+
+**T183 implemented "Instrument track" as `TrackKind::Midi`, not a new kind.** This table originally
+called it "(new track kind)" — a `TrackKind::Instrument` enum value plus format/serialization and
+kind-badge UI changes. T183's own scope never asked for that, and an instrument track today is
+exactly what this row above ("MIDI track into an existing instrument") already describes once the
+user draws the cable by hand: a Track In feeding exactly one instrument. "+ Track -> Instrument"
+just draws that cable and builds the channel automatically instead of making the user do both steps
+— see `MainComponent::addInstrumentTrack`'s own comment. A future `TrackKind::Instrument` would
+need to migrate every track this flow has already created.
 
 **The main workflow: connecting a MIDI track to an unchanneled instrument.** A track's own
 mute/solo controls only mean anything once a channel exists for them to drive, so the common path
@@ -430,7 +442,7 @@ Main line, in dependency order:
      Direct input; un-soloing the last soloed strip restores every other strip; solo never mutates
      another strip's mute parameter; `Master` splice is one undo step and undoes cleanly.
 
-2. **P9-3 (T173) — Channel creation flows.** Audio track auto-channel, the new Instrument track,
+2. **P9-3 (T173) — Channel creation flows.** Audio track auto-channel, the Instrument track,
    MIDI-track auto-channel-on-connect (§5.2's main workflow, Preferences-gated), "Make channel",
    "Create channels" for existing projects, the factory default chain (EQ -> Compressor, bypassed).
    - Tests: an audio/instrument track creation produces exactly one channel in one undo step; a
@@ -449,8 +461,26 @@ Main line, in dependency order:
      checking whether the connection's SOURCE NODE is itself a `ChannelStripModule`; a
      `MacroOutlet` sitting between the strip and Master would make the source node a `MacroOutlet`
      instead and defeat that check, which the later "Create channels" subtask (this same list,
-     "N channel-less tracks") depends on. The other bullet points above (Instrument track,
-     MIDI-track auto-channel, "Make channel", "Create channels") remain open follow-ups.
+     "N channel-less tracks") depends on.
+   - **T183 (instrument track) — DONE.** "+ Track -> Instrument" opens a submenu of audio-producing
+     MIDI instruments (Oscillator, Wavetable, Sampler — deliberately NOT every
+     `isMidiInstrumentType()` member: Poly MIDI/Sequencer/Poly Sequencer generate CV/MIDI, not
+     audio) and builds Track In -> the chosen instrument -> the same
+     `synth::buildDefaultAudioChannel` chain T173a uses, in ONE undo step
+     (`MainComponent::addInstrumentTrack`). `{Track In, instrument, [Voice Mixer if poly], EQ,
+     Compressor, Strip}` are boxed into one collapsed macro the same way T173a's are; Master stays
+     outside it for the same `spliceMasterNode` reason. `buildDefaultAudioChannel` gained a
+     trailing `sourceRightChannel` parameter (default 1, Track Audio's contiguous pair unchanged)
+     so a split-block source can pass its own `ModuleBase::rightAudioLegChannel()` instead of
+     assuming ch1 — Oscillator/Wavetable's right leg is never ch1 (Source/Modules/CLAUDE.md). A new
+     `synth::addVoiceMixerForPolyInstrument` (§5.4/§5.8's "poly output needs a Voice Mixer ahead of
+     the strip" rule) sums a poly instrument's ch0-7 into a Voice Mixer first — gated on the
+     instrument's own live `poly` parameter, never forced on: a factory-created instrument defaults
+     to poly OFF, so this branch is a no-op on the golden path today and exists for whenever it
+     isn't (`Tests/ChannelFlowTests.cpp`'s `PolyInstrumentGetsVoiceMixerAheadOfStripAndFeedsTheChannel`
+     exercises it directly). See §5.2's table note for the `TrackKind::Midi` scope decision. The
+     other bullet points above (MIDI-track auto-channel, "Make channel", "Create channels") remain
+     open follow-ups.
      `Tests/ChannelFlowTests.cpp`.
 
 3. **P9-4 (T177) — Track/channel link.** Name sync, live colour sync across track/macro/column

@@ -64,6 +64,7 @@ struct StubHost : TrackHeaderHost {
     }
     void addMidiTrack() override {}
     void addAudioTrack() override {}
+    void addInstrumentTrack(const juce::String&) override {}
     std::vector<PluginLaneOption> getAvailablePluginLaneOptions() const override { return {}; }
     synth::LaneId addPluginAutomationLane(const PluginLaneOption&) override { return {}; }
 

@@ -1138,6 +1138,12 @@ void TimelinePanelComponent::applyAddTrackMenuChoice(int menuId) {
         trackHeaderHost_->addMidiTrack();
     else if (menuId == kAddAudioTrackMenuId)
         trackHeaderHost_->addAudioTrack();
+    else if (menuId == kAddInstrumentOscillatorMenuId)
+        trackHeaderHost_->addInstrumentTrack("Oscillator");
+    else if (menuId == kAddInstrumentWavetableMenuId)
+        trackHeaderHost_->addInstrumentTrack("Wavetable");
+    else if (menuId == kAddInstrumentSamplerMenuId)
+        trackHeaderHost_->addInstrumentTrack("Sampler");
 }
 
 synth::MarkerId TimelinePanelComponent::addMarkerAtPlayhead() {
@@ -1178,6 +1184,13 @@ void TimelinePanelComponent::openAddTrackMenu() {
     juce::PopupMenu menu;
     menu.addItem(kAddMidiTrackMenuId, "MIDI Track");
     menu.addItem(kAddAudioTrackMenuId, "Audio Track");
+    // T183 (P9-3b): a submenu rather than three flat entries — these are all "Instrument Track",
+    // differing only by which audio-producing MIDI instrument drives it.
+    juce::PopupMenu instrumentMenu;
+    instrumentMenu.addItem(kAddInstrumentOscillatorMenuId, "Oscillator");
+    instrumentMenu.addItem(kAddInstrumentWavetableMenuId, "Wavetable");
+    instrumentMenu.addItem(kAddInstrumentSamplerMenuId, "Sampler");
+    menu.addSubMenu("Instrument Track", instrumentMenu);
     // Separated because it is not a track at all: a marker adds no row to the header column and
     // nothing to the graph, it drops a flag on the ruler.
     menu.addSeparator();

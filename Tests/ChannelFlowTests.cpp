@@ -18,6 +18,7 @@
 #include "../Source/AI/AIStateMapper.h"
 #include "../Source/AudioEngine.h"
 #include "../Source/MacroSet.h"
+#include "../Source/Mixer/ChannelFlows.h"
 #include "../Source/Modules/ChannelStripModule.h"
 #include "../Source/Modules/MasterModule.h"
 #include "../Source/Modules/ModuleBase.h"
@@ -94,6 +95,20 @@ juce::String nodeUuid(juce::AudioProcessorGraph::Node* node) {
     return node != nullptr ? node->properties["uuid"].toString() : juce::String();
 }
 
+// T183: flips a module's "poly" AudioParameterBool, when it has one. No-op (returns false) for
+// Sampler, which has no poly parameter at all.
+bool setPolyParamCFT(juce::AudioProcessor* processor, bool poly) {
+    if (processor == nullptr)
+        return false;
+    for (auto* param : processor->getParameters())
+        if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param))
+            if (boolParam->paramID == "poly") {
+                boolParam->setValueNotifyingHost(poly ? 1.0f : 0.0f);
+                return true;
+            }
+    return false;
+}
+
 } // namespace
 
 class ChannelFlowTest : public ::testing::Test {
@@ -127,6 +142,17 @@ protected:
     // The menu hook, not the async PopupMenu — the same headless seam the binding chip uses.
     static void addAudioTrack(MainComponent& mc) {
         mc.getTimelinePanel().applyAddTrackMenuChoice(synth::ui::TimelinePanelComponent::kAddAudioTrackMenuId);
+    }
+
+    // T183: the Instrument submenu's headless seam, keyed by module type name rather than the raw
+    // menu id — matches how the picker itself is spelled everywhere else in this file.
+    static void addInstrumentTrack(MainComponent& mc, const juce::String& instrumentModuleType) {
+        int menuId = synth::ui::TimelinePanelComponent::kAddInstrumentSamplerMenuId;
+        if (instrumentModuleType == "Oscillator")
+            menuId = synth::ui::TimelinePanelComponent::kAddInstrumentOscillatorMenuId;
+        else if (instrumentModuleType == "Wavetable")
+            menuId = synth::ui::TimelinePanelComponent::kAddInstrumentWavetableMenuId;
+        mc.getTimelinePanel().applyAddTrackMenuChoice(menuId);
     }
 };
 
@@ -442,4 +468,294 @@ TEST_F(ChannelFlowTest, RefusedAtMaxTracksCreatesNothing) {
     EXPECT_EQ(graph.getNumNodes(), nodesBefore) << "a refused audio track must leave no orphan node";
     EXPECT_EQ(macros.size(), 0) << "a refused audio track must leave no macro";
     EXPECT_FALSE(mc.getUndoManager().canUndo()) << "nothing changed in any domain: no undo step";
+}
+
+// ---------------------------------------------------------------------------------------------
+// T183 (P9-3b): "+ Track -> Instrument -> {Oscillator/Wavetable/Sampler}" builds
+//
+//     Track In -> instrument -> Parametric EQ (bypassed) -> Compressor (bypassed)
+//              -> Channel Strip (Stereo) -> Master (Mix)
+//
+// as ONE undo step, with {Track In, instrument, EQ, Compressor, Strip} boxed into one collapsed
+// macro named after the track — the MIDI-track mirror of the Audio Track tests above. See
+// MainComponent::addInstrumentTrack's own comment for why this stays a TrackKind::Midi track
+// rather than a new TrackKind, and Source/Mixer/ChannelFlows.h for the poly/Voice Mixer contract.
+// ---------------------------------------------------------------------------------------------
+
+TEST_F(ChannelFlowTest, InstrumentTrackSamplerBuildsDefaultChannelDirectlyOnAContiguousPair) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+
+    addInstrumentTrack(mc, "Sampler");
+
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::TimelineMidiSource), 1);
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::Sampler), 1);
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::VoiceMixer), 0)
+        << "Sampler is a contiguous stereo pair — no Voice Mixer needed";
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::ParametricEQ), 1);
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::Compressor), 1);
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::ChannelStrip), 1);
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::Master), 1);
+
+    auto* trackIn = findNodeOfTypeCFT(graph, ModuleType::TimelineMidiSource);
+    auto* sampler = findNodeOfTypeCFT(graph, ModuleType::Sampler);
+    auto* eq = findNodeOfTypeCFT(graph, ModuleType::ParametricEQ);
+    ASSERT_NE(trackIn, nullptr);
+    ASSERT_NE(sampler, nullptr);
+    ASSERT_NE(eq, nullptr);
+
+    EXPECT_TRUE(graph.isConnected({{trackIn->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
+                                   {sampler->nodeID, juce::AudioProcessorGraph::midiChannelIndex}}));
+
+    auto* samplerModule = dynamic_cast<ModuleBase*>(sampler->getProcessor());
+    ASSERT_NE(samplerModule, nullptr);
+    ASSERT_EQ(samplerModule->rightAudioLegChannel(), 1) << "Sampler's legs ARE the contiguous ch0/ch1 pair";
+    EXPECT_TRUE(graph.isConnected({{sampler->nodeID, 0}, {eq->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{sampler->nodeID, 1}, {eq->nodeID, 1}}));
+}
+
+TEST_F(ChannelFlowTest, InstrumentTrackOscillatorWiresSplitBlockRightLegNeverCh1) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+
+    addInstrumentTrack(mc, "Oscillator");
+
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::VoiceMixer), 0)
+        << "a freshly created Oscillator defaults to poly OFF — no Voice Mixer needed";
+
+    auto* oscillator = findNodeOfTypeCFT(graph, ModuleType::Oscillator);
+    auto* eq = findNodeOfTypeCFT(graph, ModuleType::ParametricEQ);
+    ASSERT_NE(oscillator, nullptr);
+    ASSERT_NE(eq, nullptr);
+
+    auto* oscModule = dynamic_cast<ModuleBase*>(oscillator->getProcessor());
+    ASSERT_NE(oscModule, nullptr);
+    const int rightLeg = oscModule->rightAudioLegChannel();
+    ASSERT_GT(rightLeg, 1) << "Oscillator's right leg is a dedicated kRightBase block, never ch1";
+
+    EXPECT_TRUE(graph.isConnected({{oscillator->nodeID, 0}, {eq->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{oscillator->nodeID, rightLeg}, {eq->nodeID, 1}}));
+    EXPECT_FALSE(graph.isConnected({{oscillator->nodeID, 1}, {eq->nodeID, 1}}))
+        << "must never assume ch1 for a split-block source";
+}
+
+TEST_F(ChannelFlowTest, InstrumentTrackDefaultInsertsAreBypassedAndStripIsStereo) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+
+    addInstrumentTrack(mc, "Sampler");
+
+    auto* eqModule = dynamic_cast<ModuleBase*>(findNodeOfTypeCFT(graph, ModuleType::ParametricEQ)->getProcessor());
+    auto* compModule = dynamic_cast<ModuleBase*>(findNodeOfTypeCFT(graph, ModuleType::Compressor)->getProcessor());
+    auto* stripModule =
+        dynamic_cast<ChannelStripModule*>(findNodeOfTypeCFT(graph, ModuleType::ChannelStrip)->getProcessor());
+    ASSERT_NE(eqModule, nullptr);
+    ASSERT_NE(compModule, nullptr);
+    ASSERT_NE(stripModule, nullptr);
+
+    EXPECT_TRUE(eqModule->isBypassed());
+    EXPECT_TRUE(compModule->isBypassed());
+    EXPECT_FALSE(stripModule->isBypassed());
+    EXPECT_EQ(stripModule->getShape(), ChannelStripModule::Shape::Stereo);
+}
+
+TEST_F(ChannelFlowTest, InstrumentTrackIsOneCollapsedMacroNamedAfterTrackAndStaysMidiKind) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto& doc = mc.getTimelineDoc();
+    auto& macros = mc.getGraphEditor().getMacros();
+
+    addInstrumentTrack(mc, "Sampler");
+
+    ASSERT_EQ(macros.size(), 1);
+    const auto& macro = macros.getAll().front();
+    ASSERT_EQ(doc.getTracks().size(), 1u);
+    const auto& track = doc.getTracks().back();
+
+    EXPECT_EQ(macro.name, track.name);
+    EXPECT_TRUE(macro.collapsed);
+    // T183's scope decision: an instrument track is TrackKind::Midi (a Track In feeding exactly
+    // one instrument), not a new TrackKind — see MainComponent::addInstrumentTrack's own comment.
+    EXPECT_EQ(track.kind, synth::TrackKind::Midi);
+    EXPECT_EQ(track.bindingUuid, nodeUuid(findNodeOfTypeCFT(graph, ModuleType::TimelineMidiSource)));
+
+    std::vector<juce::String> expected = {nodeUuid(findNodeOfTypeCFT(graph, ModuleType::TimelineMidiSource)),
+                                          nodeUuid(findNodeOfTypeCFT(graph, ModuleType::Sampler)),
+                                          nodeUuid(findNodeOfTypeCFT(graph, ModuleType::ParametricEQ)),
+                                          nodeUuid(findNodeOfTypeCFT(graph, ModuleType::Compressor)),
+                                          nodeUuid(findNodeOfTypeCFT(graph, ModuleType::ChannelStrip))};
+    auto actual = macro.members;
+    std::sort(expected.begin(), expected.end());
+    std::sort(actual.begin(), actual.end());
+    EXPECT_EQ(actual, expected);
+
+    EXPECT_FALSE(macro.hasMember(nodeUuid(findNodeOfTypeCFT(graph, ModuleType::Master))))
+        << "Master must stay outside the macro";
+}
+
+TEST_F(ChannelFlowTest, InstrumentTrackOneUndoStepRevertsEverythingAndRedoRestores) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto& doc = mc.getTimelineDoc();
+    auto& macros = mc.getGraphEditor().getMacros();
+
+    const juce::String graphBefore = juce::JSON::toString(synth::AIStateMapper::graphToJSON(graph));
+    const juce::String docBefore = juce::JSON::toString(doc.toVar());
+    const juce::String macrosBefore = juce::JSON::toString(macros.toVar());
+
+    addInstrumentTrack(mc, "Oscillator");
+    ASSERT_EQ(countNodesOfTypeCFT(graph, ModuleType::ChannelStrip), 1) << "the channel must have been built";
+    const juce::String graphAfter = juce::JSON::toString(synth::AIStateMapper::graphToJSON(graph));
+    const juce::String docAfter = juce::JSON::toString(doc.toVar());
+    const juce::String macrosAfter = juce::JSON::toString(macros.toVar());
+
+    ASSERT_TRUE(mc.getUndoManager().canUndo());
+    ASSERT_TRUE(mc.getUndoManager().undo());
+    EXPECT_EQ(juce::JSON::toString(synth::AIStateMapper::graphToJSON(graph)), graphBefore);
+    EXPECT_EQ(juce::JSON::toString(doc.toVar()), docBefore);
+    EXPECT_EQ(juce::JSON::toString(macros.toVar()), macrosBefore);
+    EXPECT_FALSE(mc.getUndoManager().canUndo()) << "the whole channel was ONE undo step";
+
+    ASSERT_TRUE(mc.getUndoManager().redo());
+    EXPECT_EQ(juce::JSON::toString(synth::AIStateMapper::graphToJSON(graph)), graphAfter);
+    EXPECT_EQ(juce::JSON::toString(doc.toVar()), docAfter);
+    EXPECT_EQ(juce::JSON::toString(macros.toVar()), macrosAfter);
+}
+
+// The Wavetable card and the Parametric EQ card are BOTH double-width — the exact overlap shape
+// P9-3a's own bug (see this file's header comment) reproduced for, now one node to the left of
+// where it was. Reuses ChannelCardsDoNotOverlapAndMasterIsRightOfStrip's real-ModuleComponent
+// approach rather than inferring bounds from positions.
+TEST_F(ChannelFlowTest, InstrumentTrackWavetableCardsDoNotOverlap) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(2600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto& macros = mc.getGraphEditor().getMacros();
+
+    addInstrumentTrack(mc, "Wavetable");
+
+    ASSERT_EQ(macros.size(), 1);
+    const auto macroId = macros.getAll().front().id;
+    mc.getGraphEditor().setMacroCollapsed(macroId, false);
+    ASSERT_FALSE(macros.find(macroId)->collapsed);
+
+    auto* trackInNode = findNodeOfTypeCFT(graph, ModuleType::TimelineMidiSource);
+    auto* wavetableNode = findNodeOfTypeCFT(graph, ModuleType::Wavetable);
+    auto* eqNode = findNodeOfTypeCFT(graph, ModuleType::ParametricEQ);
+    auto* compNode = findNodeOfTypeCFT(graph, ModuleType::Compressor);
+    auto* stripNode = findNodeOfTypeCFT(graph, ModuleType::ChannelStrip);
+    auto* masterNode = findNodeOfTypeCFT(graph, ModuleType::Master);
+    ASSERT_NE(trackInNode, nullptr);
+    ASSERT_NE(wavetableNode, nullptr);
+    ASSERT_NE(eqNode, nullptr);
+    ASSERT_NE(compNode, nullptr);
+    ASSERT_NE(stripNode, nullptr);
+    ASSERT_NE(masterNode, nullptr);
+
+    auto findComp = [&mc](juce::AudioProcessorGraph::Node* node) -> ModuleComponent* {
+        for (auto* comp : mc.getGraphEditor().getModuleComponents())
+            if (comp != nullptr && comp->getNodeId() == node->nodeID)
+                return comp;
+        return nullptr;
+    };
+
+    const std::array<ModuleComponent*, 6> cards = {findComp(trackInNode), findComp(wavetableNode),
+                                                   findComp(eqNode),      findComp(compNode),
+                                                   findComp(stripNode),   findComp(masterNode)};
+    for (auto* card : cards)
+        ASSERT_NE(card, nullptr) << "every macro member must have a real ModuleComponent once expanded";
+
+    for (size_t i = 0; i < cards.size(); ++i)
+        for (size_t j = i + 1; j < cards.size(); ++j)
+            EXPECT_FALSE(cards[i]->getBounds().intersects(cards[j]->getBounds()))
+                << "card " << i << " " << cards[i]->getBounds().toString().toStdString() << " overlaps card " << j
+                << " " << cards[j]->getBounds().toString().toStdString();
+
+    for (size_t i = 0; i + 1 < cards.size(); ++i)
+        EXPECT_LT(cards[i]->getX(), cards[i + 1]->getX());
+}
+
+TEST_F(ChannelFlowTest, InstrumentTrackRefusedAtMaxTracksCreatesNothing) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& doc = mc.getTimelineDoc();
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto& macros = mc.getGraphEditor().getMacros();
+
+    while ((int)doc.getTracks().size() < synth::TimelineDoc::kMaxTracks)
+        ASSERT_TRUE(doc.addTrack(synth::TrackKind::Midi, "Filler").isValid());
+    ASSERT_FALSE(mc.getUndoManager().canUndo());
+    const int nodesBefore = graph.getNumNodes();
+
+    addInstrumentTrack(mc, "Sampler");
+
+    EXPECT_EQ((int)doc.getTracks().size(), synth::TimelineDoc::kMaxTracks);
+    EXPECT_EQ(graph.getNumNodes(), nodesBefore) << "a refused instrument track must leave no orphan node";
+    EXPECT_EQ(macros.size(), 0) << "a refused instrument track must leave no macro";
+    EXPECT_FALSE(mc.getUndoManager().canUndo()) << "nothing changed in any domain: no undo step";
+}
+
+// synth::addVoiceMixerForPolyInstrument / the poly branch of MainComponent::addInstrumentTrack's
+// chain-source selection, exercised directly at the ChannelFlows level: a factory-default
+// Oscillator is poly OFF (see InstrumentTrackOscillatorWiresSplitBlockRightLegNeverCh1 above), so
+// the golden "+ Track -> Instrument" path never takes this branch today — this proves it wires
+// correctly for whenever an instrument IS poly (docs/mixer.md §5.4/§5.8).
+TEST_F(ChannelFlowTest, PolyInstrumentGetsVoiceMixerAheadOfStripAndFeedsTheChannel) {
+    AudioEngine engine;
+    auto& graph = engine.getGraph();
+
+    auto oscProcessor = synth::AIStateMapper::createModule("Oscillator");
+    ASSERT_NE(oscProcessor, nullptr);
+    ASSERT_TRUE(setPolyParamCFT(oscProcessor.get(), true));
+    auto oscNode = graph.addNode(std::move(oscProcessor));
+    ASSERT_NE(oscNode, nullptr);
+
+    juce::String voiceMixerUuid;
+    auto* voiceMixer = synth::addVoiceMixerForPolyInstrument(graph, *oscNode, {0, 0}, voiceMixerUuid);
+    ASSERT_NE(voiceMixer, nullptr);
+    EXPECT_FALSE(voiceMixerUuid.isEmpty());
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::VoiceMixer), 1);
+
+    for (int voice = 0; voice < 8; ++voice)
+        EXPECT_TRUE(graph.isConnected({{oscNode->nodeID, voice}, {voiceMixer->nodeID, voice}}))
+            << "voice " << voice << " must be summed into the Voice Mixer";
+
+    const synth::DefaultChannelLayout layout{{100, 0}, {200, 0}, {300, 0}, {400, 0}};
+    const auto channel = synth::buildDefaultAudioChannel(graph, *voiceMixer, layout);
+    ASSERT_FALSE(channel.stripUuid.isEmpty());
+
+    auto* eq = findNodeOfTypeCFT(graph, ModuleType::ParametricEQ);
+    ASSERT_NE(eq, nullptr);
+    EXPECT_TRUE(graph.isConnected({{voiceMixer->nodeID, 0}, {eq->nodeID, 0}}))
+        << "Voice Mixer's own ch0/ch1 output satisfies buildDefaultAudioChannel's default contiguous-pair contract";
+    EXPECT_TRUE(graph.isConnected({{voiceMixer->nodeID, 1}, {eq->nodeID, 1}}));
+}
+
+TEST_F(ChannelFlowTest, NonPolyInstrumentGetsNoVoiceMixer) {
+    AudioEngine engine;
+    auto& graph = engine.getGraph();
+
+    auto oscProcessor = synth::AIStateMapper::createModule("Oscillator");
+    ASSERT_NE(oscProcessor, nullptr);
+    // Factory default: poly OFF — no setPolyParamCFT call.
+    auto oscNode = graph.addNode(std::move(oscProcessor));
+    ASSERT_NE(oscNode, nullptr);
+
+    juce::String voiceMixerUuid;
+    auto* voiceMixer = synth::addVoiceMixerForPolyInstrument(graph, *oscNode, {0, 0}, voiceMixerUuid);
+    EXPECT_EQ(voiceMixer, nullptr);
+    EXPECT_TRUE(voiceMixerUuid.isEmpty());
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::VoiceMixer), 0);
 }

@@ -34,10 +34,23 @@ juce::AudioProcessorGraph::Node* addChainNode(juce::AudioProcessorGraph& graph, 
     return node.get();
 }
 
+// True when `processor` declares a "poly" AudioParameterBool and it's currently on. Hand-rolled
+// rather than reusing AIStateMapper::applyParamsToProcessor's param-matching idiom: that method is
+// private to AIStateMapper.cpp, and this only needs to READ one parameter, not set arbitrary ones.
+bool isProcessorPoly(juce::AudioProcessor* processor) {
+    if (processor == nullptr)
+        return false;
+    for (auto* param : processor->getParameters())
+        if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param))
+            if (boolParam->paramID == "poly")
+                return boolParam->get();
+    return false;
+}
+
 } // namespace
 
 DefaultChannel buildDefaultAudioChannel(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::Node& source,
-                                        const DefaultChannelLayout& layout) {
+                                        const DefaultChannelLayout& layout, int sourceRightChannel) {
     DefaultChannel result;
 
     juce::String eqUuid;
@@ -85,7 +98,7 @@ DefaultChannel buildDefaultAudioChannel(juce::AudioProcessorGraph& graph, juce::
     // strip's right leg, which is ChannelStripModule::kRightBase — NEVER ch1 (Source/Modules/
     // CLAUDE.md), see ChannelFlows.h's own comment for why that's the one place the number jumps.
     graph.addConnection({{source.nodeID, 0}, {eq->nodeID, 0}});
-    graph.addConnection({{source.nodeID, 1}, {eq->nodeID, 1}});
+    graph.addConnection({{source.nodeID, sourceRightChannel}, {eq->nodeID, 1}});
     graph.addConnection({{eq->nodeID, 0}, {compressor->nodeID, 0}});
     graph.addConnection({{eq->nodeID, 1}, {compressor->nodeID, 1}});
     graph.addConnection({{compressor->nodeID, 0}, {strip->nodeID, 0}});
@@ -108,6 +121,25 @@ DefaultChannel buildDefaultAudioChannel(juce::AudioProcessorGraph& graph, juce::
     result.strip = strip;
     result.master = master;
     return result;
+}
+
+juce::AudioProcessorGraph::Node* addVoiceMixerForPolyInstrument(juce::AudioProcessorGraph& graph,
+                                                                juce::AudioProcessorGraph::Node& instrument,
+                                                                juce::Point<int> position, juce::String& uuidOut) {
+    if (!isProcessorPoly(instrument.getProcessor()))
+        return nullptr;
+
+    auto* voiceMixer = addChainNode(graph, "Voice Mixer", position, uuidOut);
+    if (voiceMixer == nullptr)
+        return nullptr;
+
+    // The instrument's L-octet (raw ch0-7, poly ON) is up to 8 simultaneous voices; Voice Mixer sums
+    // them to a mono value duplicated onto its own ch0(L)/ch1(R) (docs/mixer.md §5.4/§5.8). The
+    // instrument's R-octet is deliberately NOT summed in — same precedent, same known limitation.
+    for (int voice = 0; voice < 8; ++voice)
+        graph.addConnection({{instrument.nodeID, voice}, {voiceMixer->nodeID, voice}});
+
+    return voiceMixer;
 }
 
 } // namespace synth

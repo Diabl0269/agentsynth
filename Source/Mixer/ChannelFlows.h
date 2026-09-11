@@ -69,15 +69,42 @@ struct DefaultChannelLayout {
  * non-overlapping positions from the real card widths (MainComponent::addAudioTrack is today's only
  * caller; see its own comment for how it derives `layout`).
  *
- * @param source must already be live in `graph`, with a stereo output on raw ch0/ch1 (Track Audio,
- *               today's only caller) and an assigned "uuid"/"x"/"y" set of properties.
+ * @param source must already be live in `graph`, with its stereo pair on raw ch0 and
+ *               `sourceRightChannel` (Track Audio, today's only caller, is a contiguous ch0/ch1 pair
+ *               — the default), and an assigned "uuid"/"x"/"y" set of properties.
  * @param layout canvas positions for EQ/Compressor/Strip, and for Master if this call is the one
  *               that splices it (ignored otherwise — see the DefaultChannelLayout comment).
+ * @param sourceRightChannel the raw channel carrying `source`'s right leg. Defaults to 1 (a
+ *               contiguous stereo pair); a split-block source (T183: Oscillator/Wavetable) passes
+ *               `ModuleBase::rightAudioLegChannel()` instead — Source/Modules/CLAUDE.md: "pair legs
+ *               via rightAudioLegChannel(), never by assuming ch1."
  * @return the created chain's uuids/nodes. `stripUuid` (and every uuid before it, in order) is empty
  *         when a step failed to create its node — the caller should treat that as "nothing usable was
  *         built" the same way any other `graph.addNode()` failure is handled elsewhere.
  */
 DefaultChannel buildDefaultAudioChannel(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::Node& source,
-                                        const DefaultChannelLayout& layout);
+                                        const DefaultChannelLayout& layout, int sourceRightChannel = 1);
+
+/**
+ * T183 (P9-3b): when `instrument` is currently in poly mode (it has a "poly" AudioParameterBool and
+ * it's on), its L-octet (raw ch0-7) can carry up to 8 simultaneous voices, which
+ * buildDefaultAudioChannel() cannot accept directly — it wants one stereo pair. Creates a Voice Mixer
+ * (docs/mixer.md §5.4/§5.8: any chain ending poly gets one ahead of the strip), wires `instrument`'s
+ * raw ch0-7 into it, and returns it so the caller can pass ITS ch0/ch1 as `source` to
+ * buildDefaultAudioChannel() instead of `instrument` directly.
+ *
+ * A factory-created instrument defaults to poly OFF (Oscillator/Wavetable's own `poly` parameter
+ * default), so this returns nullptr on the golden "+ Track -> Instrument" path today; it exists so
+ * poly instruments are handled correctly wherever they arise (a caller that explicitly turns poly on
+ * before building the chain, or a future direct-poly picker), without the strip ever seeing more than
+ * one stereo pair.
+ *
+ * @return nullptr, `uuidOut` untouched, when `instrument` has no "poly" parameter, it's off, or a
+ *         factory/addNode failure occurred — the caller's existing `source`/`sourceRightChannel`
+ *         stay valid as-is.
+ */
+juce::AudioProcessorGraph::Node* addVoiceMixerForPolyInstrument(juce::AudioProcessorGraph& graph,
+                                                                juce::AudioProcessorGraph::Node& instrument,
+                                                                juce::Point<int> position, juce::String& uuidOut);
 
 } // namespace synth

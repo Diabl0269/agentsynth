@@ -79,6 +79,7 @@ public:
 
     void addMidiTrack() override { ++addTrackCalls; }
     void addAudioTrack() override { ++addAudioTrackCalls; }
+    void addInstrumentTrack(const juce::String&) override { ++addInstrumentTrackCalls; }
 
     // Not exercised by this file (it tests the track-header column, not the automation
     // strip's lane picker) — empty/no-op is the correct stub behaviour.
@@ -110,6 +111,7 @@ public:
     int editCalls = 0;
     int addTrackCalls = 0;
     int addAudioTrackCalls = 0;
+    int addInstrumentTrackCalls = 0;
     // Null by default (in-memory-only colour picker). A test that needs the real undo contract
     // sets this to a real AppUndoManager it owns.
     AppUndoManager* undoManager = nullptr;
