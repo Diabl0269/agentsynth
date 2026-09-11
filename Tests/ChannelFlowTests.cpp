@@ -333,6 +333,46 @@ TEST_F(ChannelFlowTest, SecondAudioTrackReusesMaster) {
     EXPECT_EQ(macros.size(), 1);
 }
 
+// T187: before this fix, GraphEditor::newPatch() left the graph with zero nodes, so
+// synth::spliceMasterNode (called from buildDefaultAudioChannel) had no Audio Output to target
+// and silently returned nullptr — a bare Track Audio in a brand-new project was unheard until the
+// user manually added an Audio Output. newPatch() now seeds one as part of the same undo step.
+TEST_F(ChannelFlowTest, AudioTrackOnFreshNewPatchGetsMaster) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+
+    mc.newPatchForTest();
+    ASSERT_NE(findNodeNamedCFT(graph, "Audio Output"), nullptr) << "newPatch must seed an Audio Output";
+
+    addAudioTrack(mc);
+
+    auto* strip = findNodeOfTypeCFT(graph, ModuleType::ChannelStrip);
+    auto* master = findNodeOfTypeCFT(graph, ModuleType::Master);
+    ASSERT_NE(strip, nullptr);
+    ASSERT_NE(master, nullptr) << "the first channel must splice Master immediately, not need a manual Audio Output";
+
+    EXPECT_TRUE(graph.isConnected({{strip->nodeID, 0}, {master->nodeID, MasterModule::kMixLeft}}));
+    EXPECT_TRUE(graph.isConnected(
+        {{strip->nodeID, ChannelStripModule::kRightBase}, {master->nodeID, MasterModule::kMixRight}}));
+
+    auto* output = findNodeNamedCFT(graph, "Audio Output");
+    ASSERT_NE(output, nullptr);
+    EXPECT_TRUE(graph.isConnected({{master->nodeID, 0}, {output->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{master->nodeID, 1}, {output->nodeID, 1}}));
+
+    // T187 layout follow-up: a bare Audio Output left at the newPatch seed's canvas origin while
+    // Master lands right of the freshly-built chain read as backwards wiring on screen (Master "on
+    // the right", Audio Output "top left" with a cable snaking back across everything to reach it —
+    // caught live via computer-use testing). addAudioTrack now relocates the seeded Audio Output to
+    // sit right of Master once Master is first spliced, so the row reads left to right.
+    const int outputX = static_cast<int>(output->properties.getWithDefault("x", 0));
+    const int masterX = static_cast<int>(master->properties.getWithDefault("x", 0));
+    EXPECT_GT(outputX, masterX) << "Audio Output must be relocated to terminate the row after Master, "
+                                   "not left behind at the newPatch seed position";
+}
+
 // Same pinning pattern as AudioClipPlaybackTest.AbsentFromTheLibraryWithAPinnedSizeEstimate /
 // RecordTapTest's own — but for two cards at once, since both were missing an estimateModuleSize
 // entry (silently falling back to the generic {280, 360} default, which is wrong for either card

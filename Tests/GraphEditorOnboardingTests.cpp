@@ -241,7 +241,7 @@ TEST(GraphEditorOnboarding, PaintOverChildrenSmokeNonEmptyCanvas) {
 // 4. newPatch() — clear canvas action (headless, no undoManager)
 // ============================================================================
 
-TEST(GraphEditorOnboarding, NewPatchClearsGraph) {
+TEST(GraphEditorOnboarding, NewPatchClearsGraphAndSeedsAudioOutput) {
     // Construct engine + editor without an undoManager (headless path).
     AudioEngine engine;
     GraphEditor editor(engine); // undoManager = nullptr
@@ -262,27 +262,36 @@ TEST(GraphEditorOnboarding, NewPatchClearsGraph) {
     // Act.
     EXPECT_NO_THROW(editor.newPatch());
 
-    // After newPatch the graph must have zero nodes.
-    const int nodesAfter = (int)engine.getGraph().getNodes().size();
-    EXPECT_EQ(nodesAfter, 0) << "newPatch must clear all graph nodes";
+    // T187: newPatch clears every old node but seeds exactly one fresh Audio Output, so the
+    // graph is never left with nothing for the first channel's Master splice to target.
+    const auto& nodesAfter = engine.getGraph().getNodes();
+    ASSERT_EQ(nodesAfter.size(), 1u) << "newPatch must clear old nodes and seed exactly one Audio Output";
+    ASSERT_NE(nodesAfter[0]->getProcessor(), nullptr);
+    EXPECT_EQ(nodesAfter[0]->getProcessor()->getName(), "Audio Output");
 
-    // And the GraphEditor's module-component list must be empty (detachAllModuleComponents was called).
-    EXPECT_EQ(editor.getModuleComponents().size(), 0) << "newPatch must detach all module components";
+    // The old oscillator's component must be gone (detachAllModuleComponents was called), and a
+    // new component for the seeded Audio Output must be the only one left.
+    EXPECT_EQ(editor.getModuleComponents().size(), 1) << "newPatch must detach old components and add one";
 
-    // isCanvasEmpty must reflect the cleared state.
-    EXPECT_TRUE(GraphEditor::isCanvasEmpty((int)editor.getModuleComponents().size()))
-        << "isCanvasEmpty must return true after newPatch";
+    // isCanvasEmpty is a raw node-count predicate: a graph with an Audio Output is not empty.
+    EXPECT_FALSE(GraphEditor::isCanvasEmpty((int)editor.getModuleComponents().size()))
+        << "isCanvasEmpty must reflect the seeded Audio Output, not report false emptiness";
 }
 
-TEST(GraphEditorOnboarding, NewPatchOnEmptyCanvasIsNoop) {
-    // Calling newPatch on an already-empty canvas must not crash.
+TEST(GraphEditorOnboarding, NewPatchOnEmptyCanvasSeedsAudioOutput) {
+    // Calling newPatch on an already-empty canvas must not crash, and still seeds Audio Output.
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(800, 600);
 
     EXPECT_NO_THROW(editor.newPatch());
-    EXPECT_EQ(engine.getGraph().getNodes().size(), 0u);
-    EXPECT_TRUE(GraphEditor::isCanvasEmpty((int)editor.getModuleComponents().size()));
+    ASSERT_EQ(engine.getGraph().getNodes().size(), 1u);
+    EXPECT_EQ(engine.getGraph().getNodes()[0]->getProcessor()->getName(), "Audio Output");
+    EXPECT_FALSE(GraphEditor::isCanvasEmpty((int)editor.getModuleComponents().size()));
+
+    // Calling it again must not accumulate a second Audio Output.
+    EXPECT_NO_THROW(editor.newPatch());
+    EXPECT_EQ(engine.getGraph().getNodes().size(), 1u) << "newPatch must not accumulate Audio Output nodes";
 }
 
 TEST(GraphEditorOnboarding, NewPatchWithUndoManagerIsUndoable) {
@@ -303,7 +312,8 @@ TEST(GraphEditorOnboarding, NewPatchWithUndoManagerIsUndoable) {
 
     // Perform newPatch — must be recorded in the undo stack.
     editor.newPatch();
-    EXPECT_EQ(engine.getGraph().getNodes().size(), 0u) << "Canvas must be empty after newPatch";
+    // T187: newPatch seeds a fresh Audio Output as part of the same undo step.
+    EXPECT_EQ(engine.getGraph().getNodes().size(), 1u) << "Canvas must hold only the seeded Audio Output";
     EXPECT_TRUE(undoManager.canUndo()) << "newPatch must push an undoable action when undoManager is present";
 
     // Undo must restore the graph to its prior non-empty state.
@@ -312,4 +322,15 @@ TEST(GraphEditorOnboarding, NewPatchWithUndoManagerIsUndoable) {
     editor.updateComponents();
     EXPECT_FALSE(GraphEditor::isCanvasEmpty((int)editor.getModuleComponents().size()))
         << "Undo of newPatch must restore prior module components";
+
+    // T187: redo must replay the seeded Audio Output too — the "after" snapshot captured by
+    // recordStructuralChange was taken post-mutation, so it already contains the seeded node.
+    undoManager.redo();
+    editor.updateComponents();
+    int audioOutputCount = 0;
+    for (auto* node : engine.getGraph().getNodes()) {
+        if (node->getProcessor() != nullptr && node->getProcessor()->getName() == "Audio Output")
+            ++audioOutputCount;
+    }
+    EXPECT_EQ(audioOutputCount, 1) << "Redo of newPatch must reconstruct the seeded Audio Output";
 }

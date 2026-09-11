@@ -8395,7 +8395,20 @@ void GraphEditor::newPatch() {
         // never be resurrected into it.
         patchDocument.clear();
         macros.clear();
-        updateComponents(); // reconciles the now-empty view; the empty-canvas hint will show
+
+        // T187: seed a fresh Audio Output immediately, in the same undo step as the clear, so
+        // the first channel's Master splice (synth::spliceMasterNode) has something to target
+        // right away — otherwise a bare Track Audio in a brand-new project is silently unheard
+        // until the user manually adds an Audio Output.
+        if (auto processor = synth::AIStateMapper::createModule("Audio Output")) {
+            if (auto node = graph.addNode(std::move(processor))) {
+                synth::AIStateMapper::ensureNodeUuid(node.get());
+                node->properties.set("x", synth::LayoutUtil::kArrangeOriginX);
+                node->properties.set("y", synth::LayoutUtil::kArrangeOriginY);
+            }
+        }
+
+        updateComponents(); // reconciles the view around the fresh Audio Output
     };
 
     if (undoManager) {
