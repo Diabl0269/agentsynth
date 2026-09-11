@@ -117,6 +117,11 @@ jobs:
       run: bash scripts/tests/ai-eval-ratchet.test.sh
     - name: Test UTF-8 literal check
       run: bash scripts/tests/utf8-literal-check.test.sh
+    - name: Test dev-sign-app
+      # scripts/dev-sign-app.sh itself only ever does anything on a macOS runner with an Apple
+      # Development identity installed (neither is true here), but its identity-selection logic
+      # is still worth testing -- via fake uname/security/codesign shims -- on every platform.
+      run: bash scripts/tests/dev-sign-app.test.sh
     - name: Check for un-decoded UTF-8 escapes
       # juce::String(const char*) decodes as ASCII, not UTF-8 -- a "\xe2\x80\x94"-style escape
       # passed straight to a String-taking API silently renders as mojibake (P6-16, 2026-08-26).
