@@ -107,4 +107,64 @@ juce::AudioProcessorGraph::Node* addVoiceMixerForPolyInstrument(juce::AudioProce
                                                                 juce::AudioProcessorGraph::Node& instrument,
                                                                 juce::Point<int> position, juce::String& uuidOut);
 
+/**
+ * T184 (P9-3c, docs/mixer.md §5.2 "main workflow"): BFS forward from `start`, following every
+ * outgoing graph edge (audio AND MIDI — an `AudioProcessorGraph::Connection` is always one or the
+ * other), to find every point where `start`'s own signal path reaches the output WITHOUT already
+ * passing through a `ChannelStripModule`. Each such point is returned as the exact `Connection`
+ * that crosses it — the caller (buildChannelForFeeds below) removes those edges and rebuilds a
+ * channel from their sources.
+ *
+ * Traversal rules:
+ *   - Never enter an `AttenuverterModule` node — `AudioEngine::addModRouting` always wraps a
+ *     hidden modulation leg in one of these; its own outgoing edge is a mod-CV destination
+ *     parameter, not part of `start`'s audio/MIDI signal path, and is neither traversed nor
+ *     itself an exit.
+ *   - Never expand PAST a `ChannelStripModule` — that branch already terminates in a channel, so
+ *     nothing downstream of it is `start`'s to claim. Not an exit either (it is not one of the
+ *     three terminal types below).
+ *   - Never expand past a terminal: Audio Output (`juce::AudioGraphIOProcessor` named "Audio
+ *     Output"), `RecordTapModule`, or `MasterModule`. An edge landing on one of these IS an exit
+ *     when it lands on the right channel — Audio Output/Rec Tap ch0/ch1, or Master's
+ *     `kDirectLeft`/`kDirectRight` (its ALREADY-channeled `kMixLeft`/`kMixRight` inputs are never
+ *     an exit — they can only be fed by an existing strip's own output, which this BFS never
+ *     reaches, having stopped at the strip).
+ *   - Every other node (an instrument, an FX module, a macro port pass-through, ...) is just
+ *     traversed through, exactly like any other hop in the chain.
+ *
+ * Cycle-safe (a visited-node set), and safe to call on a node with nothing downstream yet (empty
+ * result — nothing to auto-channel). NO UNDO, NO GRAPH MUTATION — a pure query; Core cannot depend
+ * on AppUndoManager/GraphEditor.
+ */
+std::vector<juce::AudioProcessorGraph::Connection> findUnchanneledOutputFeeds(juce::AudioProcessorGraph& graph,
+                                                                              juce::AudioProcessorGraph::NodeID start);
+
+/**
+ * T184 (P9-3c): builds a channel — Parametric EQ (bypassed) -> Compressor (bypassed) -> Channel
+ * Strip (Stereo) -> Master (Mix), exactly the same chain and ordering buildDefaultAudioChannel
+ * documents above (shared internal builder) — from `exits` (as returned by
+ * findUnchanneledOutputFeeds), instead of from one fixed stereo-pair source.
+ *
+ * Every edge in `exits` is REMOVED FIRST (collected, then removed, same reasoning as
+ * spliceMasterNode's own splice), classified Left/Right by its DESTINATION channel (raw ch0 or
+ * `MasterModule::kDirectLeft` -> Left; ch1 or `MasterModule::kDirectRight` -> Right), and its
+ * SOURCE re-wired into the new EQ's matching input instead — so every exit's original source now
+ * feeds the new channel, and `AudioProcessorGraph`'s many-to-one summing at the EQ's input means
+ * more than one exit landing on the same side (e.g. two separate Direct feeds) still sums exactly
+ * as it did before, just one hop later. The sound does not change.
+ *
+ * NO UNDO — same contract as buildDefaultAudioChannel: a plain graph mutation for a caller already
+ * inside its own undo transaction (GraphEditor::endConnectionDrag's T184 hook).
+ *
+ * @param exits must be non-empty (the caller checks findUnchanneledOutputFeeds's result first) and
+ *              every connection in it must still be live in `graph`.
+ * @param layout canvas positions for EQ/Compressor/Strip, and for Master if this call is the one
+ *               that splices it — same contract as DefaultChannelLayout above.
+ * @return the created chain's uuids/nodes, empty-string/null on a partial factory/addNode failure
+ *         — same contract as buildDefaultAudioChannel.
+ */
+DefaultChannel buildChannelForFeeds(juce::AudioProcessorGraph& graph,
+                                    const std::vector<juce::AudioProcessorGraph::Connection>& exits,
+                                    const DefaultChannelLayout& layout);
+
 } // namespace synth

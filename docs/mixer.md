@@ -1,13 +1,15 @@
 # Mixer
 
-**Status: DECIDED 2026-09-10 (founder sign-off on D1-D4). P9-2 implemented, P9-3's audio-track and
-instrument-track flows implemented (T173a, T183)** — the `ChannelStrip` and `Master` nodes, the
-engine-owned solo gate and the Master splice exist (engine only; §8 item 1 records how), "+ Track ->
-Audio Track" builds the factory default channel end to end (§8 item 2), and "+ Track -> Instrument"
-does the same ahead of a chosen instrument (§8 item 2, T183) — see §5.2's table note for why that
-one stays a `TrackKind::Midi` track rather than the "(new track kind)" this doc originally called
-for. The other P9-3 flows (MIDI-track auto-channel-on-connect, "Make channel", "Create channels" for
-existing projects) are still follow-ups, and there is no mixer panel yet (P9-5). This document
+**Status: DECIDED 2026-09-10 (founder sign-off on D1-D4). P9-2 implemented, P9-3's audio-track,
+instrument-track and MIDI-track-auto-channel flows implemented (T173a, T183, T184)** — the
+`ChannelStrip` and `Master` nodes, the engine-owned solo gate and the Master splice exist (engine
+only; §8 item 1 records how), "+ Track -> Audio Track" builds the factory default channel end to
+end (§8 item 2), "+ Track -> Instrument" does the same ahead of a chosen instrument (§8 item 2,
+T183) — see §5.2's table note for why that one stays a `TrackKind::Midi` track rather than the "(new
+track kind)" this doc originally called for — and connecting a MIDI track's cable to an unchanneled
+instrument auto-creates a channel at the point the audio reaches the output (§8 item 2, T184; §5.2's
+"main workflow" paragraph). The other P9-3 flows ("Make channel", "Create channels" for existing
+projects) are still follow-ups, and there is no mixer panel yet (P9-5). This document
 records the decided design;
 §8 is the implementation order that turns it into code. The visual
 proposal that led to this decision (canvas diagram, mixer panel mock, the four decision cards)
@@ -160,14 +162,15 @@ just draws that cable and builds the channel automatically instead of making the
 — see `MainComponent::addInstrumentTrack`'s own comment. A future `TrackKind::Instrument` would
 need to migrate every track this flow has already created.
 
-**The main workflow: connecting a MIDI track to an unchanneled instrument.** A track's own
-mute/solo controls only mean anything once a channel exists for them to drive, so the common path
-— add a MIDI track, wire it to a macro or a bare instrument whose audio has never reached a
-channel — has to *create* the channel, not just wait for the user to run "Make channel"
+**The main workflow: connecting a MIDI track to an unchanneled instrument — DONE (T184).** A
+track's own mute/solo controls only mean anything once a channel exists for them to drive, so the
+common path — add a MIDI track, wire it to a macro or a bare instrument whose audio has never
+reached a channel — has to *create* the channel, not just wait for the user to run "Make channel"
 separately. When a connection like that makes some audio newly reach a `ChannelStrip`-less path to
 Audio Output, a channel is **auto-created at the point that audio reaches the output**: one undo
-step, gated by a Preferences toggle that defaults to **ON**. Turning the toggle off restores
-today's behaviour (wire freely, no channel appears until asked for).
+step, gated by a Preferences toggle (`mixerAutoCreateChannelOnConnect`) that defaults to **ON**.
+Turning the toggle off restores today's behaviour (wire freely, no channel appears until asked
+for). §8 item 2's own T184 bullet has the implementation detail.
 
 **The link rule.** A track and a channel are **linked** exactly when the track is the channel's
 **only** source — an audio track, an instrument track, or a MIDI track that alone drives an
@@ -500,10 +503,73 @@ Main line, in dependency order:
      instrument's own live `poly` parameter, never forced on: a factory-created instrument defaults
      to poly OFF, so this branch is a no-op on the golden path today and exists for whenever it
      isn't (`Tests/ChannelFlowTests.cpp`'s `PolyInstrumentGetsVoiceMixerAheadOfStripAndFeedsTheChannel`
-     exercises it directly). See §5.2's table note for the `TrackKind::Midi` scope decision. The
-     other bullet points above (MIDI-track auto-channel, "Make channel", "Create channels") remain
-     open follow-ups.
+     exercises it directly). See §5.2's table note for the `TrackKind::Midi` scope decision.
      `Tests/ChannelFlowTests.cpp`.
+   - **T184 (MIDI-track auto-channel-on-connect) — DONE.** Dragging a MIDI cable from a Track In
+     node (`ModuleType::TimelineMidiSource`) onto an instrument or macro whose audio reaches Audio
+     Output/Rec Tap/Master's Direct bus with no `ChannelStrip` anywhere on that path auto-builds a
+     channel there, as ONE undo step with the connection itself
+     (`AppUndoManager::recordGraphAndMacroChange`, `GraphEditor::endConnectionDrag`). An instrument
+     that already has a channel on its path gets nothing new — connecting a second MIDI track just
+     wires straight in, same as any other MIDI-track-into-an-existing-instrument case (§5.2's
+     table). Gated by a Preferences toggle, `mixerAutoCreateChannelOnConnect`, default **ON**; OFF
+     restores exactly today's behaviour (wire freely, no channel appears).
+     - *Core* (`Source/Mixer/ChannelFlows.h`/`.cpp`, no AppUI/GraphEditor/AppUndoManager
+       dependency): `synth::findUnchanneledOutputFeeds(graph, start)` does a forward BFS from the
+       just-connected node over audio AND MIDI edges — never expanding past a
+       `ChannelStripModule` (already channeled: stop, no exit), a `RecordTapModule`, a
+       `MasterModule`, or the `AudioGraphIOProcessor` named "Audio Output" (all three are
+       terminals), and never traversing INTO a hidden `AttenuverterModule` (a mod/CV leg is not an
+       audio-reaching-the-output path). An "exit" is an edge landing on Audio Output ch0/1, Rec Tap
+       ch0/1, or Master's `kDirectLeft`/`kDirectRight` — `kMixLeft`/`kMixRight` are deliberately
+       NOT exits, since only a `ChannelStripModule`'s own output legitimately lands there.
+       `synth::buildChannelForFeeds(graph, exits, layout)` removes every exit edge FIRST (so
+       `spliceMasterNode`'s own "sweep everything already feeding Audio Output/Rec Tap into Master"
+       behaviour, run as part of building the chain when no Master exists yet, never re-captures an
+       edge this call is about to own), then builds EQ(bypassed) -> Compressor(bypassed) -> Strip
+       (Stereo) -> Master via the SAME internal builder `buildDefaultAudioChannel` now shares
+       (`buildChannelChain`), generalized to accept arbitrary left/right feed lists instead of one
+       fixed stereo pair (multiple feeds landing on the same side is fine — `AudioProcessorGraph`
+       sums them).
+     - *GraphEditor hook* (`Source/UI/GraphEditor.h`/`.cpp`): `endConnectionDrag` gates on the drag
+       being MIDI and the real source node being `ModuleType::TimelineMidiSource`
+       (`nodeIsTimelineMidiSource`), covering both the direct-jack path and the collapsed-macro-card
+       "existing port jack" path — not the `createMacroPortFromDroppedCable` fallback (dropping a
+       cable on a macro's body with no jack under it mints a port with no interior leg yet, so
+       there is nothing to search from and T184 never applies there). One undo transaction wraps macro-port
+       auto-creation (T148, if the drag also crosses a macro boundary), the connection itself, and
+       the auto-channel build — `maybeAutoCreateMacroPortsForDrag` gained a trailing
+       `recordUndo = true` parameter so a caller already inside its own transaction can pass
+       `false` and hoist `updateComponents()` out to run once, after every mutation, instead of the
+       nested-transaction double-repaint a naive wrap would produce (docs/macros.md §7 item 9 has
+       the signature detail). Layout mirrors T173a/T183's own pattern: `estimateModuleSize()` per
+       node type plus a 40px gap constant (`kAutoChannelCardGapX`, GraphEditor.cpp's own copy of
+       `MainComponent.cpp`'s `kChannelCardGapX` — duplicated rather than shared, since Core/UI
+       layering keeps GraphEditor.cpp from reaching into MainComponent.cpp). **Boxing rule:** the
+       new EQ/Compressor/Strip join the SAME macro as the instrument only when every distinct exit
+       source node is already an ORDINARY member of ONE common macro (not a port, not split across
+       macros, not un-macroed) — otherwise the new chain nodes are left unboxed on the canvas
+       rather than guessing which container they belong to.
+     - Tests: `Tests/ChannelFlowTests.cpp` — Core-level (`ChannelFlowAutoChannelCore`):
+       `FindUnchanneledOutputFeedsOnInstrumentToOutputFindsTwoExits`,
+       `FindUnchanneledOutputFeedsOnStripChanneledInstrumentFindsZero`,
+       `FindUnchanneledOutputFeedsNotReachingOutputFindsZero`,
+       `FindUnchanneledOutputFeedsIgnoresModulationBranchAndSweepsTheUnrelatedPathOntoMasterDirect` (a mod/CV
+       leg through a hidden Attenuverter is neither traversed nor counted, and an unrelated
+       pre-existing direct-to-output feed gets correctly swept onto Master's Direct bus by the
+       same-transaction `spliceMasterNode` splice, exactly like any other pre-existing feed would
+       be), `BuildChannelForFeedsRemovesExitEdgesAndWiresThroughToANewMaster`,
+       `BuildChannelForFeedsReusesAnExistingMasterAndClearsDirectFeeds`,
+       `BypassedEQAndCompressorReportZeroLatencyAfterPrepare` (latency-zero gate: neither module
+       calls `setLatencySamples`). Real-mouse-path (`ChannelFlowTest`, `MainComponent` fixture,
+       synthesized `juce::MouseEvent`s driven straight into `ModuleComponent`, docs/testing.md's
+       "test the real mouse path"): `AutoChannelOnConnect_ToggleOnBuildsOneChannelAsOneUndoStep`,
+       `AutoChannelOnConnect_ToggleOffOnlyConnectsNoChannel`,
+       `AutoChannelOnConnect_AlreadyChanneledInstrumentGetsNoNewStrip`,
+       `AutoChannelOnConnect_NewChainNodesJoinTheInstrumentsExistingMacro`. Plus
+       `Tests/PreferencesSettingsTabTests.cpp`: default ON, persists `"0"`/`"1"` under
+       `mixerAutoCreateChannelOnConnect` and round-trips, and pushes to a live `GraphEditor` via
+       `setGraphEditor`/on toggle, mirroring every T148 toggle test exactly.
 
 3. **P9-4 (T177) — Track/channel link.** Name sync, live colour sync across track/macro/column
     through `ColourPickerPopup`'s preview/commit split, M/S driving the strip, the channel chip.

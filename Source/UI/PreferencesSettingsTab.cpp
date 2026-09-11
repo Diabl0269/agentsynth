@@ -416,6 +416,22 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         persistMacroAutoDeletePortsOnLastCable(macroAutoDeletePortsOnLastCableToggle.getToggleState());
     };
 
+    // T184 (P9-3c, docs/mixer.md §5.2 "main workflow"): auto-create a mixer channel when a MIDI
+    // cable from a Track In node connects to an instrument/macro whose audio reaches the output
+    // with no channel yet. Same "plain on/off, ON by default" shape as the two T148 toggles above.
+    contentHost.addAndMakeVisible(mixerAutoCreateChannelOnConnectToggle);
+    mixerAutoCreateChannelOnConnectToggle.setToggleState(
+        appProperties.getUserSettings()->getBoolValue("mixerAutoCreateChannelOnConnect", true),
+        juce::dontSendNotification);
+    mixerAutoCreateChannelOnConnectToggle.setTooltip(
+        "When on (the default), connecting a MIDI track to an instrument or macro whose audio "
+        "reaches the output with no mixer channel yet automatically builds one there, in the same "
+        "undo step as the connection. When off, wiring stays exactly as it is today - no channel "
+        "appears until you ask for one.");
+    mixerAutoCreateChannelOnConnectToggle.onClick = [this] {
+        persistMixerAutoCreateChannelOnConnect(mixerAutoCreateChannelOnConnectToggle.getToggleState());
+    };
+
     contentHost.addAndMakeVisible(loopSelectionArmsToggle);
     loopSelectionArmsToggle.setToggleState(
         appProperties.getUserSettings()->getBoolValue("timelineLoopSelectionArms", true), juce::dontSendNotification);
@@ -736,6 +752,18 @@ void PreferencesSettingsTab::layoutContent(int contentWidth) {
         pendingDivider = pendingDivider || visible;
     }
 
+    // Group 4d: T184 mixer auto-create-channel-on-connect toggle.
+    {
+        const bool visible = groupMatches({&mixerAutoCreateChannelOnConnectToggle});
+        setGroupVisible({&mixerAutoCreateChannelOnConnectToggle}, visible);
+        beginGroup(visible);
+        if (visible) {
+            mixerAutoCreateChannelOnConnectToggle.setBounds({0, y, contentWidth, 24});
+            y += 24;
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+
     // Group 5: the two loop-locator toggles (no divider between them).
     {
         const bool visible = groupMatches({&loopSelectionArmsToggle, &doubleClickSpansLocatorsToggle});
@@ -845,6 +873,7 @@ void PreferencesSettingsTab::setGraphEditor(GraphEditor* ge) {
     graphEditor->setMacroAutoPortPreference(macroAutoPortPreferenceFromComboId(macroAutoPortCombo_.getSelectedId()));
     graphEditor->setAutoCreateMacroPortsOnDragEnabled(macroAutoCreatePortsOnDragToggle.getToggleState());
     graphEditor->setAutoDeleteMacroPortsOnLastCableEnabled(macroAutoDeletePortsOnLastCableToggle.getToggleState());
+    graphEditor->setAutoCreateChannelOnConnectEnabled(mixerAutoCreateChannelOnConnectToggle.getToggleState());
 }
 
 GraphEditor::SmartConnectionMode PreferencesSettingsTab::getSmartConnectionMode() const {
@@ -881,6 +910,15 @@ bool PreferencesSettingsTab::isMacroAutoDeletePortsOnLastCableEnabled() const {
 void PreferencesSettingsTab::setMacroAutoDeletePortsOnLastCableEnabled(bool enabled) {
     macroAutoDeletePortsOnLastCableToggle.setToggleState(enabled, juce::dontSendNotification);
     persistMacroAutoDeletePortsOnLastCable(enabled);
+}
+
+bool PreferencesSettingsTab::isMixerAutoCreateChannelOnConnectEnabled() const {
+    return mixerAutoCreateChannelOnConnectToggle.getToggleState();
+}
+
+void PreferencesSettingsTab::setMixerAutoCreateChannelOnConnectEnabled(bool enabled) {
+    mixerAutoCreateChannelOnConnectToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistMixerAutoCreateChannelOnConnect(enabled);
 }
 
 bool PreferencesSettingsTab::isAlignmentGuidesEnabled() const { return alignmentGuideToggle.getToggleState(); }
@@ -1036,6 +1074,13 @@ void PreferencesSettingsTab::persistMacroAutoDeletePortsOnLastCable(bool enabled
     appProperties.getUserSettings()->saveIfNeeded();
     if (graphEditor)
         graphEditor->setAutoDeleteMacroPortsOnLastCableEnabled(enabled);
+}
+
+void PreferencesSettingsTab::persistMixerAutoCreateChannelOnConnect(bool enabled) {
+    appProperties.getUserSettings()->setValue("mixerAutoCreateChannelOnConnect", enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+    if (graphEditor)
+        graphEditor->setAutoCreateChannelOnConnectEnabled(enabled);
 }
 
 bool PreferencesSettingsTab::isPianoRollKeyLabelModeAll() const { return pianoRollKeyLabelsToggle.getToggleState(); }

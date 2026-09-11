@@ -845,6 +845,14 @@ public:
     void setAutoCreateMacroPortsOnDragEnabled(bool enabled) { autoCreateMacroPortsOnDragEnabled = enabled; }
     bool getAutoCreateMacroPortsOnDragEnabled() const noexcept { return autoCreateMacroPortsOnDragEnabled; }
 
+    // T184 (P9-3c, docs/mixer.md §5.2 "main workflow"): auto-create a mixer channel when a MIDI
+    // cable from a Track In node connects to an instrument/macro whose audio reaches the output
+    // without already passing through a ChannelStrip. On by default; a Preferences toggle
+    // ("mixerAutoCreateChannelOnConnect") lets a user turn this off, leaving endConnectionDrag's
+    // plain connect behaviour exactly as it was before T184.
+    void setAutoCreateChannelOnConnectEnabled(bool enabled) { autoCreateChannelOnConnectEnabled = enabled; }
+    bool getAutoCreateChannelOnConnectEnabled() const noexcept { return autoCreateChannelOnConnectEnabled; }
+
     // T148 (docs/macros.md §7 item 9): auto-delete a macro port once its last cable is removed.
     // On by default; a Preferences toggle (PreferencesSettingsTab,
     // "macroAutoDeletePortsOnLastCable") lets a user turn this off, leaving a cable-less port in
@@ -1704,9 +1712,37 @@ private:
      *  from the drag, the same scope cut createMacroPortFromDroppedCable already applies. Returns
      *  true if it minted 0, 1 or 2 ports and wired the final connection itself (the caller must NOT
      *  also call connectPorts for this drag); false means neither endpoint needed a port and the
-     *  caller should connect normally. */
+     *  caller should connect normally.
+     *
+     *  @param recordUndo true (default): wraps the whole mutation in its own
+     *  recordGraphAndMacroChange transaction and calls updateComponents() itself, exactly as
+     *  before T184. false (T184's auto-channel hook): performs the SAME mutation directly, with
+     *  NEITHER of those — the caller already owns an outer transaction and will call
+     *  updateComponents() itself, once, after its own further mutations. */
     bool maybeAutoCreateMacroPortsForDrag(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
-                                          juce::AudioProcessorGraph::NodeID dstId, int dstJack, bool isMidi);
+                                          juce::AudioProcessorGraph::NodeID dstId, int dstJack, bool isMidi,
+                                          bool recordUndo = true);
+
+    // ---- Auto-create-channel-on-connect (T184, P9-3c, docs/mixer.md §5.2 "main workflow") ------
+
+    /** True when `nodeId` resolves to a live TimelineMidiSource ("Track In") node — the one
+     *  trigger condition endConnectionDrag checks before opening the T184 auto-channel path. */
+    bool nodeIsTimelineMidiSource(juce::AudioProcessorGraph::NodeID nodeId) const;
+
+    /** Runs synth::findUnchanneledOutputFeeds() from `searchFrom` (the real destination instrument
+     *  for a direct module-jack drop, or the MacroMidiInlet port node itself for the
+     *  collapsed-macro-card existing-jack drop — a port is a plain pass-through, so the BFS reaches
+     *  the interior instrument through it on its own) and, if it finds any exit, builds a channel
+     *  there via synth::buildChannelForFeeds. Lays EQ/Compressor/Strip (and Master, if newly
+     *  spliced) to the right of the first exit's source node, using estimateModuleSize() widths and
+     *  the same real-card-width stride MainComponent::addAudioTrack uses (mirrored here as
+     *  kAutoChannelCardGapX — the gap constant lives in MainComponent.cpp, which GraphEditor can't
+     *  reach into). If every exit's source node is an ordinary (non-port) member of the SAME macro,
+     *  the three new chain nodes join that macro (macros.addMember) — never boxes when a source is
+     *  itself a macro port (that would insert between an inner node and its outlet) or when sources
+     *  span more than one macro. NO UNDO OF ITS OWN and no updateComponents() call — the caller
+     *  (already inside its own recordGraphAndMacroChange transaction) does both. */
+    void maybeAutoCreateChannelAfterConnect(juce::AudioProcessorGraph::NodeID searchFrom);
 
     /** The auto-delete half of T148 (docs/macros.md §7 item 9), the reverse of the auto-create
      *  above: after a mutation has removed a connection that may have touched a macro port, call
@@ -1776,6 +1812,7 @@ private:
     bool doubleClickPortDisconnectEnabled = true;
     bool autoCreateMacroPortsOnDragEnabled = true;
     bool autoDeleteMacroPortsOnLastCableEnabled = true;
+    bool autoCreateChannelOnConnectEnabled = true;
     bool defaultDualIOForNewModules = false;
     std::map<juce::String, bool> dualIOPerModuleOverrides;
 

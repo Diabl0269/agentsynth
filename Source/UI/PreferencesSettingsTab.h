@@ -38,6 +38,11 @@ public:
     void setMacroAutoCreatePortsOnDragEnabled(bool enabled);
     bool isMacroAutoDeletePortsOnLastCableEnabled() const;
     void setMacroAutoDeletePortsOnLastCableEnabled(bool enabled);
+    // T184 (P9-3c, docs/mixer.md §5.2 "main workflow"): plain on/off, ON by default — same shape
+    // as the two T148 toggles above (a brand-new automation, not a replacement for pre-existing
+    // silent behaviour).
+    bool isMixerAutoCreateChannelOnConnectEnabled() const;
+    void setMixerAutoCreateChannelOnConnectEnabled(bool enabled);
     bool isAlignmentGuidesEnabled() const;
     void setAlignmentGuidesEnabled(bool enabled);
     bool getDefaultDualIOForNewModules() const;
@@ -147,6 +152,7 @@ private:
     void persistDoubleClickPortDisconnect(bool enabled);
     void persistMacroAutoCreatePortsOnDrag(bool enabled);
     void persistMacroAutoDeletePortsOnLastCable(bool enabled);
+    void persistMixerAutoCreateChannelOnConnect(bool enabled);
     void persistAlignmentGuidesEnabled(bool enabled);
     void persistDefaultDualIOForNewModules(bool enabled);
     void persistMacroAutoPortPreference(GraphEditor::MacroAutoPortPreference pref);
@@ -228,6 +234,10 @@ private:
                                                         "boundary"};
     juce::ToggleButton macroAutoDeletePortsOnLastCableToggle{"Auto-delete macro ports when their last cable is "
                                                              "removed"};
+    // T184 (P9-3c, docs/mixer.md §5.2 "main workflow"): plain on/off, ON by default — see the
+    // getter/setter declarations above for why this is a different shape from a tri-state "ask".
+    juce::ToggleButton mixerAutoCreateChannelOnConnectToggle{
+        "Auto-create a mixer channel when a MIDI track is connected"};
     juce::ToggleButton loopSelectionArmsToggle{"Timeline: P (loop selection) also switches looping on"};
     // The other half of the same locator conversation, so it sits in the same group as the row
     // above rather than getting a divider of its own: one is "make the locators from a selection",

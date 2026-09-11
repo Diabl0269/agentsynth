@@ -58,6 +58,31 @@ TEST_F(PreferencesSettingsTabTest, DefaultsToNewAndUnwiredAndDoubleClickOn) {
     // getMacroAutoPortPreference() default of "ask" — see its own getter/setter comments.
     EXPECT_TRUE(tab.isMacroAutoCreatePortsOnDragEnabled());
     EXPECT_TRUE(tab.isMacroAutoDeletePortsOnLastCableEnabled());
+    // T184 (docs/mixer.md §5.2): default ON, same shape as the T148 toggles above.
+    EXPECT_TRUE(tab.isMixerAutoCreateChannelOnConnectEnabled());
+}
+
+// T184: default ON, persisted under its own key, reading the default must not write it, a fresh
+// tab restores what was written -- mirrors MacroAutoCreateAndAutoDeleteTogglesDefaultOnAndRoundTrip.
+TEST_F(PreferencesSettingsTabTest, MixerAutoCreateChannelOnConnectTogglesDefaultOnAndRoundTrips) {
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_TRUE(tab.isMixerAutoCreateChannelOnConnectEnabled());
+        EXPECT_FALSE(appProperties.getUserSettings()->containsKey("mixerAutoCreateChannelOnConnect"));
+
+        tab.setMixerAutoCreateChannelOnConnectEnabled(false);
+        EXPECT_FALSE(tab.isMixerAutoCreateChannelOnConnectEnabled());
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("mixerAutoCreateChannelOnConnect"), "0");
+    }
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_FALSE(tab.isMixerAutoCreateChannelOnConnectEnabled());
+        tab.setMixerAutoCreateChannelOnConnectEnabled(true);
+    }
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_TRUE(tab.isMixerAutoCreateChannelOnConnectEnabled());
+    }
 }
 
 // Mirrors DoubleClickSpansLocatorsDefaultsOnAndRoundTrips for the two T148 toggles: default ON,
@@ -142,6 +167,7 @@ TEST_F(PreferencesSettingsTabTest, LoadsPersistedValues) {
     appProperties.getUserSettings()->setValue("defaultDualIOForNewModules", "1");
     appProperties.getUserSettings()->setValue("macroAutoCreatePortsOnDrag", "0");
     appProperties.getUserSettings()->setValue("macroAutoDeletePortsOnLastCable", "0");
+    appProperties.getUserSettings()->setValue("mixerAutoCreateChannelOnConnect", "0");
 
     PreferencesSettingsTab tab(appProperties);
     EXPECT_EQ(tab.getSmartConnectionMode(), GraphEditor::SmartConnectionMode::Off);
@@ -149,6 +175,7 @@ TEST_F(PreferencesSettingsTabTest, LoadsPersistedValues) {
     EXPECT_TRUE(tab.getDefaultDualIOForNewModules());
     EXPECT_FALSE(tab.isMacroAutoCreatePortsOnDragEnabled());
     EXPECT_FALSE(tab.isMacroAutoDeletePortsOnLastCableEnabled());
+    EXPECT_FALSE(tab.isMixerAutoCreateChannelOnConnectEnabled());
 }
 
 TEST_F(PreferencesSettingsTabTest, ChangingControlsPersistsAndPushesToEditor) {
@@ -193,6 +220,15 @@ TEST_F(PreferencesSettingsTabTest, ChangingControlsPersistsAndPushesToEditor) {
     tab.setMacroAutoDeletePortsOnLastCableEnabled(true);
     EXPECT_EQ(appProperties.getUserSettings()->getValue("macroAutoDeletePortsOnLastCable"), "1");
     EXPECT_TRUE(editor.getAutoDeleteMacroPortsOnLastCableEnabled());
+
+    // T184 (docs/mixer.md §5.2): a toggle flip must reach the live GraphEditor immediately.
+    tab.setMixerAutoCreateChannelOnConnectEnabled(false);
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("mixerAutoCreateChannelOnConnect"), "0");
+    EXPECT_FALSE(editor.getAutoCreateChannelOnConnectEnabled());
+
+    tab.setMixerAutoCreateChannelOnConnectEnabled(true);
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("mixerAutoCreateChannelOnConnect"), "1");
+    EXPECT_TRUE(editor.getAutoCreateChannelOnConnectEnabled());
 }
 
 // Founder-review fix F5 (docs/macros.md §7 item 6.2): the macro auto-port preference. Tri-state,
@@ -359,6 +395,7 @@ TEST_F(PreferencesSettingsTabTest, SetGraphEditorPushesCurrentValues) {
     appProperties.getUserSettings()->setValue("defaultDualIOForNewModules", "1");
     appProperties.getUserSettings()->setValue("macroAutoCreatePortsOnDrag", "0");
     appProperties.getUserSettings()->setValue("macroAutoDeletePortsOnLastCable", "0");
+    appProperties.getUserSettings()->setValue("mixerAutoCreateChannelOnConnect", "0");
 
     PreferencesSettingsTab tab(appProperties);
     AudioEngine engine;
@@ -368,6 +405,7 @@ TEST_F(PreferencesSettingsTabTest, SetGraphEditorPushesCurrentValues) {
     ASSERT_FALSE(editor.getDefaultDualIOForNewModules());
     ASSERT_TRUE(editor.getAutoCreateMacroPortsOnDragEnabled());
     ASSERT_TRUE(editor.getAutoDeleteMacroPortsOnLastCableEnabled());
+    ASSERT_TRUE(editor.getAutoCreateChannelOnConnectEnabled());
 
     tab.setGraphEditor(&editor);
     EXPECT_EQ(editor.getSmartConnectionMode(), GraphEditor::SmartConnectionMode::NewOnly);
@@ -375,6 +413,7 @@ TEST_F(PreferencesSettingsTabTest, SetGraphEditorPushesCurrentValues) {
     EXPECT_TRUE(editor.getDefaultDualIOForNewModules());
     EXPECT_FALSE(editor.getAutoCreateMacroPortsOnDragEnabled());
     EXPECT_FALSE(editor.getAutoDeleteMacroPortsOnLastCableEnabled());
+    EXPECT_FALSE(editor.getAutoCreateChannelOnConnectEnabled());
 }
 
 // Moved from AppearanceSettingsTab; persistence key ("alignmentGuidesEnabled") is unchanged so

@@ -1,10 +1,13 @@
 #include "ChannelFlows.h"
 
 #include "../AI/AIStateMapper.h"
+#include "../Modules/AttenuverterModule.h"
 #include "../Modules/ChannelStripModule.h"
 #include "../Modules/MasterModule.h"
 #include "../Modules/ModuleBase.h"
+#include "../Modules/RecordTapModule.h"
 #include "MasterSplice.h"
+#include <algorithm>
 
 namespace synth {
 
@@ -47,10 +50,17 @@ bool isProcessorPoly(juce::AudioProcessor* processor) {
     return false;
 }
 
-} // namespace
-
-DefaultChannel buildDefaultAudioChannel(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::Node& source,
-                                        const DefaultChannelLayout& layout, int sourceRightChannel) {
+// The shared builder behind both buildDefaultAudioChannel (one fixed stereo-pair source) and
+// buildChannelForFeeds (T184: an arbitrary set of left/right feeds gathered from
+// findUnchanneledOutputFeeds). Builds EQ(bypassed) -> Compressor(bypassed) -> Channel Strip
+// (Stereo) -> Master (Mix) and wires every entry in `leftFeeds`/`rightFeeds` into the EQ's ch0/ch1
+// respectively (AudioProcessorGraph sums multiple sources landing on the same input channel, so
+// more than one feed a side is fine). Same ordering as buildDefaultAudioChannel's own contract:
+// chain wired first, THEN spliceMasterNode, THEN Strip->Master as plain edges.
+DefaultChannel buildChannelChain(juce::AudioProcessorGraph& graph,
+                                 const std::vector<juce::AudioProcessorGraph::NodeAndChannel>& leftFeeds,
+                                 const std::vector<juce::AudioProcessorGraph::NodeAndChannel>& rightFeeds,
+                                 const DefaultChannelLayout& layout) {
     DefaultChannel result;
 
     juce::String eqUuid;
@@ -94,11 +104,13 @@ DefaultChannel buildDefaultAudioChannel(juce::AudioProcessorGraph& graph, juce::
     strip->properties.set("x", layout.strip.x);
     strip->properties.set("y", layout.strip.y);
 
-    // The chain: source -> EQ -> Compressor -> Strip. Stereo on raw ch0/ch1 throughout, except the
-    // strip's right leg, which is ChannelStripModule::kRightBase — NEVER ch1 (Source/Modules/
-    // CLAUDE.md), see ChannelFlows.h's own comment for why that's the one place the number jumps.
-    graph.addConnection({{source.nodeID, 0}, {eq->nodeID, 0}});
-    graph.addConnection({{source.nodeID, sourceRightChannel}, {eq->nodeID, 1}});
+    // feeds -> EQ. Stereo on raw ch0/ch1 throughout, except the strip's right leg, which is
+    // ChannelStripModule::kRightBase — NEVER ch1 (Source/Modules/CLAUDE.md), see ChannelFlows.h's
+    // own comment for why that's the one place the number jumps.
+    for (const auto& feed : leftFeeds)
+        graph.addConnection({feed, {eq->nodeID, 0}});
+    for (const auto& feed : rightFeeds)
+        graph.addConnection({feed, {eq->nodeID, 1}});
     graph.addConnection({{eq->nodeID, 0}, {compressor->nodeID, 0}});
     graph.addConnection({{eq->nodeID, 1}, {compressor->nodeID, 1}});
     graph.addConnection({{compressor->nodeID, 0}, {strip->nodeID, 0}});
@@ -123,6 +135,13 @@ DefaultChannel buildDefaultAudioChannel(juce::AudioProcessorGraph& graph, juce::
     return result;
 }
 
+} // namespace
+
+DefaultChannel buildDefaultAudioChannel(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::Node& source,
+                                        const DefaultChannelLayout& layout, int sourceRightChannel) {
+    return buildChannelChain(graph, {{source.nodeID, 0}}, {{source.nodeID, sourceRightChannel}}, layout);
+}
+
 juce::AudioProcessorGraph::Node* addVoiceMixerForPolyInstrument(juce::AudioProcessorGraph& graph,
                                                                 juce::AudioProcessorGraph::Node& instrument,
                                                                 juce::Point<int> position, juce::String& uuidOut) {
@@ -140,6 +159,102 @@ juce::AudioProcessorGraph::Node* addVoiceMixerForPolyInstrument(juce::AudioProce
         graph.addConnection({{instrument.nodeID, voice}, {voiceMixer->nodeID, voice}});
 
     return voiceMixer;
+}
+
+std::vector<juce::AudioProcessorGraph::Connection> findUnchanneledOutputFeeds(juce::AudioProcessorGraph& graph,
+                                                                              juce::AudioProcessorGraph::NodeID start) {
+    std::vector<juce::AudioProcessorGraph::Connection> exits;
+
+    std::vector<juce::AudioProcessorGraph::NodeID> visited{start};
+    std::vector<juce::AudioProcessorGraph::NodeID> queue{start};
+
+    while (!queue.empty()) {
+        const auto nodeId = queue.front();
+        queue.erase(queue.begin());
+
+        auto* node = graph.getNodeForId(nodeId);
+        if (node == nullptr)
+            continue;
+        auto* processor = node->getProcessor();
+        if (processor == nullptr)
+            continue;
+
+        // Never expand PAST a terminal, an already-channeled branch, or a hidden modulation hop —
+        // see the header comment for why each of these stops traversal here.
+        if (dynamic_cast<RecordTapModule*>(processor) != nullptr || dynamic_cast<MasterModule*>(processor) != nullptr ||
+            dynamic_cast<ChannelStripModule*>(processor) != nullptr ||
+            dynamic_cast<AttenuverterModule*>(processor) != nullptr || processor->getName() == "Audio Output")
+            continue;
+
+        for (const auto& conn : graph.getConnections()) {
+            if (conn.source.nodeID != nodeId)
+                continue;
+
+            auto* destNode = graph.getNodeForId(conn.destination.nodeID);
+            if (destNode == nullptr)
+                continue;
+            auto* destProcessor = destNode->getProcessor();
+            if (destProcessor == nullptr)
+                continue;
+
+            // A hidden modulation hop: never traversed, never an exit (see header comment).
+            if (dynamic_cast<AttenuverterModule*>(destProcessor) != nullptr)
+                continue;
+
+            const int channel = conn.destination.channelIndex;
+
+            if (destProcessor->getName() == "Audio Output") {
+                if (channel == 0 || channel == 1)
+                    exits.push_back(conn);
+                continue; // terminal — never expand past Audio Output
+            }
+            if (dynamic_cast<RecordTapModule*>(destProcessor) != nullptr) {
+                if (channel == 0 || channel == 1)
+                    exits.push_back(conn);
+                continue; // terminal — never expand past Rec Tap
+            }
+            if (dynamic_cast<MasterModule*>(destProcessor) != nullptr) {
+                // kMixLeft/kMixRight are NOT an exit — only a strip's own output can land there,
+                // and this BFS never reaches one (it stops at a ChannelStripModule below).
+                if (channel == MasterModule::kDirectLeft || channel == MasterModule::kDirectRight)
+                    exits.push_back(conn);
+                continue; // terminal — never expand past Master
+            }
+            if (dynamic_cast<ChannelStripModule*>(destProcessor) != nullptr)
+                continue; // already channeled — do not expand past it, and not an exit itself
+
+            if (std::find(visited.begin(), visited.end(), conn.destination.nodeID) == visited.end()) {
+                visited.push_back(conn.destination.nodeID);
+                queue.push_back(conn.destination.nodeID);
+            }
+        }
+    }
+
+    return exits;
+}
+
+DefaultChannel buildChannelForFeeds(juce::AudioProcessorGraph& graph,
+                                    const std::vector<juce::AudioProcessorGraph::Connection>& exits,
+                                    const DefaultChannelLayout& layout) {
+    if (exits.empty())
+        return {};
+
+    // Classify by DESTINATION channel before anything is removed — ch0/kDirectLeft -> Left,
+    // ch1/kDirectRight -> Right (the only two channel numbers findUnchanneledOutputFeeds ever
+    // returns an exit for).
+    std::vector<juce::AudioProcessorGraph::NodeAndChannel> leftFeeds, rightFeeds;
+    for (const auto& exit : exits) {
+        const int channel = exit.destination.channelIndex;
+        const bool isRight = (channel == 1) || (channel == MasterModule::kDirectRight);
+        (isRight ? rightFeeds : leftFeeds).push_back(exit.source);
+    }
+
+    // REMOVE FIRST, then build — same "collect, then mutate" reasoning spliceMasterNode's own
+    // splice uses (removeConnection while iterating the list it came from would invalidate it).
+    for (const auto& exit : exits)
+        graph.removeConnection(exit);
+
+    return buildChannelChain(graph, leftFeeds, rightFeeds, layout);
 }
 
 } // namespace synth

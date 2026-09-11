@@ -1395,6 +1395,15 @@ In order, each independently shippable:
    — runs inside ONE `recordGraphAndMacroChange` transaction, so a single Cmd+Z undoes all of it
    together, the same pattern `createMacroPortFromDroppedCable`/`spliceMacroPorts` already use.
 
+   **`maybeAutoCreateMacroPortsForDrag` gained a trailing `recordUndo = true` parameter (T184,
+   docs/mixer.md §5.2/§8 item 2).** A caller that is already inside its own undo transaction — T184's
+   auto-channel hook in `endConnectionDrag`, which must cover macro-port creation, the connection,
+   AND a possible new channel as ONE step — passes `recordUndo=false` to fold this function's own
+   mutation into that outer transaction instead of opening a nested one, and takes over calling
+   `updateComponents()` itself once, after every mutation, rather than getting one call per nested
+   transaction. Every pre-existing call site is unaffected (the default keeps today's own
+   `recordGraphAndMacroChange`-and-`updateComponents()` behaviour byte-identical).
+
    **Auto-delete (`GraphEditor::autoDeleteOrphanedMacroPort`, called from `disconnectCable` and
    `disconnectPort`).** When a mutation drops a connection touching a macro port node down to ZERO
    remaining connections, the port is spliced out (`spliceOutMacroPort`, the same helper
