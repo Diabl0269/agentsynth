@@ -1,5 +1,7 @@
 #include "GraphEditor.h"
 #include "../AI/AIStateMapper.h"
+#include "../Mixer/ChannelFlows.h"
+#include "../Mixer/MasterSplice.h"
 #include "../Modules/ADSRModule.h"
 #include "../Modules/AttenuverterModule.h"
 #include "../Modules/AudioInputModule.h"
@@ -1403,16 +1405,47 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                 auto* realDst = dragSourceIsInput ? srcNode : dstNode;
                 const int srcJack = dragSourceIsInput ? port->index : dragSourceChannel;
                 const int dstJack = dragSourceIsInput ? dragSourceChannel : port->index;
-                // T148 (docs/macros.md §7 item 9): if this completed drag crosses a macro
-                // boundary (an EXPANDED macro's member on one side, something outside that same
-                // macro on the other — the collapsed-card drop above is a different code path),
-                // mint and wire a matching port instead of the plain direct connection. Gated by
-                // autoCreateMacroPortsOnDragEnabled (Preferences); when it handles the drag it
-                // returns true and the plain connectPorts below is skipped entirely.
-                if (!autoCreateMacroPortsOnDragEnabled ||
-                    !maybeAutoCreateMacroPortsForDrag(realSrc->nodeID, srcJack, realDst->nodeID, dstJack,
-                                                      dragSourceIsMidi))
+
+                // T184 (docs/mixer.md §5.2 "main workflow"): a MIDI cable from a Track In node
+                // landing here may newly make some audio reach the output with no channel — build
+                // one, in the SAME undo step as the connection itself (and as any T148 macro port
+                // the connection below also mints, so a Track In dragged across a macro boundary
+                // straight onto an unchanneled instrument gets ALL of it undone by one Cmd+Z).
+                // Gated by autoCreateChannelOnConnectEnabled (Preferences); OFF (or not a MIDI
+                // drag from a Track In) falls straight through to the T148/plain-connect branch
+                // below, byte for byte as it was before T184.
+                if (autoCreateChannelOnConnectEnabled && dragSourceIsMidi &&
+                    nodeIsTimelineMidiSource(realSrc->nodeID)) {
+                    const auto realSrcId = realSrc->nodeID;
+                    const auto realDstId = realDst->nodeID;
+                    auto doMutation = [this, realSrcId, srcJack, realDstId, dstJack] {
+                        if (!autoCreateMacroPortsOnDragEnabled ||
+                            !maybeAutoCreateMacroPortsForDrag(realSrcId, srcJack, realDstId, dstJack,
+                                                              /*isMidi=*/true, /*recordUndo=*/false))
+                            connectPorts(realSrcId, srcJack, realDstId, dstJack, /*isMidi=*/true,
+                                         /*recordUndo=*/false);
+                        // realDstId is always the real destination node, whether or not either
+                        // side just got a minted macro port above — maybeAutoCreateMacroPortsForDrag
+                        // wires any port it mints straight through to this same node — so the
+                        // search for un-channeled output feeds always starts here.
+                        maybeAutoCreateChannelAfterConnect(realDstId);
+                        updateComponents();
+                    };
+                    if (undoManager)
+                        undoManager->recordGraphAndMacroChange(graph, macros, doMutation);
+                    else
+                        doMutation();
+                } else if (!autoCreateMacroPortsOnDragEnabled ||
+                           !maybeAutoCreateMacroPortsForDrag(realSrc->nodeID, srcJack, realDst->nodeID, dstJack,
+                                                             dragSourceIsMidi)) {
+                    // T148 (docs/macros.md §7 item 9): if this completed drag crosses a macro
+                    // boundary (an EXPANDED macro's member on one side, something outside that same
+                    // macro on the other — the collapsed-card drop above is a different code path),
+                    // mint and wire a matching port instead of the plain direct connection. Gated by
+                    // autoCreateMacroPortsOnDragEnabled (Preferences); when it handles the drag it
+                    // returns true and the plain connectPorts below is skipped entirely.
                     connectPorts(realSrc->nodeID, srcJack, realDst->nodeID, dstJack, dragSourceIsMidi, true);
+                }
                 connectedToAModule = true;
             }
         }
@@ -1461,10 +1494,32 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                     (hitPort->kind == synth::MacroPortKind::Midi) == dragSourceIsMidi) {
                     const auto portNodeId = resolveMemberNodeId(hitPort->nodeUuid);
                     if (graph.getNodeForId(portNodeId) != nullptr) {
-                        if (newPortIsInput)
-                            connectPorts(srcNode->nodeID, dragSourceChannel, portNodeId, 0, dragSourceIsMidi, true);
-                        else
-                            connectPorts(portNodeId, 0, srcNode->nodeID, dragSourceChannel, dragSourceIsMidi, true);
+                        const auto connSrcId = newPortIsInput ? srcNode->nodeID : portNodeId;
+                        const auto connDstId = newPortIsInput ? portNodeId : srcNode->nodeID;
+                        const int connSrcJack = newPortIsInput ? dragSourceChannel : 0;
+                        const int connDstJack = newPortIsInput ? 0 : dragSourceChannel;
+
+                        // T184: the same auto-channel trigger as the direct-jack branch above,
+                        // for a Track In dropped straight onto an EXISTING port jack on a
+                        // collapsed macro's card. The port node (a MacroMidiInletModule) is a
+                        // plain pass-through — findUnchanneledOutputFeeds (via
+                        // maybeAutoCreateChannelAfterConnect) reaches whatever it forwards to on
+                        // its own, so searching from the port node itself is enough.
+                        if (autoCreateChannelOnConnectEnabled && dragSourceIsMidi &&
+                            nodeIsTimelineMidiSource(connSrcId)) {
+                            auto doMutation = [this, connSrcId, connSrcJack, connDstId, connDstJack] {
+                                connectPorts(connSrcId, connSrcJack, connDstId, connDstJack, /*isMidi=*/true,
+                                             /*recordUndo=*/false);
+                                maybeAutoCreateChannelAfterConnect(connDstId);
+                                updateComponents();
+                            };
+                            if (undoManager)
+                                undoManager->recordGraphAndMacroChange(graph, macros, doMutation);
+                            else
+                                doMutation();
+                        } else {
+                            connectPorts(connSrcId, connSrcJack, connDstId, connDstJack, dragSourceIsMidi, true);
+                        }
                         connectedToAModule = true;
                     }
                 }
@@ -1473,7 +1528,9 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
 
             // No jack under the cursor: fall back to the "shape from a dropped cable" convenience
             // (§5.3, T140) — the whole card is still a valid drop target, and a fresh Mono port is
-            // created to receive the cable.
+            // created to receive the cable. T184 does NOT apply here: createMacroPortFromDroppedCable
+            // wires no interior leg (the freshly-minted port has nothing behind it yet), so there is
+            // nothing for findUnchanneledOutputFeeds to find.
             createMacroPortFromDroppedCable(card->getMacroId(), newPortIsInput, dragSourceIsMidi, srcNode->nodeID,
                                             dragSourceChannel);
             break;
@@ -5667,7 +5724,8 @@ GraphEditor::mintMacroPortForAutoCreate(const juce::String& macroId, bool isInpu
 }
 
 bool GraphEditor::maybeAutoCreateMacroPortsForDrag(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
-                                                   juce::AudioProcessorGraph::NodeID dstId, int dstJack, bool isMidi) {
+                                                   juce::AudioProcessorGraph::NodeID dstId, int dstJack, bool isMidi,
+                                                   bool recordUndo) {
     // T155: a mod/CV-routed drag goes through this SAME mint-and-wire path as a plain audio drag —
     // no separate scope cut. connectPorts() (below) has its own CV detection (isCV, from the real
     // destination's getModulationTargets()) and wraps that leg in a hidden AttenuverterModule via
@@ -5723,15 +5781,127 @@ bool GraphEditor::maybeAutoCreateMacroPortsForDrag(juce::AudioProcessorGraph::No
         // reached — see the early return above), member<->port if only one side did, or
         // port<->port for a genuine cross-macro-boundary crossing.
         connectPorts(effectiveSrc, effectiveSrcJack, effectiveDst, effectiveDstJack, isMidi, /*recordUndo=*/false);
-        updateComponents();
     };
 
-    if (undoManager)
-        undoManager->recordGraphAndMacroChange(graph, macros, doMutation);
-    else
+    if (!recordUndo) {
+        // T184's auto-channel hook: the caller already owns an outer recordGraphAndMacroChange
+        // transaction and will call updateComponents() itself once, after its own further
+        // mutations — calling it here too would fire onGraphStructureChanged (and the timeline
+        // reconcile pass it drives) twice for one user gesture.
         doMutation();
+        return true;
+    }
+
+    if (undoManager)
+        undoManager->recordGraphAndMacroChange(graph, macros, [&] {
+            doMutation();
+            updateComponents();
+        });
+    else {
+        doMutation();
+        updateComponents();
+    }
 
     return true;
+}
+
+// ---- Auto-create-channel-on-connect (T184, P9-3c, docs/mixer.md §5.2 "main workflow") ----------
+
+bool GraphEditor::nodeIsTimelineMidiSource(juce::AudioProcessorGraph::NodeID nodeId) const {
+    auto* node = audioEngine.getGraph().getNodeForId(nodeId);
+    if (node == nullptr)
+        return false;
+    auto* mb = dynamic_cast<ModuleBase*>(node->getProcessor());
+    return mb != nullptr && mb->getModuleType() == ModuleType::TimelineMidiSource;
+}
+
+namespace {
+// Mirrors MainComponent.cpp's kChannelCardGapX — the real-card-width gap
+// MainComponent::addAudioTrack/addInstrumentTrack lay their own chain cards out with. Duplicated
+// here rather than shared: that constant lives in MainComponent.cpp, which GraphEditor cannot
+// reach into (the dependency runs the other way).
+constexpr int kAutoChannelCardGapX = 40;
+} // namespace
+
+void GraphEditor::maybeAutoCreateChannelAfterConnect(juce::AudioProcessorGraph::NodeID searchFrom) {
+    auto& graph = audioEngine.getGraph();
+    const auto exits = synth::findUnchanneledOutputFeeds(graph, searchFrom);
+    if (exits.empty())
+        return;
+
+    auto* firstSourceNode = graph.getNodeForId(exits.front().source.nodeID);
+    if (firstSourceNode == nullptr)
+        return;
+
+    const auto originPos = juce::Point<int>(static_cast<int>(firstSourceNode->properties.getWithDefault("x", 0)),
+                                            static_cast<int>(firstSourceNode->properties.getWithDefault("y", 0)));
+    const juce::String originType = synth::AIStateMapper::getFactoryTypeName(firstSourceNode->getProcessor());
+
+    // Lay EQ/Compressor/Strip (and Master, if it's newly spliced) out left-to-right from the real
+    // card widths, the same reasoning MainComponent::addAudioTrack's own comment gives.
+    const int eqX = originPos.x + estimateModuleSize(originType).x + kAutoChannelCardGapX;
+    const int compressorX = eqX + estimateModuleSize("Parametric EQ").x + kAutoChannelCardGapX;
+    const int stripX = compressorX + estimateModuleSize("Compressor").x + kAutoChannelCardGapX;
+    const int masterX = stripX + estimateModuleSize("Channel Strip").x + kAutoChannelCardGapX;
+    const synth::DefaultChannelLayout layout{
+        /*eq=*/{eqX, originPos.y},
+        /*compressor=*/{compressorX, originPos.y},
+        /*strip=*/{stripX, originPos.y},
+        /*master=*/{masterX, originPos.y},
+    };
+
+    // Known BEFORE the build below, the same reason T187's own relocation check needs it: whether
+    // this call is the one that splices Master for the first time.
+    const bool masterExistedBefore = synth::findMasterNode(graph) != nullptr;
+
+    // Every exit's distinct source node, gathered before buildChannelForFeeds removes the exit
+    // edges — used for the macro-boxing decision below.
+    std::vector<juce::AudioProcessorGraph::NodeID> sourceNodeIds;
+    for (const auto& exit : exits)
+        if (std::find(sourceNodeIds.begin(), sourceNodeIds.end(), exit.source.nodeID) == sourceNodeIds.end())
+            sourceNodeIds.push_back(exit.source.nodeID);
+
+    const auto channel = synth::buildChannelForFeeds(graph, exits, layout);
+    if (channel.stripUuid.isEmpty())
+        return; // a factory/addNode failure partway — same contract as buildDefaultAudioChannel
+
+    // T187 mirror (MainComponent::addAudioTrack's own comment): on the very first channel, relocate
+    // a bare Audio Output to terminate the row instead of leaving the finished chain cabling back
+    // across the whole canvas to reach wherever it already sat.
+    if (!masterExistedBefore && channel.master != nullptr) {
+        const int outputX = masterX + estimateModuleSize("Master").x + kAutoChannelCardGapX;
+        for (auto* node : graph.getNodes())
+            if (node != nullptr && node->getProcessor() != nullptr &&
+                node->getProcessor()->getName() == "Audio Output") {
+                node->properties.set("x", outputX);
+                node->properties.set("y", originPos.y);
+            }
+    }
+
+    // Boxing: only when EVERY exit source is an ORDINARY (non-port) member of the SAME macro —
+    // never insert between an inner node and its outlet (a MacroOutlet source refuses), and never
+    // guess when sources span more than one macro or none at all.
+    juce::String commonMacroId;
+    bool boxable = true;
+    for (const auto& sourceId : sourceNodeIds) {
+        const juce::String uuid = nodeUuidFor(sourceId);
+        auto* macro = uuid.isNotEmpty() ? macros.findByMember(uuid) : nullptr;
+        if (macro == nullptr || macro->memberIsPort(uuid)) {
+            boxable = false;
+            break;
+        }
+        if (commonMacroId.isEmpty())
+            commonMacroId = macro->id;
+        else if (commonMacroId != macro->id) {
+            boxable = false;
+            break;
+        }
+    }
+    if (boxable && commonMacroId.isNotEmpty()) {
+        macros.addMember(commonMacroId, channel.eqUuid);
+        macros.addMember(commonMacroId, channel.compressorUuid);
+        macros.addMember(commonMacroId, channel.stripUuid);
+    }
 }
 
 void GraphEditor::autoDeleteOrphanedMacroPort(juce::AudioProcessorGraph::NodeID nodeId) {

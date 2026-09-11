@@ -346,6 +346,10 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         appProperties.getUserSettings()->getBoolValue("macroAutoCreatePortsOnDrag", true));
     graphEditor.setAutoDeleteMacroPortsOnLastCableEnabled(
         appProperties.getUserSettings()->getBoolValue("macroAutoDeletePortsOnLastCable", true));
+    // T184 (P9-3c, docs/mixer.md §5.2 "main workflow"): default ON — see PreferencesSettingsTab's
+    // own toggle comment for why this is a plain on/off rather than a tri-state preference.
+    graphEditor.setAutoCreateChannelOnConnectEnabled(
+        appProperties.getUserSettings()->getBoolValue("mixerAutoCreateChannelOnConnect", true));
     // Stored here, but APPLIED to the patch further down — the default preset does not exist yet.
     // AudioEngine::initialise() builds it, and that runs at the end of this constructor. See
     // applyStoredDualIOPreferenceToPatch().
