@@ -3,6 +3,7 @@
 #include "AI/AIStateMapper.h"
 #include "Branding.h"
 #include "Mixer/ChannelFlows.h"
+#include "Mixer/MasterSplice.h"
 #include "Modules/TimelineAudioSourceModule.h"
 #include "Modules/TimelineMidiSourceModule.h" // auditionTrackNote pushes into the bound Track In node
 #include "Plugin/Hosting/HostedPluginModule.h"
@@ -4514,9 +4515,31 @@ void MainComponent::addAudioTrack() {
                 /*master=*/{masterX, trackAudioPosition.y},
             };
 
+            // T187 layout follow-up: know BEFORE building the chain whether this call is the one
+            // that splices Master for the first time — that's the only time a bare "Audio Output"
+            // (the newPatch seed, or wherever the user first dropped one) is worth relocating below.
+            const bool masterExistedBefore = synth::findMasterNode(audioEngine.getGraph()) != nullptr;
+
             const auto channel = synth::buildDefaultAudioChannel(audioEngine.getGraph(), *trackAudioNode, layout);
             if (channel.stripUuid.isEmpty())
                 return; // a factory/addNode failure partway — see buildDefaultAudioChannel's contract
+
+            // On the very first channel, Master lands right of this chain (masterX above) but a bare
+            // Audio Output still sits wherever it started — the newPatch seed's canvas origin, or
+            // wherever the user first dropped one — so the finished chain would cable back across the
+            // whole canvas to reach it. Move it to terminate the row instead: Track Audio -> EQ ->
+            // Compressor -> Strip -> Master -> Audio Output, left to right. Only done once; after
+            // Master exists, the canvas is already arranged and nothing here should reshuffle it.
+            if (!masterExistedBefore && channel.master != nullptr) {
+                const int outputX = masterX + GraphEditor::estimateModuleSize("Master").x + kChannelCardGapX;
+                for (auto* node : audioEngine.getGraph().getNodes()) {
+                    if (node != nullptr && node->getProcessor() != nullptr &&
+                        node->getProcessor()->getName() == "Audio Output") {
+                        node->properties.set("x", outputX);
+                        node->properties.set("y", trackAudioPosition.y);
+                    }
+                }
+            }
 
             // Box {Track Audio, EQ, Compressor, Strip} into ONE collapsed macro named after the
             // track. Master is deliberately NOT a member — see this method's own comment above.

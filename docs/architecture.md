@@ -523,7 +523,7 @@ This is the definitive hook inventory. There are six kinds, and nothing else in 
 
 **Track headers** call back into `MainComponent` through `synth::ui::TrackHeaderHost` — create/re-bind/delete `Track In` nodes, select one in the graph, and run any track edit as one undoable step. See [`docs/timeline_panel_core.md` §3](timeline_panel_core.md) for the chip semantics, the add-track rule and the never-auto-rebind rule.
 
-**New Patch clears the timeline too**, as its own undo step: `GraphEditor::newPatch()` owns the graph's `recordStructuralChange`, and folding the timeline into it would mean nesting transactions. The timeline is cleared *first*, so the graph's step is the newer one — Cmd+Z brings the canvas back, Cmd+Z again brings the timeline back, and the post-restore reconcile re-derives the bindings after each.
+**New Patch clears the timeline too**, as its own undo step: `GraphEditor::newPatch()` owns the graph's `recordStructuralChange`, and folding the timeline into it would mean nesting transactions. The timeline is cleared *first*, so the graph's step is the newer one — Cmd+Z brings the canvas back, Cmd+Z again brings the timeline back, and the post-restore reconcile re-derives the bindings after each. The same `recordStructuralChange` step also reseeds a fresh Audio Output right after the clear (T187, [`docs/mixer.md` §5.14](mixer.md)) — a brand-new empty project is never left with nothing for the mixer's Master splice to target.
 
 #### Focus regions (T159)
 

@@ -350,6 +350,28 @@ Open unchanged — no automatic migration on load. The mixer offers a single **"
 action that wraps every channel-less track's chain into a strip, as one undo step covering all of
 them at once.
 
+### 5.14 New Patch always has an Audio Output (T187)
+
+`GraphEditor::newPatch()` seeds a fresh Audio Output immediately after `graph.clear()`, as part of
+the same `recordStructuralChange` undo step — a brand-new empty project is never left with nothing
+for `spliceMasterNode` (§5.1) to target. Before this, a bare Track Audio added to a fresh New Patch
+was silently unheard until the user manually added an Audio Output; a second track added after that
+manual fix then auto-spliced Master and re-routed the first track's manual wire into it, which read
+as a surprise. Scoped to `newPatch()` only — `AIStateMapper::applyJSONToGraph`'s own `graph.clear()`
+(preset/project load) is unaffected: it always replays a full node set from JSON right after
+clearing, so it is self-correcting as long as the source JSON has an Audio Output (every factory
+preset does).
+
+On the very first channel, `MainComponent::addAudioTrack()` also relocates that Audio Output (or
+any bare Audio Output the user dropped manually before adding a track) to sit immediately right of
+the newly-spliced Master, once it knows this call is the one that splices Master (checked via
+`synth::findMasterNode` before building the chain). Master already lands right of the chain by
+design (T173a, §5.2) so the row reads `Track Audio -> EQ -> Compressor -> Strip -> Master ->
+Audio Output` left to right; without the move, Audio Output stayed wherever it started (the newPatch
+seed's canvas origin) while Master jumped to the far side of the chain, and the output cable had to
+run back across the whole canvas — caught live via computer-use testing while verifying T187. Only
+fires the first time Master is created; once it exists, later tracks don't reshuffle the canvas.
+
 ---
 
 ## 6. AI authorability
