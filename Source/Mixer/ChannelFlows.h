@@ -16,6 +16,18 @@ struct DefaultChannel {
     juce::AudioProcessorGraph::Node* master = nullptr;
 };
 
+/** Canvas positions for the four cards buildDefaultAudioChannel() may place. Core cannot size UI
+ *  cards itself (no dependency on Source/UI/LayoutUtil or GraphEditor::estimateModuleSize), so the
+ *  caller — which CAN size them — works out non-overlapping positions and hands them in. `master`
+ *  is used only when Master is newly spliced (ignored when it already exists — see the function
+ *  comment). */
+struct DefaultChannelLayout {
+    juce::Point<int> eq;
+    juce::Point<int> compressor;
+    juce::Point<int> strip;
+    juce::Point<int> master;
+};
+
 /**
  * Builds the factory default mixer channel (docs/mixer.md §5.7/D3, T173a) that "+ Track ->
  * Audio Track" wires after a freshly-created Track Audio node's stereo output:
@@ -51,18 +63,21 @@ struct DefaultChannel {
  * (MainComponent::addAudioTrack, via AppUndoManager::recordGraphTimelineAndMacroChange). Core cannot
  * depend on AppUndoManager or GraphEditor (AppUI-only), so this function touches only the graph.
  *
- * Lays EQ/Compressor/Strip out left-to-right starting right of `source` (reading its "x"/"y"
- * properties). Core cannot depend on Source/UI/LayoutUtil::kSingleWidth (AppUI-only), so the
- * horizontal step is a plain constant kept in sync with it by convention, not a shared symbol.
- * `masterPosition` positions a newly-spliced Master; ignored when Master already exists.
+ * Positions the EQ/Compressor/Strip (and, when newly spliced, Master) cards exactly where
+ * `layout` says. Core cannot size UI cards itself — no dependency on Source/UI/LayoutUtil or
+ * GraphEditor::estimateModuleSize (both AppUI-only) — so the caller must have already worked out
+ * non-overlapping positions from the real card widths (MainComponent::addAudioTrack is today's only
+ * caller; see its own comment for how it derives `layout`).
  *
  * @param source must already be live in `graph`, with a stereo output on raw ch0/ch1 (Track Audio,
  *               today's only caller) and an assigned "uuid"/"x"/"y" set of properties.
+ * @param layout canvas positions for EQ/Compressor/Strip, and for Master if this call is the one
+ *               that splices it (ignored otherwise — see the DefaultChannelLayout comment).
  * @return the created chain's uuids/nodes. `stripUuid` (and every uuid before it, in order) is empty
  *         when a step failed to create its node — the caller should treat that as "nothing usable was
  *         built" the same way any other `graph.addNode()` failure is handled elsewhere.
  */
 DefaultChannel buildDefaultAudioChannel(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::Node& source,
-                                        juce::Point<int> masterPosition);
+                                        const DefaultChannelLayout& layout);
 
 } // namespace synth

@@ -41,10 +41,11 @@ constexpr const char* kRecordingsFolderName = "Recordings";
 constexpr const char* kExportsFolderName = "Exports";
 constexpr const char* kPatchesFolderName = "Patches";
 
-// Gap (T173a) between a freshly-created audio channel's macro card and a newly-spliced Master, on
-// top of the card's own width (synth::LayoutUtil::kSingleWidth) — purely cosmetic, and only used the
-// first time (Master is a singleton afterwards; see MainComponent::addAudioTrack).
-constexpr int kMasterGapAfterMacroX = 40;
+// Horizontal gap (T173a) between each of the expanded channel's cards (Track Audio -> EQ ->
+// Compressor -> Strip -> Master), on top of the real card widths (GraphEditor::estimateModuleSize)
+// — purely cosmetic. addAudioTrack lays every card out left-to-right along this stride so none
+// overlap regardless of how wide an individual card is (e.g. Parametric EQ's double-width card).
+constexpr int kChannelCardGapX = 40;
 
 // The folder a "Export Audio..."/"Export Patch Only..." dialog starts in: <bundle>/<subFolderName>
 // when a real bundle is open (created on demand), otherwise the same Music/AgentSynth root every
@@ -4494,13 +4495,26 @@ void MainComponent::addAudioTrack() {
             const auto trackAudioPosition =
                 juce::Point<int>(static_cast<int>(trackAudioNode->properties.getWithDefault("x", 0)),
                                  static_cast<int>(trackAudioNode->properties.getWithDefault("y", 0)));
-            // Only used when this is the first channel (Master is a singleton otherwise) — right of
-            // where the collapsed macro card will sit.
-            const auto masterPosition =
-                trackAudioPosition.translated(synth::LayoutUtil::kSingleWidth + kMasterGapAfterMacroX, 0);
 
-            const auto channel =
-                synth::buildDefaultAudioChannel(audioEngine.getGraph(), *trackAudioNode, masterPosition);
+            // Lay every card of the expanded chain out left-to-right from the real card widths
+            // (GraphEditor::estimateModuleSize) rather than a fixed stride — Parametric EQ is
+            // double-width, so a fixed stride overlaps it with the Compressor (the bug this fixes).
+            // {Track Audio, EQ, Compressor, Strip} end up boxed into one collapsed macro below, so
+            // only their expanded-state positions matter for not overlapping each other; Master's
+            // position is only used the first time (it is a singleton afterwards) and sits right of
+            // where the collapsed macro card will be.
+            const int eqX = trackAudioPosition.x + GraphEditor::estimateModuleSize("Track Audio").x + kChannelCardGapX;
+            const int compressorX = eqX + GraphEditor::estimateModuleSize("Parametric EQ").x + kChannelCardGapX;
+            const int stripX = compressorX + GraphEditor::estimateModuleSize("Compressor").x + kChannelCardGapX;
+            const int masterX = stripX + GraphEditor::estimateModuleSize("Channel Strip").x + kChannelCardGapX;
+            const synth::DefaultChannelLayout layout{
+                /*eq=*/{eqX, trackAudioPosition.y},
+                /*compressor=*/{compressorX, trackAudioPosition.y},
+                /*strip=*/{stripX, trackAudioPosition.y},
+                /*master=*/{masterX, trackAudioPosition.y},
+            };
+
+            const auto channel = synth::buildDefaultAudioChannel(audioEngine.getGraph(), *trackAudioNode, layout);
             if (channel.stripUuid.isEmpty())
                 return; // a factory/addNode failure partway — see buildDefaultAudioChannel's contract
 

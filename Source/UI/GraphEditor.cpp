@@ -172,6 +172,18 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         // AudioClipPlaybackTest.AbsentFromTheLibraryWithAPinnedSizeEstimate.
         // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
         return {280, 131};
+    if (typeName == "Channel Strip")
+        // gain + pan sliders below up to 2 input jacks a side (Stereo shape, what
+        // MainComponent::addAudioTrack always builds — width doesn't move with shape, only the
+        // Mono/Stereo jack-row count would, and this card's height already covers both). Internal-
+        // only like Track Audio/Rec Tap: library-less, no replace-menu entry. Measured against the
+        // real card by ChannelFlowTest.ChannelStripAndMasterHaveAPinnedSizeEstimate.
+        return {280, 181};
+    if (typeName == "Master")
+        // gain slider only, 4 input jacks (Mix L/R, Direct L/R) a side setting the port gutter.
+        // Internal-only, singleton, library-less. Measured against the real card by
+        // ChannelFlowTest.ChannelStripAndMasterHaveAPinnedSizeEstimate.
+        return {280, 221};
     if (typeName == "Hosted Plugin")
         // Bypass and mute live in the header; the only body content is the "Open Editor" button,
         // one jack a side while empty. The card grows with the loaded plugin's real port count,

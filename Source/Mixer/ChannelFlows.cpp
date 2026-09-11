@@ -10,11 +10,6 @@ namespace synth {
 
 namespace {
 
-// Horizontal spacing between the chain's nodes. Core can't depend on Source/UI/LayoutUtil
-// (AppUI-only) — see ChannelFlows.h's own comment — so this is a plain constant, kept in sync with
-// its 300px auto-arrange stride (GraphEditor::updateComponents' placement fallback) by convention.
-constexpr int kNodeStepX = 300;
-
 // Creates one node through the factory (so it round-trips through graphToJSON/applyJSONToGraph,
 // exactly like every other node-creation call site), assigns it a fresh uuid mirrored into the
 // processor (ModuleBase::setNodeUuid), and records its canvas position. Returns nullptr on any
@@ -42,14 +37,11 @@ juce::AudioProcessorGraph::Node* addChainNode(juce::AudioProcessorGraph& graph, 
 } // namespace
 
 DefaultChannel buildDefaultAudioChannel(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::Node& source,
-                                        juce::Point<int> masterPosition) {
+                                        const DefaultChannelLayout& layout) {
     DefaultChannel result;
 
-    const int originX = static_cast<int>(source.properties.getWithDefault("x", 0));
-    const int originY = static_cast<int>(source.properties.getWithDefault("y", 0));
-
     juce::String eqUuid;
-    auto* eq = addChainNode(graph, "Parametric EQ", {originX + kNodeStepX, originY}, eqUuid);
+    auto* eq = addChainNode(graph, "Parametric EQ", layout.eq, eqUuid);
     if (eq == nullptr)
         return result;
     // Factory default: present but bypassed until the user opts in (docs/mixer.md §5.7/D3).
@@ -57,7 +49,7 @@ DefaultChannel buildDefaultAudioChannel(juce::AudioProcessorGraph& graph, juce::
         module->setBypassed(true);
 
     juce::String compressorUuid;
-    auto* compressor = addChainNode(graph, "Compressor", {originX + 2 * kNodeStepX, originY}, compressorUuid);
+    auto* compressor = addChainNode(graph, "Compressor", layout.compressor, compressorUuid);
     if (compressor == nullptr) {
         result.eqUuid = eqUuid;
         return result;
@@ -86,8 +78,8 @@ DefaultChannel buildDefaultAudioChannel(juce::AudioProcessorGraph& graph, juce::
     strip->properties.set("uuid", stripUuid);
     if (auto* module = dynamic_cast<ModuleBase*>(strip->getProcessor()))
         module->setNodeUuid(stripUuid);
-    strip->properties.set("x", originX + 3 * kNodeStepX);
-    strip->properties.set("y", originY);
+    strip->properties.set("x", layout.strip.x);
+    strip->properties.set("y", layout.strip.y);
 
     // The chain: source -> EQ -> Compressor -> Strip. Stereo on raw ch0/ch1 throughout, except the
     // strip's right leg, which is ChannelStripModule::kRightBase — NEVER ch1 (Source/Modules/
@@ -102,7 +94,7 @@ DefaultChannel buildDefaultAudioChannel(juce::AudioProcessorGraph& graph, juce::
     // Master AFTER the chain above is wired, BEFORE the Strip->Master edges below: spliceMasterNode
     // re-routes whatever already feeds the audio output, and nothing of this channel's own should be
     // among that yet (see ChannelFlows.h's own comment on the ordering).
-    auto* master = spliceMasterNode(graph, masterPosition);
+    auto* master = spliceMasterNode(graph, layout.master);
     if (master != nullptr) {
         // A PLAIN graph edge, never a macro port — see ChannelFlows.h's own comment for why.
         graph.addConnection({{strip->nodeID, 0}, {master->nodeID, MasterModule::kMixLeft}});

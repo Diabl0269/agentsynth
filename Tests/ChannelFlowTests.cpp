@@ -16,13 +16,18 @@
 
 #include "../Source/AI/AIProvider.h"
 #include "../Source/AI/AIStateMapper.h"
+#include "../Source/AudioEngine.h"
 #include "../Source/MacroSet.h"
 #include "../Source/Modules/ChannelStripModule.h"
 #include "../Source/Modules/MasterModule.h"
 #include "../Source/Modules/ModuleBase.h"
 #include "../Source/Timeline/TimelineDoc.h"
+#include "../Source/UI/GraphEditor.h"
+#include "../Source/UI/ModuleComponent.h"
+#include "../Source/UI/ModuleLibraryComponent.h"
 #include "MainComponent.h"
 #include <algorithm>
+#include <array>
 #include <gtest/gtest.h>
 #include <memory>
 
@@ -300,6 +305,119 @@ TEST_F(ChannelFlowTest, SecondAudioTrackReusesMaster) {
     EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::ChannelStrip), 1);
     EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::Master), 1);
     EXPECT_EQ(macros.size(), 1);
+}
+
+// Same pinning pattern as AudioClipPlaybackTest.AbsentFromTheLibraryWithAPinnedSizeEstimate /
+// RecordTapTest's own — but for two cards at once, since both were missing an estimateModuleSize
+// entry (silently falling back to the generic {280, 360} default, which is wrong for either card
+// and was part of why Master ended up hidden under the EQ card — see this file's header comment).
+// The strip is measured Stereo, matching what buildDefaultAudioChannel always builds; width does
+// not move between Mono/Stereo (only the input jack-row count would), so this also stands in for
+// the Mono shape.
+TEST_F(ChannelFlowTest, ChannelStripAndMasterHaveAPinnedSizeEstimate) {
+    ModuleLibraryComponent library;
+    EXPECT_FALSE(library.getDraggableModuleNames().contains("Channel Strip"))
+        << "Channel Strip is internal-only and must stay out of the module library";
+    EXPECT_FALSE(library.getDraggableModuleNames().contains("Master"))
+        << "Master is internal-only and must stay out of the module library";
+
+    AudioEngine engine;
+    GraphEditor editor(engine);
+
+    auto stripProcessor = synth::AIStateMapper::createModule("Channel Strip");
+    ASSERT_NE(stripProcessor, nullptr);
+    if (auto* stripModule = dynamic_cast<ChannelStripModule*>(stripProcessor.get()))
+        stripModule->setShape(ChannelStripModule::Shape::Stereo);
+    ModuleComponent stripComp(stripProcessor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
+    const auto stripEstimate = GraphEditor::estimateModuleSize("Channel Strip");
+    EXPECT_EQ(stripEstimate.x, stripComp.getWidth());
+    EXPECT_EQ(stripEstimate.y, stripComp.getHeight());
+
+    auto masterProcessor = synth::AIStateMapper::createModule("Master");
+    ASSERT_NE(masterProcessor, nullptr);
+    ModuleComponent masterComp(masterProcessor.get(), juce::AudioProcessorGraph::NodeID(2), editor);
+    const auto masterEstimate = GraphEditor::estimateModuleSize("Master");
+    EXPECT_EQ(masterEstimate.x, masterComp.getWidth());
+    EXPECT_EQ(masterEstimate.y, masterComp.getHeight());
+}
+
+// The bug this file's header comment describes, reproduced against the REAL ModuleComponent
+// bounds: on the old fixed-300px stride, Parametric EQ's double-width (560px) card overlapped the
+// Compressor, and Master (placed at trackAudioPosition + kSingleWidth + gap, i.e. still inside the
+// expanded chain) landed underneath the EQ card too. addAudioTrack now derives every card's x from
+// GraphEditor::estimateModuleSize, so none of the five cards below should overlap and Master should
+// sit to the right of everything else.
+TEST_F(ChannelFlowTest, ChannelCardsDoNotOverlapAndMasterIsRightOfStrip) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(2400, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto& macros = mc.getGraphEditor().getMacros();
+
+    addAudioTrack(mc);
+
+    ASSERT_EQ(macros.size(), 1);
+    const auto macroId = macros.getAll().front().id;
+
+    // Expand the macro through the same API the "Expand" menu item and the collapsed card's own
+    // click use (GraphEditor::setMacroCollapsed) so member ModuleComponents are laid out for real
+    // (applyMacroCollapsed calls updateComponents()) rather than inferring bounds ourselves.
+    mc.getGraphEditor().setMacroCollapsed(macroId, false);
+    ASSERT_FALSE(macros.find(macroId)->collapsed);
+
+    auto* trackAudioNode = findNodeOfTypeCFT(graph, ModuleType::TimelineAudioSource);
+    auto* eqNode = findNodeOfTypeCFT(graph, ModuleType::ParametricEQ);
+    auto* compNode = findNodeOfTypeCFT(graph, ModuleType::Compressor);
+    auto* stripNode = findNodeOfTypeCFT(graph, ModuleType::ChannelStrip);
+    auto* masterNode = findNodeOfTypeCFT(graph, ModuleType::Master);
+    ASSERT_NE(trackAudioNode, nullptr);
+    ASSERT_NE(eqNode, nullptr);
+    ASSERT_NE(compNode, nullptr);
+    ASSERT_NE(stripNode, nullptr);
+    ASSERT_NE(masterNode, nullptr);
+
+    auto findComp = [&mc](juce::AudioProcessorGraph::Node* node) -> ModuleComponent* {
+        for (auto* comp : mc.getGraphEditor().getModuleComponents())
+            if (comp != nullptr && comp->getNodeId() == node->nodeID)
+                return comp;
+        return nullptr;
+    };
+
+    auto* trackAudioComp = findComp(trackAudioNode);
+    auto* eqComp = findComp(eqNode);
+    auto* compComp = findComp(compNode);
+    auto* stripComp = findComp(stripNode);
+    auto* masterComp = findComp(masterNode);
+    // All five nodes are ordinary graph nodes with their own ModuleComponent (a hidden macro
+    // member's component still exists — only setVisible(false) — and expanding just flips that
+    // back on), so every lookup above must resolve; a silent nullptr here would make the
+    // assertions below pass vacuously.
+    ASSERT_NE(trackAudioComp, nullptr) << "Track Audio must have a real ModuleComponent once expanded";
+    ASSERT_NE(eqComp, nullptr) << "Parametric EQ must have a real ModuleComponent once expanded";
+    ASSERT_NE(compComp, nullptr) << "Compressor must have a real ModuleComponent once expanded";
+    ASSERT_NE(stripComp, nullptr) << "Channel Strip must have a real ModuleComponent once expanded";
+    ASSERT_NE(masterComp, nullptr) << "Master must have a real ModuleComponent (it is never boxed into the macro)";
+
+    // Anchor the coordinate space once: content-component bounds should track the node's own
+    // "x"/"y" properties directly (no zoom/scroll in a freshly-built headless MainComponent), so a
+    // mismatch here means the two are in different coordinate spaces rather than a real overlap.
+    EXPECT_EQ(trackAudioComp->getX(), static_cast<int>(trackAudioNode->properties.getWithDefault("x", -1)));
+    EXPECT_EQ(trackAudioComp->getY(), static_cast<int>(trackAudioNode->properties.getWithDefault("y", -1)));
+
+    const std::array<ModuleComponent*, 5> cards = {trackAudioComp, eqComp, compComp, stripComp, masterComp};
+    for (size_t i = 0; i < cards.size(); ++i) {
+        for (size_t j = i + 1; j < cards.size(); ++j) {
+            EXPECT_FALSE(cards[i]->getBounds().intersects(cards[j]->getBounds()))
+                << "card " << i << " " << cards[i]->getBounds().toString().toStdString() << " overlaps card " << j
+                << " " << cards[j]->getBounds().toString().toStdString();
+        }
+    }
+
+    EXPECT_LT(trackAudioComp->getX(), eqComp->getX());
+    EXPECT_LT(eqComp->getX(), compComp->getX());
+    EXPECT_LT(compComp->getX(), stripComp->getX());
+    EXPECT_LT(stripComp->getX(), masterComp->getX());
+    EXPECT_GE(masterComp->getX(), stripComp->getRight()) << "Master must be fully clear of the Strip card";
 }
 
 TEST_F(ChannelFlowTest, RefusedAtMaxTracksCreatesNothing) {
