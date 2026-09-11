@@ -883,11 +883,13 @@ TEST_F(AddAudioTrackFlowTest, AddAudioTrackFlow) {
     ASSERT_NE(created, nullptr);
     EXPECT_EQ(created->getProcessor()->getName(), "Track Audio");
 
-    auto* output = findNodeNamedACP(graph, "Audio Output");
-    ASSERT_NE(output, nullptr);
+    // T173a: "+ Track -> Audio Track" now builds a whole default channel, so the Track Audio node
+    // feeds Parametric EQ, not the master bus directly — see ChannelFlowTests.cpp for the rest of
+    // the chain (Compressor, Channel Strip, Master).
+    auto* eq = findNodeNamedACP(graph, "Parametric EQ");
+    ASSERT_NE(eq, nullptr);
     for (int channel = 0; channel < TimelineAudioSourceModule::kNumChannels; ++channel)
-        EXPECT_TRUE(graph.isConnected({{created->nodeID, channel}, {output->nodeID, channel}}))
-            << "channel " << channel;
+        EXPECT_TRUE(graph.isConnected({{created->nodeID, channel}, {eq->nodeID, channel}})) << "channel " << channel;
 
     // ONE undo step removes the node AND the track together.
     ASSERT_TRUE(mc.getUndoManager().canUndo());

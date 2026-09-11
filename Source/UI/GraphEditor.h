@@ -298,6 +298,28 @@ public:
      *  @return the new macro's id, or an empty string if refused. */
     juce::String groupSelectionIntoMacro(bool autoCreatePorts = false);
 
+    /** Builds a new collapsed macro from an explicit member-uuid list, for a caller that already
+     *  knows its members and name up front (T173a's addAudioTrack: {Track Audio, EQ, Compressor,
+     *  Channel Strip} named after the track) rather than reading the current selection.
+     *
+     *  NON-RECORDING — unlike groupSelectionIntoMacro(), this pushes no undo entry itself and does
+     *  NOT call updateComponents(): the caller is expected to be already inside its own undo
+     *  transaction (e.g. AppUndoManager::recordGraphTimelineAndMacroChange) and to call
+     *  updateComponents() itself once every node it created is in the graph, exactly the way
+     *  groupSelectionIntoMacro()'s own doGroup lambda does inside recordGraphAndMacroChange.
+     *
+     *  Builds the synth::Macro exactly like groupSelectionIntoMacro() does (collapsed = true, bounds
+     *  = origin sized kSingleWidth x kMacroCardHeight) but with the given name and no port plan — no
+     *  MacroInlet/MacroOutlet splicing, ever; a caller that wants a boundary crossing left as a plain
+     *  graph edge (as T173a's strip -> Master cable must be, see MainComponent::addAudioTrack) simply
+     *  never wires that edge's far end into `memberUuids`.
+     *
+     *  @return the new macro's id, or an empty string when `memberUuids` is empty or any of them is
+     *          already a member of another macro (the same flat-model refusal
+     *          groupSelectionIntoMacro() applies, checked via macros.findByMember()). */
+    juce::String addMacroForMembers(const std::vector<juce::String>& memberUuids, const juce::String& name,
+                                    juce::Point<int> origin);
+
     // ---- Macro auto-port preference (founder-review fix F5, docs/macros.md §7 item 6.1/6.2) ----
     //
     // Tri-state, not a bool: "ask, then remember" needs a third value beyond on/off. Unset (the

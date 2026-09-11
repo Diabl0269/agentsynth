@@ -590,27 +590,10 @@ bool AppUndoManager::recordCombinedChange(juce::AudioProcessorGraph& graph, synt
     return true;
 }
 
-bool AppUndoManager::recordGraphAndMacroChange(juce::AudioProcessorGraph& graph, synth::MacroSet& macros,
-                                               const std::function<void()>& mutation) {
-    if (!mutation)
-        return false;
-
-    undoManager.beginNewTransaction();
-
-    const juce::var graphBefore = synth::AIStateMapper::graphToJSON(graph);
-    const juce::var macrosBefore = macros.toVar();
-
-    mutation();
-
-    const juce::var graphAfter = synth::AIStateMapper::graphToJSON(graph);
-    const juce::var macrosAfter = macros.toVar();
-
-    const bool graphChanged = juce::JSON::toString(graphBefore) != juce::JSON::toString(graphAfter);
-    const bool macrosChanged = juce::JSON::toString(macrosBefore) != juce::JSON::toString(macrosAfter);
-
-    if (!graphChanged && !macrosChanged)
-        return false; // neither domain changed: no transaction pushed
-
+void AppUndoManager::pushGraphAndMacroActions(juce::AudioProcessorGraph& graph, synth::MacroSet& macros,
+                                              const juce::var& graphBefore, const juce::var& graphAfter,
+                                              const juce::var& macrosBefore, const juce::var& macrosAfter,
+                                              bool graphChanged, bool macrosChanged) {
     juce::Component::SafePointer<GraphEditor> ge(graphEditor);
 
     if (graphChanged && macrosChanged) {
@@ -632,12 +615,72 @@ bool AppUndoManager::recordGraphAndMacroChange(juce::AudioProcessorGraph& graph,
             [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); }));
     } else if (graphChanged) {
         performAction(createGraphSnapshotAction(graph, graphBefore, graphAfter));
-    } else {
+    } else if (macrosChanged) {
         performAction(new MacroSnapshotAction(macros, macrosBefore, macrosAfter, [ge] {
             if (ge)
                 ge->updateComponents();
         }));
     }
+}
+
+bool AppUndoManager::recordGraphAndMacroChange(juce::AudioProcessorGraph& graph, synth::MacroSet& macros,
+                                               const std::function<void()>& mutation) {
+    if (!mutation)
+        return false;
+
+    undoManager.beginNewTransaction();
+
+    const juce::var graphBefore = synth::AIStateMapper::graphToJSON(graph);
+    const juce::var macrosBefore = macros.toVar();
+
+    mutation();
+
+    const juce::var graphAfter = synth::AIStateMapper::graphToJSON(graph);
+    const juce::var macrosAfter = macros.toVar();
+
+    const bool graphChanged = juce::JSON::toString(graphBefore) != juce::JSON::toString(graphAfter);
+    const bool macrosChanged = juce::JSON::toString(macrosBefore) != juce::JSON::toString(macrosAfter);
+
+    if (!graphChanged && !macrosChanged)
+        return false; // neither domain changed: no transaction pushed
+
+    pushGraphAndMacroActions(graph, macros, graphBefore, graphAfter, macrosBefore, macrosAfter, graphChanged,
+                             macrosChanged);
+    return true;
+}
+
+bool AppUndoManager::recordGraphTimelineAndMacroChange(juce::AudioProcessorGraph& graph, synth::TimelineDoc& doc,
+                                                       synth::MacroSet& macros, const std::function<void()>& mutation) {
+    if (!mutation)
+        return false;
+
+    undoManager.beginNewTransaction();
+
+    const juce::var graphBefore = synth::AIStateMapper::graphToJSON(graph);
+    const juce::var timelineBefore = doc.toVar();
+    const juce::var macrosBefore = macros.toVar();
+
+    mutation();
+
+    const juce::var graphAfter = synth::AIStateMapper::graphToJSON(graph);
+    const juce::var timelineAfter = doc.toVar();
+    const juce::var macrosAfter = macros.toVar();
+
+    const bool graphChanged = juce::JSON::toString(graphBefore) != juce::JSON::toString(graphAfter);
+    const bool timelineChanged = juce::JSON::toString(timelineBefore) != juce::JSON::toString(timelineAfter);
+    const bool macrosChanged = juce::JSON::toString(macrosBefore) != juce::JSON::toString(macrosAfter);
+
+    if (!graphChanged && !timelineChanged && !macrosChanged)
+        return false; // no domain changed: no transaction pushed
+
+    // Both halves land in the same transaction (no beginNewTransaction between them), so a single
+    // undo()/redo() reverts or re-applies whichever domains actually changed, together.
+    if (graphChanged || macrosChanged)
+        pushGraphAndMacroActions(graph, macros, graphBefore, graphAfter, macrosBefore, macrosAfter, graphChanged,
+                                 macrosChanged);
+    if (timelineChanged)
+        performAction(new TimelineSnapshotAction(
+            doc, timelineBefore, timelineAfter, [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); }));
 
     return true;
 }

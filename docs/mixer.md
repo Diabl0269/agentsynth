@@ -1,10 +1,12 @@
 # Mixer
 
-**Status: DECIDED 2026-09-10 (founder sign-off on D1-D4). P9-2 implemented** — the
-`ChannelStrip` and `Master` nodes, the engine-owned solo gate and the Master splice exist (engine
-only; §8 item 1 records how). Nothing creates a channel yet (P9-3) and there is no mixer panel
-(P9-5). This document records the decided design; §8 is the implementation order that turns it
-into code. The visual
+**Status: DECIDED 2026-09-10 (founder sign-off on D1-D4). P9-2 implemented, P9-3's audio-track
+flow implemented (T173a)** — the `ChannelStrip` and `Master` nodes, the engine-owned solo gate and
+the Master splice exist (engine only; §8 item 1 records how), and "+ Track -> Audio Track" now
+builds the factory default channel end to end (§8 item 2). The other P9-3 flows (Instrument track,
+MIDI-track auto-channel-on-connect, "Make channel", "Create channels" for existing projects) are
+still follow-ups, and there is no mixer panel yet (P9-5). This document records the decided design;
+§8 is the implementation order that turns it into code. The visual
 proposal that led to this decision (canvas diagram, mixer panel mock, the four decision cards)
 lived in a separate page shown to the founder, not in this repo.
 
@@ -435,6 +437,21 @@ Main line, in dependency order:
      MIDI track wired to an unchanneled instrument auto-creates a channel in one undo step when
      the preference is ON, and creates none when it is OFF; "Create channels" on a project with N
      channel-less tracks is one undo step that creates N channels.
+   - **T173a (audio track) — DONE.** "+ Track -> Audio Track" builds the whole channel — Track
+     Audio -> Parametric EQ (bypassed) -> Compressor (bypassed) -> Channel Strip (Stereo) ->
+     Master (Mix) — in ONE undo step (`AppUndoManager::recordGraphTimelineAndMacroChange`), via a
+     new Core helper `synth::buildDefaultAudioChannel` (`Source/Mixer/ChannelFlows.h`) that splices
+     Master (`synth::spliceMasterNode`, reusing the existing singleton after the first channel) and
+     wires the strip into it. `{Track Audio, EQ, Compressor, Strip}` are boxed into ONE collapsed
+     macro named after the track (`GraphEditor::addMacroForMembers`) — **Master stays outside the
+     macro, and the Strip -> Master cable is left a plain graph edge, deliberately never a macro
+     port**: `spliceMasterNode`/`ensureMasterNode` classify a re-routed feed as Mix vs Direct by
+     checking whether the connection's SOURCE NODE is itself a `ChannelStripModule`; a
+     `MacroOutlet` sitting between the strip and Master would make the source node a `MacroOutlet`
+     instead and defeat that check, which the later "Create channels" subtask (this same list,
+     "N channel-less tracks") depends on. The other bullet points above (Instrument track,
+     MIDI-track auto-channel, "Make channel", "Create channels") remain open follow-ups.
+     `Tests/ChannelFlowTests.cpp`.
 
 3. **P9-4 (T177) — Track/channel link.** Name sync, live colour sync across track/macro/column
     through `ColourPickerPopup`'s preview/commit split, M/S driving the strip, the channel chip.
