@@ -1,5 +1,10 @@
 # CLAUDE.md
 
+This repo is the desktop app half of a product whose backend/website (`synth-platform/`)
+and marketing assets (`marketing/`) live in sibling repos under the workspace root — see
+[`../CLAUDE.md`](../CLAUDE.md) for the cross-repo map when a task touches more than this
+codebase. This file stays scoped to `agentsynth/` only.
+
 Guidance for Claude Code (claude.ai/code) in this repository. Keep this file **lean** — it is always loaded, so it holds only commands, conventions, and a tripwire index of the critical traps. The rules themselves live in per-directory `CLAUDE.md` files (`Source/`, `Source/Modules/`, `Source/Timeline/`, `Source/AI/`, `Source/UI/`, `Source/Plugin/`, `.github/`), auto-loaded when you work under that directory; the mechanism and history live in `docs/` (map below). When you change behavior, update the relevant doc, not this file — docs must never go stale, so treat updating them as part of the change itself, not a follow-up.
 
 ## Project
