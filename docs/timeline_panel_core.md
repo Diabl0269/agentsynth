@@ -874,15 +874,22 @@ outputs CV/gate and Sequencer/Poly Sequencer generate MIDI, none of them audio. 
    addVoiceMixerForPolyInstrument` (Core, `Source/Mixer/ChannelFlows.h`) sums them into a Voice
    Mixer first when the instrument's own `poly` parameter is on (docs/mixer.md §5.4/§5.8). A
    factory-created instrument defaults to poly OFF, so this is a no-op on the golden path today;
-4. `synth::buildDefaultAudioChannel` wires the instrument (or the Voice Mixer, if step 3 created
-   one) into the same `Parametric EQ (bypassed) -> Compressor (bypassed) -> Channel Strip (Stereo)`
-   chain the Audio entry uses, then splices Master. A split-block instrument (Oscillator/Wavetable,
-   whose right leg is never ch1) passes its own `ModuleBase::rightAudioLegChannel()` as
-   `buildDefaultAudioChannel`'s new `sourceRightChannel` parameter instead of the ch1 default;
-5. `GraphEditor::addMacroForMembers` boxes `{Track In, instrument, [Voice Mixer if any], EQ,
-   Compressor, Strip}` into ONE collapsed macro named after the track, the same way the Audio
-   entry's macro is built — Master stays outside it, for the same reason;
-6. bind the track to the `Track In` node's uuid and give it the palette colour for its index.
+4. for an **Oscillator/Wavetable** instrument (P9-3i, FRO43, `docs/mixer.md`'s P9-3i entry): neither
+   has an envelope of its own, so a held or released note drones forever. `synth::
+   addEnvelopeAndVCAForRawInstrument` inserts an ADSR (gated by the same Track In MIDI as the
+   instrument, forced non-poly) driving a VCA (also forced non-poly) ahead of the rest of the
+   chain — AFTER the Voice Mixer from step 3, never before it. A no-op for **Sampler**, which
+   already has its own one-shot playback envelope;
+5. `synth::buildDefaultAudioChannel` wires the instrument (or the Voice Mixer/VCA, whichever step 3
+   or 4 last produced) into the same `Parametric EQ (bypassed) -> Compressor (bypassed) -> Channel
+   Strip (Stereo)` chain the Audio entry uses, then splices Master. A split-block source
+   (Oscillator/Wavetable, whose right leg is never ch1) passes its own
+   `ModuleBase::rightAudioLegChannel()` (or `VCAModule::kRightBase`, once step 4 has run) as
+   `buildDefaultAudioChannel`'s `sourceRightChannel` parameter instead of the ch1 default;
+6. `GraphEditor::addMacroForMembers` boxes `{Track In, instrument, [Voice Mixer if any], [ADSR+VCA
+   if Oscillator/Wavetable], EQ, Compressor, Strip}` into ONE collapsed macro named after the track,
+   the same way the Audio entry's macro is built — Master stays outside it, for the same reason;
+7. bind the track to the `Track In` node's uuid and give it the palette colour for its index.
 
 **Delete track** (right-click a header) is the same compound step in reverse: the track and its
 bound `Track In` / `Track Audio` node go together, and come back together.

@@ -23,6 +23,7 @@
 #include "../Source/Modules/ChannelStripModule.h"
 #include "../Source/Modules/MasterModule.h"
 #include "../Source/Modules/ModuleBase.h"
+#include "../Source/Modules/VCAModule.h"
 #include "../Source/Timeline/TimelineDoc.h"
 #include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/ModuleComponent.h"
@@ -94,6 +95,21 @@ juce::AudioProcessorGraph::Node* findNodeNamedCFT(juce::AudioProcessorGraph& gra
 
 juce::String nodeUuid(juce::AudioProcessorGraph::Node* node) {
     return node != nullptr ? node->properties["uuid"].toString() : juce::String();
+}
+
+// The factory default preset (PresetManager::getPresetJSON(0), loaded by every fresh MainComponent)
+// already contains its own ADSR-type nodes (Amp Env, Filter Env) and a VCA node, so
+// findNodeOfTypeCFT's "last one seen" is not a safe way to find the ONE this test's own
+// addInstrumentTrack call just created. Disambiguates by macro membership instead — the track's
+// macro is freshly built and contains only this track's own nodes.
+juce::AudioProcessorGraph::Node* findMacroMemberOfTypeCFT(juce::AudioProcessorGraph& graph, const synth::Macro& macro,
+                                                          ModuleType type) {
+    for (auto* node : graph.getNodes())
+        if (node != nullptr)
+            if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor()))
+                if (module->getModuleType() == type && macro.hasMember(nodeUuid(node)))
+                    return node;
+    return nullptr;
 }
 
 // T183: flips a module's "poly" AudioParameterBool, when it has one. No-op (returns false) for
@@ -566,26 +582,148 @@ TEST_F(ChannelFlowTest, InstrumentTrackOscillatorWiresSplitBlockRightLegNeverCh1
     mc.setSize(1600, 900);
     mc.getAudioEngine().suspendDeviceCallback();
     auto& graph = mc.getAudioEngine().getGraph();
+    auto& macros = mc.getGraphEditor().getMacros();
 
     addInstrumentTrack(mc, "Oscillator");
 
     EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::VoiceMixer), 0)
         << "a freshly created Oscillator defaults to poly OFF — no Voice Mixer needed";
 
+    ASSERT_EQ(macros.size(), 1);
+    const auto& macro = macros.getAll().front();
     auto* oscillator = findNodeOfTypeCFT(graph, ModuleType::Oscillator);
-    auto* eq = findNodeOfTypeCFT(graph, ModuleType::ParametricEQ);
+    // The factory default preset every fresh MainComponent loads already has its own VCA node —
+    // disambiguate via macro membership, not "last one seen" (see findMacroMemberOfTypeCFT).
+    auto* vca = findMacroMemberOfTypeCFT(graph, macro, ModuleType::VCA);
     ASSERT_NE(oscillator, nullptr);
-    ASSERT_NE(eq, nullptr);
+    ASSERT_NE(vca, nullptr) << "P9-3i: Oscillator has no envelope of its own, so the default chain must insert a VCA";
 
     auto* oscModule = dynamic_cast<ModuleBase*>(oscillator->getProcessor());
     ASSERT_NE(oscModule, nullptr);
     const int rightLeg = oscModule->rightAudioLegChannel();
     ASSERT_GT(rightLeg, 1) << "Oscillator's right leg is a dedicated kRightBase block, never ch1";
 
-    EXPECT_TRUE(graph.isConnected({{oscillator->nodeID, 0}, {eq->nodeID, 0}}));
-    EXPECT_TRUE(graph.isConnected({{oscillator->nodeID, rightLeg}, {eq->nodeID, 1}}));
-    EXPECT_FALSE(graph.isConnected({{oscillator->nodeID, 1}, {eq->nodeID, 1}}))
-        << "must never assume ch1 for a split-block source";
+    // Oscillator -> VCA (never ch1 for the right leg — same split-block contract, one hop earlier).
+    EXPECT_TRUE(graph.isConnected({{oscillator->nodeID, 0}, {vca->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{oscillator->nodeID, rightLeg}, {vca->nodeID, VCAModule::kRightBase}}));
+    EXPECT_FALSE(graph.isConnected({{oscillator->nodeID, 1}, {vca->nodeID, 1}}))
+        << "must never assume ch1 for a split-block source, and ch1 on the VCA is its Gain CV";
+
+    // VCA -> EQ, now that the VCA sits between the instrument and the rest of the chain.
+    auto* eq = findNodeOfTypeCFT(graph, ModuleType::ParametricEQ);
+    ASSERT_NE(eq, nullptr);
+    EXPECT_TRUE(graph.isConnected({{vca->nodeID, 0}, {eq->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{vca->nodeID, VCAModule::kRightBase}, {eq->nodeID, 1}}));
+    EXPECT_FALSE(graph.isConnected({{oscillator->nodeID, 0}, {eq->nodeID, 0}}))
+        << "Oscillator must no longer feed EQ directly — it goes through the VCA";
+}
+
+// P9-3i (FRO43): the ADSR gating the VCA above is driven by the same Track In MIDI as the
+// instrument, and its Env output lands on the VCA's mono Gain CV (ch1) — never the audio legs.
+TEST_F(ChannelFlowTest, InstrumentTrackOscillatorEnvelopeGatesTheVCA) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto& macros = mc.getGraphEditor().getMacros();
+
+    addInstrumentTrack(mc, "Oscillator");
+
+    ASSERT_EQ(macros.size(), 1);
+    const auto& macro = macros.getAll().front();
+    auto* trackIn = findNodeOfTypeCFT(graph, ModuleType::TimelineMidiSource);
+    // The factory default preset every fresh MainComponent loads already has its own ADSR-type
+    // nodes (Amp Env, Filter Env) and VCA node — disambiguate via macro membership.
+    auto* adsr = findMacroMemberOfTypeCFT(graph, macro, ModuleType::ADSR);
+    auto* vca = findMacroMemberOfTypeCFT(graph, macro, ModuleType::VCA);
+    ASSERT_NE(trackIn, nullptr);
+    ASSERT_NE(adsr, nullptr);
+    ASSERT_NE(vca, nullptr);
+
+    EXPECT_TRUE(graph.isConnected({{trackIn->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
+                                   {adsr->nodeID, juce::AudioProcessorGraph::midiChannelIndex}}))
+        << "the ADSR must be gated by the same Track In MIDI as the instrument";
+    EXPECT_TRUE(graph.isConnected({{adsr->nodeID, 0}, {vca->nodeID, 1}}))
+        << "ADSR's Env output must land on the VCA's mono Gain CV (ch1)";
+
+    auto* adsrModule = dynamic_cast<ModuleBase*>(adsr->getProcessor());
+    ASSERT_NE(adsrModule, nullptr);
+    for (auto* param : adsr->getProcessor()->getParameters()) {
+        if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param))
+            if (boolParam->paramID == "poly")
+                EXPECT_FALSE(boolParam->get())
+                    << "the auto-wired ADSR must be non-poly — its poly branch ignores MIDI entirely";
+        if (auto* floatParam = dynamic_cast<juce::AudioParameterFloat*>(param))
+            if (floatParam->paramID == "sustain")
+                EXPECT_FLOAT_EQ(floatParam->get(), 0.7f)
+                    << "sustain must be overridden so a held note doesn't decay to silence";
+    }
+    for (auto* param : vca->getProcessor()->getParameters()) {
+        if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param))
+            if (boolParam->paramID == "poly")
+                EXPECT_FALSE(boolParam->get()) << "the auto-wired VCA must be non-poly";
+        if (auto* floatParam = dynamic_cast<juce::AudioParameterFloat*>(param))
+            if (floatParam->paramID == "gain")
+                EXPECT_FLOAT_EQ(floatParam->get(), 1.0f)
+                    << "gain must be overridden so the envelope alone governs level";
+    }
+}
+
+// The ticket's own bug: a held-then-released note must not drone forever. Renders the ADSR and VCA
+// nodes directly (Track In is a timeline MIDI source and won't forward an injected MidiBuffer, so a
+// full-graph render can't inject a note) — this is the render-level check topology assertions above
+// cannot give: it proves the envelope actually gates audio, not just that the wires exist.
+TEST_F(ChannelFlowTest, InstrumentTrackOscillatorEnvelopeActuallySilencesAfterNoteOff) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto& macros = mc.getGraphEditor().getMacros();
+
+    addInstrumentTrack(mc, "Oscillator");
+
+    ASSERT_EQ(macros.size(), 1);
+    const auto& macro = macros.getAll().front();
+    // The factory default preset every fresh MainComponent loads already has its own ADSR-type
+    // nodes (Amp Env, Filter Env) — disambiguate via macro membership.
+    auto* adsrNode = findMacroMemberOfTypeCFT(graph, macro, ModuleType::ADSR);
+    ASSERT_NE(adsrNode, nullptr);
+    auto* adsr = adsrNode->getProcessor();
+
+    constexpr double sampleRate = 44100.0;
+    constexpr int blockSize = 256;
+    adsr->prepareToPlay(sampleRate, blockSize);
+
+    // ch0 is the mono "Gate" CV input, unused by this test — leave it at 0 (below the default
+    // 0.5 threshold) so ONLY the injected MIDI drives the gate. Filling it with any value above
+    // threshold would latch the Schmitt trigger permanently high, masking the MIDI path entirely.
+    auto renderAdsrBlock = [&](juce::MidiBuffer midi) {
+        juce::AudioBuffer<float> buf(9, blockSize);
+        buf.clear();
+        adsr->processBlock(buf, midi);
+        return buf.getSample(0, blockSize - 1);
+    };
+
+    // No note yet: the envelope must be at rest.
+    EXPECT_NEAR(renderAdsrBlock({}), 0.0f, 1e-4f) << "envelope must start silent with no note held";
+
+    // Note on: after enough blocks to clear attack+decay, the envelope must have risen and settled
+    // at (roughly) the overridden sustain level, not fallen back to 0 — this is the actual bug fix.
+    juce::MidiBuffer noteOn;
+    noteOn.addEvent(juce::MidiMessage::noteOn(1, 60, 1.0f), 0);
+    float lastEnv = renderAdsrBlock(noteOn);
+    for (int i = 0; i < 50; ++i)
+        lastEnv = renderAdsrBlock({});
+    EXPECT_GT(lastEnv, 0.5f) << "a held note must sustain, not decay to silence while still held";
+
+    // Note off: after enough blocks for the release stage, the envelope must return to silence —
+    // this is the drone this ticket exists to fix.
+    juce::MidiBuffer noteOff;
+    noteOff.addEvent(juce::MidiMessage::noteOff(1, 60), 0);
+    lastEnv = renderAdsrBlock(noteOff);
+    for (int i = 0; i < 50; ++i)
+        lastEnv = renderAdsrBlock({});
+    EXPECT_NEAR(lastEnv, 0.0f, 1e-3f) << "the envelope must return to silence after note-off + release";
 }
 
 TEST_F(ChannelFlowTest, InstrumentTrackDefaultInsertsAreBypassedAndStripIsStereo) {
@@ -608,6 +746,35 @@ TEST_F(ChannelFlowTest, InstrumentTrackDefaultInsertsAreBypassedAndStripIsStereo
     EXPECT_TRUE(compModule->isBypassed());
     EXPECT_FALSE(stripModule->isBypassed());
     EXPECT_EQ(stripModule->getShape(), ChannelStripModule::Shape::Stereo);
+}
+
+// P9-3i (FRO43) is scoped to Oscillator/Wavetable only — Sampler already has its own one-shot
+// playback envelope and must be completely unaffected: no ADSR/VCA nodes, no change to its wiring
+// or macro membership.
+TEST_F(ChannelFlowTest, InstrumentTrackSamplerGetsNoEnvelopeOrVCA) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto& macros = mc.getGraphEditor().getMacros();
+
+    addInstrumentTrack(mc, "Sampler");
+
+    // The factory default preset every fresh MainComponent loads already has its own ADSR-type
+    // nodes and a VCA node, so a raw graph-wide count can't tell "none created" from "the preset's
+    // own" — check the track's own macro membership instead (freshly built, contains only this
+    // track's own nodes).
+    ASSERT_EQ(macros.size(), 1);
+    const auto& macro = macros.getAll().front();
+    EXPECT_EQ(findMacroMemberOfTypeCFT(graph, macro, ModuleType::ADSR), nullptr);
+    EXPECT_EQ(findMacroMemberOfTypeCFT(graph, macro, ModuleType::VCA), nullptr);
+
+    auto* sampler = findNodeOfTypeCFT(graph, ModuleType::Sampler);
+    auto* eq = findNodeOfTypeCFT(graph, ModuleType::ParametricEQ);
+    ASSERT_NE(sampler, nullptr);
+    ASSERT_NE(eq, nullptr);
+    EXPECT_TRUE(graph.isConnected({{sampler->nodeID, 0}, {eq->nodeID, 0}}))
+        << "Sampler must still feed EQ directly, unchanged by P9-3i";
 }
 
 TEST_F(ChannelFlowTest, InstrumentTrackIsOneCollapsedMacroNamedAfterTrackAndStaysMidiKind) {
@@ -646,6 +813,36 @@ TEST_F(ChannelFlowTest, InstrumentTrackIsOneCollapsedMacroNamedAfterTrackAndStay
         << "Master must stay outside the macro";
 }
 
+// P9-3i (FRO43): an Oscillator track's macro must include the new ADSR+VCA members too —
+// InstrumentTrackIsOneCollapsedMacroNamedAfterTrackAndStaysMidiKind above uses Sampler, which never
+// exercises this membership change.
+TEST_F(ChannelFlowTest, InstrumentTrackOscillatorMacroIncludesEnvelopeAndVCA) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto& macros = mc.getGraphEditor().getMacros();
+
+    addInstrumentTrack(mc, "Oscillator");
+
+    ASSERT_EQ(macros.size(), 1);
+    const auto& macro = macros.getAll().front();
+
+    // The factory default preset every fresh MainComponent loads already has its own ADSR-type
+    // nodes and a VCA node — disambiguate via macro membership, not "last one seen".
+    std::vector<juce::String> expected = {nodeUuid(findNodeOfTypeCFT(graph, ModuleType::TimelineMidiSource)),
+                                          nodeUuid(findNodeOfTypeCFT(graph, ModuleType::Oscillator)),
+                                          nodeUuid(findMacroMemberOfTypeCFT(graph, macro, ModuleType::ADSR)),
+                                          nodeUuid(findMacroMemberOfTypeCFT(graph, macro, ModuleType::VCA)),
+                                          nodeUuid(findNodeOfTypeCFT(graph, ModuleType::ParametricEQ)),
+                                          nodeUuid(findNodeOfTypeCFT(graph, ModuleType::Compressor)),
+                                          nodeUuid(findNodeOfTypeCFT(graph, ModuleType::ChannelStrip))};
+    auto actual = macro.members;
+    std::sort(expected.begin(), expected.end());
+    std::sort(actual.begin(), actual.end());
+    EXPECT_EQ(actual, expected);
+}
+
 TEST_F(ChannelFlowTest, InstrumentTrackOneUndoStepRevertsEverythingAndRedoRestores) {
     MainComponent mc(std::make_unique<MockProviderCFT>());
     mc.setSize(1600, 900);
@@ -678,9 +875,10 @@ TEST_F(ChannelFlowTest, InstrumentTrackOneUndoStepRevertsEverythingAndRedoRestor
 }
 
 // The Wavetable card and the Parametric EQ card are BOTH double-width — the exact overlap shape
-// P9-3a's own bug (see this file's header comment) reproduced for, now one node to the left of
-// where it was. Reuses ChannelCardsDoNotOverlapAndMasterIsRightOfStrip's real-ModuleComponent
-// approach rather than inferring bounds from positions.
+// P9-3a's own bug (see this file's header comment) reproduced for, now two nodes to the left of
+// where it was (P9-3i inserted ADSR+VCA between them). Reuses
+// ChannelCardsDoNotOverlapAndMasterIsRightOfStrip's real-ModuleComponent approach rather than
+// inferring bounds from positions.
 TEST_F(ChannelFlowTest, InstrumentTrackWavetableCardsDoNotOverlap) {
     MainComponent mc(std::make_unique<MockProviderCFT>());
     mc.setSize(2600, 900);
@@ -695,14 +893,21 @@ TEST_F(ChannelFlowTest, InstrumentTrackWavetableCardsDoNotOverlap) {
     mc.getGraphEditor().setMacroCollapsed(macroId, false);
     ASSERT_FALSE(macros.find(macroId)->collapsed);
 
+    // The factory default preset every fresh MainComponent loads already has its own ADSR-type
+    // nodes and a VCA node — disambiguate via macro membership, not "last one seen".
+    const auto& macro = *macros.find(macroId);
     auto* trackInNode = findNodeOfTypeCFT(graph, ModuleType::TimelineMidiSource);
     auto* wavetableNode = findNodeOfTypeCFT(graph, ModuleType::Wavetable);
+    auto* adsrNode = findMacroMemberOfTypeCFT(graph, macro, ModuleType::ADSR);
+    auto* vcaNode = findMacroMemberOfTypeCFT(graph, macro, ModuleType::VCA);
     auto* eqNode = findNodeOfTypeCFT(graph, ModuleType::ParametricEQ);
     auto* compNode = findNodeOfTypeCFT(graph, ModuleType::Compressor);
     auto* stripNode = findNodeOfTypeCFT(graph, ModuleType::ChannelStrip);
     auto* masterNode = findNodeOfTypeCFT(graph, ModuleType::Master);
     ASSERT_NE(trackInNode, nullptr);
     ASSERT_NE(wavetableNode, nullptr);
+    ASSERT_NE(adsrNode, nullptr) << "P9-3i: Wavetable also has no envelope of its own";
+    ASSERT_NE(vcaNode, nullptr);
     ASSERT_NE(eqNode, nullptr);
     ASSERT_NE(compNode, nullptr);
     ASSERT_NE(stripNode, nullptr);
@@ -715,8 +920,8 @@ TEST_F(ChannelFlowTest, InstrumentTrackWavetableCardsDoNotOverlap) {
         return nullptr;
     };
 
-    const std::array<ModuleComponent*, 6> cards = {findComp(trackInNode), findComp(wavetableNode),
-                                                   findComp(eqNode),      findComp(compNode),
+    const std::array<ModuleComponent*, 8> cards = {findComp(trackInNode), findComp(wavetableNode), findComp(adsrNode),
+                                                   findComp(vcaNode),     findComp(eqNode),        findComp(compNode),
                                                    findComp(stripNode),   findComp(masterNode)};
     for (auto* card : cards)
         ASSERT_NE(card, nullptr) << "every macro member must have a real ModuleComponent once expanded";
@@ -803,6 +1008,56 @@ TEST_F(ChannelFlowTest, NonPolyInstrumentGetsNoVoiceMixer) {
     EXPECT_EQ(voiceMixer, nullptr);
     EXPECT_TRUE(voiceMixerUuid.isEmpty());
     EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::VoiceMixer), 0);
+}
+
+// synth::addEnvelopeAndVCAForRawInstrument, exercised directly at the ChannelFlows level for the
+// poly case (a factory-default Oscillator is poly OFF, so the golden "+ Track -> Instrument" path
+// never exercises composition with a Voice Mixer today — see PolyInstrumentGetsVoiceMixerAheadOf-
+// StripAndFeedsTheChannel above for the same reasoning). Proves the VCA is inserted AFTER the Voice
+// Mixer's poly-voice sum, both forced non-poly, exactly as MainComponent::addInstrumentTrack does.
+TEST_F(ChannelFlowTest, EnvelopeAndVCAComposeAfterVoiceMixerForPolyInstrument) {
+    AudioEngine engine;
+    auto& graph = engine.getGraph();
+
+    auto trackInProcessor = synth::AIStateMapper::createModule("Track In");
+    ASSERT_NE(trackInProcessor, nullptr);
+    auto trackInNode = graph.addNode(std::move(trackInProcessor));
+    ASSERT_NE(trackInNode, nullptr);
+
+    auto oscProcessor = synth::AIStateMapper::createModule("Oscillator");
+    ASSERT_NE(oscProcessor, nullptr);
+    ASSERT_TRUE(setPolyParamCFT(oscProcessor.get(), true));
+    auto oscNode = graph.addNode(std::move(oscProcessor));
+    ASSERT_NE(oscNode, nullptr);
+
+    juce::String voiceMixerUuid;
+    auto* voiceMixer = synth::addVoiceMixerForPolyInstrument(graph, *oscNode, {100, 0}, voiceMixerUuid);
+    ASSERT_NE(voiceMixer, nullptr);
+
+    const auto envAndVca = synth::addEnvelopeAndVCAForRawInstrument(graph, *trackInNode, *voiceMixer,
+                                                                    /*chainSourceRightChannel=*/1, {200, 0}, {300, 0});
+    ASSERT_NE(envAndVca.vca, nullptr);
+    EXPECT_FALSE(envAndVca.adsrUuid.isEmpty());
+    EXPECT_FALSE(envAndVca.vcaUuid.isEmpty());
+
+    auto* adsrNode = findNodeOfTypeCFT(graph, ModuleType::ADSR);
+    ASSERT_NE(adsrNode, nullptr);
+    for (auto* param : adsrNode->getProcessor()->getParameters())
+        if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param))
+            if (boolParam->paramID == "poly")
+                EXPECT_FALSE(boolParam->get()) << "the ADSR must stay non-poly even for a poly instrument";
+    for (auto* param : envAndVca.vca->getProcessor()->getParameters())
+        if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param))
+            if (boolParam->paramID == "poly")
+                EXPECT_FALSE(boolParam->get()) << "the VCA must stay non-poly even for a poly instrument";
+
+    // Voice Mixer's summed ch0/ch1 -> VCA Audio L/R (never the poly instrument's raw ch0-7 directly).
+    EXPECT_TRUE(graph.isConnected({{voiceMixer->nodeID, 0}, {envAndVca.vca->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{voiceMixer->nodeID, 1}, {envAndVca.vca->nodeID, VCAModule::kRightBase}}));
+
+    const synth::DefaultChannelLayout layout{{400, 0}, {500, 0}, {600, 0}, {700, 0}};
+    const auto channel = synth::buildDefaultAudioChannel(graph, *envAndVca.vca, layout, VCAModule::kRightBase);
+    ASSERT_FALSE(channel.stripUuid.isEmpty()) << "the VCA's output must satisfy buildDefaultAudioChannel too";
 }
 
 // =================================================================================================
