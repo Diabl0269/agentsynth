@@ -1,7 +1,9 @@
 # Mixer
 
 **Status: DECIDED 2026-09-10 (founder sign-off on D1-D4). P9-2 implemented, P9-3's audio-track,
-instrument-track and MIDI-track-auto-channel flows implemented (T173a, T183, T184)** — the
+instrument-track and MIDI-track-auto-channel flows implemented (T173a, T183, T184), and the
+Oscillator/Wavetable instrument track now gets an envelope + VCA ahead of the chain (P9-3i,
+FRO43)** — the
 `ChannelStrip` and `Master` nodes, the engine-owned solo gate and the Master splice exist (engine
 only; §8 item 1 records how), "+ Track -> Audio Track" builds the factory default channel end to
 end (§8 item 2), "+ Track -> Instrument" does the same ahead of a chosen instrument (§8 item 2,
@@ -505,6 +507,22 @@ Main line, in dependency order:
      isn't (`Tests/ChannelFlowTests.cpp`'s `PolyInstrumentGetsVoiceMixerAheadOfStripAndFeedsTheChannel`
      exercises it directly). See §5.2's table note for the `TrackKind::Midi` scope decision.
      `Tests/ChannelFlowTests.cpp`.
+   - **P9-3i (Oscillator/Wavetable envelope) — DONE.** Oscillator and Wavetable have no envelope of
+     their own — a held (or even released) note droned forever. "+ Track -> Instrument ->
+     {Oscillator/Wavetable}" now inserts an ADSR + VCA ahead of the rest of the chain:
+     `Track In --MIDI--> ADSR --Env--> VCA's Gain CV`, `chainSource -> VCA Audio -> EQ`
+     (`synth::addEnvelopeAndVCAForRawInstrument`, `Source/Mixer/ChannelFlows.h`/`.cpp`). Inserted
+     AFTER any Voice Mixer stage, never before it, and both nodes are forced non-poly regardless of
+     the instrument's own `poly` parameter: `ADSRModule`'s poly branch is CV-gate-only (it never
+     reads the MIDI note-on/off fallback that drives its non-poly branch), so a poly ADSR fed only
+     Track In's MIDI would output a permanent zero envelope. ADSR's `sustain` (stock default 0.0)
+     is overridden to 0.7 so a held note actually sustains instead of plucking-and-dying after
+     ~0.25s; VCA's `gain` (stock default 0.5) is overridden to 1.0 so the envelope alone governs
+     level. Sampler is untouched — it already has its own one-shot playback envelope, out of scope.
+     `{Track In, instrument, [Voice Mixer if poly], ADSR, VCA, EQ, Compressor, Strip}` join the same
+     one collapsed macro. See `Tests/ChannelFlowTests.cpp`'s
+     `InstrumentTrackOscillatorEnvelopeActuallySilencesAfterNoteOff` for the render-level proof (not
+     just topology) that the envelope actually gates audio.
    - **T184 (MIDI-track auto-channel-on-connect) — DONE.** Dragging a MIDI cable from a Track In
      node (`ModuleType::TimelineMidiSource`) onto an instrument or macro whose audio reaches Audio
      Output/Rec Tap/Master's Direct bus with no `ChannelStrip` anywhere on that path auto-builds a

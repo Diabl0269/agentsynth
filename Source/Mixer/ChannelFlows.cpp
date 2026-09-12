@@ -6,6 +6,7 @@
 #include "../Modules/MasterModule.h"
 #include "../Modules/ModuleBase.h"
 #include "../Modules/RecordTapModule.h"
+#include "../Modules/VCAModule.h"
 #include "MasterSplice.h"
 #include <algorithm>
 
@@ -48,6 +49,28 @@ bool isProcessorPoly(juce::AudioProcessor* processor) {
             if (boolParam->paramID == "poly")
                 return boolParam->get();
     return false;
+}
+
+// Sets a named juce::AudioParameterFloat's real-world value. Hand-rolled for the same reason
+// isProcessorPoly is above: only needs to write one parameter by paramID, not AIStateMapper's full
+// (private) param-matching idiom. No-op if the processor has no such float param.
+void setFloatParam(juce::AudioProcessor& processor, const juce::String& paramID, float value) {
+    for (auto* param : processor.getParameters())
+        if (auto* floatParam = dynamic_cast<juce::AudioParameterFloat*>(param))
+            if (floatParam->paramID == paramID) {
+                *floatParam = value;
+                return;
+            }
+}
+
+// Sets a named juce::AudioParameterBool. Same reasoning as setFloatParam above.
+void setBoolParam(juce::AudioProcessor& processor, const juce::String& paramID, bool value) {
+    for (auto* param : processor.getParameters())
+        if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param))
+            if (boolParam->paramID == paramID) {
+                *boolParam = value;
+                return;
+            }
 }
 
 // The shared builder behind both buildDefaultAudioChannel (one fixed stereo-pair source) and
@@ -159,6 +182,52 @@ juce::AudioProcessorGraph::Node* addVoiceMixerForPolyInstrument(juce::AudioProce
         graph.addConnection({{instrument.nodeID, voice}, {voiceMixer->nodeID, voice}});
 
     return voiceMixer;
+}
+
+EnvelopeAndVCA addEnvelopeAndVCAForRawInstrument(juce::AudioProcessorGraph& graph,
+                                                 juce::AudioProcessorGraph::Node& trackIn,
+                                                 juce::AudioProcessorGraph::Node& chainSource,
+                                                 int chainSourceRightChannel, juce::Point<int> adsrPosition,
+                                                 juce::Point<int> vcaPosition) {
+    EnvelopeAndVCA result;
+
+    juce::String adsrUuid;
+    auto* adsr = addChainNode(graph, "ADSR", adsrPosition, adsrUuid);
+    if (adsr == nullptr)
+        return result;
+    // Forced non-poly regardless of the instrument's own poly flag — see this function's header
+    // comment for why a poly ADSR fed only Track In's MIDI would never fire.
+    setBoolParam(*adsr->getProcessor(), "poly", false);
+    // Overrides ADSR's stock sustain default (0.0) so a held note sustains instead of
+    // plucking-and-dying after ~0.25s — see the header comment.
+    setFloatParam(*adsr->getProcessor(), "sustain", 0.7f);
+
+    juce::String vcaUuid;
+    auto* vca = addChainNode(graph, "VCA", vcaPosition, vcaUuid);
+    if (vca == nullptr) {
+        result.adsrUuid = adsrUuid;
+        return result;
+    }
+    setBoolParam(*vca->getProcessor(), "poly", false);
+    // Overrides VCA's stock gain default (0.5) so the envelope alone governs level — see the
+    // header comment.
+    setFloatParam(*vca->getProcessor(), "gain", 1.0f);
+
+    // Track In's MIDI, fanned alongside its existing wire to the instrument, drives the ADSR's gate.
+    graph.addConnection({{trackIn.nodeID, juce::AudioProcessorGraph::midiChannelIndex},
+                         {adsr->nodeID, juce::AudioProcessorGraph::midiChannelIndex}});
+
+    // chainSource L/R -> VCA Audio L/R (VCAModule::kRightBase — never ch1, that's the Gain CV).
+    graph.addConnection({{chainSource.nodeID, 0}, {vca->nodeID, 0}});
+    graph.addConnection({{chainSource.nodeID, chainSourceRightChannel}, {vca->nodeID, VCAModule::kRightBase}});
+
+    // ADSR Env (ch0) -> VCA's mono Gain CV (ch1).
+    graph.addConnection({{adsr->nodeID, 0}, {vca->nodeID, 1}});
+
+    result.adsrUuid = adsrUuid;
+    result.vcaUuid = vcaUuid;
+    result.vca = vca;
+    return result;
 }
 
 std::vector<juce::AudioProcessorGraph::Connection> findUnchanneledOutputFeeds(juce::AudioProcessorGraph& graph,

@@ -107,6 +107,56 @@ juce::AudioProcessorGraph::Node* addVoiceMixerForPolyInstrument(juce::AudioProce
                                                                 juce::AudioProcessorGraph::Node& instrument,
                                                                 juce::Point<int> position, juce::String& uuidOut);
 
+/** The nodes addEnvelopeAndVCAForRawInstrument() created; `vca` is null (both uuids empty) on a
+ *  partial factory/addNode failure — same "nothing usable was built" contract as DefaultChannel. */
+struct EnvelopeAndVCA {
+    juce::String adsrUuid;
+    juce::String vcaUuid;
+    juce::AudioProcessorGraph::Node* vca = nullptr;
+};
+
+/**
+ * P9-3i (FRO43): Oscillator/Wavetable have no envelope of their own — a held or even released note
+ * drones forever. Inserts an ADSR gated by the track's own MIDI (fanned alongside the existing
+ * Track In -> instrument wire) driving a VCA's gain, ahead of the rest of the default chain:
+ *
+ *     Track In --MIDI--> ADSR --Env(ch0)--> VCA's Gain CV (ch1)
+ *     chainSource L/R -----------------------> VCA Audio L/R (ch0 / VCAModule::kRightBase)
+ *
+ * Both nodes are forced non-poly, regardless of the instrument's own "poly" parameter: ADSRModule's
+ * poly branch is CV-gate-only (it never reads the MIDI note-on/off fallback `midiGateHeld`, which
+ * exists solely in its non-poly branch), so a poly ADSR fed only Track In's MIDI would output a
+ * permanent zero envelope -> total silence, not degraded polyphony. Non-poly composes correctly
+ * whether or not `chainSource` is already a Voice Mixer's poly-voice sum (addVoiceMixerForPolyInstrument
+ * above) — this is deliberately called AFTER that stage, never before it, so a poly instrument's
+ * per-voice audio is summed to one stereo pair before the (necessarily-mono) VCA gates it.
+ *
+ * ADSR's sustain (stock factory default 0.0) is overridden to 0.7 so a held note actually sustains
+ * instead of plucking and decaying to silence after ~0.25s regardless of how long the key is held;
+ * the release stage (stock default, unchanged) is what fixes the drone-after-note-off bug. VCA's
+ * gain (stock factory default 0.5) is overridden to 1.0 so the envelope alone governs perceived
+ * level, not an extra silent 50% attenuation stacked under it.
+ *
+ * NO UNDO — same contract as buildDefaultAudioChannel/addVoiceMixerForPolyInstrument: a plain graph
+ * mutation for a caller already inside its own undo transaction.
+ *
+ * @param trackIn the track's Track In node (already live, feeding `chainSource`'s underlying
+ *                instrument via MIDI) — its MIDI output is fanned to the new ADSR too.
+ * @param chainSource the node the caller would otherwise pass to buildDefaultAudioChannel as
+ *                `source` (the raw instrument, or a Voice Mixer's sum when poly) — becomes the
+ *                VCA's audio input instead.
+ * @param chainSourceRightChannel the raw channel carrying `chainSource`'s right leg (same meaning as
+ *                buildDefaultAudioChannel's `sourceRightChannel`).
+ * @return the created nodes' uuids and the VCA node itself — pass the VCA as the new `chainSource`
+ *         (with `sourceRightChannel` = VCAModule::kRightBase) to buildDefaultAudioChannel. `vca` is
+ *         null, both uuids untouched/empty, on a partial factory/addNode failure.
+ */
+EnvelopeAndVCA addEnvelopeAndVCAForRawInstrument(juce::AudioProcessorGraph& graph,
+                                                 juce::AudioProcessorGraph::Node& trackIn,
+                                                 juce::AudioProcessorGraph::Node& chainSource,
+                                                 int chainSourceRightChannel, juce::Point<int> adsrPosition,
+                                                 juce::Point<int> vcaPosition);
+
 /**
  * T184 (P9-3c, docs/mixer.md §5.2 "main workflow"): BFS forward from `start`, following every
  * outgoing graph edge (audio AND MIDI — an `AudioProcessorGraph::Connection` is always one or the

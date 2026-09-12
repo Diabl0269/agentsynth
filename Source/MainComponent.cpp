@@ -6,6 +6,7 @@
 #include "Mixer/MasterSplice.h"
 #include "Modules/TimelineAudioSourceModule.h"
 #include "Modules/TimelineMidiSourceModule.h" // auditionTrackNote pushes into the bound Track In node
+#include "Modules/VCAModule.h"                // VCAModule::kRightBase for the P9-3i envelope+VCA insertion below
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"
 #include "Timeline/AssetManager.h"
@@ -4647,11 +4648,34 @@ void MainComponent::addInstrumentTrack(const juce::String& instrumentModuleType)
                 if (auto* instrumentModule = dynamic_cast<ModuleBase*>(instrumentNode->getProcessor()))
                     sourceRightChannel = instrumentModule->rightAudioLegChannel();
             }
-            const juce::String chainSourceType =
+            juce::String chainSourceType =
                 voiceMixerNode != nullptr ? juce::String("Voice Mixer") : instrumentModuleType;
-            const auto chainSourcePosition =
+            auto chainSourcePosition =
                 juce::Point<int>(static_cast<int>(chainSource->properties.getWithDefault("x", 0)),
                                  static_cast<int>(chainSource->properties.getWithDefault("y", 0)));
+
+            // P9-3i (FRO43): Oscillator/Wavetable have no envelope of their own, so a held (or even
+            // released) note drones forever. Insert an ADSR (gated by the same Track In MIDI as the
+            // instrument) driving a VCA, ahead of the rest of the chain — AFTER any Voice Mixer stage
+            // above, never before it (see addEnvelopeAndVCAForRawInstrument's own comment for why).
+            // Sampler already has its own one-shot playback envelope and is out of scope.
+            juce::String adsrUuid, vcaUuid;
+            if (instrumentModuleType == "Oscillator" || instrumentModuleType == "Wavetable") {
+                const int adsrX =
+                    chainSourcePosition.x + GraphEditor::estimateModuleSize(chainSourceType).x + kChannelCardGapX;
+                const int vcaX = adsrX + GraphEditor::estimateModuleSize("ADSR").x + kChannelCardGapX;
+                const auto envAndVca = synth::addEnvelopeAndVCAForRawInstrument(
+                    graph, *trackInNode, *chainSource, sourceRightChannel, {adsrX, chainSourcePosition.y},
+                    {vcaX, chainSourcePosition.y});
+                if (envAndVca.vca != nullptr) {
+                    adsrUuid = envAndVca.adsrUuid;
+                    vcaUuid = envAndVca.vcaUuid;
+                    chainSource = envAndVca.vca;
+                    sourceRightChannel = VCAModule::kRightBase;
+                    chainSourceType = "VCA";
+                    chainSourcePosition = {vcaX, chainSourcePosition.y};
+                }
+            }
 
             // Lay every card of the expanded chain out left-to-right from the real card widths, the
             // same reason addAudioTrack's own comment gives (Parametric EQ is double-width).
@@ -4671,12 +4695,17 @@ void MainComponent::addInstrumentTrack(const juce::String& instrumentModuleType)
             if (channel.stripUuid.isEmpty())
                 return; // a factory/addNode failure partway — see buildDefaultAudioChannel's contract
 
-            // Box {Track In, instrument, [Voice Mixer if poly], EQ, Compressor, Strip} into ONE
-            // collapsed macro named after the track. Master is deliberately NOT a member — same
-            // spliceMasterNode reason addAudioTrack's own comment explains.
+            // Box {Track In, instrument, [Voice Mixer if poly], [ADSR+VCA if Oscillator/Wavetable],
+            // EQ, Compressor, Strip} into ONE collapsed macro named after the track. Master is
+            // deliberately NOT a member — same spliceMasterNode reason addAudioTrack's own comment
+            // explains.
             std::vector<juce::String> macroMembers{trackInUuid, instrumentUuid};
             if (!voiceMixerUuid.isEmpty())
                 macroMembers.push_back(voiceMixerUuid);
+            if (!adsrUuid.isEmpty())
+                macroMembers.push_back(adsrUuid);
+            if (!vcaUuid.isEmpty())
+                macroMembers.push_back(vcaUuid);
             macroMembers.push_back(channel.eqUuid);
             macroMembers.push_back(channel.compressorUuid);
             macroMembers.push_back(channel.stripUuid);
