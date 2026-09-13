@@ -13,11 +13,23 @@ ruler/grid, track headers, playhead, transport bar, metronome/count-in and edit-
 
 ## 2. Piano Roll
 
-`Source/UI/PianoRollComponent.h/.cpp` (`synth::ui::PianoRollComponent`) is a minimal per-clip note
-editor shown INSIDE the timeline panel's lanes region — no separate window. Backed by
+`Source/UI/PianoRollComponent/PianoRollComponent.h` (`synth::ui::PianoRollComponent`) is a minimal
+per-clip note editor shown INSIDE the timeline panel's lanes region — no separate window. Backed by
 `synth::ui::NoteSelectionModel` (`Source/UI/NoteSelectionModel.h`), `ClipSelectionModel`'s sibling
 keyed on `synth::NoteId` with the identical add/remove/toggle/setSelection/retainOnly contract,
 plus a `noteHitTestMarquee` free function mirroring `clipHitTestMarquee`.
+
+**Source layout** (`Source/UI/PianoRollComponent/`, split by concern — FRO64):
+- `PianoRollComponent.h` — the class declaration, shared by every unit below.
+- `PianoRollComponent.cpp` — construction/teardown, clip open/close entry points, horizontal geometry.
+- `PianoRollScaleAssist.cpp` — the scale-assist panel and its Generate action.
+- `PianoRollPainting.cpp` — `paint()`, header chip glyphs, the local playhead line.
+- `PianoRollEditTools.cpp` — editing gestures, the edit-tool verbs, split-tool hover preview, tool cursors.
+- `PianoRollAudition.cpp` — keys-column audition, note audition, clip-overrun after resize, tooltips.
+- `PianoRollClipboardAndKeys.cpp` — the note clipboard and arrow-key editing (nudge/transpose/navigate).
+- `PianoRollMouse.cpp` — mouse handling and edge-auto-scroll.
+- `PianoRollZoom.cpp` — anchored zoom and `keyPressed` dispatch.
+- `PianoRollInternal.h` — private shared constants/helpers (not a CMake source file).
 
 **Entry/exit.** Double-clicking a clip in `TimelineClipLaneArea` fires its `onClipDoubleClicked(ClipId)`
 callback, which `TimelinePanelComponent`'s constructor wires to `openPianoRoll(ClipId)`. That call:

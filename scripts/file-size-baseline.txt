@@ -16,8 +16,7 @@
 1275 Source/UI/MacroPortConfigDialog.cpp
 3205 Source/UI/ModuleComponent.cpp
 2055 Source/UI/ModuleLibraryComponent.h
-3691 Source/UI/PianoRollComponent.cpp
-1461 Source/UI/PianoRollComponent.h
+1461 Source/UI/PianoRollComponent/PianoRollComponent.h
 1206 Source/UI/PreferencesSettingsTab.cpp
 1223 Source/UI/Theme/AppLookAndFeel.cpp
 2000 Source/UI/TimelineClipLaneArea.cpp
