@@ -1,5 +1,6 @@
 #include "../Source/AI/AIStateMapper.h"
 #include "../Source/AppUndoManager.h"
+#include "../Source/Mixer/MasterSplice.h"
 #include "../Source/Modules/ADSRModule.h"
 #include "../Source/Modules/AttenuverterModule.h"
 #include "../Source/Modules/FX/BitcrusherModule.h"
@@ -10,6 +11,7 @@
 #include "../Source/Modules/FX/RingModulatorModule.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/LFOModule.h"
+#include "../Source/Modules/MasterModule.h"
 #include "../Source/Modules/MathModule.h"
 #include "../Source/Modules/MidiKeyboardModule.h"
 #include "../Source/Modules/ModuleBase.h"
@@ -6099,4 +6101,96 @@ TEST_F(GraphEditorTest, RefreshOutputDeviceInfoClearsTextWhenProviderReturnsEmpt
     editor.setOutputDeviceInfoProvider([] { return juce::String(); }); // e.g. HostMode::Hosted
     editor.refreshOutputDeviceInfo();
     EXPECT_TRUE(outComp->getOutputDeviceInfoTextForTest().isEmpty());
+}
+
+// --- Locate Master (FRO45) ----------------------------------------------------------------------
+
+static juce::AudioProcessorGraph::Node* findAudioOutputNodeInGraph(juce::AudioProcessorGraph& graph) {
+    using IOProcessor = juce::AudioProcessorGraph::AudioGraphIOProcessor;
+    for (auto* node : graph.getNodes()) {
+        if (node == nullptr || node->getProcessor() == nullptr)
+            continue;
+        if (auto* io = dynamic_cast<IOProcessor*>(node->getProcessor()))
+            if (io->getType() == IOProcessor::audioOutputNode)
+                return node;
+    }
+    return nullptr;
+}
+
+// Founder feedback on T183's live check: auto-arrange or a drag can leave Master anywhere on the
+// canvas. GraphEditor::locateMasterOrOutput() selects it and pans the view so it's on screen.
+TEST_F(GraphEditorTest, LocateMasterSelectsMasterAndPansItIntoView) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1000, 800);
+
+    auto& graph = engine.getGraph();
+    auto masterNode = graph.addNode(std::make_unique<MasterModule>());
+    // Far outside the [0,1000]x[0,800] viewport centreViewOn/getVisibleCanvasRect start with.
+    masterNode->properties.set("x", 8000);
+    masterNode->properties.set("y", 8000);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    ASSERT_TRUE(editor.hasLocatableMasterOrOutput());
+    ASSERT_FALSE(editor.getVisibleCanvasRect().contains(juce::Point<float>(8000.0f, 8000.0f)))
+        << "precondition: Master starts off-screen";
+
+    EXPECT_EQ(editor.locateMasterOrOutput(), GraphEditor::LocateMasterResult::Master);
+
+    const auto selected = editor.getSelectedNodes();
+    ASSERT_EQ(selected.size(), 1u);
+    EXPECT_EQ(selected[0], masterNode->nodeID);
+
+    auto* comp = findModuleComp(editor, masterNode->getProcessor());
+    ASSERT_NE(comp, nullptr);
+    EXPECT_TRUE(editor.getVisibleCanvasRect().contains(comp->getBounds().toFloat().getCentre()))
+        << "the viewport must now contain Master";
+}
+
+// No Master yet (the common case before the first channel exists, docs/mixer.md) — falls back to
+// Audio Output, which T187 seeds on New Patch (a bare test AudioEngine starts with NEITHER node
+// until something adds one — see addAudioOutputNode above — so this seeds one explicitly).
+TEST_F(GraphEditorTest, LocateMasterFallsBackToAudioOutputWhenThereIsNoMaster) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1000, 800);
+
+    auto& graph = engine.getGraph();
+    auto outputNode = addAudioOutputNode(graph, 9000, 9000);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    ASSERT_EQ(synth::findMasterNode(graph), nullptr) << "precondition: no Master yet";
+    ASSERT_TRUE(editor.hasLocatableMasterOrOutput());
+
+    EXPECT_EQ(editor.locateMasterOrOutput(), GraphEditor::LocateMasterResult::AudioOutput);
+
+    const auto selected = editor.getSelectedNodes();
+    ASSERT_EQ(selected.size(), 1u);
+    EXPECT_EQ(selected[0], outputNode->nodeID);
+
+    auto* comp = findModuleComp(editor, outputNode->getProcessor());
+    ASSERT_NE(comp, nullptr);
+    EXPECT_TRUE(editor.getVisibleCanvasRect().contains(comp->getBounds().toFloat().getCentre()));
+}
+
+// Neither node exists — a bare test AudioEngine starts empty (only MainComponent's real
+// createDefaultPatch() seeds an Audio Output), so this is the natural starting state, not
+// something to engineer. Graceful no-op, and the predicate the context menu item / command's
+// setActive() both read must agree there's nothing to find.
+TEST_F(GraphEditorTest, LocateMasterIsANoOpAndReportsInactiveWithNeitherNode) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1000, 800);
+
+    auto& graph = engine.getGraph();
+    ASSERT_EQ(synth::findMasterNode(graph), nullptr);
+    ASSERT_EQ(findAudioOutputNodeInGraph(graph), nullptr) << "precondition: a bare test engine has no nodes at all";
+    EXPECT_FALSE(editor.hasLocatableMasterOrOutput());
+
+    const auto viewportBefore = editor.getVisibleCanvasRect();
+    EXPECT_EQ(editor.locateMasterOrOutput(), GraphEditor::LocateMasterResult::NoTarget);
+    EXPECT_TRUE(editor.getSelectedNodes().empty()) << "graceful no-op: nothing gets selected";
+    EXPECT_EQ(editor.getVisibleCanvasRect(), viewportBefore) << "graceful no-op: the view must not move";
 }
