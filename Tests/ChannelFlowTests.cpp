@@ -1060,6 +1060,80 @@ TEST_F(ChannelFlowTest, EnvelopeAndVCAComposeAfterVoiceMixerForPolyInstrument) {
     ASSERT_FALSE(channel.stripUuid.isEmpty()) << "the VCA's output must satisfy buildDefaultAudioChannel too";
 }
 
+// FRO46 (P9-3j): synth::addPolyEnvelopeAndVCAForInstrument, exercised directly at the ChannelFlows
+// level (a factory-default Oscillator is poly OFF, so the golden "+ Track -> Instrument" path never
+// takes this branch today, same reasoning as the poly tests above) — proves a poly instrument gets
+// a TRUE per-voice envelope: Poly MIDI's Pitch/Gate fans feed the instrument and a poly ADSR
+// directly, no Voice Mixer, both ADSR and VCA stay poly (never forced non-poly).
+TEST_F(ChannelFlowTest, PolyEnvelopeAndVCAWiresPerVoicePitchGateAndAudioWithNoVoiceMixer) {
+    AudioEngine engine;
+    auto& graph = engine.getGraph();
+
+    auto trackInProcessor = synth::AIStateMapper::createModule("Track In");
+    ASSERT_NE(trackInProcessor, nullptr);
+    auto trackInNode = graph.addNode(std::move(trackInProcessor));
+    ASSERT_NE(trackInNode, nullptr);
+
+    auto oscProcessor = synth::AIStateMapper::createModule("Oscillator");
+    ASSERT_NE(oscProcessor, nullptr);
+    ASSERT_TRUE(setPolyParamCFT(oscProcessor.get(), true));
+    auto oscNode = graph.addNode(std::move(oscProcessor));
+    ASSERT_NE(oscNode, nullptr);
+
+    const auto polyEnv =
+        synth::addPolyEnvelopeAndVCAForInstrument(graph, *trackInNode, *oscNode, {100, 0}, {200, 0}, {300, 0});
+    ASSERT_NE(polyEnv.vca, nullptr);
+    EXPECT_FALSE(polyEnv.polyMidiUuid.isEmpty());
+    EXPECT_FALSE(polyEnv.adsrUuid.isEmpty());
+    EXPECT_FALSE(polyEnv.vcaUuid.isEmpty());
+
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::PolyMidi), 1);
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::VoiceMixer), 0) << "the poly VCA does its own 8-voice summing";
+
+    auto* polyMidiNode = findNodeOfTypeCFT(graph, ModuleType::PolyMidi);
+    auto* adsrNode = findNodeOfTypeCFT(graph, ModuleType::ADSR);
+    ASSERT_NE(polyMidiNode, nullptr);
+    ASSERT_NE(adsrNode, nullptr);
+
+    for (auto* param : adsrNode->getProcessor()->getParameters()) {
+        if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param))
+            if (boolParam->paramID == "poly")
+                EXPECT_TRUE(boolParam->get()) << "the ADSR must be poly — its gate now comes from Poly MIDI CV";
+        if (auto* floatParam = dynamic_cast<juce::AudioParameterFloat*>(param))
+            if (floatParam->paramID == "sustain")
+                EXPECT_FLOAT_EQ(floatParam->get(), 0.7f) << "same sustain override as the non-poly path";
+    }
+    for (auto* param : polyEnv.vca->getProcessor()->getParameters()) {
+        if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param))
+            if (boolParam->paramID == "poly")
+                EXPECT_TRUE(boolParam->get()) << "the VCA must be poly";
+        if (auto* floatParam = dynamic_cast<juce::AudioParameterFloat*>(param))
+            if (floatParam->paramID == "gain")
+                EXPECT_FLOAT_EQ(floatParam->get(), 1.0f) << "same gain override as the non-poly path";
+    }
+
+    EXPECT_TRUE(graph.isConnected({{trackInNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
+                                   {polyMidiNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex}}))
+        << "Poly MIDI, not the ADSR, must be gated by Track In's MIDI";
+
+    for (int voice = 0; voice < 8; ++voice) {
+        EXPECT_TRUE(graph.isConnected({{polyMidiNode->nodeID, voice}, {oscNode->nodeID, voice}}))
+            << "voice " << voice << ": Poly MIDI's Pitch fan must feed the instrument's poly Pitch CV";
+        EXPECT_TRUE(graph.isConnected({{polyMidiNode->nodeID, 8 + voice}, {adsrNode->nodeID, voice}}))
+            << "voice " << voice << ": Poly MIDI's Gate fan must feed the ADSR's poly Gate CV";
+        EXPECT_TRUE(
+            graph.isConnected({{adsrNode->nodeID, voice}, {polyEnv.vca->nodeID, VCAModule::kPolyCVBase + voice}}))
+            << "voice " << voice << ": ADSR's poly Env out must feed the VCA's poly Gain CV";
+        EXPECT_TRUE(graph.isConnected({{oscNode->nodeID, voice}, {polyEnv.vca->nodeID, voice}}))
+            << "voice " << voice << ": the instrument's poly Audio L must feed the VCA's poly Audio L in";
+    }
+
+    const synth::DefaultChannelLayout layout{{400, 0}, {500, 0}, {600, 0}, {700, 0}};
+    const auto channel = synth::buildDefaultAudioChannel(graph, *polyEnv.vca, layout, /*sourceRightChannel=*/1);
+    ASSERT_FALSE(channel.stripUuid.isEmpty())
+        << "the VCA's summed ch0/ch1 output must satisfy buildDefaultAudioChannel";
+}
+
 // =================================================================================================
 // T184 (P9-3c, docs/mixer.md §5.2 "main workflow"): a MIDI track auto-creates the destination's
 // mixer channel on connect. Core-level tests for synth::findUnchanneledOutputFeeds /

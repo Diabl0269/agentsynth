@@ -1,6 +1,7 @@
 #include "Modules/ADSRModule.h"
 #include "Modules/PolyMidiModule.h"
 #include <gtest/gtest.h>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -487,4 +488,70 @@ TEST(PolyMidiToAdsrTest, RetriggerReArticulatesAdsrRegardlessOfBlockAlignment) {
     EXPECT_LT(midDip, 0.8f) << "a mid-block gap re-articulates too";
     EXPECT_GT(midDip, 0.3f);
     EXPECT_GT(endOfBlock(midBlock, 4), 0.9f);
+}
+
+// ===========================================================================
+// End-to-end: FRO46 (P9-3j) — PolyMidi's per-voice Gate fan driving a poly ADSR (the exact wiring
+// synth::addPolyEnvelopeAndVCAForInstrument builds: Poly MIDI ch(8+v) -> ADSR's poly gate ch(v)),
+// with one voice released while another stays held. This is the render-level proof that per-voice
+// gating actually happens — the ADSR's own envelope-per-channel output IS what then drives the
+// poly VCA's per-voice Gain CV (ch(kPolyCVBase+v)), whose own poly-summing multiply/sum is already
+// pinned by VCAModuleTests.cpp's poly-mode coverage. A single shared mono envelope — what the
+// pre-FRO46 forced-non-poly auto-wire gives a poly instrument — could never produce this result:
+// it has only one release stage, so releasing ANY note would decay ALL voices together.
+// ===========================================================================
+
+namespace {
+
+// Runs PolyMidi -> poly ADSR block by block, both voices' gate fans at once, and returns each
+// voice's own envelope channel (ADSR poly ch(v)).
+std::pair<std::vector<float>, std::vector<float>>
+renderTwoVoicesIntoAdsr(const std::vector<std::vector<Event>>& blocks) {
+    PolyMidiModule poly;
+    ADSRModule adsr;
+    setParam(adsr, "poly", 1.0f);
+    setParam(adsr, "attack", 0.01f);
+    setParam(adsr, "decay", 0.01f);
+    setParam(adsr, "sustain", 1.0f);
+    setParam(adsr, "release", 0.01f);
+    poly.prepareToPlay(kSampleRate, kBlockSize);
+    adsr.prepareToPlay(kSampleRate, kBlockSize);
+
+    juce::AudioBuffer<float> polyBuf(kNumChannels, kBlockSize);
+    juce::AudioBuffer<float> adsrBuf(8, kBlockSize);
+    std::vector<float> env0, env1;
+
+    for (const auto& events : blocks) {
+        pushBlock(poly, polyBuf, events);
+        adsrBuf.clear();
+        // Poly MIDI's Gate fan (ch8-15) -> ADSR's poly Gate CV in (ch0-7), same channel offset
+        // addPolyEnvelopeAndVCAForInstrument wires in the real graph.
+        for (int v = 0; v < 8; ++v)
+            adsrBuf.copyFrom(v, 0, polyBuf, 8 + v, 0, kBlockSize);
+        juce::MidiBuffer noMidi;
+        adsr.processBlock(adsrBuf, noMidi);
+        env0.insert(env0.end(), adsrBuf.getReadPointer(0), adsrBuf.getReadPointer(0) + kBlockSize);
+        env1.insert(env1.end(), adsrBuf.getReadPointer(1), adsrBuf.getReadPointer(1) + kBlockSize);
+    }
+    return {env0, env1};
+}
+
+} // namespace
+
+TEST(PolyMidiToAdsrToVcaTest, ReleasingOneVoiceLeavesAnotherHeldVoiceUntouched) {
+    // Voice 0: note 60 on at block 0, off at block 2 (releases early).
+    // Voice 1: note 64 on at block 0, held through the whole run.
+    const std::vector<std::vector<Event>> blocks = {
+        {{60, 0, true}, {64, 0, true}}, {}, {{60, 0, false}}, {}, {}, {}, {},
+    };
+
+    const auto [voice0Env, voice1Env] = renderTwoVoicesIntoAdsr(blocks);
+
+    EXPECT_GT(endOfBlock(voice0Env, 1), 0.9f) << "voice 0 sustains before its release";
+    EXPECT_GT(endOfBlock(voice1Env, 1), 0.9f) << "voice 1 sustains too, at the same point";
+
+    // After voice 0's note-off (block 2) with a 10 ms release, voice 0 must decay toward silence
+    // while voice 1 — never released — stays exactly where it was.
+    EXPECT_LT(endOfBlock(voice0Env, 6), 0.1f) << "voice 0 must have decayed to (near) silence";
+    EXPECT_GT(endOfBlock(voice1Env, 6), 0.9f) << "voice 1 must still be held at full sustain";
 }

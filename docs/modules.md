@@ -269,7 +269,7 @@ Loads an audio file from disk and plays it back one of two ways.
 - **Smoothing**: Sustain is smoothed over 20 ms (a block at a time — `juce::ADSR` only takes parameters through `setParameters`). It is the one stage that is a *level*: `juce::ADSR` emits it verbatim while a note is held, so an automated step steps every destination. Attack/Decay/Release are ramp *rates* and are deliberately not smoothed.
 - **Uses**: Modulation of VCA gain, Filter cutoff, or Oscillator Level.
 - **Threshold control**: `ThresholdControlComponent` in slider+meter mode — a live unipolar bar of the Gate jack with the Threshold slider attached, so the slice can be set by eye.
-- **Default instrument-track chain (P9-3i, FRO43)**: "+ Track -> Instrument -> {Oscillator/Wavetable}" auto-wires one ADSR (MIDI-gated, forced non-poly, `sustain` overridden to 0.7) driving a VCA ahead of the rest of the chain — see [mixer.md](mixer.md)'s P9-3i entry for the full wiring and why it's forced non-poly.
+- **Default instrument-track chain (P9-3i, FRO43)**: "+ Track -> Instrument -> {Oscillator/Wavetable}" auto-wires one ADSR (MIDI-gated, forced non-poly, `sustain` overridden to 0.7) driving a VCA ahead of the rest of the chain — see [mixer.md](mixer.md)'s P9-3i entry for the full wiring and why it's forced non-poly. When the instrument is poly (P9-3j, FRO46), the ADSR is genuinely poly instead — gated by a Poly MIDI node's per-voice Gate CV rather than raw MIDI — see mixer.md's P9-3j entry.
 
 ## Envelope Follower Module
 - **Role**: A *detector*, not a generator — tracks the amplitude contour of an audio input and emits it as unipolar `[0, 1]` modulation CV. Deliberately separate from ADSR: its input is audio (not a gate), its times are milliseconds (not seconds), and it has no decay/sustain stages.
@@ -289,7 +289,7 @@ Loads an audio file from disk and plays it back one of two ways.
 - **Poly summing**: In poly mode, multiplies each voice's audio by its corresponding envelope CV, then sums all 8 voices with `tanh` soft saturation and 1/8 normalization — the left block to ch0, the right block to ch16. Follower voices in both blocks are zeroed so they don't leak downstream.
 - **Legacy ch0→ch1 duplicate, deliberately preserved**: mono still copies the gated ch0 onto ch1 after processing, and the poly left sum is still written to both ch0 and ch1. That was the module's old "mono to stereo" affordance and `VCAModuleTest.MonoToStereoCopy` / `PolyMode_MultiVoice` / `MonoMode_BackwardsCompatible` pin it. It is vestigial now that there is a real right leg — prefer the `Audio R` jack.
 - **Features**: Parameter smoothing for click-free gain changes.
-- **Default instrument-track chain (P9-3i, FRO43)**: auto-wired ahead of the rest of an Oscillator/Wavetable instrument track's chain (`gain` overridden to 1.0 so the ADSR envelope alone governs level) — see [mixer.md](mixer.md)'s P9-3i entry.
+- **Default instrument-track chain (P9-3i, FRO43)**: auto-wired ahead of the rest of an Oscillator/Wavetable instrument track's chain (`gain` overridden to 1.0 so the ADSR envelope alone governs level) — see [mixer.md](mixer.md)'s P9-3i entry. When the instrument is poly (P9-3j, FRO46), the VCA is genuinely poly instead, doing its own 8-voice sum in place of a separate Voice Mixer stage — see mixer.md's P9-3j entry.
 
 ## Poly MIDI Module
 - **Capacity**: 8 simultaneous voices.
@@ -306,6 +306,7 @@ Loads an audio file from disk and plays it back one of two ways.
 - **Outputs**: 16 total channels — ch0-7 = per-voice pitch (Hz), ch8-15 = per-voice gate (0..1).
 - **Visible ports**: 1 output jack ("Poly Out") representing the entire poly bus.
 - **Voice mask atomic**: `voiceMaskAtomic_` (`std::atomic<uint8_t>`) is written at the end of every `processBlock` with `std::memory_order_relaxed` — one bit per voice (bit 0 = voice 0, … bit 7 = voice 7), set when `voices[i].active` is true. `AudioEngine::getDisplayVoiceCount()` reads it lock-free and counts set bits via `std::popcount` (C++20 `<bit>`).
+- **Default instrument-track chain (P9-3j, FRO46)**: "+ Track -> Instrument -> {Oscillator/Wavetable}" auto-wires a Poly MIDI node between Track In and the instrument when the instrument is poly, so the auto-wired ADSR+VCA (see the ADSR/VCA entries above) can be genuinely poly too instead of forced non-poly — see [mixer.md](mixer.md)'s P9-3j entry for the full wiring.
 
 ### Poly note contract (machine MIDI)
 
