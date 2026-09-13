@@ -12,7 +12,10 @@ T183) — see §5.2's table note for why that one stays a `TrackKind::Midi` trac
 track kind)" this doc originally called for — and connecting a MIDI track's cable to an unchanneled
 instrument auto-creates a channel at the point the audio reaches the output (§8 item 2, T184; §5.2's
 "main workflow" paragraph). The other P9-3 flows ("Make channel", "Create channels" for existing
-projects) are still follow-ups, and there is no mixer panel yet (P9-5). This document
+projects) are still follow-ups, and there is no mixer panel yet (P9-5) — until it exists, "Locate
+Master" (Cmd+Shift+M / canvas right-click, P9-3g/FRO45, [`shortcuts.md`](shortcuts.md#locate-master-fro45))
+is the lightweight, canvas-only stopgap for finding Master (or Audio Output) after auto-arrange or a
+drag leaves it off-screen. This document
 records the decided design;
 §8 is the implementation order that turns it into code. The visual
 proposal that led to this decision (canvas diagram, mixer panel mock, the four decision cards)

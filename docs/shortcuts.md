@@ -1,8 +1,8 @@
 # Keyboard Shortcuts
 
 Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/ShortcutsSettingsTab.h/.cpp`).
-`ShortcutManager` (`Source/ShortcutManager.h`) registers **72 actions** across four categories —
-**General** (30, app-wide or routed per focused editor), **Graph** (5), **Timeline** (25) and
+`ShortcutManager` (`Source/ShortcutManager.h`) registers **73 actions** across four categories —
+**General** (30, app-wide or routed per focused editor), **Graph** (6), **Timeline** (25) and
 **Piano Roll** (12) — every one of them rebindable, including keys that used to be hardcoded:
 nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the six tool
 digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
@@ -101,7 +101,9 @@ exists: **Toolbar** (always open — the top strip), **Library** (`isLibraryVisi
   get you there even if that panel was closed; Tab-cycling only ever moves between what's already on
   screen. Neither is suppressed by the welcome screen.
 - **Cmd+Shift+M is deliberately NOT used for a Library shortcut** — `Cmd+M` already owns "Toggle Mod
-  Matrix", and the bare letter is reserved for a future Mixer-focus shortcut once a Mixer exists.
+  Matrix", and the chord instead went to "Locate Master" (Graph category — see [**Locate Master
+  (FRO45)**](#locate-master-fro45)), the same "find the mix bus" need this reservation was
+  originally held for, ahead of the eventual mixer panel (P9-5).
 - **Every region root explicitly wants keyboard focus** — each of the six roots calls
   `setWantsKeyboardFocus(true)` in its constructor, so `grabKeyboardFocus()` always lands
   deterministically on the root itself. Without this, JUCE would instead descend into whichever
@@ -274,11 +276,12 @@ even with no mouse involved.
 | Cmd+G | Group / Toggle Macro |
 | Cmd+Shift+G | Ungroup Macro |
 | Cmd+Alt+G | Collapse / Expand Macro (toggle) |
+| Cmd+Shift+M | Locate Master — selects Master (falling back to Audio Output when there is no Master yet) and pans it into view; a graceful no-op with neither. Also on the canvas's right-click menu. See [**Locate Master (FRO45)**](#locate-master-fro45) below |
 
-Graph holds only the five verbs that mean nothing on any other surface — auto-arrange,
-save-selection-as-snippet, and grouping/ungrouping/collapsing a macro (P8-12) — everything that
-means the same thing everywhere (copy/paste/cut/duplicate/repeat/select-all, both zoom pairs) is
-General instead, so it can route through `resolveEditSurface()`.
+Graph holds only the six verbs that mean nothing on any other surface — auto-arrange,
+save-selection-as-snippet, grouping/ungrouping/collapsing a macro (P8-12), and locating Master —
+everything that means the same thing everywhere (copy/paste/cut/duplicate/repeat/select-all, both
+zoom pairs) is General instead, so it can route through `resolveEditSurface()`.
 
 **Cmd+G is smart (P8-14, `GraphEditor::groupOrToggleSelectionMacros`)**: if the selection touches
 any macro, Cmd+G toggles those macros collapsed/expanded instead of grouping; only a selection that
@@ -301,6 +304,27 @@ always wins). One command works because the menu/Settings-list label is a single
 "Collapse / Expand Macro", that reads right regardless of which way the toggle is about to go —
 Ungroup above stays its own command because dissolving a macro is a different precondition and a
 genuinely different verb from either grouping or toggling.
+
+### Locate Master (FRO45)
+
+Founder feedback on T183's live check: once Master and Audio Output exist (T187 seeds an Audio
+Output on New Patch, docs/mixer.md), auto-arrange or an ordinary drag can leave either node
+anywhere on the canvas, and there was no way to find it short of scrolling around. Cmd+Shift+M
+(and the canvas right-click menu's "Locate Master" row) selects Master, falling back to Audio
+Output when the patch has no Master yet, and pans the view so it sits centred on screen — a
+graceful no-op, with the menu row disabled, when the patch has neither node
+(`GraphEditor::locateMasterOrOutput`). The minimap highlight comes for free: it already derives a
+node's highlighted state from the current selection, so selecting Master by this route highlights
+it there too, with no separate flash/pulse mechanism.
+
+This is the lightweight, canvas-only stopgap the founder asked for — the durable answer is the
+future mixer panel (P9-5, docs/mixer.md), which does not exist yet. Cmd+Shift+M was reserved for a
+future "Mixer-focus" shortcut before this (see the Focus regions section above); locating Master is
+that same "find the mix bus" need in its interim, pre-panel form, so it claims the chord now rather
+than leaving it idle. Reuses the same select-by-NodeID path `MainComponent::selectNodeInGraph`
+already uses for the timeline binding chip (`GraphEditor::selectModule`) plus the same pan
+primitive the minimap's own click-to-navigate uses (`GraphEditor::centreViewOn`) — no new
+selection or pan mechanism was added.
 
 ## Timeline
 
@@ -505,10 +529,10 @@ onto 1–6. Shipping one of the missing three later costs no rebind: the digit i
 
 ## Command vs surface actions
 
-The 72 actions split into two kinds, and telling them apart is the key to reasoning about "why
+The 73 actions split into two kinds, and telling them apart is the key to reasoning about "why
 doesn't this key do anything":
 
-- **Command-dispatched** (45 actions) — every General action, all five Graph actions, and the Timeline
+- **Command-dispatched** (46 actions) — every General action, all six Graph actions, and the Timeline
   category's eight grid-set + two grid-cycle commands. `AppCommands::getCommandForAction(actionId)`
   returns a real `juce::CommandID` for these; `MainComponent` implements
   `ApplicationCommandTarget`, so they appear in the native menu bar, drive toolbar tooltip text, and
@@ -601,7 +625,7 @@ habit changes. See [`layout_selection_canvas.md §1`](layout_selection_canvas.md
 | Drag any selected module | Move the whole selection together |
 | Click empty canvas | Clear the selection |
 | Right-click a module | Copy / Duplicate / Paste / Save as Snippet / Delete for the whole selection |
-| Right-click empty canvas | Paste Here (at the click point) / Select All Modules |
+| Right-click empty canvas | Paste Here (at the click point) / Select All Modules / Locate Master (see [FRO45](#locate-master-fro45); greyed out with neither Master nor Audio Output) |
 | Double-click a connected jack | Disconnect every cable on that port (on by default; `Settings → Preferences`) |
 
 Right-clicking empty canvas keeps the selection rather than clearing it, so the menu can still act

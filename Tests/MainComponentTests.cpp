@@ -1,5 +1,6 @@
 #include "../Source/AI/AIProvider.h"
 #include "../Source/AI/AIProviderRegistry.h"
+#include "../Source/Modules/MasterModule.h"
 #include "FakeAudioIODevice.h"
 #include "MainComponent.h"
 #include "UI/ToolbarComponent.h"
@@ -1377,4 +1378,31 @@ TEST_F(MainComponentTest, ToolbarButtonsHaveNonZeroBoundsAfterConstruction) {
         EXPECT_GT(b->getWidth(), 0) << "Button '" << b->getComponentID() << "' has zero width after construction";
         EXPECT_GT(b->getHeight(), 0) << "Button '" << b->getComponentID() << "' has zero height after construction";
     }
+}
+
+// FRO45: Cmd+Shift+M drives the same real key-handling path FocusRegionTests.cpp's Cmd+Shift+T/L
+// tests use (MainComponent::keyPressed -> ApplicationCommandManager::invokeDirectly, async), not a
+// direct call to GraphEditor::locateMasterOrOutput() — pinning that the shortcut is actually wired
+// through ShortcutManager/AppCommands, not just that the underlying action works.
+TEST_F(MainComponentTest, LocateMasterCmdShiftMSelectsMasterThroughTheRealKeyPath) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1200, 800);
+
+    auto masterNode = mc.getAudioEngine().getGraph().addNode(std::make_unique<MasterModule>());
+    masterNode->properties.set("x", 8000);
+    masterNode->properties.set("y", 8000);
+    mc.getGraphEditor().updateComponents();
+    ASSERT_TRUE(mc.getGraphEditor().getSelectedNodes().empty()) << "precondition: nothing selected yet";
+
+    const auto binding = mc.getShortcutManager().getBinding("locateMaster");
+    ASSERT_TRUE(binding.isValid());
+    EXPECT_TRUE(mc.keyPressed(binding));
+    // Async, like every other command MainComponent::keyPressed dispatches (see
+    // FocusRegionTests.cpp's Cmd+Shift+T/L tests for the same pattern) — perform() runs on the
+    // next message-loop pump, not synchronously inside keyPressed() itself.
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+
+    const auto selected = mc.getGraphEditor().getSelectedNodes();
+    ASSERT_EQ(selected.size(), 1u);
+    EXPECT_EQ(selected[0], masterNode->nodeID);
 }

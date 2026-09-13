@@ -2134,9 +2134,9 @@ void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
                        AppCommands::openProject, AppCommands::newPatch, AppCommands::undo, AppCommands::redo,
                        AppCommands::toggleModMatrix, AppCommands::toggleMinimap, AppCommands::toggleAiPanel,
                        AppCommands::autoArrange, AppCommands::groupSelection, AppCommands::ungroupSelection,
-                       AppCommands::collapseMacro, AppCommands::toggleLibrary, AppCommands::selectAllModules,
-                       AppCommands::saveSnippet, AppCommands::copySelection, AppCommands::pasteSelection,
-                       AppCommands::duplicateSelection, AppCommands::cutSelection,
+                       AppCommands::collapseMacro, AppCommands::locateMaster, AppCommands::toggleLibrary,
+                       AppCommands::selectAllModules, AppCommands::saveSnippet, AppCommands::copySelection,
+                       AppCommands::pasteSelection, AppCommands::duplicateSelection, AppCommands::cutSelection,
                        // Registered unconditionally alongside togglePlayback below even though only
                        // the timeline surfaces implement it — reported inactive rather than dropping
                        // the row from Settings.
@@ -2259,6 +2259,15 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         result.setInfo("Auto Arrange", "Auto-arrange modules by signal flow", "View", 0);
         auto kp = shortcutManager.getBinding("autoArrange");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    case AppCommands::locateMaster: {
+        result.setInfo("Locate Master", "Select Master (or Audio Output) and pan it into view", "View", 0);
+        auto kp = shortcutManager.getBinding("locateMaster");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        // Mirrors the canvas context menu item's setEnabled — same predicate, so the two
+        // discoverable surfaces can never disagree about whether there's anything to find.
+        result.setActive(graphEditor.hasLocatableMasterOrOutput());
         break;
     }
     case AppCommands::toggleLibrary: {
@@ -2596,6 +2605,20 @@ bool MainComponent::perform(const InvocationInfo& info) {
     case AppCommands::autoArrange:
         graphEditor.autoArrange();
         return true;
+    case AppCommands::locateMaster: {
+        switch (graphEditor.locateMasterOrOutput()) {
+        case GraphEditor::LocateMasterResult::Master:
+            statusBar.showMessage("Located Master");
+            break;
+        case GraphEditor::LocateMasterResult::AudioOutput:
+            statusBar.showMessage("Located Audio Output (no Master yet)");
+            break;
+        case GraphEditor::LocateMasterResult::NoTarget:
+            statusBar.showMessage("No Master or Audio Output in this patch");
+            break;
+        }
+        return true;
+    }
     case AppCommands::groupSelection:
         graphEditor.groupOrToggleSelectionMacros();
         return true;

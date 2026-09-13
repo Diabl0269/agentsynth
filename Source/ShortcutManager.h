@@ -115,7 +115,13 @@ enum CommandIDs {
     // than the region root focusLibrary lands on — see ModuleLibraryComponent::focusSearchField and
     // docs/shortcuts.md's Focus regions section for why those are two different destinations. Same
     // General/command-dispatched treatment as the other three Focus* actions above.
-    focusLibrarySearch
+    focusLibrarySearch,
+    // FRO45: selects Master (falling back to Audio Output when there is no Master yet) and pans it
+    // into view — the canvas-only stopgap for founder feedback that auto-arrange or a drag can
+    // leave either node anywhere (GraphEditor::locateMasterOrOutput). Appended here per the
+    // snapSet comment above ("nothing persists a raw juce::CommandID"); filed under Graph in the
+    // action table below, alongside autoArrange, since it means nothing off the canvas.
+    locateMaster
 };
 
 /** What getCommandForAction() answers for a SURFACE action — an id that is rebindable and appears
@@ -216,6 +222,8 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return focusLibrary;
     if (actionId == "focusLibrarySearch")
         return focusLibrarySearch;
+    if (actionId == "locateMaster")
+        return locateMaster;
     // Every SURFACE action lands here — see kNoCommand.
     return kNoCommand;
 }
@@ -491,11 +499,12 @@ public:
         bindings["focusPrevRegion"] = juce::KeyPress(juce::KeyPress::tabKey, juce::ModifierKeys::shiftModifier, 0);
         // Direct-focus shortcuts OPEN a closed target region before focusing it (unlike Tab-cycling
         // above, which only ever visits what's already open). Cmd+Shift+M is deliberately NOT used
-        // for Library: Cmd+M already owns "Toggle Mod Matrix", and 'm' is reserved for a future
-        // Mixer-focus shortcut. Free on both counts against the rest of this table: no other binding
-        // uses 't' or 'l' with Cmd+Shift (toggleTimelinePanel is bare Cmd+T; autoArrange is bare
-        // Cmd+L, a different category entirely), and no component keyPressed() override hardcodes
-        // either chord.
+        // for Library: Cmd+M already owns "Toggle Mod Matrix", and 'm' went to "locateMaster"
+        // (Graph, below) instead — FRO45's canvas-only stopgap for the same "find Master" need this
+        // reservation was originally held for, ahead of the eventual mixer panel (P9-5). Free on both
+        // counts against the rest of this table: no other binding uses 't' or 'l' with Cmd+Shift
+        // (toggleTimelinePanel is bare Cmd+T; autoArrange is bare Cmd+L, a different category
+        // entirely), and no component keyPressed() override hardcodes either chord.
         bindings["focusTimeline"] =
             juce::KeyPress('t', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
         bindings["focusLibrary"] =
@@ -518,6 +527,16 @@ public:
             juce::KeyPress('g', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
         bindings["collapseMacro"] =
             juce::KeyPress('g', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
+        // FRO45: Cmd+Shift+M — the chord "focusTimeline"/"focusLibrary"'s own comment above earmarked
+        // ("'m' is reserved for a future Mixer-focus shortcut") once a mixer existed. Master/Audio
+        // Output locate is exactly that need in its canvas-only, pre-mixer-panel form (P9-5 is the
+        // eventual destination), so it claims the chord now rather than leaving it idle; free on
+        // both counts, same as when it was reserved — no other binding in this table uses 'm' with
+        // Cmd+Shift (bare Cmd+M is toggleModMatrix, a different chord entirely; bare unmodified 'm'
+        // is timelineMuteFocusedTrack, Timeline category), and no component keyPressed() override
+        // hardcodes it either.
+        bindings["locateMaster"] =
+            juce::KeyPress('m', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
 
         // ---- Timeline ----
         // The bare-key DAW conventions. All three are already what TimelinePanelComponent's
@@ -752,6 +771,8 @@ public:
             return "Ungroup Macro";
         if (actionId == "collapseMacro")
             return "Collapse / Expand Macro";
+        if (actionId == "locateMaster")
+            return "Locate Master";
         if (actionId == "toggleLibrary")
             return "Toggle Module Library";
         // Kept as "selectAllModules" (both the actionId string and the AppCommands name) so a
@@ -987,6 +1008,7 @@ private:
             {"groupSelection", ShortcutCategory::Graph},
             {"ungroupSelection", ShortcutCategory::Graph},
             {"collapseMacro", ShortcutCategory::Graph},
+            {"locateMaster", ShortcutCategory::Graph},
             // Timeline — the panel's own keys (consulted by TimelinePanelComponent /
             // TimelineClipLaneArea) plus the grid commands, which act on the shared snap value.
             {"timelineSnapToggle", ShortcutCategory::Timeline},
