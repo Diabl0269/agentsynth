@@ -94,7 +94,7 @@ add_executable(Tests
     GraphEditor/GraphEditorSmartConnectionInsertTests.cpp
     GraphEditor/GraphEditorSmartConnectionPreviewTests.cpp
     GraphEditor/GraphEditorSmartConnectionMatrixTests.cpp
-    GraphEditor/GraphEditorMiscTests.cpp
+    GraphEditor/GraphEditorNodeActionsTests.cpp
     ZoomFrozenCachedImageTests.cpp
     ModuleComponentTests.cpp
     AutomationUiReflectionTests.cpp

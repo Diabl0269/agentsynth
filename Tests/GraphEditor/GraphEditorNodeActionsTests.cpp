@@ -1,5 +1,6 @@
-// GraphEditor miscellaneous tests: module title rename (custom card titles), double-click port
-// disconnect (issue #216), output-card identity treatment (module chrome), and Locate Master (FRO45).
+// GraphEditor per-node action tests: module title rename (custom card titles), double-click port
+// disconnect (issue #216), output-card identity treatment (module chrome), and Locate Master (FRO45)
+// — actions and identity checks that target one existing node/card rather than graph wiring.
 // Shared GraphEditorTest fixture and helpers live in GraphEditorTestHelpers.h.
 
 #include "GraphEditorTestHelpers.h"

@@ -247,7 +247,7 @@ Test UI component interactions using in-process construction (no window, no disp
 | `GraphEditorSmartConnectionInsertTests.cpp` | Occupied audio destinations: default parallel-add, Ctrl insert-in-series, stereo fan correctness |
 | `GraphEditorSmartConnectionPreviewTests.cpp` | Drop preview, Ctrl gesture plumbing, round-5 regressions |
 | `GraphEditorSmartConnectionMatrixTests.cpp` | The three `TestWithParam` matrices: every FX insertable at the gap, vertical aim, and the full gesture-matrix contract table |
-| `GraphEditorMiscTests.cpp` | Module title rename, double-click port disconnect (issue #216), output-card identity, Locate Master (FRO45) |
+| `GraphEditorNodeActionsTests.cpp` | Per-node actions/identity: module title rename, double-click port disconnect (issue #216), output-card identity, Locate Master (FRO45) |
 
 #### `createComponentSnapshot` smoke-test pattern
 
