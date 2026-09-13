@@ -94,6 +94,27 @@ other and destroy the arrangement the user just made.
 are not necessarily grid-aligned, so running the finalize path on a drag that did not happen would
 visibly nudge the group.
 
+**Drag-in-progress flags and their reset sites (FRO19, founder review round 3).** `GraphEditor`
+owns a small family of gesture-scoped flags — `dragPreviewActive`/`dragPreviewGhost`,
+`marqueeActive`/`marqueeRect`, `selectionDragActive`/`selectionDragStartPositions`, and
+`macroChipDragId` — each cleared by exactly one or two functions (`endDragPreview`, `endMarquee`,
+`cancelSelectionDrag`/`finalizeSelectionDrag`), reached only from the real `mouseUp` of whichever
+component armed them (`ModuleComponent`, `MacroCardComponent`, or `GraphEditor` itself). A `mouseUp`
+that never runs its matching cleanup leaves a ghost or marquee rectangle drawn indefinitely. Two
+such gaps were found and fixed before this note: a double-click-to-rename on an expanded macro's
+chip, and on a collapsed macro's card, each opens a modal `AlertWindow` (`enterModalState(true,
+...)`) whose global input grab swallows the drag's own `mouseUp` — both `mouseDoubleClick`
+overrides now cancel the armed drag unconditionally rather than depending on that `mouseUp` ever
+arriving (see their own comments). `Tests/DragStateResetTests.cpp` drives every flag-arming real
+gesture (plain and multi-select body drag, Ctrl-insert drag, marquee, macro chip drag, macro card
+drag, both double-click-rename cases, and a release reported far outside the pressed component's
+own bounds) through the actual `mouseDown`/`mouseDrag`/`mouseUp` callbacks and asserts every flag
+clears — a regression suite for the two known fixes, and a clean sweep (as of this writing) for
+every other gesture it can drive synthetically. Founder reports of a still-stuck ghost/selection
+after this sweep point at a gesture the sweep doesn't yet cover (an async graph reconcile
+racing a live drag is the leading remaining suspect, but unconfirmed) — reproduce it, then extend
+this file with the new case before touching the reset logic itself.
+
 ### 1.5 Snippets — `Source/SnippetManager.{h,cpp}`
 
 A snippet is the **same JSON dialect as a preset** (`AIStateMapper::graphToJSON`) narrowed to a subset

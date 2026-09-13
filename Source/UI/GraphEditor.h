@@ -266,6 +266,11 @@ public:
     void cancelSelectionDrag();
     bool isSelectionDragActive() const { return selectionDragActive; }
 
+    /** Test accessor: whether an expanded macro's chip drag (GraphEditor::mouseDown's
+     *  macroChipAt branch) is currently armed — FRO19 regression coverage for the drag-end
+     *  state-reset sweep (see MacroPortRealMouseDragTests.cpp's sibling file). */
+    bool isMacroChipDragActive() const { return macroChipDragId.isNotEmpty(); }
+
     // ---- Macros (P8-12) ------------------------------------------------------------------
     //
     // A Macro is a named, coloured, collapsible container: membership plus presentation, no
@@ -451,6 +456,13 @@ public:
      *  card keeps its own nicer inline rename (MacroCardComponent::beginRename) — this is only
      *  for the case that has no card. */
     void promptRenameMacro(const juce::String& macroId);
+
+    /** Test seam: when set, called INSTEAD of promptRenameMacro's real juce::AlertWindow — a real
+     *  AlertWindow segfaults on a headless Linux CI runner with no display (same class of issue
+     *  ModuleComponent::setShowContextMenuHookForTest's own comment documents for PopupMenu, and
+     *  macroAutoPortModalForTest above already works around for the auto-port prompt). Production
+     *  code leaves this null. */
+    std::function<void(const juce::String& macroId)> promptRenameMacroForTest;
 
     /** Opens the shared synth::ui::ColourPickerPopup over `screenArea` (screen coordinates) for
      *  `macroId` — the same picker the timeline ruler's marker menu and the track header swatch

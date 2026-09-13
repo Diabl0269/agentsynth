@@ -4582,6 +4582,11 @@ void GraphEditor::promptRenameMacro(const juce::String& macroId) {
     if (macro == nullptr)
         return;
 
+    if (promptRenameMacroForTest) {
+        promptRenameMacroForTest(macroId);
+        return;
+    }
+
     auto* window = new juce::AlertWindow("Rename Macro", "New name:", juce::AlertWindow::NoIcon);
     window->addTextEditor("name", macro->name, "Macro name:");
     window->addButton("Rename", 1, juce::KeyPress(juce::KeyPress::returnKey));
