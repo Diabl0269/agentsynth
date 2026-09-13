@@ -45,11 +45,23 @@ public:
     // MainComponent::promptExportAudio). initialDestinationDirectory/initialFileNameBase: the
     // folder and base file name (no extension) Export starts pre-filled with; the caller resolves
     // both (bundle-relative Exports/ folder + the project's name) so this class stays free of
-    // ProjectBundle/currentPatchName_ knowledge.
+    // ProjectBundle/currentPatchName_ knowledge. stemsMode (P9-8, docs/mixer.md §5.12): false is the
+    // original "Export Audio" shape (a FILE destination); true switches the destination to a FOLDER
+    // (defaulted to "<initialFileNameBase> Stems" inside initialDestinationDirectory, no extension
+    // tracking, no destination-exists collision prompt — a stems folder is a container, meant to be
+    // re-exported into) while keeping every other control (format/rate/bit depth/tail/range) and the
+    // whole progress page identical, so MainComponent drives both through the one dialog class.
     ExportAudioDialog(double arrangementEndBeat, bool hasLoopRange, double loopStartBeat, double loopEndBeat,
                       double bpm, bool projectIsSaved, const juce::File& initialDestinationDirectory,
-                      const juce::String& initialFileNameBase);
+                      const juce::String& initialFileNameBase, bool stemsMode = false);
     ~ExportAudioDialog() override;
+
+    // "Export Audio" or "Export Stems" depending on the mode this instance was constructed with -
+    // the string MainComponent hands to juce::DialogWindow::LaunchOptions::dialogTitle, kept as a
+    // real accessor (not test-only) so the window title and this class's own idea of its mode can
+    // never drift apart.
+    juce::String getWindowTitle() const { return stemsMode_ ? "Export Stems" : "Export Audio"; }
+    bool isStemsModeForTest() const { return stemsMode_; }
 
     void paint(juce::Graphics& g) override;
     void resized() override;
@@ -82,7 +94,10 @@ public:
     // MESSAGE THREAD. Called by the owner to drive the progress page.
     void showProgressPage();
     void reportProgress(double fraction);
-    void reportComplete(const BounceResult& result);
+    // Stem export has no BounceResult (StemExporter reports StemResult) - both funnel into the same
+    // progress-page text/button repurposing via this overload.
+    void reportComplete(bool ok, const juce::String& message);
+    void reportComplete(const BounceResult& result) { reportComplete(result.ok, result.message); }
 
     // Test seams - drive the real controls (not a backdoor into private state) and read back what
     // Export would send.
@@ -119,6 +134,7 @@ private:
     // "Take 2.wav" style, never "Take 2 2.wav" (strips a trailing " <digits>" from the base first).
     static juce::File uniquifyExistingFile(const juce::File& file);
 
+    const bool stemsMode_;
     double arrangementEndBeat_;
     bool hasLoopRange_;
     double loopStartBeat_;

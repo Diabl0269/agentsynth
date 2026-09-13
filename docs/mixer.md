@@ -358,9 +358,49 @@ not change how a hosted plugin's channel count is checked.
 
 ### 5.12 Stem export
 
-Every strip is a natural tap point: "single render, parallel writers," the shape stem export
-already needs. One render pass writes one file per strip. Test: the resulting stems sum back to
-the pre-Master mix.
+**DONE (P9-8, T123).** Every strip is a natural tap point: "single render, parallel writers," the
+shape stem export already needs. One render pass writes one file per strip. Test: the resulting
+stems sum back to the pre-Master mix.
+
+`ChannelStripModule` carries an opt-in, non-owning stem tap (`setStemTapBuffer`): a
+message-thread-armed pointer to a preallocated stereo buffer, null outside an export. When armed,
+the strip copies its FINAL output — post gain, pan, mute AND solo, exactly what it hands to
+Master — into the tap at the end of every `processBlock` exit path. No allocation, no locks: an
+atomic pointer swap and, when armed, one `copyFrom` per leg.
+
+`synth::StemExporter::exportStems` (`Source/Transport/StemExporter.{h,cpp}`) drives ONE render
+pass through the exact same offline path `BounceExporter::bounce` uses — same `BounceOptions`
+(range, tail, sample rate, bit depth, format), same suspend/reprepare/restore choreography, same
+progress/cancel semantics — via a sibling session class, `synth::StemSession`
+(`Source/Transport/StemSession.{h,cpp}`), and a sibling chunked runner, `synth::StemRunner`
+(`Source/Transport/StemRunner.{h,cpp}`), mirroring `BounceSession`/`BounceRunner` so the message
+thread stays responsive exactly like Export Audio. The two shared pieces both paths actually
+duplicate no logic for (`synth::validateBounceOptions`, and the metronome/external-MIDI RAII
+guards) are factored into `Source/Transport/BounceGuards.h`, so `BounceExporter`'s own behaviour
+and tests are unchanged. Strips are enumerated from the graph in ascending node-id order (the
+"else node id" fallback — this layer has no dependency on the timeline/track model) and named
+`"NN - <strip name>.<ext>"`.
+
+**Two decisions, both load-bearing for "the stems sum back to the mix":**
+
+- **Every strip ALWAYS gets a file — muted or soloed-out included.** The tap sits AFTER the
+  strip's own bypass/mute/solo logic, so a muted or non-soloed strip's stem is simply silent for
+  exactly the blocks it was silent, never absent. A soloed strip during export therefore never
+  changes *which* strips get written, only what most of them contain — silence sums to zero, so
+  the mix identity holds in every solo/mute combination.
+- **Master's Direct input (cables that bypass every strip) is NOT a stem.** Direct is not a
+  channel (§5.10 "what the mixer shows"): summing the stems reproduces the pre-Master MIX bus, not
+  the whole signal Master receives. A patch that also uses Direct will not find it isolated in any
+  stem — by design, the same way it isn't a mixer column either.
+
+No strips in the patch: `StemExporter::hasChannelStrips` lets the UI show a clear message ("No
+mixer channels yet - use Create channels in the mixer first") before even opening the dialog,
+and `StemSession`'s own setup fails with the identical message as a defense-in-depth backstop.
+"Export Stems..." sits immediately after "Export Audio..." everywhere that action is offered
+(today: the File menu only), opening `ExportAudioDialog` in a stems mode — destination is a
+FOLDER (default `"<project name> Stems"` inside the same `Exports/` base Export Audio uses), same
+range/tail/format/rate/bit-depth controls and progress page, no destination-exists collision
+prompt (a stems folder is a re-exportable container, not a one-shot file).
 
 ### 5.13 Existing projects
 
@@ -657,9 +697,14 @@ Main line, in dependency order:
 
 Side tracks (each independent of the main line beyond its own listed dependency):
 
-- **P9-8 (T123) — Stem export.** Needs only P9-2. `Tests/StemExportTests.cpp`: the written stems
-  sum back to the pre-Master mix within a tolerance; a soloed strip during export does not affect
-  which strips get written.
+- **P9-8 (T123) — Stem export. DONE.** See §5.12 for the design as it landed
+  (`ChannelStripModule`'s stem tap, `StemExporter`/`StemSession`/`StemRunner`, the two decisions on
+  muted/soloed strips and Master's Direct). `Tests/StemExportTests.cpp`: N strips produce N files
+  of equal length; the written stems sum back to the pre-Master mix within a tolerance, proven
+  against a non-unity Master gain; non-default strip gain/pan prove the tap is post-fader; a muted
+  strip's file is silent and the sum property still holds; a soloed strip during export does not
+  affect which strips get written and leaves solo/mute state unchanged; a cancelled or failed
+  export leaves no stem files behind, never touches a pre-existing file, and disarms every tap.
 - **P9-9 (T178) — Sends and group buses.** After P9-5; needs a short design pass of its own before
   implementation (a send is a tap on a strip feeding a bus channel, per §9, but the mechanism
   itself isn't specified here).

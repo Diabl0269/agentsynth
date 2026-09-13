@@ -42,6 +42,11 @@ struct BounceOptions {
     BounceFormat format = BounceFormat::Wav;
 };
 
+// Everything about `options` that can be rejected before a single sample is rendered or a single
+// file touched. Empty string means valid. Shared by BounceSession and StemSession (Source/Transport/
+// StemSession.h) so the two offline-render paths reject the exact same things the exact same way.
+juce::String validateBounceOptions(const BounceOptions& options);
+
 struct BounceResult {
     bool ok = false;
     juce::String message; // always set: the reason on failure, a one-line summary on success

@@ -1,27 +1,36 @@
-#include "BounceSession.h"
+#include "StemSession.h"
 
 #include "../AudioEngine.h"
 #include "BounceGuards.h"
 #include "OfflineTransportDriver.h"
+#include <algorithm>
 #include <cmath>
 
 namespace synth {
 
+std::vector<StemStripEntry> collectStemStrips(juce::AudioProcessorGraph& graph) {
+    std::vector<StemStripEntry> result;
+    for (auto* node : graph.getNodes()) {
+        if (node == nullptr)
+            continue;
+        if (auto* strip = dynamic_cast<ChannelStripModule*>(node->getProcessor()))
+            result.push_back({node->nodeID, strip});
+    }
+    // "else node id" (docs/mixer.md §5.12) - Transport has no dependency on the timeline/track
+    // model, so node id ascending is the stable order available at this layer.
+    std::sort(result.begin(), result.end(),
+              [](const StemStripEntry& a, const StemStripEntry& b) { return a.nodeId.uid < b.nodeId.uid; });
+    return result;
+}
+
 namespace {
 
-// A safety cap for the range render, sized off the exact block count the tempo implies. Under a
-// constant tempo the render lands on the expected count exactly; this only exists so a future
-// tempo-map bug fails after a bounded amount of work instead of grinding to the driver's own
-// 2^18-block backstop.
+// Same safety cap and prime timeout as BounceSession - see that file's own comments.
 constexpr juce::int64 kMaxRangeBlocks = 1 << 20;
-
-// How long one block may wait for AudioClipStreamer's prefetch thread before the block is counted
-// as a dropout and rendered anyway. Generous: a ring that has not filled in two seconds means the
-// disk is in trouble, and stalling the whole bounce on it would be worse than reporting it.
 constexpr int kPrimeTimeoutMs = 2000;
 
-BounceResult failure(juce::String message) {
-    BounceResult result;
+StemResult failure(juce::String message) {
+    StemResult result;
     result.ok = false;
     result.message = std::move(message);
     return result;
@@ -29,10 +38,10 @@ BounceResult failure(juce::String message) {
 
 } // namespace
 
-BounceSession::BounceSession(AudioEngine& engine, const juce::File& outFile, const BounceOptions& options,
-                             const BounceExporter::ProgressCallback& progress)
+StemSession::StemSession(AudioEngine& engine, const juce::File& destinationFolder, const BounceOptions& options,
+                         const BounceExporter::ProgressCallback& progress)
     : engine_(engine)
-    , outFile_(outFile)
+    , destinationFolder_(destinationFolder)
     , options_(options)
     , progress_(progress)
     , nextBlockBeat_(options.startBeat) {
@@ -41,9 +50,14 @@ BounceSession::BounceSession(AudioEngine& engine, const juce::File& outFile, con
         setupResult_ = failure(problem);
         return;
     }
-    if (outFile_ == juce::File()) {
+    if (destinationFolder_ == juce::File()) {
         setupFailed_ = true;
-        setupResult_ = failure("No output file was given.");
+        setupResult_ = failure("No destination folder was given.");
+        return;
+    }
+    if (destinationFolder_.exists() && !destinationFolder_.isDirectory()) {
+        setupFailed_ = true;
+        setupResult_ = failure("\"" + destinationFolder_.getFullPathName() + "\" is not a folder.");
         return;
     }
 
@@ -63,41 +77,80 @@ BounceSession::BounceSession(AudioEngine& engine, const juce::File& outFile, con
     previousInputChannels_ = graph.getTotalNumInputChannels();
     previousOutputChannels_ = graph.getTotalNumOutputChannels();
 
-    // Take the graph off the device (Standalone with a live device); a Hosted engine reports false
-    // and is used as-is.
     deviceWasAttached_ = engine_.suspendDeviceCallback();
-
-    // A no-op in Hosted mode (nothing ever opens hardware MIDI there) and cheap regardless — see
-    // ExternalMidiSuspendGuard above and AudioEngine::suspendExternalMidi().
     externalMidiGuard_ = std::make_unique<ExternalMidiSuspendGuard>(engine_);
 
-    // Constructing the driver re-prepares the whole graph at the render format.
+    // Constructing the driver re-prepares the whole graph at the render format - strips' pointers
+    // stay valid across this (the graph itself is not cleared), so enumerating and sizing tap
+    // buffers afterward, against the settled options_.blockSize, is correct either way.
     driver_ = std::make_unique<OfflineTransportDriver>(engine_, options_.sampleRate, options_.blockSize,
                                                        options_.numChannels);
 
-    // ---- The writer, on a temp file beside the target ----
-    temporary_ = std::make_unique<juce::TemporaryFile>(outFile_);
-    std::unique_ptr<juce::FileOutputStream> stream(temporary_->getFile().createOutputStream());
-    if (stream == nullptr || stream->failedToOpen()) {
+    // ---- No strips means nothing to export - fail before touching the destination folder ----
+    const auto entries = collectStemStrips(graph);
+    if (entries.empty()) {
         restoreTransportAndEngine();
         setupFailed_ = true;
-        setupResult_ = failure("Could not open \"" + outFile_.getFullPathName() + "\" for writing.");
+        setupResult_ = failure(StemExporter::kNoChannelsMessage);
         return;
     }
 
+    if (!destinationFolder_.isDirectory()) {
+        const auto folderResult = destinationFolder_.createDirectory();
+        if (folderResult.failed()) {
+            restoreTransportAndEngine();
+            setupFailed_ = true;
+            setupResult_ = failure("Could not create \"" + destinationFolder_.getFullPathName() + "\".");
+            return;
+        }
+    }
+
+    // ---- One writer per strip, on a sibling temp file each, inside the destination folder ----
     juce::WavAudioFormat wavFormat;
     juce::AiffAudioFormat aiffFormat;
     juce::AudioFormat& audioFormat = options_.format == BounceFormat::Aiff ? static_cast<juce::AudioFormat&>(aiffFormat)
                                                                            : static_cast<juce::AudioFormat&>(wavFormat);
-    writer_.reset(audioFormat.createWriterFor(stream.get(), options_.sampleRate, (unsigned int)options_.numChannels,
-                                              options_.bitDepth, {}, 0));
-    if (writer_ == nullptr) {
-        restoreTransportAndEngine();
-        setupFailed_ = true;
-        setupResult_ = failure("Could not create an audio writer for the requested format.");
-        return;
+    const juce::String extension = options_.format == BounceFormat::Aiff ? "aiff" : "wav";
+    // Wide enough that "07" doesn't need to become "007" once an 8th strip exists, but never
+    // narrower than 2 digits even for a 1-strip export - see docs/mixer.md §5.12.
+    const int nameWidth = juce::jmax(2, juce::String((int)entries.size()).length());
+
+    stems_.reserve(entries.size()); // pointers into stems_[i].tapBuffer are armed below and must
+                                    // never move once a tap holds one - see the class comment.
+    for (std::size_t i = 0; i < entries.size(); ++i) {
+        StemWriter sw;
+        sw.strip = entries[i].strip;
+        const auto number = juce::String((int)i + 1).paddedLeft('0', nameWidth);
+        const auto legalName = juce::File::createLegalFileName(sw.strip->getName());
+        sw.finalFile = destinationFolder_.getChildFile(number + " - " + legalName + "." + extension);
+        sw.tapBuffer.setSize(2, options_.blockSize);
+        sw.tapBuffer.clear();
+
+        sw.temporary = std::make_unique<juce::TemporaryFile>(sw.finalFile);
+        std::unique_ptr<juce::FileOutputStream> stream(sw.temporary->getFile().createOutputStream());
+        if (stream == nullptr || stream->failedToOpen()) {
+            restoreTransportAndEngine();
+            setupFailed_ = true;
+            setupResult_ = failure("Could not open \"" + sw.finalFile.getFullPathName() + "\" for writing.");
+            return;
+        }
+
+        sw.writer.reset(audioFormat.createWriterFor(stream.get(), options_.sampleRate, 2u, options_.bitDepth, {}, 0));
+        if (sw.writer == nullptr) {
+            restoreTransportAndEngine();
+            setupFailed_ = true;
+            setupResult_ = failure("Could not create an audio writer for the requested format.");
+            return;
+        }
+        stream.release(); // the writer owns the stream from here
+
+        stems_.push_back(std::move(sw));
     }
-    stream.release(); // the writer owns the stream from here
+
+    // Every writer opened cleanly - only now arm the taps. A partial failure above must never leave
+    // any strip's tap pointing at a buffer this session is about to destroy.
+    for (auto& stem : stems_)
+        stem.strip->setStemTapBuffer(&stem.tapBuffer);
 
     // ---- How long this is expected to be, for the progress fraction ----
     const double bpm = before.bpm > 0.0 ? before.bpm : 120.0;
@@ -111,21 +164,29 @@ BounceSession::BounceSession(AudioEngine& engine, const juce::File& outFile, con
     rangeBlocksRemaining_ = (int)juce::jlimit<juce::int64>(1, kMaxRangeBlocks, expectedRangeBlocks * 2 + 64);
     tailBlocksRemaining_ = (int)juce::jmin<juce::int64>(tailBlocksTotal, kMaxRangeBlocks);
 
-    // ---- Choreography start ----
-    // All four commands drain, in this order, at the top of the first tick below: stop whatever
-    // was playing, drop the loop for the duration, locate to the range start, play.
+    // ---- Choreography start - identical to BounceSession's ----
     transport.stop();
     transport.setLoop(beforeLoopStartPpq_, beforeLoopEndPpq_, false);
     transport.locateBeat(options_.startBeat);
     transport.play();
 }
 
-BounceSession::~BounceSession() {
+StemSession::~StemSession() {
     if (!finished_)
         finish();
 }
 
-void BounceSession::restoreTransportAndEngine() {
+void StemSession::disarmAllTaps() noexcept {
+    for (auto& stem : stems_)
+        if (stem.strip != nullptr)
+            stem.strip->setStemTapBuffer(nullptr);
+}
+
+void StemSession::restoreTransportAndEngine() {
+    // Disarmed BEFORE the flush-block below, so that block (and anything rendered after this
+    // session is gone) never writes into a buffer this session is about to destroy.
+    disarmAllTaps();
+
     auto& transport = engine_.getTransport();
     transport.stop();
     transport.setLoop(beforeLoopStartPpq_, beforeLoopEndPpq_, beforeLooping_);
@@ -133,23 +194,22 @@ void BounceSession::restoreTransportAndEngine() {
     if (driver_ != nullptr)
         driver_->streamBlocks(1, {});
 
-    // Resumes external MIDI delivery here — explicitly, not left to ~BounceSession() — since this
-    // can run mid-object-lifetime (the two constructor failure branches call it directly, not just
-    // finish()).
     externalMidiGuard_.reset();
 
     if (deviceWasAttached_)
-        engine_.resumeDeviceCallback(); // re-prepares at the DEVICE's rate; see AudioEngine.h
+        engine_.resumeDeviceCallback();
     else if (previousSampleRate_ > 0.0 && previousBlockSize_ > 0)
         engine_.prepareForHost(previousSampleRate_, previousBlockSize_, previousInputChannels_,
                                previousOutputChannels_);
 }
 
-bool BounceSession::stepRange(int maxBlocks) {
+bool StemSession::stepRange(int maxBlocks) {
     if (isRangeDone())
         return true;
 
-    // The one place audio leaves the render.
+    // The one place audio leaves the render - every stem writer gets a slice of the SAME block, all
+    // already sitting in each strip's tapBuffer by the time this fires (OfflineTransportDriver hands
+    // the callback the block only after the whole graph pass, taps included, has run).
     const auto streamToWriter = [this](const juce::AudioBuffer<float>& block, const BlockTimeInfo& info) {
         if (info.bpm > 0.0)
             nextBlockBpm_ = info.bpm;
@@ -158,10 +218,12 @@ bool BounceSession::stepRange(int maxBlocks) {
         if (cancelled_ || writeFailed_)
             return;
 
-        if (!writer_->writeFromAudioSampleBuffer(block, 0, block.getNumSamples())) {
-            writeFailed_ = true;
-            engine_.getTransport().stop();
-            return;
+        for (auto& stem : stems_) {
+            if (!stem.writer->writeFromAudioSampleBuffer(stem.tapBuffer, 0, block.getNumSamples())) {
+                writeFailed_ = true;
+                engine_.getTransport().stop();
+                return;
+            }
         }
 
         samplesWritten_ += block.getNumSamples();
@@ -177,9 +239,6 @@ bool BounceSession::stepRange(int maxBlocks) {
         }
     };
 
-    // A bounce outruns the clip streamer's prefetch thread by orders of magnitude, and
-    // constructing the driver invalidated every ring, so the first block would otherwise read
-    // silence and later ones would drop out at the disk's whim.
     const auto renderRangeBlock = [this]() {
         if (cancelled_ || writeFailed_)
             return false;
@@ -191,10 +250,8 @@ bool BounceSession::stepRange(int maxBlocks) {
 
     if (!firstBlockRendered_) {
         firstBlockRendered_ = true;
-        // One block on its own first, on purpose: streamToBeat decides whether the target is even
-        // ahead of the playhead by reading the CROSS-THREAD POSITION SNAPSHOT, which the locate in
-        // the constructor has not reached yet — bouncing bars 1-2 while the playhead sits at bar
-        // 40 would otherwise bail out instantly with an empty file.
+        // Same reason BounceSession does this: streamToBeat reads the cross-thread position
+        // snapshot, which the constructor's locate has not reached yet on the very first tick.
         driver_->streamBlocks(1, streamToWriter, renderRangeBlock);
         maxBlocks = juce::jmax(0, maxBlocks - 1);
     }
@@ -210,11 +267,11 @@ bool BounceSession::stepRange(int maxBlocks) {
     return rangeDone_;
 }
 
-bool BounceSession::stepTail(int maxBlocks) {
+bool StemSession::stepTail(int maxBlocks) {
     if (isTailDone())
         return true;
     if (!isRangeDone())
-        return false; // not ready yet
+        return false;
 
     const auto streamToWriter = [this](const juce::AudioBuffer<float>& block, const BlockTimeInfo& info) {
         if (info.bpm > 0.0)
@@ -224,9 +281,11 @@ bool BounceSession::stepTail(int maxBlocks) {
         if (cancelled_ || writeFailed_)
             return;
 
-        if (!writer_->writeFromAudioSampleBuffer(block, 0, block.getNumSamples())) {
-            writeFailed_ = true;
-            return;
+        for (auto& stem : stems_) {
+            if (!stem.writer->writeFromAudioSampleBuffer(stem.tapBuffer, 0, block.getNumSamples())) {
+                writeFailed_ = true;
+                return;
+            }
         }
 
         samplesWritten_ += block.getNumSamples();
@@ -239,9 +298,6 @@ bool BounceSession::stepTail(int maxBlocks) {
                 cancelled_ = true;
         }
     };
-    // Rendered with the transport STOPPED (see below), so clips and sequencers fall silent while
-    // the FX ring out — nothing to prime, this gate exists only so a cancelled or failed bounce
-    // stops rendering a tail nobody is writing.
     const auto renderTailBlock = [this]() { return !cancelled_ && !writeFailed_; };
 
     if (!tailSetupDone_) {
@@ -257,14 +313,14 @@ bool BounceSession::stepTail(int maxBlocks) {
         const int rendered = driver_->streamBlocks(thisCall, streamToWriter, renderTailBlock);
         tailBlocksRemaining_ -= rendered;
         if (rendered < thisCall)
-            tailBlocksRemaining_ = 0; // the gate stopped it early (cancel/fail) - nothing more to render
+            tailBlocksRemaining_ = 0;
     }
 
     tailDone_ = tailBlocksRemaining_ <= 0;
     return tailDone_;
 }
 
-BounceResult BounceSession::finish() {
+StemResult StemSession::finish() {
     if (finished_)
         return finishedResult_;
     finished_ = true;
@@ -274,43 +330,50 @@ BounceResult BounceSession::finish() {
         return finishedResult_;
     }
 
-    // Abandoned mid-render (a caller gave up without cancelling through the progress callback) -
-    // treat it as a cancel rather than claim a success that never happened.
+    // Abandoned mid-render, same as BounceSession::finish().
     if (!rangeDone_ || !tailDone_)
         cancelled_ = true;
 
-    // Flush and close before the file is moved or inspected.
-    writer_.reset();
+    // Flush and close every writer before any file is moved or inspected.
+    for (auto& stem : stems_)
+        stem.writer.reset();
     restoreTransportAndEngine();
 
-    BounceResult result;
+    StemResult result;
     result.samplesWritten = samplesWritten_;
     result.streamDropouts = streamDropouts_;
 
     if (cancelled_) {
-        // The temp file dies with `temporary_`; the target was never touched.
-        result.message = "Bounce cancelled.";
+        // Every temp file dies with its `stems_` entry; no target was ever touched.
+        result.message = "Stem export cancelled.";
         finishedResult_ = result;
         return finishedResult_;
     }
 
     if (writeFailed_) {
-        result.message = "Failed while writing to \"" + outFile_.getFullPathName() + "\".";
+        result.message = "Failed while writing stems to \"" + destinationFolder_.getFullPathName() + "\".";
         finishedResult_ = result;
         return finishedResult_;
     }
 
-    if (!temporary_->overwriteTargetFileWithTemporary()) {
-        result.message = "Could not move the rendered audio into \"" + outFile_.getFullPathName() + "\".";
-        finishedResult_ = result;
-        return finishedResult_;
+    // Move every stem into place only once every one of them rendered successfully - see the header
+    // comment for why this cannot be perfectly atomic across N independent filesystem renames, and
+    // why that residual gap does not matter for the property this export exists to guarantee.
+    for (auto& stem : stems_) {
+        if (!stem.temporary->overwriteTargetFileWithTemporary()) {
+            result.message = "Could not move the rendered stems into \"" + destinationFolder_.getFullPathName() + "\".";
+            finishedResult_ = result;
+            return finishedResult_;
+        }
+        result.stemFiles.add(stem.finalFile);
     }
 
     if (progress_)
         progress_(1.0);
 
     result.ok = true;
-    result.message = "Bounced " + juce::String(samplesWritten_) + " samples to \"" + outFile_.getFileName() + "\".";
+    result.message = "Exported " + juce::String(stems_.size()) + " stem(s) (" + juce::String(samplesWritten_) +
+                     " samples each) to \"" + destinationFolder_.getFileName() + "\".";
     if (streamDropouts_ > 0)
         result.message +=
             " " + juce::String(streamDropouts_) + " block(s) played silence while waiting for audio clips.";
@@ -318,7 +381,7 @@ BounceResult BounceSession::finish() {
     return finishedResult_;
 }
 
-double BounceSession::getProgress() const noexcept {
+double StemSession::getProgress() const noexcept {
     return expectedTotalSamples_ > 0 ? juce::jmin(1.0, (double)samplesWritten_ / (double)expectedTotalSamples_) : 0.0;
 }
 

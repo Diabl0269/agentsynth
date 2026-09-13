@@ -405,10 +405,13 @@ TEST_F(MainComponentTest, CommandManagerHasCommands) {
     // getAllCommands so the menu can invoke it but, like checkForUpdates, has no shortcut-table
     // entry, so the action-filtered count above omits it.
     expectedCommandCount += 1; // openPreset is menu-only (analogous to checkForUpdates)
+    // exportStems (P9-8) is a third menu-only command, same treatment as openPreset above: no
+    // ShortcutManager actionId/binding, registered here so the File menu can invoke it.
+    expectedCommandCount += 1; // exportStems is menu-only (analogous to openPreset)
     // exportPatchOnly (Cmd+Shift+P, P8-20) joined exportAudio (Cmd+Shift+E, P8-5) as a rebindable
     // action with a default binding, so both are now counted through expectedActions above; the old
-    // manual `+= 1` for exportPatchOnly no longer applies -- only checkForUpdates (mac), showWelcomeScreen/whatsNew and
-    // openPreset (above) are still menu-only commands with no shortcut-table entry.
+    // manual `+= 1` for exportPatchOnly no longer applies -- only checkForUpdates (mac), showWelcomeScreen/whatsNew,
+    // openPreset and exportStems (above) are still menu-only commands with no shortcut-table entry.
     EXPECT_EQ(commands.size(), expectedCommandCount);
     for (const auto& actionId : expectedActions)
         EXPECT_TRUE(commands.contains(AppCommands::getCommandForAction(actionId)))

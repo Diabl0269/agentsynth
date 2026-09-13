@@ -22,6 +22,14 @@ ExportAudioDialog makeDialog(double arrangementEndBeat = kArrangementEndBeat, bo
     return ExportAudioDialog(arrangementEndBeat, hasLoopRange, loopStartBeat, loopEndBeat, kBpm, projectIsSaved,
                              juce::File::getSpecialLocation(juce::File::tempDirectory), fileNameBase);
 }
+
+ExportAudioDialog makeStemsDialog(double arrangementEndBeat = kArrangementEndBeat, bool hasLoopRange = false,
+                                  double loopStartBeat = 0.0, double loopEndBeat = 0.0, bool projectIsSaved = true,
+                                  const juce::String& fileNameBase = "Default") {
+    return ExportAudioDialog(arrangementEndBeat, hasLoopRange, loopStartBeat, loopEndBeat, kBpm, projectIsSaved,
+                             juce::File::getSpecialLocation(juce::File::tempDirectory), fileNameBase,
+                             /*stemsMode=*/true);
+}
 } // namespace
 
 TEST(ExportAudioDialogTest, DefaultsToWholeArrangementWhenClipsExist) {
@@ -292,6 +300,92 @@ TEST(ExportAudioDialogTest, SaveAsCopyChoiceUniquifiesTheFileName) {
 
     EXPECT_EQ(seenFile, dir.getChildFile("ExportAudioDialogTest_Copy 2.wav"));
     file.deleteFile();
+}
+
+// ---- P9-8: stems mode (docs/mixer.md §5.12) ----
+
+TEST(ExportAudioDialogTest, DefaultModeReportsExportAudioTitleAndIsNotStemsMode) {
+    auto dialog = makeDialog();
+    EXPECT_FALSE(dialog.isStemsModeForTest());
+    EXPECT_EQ(dialog.getWindowTitle(), "Export Audio");
+}
+
+TEST(ExportAudioDialogTest, StemsModeReportsExportStemsTitle) {
+    auto dialog = makeStemsDialog();
+    EXPECT_TRUE(dialog.isStemsModeForTest());
+    EXPECT_EQ(dialog.getWindowTitle(), "Export Stems");
+}
+
+// Destination is a FOLDER, defaulted to "<project name> Stems" inside the given base folder - never
+// a file with an audio extension.
+TEST(ExportAudioDialogTest, StemsModeDefaultsToAFolderDestination) {
+    const auto base = juce::File::getSpecialLocation(juce::File::tempDirectory);
+    auto dialog = makeStemsDialog(kArrangementEndBeat, false, 0.0, 0.0, true, "My Project");
+    EXPECT_EQ(dialog.getDestinationForTest(), base.getChildFile("My Project Stems"));
+    EXPECT_TRUE(dialog.getDestinationForTest().getFileExtension().isEmpty());
+}
+
+// Switching format/bit depth in stems mode must never grow an audio extension onto the folder name -
+// each stem file gets its own extension at export time, not the destination itself.
+TEST(ExportAudioDialogTest, StemsModeDestinationKeepsNoExtensionWhenFormatChanges) {
+    auto dialog = makeStemsDialog(kArrangementEndBeat, false, 0.0, 0.0, true, "My Project");
+    dialog.setFormatForTest(BounceFormat::Aiff);
+    EXPECT_EQ(dialog.getDestinationForTest().getFileName(), "My Project Stems");
+}
+
+// Range/tail/format/rate/bit-depth options pass through identically to the non-stems path, and
+// Export fires directly (no destination-exists collision prompt - a stems folder is a re-exportable
+// container, not a one-shot file) even when the folder already exists on disk.
+TEST(ExportAudioDialogTest, StemsModeExportPassesThroughOptionsAndTheFolderDestination) {
+    auto dialog = makeStemsDialog(kArrangementEndBeat, /*hasLoopRange=*/true, kLoopStartBeat, kLoopEndBeat);
+    dialog.setFormatForTest(BounceFormat::Aiff);
+    dialog.setBitDepthForTest(16);
+    dialog.setSampleRateForTest(44100.0);
+    dialog.setUseSelectionForTest(true);
+    dialog.setTailValueForTest(2.0);
+
+    const auto folder = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("StemsExportDest");
+    folder.createDirectory(); // pre-existing, on purpose - must not trip a collision prompt
+    dialog.setDestinationForTest(folder);
+
+    bool promptShown = false;
+    dialog.collisionPromptForTest = [&](std::function<void(int)>) { promptShown = true; };
+
+    bool fired = false;
+    BounceOptions seen;
+    juce::File seenFolder;
+    dialog.onExport = [&](BounceOptions options, juce::File destination) {
+        fired = true;
+        seen = options;
+        seenFolder = destination;
+    };
+
+    dialog.triggerExportForTest();
+
+    EXPECT_FALSE(promptShown);
+    ASSERT_TRUE(fired);
+    EXPECT_EQ(seenFolder, folder);
+    EXPECT_EQ(seen.format, BounceFormat::Aiff);
+    EXPECT_EQ(seen.bitDepth, 16);
+    EXPECT_DOUBLE_EQ(seen.sampleRate, 44100.0);
+    EXPECT_DOUBLE_EQ(seen.startBeat, kLoopStartBeat);
+    EXPECT_DOUBLE_EQ(seen.endBeat, kLoopEndBeat);
+    EXPECT_DOUBLE_EQ(seen.tailSeconds, 2.0);
+
+    folder.deleteRecursively();
+}
+
+// reportComplete's bool/message overload (what StemResult drives) does the same page repurposing
+// the BounceResult overload does.
+TEST(ExportAudioDialogTest, ReportCompleteBoolOverloadRepurposesTheProgressPage) {
+    auto dialog = makeStemsDialog();
+    dialog.showProgressPage();
+
+    bool closeRequested = false;
+    dialog.onRequestClose = [&] { closeRequested = true; };
+
+    dialog.reportComplete(true, "Exported 3 stem(s) to \"My Project Stems\".");
+    EXPECT_FALSE(closeRequested);
 }
 
 TEST(ExportAudioDialogTest, CancelChoiceDoesNotFireOnExport) {

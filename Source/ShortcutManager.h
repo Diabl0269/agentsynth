@@ -18,6 +18,11 @@ enum CommandIDs {
     // Offline audio bounce (BounceExporter/BounceRunner) - the whole arrangement or the current
     // loop range, rendered to WAV/AIFF. Rebindable (Cmd+Shift+E default) - see resetToDefaults().
     exportAudio,
+    // P9-8: offline stem export (StemExporter/StemRunner) - one file per mixer channel strip, same
+    // range/format options as exportAudio. Menu-only, immediately after Export Audio in the File
+    // menu - same "no chord, no Settings row" treatment as openPreset/checkForUpdates below (no
+    // ShortcutManager actionId/binding).
+    exportStems,
     // P8-31 split the former single "Load from file..." browser into two menu entry points:
     // a whole `.agsproj` project and a plain `.json` patch. openProject is the rebindable Cmd+O
     // open (a project); openPreset is a menu-only patch open. Loading a patch asks whether to

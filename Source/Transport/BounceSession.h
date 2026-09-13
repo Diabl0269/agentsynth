@@ -11,6 +11,11 @@ class AudioEngine;
 namespace synth {
 
 class OfflineTransportDriver;
+// Defined in BounceGuards.h; forward-declared here so this header stays a compile firewall (as
+// juce_audio_formats already is, via AudioFormatWriter) — BounceSession.cpp includes the real
+// definitions.
+struct MetronomeForceOffGuard;
+struct ExternalMidiSuspendGuard;
 
 // The choreography behind BounceExporter::bounce(), split into resumable steps so a caller can
 // interleave "render a handful of blocks" with something else (a UI progress tick) instead of
@@ -68,10 +73,8 @@ private:
     BounceOptions options_;
     BounceExporter::ProgressCallback progress_;
 
-    struct MetronomeGuard;
-    std::unique_ptr<MetronomeGuard> metronomeGuard_;
-    struct ExternalMidiGuard;
-    std::unique_ptr<ExternalMidiGuard> externalMidiGuard_;
+    std::unique_ptr<MetronomeForceOffGuard> metronomeGuard_;
+    std::unique_ptr<ExternalMidiSuspendGuard> externalMidiGuard_;
     std::unique_ptr<OfflineTransportDriver> driver_;
     std::unique_ptr<juce::TemporaryFile> temporary_;
     std::unique_ptr<juce::AudioFormatWriter> writer_;

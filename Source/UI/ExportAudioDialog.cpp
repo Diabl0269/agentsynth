@@ -14,13 +14,15 @@ constexpr double kBeatsPerBar = 4.0;
 ExportAudioDialog::ExportAudioDialog(double arrangementEndBeat, bool hasLoopRange, double loopStartBeat,
                                      double loopEndBeat, double bpm, bool projectIsSaved,
                                      const juce::File& initialDestinationDirectory,
-                                     const juce::String& initialFileNameBase)
-    : arrangementEndBeat_(arrangementEndBeat)
+                                     const juce::String& initialFileNameBase, bool stemsMode)
+    : stemsMode_(stemsMode)
+    , arrangementEndBeat_(arrangementEndBeat)
     , hasLoopRange_(hasLoopRange)
     , loopStartBeat_(loopStartBeat)
     , loopEndBeat_(loopEndBeat)
     , bpm_(bpm > 0.0 ? bpm : 120.0)
-    , destination_(initialDestinationDirectory.getChildFile(initialFileNameBase + ".wav")) {
+    , destination_(stemsMode_ ? initialDestinationDirectory.getChildFile(initialFileNameBase + " Stems")
+                              : initialDestinationDirectory.getChildFile(initialFileNameBase + ".wav")) {
     addAndMakeVisible(optionsPage_);
     optionsPage_.addAndMakeVisible(formatLabel_);
     optionsPage_.addAndMakeVisible(formatBox_);
@@ -49,9 +51,13 @@ ExportAudioDialog::ExportAudioDialog(double arrangementEndBeat, bool hasLoopRang
     formatBox_.onChange = [this] {
         updateBitDepthChoicesForFormat();
         // Keep the destination's extension in step with the chosen format so the file that lands
-        // on disk matches what the format picker says, without the user having to retype it.
-        const bool isAiff = formatBox_.getSelectedId() == 2;
-        destination_ = destination_.withFileExtension(isAiff ? "aiff" : "wav");
+        // on disk matches what the format picker says, without the user having to retype it. Stems
+        // mode's destination is a FOLDER (each stem file gets its own extension at export time), so
+        // there is no destination extension to track here.
+        if (!stemsMode_) {
+            const bool isAiff = formatBox_.getSelectedId() == 2;
+            destination_ = destination_.withFileExtension(isAiff ? "aiff" : "wav");
+        }
     };
 
     sampleRateBox_.addItem("44100 Hz", 1);
@@ -86,7 +92,10 @@ ExportAudioDialog::ExportAudioDialog(double arrangementEndBeat, bool hasLoopRang
     else if (hasLoopRange_)
         selectionButton_.setToggleState(true, juce::dontSendNotification);
 
-    fileNameEditor_.setText(initialFileNameBase, juce::dontSendNotification);
+    if (stemsMode_)
+        fileNameLabel_.setText("Folder name", juce::dontSendNotification);
+    fileNameEditor_.setText(stemsMode_ ? initialFileNameBase + " Stems" : initialFileNameBase,
+                            juce::dontSendNotification);
     fileNameEditor_.onTextChange = [this] { updateFileNameFromEditor(); };
     // T153: juce::TextEditor consumes Escape itself before it would ever bubble to keyPressed()
     // below, so this field needs its own route to the exact same page-aware handler.
@@ -178,13 +187,16 @@ void ExportAudioDialog::chooseDestinationFolder() {
 }
 
 void ExportAudioDialog::updateFileNameFromEditor() {
-    // A bare base name, sanitised for the characters a filename can't hold - the extension always
-    // comes from the format picker, never from what the user types here.
+    // A bare base name, sanitised for the characters a filename can't hold. In file mode the
+    // extension always comes from the format picker, never from what the user types here; in stems
+    // mode the destination is a folder with no extension at all.
     auto base = fileNameEditor_.getText().trim();
     if (base.isEmpty())
         base = "Untitled";
-    destination_ = destination_.getParentDirectory().getChildFile(juce::File::createLegalFileName(base) + "." +
-                                                                  destination_.getFileExtension().substring(1));
+    const auto legal = juce::File::createLegalFileName(base);
+    destination_ = stemsMode_ ? destination_.getParentDirectory().getChildFile(legal)
+                              : destination_.getParentDirectory().getChildFile(
+                                    legal + "." + destination_.getFileExtension().substring(1));
 }
 
 void ExportAudioDialog::updateTailReadoutForUnit() {
@@ -341,9 +353,10 @@ void ExportAudioDialog::showProgressPage() {
 
 void ExportAudioDialog::reportProgress(double fraction) { progressValue_ = fraction; }
 
-void ExportAudioDialog::reportComplete(const BounceResult& result) {
+void ExportAudioDialog::reportComplete(bool ok, const juce::String& message) {
+    juce::ignoreUnused(ok); // the message alone is what the status label shows either way
     progressValue_ = 1.0;
-    progressStatusLabel_.setText(result.message, juce::dontSendNotification);
+    progressStatusLabel_.setText(message, juce::dontSendNotification);
     progressCancelButton_.setButtonText("Close");
     progressCancelButton_.onClick = [this] {
         if (onRequestClose)
