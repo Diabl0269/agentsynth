@@ -8,7 +8,7 @@
 #include "../Source/AI/AIStateMapper.h"
 #include "../Source/Modules/ModuleBase.h"
 #include "../Source/UI/CableColour.h"
-#include "../Source/UI/GraphEditor.h"
+#include "../Source/UI/GraphEditor/GraphEditor.h"
 #include "../Source/UI/ModuleComponent.h"
 #include "../Source/UI/ModuleLibraryComponent.h"
 #include "../Source/UI/Theme/BuiltInThemes.h"

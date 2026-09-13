@@ -12,7 +12,7 @@
 
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/OscillatorModule.h"
-#include "../Source/UI/GraphEditor.h"
+#include "../Source/UI/GraphEditor/GraphEditor.h"
 #include "../Source/UI/ModuleComponent.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>

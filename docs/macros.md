@@ -290,7 +290,7 @@ Shape is therefore an **input to port creation**, supplied one of these ways:
   genuinely known here, from the dragged cable's own poly/stereo fan. **Not yet implemented
   (P8-15b): the cable-drop path currently always creates Mono** — shape inference from the
   cable's fan is deferred, not ruled out; a future increment can read it the same way
-  `resolvePolyLink`/`getJackTargets` already do elsewhere in `GraphEditor.cpp`. Until then the
+  `resolvePolyLink`/`getJackTargets` already do elsewhere in the GraphEditor sources. Until then the
   modal is the only way to get Stereo/Poly-N. This path never wires anything on the macro's
   INTERIOR side, regardless of shape inference ever landing — the macro is collapsed, so there is
   no member visible to pick a target from; only the modal, or a manual cable drawn after expanding
@@ -570,7 +570,7 @@ Audio) — "bypass" on a channel means "bypass the inserts": the chain's effects
 source keeps producing and the strip keeps passing signal. `macroBypassState` reports over the
 same reduced member set, so a channel whose inserts are all bypassed reads fully on. **Mute** has
 no such carve-out: muting a channel macro mutes the strip too. The filter is
-`bypassFanOutMembers` in `GraphEditor.cpp`.
+`bypassFanOutMembers` in `GraphEditorMacroPortSplice.cpp`.
 
 ### 5.7 Hosted plugin
 
@@ -878,7 +878,7 @@ In order, each independently shippable:
    `synth::ui::MacroPortConfigDialog`). Picks Mono/Stereo/Poly-N/MIDI at creation (§5.3), writes
    the port's user-visible name (§5.1), and also covers the "shape from a dropped cable"
    convenience (`GraphEditor::createMacroPortFromDroppedCable`, Mono-only — see §5.3).
-   `estimateModuleSize` in `GraphEditor.cpp` has an entry for all four types, sized to
+   `estimateModuleSize` in `GraphEditorDragDrop.cpp` has an entry for all four types, sized to
    `ModuleComponent`'s compact docked-widget geometry (`kMacroPortWidgetWidth`/
    `kMacroPortWidgetHeaderY`/`kMacroPortWidgetBottomPad`, §5.3's "Rendering" note) rather than a
    full 280-wide card — F2 replaced the "real rendered card" this used to measure against, since a

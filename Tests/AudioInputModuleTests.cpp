@@ -16,7 +16,7 @@
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/SnippetManager.h"
 #include "../Source/Transport/TransportService.h"
-#include "../Source/UI/GraphEditor.h"
+#include "../Source/UI/GraphEditor/GraphEditor.h"
 #include "../Source/UI/ModuleComponent.h"
 #include "FakeAudioIODevice.h"
 #include <gtest/gtest.h>

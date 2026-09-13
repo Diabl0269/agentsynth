@@ -24,7 +24,7 @@
 #include "UI/AIChatComponent.h"
 #include "UI/ExportAudioDialog.h"
 #include "UI/FocusRegion.h"
-#include "UI/GraphEditor.h"
+#include "UI/GraphEditor/GraphEditor.h"
 #include "UI/ModuleLibraryComponent.h"
 #include "UI/StatusBarComponent.h"
 #include "UI/Theme/AppLookAndFeel.h"

@@ -649,8 +649,24 @@ add_library(AppUI STATIC
     Source/UI/SignInDialog.h
     Source/UI/ExportAudioDialog.cpp
     Source/UI/ExportAudioDialog.h
-    Source/UI/GraphEditor.cpp
-    Source/UI/GraphEditor.h
+    Source/UI/GraphEditor/GraphEditor.cpp
+    Source/UI/GraphEditor/GraphEditor.h
+    Source/UI/GraphEditor/GraphEditorInternal.h
+    Source/UI/GraphEditor/GraphEditorCables.cpp
+    Source/UI/GraphEditor/GraphEditorConnections.cpp
+    Source/UI/GraphEditor/GraphEditorSmartConnections.cpp
+    Source/UI/GraphEditor/GraphEditorSmartConnectionsApply.cpp
+    Source/UI/GraphEditor/GraphEditorCanvas.cpp
+    Source/UI/GraphEditor/GraphEditorSelection.cpp
+    Source/UI/GraphEditor/GraphEditorMacroGeometry.cpp
+    Source/UI/GraphEditor/GraphEditorMacroGrouping.cpp
+    Source/UI/GraphEditor/GraphEditorMacroPortSplice.cpp
+    Source/UI/GraphEditor/GraphEditorChannels.cpp
+    Source/UI/GraphEditor/GraphEditorMacroPorts.cpp
+    Source/UI/GraphEditor/GraphEditorCommands.cpp
+    Source/UI/GraphEditor/GraphEditorDragDrop.cpp
+    Source/UI/GraphEditor/GraphEditorStereoWiring.cpp
+    Source/UI/GraphEditor/GraphEditorPersistence.cpp
     Source/UI/ModuleComponent.cpp
     Source/UI/ModuleComponent.h
     Source/UI/MacroCardComponent.cpp

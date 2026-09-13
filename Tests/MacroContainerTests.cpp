@@ -23,7 +23,7 @@
 #include "../Source/PatchDocument.h"
 #include "../Source/ProjectBundle.h"
 #include "../Source/Timeline/TimelineDoc.h"
-#include "../Source/UI/GraphEditor.h"
+#include "../Source/UI/GraphEditor/GraphEditor.h"
 #include "../Source/UI/MacroCardComponent.h"
 #include "../Source/UI/ModuleComponent.h"
 #include <algorithm>

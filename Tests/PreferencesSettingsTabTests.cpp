@@ -1,7 +1,7 @@
 #include "../Source/AI/AIStateMapper.h"
 #include "../Source/Modules/ModuleBase.h"
 #include "../Source/ShortcutManager.h"
-#include "../Source/UI/GraphEditor.h"
+#include "../Source/UI/GraphEditor/GraphEditor.h"
 #include "../Source/UI/PreferencesSettingsTab.h"
 #include <algorithm>
 #include <gtest/gtest.h>

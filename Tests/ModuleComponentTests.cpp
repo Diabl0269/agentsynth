@@ -10,7 +10,7 @@
 #include "../Source/Modules/VCAModule.h"
 #include "../Source/Modules/VoiceMixerModule.h"
 #include "../Source/Modules/WavetableOscillatorModule.h"
-#include "../Source/UI/GraphEditor.h"
+#include "../Source/UI/GraphEditor/GraphEditor.h"
 #include "../Source/UI/LayoutUtil.h"
 #include "../Source/UI/ModuleComponent.h"
 #include "../Source/UI/ModuleLibraryComponent.h"

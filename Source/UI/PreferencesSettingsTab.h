@@ -1,6 +1,6 @@
 #pragma once
 
-#include "GraphEditor.h"
+#include "GraphEditor/GraphEditor.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
 #include <memory>

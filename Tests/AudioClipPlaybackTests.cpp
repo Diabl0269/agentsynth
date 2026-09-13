@@ -32,7 +32,7 @@
 #include "../Source/Timeline/TimelineSnapshot.h"
 #include "../Source/Transport/OfflineTransportDriver.h"
 #include "../Source/UI/CableColour.h"
-#include "../Source/UI/GraphEditor.h"
+#include "../Source/UI/GraphEditor/GraphEditor.h"
 #include "../Source/UI/ModuleComponent.h"
 #include "../Source/UI/ModuleLibraryComponent.h"
 #include "MainComponent/MainComponent.h"

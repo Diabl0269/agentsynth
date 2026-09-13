@@ -2,7 +2,7 @@
 #include "AI/AIStateMapper.h"
 #include "MacroSet.h"
 #include "Timeline/TimelineDoc.h"
-#include "UI/GraphEditor.h"
+#include "UI/GraphEditor/GraphEditor.h"
 
 /**
  * @class SnapshotAction
