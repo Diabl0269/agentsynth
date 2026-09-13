@@ -112,18 +112,12 @@ constexpr float kGainBDb = -6.0f;
 constexpr float kPanB = 0.7f;
 constexpr float kMasterGainDb = 6.0f; // non-unity - the whole point of the correctness test
 
-void panGainsForTest(float pan, float& left, float& right) {
-    // Mirrors ModuleBase::panGains's balance law (unity centre, attenuate only the far leg) closely
-    // enough for the analytic expectation below - see ChannelStripTests.cpp's own pan assertions for
-    // the module-level proof of the law itself.
-    left = pan <= 0.0f ? 1.0f : 1.0f - pan;
-    right = pan >= 0.0f ? 1.0f : 1.0f + pan;
-}
-
 float expectedStripSample(float source, float gainDb, float pan, bool leftLeg) {
     const float gain = juce::Decibels::decibelsToGain(gainDb, ChannelStripModule::kMinGainDb);
     float panL = 1.0f, panR = 1.0f;
-    panGainsForTest(pan, panL, panR);
+    // The real law, not a reimplementation - so this test stays correct if the balance law itself
+    // ever changes (see ChannelStripTests.cpp for the module-level proof of the law).
+    ModuleBase::panGains(pan, panL, panR);
     return source * gain * (leftLeg ? panL : panR);
 }
 
@@ -193,6 +187,12 @@ BounceOptions oneBeatOptions(int bitDepth = 32) {
     options.blockSize = kBlockSize;
     options.bitDepth = bitDepth;
     options.numChannels = kNumChannels;
+    return options;
+}
+
+BounceOptions oneBeatOptionsWithTail(double tailSeconds) {
+    BounceOptions options = oneBeatOptions();
+    options.tailSeconds = tailSeconds;
     return options;
 }
 
@@ -340,6 +340,69 @@ TEST(StemExportTest, StemsSumToThePreMasterMixEvenWithNonUnityMasterGain) {
                 << "channel " << ch << " sample " << i
                 << " - a post-Master tap would be off by the Master gain factor here";
         }
+    }
+}
+
+// ============================================================================
+// 2b. The tail phase (StemSession::stepTail) is exercised at all - oneBeatOptions() above always
+//     sets tailSeconds = 0.0, which would leave the tail loop completely uncovered. A ConstantSource
+//     doesn't care whether the transport is playing or stopped, so the tail's extra blocks are
+//     expected to carry on with exactly the same per-strip values as the range - proving both that
+//     stem lengths grow by the tail and that the sum property still holds all the way through it.
+// ============================================================================
+
+TEST(StemExportTest, TailBlocksAreCapturedAndTheSumPropertyHoldsThroughTheTail) {
+    constexpr double kTailSeconds = 0.25; // -> 12000 samples -> ceil(12000/512) = 24 tail blocks
+    ScopedTempDir stemsOut("agentsynth_stems_tail");
+    ScopedTempFile bounceOut("agentsynth_stems_tail_bounce.wav");
+
+    StemResult stems;
+    {
+        StemRig rig;
+        ASSERT_TRUE(rig.build());
+        stems = StemExporter::exportStems(rig.engine, stemsOut.dir, oneBeatOptionsWithTail(kTailSeconds));
+        ASSERT_TRUE(stems.ok) << stems.message;
+    }
+    {
+        StemRig rig;
+        ASSERT_TRUE(rig.build());
+        const auto bounce = BounceExporter::bounce(rig.engine, bounceOut.file, oneBeatOptionsWithTail(kTailSeconds));
+        ASSERT_TRUE(bounce.ok) << bounce.message;
+    }
+
+    ASSERT_EQ(stems.stemFiles.size(), 2);
+    const auto wavA = readWav(stems.stemFiles[0]);
+    const auto wavB = readWav(stems.stemFiles[1]);
+    const auto wavMix = readWav(bounceOut.file);
+    ASSERT_TRUE(wavA.ok);
+    ASSERT_TRUE(wavB.ok);
+    ASSERT_TRUE(wavMix.ok);
+
+    // Range alone (oneBeatOptions(), no tail) is 47 blocks; the tail adds 24 more.
+    constexpr juce::int64 kExpectedBlocks = 47 + 24;
+    const juce::int64 expectedLength = kExpectedBlocks * (juce::int64)kBlockSize;
+    EXPECT_EQ(wavA.lengthInSamples, expectedLength);
+    EXPECT_EQ(wavB.lengthInSamples, expectedLength);
+    ASSERT_EQ(wavA.lengthInSamples, wavMix.lengthInSamples);
+    ASSERT_EQ(wavB.lengthInSamples, wavMix.lengthInSamples);
+    ASSERT_EQ(wavA.lengthInSamples, stems.samplesWritten);
+
+    const float masterGain = juce::Decibels::decibelsToGain(kMasterGainDb, MasterModule::kMinGainDb);
+    for (int ch = 0; ch < kNumChannels; ++ch) {
+        for (int i = 0; i < wavMix.lengthInSamples; ++i) {
+            const float sum = wavA.audio.getSample(ch, i) + wavB.audio.getSample(ch, i);
+            ASSERT_NEAR(sum * masterGain, wavMix.audio.getSample(ch, i), 1.0e-5f)
+                << "channel " << ch << " sample " << i << " (tail region: " << (i >= 47 * kBlockSize) << ")";
+        }
+    }
+
+    // The tail region itself carries the same per-strip values as the range - a stopped transport
+    // doesn't silence a time-invariant source, and nothing here has its own tail-only behaviour.
+    const float expectedAL = expectedStripSample(kSourceA, kGainADb, kPanA, /*leftLeg=*/true);
+    const float expectedAR = expectedStripSample(kSourceA, kGainADb, kPanA, /*leftLeg=*/false);
+    for (juce::int64 i = 47 * (juce::int64)kBlockSize; i < wavA.lengthInSamples; ++i) {
+        EXPECT_NEAR(wavA.audio.getSample(0, i), expectedAL, 1.0e-5f) << "tail sample " << i;
+        EXPECT_NEAR(wavA.audio.getSample(1, i), expectedAR, 1.0e-5f) << "tail sample " << i;
     }
 }
 

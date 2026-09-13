@@ -17,7 +17,11 @@ std::vector<StemStripEntry> collectStemStrips(juce::AudioProcessorGraph& graph) 
             result.push_back({node->nodeID, strip});
     }
     // "else node id" (docs/mixer.md §5.12) - Transport has no dependency on the timeline/track
-    // model, so node id ascending is the stable order available at this layer.
+    // model, so node id ascending is the stable order available at this layer. That stability is
+    // only WITHIN one export: node ids are reassigned whenever the graph is rebuilt from JSON (e.g.
+    // an undo/redo that crosses a rebuild - MixerSoloTests.UndoRedoAcrossAGraphRebuildSettlesTheGate
+    // is the proof such rebuilds happen), so "01 - ..." naming a given strip is not itself a
+    // cross-session guarantee, only a per-export one.
     std::sort(result.begin(), result.end(),
               [](const StemStripEntry& a, const StemStripEntry& b) { return a.nodeId.uid < b.nodeId.uid; });
     return result;
