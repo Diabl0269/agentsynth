@@ -5904,6 +5904,12 @@ void GraphEditor::maybeAutoCreateChannelAfterConnect(juce::AudioProcessorGraph::
     }
 }
 
+void GraphEditor::createChannelsForUnchanneledTracks(
+    const std::vector<juce::AudioProcessorGraph::NodeID>& trackSourceNodeIds) {
+    for (const auto& nodeId : trackSourceNodeIds)
+        maybeAutoCreateChannelAfterConnect(nodeId);
+}
+
 void GraphEditor::autoDeleteOrphanedMacroPort(juce::AudioProcessorGraph::NodeID nodeId) {
     if (!autoDeleteMacroPortsOnLastCableEnabled)
         return;

@@ -595,6 +595,8 @@ private:
     void addMidiTrack() override;
     void addAudioTrack() override;
     void addInstrumentTrack(const juce::String& instrumentModuleType, bool poly) override;
+    bool hasTracksNeedingChannels() const override;
+    void createChannelsForExistingTracks() override;
     std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> getAvailablePluginLaneOptions() const override;
     synth::LaneId addPluginAutomationLane(const synth::ui::TrackHeaderHost::PluginLaneOption& option) override;
     // The colour picker's favourites shelf persists here — the only TrackHeaderHost override
