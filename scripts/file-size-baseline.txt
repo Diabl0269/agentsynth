@@ -32,8 +32,7 @@
 3549 Tests/ChannelFlowTests.cpp
 1095 Tests/FXModuleTests.cpp
 1440 Tests/FocusArbitrationTests.cpp
-6196 Tests/GraphEditorTests.cpp
-2044 Tests/MacroAutoPortTests.cpp
+2045 Tests/MacroAutoPortTests.cpp
 2459 Tests/MacroContainerTests.cpp
 1057 Tests/MacroPortFlowTests.cpp
 1411 Tests/MainComponentTests.cpp
@@ -50,7 +49,7 @@
 1615 Tests/TimelineClipLaneTests.cpp
 1644 Tests/TimelineDocTests.cpp
 1396 Tests/TimelineMidiSourceTests.cpp
-4015 Tests/TimelinePanelTests.cpp
+4014 Tests/TimelinePanelTests.cpp
 1187 Tests/UndoRedoTests.cpp
 1472 Tests/WavetableOscillatorModuleTests.cpp
 1080 docs/AI_Engine.md
