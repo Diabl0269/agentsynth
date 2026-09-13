@@ -59,14 +59,29 @@ juce::PropertiesFile::Options userSettingsTestOptions() {
     return opts;
 }
 
+// Removes "timelineSnap"/"timelineSnapEnabled" so the NEXT MainComponent constructed in this process
+// restores TimelinePanelComponent's documented default (Snap::Quarter, enabled) instead of whatever
+// division a developer's own timeline is currently set to — see restoreViewPreferences(), which falls
+// back to its own already-default-initialised viewState_ only when the key is absent, so removing
+// (not zeroing) the keys is what makes that fallback kick in. Callers still need a PersistedKeysGuard
+// around this to put the developer's real values back afterward.
+void resetTimelineSnapKeysToDefault() {
+    juce::ApplicationProperties props;
+    props.setStorageParameters(userSettingsTestOptions());
+    if (auto* s = props.getUserSettings()) {
+        s->removeValue("timelineSnap");
+        s->removeValue("timelineSnapEnabled");
+        s->saveIfNeeded();
+    }
+}
+
 // Saves the named settings keys on construction and restores them EXACTLY on destruction, including
 // the case where a key did not exist at all.
 //
 // Needed because the commands under test persist as a side effect: setSnapValue() writes
 // "timelineSnap"/"timelineSnapEnabled", and the Preferences toggle writes "naturalScrolling" — all
 // into the REAL user settings file this machine's app reads. Clearing them afterwards would not be
-// enough: it would silently change the developer's own preferences (and, for the snap keys, flip the
-// documented CopyPasteClipsRebasedAtPlayhead local-vs-CI behaviour), so the original values go back.
+// enough: it would silently change the developer's own preferences, so the original values go back.
 //
 // Both the read and the write use their own short-lived juce::ApplicationProperties, exactly as
 // resetTimelinePanelVisibleKey does: a PropertiesFile saves its WHOLE in-memory property set, so a
@@ -261,6 +276,14 @@ TEST_F(FocusArbitrationTest, CutInactiveAndRepeatUnsupportedOnGraph) {
 // ============================================================================
 
 TEST_F(FocusArbitrationTest, CopyPasteClipsRebasedAtPlayhead) {
+    // This test's whole point is pinning the DOCUMENTED DEFAULT snap (Quarter, enabled) that
+    // TimelinePanelComponent restores at construction — unlike every test below that calls
+    // pinSnapOff() (which overrides the in-memory state AFTER construction and so never actually
+    // exercises restoreViewPreferences()), so reset the persisted keys to absent before building
+    // MainComponent and put the developer's real values back afterward.
+    PersistedKeysGuard snapGuard({"timelineSnap", "timelineSnapEnabled"});
+    resetTimelineSnapKeysToDefault();
+
     synth::theme::ThemeManager tm;
     synth::theme::AppLookAndFeel lf;
     AudioEngine engine(AudioEngine::HostMode::Hosted);
