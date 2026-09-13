@@ -99,6 +99,11 @@ DefaultChannel buildDefaultAudioChannel(juce::AudioProcessorGraph& graph, juce::
  * before building the chain, or a future direct-poly picker), without the strip ever seeing more than
  * one stereo pair.
  *
+ * FRO46 (P9-3j): for a poly Oscillator/Wavetable specifically, the caller no longer calls this —
+ * addPolyEnvelopeAndVCAForInstrument() below replaces it entirely (its poly VCA does its own
+ * 8-voice summing, so a separate Voice Mixer stage is redundant). This function is still the right
+ * one for every other poly instrument (e.g. a poly Sampler, which has no auto-wired envelope).
+ *
  * @return nullptr, `uuidOut` untouched, when `instrument` has no "poly" parameter, it's off, or a
  *         factory/addNode failure occurred — the caller's existing `source`/`sourceRightChannel`
  *         stay valid as-is.
@@ -106,6 +111,12 @@ DefaultChannel buildDefaultAudioChannel(juce::AudioProcessorGraph& graph, juce::
 juce::AudioProcessorGraph::Node* addVoiceMixerForPolyInstrument(juce::AudioProcessorGraph& graph,
                                                                 juce::AudioProcessorGraph::Node& instrument,
                                                                 juce::Point<int> position, juce::String& uuidOut);
+
+/** True when `processor` declares a "poly" AudioParameterBool and it's currently on — the same
+ *  check addVoiceMixerForPolyInstrument uses internally, exposed so a caller can decide which of
+ *  addVoiceMixerForPolyInstrument / addPolyEnvelopeAndVCAForInstrument / addEnvelopeAndVCAForRawInstrument
+ *  applies BEFORE calling any of them. */
+bool isProcessorPoly(juce::AudioProcessor* processor);
 
 /** The nodes addEnvelopeAndVCAForRawInstrument() created; `vca` is null (both uuids empty) on a
  *  partial factory/addNode failure — same "nothing usable was built" contract as DefaultChannel. */
@@ -137,14 +148,20 @@ struct EnvelopeAndVCA {
  * gain (stock factory default 0.5) is overridden to 1.0 so the envelope alone governs perceived
  * level, not an extra silent 50% attenuation stacked under it.
  *
+ * FRO46 (P9-3j) superseded this as the poly instrument's ONLY option: when the instrument is poly,
+ * the caller now builds addPolyEnvelopeAndVCAForInstrument() below instead of this one (true
+ * per-voice envelopes, no Voice Mixer). This function remains exactly as before for the non-poly
+ * case — see that function's header comment for why a poly ADSR fed only raw MIDI can't work, and
+ * how the poly path solves it (a Poly MIDI node supplying per-voice CV instead).
+ *
  * NO UNDO — same contract as buildDefaultAudioChannel/addVoiceMixerForPolyInstrument: a plain graph
  * mutation for a caller already inside its own undo transaction.
  *
  * @param trackIn the track's Track In node (already live, feeding `chainSource`'s underlying
  *                instrument via MIDI) — its MIDI output is fanned to the new ADSR too.
  * @param chainSource the node the caller would otherwise pass to buildDefaultAudioChannel as
- *                `source` (the raw instrument, or a Voice Mixer's sum when poly) — becomes the
- *                VCA's audio input instead.
+ *                `source` (the raw instrument — never a Voice Mixer's sum any more, see above)
+ *                — becomes the VCA's audio input instead.
  * @param chainSourceRightChannel the raw channel carrying `chainSource`'s right leg (same meaning as
  *                buildDefaultAudioChannel's `sourceRightChannel`).
  * @return the created nodes' uuids and the VCA node itself — pass the VCA as the new `chainSource`
@@ -156,6 +173,62 @@ EnvelopeAndVCA addEnvelopeAndVCAForRawInstrument(juce::AudioProcessorGraph& grap
                                                  juce::AudioProcessorGraph::Node& chainSource,
                                                  int chainSourceRightChannel, juce::Point<int> adsrPosition,
                                                  juce::Point<int> vcaPosition);
+
+/** The nodes addPolyEnvelopeAndVCAForInstrument() created; `vca` is null (every uuid empty) on a
+ *  partial factory/addNode failure — same "nothing usable was built" contract as EnvelopeAndVCA. */
+struct PolyEnvelopeAndVCA {
+    juce::String polyMidiUuid;
+    juce::String adsrUuid;
+    juce::String vcaUuid;
+    juce::AudioProcessorGraph::Node* vca = nullptr;
+};
+
+/**
+ * FRO46 (P9-3j): addEnvelopeAndVCAForRawInstrument's ADSR+VCA are forced non-poly because
+ * ADSRModule's poly branch is CV-gate-only — it never reads the MIDI note-on/off fallback that
+ * drives its mono branch (ADSRModule.h's `midiGateHeld`), so a poly ADSR fed only Track In's raw
+ * MIDI would output a permanent zero envelope. This is the poly counterpart: instead of MIDI
+ * driving a mono ADSR, a Poly MIDI node (the codebase's existing per-voice MIDI-to-CV converter —
+ * docs/modules.md "Poly MIDI Module") turns Track In's MIDI into per-voice pitch/gate CV, which
+ * drives a genuinely poly ADSR and VCA:
+ *
+ *     Track In --MIDI--> Poly MIDI --Pitch(ch0-7)--> instrument's poly Pitch CV in (ch0-7)
+ *                         Poly MIDI --Gate(ch8-15)--> ADSR's poly Gate CV in (ch0-7)
+ *     ADSR poly Env (ch0-7) --> VCA's poly Gain CV in (ch8-15, VCAModule::kPolyCVBase)
+ *     instrument's poly Audio L (ch0-7) --> VCA's poly Audio L in (ch0-7)
+ *
+ * VCA's own poly branch already sums all 8 gated voices to a stereo-shaped pair (ch0 = left sum,
+ * ch1 = the module's legacy duplicate of it — VCAModule.h), so unlike the non-poly path, no
+ * separate Voice Mixer is inserted; this REPLACES addVoiceMixerForPolyInstrument entirely for the
+ * Oscillator/Wavetable case, it does not compose after it. The instrument's R-octet is deliberately
+ * NOT wired into VCA's own Audio R poly block (ch16-23) — same known limitation
+ * addVoiceMixerForPolyInstrument's own comment documents (a poly instrument's stereo image isn't
+ * preserved; downstream reads the mono ch0/ch1 duplicate). Only call this when the instrument's own
+ * "poly" parameter is already on (Oscillator/Wavetable only) — for every other case, call
+ * addVoiceMixerForPolyInstrument + addEnvelopeAndVCAForRawInstrument instead, never both paths for
+ * the same instrument.
+ *
+ * The existing Track In -> instrument MIDI connection (wired unconditionally at instrument-track
+ * creation) is left as-is: it's harmless in poly mode. OscillatorModule/WavetableOscillatorModule
+ * only ever consult raw MIDI as a last-resort fallback for voice 0's pitch when no CV is present on
+ * ch0, and Poly MIDI supplies real per-voice Hz once a note sounds — the fallback simply never
+ * triggers once this is wired.
+ *
+ * NO UNDO — same contract as the other ChannelFlows builders.
+ *
+ * @param trackIn the track's Track In node — its MIDI output is fanned to the new Poly MIDI node.
+ * @param instrument the poly Oscillator/Wavetable node (caller has already confirmed its "poly"
+ *                param is on).
+ * @return the created nodes' uuids and the VCA node itself — pass the VCA as the new `chainSource`
+ *         (with `sourceRightChannel` = 1, the legacy ch0/ch1 duplicate — see the limitation note
+ *         above) to buildDefaultAudioChannel. `vca` is null, every uuid empty, on a partial
+ *         factory/addNode failure.
+ */
+PolyEnvelopeAndVCA addPolyEnvelopeAndVCAForInstrument(juce::AudioProcessorGraph& graph,
+                                                      juce::AudioProcessorGraph::Node& trackIn,
+                                                      juce::AudioProcessorGraph::Node& instrument,
+                                                      juce::Point<int> polyMidiPosition, juce::Point<int> adsrPosition,
+                                                      juce::Point<int> vcaPosition);
 
 /**
  * T184 (P9-3c, docs/mixer.md §5.2 "main workflow"): BFS forward from `start`, following every

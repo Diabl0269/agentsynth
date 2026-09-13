@@ -1,9 +1,10 @@
 # Mixer
 
 **Status: DECIDED 2026-09-10 (founder sign-off on D1-D4). P9-2 implemented, P9-3's audio-track,
-instrument-track and MIDI-track-auto-channel flows implemented (T173a, T183, T184), and the
+instrument-track and MIDI-track-auto-channel flows implemented (T173a, T183, T184), the
 Oscillator/Wavetable instrument track now gets an envelope + VCA ahead of the chain (P9-3i,
-FRO43)** — the
+FRO43), and a poly Oscillator/Wavetable instrument track gets a TRUE per-voice envelope instead of
+a shared mono one (P9-3j, FRO46)** — the
 `ChannelStrip` and `Master` nodes, the engine-owned solo gate and the Master splice exist (engine
 only; §8 item 1 records how), "+ Track -> Audio Track" builds the factory default channel end to
 end (§8 item 2), "+ Track -> Instrument" does the same ahead of a chosen instrument (§8 item 2,
@@ -523,6 +524,36 @@ Main line, in dependency order:
      one collapsed macro. See `Tests/ChannelFlowTests.cpp`'s
      `InstrumentTrackOscillatorEnvelopeActuallySilencesAfterNoteOff` for the render-level proof (not
      just topology) that the envelope actually gates audio.
+   - **P9-3j (poly Oscillator/Wavetable envelope) — DONE (FRO46).** P9-3i's ADSR+VCA were forced
+     non-poly even when the instrument's own `poly` parameter was on: `ADSRModule`'s poly branch is
+     CV-gate-only, it never reads the MIDI note-on/off fallback that drives its non-poly branch, so
+     a poly ADSR fed only raw MIDI would output a permanent zero envelope. Fixed by inserting a
+     **Poly MIDI** node (the codebase's existing per-voice MIDI-to-CV converter, §"Poly MIDI Module"
+     in `docs/modules.md`) between Track In and the instrument instead of raw MIDI, when the
+     instrument's `poly` parameter is already on at instrument-track creation time (same "poly
+     handled correctly wherever it arises" precedent T183's `addVoiceMixerForPolyInstrument`
+     established):
+     ```
+     Track In --MIDI--> Poly MIDI --Pitch(ch0-7)--> instrument's poly Pitch CV in (ch0-7)
+                         Poly MIDI --Gate(ch8-15)--> ADSR's poly Gate CV in (ch0-7)
+     ADSR poly Env (ch0-7) --> VCA's poly Gain CV in (ch8-15, VCAModule::kPolyCVBase)
+     instrument's poly Audio L (ch0-7) --> VCA's poly Audio L in (ch0-7)
+     ```
+     Both ADSR and VCA are now genuinely poly (`synth::addPolyEnvelopeAndVCAForInstrument`,
+     `Source/Mixer/ChannelFlows.h`/`.cpp`), giving each voice its own independent envelope instead
+     of one shared mono envelope gating the whole poly-voice sum. No separate Voice Mixer is
+     inserted for this case — the poly VCA already sums all 8 gated voices to a stereo-shaped pair
+     itself (ch0 = left sum, ch1 = its own legacy duplicate), so `addVoiceMixerForPolyInstrument` is
+     skipped entirely when this branch fires; it still fires for a poly instrument this doesn't
+     apply to (e.g. a poly Sampler). The instrument's R-octet is deliberately NOT wired into the
+     VCA's own Audio R poly block (ch16-23) — same known stereo limitation
+     `addVoiceMixerForPolyInstrument`'s own comment documents for the non-envelope poly path.
+     `{Track In, instrument, Poly MIDI, ADSR, VCA, EQ, Compressor, Strip}` join the same one
+     collapsed macro. See `Tests/ChannelFlowTests.cpp`'s
+     `PolyEnvelopeAndVCAWiresPerVoicePitchGateAndAudioWithNoVoiceMixer` for the wiring proof and
+     `Tests/PolyMidiModuleTests.cpp`'s `PolyMidiToAdsrToVcaTest.ReleasingOneVoiceLeavesAnother-
+     HeldVoiceUntouched` for the render-level proof that releasing one voice's note leaves another
+     held voice's envelope untouched — the thing a single shared mono envelope could never do.
    - **T184 (MIDI-track auto-channel-on-connect) — DONE.** Dragging a MIDI cable from a Track In
      node (`ModuleType::TimelineMidiSource`) onto an instrument or macro whose audio reaches Audio
      Output/Rec Tap/Master's Direct bus with no `ChannelStrip` anywhere on that path auto-builds a

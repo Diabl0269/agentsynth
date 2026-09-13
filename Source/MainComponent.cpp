@@ -4629,51 +4629,86 @@ void MainComponent::addInstrumentTrack(const juce::String& instrumentModuleType)
             graph.addConnection({{trackInNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
                                  {instrumentNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex}});
 
-            // A poly instrument's L-octet needs summing before the strip (see
-            // addVoiceMixerForPolyInstrument's own comment) — a no-op for today's factory-default
-            // instruments (poly defaults off), kept general for whenever it isn't.
-            const int voiceMixerX =
-                instrumentX + GraphEditor::estimateModuleSize(instrumentModuleType).x + kChannelCardGapX;
-            juce::String voiceMixerUuid;
-            auto* voiceMixerNode = synth::addVoiceMixerForPolyInstrument(
-                graph, *instrumentNode, {voiceMixerX, trackInPosition.y}, voiceMixerUuid);
+            const bool isOscOrWavetable = instrumentModuleType == "Oscillator" || instrumentModuleType == "Wavetable";
+            const bool instrumentIsPoly = synth::isProcessorPoly(instrumentNode->getProcessor());
 
-            // The node buildDefaultAudioChannel treats as `source`, and the raw channel carrying its
-            // right leg — a contiguous stereo pair (Voice Mixer, or Sampler's declared ch0/ch1 pair)
-            // uses the default ch1; a split-block instrument (Oscillator/Wavetable) uses its own
-            // rightAudioLegChannel() (Source/Modules/CLAUDE.md: never assume ch1).
-            auto* chainSource = voiceMixerNode != nullptr ? voiceMixerNode : instrumentNode;
+            auto* chainSource = instrumentNode;
             int sourceRightChannel = 1;
-            if (voiceMixerNode == nullptr) {
-                if (auto* instrumentModule = dynamic_cast<ModuleBase*>(instrumentNode->getProcessor()))
-                    sourceRightChannel = instrumentModule->rightAudioLegChannel();
-            }
-            juce::String chainSourceType =
-                voiceMixerNode != nullptr ? juce::String("Voice Mixer") : instrumentModuleType;
+            if (auto* instrumentModule = dynamic_cast<ModuleBase*>(instrumentNode->getProcessor()))
+                sourceRightChannel = instrumentModule->rightAudioLegChannel();
+            juce::String chainSourceType = instrumentModuleType;
             auto chainSourcePosition =
                 juce::Point<int>(static_cast<int>(chainSource->properties.getWithDefault("x", 0)),
                                  static_cast<int>(chainSource->properties.getWithDefault("y", 0)));
 
-            // P9-3i (FRO43): Oscillator/Wavetable have no envelope of their own, so a held (or even
-            // released) note drones forever. Insert an ADSR (gated by the same Track In MIDI as the
-            // instrument) driving a VCA, ahead of the rest of the chain — AFTER any Voice Mixer stage
-            // above, never before it (see addEnvelopeAndVCAForRawInstrument's own comment for why).
-            // Sampler already has its own one-shot playback envelope and is out of scope.
-            juce::String adsrUuid, vcaUuid;
-            if (instrumentModuleType == "Oscillator" || instrumentModuleType == "Wavetable") {
-                const int adsrX =
-                    chainSourcePosition.x + GraphEditor::estimateModuleSize(chainSourceType).x + kChannelCardGapX;
+            juce::String voiceMixerUuid, polyMidiUuid, adsrUuid, vcaUuid;
+
+            if (isOscOrWavetable && instrumentIsPoly) {
+                // FRO46 (P9-3j): a poly Oscillator/Wavetable gets a TRUE per-voice envelope — Poly
+                // MIDI + poly ADSR + poly VCA, replacing both the Voice Mixer stage below and
+                // addEnvelopeAndVCAForRawInstrument's forced-mono ADSR/VCA (see
+                // addPolyEnvelopeAndVCAForInstrument's own comment for why the non-poly path can't
+                // just be made poly in place). No Voice Mixer is inserted: the poly VCA does its own
+                // 8-voice summing.
+                const int polyMidiX =
+                    instrumentX + GraphEditor::estimateModuleSize(instrumentModuleType).x + kChannelCardGapX;
+                const int adsrX = polyMidiX + GraphEditor::estimateModuleSize("Poly MIDI").x + kChannelCardGapX;
                 const int vcaX = adsrX + GraphEditor::estimateModuleSize("ADSR").x + kChannelCardGapX;
-                const auto envAndVca = synth::addEnvelopeAndVCAForRawInstrument(
-                    graph, *trackInNode, *chainSource, sourceRightChannel, {adsrX, chainSourcePosition.y},
-                    {vcaX, chainSourcePosition.y});
-                if (envAndVca.vca != nullptr) {
-                    adsrUuid = envAndVca.adsrUuid;
-                    vcaUuid = envAndVca.vcaUuid;
-                    chainSource = envAndVca.vca;
-                    sourceRightChannel = VCAModule::kRightBase;
+                const auto polyEnv = synth::addPolyEnvelopeAndVCAForInstrument(
+                    graph, *trackInNode, *instrumentNode, {polyMidiX, trackInPosition.y}, {adsrX, trackInPosition.y},
+                    {vcaX, trackInPosition.y});
+                if (polyEnv.vca != nullptr) {
+                    polyMidiUuid = polyEnv.polyMidiUuid;
+                    adsrUuid = polyEnv.adsrUuid;
+                    vcaUuid = polyEnv.vcaUuid;
+                    chainSource = polyEnv.vca;
+                    // The legacy ch0/ch1 duplicate (VCAModule.h) — the instrument's R-octet is
+                    // deliberately not wired into the VCA's real Audio R poly block, same known
+                    // limitation addVoiceMixerForPolyInstrument's own comment documents.
+                    sourceRightChannel = 1;
                     chainSourceType = "VCA";
-                    chainSourcePosition = {vcaX, chainSourcePosition.y};
+                    chainSourcePosition = {vcaX, trackInPosition.y};
+                }
+            } else {
+                // A poly instrument's L-octet needs summing before the strip (see
+                // addVoiceMixerForPolyInstrument's own comment) — a no-op for today's factory-default
+                // instruments (poly defaults off) and for the poly Oscillator/Wavetable case handled
+                // above, kept general for a poly Sampler or any other poly instrument.
+                const int voiceMixerX =
+                    instrumentX + GraphEditor::estimateModuleSize(instrumentModuleType).x + kChannelCardGapX;
+                auto* voiceMixerNode = synth::addVoiceMixerForPolyInstrument(
+                    graph, *instrumentNode, {voiceMixerX, trackInPosition.y}, voiceMixerUuid);
+
+                if (voiceMixerNode != nullptr) {
+                    chainSource = voiceMixerNode;
+                    sourceRightChannel = 1;
+                    chainSourceType = "Voice Mixer";
+                    chainSourcePosition =
+                        juce::Point<int>(static_cast<int>(chainSource->properties.getWithDefault("x", 0)),
+                                         static_cast<int>(chainSource->properties.getWithDefault("y", 0)));
+                }
+
+                // P9-3i (FRO43): Oscillator/Wavetable have no envelope of their own, so a held (or
+                // even released) note drones forever. Insert an ADSR (gated by the same Track In
+                // MIDI as the instrument) driving a VCA, ahead of the rest of the chain — AFTER any
+                // Voice Mixer stage above, never before it (see addEnvelopeAndVCAForRawInstrument's
+                // own comment for why). Sampler already has its own one-shot playback envelope and
+                // is out of scope. Never reached for a poly Oscillator/Wavetable (handled above).
+                if (isOscOrWavetable) {
+                    const int adsrX =
+                        chainSourcePosition.x + GraphEditor::estimateModuleSize(chainSourceType).x + kChannelCardGapX;
+                    const int vcaX = adsrX + GraphEditor::estimateModuleSize("ADSR").x + kChannelCardGapX;
+                    const auto envAndVca = synth::addEnvelopeAndVCAForRawInstrument(
+                        graph, *trackInNode, *chainSource, sourceRightChannel, {adsrX, chainSourcePosition.y},
+                        {vcaX, chainSourcePosition.y});
+                    if (envAndVca.vca != nullptr) {
+                        adsrUuid = envAndVca.adsrUuid;
+                        vcaUuid = envAndVca.vcaUuid;
+                        chainSource = envAndVca.vca;
+                        sourceRightChannel = VCAModule::kRightBase;
+                        chainSourceType = "VCA";
+                        chainSourcePosition = {vcaX, chainSourcePosition.y};
+                    }
                 }
             }
 
@@ -4695,13 +4730,15 @@ void MainComponent::addInstrumentTrack(const juce::String& instrumentModuleType)
             if (channel.stripUuid.isEmpty())
                 return; // a factory/addNode failure partway — see buildDefaultAudioChannel's contract
 
-            // Box {Track In, instrument, [Voice Mixer if poly], [ADSR+VCA if Oscillator/Wavetable],
-            // EQ, Compressor, Strip} into ONE collapsed macro named after the track. Master is
-            // deliberately NOT a member — same spliceMasterNode reason addAudioTrack's own comment
-            // explains.
+            // Box {Track In, instrument, [Voice Mixer if poly], [Poly MIDI if poly Oscillator/
+            // Wavetable], [ADSR+VCA if Oscillator/Wavetable], EQ, Compressor, Strip} into ONE
+            // collapsed macro named after the track. Master is deliberately NOT a member — same
+            // spliceMasterNode reason addAudioTrack's own comment explains.
             std::vector<juce::String> macroMembers{trackInUuid, instrumentUuid};
             if (!voiceMixerUuid.isEmpty())
                 macroMembers.push_back(voiceMixerUuid);
+            if (!polyMidiUuid.isEmpty())
+                macroMembers.push_back(polyMidiUuid);
             if (!adsrUuid.isEmpty())
                 macroMembers.push_back(adsrUuid);
             if (!vcaUuid.isEmpty())
