@@ -202,6 +202,83 @@ else
     fail=$((fail + 1))
 fi
 
+# --- FRO81: git-hook environment (GIT_DIR/etc. inherited) must never cause a vacuous pass -------
+#
+# Git exports GIT_DIR (and sometimes GIT_WORK_TREE/GIT_INDEX_FILE) into hook processes. With no
+# --root override, the script resolves ROOT via `cd "$SCRIPT_DIR" && git rev-parse --show-toplevel`
+# -- a relative GIT_DIR (the common case: hooks run with cwd at the repo root and GIT_DIR=.git)
+# resolves against SCRIPT_DIR instead of the real repo root once inside that cd, so the git call
+# fails, ROOT was empty, and every file read back as "missing" (0 lines) -- a silent, vacuous
+# pass. These cases run the script from a real fixture repo (not via --root, which would sidestep
+# ROOT resolution entirely and prove nothing) to exercise that path directly.
+
+# (a) GIT_DIR=.git exported from the fixture repo root, script physically inside that repo (the
+# real pre-commit/pre-push hook shape) -- must resolve ROOT correctly and report the real numbers.
+reset_repo
+make_file "Big.cpp" 30
+commit_all
+mkdir -p "$REPO/scripts"
+cp "$CHECK" "$REPO/scripts/check-file-sizes.sh"   # deliberately NOT `git add`ed -- must not self-scan
+set_baseline "30 Big.cpp"
+hook_output="$(cd "$REPO" && FILE_SIZE_CAP="$FILE_SIZE_CAP" FILE_SIZE_BASELINE="$BASELINE" GIT_DIR=.git bash scripts/check-file-sizes.sh 2>&1)"
+hook_status=$?
+if [ "$hook_status" -eq 0 ] && echo "$hook_output" | grep -qF -- "1 files scanned, 1 over the ${FILE_SIZE_CAP}-line cap, largest: Big.cpp (30 lines)"; then
+    echo "PASS: an inherited relative GIT_DIR from the fixture repo root resolves ROOT correctly and reports real numbers"
+    pass=$((pass + 1))
+else
+    echo "FAIL: an inherited relative GIT_DIR from the fixture repo root resolves ROOT correctly and reports real numbers"
+    echo "exit=$hook_status"
+    echo "$hook_output"
+    fail=$((fail + 1))
+fi
+
+# (b) GIT_DIR=/nonexistent with the script run from OUTSIDE any git repo and no --root -- ROOT
+# resolution must fail loudly (::error:: + non-zero exit), never silently report a vacuous pass.
+nogit_dir="$TMPROOT/no-git-here"
+rm -rf "$nogit_dir"
+mkdir -p "$nogit_dir"
+cp "$CHECK" "$nogit_dir/check-file-sizes.sh"
+nogit_output="$(cd "$nogit_dir" && GIT_DIR=/nonexistent bash ./check-file-sizes.sh 2>&1)"
+nogit_status=$?
+if [ "$nogit_status" -ne 0 ] && echo "$nogit_output" | grep -qF -- "::error::check-file-sizes: 'git rev-parse --show-toplevel' failed"; then
+    echo "PASS: ROOT resolution failing outside a git repo fails loudly instead of passing vacuously"
+    pass=$((pass + 1))
+else
+    echo "FAIL: ROOT resolution failing outside a git repo fails loudly instead of passing vacuously"
+    echo "exit=$nogit_status"
+    echo "$nogit_output"
+    fail=$((fail + 1))
+fi
+rm -rf "$nogit_dir"
+
+# (c) awk fail-safe backstop: ROOT resolves to a real git repo (so (b)'s guard doesn't fire), but
+# every tracked file is missing on disk -- reproduced honestly with a `git clone --no-checkout`
+# (a valid index without a checked-out working tree; `git read-tree HEAD` populates the index the
+# same way a bare checkout step would, without materializing the files). This is the same shape
+# as the original bug (git thinks the files exist; the filesystem doesn't have them at ROOT) but
+# without relying on GIT_DIR at all, so it isolates the awk-level backstop from the ROOT-resolution
+# guard in (b).
+reset_repo
+make_file "f1.txt" 5
+make_file "f2.txt" 5
+commit_all
+clone_dir="$TMPROOT/no-checkout-clone"
+rm -rf "$clone_dir"
+git clone -q --no-checkout "$REPO" "$clone_dir"
+(cd "$clone_dir" && git read-tree HEAD)
+failsafe_output="$(bash "$CHECK" --root "$clone_dir" 2>&1)"
+failsafe_status=$?
+if [ "$failsafe_status" -ne 0 ] && echo "$failsafe_output" | grep -qF -- "::error::check-file-sizes read every one of 2 scanned files as 0 lines"; then
+    echo "PASS: the awk fail-safe catches every scanned file reading as 0 lines and fails loudly"
+    pass=$((pass + 1))
+else
+    echo "FAIL: the awk fail-safe catches every scanned file reading as 0 lines and fails loudly"
+    echo "exit=$failsafe_status"
+    echo "$failsafe_output"
+    fail=$((fail + 1))
+fi
+rm -rf "$clone_dir"
+
 # --- the real thing: the repo's own tree + its own committed baseline must pass -----------------
 if output="$( (unset FILE_SIZE_CAP FILE_SIZE_BASELINE && bash "$CHECK" --root "$SCRIPT_DIR") 2>&1)"; then
     echo "PASS: the real repo tree passes its own committed baseline"
