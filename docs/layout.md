@@ -411,9 +411,18 @@ the second arm another would leave `bodyDragActive` set under an open editor, so
 undo/redo of any *other* structural change: the snapshot is `graphToJSON`, so the title has to be
 serialized (below) for undo to restore it at all.
 
+### ModuleComponent source layout
+
+`ModuleComponent` (the module card class referenced throughout this doc) outgrew one file and is
+split by concern under `Source/UI/ModuleComponent/` (FRO65), the same `<Class>/<Class><Concern>.cpp`
+pattern as `Source/UI/GraphEditor/` and `Source/MainComponent/` — see the unit-by-unit table in
+[`docs/architecture.md § ModuleComponent`](architecture.md#modulecomponent). A follow-up ticket
+covers extracting the wavetable tab strip (`ModuleComponentWavetable.cpp`) into its own component
+class rather than a set of `ModuleComponent` methods.
+
 ### ModuleComponent header button layout
 
-The header area of each module card (`Source/UI/ModuleComponent.cpp`) contains `DrawableButton` instances (not `TextButton`), positioned in `resized()`:
+The header area of each module card (`Source/UI/ModuleComponent/`) contains `DrawableButton` instances (not `TextButton`), positioned in `resized()` (`ModuleComponentPaint.cpp`):
 
 | Button | Bounds | Action |
 |---|---|---|
@@ -434,7 +443,7 @@ never overlaps the title, regardless of whether the LED is currently lit.
 
 Audio Output is a bare `juce::AudioGraphIOProcessor`, not a `ModuleBase`, so it otherwise renders
 through the exact same generic path as every other card (its `getType()` falls back to
-`ModuleType::Oscillator` — see the free function at the top of `ModuleComponent.cpp`). Two small,
+`ModuleType::Oscillator` — see `detail::getType` in `ModuleComponentInternal.h`). Two small,
 purely additive blocks in `ModuleComponent::paint()` give it its own identity, both gated on a
 local `isAudioOutputIONode(juce::AudioProcessor*)` helper (`dynamic_cast` to
 `AudioGraphIOProcessor` + an `IODeviceType == audioOutputNode` check — the same type-not-name idiom
