@@ -233,6 +233,22 @@ Test UI component interactions using in-process construction (no window, no disp
 
 **Poly connection creation coverage.** `GraphEditorTest` covers poly fan-out on drag (dragging a cable between two poly jacks creates all N per-voice connections) and poly-toggle rewire (toggling a module's `poly` parameter re-anchors its existing cables via `rewireForPolyChange`). `Tests/LogicalPortTests.cpp` adds pure, headless coverage of jack-target resolution — `ModuleBase::getJackTargets` and `GraphEditor::resolvePolyLink`'s pairing/scoring rules — independent of the audio graph.
 
+**`GraphEditorTest`/`SmartConnection*Test` file layout.** The suite is split by topic under `Tests/GraphEditor/`, all sharing the `GraphEditorTest` fixture and drag/connection helpers in `Tests/GraphEditor/GraphEditorTestHelpers.h` (header-only, not built on its own):
+
+| File | Covers |
+|------|--------|
+| `GraphEditorTests.cpp` | Core: init/resize, mod-matrix visibility, module drag-and-drop (incl. Dual I/O defaults, split-block collapse), audio-file drop, drag-to-knob modulation, port-drag connections, Replace Module |
+| `GraphEditorLayoutTests.cpp` | Grid-layout / anti-overlap, alignment-guide rendering, Macro Control bank runtime resize |
+| `GraphEditorPolyLinkTests.cpp` | Pure `resolvePolyLink` pairing/scoring, plus Dual I/O toggle stereo-leg completeness |
+| `GraphEditorDualIOTests.cpp` | Dual I/O split/collapse wiring (migrate-not-duplicate, mid-chain voice modules, one-undo-step) and render-identity checks |
+| `GraphEditorIntegrationTests.cpp` | Issue #163 poly connection integration through a full graph |
+| `GraphEditorViewportTests.cpp` | Minimap (issue #159) visibility/model, zoom-perf cable memoization and zoom-gesture raster freeze |
+| `GraphEditorSmartConnectionTests.cpp` | Smart-connection eligibility (mode, stereo/mono fan, incompatible pairs) |
+| `GraphEditorSmartConnectionInsertTests.cpp` | Occupied audio destinations: default parallel-add, Ctrl insert-in-series, stereo fan correctness |
+| `GraphEditorSmartConnectionPreviewTests.cpp` | Drop preview, Ctrl gesture plumbing, round-5 regressions |
+| `GraphEditorSmartConnectionMatrixTests.cpp` | The three `TestWithParam` matrices: every FX insertable at the gap, vertical aim, and the full gesture-matrix contract table |
+| `GraphEditorMiscTests.cpp` | Module title rename, double-click port disconnect (issue #216), output-card identity, Locate Master (FRO45) |
+
 #### `createComponentSnapshot` smoke-test pattern
 
 Several new tests use `Component::createComponentSnapshot(bounds)` to verify that a component renders without crashing and produces non-empty pixels, without requiring a real display or window. Example: `StatusBarTests::RendersNonEmptyImage` and `ThemeTests::StyledWidgetSmokeTest.*`. The pattern is:

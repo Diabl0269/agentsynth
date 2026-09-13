@@ -843,8 +843,8 @@ TEST_F(FocusArbitrationTest, SpaceTogglesPlayback) {
 
         // perform() reuses the transport bar's play/stop button, and juce::Button::triggerClick()
         // always POSTS its click (never fires onClick synchronously) — pump the message loop
-        // briefly so it actually runs, the same idiom GraphEditorTests.cpp's setKnobs() helper uses
-        // for a marshalled callback, before draining the resulting transport command with a tick.
+        // briefly so it actually runs, the same idiom Tests/GraphEditor/GraphEditorLayoutTests.cpp's setKnobs() helper
+        // uses for a marshalled callback, before draining the resulting transport command with a tick.
         ASSERT_TRUE(cm.invokeDirectly(AppCommands::togglePlayback, false));
         juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
         engine.processHostBlock(buffer, midi);

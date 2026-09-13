@@ -1526,7 +1526,7 @@ TEST(MacroUndo, TogglingASelectionSpanningTwoMacrosIsOneUndoStep) {
 // exercises the API layer BENEATH GraphEditor::mouseDown/mouseDrag/mouseUp. That is exactly the
 // layer a broken hit-test cannot fail in, so those tests stayed green while the gesture was dead
 // on the canvas. These drive synthesised mouse events into GraphEditor itself, the same way
-// GraphEditorTests.cpp and MinimapComponentTests.cpp already do.
+// GraphEditorViewportTests.cpp (Tests/GraphEditor/) and MinimapComponentTests.cpp already do.
 
 namespace {
 

@@ -138,8 +138,9 @@ bool hasMidiConnection(AudioEngine& engine, NodeID srcId, NodeID dstId) {
                          juce::AudioProcessorGraph::midiChannelIndex);
 }
 
-// Hand-built MouseEvent, same pattern as GraphEditorTests.cpp's makeGraphEditorMouseEvent — no OS
-// mouse source exists headlessly, but MouseInputSource is copyable and Desktop always exposes one.
+// Hand-built MouseEvent, same pattern as GraphEditorViewportTests.cpp's makeGraphEditorMouseEvent
+// (Tests/GraphEditor/) — no OS mouse source exists headlessly, but MouseInputSource is copyable
+// and Desktop always exposes one.
 // `position` is in GraphEditor-LOCAL (screen) coordinates, the same space GraphEditor::mouseDown
 // converts via content.getLocalPoint() before doing any canvas-space hit-testing.
 juce::MouseEvent makeEditorMouseEvent(juce::Component& comp, juce::Point<float> position, int clicks = 1) {
@@ -149,10 +150,10 @@ juce::MouseEvent makeEditorMouseEvent(juce::Component& comp, juce::Point<float> 
                             false);
 }
 
-// Inverse of GraphEditorTests.cpp's screenToCanvas: a cable's p1/p2 (and therefore its painted
-// knob midpoint) are in CANVAS coordinates, but a MouseEvent fed into GraphEditor itself must be in
-// GraphEditor-local (screen) coordinates -- getVisibleCanvasRect() is the one linear map between
-// the two (zoom + pan), so a mouse-driven test has to go through it rather than assume 1:1.
+// Inverse of GraphEditorViewportTests.cpp's screenToCanvas (Tests/GraphEditor/): a cable's p1/p2
+// (and therefore its painted knob midpoint) are in CANVAS coordinates, but a MouseEvent fed into GraphEditor itself
+// must be in GraphEditor-local (screen) coordinates -- getVisibleCanvasRect() is the one linear map between the two
+// (zoom + pan), so a mouse-driven test has to go through it rather than assume 1:1.
 juce::Point<float> canvasToEditorLocal(const GraphEditor& editor, juce::Point<float> canvasPt) {
     const auto rect = editor.getVisibleCanvasRect();
     const auto w = static_cast<float>(editor.getWidth());
