@@ -143,6 +143,38 @@ int PluginScanService::getScanTimeoutMs() const noexcept {
 }
 
 //==============================================================================
+// Listeners (FRO44)
+//==============================================================================
+
+void PluginScanService::addListener(Listener* listener) {
+    if (listener == nullptr)
+        return;
+    const std::lock_guard<std::mutex> lock(mutex_);
+    if (std::find(listeners_.begin(), listeners_.end(), listener) == listeners_.end())
+        listeners_.push_back(listener);
+}
+
+void PluginScanService::removeListener(Listener* listener) {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    listeners_.erase(std::remove(listeners_.begin(), listeners_.end(), listener), listeners_.end());
+}
+
+void PluginScanService::notifyListeners(const Result& result) {
+    postToMessageThread([this, result] {
+        // Snapshot under lock: a listener's own pluginScanCompleted may call removeListener (on
+        // itself, or on another listener it owns), which must not invalidate this loop.
+        std::vector<Listener*> snapshot;
+        {
+            const std::lock_guard<std::mutex> lock(mutex_);
+            snapshot = listeners_;
+        }
+        for (auto* listener : snapshot)
+            if (listener != nullptr)
+                listener->pluginScanCompleted(result);
+    });
+}
+
+//==============================================================================
 // Scanning
 //==============================================================================
 
@@ -156,7 +188,21 @@ void PluginScanService::postToMessageThread(std::function<void()> fn) {
     });
 }
 
-void PluginScanService::scanAsync(const juce::StringArray& formatNames, ProgressFn progress, CompletionFn completion) {
+void PluginScanService::ensureScanned(const juce::StringArray& formatNames) {
+    // First caller wins; every later one (concurrent with that scan, or long after it finished) is
+    // absorbed here rather than starting a second scan — see the class comment.
+    if (ensureScanRequested_.exchange(true))
+        return;
+    // skipAlreadyKnown=true: this runs unprompted (at startup, or on whatever consumer happens to
+    // ask first), so it must not pay a child-process launch for every plugin already in the
+    // persisted-and-loaded list — only for whatever is newly installed since the list was saved.
+    // The manual "Scan for plugins..." row calls scanAsync() directly and keeps the old
+    // always-reprobe-everything default, which is the whole point of a user-requested rescan.
+    scanAsync(formatNames, nullptr, nullptr, /* skipAlreadyKnown */ true);
+}
+
+void PluginScanService::scanAsync(const juce::StringArray& formatNames, ProgressFn progress, CompletionFn completion,
+                                  bool skipAlreadyKnown) {
     if (scanning_.exchange(true)) {
         // Already scanning. Report a no-op completion rather than silently dropping the request:
         // a caller that put the UI into a "scanning" state needs its callback either way.
@@ -174,13 +220,14 @@ void PluginScanService::scanAsync(const juce::StringArray& formatNames, Progress
 
     cancelRequested_.store(false);
 
-    scanThread_ =
-        std::thread([this, formatNames, progress = std::move(progress), completion = std::move(completion)]() mutable {
-            runScan(formatNames, std::move(progress), std::move(completion));
-        });
+    scanThread_ = std::thread([this, formatNames, progress = std::move(progress), completion = std::move(completion),
+                               skipAlreadyKnown]() mutable {
+        runScan(formatNames, std::move(progress), std::move(completion), skipAlreadyKnown);
+    });
 }
 
-void PluginScanService::runScan(juce::StringArray formatNames, ProgressFn progress, CompletionFn completion) {
+void PluginScanService::runScan(juce::StringArray formatNames, ProgressFn progress, CompletionFn completion,
+                                bool skipAlreadyKnown) {
     // Snapshot the seams once: they are message-thread state and must not be read per candidate.
     ChildLauncher launcher;
     CandidateSource candidateSource;
@@ -225,6 +272,7 @@ void PluginScanService::runScan(juce::StringArray formatNames, ProgressFn progre
             postToMessageThread([progress, what, scanned, total] { progress(what, scanned, total); });
         }
 
+        bool alreadyKnown = false;
         {
             const std::lock_guard<std::mutex> lock(mutex_);
             if (knownPlugins_.getBlacklistedFiles().contains(candidate.fileOrIdentifier)) {
@@ -233,6 +281,23 @@ void PluginScanService::runScan(juce::StringArray formatNames, ProgressFn progre
                 ++result.skipped;
                 continue;
             }
+            if (skipAlreadyKnown) {
+                for (const auto& known : knownPlugins_.getTypes()) {
+                    if (known.pluginFormatName == candidate.format &&
+                        known.fileOrIdentifier == candidate.fileOrIdentifier) {
+                        alreadyKnown = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if (alreadyKnown) {
+            // FRO44: the eager/ensureScanned path only — never launched again for a plugin the list
+            // already has, so a warm launch costs a child process per NEWLY installed plugin, not
+            // per plugin on the machine. A rescan the user explicitly asks for (scanAsync's default,
+            // skipAlreadyKnown=false) still re-probes this, e.g. to notice an in-place update.
+            ++result.reused;
+            continue;
         }
 
         juce::String xmlText;
@@ -258,6 +323,10 @@ void PluginScanService::runScan(juce::StringArray formatNames, ProgressFn progre
 
     if (completion != nullptr)
         postToMessageThread([completion, result] { completion(result); });
+    // FRO44: every registered Listener hears about a real scan finishing, regardless of which
+    // caller's completion (if any) is also firing above — this is what lets a consumer that never
+    // triggered the scan itself (a picker opened after the sidebar already asked) find out.
+    notifyListeners(result);
 }
 
 void PluginScanService::cancelScan() {

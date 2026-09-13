@@ -137,6 +137,14 @@ private:
                 // Seeds the title before any save/dirty event has fired — getCurrentPatchName()
                 // starts as "Default", matching the window's pre-existing untitled state.
                 mc->onDocumentTitleChanged(mc->getCurrentPatchName());
+
+                // FRO44: kick off the eager background scan here — the real app's ONE call site —
+                // rather than from MainComponent's own constructor, so every test and every plugin
+                // editor that builds a MainComponent stays exactly as scan-free as before. Posting
+                // the child processes happens on PluginScanService's own background thread; this
+                // call itself only flips an atomic and (at most) spawns that thread, so it is not on
+                // this window's construction critical path.
+                mc->maybeStartEagerPluginScan();
             }
 
 #if JUCE_IOS || JUCE_ANDROID
