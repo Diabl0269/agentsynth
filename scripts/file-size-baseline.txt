@@ -18,8 +18,6 @@
 1461 Source/UI/PianoRollComponent/PianoRollComponent.h
 1206 Source/UI/PreferencesSettingsTab.cpp
 1223 Source/UI/Theme/AppLookAndFeel.cpp
-2000 Source/UI/TimelineClipLaneArea.cpp
-2215 Source/UI/TimelinePanelComponent.cpp
 2345 Tests/AIChatComponentTests.cpp
 1421 Tests/AIIntegrationServiceTests.cpp
 1549 Tests/AIStateMapperTests.cpp

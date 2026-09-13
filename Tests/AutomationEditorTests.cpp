@@ -18,7 +18,7 @@
 #include "../Source/AppUndoManager.h"
 #include "../Source/Timeline/TimelineDoc.h"
 #include "../Source/UI/AutomationLaneEditor.h"
-#include "../Source/UI/TimelinePanelComponent.h"
+#include "../Source/UI/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "../Source/UI/TimelineViewState.h"
 #include "MainComponent/MainComponent.h"
 #include <cmath>

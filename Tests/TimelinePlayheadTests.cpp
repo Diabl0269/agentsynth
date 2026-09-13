@@ -20,7 +20,7 @@
 
 #include "../Source/AI/AIProvider.h"
 #include "../Source/Transport/TransportService.h"
-#include "../Source/UI/TimelinePanelComponent.h"
+#include "../Source/UI/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "../Source/UI/TimelinePlayheadOverlay.h"
 #include "../Source/UI/TimelineViewState.h"
 #include "MainComponent/MainComponent.h"

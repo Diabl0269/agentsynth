@@ -17,14 +17,26 @@ track headers, playhead, transport bar, metronome/count-in and edit-tool strip l
 
 ## 1. Clip Lanes
 
-`Source/UI/TimelineClipLaneArea.h/.cpp` (`synth::ui::TimelineClipLaneArea`) fills the lanes region
-below the ruler (`getLanesBounds()` minus the ruler strip — the same rect the bar/beat grid is
-painted into) with per-track rows of `synth::Clip` rects: drag to move, drag an edge to trim, a
-context menu to split/duplicate/delete, and marquee (rubber-band) multi-select. Backed by
-`synth::ui::ClipSelectionModel` (`Source/UI/ClipSelectionModel.h`), the clip analogue of
-`SelectionModel` (`docs/layout_selection_canvas.md` §1.2) — a `std::set<synth::ClipId>` with the same add/remove/toggle/
+`Source/UI/TimelineClipLaneArea/` (`synth::ui::TimelineClipLaneArea`, declared in
+`TimelineClipLaneArea.h`) fills the lanes region below the ruler (`getLanesBounds()` minus the
+ruler strip — the same rect the bar/beat grid is painted into) with per-track rows of
+`synth::Clip` rects: drag to move, drag an edge to trim, a context menu to split/duplicate/delete,
+and marquee (rubber-band) multi-select. Backed by `synth::ui::ClipSelectionModel`
+(`Source/UI/ClipSelectionModel.h`), the clip analogue of `SelectionModel`
+(`docs/layout_selection_canvas.md` §1.2) — a `std::set<synth::ClipId>` with the same add/remove/toggle/
 setSelection/retainOnly contract, ordered ascending by id so a batched move or delete always walks
 clips in a stable order regardless of click order.
+
+Source layout (FRO66 split, one file per concern; the class itself is declared in
+`TimelineClipLaneArea.h`, with constants shared by two or more units in `TimelineClipLaneInternal.h`):
+
+| Unit | Concern |
+|------|---------|
+| `TimelineClipLaneArea.cpp` | Ctor, `TimelineDoc` wiring, row/rect geometry, hit-testing, core `paint()` |
+| `TimelineClipLanePainting.cpp` | Tool affordances (drag/draw/split-preview ghosts), waveform painting, live-recording strip |
+| `TimelineClipLaneMouse.cpp` | Mouse handling, drag-preview/auto-scroll, double-click clip creation, file drag/drop |
+| `TimelineClipLaneSelection.cpp` | Selected-clip span query, panel-scoped `keyPressed`, marquee begin/update/end |
+| `TimelineClipLaneEditTools.cpp` | Active tool/cursor/gestures and their previews, clip renaming, clip context menu |
 
 **Ownership.** `TimelinePanelComponent` owns the `ClipSelectionModel` and the lane area
 (`getClipSelection()` / `getClipLaneArea()`); the lane area holds the selection model and the

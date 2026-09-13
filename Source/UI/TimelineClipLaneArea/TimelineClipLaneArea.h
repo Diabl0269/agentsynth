@@ -1,11 +1,11 @@
 #pragma once
 
-#include "../Timeline/PeaksFile.h"
-#include "../Timeline/TimelineDoc.h"
-#include "ClipSelectionModel.h"
-#include "EdgeAutoScroll.h"
-#include "EditTool.h"
-#include "TimelineViewState.h"
+#include "../../Timeline/PeaksFile.h"
+#include "../../Timeline/TimelineDoc.h"
+#include "../ClipSelectionModel.h"
+#include "../EdgeAutoScroll.h"
+#include "../EditTool.h"
+#include "../TimelineViewState.h"
 #include <array>
 #include <cmath>
 #include <functional>

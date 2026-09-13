@@ -29,7 +29,7 @@
 #include "UI/StatusBarComponent.h"
 #include "UI/Theme/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
-#include "UI/TimelinePanelComponent.h"
+#include "UI/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/TimelineTrackHeaderComponent.h"
 #include "UI/ToolbarComponent.h"
 #include "UI/UIAnimation.h"

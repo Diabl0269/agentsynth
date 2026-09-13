@@ -14,7 +14,7 @@
 #include "../Source/Transport/TransportService.h"
 #include "../Source/UI/Theme/AppLookAndFeel.h"
 #include "../Source/UI/Theme/BuiltInThemes.h"
-#include "../Source/UI/TimelinePanelComponent.h"
+#include "../Source/UI/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "../Source/UI/TimelineTransportBar.h"
 #include "MainComponent/MainComponent.h"
 #include <gtest/gtest.h>
