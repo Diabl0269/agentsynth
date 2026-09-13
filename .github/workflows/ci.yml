@@ -127,6 +127,15 @@ jobs:
       # passed straight to a String-taking API silently renders as mojibake (P6-16, 2026-08-26).
       # See scripts/utf8-literal-check.sh's own doc comment for the full story.
       run: bash scripts/utf8-literal-check.sh
+    - name: Test file-size guard
+      # If the guard that stops the next GraphEditor.cpp (9,000+ lines) has a hole -- a mis-scanned
+      # exclusion, a ratchet that doesn't actually ratchet -- the cap is decorative. ~1s, no compiler.
+      run: bash scripts/tests/check-file-sizes.test.sh
+    - name: Check file sizes
+      # FRO61: hard 1000-line cap + strict ratchet baseline (scripts/file-size-baseline.txt) for
+      # legacy files already over it. See scripts/check-file-sizes.sh's own doc comment and
+      # docs/testing.md "File-size cap" for the full mechanism.
+      run: bash scripts/check-file-sizes.sh
 
   build-and-test:
     name: Build, Test, and Coverage

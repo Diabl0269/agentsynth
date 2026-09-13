@@ -36,6 +36,7 @@ bash scripts/tests/ci-cache-check.test.sh          # cache health check (also ru
 bash scripts/tests/ci-install-linux-deps.test.sh   # Linux apt install + mirror failover
 bash scripts/tests/check-nonascii-literals.test.sh # no raw/escaped non-ASCII in string literals (fromUTF8/CharPointer_UTF8 exempt)
 bash scripts/tests/utf8-literal-check.test.sh      # non-ASCII \x escape wrapping (also runs directly in the Lint job)
+bash scripts/check-file-sizes.sh            # 1000-line cap, strict ratchet baseline (--list / --update)
 
 # Reproduce CI locally (lint + build every CMake target CI builds + full test suite; prints the
 # built app bundle path on success). Single source of truth for "what CI will check" — also what
@@ -56,6 +57,15 @@ Every implementation plan **must** include:
 
 1. A **Tests** section — list new test cases, the test file, and what each verifies.
 2. A **Docs Updates** section — list which docs (`docs/testing.md`, `CLAUDE.md`, etc.) need updating.
+3. A **Structure** check — no file over 1,000 lines after the change; a change that would grow a file listed in `scripts/file-size-baseline.txt` moves the new code into a new per-concern unit instead.
+
+## Code structure
+
+- Every file is capped at 1,000 lines, enforced by `scripts/check-file-sizes.sh` (ratchet baseline `scripts/file-size-baseline.txt`) — mechanism in [`docs/testing.md`](docs/testing.md).
+- A class that outgrows one file gets its own directory named after the class, never flat siblings dropped next to dozens of others: `<Class>/<Class>.h` + `<Class><Concern>.cpp` units (never `_Part1`) + shared private helpers in `<Class>Internal.h` — e.g. `Source/UI/GraphEditor/`, `Source/MainComponent/`. Tests mirror it: `Tests/<Class>/<Class><Topic>Tests.cpp` with shared fixtures in `<Class>TestFixture.h`/`<Class>TestHelpers.h`. Each unit opens with a comment naming its concern.
+- A directory past roughly 30 files gets split by area too (`Source/UI` and `Tests` are both already past that; reorganizing them is a separate follow-up, not required by this rule).
+- Docs: one topic per doc, split at section boundaries; keep the Docs map current.
+- Functions do one thing — extract when a function needs section comments or exceeds roughly a screen (~60–80 lines); a new function must never be 200+ lines. Prefer extracting a real collaborator class over a per-concern unit when the concern has its own state.
 
 ## Critical invariants (break these and you ship bugs)
 

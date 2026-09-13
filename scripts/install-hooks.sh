@@ -7,7 +7,8 @@ set -e
 HOOK_DIR="$(git rev-parse --git-path hooks)"
 mkdir -p "$HOOK_DIR"
 
-# pre-commit: fast clang-format lint on staged C/C++ files (mirrors CI Lint).
+# pre-commit: fast clang-format lint on staged C/C++ files, plus the whole-tree file-size guard
+# (mirrors CI Lint).
 cat > "$HOOK_DIR/pre-commit" << 'EOF'
 #!/bin/bash
 exec "$(git rev-parse --show-toplevel)/scripts/pre-commit-lint.sh"
@@ -23,5 +24,5 @@ EOF
 chmod +x "$HOOK_DIR/pre-push"
 
 echo "Installed git hooks:"
-echo "  pre-commit -> scripts/pre-commit-lint.sh  (clang-format lint, staged files)"
+echo "  pre-commit -> scripts/pre-commit-lint.sh  (clang-format lint on staged files + file-size guard)"
 echo "  pre-push   -> scripts/ci-local.sh         (full local CI reproduction: lint + build + tests)"
