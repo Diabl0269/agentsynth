@@ -52,6 +52,13 @@
 
 set -euo pipefail
 
+# When this runs from a git hook (scripts/install-hooks.sh wires it into pre-push), git exports
+# GIT_DIR and friends into the environment. Anything below that creates or inspects a git repo
+# -- the scripts/tests/*.test.sh harnesses build throwaway repos -- would then act on THIS
+# repository instead (FRO82: a hook-run harness staged 683 real files as deleted). Strip the
+# inherited git env up front; every git call below does normal discovery from the cwd.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 

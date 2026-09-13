@@ -11,6 +11,14 @@
 
 set -uo pipefail
 
+# Git hooks export GIT_DIR (often absolute) -- and sometimes GIT_WORK_TREE/GIT_INDEX_FILE -- into
+# every process they run. This harness builds throwaway git repos with `git init`/`git add`; with
+# an inherited GIT_DIR those commands would target the REAL repository with the fixture dir as
+# its work tree, staging every real file as deleted and adding fixture files to the real index
+# (FRO82 -- that is exactly what happened when a pre-push hook ran ci-local.sh). Strip the
+# inherited git env first so the fixtures are genuinely isolated wherever this runs.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CHECK="$SCRIPT_DIR/scripts/utf8-literal-check.sh"
 WORK="$(mktemp -d)"
