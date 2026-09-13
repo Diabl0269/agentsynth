@@ -1,4 +1,4 @@
-// GraphEditor-level tests for the Macro bypass/mute fan-out (P8-15d, T142, docs/macros.md §5.6):
+// GraphEditor-level tests for the Macro bypass/mute fan-out (P8-15d, T142, docs/macros_ports.md §5.6):
 // "Bypass macro" / "Mute macro" fan ModuleBase::setBypassed/setMuted out over every member as ONE
 // undo step. Both setters are already parameter writes via setValueNotifyingHost, so this is an
 // ordinary parameter change -- no new mutation mechanism, and no macro-level reinterpretation of

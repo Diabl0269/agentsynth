@@ -102,7 +102,7 @@ public:
         // Request timeout: how long the UI watchdog waits before cancelling an in-flight request
         // and how long the active provider's own HTTP connection timeout is set to — the SAME
         // value for both, by construction, so the two mechanisms can't drift apart the way the
-        // old hardcoded 120s (UI)/240s (provider) pair did. See docs/AI_Engine.md.
+        // old hardcoded 120s (UI)/240s (provider) pair did. See docs/AI_Engine_chat_component.md.
         addAndMakeVisible(requestTimeoutLabel);
         requestTimeoutLabel.setText("Request Timeout:", juce::dontSendNotification);
 

@@ -210,7 +210,7 @@ TEST(MacroPortConfigDialogTest, VoiceCountCommitsWithTheRowsCurrentShape) {
 // committing without ever changing the field (e.g. tabbing past it, or pressing Close right after
 // it) must be a no-op. Firing anyway would send onChangePortShape with the SAME (shape, voices)
 // pair GraphEditor::changeMacroPortShape already has, which still deletes and re-creates the
-// port's node — minting a fresh nodeUuid for nothing, in the one subsystem (docs/macros.md §5.2)
+// port's node — minting a fresh nodeUuid for nothing, in the one subsystem (docs/macros_ports.md §5.2)
 // built entirely on uuid identity.
 TEST(MacroPortConfigDialogTest, VoiceCountCommitDoesNothingWhenNothingChanged) {
     Row poly;
@@ -525,7 +525,7 @@ TEST(MacroPortConfigDialogTest, ArrowKeyOnARowsDeleteButtonIsConsumedByTheButton
 }
 
 // ============================================================================
-// MacroAutoPortPromptDialog (founder-review fix F5, docs/macros.md §7 item 6.2)
+// MacroAutoPortPromptDialog (founder-review fix F5, docs/macros_implementation.md §7 item 6.2)
 // ============================================================================
 
 using synth::ui::MacroAutoPortPromptDialog;

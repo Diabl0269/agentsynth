@@ -42,7 +42,7 @@ public:
      *  unreadable tooltip. */
     juce::String getTooltip() override;
 
-    /** The card's own "N modules[, M ports]" line (founder-review fix G6, docs/macros.md §7
+    /** The card's own "N modules[, M ports]" line (founder-review fix G6, docs/macros_implementation.md §7
      *  item 4 note) — a MODULE count, excluding port nodes, with the port count named alongside
      *  it (never silently dropped) whenever the macro actually has one. Public so a test can pin
      *  the exact text against a founder-reported scenario (group 2 modules with a crossing cable
@@ -89,7 +89,7 @@ private:
      *  then finding your way back into them was a guessing game (double-click, undocumented). */
     juce::Rectangle<float> getExpandButtonBounds() const;
 
-    /** One bypass/mute indeterminate-indicator badge's bounds (P8-15d, T142, docs/macros.md
+    /** One bypass/mute indeterminate-indicator badge's bounds (P8-15d, T142, docs/macros_ports.md
      *  §5.6), just left of the expand chevron — `mute=false` is the outer (bypass) slot, `true`
      *  the inner (mute) slot nearer the chevron. Purely a function of `getExpandButtonBounds()`,
      *  so paint() and getTitleRowBounds() (which reserves room for both slots so a long macro

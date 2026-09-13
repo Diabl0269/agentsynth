@@ -1,7 +1,7 @@
 // MacroPortModuleTests.cpp
-// Module-level sanity for the four Macro I/O port node types (P8-15, docs/macros.md §5.1, §7
-// item 1) — MacroInlet/MacroOutlet (audio/CV) and MacroMidiInlet/MacroMidiOutlet (MIDI). Driven
-// directly, no graph/engine, the same way RecordTapTests exercises RecordTapModule in isolation.
+// Module-level sanity for the four Macro I/O port node types (P8-15, docs/macros_ports.md §5.1,
+// docs/macros_implementation.md §7 item 1) — MacroInlet/MacroOutlet (audio/CV) and MacroMidiInlet/MacroMidiOutlet
+// (MIDI). Driven directly, no graph/engine, the same way RecordTapTests exercises RecordTapModule in isolation.
 //
 //   • pass-through   — audio/CV or MIDI reaches the output unchanged
 //   • bypass         — the two-branch contract: visible channels stay dry either way (there is
@@ -167,11 +167,10 @@ TEST(MacroInletModuleTest, SetPortShapeStereoExposesChannelZeroAndKRightBaseAsTw
     EXPECT_NE(inlet.mapOutputChannel(1).role, PortRole::Audio);
 }
 
-// StereoCollapsed (founder-review fix G2, docs/macros.md §5.3/§7 item 7): auto-derived only,
-// produced when a crossing cable lands on an ordinary module's own COLLAPSED stereo jack (e.g. an
-// FX module's single "Audio" jack). The port must present the SAME one visible jack that internal
-// jack does, while still carrying both raw channels — never the two-jack MacroPortShape::Stereo a
-// hand-picked Configure I/O choice means.
+// StereoCollapsed (founder-review fix G2, docs/macros_ports.md §5.3 / docs/macros_implementation.md §7 item 7):
+// auto-derived only, produced when a crossing cable lands on an ordinary module's own COLLAPSED stereo jack (e.g. an FX
+// module's single "Audio" jack). The port must present the SAME one visible jack that internal jack does, while still
+// carrying both raw channels — never the two-jack MacroPortShape::Stereo a hand-picked Configure I/O choice means.
 TEST(MacroInletModuleTest, SetPortShapeStereoCollapsedExposesOneJackCarryingBothRawChannels) {
     MacroInletModule inlet;
     inlet.setPortShape(MacroPortShape::StereoCollapsed);

@@ -54,7 +54,7 @@ TEST_F(PreferencesSettingsTabTest, DefaultsToNewAndUnwiredAndDoubleClickOn) {
     EXPECT_EQ(tab.getSmartConnectionMode(), GraphEditor::SmartConnectionMode::NewAndUnwired);
     EXPECT_TRUE(tab.isDoubleClickPortDisconnectEnabled());
     EXPECT_FALSE(tab.getDefaultDualIOForNewModules());
-    // T148 (docs/macros.md §7 item 9): both default ON, unlike the tri-state
+    // T148 (docs/macros_implementation.md §7 item 9): both default ON, unlike the tri-state
     // getMacroAutoPortPreference() default of "ask" — see its own getter/setter comments.
     EXPECT_TRUE(tab.isMacroAutoCreatePortsOnDragEnabled());
     EXPECT_TRUE(tab.isMacroAutoDeletePortsOnLastCableEnabled());
@@ -204,7 +204,7 @@ TEST_F(PreferencesSettingsTabTest, ChangingControlsPersistsAndPushesToEditor) {
     EXPECT_EQ(appProperties.getUserSettings()->getValue("defaultDualIOForNewModules"), "0");
     EXPECT_FALSE(editor.getDefaultDualIOForNewModules());
 
-    // T148 (docs/macros.md §7 item 9): a toggle flip must reach the live GraphEditor immediately.
+    // T148 (docs/macros_implementation.md §7 item 9): a toggle flip must reach the live GraphEditor immediately.
     tab.setMacroAutoCreatePortsOnDragEnabled(false);
     EXPECT_EQ(appProperties.getUserSettings()->getValue("macroAutoCreatePortsOnDrag"), "0");
     EXPECT_FALSE(editor.getAutoCreateMacroPortsOnDragEnabled());
@@ -231,7 +231,7 @@ TEST_F(PreferencesSettingsTabTest, ChangingControlsPersistsAndPushesToEditor) {
     EXPECT_TRUE(editor.getAutoCreateChannelOnConnectEnabled());
 }
 
-// Founder-review fix F5 (docs/macros.md §7 item 6.2): the macro auto-port preference. Tri-state,
+// Founder-review fix F5 (docs/macros_implementation.md §7 item 6.2): the macro auto-port preference. Tri-state,
 // DEFAULT "ask" (Unset) — a silent default of either behaviour would change what grouping does the
 // first time this ships with no warning.
 TEST_F(PreferencesSettingsTabTest, MacroAutoPortDefaultsToAskAndDoesNotWriteUntouched) {

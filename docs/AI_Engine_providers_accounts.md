@@ -28,7 +28,7 @@ client has one from a prior response in the same session, and the server respond
 or same) only when it actually persisted the exchange — a free-plan response carries **no**
 header at all, not an empty one.
 
-The re-push shape mirrors [`AI_Engine.md`](AI_Engine.md#auth-token-re-push-contract)'s Auth Token contract almost exactly:
+The re-push shape mirrors [`AI_Engine_chat_component.md`](AI_Engine_chat_component.md#auth-token-re-push-contract)'s Auth Token contract almost exactly:
 `AIIntegrationService::setConversationId(id)` stores the value in `currentConversationId`
 regardless of whether a provider is installed, and `setProvider(...)` re-pushes it to whatever
 provider it installs next. `AIProvider::setConversationId()` defaults to a no-op, so `OllamaProvider`
@@ -354,7 +354,7 @@ case directly: if `currentModel.isEmpty()`, it returns
 `"Error: No Ollama model selected. Check that Ollama is running and that a model is available
 (ollama list)."` with `success = false` **without touching the network** — this closes the
 window where the bug described in
-[`AI_Engine.md`](AI_Engine.md#model-discovery-ordering-contract) could still silently POST
+[`AI_Engine_chat_component.md`](AI_Engine_chat_component.md#model-discovery-ordering-contract) could still silently POST
 `{"model": ""}`.
 
 When the HTTP request itself fails, `OllamaProvider` now distinguishes a reachable-but-rejecting
@@ -715,7 +715,7 @@ request):
   twice. (Contrast with the patch path's wrap-once equivalence argument above — same goal,
   opposite conclusion, because the two capabilities wrap differently server-side.)
 - `arrangementContext` — `ArrangementContext::summarize()` (§8 in
-  [`AI_Engine.md`](AI_Engine.md#8-arrangement-context-arrangementcontextsummarize)); `""` for an empty doc (the
+  [`AI_Engine_patch_safety.md`](AI_Engine_patch_safety.md#8-arrangement-context-arrangementcontextsummarize)); `""` for an empty doc (the
   schema requires the key but allows it empty).
 - `paramTargets` — `{nodeUuid, nodeName, paramId, min, max, default}` per automatable parameter,
   from `enumerateAutomationTargets()`: the SAME enumeration `buildAutomationTargetsSection()`
@@ -732,11 +732,11 @@ History and conversation-id bookkeeping are shared with `sendMessage()` via
 **The response re-enters the existing seam unchanged.** `timeline.generate` answers
 `{"data": {"timelineOps": [...]}}`; `RemoteProvider` re-serializes `data` as `AIResponse::content`
 exactly as for a patch, and the §9 flow in
-[`AI_Engine.md`](AI_Engine.md#9-timeline-operations) — `extractTimelineOps()` → `TimelineOps::validate` →
+[`AI_Engine_patch_safety.md`](AI_Engine_patch_safety.md#9-timeline-operations) — `extractTimelineOps()` → `TimelineOps::validate` →
 `TimelineCard` preview → the user's Apply — consumes it with **no remote-specific branch**. Arrange
 mode adds a second way to *ask*, never a second way to *apply*; both doors' validators are
 untouched (the two-door model of §7 in
-[`AI_Engine.md`](AI_Engine.md#7-untrusted-timeline-data-validatetimeline) stands). A response that fails `TimelineOps::validate` shows
+[`AI_Engine_patch_safety.md`](AI_Engine_patch_safety.md#7-untrusted-timeline-data-validatetimeline) stands). A response that fails `TimelineOps::validate` shows
 the rejection in the card with no Apply button, and there is **no client retry loop**: the server
 already runs its own bounded repair-retry inside the capability (`generateStructured`), so a
 rejection here is information for the user, not a trigger for another round trip.
@@ -804,7 +804,7 @@ hosted: `"Hosted mode sends your prompt and current patch to Agent Synth's serve
 `AIProvider::isHosted()` (default `false`, overridden `true` in `RemoteProvider`) drives this via
 `AIIntegrationService::isCurrentProviderHosted()`; `AIChatComponent::updateHostedModeNotice()` is
 called from `refreshModels()`, the same post-`setProvider()` resync point documented in
-[`AI_Engine.md`](AI_Engine.md#model-discovery-ordering-contract) for model discovery, so the notice's visibility never lags a provider switch. `AISettingsTab`'s
+[`AI_Engine_chat_component.md`](AI_Engine_chat_component.md#model-discovery-ordering-contract) for model discovery, so the notice's visibility never lags a provider switch. `AISettingsTab`'s
 provider combo box also carries the same disclosure as a tooltip, for the toggle itself.
 
 **Model picker in hosted mode.** `RemoteProvider::fetchAvailableModels()` always resolves

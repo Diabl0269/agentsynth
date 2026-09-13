@@ -606,7 +606,7 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
         // without selecting the macro here FIRST, those items would have silently acted on
         // whatever was selected before this click instead of the macro the user just right-clicked.
         // Now redundant — buildMacroMenu selects the macro itself before either item runs
-        // (founder-review item 4, docs/macros.md §5.8, so the same fix also covers a macro
+        // (founder-review item 4, docs/macros_ports.md §5.8, so the same fix also covers a macro
         // member's own right-click menu) — left in place to keep this fix's diff scoped.
         if (const auto hullMacroId = macroHullAt(canvasPos.roundToInt()); hullMacroId.isNotEmpty()) {
             // T138: captured BEFORE the reselect above, which otherwise destroys any external

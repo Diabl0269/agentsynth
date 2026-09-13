@@ -275,7 +275,7 @@ public:
     // one big component (contrast ModuleLibraryComponent's T160 row nav) — TimelineTrackHeaderComponent
     // already IS one-component-per-track. Up/Down and M/S/R only ever reach keyPressed() below while
     // THIS row genuinely holds real OS keyboard focus, by JUCE's own key-dispatch rule — no extra
-    // "am I the focused one" guard is needed or wanted (see docs/timeline_panel_core.md §3).
+    // "am I the focused one" guard is needed or wanted (see docs/timeline_panel_tracks.md §3).
     bool keyPressed(const juce::KeyPress& key) override;
     // The four toggle buttons opt OUT of taking focus for themselves (juce::Button opts in by
     // default) — otherwise clicking M/S/R/A would silently move real focus off the row and onto the

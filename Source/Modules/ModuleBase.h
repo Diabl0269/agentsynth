@@ -81,11 +81,11 @@ enum class ModuleType {
     // byte blob handed straight to third-party code, which is the last thing that should arrive
     // from a model.
     HostedPlugin,
-    // Internal-only: a Macro's audio/CV inlet jack (P8-15 Macro I/O; docs/macros.md §5). Created
+    // Internal-only: a Macro's audio/CV inlet jack (P8-15 Macro I/O; docs/macros_ports.md §5). Created
     // by the macro port-creation flow, never offered by the library or the replace menu, and
     // never authorable by a model (kNonAuthorableModuleTypes) — a Macro Inlet only means anything
     // relative to the macro that created it, which a model has no way to have done. A pure
-    // pass-through with a channel shape fixed at construction (docs/macros.md §5.3).
+    // pass-through with a channel shape fixed at construction (docs/macros_ports.md §5.3).
     MacroInlet,
     // Internal-only: a Macro's audio/CV outlet jack. Same exclusions and shape rule as
     // MacroInlet, mirrored in the other direction.
@@ -415,7 +415,7 @@ public:
     /** Whether this module opted into `addMuteParameter()`. A handful of internal-only node types
      *  (Track In, Rec Tap, Track Audio; and, as of P8-15, Macro In/Out and their MIDI variants)
      *  do not — there is nothing for a mute to silence beyond what bypass already covers. Any
-     *  caller fanning `setMuted` out over an arbitrary set of modules (docs/macros.md §5.6's
+     *  caller fanning `setMuted` out over an arbitrary set of modules (docs/macros_ports.md §5.6's
      *  macro-level mute) MUST check this first: `isMuted()`/`setMuted()` dereference `mutedParam`
      *  unconditionally and are only safe once this returns true. */
     bool hasMuteParameter() const { return mutedParam != nullptr; }

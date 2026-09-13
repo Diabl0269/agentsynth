@@ -258,7 +258,7 @@ refusing outright, via `onStatusMessage`, rather than doing something ad hoc: fe
 selected nodes, or any selected node already belonging to a macro. The right-click "Create Macro
 from N Modules" menu item (`ModuleComponent`'s menu and `GraphEditor::showCanvasContextMenu`)
 calls `GraphEditor::requestGroupSelectionIntoMacro()`, which always means exactly that verb — it
-just wraps `groupSelectionIntoMacro()` with the P8-15 auto-port-preference gate (docs/macros.md §7
+just wraps `groupSelectionIntoMacro()` with the P8-15 auto-port-preference gate (docs/macros_implementation.md §7
 item 6.1/6.2) before delegating to it. `ungroupSelection()`
 (Cmd+Shift+G) dissolves every macro touched by the current selection, leaving the member modules
 exactly where they are and expanding them back to individual cards; it is a no-op (also surfaced

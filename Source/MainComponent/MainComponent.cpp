@@ -143,7 +143,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         appProperties.getUserSettings()->getValue("smartConnectionMode", "NewAndUnwired")));
     graphEditor.setDoubleClickPortDisconnectEnabled(
         appProperties.getUserSettings()->getBoolValue("doubleClickPortDisconnect", true));
-    // T148 (docs/macros.md §7 item 9): both default ON — see PreferencesSettingsTab's own toggle
+    // T148 (docs/macros_implementation.md §7 item 9): both default ON — see PreferencesSettingsTab's own toggle
     // comments for why these are plain on/off rather than the tri-state macroAutoPortPreference.
     graphEditor.setAutoCreateMacroPortsOnDragEnabled(
         appProperties.getUserSettings()->getBoolValue("macroAutoCreatePortsOnDrag", true));

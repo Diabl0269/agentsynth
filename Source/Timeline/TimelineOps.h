@@ -36,7 +36,7 @@ struct TimelineOpsResult {
  *
  * This is a **sibling** of a patch suggestion, never nested inside one.
  * `AIStateMapper::validatePatch(trusted=false)` still refuses a `"timeline"` key inside patch
- * JSON and always will (see docs/AI_Engine.md §5c "the two-door model") — timeline data reaches
+ * JSON and always will (see docs/AI_Engine_patch_safety.md §5c "the two-door model") — timeline data reaches
  * the app through this door or not at all. Because `"timelineOps"` is a different key from
  * `"timeline"`, a response may legitimately carry a patch and an ops envelope side by side; each is
  * validated and applied by its own gate, with its own Apply affordance.

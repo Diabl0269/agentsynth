@@ -35,7 +35,7 @@ void GraphEditor::deleteMacroAndMembers(const juce::String& macroId) {
     deleteSelection();
 }
 
-// ---- Macro bypass/mute (P8-15d, T142, docs/macros.md §5.6) -------------------------------------
+// ---- Macro bypass/mute (P8-15d, T142, docs/macros_ports.md §5.6) -------------------------------------
 
 std::vector<juce::AudioProcessorGraph::NodeID>
 GraphEditor::resolvedMacroMemberModuleNodes(const juce::String& macroId) const {
@@ -139,7 +139,7 @@ void GraphEditor::setMacroBypassed(const juce::String& macroId, bool bypassed) {
         return;
 
     // The fan-out is an ORDINARY parameter change (ModuleBase::setBypassed is already
-    // setValueNotifyingHost under the hood, docs/macros.md §5.6) batched into ONE undo step via
+    // setValueNotifyingHost under the hood, docs/macros_ports.md §5.6) batched into ONE undo step via
     // the same before/after graph-JSON snapshot applySmartSuggestions uses to land several
     // connections as one step — never a new mutation mechanism, and never a macro-level
     // reinterpretation of what bypass means. Each member's own processBlock keeps honouring the
@@ -278,7 +278,7 @@ int GraphEditor::nextMacroPortOrder(const synth::Macro& macro, bool isInput) {
     return next;
 }
 
-// ---- Auto-create-ports-on-group (founder-review fix F5, docs/macros.md §7 item 6.1) -------------
+// ---- Auto-create-ports-on-group (founder-review fix F5, docs/macros_implementation.md §7 item 6.1) -------------
 
 std::vector<GraphEditor::MacroPortCrossingGroup>
 GraphEditor::buildMacroPortCrossingPlan(const std::vector<juce::AudioProcessorGraph::NodeID>& memberNodeIds) const {
@@ -405,8 +405,8 @@ GraphEditor::buildMacroPortCrossingPlan(const std::vector<juce::AudioProcessorGr
             }
             thisSpan = headSpan;
             // headSpan > 1 with Audio role is a COLLAPSED stereo jack (an FX module's single
-            // "Audio" jack fanning both raw legs, docs/macros.md §5.3/§7 item 7) — the port must
-            // present the SAME one visible jack the module does (MacroPortShape::StereoCollapsed),
+            // "Audio" jack fanning both raw legs, docs/macros_ports.md §5.3 / docs/macros_implementation.md §7 item 7)
+            // — the port must present the SAME one visible jack the module does (MacroPortShape::StereoCollapsed),
             // never the two-jack MacroPortShape::Stereo a hand-picked Configure I/O choice means.
             // A Dual-I/O-ON module's separately-jacked Left/Right pair never reaches this branch:
             // each leg is its own visible jack with headSpan == 1 here, so it starts life as two
@@ -513,7 +513,7 @@ void GraphEditor::spliceMacroPorts(const juce::String& macroId, const std::vecto
         return;
     auto& graph = audioEngine.getGraph();
 
-    // The right leg of a Stereo macro port node's own raw layout (docs/macros.md §5.3's
+    // The right leg of a Stereo macro port node's own raw layout (docs/macros_ports.md §5.3's
     // implementation note) — identical on MacroInletModule and MacroOutletModule.
     constexpr int kMacroPortRightBase = MacroInletModule::kRightBase;
     static_assert(MacroOutletModule::kRightBase == kMacroPortRightBase,
@@ -785,7 +785,7 @@ juce::String GraphEditor::autoMacroPortName(ModuleBase* internalMb, bool isInput
     return jackLabel.isNotEmpty() ? base + " " + jackLabel : base;
 }
 
-// ---- Auto-create-port-on-drag / auto-delete-on-last-cable (T148, docs/macros.md §7 item 9) -----
+// ---- Auto-create-port-on-drag / auto-delete-on-last-cable (T148, docs/macros_implementation.md §7 item 9) -----
 
 bool GraphEditor::nodeIsMacroPort(juce::AudioProcessorGraph::NodeID nodeId) const {
     const juce::String uuid = nodeUuidFor(nodeId);
@@ -847,7 +847,7 @@ bool GraphEditor::maybeAutoCreateMacroPortsForDrag(juce::AudioProcessorGraph::No
     // destination's getModulationTargets()) and wraps that leg in a hidden AttenuverterModule via
     // addModRouting() exactly as it always has; a freshly-minted MacroInletModule/MacroOutletModule
     // is never itself a modulation target, so only the leg whose real endpoint is the genuine
-    // mod-target parameter can ever attract the wrap (docs/macros.md §7 item 9).
+    // mod-target parameter can ever attract the wrap (docs/macros_implementation.md §7 item 9).
     const juce::String srcUuid = nodeUuidFor(srcId);
     const juce::String dstUuid = nodeUuidFor(dstId);
     auto* srcMacro = srcUuid.isNotEmpty() ? macros.findByMember(srcUuid) : nullptr;

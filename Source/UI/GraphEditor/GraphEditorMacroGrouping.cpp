@@ -58,7 +58,7 @@ juce::String GraphEditor::groupSelectionIntoMacro(bool autoCreatePorts) {
         return {};
     }
 
-    // Founder-review fix F5 (docs/macros.md §7 item 6.1): the crossing plan is read off the LIVE
+    // Founder-review fix F5 (docs/macros_implementation.md §7 item 6.1): the crossing plan is read off the LIVE
     // graph now, before the macro exists — resolveMemberNodeId (which buildMacroPortCrossingPlan
     // uses internally) only knows about macros already in `macros`, so this has to work off the
     // uuid list directly. Pure read; nothing below mutates the graph until doGroup runs.
@@ -445,7 +445,7 @@ void GraphEditor::groupOrToggleSelectionMacros() {
         // Nothing selected touches a macro — Cmd+G means exactly what it always meant: group.
         // requestGroupSelectionIntoMacro() carries its own refusal/status behaviour (fewer than
         // two modules) unchanged, and additionally gates the auto-port-preference modal (founder-
-        // review fix F5, docs/macros.md §7 item 6.2) when it applies.
+        // review fix F5, docs/macros_implementation.md §7 item 6.2) when it applies.
         requestGroupSelectionIntoMacro();
         return;
     }
@@ -715,7 +715,7 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
         if (uuid.isEmpty())
             continue;
         if (macro->hasMember(uuid)) {
-            // A port is a boundary jack, not a module the user put in the box (docs/macros.md
+            // A port is a boundary jack, not a module the user put in the box (docs/macros_ports.md
             // §5.1) — it has its own "Delete Port" affordance and must never be pulled out of
             // `members` by this generic path.
             if (!macro->memberIsPort(uuid))
@@ -763,7 +763,7 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
 
         self->promptRecolourMacro(macroId, anchor);
     });
-    // Unifies docs/macros.md §7 items 3 (add) and 5 (rename/reorder) into ONE modal per an
+    // Unifies docs/macros_implementation.md §7 items 3 (add) and 5 (rename/reorder) into ONE modal per an
     // explicit founder request, rather than separate "Add Input"/"Add Output"/"Rename..."/
     // "Reorder" menu items.
     m.addItem("Configure I/O...", [safeThis, macroId] {

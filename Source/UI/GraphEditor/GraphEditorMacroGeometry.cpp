@@ -308,7 +308,7 @@ void GraphEditor::syncMacroCards() {
 }
 
 namespace {
-// Docked macro-port widget layout (P8-15 founder-review fix F2, docs/macros.md §5.4). Small and
+// Docked macro-port widget layout (P8-15 founder-review fix F2, docs/macros_ports.md §5.4). Small and
 // fixed regardless of anything else on the canvas — the widget's own getWidth()/getHeight() (set
 // by ModuleComponent::layoutMacroPortWidget, called from its own updateLayout() before this ever
 // runs) decide how big; this only decides WHERE.

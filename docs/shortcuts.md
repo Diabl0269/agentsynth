@@ -262,7 +262,7 @@ verbs use, in/out factor `1.25` / `1 / 1.25` (`MainComponent::kZoomInFactor`/`kZ
 |---|---|---|
 | Graph | `GraphEditor::zoomAroundCentre` — the canvas' one zoom level | **Inactive** — the canvas zooms uniformly (one `zoomLevel`, no separate axes), so a second key that did the same thing under a different modifier would be a trap, not a feature |
 | TimelineClips | `TimelinePanelComponent::zoomTimelineHorizontal` — `TimelineViewState::pixelsPerBeat`, anchored at the visible centre | `zoomTimelineVertical` — `TimelineViewState::rowHeightScale` (track row height), anchored at the visible centre |
-| PianoRoll | `PianoRollComponent::zoomHorizontal` — the roll's OWN `pixelsPerBeat` (never the shared `TimelineViewState` — see [`timeline_panel_clips_automation.md §2`](timeline_panel_clips_automation.md)) | `zoomVertical` — `pixelsPerSemitone_` |
+| PianoRoll | `PianoRollComponent::zoomHorizontal` — the roll's OWN `pixelsPerBeat` (never the shared `TimelineViewState` — see [`timeline_panel_piano_roll.md §2`](timeline_panel_piano_roll.md)) | `zoomVertical` — `pixelsPerSemitone_` |
 
 Each keypress reports its own status-bar message ("Canvas: zoom", "Timeline: zoom" / "Timeline:
 track height", "Piano roll: zoom" / "Piano roll: vertical zoom") so a held key's effect is visible
@@ -342,7 +342,7 @@ and, for the loop-selection key, `TimelineClipLaneArea::keyPressed()` too):
 | L | Toggle Looping, keeping the existing bounds — the transport bar's loop button |
 | F | Toggle Follow Playhead (`timelineFollowPlayheadToggle`) — mirrors the transport strip's follow button; panel-scoped like J/L/P, so it works whichever timeline surface (lanes or roll) has focus |
 | P | Loop the Selection — sets the transport loop to the selected clips' (or, with the roll open, the edited clip's) span. Whether it also arms looping is `Settings → Preferences → "Timeline: P (loop selection) also switches looping on"` (default on; off = locators only) |
-| 1 / 3 / 4 / 5 / 7 / 8 | Switch the active edit tool: 1 Select, 3 Split, 4 Glue, 5 Erase, 7 Mute, 8 Draw (Cubase's own numbering — see [`timeline_panel_core.md §7`](timeline_panel_core.md)) |
+| 1 / 3 / 4 / 5 / 7 / 8 | Switch the active edit tool: 1 Select, 3 Split, 4 Glue, 5 Erase, 7 Mute, 8 Draw (Cubase's own numbering — see [`timeline_panel_transport.md §7`](timeline_panel_transport.md)) |
 | Option+1 | Jump to Locator 1 — parks the cursor on the LEFT loop locator (`timelineJumpToLocator1`) |
 | Option+2 | Jump to Locator 2 — the RIGHT loop locator (`timelineJumpToLocator2`) |
 
@@ -521,7 +521,7 @@ click (no modifier variants anywhere in the header any more): **Snap**, **Quanti
 Pitches**, **Scale** and **Show Only Scale Notes**. The first three and the last carry small drawn
 vector glyphs rather than letters — "Q" for a grid toggle was the same letter the timeline binds to
 snap, and a second "Q" beside it for pitch-quantise told the user nothing. See
-[`timeline_panel_clips_automation.md §2`](timeline_panel_clips_automation.md).
+[`timeline_panel_piano_roll.md §2`](timeline_panel_piano_roll.md).
 
 2 (Range Selection), 6 (Zoom) and 9 (Play/Scrub) are Cubase tools this app doesn't ship yet and stay
 **unassigned on purpose** — `editToolForKeyChar` (`Source/UI/EditTool.h`) returns `nullopt` for

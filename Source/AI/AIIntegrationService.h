@@ -41,7 +41,7 @@ public:
      *
      * Stored regardless of whether a provider is currently installed — setProvider() re-pushes
      * it to whatever provider it installs next, mirroring the model-discovery re-push contract
-     * documented for this class (see docs/AI_Engine.md "Model Discovery Ordering Contract"):
+     * documented for this class (see docs/AI_Engine_chat_component.md "Model Discovery Ordering Contract"):
      * AIChatComponent/AccountService can be wired up before MainComponent::initialiseCommon()
      * installs the real provider, so a value set first must not be lost.
      */
@@ -56,7 +56,7 @@ public:
      * unlike a token or conversation id there's always a meaningful value) to whatever provider
      * it installs next — otherwise a provider swap would silently fall back to that provider's
      * own hardcoded default, re-introducing the exact drift this value exists to prevent (see
-     * docs/AI_Engine.md, request timeout section).
+     * docs/AI_Engine_chat_component.md, request timeout section).
      */
     void setRequestTimeoutMs(int timeoutMs);
 

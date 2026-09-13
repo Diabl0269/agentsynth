@@ -31,7 +31,7 @@ public:
     void setSmartConnectionMode(GraphEditor::SmartConnectionMode mode);
     bool isDoubleClickPortDisconnectEnabled() const;
     void setDoubleClickPortDisconnectEnabled(bool enabled);
-    // T148 (docs/macros.md §7 item 9): plain on/off, unlike getMacroAutoPortPreference() below —
+    // T148 (docs/macros_implementation.md §7 item 9): plain on/off, unlike getMacroAutoPortPreference() below —
     // these are brand-new automations shipped ON by default, with a plain escape hatch, not a
     // replacement for pre-existing silent behaviour (which is why that one is a tri-state "ask").
     bool isMacroAutoCreatePortsOnDragEnabled() const;
@@ -47,7 +47,7 @@ public:
     void setAlignmentGuidesEnabled(bool enabled);
     bool getDefaultDualIOForNewModules() const;
     void setDefaultDualIOForNewModules(bool enabled);
-    // Founder-review fix F5 (docs/macros.md §7 item 6.2): whether grouping a selection with a
+    // Founder-review fix F5 (docs/macros_implementation.md §7 item 6.2): whether grouping a selection with a
     // crossing cable into a macro auto-creates matching ports, leaves the cables as they are, or
     // asks every time (the default). "Always ask" here is what lets a user who picked a side once
     // reconsider — GraphEditor's own modal offers no such way back in, only "remember this choice".
@@ -223,12 +223,12 @@ private:
     // module type that carries the Dual I/O parameter — see buildDualIOPerModuleDefaultsPopup() and
     // the "dualIOPerModuleDefaults" JSON key.
     juce::TextButton perModuleDefaultsButton{"Per-module I/O defaults..."};
-    // Founder-review fix F5 (docs/macros.md §7 item 6.1/6.2): "Always ask" / "Auto-create ports" /
+    // Founder-review fix F5 (docs/macros_implementation.md §7 item 6.1/6.2): "Always ask" / "Auto-create ports" /
     // "Leave cables as is" — the tri-state GraphEditor::MacroAutoPortPreference the "Create Macro"
     // gesture reads before deciding whether to show its own modal.
     juce::Label macroAutoPortLabel_;
     juce::ComboBox macroAutoPortCombo_;
-    // T148 (docs/macros.md §7 item 9): plain on/off toggles, ON by default — see their getter/
+    // T148 (docs/macros_implementation.md §7 item 9): plain on/off toggles, ON by default — see their getter/
     // setter declarations above for why these are a different shape from macroAutoPortCombo_.
     juce::ToggleButton macroAutoCreatePortsOnDragToggle{"Auto-create macro ports when dragging a cable across a "
                                                         "boundary"};

@@ -19,7 +19,7 @@ int comboIdFromMode(GraphEditor::SmartConnectionMode mode) {
     }
 }
 
-// Founder-review fix F5 (docs/macros.md §7 item 6.1/6.2). Duplicated from the constexpr
+// Founder-review fix F5 (docs/macros_implementation.md §7 item 6.1/6.2). Duplicated from the constexpr
 // GraphEditor::requestGroupSelectionIntoMacro() writes through propertiesFile_ directly for the
 // "remember my choice" case (that modal can fire before this tab, or any Settings window, has
 // ever been constructed) — the same "one-line string not worth a header dependency" reasoning
@@ -389,7 +389,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         persistMacroAutoPortPreference(macroAutoPortPreferenceFromComboId(macroAutoPortCombo_.getSelectedId()));
     };
 
-    // T148 (docs/macros.md §7 item 9): auto-create/auto-delete are plain on/off, unlike the
+    // T148 (docs/macros_implementation.md §7 item 9): auto-create/auto-delete are plain on/off, unlike the
     // tri-state preference above — that one defaults to "ask" because it replaced pre-existing
     // silent behaviour; these two are brand-new automations the founder asked to ship ON by
     // default, with a plain escape hatch. Same idiom as doubleClickDisconnectToggle above.
