@@ -3245,6 +3245,27 @@ TEST_F(ChannelFlowTest, DuplicateIntoChannelGivesAnIndependentCopyAndLeavesTheOt
     ASSERT_NE(item, nullptr) << "a module shared into a channel from outside offers Duplicate into Channel";
     ASSERT_TRUE(item->action != nullptr);
 
+    // Every hidden attenuverter fed by `source`'s output, with its "amount" parameter.
+    auto amountsFedBy = [&graph](const juce::AudioProcessorGraph::Node* source) {
+        std::vector<juce::RangedAudioParameter*> amounts;
+        for (const auto& c : graph.getConnections()) {
+            if (c.source.nodeID != source->nodeID)
+                continue;
+            auto* dest = graph.getNodeForId(c.destination.nodeID);
+            if (!isModuleOfTypeCFT(dest, ModuleType::Attenuverter))
+                continue;
+            for (auto* p : dest->getProcessor()->getParameters())
+                if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(p))
+                    if (ranged->getParameterID() == "amount")
+                        amounts.push_back(ranged);
+        }
+        return amounts;
+    };
+    // A non-default routing depth, so a silently reset amount on the copy would show.
+    constexpr float kAmount = 0.37f;
+    for (auto* amount : amountsFedBy(rig.sharedLfo))
+        amount->setValueNotifyingHost(amount->convertTo0to1(kAmount));
+
     const int lfosBefore = countNodesOfTypeCFT(graph, ModuleType::LFO);
     const auto before = snapshotCFT(mc);
     item->action();
@@ -3263,6 +3284,12 @@ TEST_F(ChannelFlowTest, DuplicateIntoChannelGivesAnIndependentCopyAndLeavesTheOt
     EXPECT_FALSE(modulatesCFT(graph, rig.sharedLfo, rig.filterA, rig.cutoffChannel));
     EXPECT_TRUE(modulatesCFT(graph, rig.sharedLfo, rig.filterB, rig.cutoffChannel))
         << "the other track stays on the original";
+
+    // The copy's modulation keeps the original routing's depth.
+    const auto copyAmounts = amountsFedBy(copy);
+    ASSERT_FALSE(copyAmounts.empty()) << "the copy modulates through its own attenuverter";
+    for (auto* amount : copyAmounts)
+        EXPECT_NEAR(amount->convertFrom0to1(amount->getValue()), kAmount, 1e-4f);
 
     // Independent: retuning the copy leaves the original alone.
     auto* originalParam = rig.sharedLfo->getProcessor()->getParameters()[0];

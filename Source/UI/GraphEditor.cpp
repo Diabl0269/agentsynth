@@ -6228,10 +6228,18 @@ bool GraphEditor::duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeId,
             auto* from = graph.getNodeForId(c.source.nodeID);
             auto* to = graph.getNodeForId(newAtten);
             if (from != nullptr && to != nullptr) {
-                const auto& fromParams = from->getProcessor()->getParameters();
-                const auto& toParams = to->getProcessor()->getParameters();
-                for (int i = 0; i < juce::jmin(fromParams.size(), toParams.size()); ++i)
-                    toParams[i]->setValueNotifyingHost(fromParams[i]->getValue());
+                // Carry the amount across by paramID, so the copy's modulation depth matches.
+                auto findAmount = [](juce::AudioProcessor* p) -> juce::RangedAudioParameter* {
+                    for (auto* param : p->getParameters())
+                        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param))
+                            if (ranged->getParameterID() == "amount")
+                                return ranged;
+                    return nullptr;
+                };
+                auto* fromAmount = findAmount(from->getProcessor());
+                auto* toAmount = findAmount(to->getProcessor());
+                if (fromAmount != nullptr && toAmount != nullptr)
+                    toAmount->setValueNotifyingHost(fromAmount->getValue());
             }
         }
     }

@@ -898,6 +898,13 @@ MakeChannelPlan planMakeChannel(juce::AudioProcessorGraph& graph, juce::AudioPro
         anyGrouped = anyGrouped || std::any_of(bus.members.begin(), bus.members.end(), inMacro);
     if (anyGrouped)
         plan.refusal = "Can't make a channel: part of this chain is already in a macro. Ungroup it first.";
+    if (plan.refusal.isNotEmpty()) {
+        // A refused plan carries only needsChannel + refusal — nothing a caller could half-build from.
+        plan.members.clear();
+        plan.exits.clear();
+        plan.stripCrossings.clear();
+        plan.buses.clear();
+    }
     return plan;
 }
 
