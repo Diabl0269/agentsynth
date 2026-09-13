@@ -13,7 +13,9 @@
 # count and never lets them grow past it -- a STRICT ratchet, not a one-time snapshot: it only
 # ever tightens. Shrink a baselined file and the entry must tighten to match (--update does that);
 # get it under the cap and the entry must be removed entirely (--update does that too). No file is
-# ever allowed to join the baseline as new -- split it into per-concern units instead. This is the
+# ever allowed to join the baseline as new -- split it into per-concern units instead. --update
+# itself enforces this: it never raises an existing entry or adds a new one, and --allow-growth is
+# the deliberate, reviewed exception for the rare case that really needs one. This is the
 # mechanism that stops the next GraphEditor.cpp from happening while the existing ones get split
 # over time.
 #
@@ -23,6 +25,7 @@
 # Usage:
 #   bash scripts/check-file-sizes.sh                  # check the tree against cap + baseline
 #   bash scripts/check-file-sizes.sh --update         # rewrite the baseline from the current tree
+#   bash scripts/check-file-sizes.sh --update --allow-growth  # ...and let a raised entry through
 #   bash scripts/check-file-sizes.sh --list [N]       # N largest scanned files, default 25
 #   bash scripts/check-file-sizes.sh --root <dir>     # scan a different repo root (for tests)
 #   bash scripts/check-file-sizes.sh -h|--help
@@ -97,7 +100,11 @@ mechanism and how to split an over-cap file.
 
   (no flags)     Check the tree against the cap + baseline. Exit 1 on any violation.
   --update       Rewrite the baseline from the current tree (files over cap only, sorted) and
-                 print what changed.
+                 print what changed. Refuses to raise an existing entry or add a new over-cap
+                 file to the baseline (exit 1, baseline left untouched) -- pass --allow-growth
+                 to let it through as a deliberate, reviewed exception.
+  --allow-growth Only meaningful with --update: let a raised entry or new over-cap file through,
+                 printing a ::warning:: per one so it stays visible in CI logs and PR review.
   --list [N]     Print the N (default 25) largest scanned files, largest first, regardless of
                  cap or baseline -- for planning a split.
   --root <dir>   Repo root to scan (default: `git rev-parse --show-toplevel` from this script's
@@ -113,11 +120,16 @@ USAGE
 MODE="check"
 LIST_N=25
 ROOT_OVERRIDE=""
+ALLOW_GROWTH=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --update)
             MODE="update"
+            shift
+            ;;
+        --allow-growth)
+            ALLOW_GROWTH=1
             shift
             ;;
         --list)
@@ -343,9 +355,109 @@ run_update() {
     workdir="$(mktemp -d)"
     trap 'rm -rf "$workdir"' EXIT
 
-    old_data="$(baseline_data | sort -k2,2)"
+    baseline_data | sort -k2,2 >"$workdir/old.txt"
     build_current_data | awk -v cap="$CAP" '($1 + 0) > cap' | sort -k2,2 >"$workdir/new.txt"
+
+    old_data="$(cat "$workdir/old.txt")"
     new_data="$(cat "$workdir/new.txt")"
+
+    # The ratchet only makes sense once a baseline actually exists -- the very first --update
+    # ever run against a repo (no baseline file on disk yet) is a one-time bootstrap that grand-
+    # fathers whatever is over cap today, not a "new file joining the baseline" violation. Every
+    # entry looks "new" against a nonexistent baseline, so skip the growth/new-file checks below
+    # entirely in that case; once the baseline exists, every later --update is checked normally.
+    baseline_existed=0
+    [ -f "$BASELINE_FILE" ] && baseline_existed=1
+
+    # Rename pairs ("<old-path> <new-path>") git can confirm for THIS tree: a staged `git mv`
+    # (add the move, run --update before committing) via `git diff --cached -M`, plus anything
+    # `git status --porcelain`'s own rename detection already found. Best-effort only -- a rename
+    # git can't confirm falls through to the ordinary new-file check below and needs
+    # --allow-growth like any other addition.
+    : >"$workdir/renames.txt"
+    git -C "$ROOT" diff --cached -M --name-status 2>/dev/null |
+        awk -F'\t' '$1 ~ /^R/ { print $2, $3 }' >>"$workdir/renames.txt"
+    git -C "$ROOT" status --porcelain 2>/dev/null |
+        awk '
+            /^R/ {
+                line = $0
+                sub(/^R[ MDACU?!]?[ \t]+/, "", line)
+                n = split(line, parts, " -> ")
+                if (n == 2) print parts[1], parts[2]
+            }
+        ' >>"$workdir/renames.txt"
+
+    growth_errors=0
+    growth_warnings=0
+
+    if [ "$baseline_existed" -eq 1 ]; then
+        # (a) a path scanned both before and after whose count rose -- the plain "grew" case. The
+        # ratchet only tightens; --allow-growth is the one deliberate escape hatch.
+        while IFS=' ' read -r new_count path; do
+            [ -n "$path" ] || continue
+            old_count="$(awk -v p="$path" '$2 == p { print $1 }' "$workdir/old.txt")"
+            [ -n "$old_count" ] || continue
+            if [ "$new_count" -gt "$old_count" ]; then
+                if [ "$ALLOW_GROWTH" -eq 1 ]; then
+                    echo "::warning::$path raised from $old_count to $new_count lines -- allowed via --allow-growth (reviewed exception)"
+                    growth_warnings=$((growth_warnings + 1))
+                else
+                    echo "::error::$path would raise the baseline from $old_count to $new_count lines -- the ratchet only tightens; split the file / move the addition into a new unit, or pass --allow-growth only for a deliberate, reviewed exception"
+                    growth_errors=$((growth_errors + 1))
+                fi
+            fi
+        done <"$workdir/new.txt"
+
+        # (b) a path scanned now that the OLD baseline didn't cover at all -- a genuinely new
+        # over-cap file, UNLESS it's a same-size `git mv` of a path the old baseline did cover
+        # (confirmed via the rename pairs above; otherwise treated like any other new file, since
+        # a same-size coincidence proves nothing on its own).
+        while IFS=' ' read -r new_count path; do
+            [ -n "$path" ] || continue
+            if awk -v p="$path" '$2 == p { f = 1 } END { exit !f }' "$workdir/old.txt"; then
+                continue   # already handled by (a) above
+            fi
+
+            candidate=""
+            is_rename=0
+            while IFS=' ' read -r old_count old_path; do
+                [ -n "$old_path" ] || continue
+                [ "$old_count" = "$new_count" ] || continue
+                # still scanned under its old path at the same size? then it didn't move.
+                awk -v p="$old_path" '$2 == p' "$workdir/new.txt" | grep -q . && continue
+                candidate="$old_path"
+                if grep -qF -- "$old_path $path" "$workdir/renames.txt"; then
+                    is_rename=1
+                    break
+                fi
+            done <"$workdir/old.txt"
+
+            if [ "$is_rename" -eq 1 ]; then
+                continue   # confirmed git mv, same size -- ratchet unaffected, accept silently
+            fi
+
+            if [ "$ALLOW_GROWTH" -eq 1 ]; then
+                if [ -n "$candidate" ]; then
+                    echo "::warning::$path is a new over-cap file ($new_count lines, cap $CAP) -- same size as removed path $candidate but git couldn't confirm a rename; allowed via --allow-growth (reviewed exception)"
+                else
+                    echo "::warning::$path is a new over-cap file ($new_count lines, cap $CAP) -- allowed via --allow-growth (reviewed exception)"
+                fi
+                growth_warnings=$((growth_warnings + 1))
+            else
+                if [ -n "$candidate" ]; then
+                    echo "::error::$path is a new over-cap file ($new_count lines, cap $CAP) -- same size as removed path $candidate, but git couldn't confirm a rename; if this is a git mv, stage it as one so \`git status\`/\`git diff --cached -M --name-status\` show it as a rename, or pass --allow-growth only for a deliberate, reviewed exception"
+                else
+                    echo "::error::$path is a new over-cap file ($new_count lines, cap $CAP) -- the baseline never grows by adding files; split it by concern, or pass --allow-growth only for a deliberate, reviewed exception"
+                fi
+                growth_errors=$((growth_errors + 1))
+            fi
+        done <"$workdir/new.txt"
+    fi
+
+    if [ "$growth_errors" -gt 0 ]; then
+        echo "check-file-sizes --update: refusing to write the baseline -- $growth_errors entr$( [ "$growth_errors" -eq 1 ] && echo y || echo ies ) would raise it or add to it (see errors above). The ratchet only tightens; pass --allow-growth only for a deliberate, reviewed exception." >&2
+        return 1
+    fi
 
     {
         echo "# Legacy files over the cap. STRICT ratchet: an entry is the exact current line count."
@@ -360,7 +472,11 @@ run_update() {
     if [ "$old_data" = "$new_data" ]; then
         echo "check-file-sizes --update: baseline unchanged ($entry_count entries)."
     else
-        echo "check-file-sizes --update: baseline rewritten ($entry_count entries). Changes:"
+        if [ "$growth_warnings" -gt 0 ]; then
+            echo "check-file-sizes --update: baseline rewritten ($entry_count entries, $growth_warnings raised via --allow-growth). Changes:"
+        else
+            echo "check-file-sizes --update: baseline rewritten ($entry_count entries). Changes:"
+        fi
         diff <(printf '%s\n' "$old_data") <(printf '%s\n' "$new_data") || true
     fi
 }

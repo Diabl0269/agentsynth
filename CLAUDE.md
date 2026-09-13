@@ -61,7 +61,7 @@ Every implementation plan **must** include:
 
 ## Code structure
 
-- Every file is capped at 1,000 lines, enforced by `scripts/check-file-sizes.sh` (ratchet baseline `scripts/file-size-baseline.txt`) — mechanism in [`docs/testing.md`](docs/testing.md).
+- Every file is capped at 1,000 lines, enforced by `scripts/check-file-sizes.sh` (ratchet baseline `scripts/file-size-baseline.txt`) — mechanism in [`docs/testing.md`](docs/testing.md). `--update` never raises an entry; `--allow-growth` is a reviewed exception.
 - A class that outgrows one file gets its own directory named after the class, never flat siblings dropped next to dozens of others: `<Class>/<Class>.h` + `<Class><Concern>.cpp` units (never `_Part1`) + shared private helpers in `<Class>Internal.h` — e.g. `Source/UI/GraphEditor/`, `Source/MainComponent/`. Tests mirror it: `Tests/<Class>/<Class><Topic>Tests.cpp` with shared fixtures in `<Class>TestFixture.h`/`<Class>TestHelpers.h`. Each unit opens with a comment naming its concern.
 - A directory past roughly 30 files gets split by area too (`Source/UI` and `Tests` are both already past that; reorganizing them is a separate follow-up, not required by this rule).
 - Docs: one topic per doc, split at section boundaries; keep the Docs map current.
