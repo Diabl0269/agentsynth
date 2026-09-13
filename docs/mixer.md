@@ -1,18 +1,20 @@
 # Mixer
 
 **Status: DECIDED 2026-09-10 (founder sign-off on D1-D4). P9-2 implemented, P9-3's audio-track,
-instrument-track and MIDI-track-auto-channel flows implemented (T173a, T183, T184), the
-Oscillator/Wavetable instrument track now gets an envelope + VCA ahead of the chain (P9-3i,
-FRO43), and a poly Oscillator/Wavetable instrument track gets a TRUE per-voice envelope instead of
-a shared mono one (P9-3j, FRO46)** — the
+instrument-track, MIDI-track-auto-channel and existing-project "Create channels" flows implemented
+(T173a, T183, T184, T173e/FRO26), the Oscillator/Wavetable instrument track now gets an envelope +
+VCA ahead of the chain (P9-3i, FRO43), and a poly Oscillator/Wavetable instrument track gets a TRUE
+per-voice envelope instead of a shared mono one (P9-3j, FRO46)** — the
 `ChannelStrip` and `Master` nodes, the engine-owned solo gate and the Master splice exist (engine
 only; §8 item 1 records how), "+ Track -> Audio Track" builds the factory default channel end to
 end (§8 item 2), "+ Track -> Instrument" does the same ahead of a chosen instrument (§8 item 2,
 T183) — see §5.2's table note for why that one stays a `TrackKind::Midi` track rather than the "(new
-track kind)" this doc originally called for — and connecting a MIDI track's cable to an unchanneled
+track kind)" this doc originally called for — connecting a MIDI track's cable to an unchanneled
 instrument auto-creates a channel at the point the audio reaches the output (§8 item 2, T184; §5.2's
-"main workflow" paragraph). The other P9-3 flows ("Make channel", "Create channels" for existing
-projects) are still follow-ups, and there is no mixer panel yet (P9-5). This document
+"main workflow" paragraph), and the "+ Track" menu's "Create Channels" entry sweeps every
+channel-less track in the open project into its own channel in one shot (§5.13, §8 item 2, FRO26).
+"Make channel" (a single track/instrument, on demand) is still a follow-up, and there is no mixer
+panel yet (P9-5). This document
 records the decided design;
 §8 is the implementation order that turns it into code. The visual
 proposal that led to this decision (canvas diagram, mixer panel mock, the four decision cards)
@@ -364,9 +366,27 @@ the pre-Master mix.
 
 ### 5.13 Existing projects
 
-Open unchanged — no automatic migration on load. The mixer offers a single **"Create channels"**
-action that wraps every channel-less track's chain into a strip, as one undo step covering all of
-them at once.
+Open unchanged — no automatic migration on load. **DONE (FRO26, T173e).** Since there is no mixer
+panel yet (P9-5), the action lives on the "+ Track" menu (`TimelinePanelComponent::
+kCreateChannelsMenuId`) alongside every other channel-creating entry (Audio Track, Instrument
+Track) rather than a per-track context menu or a not-yet-built mixer column — it acts on every
+track in the project at once, so it belongs beside the project-wide actions, not off a single
+track header. "Create Channels" wraps every channel-less track's chain into a strip, as one undo
+step covering all of them at once: `MainComponent::createChannelsForExistingTracks()` walks
+`TimelineDoc::getTracks()`, resolves each track's own bound node (`bindingUuid` — a "Track Audio"
+or "Track In"), and hands every one of them to `GraphEditor::createChannelsForUnchanneledTracks()`,
+which runs T184's own per-node builder (`maybeAutoCreateChannelAfterConnect` — same
+`synth::findUnchanneledOutputFeeds`/`buildChannelForFeeds` pair T184 uses) once per track inside
+ONE `AppUndoManager::recordGraphTimelineAndMacroChange` transaction. A track that already reaches
+a `ChannelStripModule` is silently skipped (same "exits.empty()" early return as T184's
+connect-triggered case) — untouched, not re-channeled. The menu entry is disabled, and the action
+is a no-op pushing nothing to the undo stack, when no track needs a channel
+(`hasTracksNeedingChannels()`). Two channel-less tracks that share one unchanneled instrument (D1,
+§7) still come out of the sweep as exactly one channel: the first track's
+`maybeAutoCreateChannelAfterConnect` call builds it and removes the exit edges, so the second
+track's call sees `findUnchanneledOutputFeeds` already empty for that instrument and does nothing —
+free of any extra bookkeeping, since it's the same per-node builder T184 already runs on live
+connects.
 
 ### 5.14 New Patch always has an Audio Output (T187)
 
@@ -488,7 +508,7 @@ Main line, in dependency order:
      port**: `spliceMasterNode`/`ensureMasterNode` classify a re-routed feed as Mix vs Direct by
      checking whether the connection's SOURCE NODE is itself a `ChannelStripModule`; a
      `MacroOutlet` sitting between the strip and Master would make the source node a `MacroOutlet`
-     instead and defeat that check, which the later "Create channels" subtask (this same list,
+     instead and defeat that check, which the "Create channels" flow (T173e, DONE — see below,
      "N channel-less tracks") depends on.
    - **T183 (instrument track) — DONE.** "+ Track -> Instrument" opens a submenu of audio-producing
      MIDI instruments (Oscillator, Wavetable, Sampler — deliberately NOT every
@@ -626,6 +646,37 @@ Main line, in dependency order:
        `Tests/PreferencesSettingsTabTests.cpp`: default ON, persists `"0"`/`"1"` under
        `mixerAutoCreateChannelOnConnect` and round-trips, and pushes to a live `GraphEditor` via
        `setGraphEditor`/on toggle, mirroring every T148 toggle test exactly.
+   - **T173e (existing projects, "Create channels") — DONE (FRO26).** The "+ Track" menu's new
+     "Create Channels" entry (`TimelinePanelComponent::kCreateChannelsMenuId`) — see §5.13 for why
+     it lives there. `GraphEditor::createChannelsForUnchanneledTracks(trackSourceNodeIds)` is a thin
+     public wrapper: for each id, it calls the SAME private `maybeAutoCreateChannelAfterConnect`
+     T184's `endConnectionDrag` hook already uses, reusing its exit-finding, chain-building, T187
+     Master-relocation and same-macro boxing logic unchanged rather than a parallel implementation.
+     `MainComponent::createChannelsForExistingTracks()` gathers every track's own bound node
+     (`TimelineDoc::Track::bindingUuid`) first, then wraps the whole per-track sweep in ONE
+     `AppUndoManager::recordGraphTimelineAndMacroChange` transaction, so N channel-less tracks
+     becoming N new channels (sharing one `Master` after the first) is a single Cmd+Z.
+     `hasTracksNeedingChannels()` — the same `synth::findUnchanneledOutputFeeds` query per track,
+     short-circuiting on the first hit — backs both the menu's enabled state and the action's own
+     no-op guard, so a project where every track already has a channel changes nothing and pushes
+     no undo step. Both methods are non-pure `TrackHeaderHost` virtuals with inert defaults
+     (`Source/UI/TimelineTrackHeaderComponent.h`), the same pattern every other "+ Track" action
+     uses, so existing test stubs keep compiling untouched.
+     - Tests (`Tests/ChannelFlowTests.cpp`, `ChannelFlowTest` fixture):
+       `CreateChannelsWrapsEveryChannellessTrackAsOneUndoStep` (two legacy tracks — a bare
+       "Track Audio" and a "Track In" -> Oscillator, both wired straight to the output, the
+       pre-P9-3 shape a real old project still loads as — both get their own strip sharing one
+       `Master`, their old straight-to-output feeds are gone, and ONE undo/redo round-trips the
+       whole sweep byte-for-byte against the graph/timeline/macro JSON snapshots taken right
+       before the action), `CreateChannelsLeavesAlreadyChanneledTracksUntouched` (one track already
+       channeled via `addAudioTrack()` plus one legacy track — the pre-existing strip's node and
+       its wiring to Master are untouched; only the legacy track gets a new strip),
+       `CreateChannelsIsANoOpWhenNothingNeedsAChannel` (every track already channeled — no new
+       nodes, and undoing once removes the earlier `addAudioTrack()` step itself, proving "Create
+       Channels" pushed no undo step of its own),
+       `CreateChannelsGivesTwoTracksSharingOneInstrumentJustOneChannel` (D1, §7: two MIDI tracks
+       wired into one shared channel-less Oscillator come out of the sweep with exactly one
+       channel, not two, and one undo removes it).
 
 3. **P9-4 (T177) — Track/channel link.** Name sync, live colour sync across track/macro/column
     through `ColourPickerPopup`'s preview/commit split, M/S driving the strip, the channel chip.

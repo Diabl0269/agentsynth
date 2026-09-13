@@ -4761,6 +4761,62 @@ void MainComponent::addInstrumentTrack(const juce::String& instrumentModuleType,
     statusBar.showMessage(pushed ? "Added " + trackName : "Could not add a track");
 }
 
+// FRO26 (P9-3e, docs/mixer.md §5.13): every track whose bound node's chain still reaches the
+// output without passing through a ChannelStripModule — the same synth::findUnchanneledOutputFeeds
+// query T184's connect-triggered auto-channel already runs, just from each track's own binding
+// instead of a just-completed cable drag. An unbound or orphaned track (empty/unresolved
+// bindingUuid) contributes nothing — there is no chain to channel.
+bool MainComponent::hasTracksNeedingChannels() const {
+    auto& graph = audioEngine.getGraph();
+    for (const auto& track : timelineDoc.getTracks()) {
+        if (track.bindingUuid.isEmpty())
+            continue;
+        auto* node = findNodeByUuid(track.bindingUuid);
+        if (node == nullptr)
+            continue;
+        if (!synth::findUnchanneledOutputFeeds(graph, node->nodeID).empty())
+            return true;
+    }
+    return false;
+}
+
+// FRO26 (P9-3e, docs/mixer.md §5.13): the "+ Track" menu's "Create Channels" action for existing
+// projects — docs/mixer.md §5.13 says the project itself opens unchanged (no automatic migration on
+// load; this method is never called from anywhere but the explicit menu choice below). Gathers
+// every track's own bound node first (outside the undo transaction — this is a pure read), then
+// wraps GraphEditor::createChannelsForUnchanneledTracks() in ONE
+// recordGraphTimelineAndMacroChange transaction, the same shape addAudioTrack/addInstrumentTrack
+// use, so N channel-less tracks becoming N new channels is a SINGLE Cmd+Z. A track already reaching
+// a ChannelStripModule is silently skipped inside that call (see its own comment) — nothing here
+// needs to pre-filter beyond "has a live binding at all".
+void MainComponent::createChannelsForExistingTracks() {
+    std::vector<juce::AudioProcessorGraph::NodeID> sourceNodeIds;
+    for (const auto& track : timelineDoc.getTracks()) {
+        if (track.bindingUuid.isEmpty())
+            continue;
+        auto* node = findNodeByUuid(track.bindingUuid);
+        if (node != nullptr)
+            sourceNodeIds.push_back(node->nodeID);
+    }
+
+    // No-op, no undo step, when nothing needs a channel (also the "+ Track" menu's own disabled
+    // condition — see hasTracksNeedingChannels() above) — checked again here rather than trusting
+    // the menu's enabled state, since this is also the seam tests drive directly.
+    if (!hasTracksNeedingChannels()) {
+        statusBar.showMessage("No tracks need a channel");
+        return;
+    }
+
+    const bool pushed = undoManager.recordGraphTimelineAndMacroChange(
+        audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(), [this, &sourceNodeIds] {
+            graphEditor.createChannelsForUnchanneledTracks(sourceNodeIds);
+            graphEditor.updateComponents();
+        });
+
+    reconcileTimelineAfterGraphChange();
+    statusBar.showMessage(pushed ? "Created channels" : "No tracks needed a channel");
+}
+
 // The automation strip lane picker's "Add lane..." entries — the minimal creation surface
 // for a hosted plugin's own parameters, which have no ModuleComponent knob to right-click (the
 // plugin has its own editor; see docs/modulation.md's Hosted Plugin table). Every live

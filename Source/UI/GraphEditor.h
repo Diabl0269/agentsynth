@@ -853,6 +853,23 @@ public:
     void setAutoCreateChannelOnConnectEnabled(bool enabled) { autoCreateChannelOnConnectEnabled = enabled; }
     bool getAutoCreateChannelOnConnectEnabled() const noexcept { return autoCreateChannelOnConnectEnabled; }
 
+    /** FRO26 (P9-3e, docs/mixer.md §5.13): "Create channels" for existing projects — runs the exact
+     *  same per-node channel-creation maybeAutoCreateChannelAfterConnect() already does for T184's
+     *  connect-triggered case, once per entry in `trackSourceNodeIds` (each track's own bound
+     *  node — a "Track Audio" or "Track In" — as MainComponent resolves from TimelineDoc, which
+     *  GraphEditor deliberately owns no reference to). A track that already reaches the output
+     *  through an existing ChannelStripModule (or reaches nothing at all — an unbound/orphaned
+     *  entry the caller should not have passed) is silently skipped, same as
+     *  maybeAutoCreateChannelAfterConnect's own "exits.empty()" early return — a caller can safely
+     *  pass every track's source node without pre-filtering.
+     *
+     *  NO UNDO OF ITS OWN and no updateComponents() call, same contract as
+     *  maybeAutoCreateChannelAfterConnect — the caller (MainComponent::createChannelsForExistingTracks)
+     *  wraps the whole call in ONE recordGraphTimelineAndMacroChange transaction covering every
+     *  track, and calls updateComponents() itself afterward, so the whole multi-track sweep is a
+     *  SINGLE undo step. */
+    void createChannelsForUnchanneledTracks(const std::vector<juce::AudioProcessorGraph::NodeID>& trackSourceNodeIds);
+
     // T148 (docs/macros.md §7 item 9): auto-delete a macro port once its last cable is removed.
     // On by default; a Preferences toggle (PreferencesSettingsTab,
     // "macroAutoDeletePortsOnLastCable") lets a user turn this off, leaving a cable-less port in
