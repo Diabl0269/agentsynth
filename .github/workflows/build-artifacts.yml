@@ -499,11 +499,13 @@ jobs:
           }
           Expand-Archive -Path winsparkle.zip -DestinationPath winsparkle-tools
 
-      # winsparkle-tool's exact CLI is verified from the project's README (`winsparkle-tool sign -f
-      # private.key Updater.exe`, printing `sparkle:edSignature="..." length="..."` to stdout) —
-      # NOT independently re-verified against `--help` output in this environment (no Windows
-      # machine to run the .exe on). The private key is written to a temp file only for the
-      # duration of this step and removed immediately after, never left on disk or logged.
+      # winsparkle-tool's `sign --private-key-file KEYFILE FILENAME` flags are confirmed against
+      # the real .exe's own --help (see docs/distribution.md); the project's README additionally
+      # documents `-f`/`--private-key-file` as printing `sparkle:edSignature="..." length="..."` to
+      # stdout — that exact stdout SHAPE is still not independently re-verified (no real key +
+      # installer have been signed yet in any environment). The private key is written to a temp
+      # file only for the duration of this step and removed immediately after, never left on disk
+      # or logged.
       - name: Sign Windows installer
         id: sign
         shell: pwsh
