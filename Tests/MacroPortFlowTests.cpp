@@ -788,7 +788,7 @@ TEST(MacroPortFlow,
     ASSERT_NE(lfoComp, nullptr);
 
     // External Wavetable Oscillator: its "Position" slider is a real modulation target, the same
-    // Serum-style knob-drop DroppingACableOnAKnobCreatesAModRouting (GraphEditorTests.cpp) exercises.
+    // Serum-style knob-drop DroppingACableOnAKnobCreatesAModRouting (Tests/GraphEditor/GraphEditorTests.cpp) exercises.
     auto extWt = addModuleAt(editor, engine, std::make_unique<WavetableOscillatorModule>(), 900, 100);
     auto* extComp = compFor(editor, extWt);
     ASSERT_NE(extComp, nullptr);

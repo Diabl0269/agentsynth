@@ -84,7 +84,17 @@ add_executable(Tests
     LocalHistoryStoreTests.cpp
     MainComponentTests.cpp
     WelcomeScreenTests.cpp
-    GraphEditorTests.cpp
+    GraphEditor/GraphEditorTests.cpp
+    GraphEditor/GraphEditorLayoutTests.cpp
+    GraphEditor/GraphEditorPolyLinkTests.cpp
+    GraphEditor/GraphEditorDualIOTests.cpp
+    GraphEditor/GraphEditorIntegrationTests.cpp
+    GraphEditor/GraphEditorViewportTests.cpp
+    GraphEditor/GraphEditorSmartConnectionTests.cpp
+    GraphEditor/GraphEditorSmartConnectionInsertTests.cpp
+    GraphEditor/GraphEditorSmartConnectionPreviewTests.cpp
+    GraphEditor/GraphEditorSmartConnectionMatrixTests.cpp
+    GraphEditor/GraphEditorNodeActionsTests.cpp
     ZoomFrozenCachedImageTests.cpp
     ModuleComponentTests.cpp
     AutomationUiReflectionTests.cpp

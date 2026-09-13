@@ -242,11 +242,10 @@ TEST_F(TimelinePanelIntegrationTest, ToggleTimelinePanelAndPlaybackCommandsAreAl
 
 namespace {
 
-// Hand-built MouseEvent, same pattern as GraphEditorTests.cpp/MinimapComponentTests.cpp — no OS
-// mouse source exists headlessly, but MouseInputSource is copyable and Desktop always exposes
-// one. mouseWasDragged is the constructor's own bool (JUCE stores it verbatim, see
-// MouseEvent::mouseWasDraggedSinceMouseDown()) rather than anything derived from real mouse
-// motion, so it is fully under the caller's control here.
+// Hand-built MouseEvent, same pattern as Tests/GraphEditor/GraphEditorViewportTests.cpp/MinimapComponentTests.cpp — no
+// OS mouse source exists headlessly, but MouseInputSource is copyable and Desktop always exposes one. mouseWasDragged
+// is the constructor's own bool (JUCE stores it verbatim, see MouseEvent::mouseWasDraggedSinceMouseDown()) rather than
+// anything derived from real mouse motion, so it is fully under the caller's control here.
 juce::MouseEvent makeTimelineMouseEvent(juce::Component& comp, juce::Point<float> position, juce::ModifierKeys mods,
                                         bool mouseWasDragged, juce::Point<float> mouseDownPos) {
     return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), position, mods, 0.0f, 0.0f, 0.0f, 0.0f,
