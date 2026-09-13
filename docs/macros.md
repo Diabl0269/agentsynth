@@ -981,7 +981,73 @@ In order, each independently shippable:
     identically (before T162 the widget still drew the kind tint for a coloured port — the mismatch
      this task closes). See §5.2 for the `colour` field's persistence.
 
-   **DONE (T153, founder review round 3, item 3 second half): keyboard accessibility.** Every
+   **DONE (T165, founder review, real-time re-colour):** T162 made the collapsed card AND the expanded
+   docked widget both *paint* a port's user colour, but a port-colour change is a **macro-set** change, not
+   a graph or structural change, so neither surface has a listener that would notice it on its own — the
+   old code did a bare canvas `repaint()`, which reached the card but **not** the port's docked
+   `ModuleComponent` (its jack "only showed the new colour after a collapse/expand", which re-runs the
+   layout and forces a fresh paint). `GraphEditor::changeMacroPortColour` now calls
+   `GraphEditor::repaintMacroPortColourTargets(macroId, nodeUuid)` after recording the change, which
+   repaints **both** surfaces in real time — the live collapsed `MacroCardComponent` (found via
+   `content.getMacroCards()` + `getMacroId()`, so it is correct whether the macro is folded or not) and the
+   port's own docked `ModuleComponent` (found via `resolveMemberNodeId(nodeUuid)` +
+   `content.getModules()`, mirroring `setMacroBypassed`/`setMacroMuted`, which force their card repaint
+   after a member-level fan-out). The port node persists even while its macro is collapsed (its widget
+   just goes hidden), so the widget is always found — a repaint of the hidden widget is a harmless no-op
+   until the macro is expanded, at which point its first paint already reads the new colour. The method
+   returns the (possibly-null) `MacroPortRecolourTargets{card, widget}` it targeted for the same reason
+   `getMacroCardForTest` exists — a headless test cannot observe a `repaint()` (a no-op with no window;
+   `StatusBarTests`' gated-repaint precedent), so the observable seam is "did the fix reach the two paint
+   surfaces?", not "did a frame paint?". Covered by `MacroPortWidget.{ExpandsRecolourReachesBothTheCardAndTheDockedWidget,
+   EveryPortKindReachesItsDockedWidget, CollapsedRecolourStillTargetsTheCardAndTheHiddenWidget,
+   MissingMacroIdReachesNoSurfacesAndDoesNotCrash, ChangeMacroPortColourIsOneUndoStep}`. **No data change** —
+   this is a paint-timing fix on top of T162, so §5/§5.2 persistence and the undo step are unchanged
+   (one `MacroSnapshotAction`, like every port-metadatum edit).
+
+   **DONE (T165 continuation, founder request: live colour preview):** T165 closed the first symptom —
+   a committed re-colour now repaints BOTH surfaces via `repaintMacroPortColourTargets`. But the picker
+   still only *committed* once, on close: while the user dragged the selector the jack did not move. T152
+   deliberately kept the picker "commit-once" because `changeMacroPortColour` records a `MacroSnapshotAction`,
+   so a per-tick commit is a per-pixel undo step. The fix keeps that property AND adds live feedback, exactly
+   like the timeline track colour: the picker's `onPreview` (fired on every selector tick / favourite click)
+   now drives a **view-layer-only** preview, and the single `onCommit` (on close) still writes the stored
+   `MacroPort::colour`.
+   - **View-layer preview, not data.** A live preview lives only on the two paint surfaces: a single
+     `std::optional<juce::Colour>` on `ModuleComponent` (one open picker previews one port) and a per-port
+     `std::optional<std::pair<juce::String, juce::Colour>>` on `MacroCardComponent` (a card draws every
+     port's jack at once, so the preview is keyed by the port's `nodeUuid`). Neither ever writes
+     `MacroPort::colour`, so a drag pushes **no** undo step and dirties no data. `ModuleComponent::paintMacroPortWidget`
+     and `MacroCardComponent::paint` now resolve the jack colour **preview-first** (via
+     `ModuleComponent::effectiveMacroPortJackColour` / `MacroCardComponent::resolvePortJackColourForTest`),
+     falling back to the stored colour, then the kind tint.
+   - **Wiring.** `MacroPortConfigDialog` gained an `onPreviewPortColour` callback (distinct from
+     `onChangePortColour`); `buildColourPicker` fires it on every preview, `GraphEditor::promptConfigureMacroIO`
+     routes it to `GraphEditor::previewMacroPortColour(macroId, nodeUuid, colour)`, which arms the preview on
+     both surfaces and repaints them via the shared `findMacroPortRecolourTargets` — the very same lookup the
+     commit path uses, so a preview and its commit can never target different surfaces.
+   - **The preview is disarmed at the data boundary.** `changeMacroPortColour` now ends with
+     `clearMacroPortColourPreview` (which resolves + repaints the same two surfaces), so **every** path that
+     commits a colour — not just the modal — disarms the armed preview in the same call. Because the committed
+     colour equals the preview that was armed, the jack shows the stored colour continuously, so it never
+     glitches when the last preview tick gives way to the commit.
+   Covered by `MacroPortWidget.{PreviewArmsBothSurfacesButWritesNoStoredColourAndNoUndo,
+   DockedWidgetResolvesPreviewThenStoredThenKindTint, CollapsedCardPreviewIsScopedToOnePort,
+   PreviewThenCommitIsOneUndoStepAndShowsStoredColour, ColourPickerFiresOnPreviewThenCommitsOnce}`.
+   No data / undo change beyond T165: the preview is view-layer only, and the commit is the same single
+    `MacroSnapshotAction` as before.
+    - **Founder re-report (“even worse — only updates after closing the modal”).** A live preview had been
+   wired end-to-end (the picker's `onPreview` arms `portColourPreview_` on both surfaces, `paint()` reads
+     it preview-first) but the *docked* `ModuleComponent::paintMacroPortWidget` was painting through
+     `resolveMacroPortJackColour` (the committed-colour path) instead of `effectiveMacroPortJackColour` (the
+     preview-first path), so a docked widget ignored the armed preview and showed its jack update only once
+     the pick committed to `MacroPort::colour` on close — exactly the “only after closing the modal” symptom.
+     The fix is to paint through `effectiveMacroPortJackColour` (the same resolver the card's preview-first
+     branch and the test seam use), so the docked widget tracks the open selector in real time just like the
+     card. `ModuleComponent::effectiveMacroPortJackColour` (and its test seam, asserted in the
+   `MacroPortWidget.*` cases) now guard the exact paint path — a headless test cannot observe a
+   repaint, so the guarantee is "the paint path resolves the preview", not "a frame painted".
+
+    **DONE (T153, founder review round 3, item 3 second half): keyboard accessibility.** Every
    real control in the Configure I/O modal already gets Tab/Return/Space for free from
    `juce::Button`/`juce::ComboBox`/`juce::TextEditor`'s own defaults, so the fixes needed were
    narrower than a full rewrite:

@@ -138,6 +138,14 @@ public:
     /** T152 per-port colour: `newColour` is nullopt when the user resets to the kind-tint default
      *  (the swatch's right-click), otherwise the colour just picked. */
     std::function<void(const juce::String& nodeUuid, std::optional<juce::Colour> newColour)> onChangePortColour;
+
+    /** T165 LIVE PREVIEW: fired on EVERY selector tick / favourite click (the picker's onPreview),
+     *  carrying the in-progress colour, so the macro port's jack on the docked widget AND the
+     *  collapsed card can track the pick in real time. Deliberately DISTINCT from onChangePortColour
+     *  (a.k.a. the commit): this is view-layer only -- it arms a preview that paints the jack but
+     *  never writes MacroPort::colour, so a drag pushes no undo step (T152's "commit once on close"
+     *  property) -- whereas onChangePortColour fires once, on close, and commits the stored value. */
+    std::function<void(const juce::String& nodeUuid, juce::Colour previewedColour)> onPreviewPortColour;
     std::function<void()> onRequestClose;
 
     /** Favourites shelf storage for the per-row colour picker (T152) — shares the same
