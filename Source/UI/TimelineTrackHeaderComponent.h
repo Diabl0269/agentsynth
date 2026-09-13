@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../Plugin/Hosting/HostedPluginBackend.h"
 #include "../Timeline/TimelineDoc.h"
 #include "ColourPickerPopup.h"
 #include "MidiDestinationPicker.h"
@@ -100,6 +101,42 @@ struct TrackHeaderHost {
      *  pushed to the undo stack) when hasTracksNeedingChannels() would return false. Non-pure with
      *  an inert no-op default so every existing TrackHeaderHost implementer keeps compiling. */
     virtual void createChannelsForExistingTracks() {}
+
+    /** FRO42 (P9-3h): instrument-capable hosted plugins for the "+ Track -> Instrument -> Plugin"
+     *  submenu — every scanned plugin whose juce::PluginDescription::isInstrument is true, sorted by
+     *  name like the library sidebar's own list (effects are never offered here, and neither is this
+     *  app's own VST3/AU build — see MainComponent::getInstrumentPluginOptions). A pure read of
+     *  whatever PluginScanService currently knows — never triggers a scan itself; see
+     *  ensureInstrumentPluginsScanned() below for that. Non-pure with an inert empty-list default so
+     *  every existing TrackHeaderHost implementer keeps compiling unchanged (same reasoning as
+     *  getMidiDestinationOptions below). */
+    virtual std::vector<synth::PluginIdentity> getInstrumentPluginOptions() const { return {}; }
+
+    /** True while a plugin scan is running. The menu shows a disabled "Scanning for plugins..." row
+     *  instead of an empty submenu while this holds and getInstrumentPluginOptions() above is still
+     *  empty (once it finds anything, whether or not the scan is still going, the real rows show
+     *  instead — same "list is visible immediately, regardless of scan state" contract
+     *  PluginScanService::ensureScanned documents). Non-pure default: never scanning. */
+    virtual bool isPluginScanInProgress() const { return false; }
+
+    /** Kicks off (or no-ops past the first call this session — see PluginScanService::
+     *  ensureScanned) the scan that populates getInstrumentPluginOptions() above. Called once when
+     *  the "+ Track" menu opens, never on every keystroke or click. MainComponent delegates to its
+     *  own maybeStartEagerPluginScan(), so opening this menu inside a hosted DAW build never
+     *  re-launches the host binary — the same guard the eager startup scan and the library
+     *  sidebar's manual "Scan for plugins..." row both already honour. Non-pure no-op default. */
+    virtual void ensureInstrumentPluginsScanned() {}
+
+    /** FRO42 (P9-3h): "+ Track -> Instrument -> Plugin -> <name>" — builds the same
+     *  Track In -> instrument -> default chain (EQ bypassed -> Compressor bypassed -> Channel
+     *  Strip) -> Master flow addInstrumentTrack() builds for a factory instrument, boxed into one
+     *  collapsed macro, as ONE undo step — except the instrument is a hosted plugin instance loaded
+     *  ASYNCHRONOUSLY rather than a factory module created on the spot. Nothing touches the graph or
+     *  the undo stack until the load either succeeds (the whole chain lands in one step) or fails /
+     *  the identity no longer resolves (nothing lands at all — see MainComponent's implementation).
+     *  No ADSR+VCA is added: a hosted synth has its own envelope. Non-pure no-op default, same
+     *  reasoning as the two methods above. */
+    virtual void addInstrumentPluginTrack(const synth::PluginIdentity& identity) { juce::ignoreUnused(identity); }
 
     /** One hosted-plugin instance parameter with no automation lane yet — the automation
      *  strip's lane picker "Add lane..." entries. `paramId` is the value a created lane would carry

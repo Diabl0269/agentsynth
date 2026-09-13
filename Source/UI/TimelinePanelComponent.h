@@ -441,6 +441,18 @@ public:
     // (Audio Track, Instrument Track); a project-wide sweep belongs beside them, not off a single
     // track header, since it acts on every track at once.
     static constexpr int kCreateChannelsMenuId = 9;
+    // FRO42 (P9-3h): the Instrument submenu's "Plugin" sub-submenu. The single disabled row shown
+    // in place of an empty/scanning submenu (never actually selectable — JUCE never delivers a
+    // disabled item's id — but named for clarity and so applyAddTrackMenuChoice has an explicit
+    // no-op to ignore rather than falling through by luck). Every real plugin entry's id is
+    // `kAddInstrumentPluginMenuIdBase + index`, `index` into
+    // collectInstrumentPluginMenuOptions()'s result — re-collected fresh at both build and apply
+    // time, same "no cache, just re-derive by index" contract as
+    // collectAutomationLaneOptions/applyAutomationLaneMenuChoice. Deliberately 10, not 9 — FRO26's
+    // kCreateChannelsMenuId already claims 9 on this same flat "+ Track" menu, and every flat id
+    // here must stay < kAddInstrumentPluginMenuIdBase (100) with no collisions between them.
+    static constexpr int kAddInstrumentPluginNoneMenuId = 10;
+    static constexpr int kAddInstrumentPluginMenuIdBase = 100;
 
     /** Adds a marker at the transport's current position, named "Marker N", coloured from the
      *  theme (see defaultMarkerColourArgb) — ONE recordTimelineChange when an undo manager is
@@ -504,6 +516,23 @@ public:
     // to read "where am I" without walking the component tree asking each row whether it
     // hasKeyboardFocus(true) (which is also unreliable headlessly with no native peer).
     int getFocusedTrackIndexForTest() const noexcept { return focusedTrackIndex_; }
+
+    /** Builds the "+ Track" menu WITHOUT showing it — openAddTrackMenu() calls this then shows the
+     *  result async. The headless test seam for inspecting menu CONTENTS (item text, enabled state,
+     *  submenus), the same `juce::PopupMenu::MenuItemIterator` pattern
+     *  MacroPortWidgetTests.cpp/MacroContainerTests.cpp use elsewhere — unlike those, no context-menu
+     *  hook is needed here because this menu was already a pure builder call away from
+     *  showMenuAsync(), nothing to intercept. Triggers ensureInstrumentPluginsScanned() on the host
+     *  first (openAddTrackMenu()'s own contract — see that method), so the Plugin submenu this builds
+     *  reflects a scan that has at least been started. */
+    juce::PopupMenu buildAddTrackMenu();
+
+    /** The Instrument submenu's "Plugin" sub-submenu options, re-collected fresh on every call —
+     *  same "no cache" contract as collectAutomationLaneOptions: an id's meaning
+     *  (`kAddInstrumentPluginMenuIdBase + index`) is only ever resolved by re-running this at click
+     *  time, in applyAddTrackMenuChoice, exactly as it was built. Empty when the host is null or
+     *  offers nothing yet. */
+    std::vector<synth::PluginIdentity> collectInstrumentPluginMenuOptions() const;
 
 protected:
     /** Opens the "+ Track" button's menu (MIDI Track / Audio Track / Add Marker). The default

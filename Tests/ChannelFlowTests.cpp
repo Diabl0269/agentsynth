@@ -24,15 +24,21 @@
 #include "../Source/Modules/MasterModule.h"
 #include "../Source/Modules/ModuleBase.h"
 #include "../Source/Modules/VCAModule.h"
+#include "../Source/Plugin/Hosting/HostedPluginModule.h"
+#include "../Source/Plugin/Hosting/PluginScanService.h"
 #include "../Source/Timeline/TimelineDoc.h"
 #include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/ModuleComponent.h"
 #include "../Source/UI/ModuleLibraryComponent.h"
 #include "MainComponent.h"
+#include "StubPluginInstance.h"
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <gtest/gtest.h>
+#include <map>
 #include <memory>
+#include <thread>
 
 namespace {
 
@@ -126,6 +132,92 @@ bool setPolyParamCFT(juce::AudioProcessor* processor, bool poly) {
     return false;
 }
 
+// ============================================================================
+// FRO42 (P9-3h): "+ Track -> Instrument -> Plugin" — the fake plugin-format seam, same shape
+// PluginScanTests.cpp's ScanningStubBackend/ScanListStubBackend use, extended with a name-keyed
+// factory table so a single backend can make one scanned identity succeed (an instrument) and
+// another fail (an effect never offered, or an instrument whose load is refused/broken) without
+// juggling several ScopedDefault installs per test.
+// ============================================================================
+
+/** Pumps the JUCE message loop until `predicate` holds or the timeout expires — same bounded-poll
+ *  idiom as HostedPluginTests.cpp/PluginScanTests.cpp. Also usable as a plain "drain the loop for a
+ *  bit" call with an always-false predicate when a test has nothing else to wait on. */
+template <typename Predicate>
+bool pumpUntilCFT(Predicate predicate, int timeoutMs = 4000) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+    do {
+        if (predicate())
+            return true;
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(5);
+    } while (std::chrono::steady_clock::now() < deadline);
+    return predicate();
+}
+
+class InstrumentPluginStubBackendCFT : public synth::DefaultHostedPluginBackend {
+public:
+    using synth::DefaultHostedPluginBackend::createInstanceAsync;
+
+    // Keyed by juce::PluginDescription::name. No entry for a name means "this load fails" — the
+    // FailedLoad test's whole point, and never needs a StubPluginInstance of its own.
+    std::map<juce::String, std::function<std::unique_ptr<juce::AudioPluginInstance>()>> factories;
+    juce::String failureError = "Plugin failed to load.";
+
+    void createInstanceAsync(const juce::PluginDescription& description, double, int,
+                             InstanceCallback callback) override {
+        if (callback == nullptr)
+            return;
+        auto sharedCallback = std::make_shared<InstanceCallback>(std::move(callback));
+        const auto it = factories.find(description.name);
+        if (it == factories.end()) {
+            const juce::String error = failureError;
+            juce::MessageManager::callAsync([sharedCallback, error] { (*sharedCallback)(nullptr, error); });
+            return;
+        }
+        auto factory = it->second;
+        juce::MessageManager::callAsync([sharedCallback, factory] { (*sharedCallback)(factory(), juce::String()); });
+    }
+};
+
+/** A minimal scanned-plugin description — `isInstrument` is the one field
+ * PluginScanTests.cpp's own `descriptionXml()` helper never sets (it defaults false), and is
+ * exactly what getInstrumentPluginOptions() filters on. */
+juce::PluginDescription pluginDescriptionCFT(const juce::String& name, int uid, bool isInstrument) {
+    juce::PluginDescription description;
+    description.name = name;
+    description.pluginFormatName = "VST3";
+    description.uniqueId = uid;
+    description.deprecatedUid = uid;
+    description.fileOrIdentifier = "/plugins/" + name + ".vst3";
+    description.isInstrument = isInstrument;
+    return description;
+}
+
+/** juce::KnownPluginList's own XML shape (PluginScanService::loadFromXml's input), preserving each
+ *  description's isInstrument flag — see juce::PluginDescription::createXml/loadFromXml. */
+juce::String knownPluginsXmlCFT(const std::vector<juce::PluginDescription>& descriptions) {
+    juce::KnownPluginList list;
+    for (const auto& description : descriptions)
+        list.addType(description);
+    auto xml = list.createXml();
+    return xml != nullptr ? xml->toString() : juce::String();
+}
+
+/** Seeds `service` with `descriptions` the way a completed scan would, without running one. */
+void seedScanListCFT(synth::PluginScanService& service, const std::vector<juce::PluginDescription>& descriptions) {
+    auto xml = juce::parseXML(knownPluginsXmlCFT(descriptions));
+    ASSERT_NE(xml, nullptr);
+    service.loadFromXml(*xml);
+}
+
+const juce::PopupMenu::Item* findMenuItemByTextCFT(const juce::PopupMenu& menu, const juce::String& text) {
+    juce::PopupMenu::MenuItemIterator it(menu, true);
+    while (it.next())
+        if (it.getItem().text == text)
+            return &it.getItem();
+    return nullptr;
+}
+
 } // namespace
 
 class ChannelFlowTest : public ::testing::Test {
@@ -153,6 +245,15 @@ protected:
             // persisted "0" to this same shared on-disk settings file can't silently flip these
             // tests' trigger condition off.
             s->setValue("mixerAutoCreateChannelOnConnect", "1");
+            // FRO42: the plugin-instrument tests below drive a REAL PluginScanService::ensureScanned()
+            // through MainComponent, and a completed scan's pluginScanCompleted() unconditionally
+            // persists the scan list (MainComponent::savePluginScanList()) to this SAME shared
+            // on-disk file — same convention as PluginScanTests.cpp's PluginScanPersistenceTest::
+            // clearScanList(). Left uncleared, a fake candidate path ("/plugins/Slow.vst3" etc.)
+            // scanned once survives as a blacklist/known-plugin entry into every later run on this
+            // machine, so a later test's "fresh" scan silently skips its own candidate as
+            // already-known/blacklisted instead of actually invoking its child launcher.
+            s->removeValue(MainComponent::kPluginScanListKey);
             s->saveIfNeeded();
         }
     }
@@ -959,6 +1060,229 @@ TEST_F(ChannelFlowTest, InstrumentTrackRefusedAtMaxTracksCreatesNothing) {
     EXPECT_EQ(graph.getNumNodes(), nodesBefore) << "a refused instrument track must leave no orphan node";
     EXPECT_EQ(macros.size(), 0) << "a refused instrument track must leave no macro";
     EXPECT_FALSE(mc.getUndoManager().canUndo()) << "nothing changed in any domain: no undo step";
+}
+
+// ============================================================================
+// FRO42 (P9-3h): "+ Track -> Instrument -> Plugin -> <name>" — a hosted plugin as the instrument.
+// Loading is asynchronous (StubBackend's own contract), so every test here pumps the message loop
+// after driving the SAME applyAddTrackMenuChoice/menu-id path the tests above use.
+// ============================================================================
+
+TEST_F(ChannelFlowTest, PluginInstrumentTrackBuildsDefaultChannelWithNoAdsr) {
+    InstrumentPluginStubBackendCFT backend;
+    backend.factories["Stub Synth"] = [] {
+        return std::make_unique<synth::test::StubPluginInstance>(0, 2, "Stub Synth");
+    };
+    synth::HostedPluginBackend::ScopedDefault installed(&backend);
+
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto& macros = mc.getGraphEditor().getMacros();
+    seedScanListCFT(mc.getPluginScanService(), {pluginDescriptionCFT("Stub Synth", 0xA1FA, /*isInstrument=*/true)});
+
+    mc.getTimelinePanel().applyAddTrackMenuChoice(synth::ui::TimelinePanelComponent::kAddInstrumentPluginMenuIdBase +
+                                                  0);
+
+    ASSERT_TRUE(pumpUntilCFT([&] { return countNodesOfTypeCFT(graph, ModuleType::ChannelStrip) == 1; }))
+        << "the async load/chain-build never completed";
+
+    auto* trackIn = findNodeOfTypeCFT(graph, ModuleType::TimelineMidiSource);
+    auto* plugin = findNodeOfTypeCFT(graph, ModuleType::HostedPlugin);
+    auto* eq = findNodeOfTypeCFT(graph, ModuleType::ParametricEQ);
+    auto* comp = findNodeOfTypeCFT(graph, ModuleType::Compressor);
+    auto* strip = findNodeOfTypeCFT(graph, ModuleType::ChannelStrip);
+    ASSERT_NE(trackIn, nullptr);
+    ASSERT_NE(plugin, nullptr);
+    ASSERT_NE(eq, nullptr);
+    ASSERT_NE(comp, nullptr);
+    ASSERT_NE(strip, nullptr);
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::Master), 1);
+
+    ASSERT_EQ(macros.size(), 1);
+    const auto& macro = macros.getAll().front();
+    EXPECT_EQ(findMacroMemberOfTypeCFT(graph, macro, ModuleType::ADSR), nullptr)
+        << "a hosted synth has its own envelope — no P9-3i ADSR+VCA for it";
+    EXPECT_EQ(findMacroMemberOfTypeCFT(graph, macro, ModuleType::VCA), nullptr);
+    std::vector<juce::String> expectedMembers{nodeUuid(trackIn), nodeUuid(plugin), nodeUuid(eq), nodeUuid(comp),
+                                              nodeUuid(strip)};
+    auto actualMembers = macro.members;
+    std::sort(expectedMembers.begin(), expectedMembers.end());
+    std::sort(actualMembers.begin(), actualMembers.end());
+    EXPECT_EQ(actualMembers, expectedMembers) << "exactly Track In/plugin/EQ/Compressor/Strip, nothing else";
+
+    bool midiWired = false;
+    for (const auto& c : graph.getConnections())
+        if (c.source.nodeID == trackIn->nodeID &&
+            c.source.channelIndex == juce::AudioProcessorGraph::midiChannelIndex &&
+            c.destination.nodeID == plugin->nodeID &&
+            c.destination.channelIndex == juce::AudioProcessorGraph::midiChannelIndex)
+            midiWired = true;
+    EXPECT_TRUE(midiWired) << "Track In's MIDI must reach the plugin's MIDI input";
+
+    bool leftWired = false;
+    bool rightWired = false;
+    for (const auto& c : graph.getConnections()) {
+        if (c.source.nodeID != plugin->nodeID || c.destination.nodeID != eq->nodeID)
+            continue;
+        if (c.source.channelIndex == 0 && c.destination.channelIndex == 0)
+            leftWired = true;
+        if (c.source.channelIndex == 1 && c.destination.channelIndex == 1)
+            rightWired = true;
+    }
+    EXPECT_TRUE(leftWired) << "the plugin's L output must reach EQ L";
+    EXPECT_TRUE(rightWired) << "the plugin's real published R output (raw ch1) must reach EQ R — "
+                               "rightAudioLegChannel() read AFTER the load completed, never assumed ch1 blind";
+}
+
+TEST_F(ChannelFlowTest, PluginInstrumentTrackOneUndoStepRevertsEverythingAndRedoRestores) {
+    InstrumentPluginStubBackendCFT backend;
+    backend.factories["Stub Synth"] = [] {
+        return std::make_unique<synth::test::StubPluginInstance>(0, 2, "Stub Synth");
+    };
+    synth::HostedPluginBackend::ScopedDefault installed(&backend);
+
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto& doc = mc.getTimelineDoc();
+    auto& macros = mc.getGraphEditor().getMacros();
+    seedScanListCFT(mc.getPluginScanService(), {pluginDescriptionCFT("Stub Synth", 0xA1FA, /*isInstrument=*/true)});
+
+    // Settle first: GraphEditor::updateComponents() (already run once, for the factory preset the
+    // constructor loads) posts a mod-matrix refresh via callAsync, and that refresh renumbers every
+    // module's display name THE FIRST TIME IT EVER RUNS (AudioEngine::updateModuleNames() — cosmetic,
+    // never undo-tracked). The synchronous factory-instrument flow never pumps the loop, so that
+    // rename never gets a chance to fire there; THIS flow necessarily pumps it for the async plugin
+    // load below, so it must be allowed to happen and settle BEFORE "before" is captured, or it would
+    // land in the gap between "before" and "after undo" and make them differ over nothing this
+    // feature touched.
+    pumpUntilCFT([] { return false; }, 50);
+
+    const juce::String graphBefore = juce::JSON::toString(synth::AIStateMapper::graphToJSON(graph));
+    const juce::String docBefore = juce::JSON::toString(doc.toVar());
+    const juce::String macrosBefore = juce::JSON::toString(macros.toVar());
+
+    mc.getTimelinePanel().applyAddTrackMenuChoice(synth::ui::TimelinePanelComponent::kAddInstrumentPluginMenuIdBase +
+                                                  0);
+    ASSERT_TRUE(pumpUntilCFT([&] { return countNodesOfTypeCFT(graph, ModuleType::ChannelStrip) == 1; }));
+
+    const juce::String graphAfter = juce::JSON::toString(synth::AIStateMapper::graphToJSON(graph));
+    const juce::String docAfter = juce::JSON::toString(doc.toVar());
+    const juce::String macrosAfter = juce::JSON::toString(macros.toVar());
+
+    ASSERT_TRUE(mc.getUndoManager().canUndo());
+    ASSERT_TRUE(mc.getUndoManager().undo());
+    EXPECT_EQ(juce::JSON::toString(synth::AIStateMapper::graphToJSON(graph)), graphBefore);
+    EXPECT_EQ(juce::JSON::toString(doc.toVar()), docBefore);
+    EXPECT_EQ(juce::JSON::toString(macros.toVar()), macrosBefore);
+    EXPECT_FALSE(mc.getUndoManager().canUndo()) << "the whole channel was ONE undo step";
+
+    ASSERT_TRUE(mc.getUndoManager().redo());
+    EXPECT_EQ(juce::JSON::toString(synth::AIStateMapper::graphToJSON(graph)), graphAfter);
+    EXPECT_EQ(juce::JSON::toString(doc.toVar()), docAfter);
+    EXPECT_EQ(juce::JSON::toString(macros.toVar()), macrosAfter);
+}
+
+TEST_F(ChannelFlowTest, PluginInstrumentTrackEffectsAreNeverOfferedInTheMenu) {
+    InstrumentPluginStubBackendCFT backend;
+    synth::HostedPluginBackend::ScopedDefault installed(&backend);
+
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto& doc = mc.getTimelineDoc();
+    seedScanListCFT(mc.getPluginScanService(), {pluginDescriptionCFT("Stub Delay", 0xB37A, /*isInstrument=*/false)});
+
+    EXPECT_TRUE(mc.getTimelinePanel().collectInstrumentPluginMenuOptions().empty())
+        << "an effect (isInstrument=false) must never appear in the Instrument -> Plugin submenu";
+
+    const int tracksBefore = (int)doc.getTracks().size();
+    const int nodesBefore = graph.getNumNodes();
+    // Nothing at this id — the list is empty, so the index is out of range and this must be a no-op,
+    // exactly like a stale/out-of-range id on any other dynamically-built menu in this app.
+    mc.getTimelinePanel().applyAddTrackMenuChoice(synth::ui::TimelinePanelComponent::kAddInstrumentPluginMenuIdBase +
+                                                  0);
+
+    EXPECT_EQ((int)doc.getTracks().size(), tracksBefore);
+    EXPECT_EQ(graph.getNumNodes(), nodesBefore);
+    EXPECT_FALSE(mc.getUndoManager().canUndo());
+}
+
+TEST_F(ChannelFlowTest, PluginInstrumentTrackFailedLoadLeavesGraphAndUndoUntouched) {
+    // "Broken Synth" is scanned (isInstrument=true, so it IS offered) but has no factory entry —
+    // InstrumentPluginStubBackendCFT fails its load, exactly like a plugin whose binary the machine
+    // can no longer find or whose format crashed on load.
+    InstrumentPluginStubBackendCFT backend;
+    synth::HostedPluginBackend::ScopedDefault installed(&backend);
+
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto& doc = mc.getTimelineDoc();
+    seedScanListCFT(mc.getPluginScanService(), {pluginDescriptionCFT("Broken Synth", 0xC0DE, /*isInstrument=*/true)});
+
+    const int tracksBefore = (int)doc.getTracks().size();
+    const int nodesBefore = graph.getNumNodes();
+    const juce::String messageBefore = mc.getStatusBar().getTransientMessageForTest();
+
+    mc.getTimelinePanel().applyAddTrackMenuChoice(synth::ui::TimelinePanelComponent::kAddInstrumentPluginMenuIdBase +
+                                                  0);
+
+    ASSERT_TRUE(pumpUntilCFT([&] { return mc.getStatusBar().getTransientMessageForTest() != messageBefore; }))
+        << "the failure was never reported";
+
+    EXPECT_EQ((int)doc.getTracks().size(), tracksBefore) << "a failed load must leave no orphan track";
+    EXPECT_EQ(graph.getNumNodes(), nodesBefore) << "a failed load must leave no orphan node — not even a bare "
+                                                   "Hosted Plugin placeholder";
+    EXPECT_FALSE(mc.getUndoManager().canUndo()) << "a failed load must push no undo step";
+
+    // The pending processor is torn down on a LATER message-loop turn (see
+    // MainComponent::addInstrumentPluginTrack's own comment on why); give it that turn and confirm
+    // nothing changed as a result either.
+    pumpUntilCFT([] { return false; }, 100);
+    EXPECT_EQ((int)doc.getTracks().size(), tracksBefore);
+    EXPECT_EQ(graph.getNumNodes(), nodesBefore);
+    EXPECT_FALSE(mc.getUndoManager().canUndo());
+}
+
+TEST_F(ChannelFlowTest, PluginInstrumentMenuShowsScanningThenNoInstrumentPluginsFound) {
+    InstrumentPluginStubBackendCFT backend;
+    synth::HostedPluginBackend::ScopedDefault installed(&backend);
+
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+
+    // One VST3 candidate with a launcher that deliberately takes a moment — long enough that
+    // isScanning() is still reliably true the instant buildAddTrackMenu() returns (with zero
+    // candidates the background thread can finish before this thread's very next line runs, which
+    // would make that assertion flaky). It reports "not found" either way, so the scan still
+    // finishes with nothing known — the "nothing installed on this machine" case.
+    mc.getPluginScanService().setCandidateSource([](const juce::String& format) {
+        return format == "VST3" ? juce::StringArray("/plugins/Slow.vst3") : juce::StringArray();
+    });
+    mc.getPluginScanService().setChildLauncher([](const juce::String&, const juce::String&, int, juce::String&) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        return false;
+    });
+
+    juce::PopupMenu firstOpen = mc.getTimelinePanel().buildAddTrackMenu();
+    EXPECT_TRUE(mc.getPluginScanService().isScanning()) << "opening the menu must kick off the eager scan";
+    const auto* scanningItem = findMenuItemByTextCFT(firstOpen, "Scanning for plugins...");
+    ASSERT_NE(scanningItem, nullptr);
+    EXPECT_FALSE(scanningItem->isEnabled);
+
+    ASSERT_TRUE(pumpUntilCFT([&] { return !mc.getPluginScanService().isScanning(); }));
+
+    juce::PopupMenu secondOpen = mc.getTimelinePanel().buildAddTrackMenu();
+    const auto* noneItem = findMenuItemByTextCFT(secondOpen, "No instrument plugins found");
+    ASSERT_NE(noneItem, nullptr);
+    EXPECT_FALSE(noneItem->isEnabled);
 }
 
 // synth::addVoiceMixerForPolyInstrument / the poly branch of MainComponent::addInstrumentTrack's

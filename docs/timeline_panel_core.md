@@ -788,15 +788,33 @@ Picking one calls `TimelineDoc::setTrackBinding` as one undoable step, then reco
 **"+ Track"** (it used to read `"+ MIDI Track"` and added one outright until audio tracks existed,
 and carries the tooltip *"Add a MIDI or Audio track"* so the two-item menu isn't a surprise)
 opens a menu — **MIDI Track** / **Audio Track**, an **Instrument Track** submenu (**Oscillator** /
-**Wavetable** / **Sampler**), then a separator and **Add Marker** — whose ids are
-`TimelinePanelComponent::kAddMidiTrackMenuId` / `kAddAudioTrackMenuId` /
-`kAddInstrumentOscillatorMenuId` / `kAddInstrumentWavetableMenuId` / `kAddInstrumentSamplerMenuId` /
-`kAddMarkerMenuId`. The MIDI/Audio entries land on `TrackHeaderHost` (`addMidiTrack()` /
-`addAudioTrack()`); each Instrument submenu entry calls `addInstrumentTrack(instrumentModuleType)`
-with its module type string. `TimelinePanelComponent::applyAddTrackMenuChoice(id)` is the headless
-seam for all of them — the same split the binding and context menus use, since a `juce::PopupMenu`
-never runs in the test binary. `MainComponent::simulateAddMidiTrackClick()` /
-`simulateAddAudioTrackClick()` / `simulateAddInstrumentTrackClick(menuId)` call straight into it.
+**Wavetable** / **Sampler**, poly variants, then a **Plugin** sub-submenu — see below), then a
+separator and **Add Marker** — whose ids are `TimelinePanelComponent::kAddMidiTrackMenuId` /
+`kAddAudioTrackMenuId` / `kAddInstrumentOscillatorMenuId` / `kAddInstrumentWavetableMenuId` /
+`kAddInstrumentSamplerMenuId` / `kAddMarkerMenuId`. The MIDI/Audio entries land on
+`TrackHeaderHost` (`addMidiTrack()` / `addAudioTrack()`); each Instrument submenu entry calls
+`addInstrumentTrack(instrumentModuleType)` with its module type string.
+`TimelinePanelComponent::applyAddTrackMenuChoice(id)` is the headless seam for all of them — the
+same split the binding and context menus use, since a `juce::PopupMenu` never runs in the test
+binary. `MainComponent::simulateAddMidiTrackClick()` / `simulateAddAudioTrackClick()` /
+`simulateAddInstrumentTrackClick(menuId)` call straight into it.
+
+**The Instrument submenu's Plugin sub-submenu (FRO42, P9-3h)** lists the scanned INSTRUMENT hosted
+plugins (`TrackHeaderHost::getInstrumentPluginOptions()`, filtered on
+`juce::PluginDescription::isInstrument` — effects are never offered). Opening the menu
+(`TimelinePanelComponent::buildAddTrackMenu()`, called by `openAddTrackMenu()` before it shows the
+result, and the headless test seam for inspecting the built `juce::PopupMenu`'s contents) calls
+`TrackHeaderHost::ensureInstrumentPluginsScanned()` first, which `MainComponent` wires straight to
+its existing `maybeStartEagerPluginScan()` — the SAME hosted-mode-guarded entry point the eager
+startup scan and the library sidebar's manual "Scan for plugins..." row use, never a second scan
+trigger. An empty or still-in-progress list shows one disabled row — "Scanning for plugins..." or
+"No instrument plugins found" (`TrackHeaderHost::isPluginScanInProgress()`) — instead of an empty
+submenu. Every real entry's id is `kAddInstrumentPluginMenuIdBase + index`, `index` into
+`TimelinePanelComponent::collectInstrumentPluginMenuOptions()`'s result; like the automation strip's
+lane picker (`collectAutomationLaneOptions`/`applyAutomationLaneMenuChoice`, §5 below), the id is
+resolved by RE-RUNNING that same collector at apply time rather than caching a snapshot from when
+the menu was built. Choosing one calls `TrackHeaderHost::addInstrumentPluginTrack(identity)` — see
+`docs/mixer.md` §8's P9-3h entry for what it builds and why the load has to be asynchronous.
 
 **Add Marker** sits below a separator because it is **not a track**: it adds no header row and no
 graph node, it drops a flag on the ruler (see *Markers* under §2 above). It shares this menu

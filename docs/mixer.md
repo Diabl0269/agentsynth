@@ -640,6 +640,38 @@ Main line, in dependency order:
      branch check runs, making P9-3j's poly-envelope auto-wire reachable from the UI for the first
      time. See `ChannelFlowTest.AddInstrumentTrackMenuOscillatorPolyWiresPolyEnvelopeAndVCA` /
      `...WavetablePolyWiresPolyEnvelopeAndVCA` in `Tests/ChannelFlowTests.cpp`.
+   - **P9-3h (hosted plugin as the instrument) — DONE (FRO42).** "+ Track -> Instrument" gained a
+     "Plugin" sub-submenu listing the scanned INSTRUMENT plugins (`juce::PluginDescription::
+     isInstrument`; effects are filtered out and never offered here) — opening the menu calls
+     `MainComponent::maybeStartEagerPluginScan()` (FRO44's shared, hosted-mode-guarded entry point;
+     never a parallel scan trigger) so the list is populated even on the FIRST open, and an empty/
+     still-scanning list shows one disabled "Scanning for plugins..." / "No instrument plugins
+     found" row instead of an empty submenu. Choosing a plugin builds the exact same Track In ->
+     instrument -> default chain (EQ bypassed -> Compressor bypassed -> Channel Strip) -> Master
+     flow T183 built, boxed into one collapsed macro, as ONE undo step — except the instrument is a
+     hosted `HostedPluginModule` instance rather than a factory module, and the load is
+     ASYNCHRONOUS: `MainComponent::addInstrumentPluginTrack` stages a bare Hosted Plugin module OFF
+     the graph, starts its load, and only opens the undo transaction (via the SAME shared tail
+     `MainComponent::buildInstrumentTrackAndChain` now factors `addInstrumentTrack` through) once
+     `HostedPluginModule::onLoadCompleted` reports success — a new completion hook that fires once
+     per load attempt covering all three exits (publish, an outright backend failure, and the
+     over-max refusal inside `publishInstance()`, none of which `onInstancePublished`/
+     `onInstanceChanged` alone would catch). A failed or refused load touches neither the graph nor
+     the undo stack; the staged module (owned by `MainComponent::pendingInstrumentPluginLoads_`,
+     never by a `shared_ptr` looped back through its own `onLoadCompleted`, which would keep the
+     object alive forever) is simply torn down on the next message-loop turn. No P9-3i ADSR+VCA is
+     added — a hosted synth has its own envelope — which the shared tail gets for free: it keys the
+     Oscillator/Wavetable/poly branches off the instrument NODE's own `getName()`/"poly" parameter,
+     and a `HostedPluginModule` is named "Hosted Plugin" and declares no "poly" parameter, so every
+     one of those branches falls through to the plain path automatically. `ModuleBase::
+     rightAudioLegChannel()` — read only AFTER the load completes, since the module's real channel
+     count isn't known before then — gained a `HostedPluginModule` override deriving from the
+     published instance's real output count (ch1 once there are 2+ outputs; ch0 duplicated onto both
+     legs for a genuinely mono instance; the base class's `hasDualIOParameter()`-gated default would
+     have read -1 forever, since this module never registers a Dual I/O parameter). See
+     `Tests/HostedPluginTests.cpp`'s `OnLoadCompletedFires*`/`RightAudioLegChannelFollows...` and
+     `Tests/ChannelFlowTests.cpp`'s `PluginInstrumentTrack*` — the latter drives the exact same
+     `applyAddTrackMenuChoice`/menu-id seam the T183 tests use.
    - **T184 (MIDI-track auto-channel-on-connect) — DONE.** Dragging a MIDI cable from a Track In
      node (`ModuleType::TimelineMidiSource`) onto an instrument or macro whose audio reaches Audio
      Output/Rec Tap/Master's Direct bus with no `ChannelStrip` anywhere on that path auto-builds a

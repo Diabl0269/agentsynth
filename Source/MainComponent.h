@@ -455,6 +455,7 @@ public:
     // therefore goes through getPluginScanService(), never the member directly.
 
     synth::PluginScanService& getPluginScanService() noexcept { return *activeScanService; }
+    const synth::PluginScanService& getPluginScanService() const noexcept { return *activeScanService; }
 
     /** Starts a background scan of every format this build can host, reporting through the status
      *  bar and refreshing the library's Plugins section (and the saved list) when it finishes.
@@ -536,6 +537,31 @@ private:
     // post-apply site (a module deleted from the canvas). See the call site for why publishing
     // there would be waste.
     void reconcileTimelineBindingsOnly();
+
+    // T183/FRO42: the shared tail of addInstrumentTrack() and addInstrumentPluginTrack() — Track In
+    // -> `instrumentProcessor` -> [poly/envelope branches, gated exactly as addInstrumentTrack's own
+    // comment describes] -> default chain -> Master, boxed into one collapsed macro, as ONE undo
+    // step. `instrumentProcessor` must be non-null and NOT yet added to any graph (a factory
+    // failure, or a plugin whose load failed/refused, is the CALLER's job to catch and report before
+    // this ever runs — see addInstrumentPluginTrack's own comment for why: nothing here may open a
+    // transaction for an instrument that doesn't exist). Every branch this method takes (Oscillator/
+    // Wavetable's ADSR+VCA, a poly instrument's Voice Mixer) is keyed off the PROCESSOR's own
+    // getName()/"poly" parameter, never a caller-supplied type string — a hosted plugin's getName()
+    // is "Hosted Plugin" and it declares no "poly" parameter, so every one of those branches falls
+    // out to the plain path automatically, with no separate plugin-shaped copy of this logic. `poly`
+    // mirrors addInstrumentTrack's own parameter (always false from the plugin path, which has no
+    // poly concept). `trackNamePrefix` becomes "<prefix> <N>", same numbering as before.
+    void buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProcessor> instrumentProcessor,
+                                      const juce::String& trackNamePrefix, bool poly);
+
+    // FRO42: hosted-plugin instrument loads in flight — see addInstrumentPluginTrack's own comment
+    // for why THIS (an external, independent owner) holds the staged processor rather than a
+    // shared_ptr captured by the module's own onLoadCompleted callback, which would make the object
+    // keep itself alive via its own member. A failed/refused load is dropped via
+    // dropPendingInstrumentPluginLoad(), deferred to the next message-loop turn so the module is
+    // never destroyed from inside its own currently-executing onLoadCompleted callback.
+    std::vector<std::unique_ptr<juce::AudioProcessor>> pendingInstrumentPluginLoads_;
+    void dropPendingInstrumentPluginLoad(juce::AudioProcessor* processor);
 
     // Status-bar round-trip readout. Called from the 5 Hz poll and from any
     // hosted-plugin latency change (which moves the graph term of the sum between polls).
@@ -629,6 +655,11 @@ private:
     void addInstrumentTrack(const juce::String& instrumentModuleType, bool poly) override;
     bool hasTracksNeedingChannels() const override;
     void createChannelsForExistingTracks() override;
+    // FRO42 (P9-3h): the Instrument submenu's "Plugin" entries.
+    std::vector<synth::PluginIdentity> getInstrumentPluginOptions() const override;
+    bool isPluginScanInProgress() const override { return getPluginScanService().isScanning(); }
+    void ensureInstrumentPluginsScanned() override { maybeStartEagerPluginScan(); }
+    void addInstrumentPluginTrack(const synth::PluginIdentity& identity) override;
     std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> getAvailablePluginLaneOptions() const override;
     synth::LaneId addPluginAutomationLane(const synth::ui::TrackHeaderHost::PluginLaneOption& option) override;
     // The colour picker's favourites shelf persists here — the only TrackHeaderHost override
