@@ -41,6 +41,15 @@
 
 set -uo pipefail
 
+# Git hooks run with GIT_DIR (and sometimes GIT_WORK_TREE/GIT_INDEX_FILE) exported into the
+# environment. With GIT_DIR set and no matching GIT_WORK_TREE, `git rev-parse --show-toplevel`
+# stops doing normal discovery from the current directory, so ROOT below can resolve to the wrong
+# path (e.g. this script's own directory) -- every scanned file then reads as missing (n=0), and
+# the check passes vacuously with nothing actually scanned. Strip the inherited git env so every
+# git call below does normal discovery, whether run standalone, from the pre-commit hook, or from
+# a linked worktree.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
+
 # File extensions this guard cares about -- source, tests, scripts, docs, config. One cap for
 # all of them; see the header above for why there's no per-directory exception.
 EXTENSIONS=(
@@ -149,7 +158,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -n "$ROOT_OVERRIDE" ]; then
     ROOT="$(cd "$ROOT_OVERRIDE" && pwd)"
 else
-    ROOT="$(cd "$SCRIPT_DIR" && git rev-parse --show-toplevel)"
+    # Fail loudly rather than silently: if this can't resolve, a wrong/empty ROOT must never
+    # reach the scan below (see the awk fail-safe further down for the belt-and-braces backstop).
+    if ! ROOT="$(cd "$SCRIPT_DIR" && git rev-parse --show-toplevel)"; then
+        echo "::error::check-file-sizes: 'git rev-parse --show-toplevel' failed from $SCRIPT_DIR -- refusing to guess ROOT (pass --root explicitly to override)" >&2
+        exit 1
+    fi
 fi
 
 CAP="${FILE_SIZE_CAP:-1000}"
@@ -242,6 +256,9 @@ run_check() {
             count[$2] = $1 + 0
             scanned[$2] = 1
             total++
+            if ($1 + 0 == 0) {
+                zero_count++
+            }
             if ($1 + 0 > max_count) {
                 max_count = $1 + 0
                 max_path = $2
@@ -277,6 +294,18 @@ run_check() {
             if (max_path == "") {
                 max_path = "(none)"
                 max_count = 0
+            }
+            # Fail safe: reading EVERY scanned file as 0 lines (see the GIT_DIR note near the top
+            # of this script -- a wrong ROOT makes every `$ROOT/$path` lookup miss the filesystem)
+            # looks identical to a clean pass: 0 legacy files, no errors. A real tree never has
+            # every one of several tracked, non-empty-by-construction files read back as empty --
+            # an audit that silently matches nothing is the same blind spot it exists to close, so
+            # this shape fails loudly instead of reporting a vacuous pass. (Scanning zero files is
+            # NOT itself flagged here -- a repo or --root with no matching tracked files is legitimate,
+            # e.g. everything under it happens to be excluded.)
+            if (total + 0 > 1 && zero_count + 0 == total + 0) {
+                printf "::error::check-file-sizes read every one of %d scanned files as 0 lines -- ROOT is almost certainly wrong (a stray GIT_DIR/GIT_WORK_TREE in the environment is the usual cause); refusing to report a vacuous pass\n", total + 0
+                errors++
             }
             printf "SUMMARY %d %d %d %s\n", total + 0, legacy, max_count, max_path
             exit (errors > 0 ? 1 : 0)
