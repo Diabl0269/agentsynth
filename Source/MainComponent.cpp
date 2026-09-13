@@ -4560,7 +4560,7 @@ void MainComponent::addAudioTrack() {
     statusBar.showMessage(pushed ? "Added " + trackName : "Could not add a track");
 }
 
-void MainComponent::addInstrumentTrack(const juce::String& instrumentModuleType) {
+void MainComponent::addInstrumentTrack(const juce::String& instrumentModuleType, bool poly) {
     const int index = (int)timelineDoc.getTracks().size();
     juce::String trackName; // set inside the mutation; read afterwards for the status message
 
@@ -4577,7 +4577,8 @@ void MainComponent::addInstrumentTrack(const juce::String& instrumentModuleType)
     // T183's own scope never asked for a new TrackKind, and adding one is a format/serialization
     // change nothing here requires — see that doc's update alongside this change.
     const bool pushed = undoManager.recordGraphTimelineAndMacroChange(
-        audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(), [this, index, &trackName, instrumentModuleType] {
+        audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(),
+        [this, index, &trackName, instrumentModuleType, poly] {
             trackName = instrumentModuleType + " " + juce::String(index + 1);
             const auto trackId = timelineDoc.addTrack(synth::TrackKind::Midi, trackName);
             if (!trackId.isValid())
@@ -4620,6 +4621,9 @@ void MainComponent::addInstrumentTrack(const juce::String& instrumentModuleType)
                 module->setNodeUuid(instrumentUuid);
             instrumentNode->properties.set("x", instrumentX);
             instrumentNode->properties.set("y", trackInPosition.y);
+
+            if (poly)
+                synth::setProcessorPoly(instrumentNode->getProcessor(), true);
 
             timelineDoc.setTrackBinding(trackId, trackInUuid);
             timelineDoc.setTrackColour(trackId, synth::ui::trackPaletteColour(index).getARGB());

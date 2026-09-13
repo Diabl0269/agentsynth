@@ -1139,11 +1139,15 @@ void TimelinePanelComponent::applyAddTrackMenuChoice(int menuId) {
     else if (menuId == kAddAudioTrackMenuId)
         trackHeaderHost_->addAudioTrack();
     else if (menuId == kAddInstrumentOscillatorMenuId)
-        trackHeaderHost_->addInstrumentTrack("Oscillator");
+        trackHeaderHost_->addInstrumentTrack("Oscillator", false);
     else if (menuId == kAddInstrumentWavetableMenuId)
-        trackHeaderHost_->addInstrumentTrack("Wavetable");
+        trackHeaderHost_->addInstrumentTrack("Wavetable", false);
     else if (menuId == kAddInstrumentSamplerMenuId)
-        trackHeaderHost_->addInstrumentTrack("Sampler");
+        trackHeaderHost_->addInstrumentTrack("Sampler", false);
+    else if (menuId == kAddInstrumentOscillatorPolyMenuId)
+        trackHeaderHost_->addInstrumentTrack("Oscillator", true);
+    else if (menuId == kAddInstrumentWavetablePolyMenuId)
+        trackHeaderHost_->addInstrumentTrack("Wavetable", true);
 }
 
 synth::MarkerId TimelinePanelComponent::addMarkerAtPlayhead() {
@@ -1190,6 +1194,11 @@ void TimelinePanelComponent::openAddTrackMenu() {
     instrumentMenu.addItem(kAddInstrumentOscillatorMenuId, "Oscillator");
     instrumentMenu.addItem(kAddInstrumentWavetableMenuId, "Wavetable");
     instrumentMenu.addItem(kAddInstrumentSamplerMenuId, "Sampler");
+    // FRO48 (P9-3k): poly variants below a separator — Sampler has no "poly" parameter, so it has
+    // no poly entry.
+    instrumentMenu.addSeparator();
+    instrumentMenu.addItem(kAddInstrumentOscillatorPolyMenuId, "Oscillator (Poly)");
+    instrumentMenu.addItem(kAddInstrumentWavetablePolyMenuId, "Wavetable (Poly)");
     menu.addSubMenu("Instrument Track", instrumentMenu);
     // Separated because it is not a track at all: a marker adds no row to the header column and
     // nothing to the graph, it drops a flag on the ruler.

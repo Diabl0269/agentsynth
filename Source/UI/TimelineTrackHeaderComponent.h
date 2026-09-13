@@ -81,8 +81,11 @@ struct TrackHeaderHost {
     /** The "+ Track" button's Instrument submenu (T183/P9-3b): `instrumentModuleType` ("Oscillator",
      *  "Wavetable" or "Sampler") wired as Track In -> instrument -> default chain (EQ/Compressor
      *  bypassed -> Channel Strip Stereo) -> Master, plus a Midi-kind track bound to the Track In, as
-     *  ONE compound undo step — the exact mirror of addAudioTrack(). */
-    virtual void addInstrumentTrack(const juce::String& instrumentModuleType) = 0;
+     *  ONE compound undo step — the exact mirror of addAudioTrack(). `poly` (FRO48; Oscillator/
+     *  Wavetable only, ignored for Sampler which has no "poly" parameter) turns the new instrument's
+     *  poly mode on before the rest of the wiring runs, so the poly-envelope auto-wire (P9-3j) picks
+     *  it up. */
+    virtual void addInstrumentTrack(const juce::String& instrumentModuleType, bool poly) = 0;
 
     /** One hosted-plugin instance parameter with no automation lane yet — the automation
      *  strip's lane picker "Add lane..." entries. `paramId` is the value a created lane would carry

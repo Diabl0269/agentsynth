@@ -118,6 +118,11 @@ juce::AudioProcessorGraph::Node* addVoiceMixerForPolyInstrument(juce::AudioProce
  *  applies BEFORE calling any of them. */
 bool isProcessorPoly(juce::AudioProcessor* processor);
 
+/** Sets `processor`'s "poly" AudioParameterBool if it declares one (no-op otherwise) — the write
+ *  counterpart to isProcessorPoly, for a caller that wants an instrument it just created to start
+ *  poly before running the rest of addInstrumentTrack's poly-aware wiring. */
+void setProcessorPoly(juce::AudioProcessor* processor, bool poly);
+
 /** The nodes addEnvelopeAndVCAForRawInstrument() created; `vca` is null (both uuids empty) on a
  *  partial factory/addNode failure — same "nothing usable was built" contract as DefaultChannel. */
 struct EnvelopeAndVCA {
