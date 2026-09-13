@@ -129,6 +129,18 @@ public:
      *  Owned by MainComponent, separately from onInstanceChanged. */
     std::function<void()> onInstancePublished;
 
+    /** FRO42: fired on the message thread at the end of EVERY loadPlugin() attempt — success,
+     *  outright failure (the backend hands back no instance) OR the over-max refusal inside
+     *  publishInstance() (which itself fires nothing else at all) — with `success` = hasInstance()
+     *  read right after. This is the one signal that covers all three exits, which is exactly why a
+     *  caller that must not touch the graph/undo stack until it KNOWS the outcome (a track-builder
+     *  staging the module off-graph — see MainComponent::addInstrumentPluginTrack) cannot use
+     *  onInstancePublished (success only) or onInstanceChanged (never fires on a failed/refused
+     *  load, since there was never a "gone" edge to cross) for this. Fired AFTER onInstanceChanged/
+     *  onInstancePublished on the success path, so a listener reading getActiveInstanceForEditor()
+     *  or getInstanceParameters() from here always sees the fully-published state. */
+    std::function<void(bool success)> onLoadCompleted;
+
     //==============================================================================
     // Instance parameters — automation-lane resolution seam, message thread only
     //==============================================================================
@@ -208,6 +220,29 @@ public:
 
     LogicalPort mapInputChannel(int rawChannel) const override;
     LogicalPort mapOutputChannel(int rawChannel) const override;
+
+    /** FRO42: unlike the split-block voice modules, ch1 here is never a CV input — this module has
+     *  none, only the instance's own raw audio channels in a contiguous block (mapOutputChannel
+     *  above) — so it does NOT use the ModuleBase default (`hasDualIOParameter() ? 1 : -1`), which
+     *  would read -1 forever: this module never registers a Dual I/O parameter (its shape is fixed
+     *  16/16, not the exactly-2-out shape that grants one). Derived from the PUBLISHED instance's
+     *  real output count instead: ch1 once there are 2+ real outputs (a stereo or wider
+     *  instrument/effect); ch0 again (both legs read the one channel) for a genuinely mono
+     *  instance; -1 (no leg at all) for a bare/silent module. Callers that build a stereo channel
+     *  from this node (MainComponent::addInstrumentPluginTrack) must read this only AFTER the load
+     *  completes — see onLoadCompleted above — so it reflects the real instance, not the bare
+     *  placeholder's 1-in/1-out default. */
+    int rightAudioLegChannel() const override {
+        if (!hasInstance())
+            return -1; // bare/silent module: getVisibleOutputPortCount()'s floor-of-1 placeholder
+                       // is not a real channel to report a leg on
+        const int outputs = getVisibleOutputPortCount();
+        if (outputs >= 2)
+            return 1;
+        if (outputs == 1)
+            return 0;
+        return -1;
+    }
 
     ModulationCategory getModulationCategory() const override { return ModulationCategory::FX; }
     ModuleType getModuleType() const override { return ModuleType::HostedPlugin; }

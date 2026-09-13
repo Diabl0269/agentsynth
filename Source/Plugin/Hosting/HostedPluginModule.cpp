@@ -73,10 +73,15 @@ void HostedPluginModule::loadPlugin(const juce::PluginDescription& description, 
 
             if (instance == nullptr) {
                 module->statusMessage_ = error.isNotEmpty() ? error : juce::String("Plugin failed to load.");
-                return;
+            } else {
+                module->publishInstance(std::move(instance));
             }
 
-            module->publishInstance(std::move(instance));
+            // FRO42: fires last, whatever branch above ran — see onLoadCompleted's own comment for
+            // why hasInstance() (not `instance != nullptr`) is the right read here: publishInstance()
+            // itself can silently refuse an over-max instance without ever publishing one.
+            if (module->onLoadCompleted)
+                module->onLoadCompleted(module->hasInstance());
         });
 }
 
@@ -108,10 +113,13 @@ void HostedPluginModule::startIdentityLoad(const PluginIdentity& identity, Hoste
                 // The identity is deliberately KEPT: a placeholder that still
                 // names its plugin is a valid state.
                 module->statusMessage_ = error.isNotEmpty() ? error : juce::String("Plugin failed to load.");
-                return;
+            } else {
+                module->publishInstance(std::move(instance));
             }
 
-            module->publishInstance(std::move(instance));
+            // See the description-overload's own comment on this same line.
+            if (module->onLoadCompleted)
+                module->onLoadCompleted(module->hasInstance());
         });
 }
 

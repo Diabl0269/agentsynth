@@ -441,6 +441,25 @@ public:
     // (Audio Track, Instrument Track); a project-wide sweep belongs beside them, not off a single
     // track header, since it acts on every track at once.
     static constexpr int kCreateChannelsMenuId = 9;
+    // FRO42 (P9-3h): the Instrument submenu's "Plugin" sub-submenu. The single disabled row shown
+    // in place of an empty/scanning submenu (never actually selectable — JUCE never delivers a
+    // disabled item's id — but named for clarity and so applyAddTrackMenuChoice has an explicit
+    // no-op to ignore rather than falling through by luck). Every real plugin entry's id is
+    // `kAddInstrumentPluginMenuIdBase + index`, `index` into the SNAPSHOT `buildAddTrackMenu()`
+    // captures into `instrumentPluginMenuSnapshot_` at build time. Deliberately NOT the same
+    // contract as collectAutomationLaneOptions/applyAutomationLaneMenuChoice: an automation lane
+    // is document data mutated only on the message thread, so re-running the collector at click
+    // time is safe and cheap. The known-plugin list backing this menu is mutated by
+    // `PluginScanService::runScan` on a BACKGROUND thread and re-sorted by name in
+    // `MainComponent::getInstrumentPluginOptions()` — a scan that completes between the menu
+    // opening and the click landing can silently change what index N means, resolving the click
+    // against a plugin the menu never actually showed at that row. Resolving against a snapshot
+    // taken when the menu was built (what the user is actually looking at) closes that: see
+    // applyAddTrackMenuChoice. Deliberately 10, not 9 — FRO26's kCreateChannelsMenuId already
+    // claims 9 on this same flat "+ Track" menu, and every flat id here must stay <
+    // kAddInstrumentPluginMenuIdBase (100) with no collisions between them.
+    static constexpr int kAddInstrumentPluginNoneMenuId = 10;
+    static constexpr int kAddInstrumentPluginMenuIdBase = 100;
 
     /** Adds a marker at the transport's current position, named "Marker N", coloured from the
      *  theme (see defaultMarkerColourArgb) — ONE recordTimelineChange when an undo manager is
@@ -505,6 +524,24 @@ public:
     // hasKeyboardFocus(true) (which is also unreliable headlessly with no native peer).
     int getFocusedTrackIndexForTest() const noexcept { return focusedTrackIndex_; }
 
+    /** Builds the "+ Track" menu WITHOUT showing it — openAddTrackMenu() calls this then shows the
+     *  result async. The headless test seam for inspecting menu CONTENTS (item text, enabled state,
+     *  submenus), the same `juce::PopupMenu::MenuItemIterator` pattern
+     *  MacroPortWidgetTests.cpp/MacroContainerTests.cpp use elsewhere — unlike those, no context-menu
+     *  hook is needed here because this menu was already a pure builder call away from
+     *  showMenuAsync(), nothing to intercept. Triggers ensureInstrumentPluginsScanned() on the host
+     *  first (openAddTrackMenu()'s own contract — see that method), so the Plugin submenu this builds
+     *  reflects a scan that has at least been started. */
+    juce::PopupMenu buildAddTrackMenu();
+
+    /** The Instrument submenu's "Plugin" sub-submenu options, re-collected fresh on every call —
+     *  used to POPULATE the menu (buildAddTrackMenu(), which also snapshots the result into
+     *  instrumentPluginMenuSnapshot_) and by tests inspecting what the menu would currently show.
+     *  NOT used to resolve a click — see kAddInstrumentPluginNoneMenuId's comment for why
+     *  applyAddTrackMenuChoice reads the snapshot instead of calling this again. Empty when the
+     *  host is null or offers nothing yet. */
+    std::vector<synth::PluginIdentity> collectInstrumentPluginMenuOptions() const;
+
 protected:
     /** Opens the "+ Track" button's menu (MIDI Track / Audio Track / Add Marker). The default
      *  implementation shows a real `juce::PopupMenu` via `showMenuAsync`.
@@ -549,6 +586,15 @@ private:
     // writer in this class already treats as ground truth (see syncTrackScroll()).
     void ensureTrackVisible(int index);
     int focusedTrackIndex_ = -1;
+
+    // ---- FRO42 (P9-3h): Instrument -> Plugin submenu click-resolution snapshot ----
+    // The exact option list `buildAddTrackMenu()` used to populate the "Plugin" sub-submenu, so
+    // `applyAddTrackMenuChoice` resolves `kAddInstrumentPluginMenuIdBase + index` against what the
+    // user actually saw rather than re-running collectInstrumentPluginMenuOptions() (which can have
+    // changed — see kAddInstrumentPluginNoneMenuId's comment). Left as-is between menu builds
+    // (never cleared on dismiss/apply): a stale snapshot from a menu that was shown but never acted
+    // on is harmless, since nothing indexes it until another click arrives.
+    std::vector<synth::PluginIdentity> instrumentPluginMenuSnapshot_;
 
     // ---- T166: track-reorder drag (whole-row drag — see TimelineTrackHeaderComponent::
     // onRowDragStarted's own comment for why the row hands us raw screen Y instead of computing an

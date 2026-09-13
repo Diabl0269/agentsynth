@@ -256,6 +256,93 @@ TEST(HostedPluginTest, UnresolvedIdentityStaysAPlaceholderThatRemembersItsPlugin
 }
 
 // ============================================================================
+// 3b. onLoadCompleted (FRO42) — the one signal that covers success, outright failure AND the
+//     over-max refusal, for a caller (MainComponent::addInstrumentPluginTrack) that must not touch
+//     the graph/undo stack until it KNOWS which of the three happened.
+// ============================================================================
+
+TEST(HostedPluginTest, OnLoadCompletedFiresTrueOnceTheInstancePublishes) {
+    StubBackend backend;
+    HostedPluginModule module;
+    module.prepareToPlay(kSampleRate, kBlockSize);
+
+    std::vector<bool> results;
+    module.onLoadCompleted = [&](bool success) { results.push_back(success); };
+
+    module.loadPlugin(stubDescription(), backend);
+    EXPECT_TRUE(results.empty()) << "must not fire re-entrantly, same as the backend callback itself";
+
+    ASSERT_TRUE(pumpUntil([&] { return !results.empty(); }));
+    EXPECT_EQ(results.size(), 1u) << "exactly once per load attempt";
+    EXPECT_TRUE(results.front());
+    EXPECT_TRUE(module.hasInstance());
+}
+
+TEST(HostedPluginTest, OnLoadCompletedFiresFalseOnAnOutrightBackendFailure) {
+    StubBackend backend;
+    backend.resolves = false;
+    HostedPluginModule module;
+    module.prepareToPlay(kSampleRate, kBlockSize);
+
+    std::vector<bool> results;
+    module.onLoadCompleted = [&](bool success) { results.push_back(success); };
+
+    PluginIdentity identity;
+    identity.format = "VST3";
+    identity.name = "Absent Plugin";
+    identity.uid = 4242;
+    module.loadPlugin(identity, backend);
+
+    ASSERT_TRUE(pumpUntil([&] { return !results.empty(); }));
+    EXPECT_EQ(results.size(), 1u);
+    EXPECT_FALSE(results.front());
+    EXPECT_FALSE(module.hasInstance());
+}
+
+TEST(HostedPluginTest, OnLoadCompletedFiresFalseOnTheOverMaxRefusal) {
+    // The refusal happens SILENTLY inside publishInstance() (no onInstanceChanged, no
+    // onInstancePublished) — onLoadCompleted is the only one of the three module-level completion
+    // signals that still fires here, which is exactly why it exists.
+    StubBackend backend(
+        [] { return std::make_unique<StubPluginInstance>(kTooManyChannels, kTooManyChannels, "Wide Plugin"); });
+    HostedPluginModule module;
+    module.prepareToPlay(kSampleRate, kBlockSize);
+
+    std::vector<bool> results;
+    module.onLoadCompleted = [&](bool success) { results.push_back(success); };
+
+    module.loadPlugin(stubDescription("Wide Plugin"), backend);
+    ASSERT_TRUE(pumpUntil([&] { return !results.empty(); }));
+    EXPECT_EQ(results.size(), 1u);
+    EXPECT_FALSE(results.front()) << "an over-max refusal must read as a failed load, not a silent nothing";
+    EXPECT_FALSE(module.hasInstance());
+}
+
+// ============================================================================
+// 3c. rightAudioLegChannel (FRO42) — ch1 is a genuine audio channel here (this module has no CV
+//     inputs, unlike the split-block voice modules), so it must NOT inherit ModuleBase's
+//     hasDualIOParameter()-gated default, which would read -1 forever (this module never registers
+//     a Dual I/O parameter).
+// ============================================================================
+
+TEST(HostedPluginTest, RightAudioLegChannelFollowsThePublishedInstancesRealOutputCount) {
+    HostedPluginModule module;
+    module.prepareToPlay(kSampleRate, kBlockSize);
+    EXPECT_EQ(module.rightAudioLegChannel(), -1) << "a bare module has no real second leg yet";
+
+    StubBackend stereoBackend;
+    module.loadPlugin(stubDescription(), stereoBackend);
+    ASSERT_TRUE(pumpUntil([&] { return module.hasInstance(); }));
+    EXPECT_EQ(module.rightAudioLegChannel(), 1) << "a stereo instance's right leg is raw ch1, same as an FX pair";
+
+    StubBackend monoBackend([] { return std::make_unique<StubPluginInstance>(0, 1, "Mono Synth"); });
+    module.loadPlugin(stubDescription("Mono Synth"), monoBackend);
+    ASSERT_TRUE(pumpUntil([&] { return module.getVisibleOutputPortCount() == 1; }));
+    EXPECT_EQ(module.rightAudioLegChannel(), 0)
+        << "a genuinely mono instance duplicates its one output onto both legs rather than going silent on the right";
+}
+
+// ============================================================================
 // 4. State — the trusted round-trip
 // ============================================================================
 

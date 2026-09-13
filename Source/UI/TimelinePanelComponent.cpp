@@ -35,6 +35,18 @@ constexpr int kSnapToggleButtonWidth = 46;
 // locate the marker against the arrangement without competing with the clips for attention.
 constexpr float kMarkerLaneStemAlpha = 0.40f;
 constexpr int kFollowPlayheadButtonWidth = 30;
+
+// FRO42 review fix: the Instrument -> Plugin submenu ALWAYS appends the format so a VST3 and an AU
+// build of the same product (e.g. "Massive") don't show as two identical, unlabelled rows — same
+// "disambiguate by format" job ModuleLibraryComponent's plugin sub-headers do for the library
+// sidebar, just inline on the row instead of a separate group label (this submenu is flat, with no
+// room for sub-headers). `format` is `juce::PluginDescription::pluginFormatName` ("VST3" /
+// "AudioUnit"); "AudioUnit" is shortened to "AU" to match the sidebar's own short form, anything
+// else (a format this app doesn't know about yet) is shown as-is rather than guessing an
+// abbreviation.
+juce::String shortPluginFormatLabel(const juce::String& format) {
+    return format == "AudioUnit" ? juce::String("AU") : format;
+}
 constexpr const char* kTimelineSnapPropertyKey = "timelineSnap";
 constexpr const char* kTimelineSnapEnabledPropertyKey = "timelineSnapEnabled";
 constexpr const char* kTimelineFollowPlayheadPropertyKey = "timelineFollowPlayhead";
@@ -1150,6 +1162,17 @@ void TimelinePanelComponent::applyAddTrackMenuChoice(int menuId) {
         trackHeaderHost_->addInstrumentTrack("Wavetable", true);
     else if (menuId == kCreateChannelsMenuId)
         trackHeaderHost_->createChannelsForExistingTracks();
+    else if (menuId >= kAddInstrumentPluginMenuIdBase) {
+        // FRO42: resolved against the SNAPSHOT buildAddTrackMenu() captured when this menu was
+        // built, never by re-running collectInstrumentPluginMenuOptions() here — the known-plugin
+        // list can be mutated by a background scan between the menu opening and this click landing
+        // (see instrumentPluginMenuSnapshot_'s own comment). kAddInstrumentPluginNoneMenuId itself
+        // is a disabled row and JUCE never delivers a disabled item's id, so nothing here needs to
+        // special-case it.
+        const int index = menuId - kAddInstrumentPluginMenuIdBase;
+        if (index >= 0 && index < (int)instrumentPluginMenuSnapshot_.size())
+            trackHeaderHost_->addInstrumentPluginTrack(instrumentPluginMenuSnapshot_[(size_t)index]);
+    }
 }
 
 synth::MarkerId TimelinePanelComponent::addMarkerAtPlayhead() {
@@ -1186,7 +1209,16 @@ juce::uint32 TimelinePanelComponent::defaultMarkerColourArgb() const {
     return synth::Marker{}.colourArgb; // headless: the model's own amber default
 }
 
-void TimelinePanelComponent::openAddTrackMenu() {
+std::vector<synth::PluginIdentity> TimelinePanelComponent::collectInstrumentPluginMenuOptions() const {
+    if (trackHeaderHost_ == nullptr)
+        return {};
+    return trackHeaderHost_->getInstrumentPluginOptions();
+}
+
+juce::PopupMenu TimelinePanelComponent::buildAddTrackMenu() {
+    if (trackHeaderHost_ != nullptr)
+        trackHeaderHost_->ensureInstrumentPluginsScanned();
+
     juce::PopupMenu menu;
     menu.addItem(kAddMidiTrackMenuId, "MIDI Track");
     menu.addItem(kAddAudioTrackMenuId, "Audio Track");
@@ -1201,11 +1233,40 @@ void TimelinePanelComponent::openAddTrackMenu() {
     instrumentMenu.addSeparator();
     instrumentMenu.addItem(kAddInstrumentOscillatorPolyMenuId, "Oscillator (Poly)");
     instrumentMenu.addItem(kAddInstrumentWavetablePolyMenuId, "Wavetable (Poly)");
+
+    // FRO42 (P9-3h): a hosted plugin as the instrument, in its own sub-submenu rather than a flat
+    // "Plugin..." entry — effects are filtered out host-side (getInstrumentPluginOptions), so
+    // everything listed here really is choosable.
+    instrumentMenu.addSeparator();
+    juce::PopupMenu pluginMenu;
+    const auto pluginOptions = collectInstrumentPluginMenuOptions();
+    // Snapshot for applyAddTrackMenuChoice — see instrumentPluginMenuSnapshot_'s own comment. Taken
+    // here, at the exact moment the menu below is built from this same list, so a click can never
+    // resolve against anything other than what was actually shown.
+    instrumentPluginMenuSnapshot_ = pluginOptions;
+    if (pluginOptions.empty()) {
+        const bool scanning = trackHeaderHost_ != nullptr && trackHeaderHost_->isPluginScanInProgress();
+        pluginMenu.addItem(kAddInstrumentPluginNoneMenuId,
+                           scanning ? "Scanning for plugins..." : "No instrument plugins found",
+                           /*isEnabled=*/false);
+    } else {
+        for (int i = 0; i < (int)pluginOptions.size(); ++i)
+            pluginMenu.addItem(kAddInstrumentPluginMenuIdBase + i,
+                               pluginOptions[(size_t)i].name + " (" +
+                                   shortPluginFormatLabel(pluginOptions[(size_t)i].format) + ")");
+    }
+    instrumentMenu.addSubMenu("Plugin", pluginMenu);
+
     menu.addSubMenu("Instrument Track", instrumentMenu);
     // Separated because it is not a track at all: a marker adds no row to the header column and
     // nothing to the graph, it drops a flag on the ruler.
     menu.addSeparator();
     menu.addItem(kAddMarkerMenuId, "Add Marker");
+    return menu;
+}
+
+void TimelinePanelComponent::openAddTrackMenu() {
+    juce::PopupMenu menu = buildAddTrackMenu();
 
     // FRO26 (P9-3e, docs/mixer.md §5.13): disabled rather than hidden when every track already has
     // a channel (or there are no tracks at all) — a hidden entry would look like the feature

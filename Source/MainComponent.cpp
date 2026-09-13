@@ -3727,12 +3727,23 @@ void MainComponent::guardUnsavedChanges(const juce::String& actionLabel, std::fu
         statusBar.showMessage(actionLabel + " must wait for the export to finish, or cancel it first.");
         return;
     }
-    if (!isDirty_) {
+
+    // FRO42 review fix: wrapped ONCE here so every arm below that actually goes ahead (not-dirty,
+    // Discard, Save-succeeded) bumps documentGeneration_ right before replacing the document — never
+    // on Cancel, a failed Save, or a cancelled Save chooser, all of which return without calling
+    // `proceed` at all. See documentGeneration_'s own comment for what reads this.
+    std::function<void()> proceedAndBumpGeneration = [this, proceed] {
+        ++documentGeneration_;
         proceed();
+    };
+
+    if (!isDirty_) {
+        proceedAndBumpGeneration();
         return;
     }
-    promptUnsavedChanges(actionLabel,
-                         [this, proceed](UnsavedChangesChoice choice) { applyUnsavedChangesAnswer(choice, proceed); });
+    promptUnsavedChanges(actionLabel, [this, proceedAndBumpGeneration](UnsavedChangesChoice choice) {
+        applyUnsavedChangesAnswer(choice, proceedAndBumpGeneration);
+    });
 }
 
 void MainComponent::promptUnsavedChanges(const juce::String& actionLabel,
@@ -4684,25 +4695,43 @@ void MainComponent::addAudioTrack() {
 }
 
 void MainComponent::addInstrumentTrack(const juce::String& instrumentModuleType, bool poly) {
-    const int index = (int)timelineDoc.getTracks().size();
-    juce::String trackName; // set inside the mutation; read afterwards for the status message
-
     // T183 (P9-3b): "+ Track -> Instrument -> {Oscillator/Wavetable/Sampler}" builds Track In ->
     // instrument -> default chain (Parametric EQ bypassed -> Compressor bypassed -> Channel Strip
     // Stereo -> Master Mix) in ONE undo step, the MIDI-track mirror of addAudioTrack()'s T173a step.
     // {Track In, instrument, EQ, Compressor, Strip} are boxed into one collapsed macro named after
     // the track; Master stays outside it for the same spliceMasterNode reason addAudioTrack's own
-    // comment explains. A single Cmd+Z removes every bit of it.
+    // comment explains. A single Cmd+Z removes every bit of it. See buildInstrumentTrackAndChain's
+    // own comment for the shared tail this delegates to (also used by addInstrumentPluginTrack).
     //
     // This is a TrackKind::Midi track — a Track In feeding exactly one instrument is already what
     // addMidiTrack() produces once a cable is drawn by hand; this flow just draws that cable and
     // builds the channel automatically. docs/mixer.md §5.2 once called this "(new track kind)" but
     // T183's own scope never asked for a new TrackKind, and adding one is a format/serialization
     // change nothing here requires — see that doc's update alongside this change.
+    buildInstrumentTrackAndChain(synth::AIStateMapper::createModule(instrumentModuleType), instrumentModuleType, poly);
+}
+
+void MainComponent::buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProcessor> instrumentProcessor,
+                                                 const juce::String& trackNamePrefix, bool poly) {
+    if (instrumentProcessor == nullptr) {
+        // A factory failure (addInstrumentTrack) or a caller that already checked and still handed
+        // us nothing — either way, nothing to build with, and nothing below may run: no track, no
+        // node, no undo entry.
+        statusBar.showMessage("Could not add a track");
+        return;
+    }
+
+    const int index = (int)timelineDoc.getTracks().size();
+    juce::String trackName; // set inside the mutation; read afterwards for the status message
+    // shared_ptr so the mutate lambda (which recordGraphTimelineAndMacroChange takes by const-ref
+    // and must remain copyable as std::function) can carry a move-only juce::AudioProcessor —
+    // the same idiom GraphEditor::addModuleAtCanvasPosition's own recordStructuralChange call uses.
+    auto stagedInstrument = std::make_shared<std::unique_ptr<juce::AudioProcessor>>(std::move(instrumentProcessor));
+
     const bool pushed = undoManager.recordGraphTimelineAndMacroChange(
         audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(),
-        [this, index, &trackName, instrumentModuleType, poly] {
-            trackName = instrumentModuleType + " " + juce::String(index + 1);
+        [this, index, &trackName, trackNamePrefix, poly, stagedInstrument] {
+            trackName = trackNamePrefix + " " + juce::String(index + 1);
             const auto trackId = timelineDoc.addTrack(synth::TrackKind::Midi, trackName);
             if (!trackId.isValid())
                 return; // at kMaxTracks: nothing added, no node created, no macro
@@ -4729,15 +4758,21 @@ void MainComponent::addInstrumentTrack(const juce::String& instrumentModuleType,
             trackInNode->properties.set("x", trackInPosition.x);
             trackInNode->properties.set("y", trackInPosition.y);
 
-            // The instrument, right of Track In.
+            // The instrument, right of Track In — already created (and, for a hosted plugin,
+            // already loaded) by the caller; adopted into the live graph HERE, inside this undo
+            // transaction, so Cmd+Z removes it along with everything else.
+            if (!*stagedInstrument)
+                return; // moved exactly once above; defensive, mirrors addModuleAtCanvasPosition's own guard
             const int instrumentX = trackInPosition.x + trackInSize.x + kChannelCardGapX;
-            auto instrumentProcessor = synth::AIStateMapper::createModule(instrumentModuleType);
-            if (instrumentProcessor == nullptr)
-                return;
-            auto instrumentNodePtr = graph.addNode(std::move(instrumentProcessor));
+            auto instrumentNodePtr = graph.addNode(std::move(*stagedInstrument));
             if (instrumentNodePtr == nullptr)
                 return;
             auto* instrumentNode = instrumentNodePtr.get();
+            // The processor's OWN name, not the caller's `trackNamePrefix` — for a hosted plugin the
+            // latter is the plugin's display name (e.g. "Serum"), never "Hosted Plugin", so every
+            // branch below that keys off the factory type name (isOscOrWavetable, estimateModuleSize)
+            // must read it from the node it actually got.
+            const juce::String instrumentModuleType = instrumentNode->getProcessor()->getName();
             const juce::String instrumentUuid = juce::Uuid().toDashedString();
             instrumentNode->properties.set("uuid", instrumentUuid);
             if (auto* module = dynamic_cast<ModuleBase*>(instrumentNode->getProcessor()))
@@ -4943,6 +4978,132 @@ void MainComponent::createChannelsForExistingTracks() {
     // channel" (that case already returned above), so it gets the same wording addAudioTrack's own
     // failure branch uses rather than a misleadingly cheerful no-op message.
     statusBar.showMessage(pushed ? "Created channels" : "Could not create channels");
+}
+
+// FRO42 (P9-3h): instrument-capable hosted plugins for the "+ Track -> Instrument -> Plugin"
+// submenu — see TrackHeaderHost::getInstrumentPluginOptions's own comment. getKnownPlugins() (full
+// juce::PluginDescription, which carries isInstrument) is read here rather than
+// getKnownPluginIdentities() (PluginIdentity alone, no isInstrument) precisely because the filter
+// needs that field.
+std::vector<synth::PluginIdentity> MainComponent::getInstrumentPluginOptions() const {
+    std::vector<synth::PluginIdentity> options;
+    for (const auto& description : getPluginScanService().getKnownPlugins()) {
+        if (!description.isInstrument)
+            continue;
+        // FRO42 review fix: never offer to host this app's OWN VST3/AU build as an instrument —
+        // matched against synth::branding's product identity (the single source of truth CMake's
+        // PRODUCT_NAME/COMPANY_NAME args are mirrored into for C++ code, see Branding.h) rather than
+        // a literal re-typed here, and against BOTH name and manufacturer so a same-named third-
+        // party plugin from a different vendor is not caught by accident. The library sidebar goes
+        // through getKnownPluginIdentities() (MainComponent::refreshPluginLibrary(), never this
+        // method), so it is deliberately untouched by this filter.
+        if (description.name.equalsIgnoreCase(synth::branding::kProductName) &&
+            description.manufacturerName.equalsIgnoreCase(synth::branding::kCompanyName))
+            continue;
+        options.push_back(synth::PluginIdentity::fromDescription(description));
+    }
+
+    // Same ordering as PluginScanService::getKnownPluginIdentities(), so the submenu lists plugins
+    // in the same order the library sidebar's Plugins section does.
+    std::sort(options.begin(), options.end(), [](const synth::PluginIdentity& a, const synth::PluginIdentity& b) {
+        const int byName = a.name.compareIgnoreCase(b.name);
+        return byName != 0 ? byName < 0 : a.format < b.format;
+    });
+    return options;
+}
+
+void MainComponent::addInstrumentPluginTrack(const synth::PluginIdentity& identity) {
+    if (!identity.isValid())
+        return;
+
+    const auto description = getPluginScanService().resolve(identity);
+    if (!description.has_value()) {
+        statusBar.showMessage((identity.name.isNotEmpty() ? identity.name : juce::String("That plugin")) +
+                              " is no longer available - try rescanning.");
+        return; // graph and undo stack both untouched
+    }
+
+    auto instrumentProcessor = synth::AIStateMapper::createModule("Hosted Plugin");
+    auto* hosted = dynamic_cast<synth::HostedPluginModule*>(instrumentProcessor.get());
+    if (hosted == nullptr) {
+        statusBar.showMessage("Could not add a track");
+        return;
+    }
+
+    // Owned here (an independent, external owner) for the whole in-flight load — see
+    // pendingInstrumentPluginLoads_'s own comment for why NOT a shared_ptr captured by the module's
+    // own onLoadCompleted below, which would make the object keep itself alive through its own
+    // member. Nothing here has touched the graph or the undo stack yet, and nothing below does
+    // either until the load actually succeeds.
+    pendingInstrumentPluginLoads_.push_back(std::move(instrumentProcessor));
+
+    const juce::String pluginName = description->name;
+    // FRO42 review fix: captured NOW, against the document this load was started for. New Patch/
+    // Open/Load preset (all via guardUnsavedChanges) bump documentGeneration_ before replacing the
+    // document, so a completion that lands after that has a stale value here — see
+    // documentGeneration_'s own comment.
+    const int loadGeneration = documentGeneration_;
+    juce::Component::SafePointer<MainComponent> safeThis(this);
+    hosted->onLoadCompleted = [safeThis, hosted, pluginName, loadGeneration](bool success) {
+        auto* self = safeThis.getComponent();
+        if (self == nullptr)
+            return; // this MainComponent (and its pending-loads list) is already gone
+
+        if (self->documentGeneration_ != loadGeneration) {
+            // The document this load was for has already been replaced (New Patch/Open/Load preset
+            // ran while the load was still in flight). Building the track now would land it in the
+            // WRONG (freshly loaded/created) document. Drop it the same deferred way a failed load
+            // is dropped — never destroy `hosted` from inside its own currently-executing callback —
+            // and touch neither the graph nor the undo stack of the document that is live now.
+            juce::Component::SafePointer<MainComponent> deferredSelf = safeThis;
+            juce::MessageManager::callAsync([deferredSelf, hosted] {
+                if (auto* mc = deferredSelf.getComponent())
+                    mc->dropPendingInstrumentPluginLoad(hosted);
+            });
+            return;
+        }
+
+        if (success) {
+            // Extract ownership WITHOUT destroying anything — it transfers straight into
+            // buildInstrumentTrackAndChain (ultimately, the graph node), never freed here.
+            auto& pending = self->pendingInstrumentPluginLoads_;
+            const auto it =
+                std::find_if(pending.begin(), pending.end(),
+                             [hosted](const std::unique_ptr<juce::AudioProcessor>& p) { return p.get() == hosted; });
+            if (it == pending.end())
+                return; // should not happen — defensive
+            auto instrumentProcessor = std::move(*it);
+            pending.erase(it);
+            self->buildInstrumentTrackAndChain(std::move(instrumentProcessor), pluginName, /*poly=*/false);
+            return;
+        }
+
+        // Failed or refused (including the over-max refusal inside publishInstance(), which
+        // hasInstance() reads identically to an outright backend failure — see
+        // HostedPluginModule::onLoadCompleted's own comment). Graph and undo stack both untouched:
+        // `hosted` is still owned only by pendingInstrumentPluginLoads_ and never joined the graph.
+        self->statusBar.showMessage(hosted->getStatusMessage().isNotEmpty() ? hosted->getStatusMessage()
+                                                                            : "Could not load " + pluginName);
+
+        // Deferred to the next message-loop turn: dropping the entry here would destroy `hosted`
+        // — and with it the onLoadCompleted std::function member THIS VERY LAMBDA is the target of
+        // — from inside its own currently-executing invocation. callAsync runs on a fresh call
+        // stack once this call has fully returned, where that is simply a normal member teardown.
+        juce::Component::SafePointer<MainComponent> deferredSelf = safeThis;
+        juce::MessageManager::callAsync([deferredSelf, hosted] {
+            if (auto* mc = deferredSelf.getComponent())
+                mc->dropPendingInstrumentPluginLoad(hosted);
+        });
+    };
+    hosted->loadPlugin(*description);
+}
+
+void MainComponent::dropPendingInstrumentPluginLoad(juce::AudioProcessor* processor) {
+    auto& pending = pendingInstrumentPluginLoads_;
+    pending.erase(
+        std::remove_if(pending.begin(), pending.end(),
+                       [processor](const std::unique_ptr<juce::AudioProcessor>& p) { return p.get() == processor; }),
+        pending.end());
 }
 
 // The automation strip lane picker's "Add lane..." entries — the minimal creation surface
