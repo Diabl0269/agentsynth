@@ -315,6 +315,109 @@ if [ -z "${CHECK_FILE_SIZES_TEST_NESTED:-}" ]; then
     fi
 fi
 
+# --- FRO83: --update must refuse to RAISE a baseline entry (ratchet only tightens) --------------
+
+# (a) a legacy file grows further -- --update must refuse, leave the baseline untouched, exit 1.
+reset_repo
+make_file "Legacy.cpp" 30
+commit_all
+bash "$CHECK" --root "$REPO" --update >/dev/null 2>&1
+baseline_before_raise="$(cat "$BASELINE")"
+make_file "Legacy.cpp" 35
+commit_all
+raise_output="$(bash "$CHECK" --root "$REPO" --update 2>&1)"
+raise_status=$?
+baseline_after_raise="$(cat "$BASELINE")"
+if [ "$raise_status" -ne 0 ] && echo "$raise_output" | grep -qF -- "Legacy.cpp would raise the baseline from 30 to 35" \
+    && [ "$baseline_before_raise" = "$baseline_after_raise" ]; then
+    echo "PASS: --update refuses to raise a baseline entry (exit 1, baseline unchanged)"
+    pass=$((pass + 1))
+else
+    echo "FAIL: --update refuses to raise a baseline entry (exit 1, baseline unchanged)"
+    echo "exit=$raise_status"
+    echo "$raise_output"
+    fail=$((fail + 1))
+fi
+
+# (b) the same raise, but with --allow-growth -- must go through (exit 0), print a ::warning::,
+# and actually rewrite the baseline to the raised count.
+allow_output="$(bash "$CHECK" --root "$REPO" --update --allow-growth 2>&1)"
+allow_status=$?
+baseline_after_allow="$(cat "$BASELINE")"
+if [ "$allow_status" -eq 0 ] && echo "$allow_output" | grep -qF -- "::warning::Legacy.cpp raised from 30 to 35" \
+    && echo "$baseline_after_allow" | grep -qF -- "35 Legacy.cpp"; then
+    echo "PASS: --update --allow-growth lets a raised entry through with a warning"
+    pass=$((pass + 1))
+else
+    echo "FAIL: --update --allow-growth lets a raised entry through with a warning"
+    echo "exit=$allow_status"
+    echo "$allow_output"
+    fail=$((fail + 1))
+fi
+
+# (c) a shrink must still update silently -- no growth error/warning, baseline tightens.
+reset_repo
+make_file "Shrinking.cpp" 40
+commit_all
+bash "$CHECK" --root "$REPO" --update >/dev/null 2>&1
+make_file "Shrinking.cpp" 32
+commit_all
+shrink_output="$(bash "$CHECK" --root "$REPO" --update 2>&1)"
+shrink_status=$?
+shrink_baseline="$(cat "$BASELINE")"
+if [ "$shrink_status" -eq 0 ] && echo "$shrink_baseline" | grep -qF -- "32 Shrinking.cpp" \
+    && ! echo "$shrink_output" | grep -q "::error::" && ! echo "$shrink_output" | grep -q "::warning::"; then
+    echo "PASS: --update tightens a shrunk entry silently (no growth error or warning)"
+    pass=$((pass + 1))
+else
+    echo "FAIL: --update tightens a shrunk entry silently (no growth error or warning)"
+    echo "exit=$shrink_status"
+    echo "$shrink_output"
+    fail=$((fail + 1))
+fi
+
+# (d) a pure `git mv` of an over-cap file (same count, new path) is accepted WITHOUT --allow-growth
+# -- git confirms the rename, so it isn't treated as a new file joining the baseline.
+reset_repo
+make_file "Old.cpp" 33
+commit_all
+bash "$CHECK" --root "$REPO" --update >/dev/null 2>&1
+(cd "$REPO" && git mv Old.cpp New.cpp)
+mv_output="$(bash "$CHECK" --root "$REPO" --update 2>&1)"
+mv_status=$?
+mv_baseline="$(cat "$BASELINE")"
+if [ "$mv_status" -eq 0 ] && echo "$mv_baseline" | grep -qF -- "33 New.cpp" \
+    && ! echo "$mv_baseline" | grep -q "Old.cpp" && ! echo "$mv_output" | grep -q "::error::"; then
+    echo "PASS: a pure git-mv of an over-cap file (same count, new path) is accepted without --allow-growth"
+    pass=$((pass + 1))
+else
+    echo "FAIL: a pure git-mv of an over-cap file (same count, new path) is accepted without --allow-growth"
+    echo "exit=$mv_status"
+    echo "$mv_output"
+    fail=$((fail + 1))
+fi
+
+# (e) a genuinely new over-cap file (no plausible rename source) is refused without --allow-growth.
+reset_repo
+make_file "Existing.cpp" 30
+commit_all
+bash "$CHECK" --root "$REPO" --update >/dev/null 2>&1
+make_file "BrandNew.cpp" 45
+commit_all
+new_output="$(bash "$CHECK" --root "$REPO" --update 2>&1)"
+new_status=$?
+new_baseline="$(cat "$BASELINE")"
+if [ "$new_status" -ne 0 ] && echo "$new_output" | grep -qF -- "BrandNew.cpp is a new over-cap file (45 lines" \
+    && ! echo "$new_baseline" | grep -q "BrandNew.cpp"; then
+    echo "PASS: a genuinely new over-cap file is refused by --update without --allow-growth"
+    pass=$((pass + 1))
+else
+    echo "FAIL: a genuinely new over-cap file is refused by --update without --allow-growth"
+    echo "exit=$new_status"
+    echo "$new_output"
+    fail=$((fail + 1))
+fi
+
 # --- the real thing: the repo's own tree + its own committed baseline must pass -----------------
 if output="$( (unset FILE_SIZE_CAP FILE_SIZE_BASELINE && bash "$CHECK" --root "$SCRIPT_DIR") 2>&1)"; then
     echo "PASS: the real repo tree passes its own committed baseline"
