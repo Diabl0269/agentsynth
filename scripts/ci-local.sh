@@ -37,11 +37,16 @@
 # cross-platform compilation -- this only exercises the toolchain installed on THIS machine.
 #
 # Usage:
-#   bash scripts/ci-local.sh [--open] [-h|--help]
+#   bash scripts/ci-local.sh [--open] [--skip-tests] [-h|--help]
 #
-#   --open       After every check passes, `open` the built app bundle (macOS only). Default
-#                off, since this also runs headless in the pre-push hook.
-#   -h, --help   Show this message and exit.
+#   --open        After every check passes, `open` the built app bundle (macOS only). Default
+#                 off, since this also runs headless in the pre-push hook.
+#   --skip-tests  Skip step 6 (the full Tests suite, often the slowest step). Everything else
+#                 still runs, including the dev-sign step, so a rebuild still keeps the same
+#                 TCC identity for a live/manual app run. Default off: the pre-push hook and CI
+#                 both expect the full suite, so leave this off unless you're iterating locally
+#                 and will run the suite before pushing.
+#   -h, --help    Show this message and exit.
 
 set -euo pipefail
 
@@ -50,10 +55,11 @@ cd "$REPO_ROOT"
 
 BUILD_DIR="build-ci-local"
 OPEN_APP=false
+SKIP_TESTS=false
 
 usage() {
     cat <<'EOF'
-Usage: bash scripts/ci-local.sh [--open] [-h|--help]
+Usage: bash scripts/ci-local.sh [--open] [--skip-tests] [-h|--help]
 
 Reproduces .github/workflows/ci.yml's Lint job plus this machine's platform
 build-and-test job: clang-format check, the UTF-8/ASCII literal checks,
@@ -63,10 +69,16 @@ ENABLE_TESTS=ON, followed by the full test suite. See the header comment
 in this file, and docs/testing.md's "Local CI reproduction" section, for
 the full mapping to what CI actually runs.
 
-  --open       After every check passes, `open` the built app bundle
-               (macOS only). Default off, since this also runs headless
-               in the pre-push hook.
-  -h, --help   Show this message and exit.
+  --open        After every check passes, `open` the built app bundle
+                (macOS only). Default off, since this also runs headless
+                in the pre-push hook.
+  --skip-tests  Skip the Tests suite (step 6), often the slowest step.
+                Everything else still runs, including the dev-sign step,
+                so a rebuild still keeps the same TCC identity for a
+                live/manual app run. Default off -- the pre-push hook and
+                CI both expect the full suite; only pass this for a quick
+                local iteration loop, and run the suite before pushing.
+  -h, --help    Show this message and exit.
 EOF
 }
 
@@ -74,6 +86,9 @@ for arg in "$@"; do
     case "$arg" in
         --open)
             OPEN_APP=true
+            ;;
+        --skip-tests)
+            SKIP_TESTS=true
             ;;
         -h | --help)
             usage
@@ -168,12 +183,16 @@ else
 fi
 
 # --- 6. Run the full test suite -----------------------------------------------------------------
-step "Run tests"
-TESTS_BIN="$BUILD_DIR/Tests/Tests"
-if [ ! -x "$TESTS_BIN" ]; then
-    fail "$TESTS_BIN not found or not executable -- the Tests target did not build."
+if [ "$SKIP_TESTS" = true ]; then
+    step "Run tests (skipped: --skip-tests)"
+else
+    step "Run tests"
+    TESTS_BIN="$BUILD_DIR/Tests/Tests"
+    if [ ! -x "$TESTS_BIN" ]; then
+        fail "$TESTS_BIN not found or not executable -- the Tests target did not build."
+    fi
+    "$TESTS_BIN" || fail "test suite failed (see above)."
 fi
-"$TESTS_BIN" || fail "test suite failed (see above)."
 
 # --- Done: point at a build the user can actually launch ---------------------------------------
 step "All checks passed"
