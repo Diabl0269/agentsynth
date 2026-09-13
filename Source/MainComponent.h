@@ -406,6 +406,12 @@ public:
     void guardUnsavedChanges(const juce::String& actionLabel, std::function<void()> proceed);
     // Non-const access to ApplicationProperties for persistence tests (read-back within session).
     juce::ApplicationProperties& getAppPropertiesForTest() { return appProperties; }
+    // FRO26 (P9-3e, docs/mixer.md §5.13): hasTracksNeedingChannels() is a private TrackHeaderHost
+    // override (MainComponent inherits that interface privately), so a test can't call it directly
+    // the way it can drive the menu action itself via getTimelinePanel().applyAddTrackMenuChoice() —
+    // this thin public wrapper is the same idiom as newPatchForTest() above, just for a query
+    // instead of a mutation, so a test can assert the "+ Track" menu's own enabled/disabled state.
+    bool hasTracksNeedingChannelsForTest() const { return hasTracksNeedingChannels(); }
     int getStatusBarTickCountForTest() const { return statusBarTickCount_; }
     // Mirrors the loadButton factory-preset call site exactly (load + patch-name update), so
     // tests can verify the patch-name side effect without driving the async PopupMenu.

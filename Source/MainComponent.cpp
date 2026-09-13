@@ -4937,7 +4937,12 @@ void MainComponent::createChannelsForExistingTracks() {
         });
 
     reconcileTimelineAfterGraphChange();
-    statusBar.showMessage(pushed ? "Created channels" : "No tracks needed a channel");
+    // Reaching here with pushed == false means hasTracksNeedingChannels() was true but the sweep
+    // still built nothing (a factory/addNode failure partway through, same contract as
+    // buildDefaultAudioChannel/buildChannelForFeeds) — an internal failure, not "nothing needed a
+    // channel" (that case already returned above), so it gets the same wording addAudioTrack's own
+    // failure branch uses rather than a misleadingly cheerful no-op message.
+    statusBar.showMessage(pushed ? "Created channels" : "Could not create channels");
 }
 
 // The automation strip lane picker's "Add lane..." entries — the minimal creation surface

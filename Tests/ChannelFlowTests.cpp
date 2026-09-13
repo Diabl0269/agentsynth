@@ -2015,3 +2015,44 @@ TEST_F(ChannelFlowTest, CreateChannelsGivesTwoTracksSharingOneInstrumentJustOneC
     EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::ChannelStrip), 0)
         << "the one undo step removes the whole (single) channel";
 }
+
+// The spec's other required no-op clause: the "+ Track" menu's "Create Channels" entry itself must
+// be DISABLED (not just a silent no-op) whenever nothing needs a channel, and enabled the moment
+// something does. openAddTrackMenu() reads this straight off
+// TrackHeaderHost::hasTracksNeedingChannels() (TimelinePanelComponent.cpp), so exercising that same
+// public seam here proves the real menu's enabled state without needing to open the async
+// juce::PopupMenu itself.
+TEST_F(ChannelFlowTest, HasTracksNeedingChannelsBacksTheMenusEnabledState) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    mc.newPatchForTest();
+    auto& graph = mc.getAudioEngine().getGraph();
+
+    EXPECT_FALSE(mc.hasTracksNeedingChannelsForTest()) << "a brand-new patch has no tracks at all";
+
+    addAudioTrack(mc); // fully channeled via the normal flow
+    EXPECT_FALSE(mc.hasTracksNeedingChannelsForTest())
+        << "the menu entry must stay disabled -- this track already has a channel";
+
+    // A legacy audio track, wired straight to the output with no insert chain -- the same
+    // pre-P9-3 shape the tests above build.
+    auto* output = findNodeNamedCFT(graph, "Audio Output");
+    ASSERT_NE(output, nullptr);
+    juce::String legacyUuid;
+    auto* legacyNode = addPlainNodeCFT(graph, "Track Audio", {800, 50}, legacyUuid);
+    ASSERT_NE(legacyNode, nullptr);
+    graph.addConnection({{legacyNode->nodeID, 0}, {output->nodeID, 0}});
+    graph.addConnection({{legacyNode->nodeID, 1}, {output->nodeID, 1}});
+    auto& doc = mc.getTimelineDoc();
+    const auto legacyTrackId = doc.addTrack(synth::TrackKind::Audio, "Legacy Audio");
+    ASSERT_TRUE(legacyTrackId.isValid());
+    ASSERT_TRUE(doc.setTrackBinding(legacyTrackId, legacyUuid));
+    mc.getGraphEditor().updateComponents();
+
+    EXPECT_TRUE(mc.hasTracksNeedingChannelsForTest())
+        << "the legacy track has no channel yet -- the menu entry must now be enabled";
+
+    mc.getTimelinePanel().applyAddTrackMenuChoice(synth::ui::TimelinePanelComponent::kCreateChannelsMenuId);
+    EXPECT_FALSE(mc.hasTracksNeedingChannelsForTest()) << "both tracks are channeled now -- disabled again";
+}

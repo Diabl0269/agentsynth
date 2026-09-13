@@ -437,6 +437,16 @@ track's call sees `findUnchanneledOutputFeeds` already empty for that instrument
 free of any extra bookkeeping, since it's the same per-node builder T184 already runs on live
 connects.
 
+Reusing `maybeAutoCreateChannelAfterConnect` unchanged also carries over its macro-boxing rule:
+the new EQ/Compressor/Strip only join the source's existing macro when every exit source is an
+ordinary (non-port) member of the SAME macro (§5.2's boxing paragraph). A genuinely pre-P9-3
+track's own node was never a macro member at all, so this condition fails and the sweep's new
+channel ships as loose cards on the canvas rather than boxed like T173a/T183/T184's own channels
+— an accepted consequence of reusing the connect-triggered builder as-is rather than teaching it
+a second, legacy-specific boxing path; also gated independently of `autoCreateChannelOnConnectEnabled`
+(the T184 Preferences toggle), since this is an explicit user action, not a live connect — a
+legacy project with that preference OFF still gets working channels from this menu entry.
+
 ### 5.14 New Patch always has an Audio Output (T187)
 
 `GraphEditor::newPatch()` seeds a fresh Audio Output immediately after `graph.clear()`, as part of
