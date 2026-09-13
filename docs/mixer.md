@@ -672,6 +672,28 @@ Main line, in dependency order:
      `Tests/HostedPluginTests.cpp`'s `OnLoadCompletedFires*`/`RightAudioLegChannelFollows...` and
      `Tests/ChannelFlowTests.cpp`'s `PluginInstrumentTrack*` — the latter drives the exact same
      `applyAddTrackMenuChoice`/menu-id seam the T183 tests use.
+
+     **Review fixes on top of the above (same FRO42/P9-3h):** (1) the picker's Plugin sub-submenu
+     resolves a click against a SNAPSHOT of the options list captured when the menu was built
+     (`TimelinePanelComponent::instrumentPluginMenuSnapshot_`), never by re-running the collector at
+     click time — a background `PluginScanService::runScan` finishing between open and click could
+     otherwise resolve the click against a different plugin than the one the menu showed (see
+     `docs/timeline_panel_core.md` §3 for the full mechanism and the live repro this fixed). (2)
+     Every entry's label always carries its format — "Massive (VST3)" / "Massive (AU)" — so a VST3
+     and an AU build of the same product never show as two identical rows. (3) The picker excludes
+     this app's own VST3/AU build (matched against `synth::branding::kProductName`/`kCompanyName`),
+     so it never offers to host itself; the library sidebar is a separate collector and stays
+     unfiltered. (4) A load still in flight when the document is replaced (New Patch/Open/Load
+     preset, all via `guardUnsavedChanges`) is dropped rather than landing in the FRESH document:
+     `MainComponent::documentGeneration_` is bumped once per replacement that actually proceeds
+     (never on Cancel/a failed Save), `addInstrumentPluginTrack` captures it when the load starts,
+     and `onLoadCompleted` compares it before building a track — a mismatch tears the staged module
+     down the same deferred way a failed load already was, touching neither the graph nor the undo
+     stack of the document that is live by then. See `Tests/ChannelFlowTests.cpp`'s
+     `PluginInstrumentMenuChoiceResolvesAgainstSnapshotNotALaterRescan`,
+     `PluginInstrumentMenuAppendsFormatLabelSoIdenticalNamesAreDistinguishable`,
+     `PluginInstrumentMenuExcludesThisAppsOwnPluginBuild`, and
+     `PluginInstrumentLoadCompletingAfterNewPatchIsDroppedNotAddedToTheFreshDocument`.
    - **T184 (MIDI-track auto-channel-on-connect) — DONE.** Dragging a MIDI cable from a Track In
      node (`ModuleType::TimelineMidiSource`) onto an instrument or macro whose audio reaches Audio
      Output/Rec Tap/Master's Direct bus with no `ChannelStrip` anywhere on that path auto-builds a

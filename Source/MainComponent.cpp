@@ -3727,12 +3727,23 @@ void MainComponent::guardUnsavedChanges(const juce::String& actionLabel, std::fu
         statusBar.showMessage(actionLabel + " must wait for the export to finish, or cancel it first.");
         return;
     }
-    if (!isDirty_) {
+
+    // FRO42 review fix: wrapped ONCE here so every arm below that actually goes ahead (not-dirty,
+    // Discard, Save-succeeded) bumps documentGeneration_ right before replacing the document — never
+    // on Cancel, a failed Save, or a cancelled Save chooser, all of which return without calling
+    // `proceed` at all. See documentGeneration_'s own comment for what reads this.
+    std::function<void()> proceedAndBumpGeneration = [this, proceed] {
+        ++documentGeneration_;
         proceed();
+    };
+
+    if (!isDirty_) {
+        proceedAndBumpGeneration();
         return;
     }
-    promptUnsavedChanges(actionLabel,
-                         [this, proceed](UnsavedChangesChoice choice) { applyUnsavedChangesAnswer(choice, proceed); });
+    promptUnsavedChanges(actionLabel, [this, proceedAndBumpGeneration](UnsavedChangesChoice choice) {
+        applyUnsavedChangesAnswer(choice, proceedAndBumpGeneration);
+    });
 }
 
 void MainComponent::promptUnsavedChanges(const juce::String& actionLabel,
@@ -4976,9 +4987,21 @@ void MainComponent::createChannelsForExistingTracks() {
 // needs that field.
 std::vector<synth::PluginIdentity> MainComponent::getInstrumentPluginOptions() const {
     std::vector<synth::PluginIdentity> options;
-    for (const auto& description : getPluginScanService().getKnownPlugins())
-        if (description.isInstrument)
-            options.push_back(synth::PluginIdentity::fromDescription(description));
+    for (const auto& description : getPluginScanService().getKnownPlugins()) {
+        if (!description.isInstrument)
+            continue;
+        // FRO42 review fix: never offer to host this app's OWN VST3/AU build as an instrument —
+        // matched against synth::branding's product identity (the single source of truth CMake's
+        // PRODUCT_NAME/COMPANY_NAME args are mirrored into for C++ code, see Branding.h) rather than
+        // a literal re-typed here, and against BOTH name and manufacturer so a same-named third-
+        // party plugin from a different vendor is not caught by accident. The library sidebar goes
+        // through getKnownPluginIdentities() (MainComponent::refreshPluginLibrary(), never this
+        // method), so it is deliberately untouched by this filter.
+        if (description.name.equalsIgnoreCase(synth::branding::kProductName) &&
+            description.manufacturerName.equalsIgnoreCase(synth::branding::kCompanyName))
+            continue;
+        options.push_back(synth::PluginIdentity::fromDescription(description));
+    }
 
     // Same ordering as PluginScanService::getKnownPluginIdentities(), so the submenu lists plugins
     // in the same order the library sidebar's Plugins section does.
@@ -5015,11 +5038,30 @@ void MainComponent::addInstrumentPluginTrack(const synth::PluginIdentity& identi
     pendingInstrumentPluginLoads_.push_back(std::move(instrumentProcessor));
 
     const juce::String pluginName = description->name;
+    // FRO42 review fix: captured NOW, against the document this load was started for. New Patch/
+    // Open/Load preset (all via guardUnsavedChanges) bump documentGeneration_ before replacing the
+    // document, so a completion that lands after that has a stale value here — see
+    // documentGeneration_'s own comment.
+    const int loadGeneration = documentGeneration_;
     juce::Component::SafePointer<MainComponent> safeThis(this);
-    hosted->onLoadCompleted = [safeThis, hosted, pluginName](bool success) {
+    hosted->onLoadCompleted = [safeThis, hosted, pluginName, loadGeneration](bool success) {
         auto* self = safeThis.getComponent();
         if (self == nullptr)
             return; // this MainComponent (and its pending-loads list) is already gone
+
+        if (self->documentGeneration_ != loadGeneration) {
+            // The document this load was for has already been replaced (New Patch/Open/Load preset
+            // ran while the load was still in flight). Building the track now would land it in the
+            // WRONG (freshly loaded/created) document. Drop it the same deferred way a failed load
+            // is dropped — never destroy `hosted` from inside its own currently-executing callback —
+            // and touch neither the graph nor the undo stack of the document that is live now.
+            juce::Component::SafePointer<MainComponent> deferredSelf = safeThis;
+            juce::MessageManager::callAsync([deferredSelf, hosted] {
+                if (auto* mc = deferredSelf.getComponent())
+                    mc->dropPendingInstrumentPluginLoad(hosted);
+            });
+            return;
+        }
 
         if (success) {
             // Extract ownership WITHOUT destroying anything — it transfers straight into

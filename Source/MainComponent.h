@@ -1083,6 +1083,16 @@ private:
     // the document was reset and must be able to recompute rather than blindly re-dirty it.
     int savedEditSerial_ = 0;
 
+    // FRO42 review fix: bumped exactly once by guardUnsavedChanges() immediately before it actually
+    // runs `proceed` — i.e. once per New Patch/Open/Load-preset/Quit that really goes ahead, never
+    // on Cancel or a failed/cancelled Save arm. A hosted-plugin instrument load started against the
+    // PREVIOUS document is asynchronous (see pendingInstrumentPluginLoads_); addInstrumentPluginTrack
+    // captures this value when the load starts, and its onLoadCompleted lambda compares it against
+    // the live value before building a track — a mismatch means the document underneath that load
+    // is already gone, so the completion is dropped (graph/undo untouched) instead of landing a new
+    // track in the freshly loaded/created document.
+    int documentGeneration_ = 0;
+
     // Autosave's own baseline — a SEPARATE serial from savedEditSerial_ above (see
     // maybeAutosave()/performAutosave()/markDocumentClean() comments): rebased on a successful
     // autosave write and on markDocumentClean(), never on anything else. Comparing against this

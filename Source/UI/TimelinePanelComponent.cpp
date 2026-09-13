@@ -35,6 +35,18 @@ constexpr int kSnapToggleButtonWidth = 46;
 // locate the marker against the arrangement without competing with the clips for attention.
 constexpr float kMarkerLaneStemAlpha = 0.40f;
 constexpr int kFollowPlayheadButtonWidth = 30;
+
+// FRO42 review fix: the Instrument -> Plugin submenu ALWAYS appends the format so a VST3 and an AU
+// build of the same product (e.g. "Massive") don't show as two identical, unlabelled rows — same
+// "disambiguate by format" job ModuleLibraryComponent's plugin sub-headers do for the library
+// sidebar, just inline on the row instead of a separate group label (this submenu is flat, with no
+// room for sub-headers). `format` is `juce::PluginDescription::pluginFormatName` ("VST3" /
+// "AudioUnit"); "AudioUnit" is shortened to "AU" to match the sidebar's own short form, anything
+// else (a format this app doesn't know about yet) is shown as-is rather than guessing an
+// abbreviation.
+juce::String shortPluginFormatLabel(const juce::String& format) {
+    return format == "AudioUnit" ? juce::String("AU") : format;
+}
 constexpr const char* kTimelineSnapPropertyKey = "timelineSnap";
 constexpr const char* kTimelineSnapEnabledPropertyKey = "timelineSnapEnabled";
 constexpr const char* kTimelineFollowPlayheadPropertyKey = "timelineFollowPlayhead";
@@ -1151,14 +1163,15 @@ void TimelinePanelComponent::applyAddTrackMenuChoice(int menuId) {
     else if (menuId == kCreateChannelsMenuId)
         trackHeaderHost_->createChannelsForExistingTracks();
     else if (menuId >= kAddInstrumentPluginMenuIdBase) {
-        // FRO42: re-collected fresh, never cached — same "resolve the id by re-running the same
-        // collector" contract as applyAutomationLaneMenuChoice. kAddInstrumentPluginNoneMenuId
-        // itself is a disabled row and JUCE never delivers a disabled item's id, so nothing here
-        // needs to special-case it.
-        const auto options = collectInstrumentPluginMenuOptions();
+        // FRO42: resolved against the SNAPSHOT buildAddTrackMenu() captured when this menu was
+        // built, never by re-running collectInstrumentPluginMenuOptions() here — the known-plugin
+        // list can be mutated by a background scan between the menu opening and this click landing
+        // (see instrumentPluginMenuSnapshot_'s own comment). kAddInstrumentPluginNoneMenuId itself
+        // is a disabled row and JUCE never delivers a disabled item's id, so nothing here needs to
+        // special-case it.
         const int index = menuId - kAddInstrumentPluginMenuIdBase;
-        if (index >= 0 && index < (int)options.size())
-            trackHeaderHost_->addInstrumentPluginTrack(options[(size_t)index]);
+        if (index >= 0 && index < (int)instrumentPluginMenuSnapshot_.size())
+            trackHeaderHost_->addInstrumentPluginTrack(instrumentPluginMenuSnapshot_[(size_t)index]);
     }
 }
 
@@ -1227,6 +1240,10 @@ juce::PopupMenu TimelinePanelComponent::buildAddTrackMenu() {
     instrumentMenu.addSeparator();
     juce::PopupMenu pluginMenu;
     const auto pluginOptions = collectInstrumentPluginMenuOptions();
+    // Snapshot for applyAddTrackMenuChoice — see instrumentPluginMenuSnapshot_'s own comment. Taken
+    // here, at the exact moment the menu below is built from this same list, so a click can never
+    // resolve against anything other than what was actually shown.
+    instrumentPluginMenuSnapshot_ = pluginOptions;
     if (pluginOptions.empty()) {
         const bool scanning = trackHeaderHost_ != nullptr && trackHeaderHost_->isPluginScanInProgress();
         pluginMenu.addItem(kAddInstrumentPluginNoneMenuId,
@@ -1234,7 +1251,9 @@ juce::PopupMenu TimelinePanelComponent::buildAddTrackMenu() {
                            /*isEnabled=*/false);
     } else {
         for (int i = 0; i < (int)pluginOptions.size(); ++i)
-            pluginMenu.addItem(kAddInstrumentPluginMenuIdBase + i, pluginOptions[(size_t)i].name);
+            pluginMenu.addItem(kAddInstrumentPluginMenuIdBase + i,
+                               pluginOptions[(size_t)i].name + " (" +
+                                   shortPluginFormatLabel(pluginOptions[(size_t)i].format) + ")");
     }
     instrumentMenu.addSubMenu("Plugin", pluginMenu);
 
