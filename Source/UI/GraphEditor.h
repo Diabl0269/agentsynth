@@ -78,6 +78,32 @@ public:
     // Test accessor. Non-const because it calls buildVisibleCables(), which is non-const.
     synth::ui::MinimapModel buildMinimapModel();
 
+    // ---- Locate Master (FRO45) ----
+    // Founder feedback on T183's live check: once Master and Audio Output exist (T187 seeds an
+    // Audio Output on New Patch), auto-arrange or a drag can leave them anywhere on the canvas.
+    // This is the lightweight canvas-only stopgap — the durable answer is the future mixer panel
+    // (P9-5, docs/mixer.md), not built here.
+    enum class LocateMasterResult {
+        NoTarget,   // neither node exists yet — graceful no-op
+        Master,     // Master was selected and brought into view
+        AudioOutput // no Master yet; fell back to Audio Output
+    };
+
+    /** True when locateMasterOrOutput() has a node to find — drives the canvas context menu item's
+     *  (and the equivalent command's) enabled state, so the two surfaces can never disagree. */
+    bool hasLocatableMasterOrOutput() const;
+
+    /** Selects Master, falling back to Audio Output when there is no Master yet, and pans it into
+     *  the centre of the view. Reuses the exact select-by-NodeID path MainComponent::
+     *  selectNodeInGraph already uses for the timeline binding chip (GraphEditor::selectModule)
+     *  rather than duplicating it, plus the same pan primitive the minimap's own click-to-navigate
+     *  uses (centreViewOn). The minimap highlight comes for free: buildMinimapModel() derives
+     *  Node::selected from the current selection, so selecting Master IS the minimap highlight —
+     *  refreshed immediately here rather than waiting for the next 30 Hz tick, the same as
+     *  centreViewOn's own immediate viewport push in updateTransform(). Graceful no-op
+     *  (LocateMasterResult::NoTarget) when the patch has neither node. */
+    LocateMasterResult locateMasterOrOutput();
+
     // Interactions
     void beginConnectionDrag(ModuleComponent* sourceModule, int channelIndex, bool isInput, bool isMidi,
                              juce::Point<int> screenPos);
