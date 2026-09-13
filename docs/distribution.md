@@ -147,22 +147,29 @@ Once both exist, `build-artifacts.yml`'s `publish-appcast` job (gated on
 WinSparkle uses the same EdDSA (Ed25519) primitive as Sparkle, but its own, **separate and
 independent** key pair — never reuse the Sparkle key here.
 
+**Must run on a real Windows machine you control, not this repo's CI.** `agentsynth` is a public
+repo — a GitHub Actions artifact or log is downloadable by any signed-in GitHub user for as long as
+it exists, so a CI job is not a safe place for the private key to ever pass through, even briefly.
+Generate locally and push the secret from your own authenticated `gh` session instead.
+
 1. Download WinSparkle's prebuilt release (the same `SYNTH_WINSPARKLE_URL` pin as
-   `cmake/DependencyVersions.cmake`) and find `bin/winsparkle-tool.exe`. This is a Windows binary —
-   run it on a Windows machine.
-2. Generate a key pair:
+   `cmake/DependencyVersions.cmake`) and find `bin/winsparkle-tool.exe`.
+2. CLI confirmed against the real `.exe` (`winsparkle-tool.exe --help` / `<subcommand> --help`):
    ```
    winsparkle-tool.exe generate-key --file private.key
+   winsparkle-tool.exe public-key --private-key-file private.key   # prints the public key — safe to share/log
+   winsparkle-tool.exe sign --private-key-file private.key <file>  # matches the CI signing step below
    ```
-   This documented command writes the private key to `private.key`. **Not independently verified
-   in this environment** (no Windows machine to run the `.exe` on) exactly how the public key is
-   printed/obtained from the same invocation — run `winsparkle-tool.exe generate-key --help` first
-   and confirm before treating this as gospel; adjust these steps if the real CLI differs.
+   `generate-key` only writes `private.key`; run `public-key` against that file to get the public
+   key to hand off.
 3. Set the public key as a **repository variable** (not a secret — it's public by design):
-   Settings ▸ Secrets and variables ▸ Actions ▸ Variables ▸ new variable `WINSPARKLE_PUBLIC_KEY`.
-   Also pass it locally to test the real flow: `-DSYNTH_WINSPARKLE_PUBLIC_KEY=<key>`.
-4. Add `private.key`'s contents as the **repository secret** `WINSPARKLE_PRIVATE_KEY`, then delete
-   the local file. Never commit it.
+   `gh variable set WINSPARKLE_PUBLIC_KEY --body "<key>"`, or Settings ▸ Secrets and variables ▸
+   Actions ▸ Variables. Also pass it locally to test the real flow:
+   `-DSYNTH_WINSPARKLE_PUBLIC_KEY=<key>`.
+4. Add `private.key`'s contents as the **repository secret** `WINSPARKLE_PRIVATE_KEY` directly from
+   the Windows machine (or copy it to wherever your `gh` session already has repo admin access):
+   `gh secret set WINSPARKLE_PRIVATE_KEY < private.key`. Then delete the local file. Never commit
+   it, and never paste it into a chat/CI log/artifact.
 
 Once both exist, `build-artifacts.yml`'s `publish-appcast-windows` job (gated on
 `vars.WINSPARKLE_PUBLIC_KEY != ''`) starts running for real instead of skipping, and
