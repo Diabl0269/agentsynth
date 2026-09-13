@@ -12,6 +12,14 @@
 
 set -uo pipefail
 
+# Git hooks export GIT_DIR (often absolute) -- and sometimes GIT_WORK_TREE/GIT_INDEX_FILE -- into
+# every process they run. This harness builds throwaway git repos with `git init`/`git add`; with
+# an inherited GIT_DIR those commands would target the REAL repository with the fixture dir as
+# its work tree, staging every real file as deleted and adding fixture files to the real index
+# (FRO82 -- that is exactly what happened when a pre-push hook ran ci-local.sh). Strip the
+# inherited git env first so the fixtures are genuinely isolated wherever this runs.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CHECK="$SCRIPT_DIR/scripts/check-file-sizes.sh"
 
@@ -278,6 +286,34 @@ else
     fail=$((fail + 1))
 fi
 rm -rf "$clone_dir"
+
+# --- FRO82: running this harness from a git hook must never touch the hook's repository --------
+#
+# Hooks export GIT_DIR (absolute, in the pre-push case). Before the `unset` at the top of this file,
+# the fixture repos' `git init`/`git add` calls resolved to the hook's repository with the fixture
+# directory as its work tree -- staging every real file as deleted and adding fixture files to the
+# real index. Reproduce with a sentinel repo: run this very harness with GIT_DIR pointing at it and
+# require its index and work tree to come back untouched. The nested run is told to skip this case
+# (otherwise it would recurse forever).
+if [ -z "${CHECK_FILE_SIZES_TEST_NESTED:-}" ]; then
+    sentinel="$TMPROOT/sentinel"
+    mkdir -p "$sentinel"
+    (cd "$sentinel" && git init -q && echo keep >keep.txt && git add keep.txt \
+        && git -c user.email=t@t -c user.name=t commit -qm sentinel)
+    (cd "$sentinel" && GIT_DIR="$sentinel/.git" CHECK_FILE_SIZES_TEST_NESTED=1 \
+        bash "$SCRIPT_DIR/scripts/tests/check-file-sizes.test.sh" >/dev/null 2>&1) || true
+    sentinel_status="$(git -C "$sentinel" status --porcelain 2>&1)"
+    sentinel_files="$(git -C "$sentinel" ls-files 2>&1)"
+    if [ -z "$sentinel_status" ] && [ "$sentinel_files" = "keep.txt" ]; then
+        echo "PASS: running the harness under a hook-style GIT_DIR leaves the hook's repository untouched"
+        pass=$((pass + 1))
+    else
+        echo "FAIL: running the harness under a hook-style GIT_DIR leaves the hook's repository untouched"
+        echo "  sentinel status: $sentinel_status"
+        echo "  sentinel files:  $sentinel_files"
+        fail=$((fail + 1))
+    fi
+fi
 
 # --- the real thing: the repo's own tree + its own committed baseline must pass -----------------
 if output="$( (unset FILE_SIZE_CAP FILE_SIZE_BASELINE && bash "$CHECK" --root "$SCRIPT_DIR") 2>&1)"; then
