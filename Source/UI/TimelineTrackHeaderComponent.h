@@ -87,6 +87,20 @@ struct TrackHeaderHost {
      *  it up. */
     virtual void addInstrumentTrack(const juce::String& instrumentModuleType, bool poly) = 0;
 
+    /** FRO26 (P9-3e, docs/mixer.md §5.13): true when at least one track's chain still reaches the
+     *  output without passing through a ChannelStripModule — the "+ Track" menu's "Create Channels"
+     *  entry is enabled exactly when this is true. Non-pure with an inert `false` default so every
+     *  existing TrackHeaderHost implementer (test stubs included) keeps compiling. */
+    virtual bool hasTracksNeedingChannels() const { return false; }
+
+    /** FRO26 (P9-3e, docs/mixer.md §5.13): the "+ Track" menu's "Create Channels" entry — wraps
+     *  every channel-less track's chain into a mixer channel (docs/mixer.md's factory default:
+     *  EQ -> Compressor, both bypassed -> Channel Strip -> Master), as ONE undo step covering every
+     *  track it touches. A track that already has a channel is left untouched; a no-op (nothing
+     *  pushed to the undo stack) when hasTracksNeedingChannels() would return false. Non-pure with
+     *  an inert no-op default so every existing TrackHeaderHost implementer keeps compiling. */
+    virtual void createChannelsForExistingTracks() {}
+
     /** One hosted-plugin instance parameter with no automation lane yet — the automation
      *  strip's lane picker "Add lane..." entries. `paramId` is the value a created lane would carry
      *  (a real stable id, or the synthetic "legacy:<index>" form — see

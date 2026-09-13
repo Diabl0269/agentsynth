@@ -435,6 +435,12 @@ public:
     // parameter, so it has no poly entry.
     static constexpr int kAddInstrumentOscillatorPolyMenuId = 7;
     static constexpr int kAddInstrumentWavetablePolyMenuId = 8;
+    // FRO26 (P9-3e, docs/mixer.md §5.13): "Create channels" for existing projects. Lives on this
+    // same menu rather than a per-track context menu or a mixer panel — there is no mixer panel yet
+    // (P9-5), and "+ Track" is already where every other channel-creating action in this doc lives
+    // (Audio Track, Instrument Track); a project-wide sweep belongs beside them, not off a single
+    // track header, since it acts on every track at once.
+    static constexpr int kCreateChannelsMenuId = 9;
 
     /** Adds a marker at the transport's current position, named "Marker N", coloured from the
      *  theme (see defaultMarkerColourArgb) — ONE recordTimelineChange when an undo manager is
