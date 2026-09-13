@@ -13,7 +13,7 @@
 #include "../Source/AudioEngine.h"
 #include "../Source/UI/AIChatComponent.h"
 #include "../Source/UI/UIAnimation.h"
-#include "MainComponent.h"
+#include "MainComponent/MainComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 

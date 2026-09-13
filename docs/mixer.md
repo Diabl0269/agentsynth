@@ -48,7 +48,7 @@ export (P9-8) already has to design around: there is no point in the graph, toda
 this track's contribution" is actually isolated.
 
 The graph has exactly one **Audio Output** node, a `juce::AudioGraphIOProcessor` that cannot host
-DSP of its own. `MainComponent::ensureMasterRecordTap()` (`Source/MainComponent.cpp`) already
+DSP of its own. `MainComponent::ensureMasterRecordTap()` (`Source/MainComponent/MainComponentTimeline.cpp`) already
 splices a singleton `Rec Tap` node in front of it on demand, re-routing every audio connection
 that fed the output through the tap, as one compound undo step (`docs/architecture.md`). This is
 the closest existing precedent for what a `Master` node splice would look like (§5.1).
@@ -767,8 +767,9 @@ Main line, in dependency order:
        nested-transaction double-repaint a naive wrap would produce (docs/macros.md §7 item 9 has
        the signature detail). Layout mirrors T173a/T183's own pattern: `estimateModuleSize()` per
        node type plus a 40px gap constant (`kAutoChannelCardGapX`, GraphEditor.cpp's own copy of
-       `MainComponent.cpp`'s `kChannelCardGapX` — duplicated rather than shared, since Core/UI
-       layering keeps GraphEditor.cpp from reaching into MainComponent.cpp). **Boxing rule:** the
+       `MainComponentTrackCreation.cpp`'s `kChannelCardGapX` — duplicated rather than shared, since
+       Core/UI layering keeps GraphEditor.cpp from reaching into the MainComponent units). **Boxing
+       rule:** the
        new EQ/Compressor/Strip join the SAME macro as the instrument only when every distinct exit
        source node is already an ORDINARY member of ONE common macro (not a port, not split across
        macros, not un-macroed) — otherwise the new chain nodes are left unboxed on the canvas

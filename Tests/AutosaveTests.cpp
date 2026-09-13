@@ -14,7 +14,7 @@
 #include "../Source/AI/AIProvider.h"
 #include "../Source/ProjectBundle.h"
 #include "../Source/Transport/BounceExporter.h"
-#include "MainComponent.h"
+#include "MainComponent/MainComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>

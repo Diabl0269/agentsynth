@@ -15,7 +15,7 @@
 #include "../Source/AudioEngine.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include "FakeAudioIODevice.h"
-#include "MainComponent.h"
+#include "MainComponent/MainComponent.h"
 #include <gtest/gtest.h>
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_audio_processors/juce_audio_processors.h>

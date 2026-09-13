@@ -195,7 +195,14 @@ add_executable(Tests
     RecentProjectsTests.cpp
     AssetManagerTests.cpp
     BrandingTests.cpp
-    ../Source/MainComponent.cpp
+    ../Source/MainComponent/MainComponent.cpp
+    ../Source/MainComponent/MainComponentCallbacks.cpp
+    ../Source/MainComponent/MainComponentFileIO.cpp
+    ../Source/MainComponent/MainComponentCommands.cpp
+    ../Source/MainComponent/MainComponentPanels.cpp
+    ../Source/MainComponent/MainComponentTimeline.cpp
+    ../Source/MainComponent/MainComponentTrackHeaderHost.cpp
+    ../Source/MainComponent/MainComponentTrackCreation.cpp
     ../Source/UI/TimelinePanelComponent.cpp
     ../Source/UI/TimelineRulerComponent.cpp
     ../Source/UI/TimelinePlayheadOverlay.cpp
@@ -225,9 +232,10 @@ add_executable(Tests
     ../Source/UI/WelcomeScreenComponent.cpp
 )
 
-# MainComponent.cpp above pulls in synth::update::UpdateManager (Source/Update/UpdateManager.h) on
-# macOS — Tests compiles MainComponent.cpp directly rather than linking the AgentSynth target, so
-# it needs the same Sparkle sources/linking AgentSynth gets in the top-level CMakeLists.txt.
+# MainComponent.h (included by the MainComponent/*.cpp units above) pulls in
+# synth::update::UpdateManager (Source/Update/UpdateManager.h) on macOS — Tests compiles those
+# units directly rather than linking the AgentSynth target, so it needs the same Sparkle
+# sources/linking AgentSynth gets in the top-level CMakeLists.txt.
 if(APPLE)
     target_sources(Tests PRIVATE ../Source/Update/SparkleUpdateManager.mm)
     set_source_files_properties(../Source/Update/SparkleUpdateManager.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
@@ -274,8 +282,8 @@ target_link_libraries(Tests PRIVATE
 target_include_directories(Tests PRIVATE
     ${CMAKE_SOURCE_DIR}/Source
     # WhatsNewData.h (generated at configure time by the root CMakeLists.txt's "What's New"
-    # block) — Tests compiles MainComponent.cpp directly (see the comment above), so it needs the
-    # same generated-header include path AppUI gets.
+    # block) — Tests compiles the MainComponent/*.cpp units directly (see the comment above), so
+    # it needs the same generated-header include path AppUI gets.
     ${SYNTH_WHATSNEW_GENERATED_DIR}
 )
 

@@ -13,7 +13,7 @@
 
 #include "../Source/AI/AIProvider.h"
 #include "../Source/AudioEngine.h"
-#include "../Source/MainComponent.h"
+#include "../Source/MainComponent/MainComponent.h"
 #include "../Source/ProjectBundle.h"
 #include "../Source/UI/Theme/AppLookAndFeel.h"
 #include "../Source/UI/Theme/ThemeManager.h"

@@ -43,7 +43,7 @@
 #include "../Source/Timeline/AudioClipStreamer.h"
 #include "../Source/Timeline/TakePlacement.h"
 #include "../Source/Timeline/TimelineDoc.h"
-#include "MainComponent.h"
+#include "MainComponent/MainComponent.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 
 namespace {

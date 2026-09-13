@@ -17,7 +17,7 @@
 //     command active/inactive, keyPressed's return value) rather than asserting real focus moved.
 
 #include "../Source/AI/AIProvider.h"
-#include "../Source/MainComponent.h"
+#include "../Source/MainComponent/MainComponent.h"
 #include "../Source/UI/FocusRegion.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

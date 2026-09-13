@@ -609,8 +609,16 @@ target_compile_definitions(Core PUBLIC HAS_FONT_ASSETS=1)
 # Main.cpp stays out — it is the standalone entry point (JUCEApplication + the generated
 # JuceHeader.h) and has no meaning inside a plugin.
 add_library(AppUI STATIC
-    Source/MainComponent.cpp
-    Source/MainComponent.h
+    Source/MainComponent/MainComponent.cpp
+    Source/MainComponent/MainComponent.h
+    Source/MainComponent/MainComponentInternal.h
+    Source/MainComponent/MainComponentCallbacks.cpp
+    Source/MainComponent/MainComponentFileIO.cpp
+    Source/MainComponent/MainComponentCommands.cpp
+    Source/MainComponent/MainComponentPanels.cpp
+    Source/MainComponent/MainComponentTimeline.cpp
+    Source/MainComponent/MainComponentTrackHeaderHost.cpp
+    Source/MainComponent/MainComponentTrackCreation.cpp
     Source/UserSettings.h
     Source/UI/TimelinePanelComponent.h
     Source/UI/TimelinePanelComponent.cpp
@@ -683,7 +691,7 @@ add_library(AppUI STATIC
 target_link_libraries(AppUI PUBLIC Core)
 
 # WhatsNewData.h (generated above, "What's New" block) — PRIVATE since only AppUI's
-# MainComponent.cpp includes it.
+# Source/MainComponent/ units (MainComponent.cpp, MainComponentPanels.cpp) include it.
 target_include_directories(AppUI PRIVATE "${SYNTH_WHATSNEW_GENERATED_DIR}")
 
 # The VST3 is a shared object on Linux, and every object linked into a .so must be
@@ -888,7 +896,7 @@ if(ENABLE_PLUGIN)
         target_compile_options(AgentSynthPlugin PRIVATE -Wall -Wextra)
     endif()
 
-    # MainComponent.cpp (in AppUI, which this plugin links) pulls in synth::update::UpdateManager
+    # MainComponent.h (in AppUI, which this plugin links) pulls in synth::update::UpdateManager
     # on macOS, same as AgentSynth and Tests — see the Sparkle block above and
     # Tests/CMakeLists.txt's identical comment. Neither AgentSynthPlugin's Info.plist nor AU's gets
     # SUFeedURL/SUPublicEDKey merged in (only AgentSynth's does, above), so UpdateManager::isAvailable()
@@ -924,7 +932,7 @@ if(ENABLE_PLUGIN)
         set_source_files_properties(Source/Update/SparkleUpdateManager.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
     endif()
 
-    # MainComponent.cpp (in AppUI) pulls in synth::update::UpdateManager on Windows too, same
+    # MainComponent.h (in AppUI) pulls in synth::update::UpdateManager on Windows too, same
     # reasoning as the APPLE block above: AgentSynthPlugin_VST3 needs the same WinSparkle
     # source/linking AgentSynth gets, purely to satisfy the linker — the plugin's own build never
     # gets SUFeedURL/SUPublicEDKey-equivalent compile definitions (only AgentSynth does, above), so

@@ -24,7 +24,7 @@
 //   8. Persistence via the owner — MainComponent stores the list under "pluginScanList".
 
 #include "../Source/AI/AIProvider.h"
-#include "../Source/MainComponent.h"
+#include "../Source/MainComponent/MainComponent.h"
 #include "../Source/Plugin/Hosting/HostedPluginModule.h"
 #include "../Source/Plugin/Hosting/PluginScanService.h"
 #include "../Source/UI/ModuleLibraryComponent.h"

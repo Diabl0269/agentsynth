@@ -32,7 +32,7 @@
 #include "../Source/UI/ModuleComponent.h"
 #include "../Source/UI/ModuleLibraryComponent.h"
 #include "../Source/UI/TimelineTrackHeaderComponent.h"
-#include "MainComponent.h"
+#include "MainComponent/MainComponent.h"
 #include "StubPluginInstance.h"
 #include <algorithm>
 #include <array>

@@ -16,7 +16,7 @@
 #include "../Source/UI/Theme/BuiltInThemes.h"
 #include "../Source/UI/TimelinePanelComponent.h"
 #include "../Source/UI/TimelineTransportBar.h"
-#include "MainComponent.h"
+#include "MainComponent/MainComponent.h"
 #include <gtest/gtest.h>
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_gui_basics/juce_gui_basics.h>
