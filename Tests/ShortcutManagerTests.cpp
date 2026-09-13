@@ -1067,8 +1067,9 @@ TEST_F(ShortcutManagerTest, FocusRegionActionsAreGeneralCategory) {
 
 // The collision check the task's own acceptance criteria calls out explicitly: none of the four new
 // chords collide with anything already in the (General) table, including each other and the
-// deliberately-NOT-reused Cmd+M (toggleModMatrix, reserved so a future Mixer-focus shortcut can use
-// Cmd+Shift+M without a clash).
+// deliberately-NOT-reused Cmd+M (toggleModMatrix). Cmd+Shift+M itself was reserved at the time for a
+// future Mixer-focus shortcut and is now FRO45's "Locate Master" (Graph category) — see that action's
+// own comment in ShortcutManager::resetToDefaults for why it claims the chord that reservation held.
 TEST_F(ShortcutManagerTest, FocusRegionActionsDoNotCollideWithAnyExistingGeneralBinding) {
     for (const auto* actionId : {"focusNextRegion", "focusPrevRegion", "focusTimeline", "focusLibrary"}) {
         auto binding = manager.getBinding(actionId);
@@ -1077,14 +1078,17 @@ TEST_F(ShortcutManagerTest, FocusRegionActionsDoNotCollideWithAnyExistingGeneral
             << actionId << " collides with " << manager.getConflictingAction(actionId, binding);
     }
 
-    // Cmd+Shift+M is reserved (not bound to anything by T159) — Cmd+M already owns toggleModMatrix,
-    // and the plain letter is left for a future Mixer-focus shortcut.
+    // Cmd+Shift+M now belongs to locateMaster (FRO45) — Library/Timeline focus must not have
+    // wandered onto it, and nothing else may have claimed it either.
     const auto cmdShiftM =
         juce::KeyPress('m', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
     EXPECT_NE(manager.getBinding("focusLibrary"), cmdShiftM);
     EXPECT_NE(manager.getBinding("focusTimeline"), cmdShiftM);
+    EXPECT_EQ(manager.getBinding("locateMaster"), cmdShiftM);
     for (const auto& actionId : manager.getActionIds())
-        EXPECT_NE(manager.getBinding(actionId), cmdShiftM) << actionId << " must not claim the reserved Cmd+Shift+M";
+        if (actionId != "locateMaster")
+            EXPECT_NE(manager.getBinding(actionId), cmdShiftM)
+                << actionId << " must not claim locateMaster's Cmd+Shift+M";
 }
 
 // ---------------------------------------------------------------------------

@@ -3163,6 +3163,56 @@ void GraphEditor::fitViewToModules() {
     updateTransform();
 }
 
+bool GraphEditor::hasLocatableMasterOrOutput() const {
+    auto& graph = audioEngine.getGraph();
+    if (synth::findMasterNode(graph) != nullptr)
+        return true;
+    for (auto* node : graph.getNodes())
+        if (node != nullptr && isTerminalAudioSink(node->getProcessor()))
+            return true;
+    return false;
+}
+
+GraphEditor::LocateMasterResult GraphEditor::locateMasterOrOutput() {
+    auto& graph = audioEngine.getGraph();
+
+    juce::AudioProcessorGraph::Node* node = synth::findMasterNode(graph);
+    LocateMasterResult result = LocateMasterResult::Master;
+    if (node == nullptr) {
+        // Fall back to Audio Output — identified by TYPE via isTerminalAudioSink (defined above),
+        // never by the "Audio Output" name comparison MasterSplice.cpp uses, so a ModuleBase that
+        // happened to share that name could not impersonate the sink.
+        for (auto* n : graph.getNodes()) {
+            if (n != nullptr && isTerminalAudioSink(n->getProcessor())) {
+                node = n;
+                break;
+            }
+        }
+        result = LocateMasterResult::AudioOutput;
+    }
+    if (node == nullptr)
+        return LocateMasterResult::NoTarget; // neither node exists yet — graceful no-op
+
+    // Reuses the exact select-by-NodeID path MainComponent::selectNodeInGraph already uses for the
+    // timeline binding chip, rather than duplicating it.
+    selectModule(node->nodeID, /*additive=*/false);
+
+    for (auto* comp : content.getModules()) {
+        if (comp != nullptr && comp->getNodeId() == node->nodeID) {
+            centreViewOn(comp->getBounds().toFloat().getCentre());
+            break;
+        }
+    }
+
+    // The minimap highlight is free (buildMinimapModel() derives Node::selected from the selection
+    // set above) — pushed immediately rather than waiting for the next 30 Hz tick, the same as
+    // centreViewOn's own immediate viewport push in updateTransform().
+    if (minimap.isVisible())
+        minimap.setModel(buildMinimapModel());
+
+    return result;
+}
+
 void GraphEditor::mouseMove(const juce::MouseEvent& e) {
     auto localPos = content.getLocalPoint(this, e.getPosition());
 
@@ -6763,6 +6813,17 @@ void GraphEditor::showCanvasContextMenu(juce::Point<int> canvasPos) {
         if (safeThis != nullptr)
             safeThis->selectAllModules();
     });
+
+    // FRO45: discoverable regardless of where auto-arrange or a drag left Master/Audio Output.
+    // Disabled (mirroring the Paste item's setEnabled idiom above) rather than hidden, so the row
+    // stays in a stable place whether or not the patch has a channel yet.
+    juce::PopupMenu::Item locateMaster("Locate Master");
+    locateMaster.setEnabled(hasLocatableMasterOrOutput());
+    locateMaster.action = [safeThis] {
+        if (safeThis != nullptr)
+            safeThis->locateMasterOrOutput();
+    };
+    m.addItem(locateMaster);
 
     const int selectionCount = getSelectionCount();
     if (selectionCount > 1) {
