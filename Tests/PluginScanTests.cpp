@@ -204,6 +204,143 @@ TEST(PluginScanTest, RescanningAKnownPluginIsNotCountedAsNewAndDoesNotBlacklistI
 }
 
 // ============================================================================
+// 1b. Eager population / shared listeners (FRO44)
+//
+// One PluginScanService is meant to be shared by several consumers (the sidebar today, a future
+// Instrument-track plugin picker) without each one owning — or re-triggering — its own scan.
+// ============================================================================
+
+namespace {
+
+/** A consumer that just wants to know when a scan it may or may not have triggered finishes —
+ *  stands in for the sidebar, a picker, or anything else registered on the shared service. */
+struct RecordingListener : PluginScanService::Listener {
+    std::vector<PluginScanService::Result> results;
+    void pluginScanCompleted(const PluginScanService::Result& result) override { results.push_back(result); }
+};
+
+} // namespace
+
+TEST(PluginScanTest, EnsureScannedTriggersExactlyOneScanNoMatterHowManyConsumersAsk) {
+    FakeLauncher launcher;
+    launcher.xmlByFile[kAlpha] = descriptionXml("Alpha", 0xA1FA, kAlpha);
+
+    int candidateSourceCalls = 0;
+    PluginScanService service;
+    service.setCandidateSource([&](const juce::String&) {
+        ++candidateSourceCalls;
+        return juce::StringArray(kAlpha);
+    });
+    service.setChildLauncher(launcher.fn());
+
+    // Three independent entry points — startup, the sidebar opening, a picker opening — all ask in
+    // the same run, before anything has completed.
+    RecordingListener startup, sidebar, picker;
+    service.addListener(&startup);
+    service.addListener(&sidebar);
+    service.addListener(&picker);
+
+    service.ensureScanned(juce::StringArray("VST3"));
+    service.ensureScanned(juce::StringArray("VST3"));
+    service.ensureScanned(juce::StringArray("VST3"));
+
+    ASSERT_TRUE(pumpUntil([&] { return !startup.results.empty(); })) << "the one real scan never completed";
+
+    EXPECT_EQ(candidateSourceCalls, 1) << "only the FIRST ensureScanned() call may start a real scan";
+    EXPECT_EQ(launcher.launchCountFor(kAlpha), 1);
+    EXPECT_EQ(service.getNumKnownPlugins(), 1);
+
+    // Every registered consumer hears about it, not just whichever call happened to win the race.
+    ASSERT_EQ(startup.results.size(), 1u);
+    ASSERT_EQ(sidebar.results.size(), 1u);
+    ASSERT_EQ(picker.results.size(), 1u);
+    EXPECT_EQ(startup.results[0].added, 1);
+    EXPECT_EQ(sidebar.results[0].added, 1);
+    EXPECT_EQ(picker.results[0].added, 1);
+
+    service.removeListener(&startup);
+    service.removeListener(&sidebar);
+    service.removeListener(&picker);
+}
+
+TEST(PluginScanTest, EnsureScannedNeverRescansOnceItHasAlreadyCompleted) {
+    // "Persist/reuse the cached list so startup doesn't rescan everything every launch" — the flip
+    // side of the exactly-one-scan test above: a LATER ensureScanned() (a picker opened well after
+    // the eager startup scan already finished) must not launch a second one.
+    FakeLauncher launcher;
+    launcher.xmlByFile[kAlpha] = descriptionXml("Alpha", 0xA1FA, kAlpha);
+    PluginScanService service;
+    service.setCandidateSource(candidates({kAlpha}));
+    service.setChildLauncher(launcher.fn());
+
+    service.ensureScanned(juce::StringArray("VST3"));
+    ASSERT_TRUE(pumpUntil([&] { return service.getNumKnownPlugins() > 0; }));
+    EXPECT_EQ(launcher.launchCountFor(kAlpha), 1);
+
+    service.ensureScanned(juce::StringArray("VST3"));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    EXPECT_EQ(launcher.launchCountFor(kAlpha), 1) << "a later ensureScanned() must not trigger a second scan";
+
+    // The explicit rescan path (the sidebar's "Scan for plugins..." row) is unaffected — it always
+    // calls scanAsync() directly and must still be able to find new plugins.
+    launcher.xmlByFile[kBeta] = descriptionXml("Beta", 0xB37A, kBeta);
+    service.setCandidateSource(candidates({kAlpha, kBeta}));
+    EXPECT_EQ(scanToCompletion(service).added, 1);
+    EXPECT_EQ(service.getNumKnownPlugins(), 2);
+}
+
+TEST(PluginScanTest, ConsumersSeeThePluginListWithoutTheSidebarEverOpening) {
+    // No ModuleLibraryComponent is constructed anywhere in this test — a future picker reading
+    // straight off the shared service must see the scanned plugin without anyone ever opening the
+    // library sidebar's PLUGINS section.
+    FakeLauncher launcher;
+    launcher.xmlByFile[kAlpha] = descriptionXml("Alpha", 0xA1FA, kAlpha);
+    PluginScanService service;
+    service.setCandidateSource(candidates({kAlpha}));
+    service.setChildLauncher(launcher.fn());
+
+    EXPECT_EQ(service.getNumKnownPlugins(), 0);
+    service.ensureScanned(juce::StringArray("VST3"));
+    ASSERT_TRUE(pumpUntil([&] { return service.getNumKnownPlugins() > 0; }));
+
+    const auto identities = service.getKnownPluginIdentities();
+    ASSERT_EQ(identities.size(), 1u);
+    EXPECT_EQ(identities[0].name, "Alpha");
+}
+
+TEST(PluginScanTest, ScanAsyncNotifiesRegisteredListenersEvenWithNoCompletionCallback) {
+    // scanAsync() itself (not just ensureScanned()) must reach every registered Listener — this is
+    // what lets the sidebar's manual "Scan for plugins..." row and the eager path share one
+    // completion handler (MainComponent::pluginScanCompleted) instead of duplicating it.
+    FakeLauncher launcher;
+    launcher.xmlByFile[kAlpha] = descriptionXml("Alpha", 0xA1FA, kAlpha);
+    PluginScanService service;
+    service.setCandidateSource(candidates({kAlpha}));
+    service.setChildLauncher(launcher.fn());
+
+    RecordingListener listener;
+    service.addListener(&listener);
+    service.scanAsync(juce::StringArray("VST3"), {}, {});
+    ASSERT_TRUE(pumpUntil([&] { return !listener.results.empty(); }));
+    EXPECT_EQ(listener.results[0].added, 1);
+    EXPECT_FALSE(listener.results[0].cancelled);
+
+    service.removeListener(&listener);
+}
+
+TEST(PluginScanTest, RemovedListenerHearsNothingFurther) {
+    PluginScanService service;
+    service.setCandidateSource(candidates({}));
+
+    RecordingListener listener;
+    service.addListener(&listener);
+    service.removeListener(&listener);
+
+    scanToCompletion(service);
+    EXPECT_TRUE(listener.results.empty()) << "a removed listener must not be notified";
+}
+
+// ============================================================================
 // 2. Crash isolation
 // ============================================================================
 
@@ -1143,4 +1280,63 @@ TEST_F(PluginScanPersistenceTest, AHostedBuildResolvesButNeverScans) {
     // resolve its identity to a binary.
     if (auto* backend = dynamic_cast<synth::DefaultHostedPluginBackend*>(&synth::HostedPluginBackend::getDefault()))
         EXPECT_EQ(backend->getScanService(), &main.getPluginScanService());
+}
+
+// ============================================================================
+// 9. Eager startup scan (FRO44)
+// ============================================================================
+
+TEST_F(PluginScanPersistenceTest, HostedBuildNeverStartsTheEagerScanEither) {
+    // FRO44's own guard on the same door AHostedBuildResolvesButNeverScans (above) locks: the eager
+    // entry point must defer to the very same "never inside a host" rule as the manual button, not
+    // reintroduce a bypass.
+    AudioEngine hostedEngine(AudioEngine::HostMode::Hosted);
+    synth::theme::ThemeManager themeManager;
+    synth::theme::AppLookAndFeel lookAndFeel;
+    MainComponent main(themeManager, lookAndFeel, hostedEngine, std::make_unique<SilentProvider>());
+
+    main.maybeStartEagerPluginScan();
+    EXPECT_FALSE(main.getPluginScanService().isScanning())
+        << "hosted mode must stay lazy-on-resolve-only — see docs/architecture.md's Plugin scanning section";
+    EXPECT_EQ(main.getModuleLibrary().getPluginCount(), 0);
+}
+
+TEST_F(PluginScanPersistenceTest, EagerScanPopulatesTheSidebarWithoutItEverBeingOpened) {
+    // The founder complaint this ticket fixes, end to end: nothing here calls
+    // moduleLibrary.onScanPluginsRequested or opens the PLUGINS section — only the eager entry point
+    // Main.cpp calls after building the real window.
+    //
+    // `launcher` is declared BEFORE `main` (the pattern every other test in this file follows,
+    // e.g. PersistenceViaOwner's inner scope): MainComponent's destructor joins the scan thread via
+    // cancelScan(), and that thread can still be calling into a captured `&launcher` while it winds
+    // down, so the launcher must outlive `main`, not the other way around.
+    FakeLauncher launcher;
+    launcher.xmlByFile[kAlpha] = descriptionXml("Alpha", 0xA1FA, kAlpha);
+
+    // The delegating ctor owns its own (standalone, never Hosted) AudioEngine — see MainComponent.h's
+    // ctor comment — so the eager scan's isHosted() guard is a no-op here, exactly as it is for the
+    // real app's own MainWindow-created MainComponent.
+    MainComponent main(std::make_unique<SilentProvider>());
+    ASSERT_EQ(main.getModuleLibrary().getPluginCount(), 0) << "nothing saved from a previous test run";
+
+    // maybeStartEagerPluginScan() drives the REAL synth::hostedPluginFormatNames() (VST3 **and**
+    // AudioUnit on macOS), unlike the single-format helpers most other tests in this file use — so
+    // the fake source must be format-aware, or a plugin "found" for one format is scanned again for
+    // every other hosted format and double-counted below.
+    main.getPluginScanService().setCandidateSource(
+        [](const juce::String& format) { return format == "VST3" ? juce::StringArray(kAlpha) : juce::StringArray(); });
+    main.getPluginScanService().setChildLauncher(launcher.fn());
+
+    main.maybeStartEagerPluginScan();
+    ASSERT_TRUE(pumpUntil([&] { return main.getModuleLibrary().getPluginCount() > 0; }))
+        << "the eager scan never reached the sidebar";
+    EXPECT_GE(entryIndexForText(main.getModuleLibrary(), "Alpha"), 0);
+
+    // pluginScanCompleted() persists the list exactly like a manual scan's old inline completion did.
+    EXPECT_TRUE(main.getAppPropertiesForTest().getUserSettings()->containsKey(MainComponent::kPluginScanListKey));
+
+    // A later call (e.g. FRO42's picker opening after startup already scanned) must not rescan.
+    main.maybeStartEagerPluginScan();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    EXPECT_EQ(launcher.launchCountFor(kAlpha), 1);
 }

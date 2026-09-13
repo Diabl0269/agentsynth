@@ -55,7 +55,11 @@ class MainComponent
     // T159: repaints a focus-region root's accent outline when keyboard focus moves into or out of
     // it. Component::focusGained/focusLost are no-op virtuals for most components, so this listener
     // is the one thing that actually triggers the repaint (see FocusRegion.h's paint helper).
-    , private juce::FocusChangeListener {
+    , private juce::FocusChangeListener
+    // FRO44: registers on the ONE shared PluginScanService (ours, or the plugin path's adopted one)
+    // so the sidebar refreshes and the list is persisted no matter which caller — the sidebar's own
+    // "Scan for plugins..." row, or the eager startup scan below — actually triggered the scan.
+    , private synth::PluginScanService::Listener {
 public:
     // Primary ctor: receives injected ThemeManager and LookAndFeel from Main.cpp.
     // provider is optional (nullptr → reads saved provider pref from appProperties).
@@ -450,6 +454,20 @@ public:
      *  the scan re-launches `currentExecutableFile`, which inside a VST3/AU is the HOST's binary. */
     void startPluginScan();
 
+    /** FRO44: the eager-population entry point, called ONCE by `Main.cpp` right after the real
+     *  standalone window is created — never by this class's own constructor, and never for the
+     *  plugin-hosted path (see below). Delegates to `getPluginScanService().ensureScanned(...)`,
+     *  which is itself a one-shot-per-service no-op past the first call: a second call (a test, or a
+     *  future picker that also wants to make sure the list is populated) is always safe to make.
+     *
+     *  Hosted mode (`AudioEngine::isHosted()`) is a deliberate no-op, matching `startPluginScan()`'s
+     *  own refusal: `currentExecutableFile` inside a VST3/AU build is the HOST's binary, so scanning
+     *  there would launch a copy of the DAW per candidate plugin, and the host owns plugin discovery
+     *  in that world regardless. A hosted session still RESOLVES identities — against whatever list
+     *  the constructor already restored from settings — it just never scans one itself; see
+     *  docs/architecture.md's "Plugin scanning" section. */
+    void maybeStartEagerPluginScan();
+
     /** Writes the scan list into appProperties under "pluginScanList". */
     void savePluginScanList();
 
@@ -478,6 +496,12 @@ public:
     void rebuildGraphForLatencyChange();
 
 private:
+    // synth::PluginScanService::Listener — fired once per real scan, no matter which caller
+    // (the sidebar's row, maybeStartEagerPluginScan(), a future picker) actually triggered it.
+    // Consolidates what used to be startPluginScan()'s own inline completion lambda, so every
+    // trigger path gets the same status-bar message, sidebar refresh and persisted save.
+    void pluginScanCompleted(const synth::PluginScanService::Result& result) override;
+
     // AIIntegrationService::Listener
     void aiPatchAboutToApply() override;
     void aiPatchApplied() override;
