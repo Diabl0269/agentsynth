@@ -501,6 +501,9 @@ public:
             return "Dynamic range compressor with threshold, ratio, attack and release.";
         if (moduleName.equalsIgnoreCase("Limiter"))
             return "Brickwall limiter that prevents the signal from exceeding 0 dBFS.";
+        if (moduleName.equalsIgnoreCase("Gate"))
+            return "Noise gate - attenuates the signal below Threshold, with Hold and Range "
+                   "controlling how it closes.";
         if (moduleName.equalsIgnoreCase("Macros"))
             return "Bank of assignable macro knobs - one knob drives many parameters at once.";
         if (moduleName.equalsIgnoreCase("Sample & Hold"))
@@ -1957,6 +1960,7 @@ private:
             {"Dynamics", {
                 "Compressor",
                 "Limiter",
+                "Gate",
             }},
             {"Utility", {
                 "Macros",

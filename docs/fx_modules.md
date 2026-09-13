@@ -263,7 +263,7 @@ Modules whose output is **audio** carry a `Level` parameter (`outputLevel`, line
 | `prepareOutputLevel(sampleRate)` | in `prepareToPlay` — sets up the 10 ms anti-click ramp |
 | `applyOutputLevel(buffer, numAudioChannels)` | at the **end of the normal `processBlock` path** |
 
-Adopting modules: **Distortion, Delay, Reverb, Chorus, Phaser, Flanger, Filter, Bitcrusher, Pitch Shifter, Ring Modulator**.
+Adopting modules: **Distortion, Delay, Reverb, Chorus, Phaser, Flanger, Filter, Bitcrusher, Pitch Shifter, Ring Modulator, Gate**.
 
 **This is a standing rule, not a one-off.** Every *new* module whose output carries audio must have a level control — the shared stage here, or its own `level`/`gain` parameter. `Tests/ModuleAdoptionTests.cpp` enforces it: it classifies every module the factory can build into one of three buckets (shared stage / own parameter / no level by design, with a rationale), and a new module that nobody classified fails `EveryFactoryModuleIsClassified`. A renamed or deleted module fails `ClassificationTableHasNoStaleEntries`. So the decision cannot be skipped — only made explicitly.
 
@@ -340,6 +340,46 @@ CV control of Level is deliberately **not** implemented — it would need a new 
 - **CV Modulation**: None — no CV input channels.
 - **Parameters**: Threshold (-20–0 dB, default -1 dB), Release (1–500 ms), Input Gain (-20–+20 dB).
 - **Smoothing**: Threshold is smoothed over 10 ms (a block at a time) — it is where the gain computer starts pulling the signal down, so stepping it steps the gain reduction. Release is a detector time constant and is deliberately not smoothed.
+
+## Gate Module
+
+`Source/Modules/FX/GateModule.h` (P9-11). A standard noise gate: attenuates the signal below
+Threshold, with Attack/Hold/Release shaping how it opens and closes and Range setting the floor.
+
+- **Implementation**: Hand-rolled (not `juce::dsp`) — a hysteresis comparator driving a linear
+  gain ramp. There is no equivalent `juce::dsp` gate class.
+- **Detector**: **Stereo-linked** — ONE gain computer driven by `max(|L|, |R|)`, applied
+  identically to both legs, so the stereo image never shifts. There is no per-channel gating.
+- **Hysteresis**: the gate opens once the linked envelope reaches Threshold and closes only once
+  it falls `kGateHysteresisDb` (a named constant, **3 dB**) below Threshold — a Schmitt trigger,
+  so a signal hovering right at Threshold does not chatter the gate open/closed every few
+  samples. A level sitting in the hysteresis gap (below Threshold but at/above Threshold -
+  hysteresis) keeps whichever state the gate was already in.
+- **Hold**: once the envelope drops below the close level, the gate stays fully open for Hold ms
+  before Release begins. The hold window resets every sample the envelope is still at or above
+  the close level, so Hold always measures from the moment the signal actually crosses down, not
+  from Threshold itself. Hold = 0 starts releasing on the very next below-close-level sample.
+- **Attack/Release**: linear gain ramps, in each direction, across the full span from the Range
+  floor to unity (0 dB) — so "Attack" always means "time to fully open from fully closed"
+  regardless of where Range is currently set, matching what the parameter name promises.
+- **Range**: the gain applied when fully closed (the floor), **-80 to 0 dB, default -80 dB**. Not
+  a hard mute — e.g. -20 dB leaves 0.1 linear amplitude through. A general output trim is a
+  separate concern (see below); Range only ever applies while the gate is closed.
+- **Parameters**: Threshold (-80–0 dB, default -40 dB), Attack (0.1–200 ms, default 2 ms), Hold
+  (0–500 ms, default 10 ms), Release (5–2000 ms, default 150 ms), Range (-80–0 dB, default -80
+  dB), Level (0–1, shared output-level stage — see § Output Level; Range cannot double as this
+  the way Compressor's `makeupGain` / Limiter's `inputGain` do, since it only ever applies while
+  closed).
+- **Smoothing**: Threshold and Range are both smoothed over 10 ms (a block at a time) — both feed
+  the gain computer directly (the open/close comparison level, and the closed-state floor gain).
+  Attack and Release are detector/ramp time constants and are deliberately not smoothed (same
+  reasoning as Compressor's Attack/Release: stepping one changes how fast the gate moves, never
+  the currently-applied gain). Hold is consulted only at the discrete "signal just dropped below
+  the close level" event, the same category as a sequencer's gate length, so it is not smoothed
+  either.
+- **CV Modulation**: None — no CV input channels, no sidechain input. **Out of scope for v1.**
+- **Dual I/O**: inherited `StereoAudio::Auto`, same as Compressor/Limiter — plain ch0/ch1 stereo,
+  no CV inputs to share the block with.
 
 ## Bitcrusher Module
 - **Implementation**: Downsampling and bit-depth quantization effect with dither.

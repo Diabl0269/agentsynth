@@ -46,6 +46,7 @@ enum class ModuleType {
     Compressor,
     Flanger,
     Limiter,
+    Gate,
     ParametricEQ,
     VoiceMixer,
     Bitcrusher,

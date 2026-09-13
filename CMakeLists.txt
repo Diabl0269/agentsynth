@@ -333,6 +333,7 @@ add_library(Core STATIC
     Source/Modules/FX/CompressorModule.h
     Source/Modules/FX/FlangerModule.h
     Source/Modules/FX/LimiterModule.h
+    Source/Modules/FX/GateModule.h
     Source/Modules/FX/BitcrusherModule.h
     Source/Modules/FX/PitchShifterModule.h
     Source/Modules/FX/RingModulatorModule.h

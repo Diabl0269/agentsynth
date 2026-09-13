@@ -222,6 +222,13 @@ const std::vector<ModuleConfig>& moduleConfigs() {
          // check is meaningful here.
          2.2f},
         {/*factoryName*/ "Ring Modulator", false, "", 2},
+        // Default Threshold (-40 dB) sits well below the 0.5-amplitude test tone (~-6 dB), so the
+        // gate opens within a couple of ms and stays open for every sweep except Threshold's own
+        // (Attack/Hold/Release/Range only affect the CLOSED state, which the tone never reaches).
+        // Threshold's own sweep crosses that boundary, but Threshold is smoothed and the
+        // resulting open/close transition is still bounded by the (unswept, default) Attack/
+        // Release ramp, so no case here needs a raised bound.
+        {/*factoryName*/ "Gate", false, "", 2},
 
         // ---- excluded ------------------------------------------------------------------------
         {/*factoryName*/ "Sequencer", true,

@@ -3,6 +3,7 @@
 #include "../Source/Modules/FX/CompressorModule.h"
 #include "../Source/Modules/FX/DelayModule.h"
 #include "../Source/Modules/FX/FlangerModule.h"
+#include "../Source/Modules/FX/GateModule.h"
 #include "../Source/Modules/FX/LimiterModule.h"
 #include "../Source/Modules/FX/ParametricEQModule.h"
 #include "../Source/Modules/FX/PhaserModule.h"
@@ -559,6 +560,48 @@ TEST(FXBypassTest, LimiterBypassPassesDryAudio) {
 
 TEST(FXBypassTest, LimiterMuteSilencesOutput) {
     LimiterModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(2, 512);
+    buffer.clear();
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < 512; ++i)
+            buffer.setSample(ch, i, 0.9f);
+
+    module.setMuted(true);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < 512; ++i)
+            EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.0f) << "Ch" << ch << " sample " << i;
+}
+
+// --- Gate ---
+
+TEST(FXBypassTest, GateBypassPassesDryAudio) {
+    GateModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(2, 512);
+    buffer.clear();
+    for (int i = 0; i < 512; ++i) {
+        buffer.setSample(0, i, 0.05f); // below default Threshold — would otherwise stay gated shut
+        buffer.setSample(1, i, 0.05f);
+    }
+
+    module.setBypassed(true);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    for (int i = 0; i < 512; ++i) {
+        EXPECT_FLOAT_EQ(buffer.getSample(0, i), 0.05f) << "Ch0 sample " << i;
+        EXPECT_FLOAT_EQ(buffer.getSample(1, i), 0.05f) << "Ch1 sample " << i;
+    }
+}
+
+TEST(FXBypassTest, GateMuteSilencesOutput) {
+    GateModule module;
     module.prepareToPlay(44100.0, 512);
 
     juce::AudioBuffer<float> buffer(2, 512);

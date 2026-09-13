@@ -53,8 +53,8 @@ processing of its own, and its ports are proxy nodes (`MacroInlet`/`MacroOutlet`
 three ways.
 
 Relevant existing modules: `VoiceMixerModule` (sums a poly chain to one signal),
-`ParametricEQModule`, `CompressorModule`, `LimiterModule` (all under `Source/Modules/FX/`). There
-is **no Gate module** — see §7 (D3) / §8 (P9-11).
+`ParametricEQModule`, `CompressorModule`, `LimiterModule`, `GateModule` (all under
+`Source/Modules/FX/`) — see §8 (P9-11).
 
 ---
 
@@ -664,8 +664,9 @@ Side tracks (each independent of the main line beyond its own listed dependency)
   implementation (a send is a tap on a strip feeding a bus channel, per §9, but the mechanism
   itself isn't specified here).
 - **P9-10 (T179) — EQ curve thumbnail on mixer columns.** After P9-5.
-- **P9-11 (T180) — Gate module.** No dependency on the rest of P9; only needed if a default track
-  preset (§5.7/§7 D3) should include one.
+- **P9-11 (T180) — Gate module.** Done — `GateModule` (`Source/Modules/FX/GateModule.h`,
+  [`fx_modules.md` § Gate Module](fx_modules.md#gate-module)). No dependency on the rest of P9;
+  wiring it into a default track preset (§5.7/§7 D3) is still open.
 - **T181 — Mixer accessibility**, in the Accessibility epic: column navigation, the existing
   rebindable M/S keys acting on the focused column, fader nudge, screen-reader labels for faders
   and meters, alongside T158's app-wide keyboard focus work.
@@ -677,7 +678,6 @@ Side tracks (each independent of the main line beyond its own listed dependency)
 - **Sends and group buses** — P9-9 (T178), after the mixer panel ships and its own short design
   pass is done.
 - **An EQ curve thumbnail on a channel column** — P9-10 (T179), after the mixer panel ships.
-- **A Gate module** — P9-11 (T180), independent of the rest of P9.
 - **Mixer accessibility** (keyboard navigation, screen-reader labels) — T181, in the Accessibility
   epic rather than P9, alongside T158's app-wide keyboard focus work.
 

@@ -264,7 +264,7 @@ Loads an audio file from disk and plays it back one of two ways.
 - **Stages**: Attack, Decay, Sustain, Release.
 - **Mono output**: Generates a single control signal (0.0 to 1.0) on channel 0. The envelope is held while **either** MIDI is down **or** the Gate CV is high, and releases only when both are low. Unpatched Gate stays silent, so existing MIDI-only patches are unchanged.
 - **Gate CV**: a Schmitt trigger on ch0 (same `SchmittTrigger` helper as Sample & Hold / Comparator). Arms above `Threshold` and only re-arms once the signal falls a fixed 0.05 below it. Poly mode already did this; mono used to ignore the jack and overwrite the incoming CV (issue #187).
-- **Threshold**: `gateThreshold` (0.0–1.0, default 0.5) plus Threshold CV on ch8. The id is `gateThreshold` rather than `threshold` / `trigThreshold` because Compressor owns `threshold` as dB and Sample & Hold / Comparator own `trigThreshold` as bipolar CV.
+- **Threshold**: `gateThreshold` (0.0–1.0, default 0.5) plus Threshold CV on ch8. The id is `gateThreshold` rather than `threshold` / `trigThreshold` because Compressor / Limiter / Gate own `threshold` as dB and Sample & Hold / Comparator own `trigThreshold` as bipolar CV.
 - **Poly mode**: 8 gate CV inputs (ch0-7) drive 8 independent ADSR instances; outputs 8 per-voice envelopes (ch0-7). Threshold CV (ch8) is shared across voices.
 - **Smoothing**: Sustain is smoothed over 20 ms (a block at a time — `juce::ADSR` only takes parameters through `setParameters`). It is the one stage that is a *level*: `juce::ADSR` emits it verbatim while a note is held, so an automated step steps every destination. Attack/Decay/Release are ramp *rates* and are deliberately not smoothed.
 - **Uses**: Modulation of VCA gain, Filter cutoff, or Oscillator Level.
@@ -411,7 +411,7 @@ Hand-played MIDI rarely repeats a pitch inside an envelope's attack; **machine-g
     - `Source` (choice: Input / **Random**) — sample the Signal input, or an internal white-noise generator.
     - `Mode` (choice: **Sample** / Track, param id `holdMode`) — Sample latches one value per rising edge; Track follows the source while the gate is high and freezes when it falls. The id is `holdMode` rather than `mode` because `AIStateMapper::getPatchSchema` constrains choice parameters globally by id and `LFOModule` already owns a boolean `mode`.
     - `Clock` (choice: **Internal** / External) — free-running internal oscillator, or the Trigger input.
-    - `Threshold` (-1.0–1.0, default 0.5, param id `trigThreshold`) — level the Trigger input must exceed to fire. The id is `trigThreshold` rather than `threshold` because Compressor and Limiter both own a `threshold` float meaning dB.
+    - `Threshold` (-1.0–1.0, default 0.5, param id `trigThreshold`) — level the Trigger input must exceed to fire. The id is `trigThreshold` rather than `threshold` because Compressor, Limiter and Gate all own a `threshold` float meaning dB.
     - `Rate` (0.1–50 Hz, default 8, skewed) — internal clock speed. Ignored when `Clock` is External.
     - `Slew` (0.0–1.0, default 0.0) — one-pole lag toward each new value, up to 0.5 s. 0 snaps instantly.
     - `Level` (0.0–1.0, default 1.0) — output scaling.
