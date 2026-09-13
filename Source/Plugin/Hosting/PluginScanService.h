@@ -70,12 +70,14 @@ namespace synth {
  * instance (`MainComponent::getPluginScanService()`) and calls `ensureScanned()` when it wants the
  * list populated:
  *
- *   - The FIRST call actually starts a scan (`scanAsync()`, on the usual background thread).
+ *   - The FIRST call actually starts a scan (`scanAsync(..., skipAlreadyKnown=true)`, on the usual
+ *     background thread) — `skipAlreadyKnown` means a candidate already in the persisted-and-loaded
+ *     list is never handed to the launcher at all, so a warm launch costs one child-process probe
+ *     per NEWLY installed plugin, not per plugin on the machine.
  *   - Every later call, from any consumer, while that scan is in flight OR after it has already
  *     completed, is a no-op — this is "populate the list once without waiting for the sidebar",
- *     not "keep rescanning on every access". A cheap re-run of the cached-from-disk list is still
- *     visible immediately via `getKnownPluginIdentities()`; nothing here re-launches a child process
- *     per candidate on every call.
+ *     not "keep rescanning on every access". The cached-from-disk list is visible immediately via
+ *     `getKnownPluginIdentities()` regardless of whether a scan has run at all this launch.
  *   - Every registered `Listener` is notified (`pluginScanCompleted`, message thread) once the scan
  *     finishes, regardless of which consumer's call actually triggered it — so a picker opened AFTER
  *     the sidebar already asked still finds out when the scan it never itself started completes.
@@ -110,6 +112,7 @@ public:
         int added = 0;   ///< NEW descriptions added to the list
         int failed = 0;  ///< crashed / timed out / produced nothing — all newly blacklisted
         int skipped = 0; ///< already blacklisted, so never launched
+        int reused = 0;  ///< already in the list (skipAlreadyKnown scan only) — matched from cache, never launched
         bool cancelled = false;
     };
 
@@ -214,16 +217,28 @@ public:
     /** Message thread. Enumerates candidates for each format, then probes each one that is not
      *  blacklisted through the child launcher. A second call while a scan is running is ignored
      *  (its completion callback still fires, with `cancelled` set, so a caller never hangs waiting
-     *  for a callback that will not come). */
-    void scanAsync(const juce::StringArray& formatNames, ProgressFn progress, CompletionFn completion);
+     *  for a callback that will not come).
+     *
+     *  `skipAlreadyKnown` (default false, matching every pre-FRO44 caller): when true, a candidate
+     *  already present in the list (same format + fileOrIdentifier) is counted in `Result::reused`
+     *  and never handed to the launcher at all — this is what makes `ensureScanned()` below cheap on
+     *  a warm cache instead of relaunching a child process per already-known plugin on every call.
+     *  The sidebar's manual "Scan for plugins..." row always passes the default (false): a rescan
+     *  the user explicitly asked for must re-probe everything, e.g. to notice a plugin that was
+     *  updated in place at the same path. */
+    void scanAsync(const juce::StringArray& formatNames, ProgressFn progress, CompletionFn completion,
+                   bool skipAlreadyKnown = false);
 
     /** FRO44: "make sure a scan has been requested at least once" — the eager-population entry
      *  point every consumer (app startup, the sidebar, a future picker) can call without worrying
      *  about who else already asked. The FIRST call this service instance ever sees starts
-     *  `scanAsync(formatNames, nullptr, nullptr)`; every later call — concurrent with that scan or
-     *  after it has already finished — is a no-op. Every registered `Listener` still hears
-     *  `pluginScanCompleted` when the one real scan finishes, whether or not it was this call that
-     *  started it. Message thread only, like `scanAsync()`.
+     *  `scanAsync(formatNames, nullptr, nullptr, skipAlreadyKnown: true)` — so a warm launch
+     *  (the persisted list already loaded via `loadFromXml`) only pays a child-process launch for
+     *  candidates that are NOT already known, not the whole install base every time the app opens;
+     *  every later `ensureScanned()` call — concurrent with that scan or after it has already
+     *  finished — is a no-op. Every registered `Listener` still hears `pluginScanCompleted` when the
+     *  one real scan finishes, whether or not it was this call that started it. Message thread only,
+     *  like `scanAsync()`.
      *
      *  IMPORTANT for a caller that arrives AFTER the one real scan has already completed (the normal
      *  case once the app has been running a while — the eager startup scan is long done by the time
@@ -290,7 +305,7 @@ private:
     /** Background thread. Folds a child's XML document into the list. */
     XmlFold addTypesFromXml(const juce::String& xmlText);
 
-    void runScan(juce::StringArray formatNames, ProgressFn progress, CompletionFn completion);
+    void runScan(juce::StringArray formatNames, ProgressFn progress, CompletionFn completion, bool skipAlreadyKnown);
 
     /** Posts `fn` to the message thread, dropped if this service is gone by the time it runs. */
     void postToMessageThread(std::function<void()> fn);

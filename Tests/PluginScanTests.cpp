@@ -340,6 +340,49 @@ TEST(PluginScanTest, RemovedListenerHearsNothingFurther) {
     EXPECT_TRUE(listener.results.empty()) << "a removed listener must not be notified";
 }
 
+TEST(PluginScanTest, EnsureScannedNeverRelaunchesAnAlreadyKnownPluginOnAWarmCache) {
+    // "Persist/reuse the cached list so startup doesn't rescan everything every launch" (FRO44 spec)
+    // — the persisted-list equivalent of EnsureScannedNeverRescansOnceItHasAlreadyCompleted above,
+    // but for the case that actually happens on every real relaunch of the app: a FRESH
+    // PluginScanService instance (ensureScanRequested_ latch reset) that loaded yesterday's saved
+    // list via loadFromXml() before anyone calls ensureScanned(). Alpha is already known; only Beta
+    // is newly on disk. A per-launch child-process probe of every installed plugin — not just the
+    // new one — is exactly the regression this test guards against.
+    FakeLauncher launcher;
+    launcher.xmlByFile[kAlpha] = descriptionXml("Alpha", 0xA1FA, kAlpha);
+    launcher.xmlByFile[kBeta] = descriptionXml("Beta", 0xB37A, kBeta);
+
+    std::unique_ptr<juce::XmlElement> savedList;
+    {
+        PluginScanService priorLaunch;
+        priorLaunch.setCandidateSource(candidates({kAlpha}));
+        priorLaunch.setChildLauncher(launcher.fn());
+        ASSERT_EQ(scanToCompletion(priorLaunch).added, 1);
+        savedList = priorLaunch.toXml();
+        ASSERT_NE(savedList, nullptr);
+    }
+
+    PluginScanService service;
+    service.loadFromXml(*savedList);
+    ASSERT_EQ(service.getNumKnownPlugins(), 1) << "the persisted list must be visible before any scan runs";
+    launcher.launched.clear();
+
+    service.setCandidateSource(candidates({kAlpha, kBeta}));
+    service.setChildLauncher(launcher.fn());
+    service.ensureScanned(juce::StringArray("VST3"));
+    ASSERT_TRUE(pumpUntil([&] { return service.getNumKnownPlugins() > 1; }));
+
+    EXPECT_EQ(launcher.launchCountFor(kAlpha), 0)
+        << "an already-known plugin must not be relaunched by the automatic/eager path";
+    EXPECT_EQ(launcher.launchCountFor(kBeta), 1) << "a newly installed plugin must still be probed";
+    EXPECT_EQ(service.getNumKnownPlugins(), 2);
+
+    // The manual "Scan for plugins..." row is a different call (scanAsync's default
+    // skipAlreadyKnown=false) and must keep re-probing everything, e.g. to notice an in-place update.
+    EXPECT_EQ(scanToCompletion(service).added, 0) << "no NEW plugin, but the launcher must still run";
+    EXPECT_EQ(launcher.launchCountFor(kAlpha), 1) << "the manual rescan path must still re-probe Alpha";
+}
+
 // ============================================================================
 // 2. Crash isolation
 // ============================================================================
@@ -1295,9 +1338,21 @@ TEST_F(PluginScanPersistenceTest, HostedBuildNeverStartsTheEagerScanEither) {
     synth::theme::AppLookAndFeel lookAndFeel;
     MainComponent main(themeManager, lookAndFeel, hostedEngine, std::make_unique<SilentProvider>());
 
+    // A counting seam, not just isScanning(): on a CI machine with zero real plugins installed,
+    // isScanning() alone would read false whether or not the guard actually fired (a real scan with
+    // nothing to find also finishes instantly), so it cannot tell "never started" from "started and
+    // already done". Asserting the candidate source is never even CALLED is the one check that
+    // actually pins the isHosted() guard.
+    int candidateSourceCalls = 0;
+    main.getPluginScanService().setCandidateSource([&](const juce::String&) {
+        ++candidateSourceCalls;
+        return juce::StringArray();
+    });
+
     main.maybeStartEagerPluginScan();
     EXPECT_FALSE(main.getPluginScanService().isScanning())
         << "hosted mode must stay lazy-on-resolve-only — see docs/architecture.md's Plugin scanning section";
+    EXPECT_EQ(candidateSourceCalls, 0) << "a hosted build must never even enumerate candidates";
     EXPECT_EQ(main.getModuleLibrary().getPluginCount(), 0);
 }
 
