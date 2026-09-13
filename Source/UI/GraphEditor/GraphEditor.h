@@ -1,18 +1,18 @@
 #pragma once
 
-#include "../AppUndoManager.h"
-#include "../AudioEngine.h"
-#include "../MacroSet.h"
-#include "../Modules/MacroPortShape.h"
-#include "../PatchDocument.h"
-#include "../Plugin/Hosting/HostedPluginBackend.h"
-#include "CableColour.h"
-#include "ColourPickerPopup.h"
-#include "LayoutUtil.h"
-#include "MacroPortConfigDialog.h"
-#include "ModuleClipboard.h"
-#include "SelectionModel.h"
-#include "UIAnimation.h"
+#include "../../AppUndoManager.h"
+#include "../../AudioEngine.h"
+#include "../../MacroSet.h"
+#include "../../Modules/MacroPortShape.h"
+#include "../../PatchDocument.h"
+#include "../../Plugin/Hosting/HostedPluginBackend.h"
+#include "../CableColour.h"
+#include "../ColourPickerPopup.h"
+#include "../LayoutUtil.h"
+#include "../MacroPortConfigDialog.h"
+#include "../ModuleClipboard.h"
+#include "../SelectionModel.h"
+#include "../UIAnimation.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
 #include <memory>
@@ -21,8 +21,8 @@
 
 class ModuleComponent;
 class MacroCardComponent;
-#include "MinimapComponent.h"
-#include "ModMatrixComponent.h"
+#include "../MinimapComponent.h"
+#include "../ModMatrixComponent.h"
 
 class GraphEditor
     : public juce::Component

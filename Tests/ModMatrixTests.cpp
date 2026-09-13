@@ -6,7 +6,7 @@
 #include "../Source/Modules/MacroInletModule.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Modules/VCAModule.h"
-#include "../Source/UI/GraphEditor.h"
+#include "../Source/UI/GraphEditor/GraphEditor.h"
 #include "../Source/UI/ModMatrixComponent.h"
 #include <gtest/gtest.h>
 

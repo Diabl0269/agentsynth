@@ -8,7 +8,7 @@
 #include "../Modules/SequencerModule.h"
 #include "../Modules/ThresholdMeterSource.h"
 #include "../Plugin/Hosting/HostedPluginModule.h"
-#include "GraphEditor.h"
+#include "GraphEditor/GraphEditor.h"
 #include "LayoutUtil.h"
 #include "Theme/AppLookAndFeel.h"
 #include "ZoomFrozenCachedImage.h"

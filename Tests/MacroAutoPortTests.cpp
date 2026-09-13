@@ -17,7 +17,7 @@
 #include "../Source/Modules/MacroMidiInletModule.h"
 #include "../Source/Modules/MacroMidiOutletModule.h"
 #include "../Source/Modules/MacroOutletModule.h"
-#include "../Source/UI/GraphEditor.h"
+#include "../Source/UI/GraphEditor/GraphEditor.h"
 #include "../Source/UI/MacroCardComponent.h"
 #include "../Source/UI/ModuleComponent.h"
 #include "../Source/UI/PreferencesSettingsTab.h"

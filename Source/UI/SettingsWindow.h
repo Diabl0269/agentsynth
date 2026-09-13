@@ -3,7 +3,7 @@
 #include "../AI/AIIntegrationService.h"
 #include "../AI/AccountService.h"
 #include "AIChatComponent.h"
-#include "GraphEditor.h"
+#include "GraphEditor/GraphEditor.h"
 #include "Theme/ThemeManager.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>

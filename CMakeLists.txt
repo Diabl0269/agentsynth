@@ -608,83 +608,10 @@ target_compile_definitions(Core PUBLIC HAS_FONT_ASSETS=1)
 # not built with.
 # Main.cpp stays out — it is the standalone entry point (JUCEApplication + the generated
 # JuceHeader.h) and has no meaning inside a plugin.
-add_library(AppUI STATIC
-    Source/MainComponent/MainComponent.cpp
-    Source/MainComponent/MainComponent.h
-    Source/MainComponent/MainComponentInternal.h
-    Source/MainComponent/MainComponentCallbacks.cpp
-    Source/MainComponent/MainComponentFileIO.cpp
-    Source/MainComponent/MainComponentCommands.cpp
-    Source/MainComponent/MainComponentPanels.cpp
-    Source/MainComponent/MainComponentTimeline.cpp
-    Source/MainComponent/MainComponentTrackHeaderHost.cpp
-    Source/MainComponent/MainComponentTrackCreation.cpp
-    Source/UserSettings.h
-    Source/UI/TimelinePanelComponent.h
-    Source/UI/TimelinePanelComponent.cpp
-    Source/UI/TimelineRulerComponent.h
-    Source/UI/TimelineRulerComponent.cpp
-    Source/UI/TimelinePlayheadOverlay.h
-    Source/UI/TimelinePlayheadOverlay.cpp
-    Source/UI/TimelineTrackHeaderComponent.h
-    Source/UI/TimelineTrackHeaderComponent.cpp
-    Source/UI/TimelineTransportBar.h
-    Source/UI/TimelineTransportBar.cpp
-    Source/UI/TimelineClipLaneArea.h
-    Source/UI/TimelineClipLaneArea.cpp
-    Source/UI/ClipSelectionModel.h
-    Source/UI/PianoRollComponent.h
-    Source/UI/PianoRollComponent.cpp
-    Source/UI/NoteSelectionModel.h
-    Source/UI/AutomationLaneEditor.h
-    Source/UI/AutomationLaneEditor.cpp
-    Source/UI/TrackColour.h
-    Source/UI/TimelineViewState.h
-    Source/UI/AIChatComponent.cpp
-    Source/UI/AccountRow.cpp
-    Source/UI/AccountRow.h
-    Source/UI/PlanBadge.cpp
-    Source/UI/PlanBadge.h
-    Source/UI/SignInDialog.cpp
-    Source/UI/SignInDialog.h
-    Source/UI/ExportAudioDialog.cpp
-    Source/UI/ExportAudioDialog.h
-    Source/UI/GraphEditor.cpp
-    Source/UI/GraphEditor.h
-    Source/UI/ModuleComponent.cpp
-    Source/UI/ModuleComponent.h
-    Source/UI/MacroCardComponent.cpp
-    Source/UI/MacroPortConfigDialog.cpp
-    Source/UI/MacroCardComponent.h
-    Source/UI/FrequencyResponseComponent.h
-    Source/UI/FrequencyGrid.h
-    Source/UI/EQCurveComponent.h
-    Source/UI/EQWindow.h
-    Source/UI/SampleWaveformComponent.h
-    Source/UI/WavetableDisplayComponent.h
-    Source/UI/TriggerMeterComponent.h
-    Source/UI/ThresholdControlComponent.h
-    Source/UI/ModMatrixComponent.cpp
-    Source/UI/ModMatrixComponent.h
-    Source/UI/SettingsWindow.cpp
-    Source/UI/SettingsWindow.h
-    Source/UI/WelcomeScreenComponent.cpp
-    Source/UI/WelcomeScreenComponent.h
-    # Plugin hosting UI (TL7-5) — native editor windows for hosted VST3/AU plugins. In AppUI (a
-    # window), not Core, mirroring HostedPluginModule/HostedPluginBackend's Core placement above.
-    Source/Plugin/Hosting/HostedPluginEditorWindow.cpp
-    Source/Plugin/Hosting/HostedPluginEditorWindow.h
-    Source/Plugin/Hosting/HostedPluginWindowManager.h
-    Source/UI/AppearanceSettingsTab.cpp
-    Source/UI/AppearanceSettingsTab.h
-    Source/UI/FeedbackSettingsTab.cpp
-    Source/UI/FeedbackSettingsTab.h
-    Source/UI/PreferencesSettingsTab.cpp
-    Source/UI/PreferencesSettingsTab.h
-    Source/UI/ShortcutsSettingsTab.cpp
-    Source/ShortcutManager.h
-    Source/Update/UpdateManager.h
-)
+# Source list in cmake/AppUISources.cmake (APPUI_SOURCES) -- split out to keep this file
+# under the repo's 1,000-line file-size cap (scripts/check-file-sizes.sh).
+include(cmake/AppUISources.cmake)
+add_library(AppUI STATIC ${APPUI_SOURCES})
 
 # PUBLIC so consumers (the app and the plugin) inherit Core's JUCE modules, include dirs,
 # the Assets binary-data lib and HAS_FONT_ASSETS.

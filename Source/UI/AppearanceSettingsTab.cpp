@@ -1,6 +1,6 @@
 #include "AppearanceSettingsTab.h"
 #include "ColourPickerPopup.h"
-#include "GraphEditor.h"
+#include "GraphEditor/GraphEditor.h"
 
 namespace {
 // Pitch-class labels, C first — matches synth::ui::NoteColourOverrides' pitch % 12 indexing.

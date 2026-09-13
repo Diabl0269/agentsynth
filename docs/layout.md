@@ -438,7 +438,7 @@ through the exact same generic path as every other card (its `getType()` falls b
 purely additive blocks in `ModuleComponent::paint()` give it its own identity, both gated on a
 local `isAudioOutputIONode(juce::AudioProcessor*)` helper (`dynamic_cast` to
 `AudioGraphIOProcessor` + an `IODeviceType == audioOutputNode` check — the same type-not-name idiom
-`isTerminalAudioSink` in `GraphEditor.cpp` uses for cable routing, so a `ModuleBase` named "Audio
+`isTerminalAudioSink` in `GraphEditorInternal.h` uses for cable routing, so a `ModuleBase` named "Audio
 Output" cannot impersonate the sink):
 
 - **Identity glyph** — the `synth::theme::Icon::CatIO` speaker glyph, in the activity LED's slot

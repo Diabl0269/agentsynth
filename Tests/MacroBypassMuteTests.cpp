@@ -26,7 +26,7 @@
 #include "../Source/Modules/MacroOutletModule.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Modules/TimelineMidiSourceModule.h"
-#include "../Source/UI/GraphEditor.h"
+#include "../Source/UI/GraphEditor/GraphEditor.h"
 #include "../Source/UI/MacroCardComponent.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>

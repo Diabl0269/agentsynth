@@ -754,7 +754,7 @@ Main line, in dependency order:
        (`buildChannelChain`), generalized to accept arbitrary left/right feed lists instead of one
        fixed stereo pair (multiple feeds landing on the same side is fine — `AudioProcessorGraph`
        sums them).
-     - *GraphEditor hook* (`Source/UI/GraphEditor.h`/`.cpp`): `endConnectionDrag` gates on the drag
+     - *GraphEditor hook* (`Source/UI/GraphEditor/`): `endConnectionDrag` gates on the drag
        being MIDI and the real source node being `ModuleType::TimelineMidiSource`
        (`nodeIsTimelineMidiSource`), covering both the direct-jack path and the collapsed-macro-card
        "existing port jack" path — not the `createMacroPortFromDroppedCable` fallback (dropping a
@@ -766,10 +766,10 @@ Main line, in dependency order:
        `false` and hoist `updateComponents()` out to run once, after every mutation, instead of the
        nested-transaction double-repaint a naive wrap would produce (docs/macros.md §7 item 9 has
        the signature detail). Layout mirrors T173a/T183's own pattern: `estimateModuleSize()` per
-       node type plus a 40px gap constant (`kAutoChannelCardGapX`, GraphEditor.cpp's own copy of
-       `MainComponentTrackCreation.cpp`'s `kChannelCardGapX` — duplicated rather than shared, since
-       Core/UI layering keeps GraphEditor.cpp from reaching into the MainComponent units). **Boxing
-       rule:** the
+       node type plus a 40px gap constant (`kAutoChannelCardGapX`, GraphEditorChannels.cpp's own copy
+       of `MainComponentTrackCreation.cpp`'s `kChannelCardGapX` — duplicated rather than shared, since
+       Core/UI layering keeps GraphEditor's sources from reaching into the MainComponent units).
+       **Boxing rule:** the
        new EQ/Compressor/Strip join the SAME macro as the instrument only when every distinct exit
        source node is already an ORDINARY member of ONE common macro (not a port, not split across
        macros, not un-macroed) — otherwise the new chain nodes are left unboxed on the canvas

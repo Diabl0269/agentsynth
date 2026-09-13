@@ -496,7 +496,24 @@ Related: look parameters up with `findParameterByID(processor, "paramID")` rathe
 
 ### 7. GraphEditor
 
-`Source/UI/GraphEditor.h/.cpp`
+`Source/UI/GraphEditor/` — one class (declared in `GraphEditor.h`) split across per-concern translation units (FRO62), none over 1,000 lines, plus a private `GraphEditorInternal.h` for helpers shared by two or more of them. Source layout:
+
+- `GraphEditor.cpp` — constructor/destructor, core lifecycle
+- `GraphEditorCables.cpp` — cable geometry/colour, `GraphContentComponent::paint`/`paintOverChildren`/`resized`
+- `GraphEditorConnections.cpp` — poly-link resolution, connection drag begin/drag/end
+- `GraphEditorSmartConnections.cpp` — smart-connection naming + eligibility helpers
+- `GraphEditorSmartConnectionsApply.cpp` — building/applying smart-connection suggestions
+- `GraphEditorCanvas.cpp` — component lifecycle, paint/resized, zoom/pan/minimap, canvas mouse handling
+- `GraphEditorSelection.cpp` — selection model, marquee, selection drag
+- `GraphEditorMacroGeometry.cpp` — macro hull/chip/card geometry, collapse button, port-dock layout
+- `GraphEditorMacroGrouping.cpp` — group/ungroup, collapse, colour, macro menu
+- `GraphEditorMacroPortSplice.cpp` — macro bypass/mute, port crossing-plan math, auto-create-port-on-drag
+- `GraphEditorChannels.cpp` — auto-create-channel-on-connect, "Make channel"/"Duplicate into this channel"
+- `GraphEditorMacroPorts.cpp` — macro port CRUD + the "Configure I/O" dialog
+- `GraphEditorCommands.cpp` — snippets, copy/paste/duplicate, context menu, keyboard, delete/replace, timer
+- `GraphEditorDragDrop.cpp` — estimated module size, drag-preview API, file/plugin drop, drop placement
+- `GraphEditorStereoWiring.cpp` — dual-I/O wiring, stereo-pair completion, module-resize handling
+- `GraphEditorPersistence.cpp` — auto-arrange, patch save/load/new-patch
 
 The visual patching interface. Lives in the `AgentSynth` app target.
 

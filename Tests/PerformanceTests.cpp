@@ -11,7 +11,7 @@
 
 #include "../Source/AudioEngine.h"
 #include "../Source/PresetManager.h"
-#include "../Source/UI/GraphEditor.h"
+#include "../Source/UI/GraphEditor/GraphEditor.h"
 #include <chrono>
 #include <gtest/gtest.h>
 #include <iostream>

@@ -13,7 +13,7 @@
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Modules/VCAModule.h"
 #include "../Source/SnippetManager.h"
-#include "../Source/UI/GraphEditor.h"
+#include "../Source/UI/GraphEditor/GraphEditor.h"
 #include "../Source/UI/ModuleComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

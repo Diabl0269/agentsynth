@@ -19,7 +19,7 @@
 #include "../Source/Modules/SamplerModule.h"
 #include "../Source/Modules/VCAModule.h"
 #include "../Source/SnippetManager.h"
-#include "../Source/UI/GraphEditor.h"
+#include "../Source/UI/GraphEditor/GraphEditor.h"
 #include "../Source/UI/ModuleClipboard.h"
 #include "../Source/UI/ModuleComponent.h"
 #include <gtest/gtest.h>
