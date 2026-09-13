@@ -8,7 +8,7 @@
 #include "GraphEditorInternal.h"
 
 #include "../../Modules/AttenuverterModule.h"
-#include "../ModuleComponent.h"
+#include "../ModuleComponent/ModuleComponent.h"
 
 using namespace detail;
 

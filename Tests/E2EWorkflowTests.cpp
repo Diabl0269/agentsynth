@@ -20,7 +20,7 @@
 #include "../Source/PresetManager.h"
 #include "../Source/UI/GraphEditor/GraphEditor.h"
 #include "../Source/UI/LayoutUtil.h"
-#include "../Source/UI/ModuleComponent.h"
+#include "../Source/UI/ModuleComponent/ModuleComponent.h"
 #include "MainComponent/MainComponent.h"
 #include <cmath>
 #include <gtest/gtest.h>

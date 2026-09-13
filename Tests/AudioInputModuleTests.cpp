@@ -17,7 +17,7 @@
 #include "../Source/SnippetManager.h"
 #include "../Source/Transport/TransportService.h"
 #include "../Source/UI/GraphEditor/GraphEditor.h"
-#include "../Source/UI/ModuleComponent.h"
+#include "../Source/UI/ModuleComponent/ModuleComponent.h"
 #include "FakeAudioIODevice.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>

@@ -14,7 +14,6 @@
 1999 Source/UI/AIChatComponent.cpp
 1984 Source/UI/GraphEditor/GraphEditor.h
 1275 Source/UI/MacroPortConfigDialog.cpp
-3205 Source/UI/ModuleComponent.cpp
 2055 Source/UI/ModuleLibraryComponent.h
 3691 Source/UI/PianoRollComponent.cpp
 1461 Source/UI/PianoRollComponent.h

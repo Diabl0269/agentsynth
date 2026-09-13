@@ -9,7 +9,7 @@
 
 #include "../../AI/AIStateMapper.h"
 #include "../MacroCardComponent.h"
-#include "../ModuleComponent.h"
+#include "../ModuleComponent/ModuleComponent.h"
 #include "../Theme/AppLookAndFeel.h"
 
 using namespace detail;

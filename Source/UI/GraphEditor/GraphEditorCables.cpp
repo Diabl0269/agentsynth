@@ -10,7 +10,7 @@
 
 #include "../../Modules/AttenuverterModule.h"
 #include "../MacroCardComponent.h"
-#include "../ModuleComponent.h"
+#include "../ModuleComponent/ModuleComponent.h"
 #include "../Theme/AppLookAndFeel.h"
 
 using namespace detail;

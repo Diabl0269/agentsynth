@@ -60,8 +60,15 @@ set(APPUI_SOURCES
     Source/UI/GraphEditor/GraphEditorDragDrop.cpp
     Source/UI/GraphEditor/GraphEditorStereoWiring.cpp
     Source/UI/GraphEditor/GraphEditorPersistence.cpp
-    Source/UI/ModuleComponent.cpp
-    Source/UI/ModuleComponent.h
+    Source/UI/ModuleComponent/ModuleComponent.cpp
+    Source/UI/ModuleComponent/ModuleComponent.h
+    Source/UI/ModuleComponent/ModuleComponentInternal.h
+    Source/UI/ModuleComponent/ModuleComponentEQCard.cpp
+    Source/UI/ModuleComponent/ModuleComponentAudioDrop.cpp
+    Source/UI/ModuleComponent/ModuleComponentWavetable.cpp
+    Source/UI/ModuleComponent/ModuleComponentLayout.cpp
+    Source/UI/ModuleComponent/ModuleComponentPaint.cpp
+    Source/UI/ModuleComponent/ModuleComponentInteraction.cpp
     Source/UI/MacroCardComponent.cpp
     Source/UI/MacroPortConfigDialog.cpp
     Source/UI/MacroCardComponent.h

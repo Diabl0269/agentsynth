@@ -1,16 +1,16 @@
 #pragma once
 
-#include "../AppUndoManager.h"
-#include "../AudioEngine.h"
-#include "../Modules/FilterModule.h"
-#include "../Modules/MidiKeyboardModule.h"
-#include "EQCurveComponent.h"
-#include "EQWindow.h"
-#include "FrequencyResponseComponent.h"
-#include "SampleWaveformComponent.h"
-#include "ScopeComponent.h"
-#include "ThresholdControlComponent.h"
-#include "WavetableDisplayComponent.h"
+#include "../../AppUndoManager.h"
+#include "../../AudioEngine.h"
+#include "../../Modules/FilterModule.h"
+#include "../../Modules/MidiKeyboardModule.h"
+#include "../EQCurveComponent.h"
+#include "../EQWindow.h"
+#include "../FrequencyResponseComponent.h"
+#include "../SampleWaveformComponent.h"
+#include "../ScopeComponent.h"
+#include "../ThresholdControlComponent.h"
+#include "../WavetableDisplayComponent.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>

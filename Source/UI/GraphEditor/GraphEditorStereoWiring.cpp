@@ -12,7 +12,7 @@
 #include "../../Modules/AudioInputModule.h"
 #include "../../Modules/FilterModule.h"
 #include "../../Modules/VCAModule.h"
-#include "../ModuleComponent.h"
+#include "../ModuleComponent/ModuleComponent.h"
 
 using namespace detail;
 

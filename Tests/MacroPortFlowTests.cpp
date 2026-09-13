@@ -30,7 +30,7 @@
 #include "../Source/Modules/WavetableOscillatorModule.h"
 #include "../Source/UI/GraphEditor/GraphEditor.h"
 #include "../Source/UI/MacroCardComponent.h"
-#include "../Source/UI/ModuleComponent.h"
+#include "../Source/UI/ModuleComponent/ModuleComponent.h"
 #include "../Source/UI/ModuleLibraryComponent.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
