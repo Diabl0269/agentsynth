@@ -1,0 +1,43 @@
+name: "[TEMP] WinSparkle keygen recon"
+
+# Throwaway, manually-triggered probe for FRO51 — confirms winsparkle-tool.exe's real CLI
+# (generate-key flags, how the public key is emitted) before we script actual key generation.
+# Generates NOTHING sensitive: only --help output is printed. Delete this file once FRO51's
+# real key-generation run has happened.
+on:
+  workflow_dispatch:
+
+jobs:
+  recon:
+    runs-on: windows-latest
+    steps:
+      - name: Fetch WinSparkle tools
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/vslavik/winsparkle/releases/download/v0.9.4/WinSparkle-0.9.4.zip" -OutFile winsparkle.zip
+          $hash = (Get-FileHash winsparkle.zip -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne "6037df37fc263bd1650a1c4949681a9d40ffe991d01f35892a406cb5d103c976") {
+            Write-Error "WinSparkle zip hash mismatch: $hash"
+            exit 1
+          }
+          Expand-Archive -Path winsparkle.zip -DestinationPath winsparkle-tools
+
+      - name: List extracted contents
+        shell: pwsh
+        run: Get-ChildItem -Path winsparkle-tools -Recurse | Select-Object FullName
+
+      - name: winsparkle-tool.exe --help
+        shell: pwsh
+        run: |
+          $toolExe = Get-ChildItem -Path winsparkle-tools -Recurse -Filter "winsparkle-tool.exe" | Select-Object -First 1
+          if (-not $toolExe) {
+            Write-Error "winsparkle-tool.exe not found in extracted archive"
+            exit 1
+          }
+          Write-Output "=== winsparkle-tool.exe (no args) ==="
+          & $toolExe.FullName
+          Write-Output "=== winsparkle-tool.exe --help ==="
+          & $toolExe.FullName --help
+          Write-Output "=== winsparkle-tool.exe generate-key --help ==="
+          & $toolExe.FullName generate-key --help
+          exit 0
