@@ -457,6 +457,13 @@ public:
      *  for the case that has no card. */
     void promptRenameMacro(const juce::String& macroId);
 
+    /** Test seam: when set, called INSTEAD of promptRenameMacro's real juce::AlertWindow — a real
+     *  AlertWindow segfaults on a headless Linux CI runner with no display (same class of issue
+     *  ModuleComponent::setShowContextMenuHookForTest's own comment documents for PopupMenu, and
+     *  macroAutoPortModalForTest above already works around for the auto-port prompt). Production
+     *  code leaves this null. */
+    std::function<void(const juce::String& macroId)> promptRenameMacroForTest;
+
     /** Opens the shared synth::ui::ColourPickerPopup over `screenArea` (screen coordinates) for
      *  `macroId` — the same picker the timeline ruler's marker menu and the track header swatch
      *  use (TimelineRulerComponent::buildMarkerColourPicker is the exact pattern this mirrors).

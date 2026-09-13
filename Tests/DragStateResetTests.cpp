@@ -247,6 +247,12 @@ TEST(DragStateReset, MacroChipDoubleClickRenameCancelsTheArmedChipDrag) {
     const juce::Point<int> pressPos = chipBounds.getCentre();
     const juce::ModifierKeys leftClick(juce::ModifierKeys::leftButtonModifier);
 
+    // Real promptRenameMacro() constructs a real juce::AlertWindow, which segfaults on a headless
+    // CI runner with no display — stand in for it, exactly like macroAutoPortModalForTest already
+    // does for the auto-port prompt, so this test exercises the real mouseDoubleClick cancel logic
+    // without needing a native window.
+    editor.promptRenameMacroForTest = [](const juce::String&) {};
+
     // First click of the pair: arms the chip drag exactly like MacroChipDragClearsAllStateOnMouseUp.
     editor.mouseDown(realMouseEvent(editor, pressPos, pressPos, leftClick));
     ASSERT_TRUE(editor.isMacroChipDragActive());
