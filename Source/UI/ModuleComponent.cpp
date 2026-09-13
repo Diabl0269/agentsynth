@@ -2105,10 +2105,10 @@ void ModuleComponent::paintMacroPortWidget(juce::Graphics& g) {
     const juce::Colour jackAccentColour = themeColors.accent;
     constexpr float kJackRadius = 3.5f; // 7px dot, down from a full card's 10px (fix G4)
 
-    // T162/T165: a port with a user colour (MacroPort::colour, set from the Configure I/O modal's
+    // A port with a user colour (MacroPort::colour, set from the Configure I/O modal's
     // swatch) paints its dot in THAT colour; otherwise the kind tint (audioWire for MIDI, accent
     // for AudioCV) — the same fallback the collapsed card's MacroCardComponent::paint uses, so an
-    // expanded docked widget and a collapsed card read a port's jack identically. T165: resolve via
+    // expanded docked widget and a collapsed card read a port's jack identically. Resolve via
     // effectiveMacroPortJackColour (NOT resolveMacroPortJackColour) so an in-progress live preview
     // from the open ColourPickerPopup wins over the stored colour, mirroring the card's preview-first
     // branch -- a docked widget that read only the stored colour would update its jack only on commit
@@ -2171,7 +2171,7 @@ juce::Colour ModuleComponent::resolveMacroPortJackColour(const synth::MacroPort*
 }
 
 juce::Colour ModuleComponent::effectiveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint) const {
-    // T165: the armed live preview wins and ignores the kind tint (one picked colour drives both a
+    // The armed live preview wins and ignores the kind tint (one picked colour drives both a
     // MIDI and a CV jack); otherwise it is exactly the stored-colour resolution the static
     // resolveMacroPortJackColour performs. Mirrors paintMacroPortWidget's own branch so a headless
     // test can assert "the jack tracks the live pick" without capturing pixels.

@@ -893,11 +893,11 @@ TEST(MacroPortWidget, ANullPortFallsBackToTheKindTint) {
 }
 
 // ============================================================================
-// A port-colour change repaints BOTH surfaces in real time (T165)
+// A port-colour change repaints BOTH surfaces in real time
 // ============================================================================
-// T162 made the docked widget (ModuleComponent::paintMacroPortWidget) and the collapsed card
+// Per-port colour already makes the docked widget (ModuleComponent::paintMacroPortWidget) and the collapsed card
 // (MacroCardComponent::paint) BOTH read a port's user colour, but a port-colour change is only a
-// macro-set mutation, so neither surface has a listener to notice it: the T165 report is that the
+// macro-set mutation, so neither surface has a listener to notice it: the reported symptom was that
 // jack "only shows the new colour after a collapse/expand", which re-runs the layout and forces a
 // fresh paint. changeMacroPortColour now forces a repaint of BOTH surfaces itself, via
 // repaintMacroPortColourTargets() - the seam these tests pin. As StatusBarTests' gated-repaint
@@ -975,7 +975,7 @@ TEST(MacroPortWidget, EveryPortKindReachesItsDockedWidget) {
 }
 
 TEST(MacroPortWidget, CollapsedRecolourStillTargetsTheCardAndTheHiddenWidget) {
-    // The collapse/expand symptom in T165: even before expanding, the card must be the surface that
+    // The collapse/expand symptom: even before expanding, the card must be the surface that
     // shows the colour, and the (currently hidden) docked widget is still found so that when the user
     // expands, its first paint already reads the new colour without a manual fold/unfold dance.
     AudioEngine engine;
@@ -1013,7 +1013,7 @@ TEST(MacroPortWidget, MissingMacroIdReachesNoSurfacesAndDoesNotCrash) {
 }
 
 TEST(MacroPortWidget, ChangeMacroPortColourIsOneUndoStep) {
-    // T165 rides on the same single recorded undo step as the T162 data path; one recolor is one
+    // The recolor rides on the same single recorded undo step as the port-colour data path; one recolor is one
     // undo entry, and after undo the same live surfaces still resolve for a subsequent recolor.
     AudioEngine engine;
     AppUndoManager undo;
@@ -1032,7 +1032,7 @@ TEST(MacroPortWidget, ChangeMacroPortColourIsOneUndoStep) {
     ASSERT_TRUE(editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port->colour.has_value());
 
     // The recolor recorded exactly one undo step (the colour only mutates `macros`, so a
-    // MacroSnapshotAction, like every other T152/T162 port-metadatum edit).
+    // MacroSnapshotAction, like every other port-metadatum edit).
     ASSERT_TRUE(undo.canUndo());
     undo.undo();
     EXPECT_FALSE(editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port->colour.has_value())
@@ -1045,13 +1045,13 @@ TEST(MacroPortWidget, ChangeMacroPortColourIsOneUndoStep) {
 }
 
 // --------------------------------------------------------------------------------------------
-// T165 (continuation): a macro port's configured colour updates in REAL TIME on both surfaces as
+// A macro port's configured colour updates in REAL TIME on both surfaces as
 // the Configure I/O picker's selector moves — the same live-preview behaviour the timeline track
 // colour has — WITHOUT a per-pixel undo step. The preview is a view-layer-only override (a
 // transient on the docked ModuleComponent and per-port on the collapsed MacroCardComponent); the
 // stored `synth::MacroPort::colour` is written exactly once, on pick COMMIT (onClose).
 //
-// The seam, exactly as T162's commit repaint: no public repaint-count API in JUCE, so a test
+// The seam, exactly as the commit repaint: no public repaint-count API in JUCE, so a test
 // asserts the TARGETS and the RESOLVED COLOUR (via resolve/effective seams) rather than repaint()
 // having painted. The three guarantees asserted below:
 //   (1) previewMacroPortColour arms BOTH surfaces and repaints them, but writes NO stored colour,
@@ -1180,7 +1180,7 @@ TEST(MacroPortWidget, CollapsedCardPreviewIsScopedToOnePort) {
 }
 
 TEST(MacroPortWidget, PreviewThenCommitIsOneUndoStepAndShowsStoredColour) {
-    // The end-to-end guarantee behind T165: many preview ticks push zero undo steps and write no
+    // The end-to-end guarantee: many preview ticks push zero undo steps and write no
     // data; the single commit pushes exactly one undo step and stores the colour, leaving the jack
     // showing it (preview-clear == store, so the colour never glitches).
     AudioEngine engine;

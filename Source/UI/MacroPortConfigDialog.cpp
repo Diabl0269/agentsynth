@@ -445,9 +445,9 @@ public:
     // TimelineTrackHeaderComponent::buildColourPicker's own split. onPreview drives a LIVE,
     // view-layer-only colour preview on BOTH surfaces that paint the jack -- this row's swatch
     // AND the macro port's jack on the docked ModuleComponent and its collapsed MacroCardComponent
-    // (via onPreviewPortColour, T165) -- so the jack tracks the selector in real time. It still
+    // (via onPreviewPortColour) -- so the jack tracks the selector in real time. It still
     // COMMITs nothing: a preview never writes MacroPort::colour, so a drag pushes no recordGraph
-    // entry per pixel of slider movement (the T152 property); the real commit fires once, when the
+    // entry per pixel of slider movement (the same property); the real commit fires once, when the
     // popup closes, exactly like the shape combo's own "commits immediately [on a real, discrete
     // choice]" rule, not on every intermediate value.
     //
@@ -475,10 +475,10 @@ public:
                 if (auto* row = safeRow.getComponent()) {
                     row->colourSwatch.colour = c;
                     row->colourSwatch.repaint();
-                    // T165: also preview this port's jack on BOTH surfaces (the docked widget and the
+                    // Also preview this port's jack on BOTH surfaces (the docked widget and the
                     // collapsed card) live, so the jack tracks the pick in real time. View-layer only
                     // (a preview, never a MacroPort::colour write -- onCommit below owns the commit),
-                    // so a drag pushes no undo step exactly like T152. Captured via safeDialog because
+                    // so a drag pushes no undo step. Captured via safeDialog because
                     // the popup outlives one click dispatch just like onCommit; onPreviewPortColour is
                     // optional and is skipped unchanged when unset (the default in a standalone test).
                     if (auto* dialog = safeDialog.getComponent()) {

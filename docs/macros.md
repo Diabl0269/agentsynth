@@ -981,7 +981,7 @@ In order, each independently shippable:
     identically (before T162 the widget still drew the kind tint for a coloured port — the mismatch
      this task closes). See §5.2 for the `colour` field's persistence.
 
-   **DONE (T165, founder review, real-time re-colour):** T162 made the collapsed card AND the expanded
+   **Real-time re-colour (done):** Per-port colour made the collapsed card AND the expanded
    docked widget both *paint* a port's user colour, but a port-colour change is a **macro-set** change, not
    a graph or structural change, so neither surface has a listener that would notice it on its own — the
    old code did a bare canvas `repaint()`, which reached the card but **not** the port's docked
@@ -1001,12 +1001,12 @@ In order, each independently shippable:
    surfaces?", not "did a frame paint?". Covered by `MacroPortWidget.{ExpandsRecolourReachesBothTheCardAndTheDockedWidget,
    EveryPortKindReachesItsDockedWidget, CollapsedRecolourStillTargetsTheCardAndTheHiddenWidget,
    MissingMacroIdReachesNoSurfacesAndDoesNotCrash, ChangeMacroPortColourIsOneUndoStep}`. **No data change** —
-   this is a paint-timing fix on top of T162, so §5/§5.2 persistence and the undo step are unchanged
+   this is a paint-timing fix on top of the per-port-colour work above, so §5/§5.2 persistence and the undo step are unchanged
    (one `MacroSnapshotAction`, like every port-metadatum edit).
 
-   **DONE (T165 continuation, founder request: live colour preview):** T165 closed the first symptom —
+   **Live colour preview (done):** Real-time re-colour closed the first symptom —
    a committed re-colour now repaints BOTH surfaces via `repaintMacroPortColourTargets`. But the picker
-   still only *committed* once, on close: while the user dragged the selector the jack did not move. T152
+   still only *committed* once, on close: while the user dragged the selector the jack did not move. Per-port colour
    deliberately kept the picker "commit-once" because `changeMacroPortColour` records a `MacroSnapshotAction`,
    so a per-tick commit is a per-pixel undo step. The fix keeps that property AND adds live feedback, exactly
    like the timeline track colour: the picker's `onPreview` (fired on every selector tick / favourite click)
@@ -1033,9 +1033,9 @@ In order, each independently shippable:
    Covered by `MacroPortWidget.{PreviewArmsBothSurfacesButWritesNoStoredColourAndNoUndo,
    DockedWidgetResolvesPreviewThenStoredThenKindTint, CollapsedCardPreviewIsScopedToOnePort,
    PreviewThenCommitIsOneUndoStepAndShowsStoredColour, ColourPickerFiresOnPreviewThenCommitsOnce}`.
-   No data / undo change beyond T165: the preview is view-layer only, and the commit is the same single
+   No data / undo change here: the preview is view-layer only, and the commit is the same single
     `MacroSnapshotAction` as before.
-    - **Founder re-report (“even worse — only updates after closing the modal”).** A live preview had been
+    - **Docked-widget variant (“even worse — only updates after closing the modal”).** A live preview had been
    wired end-to-end (the picker's `onPreview` arms `portColourPreview_` on both surfaces, `paint()` reads
      it preview-first) but the *docked* `ModuleComponent::paintMacroPortWidget` was painting through
      `resolveMacroPortJackColour` (the committed-colour path) instead of `effectiveMacroPortJackColour` (the
@@ -1047,7 +1047,7 @@ In order, each independently shippable:
    `MacroPortWidget.*` cases) now guard the exact paint path — a headless test cannot observe a
    repaint, so the guarantee is "the paint path resolves the preview", not "a frame painted".
 
-    **DONE (T153, founder review round 3, item 3 second half): keyboard accessibility.** Every
+    **Keyboard accessibility (done).** Every
    real control in the Configure I/O modal already gets Tab/Return/Space for free from
    `juce::Button`/`juce::ComboBox`/`juce::TextEditor`'s own defaults, so the fixes needed were
    narrower than a full rewrite:

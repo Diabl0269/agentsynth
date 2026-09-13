@@ -94,8 +94,8 @@ void MacroCardComponent::paint(juce::Graphics& g) {
         for (const auto& port : owner.macroCardPortLayout(macro->id)) {
             const juce::Colour kindTint =
                 port.kind == synth::MacroPortKind::Midi ? themeColors.audioWire : themeColors.accent;
-            // T165: an armed live preview (the open picker's port, preview-first) wins over the
-            // stored port colour; T152's stored user colour next; else the kind tint -- the same
+            // An armed live preview (the open picker's port, preview-first) wins over the
+            // stored port colour; the stored user colour next; else the kind tint -- the same
             // fallback the collapsed card always painted the jack with.
             const bool previewed = portColourPreview_.has_value() && portColourPreview_->first == port.nodeUuid;
             g.setColour(previewed ? portColourPreview_->second : port.colour.value_or(kindTint));
@@ -376,7 +376,7 @@ juce::String MacroCardComponent::getTooltip() {
     return shown.joinIntoString("\n");
 }
 
-// ---- T165 live jack-colour preview (view-layer only; never the stored MacroPort::colour) -------
+// ---- live jack-colour preview (view-layer only; never the stored MacroPort::colour) -------
 void MacroCardComponent::setPortColourPreview(const juce::String& nodeUuid, juce::Colour c) {
     portColourPreview_ = {nodeUuid, c};
 }

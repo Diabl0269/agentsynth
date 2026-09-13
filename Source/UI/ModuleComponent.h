@@ -73,11 +73,11 @@ public:
      *  is the only caller. */
     static juce::Colour resolveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint);
 
-    /** T165 live preview. While the Configure I/O picker is open, the user's in-progress jack
+    /** Live preview. While the Configure I/O picker is open, the user's in-progress jack
      *  colour is shown in real time on the two surfaces that paint that jack — this docked widget
      *  AND its own collapsed card — WITHOUT waiting for the pick to be committed. View-layer ONLY:
      *  it is never written to the stored `synth::MacroPort::colour`, so a live preview pushes no
-     *  undo step and dirties no data — the exact property T152's "commit once on close" design
+     *  undo step and dirties no data — the exact property the "commit once on close" design
      *  required to avoid a `recordGraphAndMacroChange` entry per pixel of slider movement. Armed by
      *  `GraphEditor::previewMacroPortColour` on every picker tick, cleared by
      *  `GraphEditor::clearMacroPortColourPreview` when the pick commits (or the picker closes). A
@@ -282,7 +282,7 @@ private:
 
     juce::AudioProcessor* module;
     juce::AudioProcessorGraph::NodeID nodeId;
-    std::optional<juce::Colour> portColourPreview_; // T165 live jack-colour preview; view-layer only
+    std::optional<juce::Colour> portColourPreview_; // live jack-colour preview; view-layer only
     GraphEditor& owner;
     juce::ComponentDragger dragger;
 

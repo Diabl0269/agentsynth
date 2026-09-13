@@ -6097,14 +6097,14 @@ void GraphEditor::changeMacroPortColour(const juce::String& macroId, const juce:
     else
         doChange();
 
-    // T165: a committed colour is exactly when any armed live preview must be disarmed, so CLEAR it
+    // A committed colour is exactly when any armed live preview must be disarmed, so CLEAR it
     // on both surfaces and repaint them. clearMacroPortColourPreview resolves those same two
     // surfaces via findMacroPortRecolourTargets and repaints both, and is a harmless no-op when
     // nothing was ever previewed. Doing it at the data-mutation boundary means EVERY path that
     // commits a colour disarms the preview (not just the Configure I/O modal), so the jack shows
     // the just-stored colour -- which equals the armed preview -- and so never glitches. (A port
     // colour is a macro-set change, not a graph/structural change, so neither has a listener;
-    // before T165 a bare canvas repaint reached the card but not the docked widget.)
+    // a bare canvas repaint reaches the card but not the docked widget.)
     clearMacroPortColourPreview(macroId, nodeUuid);
 }
 
@@ -6120,7 +6120,7 @@ GraphEditor::MacroPortRecolourTargets GraphEditor::findMacroPortRecolourTargets(
         }
 
     // When the macro is expanded the port fronts a docked ModuleComponent whose paintMacroPortWidget
-    // reads the colour (T162's resolveMacroPortJackColour seam); when collapsed that component is
+    // reads the colour via resolveMacroPortJackColour; when collapsed that component is
     // hidden while folded, so a repaint of it is a harmless no-op until expanded; the widget still
     // resolves, so its first expand-time paint reads the colour. Null only fronts a uuid that maps to
     // no component.
@@ -6142,8 +6142,8 @@ GraphEditor::MacroPortRecolourTargets GraphEditor::findMacroPortRecolourTargets(
 
 GraphEditor::MacroPortRecolourTargets GraphEditor::repaintMacroPortColourTargets(const juce::String& macroId,
                                                                                  const juce::String& nodeUuid) {
-    // T165 (continuation): a bare canvas repaint (the pre-T165 bare repaint) reached the card
-    // but not the docked widget; this forces BOTH. Thin over the shared finder so a preview and
+    // A bare canvas repaint reaches the card but not the docked widget; this forces BOTH.
+    // Thin over the shared finder so a preview and
     // a commit can never target different surfaces.
     auto targets = findMacroPortRecolourTargets(macroId, nodeUuid);
     if (targets.card != nullptr)
@@ -6155,7 +6155,7 @@ GraphEditor::MacroPortRecolourTargets GraphEditor::repaintMacroPortColourTargets
 
 void GraphEditor::previewMacroPortColour(const juce::String& macroId, const juce::String& nodeUuid,
                                          juce::Colour colour) {
-    // T165 live preview: arm the (view-layer only) preview on both surfaces that paint this jack
+    // Live preview: arm the (view-layer only) preview on both surfaces that paint this jack
     // and repaint them, so the jack tracks the Configure I/O selector in real time WITHOUT touching
     // MacroPort::colour (no undo, no dirty). Idempotent -- re-previews just overwrite and repaint.
     auto targets = findMacroPortRecolourTargets(macroId, nodeUuid);
@@ -6170,7 +6170,7 @@ void GraphEditor::previewMacroPortColour(const juce::String& macroId, const juce
 }
 
 void GraphEditor::clearMacroPortColourPreview(const juce::String& macroId, const juce::String& nodeUuid) {
-    // T165: disarm the live preview on both surfaces when the pick has committed (or the picker
+    // Disarm the live preview on both surfaces when the pick has committed (or the picker
     // closed), so the jack falls back to the now-stored MacroPort::colour. A never-armed preview
     // is a harmless no-op.
     auto targets = findMacroPortRecolourTargets(macroId, nodeUuid);
@@ -6630,7 +6630,7 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
         });
     };
 
-    // T165 live preview: fired on every selector tick / favourite click (the picker's onPreview)
+    // Live colour preview: fired on every selector tick / favourite click (the picker's onPreview)
     // with the in-progress colour, so the jack on BOTH surfaces tracks the pick in real time
     // WITHOUT committing -- view-layer only, so a drag pushes no undo step. No callAsync (unlike
     // the mutators above): previewMacroPortColour mutates no data and rebuilds nothing, so it is

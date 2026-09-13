@@ -76,10 +76,10 @@ public:
             hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
     }
 
-    /** T165 live preview of ONE port's jack colour on this collapsed card, shown in real time while
+    /** Live preview of ONE port's jack colour on this collapsed card, shown in real time while
      *  the Configure I/O picker is open without waiting for the pick to commit. View-layer ONLY — it
      *  is never written to the stored `synth::MacroPort::colour`, so a live preview pushes no undo
-     *  step and dirties no data (the property T152's "commit once on close" needs to avoid a
+     *  step and dirties no data (the commit-once-on-close property needs to avoid a
      *  `recordGraphAndMacroChange` entry per pixel of slider movement). Keyed by the port's `nodeUuid`
      *  because a card draws all its macro's ports at once; the single open picker previews one of them,
      *  so `set`/`clear` carry a `nodeUuid`. Armed by `GraphEditor::previewMacroPortColour` on every
@@ -138,7 +138,7 @@ private:
 
     std::unique_ptr<juce::TextEditor> nameEditor;
 
-    // T165 live jack-colour preview for the single open picker's port. A pair (nodeUuid -> colour)
+    // Live-jack-colour preview for the single open picker's port. A pair (nodeUuid -> colour)
     // rather than a map because only one picker (one port) is ever open at a time, so a single
     // optional entry is correct and needs no container/hash. view-layer only (see setPortColourPreview).
     std::optional<std::pair<juce::String, juce::Colour>> portColourPreview_;
