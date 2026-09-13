@@ -183,6 +183,8 @@ add_executable(Tests
     OfflineTransportDriverTests.cpp
     BounceExporterTests.cpp
     BounceRunnerTests.cpp
+    StemExportTests.cpp
+    StemRunnerTests.cpp
     ExportAudioDialogTests.cpp
     MetronomeTests.cpp
     DeviceChangeTests.cpp

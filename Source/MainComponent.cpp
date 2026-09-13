@@ -1452,12 +1452,17 @@ void MainComponent::timerCallback() {
     // tick, and a take still genuinely in flight must still block it.
     maybeAutosave();
 
-    // Polls BounceRunner's progress onto the dialog's progress bar - on the SAME 10 Hz driver as
-    // everything else here, rather than a second timer just for this. exportDialog_ is a
+    // Polls BounceRunner/StemRunner's progress onto the dialog's progress bar - on the SAME 10 Hz
+    // driver as everything else here, rather than a second timer just for this. exportDialog_ is a
     // SafePointer: the dialog can only go away by the user closing the (modal) window, but nothing
-    // stops that from racing a tick.
-    if (isBounceInProgress_ && bounceRunner_ != nullptr && exportDialog_ != nullptr)
-        exportDialog_->reportProgress(bounceRunner_->getProgress());
+    // stops that from racing a tick. Only one of the two runners is ever non-null at once - see
+    // isBounceInProgress_'s own comment.
+    if (isBounceInProgress_ && exportDialog_ != nullptr) {
+        if (bounceRunner_ != nullptr)
+            exportDialog_->reportProgress(bounceRunner_->getProgress());
+        else if (stemRunner_ != nullptr)
+            exportDialog_->reportProgress(stemRunner_->getProgress());
+    }
 
     wasTransportPlaying_ = position.playing;
 
@@ -1804,7 +1809,7 @@ void MainComponent::promptExportAudio() {
 
     juce::DialogWindow::LaunchOptions options;
     options.content.setOwned(dialog);
-    options.dialogTitle = "Export Audio";
+    options.dialogTitle = dialog->getWindowTitle();
     options.componentToCentreAround = this;
     options.useNativeTitleBar = true;
     options.resizable = false;
@@ -1855,6 +1860,67 @@ void MainComponent::promptExportAudio() {
     // isBounceInProgress_ is true (see guardUnsavedChanges), but nothing stops the user from
     // reaching them if the window itself is merely floating. enterModalState's `deleteWhenDismissed`
     // means the window (and dialog) are freed once exitModalState() runs above.
+    window->enterModalState(true, nullptr, true);
+}
+
+// The stem export flow (P9-8, docs/mixer.md §5.12) — the same options dialog as Export Audio,
+// opened in its stems mode, driving a StemRunner instead of a BounceRunner. Mirrors
+// promptExportAudio() above closely on purpose: same modal choreography, same isBounceInProgress_
+// gate (shared across both — see its own comment), same progress polling in timerCallback().
+void MainComponent::promptExportStems() {
+    if (isBounceInProgress_)
+        return; // the command is reported inactive while one is running - see getCommandInfo.
+
+    // A patch with no mixer channels has nothing to export - tell the user why instead of opening
+    // a dialog whose render would just fail with the same message once Export is pressed.
+    if (!synth::StemExporter::hasChannelStrips(audioEngine)) {
+        statusBar.showMessage(synth::StemExporter::kNoChannelsMessage);
+        return;
+    }
+
+    const double arrangementEndBeat = timelineDoc.getArrangementEndBeat();
+    const auto position = audioEngine.getTransport().getPositionSnapshot();
+    const bool hasLoopRange = position.loopEndPpq > position.loopStartPpq;
+    const bool projectIsSaved = currentBundleDir_ != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir_);
+
+    auto* dialog = new synth::ui::ExportAudioDialog(
+        arrangementEndBeat, hasLoopRange, position.loopStartPpq, position.loopEndPpq, position.bpm, projectIsSaved,
+        resolveExportSubdirectory(currentBundleDir_, kExportsFolderName), currentPatchName_, /*stemsMode=*/true);
+
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned(dialog);
+    options.dialogTitle = dialog->getWindowTitle();
+    options.componentToCentreAround = this;
+    options.useNativeTitleBar = true;
+    options.resizable = false;
+    options.escapeKeyTriggersCloseButton = false;
+    auto* window = options.launchAsync();
+    exportDialog_ = dialog;
+
+    dialog->onRequestClose = [window] {
+        if (window != nullptr)
+            window->exitModalState(0);
+    };
+    dialog->onCancelRender = [this] {
+        if (stemRunner_ != nullptr)
+            stemRunner_->cancel();
+    };
+    dialog->onExport = [this, dialog](synth::BounceOptions bounceOptions, juce::File destinationFolder) {
+        publishTimelineAndRebindRecorder();
+
+        isBounceInProgress_ = true;
+        dialog->showProgressPage();
+
+        stemRunner_ = std::make_unique<synth::StemRunner>(
+            audioEngine, destinationFolder, bounceOptions, [this](synth::StemResult result) {
+                isBounceInProgress_ = false;
+                stemRunner_.reset();
+                if (exportDialog_ != nullptr)
+                    exportDialog_->reportComplete(result.ok, result.message);
+                statusBar.showMessage(result.message);
+            });
+    };
+
     window->enterModalState(true, nullptr, true);
 }
 
@@ -2130,13 +2196,13 @@ void MainComponent::paint(juce::Graphics& g) {
 
 void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
     commands.addArray({AppCommands::openSettings, AppCommands::savePreset, AppCommands::saveProjectAs,
-                       AppCommands::exportPatchOnly, AppCommands::exportAudio, AppCommands::openPreset,
-                       AppCommands::openProject, AppCommands::newPatch, AppCommands::undo, AppCommands::redo,
-                       AppCommands::toggleModMatrix, AppCommands::toggleMinimap, AppCommands::toggleAiPanel,
-                       AppCommands::autoArrange, AppCommands::groupSelection, AppCommands::ungroupSelection,
-                       AppCommands::collapseMacro, AppCommands::toggleLibrary, AppCommands::selectAllModules,
-                       AppCommands::saveSnippet, AppCommands::copySelection, AppCommands::pasteSelection,
-                       AppCommands::duplicateSelection, AppCommands::cutSelection,
+                       AppCommands::exportPatchOnly, AppCommands::exportAudio, AppCommands::exportStems,
+                       AppCommands::openPreset, AppCommands::openProject, AppCommands::newPatch, AppCommands::undo,
+                       AppCommands::redo, AppCommands::toggleModMatrix, AppCommands::toggleMinimap,
+                       AppCommands::toggleAiPanel, AppCommands::autoArrange, AppCommands::groupSelection,
+                       AppCommands::ungroupSelection, AppCommands::collapseMacro, AppCommands::toggleLibrary,
+                       AppCommands::selectAllModules, AppCommands::saveSnippet, AppCommands::copySelection,
+                       AppCommands::pasteSelection, AppCommands::duplicateSelection, AppCommands::cutSelection,
                        // Registered unconditionally alongside togglePlayback below even though only
                        // the timeline surfaces implement it — reported inactive rather than dropping
                        // the row from Settings.
@@ -2203,6 +2269,13 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         // Greyed out rather than re-entrant: only one bounce (and one modal progress window) at a
         // time - see isBounceInProgress_.
+        result.setActive(!isBounceInProgress_);
+        break;
+    }
+    case AppCommands::exportStems: {
+        result.setInfo("Export Stems...", "Render each mixer channel to its own audio file in a folder", "General", 0);
+        // Menu-only, like openPreset/checkForUpdates - no ShortcutManager binding, so no
+        // addDefaultKeypress call. Same isBounceInProgress_ gate as exportAudio - see its comment.
         result.setActive(!isBounceInProgress_);
         break;
     }
@@ -2566,6 +2639,9 @@ bool MainComponent::perform(const InvocationInfo& info) {
         return true;
     case AppCommands::exportAudio:
         promptExportAudio();
+        return true;
+    case AppCommands::exportStems:
+        promptExportStems();
         return true;
     case AppCommands::openPreset:
         openPresetFromFile();

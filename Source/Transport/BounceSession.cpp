@@ -1,7 +1,7 @@
 #include "BounceSession.h"
 
 #include "../AudioEngine.h"
-#include "Metronome.h"
+#include "BounceGuards.h"
 #include "OfflineTransportDriver.h"
 #include <cmath>
 
@@ -27,68 +27,7 @@ BounceResult failure(juce::String message) {
     return result;
 }
 
-// Everything that can be rejected before a single sample is rendered, or a single file touched.
-juce::String validateOptions(const BounceOptions& options) {
-    if (!(options.sampleRate > 0.0) || !std::isfinite(options.sampleRate))
-        return "Sample rate must be a positive number.";
-    if (options.blockSize <= 0)
-        return "Block size must be at least 1 sample.";
-    if (options.numChannels <= 0)
-        return "A bounce needs at least one channel.";
-    if (options.bitDepth != 16 && options.bitDepth != 24 && options.bitDepth != 32)
-        return "Bit depth must be 16, 24 or 32.";
-    if (options.format == BounceFormat::Aiff && options.bitDepth == 32)
-        return "AIFF has no 32-bit float variant - choose 16 or 24 bit, or export WAV instead.";
-    if (!std::isfinite(options.startBeat) || !std::isfinite(options.endBeat))
-        return "The bounce range must be finite.";
-    if (options.startBeat < 0.0)
-        return "The bounce range must start at or after beat 0.";
-    if (!(options.endBeat > options.startBeat))
-        return "The bounce range must end after it starts.";
-    if (!std::isfinite(options.tailSeconds) || options.tailSeconds < 0.0)
-        return "Tail length must be zero or more seconds.";
-    return {};
-}
-
 } // namespace
-
-// The metronome is summed POST-graph, so a bounce — which captures exactly the graph's own output
-// buffer — would otherwise pick the click up. Force BOTH the user toggle and the count-in
-// forced-on flag off for the render and restore them afterwards, on every exit path.
-struct BounceSession::MetronomeGuard {
-    explicit MetronomeGuard(Metronome& metronomeIn) noexcept
-        : metronome(metronomeIn)
-        , savedEnabled(metronomeIn.isEnabled())
-        , savedForcedOn(metronomeIn.isForcedOn()) {
-        metronome.setEnabled(false);
-        metronome.setForcedOn(false);
-    }
-    ~MetronomeGuard() noexcept {
-        metronome.setEnabled(savedEnabled);
-        metronome.setForcedOn(savedForcedOn);
-    }
-
-    Metronome& metronome;
-    bool savedEnabled;
-    bool savedForcedOn;
-
-    JUCE_DECLARE_NON_COPYABLE(MetronomeGuard)
-};
-
-// Real hardware MIDI keeps arriving on its own driver thread throughout a bounce — there is no
-// device callback to suspend it from, so this pairs with suspendDeviceCallback/resumeDeviceCallback
-// to close that hole too. See AudioEngine::suspendExternalMidi()'s comment.
-struct BounceSession::ExternalMidiGuard {
-    explicit ExternalMidiGuard(AudioEngine& engineIn) noexcept
-        : engine(engineIn) {
-        engine.suspendExternalMidi();
-    }
-    ~ExternalMidiGuard() noexcept { engine.resumeExternalMidi(); }
-
-    AudioEngine& engine;
-
-    JUCE_DECLARE_NON_COPYABLE(ExternalMidiGuard)
-};
 
 BounceSession::BounceSession(AudioEngine& engine, const juce::File& outFile, const BounceOptions& options,
                              const BounceExporter::ProgressCallback& progress)
@@ -97,7 +36,7 @@ BounceSession::BounceSession(AudioEngine& engine, const juce::File& outFile, con
     , options_(options)
     , progress_(progress)
     , nextBlockBeat_(options.startBeat) {
-    if (const auto problem = validateOptions(options_); problem.isNotEmpty()) {
+    if (const auto problem = validateBounceOptions(options_); problem.isNotEmpty()) {
         setupFailed_ = true;
         setupResult_ = failure(problem);
         return;
@@ -111,7 +50,7 @@ BounceSession::BounceSession(AudioEngine& engine, const juce::File& outFile, con
     auto& transport = engine_.getTransport();
     auto& graph = engine_.getGraph();
 
-    metronomeGuard_ = std::make_unique<MetronomeGuard>(engine_.getMetronome());
+    metronomeGuard_ = std::make_unique<MetronomeForceOffGuard>(engine_.getMetronome());
 
     // ---- Everything that has to go back afterwards, read before anything is disturbed ----
     const auto before = transport.getPositionSnapshot();
@@ -129,8 +68,8 @@ BounceSession::BounceSession(AudioEngine& engine, const juce::File& outFile, con
     deviceWasAttached_ = engine_.suspendDeviceCallback();
 
     // A no-op in Hosted mode (nothing ever opens hardware MIDI there) and cheap regardless — see
-    // ExternalMidiGuard above and AudioEngine::suspendExternalMidi().
-    externalMidiGuard_ = std::make_unique<ExternalMidiGuard>(engine_);
+    // ExternalMidiSuspendGuard above and AudioEngine::suspendExternalMidi().
+    externalMidiGuard_ = std::make_unique<ExternalMidiSuspendGuard>(engine_);
 
     // Constructing the driver re-prepares the whole graph at the render format.
     driver_ = std::make_unique<OfflineTransportDriver>(engine_, options_.sampleRate, options_.blockSize,

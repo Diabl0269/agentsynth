@@ -48,6 +48,17 @@
  * a bypassed non-soloed strip leaking into a soloed mix would break §5.3's "every non-soloed strip
  * outputs silence".
  *
+ * STEM TAP (P9-8, docs/mixer.md §5.12). An opt-in, non-owning tap for offline stem export: a
+ * message-thread-armed pointer to a caller-owned stereo destination buffer, null during normal/live
+ * playback. When non-null, the strip copies its FINAL stereo output — post gain, pan, mute AND solo
+ * gate, i.e. exactly what it hands to Master — into the tap at the end of every processBlock exit
+ * path (bypass, mute, solo-gated silence, and the normal path alike), so a muted or soloed-out strip
+ * during a stem export still taps whatever it actually output (silence). No allocation, no locks:
+ * an atomic pointer swap and, when armed, one copyFrom per leg. The destination buffer must already
+ * hold at least `numSamples` samples in 2 channels — synth::StemSession preallocates one per strip
+ * at the render's block size before arming any tap — and a block wider than that is dropped rather
+ * than overrun, since the audio thread must never touch memory it wasn't handed room for.
+ *
  * INTERNAL-ONLY, the same three exclusions as Rec Tap and the macro port types: no library row, no
  * replace-menu entry, never authorable by a model (kNonAuthorableModuleTypes, docs/mixer.md §6).
  */
@@ -118,13 +129,13 @@ public:
             // Dry: no gain, no pan. The solo gate still applies — see the class comment.
             if (soloGated)
                 buffer.clear();
-            storeMeter(buffer, numSamples);
+            finishBlock(buffer, numSamples);
             return;
         }
 
         if (isMuted()) {
             buffer.clear();
-            storeMeter(buffer, numSamples);
+            finishBlock(buffer, numSamples);
             return;
         }
 
@@ -138,7 +149,7 @@ public:
             smoothedGainL_.skip(numSamples);
             smoothedGainR_.skip(numSamples);
             buffer.clear();
-            storeMeter(buffer, numSamples);
+            finishBlock(buffer, numSamples);
             return;
         }
 
@@ -148,7 +159,7 @@ public:
             left[i] *= smoothedGainL_.getNextValue();
             right[i] *= smoothedGainR_.getNextValue();
         }
-        storeMeter(buffer, numSamples);
+        finishBlock(buffer, numSamples);
     }
 
     bool acceptsMidi() const override { return false; }
@@ -215,6 +226,19 @@ public:
         return (leg == 1 ? meterPeakR_ : meterPeakL_).load(std::memory_order_relaxed);
     }
 
+    // ---- Stem export tap (message thread arms/disarms; audio thread reads the pointer and writes
+    // through it every block). See the class comment. `buffer` must outlive every processBlock call
+    // made while it is armed, and must hold >= the render's block size in 2 channels; pass nullptr
+    // to disarm. Never call this while the graph this strip belongs to is rendering.
+    void setStemTapBuffer(juce::AudioBuffer<float>* buffer) noexcept {
+        stemTap_.store(buffer, std::memory_order_release);
+    }
+
+    // Test seam: true while a tap is armed. Lets a test prove a session disarms every tap on the
+    // way out (cancel, failure, or normal completion) without needing a dangling pointer into
+    // memory the session already freed.
+    bool isStemTapArmedForTest() const noexcept { return stemTap_.load(std::memory_order_acquire) != nullptr; }
+
     // ---- Non-parameter state. TRUSTED-PATH ONLY — AIStateMapper never calls setExtraState for
     // model output, and this type is additionally refused outright on the untrusted path
     // (kNonAuthorableModuleTypes). ----
@@ -260,9 +284,22 @@ private:
         return transport != nullptr && transport->isMixerSoloActiveForBlock();
     }
 
-    void storeMeter(const juce::AudioBuffer<float>& buffer, int numSamples) noexcept {
+    // The one place every processBlock exit path converges: updates the meter and, if a stem tap is
+    // armed, copies this block's FINAL output into it. `buffer` at this point is exactly what the
+    // strip hands to Master, in every branch (dry-bypassed, muted, solo-gated silent, or normal) —
+    // see the class comment.
+    void finishBlock(const juce::AudioBuffer<float>& buffer, int numSamples) noexcept {
         meterPeakL_.store(buffer.getMagnitude(0, 0, numSamples), std::memory_order_relaxed);
         meterPeakR_.store(buffer.getMagnitude(kRightBase, 0, numSamples), std::memory_order_relaxed);
+
+        if (auto* tap = stemTap_.load(std::memory_order_acquire)) {
+            // Defensive, not expected: a caller-sized-wrong tap must never be overrun. See the class
+            // comment for the sizing contract StemSession upholds.
+            if (tap->getNumChannels() >= 2 && tap->getNumSamples() >= numSamples) {
+                tap->copyFrom(0, 0, buffer, 0, 0, numSamples);
+                tap->copyFrom(1, 0, buffer, kRightBase, 0, numSamples);
+            }
+        }
     }
 
     juce::AudioParameterFloat* gainParam_ = nullptr;
@@ -279,6 +316,9 @@ private:
 
     std::atomic<float> meterPeakL_{0.0f};
     std::atomic<float> meterPeakR_{0.0f};
+
+    // Non-owning; null outside a stem export. See setStemTapBuffer() and the class comment.
+    std::atomic<juce::AudioBuffer<float>*> stemTap_{nullptr};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ChannelStripModule)
 };

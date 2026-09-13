@@ -247,6 +247,7 @@ add_library(Core STATIC
     Source/Transport/BlockTimeInfo.h
     Source/Transport/BounceExporter.cpp
     Source/Transport/BounceExporter.h
+    Source/Transport/BounceGuards.h
     Source/Transport/BounceRunner.cpp
     Source/Transport/BounceRunner.h
     Source/Transport/BounceSession.cpp
@@ -255,6 +256,12 @@ add_library(Core STATIC
     Source/Transport/Metronome.h
     Source/Transport/OfflineTransportDriver.cpp
     Source/Transport/OfflineTransportDriver.h
+    Source/Transport/StemExporter.cpp
+    Source/Transport/StemExporter.h
+    Source/Transport/StemRunner.cpp
+    Source/Transport/StemRunner.h
+    Source/Transport/StemSession.cpp
+    Source/Transport/StemSession.h
     Source/Transport/TempoMap.h
     Source/Transport/TransportService.cpp
     Source/Transport/TransportService.h

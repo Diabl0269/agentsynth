@@ -19,6 +19,8 @@
 #include "Timeline/TimelineDoc.h"
 #include "Timeline/TimelineOps.h"
 #include "Transport/BounceRunner.h"
+#include "Transport/StemExporter.h"
+#include "Transport/StemRunner.h"
 #include "UI/AIChatComponent.h"
 #include "UI/ExportAudioDialog.h"
 #include "UI/FocusRegion.h"
@@ -708,6 +710,11 @@ private:
     // The "Export Audio..." menu item's handler: shows synth::ui::ExportAudioDialog, then drives a
     // BounceRunner from its options. See Source/UI/ExportAudioDialog.h.
     void promptExportAudio();
+    // The "Export Stems..." menu item's handler (P9-8, docs/mixer.md §5.12): same
+    // synth::ui::ExportAudioDialog, opened in its stems mode, driving a StemRunner instead of a
+    // BounceRunner. Shows a status message instead of opening the dialog when the patch has no
+    // mixer channels yet (synth::StemExporter::hasChannelStrips).
+    void promptExportStems();
     // One choke point for "load factory preset N + keep the timeline in step", shared by the Load
     // menu and simulateLoadFactoryPresetForTest.
     void loadFactoryPresetAtIndex(int index);
@@ -1025,18 +1032,23 @@ private:
     // 10 Hz timer's actual firing rate is not guaranteed exact.
     juce::uint32 lastAutosaveMs_ = 0;
 
-    // True from the moment an Export Audio (bounce) render starts until its completion callback
-    // runs — checked by maybeAutosave() (a sidecar write mid-render is pointless and autosave has
-    // no business touching the document while the engine is offline-prepared) and by
-    // guardUnsavedChanges() (New Patch/Open/Load preset/Quit must not mutate or replace the graph
-    // out from under a live render — see BounceRunner.h). Owning the runner and this flag together
-    // is what makes "one bounce in flight at a time" true without a second piece of state to drift.
+    // True from the moment an Export Audio (bounce) OR Export Stems render starts until its
+    // completion callback runs — checked by maybeAutosave() (a sidecar write mid-render is
+    // pointless and autosave has no business touching the document while the engine is
+    // offline-prepared) and by guardUnsavedChanges() (New Patch/Open/Load preset/Quit must not
+    // mutate or replace the graph out from under a live render — see BounceRunner.h/StemRunner.h).
+    // ONE flag, deliberately, for both: the offline render path (suspendDeviceCallback + reprepare)
+    // is exclusive regardless of which of the two is running, so "one render in flight at a time"
+    // has to mean across both, not per-kind.
     bool isBounceInProgress_ = false;
     std::unique_ptr<synth::BounceRunner> bounceRunner_;
-    // The currently-shown Export Audio dialog, polled for progress by timerCallback() - a
-    // SafePointer because the modal window (and its content) can go away independently, and
+    std::unique_ptr<synth::StemRunner> stemRunner_;
+    // The currently-shown Export Audio/Export Stems dialog, polled for progress by timerCallback() -
+    // a SafePointer because the modal window (and its content) can go away independently, and
     // reportProgress() must simply become a no-op rather than a dangling call. Owned by the
-    // DialogWindow that shows it, never by MainComponent.
+    // DialogWindow that shows it, never by MainComponent. Shared by both flows (ExportAudioDialog's
+    // stems mode is the same class) since only one of bounceRunner_/stemRunner_ is ever non-null at
+    // a time.
     juce::Component::SafePointer<synth::ui::ExportAudioDialog> exportDialog_;
 
     // Declared here (not in AudioEngine or Core) because it is settings-backed and
