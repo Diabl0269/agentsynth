@@ -17,7 +17,7 @@ AIIntegrationService::~AIIntegrationService() {}
 void AIIntegrationService::setProvider(std::unique_ptr<AIProvider> newProvider) {
     provider = std::move(newProvider);
 
-    // Re-push contract (mirrors AIChatComponent::refreshModels(), see docs/AI_Engine.md "Model
+    // Re-push contract (mirrors AIChatComponent::refreshModels(), see docs/AI_Engine_chat_component.md "Model
     // Discovery Ordering Contract"): a caller may have called setAuthToken() before a provider
     // existed at all, so the value must be forwarded to whatever provider is installed now.
     if (provider && currentAuthToken.isNotEmpty())

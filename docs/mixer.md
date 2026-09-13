@@ -82,7 +82,7 @@ Treat an existing macro as the channel unit directly: no new node type, reuse th
 already ships.
 
 **Where it breaks:** a macro and a channel would then have two-part identity that can disagree.
-Ungrouping (per `docs/macros.md` fix G7) removes a macro's *ports* but never its ordinary members
+Ungrouping (per `docs/macros_implementation.md` §7 item 8, fix G7) removes a macro's *ports* but never its ordinary members
 — so ungrouping a channel macro would leave the fader/pan/solo controls with no box around them,
 still alive, still processing, just no longer presented as a channel. A box with no strip is just
 a macro; a strip with no box is still a channel. Tying channel identity to a single node avoids
@@ -132,7 +132,7 @@ the same three exclusions as `TimelineMidiSource` / `Rec Tap` / the macro port t
 row, no replace-menu entry, never model-authorable (`kNonAuthorableModuleTypes`,
 `Source/AI/AIStateMapper.cpp`). Adding them to the factory without adding them to that set will
 fail `AIStateMapperTest.AuthorableModuleTypesGolden` — that failure is intended and is how the
-golden test is meant to catch this exact addition (see `docs/macros.md` §6 for the identical
+golden test is meant to catch this exact addition (see `docs/macros_implementation.md` §6 for the identical
 pattern with the macro port types).
 
 `Master` is spliced in front of Audio Output **when the first channel is created** — a user
@@ -240,7 +240,7 @@ document.
 
 A strip's channel shape is fixed **at creation**, derived from the chain it terminates — never
 inferred later from what gets plugged into it. This is the same rule macro ports follow
-(`docs/macros.md` §5.3: "a port's shape is chosen at creation and then fixed"), applied to strips.
+(`docs/macros_ports.md` §5.3: "a port's shape is chosen at creation and then fixed"), applied to strips.
 
 Strip output is always stereo. Pan is a balance law with unity gain at centre; a mono strip feeds
 both output legs from a single input jack. The right leg follows the `kRightBase` convention
@@ -258,7 +258,7 @@ The strip follows the root `CLAUDE.md` two-branch bypass/mute contract like ever
 signal-processing module. The mixer exposes **no bypass control on the strip itself** — bypass is
 not a mixer-level idea.
 
-A channel macro's existing **Bypass** fan-out (`docs/macros.md` §5.6: `setBypassed(true)` across
+A channel macro's existing **Bypass** fan-out (`docs/macros_ports.md` §5.6: `setBypassed(true)` across
 every member) skips the source node and the strip when it fans out over a channel macro's
 members — this is what "bypass inserts" means on the mixer: the chain's own effects go dry, but
 the source keeps producing and the strip keeps passing signal through. The macro's **Mute**
@@ -318,7 +318,7 @@ reverb) — **these stay shared**:
 - Modules used **only** by this track move into the new channel's box.
 - A module still feeding another track too (an exclusively-shared modulator, for example) **stays
   outside** and reaches in through an auto-created macro port — the same auto-porting mechanism
-  `docs/macros.md` §7 item 7 already built for a cable crossing a macro's boundary at group time.
+  `docs/macros_implementation.md` §7 item 7 already built for a cable crossing a macro's boundary at group time.
   The sound does not change at the moment of conversion. (The same outside-module accounting
   applies when *saving* a channel, not just when creating one — see §5.7's "what a saved preset
   carries beyond the box.")
@@ -339,7 +339,7 @@ modulation attenuverter, through strips and macro ports, stopping at Audio Outpu
 Master. A node the track reaches that no other track source reaches is **own** and moves in; one
 another track also reaches is **shared** and never moves; a node no track reaches (an LFO) moves in
 only when every consumer of it (looking through attenuverters) already does — otherwise it stays
-outside and the group-time auto-port pass fronts its cable ([`macros.md`](macros.md) §7 item 7).
+outside and the group-time auto-port pass fronts its cable ([`macros_implementation.md`](macros_implementation.md) §7 item 7).
 The new strip takes over the own region's exits to the output, plus every audio edge into the
 shared region carrying that same signal (with no exit at all, every such edge, provided each side
 carries one consistent signal — otherwise the action is refused with a status message; a
@@ -514,7 +514,7 @@ change; per the root `CLAUDE.md` invariant, it is never relaxed to raise an AI p
 
 If a future goal is "the AI can build a channel," the correct shape is an app-side **tool/action**
 — "create channel" — that the model invokes and the app executes against a validated node set,
-never a patch key the model writes directly. This mirrors the same resolution `docs/macros.md` §6
+never a patch key the model writes directly. This mirrors the same resolution `docs/macros_implementation.md` §6
 already reached for "the AI can build a macro."
 
 ---
@@ -712,7 +712,7 @@ Main line, in dependency order:
      (`TimelinePanelComponent::instrumentPluginMenuSnapshot_`), never by re-running the collector at
      click time — a background `PluginScanService::runScan` finishing between open and click could
      otherwise resolve the click against a different plugin than the one the menu showed (see
-     `docs/timeline_panel_core.md` §3 for the full mechanism and the live repro this fixed). (2)
+     `docs/timeline_panel_tracks.md` §3 for the full mechanism and the live repro this fixed). (2)
      Every entry's label always carries its format — "Massive (VST3)" / "Massive (AU)" — so a VST3
      and an AU build of the same product never show as two identical rows. (3) The picker excludes
      this app's own VST3/AU build (matched against `synth::branding::kProductName`/`kCompanyName`),
@@ -764,7 +764,7 @@ Main line, in dependency order:
        the auto-channel build — `maybeAutoCreateMacroPortsForDrag` gained a trailing
        `recordUndo = true` parameter so a caller already inside its own transaction can pass
        `false` and hoist `updateComponents()` out to run once, after every mutation, instead of the
-       nested-transaction double-repaint a naive wrap would produce (docs/macros.md §7 item 9 has
+       nested-transaction double-repaint a naive wrap would produce (docs/macros_implementation.md §7 item 9 has
        the signature detail). Layout mirrors T173a/T183's own pattern: `estimateModuleSize()` per
        node type plus a 40px gap constant (`kAutoChannelCardGapX`, GraphEditorChannels.cpp's own copy
        of `MainComponentTrackCreation.cpp`'s `kChannelCardGapX` — duplicated rather than shared, since
@@ -832,7 +832,7 @@ Main line, in dependency order:
      a strip can feed a merge point's input pins instead of, or besides, Master's Mix — plus
      `addVoiceMixerForPolyInstrument` ahead of any poly feed) and `synth::resolveChannelSource`, all
      in `Source/Mixer/ChannelFlows.{h,cpp}`. AppUI: `GraphEditor::makeChannelFromNode` (boxes each
-     channel via the group-time crossing plan minus the strip's own outlets — [`macros.md`](macros.md)
+     channel via the group-time crossing plan minus the strip's own outlets — [`macros_implementation.md`](macros_implementation.md)
      §7 item 7 — and relocates Audio Output on a first Master, the T187 mirror),
      `duplicateIntoChannel`/`duplicateIntoChannelTargets`, the canvas and module-card menu items;
      `TimelineTrackHeaderComponent`'s "Make Channel" (`kMakeChannelMenuId`) over two new non-pure

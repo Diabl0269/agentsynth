@@ -37,7 +37,7 @@ static ModuleType getType(juce::AudioProcessor* module) {
     return ModuleType::Oscillator;
 }
 
-/** The four macro-boundary node types (Macro In/Out, Macro MIDI In/Out — docs/macros.md §5.1),
+/** The four macro-boundary node types (Macro In/Out, Macro MIDI In/Out — docs/macros_ports.md §5.1),
  *  which render as the compact docked port widget (P8-15 founder-review fix F2) rather than an
  *  ordinary module card: no header chrome, no body, a small tinted row docked to their macro's
  *  hull edge instead of freely placed. See layoutMacroPortWidget()/paintMacroPortWidget(). */
@@ -1575,7 +1575,7 @@ void ModuleComponent::updateLayout() {
 }
 
 // Compact docked widget for the four macro-port types (P8-15 founder-review fix F2,
-// docs/macros.md §5.3/§5.4): a small, fixed-shape row — no header chrome, no body, no 100px
+// docs/macros_ports.md §5.3/§5.4): a small, fixed-shape row — no header chrome, no body, no 100px
 // floor a real module card carries. Sized purely from the module's own visible jack count, which
 // for a Mono/Poly-N port (or a MIDI port, no shape at all) is one row on each side (getVisible*
 // PortCount()==1) and for Stereo is two (==2) — MacroInletModule/MacroOutletModule's
@@ -2064,7 +2064,7 @@ void ModuleComponent::paint(juce::Graphics& g) {
     }
 }
 
-// Compact docked port widget (P8-15 founder-review fix F2, docs/macros.md §5.3/§5.4): a small
+// Compact docked port widget (P8-15 founder-review fix F2, docs/macros_ports.md §5.3/§5.4): a small
 // row tinted with the owning macro's colour, showing the port's own NAME (resolved live through
 // GraphEditor — the name lives on synth::MacroPort, not this node, so a rename in the Configure
 // I/O dialog is reflected the next time this repaints, with nothing to cache or invalidate) and
@@ -2805,7 +2805,7 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
         // ("Create Macro") and must keep doing exactly what it says, even for a selection
         // that already touches a macro (where it still refuses, same as always).
         // requestGroupSelectionIntoMacro() gates the auto-port-preference modal (founder-review
-        // fix F5, docs/macros.md §7 item 6.2) the same way Cmd+G does.
+        // fix F5, docs/macros_implementation.md §7 item 6.2) the same way Cmd+G does.
         m.addItem("Create Macro from " + juce::String(selectionCount) + " Modules",
                   [this] { owner.requestGroupSelectionIntoMacro(); });
         m.addItem("Delete " + juce::String(selectionCount) + " Selected Modules", [this] { owner.deleteSelection(); });
@@ -2924,7 +2924,7 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
 
     m.addItem("Delete Module", [this] { owner.deleteModule(this); });
 
-    // Founder-review item 4 (docs/macros.md): this module's own menu also offers the macro it
+    // Founder-review item 4 (docs/macros_ports.md §5.8): this module's own menu also offers the macro it
     // belongs to, as an appended submenu — never folded into the items above, and never built
     // when this module is in no macro (a module in no macro sees no change at all). buildMacroMenu
     // itself now selects THIS macro before running its "Ungroup"/"Save as Snippet..." items (see
@@ -2987,7 +2987,7 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
 
         // Docked macro-port widget (P8-15 fix F2): not individually selectable or draggable via a
         // LEFT click — its position is fully derived by GraphEditor::dockMacroPortWidgets()
-        // against its macro's hull (docs/macros.md §5.4), and a body drag/select here would fight
+        // against its macro's hull (docs/macros_ports.md §5.4), and a body drag/select here would fight
         // that on every layout pass. A WHOLE-macro drag (via the collapsed card, or selecting the
         // macro through selectMacro()) still carries it along: that path adds every member —
         // ports included — to the selection directly, never through this component's own

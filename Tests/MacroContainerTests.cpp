@@ -2160,7 +2160,7 @@ TEST(MacroMemberContextMenu, UngroupFromTheSubmenuDissolvesTheRightMacroDespiteA
 }
 
 TEST(MacroMemberContextMenu, RightClickFiresTheContextMenuHookExactlyOnce) {
-    // Regression guard for the seam itself (docs/macros.md): a real right-click body mouseDown()
+    // Regression guard for the seam itself (docs/macros_ports.md §5.8): a real right-click body mouseDown()
     // must hand its menu to showContextMenuHook_ exactly once, rather than calling
     // PopupMenu::showMenuAsync() directly -- the latter opens a real popup and segfaults on a
     // headless (no-display) Linux CI runner. This pins the wiring so a future revert back to a

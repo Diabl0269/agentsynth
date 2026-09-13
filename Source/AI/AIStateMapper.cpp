@@ -120,7 +120,7 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     {"Track Audio", []() { return std::make_unique<TimelineAudioSourceModule>(); }},
     // A Macro's audio/CV inlet/outlet jacks (P8-15 Macro I/O). In the factory so our own saves
     // round-trip a patch that has one; kNonAuthorableModuleTypes below keeps them away from the
-    // model — see docs/macros.md §6.
+    // model — see docs/macros_implementation.md §6.
     {"Macro In", []() { return std::make_unique<MacroInletModule>(); }},
     {"Macro Out", []() { return std::make_unique<MacroOutletModule>(); }},
     // A Macro's MIDI inlet/outlet jacks — a separate type from the audio/CV pair above (see
@@ -175,7 +175,7 @@ const std::set<juce::String> kNonAuthorableModuleTypes = {
     // (PatchValidationError::InternalModuleNotAllowed) rather than sanitised. Only the app's own
     // load UX may create one.
     "Hosted Plugin",
-    // A Macro's audio/CV inlet/outlet jack (P8-15 Macro I/O; docs/macros.md §6). Membership of
+    // A Macro's audio/CV inlet/outlet jack (P8-15 Macro I/O; docs/macros_implementation.md §6). Membership of
     // the macro it belongs to is keyed by node uuid, and a provider-supplied uuid is ignored
     // (adoptUuidIfTrusted) — so a model-authored one could never resolve to a real macro's port
     // list even if it were let through. The macro's own port-creation flow is the only thing that

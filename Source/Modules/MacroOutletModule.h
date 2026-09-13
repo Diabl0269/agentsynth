@@ -7,7 +7,7 @@
 
 /**
  * @brief "Macro Out" — an audio/CV outlet jack on a Macro's boundary (P8-15 Macro I/O,
- * docs/macros.md §5).
+ * docs/macros_ports.md §5).
  *
  * The exact mirror of MacroInletModule in the other direction — see that class's comment for the
  * full reasoning (pass-through semantics, the declare-max/vary-visible channel-shape mechanism,
@@ -17,7 +17,7 @@
  *
  * INTERNAL-ONLY, the same three exclusions as Track In / Rec Tap / Track Audio: not in the module
  * library, not offered by the replace menu, never authorable by a model
- * (kNonAuthorableModuleTypes, docs/macros.md §6).
+ * (kNonAuthorableModuleTypes, docs/macros_implementation.md §6).
  */
 class MacroOutletModule : public ModuleBase {
 public:

@@ -15,7 +15,7 @@ namespace synth::ui {
  * @brief The "Configure I/O" modal for one Macro (P8-15b, T140; redesigned in the F1 founder-review
  * fix pass).
  *
- * Unifies docs/macros.md §7 items 3 ("Add Input"/"Add Output") and 5 (rename/reorder) into ONE
+ * Unifies docs/macros_implementation.md §7 items 3 ("Add Input"/"Add Output") and 5 (rename/reorder) into ONE
  * small modal, per an explicit founder request rather than piecemeal menu actions: add/remove/
  * rename/reorder every input and output on the macro from one place, picking Mono/Stereo/Poly-N/
  * MIDI at creation time (§5.3 — a port's shape/kind is fixed once created; changing shape means
@@ -336,7 +336,7 @@ private:
 };
 
 /**
- * @brief "Create ports for the crossing cables?" modal (founder-review fix F5, docs/macros.md §7
+ * @brief "Create ports for the crossing cables?" modal (founder-review fix F5, docs/macros_implementation.md §7
  * item 6.2) — shown by GraphEditor::requestGroupSelectionIntoMacro() the first time a group has a
  * cable crossing its would-be boundary and the auto-port preference is still Unset.
  *

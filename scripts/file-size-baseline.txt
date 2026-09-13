@@ -51,7 +51,3 @@
 4014 Tests/TimelinePanelTests.cpp
 1187 Tests/UndoRedoTests.cpp
 1472 Tests/WavetableOscillatorModuleTests.cpp
-1080 docs/AI_Engine.md
-1507 docs/macros.md
-1143 docs/timeline_panel_clips_automation.md
-1278 docs/timeline_panel_core.md

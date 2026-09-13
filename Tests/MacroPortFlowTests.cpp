@@ -1,5 +1,5 @@
 // GraphEditor-level tests for the Macro I/O port lifecycle (P8-15b, T140): the "Configure I/O"
-// modal's underlying API (docs/macros.md §7 items 3+5, unified per the founder's explicit request)
+// modal's underlying API (docs/macros_implementation.md §7 items 3+5, unified per the founder's explicit request)
 // plus the "shape from a dropped cable" convenience (§5.3). MacroPortConfigDialogTests.cpp covers
 // the dialog itself in isolation; this file covers what its callbacks are meant to reach, and the
 // cable-drop path the dialog is not involved in at all.
@@ -8,14 +8,14 @@
 //   • remove       — deletes the node, drops the port via the existing retainOnly() mechanism
 //   • rename       — touches only the port's name
 //   • reorder      — move-up/move-down scoped to one direction, no-op at either edge
-//   • shape change — THE load-bearing case (docs/macros.md §5.3): delete-node + create-node +
+//   • shape change — THE load-bearing case (docs/macros_ports.md §5.3): delete-node + create-node +
 //                    rewire lands as ONE undo step, external AND internal cables on a
 //                    still-active raw channel survive, cables on a channel the new shape drops are
 //                    dropped (not silently adapted)
 //   • cable drop   — dragging a cable onto a collapsed macro card creates a Mono port and wires
 //                    the external end, with no dialog involved
 //   • library/size — the four node types stay out of the module library, with a size estimate
-//                    pinned against the real rendered card (docs/macros.md §7 item 3's own
+//                    pinned against the real rendered card (docs/macros_implementation.md §7 item 3's own
 //                    "estimateModuleSize needs an entry" requirement)
 
 #include "../Source/AI/AIStateMapper.h"
@@ -551,7 +551,7 @@ TEST(MacroPortFlow, DroppingAMidiCableOnACollapsedCardCreatesAMidiOutput) {
 }
 
 // ============================================================================
-// Library absence + pinned size estimate (docs/macros.md §7 item 3's own requirement)
+// Library absence + pinned size estimate (docs/macros_implementation.md §7 item 3's own requirement)
 // ============================================================================
 
 TEST(MacroPortFlow, AllFourTypesAreAbsentFromTheLibraryWithAPinnedSizeEstimate) {
@@ -574,7 +574,7 @@ TEST(MacroPortFlow, AllFourTypesAreAbsentFromTheLibraryWithAPinnedSizeEstimate) 
 }
 
 // ============================================================================
-// T148 (docs/macros.md §7 item 9): auto-create a macro port when a dragged cable crosses an
+// T148 (docs/macros_implementation.md §7 item 9): auto-create a macro port when a dragged cable crosses an
 // EXPANDED macro's boundary — the counterpart to the collapsed-card drop convenience above, which
 // only fires when there is no jack under the cursor. All jack-to-jack, so both endpoints are real,
 // visible ModuleComponents this time (no MacroCardComponent involved).
@@ -839,7 +839,7 @@ TEST(MacroPortFlow,
         << "no leftover direct port->destination connection";
 
     // Neither the attenuverter nor the port's own uuid appears anywhere but the one macro entry —
-    // the attenuverter can never itself be a macro member (docs/macros.md §2/§7 item 7).
+    // the attenuverter can never itself be a macro member (docs/macros.md §2, docs/macros_implementation.md §7 item 7).
     EXPECT_FALSE(macro->hasMember(uuidOf(engine, attenId)));
 }
 

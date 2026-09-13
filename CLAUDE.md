@@ -72,7 +72,7 @@ Every implementation plan **must** include:
 Three rules stated in full because they're cheap to follow and catastrophic to miss:
 
 - **Bypass/mute contract** — in every signal-processing `processBlock`, use **two separate branches**: `isBypassed()` → dry pass-through (return early WITHOUT touching audio channels; clear only CV channels ≥2 so mod CV doesn't leak as audio); `isMuted()` → `buffer.clear()` then return. Never `if (isBypassed() || isMuted()) buffer.clear()` — that mutes on bypass. **Exception:** modules with no dry audio path (pure sources like Oscillator / Poly MIDI; audio-in/CV-out taps like Envelope Follower / Comparator) clear on bypass, still as two branches. → [`docs/architecture.md`](docs/architecture.md)
-- **Never relax `validatePatch` to raise the AI pass rate** — it is the security boundary for untrusted model output. Fix validity on the *generation* side, most upstream first: schema → bounded retry → narrow repair → prompt; measure with `Tools/AIPatchHarness` first. A node's `"state"` object (`ModuleBase::setExtraState`) is applied on the **trusted path only** — honouring it for provider output makes a patch suggestion an arbitrary file read. → [`docs/AI_Engine.md`](docs/AI_Engine.md)
+- **Never relax `validatePatch` to raise the AI pass rate** — it is the security boundary for untrusted model output. Fix validity on the *generation* side, most upstream first: schema → bounded retry → narrow repair → prompt; measure with `Tools/AIPatchHarness` first. A node's `"state"` object (`ModuleBase::setExtraState`) is applied on the **trusted path only** — honouring it for provider output makes a patch suggestion an arbitrary file read. → [`docs/AI_Engine_patch_safety.md`](docs/AI_Engine_patch_safety.md)
 - **`trusted=true` on `applyJSONToGraph` is about parameter fidelity, not skipping checks** — the untrusted path rescales in-`[0,1]` values against wider ranges (a heuristic for models), which corrupts app-authored values like a 0.5 Hz LFO rate. Replaying our own `graphToJSON` output applies trusted; if it came off disk, run `validatePatch(..., trusted=false)` as a separate gate first (`SnippetManager::insertSnippet` / `ProjectBundle::load` are the reference pairing). → [`docs/layout_selection_canvas.md §1.5`](docs/layout_selection_canvas.md)
 
 Everything else below is a tripwire index. The full rule lives in the named area `CLAUDE.md` (auto-loaded when you work under that directory); the mechanism and history live in the linked doc — **read it before touching the area**. A new invariant gets one line here, its rule in the area file, and its detail in the doc.
@@ -83,7 +83,7 @@ Everything else below is a tripwire index. The full rule lives in the named area
 - The device callback's render buffer is shared in-place with the graph; never allocate in the callback; audio input stays opt-in (restore requests 0 inputs). → [`docs/architecture.md`](docs/architecture.md)
 - A device/sample-rate change goes through the ONE hook (`AudioEngine::handleStreamFormatChange`), and a recording take never spans it. → [`docs/architecture.md`](docs/architecture.md)
 - Timeline data crosses threads only via `EpochExchange`: opened once per render pass, published snapshot-first/bindings-second, republished after any graph change. → [`docs/architecture.md`](docs/architecture.md)
-- `MainComponent` owns the app's live `TimelineDoc`; every graph change must reach `MainComponent::timelineChanged` / the reconcile pass (hook inventory: [`docs/architecture.md` §8](docs/architecture.md)); a binding is never re-established automatically. → [`docs/timeline_panel_core.md §3`](docs/timeline_panel_core.md)
+- `MainComponent` owns the app's live `TimelineDoc`; every graph change must reach `MainComponent::timelineChanged` / the reconcile pass (hook inventory: [`docs/architecture.md` §8](docs/architecture.md)); a binding is never re-established automatically. → [`docs/timeline_panel_tracks.md §3`](docs/timeline_panel_tracks.md)
 - Every node-uuid write mirrors into the processor via `ModuleBase::setNodeUuid`; written once, never rewritten. → [`docs/architecture.md`](docs/architecture.md)
 - Mixer solo is a render-time gate, never a `setMuted` fan-out: the engine recounts soloed strips inside `publishTimeline`, and a graph-replacing path that skips it calls `AudioEngine::refreshSoloGate()`. → [`docs/mixer.md §5.3`](docs/mixer.md) · [`docs/architecture.md`](docs/architecture.md)
 - Every document-replacing action goes through `MainComponent::guardUnsavedChanges` (async — hand it the work, never do it then ask), and any path that replaces the document with something that is not a bundle drops `currentBundleDir_`. → [`docs/architecture.md`](docs/architecture.md)
@@ -107,7 +107,7 @@ Everything else below is a tripwire index. The full rule lives in the named area
 - Patch-format reserved fields stay reserved (`"timeline"` and `"macros"` (P8-12) both refused untrusted; flat scalar params; `uuid` trusted-only). → [`docs/AI_Engine.md`](docs/AI_Engine.md) · [`docs/layout_selection_canvas.md §1.7`](docs/layout_selection_canvas.md)
 - Conversation-history persistence is resolved server-side from the entitlement, never trusted from a client header. → [`docs/AI_Engine_providers_accounts.md §1`](docs/AI_Engine_providers_accounts.md)
 - Persist a rotated refresh token before using the access token that came with it (`AccountService::completeSignIn` is the funnel). → [`docs/AI_Engine_providers_accounts.md §5`](docs/AI_Engine_providers_accounts.md)
-- Installing an AI provider after construction requires calling `refreshModels()` again, or every `/api/chat` gets a 400. → [`docs/AI_Engine.md`](docs/AI_Engine.md)
+- Installing an AI provider after construction requires calling `refreshModels()` again, or every `/api/chat` gets a 400. → [`docs/AI_Engine_chat_component.md`](docs/AI_Engine_chat_component.md)
 
 **UI & theming** (`Source/UI/CLAUDE.md`, `Source/Plugin/CLAUDE.md`):
 
@@ -115,7 +115,7 @@ Everything else below is a tripwire index. The full rule lives in the named area
 - A cable is not a graph edge — enumerate via `GraphEditor::buildVisibleCables()`, colour via `synth::ui::resolveCableColour`. → [`docs/layout_selection_canvas.md §3`](docs/layout_selection_canvas.md) · [`docs/theming.md §11`](docs/theming.md)
 - Themes never swap font families (JUCE 8 + CoreText corrupts text); colour/treatment/glow only. → [`docs/theming.md`](docs/theming.md)
 - A plugin editor never calls `Desktop::setDefaultLookAndFeel` — it's process-global inside the host. → [`docs/architecture.md`](docs/architecture.md)
-- No per-sample / per-frame / per-parameter logging — a global Logger pipes into a UI-thread console. → [`docs/AI_Engine.md`](docs/AI_Engine.md)
+- No per-sample / per-frame / per-parameter logging — a global Logger pipes into a UI-thread console. → [`docs/AI_Engine_chat_component.md`](docs/AI_Engine_chat_component.md)
 
 **CI** (`.github/CLAUDE.md`):
 
@@ -130,14 +130,21 @@ Everything else below is a tripwire index. The full rule lives in the named area
 - [`docs/layout.md`](docs/layout.md) — grid/snap/auto-arrange, toolbar & status-bar chrome, width buckets, LayoutUtil API, drag affordance + smart connections
 - [`docs/layout_visuals_animation.md`](docs/layout_visuals_animation.md) — visualizer components, UI rendering performance, animation system (UIAnimation.h, AnimationDriver, PanelSlide, micro-interactions), alignment guides
 - [`docs/layout_selection_canvas.md`](docs/layout_selection_canvas.md) — multi-select + group drag + snippets/clipboard (§1.5), collapsible library sections, cable interaction, minimap overlay
-- [`docs/macros.md`](docs/macros.md) — Macros: the P8-12 presentation-only container, plus the DECIDED Macro I/O model (P8-14) that P8-15 implements — proxy inlet/outlet nodes on a flat graph, and why a container node with an inner graph was rejected
+- [`docs/macros.md`](docs/macros.md) — Macros: the P8-12 presentation-only container and the DECIDED Macro I/O model (P8-14) overview, and why a container node with an inner graph was rejected
+- [`docs/macros_ports.md`](docs/macros_ports.md) — Macro I/O port mechanics: node types, port set/ordering, poly/stereo shape, cable rendering across the boundary, bypass/mute, the macro menu
+- [`docs/macros_implementation.md`](docs/macros_implementation.md) — Macro I/O AI-authorability decision, the P8-15 implementation tracker, and out-of-scope items
 - [`docs/mixer.md`](docs/mixer.md) — Mixer channels (P9-1, decided 2026-09-10): the ChannelStrip node is the channel, macros are the container, solo as a render-time gate, Master/Direct, the track/channel link, track presets
-- [`docs/timeline_panel_core.md`](docs/timeline_panel_core.md) — timeline panel overview, ruler/grid/zoom/snap + markers, track headers/binding chips, playhead, transport bar, metronome, edit-tool strip
-- [`docs/timeline_panel_clips_automation.md`](docs/timeline_panel_clips_automation.md) — clip lanes, piano roll, automation strip, keyboard & focus arbitration
+- [`docs/timeline_panel_core.md`](docs/timeline_panel_core.md) — timeline panel overview, ruler/grid/zoom/snap + markers
+- [`docs/timeline_panel_tracks.md`](docs/timeline_panel_tracks.md) — track headers/binding chips, Add-Track
+- [`docs/timeline_panel_transport.md`](docs/timeline_panel_transport.md) — playhead, transport bar, metronome, edit-tool strip
+- [`docs/timeline_panel_clips_automation.md`](docs/timeline_panel_clips_automation.md) — clip lanes, automation strip, keyboard & focus arbitration
+- [`docs/timeline_panel_piano_roll.md`](docs/timeline_panel_piano_roll.md) — the piano roll note editor
 - [`docs/theming.md`](docs/theming.md) — theme tokens, SVG icons, JSON user themes, LookAndFeel, font limitation
 - [`docs/testing.md`](docs/testing.md) — test layers, build/test commands, CI pipeline, git hooks, coverage
 - [`docs/Module_Development_Guide.md`](docs/Module_Development_Guide.md) — step-by-step guide to adding a module
-- [`docs/AI_Engine.md`](docs/AI_Engine.md) · [`docs/AI_Usage_Guide.md`](docs/AI_Usage_Guide.md) — AI patching subsystem: architecture, communication pattern, patch validity/few-shot/untrusted-timeline/security model, AIChatComponent
+- [`docs/AI_Engine.md`](docs/AI_Engine.md) · [`docs/AI_Usage_Guide.md`](docs/AI_Usage_Guide.md) — AI patching subsystem: architecture, communication pattern, patch-diff/feedback UI
+- [`docs/AI_Engine_patch_safety.md`](docs/AI_Engine_patch_safety.md) — patch validity/few-shot/untrusted-timeline data/arrangement context/timeline operations/agentic security model
+- [`docs/AI_Engine_chat_component.md`](docs/AI_Engine_chat_component.md) — AIChatComponent and its logging rules
 - [`docs/AI_Engine_providers_accounts.md`](docs/AI_Engine_providers_accounts.md) — conversation history, provider registry (OllamaProvider/RemoteProvider), account sign-in, device id/trial, quota UI
 - [`docs/midi_input.md`](docs/midi_input.md) · [`docs/shortcuts.md`](docs/shortcuts.md) — external MIDI routing, keyboard shortcuts
 - [`docs/distribution.md`](docs/distribution.md) — version identity, Sparkle auto-update (macOS), EdDSA key generation, CI appcast publishing, WinSparkle status

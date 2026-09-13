@@ -16,7 +16,7 @@ namespace synth {
  *  and MIDI jacks apart. */
 enum class MacroPortKind { AudioCV, Midi };
 
-/** One inlet or outlet jack on a Macro's boundary (P8-15 Macro I/O; docs/macros.md §5). The node
+/** One inlet or outlet jack on a Macro's boundary (P8-15 Macro I/O; docs/macros_ports.md §5). The node
  *  named by `nodeUuid` (a MacroInlet/MacroOutlet or MacroMidiInlet/MacroMidiOutlet — always also
  *  a member of the same Macro, exactly like any other node) is the ground truth for what actually
  *  carries signal; this struct is the macro-level PRESENTATION layered over it — name and draw
@@ -49,10 +49,10 @@ struct MacroPort {
 
 /** A named, coloured, collapsible grouping of graph nodes on the canvas — presentation over a
  *  flat graph (P8-12; docs/layout_selection_canvas.md), now gaining optional named ports
- *  (P8-15 Macro I/O, docs/macros.md §5). A Macro still adds no graph edges and no processing of
+ *  (P8-15 Macro I/O, docs/macros_ports.md §5). A Macro still adds no graph edges and no processing of
  *  its own: `ports` is a description of which of its OWN inlet/outlet member nodes are exposed as
  *  named jacks, not a mechanism the macro itself implements — the boundary stays a rendering
- *  concept (docs/macros.md §5.4).
+ *  concept (docs/macros_ports.md §5.4).
  *
  *  Membership is by node UUID (the same persistent "uuid" ModuleBase::setNodeUuid mirrors into
  *  the processor), never by juce::AudioProcessorGraph::NodeID — a NodeID is only valid for the
@@ -78,7 +78,7 @@ struct Macro {
     std::vector<juce::String> members; // node uuids
 
     // Named jacks on this macro's boundary (P8-15). Every port's nodeUuid MUST also appear in
-    // `members` — an inlet/outlet is a member like any other node (docs/macros.md §5.1) — and
+    // `members` — an inlet/outlet is a member like any other node (docs/macros_ports.md §5.1) — and
     // MacroSet::fromVar rejects a saved macro where that does not hold. Order in this vector is
     // NOT the draw order; use each port's own `order` field (user-reorderable, §7 item 5).
     std::vector<MacroPort> ports;
@@ -91,7 +91,7 @@ struct Macro {
      *  variant node) rather than being an ordinary module the user grouped. Presentation-only —
      *  it answers "is this member a boundary jack", nothing more; `members` itself, and every
      *  consumer that reads it for bounds/group-drag/bypass-mute/undo/serialization, is completely
-     *  untouched by this (founder-review fix G6, docs/macros.md §7 item 4 note). */
+     *  untouched by this (founder-review fix G6, docs/macros_implementation.md §7 item 4 note). */
     bool memberIsPort(const juce::String& memberUuid) const {
         return std::any_of(ports.begin(), ports.end(), [&](const MacroPort& p) { return p.nodeUuid == memberUuid; });
     }
@@ -99,7 +99,7 @@ struct Macro {
     /** The user-facing MODULE count: `members.size()` minus the members that are actually port
      *  nodes (founder-review fix G6). Grouping N modules with a crossing cable can splice in
      *  inlet/outlet nodes that are genuine members (they must be, for bounds/drag/undo to work —
-     *  see the class comment above and docs/macros.md §5.1), but a port is a boundary jack the
+     *  see the class comment above and docs/macros_ports.md §5.1), but a port is a boundary jack the
      *  macro exposes, not a module the user put in the box — those are different quantities, and
      *  every user-facing count/list must report the first one, not `members.size()`. This is the
      *  ONE place that filter lives; route every presentation call site through it (or through
@@ -136,7 +136,7 @@ public:
 
     /** Removes the macro. Does NOT touch its former members' graph nodes itself — this call is
      *  purely a metadata change, same as every other MacroSet mutator. GraphEditor::
-     *  ungroupSelection() (founder-review fix G7, docs/macros.md §7 item 8) is the caller that
+     *  ungroupSelection() (founder-review fix G7, docs/macros_implementation.md §7 item 8) is the caller that
      *  gives "ungroup" its full user-facing meaning: it splices every one of the macro's PORT
      *  nodes back out (GraphEditor::spliceOutMacroPort) — removing them and reconnecting the
      *  cable each proxied — before ever calling this, so by the time `remove()` runs, only

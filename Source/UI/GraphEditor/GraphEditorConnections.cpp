@@ -268,7 +268,7 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                 } else if (!autoCreateMacroPortsOnDragEnabled ||
                            !maybeAutoCreateMacroPortsForDrag(realSrc->nodeID, srcJack, realDst->nodeID, dstJack,
                                                              dragSourceIsMidi)) {
-                    // T148 (docs/macros.md §7 item 9): if this completed drag crosses a macro
+                    // T148 (docs/macros_implementation.md §7 item 9): if this completed drag crosses a macro
                     // boundary (an EXPANDED macro's member on one side, something outside that same
                     // macro on the other — the collapsed-card drop above is a different code path),
                     // mint and wire a matching port instead of the plain direct connection. Gated by
@@ -281,7 +281,7 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
         }
     }
 
-    // Macro card drop (docs/macros.md §5.3/§5.4): nothing above matched (no module jack under the
+    // Macro card drop (docs/macros_ports.md §5.3/§5.4): nothing above matched (no module jack under the
     // cursor), so check whether the release point is over a COLLAPSED macro's card.
     if (!connectedToAModule && dragSourceModule != nullptr) {
         for (auto* card : content.getMacroCards()) {

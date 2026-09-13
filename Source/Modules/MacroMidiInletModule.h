@@ -5,7 +5,7 @@
 
 /**
  * @brief "Macro MIDI In" — a MIDI inlet jack on a Macro's boundary (P8-15 Macro I/O,
- * docs/macros.md §5, §7 item 1's MIDI-port decision).
+ * docs/macros_ports.md §5, docs/macros_implementation.md §7 item 1's MIDI-port decision).
  *
  * A SEPARATE type from MacroInlet rather than a "kind" flag on one type — the same shape of
  * choice TimelineMidiSource/TimelineAudioSource already made for Track In vs Track Audio. The
@@ -31,7 +31,7 @@
  *
  * INTERNAL-ONLY, the same three exclusions as Track In / Rec Tap / Track Audio: not in the module
  * library, not offered by the replace menu, never authorable by a model
- * (kNonAuthorableModuleTypes, docs/macros.md §6). No "muted" parameter, matching those three.
+ * (kNonAuthorableModuleTypes, docs/macros_implementation.md §6). No "muted" parameter, matching those three.
  */
 class MacroMidiInletModule : public ModuleBase {
 public:

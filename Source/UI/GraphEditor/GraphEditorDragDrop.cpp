@@ -165,12 +165,11 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
         return {280, 131};
     if (typeName == "Macro In" || typeName == "Macro Out")
-        // Founder-review fix F2 (docs/macros.md §5.3/§7 item 3): no longer a full module card — a
-        // small docked widget (ModuleComponent::layoutMacroPortWidget), constructed Mono by
-        // default (one jack row) — the port-creation flow grows it to two rows for Stereo via the
-        // ordinary component re-layout, same as any other jack-count change. Library-less (the
-        // "Configure I/O" modal places it). Measured against the real card by
-        // MacroPortFlow.AllFourTypesAreAbsentFromTheLibraryWithAPinnedSizeEstimate.
+        // Founder-review fix F2 (docs/macros_ports.md §5.3 / docs/macros_implementation.md §7 item 3): no longer a full
+        // module card — a small docked widget (ModuleComponent::layoutMacroPortWidget), constructed Mono by default
+        // (one jack row) — the port-creation flow grows it to two rows for Stereo via the ordinary component re-layout,
+        // same as any other jack-count change. Library-less (the "Configure I/O" modal places it). Measured against the
+        // real card by MacroPortFlow.AllFourTypesAreAbsentFromTheLibraryWithAPinnedSizeEstimate.
         return {ModuleComponent::kMacroPortWidgetWidth,
                 ModuleComponent::kMacroPortWidgetHeaderY + ModuleComponent::kMacroPortWidgetBottomPad};
     if (typeName == "Macro MIDI In" || typeName == "Macro MIDI Out")

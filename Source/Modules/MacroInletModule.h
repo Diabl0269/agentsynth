@@ -7,7 +7,7 @@
 
 /**
  * @brief "Macro In" — an audio/CV inlet jack on a Macro's boundary (P8-15 Macro I/O,
- * docs/macros.md §5).
+ * docs/macros_ports.md §5).
  *
  * A pure PASS-THROUGH: whatever lands on a visible input jack reaches the matching output jack
  * unchanged (the graph hands every node its input already sitting in the buffer it wants the
@@ -15,7 +15,7 @@
  * buildVisibleCables() anchors a cable crossing a collapsed card to this node's card jack — this
  * module carries no boundary logic of its own.
  *
- * CHANNEL SHAPE (docs/macros.md §5.3): "a port node's channel shape is decided when the node is
+ * CHANNEL SHAPE (docs/macros_ports.md §5.3): "a port node's channel shape is decided when the node is
  * constructed, and is immutable for that node's lifetime." JUCE settles the bus layout in the
  * ModuleBase constructor, so this node always carries kMaxChannels raw channels — the same
  * declare-a-maximum-and-vary-the-visible-count pattern Audio Input and Hosted Plugin already use
@@ -36,14 +36,13 @@
  *
  * INTERNAL-ONLY, the same three exclusions as Track In / Rec Tap / Track Audio: not in the module
  * library, not offered by the replace menu, never authorable by a model
- * (kNonAuthorableModuleTypes, docs/macros.md §6).
+ * (kNonAuthorableModuleTypes, docs/macros_implementation.md §6).
  *
  * No "muted" parameter, following the same three modules: there is nothing here for a mute to
  * silence beyond what bypass already covers, and it is deliberately not added just because a
- * future macro-level mute fan-out (docs/macros.md §5.6, §7 item 6) might want to call setMuted on
- * every member — that fan-out already has to guard against members with no mute parameter today
- * (any macro can already contain a Track In / Rec Tap / Track Audio node), so this is not a new
- * gap.
+ * future macro-level mute fan-out (docs/macros_ports.md §5.6, docs/macros_implementation.md §7 item 6) might want to
+ * call setMuted on every member — that fan-out already has to guard against members with no mute parameter today (any
+ * macro can already contain a Track In / Rec Tap / Track Audio node), so this is not a new gap.
  */
 class MacroInletModule : public ModuleBase {
 public:
@@ -125,7 +124,7 @@ public:
         }
     }
 
-    // ---- Port-creation flow API (P8-15b, docs/macros.md §7 item 3). Called exactly ONCE, by
+    // ---- Port-creation flow API (P8-15b, docs/macros_implementation.md §7 item 3). Called exactly ONCE, by
     // GraphEditor::addMacroPort/changeMacroPortShape, right after construction and before the
     // node is added to a running graph — never again; see the class comment's immutability rule.
     // `voiceCount` is meaningless (and ignored) unless `shape` is Poly, where it is clamped to

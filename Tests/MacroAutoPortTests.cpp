@@ -1,5 +1,5 @@
 // GraphEditor-level tests for auto-creating macro ports on grouping (founder-review fix F5,
-// docs/macros.md §7 item 6.1/6.2): for every graph connection crossing a would-be macro's
+// docs/macros_implementation.md §7 item 6.1/6.2): for every graph connection crossing a would-be macro's
 // boundary, GraphEditor::groupSelectionIntoMacro(true) splices in the matching MacroInlet/
 // MacroOutlet (or MIDI variant) node — disconnect external<->internal, insert the port, reconnect
 // external->port->internal (or the reverse for an outlet) — all inside ONE
@@ -345,7 +345,7 @@ TEST(MacroAutoPort, CollapsedStereoOutputCrossingCreatesAOneJackStereoCollapsedO
     ASSERT_NE(outlet, nullptr);
     EXPECT_EQ(outlet->getPortShape(), MacroPortShape::StereoCollapsed);
     // The bug this fix closes: the port must present exactly as many VISIBLE jacks as the
-    // internal jack it fronts (docs/macros.md). Reverb's own jack is ONE jack; so must this be.
+    // internal jack it fronts (docs/macros_ports.md §5.3). Reverb's own jack is ONE jack; so must this be.
     EXPECT_EQ(outlet->getVisibleInputPortCount(), 1);
     EXPECT_EQ(outlet->getVisibleOutputPortCount(), 1);
 
@@ -619,7 +619,7 @@ TEST(MacroAutoPort, AttenuverterAdjacentCrossingIsSplicedForAGenuineExternalCros
 // a ModuleComponent), so it is nominally "outside" no matter what -- but splicing here would spawn
 // two spurious ports for a routing the user is grouping wholly inside the macro. This is the one
 // sub-case G3 deliberately leaves un-ported; this test pins that as the CURRENT, intended
-// behaviour (docs/macros.md §7 item 7).
+// behaviour (docs/macros_implementation.md §7 item 7).
 TEST(MacroAutoPort, ModRoutingWithBothRealEndpointsInsideStaysWhollyInternal) {
     AudioEngine engine;
     GraphEditor editor(engine);
@@ -789,7 +789,7 @@ TEST(MacroAutoPort, UndoRestoresAModRoutingCrossingSpliceExactly) {
 // silently drifted ~300px off the real knob position the moment either endpoint became a macro
 // port node, in EVERY collapse state including both macros fully expanded. It now reuses
 // buildVisibleCables()'s own AttenuverterChain cable, so hit-testing can never disagree with what
-// is painted (docs/macros.md §7 item 7's fix note).
+// is painted (docs/macros_implementation.md §7 item 7's fix note).
 TEST(MacroAutoPort, TwoMacroCrossingKnobHitTestMatchesPaintedGeometryInEveryCollapseState) {
     AudioEngine engine;
     GraphEditor editor(engine);
@@ -960,7 +960,7 @@ TEST(MacroAutoPort, GroupingAndSplicedPortsIsOneUndoStep) {
 
 // ============================================================================
 // Ungroup removes the macro's ports and splices the cable back (founder-review fix G7,
-// docs/macros.md §7): "ungroup leaves the macro input/output in place (They should be removed)".
+// docs/macros_implementation.md §7): "ungroup leaves the macro input/output in place (They should be removed)".
 // Group then Ungroup must be a true round trip — every port node gone, every boundary cable it
 // proxied reconnected external<->internal directly, on the original raw channels.
 // ============================================================================
@@ -1184,7 +1184,7 @@ TEST(MacroUngroupPorts, ReachesTheGraphStructureChangedNotificationHook) {
 }
 
 // ============================================================================
-// Presentation (founder-review fix G6, docs/macros.md §7 item 4 note): the module-count
+// Presentation (founder-review fix G6, docs/macros_implementation.md §7 item 4 note): the module-count
 // indicator, the tooltip's member list and the content preview must count/list MODULES, never
 // the port nodes a crossing cable spliced in — members.size() itself stays untouched.
 // ============================================================================
@@ -1598,7 +1598,7 @@ TEST(MacroAutoPort, PreferenceLeaveCablesAsIsSkipsTheModal) {
 }
 
 // ============================================================================
-// T148 (docs/macros.md §7 item 9): auto-delete a macro port once its last cable is gone — the
+// T148 (docs/macros_implementation.md §7 item 9): auto-delete a macro port once its last cable is gone — the
 // reverse of the auto-create-on-group behaviour above. GraphEditor::disconnectCable and
 // disconnectPort are the two explicit user-gesture call sites hooked. T154 extends the same
 // auto-delete primitive (autoDeleteOrphanedMacroPort) to whole-node deletion —
@@ -1843,7 +1843,7 @@ TEST(MacroAutoPortDelete, DisabledPreferenceLeavesACablelessPortInPlaceRegressio
 }
 
 // ============================================================================
-// T154 (docs/macros.md §7 item 9's follow-up): the same auto-delete primitive, now also swept
+// T154 (docs/macros_implementation.md §7 item 9's follow-up): the same auto-delete primitive, now also swept
 // after a whole-node deletion (deleteSelection/deleteModule/requestDeleteModule) via
 // GraphEditor::macroPortDeletionNeighbors.
 // ============================================================================

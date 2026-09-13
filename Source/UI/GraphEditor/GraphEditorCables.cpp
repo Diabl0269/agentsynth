@@ -426,7 +426,7 @@ void GraphEditor::setCableColourOverrides(const synth::ui::CableColourOverrides&
 void GraphEditor::disconnectCable(const VisibleCable& cable) {
     auto& graph = audioEngine.getGraph();
 
-    // T148 (docs/macros.md §7 item 9): both cable kinds populate id.srcUid/dstUid with the REAL
+    // T148 (docs/macros_implementation.md §7 item 9): both cable kinds populate id.srcUid/dstUid with the REAL
     // logical endpoints — for an AttenuverterChain that's the true mod source/destination the
     // chain proxies, never the hidden attenuverter itself (buildVisibleCables() constructs it
     // that way, and G3's own splice logic already treats them as such). Decide BEFORE mutating
