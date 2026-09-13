@@ -40,4 +40,8 @@ jobs:
           & $toolExe.FullName --help
           Write-Output "=== winsparkle-tool.exe generate-key --help ==="
           & $toolExe.FullName generate-key --help
+          Write-Output "=== winsparkle-tool.exe public-key --help ==="
+          & $toolExe.FullName public-key --help
+          Write-Output "=== winsparkle-tool.exe sign --help ==="
+          & $toolExe.FullName sign --help
           exit 0
