@@ -22,7 +22,7 @@
 
 #include "../Source/AI/AIProvider.h"
 #include "../Source/AI/AIStateMapper.h"
-#include "../Source/MainComponent.h"
+#include "../Source/MainComponent/MainComponent.h"
 #include "../Source/Modules/ModuleBase.h"
 #include <algorithm>
 #include <gtest/gtest.h>

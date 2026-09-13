@@ -20,7 +20,7 @@
 #include "../Source/ProjectBundle.h"
 #include "../Source/Timeline/AssetManager.h"
 #include "../Source/Timeline/TimelineDoc.h"
-#include "MainComponent.h"
+#include "MainComponent/MainComponent.h"
 #include <functional>
 #include <gtest/gtest.h>
 #include <juce_audio_formats/juce_audio_formats.h>

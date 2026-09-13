@@ -24,7 +24,7 @@
 
 #include "../Source/AI/AIProvider.h"
 #include "../Source/Timeline/TimelineDoc.h"
-#include "MainComponent.h"
+#include "MainComponent/MainComponent.h"
 
 using synth::BlockTimeInfo;
 using synth::Metronome;

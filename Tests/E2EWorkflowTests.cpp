@@ -21,7 +21,7 @@
 #include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/LayoutUtil.h"
 #include "../Source/UI/ModuleComponent.h"
-#include "MainComponent.h"
+#include "MainComponent/MainComponent.h"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <iostream>

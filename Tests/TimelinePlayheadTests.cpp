@@ -23,7 +23,7 @@
 #include "../Source/UI/TimelinePanelComponent.h"
 #include "../Source/UI/TimelinePlayheadOverlay.h"
 #include "../Source/UI/TimelineViewState.h"
-#include "MainComponent.h"
+#include "MainComponent/MainComponent.h"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

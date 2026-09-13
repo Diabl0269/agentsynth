@@ -31,7 +31,7 @@
 #include "../Source/UI/TimelinePanelComponent.h"
 #include "../Source/UI/TrackColour.h"
 #include "../Source/UserSettings.h"
-#include "MainComponent.h"
+#include "MainComponent/MainComponent.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

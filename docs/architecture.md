@@ -513,7 +513,31 @@ See [`docs/layout.md`](layout.md) for the grid model, anti-overlap algorithm, an
 
 ### 8. App wiring — who owns the timeline, and every hook that keeps it in step
 
-`Source/MainComponent.h/.cpp`
+`Source/MainComponent/` — one class (`MainComponent`, declared in `MainComponent.h`), split across
+several translation units by concern (FRO63). Method bodies live wherever their concern puts them;
+there is no per-file class boundary. Source layout:
+
+- `MainComponent.cpp` — the three constructors and `initialiseCommon` (kept together: every ctor
+  delegates into it), plus the destructor.
+- `MainComponentCallbacks.cpp` — change/focus/timer callbacks, hosted-plugin latency, AI patch
+  apply hooks, preset/project load and export entry points.
+- `MainComponentFileIO.cpp` — save/open file I/O (`.json` patch and `.agsproj` bundle), autosave
+  recovery/patch-load-mode prompts, and document-lifecycle state (dirty tracking, autosave
+  scheduling, `guardUnsavedChanges`).
+- `MainComponentCommands.cpp` — `paint()` plus the `getAllCommands`/`getCommandInfo`/`perform`
+  `juce::ApplicationCommandTarget` trio (kept together).
+- `MainComponentPanels.cpp` — plugin/snippet library refresh, repeat selection, keyboard/focus
+  arbitration, `resized()`/toolbar icons, panel-slide animation, welcome screen, scroll/zoom
+  preferences.
+- `MainComponentTimeline.cpp` — timeline reconciliation, MIDI/audio recording commit, new-patch,
+  Track In/Track Audio node creation, asset relinking, automation lane creation.
+- `MainComponentTrackHeaderHost.cpp` — the `synth::ui::TrackHeaderHost` query/binding surface
+  (available Track In candidates, plugin lane options, MIDI destination options, note audition).
+- `MainComponentTrackCreation.cpp` — add/delete track, MIDI/audio/instrument/plugin track
+  creation, channel-strip build-out.
+- `MainComponentInternal.h` — the handful of file-local helpers shared by more than one of the
+  units above (`detail::kRecordingsFolderName`, `detail::isMidiInstrumentNode`); not part of the
+  public API.
 
 **`MainComponent` owns the app's one live `synth::TimelineDoc`, its `synth::AutomationRecorder`, and its `synth::MidiRecorder`**, as plain members. All three exist unconditionally, and every line of wiring below is likewise permanent, always-compiled code — there is no build configuration in which it is stripped out. The plugin path gets the same wiring for free — `MainComponent` is shared by both targets — with the one difference that the engine is injected rather than owned.
 

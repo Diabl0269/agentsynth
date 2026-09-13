@@ -35,7 +35,7 @@
 #include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/ModuleComponent.h"
 #include "../Source/UI/ModuleLibraryComponent.h"
-#include "MainComponent.h"
+#include "MainComponent/MainComponent.h"
 #include <cmath>
 #include <cstring>
 #include <gtest/gtest.h>

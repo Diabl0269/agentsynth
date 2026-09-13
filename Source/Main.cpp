@@ -1,5 +1,5 @@
 #include "Branding.h"
-#include "MainComponent.h"
+#include "MainComponent/MainComponent.h"
 #include "Plugin/Hosting/PluginScanService.h"
 #include "SettingsMigration.h"
 #include "ShortcutManager.h"

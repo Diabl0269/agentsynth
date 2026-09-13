@@ -11,7 +11,7 @@
 #include "../Source/AI/AIProvider.h"
 #include "../Source/AI/AIStateMapper.h"
 #include "../Source/AudioEngine.h"
-#include "../Source/MainComponent.h"
+#include "../Source/MainComponent/MainComponent.h"
 #include "../Source/Modules/LFOModule.h"
 #include "../Source/Modules/ModuleBase.h"
 #include "../Source/Modules/OscillatorModule.h"

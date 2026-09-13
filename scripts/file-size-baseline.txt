@@ -5,8 +5,8 @@
 1034 Source/AI/AIIntegrationService.cpp
 2105 Source/AI/AIStateMapper.cpp
 1312 Source/AudioEngine.cpp
-5379 Source/MainComponent.cpp
-1213 Source/MainComponent.h
+1135 Source/MainComponent/MainComponent.cpp
+1213 Source/MainComponent/MainComponent.h
 1004 Source/Mixer/ChannelFlows.cpp
 1995 Source/Modules/WavetableOscillatorModule.h
 1165 Source/ShortcutManager.h

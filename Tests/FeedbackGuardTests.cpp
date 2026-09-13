@@ -24,7 +24,7 @@
 #include <vector>
 
 #include "../Source/AI/AIProvider.h"
-#include "MainComponent.h"
+#include "MainComponent/MainComponent.h"
 
 namespace {
 

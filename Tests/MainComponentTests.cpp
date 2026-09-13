@@ -2,7 +2,7 @@
 #include "../Source/AI/AIProviderRegistry.h"
 #include "../Source/Modules/MasterModule.h"
 #include "FakeAudioIODevice.h"
-#include "MainComponent.h"
+#include "MainComponent/MainComponent.h"
 #include "UI/ToolbarComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
