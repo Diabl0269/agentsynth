@@ -651,13 +651,30 @@ void TimelineTrackHeaderComponent::showBindingMenu() {
 }
 
 void TimelineTrackHeaderComponent::applyContextMenuChoice(int menuId) {
-    if (menuId == kDeleteTrackMenuId && host_ != nullptr)
+    if (host_ == nullptr)
+        return;
+    if (menuId == kDeleteTrackMenuId)
         host_->deleteTrack(trackId_);
+    else if (menuId == kMakeChannelMenuId && host_->canMakeChannelForTrack(trackId_))
+        host_->makeChannelForTrack(trackId_);
+}
+
+juce::PopupMenu TimelineTrackHeaderComponent::buildContextMenu() const {
+    juce::PopupMenu menu;
+    // FRO25 (P9-3d): disabled rather than hidden once the track has a channel, so the row sits in
+    // a stable place (the canvas menu's "Locate Master" idiom).
+    menu.addItem(kMakeChannelMenuId, "Make Channel", host_ != nullptr && host_->canMakeChannelForTrack(trackId_));
+    menu.addSeparator();
+    menu.addItem(kDeleteTrackMenuId, "Delete Track");
+    return menu;
 }
 
 void TimelineTrackHeaderComponent::showContextMenu() {
-    juce::PopupMenu menu;
-    menu.addItem(kDeleteTrackMenuId, "Delete Track");
+    auto menu = buildContextMenu();
+    if (showContextMenuHook_) {
+        showContextMenuHook_(menu);
+        return;
+    }
 
     juce::Component::SafePointer<TimelineTrackHeaderComponent> safeThis(this);
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this), [safeThis](int result) {

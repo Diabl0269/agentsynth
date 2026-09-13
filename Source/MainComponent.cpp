@@ -501,6 +501,15 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     graphEditor.onSaveSnippetRequested = [this] { promptSaveSnippet(); };
     // Macros (P8-12): GraphEditor owns no status bar — see onStatusMessage's own comment.
     graphEditor.onStatusMessage = [this](const juce::String& msg) { statusBar.showMessage(msg); };
+    // FRO25 (P9-3d): the canvas/module menus' "Make Channel" and "Duplicate into Channel" route
+    // here so their ONE undo step also covers the timeline and runs the reconcile pass.
+    graphEditor.onMakeChannelRequested = [this](juce::AudioProcessorGraph::NodeID source) {
+        makeChannelForNode(source);
+    };
+    graphEditor.onDuplicateIntoChannelRequested = [this](juce::AudioProcessorGraph::NodeID nodeId,
+                                                         const juce::String& macroId) {
+        duplicateIntoChannel(nodeId, macroId);
+    };
     // Right-click-any-knob -> the automation lane editor. Mirrors onSaveSnippetRequested's
     // shape exactly — GraphEditor owns no TimelineDoc, so it hands the (nodeId, paramId) pair back
     // to the one component that owns both the doc and the graph.
@@ -4978,6 +4987,82 @@ void MainComponent::createChannelsForExistingTracks() {
     // channel" (that case already returned above), so it gets the same wording addAudioTrack's own
     // failure branch uses rather than a misleadingly cheerful no-op message.
     statusBar.showMessage(pushed ? "Created channels" : "Could not create channels");
+}
+
+// FRO25 (P9-3d, docs/mixer.md §5.8): "Make channel" on one track's bound node — the header menu's
+// enabled state is the same synth::planMakeChannel query the action itself runs.
+bool MainComponent::canMakeChannelForTrack(synth::TrackId trackId) const {
+    const auto* track = timelineDoc.getTrack(trackId);
+    if (track == nullptr || track->bindingUuid.isEmpty())
+        return false;
+    auto* node = findNodeByUuid(track->bindingUuid);
+    return node != nullptr && graphEditor.nodeNeedsChannel(node->nodeID);
+}
+
+void MainComponent::makeChannelForTrack(synth::TrackId trackId) {
+    const auto* track = timelineDoc.getTrack(trackId);
+    if (track == nullptr || track->bindingUuid.isEmpty())
+        return;
+    if (auto* node = findNodeByUuid(track->bindingUuid))
+        makeChannelForNode(node->nodeID);
+}
+
+// Every "Make channel" entry point lands here: the refusal/no-op checks run BEFORE the transaction
+// (so neither pushes an undo step), then ONE recordGraphTimelineAndMacroChange covers the whole
+// rebuild — own channel, any bus channels, their macros and ports — with updateComponents() inside
+// the mutation (MacroSet::retainOnly must see every new node alive), then the reconcile pass. The
+// macro is named after the track the chain belongs to (the one bound to `source`), falling back to
+// the source module's own name for a trackless chain picked on the canvas.
+void MainComponent::makeChannelForNode(juce::AudioProcessorGraph::NodeID source) {
+    auto& graph = audioEngine.getGraph();
+    auto* sourceNode = graph.getNodeForId(source);
+    if (sourceNode == nullptr)
+        return;
+    const auto plan = synth::planMakeChannel(graph, source, graphEditor.getMacros());
+    if (!plan.needsChannel) {
+        statusBar.showMessage("This chain already has a channel");
+        return;
+    }
+    if (plan.refusal.isNotEmpty()) {
+        statusBar.showMessage(plan.refusal);
+        return;
+    }
+
+    juce::String name = sourceNode->getProcessor() != nullptr ? sourceNode->getProcessor()->getName() : "Channel";
+    const juce::String sourceUuid = sourceNode->properties["uuid"].toString();
+    if (sourceUuid.isNotEmpty())
+        for (const auto& track : timelineDoc.getTracks())
+            if (track.bindingUuid == sourceUuid) {
+                name = track.name;
+                break;
+            }
+
+    bool built = false;
+    const bool pushed = undoManager.recordGraphTimelineAndMacroChange(
+        graph, timelineDoc, graphEditor.getMacros(), [this, source, name, &built] {
+            built = graphEditor.makeChannelFromNode(source, name);
+            graphEditor.updateComponents();
+        });
+
+    reconcileTimelineAfterGraphChange();
+    statusBar.showMessage(built && pushed ? "Made channel: " + name : juce::String("Could not make a channel"));
+}
+
+// FRO25 (P9-3d): "Duplicate into Channel" — same one-transaction + reconcile shape as above.
+void MainComponent::duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& macroId) {
+    const auto targets = graphEditor.duplicateIntoChannelTargets(nodeId);
+    if (std::find(targets.begin(), targets.end(), macroId) == targets.end())
+        return;
+
+    bool built = false;
+    undoManager.recordGraphTimelineAndMacroChange(audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(),
+                                                  [this, nodeId, macroId, &built] {
+                                                      built = graphEditor.duplicateIntoChannel(nodeId, macroId);
+                                                      graphEditor.updateComponents();
+                                                  });
+
+    reconcileTimelineAfterGraphChange();
+    statusBar.showMessage(built ? "Duplicated into the channel" : "Could not duplicate into the channel");
 }
 
 // FRO42 (P9-3h): instrument-capable hosted plugins for the "+ Track -> Instrument -> Plugin"

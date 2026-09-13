@@ -1,8 +1,12 @@
 #pragma once
 
+#include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <vector>
 
 namespace synth {
+
+class MacroSet;
 
 /** The nodes buildDefaultAudioChannel() created (or, for `master`, spliced/reused) — every field
  *  empty/null when the build failed partway (out-of-memory-class failures only; see the function
@@ -294,5 +298,112 @@ std::vector<juce::AudioProcessorGraph::Connection> findUnchanneledOutputFeeds(ju
 DefaultChannel buildChannelForFeeds(juce::AudioProcessorGraph& graph,
                                     const std::vector<juce::AudioProcessorGraph::Connection>& exits,
                                     const DefaultChannelLayout& layout);
+
+// ---- FRO25 (P9-3d, docs/mixer.md §5.8): "Make channel" ------------------------------------------
+
+/** True for a track's own source node — a Track In (ModuleType::TimelineMidiSource) or Track Audio
+ *  (ModuleType::TimelineAudioSource). "Which modules does this track use" is answered against every
+ *  OTHER such node in the graph, never against TimelineDoc (Core has no reference to it). */
+bool isTrackSourceNode(const juce::AudioProcessor* processor);
+
+/**
+ * What "Make channel" would do for the chain starting at `source`, read off the live graph — a pure
+ * query (NO GRAPH MUTATION, NO UNDO), so a menu can enable/disable itself from `needsChannel` and a
+ * click can report `refusal` without touching anything.
+ *
+ * Signal reach: a forward walk from a node along every MIDI edge and every audio edge whose
+ * destination pin is not a modulation input (PortRole::ModCV) — so a plain CV cable into another
+ * track's cutoff, like an AudioEngine::addModRouting leg (an AttenuverterModule, never entered),
+ * never makes two chains "the same chain". The walk passes THROUGH Channel Strips and macro port
+ * nodes and stops at the terminals (Audio Output, Record Tap, Master).
+ *
+ *   - own region: nodes `source` reaches that no OTHER track source reaches (macro port nodes are
+ *     walked through but never own anything). These are the modules "used only by this track".
+ *   - shared region: nodes `source` reaches that another track also reaches — never moved into this
+ *     track's channel. Where this track's own region feeds into it is a MERGE: each such merge head
+ *     that still reaches the output without a strip becomes its OWN bus channel (`buses`), holding
+ *     the shared nodes downstream of it.
+ *   - side inputs: a node no track source reaches (an LFO, a free oscillator) whose every consumer
+ *     (looking through modulation attenuverters) is already a member is absorbed into the member
+ *     set, to a fixpoint. A side input with a consumer anywhere else — the shared-LFO case — stays
+ *     outside, and the caller's auto-port pass fronts its cable with a macro port.
+ *
+ * The new strip takes over `exits` (edges from the own region onto the output) and `stripCrossings`
+ * (audio edges from the own region into shared modules carrying the same signal the exits carry,
+ * or — with no exits at all — every audio edge into the shared region, provided each side feeds one
+ * consistent signal; otherwise `refusal`). An audio edge into the shared region that carries a
+ * DIFFERENT signal from the exits stays a pre-strip send. Channel Strip, bypassed EQ/Compressor
+ * and Master are unity at their defaults, so the rebuilt graph renders identically.
+ *
+ * `needsChannel` is false (menu disabled, click a no-op) when the own region already contains a
+ * Channel Strip, when nothing `source` reaches ever lands on an output, or when there is nothing
+ * to channel. `refusal` is non-empty (and nothing may be built) when a node that would move is
+ * already in a macro (flat model — MacroSet::findByMember), or when the own region feeds shared
+ * modules from more than one point with no output of its own.
+ */
+struct MakeChannelPlan {
+    bool needsChannel = false;
+    juce::String refusal;
+    std::vector<juce::AudioProcessorGraph::NodeID> members; // own region + absorbed side inputs
+    std::vector<juce::AudioProcessorGraph::Connection> exits;
+    std::vector<juce::AudioProcessorGraph::Connection> stripCrossings;
+    struct Bus {
+        juce::AudioProcessorGraph::NodeID head;
+        std::vector<juce::AudioProcessorGraph::NodeID> members; // shared nodes + their side inputs
+    };
+    std::vector<Bus> buses;
+};
+
+MakeChannelPlan planMakeChannel(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID source,
+                                const MacroSet& macros);
+
+/** Where buildMakeChannel places new cards: called with the node a new card row should start to
+ *  the right of. Core cannot size UI cards (see DefaultChannelLayout), so the AppUI caller does. */
+using ChannelLayoutFn = std::function<DefaultChannelLayout(juce::AudioProcessorGraph::Node& rightOf)>;
+
+/** The nodes buildMakeChannel built, as macro member lists ready for the caller's boxing pass.
+ *  `memberUuids` is empty when this track got no strip of its own (a MIDI-only merge: the shared
+ *  instrument's bus is the one channel). Each list holds pre-existing members first, then any
+ *  Voice Mixer, then EQ, Compressor, Strip — Master is never a member. */
+struct MadeChannel {
+    DefaultChannel channel;
+    std::vector<juce::String> memberUuids;
+    struct Bus {
+        DefaultChannel channel;
+        juce::String headUuid;
+        std::vector<juce::String> memberUuids;
+    };
+    std::vector<Bus> buses;
+};
+
+/**
+ * Executes `plan` (planMakeChannel's result, computed against this same graph state): rebuilds the
+ * own exits/crossings through EQ (bypassed) -> Compressor (bypassed) -> Channel Strip, whose output
+ * goes to Master's Mix for the exits (Master spliced exactly as buildChannelForFeeds does) and to
+ * the original shared input pins for the crossings — plain edges, never macro ports, see
+ * buildDefaultAudioChannel's own comment. Then builds each bus with buildChannelForFeeds' chain.
+ *
+ * A feed from a poly module's poly jack (isProcessorPoly, span > 1 — so a poly VCA, which self-sums
+ * to one channel, never qualifies) gets addVoiceMixerForPolyInstrument ahead of the strip instead
+ * (docs/mixer.md §5.4/§5.8). The one intended sound change: the channel then carries every voice,
+ * where a bare poly jack wired to a mono input carried voice 0 only.
+ *
+ * Assigns every member a uuid via AIStateMapper::ensureNodeUuid (mirrored into the processor).
+ * NO UNDO, NO MACROS — a plain graph mutation for a caller already inside its own undo transaction,
+ * which then boxes the returned member lists. No-op (empty result) when `plan` is refused or has
+ * nothing to do.
+ */
+MadeChannel buildMakeChannel(juce::AudioProcessorGraph& graph, const MakeChannelPlan& plan,
+                             const ChannelLayoutFn& layoutRightOf);
+
+/**
+ * The chain source "Make channel" acts on for a canvas selection (or one right-clicked module):
+ * the one selected track source; else the one track source upstream of the selection; else the one
+ * root (a node with no signal predecessor) upstream of it. Invalid NodeID when none, or when more
+ * than one candidate makes the choice ambiguous. Upstream walks use planMakeChannel's signal-edge
+ * rule (no attenuverters, no ModCV pins). Pure query.
+ */
+juce::AudioProcessorGraph::NodeID resolveChannelSource(juce::AudioProcessorGraph& graph,
+                                                       const std::vector<juce::AudioProcessorGraph::NodeID>& nodes);
 
 } // namespace synth

@@ -2811,6 +2811,12 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
         m.addItem("Delete " + juce::String(selectionCount) + " Selected Modules", [this] { owner.deleteSelection(); });
     }
 
+    // FRO25 (P9-3d, docs/mixer.md §5.8): "Make Channel" for the chain this selection belongs to
+    // (shown only when one resolves, disabled once it already has a channel), and "Duplicate into
+    // Channel" when this module is shared into a channel macro from outside it.
+    owner.addMakeChannelMenuItem(m);
+    owner.addDuplicateIntoChannelMenuItems(m, nodeId);
+
     // Cmd+Alt+G's toggle, reachable from a member module's own menu too: an expanded
     // macro's card (the collapsed card's own menu) doesn't exist while expanded, so this
     // is the only always-reachable UI for the round trip. Shown for either state now —

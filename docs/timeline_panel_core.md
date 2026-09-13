@@ -929,9 +929,17 @@ outputs CV/gate and Sequencer/Poly Sequencer generate MIDI, none of them audio. 
 **Delete track** (right-click a header) is the same compound step in reverse: the track and its
 bound `Track In` / `Track Audio` node go together, and come back together.
 
+**Make Channel** (right-click a header, above Delete Track; P9-3d/FRO25) turns the track's bound
+chain into a mixer channel — see [`mixer.md`](mixer.md) §5.8 for what moves and what stays shared.
+It is enabled only while `TrackHeaderHost::canMakeChannelForTrack()` is true (the chain has no
+Channel Strip of its own yet), disabled — not hidden — afterwards, and `MainComponent` runs it as ONE
+graph + timeline + macro undo step followed by the reconcile pass.
+
 Headless test seams (a `juce::PopupMenu` never runs in the test binary): `collectBindingOptions()` /
 `applyBindingMenuChoice(id)` and `applyContextMenuChoice(id)` are the menus' semantics without the
-menu, and `handleChipClick(showMenu=false)` exercises the selection affordance on its own. The row
+menu, `buildContextMenu()` plus `setShowContextMenuHookForTest()` capture the menu a real right-click
+`mouseDown()` builds, and `handleChipClick(showMenu=false)` exercises the selection affordance on its
+own. The row
 talks to the app exclusively through `synth::ui::TrackHeaderHost` (implemented by `MainComponent`),
 so it is fully testable against a stub with no graph — see `Tests/TimelineTrackHeaderTests.cpp`.
 
