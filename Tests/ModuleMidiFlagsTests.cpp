@@ -21,7 +21,7 @@
 //      MidiDestinationOptionsNowIncludeAnADSRNode below.
 
 #include "../Source/AI/AIProvider.h"
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/MainComponent/MainComponent.h"
 #include "../Source/Modules/ModuleBase.h"
 #include <algorithm>

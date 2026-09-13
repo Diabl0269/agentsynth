@@ -1,4 +1,4 @@
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/Modules/MacroControlModule.h"
 #include <gtest/gtest.h>
 

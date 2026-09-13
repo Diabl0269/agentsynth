@@ -1,4 +1,4 @@
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/AppUndoManager.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/OscillatorModule.h"

@@ -16,7 +16,7 @@
 // Headless/deterministic house rules apply: HostMode::Hosted only, no audio device, no sleeps.
 // 48 kHz, 512-sample blocks, 120 BPM (the transport's own default) => 24000 samples/beat.
 
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/AudioEngine.h"
 #include "../Source/Modules/MasterModule.h"
 #include "../Source/Transport/BounceExporter.h"

@@ -4,7 +4,7 @@
 
 #include "GraphEditorTestHelpers.h"
 
-#include "../../Source/AI/AIStateMapper.h"
+#include "../../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../../Source/Modules/FilterModule.h"
 #include "../../Source/Modules/ModuleBase.h"
 #include "../../Source/Modules/OscillatorModule.h"

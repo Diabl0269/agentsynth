@@ -37,6 +37,17 @@ The AI Engine's architecture is designed for modularity and extensibility, prima
 
 -   **`AIStateMapper`**: A utility component responsible for translating between the AI-friendly JSON representation of a synthesizer patch and Agent Synth's internal `juce::AudioProcessorGraph` structure. It handles both `graphToJSON` (for providing context to the AI) and `applyJSONToGraph` (for applying AI suggestions).
 
+    Source layout (`Source/AI/AIStateMapper/`, split by concern — no file over 1,000 lines):
+
+    | Unit | Concern |
+    |------|---------|
+    | `AIStateMapper.h` | Class declaration, shared across every unit below |
+    | `AIStateMapper.cpp` | Module factory access, graph ↔ JSON mapping (`graphToJSON`/`applyJSONToGraph`), `createModule` |
+    | `AIStateMapperValidation.cpp` | `validatePatch`/`validateNodeParams` — the untrusted-input security boundary |
+    | `AIStateMapperSnapshots.cpp` | Undo/redo snapshot restore (`applySnapshotPreservingNodes`) |
+    | `AIStateMapperSchema.cpp` | AI-facing schema generation (`getPatchSchema`, `getPatchSchemaWithTimelineOps`, `getTimelineOpsEnvelopeSchema`) |
+    | `AIStateMapperInternal.h` | Private helpers shared by two or more units above (the module factory map, `isInternalOnlyModule`, `mirrorUuidIntoProcessor`, etc.) — not part of the public API, never included outside this directory |
+
 ### Interaction Flow:
 
 1.  **User Input**: The user provides a natural language prompt via the UI (e.g., "create a warm pad sound with a slow attack").

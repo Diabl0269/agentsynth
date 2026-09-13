@@ -5,7 +5,7 @@
 
 #include "GraphEditorTestHelpers.h"
 
-#include "../../Source/AI/AIStateMapper.h"
+#include "../../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../../Source/AppUndoManager.h"
 #include "../../Source/Modules/FX/ChorusModule.h"
 #include "../../Source/Modules/FX/DelayModule.h"

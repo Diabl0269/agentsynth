@@ -1,4 +1,4 @@
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/AppUndoManager.h"
 #include "../Source/Modules/ADSRModule.h"
 #include "../Source/Modules/AttenuverterModule.h"

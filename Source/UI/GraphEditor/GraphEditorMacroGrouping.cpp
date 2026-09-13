@@ -7,7 +7,7 @@
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
 
-#include "../../AI/AIStateMapper.h"
+#include "../../AI/AIStateMapper/AIStateMapper.h"
 #include "../MacroCardComponent.h"
 #include "../ModuleComponent/ModuleComponent.h"
 #include "../Theme/AppLookAndFeel.h"

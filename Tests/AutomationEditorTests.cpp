@@ -14,7 +14,7 @@
 //      (MainComponent::automateParameter).
 
 #include "../Source/AI/AIProvider.h"
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/AppUndoManager.h"
 #include "../Source/Timeline/TimelineDoc.h"
 #include "../Source/UI/AutomationLaneEditor.h"

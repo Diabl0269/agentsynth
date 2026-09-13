@@ -15,7 +15,7 @@
 //                     one undo step spanning original -> final colour
 //   • card dbl-click — P8-14: the collapsed card's title row renames in place; elsewhere expands
 
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/AppUndoManager.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/OscillatorModule.h"

@@ -89,7 +89,7 @@ against:
       Because the enum is *derived*, **registering a module makes it model-authorable by default** —
       the right default for an ordinary DSP module, the wrong one for anything that names an
       external resource or carries privileged state (a hosted plugin, a timeline feed). Such a
-      module goes into `kNonAuthorableModuleTypes` (AIStateMapper.cpp) when it is registered.
+      module goes into `kNonAuthorableModuleTypes` (AIStateMapper/AIStateMapperInternal.h) when it is registered.
       `AIStateMapperTest.AuthorableModuleTypesGolden` pins the exact resulting list, so either kind
       of addition fails the build until the choice is made deliberately.
 

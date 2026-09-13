@@ -1,6 +1,6 @@
 #pragma once
 
-#include "AI/AIStateMapper.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "MacroSet.h"
 #include "PatchDocument.h"
 #include "Timeline/TimelineDoc.h"

@@ -1,6 +1,6 @@
 #include "ChannelFlows.h"
 
-#include "../AI/AIStateMapper.h"
+#include "../AI/AIStateMapper/AIStateMapper.h"
 #include "../MacroSet.h"
 #include "../Modules/AttenuverterModule.h"
 #include "../Modules/ChannelStripModule.h"

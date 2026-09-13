@@ -384,7 +384,7 @@ documents a proven Ollama grammar-compiler defect — an "anything goes" subsche
 (the empty-object JSON Schema, as opposed to the boolean `true`) gets mangled into a garbage
 wrapped object instead of passing the value through unconstrained, confirmed on gpt-oss:20b and
 gemma4:12b-it-qat. `AIStateMapper::getPatchSchemaWithTimelineOps()`'s `"track"` field
-(`Source/AI/AIStateMapper.cpp`) had exactly that shape; it is now `"type": "string"` (narrowed, not
+(`Source/AI/AIStateMapper/AIStateMapperSchema.cpp`) had exactly that shape; it is now `"type": "string"` (narrowed, not
 `oneOf`/`anyOf` — see the doc comment there for why: this header's own note that llama.cpp's
 grammar compiler "handles anyOf poorly" rules that out too). `getPatchSchema()`'s own `params`
 field never hit this — its `additionalProperties: true` was already the JSON Schema boolean, not

@@ -7,7 +7,7 @@
 
 #include "GraphEditor.h"
 
-#include "../../AI/AIStateMapper.h"
+#include "../../AI/AIStateMapper/AIStateMapper.h"
 #include "../../Modules/AttenuverterModule.h"
 #include "../../Modules/AudioInputModule.h"
 #include "../../Modules/MacroControlModule.h"

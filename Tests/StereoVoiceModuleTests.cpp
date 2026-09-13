@@ -6,7 +6,7 @@
 // mono-compatibility contract (at Pan 0 / with nothing patched into Audio R, the left leg carries
 // exactly what it carried while the module was mono).
 
-#include "AI/AIStateMapper.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/FX/ReverbModule.h"
 #include "Modules/FX/RingModulatorModule.h"
 #include "Modules/FilterModule.h"

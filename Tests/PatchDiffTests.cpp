@@ -12,7 +12,7 @@
 //     proving snapshot-diffing catches what raw-patch-diffing would miss.
 
 #include "AI/AIIntegrationService.h"
-#include "AI/AIStateMapper.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "AI/PatchDiff.h"
 #include <algorithm>
 #include <gtest/gtest.h>

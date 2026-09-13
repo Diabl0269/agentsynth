@@ -1,4 +1,4 @@
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/Modules/AttenuverterModule.h"
 #include "../Source/PresetManager.h"
 #include <gtest/gtest.h>

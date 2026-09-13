@@ -1,7 +1,7 @@
 #pragma once
 
 #include "AIProvider.h"
-#include "AIStateMapper.h"
+#include "AIStateMapper/AIStateMapper.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>

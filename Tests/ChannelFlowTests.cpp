@@ -15,7 +15,7 @@
 // synth::buildDefaultAudioChannel in isolation.
 
 #include "../Source/AI/AIProvider.h"
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/AudioEngine.h"
 #include "../Source/Branding.h"
 #include "../Source/MacroSet.h"

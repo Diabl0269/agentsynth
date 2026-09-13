@@ -10,7 +10,7 @@
 //
 // Headless house rules as everywhere else: no real device (Tests/FakeAudioIODevice.h), no sleeps.
 
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/AudioEngine.h"
 #include "../Source/Modules/AudioInputModule.h"
 #include "../Source/Modules/FilterModule.h"

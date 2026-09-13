@@ -363,8 +363,11 @@ add_library(Core STATIC
     Source/AI/OllamaProvider.cpp
     Source/AI/RemoteProvider.cpp
     Source/AI/AIIntegrationService.h
-    Source/AI/AIStateMapper.cpp
-    Source/AI/AIStateMapper.h
+    Source/AI/AIStateMapper/AIStateMapper.cpp
+    Source/AI/AIStateMapper/AIStateMapper.h
+    Source/AI/AIStateMapper/AIStateMapperValidation.cpp
+    Source/AI/AIStateMapper/AIStateMapperSnapshots.cpp
+    Source/AI/AIStateMapper/AIStateMapperSchema.cpp
     Source/AI/AIProviderRegistry.h
     Source/AI/AIProviderRegistry.cpp
     Source/AI/PatchEval.h

@@ -10,7 +10,7 @@
 // The wiring assertions are the point of the feature: a pasted group must be wired to itself, must
 // not steal or share the originals' connections, and must not gain wires to the surrounding patch.
 
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/AppUndoManager.h"
 #include "../Source/Modules/AttenuverterModule.h"
 #include "../Source/Modules/FilterModule.h"

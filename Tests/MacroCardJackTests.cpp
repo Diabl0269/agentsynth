@@ -10,7 +10,7 @@
 // which is exactly the risk this file exists to cover (buildVisibleCables() is the function P8-12c
 // last reworked, and adversarial review caught 3 real integration bugs there).
 
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/MidiKeyboardModule.h"
 #include "../Source/Modules/OscillatorModule.h"

@@ -130,7 +130,7 @@ column (§5.1) and **Master**. Nothing else is a channel.
 Two additions to `ModuleType`: **`ChannelStrip`** and **`Master`**. Both are internal-only, with
 the same three exclusions as `TimelineMidiSource` / `Rec Tap` / the macro port types: no library
 row, no replace-menu entry, never model-authorable (`kNonAuthorableModuleTypes`,
-`Source/AI/AIStateMapper.cpp`). Adding them to the factory without adding them to that set will
+`Source/AI/AIStateMapper/AIStateMapperInternal.h`). Adding them to the factory without adding them to that set will
 fail `AIStateMapperTest.AuthorableModuleTypesGolden` — that failure is intended and is how the
 golden test is meant to catch this exact addition (see `docs/macros_implementation.md` §6 for the identical
 pattern with the macro port types).
@@ -508,7 +508,7 @@ fires the first time Master is created; once it exists, later tracks don't reshu
 ## 6. AI authorability
 
 `ChannelStrip` and `Master` are internal-only and join `kNonAuthorableModuleTypes`
-(`Source/AI/AIStateMapper.cpp`) — a model cannot author either directly, the same rule that
+(`Source/AI/AIStateMapper/AIStateMapperInternal.h`) — a model cannot author either directly, the same rule that
 already governs `TimelineMidiSource`, `Rec Tap` and the macro port types. `validatePatch` does not
 change; per the root `CLAUDE.md` invariant, it is never relaxed to raise an AI pass rate.
 

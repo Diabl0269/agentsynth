@@ -9,7 +9,7 @@
 //
 // See docs/fx_modules.md § Output Level and docs/Module_Development_Guide.md § 2.
 
-#include "AI/AIStateMapper.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/ModuleBase.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>

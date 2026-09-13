@@ -9,7 +9,7 @@
 // hardware (see AudioRenderingTests.cpp / StatusBarTests.cpp for the same convention).
 
 #include "../Source/AI/AIProvider.h"
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/AudioEngine.h"
 #include "../Source/MainComponent/MainComponent.h"
 #include "../Source/Modules/LFOModule.h"

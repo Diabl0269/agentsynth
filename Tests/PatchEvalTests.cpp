@@ -6,7 +6,7 @@
 // entry point AIEvalHarness and preset loading use, rather than hand-assembling
 // juce::AudioProcessorGraph nodes/connections directly.
 
-#include "AI/AIStateMapper.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "AI/PatchEval.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>

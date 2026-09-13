@@ -40,7 +40,7 @@
 
 #include "AI/AIIntegrationService.h"
 #include "AI/AIProvider.h"
-#include "AI/AIStateMapper.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "AI/OllamaProvider.h"
 #include "AI/RemoteProvider.h"
 #include "RequestBudget.h"

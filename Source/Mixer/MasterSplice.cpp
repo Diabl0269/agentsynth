@@ -1,6 +1,6 @@
 #include "MasterSplice.h"
 
-#include "../AI/AIStateMapper.h"
+#include "../AI/AIStateMapper/AIStateMapper.h"
 #include "../AppUndoManager.h"
 #include "../Modules/ChannelStripModule.h"
 #include "../Modules/MasterModule.h"

@@ -5,7 +5,7 @@
 //   2. Theme plumbing: the new midiWire / cableCategory tokens survive a JSON round-trip.
 //   3. The canvas integration: cable enumeration, hit-testing and disconnect on a real graph.
 
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/Modules/ModuleBase.h"
 #include "../Source/UI/CableColour.h"
 #include "../Source/UI/GraphEditor/GraphEditor.h"

@@ -1,4 +1,4 @@
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/Modules/AttenuverterModule.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/LFOModule.h"
@@ -1244,7 +1244,7 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
 // default — which is the wrong default for anything that names an external resource or carries
 // privileged state (a hosted plugin, a timeline feed). This test exists to make that a decision:
 // any registration changes the list and MUST consciously update the golden below, either by adding
-// the new type here or by adding it to kNonAuthorableModuleTypes in AIStateMapper.cpp.
+// the new type here or by adding it to kNonAuthorableModuleTypes in AIStateMapper/AIStateMapperInternal.h.
 TEST(AIStateMapperTest, AuthorableModuleTypesGolden) {
     const juce::StringArray golden = {"ADSR",
                                       "Amp Env",

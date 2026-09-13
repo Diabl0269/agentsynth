@@ -6,7 +6,7 @@
 // point: the timeline tools feed the message back to the model and branch on the code, so a
 // rejection landing in the wrong bucket would send the wrong correction.
 
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Timeline/TimelineDoc.h"

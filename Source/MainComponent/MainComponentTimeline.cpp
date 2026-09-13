@@ -6,7 +6,7 @@
 #include "MainComponent.h"
 #include "MainComponentInternal.h"
 
-#include "AI/AIStateMapper.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "Branding.h"
 #include "Modules/TimelineAudioSourceModule.h"
 #include "ProjectBundle.h"

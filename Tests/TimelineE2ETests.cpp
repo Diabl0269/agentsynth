@@ -22,7 +22,7 @@
 //
 // Headless/deterministic house rules apply: HostMode::Hosted only, no audio device, no sleeps.
 
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/AudioEngine.h"
 #include "../Source/Modules/TimelineMidiSourceModule.h"
 #include "../Source/Transport/OfflineTransportDriver.h"

@@ -1,5 +1,5 @@
 #include "PluginProcessor.h"
-#include "AI/AIStateMapper.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "Branding.h"
 #include "PluginEditor.h"
 #include "UserSettings.h"
