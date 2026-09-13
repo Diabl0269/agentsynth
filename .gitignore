@@ -33,6 +33,7 @@ coverage/
 *.zip
 *.txt
 !CMakeLists.txt
+!scripts/file-size-baseline.txt
 .claudignore
 .gemini/
 .claude/settings.local.json

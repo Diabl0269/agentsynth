@@ -644,7 +644,7 @@ bash scripts/install-hooks.sh
 
 Two hooks are registered:
 
-- **pre-commit** (`scripts/pre-commit-lint.sh`): runs `clang-format --dry-run --Werror` on staged `Source/` and `Tests/` C/C++ files. Fast; mirrors the CI Lint job. Also warns if the local `clang-format` version differs from the pin in `.clang-format-version`.
+- **pre-commit** (`scripts/pre-commit-lint.sh`): runs `clang-format --dry-run --Werror` on staged `Source/` and `Tests/` C/C++ files (skipped entirely when no C++ is staged), then [the file-size guard](#file-size-cap-lint-job) against the whole tree, unconditionally, for any commit with staged changes. Fast; mirrors the CI Lint job. Also warns if the local `clang-format` version differs from the pin in `.clang-format-version`.
 - **pre-push** (`scripts/ci-local.sh`): the full local CI reproduction — see [Local CI reproduction](#local-ci-reproduction) below. The first push configures the `build-ci-local/` directory; subsequent pushes are fast incremental rebuilds (ccache + Ninja are picked up automatically when installed).
 
 If you installed the hooks before this change, re-run `bash scripts/install-hooks.sh` — the generated `pre-push` hook is a static file and still points at the old `scripts/pre-push-release-test.sh`, which no longer exists.
@@ -676,7 +676,7 @@ pip install "clang-format==$(cat .clang-format-version)"
 ```bash
 bash scripts/ci-local.sh                # run every check
 bash scripts/ci-local.sh --open         # ...then `open` the built app bundle on macOS
-bash scripts/ci-local.sh --skip-tests   # skip step 6 (the Tests suite) for a faster local loop
+bash scripts/ci-local.sh --skip-tests   # skip step 7 (the Tests suite) for a faster local loop
 bash scripts/ci-local.sh --help         # usage
 ```
 
@@ -684,10 +684,11 @@ What it does, in order (fast checks first, so a lint failure doesn't wait on a f
 
 1. `clang-format --dry-run --Werror` over `Source/` `Tests/` `Tools/` — the Lint job's "Check Formatting" step, exactly. **Check-only, never `-i`** — a violation fails loudly instead of being silently rewritten.
 2. `bash scripts/utf8-literal-check.sh` against the real tree — the Lint job's "Check for un-decoded UTF-8 escapes" step, run directly rather than only via its unit test.
-3. Every `scripts/tests/*.test.sh` (globbed, so a newly added one is picked up automatically without editing this script) — as of this writing `ci-cache-check`, `ci-install-linux-deps`, `check-nonascii-literals`, `ai-eval-ratchet`, `utf8-literal-check`, `dev-sign-app`. `check-nonascii-literals.test.sh`'s last case scans the real `Source/` tree itself, so this also covers the Lint job's ASCII-literal gate on live code, not just the checker's fixtures.
-4. Configure `build-ci-local/` with `-DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=ON -DENABLE_AI_HARNESS=ON` (matching the macOS/Windows build-and-test jobs) and build with a plain `cmake --build` — every target those jobs build (`Core`, `AppUI`, `AgentSynth`, `AgentSynthPlugin`, `Tests`), the same way a missing `CMakeLists.txt` entry shows up in CI. ccache and Ninja are picked up automatically when installed (see the `find_program(CCACHE_PROGRAM ccache)` block at the top of `CMakeLists.txt`), so a second run is an incremental rebuild, not a cold one.
-5. Dev-sign the built app bundle (macOS only): `bash scripts/dev-sign-app.sh "$APP_PATH"`. Not a CI check — it runs only locally, after the build, before the test suite so a signing failure surfaces early rather than after a multi-minute test run.
-6. Run the full suite: `build-ci-local/Tests/Tests`. Skippable with `--skip-tests` (default off — the pre-push hook and CI both expect the full suite) for a faster local iteration loop; every earlier step, including dev-signing, still runs, so a `--skip-tests` rebuild keeps the same TCC identity for a live/manual app run.
+3. `bash scripts/check-file-sizes.sh` against the real tree — the Lint job's "Check file sizes" step ([File-size cap](#file-size-cap-lint-job) below), run directly rather than only via its unit test.
+4. Every `scripts/tests/*.test.sh` (globbed, so a newly added one is picked up automatically without editing this script) — as of this writing `ci-cache-check`, `ci-install-linux-deps`, `check-nonascii-literals`, `ai-eval-ratchet`, `utf8-literal-check`, `check-file-sizes`, `dev-sign-app`. `check-nonascii-literals.test.sh`'s last case scans the real `Source/` tree itself, so this also covers the Lint job's ASCII-literal gate on live code, not just the checker's fixtures.
+5. Configure `build-ci-local/` with `-DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=ON -DENABLE_AI_HARNESS=ON` (matching the macOS/Windows build-and-test jobs) and build with a plain `cmake --build` — every target those jobs build (`Core`, `AppUI`, `AgentSynth`, `AgentSynthPlugin`, `Tests`), the same way a missing `CMakeLists.txt` entry shows up in CI. ccache and Ninja are picked up automatically when installed (see the `find_program(CCACHE_PROGRAM ccache)` block at the top of `CMakeLists.txt`), so a second run is an incremental rebuild, not a cold one.
+6. Dev-sign the built app bundle (macOS only): `bash scripts/dev-sign-app.sh "$APP_PATH"`. Not a CI check — it runs only locally, after the build, before the test suite so a signing failure surfaces early rather than after a multi-minute test run.
+7. Run the full suite: `build-ci-local/Tests/Tests`. Skippable with `--skip-tests` (default off — the pre-push hook and CI both expect the full suite) for a faster local iteration loop; every earlier step, including dev-signing, still runs, so a `--skip-tests` rebuild keeps the same TCC identity for a live/manual app run.
 
 On success it prints the path to the built `Agent Synth.app` bundle under `build-ci-local/` (found the same way `build-artifacts.yml` locates it for packaging) so a green terminal isn't the only thing you're left with — you can open and try the real app. `--open` does that automatically (macOS only; a no-op notice on other platforms, since the flag also needs to be safe to leave off in a headless/CI-like run).
 
@@ -805,6 +806,35 @@ Those caps come from measurement, not taste. Healthy: `update` 5-15 s, `install`
 `scripts/tests/check-nonascii-literals.test.sh` (15 cases, ~1 s, no compiler) fails the Lint job when a `Source/**.{cpp,h}` line puts a non-ASCII byte inside a double-quoted literal. The reason is a JUCE contract that nothing else enforces: `juce::String`'s `const char*` constructor decodes its bytes with `CharPointer_ASCII` — **Latin-1, not UTF-8** — so `"Rename…"` reaches the UI as `"Renameâ€¦"`, one mojibake glyph per byte. A hex escape (`"Rename\xe2\x80\xa6"`) is the *identical* three bytes and fails the same way; that spelling is how the bug shipped a second time after the first "fix", which is why the checker flags `\x`/`\u` escapes above `0x7F` as well as raw bytes. Write plain ASCII, or declare the encoding with `juce::CharPointer_UTF8` / `juce::String::fromUTF8` — a line mentioning either is exempt.
 
 Scope and limits, all deliberate: **comments are exempt** (this codebase writes prose em dashes throughout them and they never reach `juce::String`); **`Tests/` is out of scope** (its non-ASCII lives in gtest `<<` streams, which go to a `std::ostream` and render fine); a line opening a **raw string literal** (`R"(...)"`) is skipped rather than parsed, since it has its own quoting rules; and the scanner is a byte-level state machine (`scripts/nonascii-literals.py`) that tracks string/char/line-comment/block-comment state, not a C++ parser — it does not model octal escapes or line continuations inside a literal.
+
+### File-size cap (Lint job)
+
+`scripts/tests/check-file-sizes.test.sh` (15 cases, ~1-2 s, no compiler) and `scripts/check-file-sizes.sh` itself (Lint job's "Check file sizes" step, also run directly from `ci-local.sh` and the pre-commit hook) enforce a hard **1000-line cap** (`FILE_SIZE_CAP`) on every git-tracked source/test/docs/script/config file — one cap for everything, since a 6,000-line test file is exactly as unreviewable as a 6,000-line source file; a per-directory cap would only move the goalposts. The reason it exists: `Source/UI/GraphEditor.cpp` crossed 9,000 lines and several test files passed 6,000 before this guard did — a file that size turns every change into a scroll through unrelated concerns, inflates review diffs with untouched context lines, and makes merge conflicts far likelier between two people editing different features that happen to share a file.
+
+**Strict ratchet baseline** (`scripts/file-size-baseline.txt`) grandfathers files already over the cap at their EXACT current line count, so the cap doesn't force a freeze-and-split-everything-today migration. It only ever tightens:
+
+- A baselined file may never grow past its entry — do that and the check fails, naming the exact grow (`grew from N to M lines`) and pointing at a `<Class><Concern>.cpp` split instead.
+- Shrink one and its entry must tighten to match: run `bash scripts/check-file-sizes.sh --update`, which rewrites the baseline from the current tree and prints what changed (a too-loose entry fails the check on its own, naming `--update` as the fix).
+- Get a file back under the cap and its entry must be removed entirely — `--update` does that too.
+- No file may join the baseline as new; a file crossing the cap for the first time fails outright, naming the split it needs.
+
+`bash scripts/check-file-sizes.sh --list [N]` prints the N largest scanned files (default 25), largest first, regardless of cap or baseline — for picking what to split next.
+
+**How to split an over-cap file** — full rules live in the root `CLAUDE.md`'s "Code structure" section; in short, a class that outgrows one file gets its own directory named after the class holding the header and every unit (e.g. `Source/UI/GraphEditor/GraphEditor.h` + `GraphEditor<Concern>.cpp` units, never `_Part1`, + shared private helpers in `GraphEditorInternal.h`), never flat siblings dropped next to the dozens of other files already in `Source/UI/`. Tests mirror it (`Tests/GraphEditor/GraphEditor<Topic>Tests.cpp` with shared fixtures in `GraphEditorTestFixture.h`). A directory itself gets split by area once it passes roughly 30 files — `Source/UI` and `Tests` both already have, but reorganizing those is a separate follow-up, not something this guard requires today.
+
+Largest legacy files at the time of writing (see `scripts/file-size-baseline.txt` for the full, current list):
+
+| File | Lines |
+|------|-------|
+| `Source/UI/GraphEditor.cpp` | 9125 |
+| `Tests/GraphEditorTests.cpp` | 6196 |
+| `Tests/PianoRollTests.cpp` | 6046 |
+| `Source/MainComponent.cpp` | 5379 |
+| `Tests/TimelinePanelTests.cpp` | 4015 |
+
+Scope and exclusions, all deliberate (see the script's own header comment for the full reasoning): `assets/`, `mockups/`, any local `build*` directory, `.claude/`, and recorded JSON fixture corpora (`Tests/fixtures/`, `Tools/TimelineOpsHarness/Fixtures/`) never count toward the cap — their size reflects recorded data, not hand-authored structure. The guard's own baseline file is excluded from itself.
+
+**Docs-only PRs are not gated by this in CI.** `ci.yml`'s `paths:` filter (see [CI Pipeline](#ci-pipeline) above) deliberately does not include `docs/**` or `*.md` — adding them would trigger the full build matrix for a docs-only change, which is what the filter exists to avoid. A docs-only PR is instead checked locally, by the pre-commit hook and `scripts/ci-local.sh`, both of which run the guard unconditionally against the whole tree. A mixed code+docs PR is gated normally, since `Source/**` / `scripts/**` / etc. changing triggers the Lint job the guard rides in either way.
 
 ### What didn't work
 

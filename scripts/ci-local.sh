@@ -18,19 +18,21 @@
 #      being silently rewritten.
 #   2. scripts/utf8-literal-check.sh against the real tree -- the Lint job's "Check for
 #      un-decoded UTF-8 escapes" step, run directly (not just its unit test).
-#   3. Every scripts/tests/*.test.sh -- ci-cache-check, ci-install-linux-deps,
-#      check-nonascii-literals, ai-eval-ratchet, utf8-literal-check as of this writing, globbed
-#      so a newly added one is picked up automatically. check-nonascii-literals.test.sh's own
-#      last case scans the real Source/ tree, so this also covers the Lint job's ASCII-literal
-#      gate.
-#   4. Configure (-DENABLE_TESTS=ON -DENABLE_AI_HARNESS=ON, Release, matching the macOS/Windows
+#   3. scripts/check-file-sizes.sh against the real tree -- the Lint job's "Check file sizes"
+#      step: hard 1000-line cap + strict ratchet baseline, run directly (not just its unit test).
+#   4. Every scripts/tests/*.test.sh -- ci-cache-check, ci-install-linux-deps,
+#      check-nonascii-literals, ai-eval-ratchet, utf8-literal-check, check-file-sizes as of this
+#      writing, globbed so a newly added one is picked up automatically.
+#      check-nonascii-literals.test.sh's own last case scans the real Source/ tree, so this also
+#      covers the Lint job's ASCII-literal gate.
+#   5. Configure (-DENABLE_TESTS=ON -DENABLE_AI_HARNESS=ON, Release, matching the macOS/Windows
 #      build-and-test jobs) and build EVERY target those jobs build with a plain
 #      `cmake --build` -- Core, AppUI, AgentSynth, AgentSynthPlugin, Tests -- into
 #      build-ci-local/. ccache and Ninja are picked up automatically when present (see the
 #      top of CMakeLists.txt), so repeat runs are incremental.
-#   5. Dev-sign the built app bundle with scripts/dev-sign-app.sh (macOS only -- not a CI check,
+#   6. Dev-sign the built app bundle with scripts/dev-sign-app.sh (macOS only -- not a CI check,
 #      but the point where a local build exists to sign; see that script's header for why).
-#   6. Run the full suite: build-ci-local/Tests/Tests.
+#   7. Run the full suite: build-ci-local/Tests/Tests.
 #
 # NOT reproduced here (deliberately -- see docs/testing.md): the Ubuntu coverage gate
 # (a separate opt-in, `bash scripts/coverage.sh`), the label-gated ASAN job, and actual
@@ -41,7 +43,7 @@
 #
 #   --open        After every check passes, `open` the built app bundle (macOS only). Default
 #                 off, since this also runs headless in the pre-push hook.
-#   --skip-tests  Skip step 6 (the full Tests suite, often the slowest step). Everything else
+#   --skip-tests  Skip step 7 (the full Tests suite, often the slowest step). Everything else
 #                 still runs, including the dev-sign step, so a rebuild still keeps the same
 #                 TCC identity for a live/manual app run. Default off: the pre-push hook and CI
 #                 both expect the full suite, so leave this off unless you're iterating locally
@@ -62,17 +64,17 @@ usage() {
 Usage: bash scripts/ci-local.sh [--open] [--skip-tests] [-h|--help]
 
 Reproduces .github/workflows/ci.yml's Lint job plus this machine's platform
-build-and-test job: clang-format check, the UTF-8/ASCII literal checks,
-every scripts/tests/*.test.sh, then a full Release build of every CMake
-target CI builds (Core, AppUI, AgentSynth, AgentSynthPlugin, Tests) with
-ENABLE_TESTS=ON, followed by the full test suite. See the header comment
-in this file, and docs/testing.md's "Local CI reproduction" section, for
-the full mapping to what CI actually runs.
+build-and-test job: clang-format check, the UTF-8/ASCII literal checks, the
+file-size guard, every scripts/tests/*.test.sh, then a full Release build of
+every CMake target CI builds (Core, AppUI, AgentSynth, AgentSynthPlugin,
+Tests) with ENABLE_TESTS=ON, followed by the full test suite. See the header
+comment in this file, and docs/testing.md's "Local CI reproduction" section,
+for the full mapping to what CI actually runs.
 
   --open        After every check passes, `open` the built app bundle
                 (macOS only). Default off, since this also runs headless
                 in the pre-push hook.
-  --skip-tests  Skip the Tests suite (step 6), often the slowest step.
+  --skip-tests  Skip the Tests suite (step 7), often the slowest step.
                 Everything else still runs, including the dev-sign step,
                 so a rebuild still keeps the same TCC identity for a
                 live/manual app run. Default off -- the pre-push hook and
@@ -133,7 +135,11 @@ echo "ci-local: formatting OK."
 step "scripts/utf8-literal-check.sh (real Source/Tests tree)"
 bash scripts/utf8-literal-check.sh || fail "un-decoded UTF-8 escape check failed (see above)."
 
-# --- 3. Every scripts/tests/*.test.sh ----------------------------------------------------------
+# --- 3. File-size guard, against the real tree -------------------------------------------------
+step "scripts/check-file-sizes.sh (real tree, 1000-line cap + ratchet baseline)"
+bash scripts/check-file-sizes.sh || fail "file-size guard failed (see above)."
+
+# --- 4. Every scripts/tests/*.test.sh ----------------------------------------------------------
 step "scripts/tests/*.test.sh"
 shopt -s nullglob
 test_scripts=(scripts/tests/*.test.sh)
@@ -146,7 +152,7 @@ for t in "${test_scripts[@]}"; do
     bash "$t" || fail "$t failed (see above)."
 done
 
-# --- 4. Configure + build every target the CI build-and-test jobs build -----------------------
+# --- 5. Configure + build every target the CI build-and-test jobs build -----------------------
 step "Configure ($BUILD_DIR)"
 
 cmake_args=(-B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=ON -DENABLE_AI_HARNESS=ON)
@@ -166,7 +172,7 @@ JOBS="$( (command -v nproc >/dev/null 2>&1 && nproc) || sysctl -n hw.ncpu 2>/dev
 # understand a raw `-jN` passed through to the native tool.
 cmake --build "$BUILD_DIR" --parallel "$JOBS"
 
-# --- 5. Dev-sign the app bundle (macOS only, before tests so a signing failure surfaces early) --
+# --- 6. Dev-sign the app bundle (macOS only, before tests so a signing failure surfaces early) --
 step "Dev-sign app bundle (stable TCC identity)"
 # `|| true`: under `set -o pipefail`, `head -n 1` closing the pipe after its first line can make
 # `find` see SIGPIPE and exit non-zero, which -- since this is a plain assignment, not `local` --
@@ -182,7 +188,7 @@ else
     echo "ci-local: not macOS, skipping dev-sign."
 fi
 
-# --- 6. Run the full test suite -----------------------------------------------------------------
+# --- 7. Run the full test suite -----------------------------------------------------------------
 if [ "$SKIP_TESTS" = true ]; then
     step "Run tests (skipped: --skip-tests)"
 else
