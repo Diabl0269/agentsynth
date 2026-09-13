@@ -393,6 +393,13 @@ and tests are unchanged. Strips are enumerated from the graph in ascending node-
   the whole signal Master receives. A patch that also uses Direct will not find it isolated in any
   stem — by design, the same way it isn't a mixer column either.
 
+Both decisions assume every enumerated strip is actually routed into Master's Mix bus. Strips are
+enumerated by scanning the graph for `ChannelStripModule` nodes regardless of routing (see
+`collectStemStrips`), so an orphaned strip (wired to nothing) or one wired somewhere other than
+Master's Mix inputs still gets a stem file — the same caveat as Direct above, just the mirror
+image: that stem is not part of what sums back to the pre-Master mix, exactly because it never
+fed Master's Mix bus in the first place.
+
 No strips in the patch: `StemExporter::hasChannelStrips` lets the UI show a clear message ("No
 mixer channels yet - use Create channels in the mixer first") before even opening the dialog,
 and `StemSession`'s own setup fails with the identical message as a defense-in-depth backstop.

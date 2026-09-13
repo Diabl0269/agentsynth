@@ -443,27 +443,53 @@ TEST(StemExportTest, EachStemCarriesItsOwnStripsGainAndPanPostFader) {
 // ============================================================================
 
 TEST(StemExportTest, MutedStripWritesASilentStemAndTheSumPropertyStillHolds) {
-    StemRig rig;
-    ASSERT_TRUE(rig.build());
-    stripAt(rig.engine.getGraph(), rig.stripB)->setMuted(true);
+    ScopedTempDir stemsOut("agentsynth_stems_muted");
+    ScopedTempFile bounceOut("agentsynth_stems_muted_bounce.wav");
 
-    ScopedTempDir out("agentsynth_stems_muted");
-    const auto result = StemExporter::exportStems(rig.engine, out.dir, oneBeatOptions());
-    ASSERT_TRUE(result.ok) << result.message;
-    ASSERT_EQ(result.stemFiles.size(), 2);
+    StemResult stems;
+    {
+        StemRig rig;
+        ASSERT_TRUE(rig.build());
+        stripAt(rig.engine.getGraph(), rig.stripB)->setMuted(true);
+        stems = StemExporter::exportStems(rig.engine, stemsOut.dir, oneBeatOptions());
+        ASSERT_TRUE(stems.ok) << stems.message;
+    }
 
-    const auto wavA = readWav(result.stemFiles[0]);
-    const auto wavB = readWav(result.stemFiles[1]);
+    // A fresh rig, muted the same way, bounced through the normal (non-stem) path - see
+    // StemsSumToThePreMasterMixEvenWithNonUnityMasterGain above for why this is the proof that
+    // matters: it fails if muting broke the sum identity, not just "strip B's own stem is silent".
+    {
+        StemRig rig;
+        ASSERT_TRUE(rig.build());
+        stripAt(rig.engine.getGraph(), rig.stripB)->setMuted(true);
+        const auto bounce = BounceExporter::bounce(rig.engine, bounceOut.file, oneBeatOptions());
+        ASSERT_TRUE(bounce.ok) << bounce.message;
+    }
+
+    ASSERT_EQ(stems.stemFiles.size(), 2);
+    const auto wavA = readWav(stems.stemFiles[0]);
+    const auto wavB = readWav(stems.stemFiles[1]);
+    const auto wavMix = readWav(bounceOut.file);
     ASSERT_TRUE(wavA.ok);
     ASSERT_TRUE(wavB.ok);
+    ASSERT_TRUE(wavMix.ok);
+    ASSERT_EQ(wavA.lengthInSamples, wavMix.lengthInSamples);
+    ASSERT_EQ(wavB.lengthInSamples, wavMix.lengthInSamples);
 
     const float expectedAL = expectedStripSample(kSourceA, kGainADb, kPanA, true);
     const float expectedAR = expectedStripSample(kSourceA, kGainADb, kPanA, false);
-    for (int i = 0; i < wavA.lengthInSamples; ++i) {
-        EXPECT_NEAR(wavA.audio.getSample(0, i), expectedAL, 1.0e-5f);
-        EXPECT_NEAR(wavA.audio.getSample(1, i), expectedAR, 1.0e-5f);
-        EXPECT_EQ(wavB.audio.getSample(0, i), 0.0f) << "muted strip must write silence, sample " << i;
-        EXPECT_EQ(wavB.audio.getSample(1, i), 0.0f);
+    const float masterGain = juce::Decibels::decibelsToGain(kMasterGainDb, MasterModule::kMinGainDb);
+    for (int ch = 0; ch < kNumChannels; ++ch) {
+        for (int i = 0; i < wavMix.lengthInSamples; ++i) {
+            const float expectedA = ch == 0 ? expectedAL : expectedAR;
+            EXPECT_NEAR(wavA.audio.getSample(ch, i), expectedA, 1.0e-5f) << "channel " << ch << " sample " << i;
+            EXPECT_EQ(wavB.audio.getSample(ch, i), 0.0f)
+                << "muted strip must write silence, channel " << ch << " sample " << i;
+
+            const float sum = wavA.audio.getSample(ch, i) + wavB.audio.getSample(ch, i);
+            ASSERT_NEAR(sum * masterGain, wavMix.audio.getSample(ch, i), 1.0e-5f)
+                << "channel " << ch << " sample " << i << " - the sum property must still hold when muted";
+        }
     }
 }
 

@@ -184,6 +184,7 @@ add_executable(Tests
     BounceExporterTests.cpp
     BounceRunnerTests.cpp
     StemExportTests.cpp
+    StemRunnerTests.cpp
     ExportAudioDialogTests.cpp
     MetronomeTests.cpp
     DeviceChangeTests.cpp
