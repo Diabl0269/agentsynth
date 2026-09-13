@@ -1148,6 +1148,8 @@ void TimelinePanelComponent::applyAddTrackMenuChoice(int menuId) {
         trackHeaderHost_->addInstrumentTrack("Oscillator", true);
     else if (menuId == kAddInstrumentWavetablePolyMenuId)
         trackHeaderHost_->addInstrumentTrack("Wavetable", true);
+    else if (menuId == kCreateChannelsMenuId)
+        trackHeaderHost_->createChannelsForExistingTracks();
 }
 
 synth::MarkerId TimelinePanelComponent::addMarkerAtPlayhead() {
@@ -1204,6 +1206,13 @@ void TimelinePanelComponent::openAddTrackMenu() {
     // nothing to the graph, it drops a flag on the ruler.
     menu.addSeparator();
     menu.addItem(kAddMarkerMenuId, "Add Marker");
+
+    // FRO26 (P9-3e, docs/mixer.md §5.13): disabled rather than hidden when every track already has
+    // a channel (or there are no tracks at all) — a hidden entry would look like the feature
+    // disappeared; a disabled one still tells the user it exists and why it's greyed out.
+    menu.addSeparator();
+    const bool canCreateChannels = trackHeaderHost_ != nullptr && trackHeaderHost_->hasTracksNeedingChannels();
+    menu.addItem(kCreateChannelsMenuId, "Create Channels", canCreateChannels);
 
     juce::Component::SafePointer<TimelinePanelComponent> safeThis(this);
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&addTrackButton_), [safeThis](int result) {
