@@ -61,6 +61,28 @@ namespace synth {
  * against that thread, so the UI can query the list mid-scan. The destructor cancels and joins, and
  * posted callbacks carry a shared liveness flag, so a service destroyed with a scan in flight cannot
  * leave a callback pointing at freed memory.
+ *
+ * -- One shared owner, several consumers (FRO44) --------------------------------------------------
+ *
+ * The library sidebar is no longer the only thing that wants this list — an Instrument-track "Plugin
+ * picker" wants it too, before the user has ever opened the sidebar's PLUGINS section. Rather than
+ * each consumer owning (and re-scanning with) its own service, every consumer reads the SAME
+ * instance (`MainComponent::getPluginScanService()`) and calls `ensureScanned()` when it wants the
+ * list populated:
+ *
+ *   - The FIRST call actually starts a scan (`scanAsync()`, on the usual background thread).
+ *   - Every later call, from any consumer, while that scan is in flight OR after it has already
+ *     completed, is a no-op — this is "populate the list once without waiting for the sidebar",
+ *     not "keep rescanning on every access". A cheap re-run of the cached-from-disk list is still
+ *     visible immediately via `getKnownPluginIdentities()`; nothing here re-launches a child process
+ *     per candidate on every call.
+ *   - Every registered `Listener` is notified (`pluginScanCompleted`, message thread) once the scan
+ *     finishes, regardless of which consumer's call actually triggered it — so a picker opened AFTER
+ *     the sidebar already asked still finds out when the scan it never itself started completes.
+ *
+ * A caller that wants an unconditional fresh scan (the sidebar's own "Scan for plugins..." row)
+ * still calls `scanAsync()` directly — `ensureScanned()` is purely the "make sure this has happened
+ * at least once" entry point, not a replacement for the manual rescan.
  */
 class PluginScanService {
 public:
@@ -93,6 +115,28 @@ public:
 
     /** Message thread, exactly once per scanAsync() call — including a cancelled one. */
     using CompletionFn = std::function<void(const Result&)>;
+
+    /** FRO44: registered by every consumer of the ONE shared service (the library sidebar, a future
+     *  picker) so each finds out when a scan completes without having to be the one that triggered
+     *  it — see the class comment's "One shared owner, several consumers" section. */
+    class Listener {
+    public:
+        virtual ~Listener() = default;
+
+        /** Message thread. Fired once per `scanAsync()` call that actually ran to completion or was
+         *  cancelled — i.e. once per real scan, not once per `ensureScanned()`/`scanAsync()` call
+         *  site. Never fired for the "a scan was already running" early-return inside `scanAsync()`
+         *  (that caller gets `Result::cancelled` back through its own `completion`, if it gave one;
+         *  the scan actually in flight will notify every listener, including that caller if it is
+         *  also registered, when it finishes). */
+        virtual void pluginScanCompleted(const Result& result) = 0;
+    };
+
+    /** No-op if `listener` is null or already registered. Never call from inside
+     *  `pluginScanCompleted` on a DIFFERENT listener's callback — only the listener's own removal of
+     *  itself is safe there (the notification loop works off a snapshot). */
+    void addListener(Listener* listener);
+    void removeListener(Listener* listener);
 
     /** Generous on purpose: a cold-cache VST3 on a spinning disk can genuinely take ten seconds to
      *  report itself, and killing a slow-but-honest plugin blacklists it for good. */
@@ -173,6 +217,25 @@ public:
      *  for a callback that will not come). */
     void scanAsync(const juce::StringArray& formatNames, ProgressFn progress, CompletionFn completion);
 
+    /** FRO44: "make sure a scan has been requested at least once" — the eager-population entry
+     *  point every consumer (app startup, the sidebar, a future picker) can call without worrying
+     *  about who else already asked. The FIRST call this service instance ever sees starts
+     *  `scanAsync(formatNames, nullptr, nullptr)`; every later call — concurrent with that scan or
+     *  after it has already finished — is a no-op. Every registered `Listener` still hears
+     *  `pluginScanCompleted` when the one real scan finishes, whether or not it was this call that
+     *  started it. Message thread only, like `scanAsync()`.
+     *
+     *  IMPORTANT for a caller that arrives AFTER the one real scan has already completed (the normal
+     *  case once the app has been running a while — the eager startup scan is long done by the time
+     *  a picker opens): its own `ensureScanned()` call is a no-op and it gets NO `pluginScanCompleted`
+     *  for a scan that already happened before it registered. Such a caller must read
+     *  `getKnownPluginIdentities()` synchronously right after calling `ensureScanned()` (which is
+     *  correct immediately whether or not a scan is still running — it is never empty-then-magically-
+     *  fills for a reason other than a *listened-for* completion) AND register a `Listener` for any
+     *  scan that starts later. Reading the list only from inside `pluginScanCompleted` misses
+     *  whatever was already there. */
+    void ensureScanned(const juce::StringArray& formatNames);
+
     bool isScanning() const noexcept { return scanning_.load(std::memory_order_acquire); }
 
     /** Asks the scan to stop after the candidate in flight and waits for the thread. Safe to call
@@ -232,6 +295,11 @@ private:
     /** Posts `fn` to the message thread, dropped if this service is gone by the time it runs. */
     void postToMessageThread(std::function<void()> fn);
 
+    /** Posts `pluginScanCompleted(result)` to every registered Listener, message thread, snapshotting
+     *  the list first so a listener that removes itself (or another) mid-callback cannot invalidate
+     *  the loop. Called once per real scan (see the Listener class comment). */
+    void notifyListeners(const Result& result);
+
     mutable std::mutex mutex_;
     juce::KnownPluginList knownPlugins_;
 
@@ -242,6 +310,15 @@ private:
     std::thread scanThread_;
     std::atomic<bool> scanning_{false};
     std::atomic<bool> cancelRequested_{false};
+
+    // FRO44's "exactly once" latch for ensureScanned(): true the instant the first call starts a
+    // scan, so a second/third caller (whether concurrent with that scan or long after it finished)
+    // never launches another one. Independent of `scanning_`, which only reflects "right now".
+    std::atomic<bool> ensureScanRequested_{false};
+
+    // Listeners are plain observer pointers, exactly like JUCE's own ChangeBroadcaster — the owner
+    // (MainComponent, a future picker) is responsible for removeListener() before it is destroyed.
+    std::vector<Listener*> listeners_; // guarded by mutex_
 
     // Shared with every posted callback: the destructor clears it, so a callback that outlives us is
     // dropped instead of dereferencing freed memory. Both the store and the loads happen on the

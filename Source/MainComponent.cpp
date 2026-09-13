@@ -556,6 +556,11 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     if (auto savedRecentProjects = juce::parseXML(appProperties.getUserSettings()->getValue(kRecentProjectsKey)))
         recentProjects.loadFromXml(*savedRecentProjects);
 
+    // FRO44: whichever scan service ended up active above (ours, or the plugin path's adopted one),
+    // register on it so pluginScanCompleted() fires for every real scan — the manual "Scan for
+    // plugins..." row below, and maybeStartEagerPluginScan() (called by Main.cpp, never from here).
+    getPluginScanService().addListener(this);
+
     moduleLibrary.onScanPluginsRequested = [this] { startPluginScan(); };
     moduleLibrary.onPluginActivated = [this](const synth::PluginIdentity& identity) {
         graphEditor.addHostedPluginAtCanvasPosition(identity, graphEditor.getViewportCentreInCanvasSpace());
@@ -1275,6 +1280,15 @@ juce::String MainComponent::computeOutputDeviceInfoText() const {
 }
 
 MainComponent::~MainComponent() {
+    // FRO44: unregister FIRST, before anything below (closing native plugin-editor windows
+    // included) has a chance to pump the message loop. A `pluginScanCompleted` queued by a scan on
+    // another thread would otherwise land mid-destruction and call `savePluginScanList()` /
+    // `refreshPluginLibrary()` / `statusBar.showMessage()` on a half-torn-down component. On the
+    // adopted-service path (plugin editors) the service is the PROCESSOR's and outlives this
+    // destructor regardless, so leaving the listener registered would also call back into a dead
+    // MainComponent the next time some other editor or the owner triggers a scan.
+    getPluginScanService().removeListener(this);
+
     // Pairs with the addFocusChangeListener(this) at the end of initialiseCommon(). Desktop is a
     // process-global broadcaster that outlives this component, so an unremoved listener would call
     // back into freed memory on the very next focus change anywhere in the process.
@@ -2925,10 +2939,10 @@ void MainComponent::startPluginScan() {
 
     statusBar.showMessage("Scanning for plugins...");
 
-    // Both callbacks arrive on the message thread (PluginScanService posts them), so touching the
-    // status bar and the sidebar from here is safe. Progress is one message per plugin, not per
-    // frame — a scan is seconds-per-plugin, so this is nowhere near the high-frequency logging /
-    // repaint traps.
+    // Progress arrives on the message thread (PluginScanService posts it), so touching the status
+    // bar from here is safe. Completion is NOT wired here — pluginScanCompleted() (registered as a
+    // Listener in the constructor) handles it uniformly for every trigger path, this button
+    // included, so the eager startup scan gets exactly the same sidebar refresh and persisted save.
     getPluginScanService().scanAsync(
         synth::hostedPluginFormatNames(),
         [this](const juce::String& fileOrIdentifier, int scanned, int total) {
@@ -2936,23 +2950,32 @@ void MainComponent::startPluginScan() {
             statusBar.showMessage("Scanning plugins " + juce::String(scanned) + "/" + juce::String(total) + ": " +
                                   fileOrIdentifier.fromLastOccurrenceOf("/", false, false));
         },
-        [this](const synth::PluginScanService::Result& result) {
-            savePluginScanList();
-            refreshPluginLibrary();
+        nullptr);
+}
 
-            if (result.cancelled) {
-                statusBar.showMessage("Plugin scan cancelled");
-                return;
-            }
+void MainComponent::maybeStartEagerPluginScan() {
+    // See this method's header comment: hosted mode never scans, eagerly or otherwise.
+    if (audioEngine.isHosted())
+        return;
+    getPluginScanService().ensureScanned(synth::hostedPluginFormatNames());
+}
 
-            const int found = getPluginScanService().getNumKnownPlugins();
-            juce::String message = "Found " + juce::String(found) + " plugin" + (found == 1 ? "" : "s");
-            if (result.added > 0)
-                message += " (" + juce::String(result.added) + " new)";
-            if (result.failed > 0)
-                message += "; " + juce::String(result.failed) + " could not be loaded and were skipped";
-            statusBar.showMessage(message);
-        });
+void MainComponent::pluginScanCompleted(const synth::PluginScanService::Result& result) {
+    savePluginScanList();
+    refreshPluginLibrary();
+
+    if (result.cancelled) {
+        statusBar.showMessage("Plugin scan cancelled");
+        return;
+    }
+
+    const int found = getPluginScanService().getNumKnownPlugins();
+    juce::String message = "Found " + juce::String(found) + " plugin" + (found == 1 ? "" : "s");
+    if (result.added > 0)
+        message += " (" + juce::String(result.added) + " new)";
+    if (result.failed > 0)
+        message += "; " + juce::String(result.failed) + " could not be loaded and were skipped";
+    statusBar.showMessage(message);
 }
 
 // ---- Snippets (issue #156) ----

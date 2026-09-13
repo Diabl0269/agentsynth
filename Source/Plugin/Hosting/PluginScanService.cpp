@@ -143,6 +143,38 @@ int PluginScanService::getScanTimeoutMs() const noexcept {
 }
 
 //==============================================================================
+// Listeners (FRO44)
+//==============================================================================
+
+void PluginScanService::addListener(Listener* listener) {
+    if (listener == nullptr)
+        return;
+    const std::lock_guard<std::mutex> lock(mutex_);
+    if (std::find(listeners_.begin(), listeners_.end(), listener) == listeners_.end())
+        listeners_.push_back(listener);
+}
+
+void PluginScanService::removeListener(Listener* listener) {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    listeners_.erase(std::remove(listeners_.begin(), listeners_.end(), listener), listeners_.end());
+}
+
+void PluginScanService::notifyListeners(const Result& result) {
+    postToMessageThread([this, result] {
+        // Snapshot under lock: a listener's own pluginScanCompleted may call removeListener (on
+        // itself, or on another listener it owns), which must not invalidate this loop.
+        std::vector<Listener*> snapshot;
+        {
+            const std::lock_guard<std::mutex> lock(mutex_);
+            snapshot = listeners_;
+        }
+        for (auto* listener : snapshot)
+            if (listener != nullptr)
+                listener->pluginScanCompleted(result);
+    });
+}
+
+//==============================================================================
 // Scanning
 //==============================================================================
 
@@ -154,6 +186,14 @@ void PluginScanService::postToMessageThread(std::function<void()> fn) {
         if (alive->load())
             fn();
     });
+}
+
+void PluginScanService::ensureScanned(const juce::StringArray& formatNames) {
+    // First caller wins; every later one (concurrent with that scan, or long after it finished) is
+    // absorbed here rather than starting a second scan — see the class comment.
+    if (ensureScanRequested_.exchange(true))
+        return;
+    scanAsync(formatNames, nullptr, nullptr);
 }
 
 void PluginScanService::scanAsync(const juce::StringArray& formatNames, ProgressFn progress, CompletionFn completion) {
@@ -258,6 +298,10 @@ void PluginScanService::runScan(juce::StringArray formatNames, ProgressFn progre
 
     if (completion != nullptr)
         postToMessageThread([completion, result] { completion(result); });
+    // FRO44: every registered Listener hears about a real scan finishing, regardless of which
+    // caller's completion (if any) is also firing above — this is what lets a consumer that never
+    // triggered the scan itself (a picker opened after the sidebar already asked) find out.
+    notifyListeners(result);
 }
 
 void PluginScanService::cancelScan() {
