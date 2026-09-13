@@ -5167,7 +5167,7 @@ TEST_P(SmartConnectionFxInsertTest, CtrlDragAtTheGapInsertsThisFx) {
 
 INSTANTIATE_TEST_SUITE_P(AllFxTypes, SmartConnectionFxInsertTest,
                          ::testing::Values("Distortion", "Delay", "Reverb", "Chorus", "Phaser", "Flanger", "Compressor",
-                                           "Limiter", "Bitcrusher", "Pitch Shifter", "Parametric EQ",
+                                           "Limiter", "Gate", "Bitcrusher", "Pitch Shifter", "Parametric EQ",
                                            "Ring Modulator"));
 
 TEST_F(GraphEditorTest, SmartConnectionInsertAimWindowSpansTheWholeGap) {
