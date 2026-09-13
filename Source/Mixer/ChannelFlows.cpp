@@ -161,6 +161,11 @@ bool isProcessorPoly(juce::AudioProcessor* processor) {
     return false;
 }
 
+void setProcessorPoly(juce::AudioProcessor* processor, bool poly) {
+    if (processor != nullptr)
+        setBoolParam(*processor, "poly", poly);
+}
+
 DefaultChannel buildDefaultAudioChannel(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::Node& source,
                                         const DefaultChannelLayout& layout, int sourceRightChannel) {
     return buildChannelChain(graph, {{source.nodeID, 0}}, {{source.nodeID, sourceRightChannel}}, layout);

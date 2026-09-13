@@ -530,9 +530,9 @@ Main line, in dependency order:
      a poly ADSR fed only raw MIDI would output a permanent zero envelope. Fixed by inserting a
      **Poly MIDI** node (the codebase's existing per-voice MIDI-to-CV converter, §"Poly MIDI Module"
      in `docs/modules.md`) between Track In and the instrument instead of raw MIDI, when the
-     instrument's `poly` parameter is already on at instrument-track creation time (same "poly
-     handled correctly wherever it arises" precedent T183's `addVoiceMixerForPolyInstrument`
-     established):
+     instrument's `poly` parameter is on at instrument-track creation time — whether set
+     programmatically or, since FRO48/P9-3k below, via the "(Poly)" menu entry (same "poly handled
+     correctly wherever it arises" precedent T183's `addVoiceMixerForPolyInstrument` established):
      ```
      Track In --MIDI--> Poly MIDI --Pitch(ch0-7)--> instrument's poly Pitch CV in (ch0-7)
                          Poly MIDI --Gate(ch8-15)--> ADSR's poly Gate CV in (ch0-7)
@@ -554,6 +554,13 @@ Main line, in dependency order:
      `Tests/PolyMidiModuleTests.cpp`'s `PolyMidiToAdsrToVcaTest.ReleasingOneVoiceLeavesAnother-
      HeldVoiceUntouched` for the render-level proof that releasing one voice's note leaves another
      held voice's envelope untouched — the thing a single shared mono envelope could never do.
+   - **P9-3k (poly Oscillator/Wavetable UI entry) — DONE (FRO48).** The "+ Track > Instrument" menu
+     now offers "Oscillator (Poly)" and "Wavetable (Poly)" entries (Sampler has no poly parameter,
+     so it has no poly entry) that set the new instrument's "poly" AudioParameterBool via the new
+     `synth::setProcessorPoly()` write counterpart to `isProcessorPoly()` before the poly-envelope
+     branch check runs, making P9-3j's poly-envelope auto-wire reachable from the UI for the first
+     time. See `ChannelFlowTest.AddInstrumentTrackMenuOscillatorPolyWiresPolyEnvelopeAndVCA` /
+     `...WavetablePolyWiresPolyEnvelopeAndVCA` in `Tests/ChannelFlowTests.cpp`.
    - **T184 (MIDI-track auto-channel-on-connect) — DONE.** Dragging a MIDI cable from a Track In
      node (`ModuleType::TimelineMidiSource`) onto an instrument or macro whose audio reaches Audio
      Output/Rec Tap/Master's Direct bus with no `ChannelStrip` anywhere on that path auto-builds a

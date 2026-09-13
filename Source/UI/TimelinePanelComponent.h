@@ -431,6 +431,10 @@ public:
     static constexpr int kAddInstrumentOscillatorMenuId = 4;
     static constexpr int kAddInstrumentWavetableMenuId = 5;
     static constexpr int kAddInstrumentSamplerMenuId = 6;
+    // FRO48 (P9-3k): poly variants of the Oscillator/Wavetable entries above — Sampler has no "poly"
+    // parameter, so it has no poly entry.
+    static constexpr int kAddInstrumentOscillatorPolyMenuId = 7;
+    static constexpr int kAddInstrumentWavetablePolyMenuId = 8;
 
     /** Adds a marker at the transport's current position, named "Marker N", coloured from the
      *  theme (see defaultMarkerColourArgb) — ONE recordTimelineChange when an undo manager is

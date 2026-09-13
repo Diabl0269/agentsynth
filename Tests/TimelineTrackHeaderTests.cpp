@@ -79,7 +79,7 @@ public:
 
     void addMidiTrack() override { ++addTrackCalls; }
     void addAudioTrack() override { ++addAudioTrackCalls; }
-    void addInstrumentTrack(const juce::String&) override { ++addInstrumentTrackCalls; }
+    void addInstrumentTrack(const juce::String&, bool) override { ++addInstrumentTrackCalls; }
 
     // Not exercised by this file (it tests the track-header column, not the automation
     // strip's lane picker) — empty/no-op is the correct stub behaviour.

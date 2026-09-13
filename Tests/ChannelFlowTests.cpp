@@ -166,13 +166,17 @@ protected:
     }
 
     // T183: the Instrument submenu's headless seam, keyed by module type name rather than the raw
-    // menu id — matches how the picker itself is spelled everywhere else in this file.
-    static void addInstrumentTrack(MainComponent& mc, const juce::String& instrumentModuleType) {
+    // menu id — matches how the picker itself is spelled everywhere else in this file. FRO48
+    // (P9-3k): `poly` picks the "(Poly)" menu entry instead, for Oscillator/Wavetable (Sampler has
+    // no poly parameter and no poly menu entry — see TimelinePanelComponent::openAddTrackMenu).
+    static void addInstrumentTrack(MainComponent& mc, const juce::String& instrumentModuleType, bool poly = false) {
         int menuId = synth::ui::TimelinePanelComponent::kAddInstrumentSamplerMenuId;
         if (instrumentModuleType == "Oscillator")
-            menuId = synth::ui::TimelinePanelComponent::kAddInstrumentOscillatorMenuId;
+            menuId = poly ? synth::ui::TimelinePanelComponent::kAddInstrumentOscillatorPolyMenuId
+                          : synth::ui::TimelinePanelComponent::kAddInstrumentOscillatorMenuId;
         else if (instrumentModuleType == "Wavetable")
-            menuId = synth::ui::TimelinePanelComponent::kAddInstrumentWavetableMenuId;
+            menuId = poly ? synth::ui::TimelinePanelComponent::kAddInstrumentWavetablePolyMenuId
+                          : synth::ui::TimelinePanelComponent::kAddInstrumentWavetableMenuId;
         mc.getTimelinePanel().applyAddTrackMenuChoice(menuId);
     }
 };
@@ -1132,6 +1136,116 @@ TEST_F(ChannelFlowTest, PolyEnvelopeAndVCAWiresPerVoicePitchGateAndAudioWithNoVo
     const auto channel = synth::buildDefaultAudioChannel(graph, *polyEnv.vca, layout, /*sourceRightChannel=*/1);
     ASSERT_FALSE(channel.stripUuid.isEmpty())
         << "the VCA's summed ch0/ch1 output must satisfy buildDefaultAudioChannel";
+}
+
+// FRO48 (P9-3k): the "+ Track -> Instrument -> Oscillator (Poly)" menu entry is the first real UI
+// entry point for the poly-envelope auto-wire above — it must set the freshly created Oscillator's
+// "poly" parameter BEFORE MainComponent::addInstrumentTrack's own isProcessorPoly check runs, so
+// the golden "+ Track" path (never poly today — see InstrumentTrackOscillatorWiresSplitBlockRight-
+// LegNeverCh1 above) can actually reach PolyEnvelopeAndVCAWiresPerVoicePitchGateAndAudioWithNo-
+// VoiceMixer's wiring. Drives the real menu seam (applyAddTrackMenuChoice), not
+// MainComponent::addInstrumentTrack or synth::addPolyEnvelopeAndVCAForInstrument directly.
+TEST_F(ChannelFlowTest, AddInstrumentTrackMenuOscillatorPolyWiresPolyEnvelopeAndVCA) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto& macros = mc.getGraphEditor().getMacros();
+
+    addInstrumentTrack(mc, "Oscillator", true);
+
+    auto* oscillator = findNodeOfTypeCFT(graph, ModuleType::Oscillator);
+    ASSERT_NE(oscillator, nullptr);
+    EXPECT_TRUE(synth::isProcessorPoly(oscillator->getProcessor()))
+        << "the (Poly) menu entry must have turned the instrument's own poly parameter on";
+
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::PolyMidi), 1);
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::VoiceMixer), 0)
+        << "the poly VCA does its own 8-voice summing — no separate Voice Mixer stage";
+
+    ASSERT_EQ(macros.size(), 1);
+    const auto& macro = macros.getAll().front();
+    // The factory default preset every fresh MainComponent loads already has its own ADSR-type
+    // nodes and a VCA node — disambiguate via macro membership, not "last one seen".
+    auto* adsrNode = findMacroMemberOfTypeCFT(graph, macro, ModuleType::ADSR);
+    auto* vcaNode = findMacroMemberOfTypeCFT(graph, macro, ModuleType::VCA);
+    ASSERT_NE(adsrNode, nullptr);
+    ASSERT_NE(vcaNode, nullptr);
+    for (auto* param : adsrNode->getProcessor()->getParameters())
+        if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param))
+            if (boolParam->paramID == "poly")
+                EXPECT_TRUE(boolParam->get()) << "the ADSR must be poly — its gate comes from Poly MIDI CV";
+    for (auto* param : vcaNode->getProcessor()->getParameters())
+        if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param))
+            if (boolParam->paramID == "poly")
+                EXPECT_TRUE(boolParam->get()) << "the VCA must be poly";
+
+    // The default downstream chain must still be built, exactly as the non-poly path gets.
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::ParametricEQ), 1);
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::Compressor), 1);
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::ChannelStrip), 1);
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::Master), 1);
+}
+
+// Same as AddInstrumentTrackMenuOscillatorPolyWiresPolyEnvelopeAndVCA above, for the Wavetable
+// entry — Wavetable gets the same poly-envelope auto-wire as Oscillator (P9-3j).
+TEST_F(ChannelFlowTest, AddInstrumentTrackMenuWavetablePolyWiresPolyEnvelopeAndVCA) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto& macros = mc.getGraphEditor().getMacros();
+
+    addInstrumentTrack(mc, "Wavetable", true);
+
+    auto* wavetable = findNodeOfTypeCFT(graph, ModuleType::Wavetable);
+    ASSERT_NE(wavetable, nullptr);
+    EXPECT_TRUE(synth::isProcessorPoly(wavetable->getProcessor()))
+        << "the (Poly) menu entry must have turned the instrument's own poly parameter on";
+
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::PolyMidi), 1);
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::VoiceMixer), 0)
+        << "the poly VCA does its own 8-voice summing — no separate Voice Mixer stage";
+
+    ASSERT_EQ(macros.size(), 1);
+    const auto& macro = macros.getAll().front();
+    auto* adsrNode = findMacroMemberOfTypeCFT(graph, macro, ModuleType::ADSR);
+    auto* vcaNode = findMacroMemberOfTypeCFT(graph, macro, ModuleType::VCA);
+    ASSERT_NE(adsrNode, nullptr);
+    ASSERT_NE(vcaNode, nullptr);
+    for (auto* param : adsrNode->getProcessor()->getParameters())
+        if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param))
+            if (boolParam->paramID == "poly")
+                EXPECT_TRUE(boolParam->get()) << "the ADSR must be poly — its gate comes from Poly MIDI CV";
+    for (auto* param : vcaNode->getProcessor()->getParameters())
+        if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param))
+            if (boolParam->paramID == "poly")
+                EXPECT_TRUE(boolParam->get()) << "the VCA must be poly";
+
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::ParametricEQ), 1);
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::Compressor), 1);
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::ChannelStrip), 1);
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::Master), 1);
+}
+
+// Regression guard for the two tests above: the plain (non-poly) "Oscillator" menu entry must not
+// have started taking the poly-envelope branch for everyone.
+TEST_F(ChannelFlowTest, AddInstrumentTrackMenuOscillatorNonPolyStaysNonPoly) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    auto& graph = mc.getAudioEngine().getGraph();
+
+    addInstrumentTrack(mc, "Oscillator");
+
+    auto* oscillator = findNodeOfTypeCFT(graph, ModuleType::Oscillator);
+    ASSERT_NE(oscillator, nullptr);
+    EXPECT_FALSE(synth::isProcessorPoly(oscillator->getProcessor()))
+        << "the plain menu entry must leave the instrument's poly parameter off";
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::PolyMidi), 0)
+        << "the non-poly menu entry must never take the poly-envelope branch";
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::VoiceMixer), 0)
+        << "a freshly created Oscillator defaults to poly OFF — no Voice Mixer needed";
 }
 
 // =================================================================================================
