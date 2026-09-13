@@ -908,6 +908,73 @@ public:
      *  SINGLE undo step. */
     void createChannelsForUnchanneledTracks(const std::vector<juce::AudioProcessorGraph::NodeID>& trackSourceNodeIds);
 
+    // ---- FRO25 (P9-3d, docs/mixer.md §5.8): "Make channel" / "Duplicate into this channel" ------
+
+    /** "Make channel" for the chain starting at `source` (a track's own source node, or a trackless
+     *  chain's root): runs synth::planMakeChannel/buildMakeChannel, then boxes the track's exclusive
+     *  chain + new EQ/Compressor/Strip into ONE collapsed macro named `channelName`, and each merge
+     *  point's bus channel into its own "<module> Bus" macro. Ports come from the same
+     *  group-time crossing plan groupSelectionIntoMacro(true) uses (buildMacroPortCrossingPlan +
+     *  spliceMacroPorts) — always created, regardless of the auto-port preference, since a shared
+     *  LFO reaching into the channel is exactly what the port is for — except the new strip's own
+     *  outputs, which stay plain edges (Strip -> Master must never be a port; see ChannelFlows.h).
+     *  Master stays outside every macro; a first-ever Master relocates Audio Output (T187 mirror).
+     *
+     *  NO UNDO OF ITS OWN and no updateComponents() call — the caller wraps it in one transaction
+     *  (MainComponent::makeChannelForNode, or requestMakeChannel's standalone fallback). Returns
+     *  false with nothing touched when the chain already has a channel; reports a refusal (a node
+     *  already in a macro, an inconsistent send topology) through onStatusMessage. */
+    bool makeChannelFromNode(juce::AudioProcessorGraph::NodeID source, const juce::String& channelName);
+
+    /** True when "Make channel" on `source` would build something — the menu items' enabled state.
+     *  Pure read (synth::planMakeChannel). */
+    bool nodeNeedsChannel(juce::AudioProcessorGraph::NodeID source) const;
+
+    /** The chain source the canvas/module "Make Channel" item acts on for the current selection
+     *  (synth::resolveChannelSource), or an invalid NodeID when none/ambiguous. */
+    juce::AudioProcessorGraph::NodeID channelSourceForSelection() const;
+
+    /** The canvas/module menu item's action. MainComponent installs onMakeChannelRequested so the
+     *  ONE undo step also covers the timeline and runs the reconcile pass; without it (a standalone
+     *  GraphEditor) records its own graph+macro undo step around makeChannelFromNode. */
+    void requestMakeChannel(juce::AudioProcessorGraph::NodeID source);
+    std::function<void(juce::AudioProcessorGraph::NodeID)> onMakeChannelRequested;
+
+    /** Appends "Make Channel" (enabled iff nodeNeedsChannel) when the selection resolves to a chain
+     *  source; nothing otherwise. Shared by the canvas menu and ModuleComponent's module menu. */
+    void addMakeChannelMenuItem(juce::PopupMenu& menu);
+
+    /** Channel macros (a macro with a Channel Strip member) that module `nodeId` — itself in no
+     *  macro — feeds from outside, directly, through a macro port, or through a modulation
+     *  attenuverter, while ALSO feeding at least one other consumer: the "Duplicate into this
+     *  channel" targets. Empty when `nodeId` isn't shared. Pure read. */
+    std::vector<juce::String> duplicateIntoChannelTargets(juce::AudioProcessorGraph::NodeID nodeId) const;
+
+    /** "Duplicate into this channel": a copy of `nodeId` (parameters and extra state carried over,
+     *  the duplicateSelection path) takes over every cable `nodeId` sends into macro `macroId`,
+     *  receives the same inputs `nodeId` does (a modulation routing into it is re-created with the
+     *  same amount), and joins the macro — a port only that cable used is spliced back out, and the
+     *  copy's remaining boundary crossings get ports (addSelectionToMacro's T138 passes). Every
+     *  other consumer stays on the original. NO UNDO OF ITS OWN and no updateComponents() call, same
+     *  contract as makeChannelFromNode. Returns false with nothing touched when `macroId` isn't one
+     *  of duplicateIntoChannelTargets(nodeId). */
+    bool duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& macroId);
+
+    /** The module menu item's action — same MainComponent-or-standalone undo split as
+     *  requestMakeChannel. */
+    void requestDuplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& macroId);
+    std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)> onDuplicateIntoChannelRequested;
+
+    /** Appends the "Duplicate into '<channel>'" item (one target) or a "Duplicate into Channel"
+     *  submenu (several) for `nodeId`; nothing when it has no targets. */
+    void addDuplicateIntoChannelMenuItems(juce::PopupMenu& menu, juce::AudioProcessorGraph::NodeID nodeId);
+
+    /** Test seam, the canvas counterpart to ModuleComponent::setShowContextMenuHookForTest: a real
+     *  right-click on empty canvas builds the menu and hands it here instead of showing it. */
+    void setShowCanvasContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
+        showCanvasContextMenuHook_ = std::move(hook);
+    }
+
     // T148 (docs/macros.md §7 item 9): auto-delete a macro port once its last cable is removed.
     // On by default; a Preferences toggle (PreferencesSettingsTab,
     // "macroAutoDeletePortsOnLastCable") lets a user turn this off, leaving a cable-less port in
@@ -1437,6 +1504,8 @@ private:
     /** Right-click on empty canvas: paste / select-all. Built here rather than inline in mouseDown
      *  so the menu stays out of the hit-testing path. */
     void showCanvasContextMenu(juce::Point<int> canvasPos);
+    // FRO25: see setShowCanvasContextMenuHookForTest. Null = show the real async menu.
+    std::function<void(juce::PopupMenu&)> showCanvasContextMenuHook_;
 
     // Marquee drag, in canvas coordinates.
     bool marqueeActive = false;

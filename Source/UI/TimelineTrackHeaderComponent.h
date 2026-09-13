@@ -102,6 +102,21 @@ struct TrackHeaderHost {
      *  an inert no-op default so every existing TrackHeaderHost implementer keeps compiling. */
     virtual void createChannelsForExistingTracks() {}
 
+    /** FRO25 (P9-3d, docs/mixer.md §5.8): true when the header menu's "Make Channel" would build
+     *  something for `track` — its bound node's chain has no Channel Strip of its own yet (or merges
+     *  into a shared module that has none). Non-pure with an inert `false` default, same reason as
+     *  hasTracksNeedingChannels. */
+    virtual bool canMakeChannelForTrack(synth::TrackId track) const {
+        juce::ignoreUnused(track);
+        return false;
+    }
+
+    /** FRO25 (P9-3d, docs/mixer.md §5.8): the header menu's "Make Channel" — gathers the track's
+     *  exclusive chain into a channel macro with the default EQ -> Compressor -> Channel Strip ->
+     *  Master chain as ONE undo step (a merge point becomes its own bus channel). A no-op when
+     *  canMakeChannelForTrack() is false. Non-pure with an inert no-op default. */
+    virtual void makeChannelForTrack(synth::TrackId track) { juce::ignoreUnused(track); }
+
     /** FRO42 (P9-3h): instrument-capable hosted plugins for the "+ Track -> Instrument -> Plugin"
      *  submenu — every scanned plugin whose juce::PluginDescription::isInstrument is true, sorted by
      *  name like the library sidebar's own list (effects are never offered here, and neither is this
@@ -224,6 +239,8 @@ public:
     // with either.
     static constexpr int kMidiDestinationsMenuId = 1001;
     static constexpr int kDeleteTrackMenuId = 2000;
+    // FRO25 (P9-3d): the header context menu's "Make Channel", same id space as kDeleteTrackMenuId.
+    static constexpr int kMakeChannelMenuId = 2001;
 
     TimelineTrackHeaderComponent(synth::TimelineDoc& doc, synth::TrackId trackId, TrackHeaderHost* host);
 
@@ -375,6 +392,16 @@ public:
      *  applyBindingMenuChoice. */
     void applyContextMenuChoice(int menuId);
 
+    /** FRO25: the header context menu (Make Channel, Delete Track) as showContextMenu() builds it —
+     *  item ids are the k*MenuId constants above, fed back through applyContextMenuChoice(). */
+    juce::PopupMenu buildContextMenu() const;
+
+    /** Test seam, same shape as ModuleComponent::setShowContextMenuHookForTest: a real right-click
+     *  mouseDown() builds the menu and hands it here instead of showing it. Null = the real menu. */
+    void setShowContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
+        showContextMenuHook_ = std::move(hook);
+    }
+
     // ---- Test accessors -------------------------------------------------------
     juce::Label& getNameLabel() noexcept { return nameLabel_; }
     juce::Button& getMuteButton() noexcept { return muteButton_; }
@@ -462,6 +489,8 @@ private:
     // setOpenMidiDestinationsPickerHookForTest() so applyBindingMenuChoice(kMidiDestinationsMenuId)
     // is exercisable without a live juce::CallOutBox.
     std::function<void()> openMidiDestinationsPickerHook_;
+    // FRO25: see setShowContextMenuHookForTest. Null = show the real async menu.
+    std::function<void(juce::PopupMenu&)> showContextMenuHook_;
 
     juce::Label nameLabel_;
     SwatchButton colourSwatch_;

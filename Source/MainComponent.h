@@ -655,6 +655,15 @@ private:
     void addInstrumentTrack(const juce::String& instrumentModuleType, bool poly) override;
     bool hasTracksNeedingChannels() const override;
     void createChannelsForExistingTracks() override;
+    // FRO25 (P9-3d): the header menu's "Make Channel".
+    bool canMakeChannelForTrack(synth::TrackId track) const override;
+    void makeChannelForTrack(synth::TrackId track) override;
+    // FRO25 (P9-3d): the ONE undo transaction (graph + timeline + macros) + reconcile pass behind
+    // every "Make channel" entry point (header menu, canvas/module menu via
+    // GraphEditor::onMakeChannelRequested), and behind "Duplicate into Channel"
+    // (GraphEditor::onDuplicateIntoChannelRequested).
+    void makeChannelForNode(juce::AudioProcessorGraph::NodeID source);
+    void duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& macroId);
     // FRO42 (P9-3h): the Instrument submenu's "Plugin" entries.
     std::vector<synth::PluginIdentity> getInstrumentPluginOptions() const override;
     bool isPluginScanInProgress() const override { return getPluginScanService().isScanning(); }

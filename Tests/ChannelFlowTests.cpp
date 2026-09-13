@@ -31,11 +31,13 @@
 #include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/ModuleComponent.h"
 #include "../Source/UI/ModuleLibraryComponent.h"
+#include "../Source/UI/TimelineTrackHeaderComponent.h"
 #include "MainComponent.h"
 #include "StubPluginInstance.h"
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <gtest/gtest.h>
 #include <map>
 #include <memory>
@@ -2653,4 +2655,623 @@ TEST_F(ChannelFlowTest, HasTracksNeedingChannelsBacksTheMenusEnabledState) {
 
     mc.getTimelinePanel().applyAddTrackMenuChoice(synth::ui::TimelinePanelComponent::kCreateChannelsMenuId);
     EXPECT_FALSE(mc.hasTracksNeedingChannelsForTest()) << "both tracks are channeled now -- disabled again";
+}
+
+// =================================================================================================
+// FRO25 (P9-3d, docs/mixer.md §5.8): "Make channel" on a track (header menu) or a selected chain
+// (canvas / module menu). The track's exclusive chain moves into a channel macro with the default
+// EQ -> Compressor -> Channel Strip -> Master chain; a module another track also uses stays outside
+// (a shared LFO reaches in through an auto-created port); a merge point becomes its own bus channel;
+// "Duplicate into Channel" gives this channel an independent copy of a shared module; a poly chain
+// gets a Voice Mixer; an already-channeled target is a no-op; every action is ONE undo step.
+//
+// The render-identity tests build the same legacy patch in two Hosted engines, convert one through a
+// standalone GraphEditor, and compare the offline renders sample for sample.
+// =================================================================================================
+
+namespace {
+
+constexpr double kSampleRateMCH = 44100.0;
+constexpr int kBlockSizeMCH = 256;
+
+enum class RigShapeCFT { SharedLfo, Merge };
+
+// A legacy (pre-P9-3) two-track patch, by hand, with no channel anywhere:
+//   SharedLfo: Track In A -> Osc A -> Filter A -> Audio Output, the same for B, ONE LFO modulating
+//              BOTH filters' cutoff (shared) and a second LFO modulating only Filter A (exclusive).
+//   Merge:     Track In A -> Osc A -> Filter A -> Filter M -> Audio Output, Track In B -> Osc B ->
+//              Filter M — Filter M (`filterB`) is the merge point both tracks feed.
+struct LegacyRigCFT {
+    juce::AudioProcessorGraph::Node* output = nullptr;
+    juce::AudioProcessorGraph::Node* trackInA = nullptr;
+    juce::AudioProcessorGraph::Node* oscA = nullptr;
+    juce::AudioProcessorGraph::Node* filterA = nullptr;
+    juce::AudioProcessorGraph::Node* trackInB = nullptr;
+    juce::AudioProcessorGraph::Node* oscB = nullptr;
+    juce::AudioProcessorGraph::Node* filterB = nullptr;
+    juce::AudioProcessorGraph::Node* sharedLfo = nullptr;
+    juce::AudioProcessorGraph::Node* ownLfo = nullptr;
+    juce::String trackInAUuid, trackInBUuid;
+    int cutoffChannel = -1;
+};
+
+int cutoffChannelCFT(juce::AudioProcessorGraph::Node* filter) {
+    if (auto* module = dynamic_cast<ModuleBase*>(filter->getProcessor()))
+        for (const auto& target : module->getModulationTargets())
+            return target.channelIndex;
+    return -1;
+}
+
+LegacyRigCFT buildLegacyRigCFT(AudioEngine& engine, juce::AudioProcessorGraph::Node* output, RigShapeCFT shape) {
+    auto& graph = engine.getGraph();
+    constexpr int midi = juce::AudioProcessorGraph::midiChannelIndex;
+    LegacyRigCFT rig;
+    rig.output = output;
+    juce::String unused;
+    rig.trackInA = addPlainNodeCFT(graph, "Track In", {0, 0}, rig.trackInAUuid);
+    rig.oscA = addPlainNodeCFT(graph, "Oscillator", {200, 0}, unused);
+    rig.filterA = addPlainNodeCFT(graph, "Filter", {500, 0}, unused);
+    rig.trackInB = addPlainNodeCFT(graph, "Track In", {0, 400}, rig.trackInBUuid);
+    rig.oscB = addPlainNodeCFT(graph, "Oscillator", {200, 400}, unused);
+    rig.filterB = addPlainNodeCFT(graph, "Filter", {500, 400}, unused);
+    rig.cutoffChannel = cutoffChannelCFT(rig.filterA);
+
+    graph.addConnection({{rig.trackInA->nodeID, midi}, {rig.oscA->nodeID, midi}});
+    graph.addConnection({{rig.trackInB->nodeID, midi}, {rig.oscB->nodeID, midi}});
+    // Stereo legs paired via rightAudioLegChannel(), never ch1 (Source/Modules/CLAUDE.md): both
+    // Oscillator and Filter keep Audio R on a split block, and Filter's ch1 is its Cutoff CV.
+    const int oscRight = dynamic_cast<ModuleBase*>(rig.oscA->getProcessor())->rightAudioLegChannel();
+    const int filterRight = dynamic_cast<ModuleBase*>(rig.filterA->getProcessor())->rightAudioLegChannel();
+    for (const auto [oscLeg, filterLeg, outLeg] : {std::array<int, 3>{0, 0, 0}, {oscRight, filterRight, 1}}) {
+        graph.addConnection({{rig.oscA->nodeID, oscLeg}, {rig.filterA->nodeID, filterLeg}});
+        graph.addConnection({{rig.oscB->nodeID, oscLeg}, {rig.filterB->nodeID, filterLeg}});
+        graph.addConnection({{rig.filterB->nodeID, filterLeg}, {output->nodeID, outLeg}});
+        if (shape == RigShapeCFT::SharedLfo)
+            graph.addConnection({{rig.filterA->nodeID, filterLeg}, {output->nodeID, outLeg}});
+        else
+            graph.addConnection({{rig.filterA->nodeID, filterLeg}, {rig.filterB->nodeID, filterLeg}});
+    }
+
+    if (shape == RigShapeCFT::SharedLfo) {
+        rig.sharedLfo = addPlainNodeCFT(graph, "LFO", {0, 200}, unused);
+        rig.ownLfo = addPlainNodeCFT(graph, "LFO", {0, 650}, unused);
+        engine.addModRouting(rig.sharedLfo->nodeID, 0, rig.filterA->nodeID, rig.cutoffChannel);
+        engine.addModRouting(rig.sharedLfo->nodeID, 0, rig.filterB->nodeID, rig.cutoffChannel);
+        engine.addModRouting(rig.ownLfo->nodeID, 0, rig.filterA->nodeID, rig.cutoffChannel);
+    }
+    return rig;
+}
+
+// A Hosted engine (no device) with its Audio Output node, rendered offline via processHostBlock —
+// MixerSoloTests.cpp's SoloRig shape.
+struct HostedPatchCFT {
+    AudioEngine engine{AudioEngine::HostMode::Hosted};
+    juce::AudioProcessorGraph::Node* output = nullptr;
+    bool prepared = false;
+
+    HostedPatchCFT() {
+        engine.getGraph().setPlayConfigDetails(2, 2, kSampleRateMCH, kBlockSizeMCH);
+        output = engine.getGraph().addNode(synth::AIStateMapper::createModule("Audio Output")).get();
+    }
+    ~HostedPatchCFT() {
+        if (prepared)
+            engine.releaseFromHost();
+    }
+    std::vector<float> render(int blocks) {
+        if (!prepared) {
+            engine.prepareForHost(kSampleRateMCH, kBlockSizeMCH, 2, 2);
+            prepared = true;
+        }
+        std::vector<float> samples;
+        for (int block = 0; block < blocks; ++block) {
+            juce::AudioBuffer<float> buffer(2, kBlockSizeMCH);
+            buffer.clear();
+            juce::MidiBuffer midi;
+            engine.processHostBlock(buffer, midi);
+            for (int ch = 0; ch < 2; ++ch)
+                for (int i = 0; i < kBlockSizeMCH; ++i)
+                    samples.push_back(buffer.getSample(ch, i));
+        }
+        return samples;
+    }
+};
+
+// Bypassed EQ/Compressor are dry, zero-latency pass-throughs; Channel Strip and Master sit at unity
+// by default; a macro port is a pure per-channel pass-through — so the converted render must match
+// the legacy one sample for sample, not merely approximately.
+void expectIdenticalRendersCFT(const std::vector<float>& reference, const std::vector<float>& converted) {
+    ASSERT_EQ(reference.size(), converted.size());
+    double energy = 0.0;
+    float maxDiff = 0.0f;
+    for (size_t i = 0; i < reference.size(); ++i) {
+        energy += static_cast<double>(reference[i]) * reference[i];
+        maxDiff = std::max(maxDiff, std::abs(reference[i] - converted[i]));
+    }
+    EXPECT_GT(energy, 1.0e-3) << "the reference render must not be silent, or the comparison proves nothing";
+    EXPECT_LE(maxDiff, 1.0e-6f) << "Make channel must not change the sound";
+}
+
+juce::AudioProcessorGraph::Node* nodeForUuidCFT(juce::AudioProcessorGraph& graph, const juce::String& uuid) {
+    for (auto* node : graph.getNodes())
+        if (node != nullptr && node->properties["uuid"].toString() == uuid)
+            return node;
+    return nullptr;
+}
+
+bool isModuleOfTypeCFT(juce::AudioProcessorGraph::Node* node, ModuleType type) {
+    auto* module = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
+    return module != nullptr && module->getModuleType() == type;
+}
+
+// True when `source` modulates `dest`'s `channel` through a hidden attenuverter — straight, or with
+// a macro inlet port between the attenuverter and `dest`.
+bool modulatesCFT(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::Node* source,
+                  juce::AudioProcessorGraph::Node* dest, int channel) {
+    const auto connections = graph.getConnections();
+    for (const auto& in : connections) {
+        if (in.source.nodeID != source->nodeID ||
+            !isModuleOfTypeCFT(graph.getNodeForId(in.destination.nodeID), ModuleType::Attenuverter))
+            continue;
+        for (const auto& out : connections) {
+            if (out.source.nodeID != in.destination.nodeID)
+                continue;
+            if (out.destination.nodeID == dest->nodeID && out.destination.channelIndex == channel)
+                return true;
+            if (isModuleOfTypeCFT(graph.getNodeForId(out.destination.nodeID), ModuleType::MacroInlet))
+                for (const auto& viaPort : connections)
+                    if (viaPort.source.nodeID == out.destination.nodeID && viaPort.destination.nodeID == dest->nodeID &&
+                        viaPort.destination.channelIndex == channel)
+                        return true;
+        }
+    }
+    return false;
+}
+
+struct McRigCFT {
+    LegacyRigCFT rig;
+    synth::TrackId trackA, trackB;
+};
+
+// The same legacy patch inside a real MainComponent, each Track In bound to its own track.
+McRigCFT buildMcRigCFT(MainComponent& mc, RigShapeCFT shape) {
+    McRigCFT setup;
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto* output = findNodeNamedCFT(graph, "Audio Output");
+    if (output == nullptr)
+        return setup;
+    // Park Audio Output bottom-left so the canvas's top-right corner stays empty of cards and cables
+    // (the canvas right-click test below clicks there).
+    output->properties.set("x", 0);
+    output->properties.set("y", 900);
+    setup.rig = buildLegacyRigCFT(mc.getAudioEngine(), output, shape);
+    auto& doc = mc.getTimelineDoc();
+    setup.trackA = doc.addTrack(synth::TrackKind::Midi, "Lead");
+    setup.trackB = doc.addTrack(synth::TrackKind::Midi, "Pad");
+    doc.setTrackBinding(setup.trackA, setup.rig.trackInAUuid);
+    doc.setTrackBinding(setup.trackB, setup.rig.trackInBUuid);
+    mc.getGraphEditor().updateComponents();
+    return setup;
+}
+
+synth::ui::TimelineTrackHeaderComponent* headerForCFT(MainComponent& mc, synth::TrackId track) {
+    auto& panel = mc.getTimelinePanel();
+    for (int i = 0; i < panel.getTrackHeaderCount(); ++i)
+        if (auto* header = panel.getTrackHeaderAt(i); header != nullptr && header->getTrackId() == track)
+            return header;
+    return nullptr;
+}
+
+// A real right-click on the track header — mouseDown() builds the context menu and hands it to the
+// test hook instead of showing it.
+juce::PopupMenu rightClickHeaderMenuCFT(synth::ui::TimelineTrackHeaderComponent& header) {
+    juce::PopupMenu captured;
+    header.setShowContextMenuHookForTest([&captured](juce::PopupMenu& menu) { captured = menu; });
+    const juce::Point<int> point(4, 4);
+    header.mouseDown(
+        realMouseEventCFT(header, point, point, juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier)));
+    header.setShowContextMenuHookForTest(nullptr);
+    return captured;
+}
+
+juce::PopupMenu rightClickModuleMenuCFT(ModuleComponent& comp) {
+    juce::PopupMenu captured;
+    comp.setShowContextMenuHookForTest([&captured](juce::PopupMenu& menu) { captured = menu; });
+    const juce::Point<int> body(comp.getWidth() / 2, comp.getHeight() - 10);
+    comp.mouseDown(realMouseEventCFT(comp, body, body, juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier)));
+    return captured;
+}
+
+// Chooses "Make Channel" from `track`'s header menu (asserting it is offered and enabled).
+void makeChannelFromHeaderCFT(MainComponent& mc, synth::TrackId track) {
+    auto* header = headerForCFT(mc, track);
+    ASSERT_NE(header, nullptr);
+    const auto menu = rightClickHeaderMenuCFT(*header);
+    const auto* item = findMenuItemByTextCFT(menu, "Make Channel");
+    ASSERT_NE(item, nullptr) << "the track header menu must offer Make Channel";
+    EXPECT_TRUE(item->isEnabled);
+    header->applyContextMenuChoice(item->itemID);
+}
+
+struct SnapshotCFT {
+    juce::String graph, doc, macros;
+};
+
+SnapshotCFT snapshotCFT(MainComponent& mc) {
+    return {juce::JSON::toString(synth::AIStateMapper::graphToJSON(mc.getAudioEngine().getGraph())),
+            juce::JSON::toString(mc.getTimelineDoc().toVar()),
+            juce::JSON::toString(mc.getGraphEditor().getMacros().toVar())};
+}
+
+void expectSameSnapshotCFT(const SnapshotCFT& actual, const SnapshotCFT& expected) {
+    EXPECT_EQ(actual.graph, expected.graph);
+    EXPECT_EQ(actual.doc, expected.doc);
+    EXPECT_EQ(actual.macros, expected.macros);
+}
+
+// One undo fully reverts the action to `before`; redo restores `after`.
+void expectOneUndoStepCFT(MainComponent& mc, const SnapshotCFT& before) {
+    const auto after = snapshotCFT(mc);
+    EXPECT_NE(after.graph, before.graph) << "the action must have changed the graph";
+    ASSERT_TRUE(mc.getUndoManager().undo());
+    expectSameSnapshotCFT(snapshotCFT(mc), before);
+    ASSERT_TRUE(mc.getUndoManager().redo());
+    expectSameSnapshotCFT(snapshotCFT(mc), after);
+}
+
+} // namespace
+
+// -------------------------------------------------------------------------------------------
+// Core behaviour, through a standalone GraphEditor (it owns the macros and the port splicing).
+// -------------------------------------------------------------------------------------------
+
+TEST(ChannelFlowMakeChannelCore, ExclusiveChainAndItsOwnLfoMoveIntoTheChannelMacro) {
+    HostedPatchCFT patch;
+    GraphEditor editor(patch.engine);
+    auto& graph = patch.engine.getGraph();
+    const auto rig = buildLegacyRigCFT(patch.engine, patch.output, RigShapeCFT::SharedLfo);
+    ASSERT_GE(rig.cutoffChannel, 0);
+
+    ASSERT_TRUE(editor.nodeNeedsChannel(rig.trackInA->nodeID));
+    ASSERT_TRUE(editor.makeChannelFromNode(rig.trackInA->nodeID, "Lead"));
+
+    const auto* macro = editor.getMacros().findByMember(nodeUuid(rig.trackInA));
+    ASSERT_NE(macro, nullptr);
+    EXPECT_EQ(macro->name, "Lead");
+    EXPECT_TRUE(macro->collapsed);
+    for (auto* member : {rig.trackInA, rig.oscA, rig.filterA})
+        EXPECT_TRUE(macro->hasMember(nodeUuid(member))) << "modules used only by this track move in";
+    EXPECT_TRUE(macro->hasMember(nodeUuid(rig.ownLfo))) << "an LFO modulating only this chain moves in too";
+    for (auto* outside : {rig.sharedLfo, rig.trackInB, rig.oscB, rig.filterB})
+        EXPECT_FALSE(macro->hasMember(nodeUuid(outside))) << "another track's modules never move";
+
+    auto* eq = findMacroMemberOfTypeCFT(graph, *macro, ModuleType::ParametricEQ);
+    auto* compressor = findMacroMemberOfTypeCFT(graph, *macro, ModuleType::Compressor);
+    auto* strip = findMacroMemberOfTypeCFT(graph, *macro, ModuleType::ChannelStrip);
+    ASSERT_NE(eq, nullptr);
+    ASSERT_NE(compressor, nullptr);
+    ASSERT_NE(strip, nullptr);
+    EXPECT_TRUE(dynamic_cast<ModuleBase*>(eq->getProcessor())->isBypassed());
+    EXPECT_TRUE(dynamic_cast<ModuleBase*>(compressor->getProcessor())->isBypassed());
+    EXPECT_TRUE(graph.isConnected({{rig.filterA->nodeID, 0}, {eq->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected(
+        {{rig.filterA->nodeID, dynamic_cast<ModuleBase*>(rig.filterA->getProcessor())->rightAudioLegChannel()},
+         {eq->nodeID, 1}}))
+        << "the right leg is read off rightAudioLegChannel(), never assumed to be ch1";
+
+    auto* master = findNodeOfTypeCFT(graph, ModuleType::Master);
+    ASSERT_NE(master, nullptr);
+    EXPECT_FALSE(macro->hasMember(nodeUuid(master))) << "Master stays outside the macro";
+    EXPECT_TRUE(graph.isConnected({{strip->nodeID, 0}, {master->nodeID, MasterModule::kMixLeft}}))
+        << "Strip -> Master stays a PLAIN edge, never a macro port";
+    EXPECT_TRUE(graph.isConnected(
+        {{strip->nodeID, ChannelStripModule::kRightBase}, {master->nodeID, MasterModule::kMixRight}}));
+    EXPECT_FALSE(graph.isConnected({{rig.filterA->nodeID, 0}, {rig.output->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{rig.filterB->nodeID, 0}, {master->nodeID, MasterModule::kDirectLeft}}))
+        << "track B keeps its own direct path, now through Master's Direct input";
+
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::ChannelStrip), 1);
+    EXPECT_FALSE(editor.nodeNeedsChannel(rig.trackInA->nodeID));
+    EXPECT_TRUE(editor.nodeNeedsChannel(rig.trackInB->nodeID)) << "track B is untouched and still channel-less";
+}
+
+TEST(ChannelFlowMakeChannelCore, SharedLfoStaysOutsideThroughAnAutoPortAndTheRenderIsIdentical) {
+    HostedPatchCFT reference, converted;
+    buildLegacyRigCFT(reference.engine, reference.output, RigShapeCFT::SharedLfo);
+    const auto rig = buildLegacyRigCFT(converted.engine, converted.output, RigShapeCFT::SharedLfo);
+    auto& graph = converted.engine.getGraph();
+
+    GraphEditor editor(converted.engine);
+    ASSERT_TRUE(editor.makeChannelFromNode(rig.trackInA->nodeID, "Lead"));
+    const auto* macro = editor.getMacros().findByMember(nodeUuid(rig.trackInA));
+    ASSERT_NE(macro, nullptr);
+    EXPECT_FALSE(macro->hasMember(nodeUuid(rig.sharedLfo)));
+
+    // The shared LFO's leg into Filter A now enters through one of the channel's own inlet ports.
+    bool viaOwnInlet = false;
+    for (const auto& c : graph.getConnections()) {
+        if (c.destination.nodeID != rig.filterA->nodeID || c.destination.channelIndex != rig.cutoffChannel)
+            continue;
+        auto* source = graph.getNodeForId(c.source.nodeID);
+        viaOwnInlet =
+            viaOwnInlet || (isModuleOfTypeCFT(source, ModuleType::MacroInlet) && macro->memberIsPort(nodeUuid(source)));
+    }
+    EXPECT_TRUE(viaOwnInlet) << "a shared module reaches in via an auto-created macro port";
+    EXPECT_TRUE(modulatesCFT(graph, rig.sharedLfo, rig.filterA, rig.cutoffChannel));
+    EXPECT_TRUE(modulatesCFT(graph, rig.sharedLfo, rig.filterB, rig.cutoffChannel))
+        << "the other track keeps the original LFO";
+
+    expectIdenticalRendersCFT(reference.render(16), converted.render(16));
+}
+
+TEST(ChannelFlowMakeChannelCore, MergePointBecomesItsOwnBusChannelAndTheRenderIsIdentical) {
+    HostedPatchCFT reference, converted;
+    buildLegacyRigCFT(reference.engine, reference.output, RigShapeCFT::Merge);
+    const auto rig = buildLegacyRigCFT(converted.engine, converted.output, RigShapeCFT::Merge);
+    auto& graph = converted.engine.getGraph();
+
+    GraphEditor editor(converted.engine);
+    ASSERT_TRUE(editor.makeChannelFromNode(rig.trackInA->nodeID, "Lead"));
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::ChannelStrip), 2) << "the track's own strip plus the bus strip";
+
+    const auto* lead = editor.getMacros().findByMember(nodeUuid(rig.trackInA));
+    const auto* bus = editor.getMacros().findByMember(nodeUuid(rig.filterB));
+    ASSERT_NE(lead, nullptr);
+    ASSERT_NE(bus, nullptr);
+    ASSERT_NE(lead, bus);
+    EXPECT_EQ(bus->name, "Filter Bus");
+    EXPECT_TRUE(lead->hasMember(nodeUuid(rig.filterA)));
+    EXPECT_FALSE(lead->hasMember(nodeUuid(rig.filterB))) << "the shared effect is never assigned to one track";
+    EXPECT_FALSE(bus->hasMember(nodeUuid(rig.oscB))) << "track B's own modules stay outside the bus";
+
+    auto* leadStrip = findMacroMemberOfTypeCFT(graph, *lead, ModuleType::ChannelStrip);
+    auto* busStrip = findMacroMemberOfTypeCFT(graph, *bus, ModuleType::ChannelStrip);
+    auto* master = findNodeOfTypeCFT(graph, ModuleType::Master);
+    ASSERT_NE(leadStrip, nullptr);
+    ASSERT_NE(busStrip, nullptr);
+    ASSERT_NE(master, nullptr);
+    EXPECT_TRUE(graph.isConnected({{busStrip->nodeID, 0}, {master->nodeID, MasterModule::kMixLeft}}));
+    EXPECT_FALSE(graph.isConnected({{leadStrip->nodeID, 0}, {master->nodeID, MasterModule::kMixLeft}}))
+        << "the track reaches Master only through the bus, never twice";
+    EXPECT_TRUE(editor.nodeNeedsChannel(rig.trackInB->nodeID)) << "track B can still get its own channel";
+
+    expectIdenticalRendersCFT(reference.render(16), converted.render(16));
+
+    // ...and giving track B its channel afterwards feeds the SAME bus, still rendering identically.
+    const auto planB = synth::planMakeChannel(graph, rig.trackInB->nodeID, editor.getMacros());
+    ASSERT_TRUE(planB.refusal.isEmpty()) << planB.refusal;
+    ASSERT_TRUE(editor.makeChannelFromNode(rig.trackInB->nodeID, "Pad"));
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::ChannelStrip), 3);
+    // Re-fetched: MacroSet::add may reallocate, so `bus` above is not safe to compare against.
+    const auto* busAfter = editor.getMacros().findByMember(nodeUuid(rig.filterB));
+    const auto* pad = editor.getMacros().findByMember(nodeUuid(rig.trackInB));
+    ASSERT_NE(busAfter, nullptr);
+    ASSERT_NE(pad, nullptr);
+    EXPECT_EQ(busAfter->name, "Filter Bus") << "the second track joins the SAME bus, no second one";
+    EXPECT_NE(pad, busAfter);
+    EXPECT_FALSE(pad->hasMember(nodeUuid(rig.filterB)));
+    expectIdenticalRendersCFT(reference.render(16), converted.render(16));
+}
+
+TEST(ChannelFlowMakeChannelCore, AlreadyChanneledOrGroupedTargetIsANoOp) {
+    HostedPatchCFT patch;
+    GraphEditor editor(patch.engine);
+    auto& graph = patch.engine.getGraph();
+    const auto rig = buildLegacyRigCFT(patch.engine, patch.output, RigShapeCFT::SharedLfo);
+    ASSERT_TRUE(editor.makeChannelFromNode(rig.trackInA->nodeID, "Lead"));
+
+    const auto graphBefore = juce::JSON::toString(synth::AIStateMapper::graphToJSON(graph));
+    const auto macrosBefore = juce::JSON::toString(editor.getMacros().toVar());
+    EXPECT_FALSE(editor.nodeNeedsChannel(rig.trackInA->nodeID));
+    EXPECT_FALSE(editor.makeChannelFromNode(rig.trackInA->nodeID, "Again"));
+    EXPECT_EQ(juce::JSON::toString(synth::AIStateMapper::graphToJSON(graph)), graphBefore);
+    EXPECT_EQ(juce::JSON::toString(editor.getMacros().toVar()), macrosBefore);
+
+    // A node that would move but is already in a macro refuses the whole action (flat model).
+    synth::Macro handMade;
+    handMade.name = "Hand";
+    handMade.members = {nodeUuid(rig.oscB)};
+    editor.getMacros().add(handMade);
+    const auto plan = synth::planMakeChannel(graph, rig.trackInB->nodeID, editor.getMacros());
+    EXPECT_TRUE(plan.needsChannel);
+    EXPECT_TRUE(plan.refusal.isNotEmpty());
+    EXPECT_FALSE(editor.makeChannelFromNode(rig.trackInB->nodeID, "Pad"));
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::ChannelStrip), 1);
+}
+
+// -------------------------------------------------------------------------------------------
+// The real app wiring: header / canvas / module right-click menus, one undo step each.
+// -------------------------------------------------------------------------------------------
+
+TEST_F(ChannelFlowTest, TrackHeaderMakeChannelThroughTheRealRightClickIsOneUndoStep) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    mc.newPatchForTest();
+    auto& graph = mc.getAudioEngine().getGraph();
+    const auto setup = buildMcRigCFT(mc, RigShapeCFT::SharedLfo);
+    ASSERT_NE(setup.rig.trackInA, nullptr);
+    const auto before = snapshotCFT(mc);
+
+    makeChannelFromHeaderCFT(mc, setup.trackA);
+
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::ChannelStrip), 1);
+    const auto* macro = mc.getGraphEditor().getMacros().findByMember(nodeUuid(setup.rig.trackInA));
+    ASSERT_NE(macro, nullptr);
+    EXPECT_EQ(macro->name, "Lead") << "the channel macro is named after the track";
+    EXPECT_FALSE(macro->hasMember(nodeUuid(setup.rig.sharedLfo)));
+    const auto after = snapshotCFT(mc);
+
+    // Already channeled: the entry stays in place but disabled, and choosing it anyway is a no-op.
+    auto* header = headerForCFT(mc, setup.trackA);
+    ASSERT_NE(header, nullptr);
+    const auto menu = rightClickHeaderMenuCFT(*header);
+    const auto* item = findMenuItemByTextCFT(menu, "Make Channel");
+    ASSERT_NE(item, nullptr);
+    EXPECT_FALSE(item->isEnabled);
+    header->applyContextMenuChoice(synth::ui::TimelineTrackHeaderComponent::kMakeChannelMenuId);
+    expectSameSnapshotCFT(snapshotCFT(mc), after);
+
+    ASSERT_TRUE(mc.getUndoManager().undo());
+    expectSameSnapshotCFT(snapshotCFT(mc), before);
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::ChannelStrip), 0) << "the ONE undo step reverts everything";
+    ASSERT_TRUE(mc.getUndoManager().redo());
+    expectSameSnapshotCFT(snapshotCFT(mc), after);
+}
+
+TEST_F(ChannelFlowTest, CanvasSelectionMakeChannelThroughTheRealRightClick) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    mc.newPatchForTest();
+    const auto setup = buildMcRigCFT(mc, RigShapeCFT::SharedLfo);
+    ASSERT_NE(setup.rig.trackInA, nullptr);
+    auto& editor = mc.getGraphEditor();
+
+    // The module card's own menu offers it for the chain it belongs to...
+    auto* filterComp = compForCFT(editor, setup.rig.filterA->nodeID);
+    ASSERT_NE(filterComp, nullptr);
+    const auto moduleMenu = rightClickModuleMenuCFT(*filterComp);
+    const auto* moduleItem = findMenuItemByTextCFT(moduleMenu, "Make Channel");
+    ASSERT_NE(moduleItem, nullptr) << "a module card's menu offers Make Channel for its chain";
+    EXPECT_TRUE(moduleItem->isEnabled);
+
+    // ...and so does the canvas menu for a selected chain (the real empty-canvas right-click).
+    editor.setSelectedNodes({setup.rig.oscA->nodeID, setup.rig.filterA->nodeID});
+    juce::PopupMenu canvasMenu;
+    bool shown = false;
+    editor.setShowCanvasContextMenuHookForTest([&](juce::PopupMenu& menu) {
+        canvasMenu = menu;
+        shown = true;
+    });
+    const juce::Point<int> emptyCanvas(editor.getWidth() - 20, 20);
+    editor.mouseDown(realMouseEventCFT(editor, emptyCanvas, emptyCanvas,
+                                       juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier)));
+    editor.setShowCanvasContextMenuHookForTest(nullptr);
+    ASSERT_TRUE(shown) << "the right-click must reach the canvas menu";
+    const auto* item = findMenuItemByTextCFT(canvasMenu, "Make Channel");
+    ASSERT_NE(item, nullptr);
+    EXPECT_TRUE(item->isEnabled);
+    ASSERT_TRUE(item->action != nullptr);
+
+    const auto before = snapshotCFT(mc);
+    item->action();
+    const auto* macro = editor.getMacros().findByMember(nodeUuid(setup.rig.filterA));
+    ASSERT_NE(macro, nullptr);
+    EXPECT_EQ(macro->name, "Lead") << "the selection resolves to its track, whose name the channel takes";
+    EXPECT_TRUE(macro->hasMember(nodeUuid(setup.rig.trackInA)));
+    expectOneUndoStepCFT(mc, before);
+}
+
+TEST_F(ChannelFlowTest, MergePointBecomesABusChannelInOneUndoStep) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    mc.newPatchForTest();
+    auto& graph = mc.getAudioEngine().getGraph();
+    const auto setup = buildMcRigCFT(mc, RigShapeCFT::Merge);
+    ASSERT_NE(setup.rig.trackInA, nullptr);
+    const auto before = snapshotCFT(mc);
+
+    makeChannelFromHeaderCFT(mc, setup.trackA);
+
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::ChannelStrip), 2);
+    const auto* bus = mc.getGraphEditor().getMacros().findByMember(nodeUuid(setup.rig.filterB));
+    ASSERT_NE(bus, nullptr);
+    EXPECT_EQ(bus->name, "Filter Bus");
+    expectOneUndoStepCFT(mc, before);
+}
+
+TEST_F(ChannelFlowTest, PolyChainGetsAVoiceMixerAheadOfTheStripInOneUndoStep) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    mc.newPatchForTest();
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto* output = findNodeNamedCFT(graph, "Audio Output");
+    ASSERT_NE(output, nullptr);
+
+    juce::String trackInUuid, oscUuid;
+    auto* trackIn = addPlainNodeCFT(graph, "Track In", {0, 0}, trackInUuid);
+    auto* osc = addPlainNodeCFT(graph, "Oscillator", {200, 0}, oscUuid);
+    ASSERT_NE(trackIn, nullptr);
+    ASSERT_NE(osc, nullptr);
+    ASSERT_TRUE(setPolyParamCFT(osc->getProcessor(), true));
+    graph.addConnection({{trackIn->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
+                         {osc->nodeID, juce::AudioProcessorGraph::midiChannelIndex}});
+    graph.addConnection({{osc->nodeID, 0}, {output->nodeID, 0}});
+    graph.addConnection(
+        {{osc->nodeID, dynamic_cast<ModuleBase*>(osc->getProcessor())->rightAudioLegChannel()}, {output->nodeID, 1}});
+    auto& doc = mc.getTimelineDoc();
+    const auto track = doc.addTrack(synth::TrackKind::Midi, "Poly Lead");
+    ASSERT_TRUE(doc.setTrackBinding(track, trackInUuid));
+    mc.getGraphEditor().updateComponents();
+    const auto before = snapshotCFT(mc);
+
+    makeChannelFromHeaderCFT(mc, track);
+
+    const auto* macro = mc.getGraphEditor().getMacros().findByMember(trackInUuid);
+    ASSERT_NE(macro, nullptr);
+    auto* voiceMixer = findMacroMemberOfTypeCFT(graph, *macro, ModuleType::VoiceMixer);
+    auto* eq = findMacroMemberOfTypeCFT(graph, *macro, ModuleType::ParametricEQ);
+    ASSERT_NE(voiceMixer, nullptr) << "a chain ending poly gets a Voice Mixer ahead of the strip";
+    ASSERT_NE(eq, nullptr);
+    for (int voice = 0; voice < 8; ++voice)
+        EXPECT_TRUE(graph.isConnected({{osc->nodeID, voice}, {voiceMixer->nodeID, voice}}));
+    EXPECT_TRUE(graph.isConnected({{voiceMixer->nodeID, 0}, {eq->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{voiceMixer->nodeID, 1}, {eq->nodeID, 1}}));
+    EXPECT_FALSE(graph.isConnected({{osc->nodeID, 0}, {eq->nodeID, 0}}));
+    EXPECT_TRUE(synth::isProcessorPoly(osc->getProcessor())) << "poly is never forced on or off";
+    expectOneUndoStepCFT(mc, before);
+}
+
+TEST_F(ChannelFlowTest, DuplicateIntoChannelGivesAnIndependentCopyAndLeavesTheOtherTrackOnTheOriginal) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    mc.newPatchForTest();
+    auto& graph = mc.getAudioEngine().getGraph();
+    const auto setup = buildMcRigCFT(mc, RigShapeCFT::SharedLfo);
+    ASSERT_NE(setup.rig.trackInA, nullptr);
+    const auto& rig = setup.rig;
+    makeChannelFromHeaderCFT(mc, setup.trackA);
+    auto& editor = mc.getGraphEditor();
+    const auto* macro = editor.getMacros().findByMember(nodeUuid(rig.trackInA));
+    ASSERT_NE(macro, nullptr);
+
+    auto* lfoComp = compForCFT(editor, rig.sharedLfo->nodeID);
+    ASSERT_NE(lfoComp, nullptr);
+    const auto menu = rightClickModuleMenuCFT(*lfoComp);
+    const auto* item = findMenuItemByTextCFT(menu, "Duplicate into Channel: Lead");
+    ASSERT_NE(item, nullptr) << "a module shared into a channel from outside offers Duplicate into Channel";
+    ASSERT_TRUE(item->action != nullptr);
+
+    const int lfosBefore = countNodesOfTypeCFT(graph, ModuleType::LFO);
+    const auto before = snapshotCFT(mc);
+    item->action();
+
+    EXPECT_EQ(countNodesOfTypeCFT(graph, ModuleType::LFO), lfosBefore + 1);
+    macro = editor.getMacros().findByMember(nodeUuid(rig.trackInA));
+    ASSERT_NE(macro, nullptr);
+    juce::AudioProcessorGraph::Node* copy = nullptr;
+    for (auto* node : graph.getNodes())
+        if (isModuleOfTypeCFT(node, ModuleType::LFO) && node != rig.ownLfo && macro->hasMember(nodeUuid(node)))
+            copy = node;
+    ASSERT_NE(copy, nullptr) << "the copy lives inside this channel's macro";
+    EXPECT_FALSE(macro->hasMember(nodeUuid(rig.sharedLfo))) << "the original stays outside";
+
+    EXPECT_TRUE(modulatesCFT(graph, copy, rig.filterA, rig.cutoffChannel)) << "this channel is rewired to the copy";
+    EXPECT_FALSE(modulatesCFT(graph, rig.sharedLfo, rig.filterA, rig.cutoffChannel));
+    EXPECT_TRUE(modulatesCFT(graph, rig.sharedLfo, rig.filterB, rig.cutoffChannel))
+        << "the other track stays on the original";
+
+    // Independent: retuning the copy leaves the original alone.
+    auto* originalParam = rig.sharedLfo->getProcessor()->getParameters()[0];
+    auto* copyParam = copy->getProcessor()->getParameters()[0];
+    EXPECT_FLOAT_EQ(copyParam->getValue(), originalParam->getValue()) << "the copy starts with the same settings";
+    const float originalValue = originalParam->getValue();
+    copyParam->setValueNotifyingHost(originalValue > 0.5f ? 0.1f : 0.9f);
+    EXPECT_FLOAT_EQ(originalParam->getValue(), originalValue);
+    copyParam->setValueNotifyingHost(originalValue);
+
+    expectOneUndoStepCFT(mc, before);
 }

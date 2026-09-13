@@ -12,9 +12,11 @@ T183) — see §5.2's table note for why that one stays a `TrackKind::Midi` trac
 track kind)" this doc originally called for — connecting a MIDI track's cable to an unchanneled
 instrument auto-creates a channel at the point the audio reaches the output (§8 item 2, T184; §5.2's
 "main workflow" paragraph), and the "+ Track" menu's "Create Channels" entry sweeps every
-channel-less track in the open project into its own channel in one shot (§5.13, §8 item 2, FRO26).
-"Make channel" (a single track/instrument, on demand) is still a follow-up, and there is no mixer
-panel yet (P9-5) — until it exists, "Locate Master" (Cmd+Shift+M / canvas right-click, P9-3g/FRO45,
+channel-less track in the open project into its own channel in one shot (§5.13, §8 item 2, FRO26),
+and "Make channel" — the last P9-3 flow — turns one track (header menu) or a selected chain (canvas /
+module menu) into a channel on demand, keeping shared modules shared, turning a merge point into its
+own bus channel and offering "Duplicate into Channel" for an independent copy (§5.8, §8 item 2,
+P9-3d/FRO25). There is no mixer panel yet (P9-5) — until it exists, "Locate Master" (Cmd+Shift+M / canvas right-click, P9-3g/FRO45,
 [`shortcuts.md`](shortcuts.md#locate-master-fro45)) is the lightweight, canvas-only stopgap for
 finding Master (or Audio Output) after auto-arrange or a drag leaves it off-screen. This document
 records the decided design;
@@ -325,6 +327,38 @@ reverb) — **these stay shared**:
   one track.
 - A **"Duplicate into this channel"** right-click action exists for the case where the user does
   want their own independent copy of a shared module.
+
+**As implemented (P9-3d, FRO25).** Entry points: the track header's right-click **Make Channel**
+(the track's bound node), and **Make Channel** in the canvas right-click menu (with a selection)
+and in every module card's right-click menu — `synth::resolveChannelSource` picks the chain the
+selection belongs to (a selected track source, else the one track source upstream of it, else the
+one root upstream of it; no item when ambiguous). The item is disabled, not hidden, once the chain
+has a channel. "Which modules does this track use" is `synth::planMakeChannel`'s reach walk: every
+MIDI edge and every audio edge not landing on a modulation (`PortRole::ModCV`) pin, never through a
+modulation attenuverter, through strips and macro ports, stopping at Audio Output / Record Tap /
+Master. A node the track reaches that no other track source reaches is **own** and moves in; one
+another track also reaches is **shared** and never moves; a node no track reaches (an LFO) moves in
+only when every consumer of it (looking through attenuverters) already does — otherwise it stays
+outside and the group-time auto-port pass fronts its cable ([`macros.md`](macros.md) §7 item 7).
+The new strip takes over the own region's exits to the output, plus every audio edge into the
+shared region carrying that same signal (with no exit at all, every such edge, provided each side
+carries one consistent signal — otherwise the action is refused with a status message; a
+different signal into a shared module stays a pre-strip send). Each shared merge head that still
+reaches the output without a strip gets its own **bus channel** ("<module> Bus"), holding the shared
+nodes downstream of it; the track's own strip feeds the bus's original input pins, never Master
+directly, so nothing is summed twice. Strip, bypassed EQ/Compressor, Master and macro ports are all
+unity pass-throughs at their defaults, so the converted patch renders sample-identically
+(`Tests/ChannelFlowTests.cpp` proves it offline for the shared-LFO and merge cases) — the one
+intended exception is a chain ending on a poly jack, which gets a Voice Mixer ahead of the strip
+(§5.4, `addVoiceMixerForPolyInstrument`) and so carries every voice where a bare poly jack wired to
+a mono input carried voice 0 only. A node that would move but is already in a macro refuses the
+whole action (flat model). **Duplicate into Channel** is offered on a module outside every macro
+that feeds a channel macro (directly, through its port, or through a modulation attenuverter) and
+something else too — one item naming the channel, or a submenu when it feeds several: the copy
+(parameters and extra state carried, the Duplicate path) takes over every cable into that channel,
+inherits the original's inputs (a modulation into it is re-created with the same amount), and
+joins the macro; the other consumers stay on the original. Each action is ONE graph + timeline +
+macro undo step followed by the reconcile pass.
 
 ### 5.9 Mixer panel & windows
 
@@ -790,6 +824,35 @@ Main line, in dependency order:
        `CreateChannelsGivesTwoTracksSharingOneInstrumentJustOneChannel` (D1, §7: two MIDI tracks
        wired into one shared channel-less Oscillator come out of the sweep with exactly one
        channel, not two, and one undo removes it).
+   - **P9-3d — DONE (FRO25).** "Make channel" on a track or a selected chain — the last P9-3 flow;
+     §5.8's "As implemented" note is the behaviour. Core: `synth::planMakeChannel` (a pure query:
+     own/shared/side-input regions, exits, strip crossings, bus heads, `needsChannel`, `refusal`),
+     `synth::buildMakeChannel` (the graph rebuild — the shared `buildChannelChain` gained a sink so
+     a strip can feed a merge point's input pins instead of, or besides, Master's Mix — plus
+     `addVoiceMixerForPolyInstrument` ahead of any poly feed) and `synth::resolveChannelSource`, all
+     in `Source/Mixer/ChannelFlows.{h,cpp}`. AppUI: `GraphEditor::makeChannelFromNode` (boxes each
+     channel via the group-time crossing plan minus the strip's own outlets — [`macros.md`](macros.md)
+     §7 item 7 — and relocates Audio Output on a first Master, the T187 mirror),
+     `duplicateIntoChannel`/`duplicateIntoChannelTargets`, the canvas and module-card menu items;
+     `TimelineTrackHeaderComponent`'s "Make Channel" (`kMakeChannelMenuId`) over two new non-pure
+     `TrackHeaderHost` virtuals (`canMakeChannelForTrack`/`makeChannelForTrack`);
+     `MainComponent::makeChannelForNode`/`duplicateIntoChannel` wrap each action in ONE
+     `recordGraphTimelineAndMacroChange` (refusal/no-op checked first, so neither pushes an undo
+     step) and then run `reconcileTimelineAfterGraphChange()`; GraphEditor's own
+     `onMakeChannelRequested`/`onDuplicateIntoChannelRequested` route its menu items there.
+     - Tests (`Tests/ChannelFlowTests.cpp`): `ChannelFlowMakeChannelCore` —
+       `ExclusiveChainAndItsOwnLfoMoveIntoTheChannelMacro`,
+       `SharedLfoStaysOutsideThroughAnAutoPortAndTheRenderIsIdentical` and
+       `MergePointBecomesItsOwnBusChannelAndTheRenderIsIdentical` (offline renders of the legacy and
+       converted patch, two Hosted engines, compared sample for sample; the merge case then gives
+       the second track its own channel into the same bus), `AlreadyChanneledOrGroupedTargetIsANoOp`;
+       `ChannelFlowTest` — `TrackHeaderMakeChannelThroughTheRealRightClickIsOneUndoStep`,
+       `CanvasSelectionMakeChannelThroughTheRealRightClick` (module card and empty-canvas
+       right-clicks), `MergePointBecomesABusChannelInOneUndoStep`,
+       `PolyChainGetsAVoiceMixerAheadOfTheStripInOneUndoStep`,
+       `DuplicateIntoChannelGivesAnIndependentCopyAndLeavesTheOtherTrackOnTheOriginal` — every
+       menu driven through its real right-click `mouseDown` and test hook, every action checked to
+       undo in one step against graph/timeline/macro JSON snapshots and to redo.
 
 3. **P9-4 (T177) — Track/channel link.** Name sync, live colour sync across track/macro/column
     through `ColourPickerPopup`'s preview/commit split, M/S driving the strip, the channel chip.

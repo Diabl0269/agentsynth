@@ -1271,6 +1271,16 @@ In order, each independently shippable:
    `spliceMacroPorts()` and `updateComponents()` in that order, inside the one transaction, never
    the reverse.
 
+   **Second caller: "Make channel" (P9-3d/FRO25, [`mixer.md`](mixer.md) §5.8).**
+   `GraphEditor::makeChannelFromNode` boxes each new channel with the same group-time pass
+   (`buildMacroPortCrossingPlan` before `macros.add`, then `spliceMacroPorts`), always creating ports
+   regardless of `MacroAutoPortPreference` — a shared module reaching into the channel is exactly
+   what the port is for — with ONE filter: a group whose internal node is the new Channel Strip and
+   whose direction is outward is dropped, so Strip -> Master (and Strip -> a merge point's bus) stays
+   a plain edge that `spliceMasterNode`'s Mix/Direct classification can see. "Duplicate into Channel"
+   joins its copy through `addSelectionToMacro`'s T138 incremental passes. The plan builders
+   themselves are unchanged.
+
 8. **DONE (founder-review fix G7): Ungroup removes the macro's ports, and a port node is
    directly deletable.** The item above shipped with an explicit open question for the founder —
    "what should Ungroup do with an auto-created port?" — recorded as **nothing**: the port's
