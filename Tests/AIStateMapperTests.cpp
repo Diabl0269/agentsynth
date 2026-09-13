@@ -275,7 +275,7 @@ TEST(AIStateMapperTest, FactorySupportsAllModuleTypes) {
         "MIDI Keyboard", "Amp Env",       "Filter Env", "Poly MIDI",     "Poly Sequencer", "Attenuverter",
         "Chorus",        "Phaser",        "Compressor", "Flanger",       "Limiter",        "Bitcrusher",
         "Pitch Shifter", "Parametric EQ", "Macros",     "Sample & Hold", "Math",           "Ring Modulator",
-        "Comparator"};
+        "Comparator",    "Gate"};
     for (const auto& type : expectedTypes) {
         auto module = synth::AIStateMapper::createModule(type);
         EXPECT_NE(module, nullptr) << "Failed to create module: " << type.toStdString();
@@ -1158,6 +1158,7 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Filter", "bypassed, cutoff, drive, dualIO, filterType, muted, outputLevel, poly, resonance"},
         {"Filter Env", "attack, bypassed, decay, gateThreshold, muted, poly, release, sustain"},
         {"Flanger", "bypassed, centreDelay, depth, dualIO, feedback, mix, muted, outputLevel, rate"},
+        {"Gate", "attack, bypassed, dualIO, hold, muted, outputLevel, range, release, threshold"},
         // The host module has no parameters of its own beyond bypass/mute — the hosted
         // plugin's own parameters are exposed to the graph separately, as automation lanes.
         {"Hosted Plugin", "bypassed, muted"},
@@ -1260,6 +1261,7 @@ TEST(AIStateMapperTest, AuthorableModuleTypesGolden) {
                                       "Filter",
                                       "Filter Env",
                                       "Flanger",
+                                      "Gate",
                                       "LFO",
                                       "Limiter",
                                       "MIDI Keyboard",

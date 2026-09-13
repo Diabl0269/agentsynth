@@ -42,7 +42,8 @@ TEST(ModuleLibraryDescriptionFor, KnownModulesReturnNonEmpty) {
                            "Sample & Hold",
                            "Math",
                            "Envelope Follower",
-                           "Comparator"};
+                           "Comparator",
+                           "Gate"};
     for (const char* name : known) {
         juce::String desc = ModuleLibraryComponent::descriptionFor(name);
         EXPECT_FALSE(desc.isEmpty()) << "descriptionFor(\"" << name << "\") must not be empty";
@@ -79,7 +80,8 @@ TEST(ModuleLibraryDescriptionFor, KnownModulesReturnDistinctStrings) {
                            "Sample & Hold",
                            "Math",
                            "Envelope Follower",
-                           "Comparator"};
+                           "Comparator",
+                           "Gate"};
     std::vector<juce::String> descs;
     for (const char* name : known)
         descs.push_back(ModuleLibraryComponent::descriptionFor(name));

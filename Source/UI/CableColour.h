@@ -163,6 +163,7 @@ inline ModuleCategory categoryFor(ModuleType t) noexcept {
 
     case ModuleType::Compressor:
     case ModuleType::Limiter:
+    case ModuleType::Gate:
         return ModuleCategory::Dynamics;
 
     case ModuleType::MacroControl:

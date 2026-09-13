@@ -11,6 +11,7 @@
 #include "../Modules/FX/DelayModule.h"
 #include "../Modules/FX/DistortionModule.h"
 #include "../Modules/FX/FlangerModule.h"
+#include "../Modules/FX/GateModule.h"
 #include "../Modules/FX/LimiterModule.h"
 #include "../Modules/FX/PhaserModule.h"
 #include "../Modules/FX/ReverbModule.h"
@@ -151,6 +152,10 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         return {280, 237}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Limiter")
         return {280, 161}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+    if (typeName == "Gate")
+        // 6 float sliders (Threshold/Attack/Hold/Release/Range/Level): same row count as
+        // Compressor's 5 (3+3 wraps to the same number of rows as 6 in a 3-per-row grid).
+        return {280, 237};
     if (typeName == "Voice Mixer")
         return {280, 301}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "External MIDI")

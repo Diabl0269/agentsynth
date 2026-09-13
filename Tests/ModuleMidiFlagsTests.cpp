@@ -71,6 +71,7 @@ ExpectedMidiFlags expectedFlagsFor(ModuleType type) {
     case ModuleType::Compressor:
     case ModuleType::Flanger:
     case ModuleType::Limiter:
+    case ModuleType::Gate:
     case ModuleType::ParametricEQ:
     case ModuleType::VoiceMixer:
     case ModuleType::Bitcrusher:
@@ -140,40 +141,15 @@ TEST(ModuleMidiFlagsTest, EveryFactoryModuleMatchesItsExpectedMidiFlags) {
     // Every module type this audit covers must actually have been reachable through the factory —
     // otherwise the sweep above silently tests nothing for it.
     std::set<ModuleType> requiredTypes = {
-        ModuleType::Oscillator,
-        ModuleType::Filter,
-        ModuleType::VCA,
-        ModuleType::ADSR,
-        ModuleType::LFO,
-        ModuleType::Sequencer,
-        ModuleType::PolySequencer,
-        ModuleType::MidiKeyboard,
-        ModuleType::PolyMidi,
-        ModuleType::ExternalMidi,
-        ModuleType::Attenuverter,
-        ModuleType::Delay,
-        ModuleType::Distortion,
-        ModuleType::Reverb,
-        ModuleType::Chorus,
-        ModuleType::Phaser,
-        ModuleType::Compressor,
-        ModuleType::Flanger,
-        ModuleType::Limiter,
-        ModuleType::ParametricEQ,
-        ModuleType::VoiceMixer,
-        ModuleType::Bitcrusher,
-        ModuleType::PitchShifter,
-        ModuleType::RingModulator,
-        ModuleType::Noise,
-        ModuleType::Math,
-        ModuleType::Sampler,
-        ModuleType::Wavetable,
-        ModuleType::MacroControl,
-        ModuleType::SampleHold,
-        ModuleType::EnvelopeFollower,
-        ModuleType::Comparator,
-        ModuleType::AudioInput,
-        ModuleType::HostedPlugin,
+        ModuleType::Oscillator,    ModuleType::Filter,       ModuleType::VCA,           ModuleType::ADSR,
+        ModuleType::LFO,           ModuleType::Sequencer,    ModuleType::PolySequencer, ModuleType::MidiKeyboard,
+        ModuleType::PolyMidi,      ModuleType::ExternalMidi, ModuleType::Attenuverter,  ModuleType::Delay,
+        ModuleType::Distortion,    ModuleType::Reverb,       ModuleType::Chorus,        ModuleType::Phaser,
+        ModuleType::Compressor,    ModuleType::Flanger,      ModuleType::Limiter,       ModuleType::Gate,
+        ModuleType::ParametricEQ,  ModuleType::VoiceMixer,   ModuleType::Bitcrusher,    ModuleType::PitchShifter,
+        ModuleType::RingModulator, ModuleType::Noise,        ModuleType::Math,          ModuleType::Sampler,
+        ModuleType::Wavetable,     ModuleType::MacroControl, ModuleType::SampleHold,    ModuleType::EnvelopeFollower,
+        ModuleType::Comparator,    ModuleType::AudioInput,   ModuleType::HostedPlugin,
     };
     requiredTypes.insert(ModuleType::TimelineMidiSource);
     requiredTypes.insert(ModuleType::RecordTap);

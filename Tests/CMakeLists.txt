@@ -96,6 +96,7 @@ add_executable(Tests
     AIUndoTests.cpp
     ModMatrixTests.cpp
     FXModuleTests.cpp
+    GateModuleTests.cpp
     PitchShifterModuleTests.cpp
     ParametricEQModuleTests.cpp
     VoiceMixerModuleTests.cpp
