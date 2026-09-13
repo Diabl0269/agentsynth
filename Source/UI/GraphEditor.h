@@ -266,6 +266,11 @@ public:
     void cancelSelectionDrag();
     bool isSelectionDragActive() const { return selectionDragActive; }
 
+    /** Test accessor: whether an expanded macro's chip drag (GraphEditor::mouseDown's
+     *  macroChipAt branch) is currently armed — FRO19 regression coverage for the drag-end
+     *  state-reset sweep (see MacroPortRealMouseDragTests.cpp's sibling file). */
+    bool isMacroChipDragActive() const { return macroChipDragId.isNotEmpty(); }
+
     // ---- Macros (P8-12) ------------------------------------------------------------------
     //
     // A Macro is a named, coloured, collapsible container: membership plus presentation, no
