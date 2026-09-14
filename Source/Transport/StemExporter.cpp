@@ -13,8 +13,9 @@ bool StemExporter::hasChannelStrips(AudioEngine& engine) { return !collectStemSt
 // (Source/Transport/StemRunner.h) is the other driver, for a caller that wants to interleave the
 // render with a UI progress tick.
 StemResult StemExporter::exportStems(AudioEngine& engine, const juce::File& destinationFolder,
-                                     const BounceOptions& options, const ProgressCallback& progress) {
-    StemSession session(engine, destinationFolder, options, progress);
+                                     const BounceOptions& options, const ProgressCallback& progress,
+                                     const TimelineDoc* timelineDoc) {
+    StemSession session(engine, destinationFolder, options, progress, timelineDoc);
     constexpr int kUnbounded = std::numeric_limits<int>::max();
     while (!session.isRangeDone())
         session.stepRange(kUnbounded);

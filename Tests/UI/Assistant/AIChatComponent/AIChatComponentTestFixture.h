@@ -12,7 +12,7 @@
 #include "AudioEngine.h"
 #include "Auth/InMemoryTokenStore.h"
 #include "Branding.h"
-#include "UI/Assistant/AIChatComponent.h"
+#include "UI/Assistant/AIChatComponent/AIChatComponent.h"
 #include "UI/Assistant/AccountRow.h"
 #include <cmath>
 #include <gtest/gtest.h>
