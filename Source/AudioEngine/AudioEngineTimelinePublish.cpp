@@ -4,7 +4,7 @@
 #include "AudioEngine.h"
 #include "Modules/ChannelStripModule.h"
 #include "Timeline/AutomationBinding.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <map>
 
 void AudioEngine::publishTimeline(const synth::TimelineDoc& doc) {

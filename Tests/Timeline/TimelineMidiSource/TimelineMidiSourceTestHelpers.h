@@ -18,7 +18,7 @@
 // Header-only; not compiled on its own and not registered in Tests/CMakeLists.txt.
 
 #include "AI/AIStateMapper/AIStateMapper.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/PolyMidiModule.h"
 #include "Modules/TimelineMidiSourceModule.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
