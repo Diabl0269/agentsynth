@@ -1,6 +1,6 @@
 // Concern: patch-name/dirty-state tracking and the save/load/export round trip (project bundle,
 // factory presets, legacy .json patches).
-#include "App/MainComponent/MainComponentTestFixture.h"
+#include "MainComponentTestFixture.h"
 
 TEST_F(MainComponentTest, PatchNameIsDefaultOnStartup) {
     MainComponent mc(std::make_unique<MockProvider>());

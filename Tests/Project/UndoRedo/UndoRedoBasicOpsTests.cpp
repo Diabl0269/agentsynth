@@ -1,7 +1,7 @@
 // Concern: the basic undo/redo operations -- add/remove module, add/remove connection,
 // parameter and position changes (with coalescing), multiple undo levels, clearing history,
 // and a multi-step complex graph modification.
-#include "Project/UndoRedo/UndoRedoTestFixture.h"
+#include "UndoRedoTestFixture.h"
 
 /**
  * Test 1: UndoAddModule

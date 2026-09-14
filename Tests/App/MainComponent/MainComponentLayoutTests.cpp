@@ -1,7 +1,7 @@
 // Concern: Phase-3 chrome -- toolbar layout at every width bucket, minimum window size, the
 // collapsible library/AI-panel sidebars, and the status bar (bounds + timer-gated transport
 // updates + its own play/stop button).
-#include "App/MainComponent/MainComponentTestFixture.h"
+#include "MainComponentTestFixture.h"
 
 // ===========================================================================
 // Phase-3 chrome: toolbar layout, min window size, collapsible panels, status bar

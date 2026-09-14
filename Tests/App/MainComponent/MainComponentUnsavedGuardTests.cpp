@@ -1,7 +1,7 @@
 // Concern: P8-2 -- guardUnsavedChanges(), the async dialog-fronted gate on New Patch/Open/the
 // factory-preset Load branch. See the safety-rule comment below for why every test here must
 // install mc.unsavedChangesPrompt before touching a dirty document.
-#include "App/MainComponent/MainComponentTestFixture.h"
+#include "MainComponentTestFixture.h"
 }
 
 // ---------------------------------------------------------------------------

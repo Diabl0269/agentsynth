@@ -1,6 +1,6 @@
 // Concern: default bindings and the action-table integrity tripwires (uniqueness, category
 // partitioning/contiguity, surface-vs-command resolution).
-#include "ShortcutManager/ShortcutManagerTestFixture.h"
+#include "ShortcutManagerTestFixture.h"
 
 namespace {
 

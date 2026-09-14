@@ -2,7 +2,7 @@
 // A structural undo used to destroy and re-create EVERY node, losing all module runtime state
 // and blocking the audio callback while it did so; the restore now diffs the snapshot against
 // the live graph, so these tests are about IDENTITY, not just the graph ending up the right shape.
-#include "Project/UndoRedo/UndoRedoTestFixture.h"
+#include "UndoRedoTestFixture.h"
 
 namespace {
 

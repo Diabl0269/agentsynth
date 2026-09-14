@@ -1,7 +1,7 @@
 // Concern: keyPressMatches' shifted-symbol normalization (the macOS peer bug it rescues from),
 // its use in getActionForKeyPress/getActionsForKeyPress, and the zoom/surface-default/display tests
 // that ride alongside it.
-#include "ShortcutManager/ShortcutManagerTestFixture.h"
+#include "ShortcutManagerTestFixture.h"
 
 TEST_F(ShortcutManagerTest, KeyPressMatchesRescuesShiftChordedSymbolsFromTheMacPeer) {
     const int ctrlShift = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier;

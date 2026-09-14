@@ -1,6 +1,6 @@
 // Concern: extractSnippet -- selection filtering, self-contained wiring, origin-relative
 // positions, and extra-state capture on request.
-#include "Project/SnippetManager/SnippetManagerTestHelpers.h"
+#include "SnippetManagerTestHelpers.h"
 
 TEST(SnippetExtract, CapturesOnlySelectedModules) {
     juce::AudioProcessorGraph graph;

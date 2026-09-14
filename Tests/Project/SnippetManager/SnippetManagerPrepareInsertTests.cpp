@@ -2,7 +2,7 @@
 // renumbering + offsetting without mutating the source) and insertSnippet (merging without
 // disturbing existing nodes; parameter values survive verbatim -- the normalised-rescale
 // corruption regression).
-#include "Project/SnippetManager/SnippetManagerTestHelpers.h"
+#include "SnippetManagerTestHelpers.h"
 
 // ---------------------------------------------------------------------------------------
 // nextFreeIdBase / prepareForInsert

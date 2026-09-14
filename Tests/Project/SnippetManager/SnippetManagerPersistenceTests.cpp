@@ -1,6 +1,6 @@
 // Concern: snippet name sanitisation, the drag-payload encoding, and on-disk persistence
 // (save/load/list/delete).
-#include "Project/SnippetManager/SnippetManagerTestHelpers.h"
+#include "SnippetManagerTestHelpers.h"
 
 TEST(SnippetName, TrimsAndKeepsOrdinaryNames) {
     EXPECT_EQ(SnippetManager::sanitiseName("  My Supersaw Lead  "), "My Supersaw Lead");

@@ -1,7 +1,7 @@
 // Concern: AI provider/model selection on startup (registry-driven default, the
 // post-setProvider() refresh regression lock), toolbar button bounds after construction, and
 // the Locate Master command reached through the real Cmd+Shift+M key path.
-#include "App/MainComponent/MainComponentTestFixture.h"
+#include "MainComponentTestFixture.h"
 
 TEST_F(MainComponentTest, AiProviderGetsModelSelectedOnStartup) {
     auto ownedProvider = std::make_unique<ModelTrackingMockProvider>();

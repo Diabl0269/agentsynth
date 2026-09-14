@@ -1,6 +1,6 @@
 // Concern: macros (P8-12 name/colour/membership, P8-15 ports) surviving extract-and-insert,
 // including double-insert producing independent copies and the InsertedMacroSet var round trip.
-#include "Project/SnippetManager/SnippetManagerTestHelpers.h"
+#include "SnippetManagerTestHelpers.h"
 
 // ---------------------------------------------------------------------------------------
 // Macros (P8-12 name/colour/membership, P8-15 ports) — T117

@@ -1,7 +1,7 @@
 // Concern: P8-2 -- the edit serial behind MainComponent's dirty flag (advances exactly once
 // per real edit, synchronously, including through undo/redo, and never for a no-op push or a
 // refused undo).
-#include "Project/UndoRedo/UndoRedoTestFixture.h"
+#include "UndoRedoTestFixture.h"
 
 // =============================================================================
 // P8-2: the edit serial behind MainComponent's dirty flag.

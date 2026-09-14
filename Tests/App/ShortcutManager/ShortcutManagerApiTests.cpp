@@ -1,6 +1,6 @@
 // Concern: ShortcutsSettingsTab's pure filter helpers, the basic ShortcutManager API surface,
 // the shortcutHintFor tooltip helper, and the ChangeBroadcaster/persistence broadcast contract.
-#include "ShortcutManager/ShortcutManagerTestFixture.h"
+#include "ShortcutManagerTestFixture.h"
 #include "UI/Settings/ShortcutsSettingsTab.h"
 
 // ---------------------------------------------------------------------------

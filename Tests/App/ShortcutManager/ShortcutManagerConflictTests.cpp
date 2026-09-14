@@ -1,6 +1,6 @@
 // Concern: category-scoped conflict detection, the bare tool digits vs the Ctrl+Shift grid,
 // locator jumps, and the grid command family.
-#include "ShortcutManager/ShortcutManagerTestFixture.h"
+#include "ShortcutManagerTestFixture.h"
 
 TEST_F(ShortcutManagerTest, SameKeyInTwoCategoriesIsNotAConflict) {
     const juce::KeyPress bareP('p', juce::ModifierKeys::noModifiers, 0);

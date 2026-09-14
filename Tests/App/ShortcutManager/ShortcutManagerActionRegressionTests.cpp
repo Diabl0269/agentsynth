@@ -1,7 +1,7 @@
 // Concern: per-feature regression coverage for individually-added shortcut actions (minimap,
 // macro group/ungroup/collapse, piano-roll scale toggles, snap/quantise, export-patch-only,
 // focus-region, timeline focused-track mute/solo/arm).
-#include "ShortcutManager/ShortcutManagerTestFixture.h"
+#include "ShortcutManagerTestFixture.h"
 
 // ---------------------------------------------------------------------------
 // Minimap toggle (issue #159)

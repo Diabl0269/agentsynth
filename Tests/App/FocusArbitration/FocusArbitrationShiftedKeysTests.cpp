@@ -3,7 +3,7 @@
 // them. NOTE: ShiftedSymbolKeyCodesFromTheRealKeyboardReachTheGridCommands is a documented
 // macOS flake under concurrent test suites -- rerun the locked ci-local step before assuming a
 // real regression.
-#include "App/FocusArbitration/FocusArbitrationTestFixture.h"
+#include "FocusArbitrationTestFixture.h"
 
 // ============================================================================
 // 15. REAL-KEYBOARD dispatch: the shifted-symbol key codes the macOS peer delivers

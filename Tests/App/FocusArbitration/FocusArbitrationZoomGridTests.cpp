@@ -1,7 +1,7 @@
 // Concern: grid (snap) commands and zoom commands routed by resolveEditSurface(), the
 // inactive-while-hidden gate, and the Preferences natural-scrolling/scroll-to-zoom toggles
 // reaching both the timeline and the roll live.
-#include "App/FocusArbitration/FocusArbitrationTestFixture.h"
+#include "FocusArbitrationTestFixture.h"
 
 // ============================================================================
 // 10. Grid (snap) commands — one shared value, gated on the panel being on screen

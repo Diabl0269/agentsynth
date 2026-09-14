@@ -1,7 +1,7 @@
 // Concern: Space play/stop, panel-local per-surface Delete, and resolveEditSurface() itself
 // (override path + panel-visibility fallback + surface actions falling through the global
 // handler).
-#include "App/FocusArbitration/FocusArbitrationTestFixture.h"
+#include "FocusArbitrationTestFixture.h"
 
 // ============================================================================
 // 6. Space — global play/stop toggle
