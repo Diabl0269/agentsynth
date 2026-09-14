@@ -11,7 +11,7 @@
 1726 Source/Timeline/TimelineDoc.cpp
 1999 Source/UI/Assistant/AIChatComponent.cpp
 1984 Source/UI/Graph/GraphEditor/GraphEditor.h
-1275 Source/UI/Macros/MacroPortConfigDialog.cpp
+1275 Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.cpp
 1461 Source/UI/PianoRoll/PianoRollComponent/PianoRollComponent.h
 1206 Source/UI/Settings/PreferencesSettingsTab.cpp
 1223 Source/UI/Theme/AppLookAndFeel.cpp

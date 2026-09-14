@@ -310,7 +310,7 @@ add_executable(Tests
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryInput.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryHelpPopover.cpp
     ../Source/UI/Macros/MacroCardComponent.cpp
-    ../Source/UI/Macros/MacroPortConfigDialog.cpp
+    ../Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.cpp
     ../Source/Plugin/Hosting/HostedPluginEditorWindow.cpp
     ../Source/UI/Settings/SettingsWindow.cpp
     ../Source/UI/Settings/AppearanceSettingsTab.cpp

@@ -28,7 +28,7 @@ add_executable(TimelineOpsHarness
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Macros/MacroCardComponent.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/Macros/MacroPortConfigDialog.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModMatrixComponent.cpp
 )
 

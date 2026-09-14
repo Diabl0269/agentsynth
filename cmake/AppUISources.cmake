@@ -96,7 +96,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
     Source/UI/Macros/MacroCardComponent.cpp
-    Source/UI/Macros/MacroPortConfigDialog.cpp
+    Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.cpp
     Source/UI/Macros/MacroCardComponent.h
     Source/UI/ModuleViews/FrequencyResponseComponent.h
     Source/UI/ModuleViews/FrequencyGrid.h

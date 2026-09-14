@@ -12,7 +12,7 @@
 #include "UI/Graph/SelectionModel.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Layout/UIAnimation.h"
-#include "UI/Macros/MacroPortConfigDialog.h"
+#include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
 #include <memory>
