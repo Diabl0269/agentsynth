@@ -26,7 +26,6 @@
 1411 Tests/MainComponentTests.cpp
 1262 Tests/ModuleComponentTests.cpp
 1188 Tests/OllamaProviderTests.cpp
-6046 Tests/PianoRollTests.cpp
 1397 Tests/PluginScanTests.cpp
 1184 Tests/PreferencesSettingsTabTests.cpp
 1156 Tests/RemoteProviderTests.cpp

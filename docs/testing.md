@@ -285,6 +285,24 @@ Test UI component interactions using in-process construction (no window, no disp
 | `MacroAutoPortUngroupTests.cpp` | Ungroup removes auto-created ports and splices cables back; presentation-count/tooltip rules; the auto-create-ports preference's modal-firing conditions |
 | `MacroAutoPortDeleteTests.cpp` | T148/T154: auto-delete a macro port once its last cable is gone, via `disconnectCable`/`disconnectPort` and via whole-node deletion |
 
+**PianoRoll file layout.** The piano-roll editor's suite (234 tests) is split by topic under `Tests/PianoRoll/`, all sharing the `PianoRollFixture` (a `CountingRoll`-backed roll wired to a bare `TimelineDoc` + `AppUndoManager`, no `TimelinePanelComponent` needed) and mouse/keyboard-gesture helpers in `Tests/PianoRoll/PianoRollTestHelpers.h` (header-only, not built on its own):
+
+| File | Covers |
+|------|--------|
+| `NoteSelectionModelTests.cpp` | `synth::ui::NoteSelectionModel` — mirrors `ClipSelectionModelTests.cpp`'s coverage, keyed on `synth::NoteId` |
+| `NoteHitTestMarqueeTests.cpp` | `synth::ui::noteHitTestMarquee` — mirrors `clipHitTestMarquee`'s coverage |
+| `PianoRollComponentTests.cpp` | Core: open/close lifecycle, the gesture table (single click deselects, DOUBLE-click creates/deletes, drag moves/resizes, drag-from-empty marquees), note length following the snap division, clip-window clamping, the roll's own beat<->x mapping (first bar reachable, zoom around the cursor, gridline density), the local playhead's strip-confined repaint seam, the Q button, and a snapshot smoke test |
+| `PianoRollEditToolsTests.cpp` | The edit tools (Split/Glue/Erase/Mute/Draw) — each one's single-click gesture and no-op cases; QUANTIZE — the pitch-quantize verb, its header chip and both Option+Q shortcuts |
+| `PianoRollClipboardTests.cpp` | The note clipboard — copy/cut/paste-at-playhead/duplicate/repeat/select-all, including the cross-clip paste the member clipboard exists for |
+| `PianoRollArrowKeyTests.cpp` | ARROW-key editing — grid nudge, semitone/octave transpose, group clamping, the fall-through contract when nothing is selected; Alt+Left/Right note NAVIGATION — walking the doc's canonical note order, collapsing a multi-selection, the ends of the run |
+| `PianoRollShortcutsTests.cpp` | REBINDABLE surface keys resolved through a `ShortcutManager` instead of the hardcoded defaults, including the "an unbound action has no key" rule and the two keys (Escape, Delete) that stay fixed on purpose |
+| `PianoRollZoomTests.cpp` | WHEEL/ZOOM policy — the macOS Shift axis swap, natural-vs-inverted scroll sign, the anchored zoom commands, the wheel-zoom DIRECTION convention; SNAP vs the drawn grid — the chosen division stays visible with snap off |
+| `PianoRollPaintingTests.cpp` | KEY LABELS (paintKeysColumn's pure per-row decision); ROW MAPPING (yForPitch/pitchForY through visiblePitches_, scale-context filtering); NOTE COLOURING through `synth::ui::resolveNoteColour`; KEYS-COLUMN geometry (black-key inset seam + snapshot smoke); the TOOLBAR ROW's three-band vertical layout above the ruler |
+| `PianoRollScaleAssistTests.cpp` | Scale assist — the header button + gutter shift, `quantisePitchesToScale`, `generateRandomNotesIntoClip`, per-clip memory, PropertiesFile persistence; the scale-panel SLIDE animation; SHOW ONLY SCALE NOTES as a header chip + Option+S and the scale-aware Up/Down transpose it enables; the `ScaleAssistPanel` component in isolation via its own accessors |
+| `PianoRollHeaderChipsTests.cpp` | Header button chip affordance (six chips — hover wash + resting/active fill); GENERATE — add-to-existing vs replace, plus the six chips' distinct/non-overlapping bounds |
+| `PianoRollAuditionTests.cpp` | NOTE AUDITION (`onAuditionNote`) — "clicking a note plays it" — through the roll's own callback and through the real `TimelinePanelComponent` -> `TrackHeaderHost` wiring; KEYS-COLUMN audition (the virtual keyboard down the left gutter) |
+| `PianoRollMouseTests.cpp` | MARQUEE multi-select from empty grid; BEAT-ANCHORED drag math / EDGE AUTO-SCROLL / FOLLOW PLAYHEAD; MULTI-NOTE RESIZE (incl. the Cmd unquantized resize and the clip-overrun prompt); CMD+DRAG unsnapped MOVE + the velocity scrub's move to Option |
+
 #### `createComponentSnapshot` smoke-test pattern
 
 Several new tests use `Component::createComponentSnapshot(bounds)` to verify that a component renders without crashing and produces non-empty pixels, without requiring a real display or window. Example: `StatusBarTests::RendersNonEmptyImage` and `ThemeTests::StyledWidgetSmokeTest.*`. The pattern is:
@@ -881,7 +899,6 @@ Largest legacy files at the time of writing (see `scripts/file-size-baseline.txt
 |------|-------|
 | `Source/UI/GraphEditor.cpp` | 9125 |
 | `Tests/GraphEditorTests.cpp` | 6196 |
-| `Tests/PianoRollTests.cpp` | 6046 |
 | `Source/MainComponent.cpp` | 5379 |
 
 Scope and exclusions, all deliberate (see the script's own header comment for the full reasoning): `assets/`, `mockups/`, any local `build*` directory, `.claude/`, and recorded JSON fixture corpora (`Tests/fixtures/`, `Tools/TimelineOpsHarness/Fixtures/`) never count toward the cap — their size reflects recorded data, not hand-authored structure. The guard's own baseline file is excluded from itself.
