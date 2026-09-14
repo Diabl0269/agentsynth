@@ -191,6 +191,19 @@ void MainComponent::addInstrumentTrack(const juce::String& instrumentModuleType,
     buildInstrumentTrackAndChain(synth::AIStateMapper::createModule(instrumentModuleType), instrumentModuleType, poly);
 }
 
+// T183/FRO42: the shared tail of addInstrumentTrack() and addInstrumentPluginTrack() — Track In
+// -> `instrumentProcessor` -> [poly/envelope branches, gated exactly as addInstrumentTrack's own
+// comment describes] -> default chain -> Master, boxed into one collapsed macro, as ONE undo
+// step. `instrumentProcessor` must be non-null and NOT yet added to any graph (a factory
+// failure, or a plugin whose load failed/refused, is the CALLER's job to catch and report before
+// this ever runs — see addInstrumentPluginTrack's own comment for why: nothing here may open a
+// transaction for an instrument that doesn't exist). Every branch this method takes (Oscillator/
+// Wavetable's ADSR+VCA, a poly instrument's Voice Mixer) is keyed off the PROCESSOR's own
+// getName()/"poly" parameter, never a caller-supplied type string — a hosted plugin's getName()
+// is "Hosted Plugin" and it declares no "poly" parameter, so every one of those branches falls
+// out to the plain path automatically, with no separate plugin-shaped copy of this logic. `poly`
+// mirrors addInstrumentTrack's own parameter (always false from the plugin path, which has no
+// poly concept). `trackNamePrefix` becomes "<prefix> <N>", same numbering as before.
 void MainComponent::buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProcessor> instrumentProcessor,
                                                  const juce::String& trackNamePrefix, bool poly) {
     if (instrumentProcessor == nullptr) {
@@ -211,184 +224,14 @@ void MainComponent::buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProc
     const bool pushed = undoManager.recordGraphTimelineAndMacroChange(
         audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(),
         [this, index, &trackName, trackNamePrefix, poly, stagedInstrument] {
-            trackName = trackNamePrefix + " " + juce::String(index + 1);
-            const auto trackId = timelineDoc.addTrack(synth::TrackKind::Midi, trackName);
-            if (!trackId.isValid())
-                return; // at kMaxTracks: nothing added, no node created, no macro
-
-            auto& graph = audioEngine.getGraph();
-
-            // Track In, through the factory like createTrackInNode() — inlined rather than reused
-            // because that method auto-wires to "the sole existing instrument" and calls
-            // updateComponents() itself, neither of which fits this compound build (this wires the
-            // instrument THIS call creates, and updateComponents() runs once at the end).
-            auto trackInProcessor = synth::AIStateMapper::createModule("Track In");
-            if (trackInProcessor == nullptr)
+            InstrumentChainBuild build;
+            if (!createTrackInForInstrumentChain(index, trackNamePrefix, trackName, build))
                 return;
-            auto trackInNodePtr = graph.addNode(std::move(trackInProcessor));
-            if (trackInNodePtr == nullptr)
+            if (!adoptInstrumentNodeForChain(stagedInstrument, index, poly, build))
                 return;
-            auto* trackInNode = trackInNodePtr.get();
-            const juce::String trackInUuid = juce::Uuid().toDashedString();
-            trackInNode->properties.set("uuid", trackInUuid);
-            if (auto* module = dynamic_cast<ModuleBase*>(trackInNode->getProcessor()))
-                module->setNodeUuid(trackInUuid);
-            const auto trackInSize = GraphEditor::estimateModuleSize("Track In");
-            const auto trackInPosition = graphEditor.findLeftEdgeSlotBelowModules(trackInSize.x, trackInSize.y);
-            trackInNode->properties.set("x", trackInPosition.x);
-            trackInNode->properties.set("y", trackInPosition.y);
-
-            // The instrument, right of Track In — already created (and, for a hosted plugin,
-            // already loaded) by the caller; adopted into the live graph HERE, inside this undo
-            // transaction, so Cmd+Z removes it along with everything else.
-            if (!*stagedInstrument)
-                return; // moved exactly once above; defensive, mirrors addModuleAtCanvasPosition's own guard
-            const int instrumentX = trackInPosition.x + trackInSize.x + kChannelCardGapX;
-            auto instrumentNodePtr = graph.addNode(std::move(*stagedInstrument));
-            if (instrumentNodePtr == nullptr)
-                return;
-            auto* instrumentNode = instrumentNodePtr.get();
-            // The processor's OWN name, not the caller's `trackNamePrefix` — for a hosted plugin the
-            // latter is the plugin's display name (e.g. "Serum"), never "Hosted Plugin", so every
-            // branch below that keys off the factory type name (isOscOrWavetable, estimateModuleSize)
-            // must read it from the node it actually got.
-            const juce::String instrumentModuleType = instrumentNode->getProcessor()->getName();
-            const juce::String instrumentUuid = juce::Uuid().toDashedString();
-            instrumentNode->properties.set("uuid", instrumentUuid);
-            if (auto* module = dynamic_cast<ModuleBase*>(instrumentNode->getProcessor()))
-                module->setNodeUuid(instrumentUuid);
-            instrumentNode->properties.set("x", instrumentX);
-            instrumentNode->properties.set("y", trackInPosition.y);
-
-            if (poly)
-                synth::setProcessorPoly(instrumentNode->getProcessor(), true);
-
-            timelineDoc.setTrackBinding(trackId, trackInUuid);
-            timelineDoc.setTrackColour(trackId, synth::ui::trackPaletteColour(index).getARGB());
-
-            // Track In -> instrument, MIDI. Unambiguous by construction: this instrument was just
-            // created for this track alone.
-            graph.addConnection({{trackInNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
-                                 {instrumentNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex}});
-
-            const bool isOscOrWavetable = instrumentModuleType == "Oscillator" || instrumentModuleType == "Wavetable";
-            const bool instrumentIsPoly = synth::isProcessorPoly(instrumentNode->getProcessor());
-
-            auto* chainSource = instrumentNode;
-            int sourceRightChannel = 1;
-            if (auto* instrumentModule = dynamic_cast<ModuleBase*>(instrumentNode->getProcessor()))
-                sourceRightChannel = instrumentModule->rightAudioLegChannel();
-            juce::String chainSourceType = instrumentModuleType;
-            auto chainSourcePosition =
-                juce::Point<int>(static_cast<int>(chainSource->properties.getWithDefault("x", 0)),
-                                 static_cast<int>(chainSource->properties.getWithDefault("y", 0)));
-
-            juce::String voiceMixerUuid, polyMidiUuid, adsrUuid, vcaUuid;
-
-            if (isOscOrWavetable && instrumentIsPoly) {
-                // FRO46 (P9-3j): a poly Oscillator/Wavetable gets a TRUE per-voice envelope — Poly
-                // MIDI + poly ADSR + poly VCA, replacing both the Voice Mixer stage below and
-                // addEnvelopeAndVCAForRawInstrument's forced-mono ADSR/VCA (see
-                // addPolyEnvelopeAndVCAForInstrument's own comment for why the non-poly path can't
-                // just be made poly in place). No Voice Mixer is inserted: the poly VCA does its own
-                // 8-voice summing.
-                const int polyMidiX =
-                    instrumentX + GraphEditor::estimateModuleSize(instrumentModuleType).x + kChannelCardGapX;
-                const int adsrX = polyMidiX + GraphEditor::estimateModuleSize("Poly MIDI").x + kChannelCardGapX;
-                const int vcaX = adsrX + GraphEditor::estimateModuleSize("ADSR").x + kChannelCardGapX;
-                const auto polyEnv = synth::addPolyEnvelopeAndVCAForInstrument(
-                    graph, *trackInNode, *instrumentNode, {polyMidiX, trackInPosition.y}, {adsrX, trackInPosition.y},
-                    {vcaX, trackInPosition.y});
-                if (polyEnv.vca != nullptr) {
-                    polyMidiUuid = polyEnv.polyMidiUuid;
-                    adsrUuid = polyEnv.adsrUuid;
-                    vcaUuid = polyEnv.vcaUuid;
-                    chainSource = polyEnv.vca;
-                    // The legacy ch0/ch1 duplicate (VCAModule.h) — the instrument's R-octet is
-                    // deliberately not wired into the VCA's real Audio R poly block, same known
-                    // limitation addVoiceMixerForPolyInstrument's own comment documents.
-                    sourceRightChannel = 1;
-                    chainSourceType = "VCA";
-                    chainSourcePosition = {vcaX, trackInPosition.y};
-                }
-            } else {
-                // A poly instrument's L-octet needs summing before the strip (see
-                // addVoiceMixerForPolyInstrument's own comment) — a no-op for today's factory-default
-                // instruments (poly defaults off) and for the poly Oscillator/Wavetable case handled
-                // above, kept general for a poly Sampler or any other poly instrument.
-                const int voiceMixerX =
-                    instrumentX + GraphEditor::estimateModuleSize(instrumentModuleType).x + kChannelCardGapX;
-                auto* voiceMixerNode = synth::addVoiceMixerForPolyInstrument(
-                    graph, *instrumentNode, {voiceMixerX, trackInPosition.y}, voiceMixerUuid);
-
-                if (voiceMixerNode != nullptr) {
-                    chainSource = voiceMixerNode;
-                    sourceRightChannel = 1;
-                    chainSourceType = "Voice Mixer";
-                    chainSourcePosition =
-                        juce::Point<int>(static_cast<int>(chainSource->properties.getWithDefault("x", 0)),
-                                         static_cast<int>(chainSource->properties.getWithDefault("y", 0)));
-                }
-
-                // P9-3i (FRO43): Oscillator/Wavetable have no envelope of their own, so a held (or
-                // even released) note drones forever. Insert an ADSR (gated by the same Track In
-                // MIDI as the instrument) driving a VCA, ahead of the rest of the chain — AFTER any
-                // Voice Mixer stage above, never before it (see addEnvelopeAndVCAForRawInstrument's
-                // own comment for why). Sampler already has its own one-shot playback envelope and
-                // is out of scope. Never reached for a poly Oscillator/Wavetable (handled above).
-                if (isOscOrWavetable) {
-                    const int adsrX =
-                        chainSourcePosition.x + GraphEditor::estimateModuleSize(chainSourceType).x + kChannelCardGapX;
-                    const int vcaX = adsrX + GraphEditor::estimateModuleSize("ADSR").x + kChannelCardGapX;
-                    const auto envAndVca = synth::addEnvelopeAndVCAForRawInstrument(
-                        graph, *trackInNode, *chainSource, sourceRightChannel, {adsrX, chainSourcePosition.y},
-                        {vcaX, chainSourcePosition.y});
-                    if (envAndVca.vca != nullptr) {
-                        adsrUuid = envAndVca.adsrUuid;
-                        vcaUuid = envAndVca.vcaUuid;
-                        chainSource = envAndVca.vca;
-                        sourceRightChannel = VCAModule::kRightBase;
-                        chainSourceType = "VCA";
-                        chainSourcePosition = {vcaX, chainSourcePosition.y};
-                    }
-                }
-            }
-
-            // Lay every card of the expanded chain out left-to-right from the real card widths, the
-            // same reason addAudioTrack's own comment gives (Parametric EQ is double-width).
-            const int eqX =
-                chainSourcePosition.x + GraphEditor::estimateModuleSize(chainSourceType).x + kChannelCardGapX;
-            const int compressorX = eqX + GraphEditor::estimateModuleSize("Parametric EQ").x + kChannelCardGapX;
-            const int stripX = compressorX + GraphEditor::estimateModuleSize("Compressor").x + kChannelCardGapX;
-            const int masterX = stripX + GraphEditor::estimateModuleSize("Channel Strip").x + kChannelCardGapX;
-            const synth::DefaultChannelLayout layout{
-                /*eq=*/{eqX, chainSourcePosition.y},
-                /*compressor=*/{compressorX, chainSourcePosition.y},
-                /*strip=*/{stripX, chainSourcePosition.y},
-                /*master=*/{masterX, chainSourcePosition.y},
-            };
-
-            const auto channel = synth::buildDefaultAudioChannel(graph, *chainSource, layout, sourceRightChannel);
-            if (channel.stripUuid.isEmpty())
+            buildInstrumentEnvelopeChain(build);
+            if (!buildInstrumentChannelAndMacro(trackName, build))
                 return; // a factory/addNode failure partway — see buildDefaultAudioChannel's contract
-
-            // Box {Track In, instrument, [Voice Mixer if poly], [Poly MIDI if poly Oscillator/
-            // Wavetable], [ADSR+VCA if Oscillator/Wavetable], EQ, Compressor, Strip} into ONE
-            // collapsed macro named after the track. Master is deliberately NOT a member — same
-            // spliceMasterNode reason addAudioTrack's own comment explains.
-            std::vector<juce::String> macroMembers{trackInUuid, instrumentUuid};
-            if (!voiceMixerUuid.isEmpty())
-                macroMembers.push_back(voiceMixerUuid);
-            if (!polyMidiUuid.isEmpty())
-                macroMembers.push_back(polyMidiUuid);
-            if (!adsrUuid.isEmpty())
-                macroMembers.push_back(adsrUuid);
-            if (!vcaUuid.isEmpty())
-                macroMembers.push_back(vcaUuid);
-            macroMembers.push_back(channel.eqUuid);
-            macroMembers.push_back(channel.compressorUuid);
-            macroMembers.push_back(channel.stripUuid);
-            graphEditor.addMacroForMembers(macroMembers, trackName, trackInPosition);
 
             // Inside the mutation, not after: MacroSet::retainOnly() (run by updateComponents())
             // must see every node above still alive to keep the macro's membership.
@@ -397,6 +240,216 @@ void MainComponent::buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProc
 
     reconcileTimelineAfterGraphChange();
     statusBar.showMessage(pushed ? "Added " + trackName : "Could not add a track");
+}
+
+// buildInstrumentTrackAndChain step 1/4: the track + its Track In node — through the factory like
+// createTrackInNode() — inlined rather than reused because that method auto-wires to "the sole
+// existing instrument" and calls updateComponents() itself, neither of which fits this compound
+// build (this wires the instrument THIS call creates, and updateComponents() runs once at the
+// end). Returns false exactly where the original inline body would have returned (at kMaxTracks,
+// or a factory/addNode failure) — no track, no node, no undo entry.
+bool MainComponent::createTrackInForInstrumentChain(int index, const juce::String& trackNamePrefix,
+                                                    juce::String& trackName, InstrumentChainBuild& build) {
+    trackName = trackNamePrefix + " " + juce::String(index + 1);
+    build.trackId = timelineDoc.addTrack(synth::TrackKind::Midi, trackName);
+    if (!build.trackId.isValid())
+        return false; // at kMaxTracks: nothing added, no node created, no macro
+
+    auto& graph = audioEngine.getGraph();
+    auto trackInProcessor = synth::AIStateMapper::createModule("Track In");
+    if (trackInProcessor == nullptr)
+        return false;
+    auto trackInNodePtr = graph.addNode(std::move(trackInProcessor));
+    if (trackInNodePtr == nullptr)
+        return false;
+    build.trackInNode = trackInNodePtr.get();
+    build.trackInUuid = juce::Uuid().toDashedString();
+    build.trackInNode->properties.set("uuid", build.trackInUuid);
+    if (auto* module = dynamic_cast<ModuleBase*>(build.trackInNode->getProcessor()))
+        module->setNodeUuid(build.trackInUuid);
+    build.trackInSize = GraphEditor::estimateModuleSize("Track In");
+    build.trackInPosition = graphEditor.findLeftEdgeSlotBelowModules(build.trackInSize.x, build.trackInSize.y);
+    build.trackInNode->properties.set("x", build.trackInPosition.x);
+    build.trackInNode->properties.set("y", build.trackInPosition.y);
+    return true;
+}
+
+// buildInstrumentTrackAndChain step 2/4: adopts the caller's already-created (and, for a hosted
+// plugin, already-loaded) instrument processor into the live graph HERE, inside this undo
+// transaction, so Cmd+Z removes it along with everything else; wires Track In -> instrument MIDI;
+// and seeds `chainSource`/`sourceRightChannel`/`chainSourceType`/`chainSourcePosition` at "the
+// instrument itself", which step 3 (buildInstrumentEnvelopeChain) may advance past. Returns false
+// exactly where the original inline body would have returned (staged instrument already moved, or
+// an addNode failure).
+bool MainComponent::adoptInstrumentNodeForChain(std::shared_ptr<std::unique_ptr<juce::AudioProcessor>> stagedInstrument,
+                                                int index, bool poly, InstrumentChainBuild& build) {
+    if (!*stagedInstrument)
+        return false; // moved exactly once above; defensive, mirrors addModuleAtCanvasPosition's own guard
+    auto& graph = audioEngine.getGraph();
+    const int instrumentX = build.trackInPosition.x + build.trackInSize.x + kChannelCardGapX;
+    auto instrumentNodePtr = graph.addNode(std::move(*stagedInstrument));
+    if (instrumentNodePtr == nullptr)
+        return false;
+    build.instrumentNode = instrumentNodePtr.get();
+    // The processor's OWN name, not the caller's `trackNamePrefix` — for a hosted plugin the
+    // latter is the plugin's display name (e.g. "Serum"), never "Hosted Plugin", so every
+    // branch below that keys off the factory type name (isOscOrWavetable, estimateModuleSize)
+    // must read it from the node it actually got.
+    build.instrumentModuleType = build.instrumentNode->getProcessor()->getName();
+    build.instrumentUuid = juce::Uuid().toDashedString();
+    build.instrumentNode->properties.set("uuid", build.instrumentUuid);
+    if (auto* module = dynamic_cast<ModuleBase*>(build.instrumentNode->getProcessor()))
+        module->setNodeUuid(build.instrumentUuid);
+    build.instrumentNode->properties.set("x", instrumentX);
+    build.instrumentNode->properties.set("y", build.trackInPosition.y);
+
+    if (poly)
+        synth::setProcessorPoly(build.instrumentNode->getProcessor(), true);
+
+    timelineDoc.setTrackBinding(build.trackId, build.trackInUuid);
+    timelineDoc.setTrackColour(build.trackId, synth::ui::trackPaletteColour(index).getARGB());
+
+    // Track In -> instrument, MIDI. Unambiguous by construction: this instrument was just
+    // created for this track alone.
+    graph.addConnection({{build.trackInNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
+                         {build.instrumentNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex}});
+
+    build.chainSource = build.instrumentNode;
+    build.sourceRightChannel = 1;
+    if (auto* instrumentModule = dynamic_cast<ModuleBase*>(build.instrumentNode->getProcessor()))
+        build.sourceRightChannel = instrumentModule->rightAudioLegChannel();
+    build.chainSourceType = build.instrumentModuleType;
+    build.chainSourcePosition =
+        juce::Point<int>(static_cast<int>(build.chainSource->properties.getWithDefault("x", 0)),
+                         static_cast<int>(build.chainSource->properties.getWithDefault("y", 0)));
+    return true;
+}
+
+// buildInstrumentTrackAndChain step 3/4: the optional envelope stage(s) ahead of the channel
+// build, advancing `chainSource`/`sourceRightChannel`/`chainSourceType`/`chainSourcePosition` past
+// whatever got inserted. Never fails outright — an insertion helper returning null just leaves the
+// chain source where step 2 left it.
+void MainComponent::buildInstrumentEnvelopeChain(InstrumentChainBuild& build) {
+    auto& graph = audioEngine.getGraph();
+    const bool isOscOrWavetable =
+        build.instrumentModuleType == "Oscillator" || build.instrumentModuleType == "Wavetable";
+    const bool instrumentIsPoly = synth::isProcessorPoly(build.instrumentNode->getProcessor());
+    const int instrumentX = static_cast<int>(build.instrumentNode->properties.getWithDefault("x", 0));
+
+    if (isOscOrWavetable && instrumentIsPoly) {
+        // FRO46 (P9-3j): a poly Oscillator/Wavetable gets a TRUE per-voice envelope — Poly
+        // MIDI + poly ADSR + poly VCA, replacing both the Voice Mixer stage below and
+        // addEnvelopeAndVCAForRawInstrument's forced-mono ADSR/VCA (see
+        // addPolyEnvelopeAndVCAForInstrument's own comment for why the non-poly path can't
+        // just be made poly in place). No Voice Mixer is inserted: the poly VCA does its own
+        // 8-voice summing.
+        const int polyMidiX =
+            instrumentX + GraphEditor::estimateModuleSize(build.instrumentModuleType).x + kChannelCardGapX;
+        const int adsrX = polyMidiX + GraphEditor::estimateModuleSize("Poly MIDI").x + kChannelCardGapX;
+        const int vcaX = adsrX + GraphEditor::estimateModuleSize("ADSR").x + kChannelCardGapX;
+        const auto polyEnv = synth::addPolyEnvelopeAndVCAForInstrument(
+            graph, *build.trackInNode, *build.instrumentNode, {polyMidiX, build.trackInPosition.y},
+            {adsrX, build.trackInPosition.y}, {vcaX, build.trackInPosition.y});
+        if (polyEnv.vca != nullptr) {
+            build.polyMidiUuid = polyEnv.polyMidiUuid;
+            build.adsrUuid = polyEnv.adsrUuid;
+            build.vcaUuid = polyEnv.vcaUuid;
+            build.chainSource = polyEnv.vca;
+            // The legacy ch0/ch1 duplicate (VCAModule.h) — the instrument's R-octet is
+            // deliberately not wired into the VCA's real Audio R poly block, same known
+            // limitation addVoiceMixerForPolyInstrument's own comment documents.
+            build.sourceRightChannel = 1;
+            build.chainSourceType = "VCA";
+            build.chainSourcePosition = {vcaX, build.trackInPosition.y};
+        }
+        return;
+    }
+
+    // A poly instrument's L-octet needs summing before the strip (see
+    // addVoiceMixerForPolyInstrument's own comment) — a no-op for today's factory-default
+    // instruments (poly defaults off) and for the poly Oscillator/Wavetable case handled
+    // above, kept general for a poly Sampler or any other poly instrument.
+    const int voiceMixerX =
+        instrumentX + GraphEditor::estimateModuleSize(build.instrumentModuleType).x + kChannelCardGapX;
+    auto* voiceMixerNode = synth::addVoiceMixerForPolyInstrument(
+        graph, *build.instrumentNode, {voiceMixerX, build.trackInPosition.y}, build.voiceMixerUuid);
+
+    if (voiceMixerNode != nullptr) {
+        build.chainSource = voiceMixerNode;
+        build.sourceRightChannel = 1;
+        build.chainSourceType = "Voice Mixer";
+        build.chainSourcePosition =
+            juce::Point<int>(static_cast<int>(build.chainSource->properties.getWithDefault("x", 0)),
+                             static_cast<int>(build.chainSource->properties.getWithDefault("y", 0)));
+    }
+
+    // P9-3i (FRO43): Oscillator/Wavetable have no envelope of their own, so a held (or
+    // even released) note drones forever. Insert an ADSR (gated by the same Track In
+    // MIDI as the instrument) driving a VCA, ahead of the rest of the chain — AFTER any
+    // Voice Mixer stage above, never before it (see addEnvelopeAndVCAForRawInstrument's
+    // own comment for why). Sampler already has its own one-shot playback envelope and
+    // is out of scope. Never reached for a poly Oscillator/Wavetable (handled above).
+    if (isOscOrWavetable) {
+        const int adsrX =
+            build.chainSourcePosition.x + GraphEditor::estimateModuleSize(build.chainSourceType).x + kChannelCardGapX;
+        const int vcaX = adsrX + GraphEditor::estimateModuleSize("ADSR").x + kChannelCardGapX;
+        const auto envAndVca = synth::addEnvelopeAndVCAForRawInstrument(
+            graph, *build.trackInNode, *build.chainSource, build.sourceRightChannel,
+            {adsrX, build.chainSourcePosition.y}, {vcaX, build.chainSourcePosition.y});
+        if (envAndVca.vca != nullptr) {
+            build.adsrUuid = envAndVca.adsrUuid;
+            build.vcaUuid = envAndVca.vcaUuid;
+            build.chainSource = envAndVca.vca;
+            build.sourceRightChannel = VCAModule::kRightBase;
+            build.chainSourceType = "VCA";
+            build.chainSourcePosition = {vcaX, build.chainSourcePosition.y};
+        }
+    }
+}
+
+// buildInstrumentTrackAndChain step 4/4: the default EQ/Compressor/Strip channel off
+// `chainSource`, boxed with everything built above into one collapsed macro named after the
+// track. Master is deliberately NOT a macro member — same spliceMasterNode reason addAudioTrack's
+// own comment explains. Returns false exactly where the original inline body would have returned
+// (a factory/addNode failure partway through the channel build).
+bool MainComponent::buildInstrumentChannelAndMacro(const juce::String& trackName, InstrumentChainBuild& build) {
+    // Lay every card of the expanded chain out left-to-right from the real card widths, the
+    // same reason addAudioTrack's own comment gives (Parametric EQ is double-width).
+    const int eqX =
+        build.chainSourcePosition.x + GraphEditor::estimateModuleSize(build.chainSourceType).x + kChannelCardGapX;
+    const int compressorX = eqX + GraphEditor::estimateModuleSize("Parametric EQ").x + kChannelCardGapX;
+    const int stripX = compressorX + GraphEditor::estimateModuleSize("Compressor").x + kChannelCardGapX;
+    const int masterX = stripX + GraphEditor::estimateModuleSize("Channel Strip").x + kChannelCardGapX;
+    const synth::DefaultChannelLayout layout{
+        /*eq=*/{eqX, build.chainSourcePosition.y},
+        /*compressor=*/{compressorX, build.chainSourcePosition.y},
+        /*strip=*/{stripX, build.chainSourcePosition.y},
+        /*master=*/{masterX, build.chainSourcePosition.y},
+    };
+
+    const auto channel =
+        synth::buildDefaultAudioChannel(audioEngine.getGraph(), *build.chainSource, layout, build.sourceRightChannel);
+    if (channel.stripUuid.isEmpty())
+        return false;
+
+    // Box {Track In, instrument, [Voice Mixer if poly], [Poly MIDI if poly Oscillator/
+    // Wavetable], [ADSR+VCA if Oscillator/Wavetable], EQ, Compressor, Strip} into ONE
+    // collapsed macro named after the track. Master is deliberately NOT a member — same
+    // spliceMasterNode reason addAudioTrack's own comment explains.
+    std::vector<juce::String> macroMembers{build.trackInUuid, build.instrumentUuid};
+    if (!build.voiceMixerUuid.isEmpty())
+        macroMembers.push_back(build.voiceMixerUuid);
+    if (!build.polyMidiUuid.isEmpty())
+        macroMembers.push_back(build.polyMidiUuid);
+    if (!build.adsrUuid.isEmpty())
+        macroMembers.push_back(build.adsrUuid);
+    if (!build.vcaUuid.isEmpty())
+        macroMembers.push_back(build.vcaUuid);
+    macroMembers.push_back(channel.eqUuid);
+    macroMembers.push_back(channel.compressorUuid);
+    macroMembers.push_back(channel.stripUuid);
+    graphEditor.addMacroForMembers(macroMembers, trackName, build.trackInPosition);
+    return true;
 }
 
 // FRO26 (P9-3e, docs/mixer.md §5.13): every track whose bound node's chain still reaches the
@@ -462,6 +515,7 @@ void MainComponent::createChannelsForExistingTracks() {
 
 // FRO25 (P9-3d, docs/mixer.md §5.8): "Make channel" on one track's bound node — the header menu's
 // enabled state is the same synth::planMakeChannel query the action itself runs.
+// FRO25 (P9-3d): the header menu's "Make Channel".
 bool MainComponent::canMakeChannelForTrack(synth::TrackId trackId) const {
     const auto* track = timelineDoc.getTrack(trackId);
     if (track == nullptr || track->bindingUuid.isEmpty())
@@ -484,6 +538,10 @@ void MainComponent::makeChannelForTrack(synth::TrackId trackId) {
 // the mutation (MacroSet::retainOnly must see every new node alive), then the reconcile pass. The
 // macro is named after the track the chain belongs to (the one bound to `source`), falling back to
 // the source module's own name for a trackless chain picked on the canvas.
+// FRO25 (P9-3d): the ONE undo transaction (graph + timeline + macros) + reconcile pass behind
+// every "Make channel" entry point (header menu, canvas/module menu via
+// GraphEditor::onMakeChannelRequested), and behind "Duplicate into Channel"
+// (GraphEditor::onDuplicateIntoChannelRequested).
 void MainComponent::makeChannelForNode(juce::AudioProcessorGraph::NodeID source) {
     auto& graph = audioEngine.getGraph();
     auto* sourceNode = graph.getNodeForId(source);
@@ -541,6 +599,7 @@ void MainComponent::duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeI
 // juce::PluginDescription, which carries isInstrument) is read here rather than
 // getKnownPluginIdentities() (PluginIdentity alone, no isInstrument) precisely because the filter
 // needs that field.
+// FRO42 (P9-3h): the Instrument submenu's "Plugin" entries.
 std::vector<synth::PluginIdentity> MainComponent::getInstrumentPluginOptions() const {
     std::vector<synth::PluginIdentity> options;
     for (const auto& description : getPluginScanService().getKnownPlugins()) {

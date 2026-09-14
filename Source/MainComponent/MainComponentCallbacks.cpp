@@ -35,6 +35,10 @@ juce::File resolveExportSubdirectory(const juce::File& currentBundleDir, const c
 
 } // namespace
 
+/** Pushes the saved "split L/R jacks" preference onto the patch the app just opened with.
+ *  Must run AFTER AudioEngine::initialise() has built it — the preset loader constructs its
+ *  modules with no knowledge of preferences. Standalone only; the plugin keeps its
+ *  host-restored session. */
 void MainComponent::applyStoredDualIOPreferenceToPatch() {
     // Runs once, right after AudioEngine::initialise() has built the opening patch. Storing the
     // preference on the GraphEditor is not enough on its own: the default preset's modules are
@@ -48,6 +52,13 @@ void MainComponent::applyStoredDualIOPreferenceToPatch() {
         appProperties.getUserSettings()->getBoolValue("defaultDualIOForNewModules", false));
 }
 
+/** Output-card identity treatment: the text GraphEditor's Audio Output card shows under its
+ *  title (see GraphEditor::setOutputDeviceInfoProvider). HostMode::Hosted has no device
+ *  manager — see AudioEngine's HostMode doc comment — so that path returns a fixed "Host
+ *  audio" string instead of touching it. MESSAGE THREAD ONLY (reads AudioEngine's
+ *  AudioDeviceManager, same thread AudioDeviceManager itself requires). Returns an empty
+ *  string when there is genuinely nothing to report (no device open yet), which the card
+ *  treats as "no line" rather than a blank one. */
 juce::String MainComponent::computeOutputDeviceInfoText() const {
     // Hosted mode (plugin): AudioEngine never opens a device or touches deviceManager — the host
     // owns the clock and the hardware (see HostMode::Hosted in docs/architecture.md) — so there is
@@ -77,6 +88,8 @@ juce::String MainComponent::computeOutputDeviceInfoText() const {
 }
 
 // ---- Change callbacks: theme re-skin, and the live settings-file path ----
+// ChangeListener (juce::ChangeListener override) — called when ThemeManager broadcasts.
+// Implements the 3-step re-skin pass: applyTheme → sendLookAndFeelChangeMessage → repaint.
 void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
     // The undo manager broadcasts on every perform/undo/redo/new-transaction. This RECOMPUTES the
     // answer from the edit serial rather than blindly setting dirty, because that broadcast is
@@ -125,6 +138,10 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
 // since this is just repaint() calls on a handful of components, and correctness needs both the
 // region losing focus and the one gaining it repainted (a still-focused root never calls repaint()
 // on its own, since Component::focusGained/focusLost are no-op virtuals for most components).
+// FocusChangeListener (juce::FocusChangeListener override) — fires on every keyboard-focus
+// change anywhere in the process. Repaints every registered focus-region root so T159's accent
+// outline (FocusRegion.h's paintFocusRegionOutline) tracks focus moving into or out of it; see
+// FocusRegion.h's comment on paintFocusRegionOutline for why this listener is needed at all.
 void MainComponent::globalFocusChanged(juce::Component*) {
     for (const auto& region : focusRegions_.getRegions())
         if (region.root != nullptr)
@@ -279,6 +296,8 @@ void MainComponent::timerCallback() {
     }
 }
 
+// Status-bar round-trip readout. Called from the 5 Hz poll and from any
+// hosted-plugin latency change (which moves the graph term of the sum between polls).
 void MainComponent::updateRoundTripLatencyReadout() {
     // Gated by its own string diff inside StatusBarComponent — so calling it more
     // often than the 5 Hz poll (a hosted plugin's latency change does) costs nothing when
@@ -292,6 +311,10 @@ void MainComponent::updateRoundTripLatencyReadout() {
 
 // ---- Hosted-plugin latency compensation ----
 
+// Installs MainComponent's onLatencyChanged / onInstancePublished callbacks on every
+// HostedPluginModule in the graph. Idempotent, run from GraphEditor::onGraphStructureChanged —
+// the one hook every node-adding path already goes through. Never touches onInstanceChanged,
+// which HostedPluginEditorWindow owns.
 void MainComponent::installHostedPluginObservers() {
     for (auto* node : audioEngine.getGraph().getNodes()) {
         if (node == nullptr)
@@ -316,6 +339,9 @@ void MainComponent::installHostedPluginObservers() {
     }
 }
 
+/** Rebuilds the graph's render sequence so JUCE re-derives its parallel-path delay
+ *  compensation from the nodes' CURRENT latencies, then refreshes the status bar's round-trip
+ *  readout. Public so a test can drive the exact path a hosted plugin's callback drives. */
 void MainComponent::rebuildGraphForLatencyChange() {
     // juce::AudioProcessorGraph bakes {bus layout, latencySamples} per node into
     // its render sequence and only re-derives the parallel-path compensation delays when that
@@ -332,6 +358,7 @@ void MainComponent::rebuildGraphForLatencyChange() {
     updateRoundTripLatencyReadout();
 }
 
+// AIIntegrationService::Listener
 void MainComponent::aiPatchAboutToApply() {
     // Runs synchronously before the AI patch clears/rebuilds the graph. Detach module components now so
     // their ScopeComponent timers stop and no component references a soon-to-be-freed VisualBuffer.
@@ -355,6 +382,8 @@ void MainComponent::aiPatchApplied() {
     });
 }
 
+// Mirrors the loadButton factory-preset call site exactly (load + patch-name update), so
+// tests can verify the patch-name side effect without driving the async PopupMenu.
 void MainComponent::simulateLoadFactoryPresetForTest(int index) {
     auto presets = synth::PresetManager::getPresetList();
     if (index < 0 || index >= presets.size())
@@ -363,6 +392,8 @@ void MainComponent::simulateLoadFactoryPresetForTest(int index) {
     setCurrentPatchName(presets[index].name);
 }
 
+// One choke point for "load factory preset N + keep the timeline in step", shared by the Load
+// menu and simulateLoadFactoryPresetForTest.
 void MainComponent::loadFactoryPresetAtIndex(int index) {
     ProgrammaticApplyScope guard(*this);
     graphEditor.loadFactoryPreset(index);
@@ -386,6 +417,11 @@ void MainComponent::loadFactoryPresetAtIndex(int index) {
 // never before or after guardUnsavedChanges() itself — so a Cancel answer leaves the welcome screen
 // exactly as it was (see DirtyDocumentIsGuardedBeforeWelcomeScreenReplacesIt in
 // WelcomeScreenTests.cpp).
+// T114/P8-10: guarded factory-preset load, shared by the Load menu's own preset branch and the
+// welcome screen's "Open our default project" button (index 0). hideWelcomeScreen() runs as the
+// LAST line inside the guard's `proceed` continuation — never before or after
+// guardUnsavedChanges() itself — so a Cancel answer leaves the welcome screen exactly as it was
+// (see DirtyDocumentIsGuardedBeforeWelcomeScreenReplacesIt in WelcomeScreenTests.cpp).
 void MainComponent::loadPresetGuarded(int index) {
     auto presets = synth::PresetManager::getPresetList();
     if (index < 0 || index >= presets.size())
@@ -403,11 +439,17 @@ void MainComponent::loadPresetGuarded(int index) {
 // project rows. Goes through openFromFile like every other recent-project open, so autosave
 // recovery and the bundle/plain-preset split both apply unchanged — see openFromFile/
 // loadBundleFromFile/loadAutosaveFromFile's own hideWelcomeScreen() calls on their success paths.
+// T114/P8-10: guarded recent-project open, shared by the Load menu's "Recent Projects" submenu
+// and the welcome screen's recent-project rows. Goes through openFromFile like every other
+// recent-project open, so autosave recovery and the bundle/plain-preset split both apply
+// unchanged.
 void MainComponent::openRecentProjectGuarded(const juce::File& file) {
     guardUnsavedChanges("Opening a recent project", [this, file] { openFromFile(file); });
 }
 
 // Guards BEFORE the dialog opens — the chooser itself is the post-guard half, below.
+// P8-31: the patch half. Opens a `.json` preset, then asks whether to REPLACE the current
+// patch or ADD the loaded one on top of it (promptPatchLoadMode, the patchLoadPrompt seam).
 void MainComponent::openPresetFromFile() {
     // P8-31: no top-level guard here. Loading a patch first offers to REPLACE or APPEND onto the
     // current patch; only the destructive REPLACE arm guards unsaved changes (an append keeps them),
@@ -415,6 +457,9 @@ void MainComponent::openPresetFromFile() {
     launchOpenPresetChooser();
 }
 
+// P8-31: the whole-project half of the Load menu. openPresetFromFile opens a plain `.json`
+// patch; this opens a `.agsproj` bundle (graph + timeline) by letting the user select a
+// DIRECTORY (the bundle's folder). Same async shape, and the guard runs before the chooser.
 void MainComponent::openProjectFromFile() {
     guardUnsavedChanges("Opening a project", [this] { launchOpenProjectChooser(); });
 }
@@ -422,6 +467,9 @@ void MainComponent::openProjectFromFile() {
 // P8-31: the patch half - a plain `.json` preset, an ordinary file pick (never a directory). Once
 // the user has chosen a file, promptPatchLoadMode asks whether to REPLACE the current patch or add
 // the loaded one on top of it; openFromFile() branches on that flag.
+// The post-guard half of openPresetFromFile() — launches the actual chooser. Split out so
+// guardUnsavedChanges can run BEFORE the dialog opens rather than after the user has already
+// picked a file.
 void MainComponent::launchOpenPresetChooser() {
     fileChooser = std::make_unique<juce::FileChooser>("Load Patch", synth::ProjectBundle::getDefaultProjectsDirectory(),
                                                       "*.json");
@@ -446,6 +494,9 @@ void MainComponent::launchOpenPresetChooser() {
 
 // P8-31: the project half - a `.agsproj` bundle is a DIRECTORY (project.json + Audio/ + Peaks/),
 // so the browser must let the user pick a directory.
+// P8-31: the post-guard half of openProjectFromFile() — patches open a `.json` FILE, projects
+// open a `.agsproj` DIRECTORY, so each gets its own chooser (and its own filter + selection
+// mode) rather than one combined `.json;*.agsproj` browser that conflated the two.
 void MainComponent::launchOpenProjectChooser() {
     // Empty filter: an extension filter (e.g. `*.agsproj`) would make a macOS NSOpenPanel restrict
     // selection to that file name and refuse to let the user pick the folder itself. No filter lets
@@ -465,6 +516,14 @@ void MainComponent::launchOpenProjectChooser() {
 // `.agsproj` — not because the filter forbids `.json` (it still lists both, and saveToFile still
 // branches on whatever extension comes back), but because a first-time saver who just hits Enter
 // should land on the bundle format, which is what actually keeps the timeline.
+// Cmd+S's actual decision: resave silently to the remembered bundle when one is open and
+// `forceChooser` is false, otherwise prompt (defaulting the suggested name to `.agsproj`, which
+// is what steers a first save toward the bundle format instead of the legacy plain preset).
+// `forceChooser` is what "Save Project As" (Cmd+Opt+S) sets to always prompt even with a bundle
+// already open. `onFinished` (optional) reports whether the save actually happened: false for a
+// cancelled chooser AND for a save that ran but failed — the unsaved-changes guard's Save arm
+// is the only caller that supplies it, since every other call site (menu/toolbar) has nothing
+// waiting on the outcome.
 void MainComponent::performSaveProject(bool forceChooser, std::function<void(bool saved)> onFinished) {
     if (!forceChooser && currentBundleDir_ != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir_)) {
         const bool ok = saveToFile(currentBundleDir_);
@@ -493,11 +552,16 @@ void MainComponent::performSaveProject(bool forceChooser, std::function<void(boo
 // The legacy patch-only export — see the header comment for why this calls graphEditor.savePreset
 // directly rather than saveToFile: exporting a snapshot from an open bundle must never look like
 // the project itself was (re)saved.
+// The legacy patch-only export: calls graphEditor.savePreset directly (never saveToFile), so
+// exporting a snapshot from an open BUNDLE project never renames the window title, mutates
+// currentBundleDir_, or touches isDirty_ — it's a side export, not a change of what document is
+// open.
 void MainComponent::exportPatchOnly(const juce::File& file) {
     graphEditor.savePreset(file);
     statusBar.showMessage("Exported patch: " + file.getFileNameWithoutExtension());
 }
 
+// The chooser-launching wrapper the "Export Patch Only" menu item actually calls.
 void MainComponent::promptExportPatchOnly() {
     const auto suggested =
         resolveExportSubdirectory(currentBundleDir_, kPatchesFolderName).getChildFile(currentPatchName_ + ".json");
@@ -513,6 +577,8 @@ void MainComponent::promptExportPatchOnly() {
 // The offline bounce/export flow (P8-5): show the options dialog, then drive a BounceRunner from
 // what it reports. See Source/Transport/BounceRunner.h and Source/UI/Chrome/ExportAudioDialog.h for why
 // the render is chunked rather than blocking, and docs/architecture.md for the full design.
+// The "Export Audio..." menu item's handler: shows synth::ui::ExportAudioDialog, then drives a
+// BounceRunner from its options. See Source/UI/ExportAudioDialog.h.
 void MainComponent::promptExportAudio() {
     if (isBounceInProgress_)
         return; // the command is reported inactive while one is running - see getCommandInfo.
@@ -593,6 +659,10 @@ void MainComponent::promptExportAudio() {
 // opened in its stems mode, driving a StemRunner instead of a BounceRunner. Mirrors
 // promptExportAudio() above closely on purpose: same modal choreography, same isBounceInProgress_
 // gate (shared across both — see its own comment), same progress polling in timerCallback().
+// The "Export Stems..." menu item's handler (P9-8, docs/mixer.md §5.12): same
+// synth::ui::ExportAudioDialog, opened in its stems mode, driving a StemRunner instead of a
+// BounceRunner. Shows a status message instead of opening the dialog when the patch has no
+// mixer channels yet (synth::StemExporter::hasChannelStrips).
 void MainComponent::promptExportStems() {
     if (isBounceInProgress_)
         return; // the command is reported inactive while one is running - see getCommandInfo.

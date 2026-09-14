@@ -29,8 +29,13 @@ constexpr double kMinAudioClipLengthBeats = 1.0 / 32.0;
 
 } // namespace
 
+// TimelineDoc::Listener — fired once per effective doc mutation. THE publish seam: republishes
+// the timeline to the audio thread and rebuilds the automation recorder's lane bindings.
 void MainComponent::timelineChanged(const synth::TimelineDoc&) { publishTimelineAndRebindRecorder(); }
 
+// Publishes the doc to the engine and re-resolves the recorder's per-lane parameter bindings
+// against the CURRENT graph (the same uuid -> node -> parameter resolution
+// AudioEngine::publishTimeline does for the applier's binding table).
 void MainComponent::publishTimelineAndRebindRecorder() {
     audioEngine.publishTimeline(timelineDoc);
 
@@ -67,6 +72,10 @@ void MainComponent::publishTimelineAndRebindRecorder() {
     }
 }
 
+// Reconciles every track/lane binding against the live graph after a graph change that happened
+// outside a doc mutation (preset load, new patch, AI apply, undo/redo, bundle open). Publishes
+// ONLY when the reconcile itself changed nothing — a reconcile that flips a flag is a doc
+// mutation, so timelineChanged has already published by the time it returns.
 void MainComponent::reconcileTimelineAfterGraphChange() {
     // reconcileBindings routes through the doc's single mutation choke point when (and only when) a
     // flag actually flips, which fires timelineChanged and therefore publishes. Publishing again
@@ -76,10 +85,18 @@ void MainComponent::reconcileTimelineAfterGraphChange() {
         publishTimelineAndRebindRecorder();
 }
 
+// The cheap half of the above, with no republish of its own: installed on
+// GraphEditor::onGraphStructureChanged as the catch-all for graph edits that have no explicit
+// post-apply site (a module deleted from the canvas). See the call site for why publishing
+// there would be waste.
 void MainComponent::reconcileTimelineBindingsOnly() {
     synth::TimelineReconciler::reconcile(timelineDoc, audioEngine.getGraph());
 }
 
+// The ONE place a MIDI take ever commits — the transport bar's Record-off click and the
+// 10 Hz poll's auto-commit-on-stop (playing -> stopped while still recording) both route
+// through here, so the two paths can never diverge (one warns on overrun and flips the button
+// off, the other forgets to). A no-op (compiles to an empty body) with the flag off.
 void MainComponent::commitMidiRecording() {
     // stopAndCommit()'s own return just says whether a clip was created (an empty take commits
     // nothing) — not something either caller (the transport bar's Record-off click, and the 10 Hz
@@ -96,6 +113,10 @@ void MainComponent::commitMidiRecording() {
 
 // ---- Audio recording ----
 
+// The master tap, found or created: a "Rec Tap" node spliced IN FRONT OF the Audio Output node,
+// with every connection that fed the output re-routed through it. One compound undo step when
+// it has to be created; a plain lookup (no undo step) when one is already there. Returns
+// nullptr if the patch has no Audio Output node to splice in front of.
 juce::AudioProcessorGraph::Node* MainComponent::ensureMasterRecordTap() {
     auto& graph = audioEngine.getGraph();
 
@@ -170,6 +191,9 @@ juce::AudioProcessorGraph::Node* MainComponent::ensureMasterRecordTap() {
     return created;
 }
 
+// The live master tap, or nullptr. Resolves the take's NodeID first and falls back to a scan —
+// an undo taken mid-take rebuilds the graph and renumbers nodes, and losing the tap that way
+// must lose the take, not crash.
 RecordTapModule* MainComponent::findMasterRecordTap() const {
     auto& graph = const_cast<MainComponent*>(this)->audioEngine.getGraph();
     if (auto* node = graph.getNodeForId(audioTake_.tapNode))
@@ -185,6 +209,11 @@ RecordTapModule* MainComponent::findMasterRecordTap() const {
     return nullptr;
 }
 
+// Where this take's files go: `<bundle>/Audio/take-N.wav` + `<bundle>/Peaks/take-N.agpk` for a
+// saved project, `<app data>/Recordings/take-N.wav` + `.../Recordings/take-N.agpk` for one that
+// has never been saved (see the unsaved-project policy on ProjectBundle). N is the first free
+// number in whichever folder. Fills the file/assetRef fields of `take`; returns false if the
+// directories could not be created.
 bool MainComponent::chooseTakeFiles(AudioTake& take) const {
     juce::File audioDir;
     juce::File peaksDir;
@@ -232,6 +261,10 @@ bool MainComponent::chooseTakeFiles(AudioTake& take) const {
     return false;
 }
 
+// Counterpart to commitMidiRecording(): the ONE place an audio take ever commits. Stops
+// the tap, then creates the clip in a single recordTimelineChange. A no-op unless a take is
+// actually in flight, so both callers (the Record-off click and the poll's commit-on-stop) can
+// call it unconditionally.
 void MainComponent::commitAudioRecording() {
     if (!audioTake_.capturing)
         return;
@@ -299,6 +332,7 @@ void MainComponent::commitAudioRecording() {
         statusBar.showMessage("Dropped audio during recording");
 }
 
+// New Patch empties the timeline as well as the canvas, as its own undoable step.
 void MainComponent::clearTimelineForNewPatch() {
     if (timelineDoc.isEmpty())
         return; // clear() on an empty doc is a genuine no-op — no undo step for it either
@@ -307,6 +341,8 @@ void MainComponent::clearTimelineForNewPatch() {
 
 // The post-guard half of AppCommands::newPatch — see the command's own comment in perform() for
 // why the guard has to run first. Everything below is unchanged from before the guard existed.
+// The post-guard half of AppCommands::newPatch — everything the command used to do inline,
+// now reachable directly so guardUnsavedChanges can hand it in as `proceed`.
 void MainComponent::newPatch() {
     ProgrammaticApplyScope guard(*this);
     // Two undo steps, deliberately: GraphEditor::newPatch() owns the graph's own
@@ -330,6 +366,7 @@ void MainComponent::newPatch() {
     hideWelcomeScreen();
 }
 
+// The graph node carrying this uuid, or nullptr.
 juce::AudioProcessorGraph::Node* MainComponent::findNodeByUuid(const juce::String& uuid) const {
     if (uuid.isEmpty())
         return nullptr;
@@ -339,6 +376,9 @@ juce::AudioProcessorGraph::Node* MainComponent::findNodeByUuid(const juce::Strin
     return nullptr;
 }
 
+// Creates a "Track In" node with a fresh uuid at the canvas' left edge, wires it to the single
+// MIDI instrument in the patch when there is exactly one, and returns its uuid (empty on
+// failure). Called INSIDE the caller's undo transaction — it opens none of its own.
 juce::String MainComponent::createTrackInNode() {
     auto& graph = audioEngine.getGraph();
 
@@ -386,6 +426,16 @@ juce::String MainComponent::createTrackInNode() {
     return uuid;
 }
 
+// Twin of createTrackInNode(): a "Track Audio" node with a fresh uuid. Returns its uuid, empty on
+// failure. Called INSIDE the caller's undo transaction.
+//
+// `wireDirectlyToMasterBus` (T173a): true (the default) wires the node stereo straight into the
+// master bus — the Rec Tap when one is spliced in, otherwise the Audio Output node directly, so
+// the two orderings compose (adding an audio track before or after the first take both end up
+// with the track's audio flowing THROUGH the tap) — the behaviour createAndBindTrackInNode()'s
+// ad hoc single-node rebind still wants. false leaves the node's output unwired, for a caller
+// that is about to wire it into a full channel chain instead of straight to the bus
+// (addAudioTrack(), via synth::buildDefaultAudioChannel).
 juce::String MainComponent::createTrackAudioNode(bool wireDirectlyToMasterBus) {
     auto& graph = audioEngine.getGraph();
 
@@ -441,6 +491,9 @@ juce::String MainComponent::createTrackAudioNode(bool wireDirectlyToMasterBus) {
     return uuid;
 }
 
+// Points the engine's AudioClipStreamer at the current document's asset roots: the open
+// bundle directory (invalid when the project has never been saved) plus the app-data Recordings
+// folder unsaved-project takes are written into. Called wherever `currentBundleDir_` changes.
 void MainComponent::refreshAssetRoots() {
     // The bundle root is the open .agsproj directory, or invalid when this document has never been
     // saved (in which case only "Recordings/" refs can resolve — see ProjectBundle's asset policy).
@@ -456,6 +509,9 @@ void MainComponent::refreshAssetRoots() {
     audioEngine.getAudioClipStreamer().setAssetRoots(bundleRoot, recordingsRoot);
 }
 
+// Production entry point for the clip-lane area's "Relink audio…" menu item: opens an async
+// FileChooser and, on a choice, calls relinkClipAsset(id, file). A no-op if `id` no longer
+// resolves to a clip by the time the dialog returns.
 void MainComponent::promptRelinkClipAsset(synth::ClipId id) {
     fileChooser = std::make_unique<juce::FileChooser>(
         "Relink Audio", juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),
@@ -468,6 +524,13 @@ void MainComponent::promptRelinkClipAsset(synth::ClipId id) {
                              });
 }
 
+// The actual relink: imports `chosenFile` (via synth::AssetManager::importAudioFile into the
+// current bundle, or into the app-data Recordings/ convention when the project has never been
+// saved) and rewrites assetRef on `id` AND every other clip that shared its OLD ref, as ONE
+// undo step (a single AppUndoManager::recordTimelineChange batching every
+// TimelineDoc::setClipAsset call, each preserving its own clip's sourceStartSeconds). Never
+// deletes the old file. A no-op (with a status-bar message) if `id` doesn't resolve, the asset
+// has no ref to relink, or the import fails.
 void MainComponent::relinkClipAsset(synth::ClipId id, const juce::File& chosenFile) {
     const auto* clip = timelineDoc.getClip(id);
     if (clip == nullptr || clip->assetRef.isEmpty())
@@ -519,6 +582,8 @@ void MainComponent::relinkClipAsset(synth::ClipId id, const juce::File& chosenFi
     statusBar.showMessage("Relinked to " + newRef);
 }
 
+// `file`'s duration in beats at the transport's CURRENT bpm (0.0 when it isn't readable audio).
+// Beats, not seconds, because a clip's length is beats — see synth::Clip.
 double MainComponent::audioFileLengthInBeats(const juce::File& file) const {
     juce::AudioFormatManager formats;
     formats.registerBasicFormats();
@@ -532,6 +597,13 @@ double MainComponent::audioFileLengthInBeats(const juce::File& file) const {
     return seconds * bpm / 60.0;
 }
 
+// What the clip lane area's authoring gestures (double-click an empty audio row, or drop files
+// on one) report through TimelineClipLaneArea::onAudioFileDropped. Imports `sourceFile` under
+// the SAME policy relinkClipAsset() uses (bundle Audio/, or the app-data Recordings/ convention
+// when the project has never been saved) and then adds ONE clip at `startBeat`, as long as the
+// file itself, bound to the new ref — the two doc calls batched into ONE undo step. A no-op with
+// a status-bar message when `track` is not an Audio-kind track or the import fails; a failed
+// import mutates nothing at all.
 void MainComponent::importAudioFileToClip(synth::TrackId track, double startBeat, const juce::File& sourceFile) {
     const auto* trackPtr = timelineDoc.getTrack(track);
     if (trackPtr == nullptr || trackPtr->kind != synth::TrackKind::Audio)
@@ -576,12 +648,22 @@ void MainComponent::importAudioFileToClip(synth::TrackId track, double startBeat
     statusBar.showMessage("Imported " + newRef);
 }
 
+// synth::AssetManager::cleanUnusedAssets against the current bundle + live timeline doc. 0
+// outside a saved bundle (nothing to sweep). See cleanUnusedAssetsForTest()'s comment for why
+// this has no menu/shortcut wiring yet.
 int MainComponent::cleanUnusedAssets() {
     if (currentBundleDir_ == juce::File() || !synth::ProjectBundle::isBundle(currentBundleDir_))
         return 0; // nothing to sweep outside a saved bundle
     return synth::AssetManager::cleanUnusedAssets(timelineDoc, currentBundleDir_);
 }
 
+// Right-click-any-knob's headless hook, and the production entry point
+// GraphEditor::onAutomateParameterRequested is wired to. Resolves `nodeId`'s uuid (assigning
+// one if it has none yet — the same ensure-uuid idiom createTrackInNode() uses), finds-or-
+// creates the doc's Automation-kind track, binds a lane for `paramId` with the parameter's real
+// NormalisableRange, and opens the timeline panel's automation strip on it. A no-op (with a
+// status-bar message) if `nodeId` doesn't resolve to a live ModuleBase or `paramId` doesn't
+// resolve to a real parameter on it.
 void MainComponent::automateParameter(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
     auto* node = audioEngine.getGraph().getNodeForId(nodeId);
     auto* module = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;

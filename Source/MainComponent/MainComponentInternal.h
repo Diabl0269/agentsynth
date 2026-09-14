@@ -8,8 +8,29 @@
 // the JUCE module headers these declarations depend on).
 
 #include "Modules/ModuleBase.h"
+#include "ProjectBundle.h"
 
 namespace detail {
+
+// A clip's assetRef always names the .wav asset — chooseTakeFiles() is what establishes the
+// pairing with its .agpk peaks sidecar: same stem, and either a sibling "Peaks/" directory (a saved
+// bundle: "Audio/take-n.wav" <-> "Peaks/take-n.agpk") or the SAME "Recordings/" directory (an
+// unsaved project, where chooseTakeFiles points audioDir and peaksDir at the same root). Returns
+// the peaks SIDECAR'S ref, in the same bundle/root-relative form the streamer's own
+// resolveAssetRef() understands — so that one function stays the single place a ref becomes a
+// juce::File, for both the audio and the peaks half. Empty in, empty out. Used by
+// MainComponentSetupTimeline.cpp (wireTimelineClipLaneCallbacks).
+inline juce::String peaksRefForAssetRef(const juce::String& assetRef) {
+    if (assetRef.isEmpty())
+        return {};
+
+    juce::String ref = assetRef;
+    const juce::String audioPrefix = juce::String(synth::ProjectBundle::kAudioSubdirName) + "/";
+    if (ref.startsWith(audioPrefix))
+        ref = juce::String(synth::ProjectBundle::kPeaksSubdirName) + "/" + ref.substring(audioPrefix.length());
+
+    return ref.upToLastOccurrenceOf(".", false, false) + ".agpk";
+}
 
 // Where an UNSAVED project's takes go, under <app data>/<settings folder>. Also the reserved
 // prefix such a take's clip assetRef carries — see chooseTakeFiles and ProjectBundle's asset

@@ -50,6 +50,10 @@ void MainComponent::saveRecentProjects() {
     }
 }
 
+/** Starts a background scan of every format this build can host, reporting through the status
+ *  bar and refreshing the library's Plugins section (and the saved list) when it finishes.
+ *  Ignored while a scan is already running, and refused outright when the engine is Hosted —
+ *  the scan re-launches `currentExecutableFile`, which inside a VST3/AU is the HOST's binary. */
 void MainComponent::startPluginScan() {
     // Never inside a host. The scan re-launches `currentExecutableFile`, which in a VST3/AU build is
     // the HOST's binary — one extra copy of the DAW per candidate plugin. The host owns plugin
@@ -82,6 +86,18 @@ void MainComponent::startPluginScan() {
         nullptr);
 }
 
+/** FRO44: the eager-population entry point, called ONCE by `Main.cpp` right after the real
+ *  standalone window is created — never by this class's own constructor, and never for the
+ *  plugin-hosted path (see below). Delegates to `getPluginScanService().ensureScanned(...)`,
+ *  which is itself a one-shot-per-service no-op past the first call: a second call (a test, or a
+ *  future picker that also wants to make sure the list is populated) is always safe to make.
+ *
+ *  Hosted mode (`AudioEngine::isHosted()`) is a deliberate no-op, matching `startPluginScan()`'s
+ *  own refusal: `currentExecutableFile` inside a VST3/AU build is the HOST's binary, so scanning
+ *  there would launch a copy of the DAW per candidate plugin, and the host owns plugin discovery
+ *  in that world regardless. A hosted session still RESOLVES identities — against whatever list
+ *  the constructor already restored from settings — it just never scans one itself; see
+ *  docs/architecture.md's "Plugin scanning" section. */
 void MainComponent::maybeStartEagerPluginScan() {
     // See this method's header comment: hosted mode never scans, eagerly or otherwise.
     if (audioEngine.isHosted())
@@ -89,6 +105,10 @@ void MainComponent::maybeStartEagerPluginScan() {
     getPluginScanService().ensureScanned(synth::hostedPluginFormatNames());
 }
 
+// synth::PluginScanService::Listener — fired once per real scan, no matter which caller
+// (the sidebar's row, maybeStartEagerPluginScan(), a future picker) actually triggered it.
+// Consolidates what used to be startPluginScan()'s own inline completion lambda, so every
+// trigger path gets the same status-bar message, sidebar refresh and persisted save.
 void MainComponent::pluginScanCompleted(const synth::PluginScanService::Result& result) {
     savePluginScanList();
     refreshPluginLibrary();
@@ -109,11 +129,14 @@ void MainComponent::pluginScanCompleted(const synth::PluginScanService::Result& 
 
 // ---- Snippets (issue #156) ----
 
+/** Re-reads the snippets directory and pushes the list into the library sidebar. */
 void MainComponent::refreshSnippetLibrary() {
     moduleLibrary.setSnippets(
         synth::SnippetManager::listSnippets(synth::SnippetManager::getDefaultSnippetsDirectory()));
 }
 
+/** Asks for a name and saves the canvas selection as a snippet. No-op (with a status-bar
+ *  note) when nothing is selected. */
 void MainComponent::promptSaveSnippet() {
     const int selectionCount = graphEditor.getSelectionCount();
     if (selectionCount == 0) {
@@ -164,6 +187,15 @@ void MainComponent::promptSaveSnippet() {
 
 // ---- Repeat ----
 
+/** The repeat verb's ACTUAL work, split out from the command so it can be driven without the
+ *  count dialog — tests call it directly, and a future scripting/AI caller gets the same door.
+ *  Routed by the same resolveEditSurface() every other edit verb uses: TimelineClips repeats
+ *  the clip selection, PianoRoll repeats the note selection, and Graph is deliberately
+ *  unsupported (there is no "one block length further along" on a spatial canvas — Duplicate
+ *  is the graph's answer, which is why getCommandInfo reports the command inactive there).
+ *  `count` is clamped to [kMinRepeatCount, kMaxRepeatCount]; the callee owns its own undo
+ *  transaction, so this must never be wrapped in another one.
+ *  @return whatever the surface's verb returned — true when something was actually created. */
 bool MainComponent::performRepeatSelection(int count) {
     // Clamped here as well as in the dialog: this is the public door (tests, and any future
     // scripting caller), and neither of those goes through the AlertWindow's own validation.
@@ -185,6 +217,10 @@ bool MainComponent::performRepeatSelection(int count) {
     return false;
 }
 
+/** Asks for a repeat count (async juce::AlertWindow, exactly promptSaveSnippet's modal idiom)
+ *  and hands it to performRepeatSelection(). No-op (with a status-bar note) when the focused
+ *  surface has nothing selected. Kept separate from performRepeatSelection so nothing but the
+ *  keyboard/menu path ever has to pump a modal loop. */
 void MainComponent::promptRepeatSelection() {
     juce::String subject;
     switch (resolveEditSurface()) {
@@ -239,6 +275,17 @@ void MainComponent::promptRepeatSelection() {
 }
 
 // ---- Keyboard/focus arbitration ----
+// ---- Keyboard/focus arbitration ----
+// Which surface currently owns Cmd+C/V/D (Space's togglePlayback is deliberately
+// surface-independent — see ShortcutManager's binding comment and docs/shortcuts.md).
+// TimelineClips/PianoRoll require BOTH the timeline panel to be visible AND real keyboard
+// focus (juce::Component::getCurrentlyFocusedComponent()) to sit inside the clip-lane area /
+// piano roll respectively — a hidden panel never owns the verbs, whatever a stale focus
+// pointer points at. Every one of those surfaces already grabs focus on mouseDown (the canvas
+// idiom GraphEditor::mouseDown established, followed by TimelineClipLaneArea/
+// PianoRollComponent/AutomationLaneEditor), so "last-clicked surface owns the verbs" falls out
+// of ordinary JUCE focus tracking with no extra bookkeeping in this class. Public: both
+// perform()/getCommandInfo() and FocusArbitrationTests.cpp call it directly.
 MainComponent::EditSurface MainComponent::resolveEditSurface() const {
     if (editSurfaceOverrideForTest_.has_value())
         return *editSurfaceOverrideForTest_;
@@ -368,6 +415,9 @@ void MainComponent::resized() {
 }
 
 // ---- Toolbar icon + text application ----
+// Push the (themed, re-tinted) icon Drawables onto the 9 toolbar DrawableButtons + the
+// status-bar master-mute button, and manage icon-only vs icon+text text per narrow mode.
+// dynamic_casts the LnF and no-ops the icon assignment when null (headless tests).
 void MainComponent::applyToolbarIcons() {
     using synth::theme::Icon;
 
@@ -493,12 +543,18 @@ void MainComponent::applyToolbarIcons() {
 
 // ---- Timeline panel height (user-resizable, persisted) ----
 
+// Metrics::timelinePanelHeight (220 headless) — the DEFAULT height and the MINIMUM the user can
+// drag down to, never the fixed height it used to be.
 int MainComponent::defaultTimelinePanelHeight() const {
     if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
         return lf->getTheme().metrics.timelinePanelHeight;
     return 220; // headless literal fallback, same pattern as resized()
 }
 
+// [defaultTimelinePanelHeight(), 75% of the window height]. Applied on every layout pass, so a
+// height saved on a big window can never swallow a smaller window's canvas. Before the first
+// layout (window height still 0) only the floor applies — otherwise construction would clamp a
+// persisted height away against a window that doesn't exist yet.
 int MainComponent::clampTimelinePanelHeight(int desiredHeight) const {
     const int minHeight = defaultTimelinePanelHeight();
     // Window not laid out yet: only the floor applies, so a persisted height survives construction
@@ -508,6 +564,9 @@ int MainComponent::clampTimelinePanelHeight(int desiredHeight) const {
     return juce::jlimit(minHeight, maxHeight, desiredHeight);
 }
 
+// Clamps, stores and re-lays-out (live, once per drag callback — user-driven, not a
+// free-running repaint). `persist` writes kTimelinePanelHeightKey; the drag does that only on
+// mouse-up.
 void MainComponent::setTimelinePanelHeight(int desiredHeight, bool persist) {
     const int clamped = clampTimelinePanelHeight(desiredHeight);
     if (clamped != timelinePanelHeight_) {
@@ -523,6 +582,7 @@ void MainComponent::setTimelinePanelHeight(int desiredHeight, bool persist) {
 
 // ---- Panel slides (one driver, three fractions) ----
 
+// The three fractions, addressed by name (test seams above; nothing else needs this).
 const synth::ui::PanelSlide& MainComponent::panelSlide(SlidingPanel p) const noexcept {
     switch (p) {
     case SlidingPanel::Library:
@@ -575,6 +635,7 @@ void MainComponent::beginPanelSlide() {
         [this] { finishPanelSlide(); });
 }
 
+// Per-frame body of the slide above: advance all three fractions, then re-lay-out.
 void MainComponent::applyPanelSlideFrame(float t) {
     librarySlide_.applyTweenAt(t);
     aiPanelSlide_.applyTweenAt(t);
@@ -586,6 +647,8 @@ void MainComponent::applyPanelSlideFrame(float t) {
     resized();
 }
 
+// End of the slide (its completion callback, and the synchronous path's whole body): stop the
+// driver, pin the exact end fractions, hide whatever finished closing, lay out.
 void MainComponent::finishPanelSlide() {
     // Time-bounded by construction: the driver auto-stops at t == 1 and this drops it, so nothing
     // is left registered with the VBlank updater between slides.
@@ -607,6 +670,7 @@ void MainComponent::finishPanelSlide() {
 }
 
 // ---- Collapsible library sidebar (slides, persisted) ----
+// Collapse/expand the library sidebar. Slides to the target layout (beginPanelSlide()).
 void MainComponent::setLibraryVisible(bool v) {
     isLibraryVisible = v;
     appProperties.getUserSettings()->setValue("librarySidebarVisible", v ? "1" : "0");
@@ -624,6 +688,8 @@ void MainComponent::setLibraryVisible(bool v) {
 
 // ---- Welcome screen (T114/P8-10) ----
 
+// A no-op when welcomeScreen_ is null (Hosted mode) or already hidden — every guarded action's
+// `proceed` continuation calls this unconditionally as its LAST step, so it must tolerate both.
 void MainComponent::hideWelcomeScreen() {
     // A no-op is deliberately safe here: null in Hosted mode, and every guarded action's `proceed`
     // continuation (loadPresetGuarded, newPatch) calls this unconditionally as its last step even
@@ -633,6 +699,9 @@ void MainComponent::hideWelcomeScreen() {
         welcomeScreen_->setVisible(false);
 }
 
+// Reopens the overlay (AppCommands::showWelcomeScreen, wired to the macOS Help menu in
+// Main.cpp) with a freshly re-pruned recent-projects list — the list may have changed since it
+// was last shown.
 void MainComponent::showWelcomeScreen() {
     if (!welcomeScreen_)
         return;
@@ -650,6 +719,8 @@ void MainComponent::showWelcomeScreen() {
 // captured at CMake CONFIGURE time (see the root CMakeLists.txt's "What's New" block and
 // WhatsNewData.h). Never invoked from a test — it would open a real modal juce::AlertWindow, same
 // caution as every other real-dialog entry point in this file.
+// Build-time "What's New" dialog (Feature 2) — a synchronous, no-network juce::AlertWindow
+// listing synth::whatsnew::kHighlights. Never invoked from a test (it would open a real modal).
 void MainComponent::showWhatsNewDialog() {
     juce::String message = juce::String(synth::whatsnew::kReleaseTag) + "\n\n";
     for (int i = 0; i < synth::whatsnew::kHighlightsCount; ++i)
