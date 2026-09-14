@@ -237,6 +237,83 @@ fixed cadence. There's deliberately no scheduled/automatic promotion: every prev
 a permanent prerelease, so skipping a promotion costs nothing, and auto-update only ever moves
 forward on a promotion you chose.
 
+**A promotion can silently do nothing if you only check the workflow's overall run status.**
+`promote-release.yml`'s `if: github.actor == 'Diabl0269'` guard means a run triggered by anyone
+else *skips* the job entirely — the run still shows green. Check the job's own conclusion
+(`skipped` vs `success`), not just that the workflow finished.
+
+**`DOWNLOAD_CHANNEL` (and any other build-time env var for the site) has to be set in
+`deploy-web.yml`, never in the Cloudflare Pages dashboard.** The `agentsynth-legal` Pages project
+has no Git integration configured — it's a direct-upload target (`wrangler pages deploy dist`),
+so Cloudflare never runs a build itself; a "build environment variable" set in its dashboard would
+just sit there unused. `astro build` only ever runs on the GitHub Actions runner.
+
+**If the live appcast still shows the wrong build after step 4, don't assume the fetch is broken —
+check whether the value even reached the build.** This bit the first time FRO50 shipped a stable
+release (2026-09-14): the site's `deploy-web.yml` build step sets `DOWNLOAD_CHANNEL=stable`
+correctly, but its Turborepo `build` task had no `env` allowlist — Turborepo's strict env mode
+silently hides any variable not listed there (same class of bug the private repo's `turbo.json`
+already had a comment about, for a *different* variable, on the `test` task). The channel var never
+reached `astro build`, so the download page kept resolving the newest prerelease instead of the
+promoted one, and no error appeared anywhere — it just silently picked the wrong release. A build
+that runs fine locally via `pnpm --filter @platform/web build` can still fail this way in CI, since
+that direct invocation bypasses turbo (and its strict env mode) entirely — the only faithful local
+repro is the actual CI invocation, `pnpm exec turbo run build --filter=@platform/web`.
+
+**Also, a promoted release doesn't stay the newest release for long.** Every push to `main` keeps
+minting a new prerelease (`build-artifacts.yml`) regardless of what was just promoted — so
+"stable channel" only works correctly if the code actually filters for `isPrerelease === false`
+(which `apps/web/src/lib/releases.ts` does); anything that accidentally falls back to "the newest
+release, prerelease or not" will start serving the next prerelease within hours of a promotion,
+not months.
+
+### First real macOS auto-update test (2026-09-14, FRO50)
+
+The first genuine end-to-end run of this whole pipeline — an old key-baked prerelease (v0.94.0,
+built the same afternoon `SPARKLE_PUBLIC_KEY` was set) auto-updating to a freshly promoted release
+(v0.202.0) — passed, but not on the first attempt. What actually happened, in order, since each
+step is a real trap for a tester and not just a one-off:
+
+1. **A `.zip` downloaded via `gh release download` or `curl` carries no `com.apple.quarantine`
+   attribute** — only browsers (and a few other apps that opt into `LSQuarantine`) set it. Testing
+   Gatekeeper behavior against a CLI-fetched build is testing nothing; the flag has to be added
+   back (`xattr -w com.apple.quarantine "0081;...;Google Chrome;<uuid>"`) to reproduce what a real
+   tester's browser download actually looks like to the OS.
+2. **A quarantined, ad-hoc-signed (not Developer ID) app gets a hard Gatekeeper block with no
+   "Open Anyway" button** in the first dialog — only "Move to Trash" / "Done". The bypass is:
+   Done → System Settings ▸ Privacy & Security → click "Open Anyway" next to the blocked-app
+   message → confirm the follow-up dialog (which *does* have a real Open button). The
+   right-click-▸-Open workaround this doc's download-page copy already tells users about is a
+   separate, also-valid path for the same underlying problem.
+3. **A quarantined app launched without first being moved to `/Applications` runs under App
+   Translocation** — a randomized, read-only `/private/var/folders/.../AppTranslocation/...` copy,
+   silently, no dialog. Sparkle detects this itself and refuses to self-update from there: "Agent
+   Synth can't be updated if it's running from the location it was downloaded to. Quit Agent
+   Synth, move it into your Applications folder, relaunch it from there, and try again." This is a
+   real first-run trap for anyone who runs the app straight from a Downloads folder without moving
+   it — worth calling out explicitly in tester-facing instructions, not just implied.
+4. Once actually running from `/Applications`, Check for Updates → Install Update → the EdDSA
+   signature verified, the update downloaded and installed, and the app relaunched into the
+   promoted build (`CFBundleVersion` 257, confirmed via `PlistBuddy` against the installed
+   `Info.plist` — there is no About box, so this is the only reliable way to check post-update).
+   The relaunched build's UI was also visibly newer (extra Pan knobs, a Show Timeline toggle, a
+   Plugins library section) — confirms the binary actually changed, not just the version string.
+
+**Two rough edges found along the way, tracked separately (not blockers for this promotion):**
+
+- The Sparkle update dialog itself showed `0.13.2 (257) is now available — you have 0.13.2 (124)`
+  — `CFBundleShortVersionString` had gone stale (hand-bumped, untouched since before the
+  Gravisynth→AgentSynth rename) while the build number kept advancing normally, so both sides
+  showed the same marketing version and the dialog read as broken even though it wasn't. Hand-bumped
+  to `0.202.0` as a one-time fix; making it track the release tag automatically needs a real
+  reorder of `build-artifacts.yml` (the build step runs before the tag is minted) — tracked
+  separately, not done here.
+- Two short-lived helper processes (both `responsiblePid` = the main app) crashed with a
+  `libmalloc` memory-corruption report within ~1s of the update relaunch, mid-`SecTrustVerify`/
+  `SecKeyVerifySignature` activity — consistent with Sparkle's own verification subprocess, not
+  literally our compiled code, but not yet root-caused. The main app process was unaffected and
+  kept running normally throughout. Crash reports saved locally; tracked separately.
+
 ## What's not built yet
 
 - **Notarization** — CI's existing `codesign --force --deep -s -` is ad-hoc signing, not a real
