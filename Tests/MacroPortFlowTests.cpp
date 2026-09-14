@@ -27,7 +27,7 @@
 #include "../Source/Modules/MacroOutletModule.h"
 #include "../Source/Modules/MidiKeyboardModule.h"
 #include "../Source/Modules/OscillatorModule.h"
-#include "../Source/Modules/WavetableOscillatorModule.h"
+#include "../Source/Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 #include "../Source/UI/GraphEditor/GraphEditor.h"
 #include "../Source/UI/MacroCardComponent.h"
 #include "../Source/UI/ModuleComponent/ModuleComponent.h"

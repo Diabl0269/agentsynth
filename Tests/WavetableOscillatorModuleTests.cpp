@@ -8,7 +8,7 @@
 //   • mute / bypass contract (pure source module: both clear the output)
 
 #include "../Source/AI/AIStateMapper/AIStateMapper.h"
-#include "../Source/Modules/WavetableOscillatorModule.h"
+#include "../Source/Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <juce_audio_formats/juce_audio_formats.h>

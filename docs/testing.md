@@ -409,7 +409,7 @@ New suite `Tests/ScopeTests.cpp` covering `Source/UI/ScopeComponent.h`.
 
 ### Wavetable Oscillator Tests (76 tests)
 
-Suite `Tests/WavetableOscillatorModuleTests.cpp` covering `Source/Modules/WavetableOscillatorModule.h`.
+Suite `Tests/WavetableOscillatorModuleTests.cpp` covering `Source/Modules/WavetableOscillatorModule/`.
 
 | Suite | Tests | What it covers |
 |-------|-------|----------------|

@@ -7,7 +7,6 @@
 1135 Source/MainComponent/MainComponent.cpp
 1213 Source/MainComponent/MainComponent.h
 1004 Source/Mixer/ChannelFlows.cpp
-1995 Source/Modules/WavetableOscillatorModule.h
 1165 Source/ShortcutManager.h
 1726 Source/Timeline/TimelineDoc.cpp
 1999 Source/UI/AIChatComponent.cpp

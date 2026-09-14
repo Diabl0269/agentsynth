@@ -310,7 +310,10 @@ add_library(Core STATIC
     Source/Modules/NoiseModule.h
     Source/Modules/MathModule.h
     Source/Modules/SamplerModule.h
-    Source/Modules/WavetableOscillatorModule.h
+    Source/Modules/WavetableOscillatorModule/WavetableOscillatorModule.h
+    Source/Modules/WavetableOscillatorModule/WavetableOscillatorModule.cpp
+    Source/Modules/WavetableOscillatorModule/WavetableTableBuilder.h
+    Source/Modules/WavetableOscillatorModule/WavetableTableBuilder.cpp
     Source/Modules/SequencerModule.h
     Source/Modules/MidiKeyboardModule.h
     Source/Modules/LFOModule.h
