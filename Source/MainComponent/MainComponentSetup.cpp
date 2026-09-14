@@ -6,7 +6,7 @@
 #include "AI/AIProviderRegistry.h"
 #include "MainComponent.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
-#include "UI/Settings/PreferencesSettingsTab.h"
+#include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 
 void MainComponent::restorePanelPreferences() {
     // Route AI patch applies through the app undo manager so Apply/Merge on a patch card is Cmd+Z-able.
