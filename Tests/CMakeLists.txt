@@ -212,7 +212,11 @@ add_executable(Tests
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAutosaveTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycleTests.cpp
     UI/Settings/FeedbackSettingsTabTests.cpp
-    Engine/AudioRenderingTests.cpp
+    Engine/AudioRendering/AudioRenderingBasicTests.cpp
+    Engine/AudioRendering/AudioRenderingFXModuleTests.cpp
+    Engine/AudioRendering/AudioRenderingModulationTests.cpp
+    Engine/AudioRendering/AudioRenderingPresetTests.cpp
+    Engine/AudioRendering/AudioRenderingSnapshotTests.cpp
     Engine/LogicalPortTests.cpp
     Engine/OutputLevelTests.cpp
     Modules/ModuleAdoptionTests.cpp
@@ -308,7 +312,14 @@ add_executable(Tests
     Modules/AudioInputModuleTests.cpp
     Engine/FeedbackGuardTests.cpp
     Engine/OfflineTransportDriverTests.cpp
-    Engine/BounceExporterTests.cpp
+    Engine/BounceExporter/BounceExporterCancellationTests.cpp
+    Engine/BounceExporter/BounceExporterCorrectnessTests.cpp
+    Engine/BounceExporter/BounceExporterFailureTests.cpp
+    Engine/BounceExporter/BounceExporterFormatTests.cpp
+    Engine/BounceExporter/BounceExporterLoopRangeTests.cpp
+    Engine/BounceExporter/BounceExporterProgressTests.cpp
+    Engine/BounceExporter/BounceExporterStreamedClipTests.cpp
+    Engine/BounceExporter/BounceExporterTransportTests.cpp
     Engine/BounceRunnerTests.cpp
     Engine/StemExportTests.cpp
     Engine/StemExportNamingTests.cpp

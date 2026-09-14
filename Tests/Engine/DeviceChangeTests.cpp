@@ -26,7 +26,7 @@
 // sleeps, no network.
 
 #include "../FakeAudioIODevice.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/AudioInputModule.h"
 #include "Modules/RecordTapModule.h"
 #include "Transport/OfflineTransportDriver.h"

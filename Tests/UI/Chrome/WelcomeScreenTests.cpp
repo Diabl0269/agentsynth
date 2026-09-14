@@ -12,7 +12,7 @@
 //     modal juce::AlertWindow.
 
 #include "AI/AIProvider.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "ProjectBundle.h"
 #include "UI/Chrome/WelcomeScreenComponent.h"

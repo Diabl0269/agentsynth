@@ -1,6 +1,6 @@
 #include "OfflineTransportDriver.h"
 
-#include "../AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include <cmath>
 
 namespace synth {

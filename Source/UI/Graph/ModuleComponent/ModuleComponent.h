@@ -1,7 +1,7 @@
 #pragma once
 
 #include "AppUndoManager.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/FilterModule.h"
 #include "Modules/MidiKeyboardModule.h"
 #include "UI/ModuleViews/EQCurveComponent.h"

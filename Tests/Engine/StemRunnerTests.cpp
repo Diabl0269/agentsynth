@@ -9,7 +9,7 @@
 // juce::MessageManager::runDispatchLoopUntil, the same idiom BounceRunnerTests.cpp uses.
 
 #include "AI/AIStateMapper/AIStateMapper.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/MasterModule.h"
 #include "Transport/OfflineTransportDriver.h"

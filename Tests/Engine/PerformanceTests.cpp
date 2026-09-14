@@ -9,7 +9,7 @@
 //
 // Timings are printed with std::cout so the numbers are visible in the test log.
 
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "PresetManager.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include <chrono>

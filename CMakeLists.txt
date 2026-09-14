@@ -217,8 +217,15 @@ endif()
 
 # Create the core library
 add_library(Core STATIC
-    Source/AudioEngine.cpp
-    Source/AudioEngine.h
+    Source/AudioEngine/AudioEngine.h
+    Source/AudioEngine/AudioEngineBounceSuspend.cpp
+    Source/AudioEngine/AudioEngineDeviceLifecycle.cpp
+    Source/AudioEngine/AudioEngineHostMode.cpp
+    Source/AudioEngine/AudioEngineMidi.cpp
+    Source/AudioEngine/AudioEngineModRouting.cpp
+    Source/AudioEngine/AudioEngineRenderPass.cpp
+    Source/AudioEngine/AudioEngineRuntimeState.cpp
+    Source/AudioEngine/AudioEngineTimelinePublish.cpp
     Source/AppUndoManager.cpp
     Source/AppUndoManager.h
     Source/Branding.h

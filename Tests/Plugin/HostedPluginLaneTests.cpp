@@ -25,7 +25,7 @@
 
 #include "../StubPluginInstance.h"
 #include "AppUndoManager.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Timeline/AutomationBinding.h"
 #include "Timeline/AutomationRecorder.h"

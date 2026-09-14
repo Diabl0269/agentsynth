@@ -9,7 +9,7 @@
 #include "../../StubPluginInstance.h"
 #include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "MacroSet.h"
 #include "MainComponent/MainComponent.h"
 #include "Modules/ModuleBase.h"
