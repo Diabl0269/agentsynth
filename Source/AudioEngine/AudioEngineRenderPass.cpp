@@ -2,6 +2,7 @@
 // slicing, the device-input snapshot and the feedback guard.
 
 #include "AudioEngine.h"
+#include "Timeline/MidiRecorder.h"
 #include <algorithm>
 
 namespace {
