@@ -1,6 +1,6 @@
 #include "BounceSession.h"
 
-#include "../AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "BounceGuards.h"
 #include "OfflineTransportDriver.h"
 #include <cmath>

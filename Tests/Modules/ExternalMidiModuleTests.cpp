@@ -65,7 +65,7 @@ TEST_F(ExternalMidiModuleTest, FiltersByChannel) {
 TEST_F(ExternalMidiModuleTest, UntimestampedMessagesLandAtSampleZero) {
     // Synthetic/test messages with no explicit timestamp (timestamp == 0) must still land at
     // sample 0 of the very next block, preserving backward compatibility with existing callers
-    // (e.g. AudioRenderingTests.cpp) that never call setTimeStamp().
+    // (e.g. Tests/Engine/AudioRendering/) that never call setTimeStamp().
     auto noteOn = juce::MidiMessage::noteOn(1, 60, 0.8f);
     module->pushMidiMessage(noteOn);
 

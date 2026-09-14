@@ -12,7 +12,7 @@
 
 #include "../FakeAudioIODevice.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/AudioInputModule.h"
 #include "Modules/FilterModule.h"
 #include "SnippetManager.h"

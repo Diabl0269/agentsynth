@@ -1,6 +1,6 @@
 #pragma once
 
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Plugin/Hosting/PluginScanService.h"
 #include "UI/Theme/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"

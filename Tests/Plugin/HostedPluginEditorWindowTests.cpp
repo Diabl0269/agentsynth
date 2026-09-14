@@ -21,7 +21,7 @@
 //   5. ModuleComponent — the card's "Open Editor" button.
 
 #include "../StubPluginInstance.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Plugin/Hosting/HostedPluginEditorWindow.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Plugin/Hosting/HostedPluginWindowManager.h"

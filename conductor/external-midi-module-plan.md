@@ -6,7 +6,7 @@ Introduce an `ExternalMidiModule` that acts as a bridge for external hardware MI
 ## Key Files & Context
 - `Source/Modules/ExternalMidiModule.h`: Create this new module.
 - `Source/Modules/ModuleBase.h`: Register new `ModuleType`.
-- `Source/AudioEngine.cpp`: Update to route MIDI from specific devices to the module instances.
+- `Source/AudioEngine/AudioEngine.cpp`: Update to route MIDI from specific devices to the module instances.
 
 ## Implementation Steps
 1. **Module Creation**:

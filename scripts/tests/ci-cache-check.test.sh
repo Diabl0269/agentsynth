@@ -244,7 +244,7 @@ EOF
 cat >"$WORK/modern/build.ninja" <<'EOF'
 include CMakeFiles/rules.ninja
 
-build CMakeFiles/Core.dir/AudioEngine.cpp.o: CXX_COMPILER__Core_unscanned_ ../Source/AudioEngine.cpp
+build CMakeFiles/Core.dir/AudioEngine.cpp.o: CXX_COMPILER__Core_unscanned_ ../Source/AudioEngine/AudioEngine.cpp
   DEFINES = -DJUCE_WEB_BROWSER=0
   LAUNCHER = /opt/homebrew/bin/ccache
   OBJECT_DIR = CMakeFiles/Core.dir
@@ -263,7 +263,7 @@ cp "$WORK/modern/CMakeFiles/rules.ninja" "$WORK/modern-bad/CMakeFiles/rules.ninj
 cat >"$WORK/modern-bad/build.ninja" <<'EOF'
 include CMakeFiles/rules.ninja
 
-build CMakeFiles/Core.dir/AudioEngine.cpp.o: CXX_COMPILER__Core_unscanned_ ../Source/AudioEngine.cpp
+build CMakeFiles/Core.dir/AudioEngine.cpp.o: CXX_COMPILER__Core_unscanned_ ../Source/AudioEngine/AudioEngine.cpp
   LAUNCHER = /opt/homebrew/bin/ccache
 
 build CMakeFiles/Core.dir/juce_core.mm.o: OBJCXX_COMPILER__Core_unscanned_ ../juce_core.mm

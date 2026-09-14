@@ -17,7 +17,7 @@
 #include "../../StubPluginInstance.h"
 #include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Branding.h"
 #include "ChannelFlowTestFixture.h"
 #include "MacroSet.h"

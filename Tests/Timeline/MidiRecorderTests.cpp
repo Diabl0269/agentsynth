@@ -20,7 +20,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <memory>
 
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/ExternalMidiModule.h"
 
 using synth::MidiRecorder;

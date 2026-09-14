@@ -10,7 +10,7 @@
 // Mirrors the pattern in MainComponentTests.cpp and AIChatComponentTests.cpp.
 
 #include "AI/AIProvider.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "UI/Assistant/AIChatComponent/AIChatComponent.h"
 #include "UI/Layout/UIAnimation.h"

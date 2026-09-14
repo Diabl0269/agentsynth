@@ -4,7 +4,7 @@
 Enable hardware MIDI controller support by implementing MIDI input device selection and routing in the audio engine.
 
 ## Key Files & Context
-- `Source/AudioEngine.h/cpp`: Needs to handle MIDI input device registration and message routing.
+- `Source/AudioEngine/AudioEngine.h/cpp`: Needs to handle MIDI input device registration and message routing.
 - `Source/UI/Settings/SettingsWindow.h/cpp`: Needs a new section for selecting MIDI input devices.
 - `juce::MidiInput`, `juce::AudioProcessorPlayer`, `juce::MidiMessageCollector`
 

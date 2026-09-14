@@ -2,7 +2,7 @@
 #include "AI/AIProvider.h"
 #include "AI/AccountService.h"
 #include "AI/LocalHistoryStore.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Auth/InMemoryTokenStore.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Assistant/AIChatComponent/AIChatComponent.h"

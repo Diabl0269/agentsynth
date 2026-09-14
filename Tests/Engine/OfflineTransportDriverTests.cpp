@@ -11,7 +11,7 @@
 // 512/24000 beats and two beats are 48000 samples — 93.75 blocks, i.e. 94 whole blocks.
 
 #include "../TestAudioHelpers.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/OscillatorModule.h"
 #include "Transport/OfflineTransportDriver.h"
 #include <cmath>

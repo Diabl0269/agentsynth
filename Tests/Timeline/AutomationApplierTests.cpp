@@ -11,7 +11,7 @@
 // Timing arithmetic: 48 kHz, 512-sample blocks, 120 BPM => 24000 samples/beat.
 
 #include "AI/AIStateMapper/AIStateMapper.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/ModuleBase.h"
 #include "Timeline/AutomationApplier.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
