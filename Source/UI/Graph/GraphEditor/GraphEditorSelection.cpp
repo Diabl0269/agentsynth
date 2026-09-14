@@ -272,3 +272,47 @@ void GraphEditor::cancelLiveDragGestures() {
     if (dragPreviewActive)
         endDragPreview();
 }
+
+// ---- Macro card drag (MacroCardComponent's own ComponentDragger calls these; FRO77 PR2) --------
+//
+// Thin wrappers over the plain multi-select drag primitives above — kept on GraphEditor rather
+// than moved into MacroGroupController, since moving them would need four more GraphCanvasHost
+// methods (beginSelectionDrag/dragSelectionBy/finalizeSelectionDrag/cancelSelectionDrag) purely to
+// call straight back into selection machinery that isn't a macro concern at all. See
+// MacroGroupController.h's class comment.
+
+void GraphEditor::beginMacroCardDrag(const juce::String& macroId) {
+    selectMacro(macroId, false);
+    beginSelectionDrag();
+}
+
+void GraphEditor::dragMacroCardBy(const juce::String&, juce::Point<int> delta) {
+    dragSelectionBy(delta, nullptr);
+    // Matches ModuleComponent::mouseDrag's own per-frame repaint call exactly (one repaint per
+    // drag tick), but goes through repaintCanvas() rather than a bare Component::repaint(): once
+    // rebuildVisibleCables() anchors a collapsed macro's boundary cables on the LIVE
+    // MacroCardComponent bounds (macroCableAnchorBounds), a bare repaint() would just re-paint
+    // whatever cable geometry is already cached rather than recomputing it against the card's new
+    // position. MacroCardComponent::mouseDrag deliberately does NOT also call
+    // getParentComponent()->repaint() — this is the one repaint call for the gesture.
+    repaintCanvas();
+}
+
+void GraphEditor::finalizeMacroCardDrag(const juce::String& macroId, juce::Point<int> newCardTopLeft) {
+    auto& graph = audioEngine.getGraph();
+    auto doFinalize = [this, macroId, newCardTopLeft] {
+        finalizeSelectionDrag();
+        if (auto* m = macros.find(macroId))
+            m->bounds.setPosition(synth::LayoutUtil::snap(newCardTopLeft));
+    };
+
+    if (undoManager)
+        undoManager->recordGraphAndMacroChange(graph, macros, doFinalize);
+    else
+        doFinalize();
+
+    repaintCanvas();
+}
+
+/** A press that never moved — mirrors cancelSelectionDrag, no re-resolve. */
+void GraphEditor::cancelMacroCardDrag(const juce::String&) { cancelSelectionDrag(); }
