@@ -206,7 +206,7 @@ which presets, undo snapshots and AI patches all address parameters by.
 
 ### Patch Diff Preview (PatchCard)
 
-`AIChatComponent::PatchCard` (`Source/UI/Assistant/AIChatComponent.cpp`) shows a human-readable preview as
+`AIChatComponent::PatchCard` (`Source/UI/Assistant/AIChatComponent/AIChatComponentMessageList.cpp`) shows a human-readable preview as
 its **default** view, computed once in `attachPatchPreview()` when each message is created (not on
 every `updateChatDisplay()` re-render). What it shows depends on the patch's mode:
 

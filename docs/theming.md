@@ -556,7 +556,7 @@ The following stock-widget overrides are now fully implemented in `AppLookAndFee
 ### Still deferred
 
 - **`Icon::TransportPlay`** — SVG asset and enum value are present (scaffolding), but no `DrawableButton` is wired to it. Reserved for a future transport affordance.
-- **`AIChatComponent.cpp`** — chat bubble palette + debug console (hardcoded)
+- **`AIChatComponent/AIChatComponentMessageList.cpp`** — chat bubble palette (hardcoded); debug console lives in **`AIChatComponent/AIChatComponent.cpp`**
 
 ---
 

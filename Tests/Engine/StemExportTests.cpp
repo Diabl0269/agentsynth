@@ -258,8 +258,12 @@ TEST(StemExportTest, NStripsProduceNFilesWithExpectedNamesAndEqualLength) {
     ASSERT_TRUE(result.ok) << result.message;
 
     ASSERT_EQ(result.stemFiles.size(), 2);
-    EXPECT_EQ(result.stemFiles[0].getFileName(), "01 - Channel Strip.wav");
-    EXPECT_EQ(result.stemFiles[1].getFileName(), "02 - Channel Strip.wav");
+    // Neither strip is fed by a TimelineMidiSource/TimelineAudioSource (this rig's sources are a
+    // bare ConstantSource, and no TimelineDoc is passed at all) - the FRO55 fallback, "Channel N"
+    // matching the strip's own NN position (docs/mixer.md §5.12). See
+    // Tests/Engine/StemExportNamingTests.cpp for the actual track-name resolution.
+    EXPECT_EQ(result.stemFiles[0].getFileName(), "01 - Channel 1.wav");
+    EXPECT_EQ(result.stemFiles[1].getFileName(), "02 - Channel 2.wav");
     for (auto& f : result.stemFiles)
         EXPECT_TRUE(f.existsAsFile()) << f.getFullPathName();
 

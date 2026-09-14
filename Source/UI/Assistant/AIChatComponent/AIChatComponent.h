@@ -6,8 +6,8 @@
 #include "AI/LocalHistoryStore.h"
 #include "AI/PatchDiff.h"
 #include "AI/PatchFeedbackStore.h"
-#include "AccountRow.h"
-#include "PlanBadge.h"
+#include "UI/Assistant/AccountRow.h"
+#include "UI/Assistant/PlanBadge.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Theme/AppLookAndFeel.h"
 #include <atomic>

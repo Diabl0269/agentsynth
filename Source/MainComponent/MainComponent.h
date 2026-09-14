@@ -21,7 +21,7 @@
 #include "Transport/BounceRunner.h"
 #include "Transport/StemExporter.h"
 #include "Transport/StemRunner.h"
-#include "UI/Assistant/AIChatComponent.h"
+#include "UI/Assistant/AIChatComponent/AIChatComponent.h"
 #include "UI/Chrome/ExportAudioDialog.h"
 #include "UI/Chrome/StatusBarComponent.h"
 #include "UI/Chrome/ToolbarComponent.h"

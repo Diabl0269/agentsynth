@@ -136,7 +136,7 @@ accumulate in the current session. The restored id is adopted as this session's
 `aiService.setConversationId(id)`-continued cloud) saves keep appending to that same conversation
 rather than starting a new one.
 
-**UI chrome** (`Source/UI/Assistant/AIChatComponent.h/.cpp`):
+**UI chrome** (`Source/UI/Assistant/AIChatComponent/AIChatComponent.h`, `AIChatComponentHistory.cpp`):
 - A **History** button (top toolbar, next to New Chat) opens a `juce::PopupMenu` — a "Clear my
   history" item, then one row per conversation (title + readable date). No custom list component
   needed; `PopupMenu` was already this codebase's pattern for a "pick one item" affordance
