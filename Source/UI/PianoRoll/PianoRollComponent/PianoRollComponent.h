@@ -1,5 +1,6 @@
 #pragma once
 
+#include "PianoRollTypes.h"
 #include "Timeline/MusicalScale.h"
 #include "Timeline/TimelineDoc.h"
 #include "UI/Layout/UIAnimation.h"
@@ -288,7 +289,9 @@ public:
 
     // ---- Note clipboard ----
 
-#include "PianoRollClipboardTypes.h"
+    // ClipboardNote is defined in PianoRollTypes.h; re-exposed here as a nested-type alias so
+    // PianoRollComponent::ClipboardNote keeps resolving exactly as it did when it was nested.
+    using ClipboardNote = pianoroll::ClipboardNote;
 
     // copySelectedNotes/canPasteNotes/pasteNotesAtPlayhead/duplicateSelectedNotes/cutSelectedNotes/
     // selectAllNotes/repeatSelectedNotes — see PianoRollClipboardAndKeys.cpp for the full contract
@@ -470,7 +473,10 @@ protected:
 private:
     enum class DragMode { None, Move, Resize, Marquee, VelocityScrub, DrawNew };
 
-#include "PianoRollGestureTypes.h"
+    // NoteHit/NoteOrigin are defined in PianoRollTypes.h; re-exposed as nested-type aliases so
+    // PianoRollComponent::NoteHit / ::NoteOrigin keep resolving exactly as when they were nested.
+    using NoteHit = pianoroll::NoteHit;
+    using NoteOrigin = pianoroll::NoteOrigin;
 
     std::optional<NoteHit> hitTestNote(juce::Point<int> pos) const;
     std::vector<std::pair<synth::NoteId, juce::Rectangle<int>>> collectNoteRects() const;
@@ -503,7 +509,10 @@ private:
     static constexpr float kBlackKeyWidthFraction = 0.62f;
     static int blackKeyWidthPx(int columnWidth) noexcept;
 
-#include "PianoRollGeometryTypes.h"
+    // NoteGeometry/LineRange are defined in PianoRollTypes.h; re-exposed as nested-type aliases so
+    // PianoRollComponent::NoteGeometry / ::LineRange keep resolving exactly as when nested.
+    using NoteGeometry = pianoroll::NoteGeometry;
+    using LineRange = pianoroll::LineRange;
     NoteGeometry effectiveGeometryFor(const synth::MidiNote& note) const;
 
     // createNoteAt/computeNewNoteAnchor/commitNewNote/beginMoveOrResize/beginVelocityScrub/
@@ -634,7 +643,7 @@ private:
     void paintDrawPreview(juce::Graphics& g);
     void paintSplitPreview(juce::Graphics& g);
 
-    // LineRange is defined in PianoRollGeometryTypes.h (included above, near NoteGeometry).
+    // LineRange is defined in PianoRollTypes.h (aliased above, near NoteGeometry).
     LineRange visibleLineRange(double spacingBeats) const noexcept;
 
     juce::Rectangle<int> playheadStripFor(int x) const noexcept;
@@ -855,11 +864,25 @@ private:
     // kPanelSlideMs (~190 ms) feel for the app's other show/hide sidebars.
     static constexpr double kScalePanelAnimMs = 200.0;
 
-#include "PianoRollScaleTypes.h"
+    // ClipScaleMemory is defined in PianoRollTypes.h; re-exposed as a nested-type alias so
+    // PianoRollComponent::ClipScaleMemory keeps resolving exactly as when it was nested.
+    using ClipScaleMemory = pianoroll::ClipScaleMemory;
     std::map<synth::ClipId, ClipScaleMemory> clipScaleMemory_;
 
     // ---- Edge auto-scroll timer ----
-#include "PianoRollAutoScrollTimer.h"
+    //
+    // A NESTED juce::Timer rather than a second responsibility multiplexed onto the class's own
+    // private juce::Timer base (used above for the one-shot quantise flash, timerCallback()) —
+    // one juce::Timer answering to two unrelated reasons would need a mode flag in every callback,
+    // exactly the kind of "which timer is this tick for" bug a dedicated Timer avoids by
+    // construction. autoScrollTick() (the protected virtual seam a test overrides) does the real
+    // work; this struct only forwards juce::Timer's callback to it.
+    struct AutoScrollTimer final : public juce::Timer {
+        explicit AutoScrollTimer(PianoRollComponent& ownerRef)
+            : owner(ownerRef) {}
+        void timerCallback() override { owner.autoScrollTick(); }
+        PianoRollComponent& owner;
+    };
     AutoScrollTimer autoScrollTimer_{*this};
 
     // ---- Edit tool + its cursor cache ----

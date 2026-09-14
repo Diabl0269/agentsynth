@@ -32,12 +32,16 @@ plus a `noteHitTestMarquee` free function mirroring `clipHitTestMarquee`.
 - `PianoRollMouse.cpp` — mouse handling and edge-auto-scroll.
 - `PianoRollZoom.cpp` — anchored zoom and `keyPressed` dispatch.
 - `PianoRollInternal.h` — private shared constants/helpers (not a CMake source file).
-- `PianoRollGestureTypes.h`, `PianoRollClipboardTypes.h`, `PianoRollGeometryTypes.h`,
-  `PianoRollScaleTypes.h`, `PianoRollAutoScrollTimer.h` — nested-type bodies (`NoteHit`/`NoteOrigin`,
-  `ClipboardNote`, `NoteGeometry`/`LineRange`, `ClipScaleMemory`, `AutoScrollTimer`) `#include`d
-  mid-class-body from `PianoRollComponent.h` at the exact spot each used to be defined inline, so
-  every one stays nested (`PianoRollComponent::NoteHit` etc.) with no change to any qualified
-  reference elsewhere (not CMake source files, same as `PianoRollInternal.h`).
+- `PianoRollTypes.h` — a self-contained header (own `#pragma once` + includes) defining `NoteHit`,
+  `NoteOrigin`, `ClipboardNote`, `NoteGeometry`, `LineRange` and `ClipScaleMemory` at namespace
+  scope inside a nested `synth::ui::pianoroll` namespace (so generic names like `LineRange` can't
+  collide). `PianoRollComponent.h` re-exposes each as a nested-type alias
+  (`using NoteHit = pianoroll::NoteHit;`, at the same access-section spot each used to be defined
+  inline), so every existing `PianoRollComponent::NoteHit`-style qualified reference elsewhere keeps
+  compiling unchanged. `AutoScrollTimer` stays defined inline in the class itself (it is
+  constructed with a reference to the owning `PianoRollComponent` and calls its protected
+  `autoScrollTick()`, so it has no reason to live outside the class). Not a CMake source file, same
+  as `PianoRollInternal.h`.
 
 **Entry/exit.** Double-clicking a clip in `TimelineClipLaneArea` fires its `onClipDoubleClicked(ClipId)`
 callback, which `TimelinePanelComponent`'s constructor wires to `openPianoRoll(ClipId)`. That call:
