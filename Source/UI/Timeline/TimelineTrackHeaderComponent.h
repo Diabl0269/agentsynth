@@ -2,7 +2,7 @@
 
 #include "MidiDestinationPicker.h"
 #include "Plugin/Hosting/HostedPluginBackend.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>

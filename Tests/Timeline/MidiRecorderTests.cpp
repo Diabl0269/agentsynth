@@ -13,7 +13,7 @@
 
 #include "AppUndoManager.h"
 #include "Timeline/MidiRecorder.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Transport/TransportService.h"
 #include <cmath>
 #include <gtest/gtest.h>

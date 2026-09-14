@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../Transport/TransportService.h"
-#include "TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
 

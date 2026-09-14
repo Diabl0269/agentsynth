@@ -9,7 +9,7 @@
 // grid, so inheriting a default — let alone a persisted user setting — would make the file's
 // results machine-dependent.
 #include "AppUndoManager.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Timeline/ClipSelectionModel.h"
 #include "UI/Timeline/EditTool.h"
 #include "UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h"

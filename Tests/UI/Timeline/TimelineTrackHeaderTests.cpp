@@ -12,7 +12,7 @@
 // The components and the resolver compile unconditionally, like TimelinePanelComponent itself.
 
 #include "AppUndoManager.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Theme/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"

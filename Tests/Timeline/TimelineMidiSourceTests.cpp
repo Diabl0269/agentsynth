@@ -17,7 +17,7 @@
 #include "AudioEngine.h"
 #include "Modules/PolyMidiModule.h"
 #include "Modules/TimelineMidiSourceModule.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Timeline/TimelineSnapshot.h"
 #include "Transport/TransportService.h"
 #include <algorithm>

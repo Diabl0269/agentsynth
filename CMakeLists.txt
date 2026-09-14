@@ -288,8 +288,8 @@ add_library(Core STATIC
     Source/Timeline/PeaksFile.h
     Source/Timeline/TakePlacement.cpp
     Source/Timeline/TakePlacement.h
-    Source/Timeline/TimelineDoc.cpp
-    Source/Timeline/TimelineDoc.h
+    Source/Timeline/TimelineDoc/TimelineDoc.cpp
+    Source/Timeline/TimelineDoc/TimelineDoc.h
     Source/Timeline/TimelineOps.cpp
     Source/Timeline/TimelineOps.h
     Source/Timeline/TimelineReconciler.cpp
