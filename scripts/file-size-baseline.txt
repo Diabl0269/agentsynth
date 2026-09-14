@@ -8,7 +8,6 @@
 1213 Source/MainComponent/MainComponent.h
 1004 Source/Mixer/ChannelFlows.cpp
 1165 Source/ShortcutManager.h
-1726 Source/Timeline/TimelineDoc/TimelineDoc.cpp
 1999 Source/UI/Assistant/AIChatComponent.cpp
 1984 Source/UI/Graph/GraphEditor/GraphEditor.h
 1275 Source/UI/Macros/MacroPortConfigDialog.cpp
