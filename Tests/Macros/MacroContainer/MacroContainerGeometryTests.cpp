@@ -18,7 +18,7 @@
 #include "Modules/VCAModule.h"
 #include "PatchDocument.h"
 #include "ProjectBundle.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Macros/MacroCardComponent.h"
 #include <algorithm>
 #include <gtest/gtest.h>

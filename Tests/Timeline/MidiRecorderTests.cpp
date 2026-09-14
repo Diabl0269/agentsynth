@@ -2,7 +2,7 @@
 //
 // Most of this file needs no engine and no graph: it drives a bare synth::TransportService exactly
 // the way AudioEngine::renderNextBlock does (tick(), then captureBlock() against the published
-// BlockTimeInfo), the same house style TimelineMidiSourceTests.cpp uses for the "Track In" module.
+// BlockTimeInfo), the same house style the TimelineMidiSource test suite uses for the "Track In" module.
 //
 // Timing arithmetic used throughout: 48 kHz, 512-sample blocks, 120 BPM => 24000 samples per beat
 // (TransportService's default BPM).
@@ -13,7 +13,7 @@
 
 #include "AppUndoManager.h"
 #include "Timeline/MidiRecorder.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Transport/TransportService.h"
 #include <cmath>
 #include <gtest/gtest.h>
@@ -243,7 +243,7 @@ TEST(MidiRecorderTest, NotRecordingCapturesNothing) {
 // ============================================================================
 
 // Loop [0, 2): beat 2.0 is sample 48000, which lands in block 93 (93 * 512 = 47616) at offset 384 —
-// the same wrap point TimelineMidiSourceTests.cpp uses for its loop-wrap coverage.
+// the same wrap point TimelineMidiSourceLoopTests.cpp uses for its loop-wrap coverage.
 TEST(MidiRecorderTest, WrapAwareBeatMath) {
     Harness h;
     TimelineDoc doc;

@@ -5,7 +5,7 @@
 #include "Modules/VCAModule.h"
 #include "PatchDocument.h"
 #include "ProjectBundle.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <map>

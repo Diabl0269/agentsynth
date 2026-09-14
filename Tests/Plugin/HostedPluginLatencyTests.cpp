@@ -42,7 +42,7 @@
 
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 
 using synth::HostedPluginModule;
 using synth::test::FakeAudioIODevice;

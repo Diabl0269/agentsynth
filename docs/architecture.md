@@ -163,7 +163,7 @@ Solo on a `Channel Strip` is a **render-time gate, never a parameter write** ([`
 
 ### 3. TimelineDoc (the timeline document model)
 
-`Source/Timeline/TimelineDoc.h/.cpp`
+`Source/Timeline/TimelineDoc/TimelineDoc.h/.cpp`
 
 The message-thread model behind the timeline: tracks → clips → notes, plus automation lanes and markers. Mutable, serialisable, headless — no GUI, editor or audio dependency. Everything downstream (the audio-thread snapshot, undo, `.agsproj` save) hangs off it.
 
