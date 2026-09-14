@@ -100,17 +100,6 @@ public:
     juce::ApplicationCommandManager& getCommandManager() { return commandManager; }
     void updateCommandShortcuts();
 
-    // ---- Keyboard/focus arbitration ----
-    // Which surface currently owns Cmd+C/V/D (Space's togglePlayback is deliberately
-    // surface-independent — see ShortcutManager's binding comment and docs/shortcuts.md).
-    // TimelineClips/PianoRoll require BOTH the timeline panel to be visible AND real keyboard
-    // focus (juce::Component::getCurrentlyFocusedComponent()) to sit inside the clip-lane area /
-    // piano roll respectively — a hidden panel never owns the verbs, whatever a stale focus
-    // pointer points at. Every one of those surfaces already grabs focus on mouseDown (the canvas
-    // idiom GraphEditor::mouseDown established, followed by TimelineClipLaneArea/
-    // PianoRollComponent/AutomationLaneEditor), so "last-clicked surface owns the verbs" falls out
-    // of ordinary JUCE focus tracking with no extra bookkeeping in this class. Public: both
-    // perform()/getCommandInfo() and FocusArbitrationTests.cpp call it directly.
     enum class EditSurface { Graph, TimelineClips, PianoRoll };
     EditSurface resolveEditSurface() const;
 
@@ -120,15 +109,6 @@ public:
     // default) falls through to that check.
     void setEditSurfaceOverrideForTest(std::optional<EditSurface> surface) { editSurfaceOverrideForTest_ = surface; }
 
-    /** The repeat verb's ACTUAL work, split out from the command so it can be driven without the
-     *  count dialog — tests call it directly, and a future scripting/AI caller gets the same door.
-     *  Routed by the same resolveEditSurface() every other edit verb uses: TimelineClips repeats
-     *  the clip selection, PianoRoll repeats the note selection, and Graph is deliberately
-     *  unsupported (there is no "one block length further along" on a spatial canvas — Duplicate
-     *  is the graph's answer, which is why getCommandInfo reports the command inactive there).
-     *  `count` is clamped to [kMinRepeatCount, kMaxRepeatCount]; the callee owns its own undo
-     *  transaction, so this must never be wrapped in another one.
-     *  @return whatever the surface's verb returned — true when something was actually created. */
     bool performRepeatSelection(int count);
 
     /** Repeat's count bounds, shared by the dialog's clamp and performRepeatSelection's own. 64 is
@@ -399,10 +379,6 @@ public:
      *  direction. */
     bool isProjectDirty() const { return isDirty_; }
 
-    /** THE gate every document-replacing action goes through: runs `proceed` straight away on a clean
-     *  document, otherwise asks first and runs it only on Save (successful) or Discard. Asynchronous by
-     *  nature - the caller must treat `proceed` as "maybe later, maybe never" and must not do the
-     *  destructive work itself. */
     void guardUnsavedChanges(const juce::String& actionLabel, std::function<void()> proceed);
     // Non-const access to ApplicationProperties for persistence tests (read-back within session).
     juce::ApplicationProperties& getAppPropertiesForTest() { return appProperties; }
@@ -416,28 +392,16 @@ public:
     // Mirrors the loadButton factory-preset call site exactly (load + patch-name update), so
     // tests can verify the patch-name side effect without driving the async PopupMenu.
     void simulateLoadFactoryPresetForTest(int index);
-    // P8-31: the patch half. Opens a `.json` preset, then asks whether to REPLACE the current
-    // patch or ADD the loaded one on top of it (promptPatchLoadMode, the patchLoadPrompt seam).
     void openPresetFromFile();
-    // P8-31: the whole-project half of the Load menu. openPresetFromFile opens a plain `.json`
-    // patch; this opens a `.agsproj` bundle (graph + timeline) by letting the user select a
-    // DIRECTORY (the bundle's folder). Same async shape, and the guard runs before the chooser.
     void openProjectFromFile();
     synth::AIIntegrationService& getAiServiceForTest() { return aiService; }
 
     // ---- Snippets (issue #156) ----
 
-    /** Re-reads the snippets directory and pushes the list into the library sidebar. */
     void refreshSnippetLibrary();
 
-    /** Asks for a name and saves the canvas selection as a snippet. No-op (with a status-bar
-     *  note) when nothing is selected. */
     void promptSaveSnippet();
 
-    /** Asks for a repeat count (async juce::AlertWindow, exactly promptSaveSnippet's modal idiom)
-     *  and hands it to performRepeatSelection(). No-op (with a status-bar note) when the focused
-     *  surface has nothing selected. Kept separate from performRepeatSelection so nothing but the
-     *  keyboard/menu path ever has to pump a modal loop. */
     void promptRepeatSelection();
 
     ModuleLibraryComponent& getModuleLibrary() { return moduleLibrary; }
@@ -457,24 +421,8 @@ public:
     synth::PluginScanService& getPluginScanService() noexcept { return *activeScanService; }
     const synth::PluginScanService& getPluginScanService() const noexcept { return *activeScanService; }
 
-    /** Starts a background scan of every format this build can host, reporting through the status
-     *  bar and refreshing the library's Plugins section (and the saved list) when it finishes.
-     *  Ignored while a scan is already running, and refused outright when the engine is Hosted —
-     *  the scan re-launches `currentExecutableFile`, which inside a VST3/AU is the HOST's binary. */
     void startPluginScan();
 
-    /** FRO44: the eager-population entry point, called ONCE by `Main.cpp` right after the real
-     *  standalone window is created — never by this class's own constructor, and never for the
-     *  plugin-hosted path (see below). Delegates to `getPluginScanService().ensureScanned(...)`,
-     *  which is itself a one-shot-per-service no-op past the first call: a second call (a test, or a
-     *  future picker that also wants to make sure the list is populated) is always safe to make.
-     *
-     *  Hosted mode (`AudioEngine::isHosted()`) is a deliberate no-op, matching `startPluginScan()`'s
-     *  own refusal: `currentExecutableFile` inside a VST3/AU build is the HOST's binary, so scanning
-     *  there would launch a copy of the DAW per candidate plugin, and the host owns plugin discovery
-     *  in that world regardless. A hosted session still RESOLVES identities — against whatever list
-     *  the constructor already restored from settings — it just never scans one itself; see
-     *  docs/architecture.md's "Plugin scanning" section. */
     void maybeStartEagerPluginScan();
 
     /** Writes the scan list into appProperties under "pluginScanList". */
@@ -499,16 +447,9 @@ public:
     /** The settings key the recent-projects list round-trips through. */
     static constexpr const char* kRecentProjectsKey = synth::kRecentProjectsSettingKey;
 
-    /** Rebuilds the graph's render sequence so JUCE re-derives its parallel-path delay
-     *  compensation from the nodes' CURRENT latencies, then refreshes the status bar's round-trip
-     *  readout. Public so a test can drive the exact path a hosted plugin's callback drives. */
     void rebuildGraphForLatencyChange();
 
 private:
-    // synth::PluginScanService::Listener — fired once per real scan, no matter which caller
-    // (the sidebar's row, maybeStartEagerPluginScan(), a future picker) actually triggered it.
-    // Consolidates what used to be startPluginScan()'s own inline completion lambda, so every
-    // trigger path gets the same status-bar message, sidebar refresh and persisted save.
     void pluginScanCompleted(const synth::PluginScanService::Result& result) override;
 
     // AIIntegrationService::Listener
@@ -521,36 +462,12 @@ private:
     // the timeline to the audio thread and rebuilds the automation recorder's lane bindings.
     void timelineChanged(const synth::TimelineDoc& doc) override;
 
-    // Publishes the doc to the engine and re-resolves the recorder's per-lane parameter bindings
-    // against the CURRENT graph (the same uuid -> node -> parameter resolution
-    // AudioEngine::publishTimeline does for the applier's binding table).
     void publishTimelineAndRebindRecorder();
 
-    // Reconciles every track/lane binding against the live graph after a graph change that happened
-    // outside a doc mutation (preset load, new patch, AI apply, undo/redo, bundle open). Publishes
-    // ONLY when the reconcile itself changed nothing — a reconcile that flips a flag is a doc
-    // mutation, so timelineChanged has already published by the time it returns.
     void reconcileTimelineAfterGraphChange();
 
-    // The cheap half of the above, with no republish of its own: installed on
-    // GraphEditor::onGraphStructureChanged as the catch-all for graph edits that have no explicit
-    // post-apply site (a module deleted from the canvas). See the call site for why publishing
-    // there would be waste.
     void reconcileTimelineBindingsOnly();
 
-    // T183/FRO42: the shared tail of addInstrumentTrack() and addInstrumentPluginTrack() — Track In
-    // -> `instrumentProcessor` -> [poly/envelope branches, gated exactly as addInstrumentTrack's own
-    // comment describes] -> default chain -> Master, boxed into one collapsed macro, as ONE undo
-    // step. `instrumentProcessor` must be non-null and NOT yet added to any graph (a factory
-    // failure, or a plugin whose load failed/refused, is the CALLER's job to catch and report before
-    // this ever runs — see addInstrumentPluginTrack's own comment for why: nothing here may open a
-    // transaction for an instrument that doesn't exist). Every branch this method takes (Oscillator/
-    // Wavetable's ADSR+VCA, a poly instrument's Voice Mixer) is keyed off the PROCESSOR's own
-    // getName()/"poly" parameter, never a caller-supplied type string — a hosted plugin's getName()
-    // is "Hosted Plugin" and it declares no "poly" parameter, so every one of those branches falls
-    // out to the plain path automatically, with no separate plugin-shaped copy of this logic. `poly`
-    // mirrors addInstrumentTrack's own parameter (always false from the plugin path, which has no
-    // poly concept). `trackNamePrefix` becomes "<prefix> <N>", same numbering as before.
     void buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProcessor> instrumentProcessor,
                                       const juce::String& trackNamePrefix, bool poly);
 
@@ -563,20 +480,10 @@ private:
     std::vector<std::unique_ptr<juce::AudioProcessor>> pendingInstrumentPluginLoads_;
     void dropPendingInstrumentPluginLoad(juce::AudioProcessor* processor);
 
-    // Status-bar round-trip readout. Called from the 5 Hz poll and from any
-    // hosted-plugin latency change (which moves the graph term of the sum between polls).
     void updateRoundTripLatencyReadout();
 
-    // Installs MainComponent's onLatencyChanged / onInstancePublished callbacks on every
-    // HostedPluginModule in the graph. Idempotent, run from GraphEditor::onGraphStructureChanged —
-    // the one hook every node-adding path already goes through. Never touches onInstanceChanged,
-    // which HostedPluginEditorWindow owns.
     void installHostedPluginObservers();
 
-    // The ONE place a MIDI take ever commits — the transport bar's Record-off click and the
-    // 10 Hz poll's auto-commit-on-stop (playing -> stopped while still recording) both route
-    // through here, so the two paths can never diverge (one warns on overrun and flips the button
-    // off, the other forgets to). A no-op (compiles to an empty body) with the flag off.
     void commitMidiRecording();
 
     // ---- Audio recording ----
@@ -611,28 +518,12 @@ private:
         int captureRecordingLatencySamples = 0;
     };
 
-    // The master tap, found or created: a "Rec Tap" node spliced IN FRONT OF the Audio Output node,
-    // with every connection that fed the output re-routed through it. One compound undo step when
-    // it has to be created; a plain lookup (no undo step) when one is already there. Returns
-    // nullptr if the patch has no Audio Output node to splice in front of.
     juce::AudioProcessorGraph::Node* ensureMasterRecordTap();
 
-    // The live master tap, or nullptr. Resolves the take's NodeID first and falls back to a scan —
-    // an undo taken mid-take rebuilds the graph and renumbers nodes, and losing the tap that way
-    // must lose the take, not crash.
     RecordTapModule* findMasterRecordTap() const;
 
-    // Where this take's files go: `<bundle>/Audio/take-N.wav` + `<bundle>/Peaks/take-N.agpk` for a
-    // saved project, `<app data>/Recordings/take-N.wav` + `.../Recordings/take-N.agpk` for one that
-    // has never been saved (see the unsaved-project policy on ProjectBundle). N is the first free
-    // number in whichever folder. Fills the file/assetRef fields of `take`; returns false if the
-    // directories could not be created.
     bool chooseTakeFiles(AudioTake& take) const;
 
-    // Counterpart to commitMidiRecording(): the ONE place an audio take ever commits. Stops
-    // the tap, then creates the clip in a single recordTimelineChange. A no-op unless a take is
-    // actually in flight, so both callers (the Record-off click and the poll's commit-on-stop) can
-    // call it unconditionally.
     void commitAudioRecording();
 
     // RAII suspension of automation capture for the duration of a programmatic rewrite.
@@ -658,10 +549,6 @@ private:
     // FRO25 (P9-3d): the header menu's "Make Channel".
     bool canMakeChannelForTrack(synth::TrackId track) const override;
     void makeChannelForTrack(synth::TrackId track) override;
-    // FRO25 (P9-3d): the ONE undo transaction (graph + timeline + macros) + reconcile pass behind
-    // every "Make channel" entry point (header menu, canvas/module menu via
-    // GraphEditor::onMakeChannelRequested), and behind "Duplicate into Channel"
-    // (GraphEditor::onDuplicateIntoChannelRequested).
     void makeChannelForNode(juce::AudioProcessorGraph::NodeID source);
     void duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& macroId);
     // FRO42 (P9-3h): the Instrument submenu's "Plugin" entries.
@@ -679,173 +566,95 @@ private:
     void setMidiDestinationConnected(synth::TrackId forTrack, juce::uint32 nodeUid, bool connect) override;
     void auditionTrackNote(synth::TrackId forTrack, int pitch, int velocity, bool noteOn) override;
 
-    // Creates a "Track In" node with a fresh uuid at the canvas' left edge, wires it to the single
-    // MIDI instrument in the patch when there is exactly one, and returns its uuid (empty on
-    // failure). Called INSIDE the caller's undo transaction — it opens none of its own.
     juce::String createTrackInNode();
 
-    // Twin of createTrackInNode(): a "Track Audio" node with a fresh uuid. Returns its uuid, empty on
-    // failure. Called INSIDE the caller's undo transaction.
-    //
-    // `wireDirectlyToMasterBus` (T173a): true (the default) wires the node stereo straight into the
-    // master bus — the Rec Tap when one is spliced in, otherwise the Audio Output node directly, so
-    // the two orderings compose (adding an audio track before or after the first take both end up
-    // with the track's audio flowing THROUGH the tap) — the behaviour createAndBindTrackInNode()'s
-    // ad hoc single-node rebind still wants. false leaves the node's output unwired, for a caller
-    // that is about to wire it into a full channel chain instead of straight to the bus
-    // (addAudioTrack(), via synth::buildDefaultAudioChannel).
     juce::String createTrackAudioNode(bool wireDirectlyToMasterBus = true);
 
-    // Points the engine's AudioClipStreamer at the current document's asset roots: the open
-    // bundle directory (invalid when the project has never been saved) plus the app-data Recordings
-    // folder unsaved-project takes are written into. Called wherever `currentBundleDir_` changes.
     void refreshAssetRoots();
 
     // ---- Asset management (import/relink/collect-clean/adopt-on-save) ----
 
-    // Production entry point for the clip-lane area's "Relink audio…" menu item: opens an async
-    // FileChooser and, on a choice, calls relinkClipAsset(id, file). A no-op if `id` no longer
-    // resolves to a clip by the time the dialog returns.
     void promptRelinkClipAsset(synth::ClipId id);
-    // The actual relink: imports `chosenFile` (via synth::AssetManager::importAudioFile into the
-    // current bundle, or into the app-data Recordings/ convention when the project has never been
-    // saved) and rewrites assetRef on `id` AND every other clip that shared its OLD ref, as ONE
-    // undo step (a single AppUndoManager::recordTimelineChange batching every
-    // TimelineDoc::setClipAsset call, each preserving its own clip's sourceStartSeconds). Never
-    // deletes the old file. A no-op (with a status-bar message) if `id` doesn't resolve, the asset
-    // has no ref to relink, or the import fails.
     void relinkClipAsset(synth::ClipId id, const juce::File& chosenFile);
 
-    // What the clip lane area's authoring gestures (double-click an empty audio row, or drop files
-    // on one) report through TimelineClipLaneArea::onAudioFileDropped. Imports `sourceFile` under
-    // the SAME policy relinkClipAsset() uses (bundle Audio/, or the app-data Recordings/ convention
-    // when the project has never been saved) and then adds ONE clip at `startBeat`, as long as the
-    // file itself, bound to the new ref — the two doc calls batched into ONE undo step. A no-op with
-    // a status-bar message when `track` is not an Audio-kind track or the import fails; a failed
-    // import mutates nothing at all.
     void importAudioFileToClip(synth::TrackId track, double startBeat, const juce::File& sourceFile);
 
-    // `file`'s duration in beats at the transport's CURRENT bpm (0.0 when it isn't readable audio).
-    // Beats, not seconds, because a clip's length is beats — see synth::Clip.
     double audioFileLengthInBeats(const juce::File& file) const;
 
-    // synth::AssetManager::cleanUnusedAssets against the current bundle + live timeline doc. 0
-    // outside a saved bundle (nothing to sweep). See cleanUnusedAssetsForTest()'s comment for why
-    // this has no menu/shortcut wiring yet.
     int cleanUnusedAssets();
 
     // The graph node carrying this uuid, or nullptr.
     juce::AudioProcessorGraph::Node* findNodeByUuid(const juce::String& uuid) const;
 
     // ---- File handlers, minus the dialogs ----
-    // `file` is whatever the chooser returned; the .agsproj branch is what makes a bundle a bundle.
-    // Returns whether the save actually succeeded — guardUnsavedChanges' Save arm only continues
-    // past a save that returned true.
     bool saveToFile(const juce::File& file);
     bool openFromFile(const juce::File& file, bool append = false);
-    // The actual bundle load (graph + timeline from `<bundleDir>/project.json`), extracted out of
-    // openFromFile's bundle branch so the autosave-recovery continuation below can also reach it on
-    // the Discard arm without duplicating the load/reconcile/markDocumentClean sequence.
     bool loadBundleFromFile(const juce::File& bundleDir);
-    // The Restore arm: loads `<bundleDir>/autosave.json` in place of project.json and deliberately
-    // does NOT call markDocumentClean() — the loaded state is not what's on disk, so the document
-    // must read as dirty. isDirty_ is set true directly here, the one exception to "never write
-    // isDirty_ outside the recompute-from-serial path" (see markDocumentClean()'s comment): there is
-    // no undo action to derive dirtiness from, since this mutates the graph/timeline the same
-    // programmatic way ProjectBundle::load always has.
     bool loadAutosaveFromFile(const juce::File& bundleDir);
-    // openFromFile's bundle branch, continued: reached either immediately (no sidecar) or from the
-    // async autosaveRecoveryPrompt's answer.
     void applyAutosaveRecoveryAnswer(AutosaveRecoveryChoice choice, const juce::File& bundleDir);
-    // The real dialog behind the has-autosave branch of openFromFile, same async/test-hook shape as
-    // promptUnsavedChanges below.
     void promptAutosaveRecovery(std::function<void(AutosaveRecoveryChoice)> onChoice);
-    // Ask whether to replace the current patch or add the loaded one on top of it (P8-31). Same
-    // async/test-hook shape as promptAutosaveRecovery; routes through the patchLoadPrompt seam when set.
     void promptPatchLoadMode(std::function<void(PatchLoadMode)> onChoice);
-    // Cmd+S's actual decision: resave silently to the remembered bundle when one is open and
-    // `forceChooser` is false, otherwise prompt (defaulting the suggested name to `.agsproj`, which
-    // is what steers a first save toward the bundle format instead of the legacy plain preset).
-    // `forceChooser` is what "Save Project As" (Cmd+Opt+S) sets to always prompt even with a bundle
-    // already open. `onFinished` (optional) reports whether the save actually happened: false for a
-    // cancelled chooser AND for a save that ran but failed — the unsaved-changes guard's Save arm
-    // is the only caller that supplies it, since every other call site (menu/toolbar) has nothing
-    // waiting on the outcome.
     void performSaveProject(bool forceChooser, std::function<void(bool saved)> onFinished = {});
-    // The legacy patch-only export: calls graphEditor.savePreset directly (never saveToFile), so
-    // exporting a snapshot from an open BUNDLE project never renames the window title, mutates
-    // currentBundleDir_, or touches isDirty_ — it's a side export, not a change of what document is
-    // open.
     void exportPatchOnly(const juce::File& file);
     // The chooser-launching wrapper the "Export Patch Only" menu item actually calls.
     void promptExportPatchOnly();
-    // The "Export Audio..." menu item's handler: shows synth::ui::ExportAudioDialog, then drives a
-    // BounceRunner from its options. See Source/UI/ExportAudioDialog.h.
     void promptExportAudio();
-    // The "Export Stems..." menu item's handler (P9-8, docs/mixer.md §5.12): same
-    // synth::ui::ExportAudioDialog, opened in its stems mode, driving a StemRunner instead of a
-    // BounceRunner. Shows a status message instead of opening the dialog when the patch has no
-    // mixer channels yet (synth::StemExporter::hasChannelStrips).
     void promptExportStems();
-    // One choke point for "load factory preset N + keep the timeline in step", shared by the Load
-    // menu and simulateLoadFactoryPresetForTest.
     void loadFactoryPresetAtIndex(int index);
-    // T114/P8-10: guarded factory-preset load, shared by the Load menu's own preset branch and the
-    // welcome screen's "Open our default project" button (index 0). hideWelcomeScreen() runs as the
-    // LAST line inside the guard's `proceed` continuation — never before or after
-    // guardUnsavedChanges() itself — so a Cancel answer leaves the welcome screen exactly as it was
-    // (see DirtyDocumentIsGuardedBeforeWelcomeScreenReplacesIt in WelcomeScreenTests.cpp).
     void loadPresetGuarded(int index);
-    // T114/P8-10: guarded recent-project open, shared by the Load menu's "Recent Projects" submenu
-    // and the welcome screen's recent-project rows. Goes through openFromFile like every other
-    // recent-project open, so autosave recovery and the bundle/plain-preset split both apply
-    // unchanged.
     void openRecentProjectGuarded(const juce::File& file);
     // New Patch empties the timeline as well as the canvas, as its own undoable step.
     void clearTimelineForNewPatch();
-    // The post-guard half of AppCommands::newPatch — everything the command used to do inline,
-    // now reachable directly so guardUnsavedChanges can hand it in as `proceed`.
     void newPatch();
-    // The post-guard half of openPresetFromFile() — launches the actual chooser. Split out so
-    // guardUnsavedChanges can run BEFORE the dialog opens rather than after the user has already
-    // picked a file.
     void launchOpenPresetChooser();
-    // P8-31: the post-guard half of openProjectFromFile() — patches open a `.json` FILE, projects
-    // open a `.agsproj` DIRECTORY, so each gets its own chooser (and its own filter + selection
-    // mode) rather than one combined `.json;*.agsproj` browser that conflated the two.
     void launchOpenProjectChooser();
 
-    // ChangeListener (juce::ChangeListener override) — called when ThemeManager broadcasts.
-    // Implements the 3-step re-skin pass: applyTheme → sendLookAndFeelChangeMessage → repaint.
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
 
-    // FocusChangeListener (juce::FocusChangeListener override) — fires on every keyboard-focus
-    // change anywhere in the process. Repaints every registered focus-region root so T159's accent
-    // outline (FocusRegion.h's paintFocusRegionOutline) tracks focus moving into or out of it; see
-    // FocusRegion.h's comment on paintFocusRegionOutline for why this listener is needed at all.
     void globalFocusChanged(juce::Component* focusedComponent) override;
 
     // Shared initialisation body called from both constructors after appProperties is set up.
     void initialiseCommon(std::unique_ptr<synth::AIProvider> provider, synth::AIProviderRegistry registry);
 
-    // Push the (themed, re-tinted) icon Drawables onto the 9 toolbar DrawableButtons + the
-    // status-bar master-mute button, and manage icon-only vs icon+text text per narrow mode.
-    // dynamic_casts the LnF and no-ops the icon assignment when null (headless tests).
+    // ---- initialiseCommon()'s ordered setup steps (FRO76) ----
+    // Bodies moved verbatim out of the former single-function initialiseCommon(); the call order in
+    // initialiseCommon() IS the contract (see the ORDER comments at each call site) — these are
+    // declared in that same order for the same reason. Defined across MainComponentSetup.cpp /
+    // MainComponentSetupToolbar.cpp / MainComponentSetupTimeline.cpp.
+    void restorePanelPreferences();
+    void restoreGraphEditorPreferences();
+    void configureAiProvider(std::unique_ptr<synth::AIProvider> provider, synth::AIProviderRegistry registry);
+    void wireAiChatAndAccount();
+    void wireGraphEditorCallbacks();
+    void wirePluginScanAndRecents();
+    void wireCommandsAndShortcuts();
+    void addCanvasAndPanels();
+    void addToolbarChrome();
+    void addFileButtons();
+    // The Load button's popup menu body, extracted out of addFileButtons() (FRO76).
+    void showLoadMenu();
+    void addUndoButtons();
+    void wireTimelinePanel();
+    void wireTimelinePanelServicesAndShortcuts();
+    void wireTimelineHookInventory();
+    void wireTimelineClipLaneCallbacks();
+    void wireTimelineRecordToggle();
+    // The transport bar's onRecordToggled body, extracted out of wireTimelineRecordToggle() (FRO76).
+    void handleRecordToggle(bool wantRecording);
+    void addToolbarToggleButtons();
+    void assembleToolbar();
+    void wireStatusBar();
+    // Returns false exactly where initialiseCommon() used to `return;` early on the plugin path
+    // (ownedAudioEngine == nullptr) — the caller mirrors that with `if (!initialiseAudioEngine())
+    // return;`. True means the rest of initialiseCommon() (welcome screen, focus regions) still runs.
+    bool initialiseAudioEngine();
+    void createWelcomeScreen();
+    void registerFocusRegions();
+
     void applyToolbarIcons();
 
-    /** Pushes the saved "split L/R jacks" preference onto the patch the app just opened with.
-     *  Must run AFTER AudioEngine::initialise() has built it — the preset loader constructs its
-     *  modules with no knowledge of preferences. Standalone only; the plugin keeps its
-     *  host-restored session. */
     void applyStoredDualIOPreferenceToPatch();
 
-    /** Output-card identity treatment: the text GraphEditor's Audio Output card shows under its
-     *  title (see GraphEditor::setOutputDeviceInfoProvider). HostMode::Hosted has no device
-     *  manager — see AudioEngine's HostMode doc comment — so that path returns a fixed "Host
-     *  audio" string instead of touching it. MESSAGE THREAD ONLY (reads AudioEngine's
-     *  AudioDeviceManager, same thread AudioDeviceManager itself requires). Returns an empty
-     *  string when there is genuinely nothing to report (no device open yet), which the card
-     *  treats as "no line" rather than a blank one. */
     juce::String computeOutputDeviceInfoText() const;
 
     // Collapse/expand the library sidebar. Slides to the target layout (beginPanelSlide()).
@@ -853,78 +662,27 @@ private:
 
     // ---- Welcome screen (T114/P8-10) ----
 
-    // A no-op when welcomeScreen_ is null (Hosted mode) or already hidden — every guarded action's
-    // `proceed` continuation calls this unconditionally as its LAST step, so it must tolerate both.
     void hideWelcomeScreen();
-    // Reopens the overlay (AppCommands::showWelcomeScreen, wired to the macOS Help menu in
-    // Main.cpp) with a freshly re-pruned recent-projects list — the list may have changed since it
-    // was last shown.
     void showWelcomeScreen();
-    // Build-time "What's New" dialog (Feature 2) — a synchronous, no-network juce::AlertWindow
-    // listing synth::whatsnew::kHighlights. Never invoked from a test (it would open a real modal).
     void showWhatsNewDialog();
 
     // ---- Timeline panel height (user-resizable, persisted) ----
 
-    // Metrics::timelinePanelHeight (220 headless) — the DEFAULT height and the MINIMUM the user can
-    // drag down to, never the fixed height it used to be.
     int defaultTimelinePanelHeight() const;
 
-    // [defaultTimelinePanelHeight(), 75% of the window height]. Applied on every layout pass, so a
-    // height saved on a big window can never swallow a smaller window's canvas. Before the first
-    // layout (window height still 0) only the floor applies — otherwise construction would clamp a
-    // persisted height away against a window that doesn't exist yet.
     int clampTimelinePanelHeight(int desiredHeight) const;
 
-    // Clamps, stores and re-lays-out (live, once per drag callback — user-driven, not a
-    // free-running repaint). `persist` writes kTimelinePanelHeightKey; the drag does that only on
-    // mouse-up.
     void setTimelinePanelHeight(int desiredHeight, bool persist);
 
     // Update the displayed patch name (status bar). Immediate repaint, no timer delay.
     void setCurrentPatchName(const juce::String& name);
-    // The ONE way the document becomes clean: clears isDirty_ AND rebases savedEditSerial_ on the
-    // undo manager's current serial, which is what makes the reset survive an async change
-    // notification that was already queued when it ran. Never write isDirty_ = false directly.
-    // Also rebases autosave's OWN baseline (lastAutosavedEditSerial_/lastAutosaveMs_) to match: the
-    // document now matches what's on disk (an explicit save/load/new-patch), so there is nothing an
-    // autosave sidecar would capture beyond it, and resetting the elapsed-time baseline stops the
-    // very next qualifying tick from firing off a stale "elapsed since epoch" gap. This does NOT
-    // couple autosave to isDirty_/savedEditSerial_ in the other direction — maybeAutosave() never
-    // reads either of those, and performAutosave() never writes them.
     void markDocumentClean();
-    // True while an audio or MIDI take is actively capturing — checked by the autosave gate so it
-    // never fires mid-take (see docs/architecture.md). No public accessor for the underlying
-    // AudioTake/MidiRecorder state on purpose; go through isRecordingActiveForTest() in tests.
     bool isRecordingActive() const;
-    // The autosave gate, run once per timerCallback() tick (no second juce::Timer). Fires
-    // performAutosave() only when ALL of: enabled in preferences, a bundle is open, no take is
-    // recording, the undo edit serial has moved since the last autosave (NOT isDirty_/
-    // isProjectDirty() — see markDocumentClean()'s comment: isDirty_ is never cleared by autosave,
-    // so gating on it alone would rewrite the sidecar every interval forever with zero new edits),
-    // and the configured interval has elapsed. Also gates on isBounceInProgress_: a bounce now
-    // renders in chunks via BounceRunner, ticking a juce::Timer between chunks instead of blocking
-    // the message thread for the whole take (see Transport/BounceRunner.h), so timerCallback() DOES
-    // run mid-render and this check is what stops a sidecar write from firing into it.
     void maybeAutosave();
-    // Writes the sidecar via ProjectBundle::saveAutosave and, only on success, rebases
-    // lastAutosavedEditSerial_. Never calls markDocumentClean() — isDirty_/savedEditSerial_ and
-    // project.json itself are untouched by autosave.
     void performAutosave();
-    // Fires onDocumentTitleChanged with currentPatchName_ plus a " *" dirty marker. Called at the
-    // end of setCurrentPatchName() and nowhere else — every save/load/new-patch path already routes
-    // through it.
     void notifyDocumentTitleChanged();
 
-    // The real dialog behind guardUnsavedChanges, split from applyUnsavedChangesAnswer for exactly
-    // the reason PianoRollComponent::promptExtendClipToFitNotes is split from
-    // applyExtendPromptAnswer: a headless test has no message loop to answer a real AlertWindow with,
-    // so the ANSWER logic has to be reachable without one. Async (never a modal loop) and
-    // SafePointer-guarded — the answer can arrive after this component is gone.
     void promptUnsavedChanges(const juce::String& actionLabel, std::function<void(UnsavedChangesChoice)> onChoice);
-    // What each arm of the dialog DOES. `proceed` is invoked LAST in every arm that continues, so a
-    // continuation that destroys this component (Quit does exactly that) can never return into a
-    // method that still touches members.
     void applyUnsavedChangesAnswer(UnsavedChangesChoice choice, std::function<void()> proceed);
 
     // Owned fallback objects used when the delegating ctor is called (tests/legacy).

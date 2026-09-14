@@ -6,6 +6,9 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponent.cpp
     Source/MainComponent/MainComponent.h
     Source/MainComponent/MainComponentInternal.h
+    Source/MainComponent/MainComponentSetup.cpp
+    Source/MainComponent/MainComponentSetupToolbar.cpp
+    Source/MainComponent/MainComponentSetupTimeline.cpp
     Source/MainComponent/MainComponentCallbacks.cpp
     Source/MainComponent/MainComponentFileIO.cpp
     Source/MainComponent/MainComponentCommands.cpp

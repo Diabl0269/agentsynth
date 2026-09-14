@@ -191,6 +191,19 @@ void MainComponent::addInstrumentTrack(const juce::String& instrumentModuleType,
     buildInstrumentTrackAndChain(synth::AIStateMapper::createModule(instrumentModuleType), instrumentModuleType, poly);
 }
 
+// T183/FRO42: the shared tail of addInstrumentTrack() and addInstrumentPluginTrack() — Track In
+// -> `instrumentProcessor` -> [poly/envelope branches, gated exactly as addInstrumentTrack's own
+// comment describes] -> default chain -> Master, boxed into one collapsed macro, as ONE undo
+// step. `instrumentProcessor` must be non-null and NOT yet added to any graph (a factory
+// failure, or a plugin whose load failed/refused, is the CALLER's job to catch and report before
+// this ever runs — see addInstrumentPluginTrack's own comment for why: nothing here may open a
+// transaction for an instrument that doesn't exist). Every branch this method takes (Oscillator/
+// Wavetable's ADSR+VCA, a poly instrument's Voice Mixer) is keyed off the PROCESSOR's own
+// getName()/"poly" parameter, never a caller-supplied type string — a hosted plugin's getName()
+// is "Hosted Plugin" and it declares no "poly" parameter, so every one of those branches falls
+// out to the plain path automatically, with no separate plugin-shaped copy of this logic. `poly`
+// mirrors addInstrumentTrack's own parameter (always false from the plugin path, which has no
+// poly concept). `trackNamePrefix` becomes "<prefix> <N>", same numbering as before.
 void MainComponent::buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProcessor> instrumentProcessor,
                                                  const juce::String& trackNamePrefix, bool poly) {
     if (instrumentProcessor == nullptr) {
@@ -484,6 +497,10 @@ void MainComponent::makeChannelForTrack(synth::TrackId trackId) {
 // the mutation (MacroSet::retainOnly must see every new node alive), then the reconcile pass. The
 // macro is named after the track the chain belongs to (the one bound to `source`), falling back to
 // the source module's own name for a trackless chain picked on the canvas.
+// FRO25 (P9-3d): the ONE undo transaction (graph + timeline + macros) + reconcile pass behind
+// every "Make channel" entry point (header menu, canvas/module menu via
+// GraphEditor::onMakeChannelRequested), and behind "Duplicate into Channel"
+// (GraphEditor::onDuplicateIntoChannelRequested).
 void MainComponent::makeChannelForNode(juce::AudioProcessorGraph::NodeID source) {
     auto& graph = audioEngine.getGraph();
     auto* sourceNode = graph.getNodeForId(source);

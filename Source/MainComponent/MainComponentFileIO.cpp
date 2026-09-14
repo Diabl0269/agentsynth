@@ -30,6 +30,9 @@ constexpr int kDefaultAutosaveBackupCount = 5;
 
 // ---- Save / open: one `.json` preset path, one `.agsproj` bundle path ----
 
+// `file` is whatever the chooser returned; the .agsproj branch is what makes a bundle a bundle.
+// Returns whether the save actually succeeded — guardUnsavedChanges' Save arm only continues
+// past a save that returned true.
 bool MainComponent::saveToFile(const juce::File& file) {
     statusBar.showMessage("Saving...");
 
@@ -127,6 +130,9 @@ bool MainComponent::openFromFile(const juce::File& file, bool append) {
     return true;
 }
 
+// The actual bundle load (graph + timeline from `<bundleDir>/project.json`), extracted out of
+// openFromFile's bundle branch so the autosave-recovery continuation below can also reach it on
+// the Discard arm without duplicating the load/reconcile/markDocumentClean sequence.
 bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
     ProgrammaticApplyScope guard(*this);
     // Detach BEFORE the load frees the current graph's processors — the same ordering
@@ -173,6 +179,12 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
     return true;
 }
 
+// The Restore arm: loads `<bundleDir>/autosave.json` in place of project.json and deliberately
+// does NOT call markDocumentClean() — the loaded state is not what's on disk, so the document
+// must read as dirty. isDirty_ is set true directly here, the one exception to "never write
+// isDirty_ outside the recompute-from-serial path" (see markDocumentClean()'s comment): there is
+// no undo action to derive dirtiness from, since this mutates the graph/timeline the same
+// programmatic way ProjectBundle::load always has.
 bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
     ProgrammaticApplyScope guard(*this);
     graphEditor.detachAllModuleComponents();
@@ -215,6 +227,8 @@ bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
     return true;
 }
 
+// openFromFile's bundle branch, continued: reached either immediately (no sidecar) or from the
+// async autosaveRecoveryPrompt's answer.
 void MainComponent::applyAutosaveRecoveryAnswer(AutosaveRecoveryChoice choice, const juce::File& bundleDir) {
     if (choice == AutosaveRecoveryChoice::Restore) {
         // A corrupt/invalid sidecar must not strand the user on whatever was open before, nor
@@ -232,6 +246,8 @@ void MainComponent::applyAutosaveRecoveryAnswer(AutosaveRecoveryChoice choice, c
     loadBundleFromFile(bundleDir);
 }
 
+// The real dialog behind the has-autosave branch of openFromFile, same async/test-hook shape as
+// promptUnsavedChanges below.
 void MainComponent::promptAutosaveRecovery(std::function<void(AutosaveRecoveryChoice)> onChoice) {
     if (autosaveRecoveryPrompt) {
         autosaveRecoveryPrompt(std::move(onChoice));
@@ -264,6 +280,8 @@ void MainComponent::promptAutosaveRecovery(std::function<void(AutosaveRecoveryCh
 // Mirrors promptUnsavedChanges' three-button async shape: the FIRST .withButton ("Add on top")
 // returns 1, the next ("Replace") returns 2, and "Cancel" AND a dismissed/closed window return 0,
 // so the non-destructive Cancel arm is the safe fallback for a keyboard-closed window.
+// Ask whether to replace the current patch or add the loaded one on top of it (P8-31). Same
+// async/test-hook shape as promptAutosaveRecovery; routes through the patchLoadPrompt seam when set.
 void MainComponent::promptPatchLoadMode(std::function<void(PatchLoadMode)> onChoice) {
     if (patchLoadPrompt) {
         patchLoadPrompt(std::move(onChoice));
@@ -298,6 +316,9 @@ void MainComponent::setCurrentPatchName(const juce::String& name) {
     notifyDocumentTitleChanged();
 }
 
+// Fires onDocumentTitleChanged with currentPatchName_ plus a " *" dirty marker. Called at the
+// end of setCurrentPatchName() and nowhere else — every save/load/new-patch path already routes
+// through it.
 void MainComponent::notifyDocumentTitleChanged() {
     if (onDocumentTitleChanged)
         onDocumentTitleChanged(currentPatchName_ + (isDirty_ ? juce::String(" *") : juce::String()));
@@ -309,6 +330,15 @@ void MainComponent::notifyDocumentTitleChanged() {
 // whatever edits the caller just made, so a notification still queued for those edits recomputes
 // to "clean" rather than undoing this reset. Callers clear BEFORE setCurrentPatchName(), which is
 // what fires the title notify — the notify has to see the settled state.
+// The ONE way the document becomes clean: clears isDirty_ AND rebases savedEditSerial_ on the
+// undo manager's current serial, which is what makes the reset survive an async change
+// notification that was already queued when it ran. Never write isDirty_ = false directly.
+// Also rebases autosave's OWN baseline (lastAutosavedEditSerial_/lastAutosaveMs_) to match: the
+// document now matches what's on disk (an explicit save/load/new-patch), so there is nothing an
+// autosave sidecar would capture beyond it, and resetting the elapsed-time baseline stops the
+// very next qualifying tick from firing off a stale "elapsed since epoch" gap. This does NOT
+// couple autosave to isDirty_/savedEditSerial_ in the other direction — maybeAutosave() never
+// reads either of those, and performAutosave() never writes them.
 void MainComponent::markDocumentClean() {
     savedEditSerial_ = undoManager.getEditSerial();
     isDirty_ = false;
@@ -318,8 +348,20 @@ void MainComponent::markDocumentClean() {
     lastAutosaveMs_ = juce::Time::getMillisecondCounter();
 }
 
+// True while an audio or MIDI take is actively capturing — checked by the autosave gate so it
+// never fires mid-take (see docs/architecture.md). No public accessor for the underlying
+// AudioTake/MidiRecorder state on purpose; go through isRecordingActiveForTest() in tests.
 bool MainComponent::isRecordingActive() const { return audioTake_.capturing || midiRecorder.isRecording(); }
 
+// The autosave gate, run once per timerCallback() tick (no second juce::Timer). Fires
+// performAutosave() only when ALL of: enabled in preferences, a bundle is open, no take is
+// recording, the undo edit serial has moved since the last autosave (NOT isDirty_/
+// isProjectDirty() — see markDocumentClean()'s comment: isDirty_ is never cleared by autosave,
+// so gating on it alone would rewrite the sidecar every interval forever with zero new edits),
+// and the configured interval has elapsed. Also gates on isBounceInProgress_: a bounce now
+// renders in chunks via BounceRunner, ticking a juce::Timer between chunks instead of blocking
+// the message thread for the whole take (see Transport/BounceRunner.h), so timerCallback() DOES
+// run mid-render and this check is what stops a sidecar write from firing into it.
 void MainComponent::maybeAutosave() {
     if (!synth::ProjectBundle::isBundle(currentBundleDir_))
         return; // an unsaved project has no bundle to put a sidecar in — inert until first save.
@@ -349,6 +391,9 @@ void MainComponent::maybeAutosave() {
     lastAutosaveMs_ = juce::Time::getMillisecondCounter();
 }
 
+// Writes the sidecar via ProjectBundle::saveAutosave and, only on success, rebases
+// lastAutosavedEditSerial_. Never calls markDocumentClean() — isDirty_/savedEditSerial_ and
+// project.json itself are untouched by autosave.
 void MainComponent::performAutosave() {
     auto* settings = appProperties.getUserSettings();
     const int backupCount =
@@ -366,6 +411,10 @@ void MainComponent::performAutosave() {
 
 // ---- Unsaved-changes guard ----
 
+/** THE gate every document-replacing action goes through: runs `proceed` straight away on a clean
+ *  document, otherwise asks first and runs it only on Save (successful) or Discard. Asynchronous by
+ *  nature - the caller must treat `proceed` as "maybe later, maybe never" and must not do the
+ *  destructive work itself. */
 void MainComponent::guardUnsavedChanges(const juce::String& actionLabel, std::function<void()> proceed) {
     if (!proceed)
         return;
@@ -396,6 +445,11 @@ void MainComponent::guardUnsavedChanges(const juce::String& actionLabel, std::fu
     });
 }
 
+// The real dialog behind guardUnsavedChanges, split from applyUnsavedChangesAnswer for exactly
+// the reason PianoRollComponent::promptExtendClipToFitNotes is split from
+// applyExtendPromptAnswer: a headless test has no message loop to answer a real AlertWindow with,
+// so the ANSWER logic has to be reachable without one. Async (never a modal loop) and
+// SafePointer-guarded — the answer can arrive after this component is gone.
 void MainComponent::promptUnsavedChanges(const juce::String& actionLabel,
                                          std::function<void(UnsavedChangesChoice)> onChoice) {
     if (unsavedChangesPrompt) {
@@ -434,6 +488,9 @@ void MainComponent::promptUnsavedChanges(const juce::String& actionLabel,
     });
 }
 
+// What each arm of the dialog DOES. `proceed` is invoked LAST in every arm that continues, so a
+// continuation that destroys this component (Quit does exactly that) can never return into a
+// method that still touches members.
 void MainComponent::applyUnsavedChangesAnswer(UnsavedChangesChoice choice, std::function<void()> proceed) {
     switch (choice) {
     case UnsavedChangesChoice::Cancel:

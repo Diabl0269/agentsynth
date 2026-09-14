@@ -535,7 +535,22 @@ several translation units by concern (FRO63). Method bodies live wherever their 
 there is no per-file class boundary. Source layout:
 
 - `MainComponent.cpp` — the three constructors and `initialiseCommon` (kept together: every ctor
-  delegates into it), plus the destructor.
+  delegates into it), plus the destructor. `initialiseCommon` itself (FRO76) is now a short
+  orchestrator that calls its steps in order — the step bodies (moved verbatim) live in
+  `MainComponentSetup.cpp`/`MainComponentSetupToolbar.cpp`/`MainComponentSetupTimeline.cpp` below;
+  the call order in `initialiseCommon` IS the ordering contract (see the ORDER comments at each
+  call site).
+- `MainComponentSetup.cpp` — `initialiseCommon`'s general/app-lifecycle steps: panel and
+  graph-editor preference restore, AI provider/account wiring, plugin-scan + recent-projects
+  restore, command/shortcut registration, `initialiseAudioEngine()` (returns `false` exactly where
+  the old plugin-path early return was), and the focus-region registry.
+- `MainComponentSetupToolbar.cpp` — `initialiseCommon`'s canvas/toolbar/status-bar chrome steps
+  (buttons, the Load menu's `showLoadMenu()`, toolbar assembly, status bar) and the app-only
+  welcome-screen setup.
+- `MainComponentSetupTimeline.cpp` — `initialiseCommon`'s timeline-panel wiring step
+  (`wireTimelinePanel`), split by concern into services/shortcuts, the 4-hook `TimelineDoc`
+  inventory (see the table below), clip-lane callbacks, and the transport-bar record toggle
+  (`handleRecordToggle`).
 - `MainComponentCallbacks.cpp` — change/focus/timer callbacks, hosted-plugin latency, AI patch
   apply hooks, preset/project load and export entry points.
 - `MainComponentFileIO.cpp` — save/open file I/O (`.json` patch and `.agsproj` bundle), autosave
@@ -553,8 +568,8 @@ there is no per-file class boundary. Source layout:
 - `MainComponentTrackCreation.cpp` — add/delete track, MIDI/audio/instrument/plugin track
   creation, channel-strip build-out.
 - `MainComponentInternal.h` — the handful of file-local helpers shared by more than one of the
-  units above (`detail::kRecordingsFolderName`, `detail::isMidiInstrumentNode`); not part of the
-  public API.
+  units above (`detail::kRecordingsFolderName`, `detail::isMidiInstrumentNode`,
+  `detail::peaksRefForAssetRef`); not part of the public API.
 
 **`MainComponent` owns the app's one live `synth::TimelineDoc`, its `synth::AutomationRecorder`, and its `synth::MidiRecorder`**, as plain members. All three exist unconditionally, and every line of wiring below is likewise permanent, always-compiled code — there is no build configuration in which it is stripped out. The plugin path gets the same wiring for free — `MainComponent` is shared by both targets — with the one difference that the engine is injected rather than owned.
 

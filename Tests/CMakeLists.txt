@@ -347,6 +347,9 @@ add_executable(Tests
     Project/AssetManagerTests.cpp
     App/BrandingTests.cpp
     ../Source/MainComponent/MainComponent.cpp
+    ../Source/MainComponent/MainComponentSetup.cpp
+    ../Source/MainComponent/MainComponentSetupToolbar.cpp
+    ../Source/MainComponent/MainComponentSetupTimeline.cpp
     ../Source/MainComponent/MainComponentCallbacks.cpp
     ../Source/MainComponent/MainComponentFileIO.cpp
     ../Source/MainComponent/MainComponentCommands.cpp
