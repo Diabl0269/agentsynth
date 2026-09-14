@@ -148,5 +148,5 @@ is always safe.
 
 Locked by `AIIntegrationServiceTest.SetAuthTokenForwardsToInstalledProvider` and
 `AIIntegrationServiceTest.SetAuthTokenBeforeProviderInstalledIsRePushedBySetProvider` in
-`Tests/AI/AIIntegrationServiceTests.cpp`.
+`Tests/AI/AIIntegrationService/AIIntegrationServiceProviderConfigTests.cpp`.
 

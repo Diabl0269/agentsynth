@@ -10,7 +10,7 @@ namespace synth {
 /**
  * @brief Compact, token-bounded, read-only summary of the arrangement for AI prompt context —
  *        the timeline sibling of the patch-context injection
- *        (`AIIntegrationService::buildPatchAugmentedContent`, Source/AI/AIIntegrationService.cpp).
+ *        (`AIIntegrationService::buildPatchAugmentedContent`, Source/AI/AIIntegrationService/AIIntegrationService.cpp).
  *
  * ### Security model (see TimelineValidator.h and docs/AI_Engine_patch_safety.md §5c)
  *

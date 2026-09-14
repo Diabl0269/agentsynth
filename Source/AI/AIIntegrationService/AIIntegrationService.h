@@ -1,16 +1,16 @@
 #pragma once
 
-#include "AIProvider.h"
-#include "AIStateMapper/AIStateMapper.h"
+#include "AI/AIProvider.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
 #include <memory>
 #include <vector>
 
-#include "../Timeline/ArrangementContext.h"
-#include "../Timeline/TimelineOps.h"
-#include "../Transport/TransportService.h"
+#include "Timeline/ArrangementContext.h"
+#include "Timeline/TimelineOps.h"
+#include "Transport/TransportService.h"
 
 class AppUndoManager; // Forward declaration — the service only holds a non-owning pointer.
 

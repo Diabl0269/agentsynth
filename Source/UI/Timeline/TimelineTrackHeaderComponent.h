@@ -434,6 +434,58 @@ private:
         juce::Colour colour{juce::Colours::grey};
     };
 
+    // FRO60: JUCE hands a click to whichever child component is directly under the cursor and never
+    // bubbles it up to an ancestor on its own — mouseDown() below only ever sees a right-click that
+    // lands on this row's own background pixels. nameLabel_ and the M/S/R/A toggles cover almost
+    // every OTHER pixel of the row and have no popup menu of their own, so a right-click there used
+    // to be swallowed silently instead of ever reaching showContextMenu() (found live in FRO25's
+    // check: 4 real right-click spots that a direct `header.mouseDown(...)` test can't catch, since
+    // that bypasses the child entirely). This subclass is the fix for the label: a right-click goes
+    // straight to the SAME showContextMenu() a right-click on the background uses; anything else is
+    // untouched juce::Label behaviour. The binding chip and the colour swatch are deliberately left
+    // as plain buttons — they already open a menu/picker of their own on click, and that stays (see
+    // docs/timeline_panel_tracks.md's Delete track / Make Channel section).
+    class ContextMenuForwardingLabel : public juce::Label {
+    public:
+        explicit ContextMenuForwardingLabel(TimelineTrackHeaderComponent& owner)
+            : owner_(owner) {}
+        void mouseDown(const juce::MouseEvent& e) override {
+            if (e.mods.isPopupMenu()) {
+                owner_.showContextMenu();
+                return;
+            }
+            juce::Label::mouseDown(e);
+        }
+
+    private:
+        TimelineTrackHeaderComponent& owner_;
+    };
+
+    // Same fix as ContextMenuForwardingLabel, for the M/S/R/A toggle buttons — plus one thing those
+    // need that the label doesn't: juce::Button (unlike juce::Slider, which already checks
+    // `e.mods.isPopupMenu()` itself before starting a value-drag — see juce_Slider.cpp) fires
+    // onClick from ANY mouse button. Left un-forwarded, a bare juce::TextButton here would have BOTH
+    // opened the context menu AND toggled mute/solo/arm/automation on the very same right-click.
+    // Never calling the base class's mouseDown() for a popup click keeps Button::isDown() false for
+    // the whole gesture, so the matching mouseUp() (still the plain juce::TextButton one — no
+    // override needed) finds `wasDown` false and skips the click it would otherwise fire.
+    class ContextMenuForwardingButton : public juce::TextButton {
+    public:
+        ContextMenuForwardingButton(TimelineTrackHeaderComponent& owner, const juce::String& text)
+            : juce::TextButton(text)
+            , owner_(owner) {}
+        void mouseDown(const juce::MouseEvent& e) override {
+            if (e.mods.isPopupMenu()) {
+                owner_.showContextMenu();
+                return;
+            }
+            juce::TextButton::mouseDown(e);
+        }
+
+    private:
+        TimelineTrackHeaderComponent& owner_;
+    };
+
     const synth::Track* track() const { return doc_.getTrack(trackId_); }
     // Routes a doc mutation through the host (one undo step). Falls back to running it directly
     // when there is no host, so a header built for a test is still functional.
@@ -492,12 +544,16 @@ private:
     // FRO25: see setShowContextMenuHookForTest. Null = show the real async menu.
     std::function<void(juce::PopupMenu&)> showContextMenuHook_;
 
-    juce::Label nameLabel_;
+    // FRO60: see ContextMenuForwardingLabel/ContextMenuForwardingButton above — these four are the
+    // children with NO popup menu of their own, so a right-click on them forwards to
+    // showContextMenu(). bindingChip_ keeps its own Track In menu and colourSwatch_ (SwatchButton)
+    // keeps its own colour picker — neither changes here.
+    ContextMenuForwardingLabel nameLabel_{*this};
     SwatchButton colourSwatch_;
-    juce::TextButton muteButton_{"M"};
-    juce::TextButton soloButton_{"S"};
-    juce::TextButton armButton_{"R"};
-    juce::TextButton automationButton_{"A"};
+    ContextMenuForwardingButton muteButton_{*this, "M"};
+    ContextMenuForwardingButton soloButton_{*this, "S"};
+    ContextMenuForwardingButton armButton_{*this, "R"};
+    ContextMenuForwardingButton automationButton_{*this, "A"};
     juce::TextButton bindingChip_;
 
     juce::Colour resolvedColour_{juce::Colours::grey};
