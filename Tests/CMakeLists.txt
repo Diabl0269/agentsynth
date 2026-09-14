@@ -156,6 +156,7 @@ add_executable(Tests
     UI/Graph/GraphEditor/GraphEditorSmartConnectionPreviewTests.cpp
     UI/Graph/GraphEditor/GraphEditorSmartConnectionMatrixTests.cpp
     UI/Graph/GraphEditor/GraphEditorNodeActionsTests.cpp
+    UI/Graph/SmartConnectionEngineTests.cpp
     UI/Layout/ZoomFrozenCachedImageTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentLayoutTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentPortsTests.cpp
@@ -395,8 +396,10 @@ add_executable(Tests
     ../Source/UI/Graph/GraphEditor/GraphEditor.cpp
     ../Source/UI/Graph/GraphEditor/GraphEditorCables.cpp
     ../Source/UI/Graph/GraphEditor/GraphEditorConnections.cpp
+    ../Source/UI/Graph/GraphEditor/GraphEditorModuleTitles.cpp
     ../Source/UI/Graph/GraphEditor/GraphEditorSmartConnections.cpp
-    ../Source/UI/Graph/GraphEditor/GraphEditorSmartConnectionsApply.cpp
+    ../Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngine.cpp
+    ../Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngineApply.cpp
     ../Source/UI/Graph/GraphEditor/GraphEditorCanvas.cpp
     ../Source/UI/Graph/GraphEditor/GraphEditorSelection.cpp
     ../Source/UI/Graph/GraphEditor/GraphEditorMacroGeometry.cpp

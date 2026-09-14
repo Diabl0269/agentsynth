@@ -81,8 +81,11 @@ set(APPUI_SOURCES
     Source/UI/Graph/GraphEditor/GraphEditor.h
     Source/UI/Graph/GraphEditor/GraphEditorCables.cpp
     Source/UI/Graph/GraphEditor/GraphEditorConnections.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorModuleTitles.cpp
     Source/UI/Graph/GraphEditor/GraphEditorSmartConnections.cpp
-    Source/UI/Graph/GraphEditor/GraphEditorSmartConnectionsApply.cpp
+    Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngine.h
+    Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngine.cpp
+    Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngineApply.cpp
     Source/UI/Graph/GraphEditor/GraphEditorCanvas.cpp
     Source/UI/Graph/GraphEditor/GraphEditorSelection.cpp
     Source/UI/Graph/GraphEditor/GraphEditorMacroGeometry.cpp

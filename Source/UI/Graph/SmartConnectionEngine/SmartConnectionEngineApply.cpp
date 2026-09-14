@@ -1,49 +1,49 @@
-// GraphEditorSmartConnectionsApply.cpp
+// SmartConnectionEngineApply.cpp
 //
 // Building and applying smart-connection suggestions (refreshSmartSuggestions,
-// applySmartSuggestions). Sibling GraphEditorSmartConnections.cpp holds the naming and
-// eligibility helpers this depends on. GraphEditor is declared in GraphEditor.h.
+// applySmartSuggestions). Sibling SmartConnectionEngine.cpp holds the naming and eligibility
+// helpers this depends on. SmartConnectionEngine is declared in SmartConnectionEngine.h; this TU
+// includes the real GraphEditor.h for GraphEditor::resolvePolyLink/estimatePortCenter (both stay
+// on GraphEditor — pure, host-independent) and the shared detail:: helpers in
+// GraphEditorInternal.h.
 
-#include "GraphEditor.h"
-#include "GraphEditorInternal.h"
+#include "SmartConnectionEngine.h"
 
 #include "Modules/AttenuverterModule.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/GraphEditor/GraphEditorInternal.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
 using namespace detail;
 
-void GraphEditor::refreshSmartSuggestions() {
-    const auto previous = smartSuggestions;
-    smartSuggestions.clear();
+void SmartConnectionEngine::refreshSmartSuggestions(const DragPreviewState& drag) {
+    const auto previous = smartSuggestions_;
+    smartSuggestions_.clear();
 
-    if (!dragPreviewActive || dragPreviewGhost.isEmpty() || !shouldOfferSmartConnections()) {
-        if (previous != smartSuggestions)
-            repaintCanvas();
+    if (!drag.active || drag.ghost.isEmpty() || !shouldOfferSmartConnections(drag)) {
+        if (previous != smartSuggestions_)
+            host_.repaintCanvas();
         return;
     }
 
     juce::AudioProcessor* ghostProc = nullptr;
-    if (dragPreviewSelfId.uid != 0) {
-        for (auto* c : content.getModules()) {
-            if (c != nullptr && c->getNodeId() == dragPreviewSelfId) {
-                ghostProc = c->getModule();
-                break;
-            }
-        }
+    if (drag.selfId.uid != 0) {
+        if (auto* mc = host_.moduleComponentFor(drag.selfId))
+            ghostProc = mc->getModule();
     } else {
-        ghostProc = dragPreviewProbe.get();
+        ghostProc = drag.probe;
     }
     if (ghostProc == nullptr) {
-        if (previous != smartSuggestions)
-            repaintCanvas();
+        if (previous != smartSuggestions_)
+            host_.repaintCanvas();
         return;
     }
 
-    const auto ghostBounds = dragPreviewGhost;
+    const auto ghostBounds = drag.ghost;
     // Where the cursor is pointing, before anti-overlap relocated the card. Empty on paths that
     // never set it (older tests drive updateDragPreview directly), in which case candidacy falls
     // back to the landing rect exactly as before.
-    const auto aimBounds = dragPreviewAim;
+    const auto aimBounds = drag.aim;
 
     struct Candidate {
         SmartSuggestion suggestion;
@@ -65,19 +65,16 @@ void GraphEditor::refreshSmartSuggestions() {
     };
 
     auto componentForNode = [this](juce::AudioProcessorGraph::NodeID id) -> ModuleComponent* {
-        for (auto* c : content.getModules())
-            if (c != nullptr && c->getNodeId() == id)
-                return c;
-        return nullptr;
+        return host_.moduleComponentFor(id);
     };
 
     const bool ghostAcceptsMidi = ghostProc->acceptsMidi();
     const bool ghostProducesMidi = ghostProc->producesMidi();
 
-    for (auto* neighbor : content.getModules()) {
+    for (auto* neighbor : host_.modules()) {
         if (neighbor == nullptr || neighbor->getModule() == nullptr)
             continue;
-        if (neighbor->getNodeId() == dragPreviewSelfId)
+        if (neighbor->getNodeId() == drag.selfId)
             continue;
         // Hidden attenuverter nodes are never smart-wired.
         if (dynamic_cast<AttenuverterModule*>(neighbor->getModule()) != nullptr)
@@ -96,11 +93,11 @@ void GraphEditor::refreshSmartSuggestions() {
             continue;
 
         auto* neighborProc = neighbor->getModule();
-        const bool requireSourceFree = smartConnectionMode == SmartConnectionMode::NewAndUnwired;
+        const bool requireSourceFree = smartConnectionMode_ == SmartConnectionMode::NewAndUnwired;
 
         auto jackPoint = [&](bool fromGhost, int jack, bool isInput, bool isMidi) -> juce::Point<float> {
             if (fromGhost)
-                return estimatePortCenter(ghostProc, ghostBounds, jack, isInput, isMidi).toFloat();
+                return GraphEditor::estimatePortCenter(ghostProc, ghostBounds, jack, isInput, isMidi).toFloat();
             if (isMidi)
                 return (neighbor->getBounds().getPosition() + neighbor->getMidiPortCenter(!isInput)).toFloat();
             return (neighbor->getBounds().getPosition() + neighbor->getPortCenter(jack, isInput)).toFloat();
@@ -118,7 +115,7 @@ void GraphEditor::refreshSmartSuggestions() {
             std::vector<SmartSuggestion::InsertLink> legs;
             auto* sMb = dynamic_cast<ModuleBase*>(sProc);
             auto* dMb = dynamic_cast<ModuleBase*>(dProc);
-            const auto link = resolvePolyLink(sMb, sJack, dMb, dJack);
+            const auto link = GraphEditor::resolvePolyLink(sMb, sJack, dMb, dJack);
             for (int v = 0; v < link.voiceCount; ++v) {
                 const int rawSrc = link.sourceRawChannel + v * link.sourceStride;
                 const int rawDst = link.destRawChannel + v;
@@ -151,10 +148,10 @@ void GraphEditor::refreshSmartSuggestions() {
                                        [&](const std::pair<int, int>& pr) {
                                            if (audioJackIsModCvDest(dstMb, pr.second))
                                                return true;
-                                           if (dragPreviewSelfId.uid == 0)
+                                           if (drag.selfId.uid == 0)
                                                return false;
-                                           const auto srcId = ghostIsSource ? dragPreviewSelfId : neighbor->getNodeId();
-                                           const auto dstId = ghostIsSource ? neighbor->getNodeId() : dragPreviewSelfId;
+                                           const auto srcId = ghostIsSource ? drag.selfId : neighbor->getNodeId();
+                                           const auto dstId = ghostIsSource ? neighbor->getNodeId() : drag.selfId;
                                            return areJacksAlreadyConnected(srcId, pr.first, dstId, pr.second, false);
                                        }),
                         pairs.end());
@@ -200,15 +197,15 @@ void GraphEditor::refreshSmartSuggestions() {
 
             // What an already-occupied destination jack means depends on the modifier and the node:
             //
-            //   * Cmd held  → INSERT IN SERIES, at ANY module. The upstream cabling is rerouted
+            //   * Cmd held  -> INSERT IN SERIES, at ANY module. The upstream cabling is rerouted
             //                 through the ghost. This is the only way to insert; nothing inserts
             //                 without the modifier.
-            //   * No Cmd, terminal audio sink → plain ADDITIVE parallel connection. The sink is
+            //   * No Cmd, terminal audio sink -> plain ADDITIVE parallel connection. The sink is
             //                 wired in essentially every real patch, so a hard stop there means a
             //                 module parked next to it can never be offered anything; and summing
             //                 into the mix bus is exactly what dragging a cable there by hand does.
             //                 Existing cables are left alone.
-            //   * No Cmd, any other module → hard stop, unchanged. Silently summing into a jack the
+            //   * No Cmd, any other module -> hard stop, unchanged. Silently summing into a jack the
             //                 user wired mid-patch is never something to suggest.
             //
             // insertPlan is set for the whole group, or left empty for an ordinary add.
@@ -244,7 +241,7 @@ void GraphEditor::refreshSmartSuggestions() {
                     std::unordered_map<int, std::vector<int>> upstreamJacksForDst;
                     for (int d : uniqueDsts) {
                         const auto up = findSingleUpstreamAudioLink(dstNodeIdForFreeCheck, d);
-                        if (!up.has_value() || up->jacks.empty() || up->nodeId == dragPreviewSelfId)
+                        if (!up.has_value() || up->jacks.empty() || up->nodeId == drag.selfId)
                             return;
                         if (upstreamNode.has_value() && *upstreamNode != up->nodeId)
                             return;
@@ -302,8 +299,8 @@ void GraphEditor::refreshSmartSuggestions() {
                     std::set<int> claimedRawGhostIns, claimedRawUpstreamOuts;
                     for (size_t i = 0; i < plan.doomedLinks.size(); ++i) {
                         const int ghostInJack = ghostInLegs[std::min(i, ghostInLegs.size() - 1)];
-                        const auto fan =
-                            resolvePolyLink(upstreamMb, plan.doomedLinks[i].fromJack, ghostMb, ghostInJack);
+                        const auto fan = GraphEditor::resolvePolyLink(upstreamMb, plan.doomedLinks[i].fromJack, ghostMb,
+                                                                      ghostInJack);
                         bool addsGhostIn = false, addsUpstreamOut = false;
                         for (int v = 0; v < fan.voiceCount; ++v) {
                             if (claimedRawGhostIns.insert(fan.destRawChannel + v).second)
@@ -357,7 +354,7 @@ void GraphEditor::refreshSmartSuggestions() {
                 std::vector<std::pair<int, int>> keptPairs;
                 std::set<int> claimedRawDsts, claimedRawSrcs;
                 for (const auto& pr : pairs) {
-                    const auto fan = resolvePolyLink(srcMb, pr.first, dstMb, pr.second);
+                    const auto fan = GraphEditor::resolvePolyLink(srcMb, pr.first, dstMb, pr.second);
                     bool addsDst = false, addsSrc = false;
                     for (int v = 0; v < fan.voiceCount; ++v) {
                         if (claimedRawDsts.insert(fan.destRawChannel + v).second)
@@ -433,13 +430,11 @@ void GraphEditor::refreshSmartSuggestions() {
             }
         };
 
-        // Ghost outputs → neighbor inputs, then neighbor outputs → ghost inputs.
-        pushAudioGroup(true, ghostProc, neighborProc, dragPreviewSelfId, neighbor->getNodeId(), true);
+        // Ghost outputs -> neighbor inputs, then neighbor outputs -> ghost inputs.
+        pushAudioGroup(true, ghostProc, neighborProc, drag.selfId, neighbor->getNodeId(), true);
         {
-            const auto ghostDstId =
-                dragPreviewSelfId.uid != 0 ? dragPreviewSelfId : juce::AudioProcessorGraph::NodeID{};
-            pushAudioGroup(false, neighborProc, ghostProc, neighbor->getNodeId(), ghostDstId,
-                           dragPreviewSelfId.uid != 0);
+            const auto ghostDstId = drag.selfId.uid != 0 ? drag.selfId : juce::AudioProcessorGraph::NodeID{};
+            pushAudioGroup(false, neighborProc, ghostProc, neighbor->getNodeId(), ghostDstId, drag.selfId.uid != 0);
         }
 
         // MIDI
@@ -453,18 +448,16 @@ void GraphEditor::refreshSmartSuggestions() {
                     return;
                 if (!isInputJackFree(neighbor->getNodeId(), 0, true))
                     return;
-                if (dragPreviewSelfId.uid != 0 &&
-                    areJacksAlreadyConnected(dragPreviewSelfId, 0, neighbor->getNodeId(), 0, true))
+                if (drag.selfId.uid != 0 && areJacksAlreadyConnected(drag.selfId, 0, neighbor->getNodeId(), 0, true))
                     return;
             } else {
                 if (!neighborProc->producesMidi() || !ghostAcceptsMidi)
                     return;
                 if (!isKnownMidiSourceName(neighborName) || !isKnownMidiDestName(ghostName))
                     return;
-                if (dragPreviewSelfId.uid != 0 && !isInputJackFree(dragPreviewSelfId, 0, true))
+                if (drag.selfId.uid != 0 && !isInputJackFree(drag.selfId, 0, true))
                     return;
-                if (dragPreviewSelfId.uid != 0 &&
-                    areJacksAlreadyConnected(neighbor->getNodeId(), 0, dragPreviewSelfId, 0, true))
+                if (drag.selfId.uid != 0 && areJacksAlreadyConnected(neighbor->getNodeId(), 0, drag.selfId, 0, true))
                     return;
             }
 
@@ -477,7 +470,7 @@ void GraphEditor::refreshSmartSuggestions() {
                 return;
 
             if (requireSourceFree) {
-                const auto srcId = ghostIsSource ? dragPreviewSelfId : neighbor->getNodeId();
+                const auto srcId = ghostIsSource ? drag.selfId : neighbor->getNodeId();
                 if (srcId.uid != 0 && !isOutputJackFree(srcId, 0, true))
                     return;
             }
@@ -514,7 +507,7 @@ void GraphEditor::refreshSmartSuggestions() {
     };
 
     // Audio: keep every suggestion that shares the winning neighbor + direction (stereo L/R
-    // pairs and mono↔stereo fans are multiple candidates with the same neighborId/ghostIsSource).
+    // pairs and mono<->stereo fans are multiple candidates with the same neighborId/ghostIsSource).
     if (!audioCandidates.empty()) {
         // Only ONE neighbour's group survives this sort, so the ordering decides which offer the user
         // gets. Two competing pressures, and getting either wrong is a bug we have already shipped:
@@ -564,33 +557,33 @@ void GraphEditor::refreshSmartSuggestions() {
                 continue;
             if (c.suggestion.isInsert != best.suggestion.isInsert)
                 continue; // never mix a reroute and a plain add in one applied group
-            smartSuggestions.push_back(c.suggestion);
+            smartSuggestions_.push_back(c.suggestion);
         }
     }
     if (auto best = pickBest(midiCandidates))
-        smartSuggestions.push_back(*best);
+        smartSuggestions_.push_back(*best);
 
-    if (smartSuggestions != previous)
-        repaintCanvas();
+    if (smartSuggestions_ != previous)
+        host_.repaintCanvas();
 }
 
-void GraphEditor::applySmartSuggestions(juce::AudioProcessorGraph::NodeID ghostNodeId, bool recordUndo) {
-    if (smartSuggestions.empty() || ghostNodeId.uid == 0)
+void SmartConnectionEngine::applySmartSuggestions(juce::AudioProcessorGraph::NodeID ghostNodeId, bool recordUndo) {
+    if (smartSuggestions_.empty() || ghostNodeId.uid == 0)
         return;
 
     auto applyAll = [this, ghostNodeId] {
-        for (const auto& s : smartSuggestions) {
+        for (const auto& s : smartSuggestions_) {
             if (s.isInsert) {
                 // Reroute, never double: drop EVERY doomed cable first so the sink's jacks are free
-                // for the ghost's output, then wire upstream → ghost → sink. Dropping only this
+                // for the ghost's output, then wire upstream -> ghost -> sink. Dropping only this
                 // leg's cable would leave the other one summing into the sink beside the ghost.
                 // Both sets are group-wide and deduped, so a second insert suggestion re-running
                 // them is a no-op. All of it shares the caller's transaction — one undo, one step.
                 for (const auto& doomed : s.doomedLinks)
                     disconnectAudioLink(s.upstreamId, doomed.fromJack, s.neighborId, doomed.toJack);
                 for (const auto& cable : s.upstreamCables)
-                    connectPorts(s.upstreamId, cable.fromJack, ghostNodeId, cable.toJack, false, false);
-                connectPorts(ghostNodeId, s.ghostJack, s.neighborId, s.neighborJack, false, false);
+                    host_.connectPorts(s.upstreamId, cable.fromJack, ghostNodeId, cable.toJack, false, false);
+                host_.connectPorts(ghostNodeId, s.ghostJack, s.neighborId, s.neighborJack, false, false);
                 continue;
             }
 
@@ -598,12 +591,12 @@ void GraphEditor::applySmartSuggestions(juce::AudioProcessorGraph::NodeID ghostN
             const auto dstId = s.ghostIsSource ? s.neighborId : ghostNodeId;
             const int srcJack = s.ghostIsSource ? s.ghostJack : s.neighborJack;
             const int dstJack = s.ghostIsSource ? s.neighborJack : s.ghostJack;
-            connectPorts(srcId, srcJack, dstId, dstJack, s.isMidi, false);
+            host_.connectPorts(srcId, srcJack, dstId, dstJack, s.isMidi, false);
         }
     };
 
-    if (recordUndo && undoManager)
-        undoManager->recordStructuralChange(audioEngine.getGraph(), applyAll);
+    if (recordUndo && host_.undo())
+        host_.undo()->recordStructuralChange(host_.graph(), applyAll);
     else
         applyAll();
 

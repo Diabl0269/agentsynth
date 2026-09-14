@@ -190,7 +190,7 @@ void GraphEditor::beginDragPreview(int w, int h, juce::AudioProcessorGraph::Node
     clearSmartSuggestions();
     // Seed the tick's comparison from the state at press time, so a drag started WITH the modifier
     // already held is not reported as a change on its very first tick.
-    lastSampledInsertModifier = isInsertModifierDown();
+    smartConnections_.seedInsertModifierSample();
     // Body-drag of an existing module: clear any leftover library-drop probe.
     if (selfId.uid != 0) {
         dragPreviewIsSnippet = false;
@@ -688,7 +688,10 @@ void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
     // Apply proximity suggestions before the drag-preview teardown clears them. Group drags never
     // reach here with multi-select (finalizeSelectionDrag handles those). Connections join the
     // surrounding module-drag undo snapshot (captureBeforeState / pushSnapshotFromCapture).
-    if (shouldOfferSmartConnections() && !smartSuggestions.empty())
+    // FRO77 PR1: shouldOfferSmartConnections/smartSuggestions moved onto SmartConnectionEngine —
+    // same two conditions, read through the engine instead of GraphEditor's own former fields.
+    if (smartConnections_.shouldOfferSmartConnections(buildDragPreviewState()) &&
+        smartConnections_.getSmartSuggestionCount() > 0)
         applySmartSuggestions(module->getNodeId(), /*recordUndo=*/false);
 
     repaintCanvas();

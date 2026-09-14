@@ -8,8 +8,10 @@
 #include "Plugin/Hosting/HostedPluginBackend.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Graph/CableColour.h"
+#include "UI/Graph/GraphCanvasHost.h"
 #include "UI/Graph/ModuleClipboard.h"
 #include "UI/Graph/SelectionModel.h"
+#include "UI/Graph/SmartConnectionEngine/SmartConnectionEngine.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
@@ -29,7 +31,8 @@ class GraphEditor
     , public juce::Timer
     , public juce::DragAndDropTarget
     , public juce::FileDragAndDropTarget
-    , public juce::SettableTooltipClient {
+    , public juce::SettableTooltipClient
+    , private GraphCanvasHost {
 public:
     GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr = nullptr);
     ~GraphEditor() override;
@@ -48,7 +51,7 @@ public:
     void lookAndFeelChanged() override;
 
     void timerCallback() override;
-    void updateComponents();
+    void updateComponents() override; // also GraphCanvasHost::updateComponents()
     void toggleModMatrixVisibility();
     bool isModMatrixVisible() const { return isMatrixVisible; }
 
@@ -1080,70 +1083,15 @@ public:
     bool isPortConnected(ModuleComponent* module, int portIndex, bool isInput, bool isMidi) const;
 
     // ---- Smart connections --------------------------------------------------
-    // Proximity-based cable suggestions while placing a module. One setting covers Off /
-    // library-only / free-main-I/O moves / all moves (see SmartConnectionMode).
-    enum class SmartConnectionMode { Off, NewOnly, NewAndUnwired, AllMoves };
+    // Proximity-based cable suggestions while placing a module, owned by SmartConnectionEngine
+    // (Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngine.h) since FRO77 PR1 — GraphEditor
+    // just forwards. SmartConnectionMode/SmartSuggestion are aliased here so `GraphEditor::X`
+    // keeps compiling for every existing caller (PreferencesSettingsTab, tests) unchanged.
+    using SmartConnectionMode = SmartConnectionEngine::SmartConnectionMode;
+    using SmartSuggestion = SmartConnectionEngine::SmartSuggestion;
 
-    /** One suggested cable shown as a frosted preview during drag; applied on drop.
-     *
-     *  `isInsert` turns the same record into an insert-in-series: the ghost is spliced into cabling
-     *  that already exists rather than given a jack of its own. Two cable SETS then come with it —
-     *  `doomedLinks` (upstream → sink, to be removed, drawn dashed) and `upstreamCables`
-     *  (upstream → ghost, replacing them) — plus this record's own ghostJack → neighborJack.
-     *
-     *  Both sets describe the WHOLE insert group, not just this record's leg, and both are already
-     *  deduped, so applying them once per suggestion is idempotent. They are deliberately not
-     *  per-leg: a jack pair dropped by the fan dedupe must NOT take its doomed link with it, or the
-     *  cable it represented survives and sums into the sink alongside the ghost's output.
-     *
-     *  Only offered for the graph's terminal audio sink; see refreshSmartSuggestions. */
-    struct SmartSuggestion {
-        /** One cable of an insert, at visible-jack level. Endpoints are for preview paint only. */
-        struct InsertLink {
-            int fromJack = 0; // upstream visible OUTPUT jack
-            int toJack = 0;   // sink visible input jack (doomed), or ghost visible input jack (new)
-            juce::Point<float> p1{}, p2{};
-
-            bool operator==(const InsertLink& o) const noexcept { return fromJack == o.fromJack && toJack == o.toJack; }
-        };
-
-        /** When true the dragged module is the cable source; when false it is the destination. */
-        bool ghostIsSource = true;
-        juce::AudioProcessorGraph::NodeID neighborId{};
-        int ghostJack = 0;
-        int neighborJack = 0;
-        bool isMidi = false;
-        juce::Point<float> p1{}, p2{}; // head endpoints; mainPreviewLegs is what actually gets drawn
-        synth::ui::CableSignal signal = synth::ui::CableSignal::Audio;
-        synth::ui::ModuleCategory sourceCategory = synth::ui::ModuleCategory::Utility;
-
-        /** Every frosted segment the preview must draw, so it shows exactly what the drop will wire.
-         *  ONE suggestion is not one drawn cable: connectPorts fans a collapsed jack across a whole
-         *  raw pair, and when the far end fronts those raws as two separate visible jacks (the
-         *  terminal sink does — it has no ModuleBase to group them) that is two cables on screen.
-         *  Resolved from the same PolyLink connectPorts uses and deduped to distinct visible jack
-         *  pairs, because N graph edges through one jack pair are still one cable. */
-        std::vector<InsertLink> mainPreviewLegs;     // ghostJack → neighborJack
-        std::vector<InsertLink> upstreamPreviewLegs; // upstream → ghost (insert only)
-
-        // ---- Insert-in-series (audio only; ghostIsSource is always true) ----
-        bool isInsert = false;
-        juce::AudioProcessorGraph::NodeID upstreamId{}; // node whose cabling gets rerouted
-        std::vector<InsertLink> doomedLinks;            // upstream → sink, every one to remove
-        std::vector<InsertLink> upstreamCables;         // upstream → ghost, replacing them
-        synth::ui::ModuleCategory upstreamCategory = synth::ui::ModuleCategory::Utility;
-
-        bool operator==(const SmartSuggestion& o) const noexcept {
-            return ghostIsSource == o.ghostIsSource && neighborId == o.neighborId && ghostJack == o.ghostJack &&
-                   neighborJack == o.neighborJack && isMidi == o.isMidi && isInsert == o.isInsert &&
-                   upstreamId == o.upstreamId && doomedLinks == o.doomedLinks && upstreamCables == o.upstreamCables &&
-                   mainPreviewLegs == o.mainPreviewLegs && upstreamPreviewLegs == o.upstreamPreviewLegs;
-        }
-        bool operator!=(const SmartSuggestion& o) const noexcept { return !(*this == o); }
-    };
-
-    void setSmartConnectionMode(SmartConnectionMode mode) { smartConnectionMode = mode; }
-    SmartConnectionMode getSmartConnectionMode() const noexcept { return smartConnectionMode; }
+    void setSmartConnectionMode(SmartConnectionMode mode) { smartConnections_.setSmartConnectionMode(mode); }
+    SmartConnectionMode getSmartConnectionMode() const noexcept { return smartConnections_.getSmartConnectionMode(); }
 
     /** CTRL turns a proximity suggestion into an insert-in-series. Ctrl on every platform (it is
      *  the literal Control key on macOS too, NOT Cmd) — Cmd was tried first and lost, because
@@ -1156,11 +1104,10 @@ public:
      *  toggle, and this read simply sees Ctrl already down).
      *
      *  Tests set the override; production leaves it empty and reads the real keyboard. */
-    void setInsertModifierOverrideForTests(std::optional<bool> down) { insertModifierOverride = down; }
-    bool isInsertModifierDown() const {
-        return insertModifierOverride.has_value() ? *insertModifierOverride
-                                                  : juce::ModifierKeys::getCurrentModifiersRealtime().isCtrlDown();
+    void setInsertModifierOverrideForTests(std::optional<bool> down) {
+        smartConnections_.setInsertModifierOverrideForTests(down);
     }
+    bool isInsertModifierDown() const { return smartConnections_.isInsertModifierDown(); }
 
     /** Persist / restore helpers (Preferences tab + MainComponent launch restore). */
     static SmartConnectionMode smartConnectionModeFromString(const juce::String& s);
@@ -1168,17 +1115,26 @@ public:
 
     /** Wires two visible jacks the same way a completed cable-drag does (poly fan, MIDI,
      *  attenuverter for mono mod CV). When recordUndo is false the caller owns the transaction
-     *  (e.g. inside an existing recordStructuralChange). */
+     *  (e.g. inside an existing recordStructuralChange). Also GraphCanvasHost::connectPorts(). */
     void connectPorts(juce::AudioProcessorGraph::NodeID srcId, int srcJack, juce::AudioProcessorGraph::NodeID dstId,
-                      int dstJack, bool isMidi, bool recordUndo = true);
+                      int dstJack, bool isMidi, bool recordUndo = true) override;
 
     // Test accessors
-    int getSmartSuggestionCount() const noexcept { return (int)smartSuggestions.size(); }
-    const std::vector<SmartSuggestion>& getSmartSuggestions() const noexcept { return smartSuggestions; }
+    int getSmartSuggestionCount() const noexcept { return smartConnections_.getSmartSuggestionCount(); }
+    const std::vector<SmartSuggestion>& getSmartSuggestions() const noexcept {
+        return smartConnections_.getSmartSuggestions();
+    }
     bool nodeHasCables(juce::AudioProcessorGraph::NodeID nodeId) const;
     /** Runs just the drag tick's modifier re-sample, so a test can exercise a press/release that
      *  happens without any mouse movement without needing a real 30 Hz timer. */
     void pumpDragModifierTickForTests() { refreshSuggestionsIfInsertModifierChanged(); }
+
+    /** Test seam: GraphCanvasHost is a private base (only code holding a GraphCanvasHost& should
+     *  reach GraphEditor through the narrow seam), so a test driving a SmartConnectionEngine of its
+     *  own directly (rather than through GraphEditor's forwarders) needs an explicit way to get one.
+     *  Production code never calls this — GraphEditor's own smartConnections_ member captures `*this`
+     *  itself, inside the class, where the private base is accessible without help. */
+    GraphCanvasHost& getCanvasHostForTest() { return *this; }
 
     /** Port centre inside a bounds rect — must agree with ModuleComponent::getPortCenter. */
     static juce::Point<int> estimatePortCenter(juce::AudioProcessor* proc, juce::Rectangle<int> bounds, int jack,
@@ -1186,10 +1142,10 @@ public:
 
     /** Audio-jack occupancy, for asserting that a reroute left nothing dangling. */
     bool isInputJackFreeForTests(juce::AudioProcessorGraph::NodeID nodeId, int jack) const {
-        return isInputJackFree(nodeId, jack, false);
+        return smartConnections_.isInputJackFree(nodeId, jack, false);
     }
     bool isOutputJackFreeForTests(juce::AudioProcessorGraph::NodeID nodeId, int jack) const {
-        return isOutputJackFree(nodeId, jack, false);
+        return smartConnections_.isOutputJackFree(nodeId, jack, false);
     }
 
     // ---- Onboarding / UI Phase 5 helpers (headless-testable) ----
@@ -1431,52 +1387,30 @@ private:
     bool dragPreviewIsSnippet = false;
     std::unique_ptr<juce::AudioProcessor> dragPreviewProbe;
 
-    // Smart-connection suggestions for the active drag preview.
-    SmartConnectionMode smartConnectionMode = SmartConnectionMode::NewAndUnwired;
-    std::optional<bool> insertModifierOverride; // tests only; empty means read the real keyboard
-    // Last modifier state the drag tick saw, so a press/release that happens WITHOUT a mouse move
-    // still re-evaluates the suggestions exactly once (see timerCallback).
-    bool lastSampledInsertModifier = false;
-    std::vector<SmartSuggestion> smartSuggestions;
-    static constexpr float kSmartConnectionProximityPx = 96.0f;
-
     void refreshSmartSuggestions();
     void applySmartSuggestions(juce::AudioProcessorGraph::NodeID ghostNodeId, bool recordUndo);
     void clearSmartSuggestions();
-    bool shouldOfferSmartConnections() const;
     void applyDefaultDualIOForNewModule(juce::AudioProcessor& processor, const juce::String& moduleType) const;
     /** Re-evaluates the suggestions when the insert modifier changed since the last drag tick.
      *  A modifier press/release is not a mouse move, so nothing else would notice it. */
     void refreshSuggestionsIfInsertModifierChanged();
-    bool isInputJackFree(juce::AudioProcessorGraph::NodeID nodeId, int jack, bool isMidi) const;
-    bool isOutputJackFree(juce::AudioProcessorGraph::NodeID nodeId, int jack, bool isMidi) const;
-    bool areJacksAlreadyConnected(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
-                                  juce::AudioProcessorGraph::NodeID dstId, int dstJack, bool isMidi) const;
 
-    /** The cabling feeding an audio input jack, at CABLE level (visible output jacks of the feeding
-     *  node, never raw graph edges). */
-    struct UpstreamLink {
-        juce::AudioProcessorGraph::NodeID nodeId{};
-        /** Every distinct visible OUTPUT jack of that ONE node feeding the destination jack.
-         *
-         *  More than one is normal, not exotic: a dual upstream's Left and Right legs both landing
-         *  on a collapsed mono input is our own canonical dual-to-mono wiring — it is what the Dual
-         *  I/O toggle rewire and a hand-dragged pair of cables both produce. Refusing multi-feed
-         *  outright meant insert silently did nothing for that extremely common shape. Feeds from
-         *  DIFFERENT nodes are still refused: that is a hand-built mix, and rerouting it would
-         *  change what sums where. */
-        std::vector<int> jacks;
-    };
+    /** The current drag-preview fields, packaged for SmartConnectionEngine (see
+     *  SmartConnectionEngine::DragPreviewState) — GraphEditor still owns the fields themselves
+     *  until FRO77 PR3. */
+    SmartConnectionEngine::DragPreviewState buildDragPreviewState() const;
 
-    /** Resolves the cabling currently feeding `dstJack`, or nullopt when the jack is free, is fed
-     *  from more than one NODE (a hand-built mix), or is fed through a mod routing / attenuverter
-     *  chain (neither is ever silently rerouted). Insert-in-series needs this to succeed. */
-    std::optional<UpstreamLink> findSingleUpstreamAudioLink(juce::AudioProcessorGraph::NodeID dstId, int dstJack) const;
+    // ---- GraphCanvasHost (private: only code holding a GraphCanvasHost& can call these) ----
+    juce::AudioProcessorGraph& graph() override { return audioEngine.getGraph(); }
+    AudioEngine& engine() override { return audioEngine; }
+    ModuleComponent* moduleComponentFor(juce::AudioProcessorGraph::NodeID nodeId) override;
+    juce::OwnedArray<ModuleComponent>& modules() override { return content.getModules(); }
+    AppUndoManager* undo() override { return undoManager; }
+    // repaintCanvas(), updateComponents() and connectPorts() are declared as GraphEditor's own
+    // (public) methods above/below; matching GraphCanvasHost's pure virtuals makes those the
+    // overrides too, with no separate declaration needed here.
 
-    /** Removes the audio cable between two visible jacks — the exact inverse of connectPorts, so a
-     *  collapsed stereo wire drops both raw legs. Caller owns the undo transaction. */
-    void disconnectAudioLink(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
-                             juce::AudioProcessorGraph::NodeID dstId, int dstJack);
+    SmartConnectionEngine smartConnections_{*this};
 
     juce::AudioProcessorGraph::NodeID draggingAttenuverterNodeId;
     float attenDragStartValue = 0.0f;
@@ -1957,8 +1891,8 @@ private:
     bool cablesCacheValid = false;
     int cableRebuildCount = 0; // test seam, see §11 paint-count pattern
     /** The single "the canvas changed" seam: drops the cable memo, then repaints. Every former
-     *  `content.repaint()` in this file goes through here. */
-    void repaintCanvas();
+     *  `content.repaint()` in this file goes through here. Also GraphCanvasHost::repaintCanvas(). */
+    void repaintCanvas() override;
 
     // ---- Zoom gesture (raster freeze) ----
     // While a zoom gesture is in flight every card's raster scale is pinned, so a wheel tick

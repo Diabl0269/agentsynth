@@ -641,7 +641,8 @@ bool GraphEditor::isPortConnected(ModuleComponent* module, int portIndex, bool i
     if (nodeId.uid == 0)
         return false;
 
-    return isInput ? !isInputJackFree(nodeId, portIndex, isMidi) : !isOutputJackFree(nodeId, portIndex, isMidi);
+    return isInput ? !smartConnections_.isInputJackFree(nodeId, portIndex, isMidi)
+                   : !smartConnections_.isOutputJackFree(nodeId, portIndex, isMidi);
 }
 
 void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector<LogicalPort>& previousInputMap,
