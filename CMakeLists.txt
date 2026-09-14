@@ -118,14 +118,24 @@ set(SYNTH_UPDATE_FEED_URL "${SYNTH_UPDATE_FEED_URL_DEFAULT}"
 set(SYNTH_SPARKLE_PUBLIC_KEY "" CACHE STRING "Sparkle SUPublicEDKey (base64, public half of the EdDSA signing key)")
 set(SYNTH_WINSPARKLE_PUBLIC_KEY "" CACHE STRING "WinSparkle EdDSA public key (base64, WinSparkle's own key pair, separate from Sparkle's)")
 
+# Marketing version — the human-facing version users see (CFBundleShortVersionString, the plugin's
+# own VERSION arg, the Windows installer's Add/Remove Programs entry). Defaults to PROJECT_VERSION
+# (declared by project() above), so a plain local `cmake -S . -B build` keeps behaving exactly as
+# before. CI overrides it: build-artifacts.yml's `version` job dry-runs the same tag computation
+# (mathieudutour/github-tag-action) the release job is about to commit to, and passes the result via
+# -DSYNTH_MARKETING_VERSION — so the version baked into every build is guaranteed to equal the tag
+# that gets published for it, with nobody hand-bumping project(AgentSynth VERSION ...) to keep the
+# two in sync.
+set(SYNTH_MARKETING_VERSION "${PROJECT_VERSION}" CACHE STRING
+    "Marketing version embedded in the build (CFBundleShortVersionString / plugin VERSION / installer version); CI sets this to the computed release tag, local builds default to PROJECT_VERSION")
+
 # CFBundleVersion (Sparkle's actual update-comparison key) is intentionally NOT the same as
-# PROJECT_VERSION above: PROJECT_VERSION is the human-facing marketing version, hand-bumped in this
-# file, while the release workflow auto-tags every push to main independently (mathieudutour/
-# github-tag-action) without touching this file. A build number that only advances when a human
-# remembers to bump it would make Sparkle either never detect an update or always think one is
-# available. GITHUB_RUN_NUMBER is known before the build starts and increases every run regardless
-# of what tag the release job later mints, so CI passes it via -DSYNTH_BUILD_NUMBER. Local
-# builds default to "0" — never distributed, so Sparkle comparison doesn't matter for them.
+# SYNTH_MARKETING_VERSION above: that's the human-facing marketing version (now CI-injected to match
+# the release tag — see the block above; local builds keep defaulting to PROJECT_VERSION).
+# SYNTH_BUILD_NUMBER is a separate, always-available counter instead: GITHUB_RUN_NUMBER is known
+# before the build starts and increases every run, so it doesn't depend on the version job's tag
+# computation or on semver formatting. CI passes it via -DSYNTH_BUILD_NUMBER. Local builds default
+# to "0" — never distributed, so Sparkle comparison doesn't matter for them.
 set(SYNTH_BUILD_NUMBER "0" CACHE STRING "CFBundleVersion — monotonic build number, CI sets this to the workflow run number")
 
 # ---- "What's New" (T114/P8-10, Feature 2): build-time, no-network release notes -----------------
@@ -522,7 +532,7 @@ endif()
 # Create the application target
 juce_add_gui_app(AgentSynth
     PRODUCT_NAME "${SYNTH_PRODUCT_NAME}"
-    VERSION "${PROJECT_VERSION}"
+    VERSION "${SYNTH_MARKETING_VERSION}"
     BUILD_VERSION "${SYNTH_BUILD_NUMBER}"
     COMPANY_NAME "${SYNTH_COMPANY_NAME}"
     BUNDLE_ID "${SYNTH_BUNDLE_ID}"
@@ -799,7 +809,7 @@ if(ENABLE_PLUGIN)
 
     juce_add_plugin(AgentSynthPlugin
         PRODUCT_NAME "${SYNTH_PRODUCT_NAME}"
-        VERSION "${PROJECT_VERSION}"
+        VERSION "${SYNTH_MARKETING_VERSION}"
         COMPANY_NAME "${SYNTH_COMPANY_NAME}"
         # Must differ from the app's bundle ID — macOS refuses to register two bundles that
         # claim the same CFBundleIdentifier, and a collision silently breaks AU validation.
