@@ -15,9 +15,11 @@
 #include "Modules/LFOModule.h"
 #include "Modules/MidiKeyboardModule.h"
 #include "Modules/OscillatorModule.h"
+#include "Modules/PolyMidiModule.h"
 #include "Modules/SequencerModule.h"
 #include "Modules/VCAModule.h"
 #include "PresetManager.h"
+#include <bit>
 #include <gtest/gtest.h>
 
 namespace {
@@ -646,33 +648,31 @@ TEST_F(AudioRenderingTest, AllPresetsRenderNonSilent) {
 // ===========================================================================
 // Test 8b: the "Poly Pad" preset renders identically twice (issue #198)
 //
-// Pushes an over-full chord through the real preset graph (MIDI Keyboard -> Poly MIDI -> 8-voice
-// Oscillator -> Filter -> VCA -> Reverb) — the path an offline bounce or a golden-render regression
-// would take — and requires the whole chain to be bit-reproducible.
-//
-// Scope, deliberately: this is a *forward* guard, not a detector for the original bug. Checked by
-// experiment — with voice age restored to juce::Time::getMillisecondCounter() this test still
-// passes 8/8, because every note here lands at one sample offset, so the buggy code degenerates
-// *consistently* (always voice 0) and both runs agree. What actually catches wall-clock stamping
-// is PolyMidiModuleTest.SameBlockNotesStealInArrivalOrder / OverfullChordInOneBlock…, which pin
-// *which* voice is stolen. This test's job is to fail if anything in the poly chain later
-// introduces nondeterminism (an unseeded PRNG, a clock read, uninitialised state).
+// Pushes an over-full chord (12 notes, 8 voices) through the real preset graph — a forward guard
+// against future nondeterminism. Notes go in one per block: MidiKeyboardState::noteOn() stamps
+// events with juce::Time::getMillisecondCounter(), and processNextMidiBuffer() spreads a block's
+// queue by those stamps, so queuing all 12 up front let wall-clock noteOn() timing pick which
+// voices got stolen on a slow/coverage runner. jitterMs sleeps between injections to prove that
+// no longer matters.
 // ===========================================================================
-juce::AudioBuffer<float> renderPolyPadChord(int numNotes, int numBlocks) {
+juce::AudioBuffer<float> renderPolyPadChord(int numNotes, int numBlocks, int jitterMs = 0) {
     AudioEngine engine; // do NOT initialise() — that would open a real audio device
     auto& graph = engine.getGraph();
     graph.setPlayConfigDetails(0, 2, kSampleRate, kBlockSize);
     synth::PresetManager::loadPreset(6, graph);
     graph.prepareToPlay(kSampleRate, kBlockSize);
-
+    MidiKeyboardModule* kb = nullptr;
     for (auto* node : graph.getNodes())
-        if (auto* kb = dynamic_cast<MidiKeyboardModule*>(node->getProcessor()))
-            for (int i = 0; i < numNotes; ++i)
-                kb->getKeyboardState().noteOn(1, 60 + i, 1.0f);
-
+        if (auto* k = dynamic_cast<MidiKeyboardModule*>(node->getProcessor()))
+            kb = k;
     juce::AudioBuffer<float> result(2, numBlocks * kBlockSize);
     result.clear();
     for (int b = 0; b < numBlocks; ++b) {
+        if (kb != nullptr && b < numNotes) {
+            if (jitterMs > 0)
+                juce::Thread::sleep(jitterMs);
+            kb->getKeyboardState().noteOn(1, 60 + b, 1.0f);
+        }
         juce::AudioBuffer<float> block(2, kBlockSize);
         block.clear();
         juce::MidiBuffer emptyMidi;
@@ -680,16 +680,16 @@ juce::AudioBuffer<float> renderPolyPadChord(int numNotes, int numBlocks) {
         for (int ch = 0; ch < 2; ++ch)
             result.copyFrom(ch, b * kBlockSize, block, ch, 0, kBlockSize);
     }
+    for (auto* node : graph.getNodes())
+        if (auto* poly = dynamic_cast<PolyMidiModule*>(node->getProcessor()))
+            EXPECT_EQ(std::popcount(poly->getActiveVoiceMask()), 8) << "8 voices should be active";
     return result;
 }
 
 TEST_F(AudioRenderingTest, PolyPadPresetRendersIdenticallyTwice) {
     ASSERT_EQ(synth::PresetManager::getPresetNames()[6], "Poly Pad") << "preset index 6 moved";
-
-    const auto first = renderPolyPadChord(12, 20); // 12 notes into 8 voices — 4 steals
-    juce::Thread::sleep(3);                        // a wall-clock stamp would tick over here
-    const auto second = renderPolyPadChord(12, 20);
-
+    const auto first = renderPolyPadChord(12, 20);     // 12 notes into 8 voices — 4 steals
+    const auto second = renderPolyPadChord(12, 20, 3); // jitter between injections must not matter
     ASSERT_EQ(first.getNumSamples(), second.getNumSamples());
     EXPECT_FALSE(TestAudioHelpers::isSilent(first, 0)) << "nothing was rendered, so nothing is proven";
     EXPECT_EQ(TestAudioHelpers::compareBuffers(first, second), 0.0f)

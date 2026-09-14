@@ -1,4 +1,4 @@
-#include "AI/AIIntegrationService.h"
+#include "AI/AIIntegrationService/AIIntegrationService.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
 #include "MainComponent/MainComponent.h"
