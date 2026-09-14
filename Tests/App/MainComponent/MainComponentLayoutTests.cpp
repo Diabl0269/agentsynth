@@ -7,19 +7,6 @@
 // Phase-3 chrome: toolbar layout, min window size, collapsible panels, status bar
 // ===========================================================================
 
-// Collect the 9 toolbar DrawableButtons (direct children of MainComponent).
-static std::vector<juce::Button*> collectToolbarButtons(MainComponent& mc) {
-    static const char* ids[] = {"toggleLibrary", "saveButton",        "loadButton",      "settingsButton", "undoButton",
-                                "redoButton",    "autoArrangeButton", "toggleModMatrix", "toggleAiPanel"};
-    std::vector<juce::Button*> out;
-    for (auto* child : mc.getChildren())
-        if (auto* btn = dynamic_cast<juce::Button*>(child))
-            for (const char* id : ids)
-                if (btn->getComponentID() == id)
-                    out.push_back(btn);
-    return out;
-}
-
 TEST_F(MainComponentTest, ToolbarFitsInsideMinimumWindowWidth) {
     MainComponent mc(std::make_unique<MockProvider>());
     mc.setSize(480, 400);

@@ -138,3 +138,4 @@ TEST_F(MainComponentTest, OpeningLegacyJsonPresetStillWorks) {
 
     EXPECT_TRUE(mc.openProjectForTest(jsonFile));
     EXPECT_EQ(mc.getCurrentPatchName(), "Legacy");
+}

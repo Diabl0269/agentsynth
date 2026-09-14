@@ -2,7 +2,6 @@
 // factory-preset Load branch. See the safety-rule comment below for why every test here must
 // install mc.unsavedChangesPrompt before touching a dirty document.
 #include "MainComponentTestFixture.h"
-}
 
 // ---------------------------------------------------------------------------
 // P8-2: dirty-state tracking and the unsaved-changes guard.

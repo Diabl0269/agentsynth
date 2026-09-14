@@ -114,3 +114,21 @@ protected:
     // Save/load round-trip tests write here — same idiom Tests/Project/ProjectBundleTests.cpp uses.
     juce::File tempRoot;
 };
+
+namespace {
+
+// Collect the 9 toolbar DrawableButtons (direct children of MainComponent). Shared between the
+// layout tests and ToolbarButtonsHaveNonZeroBoundsAfterConstruction.
+static std::vector<juce::Button*> collectToolbarButtons(MainComponent& mc) {
+    static const char* ids[] = {"toggleLibrary", "saveButton",        "loadButton",      "settingsButton", "undoButton",
+                                "redoButton",    "autoArrangeButton", "toggleModMatrix", "toggleAiPanel"};
+    std::vector<juce::Button*> out;
+    for (auto* child : mc.getChildren())
+        if (auto* btn = dynamic_cast<juce::Button*>(child))
+            for (const char* id : ids)
+                if (btn->getComponentID() == id)
+                    out.push_back(btn);
+    return out;
+}
+
+} // namespace
