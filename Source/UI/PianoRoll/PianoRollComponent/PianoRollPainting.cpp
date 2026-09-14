@@ -8,7 +8,7 @@
 #include "PianoRollComponent.h"
 
 #include "PianoRollInternal.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h"
 #include <algorithm>
 #include <cmath>

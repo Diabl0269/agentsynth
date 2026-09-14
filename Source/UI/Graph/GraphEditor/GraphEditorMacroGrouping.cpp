@@ -10,7 +10,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Macros/MacroCardComponent.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 using namespace detail;
 

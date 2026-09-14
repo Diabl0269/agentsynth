@@ -1,6 +1,6 @@
 #pragma once
 
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>

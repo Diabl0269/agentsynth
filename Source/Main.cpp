@@ -3,7 +3,7 @@
 #include "Plugin/Hosting/PluginScanService.h"
 #include "SettingsMigration.h"
 #include "ShortcutManager.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
 #include "UserSettings.h"
 #include <JuceHeader.h>

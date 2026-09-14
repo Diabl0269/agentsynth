@@ -1,6 +1,6 @@
 #include "ToolbarComponent.h"
 #include "UI/Layout/FocusRegion.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 // ---------------------------------------------------------------------------
 ToolbarComponent::ToolbarComponent() {

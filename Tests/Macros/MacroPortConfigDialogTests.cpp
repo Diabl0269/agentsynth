@@ -6,7 +6,7 @@
 // API these callbacks are meant to reach are covered separately in Tests/MacroPortFlowTests.cpp.
 
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <gtest/gtest.h>
 
 using synth::MacroPortKind;

@@ -413,8 +413,8 @@ add_library(Core STATIC
     Source/UI/Theme/BuiltInThemes.cpp
     Source/UI/Theme/IconLibrary.h
     Source/UI/Theme/IconLibrary.cpp
-    Source/UI/Theme/AppLookAndFeel.h
-    Source/UI/Theme/AppLookAndFeel.cpp
+    Source/UI/Theme/AppLookAndFeel/AppLookAndFeel.h
+    Source/UI/Theme/AppLookAndFeel/AppLookAndFeel.cpp
 )
 
 # Link Core against JUCE

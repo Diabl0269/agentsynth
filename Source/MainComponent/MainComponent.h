@@ -30,7 +30,7 @@
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"

@@ -1,7 +1,7 @@
 #include "PreferencesSettingsTab.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "ShortcutManager.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <functional>
 
 namespace {

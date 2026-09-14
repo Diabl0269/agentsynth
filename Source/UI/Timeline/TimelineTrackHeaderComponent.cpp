@@ -3,7 +3,7 @@
 #include "TrackColour.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Layout/FocusRegion.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
 

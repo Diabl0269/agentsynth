@@ -14,7 +14,7 @@
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>

@@ -18,7 +18,7 @@
 // null-degrades-gracefully contract every other timeline sub-component's setter follows.
 
 #include "Timeline/MusicalScale.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <array>
 #include <cstdint>
 #include <functional>

@@ -3,7 +3,7 @@
 #include "FrequencyGrid.h"
 #include "Modules/FilterModule.h"
 #include "Modules/VisualBuffer.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/Theme.h"
 #include <cmath>
 #include <juce_dsp/juce_dsp.h>

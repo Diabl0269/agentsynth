@@ -10,7 +10,7 @@
 //                     always after MainComponent applies the final persisted theme)
 
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

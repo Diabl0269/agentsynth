@@ -2,7 +2,7 @@
 #include "Modules/AttenuverterModule.h"
 #include "Modules/MacroInletModule.h"
 #include "UI/Layout/FocusRegion.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <map>
 

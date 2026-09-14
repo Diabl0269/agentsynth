@@ -1,7 +1,7 @@
 #pragma once
 
-#include "IconLibrary.h"
-#include "Theme.h"
+#include "UI/Theme/IconLibrary.h"
+#include "UI/Theme/Theme.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
 namespace synth::theme {
