@@ -6,8 +6,6 @@
 1312 Source/AudioEngine.cpp
 1135 Source/MainComponent/MainComponent.cpp
 1213 Source/MainComponent/MainComponent.h
-1004 Source/Mixer/ChannelFlows/ChannelFlows.cpp
-1165 Source/ShortcutManager/ShortcutManager.h
 1726 Source/Timeline/TimelineDoc.cpp
 1999 Source/UI/Assistant/AIChatComponent.cpp
 1984 Source/UI/Graph/GraphEditor/GraphEditor.h
@@ -20,9 +18,6 @@
 1188 Tests/AI/OllamaProviderTests.cpp
 1156 Tests/AI/RemoteProviderTests.cpp
 1044 Tests/Account/AuthClientTests.cpp
-1440 Tests/App/FocusArbitration/FocusArbitrationTests.cpp
-1411 Tests/App/MainComponent/MainComponentTests.cpp
-1264 Tests/App/ShortcutManager/ShortcutManagerTests.cpp
 1347 Tests/Engine/AudioRenderingTests.cpp
 1076 Tests/Engine/BounceExporterTests.cpp
 1095 Tests/FX/FXModuleTests.cpp
@@ -30,8 +25,6 @@
 1255 Tests/Modules/StereoVoiceModuleTests.cpp
 1472 Tests/Modules/WavetableOscillatorModuleTests.cpp
 1397 Tests/Plugin/PluginScanTests.cpp
-1061 Tests/Project/SnippetManager/SnippetManagerTests.cpp
-1187 Tests/Project/UndoRedo/UndoRedoTests.cpp
 1254 Tests/Timeline/TimelineClipEditingTests.cpp
 1644 Tests/Timeline/TimelineDocTests.cpp
 1396 Tests/Timeline/TimelineMidiSourceTests.cpp

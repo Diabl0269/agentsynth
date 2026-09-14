@@ -88,7 +88,11 @@ add_executable(Tests
     AI/PatchFeedbackStoreTests.cpp
     Account/GeneralFeedbackStoreTests.cpp
     AI/LocalHistoryStoreTests.cpp
-    App/MainComponent/MainComponentTests.cpp
+    App/MainComponent/MainComponentStartupPanelsTests.cpp
+    App/MainComponent/MainComponentLayoutTests.cpp
+    App/MainComponent/MainComponentDocumentTests.cpp
+    App/MainComponent/MainComponentUnsavedGuardTests.cpp
+    App/MainComponent/MainComponentProviderMiscTests.cpp
     UI/Chrome/WelcomeScreenTests.cpp
     UI/Graph/GraphEditor/GraphEditorTests.cpp
     UI/Graph/GraphEditor/GraphEditorLayoutTests.cpp
@@ -123,7 +127,10 @@ add_executable(Tests
     Modules/NoiseModuleTests.cpp
     Modules/EdgeCaseTests.cpp
     Engine/IntegrationTests.cpp
-    Project/UndoRedo/UndoRedoTests.cpp
+    Project/UndoRedo/UndoRedoIdentityPreservingTests.cpp
+    Project/UndoRedo/UndoRedoBasicOpsTests.cpp
+    Project/UndoRedo/UndoRedoScenarioTests.cpp
+    Project/UndoRedo/UndoRedoEditSerialTests.cpp
     App/E2EWorkflowTests.cpp
     Modules/ExternalMidiModuleTests.cpp
     Project/PresetManagerTests.cpp
@@ -134,7 +141,11 @@ add_executable(Tests
     FX/DistortionSweepTests.cpp
     Modules/OscillatorCVModulationTests.cpp
     UI/Settings/SettingsWindowTests.cpp
-    App/ShortcutManager/ShortcutManagerTests.cpp
+    App/ShortcutManager/ShortcutManagerActionRegressionTests.cpp
+    App/ShortcutManager/ShortcutManagerApiTests.cpp
+    App/ShortcutManager/ShortcutManagerConflictTests.cpp
+    App/ShortcutManager/ShortcutManagerDefaultsTests.cpp
+    App/ShortcutManager/ShortcutManagerKeyMatchingTests.cpp
     UI/Settings/ShortcutsSettingsTabTests.cpp
     UI/Settings/PreferencesSettingsTabTests.cpp
     UI/Settings/FeedbackSettingsTabTests.cpp
@@ -162,7 +173,10 @@ add_executable(Tests
     UI/Library/ModuleLibraryHelpPopupTests.cpp
     UI/Library/ModuleLibraryKeyboardNavTests.cpp
     UI/Graph/SelectionModelTests.cpp
-    Project/SnippetManager/SnippetManagerTests.cpp
+    Project/SnippetManager/SnippetManagerExtractTests.cpp
+    Project/SnippetManager/SnippetManagerPrepareInsertTests.cpp
+    Project/SnippetManager/SnippetManagerMacroTests.cpp
+    Project/SnippetManager/SnippetManagerPersistenceTests.cpp
     UI/Graph/MultiSelectTests.cpp
     Macros/MacroContainer/MacroContainerTests.cpp
     Macros/MacroContainer/MacroContainerGeometryTests.cpp
@@ -212,7 +226,11 @@ add_executable(Tests
     UI/PianoRoll/NoteColourTests.cpp
     UI/Timeline/MidiDestinationPickerTests.cpp
     Modules/ModuleMidiFlagsTests.cpp
-    App/FocusArbitration/FocusArbitrationTests.cpp
+    App/FocusArbitration/FocusArbitrationClipboardTests.cpp
+    App/FocusArbitration/FocusArbitrationSelectionTests.cpp
+    App/FocusArbitration/FocusArbitrationPlaybackDeleteTests.cpp
+    App/FocusArbitration/FocusArbitrationZoomGridTests.cpp
+    App/FocusArbitration/FocusArbitrationShiftedKeysTests.cpp
     UI/Layout/FocusRegionTests.cpp
     UI/Timeline/AutomationEditorTests.cpp
     UI/Timeline/TimelineTransportBarTests.cpp
