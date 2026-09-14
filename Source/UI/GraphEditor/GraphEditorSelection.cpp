@@ -6,7 +6,7 @@
 
 #include "GraphEditor.h"
 
-#include "../ModuleComponent.h"
+#include "../ModuleComponent/ModuleComponent.h"
 
 // ---------------------------------------------------------------------------------------
 // Selection (issue #156)

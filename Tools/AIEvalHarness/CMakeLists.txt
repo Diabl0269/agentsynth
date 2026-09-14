@@ -20,7 +20,13 @@ add_executable(AIEvalHarness
     ${CMAKE_SOURCE_DIR}/Source/UI/GraphEditor/GraphEditorDragDrop.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/GraphEditor/GraphEditorStereoWiring.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/GraphEditor/GraphEditorPersistence.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/ModuleComponent.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/ModuleComponent/ModuleComponent.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/ModuleComponent/ModuleComponentEQCard.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/ModuleComponent/ModuleComponentAudioDrop.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/ModuleComponent/ModuleComponentWavetable.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/ModuleComponent/ModuleComponentLayout.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/ModuleComponent/ModuleComponentPaint.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/ModuleComponent/ModuleComponentInteraction.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/MacroCardComponent.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/MacroPortConfigDialog.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/ModMatrixComponent.cpp

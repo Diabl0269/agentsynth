@@ -877,7 +877,17 @@ Stateless grid-layout helpers (`snap`, `intersectsAny`, `findFreeSlot`, `compute
 
 ### ModuleComponent
 
-`Source/UI/ModuleComponent.h/.cpp`
+`Source/UI/ModuleComponent/` — one class (declared in `ModuleComponent.h`) split across per-concern
+translation units (FRO65), none over 1,000 lines, plus a private `ModuleComponentInternal.h` for
+constants/helpers shared by two or more of them. Source layout:
+
+- `ModuleComponent.cpp` — construction/teardown, header/theme helpers, the auto-UI control builder (`createControls`)
+- `ModuleComponentEQCard.cpp` — the Parametric EQ card's layout geometry, knob placement, pop-out window, undo-gesture wiring
+- `ModuleComponentAudioDrop.cpp` — Sampler control creation and audio-file drag-and-drop for the Sampler and Wavetable
+- `ModuleComponentWavetable.cpp` — the Wavetable oscillator's control creation and its tabbed page strip
+- `ModuleComponentLayout.cpp` — the generic auto-layout pass (`updateLayout`, `layoutDefaultContent`, macro-port widget sizing)
+- `ModuleComponentPaint.cpp` — `paint()`, port geometry/hit-testing, `resized()`'s per-module-type dispatch
+- `ModuleComponentInteraction.cpp` — parameter callback reflection, macro/poly/dual-IO state, context menus, mouse handling, title rename
 
 Auto-generates parameter UI from `ModuleBase` metadata using type-safe `ModuleType` switching. Modulation rings read `AudioEngine::getModulationRoutings()`. Uses `setBufferedToImage(true)` and gates its 15 Hz timer repaint so the `GraphEditor`'s 30 Hz connection animation composites cached module images without re-running JUCE text layout every frame.
 

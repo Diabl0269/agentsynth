@@ -245,7 +245,13 @@ add_executable(Tests
     ../Source/UI/AccountRow.cpp
     ../Source/UI/PlanBadge.cpp
     ../Source/UI/SignInDialog.cpp
-    ../Source/UI/ModuleComponent.cpp
+    ../Source/UI/ModuleComponent/ModuleComponent.cpp
+    ../Source/UI/ModuleComponent/ModuleComponentEQCard.cpp
+    ../Source/UI/ModuleComponent/ModuleComponentAudioDrop.cpp
+    ../Source/UI/ModuleComponent/ModuleComponentWavetable.cpp
+    ../Source/UI/ModuleComponent/ModuleComponentLayout.cpp
+    ../Source/UI/ModuleComponent/ModuleComponentPaint.cpp
+    ../Source/UI/ModuleComponent/ModuleComponentInteraction.cpp
     ../Source/UI/MacroCardComponent.cpp
     ../Source/UI/MacroPortConfigDialog.cpp
     ../Source/Plugin/Hosting/HostedPluginEditorWindow.cpp

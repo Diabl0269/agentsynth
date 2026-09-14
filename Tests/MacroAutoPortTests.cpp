@@ -19,7 +19,7 @@
 #include "../Source/Modules/MacroOutletModule.h"
 #include "../Source/UI/GraphEditor/GraphEditor.h"
 #include "../Source/UI/MacroCardComponent.h"
-#include "../Source/UI/ModuleComponent.h"
+#include "../Source/UI/ModuleComponent/ModuleComponent.h"
 #include "../Source/UI/PreferencesSettingsTab.h"
 #include <atomic>
 #include <gtest/gtest.h>

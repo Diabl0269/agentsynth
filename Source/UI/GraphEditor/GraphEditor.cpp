@@ -10,7 +10,7 @@
 // (declared in GraphEditor.h with only a forward declaration) need their full definitions
 // wherever the implicit member destructors are instantiated.
 #include "../MacroCardComponent.h"
-#include "../ModuleComponent.h"
+#include "../ModuleComponent/ModuleComponent.h"
 
 GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
     : audioEngine(engine)

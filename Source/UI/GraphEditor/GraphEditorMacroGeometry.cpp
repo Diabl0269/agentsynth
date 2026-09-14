@@ -8,7 +8,7 @@
 #include "GraphEditorInternal.h"
 
 #include "../MacroCardComponent.h"
-#include "../ModuleComponent.h"
+#include "../ModuleComponent/ModuleComponent.h"
 
 using namespace detail;
 

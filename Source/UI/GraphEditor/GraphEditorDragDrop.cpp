@@ -14,7 +14,7 @@
 #include "../../Modules/SamplerModule.h"
 #include "../../Plugin/Hosting/HostedPluginModule.h"
 #include "../../SnippetManager.h"
-#include "../ModuleComponent.h"
+#include "../ModuleComponent/ModuleComponent.h"
 #include "../Theme/AppLookAndFeel.h"
 
 // Returns an estimated (w, h) footprint for a module type name.

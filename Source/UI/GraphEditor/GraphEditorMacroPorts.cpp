@@ -10,7 +10,7 @@
 #include "../../AI/AIStateMapper.h"
 #include "../../Modules/MacroInletModule.h"
 #include "../../Modules/MacroOutletModule.h"
-#include "../ModuleComponent.h"
+#include "../ModuleComponent/ModuleComponent.h"
 
 void GraphEditor::autoDeleteOrphanedMacroPort(juce::AudioProcessorGraph::NodeID nodeId) {
     if (!autoDeleteMacroPortsOnLastCableEnabled)

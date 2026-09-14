@@ -25,7 +25,7 @@
 #include "../Source/Plugin/Hosting/HostedPluginModule.h"
 #include "../Source/Plugin/Hosting/HostedPluginWindowManager.h"
 #include "../Source/UI/GraphEditor/GraphEditor.h"
-#include "../Source/UI/ModuleComponent.h"
+#include "../Source/UI/ModuleComponent/ModuleComponent.h"
 #include "StubPluginInstance.h"
 #include <chrono>
 #include <gtest/gtest.h>

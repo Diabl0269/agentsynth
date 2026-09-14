@@ -13,7 +13,7 @@
 #include "../../AI/AIStateMapper.h"
 #include "../../Modules/AttenuverterModule.h"
 #include "../../Modules/MacroControlModule.h"
-#include "../ModuleComponent.h"
+#include "../ModuleComponent/ModuleComponent.h"
 
 using namespace detail;
 

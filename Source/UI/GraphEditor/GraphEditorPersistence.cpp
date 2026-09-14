@@ -8,7 +8,7 @@
 #include "../../AI/AIStateMapper.h"
 #include "../../PresetManager.h"
 #include "../../SnippetManager.h"
-#include "../ModuleComponent.h"
+#include "../ModuleComponent/ModuleComponent.h"
 
 void GraphEditor::autoArrange() {
     auto& graph = audioEngine.getGraph();

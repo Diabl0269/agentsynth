@@ -14,7 +14,7 @@
 #include "../Source/Modules/VCAModule.h"
 #include "../Source/SnippetManager.h"
 #include "../Source/UI/GraphEditor/GraphEditor.h"
-#include "../Source/UI/ModuleComponent.h"
+#include "../Source/UI/ModuleComponent/ModuleComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 

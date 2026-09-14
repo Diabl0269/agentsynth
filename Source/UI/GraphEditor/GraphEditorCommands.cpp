@@ -11,7 +11,7 @@
 #include "../../AI/AIStateMapper.h"
 #include "../../Modules/AttenuverterModule.h"
 #include "../../SnippetManager.h"
-#include "../ModuleComponent.h"
+#include "../ModuleComponent/ModuleComponent.h"
 
 using namespace detail;
 

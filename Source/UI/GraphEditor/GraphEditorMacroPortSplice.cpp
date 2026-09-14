@@ -13,7 +13,7 @@
 #include "../../Modules/MacroInletModule.h"
 #include "../../Modules/MacroOutletModule.h"
 #include "../MacroCardComponent.h"
-#include "../ModuleComponent.h"
+#include "../ModuleComponent/ModuleComponent.h"
 
 void GraphEditor::deleteMacroAndMembers(const juce::String& macroId) {
     auto* m = macros.find(macroId);
