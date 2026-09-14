@@ -25,20 +25,6 @@ juce::String GraphEditor::smartConnectionModeToString(SmartConnectionMode mode) 
     return SmartConnectionEngine::smartConnectionModeToString(mode);
 }
 
-SmartConnectionEngine::DragPreviewState GraphEditor::buildDragPreviewState() const {
-    SmartConnectionEngine::DragPreviewState state;
-    state.active = dragPreviewActive;
-    state.ghost = dragPreviewGhost;
-    state.aim = dragPreviewAim;
-    state.selfId = dragPreviewSelfId;
-    state.isSnippet = dragPreviewIsSnippet;
-    state.probe = dragPreviewProbe.get();
-    // shouldOfferSmartConnections' selection-drag guard: selection itself is not on
-    // GraphCanvasHost in this PR, so GraphEditor precomputes the one bit the engine needs from it.
-    state.selectionDragBlocksSuggestions = selectionDragActive && selection.size() > 1;
-    return state;
-}
-
 void GraphEditor::refreshSmartSuggestions() { smartConnections_.refreshSmartSuggestions(buildDragPreviewState()); }
 
 void GraphEditor::applySmartSuggestions(juce::AudioProcessorGraph::NodeID ghostNodeId, bool recordUndo) {

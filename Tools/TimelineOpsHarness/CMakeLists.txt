@@ -24,6 +24,8 @@ add_executable(TimelineOpsHarness
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorChannels.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorCommands.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorDragDrop.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphDragDropController/GraphDragDropController.h
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphDragDropController/GraphDragDropController.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorStereoWiring.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorPersistence.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponent.cpp

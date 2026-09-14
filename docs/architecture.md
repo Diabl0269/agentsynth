@@ -520,8 +520,21 @@ collaborator class extracted out of `GraphEditor`: owns smart-connection mode/su
 the proximity-suggestion algorithm (`refreshSmartSuggestions`/`applySmartSuggestions`), reaching its
 canvas only through `Source/UI/Graph/GraphCanvasHost.h` — the narrow interface GraphEditor
 implements privately. `GraphEditor` holds one instance (`smartConnections_`) and forwards its
-existing public smart-connection API to it unchanged. More collaborators (`MacroGroupController`,
-`GraphDragDropController`) follow in FRO77 PR2/PR3.
+existing public smart-connection API to it unchanged.
+
+`Source/UI/Graph/MacroGroupController/` (FRO77 PR2) — `MacroGroupController`, the second
+collaborator: macro grouping/membership/collapse, geometry + card jacks, port CRUD, the
+port-crossing-plan math, and the bypass/mute fan-out, through the same `GraphCanvasHost` seam.
+`GraphEditor` holds `macroController_` and forwards its own macro API to it; a handful of methods
+needing a genuine `GraphEditor&` stay on `GraphEditor` — see `MacroGroupController.h`'s class
+comment.
+
+`Source/UI/Graph/GraphDragDropController/` (FRO77 PR3) — `GraphDragDropController`, the third
+collaborator: drag-preview state (grid + landing ghost), alignment guides, and the
+`DragAndDropTarget`/`FileDragAndDropTarget` overrides, through the same seam (five new host
+methods: `lookAndFeel`, `seedInsertModifierSample`, `canvasPositionOfLocalPoint`,
+`estimateModuleSizeForType`, `resolveSnippetPayload`). `GraphEditor` holds `dragDropController_`
+and forwards its existing drag-preview/drag-and-drop API to it unchanged.
 
 The visual patching interface. Lives in the `AgentSynth` app target.
 

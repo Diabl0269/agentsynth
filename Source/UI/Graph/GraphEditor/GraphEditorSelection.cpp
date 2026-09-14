@@ -11,6 +11,16 @@
 // ---------------------------------------------------------------------------------------
 // Selection (issue #156)
 // ---------------------------------------------------------------------------------------
+//
+// Gesture contract, chosen so the existing drag-to-pan muscle memory is untouched:
+//   plain drag on empty canvas          -> pan (unchanged)
+//   Shift + drag on empty canvas        -> marquee select, replacing the selection
+//   Cmd/Ctrl + Shift + drag             -> marquee select, adding to the selection
+//   click a module                      -> select just it
+//   Shift/Cmd + click a module          -> toggle it in the selection
+//   drag any selected module            -> moves the whole selection together
+//   Escape / click empty canvas         -> clear
+//   Delete / Backspace                  -> delete the selection
 
 std::vector<synth::LayoutUtil::Box> GraphEditor::collectModuleBoxes(bool selectedOnly, bool excludeSelected) const {
     std::vector<synth::LayoutUtil::Box> boxes;
@@ -269,7 +279,7 @@ void GraphEditor::cancelSelectionDrag() {
 void GraphEditor::cancelLiveDragGestures() {
     if (selectionDragActive)
         cancelSelectionDrag();
-    if (dragPreviewActive)
+    if (isDragPreviewActive())
         endDragPreview();
 }
 

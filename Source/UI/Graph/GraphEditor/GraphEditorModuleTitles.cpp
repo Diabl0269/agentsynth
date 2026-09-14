@@ -10,6 +10,15 @@
 #include "AI/AIStateMapper/AIStateMapper.h" // kMaxModuleDisplayNameChars
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
+// Message-thread ONLY and display-only, which is why — unlike "uuid" — it is deliberately NOT
+// mirrored into the processor: nothing on the audio thread reads a card title, so there is no
+// lock-free read to make sound, and adding a mirror would only create a second copy to keep in
+// sync. Do not "fix" this by mirroring it.
+//
+// It is also deliberately NOT the processor's own name: ModuleBase::getName() is the
+// auto-numbered "Chorus 2" that AudioEngine::updateModuleNames() recomputes wholesale on every
+// graph change (it strips trailing digits to renumber), so a custom title written there would be
+// clobbered by the next node added. The numbered name stays the fallback.
 juce::String GraphEditor::getModuleDisplayName(juce::AudioProcessorGraph::NodeID nodeId) const {
     if (auto* node = audioEngine.getGraph().getNodeForId(nodeId))
         return node->properties["displayName"].toString();
