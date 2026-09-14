@@ -301,6 +301,20 @@ The status bar polls at 5 Hz, driven by `MainComponent`'s 10 Hz timer via an eve
 - `formatPatch(const juce::String& s)` — empty or whitespace-only → `"Untitled"`
 - `formatRoundTrip(double ms, bool available)` — `(12.34, true) → "RT 12.3 ms"`; `(anything, false) → "RT —"`; negative input clamps to `0.0`
 
+### ModuleLibraryComponent source layout
+
+`Source/UI/ModuleLibraryComponent/` — one class (declared in `ModuleLibraryComponent.h`) split
+across per-concern translation units (FRO72), none over 1,000 lines. Source layout:
+
+- `ModuleLibraryComponent.cpp` — construction/destruction, the snippet/plugin data setters, `activateRow`, `isEntryEnabled`
+- `ModuleLibrarySearch.cpp` — query matching/highlighting, live filtering of `buildRows()`, the search field's theme colours
+- `ModuleLibraryRows.cpp` — `rebuildEntries()`, `buildRows()`, per-row classification, row lookup by position, tooltip/description text
+- `ModuleLibraryCollapse.cpp` — section collapse/expand state and its accordion animation
+- `ModuleLibraryLayout.cpp` — `resized`/`lookAndFeelChanged`/`parentHierarchyChanged`, the scroll offset and its `juce::ScrollBar`
+- `ModuleLibraryPainting.cpp` — `paint()` and the highlight/chevron/category-icon drawing helpers it calls
+- `ModuleLibraryInput.cpp` — mouse events, keyboard navigation, starting a drag-and-drop session for a row
+- `ModuleLibraryHelpPopover.cpp` — the "?" help popover's pin/float vs `CallOutBox` hosting
+
 ### ModuleLibraryComponent section headers
 
 Each category section-header entry in `ModuleLibraryComponent::paint()` draws a 16×16 category icon at `x=10` using `lf->peekIcon(catIcon)`, then shifts the header text to `x=30`. This is null-guarded: when the `AppLookAndFeel` cast returns null (headless tests or assets absent), no icon is drawn and header text falls back to the original `x=10` position.

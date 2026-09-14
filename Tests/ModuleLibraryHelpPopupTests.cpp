@@ -21,7 +21,7 @@
 // Mirrors MidiDestinationPickerTests.cpp's "talk to the component directly" approach.
 
 #include "../Source/ShortcutManager.h"
-#include "../Source/UI/ModuleLibraryComponent.h"
+#include "../Source/UI/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "../Source/UI/ModuleLibraryHelpPopup.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

@@ -8,7 +8,7 @@
 //                      the rows scrolled
 //   • paint          — drawing a scrolled panel does not crash
 
-#include "../Source/UI/ModuleLibraryComponent.h"
+#include "../Source/UI/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 

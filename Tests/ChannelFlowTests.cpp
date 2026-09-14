@@ -30,7 +30,7 @@
 #include "../Source/Timeline/TimelineDoc.h"
 #include "../Source/UI/GraphEditor/GraphEditor.h"
 #include "../Source/UI/ModuleComponent/ModuleComponent.h"
-#include "../Source/UI/ModuleLibraryComponent.h"
+#include "../Source/UI/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "../Source/UI/TimelineTrackHeaderComponent.h"
 #include "MainComponent/MainComponent.h"
 #include "StubPluginInstance.h"

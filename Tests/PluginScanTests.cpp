@@ -27,7 +27,7 @@
 #include "../Source/MainComponent/MainComponent.h"
 #include "../Source/Plugin/Hosting/HostedPluginModule.h"
 #include "../Source/Plugin/Hosting/PluginScanService.h"
-#include "../Source/UI/ModuleLibraryComponent.h"
+#include "../Source/UI/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "StubPluginInstance.h"
 #include <chrono>
 #include <gtest/gtest.h>

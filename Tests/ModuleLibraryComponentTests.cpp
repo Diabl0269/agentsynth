@@ -4,7 +4,7 @@
 //   • getEntryIndexAt — maps y-coordinates to entry indices, including header rows
 //   • paint smoke test — construct, setSize, paint; simulate a hovered index and paint again
 
-#include "../Source/UI/ModuleLibraryComponent.h"
+#include "../Source/UI/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 

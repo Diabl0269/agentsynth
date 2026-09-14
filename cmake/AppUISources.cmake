@@ -46,6 +46,15 @@ set(APPUI_SOURCES
     Source/UI/PianoRollComponent/PianoRollClipboardAndKeys.cpp
     Source/UI/PianoRollComponent/PianoRollMouse.cpp
     Source/UI/PianoRollComponent/PianoRollZoom.cpp
+    Source/UI/ModuleLibraryComponent/ModuleLibraryComponent.h
+    Source/UI/ModuleLibraryComponent/ModuleLibraryComponent.cpp
+    Source/UI/ModuleLibraryComponent/ModuleLibrarySearch.cpp
+    Source/UI/ModuleLibraryComponent/ModuleLibraryRows.cpp
+    Source/UI/ModuleLibraryComponent/ModuleLibraryCollapse.cpp
+    Source/UI/ModuleLibraryComponent/ModuleLibraryLayout.cpp
+    Source/UI/ModuleLibraryComponent/ModuleLibraryPainting.cpp
+    Source/UI/ModuleLibraryComponent/ModuleLibraryInput.cpp
+    Source/UI/ModuleLibraryComponent/ModuleLibraryHelpPopover.cpp
     Source/UI/NoteSelectionModel.h
     Source/UI/AutomationLaneEditor.h
     Source/UI/AutomationLaneEditor.cpp
