@@ -149,6 +149,18 @@ The timeline's clock and the headless render harness built on it. No audio devic
 | `buildChannelForFeeds` exit handling (T184) | exit edges are removed before the chain is built, and wired through to a freshly spliced Master (`RemovesExitEdgesAndWiresThroughToANewMaster`) or an existing one, clearing prior Direct feeds (`ReusesAnExistingMasterAndClearsDirectFeeds`) |
 | `ChannelFlowTest.AutoChannelOnConnect_*` (T184, real mouse drag) | toggle ON builds exactly one channel as one undo step (`ToggleOnBuildsOneChannelAsOneUndoStep`); toggle OFF only makes the connection, byte-identical to pre-T184 behaviour (`ToggleOffOnlyConnectsNoChannel`); an instrument that already has a channel gets nothing new when a second Track In connects (`AlreadyChanneledInstrumentGetsNoNewStrip`); the new EQ/Compressor/Strip join the instrument's existing macro when boxing applies (`NewChainNodesJoinTheInstrumentsExistingMacro`) |
 
+**`ChannelFlowTest` file layout.** The suite is split by topic under `Tests/ChannelFlow/`, all sharing the `ChannelFlowTest` fixture, `MockProviderCFT`, the plugin-scan stub backend and the FRO25 rig helpers in `Tests/ChannelFlow/ChannelFlowTestFixture.h` (header-only, not built on its own):
+
+| File | Covers |
+|------|--------|
+| `ChannelFlowTests.cpp` | T173a: "+ Track -> Audio Track" builds a whole mixer channel in one undo step |
+| `ChannelFlowInstrumentTests.cpp` | T183: "+ Track -> Instrument -> {Oscillator/Wavetable/Sampler}", the MIDI-track mirror of the audio-track flow |
+| `ChannelFlowPluginInstrumentTests.cpp` | FRO42 (P9-3h): a hosted plugin as the instrument, plus the review-fix regressions (menu snapshot resolution, format-label disambiguation, self-exclusion) |
+| `ChannelFlowAutoChannelTests.cpp` | T184 (P9-3c): auto-create channel on MIDI connect — core-level `findUnchanneledOutputFeeds`/`buildChannelForFeeds`, then real-mouse-gesture coverage through `GraphEditor::endConnectionDrag` |
+| `ChannelFlowCreateChannelsTests.cpp` | FRO26 (P9-3e): "Create Channels" for existing projects, wrapping every channel-less track's chain as one undo step |
+| `ChannelFlowMakeChannelCoreTests.cpp` | FRO25 (P9-3d): "Make channel" core behaviour through a standalone `GraphEditor` (render-identity comparisons), plus the adversarial no-double-drive / three-way-merge / chained-merge probes |
+| `ChannelFlowMakeChannelAppTests.cpp` | FRO25: the real app wiring — track header, canvas selection and module right-click menus, each as one undo step |
+
 ### Audio clip playback tests (24 tests)
 
 `Tests/AudioClipPlaybackTests.cpp`. Five layers. Playback tests render through `synth::OfflineTransportDriver` exactly the way `TimelineE2ETests.cpp` does, but assert **bit-exact sample content** rather than RMS windows, which two things make possible: the test WAV is 32-bit IEEE float carrying exactly-representable values (`n / 65536`), and the streamer's prefetch thread is **paused** (`setPrefetchPausedForTest`) and driven by `pumpForTest()` from the render loop's per-block callback. There is no sleep and no "eventually the ring fills" wait anywhere in the file.
@@ -871,7 +883,6 @@ Largest legacy files at the time of writing (see `scripts/file-size-baseline.txt
 | `Tests/GraphEditorTests.cpp` | 6196 |
 | `Tests/PianoRollTests.cpp` | 6046 |
 | `Source/MainComponent.cpp` | 5379 |
-| `Tests/TimelinePanelTests.cpp` | 4015 |
 
 Scope and exclusions, all deliberate (see the script's own header comment for the full reasoning): `assets/`, `mockups/`, any local `build*` directory, `.claude/`, and recorded JSON fixture corpora (`Tests/fixtures/`, `Tools/TimelineOpsHarness/Fixtures/`) never count toward the cap — their size reflects recorded data, not hand-authored structure. The guard's own baseline file is excluded from itself.
 

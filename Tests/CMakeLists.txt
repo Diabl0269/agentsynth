@@ -57,7 +57,13 @@ add_executable(Tests
     RecordTapTests.cpp
     ChannelStripTests.cpp
     MixerSoloTests.cpp
-    ChannelFlowTests.cpp
+    ChannelFlow/ChannelFlowTests.cpp
+    ChannelFlow/ChannelFlowInstrumentTests.cpp
+    ChannelFlow/ChannelFlowPluginInstrumentTests.cpp
+    ChannelFlow/ChannelFlowAutoChannelTests.cpp
+    ChannelFlow/ChannelFlowCreateChannelsTests.cpp
+    ChannelFlow/ChannelFlowMakeChannelCoreTests.cpp
+    ChannelFlow/ChannelFlowMakeChannelAppTests.cpp
     LatencyAlignmentTests.cpp
     AudioClipPlaybackTests.cpp
     HostedPluginTests.cpp
@@ -175,7 +181,16 @@ add_executable(Tests
     MacroBypassMuteTests.cpp
     ClipboardTests.cpp
     PanelAnimationAndLoadingTests.cpp
-    TimelinePanelTests.cpp
+    TimelinePanel/TimelinePanelTests.cpp
+    TimelinePanel/TimelinePanelRulerTests.cpp
+    TimelinePanel/TimelinePanelMarkerTests.cpp
+    TimelinePanel/TimelinePanelZoomSnapScrollTests.cpp
+    TimelinePanel/TimelinePanelTrackHeaderTests.cpp
+    TimelinePanel/TimelinePanelAppWiringTests.cpp
+    TimelinePanel/TimelinePanelResizeTests.cpp
+    TimelinePanel/TimelinePanelAuthoringGestureTests.cpp
+    TimelinePanel/TimelinePanelToolStripTests.cpp
+    TimelinePanel/TimelinePanelFollowPlayheadTests.cpp
     TimelinePlayheadTests.cpp
     TimelineTrackHeaderTests.cpp
     TimelineTrackFocusTests.cpp

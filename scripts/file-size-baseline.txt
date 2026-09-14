@@ -20,7 +20,6 @@
 1348 Tests/AudioRenderingTests.cpp
 1044 Tests/AuthClientTests.cpp
 1076 Tests/BounceExporterTests.cpp
-3549 Tests/ChannelFlowTests.cpp
 1095 Tests/FXModuleTests.cpp
 1440 Tests/FocusArbitrationTests.cpp
 1057 Tests/MacroPortFlowTests.cpp
@@ -38,6 +37,5 @@
 1615 Tests/TimelineClipLaneTests.cpp
 1644 Tests/TimelineDocTests.cpp
 1396 Tests/TimelineMidiSourceTests.cpp
-4014 Tests/TimelinePanelTests.cpp
 1187 Tests/UndoRedoTests.cpp
 1472 Tests/WavetableOscillatorModuleTests.cpp
