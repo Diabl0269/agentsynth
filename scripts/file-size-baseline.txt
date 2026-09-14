@@ -13,7 +13,7 @@
 1984 Source/UI/Graph/GraphEditor/GraphEditor.h
 1275 Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.cpp
 1461 Source/UI/PianoRoll/PianoRollComponent/PianoRollComponent.h
-1206 Source/UI/Settings/PreferencesSettingsTab.cpp
+1206 Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.cpp
 1223 Source/UI/Theme/AppLookAndFeel.cpp
 1421 Tests/AI/AIIntegrationServiceTests.cpp
 1549 Tests/AI/AIStateMapperTests.cpp

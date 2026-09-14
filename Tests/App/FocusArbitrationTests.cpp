@@ -12,7 +12,7 @@
 #include "AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "Timeline/TimelineDoc.h"
-#include "UI/Settings/PreferencesSettingsTab.h"
+#include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 #include "UI/Theme/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
 #include <algorithm>

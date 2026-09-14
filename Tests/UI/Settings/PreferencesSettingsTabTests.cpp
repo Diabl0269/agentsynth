@@ -2,7 +2,7 @@
 #include "Modules/ModuleBase.h"
 #include "ShortcutManager.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
-#include "UI/Settings/PreferencesSettingsTab.h"
+#include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

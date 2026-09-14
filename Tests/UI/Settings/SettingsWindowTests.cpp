@@ -8,7 +8,7 @@
 #include "UI/Assistant/AIChatComponent.h"
 #include "UI/PianoRoll/NoteColour.h"
 #include "UI/Settings/AppearanceSettingsTab.h"
-#include "UI/Settings/PreferencesSettingsTab.h"
+#include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 #include "UI/Settings/SettingsWindow.h"
 #include "UI/Settings/ShortcutsSettingsTab.h"
 #include "UI/Theme/ThemeManager.h"

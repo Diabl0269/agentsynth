@@ -314,7 +314,7 @@ add_executable(Tests
     ../Source/Plugin/Hosting/HostedPluginEditorWindow.cpp
     ../Source/UI/Settings/SettingsWindow.cpp
     ../Source/UI/Settings/AppearanceSettingsTab.cpp
-    ../Source/UI/Settings/PreferencesSettingsTab.cpp
+    ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.cpp
     ../Source/UI/Settings/ShortcutsSettingsTab.cpp
     ../Source/UI/Settings/FeedbackSettingsTab.cpp
     ../Source/UI/Chrome/WelcomeScreenComponent.cpp

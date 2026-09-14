@@ -4,9 +4,9 @@
 #include "AppearanceSettingsTab.h"
 #include "Branding.h"
 #include "FeedbackSettingsTab.h"
-#include "PreferencesSettingsTab.h"
 #include "ShortcutManager.h"
 #include "ShortcutsSettingsTab.h"
+#include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 
 //==============================================================================
 // AISettingsTab - AI configuration interface

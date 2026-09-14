@@ -121,8 +121,8 @@ set(APPUI_SOURCES
     Source/UI/Settings/AppearanceSettingsTab.h
     Source/UI/Settings/FeedbackSettingsTab.cpp
     Source/UI/Settings/FeedbackSettingsTab.h
-    Source/UI/Settings/PreferencesSettingsTab.cpp
-    Source/UI/Settings/PreferencesSettingsTab.h
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h
     Source/UI/Settings/ShortcutsSettingsTab.cpp
     Source/ShortcutManager.h
     Source/Update/UpdateManager.h

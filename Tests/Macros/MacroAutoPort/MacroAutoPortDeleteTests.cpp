@@ -20,7 +20,7 @@
 #include "Modules/MacroMidiOutletModule.h"
 #include "Modules/MacroOutletModule.h"
 #include "UI/Macros/MacroCardComponent.h"
-#include "UI/Settings/PreferencesSettingsTab.h"
+#include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 
 // ============================================================================
 // T148 (docs/macros_implementation.md §7 item 9): auto-delete a macro port once its last cable is gone — the
