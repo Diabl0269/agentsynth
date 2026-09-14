@@ -479,6 +479,11 @@ void TimelineTrackHeaderComponent::paintOverChildren(juce::Graphics& g) {
 
 //==============================================================================
 void TimelineTrackHeaderComponent::mouseDown(const juce::MouseEvent& e) {
+    // This only ever fires for a right-click that lands on the row's OWN background — a right-click
+    // on nameLabel_ or the M/S/R/A toggles reaches showContextMenu() straight from THEIR OWN
+    // mouseDown() instead (ContextMenuForwardingLabel/ContextMenuForwardingButton in the header;
+    // FRO60), since JUCE dispatches a click to whichever component is directly under the cursor and
+    // never routes it through here first.
     if (e.mods.isPopupMenu()) {
         showContextMenu();
         return;

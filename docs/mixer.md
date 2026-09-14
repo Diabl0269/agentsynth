@@ -416,8 +416,25 @@ thread stays responsive exactly like Export Audio. The two shared pieces both pa
 duplicate no logic for (`synth::validateBounceOptions`, and the metronome/external-MIDI RAII
 guards) are factored into `Source/Transport/BounceGuards.h`, so `BounceExporter`'s own behaviour
 and tests are unchanged. Strips are enumerated from the graph in ascending node-id order (the
-"else node id" fallback — this layer has no dependency on the timeline/track model) and named
-`"NN - <strip name>.<ext>"`.
+"else node id" fallback — that ORDER has no dependency on the timeline/track model) and named
+`"NN - <name>.<ext>"`.
+
+**Stem naming (FRO55).** `<name>` is the ONE track — `TimelineMidiSource`/`TimelineAudioSource`
+("Track In"/"Track Audio") — whose signal feeds that strip, not the strip's own graph-node
+instance name (pre-FRO55 this was `"Channel Strip"`, identical across every strip in a patch and
+therefore useless as a stem name once "Create channels" makes more than one). `StemSession`
+walks the graph upstream from the strip, along signal edges only (mirroring
+`synth::ChannelFlows`'s `isSignalEdge` rule: never through an `AttenuverterModule`, never through
+a `PortRole::ModCV` input — a modulation cable from an unrelated track must not make that track
+"feed" the strip), transitively through the instrument/macro chain, stopping at another
+`ChannelStripModule` (that strip already terminates its own track's chain). Exactly one track
+found this way contributes its `TimelineDoc` name (e.g. `"Bass"`, `"Audio 1"`); zero or several
+tracks — or no `TimelineDoc` at all, e.g. a headless caller — fall back to `"Channel N"` (`N`
+matching the strip's own `NN` position, so it agrees with the file's own number and is unique on
+its own even when a `TimelineDoc` isn't available). `ChannelStripModule` has no user-given name
+field of its own yet; when the mixer-UI work adds one, stem naming is expected to prefer it ahead
+of the track walk. `StemSession`'s constructor takes an optional `const TimelineDoc*` for this —
+null is exactly the pre-FRO55 "no timeline" behaviour (every strip falls back to `"Channel N"`).
 
 **Two decisions, both load-bearing for "the stems sum back to the mix":**
 

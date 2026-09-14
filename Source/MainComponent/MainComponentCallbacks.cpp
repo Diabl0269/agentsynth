@@ -638,13 +638,17 @@ void MainComponent::promptExportStems() {
         dialog->showProgressPage();
 
         stemRunner_ = std::make_unique<synth::StemRunner>(
-            audioEngine, destinationFolder, bounceOptions, [this](synth::StemResult result) {
+            audioEngine, destinationFolder, bounceOptions,
+            [this](synth::StemResult result) {
                 isBounceInProgress_ = false;
                 stemRunner_.reset();
                 if (exportDialog_ != nullptr)
                     exportDialog_->reportComplete(result.ok, result.message);
                 statusBar.showMessage(result.message);
-            });
+            },
+            /*chunkBlocks=*/64, /*tickMs=*/10,
+            // FRO55 (docs/mixer.md §5.12): names each stem after the track that feeds it.
+            &timelineDoc);
     };
 
     window->enterModalState(true, nullptr, true);

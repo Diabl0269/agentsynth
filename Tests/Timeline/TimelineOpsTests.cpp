@@ -8,7 +8,7 @@
 // re-stated, so the cap/bounds cases below assert against ITS constants — a change there must move
 // this file too, or the two gates have drifted.
 
-#include "AI/AIIntegrationService.h"
+#include "AI/AIIntegrationService/AIIntegrationService.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
 #include "Modules/FilterModule.h"

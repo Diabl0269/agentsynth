@@ -1,13 +1,13 @@
 #pragma once
 
-#include "AI/AIIntegrationService.h"
+#include "AI/AIIntegrationService/AIIntegrationService.h"
 #include "AI/AccountService.h"
 #include "AI/ConversationHistorySource.h"
 #include "AI/LocalHistoryStore.h"
 #include "AI/PatchDiff.h"
 #include "AI/PatchFeedbackStore.h"
-#include "AccountRow.h"
-#include "PlanBadge.h"
+#include "UI/Assistant/AccountRow.h"
+#include "UI/Assistant/PlanBadge.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <atomic>

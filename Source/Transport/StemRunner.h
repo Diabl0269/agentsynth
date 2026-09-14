@@ -10,6 +10,8 @@ class AudioEngine;
 namespace synth {
 
 class StemSession;
+class TimelineDoc; // Forward declaration (Source/Timeline/TimelineDoc.h) - see the constructor's
+                   // `timelineDoc` parameter comment.
 
 // The chunked, message-thread-timer-driven twin of StemExporter::exportStems() — StemSession's own
 // counterpart to BounceRunner (Source/Transport/BounceRunner.h). See that class's header comment for
@@ -21,8 +23,13 @@ public:
 
     // MESSAGE THREAD. Begins the render's setup synchronously and starts ticking. onComplete fires
     // exactly once, always from a timer tick.
+    //
+    // `timelineDoc` (FRO55, docs/mixer.md §5.12): forwarded to StemSession unchanged - null is fine
+    // (every stem then falls back to "Channel N"). Trailing with a default so every existing caller
+    // keeps compiling unchanged.
     StemRunner(AudioEngine& engine, const juce::File& destinationFolder, const BounceOptions& options,
-               CompletionCallback onComplete, int chunkBlocks = 64, int tickMs = 10);
+               CompletionCallback onComplete, int chunkBlocks = 64, int tickMs = 10,
+               const TimelineDoc* timelineDoc = nullptr);
     ~StemRunner() override;
 
     // MESSAGE THREAD. Requests cancellation; the in-flight chunk finishes, then onComplete fires
