@@ -33,8 +33,8 @@ Enable toggling of the Mod Matrix and AI Chat panels via keyboard shortcuts (Cmd
   - Test Shortcuts: Cmd+M toggles Mod Matrix, Cmd+A toggles AI Panel.
   - Verify shortcut conflicts are handled by `ShortcutManager`.
 - **Tests**:
-  - Update `Tests/MainComponentTests.cpp` to verify initial state is "closed".
-  - Add unit tests for the new shortcut actions in `Tests/ShortcutManagerTests.cpp` (if exists).
+  - Update `Tests/App/MainComponentTests.cpp` to verify initial state is "closed".
+  - Add unit tests for the new shortcut actions in `Tests/App/ShortcutManagerTests.cpp` (if exists).
 
 ## Docs Updates
 - Update `CLAUDE.md` to document new keyboard shortcuts.

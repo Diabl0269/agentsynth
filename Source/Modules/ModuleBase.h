@@ -141,7 +141,7 @@ public:
     // be a per-module opt-in call, and the Ring Modulator shipped a stereo output pair without it —
     // no header toggle, no Preferences row, no failing test. The only per-module decision left is
     // the *exception*, and every exception is documented — see the enumerators below and the
-    // `StereoDeclaration` suite in Tests/StereoVoiceModuleTests.cpp, which sweeps the whole factory
+    // `StereoDeclaration` suite in Tests/Modules/StereoVoiceModuleTests.cpp, which sweeps the whole factory
     // against this rule plus its two exception tables.
     // -------------------------------------------------------------------------
     enum class StereoAudio {

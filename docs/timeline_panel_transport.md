@@ -120,7 +120,7 @@ side, inset by `kGlyphInsetRatio` (24%) on each edge — never a fraction of the
 both axes, which is what flattened all four glyphs once the panel's 5 px resize grab strip left the
 bar ~19 px tall, and is exactly the "really dense" the founder reported. Everything scales off
 that square (the loop arc's stroke and arrowhead, the note's head/stem), so the row stays legible at
-any strip height. `Tests/TimelineTransportBarTests.cpp::GlyphButtonsAreSquareAndSpaced` pins
+any strip height. `Tests/UI/Timeline/TimelineTransportBarTests.cpp::GlyphButtonsAreSquareAndSpaced` pins
 squareness and the gaps at both the full and the trimmed strip height.
 
 > **Record-red is deliberately theme-independent.** An engaged record button is
@@ -195,7 +195,7 @@ value this bar remembers between polls:
 **static, pure** helper (no `Component`, headless-testable on its own): `"BAR.BEAT.TICKS"`, 1-based
 bar (zero-padded to 3 digits), 1-based beat (unpadded), ticks = 1/960 of a beat (zero-padded to 3
 digits) — `beatsPerBar = tsNum * 4 / tsDen`, the same formula used throughout the timeline panel.
-Pinned examples (see `Tests/TimelineTransportBarTests.cpp::FormatBarBeatTable`): `(0.0, 4/4)` ->
+Pinned examples (see `Tests/UI/Timeline/TimelineTransportBarTests.cpp::FormatBarBeatTable`): `(0.0, 4/4)` ->
 `"001.1.000"`, `(5.5, 4/4)` -> `"002.2.480"`, `(3.0, 3/4)` -> `"002.1.000"`. Painted in JetBrains
 Mono via `juce::Font(juce::Font::getDefaultMonospacedFontName(), theme.type.value + 1, plain)` —
 `AppLookAndFeel::getTypefaceForFont` resolves the default monospaced font name to
@@ -241,8 +241,8 @@ reflects record-ON, not "a take is capturing". `MainComponent`'s implementation 
 
 `AudioEngine::setMidiCaptureSink(&midiRecorder)` is the other half of the app-level wiring (feeds
 `MidiRecorder::captureBlock` from `AudioEngine::renderNextBlock`'s one collector-merged buffer) —
-see `Tests/MidiRecorderTests.cpp` for the model-level coverage and
-`Tests/TimelineTransportBarTests.cpp` for the button-to-commit path.
+see `Tests/Timeline/MidiRecorderTests.cpp` for the model-level coverage and
+`Tests/UI/Timeline/TimelineTransportBarTests.cpp` for the button-to-commit path.
 
 ## 6. Metronome + Count-In
 

@@ -9,7 +9,7 @@
 namespace {
 // MacroInletModule deliberately declares NO getModulationTargets() — GraphEditor::connectPorts()
 // relies on that empty list to keep a plain cable drop onto a Macro In's jack a plain connection,
-// never auto-wrapped in a fresh attenuverter (Tests/MacroPortFlowTests.cpp's drop-a-cable tests
+// never auto-wrapped in a fresh attenuverter (Tests/Macros/MacroPortFlowTests.cpp's drop-a-cable tests
 // pin that). Founder-review fix G3 (docs/macros_implementation.md §7 item 7) can still splice a MacroInletModule
 // in as the DESTINATION of an EXISTING AttenuverterChain crossing a macro boundary, so this row's
 // destination combo needs something to show and match against — without changing what the module

@@ -42,7 +42,7 @@ Two details that are easy to get wrong:
 ### 1.2 SelectionModel — `Source/UI/Graph/SelectionModel.h`
 
 Header-only, no Component or graph dependency, so the selection rules are testable headlessly
-(`Tests/SelectionModelTests.cpp`).
+(`Tests/UI/Graph/SelectionModelTests.cpp`).
 
 - `SelectionModel` wraps a `std::set<NodeID>`: `add` / `remove` / `toggle` / `setSelection` /
   `contains` / `retainOnly`. `NodeID{0}` (the graph's invalid-node sentinel) is rejected outright.
@@ -105,7 +105,7 @@ such gaps were found and fixed before this note: a double-click-to-rename on an 
 chip, and on a collapsed macro's card, each opens a modal `AlertWindow` (`enterModalState(true,
 ...)`) whose global input grab swallows the drag's own `mouseUp` — both `mouseDoubleClick`
 overrides now cancel the armed drag unconditionally rather than depending on that `mouseUp` ever
-arriving (see their own comments). `Tests/DragStateResetTests.cpp` drives every flag-arming real
+arriving (see their own comments). `Tests/UI/Graph/DragStateResetTests.cpp` drives every flag-arming real
 gesture (plain and multi-select body drag, Ctrl-insert drag, marquee, macro chip drag, macro card
 drag, both double-click-rename cases, and a release reported far outside the pressed component's
 own bounds) through the actual `mouseDown`/`mouseDrag`/`mouseUp` callbacks and asserts every flag
@@ -816,7 +816,7 @@ canvas coordinates:
 the viewport, inflated by an 80 px margin (`kWorldMargin`), and never narrower/shorter than 1200 px
 (`kMinWorldSpan`) per axis, so a single module doesn't blow up to fill the map. All three drawing
 and hit-testing helpers (`computeWorldBounds`, `computeWorldToMap`, `mapToWorld`) are pure static
-functions with no `Component` state — unit-tested directly (`Tests/MinimapComponentTests.cpp`).
+functions with no `Component` state — unit-tested directly (`Tests/UI/Graph/MinimapComponentTests.cpp`).
 
 ### Interaction
 

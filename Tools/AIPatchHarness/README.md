@@ -80,7 +80,7 @@ Each entry in `records`:
 the loop: `rawResponse` goes through `extractJsonFromResponse -> JSON::parse -> validatePatch`
 directly, and `applyPatchWithRetry` is replayed against a provider double that hands back
 `retryResponses` in order instead of calling a real model. See
-`Tests/AIPatchFixtureReplayTests.cpp`.
+`Tests/AI/AIPatchFixtureReplayTests.cpp`.
 
 **Format stability:** this schema only grows new fields; existing ones keep their meaning and
 type. A committed fixture under `Tests/fixtures/ai-patches/` is read by that name-keyed schema,
@@ -89,7 +89,7 @@ not by field position, so an old fixture stays valid after a future field is add
 ## Recording the fixture corpus
 
 `Tests/fixtures/ai-patches/*.json` are `--json` outputs from this harness, committed verbatim and
-replayed offline by `Tests/AIPatchFixtureReplayTests.cpp` — see `docs/testing.md` for what that
+replayed offline by `Tests/AI/AIPatchFixtureReplayTests.cpp` — see `docs/testing.md` for what that
 test asserts. To re-record (e.g. after a `Scenarios.h` prompt change, a schema change, or to widen
 model coverage):
 
@@ -134,7 +134,7 @@ mode) and modifying an existing one (merge mode). Merge scenarios first apply a 
 MIDI → Oscillator → Filter → VCA → Output — as *trusted* JSON, so the model faces real
 pre-existing node ids. Seeding is trusted deliberately: it is a fixture, not model output, and
 must not be judged by the gate being measured. `Scenarios.h` is shared verbatim with
-`Tests/AIPatchFixtureReplayTests.cpp`, which looks a recorded fixture's `scenario` name up there to
+`Tests/AI/AIPatchFixtureReplayTests.cpp`, which looks a recorded fixture's `scenario` name up there to
 rebuild the same seed graph and mode offline — one source of truth for what a fixture's name
 means, so the prompt table and the corpus it produced can't silently drift apart.
 

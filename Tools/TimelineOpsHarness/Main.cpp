@@ -9,7 +9,7 @@
     what this harness replays is a fixed set of RECORDED fixture files instead of prompts. Each
     fixture pins an envelope (or, for the "envelope smuggled in a patch" pin, a patch) and the
     outcome it must produce; the same fixtures are asserted as fast gtest cases in
-    Tests/TimelineOpsFixtureTests.cpp, which is what CI actually gates on. This tool exists to
+    Tests/Timeline/TimelineOpsFixtureTests.cpp, which is what CI actually gates on. This tool exists to
     print the same kind of per-case expected-vs-actual table and summary rate its siblings do, so
     a change to TimelineOps/TimelineValidator/MidiClipFile can be eyeballed against every fixture
     at once without needing a live model to do it.
@@ -46,7 +46,7 @@ juce::String argValue(const juce::StringArray& args, const juce::String& flag, c
 }
 
 // The same fixed graph every fixture is checked against: a Filter and an Oscillator carrying the
-// stable "filter-uuid"/"osc-uuid" properties Tests/TimelineOpsTests.cpp's own fixture graph uses,
+// stable "filter-uuid"/"osc-uuid" properties Tests/Timeline/TimelineOpsTests.cpp's own fixture graph uses,
 // so a writeLane fixture targeting them resolves exactly the way the unit tests' does.
 void buildFixtureGraph(juce::AudioProcessorGraph& graph) {
     graph.clear();

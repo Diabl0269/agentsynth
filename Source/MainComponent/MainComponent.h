@@ -1190,7 +1190,7 @@ private:
     /** THE panel-toggle seam: point every slide at the current visibility flags and run one
      *  coordinated tween — or land immediately when nothing can animate (an off-screen component
      *  gets no VBlank, so a headless toggle must be synchronous; that is the contract
-     *  Tests/PanelAnimationAndLoadingTests.cpp asserts with no message pump at all).
+     *  Tests/UI/Layout/PanelAnimationAndLoadingTests.cpp asserts with no message pump at all).
      *  Callers flip the flag, persist it, refresh the toolbar, then call this. */
     void beginPanelSlide();
 

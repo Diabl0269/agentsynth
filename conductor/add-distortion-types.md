@@ -11,7 +11,7 @@ Implement additional distortion algorithms (e.g., Hard Clip, Foldback) in `Disto
 2.  **UI Update**:
     *   The `ModuleComponent` should auto-detect the new `ChoiceParameter` and update the UI (Gravisynth's auto-UI should handle this automatically based on existing parameter handling).
 3.  **Testing**:
-    *   Update `Tests/DistortionSweepTests.cpp` to verify all distortion types.
+    *   Update `Tests/FX/DistortionSweepTests.cpp` to verify all distortion types.
     *   Add a test case to ensure modulation still works correctly with new types.
 
 ## Verification

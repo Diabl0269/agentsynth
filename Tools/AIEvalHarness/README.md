@@ -102,7 +102,7 @@ sendMessage(useStructuredOutput=true)
 ```
 
 `evaluatePatch` runs three structural checks against the resulting `juce::AudioProcessorGraph`,
-unit-tested independently of any model in `Tests/PatchEvalTests.cpp`:
+unit-tested independently of any model in `Tests/AI/PatchEvalTests.cpp`:
 
 - **has an output** — an `Audio Output` node exists in the graph.
 - **connects** — that `Audio Output` is reachable, following audio (not MIDI) connections

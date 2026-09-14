@@ -576,10 +576,10 @@ Main line, in dependency order:
      gate is layered on top; otherwise the strip's card bypass would leak into a soloed mix.
    - *The splice* is `synth::ensureMasterNode` (Core, `Source/Mixer/MasterSplice.h`); nothing
      calls it yet — P9-3's channel creation does.
-   - `Tests/ChannelStripTests.cpp`: pan balance law is unity at centre for both mono and stereo
+   - `Tests/Mixer/ChannelStripTests.cpp`: pan balance law is unity at centre for both mono and stereo
      shapes; bypass/mute follow the two-branch contract; shape is fixed at construction and
      rejects a later width change.
-   - `Tests/MixerSoloTests.cpp`: soloing one strip silences every other non-soloed strip and the
+   - `Tests/Mixer/MixerSoloTests.cpp`: soloing one strip silences every other non-soloed strip and the
      Direct input; un-soloing the last soloed strip restores every other strip; solo never mutates
      another strip's mute parameter; `Master` splice is one undo step and undoes cleanly.
 
@@ -664,7 +664,7 @@ Main line, in dependency order:
      `{Track In, instrument, Poly MIDI, ADSR, VCA, EQ, Compressor, Strip}` join the same one
      collapsed macro. See `Tests/ChannelFlowTests.cpp`'s
      `PolyEnvelopeAndVCAWiresPerVoicePitchGateAndAudioWithNoVoiceMixer` for the wiring proof and
-     `Tests/PolyMidiModuleTests.cpp`'s `PolyMidiToAdsrToVcaTest.ReleasingOneVoiceLeavesAnother-
+     `Tests/Modules/PolyMidiModuleTests.cpp`'s `PolyMidiToAdsrToVcaTest.ReleasingOneVoiceLeavesAnother-
      HeldVoiceUntouched` for the render-level proof that releasing one voice's note leaves another
      held voice's envelope untouched — the thing a single shared mono envelope could never do.
    - **P9-3k (poly Oscillator/Wavetable UI entry) — DONE (FRO48).** The "+ Track > Instrument" menu
@@ -703,7 +703,7 @@ Main line, in dependency order:
      published instance's real output count (ch1 once there are 2+ outputs; ch0 duplicated onto both
      legs for a genuinely mono instance; the base class's `hasDualIOParameter()`-gated default would
      have read -1 forever, since this module never registers a Dual I/O parameter). See
-     `Tests/HostedPluginTests.cpp`'s `OnLoadCompletedFires*`/`RightAudioLegChannelFollows...` and
+     `Tests/Plugin/HostedPluginTests.cpp`'s `OnLoadCompletedFires*`/`RightAudioLegChannelFollows...` and
      `Tests/ChannelFlowTests.cpp`'s `PluginInstrumentTrack*` — the latter drives the exact same
      `applyAddTrackMenuChoice`/menu-id seam the T183 tests use.
 
@@ -791,7 +791,7 @@ Main line, in dependency order:
        `AutoChannelOnConnect_ToggleOffOnlyConnectsNoChannel`,
        `AutoChannelOnConnect_AlreadyChanneledInstrumentGetsNoNewStrip`,
        `AutoChannelOnConnect_NewChainNodesJoinTheInstrumentsExistingMacro`. Plus
-       `Tests/PreferencesSettingsTabTests.cpp`: default ON, persists `"0"`/`"1"` under
+       `Tests/UI/Settings/PreferencesSettingsTabTests.cpp`: default ON, persists `"0"`/`"1"` under
        `mixerAutoCreateChannelOnConnect` and round-trips, and pushes to a live `GraphEditor` via
        `setGraphEditor`/on toggle, mirroring every T148 toggle test exactly.
    - **T173e (existing projects, "Create channels") — DONE (FRO26).** The "+ Track" menu's new
@@ -887,7 +887,7 @@ Side tracks (each independent of the main line beyond its own listed dependency)
 
 - **P9-8 (T123) — Stem export. DONE.** See §5.12 for the design as it landed
   (`ChannelStripModule`'s stem tap, `StemExporter`/`StemSession`/`StemRunner`, the two decisions on
-  muted/soloed strips and Master's Direct). `Tests/StemExportTests.cpp`: N strips produce N files
+  muted/soloed strips and Master's Direct). `Tests/Engine/StemExportTests.cpp`: N strips produce N files
   of equal length; the written stems sum back to the pre-Master mix within a tolerance, proven
   against a non-unity Master gain; non-default strip gain/pan prove the tap is post-fader; a muted
   strip's file is silent and the sum property still holds; a soloed strip during export does not

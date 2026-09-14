@@ -669,7 +669,7 @@ Factory presets 0, 1, and 5 contain a Sequencer at x=10 (right edge = 570). Afte
 - **AmpEnv**: x=560 → x=**584** (570 + 12 gap + 2 grid ceil)
 - **FilterEnv**: x=870 → x=**880** (584 + 280 + 12 gap + 4 grid ceil)
 
-Presets 2, 3, 4, 6 have no Sequencer-adjacent envelopes and required no rebake. The `AllFactoryPresetsLoadWithoutOverlap` test and the `estimateModuleSize` mirror in `Tests/PresetManagerTests.cpp` are updated atomically with the preset data change to keep the test green.
+Presets 2, 3, 4, 6 have no Sequencer-adjacent envelopes and required no rebake. The `AllFactoryPresetsLoadWithoutOverlap` test and the `estimateModuleSize` mirror in `Tests/Project/PresetManagerTests.cpp` are updated atomically with the preset data change to keep the test green.
 
 ### Poly Pad preset routing (case 6)
 

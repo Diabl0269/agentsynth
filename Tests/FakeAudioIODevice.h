@@ -10,7 +10,7 @@
 // every block is where the test put it.
 //
 // Extend this rather than writing a second fake: everything about it is settable through the
-// constructor. Users: Tests/AudioInputTests.cpp, Tests/AudioInputModuleTests.cpp.
+// constructor. Users: Tests/Engine/AudioInputTests.cpp, Tests/AudioInputModuleTests.cpp.
 
 #include <juce_audio_devices/juce_audio_devices.h>
 

@@ -294,7 +294,7 @@ Four rules live in there:
 2. **`canAnimate == false` lands immediately.** No VBlank reaches an off-screen component, so a
    headless toggle (and a persisted restore before the window exists — `initialiseCommon()` snaps
    the fractions rather than sliding them) must be synchronous. That is the contract
-   `Tests/PanelAnimationAndLoadingTests.cpp` asserts with no message pump at all, and the reason
+   `Tests/UI/Layout/PanelAnimationAndLoadingTests.cpp` asserts with no message pump at all, and the reason
    the whole test suite sees final bounds the instant a `simulate*Click()` returns.
 3. **Every slide is retargeted, not just the one whose flag moved.** The three panels share one
    `AnimationDriver` (they share a window, so they must share a clock), and restarting it has to
@@ -310,7 +310,7 @@ driver, `finish()`es each fraction on its exact endpoint (a driver's last frame 
 to be `t == 1`), hides whatever finished closing, and lays out once more.
 
 `PanelSlide` holds no animator and no JUCE GUI state, so its math is unit-tested headlessly
-(`Tests/UIAnimationTests.cpp`) and it is reusable by any multi-panel surface.
+(`Tests/UI/Layout/UIAnimationTests.cpp`) and it is reusable by any multi-panel surface.
 `GraphEditor::toggleModMatrixVisibility` and `PianoRollComponent::setScalePanelVisible` already
 implement the same pattern by hand and are **not** ported to it — they are single-panel surfaces
 and correct as they stand.
@@ -365,7 +365,7 @@ Never add:
 
 #### The playhead's confinement contract
 
-A third exception is not granted just because the second was. The playhead earned it by satisfying three clauses, all enforced in code and asserted in `Tests/TimelinePlayheadTests.cpp`:
+A third exception is not granted just because the second was. The playhead earned it by satisfying three clauses, all enforced in code and asserted in `Tests/UI/Timeline/TimelinePlayheadTests.cpp`:
 
 1. **Playing only.** The 30 Hz `juce::Timer` is started on the play transition and stopped on the stop/pause transition — it never runs while the transport is stopped, so an idle app repaints nothing (`ZeroRepaintsOver100IdleFrames`).
 2. **Strip only.** A frame never repaints the component. It repaints the *union of the old and new line strips* (`kStripHalfWidth` px either side of the line), clipped to the bounds; a frame whose rounded x did not move requests nothing at all (`PlayingRequestsConfinedStrips`).

@@ -38,15 +38,15 @@ Headless DSP tests that render audio through individual modules and verify outpu
 | SchmittTriggerTest | 6 | Shared rising-arm / falling-rearm helper: starts low, arms above threshold, holds inside the 0.05 gap, falling edge, reset, equal-to-threshold does not arm |
 | MacroControlModuleTest | 14 | Port model (16 channels, 8 visible by default, no MIDI, ModCV role), per-macro CV output, channels above the `Knobs` count silent, hidden knobs keep their values when the bank is re-grown, bipolar mapping, 20 ms smoothing, bypass/mute silence, zero-channel buffer; factory creation, `macroCount`+knob JSON round-trip, one macro fanned out to two destinations |
 | FX module tests | 53 | Delay (passthrough, feedback), Distortion (clipping, drive), Reverb (room size), Chorus, Phaser, Compressor, Flanger, Limiter, Bitcrusher (downsampling, quantization, CV), Ring Modulator (diode-ring, oversampling aliasing) |
-| GateModuleTest | 13 | `Tests/GateModuleTests.cpp`. Hysteresis Schmitt trigger (opens at Threshold, closes only below Threshold - hysteresis, a level sitting in the gap keeps whichever state the gate was already in), Attack/Hold/Release timing measured in samples against the analytic linear-ramp model, Range floor is the parameterised gain (e.g. -20 dB -> 0.1 amplitude) not silence, both stereo legs gated identically by the linked max(\|L\|,\|R\|) detector, port labels/counts, module type/category. Bypass dry pass-through and mute silence live in `FXBypassTest` alongside every other FX module |
+| GateModuleTest | 13 | `Tests/FX/GateModuleTests.cpp`. Hysteresis Schmitt trigger (opens at Threshold, closes only below Threshold - hysteresis, a level sitting in the gap keeps whichever state the gate was already in), Attack/Hold/Release timing measured in samples against the analytic linear-ramp model, Range floor is the parameterised gain (e.g. -20 dB -> 0.1 amplitude) not silence, both stereo legs gated identically by the linked max(\|L\|,\|R\|) detector, port labels/counts, module type/category. Bypass dry pass-through and mute silence live in `FXBypassTest` alongside every other FX module |
 | PitchShifterModuleTest | 22 | Pitch mode transposition ratios (spectral peak), Frequency mode SSB offset + sideband suppression, CV routing, feedback stability, state round-trip |
 | SamplerModuleTest | 31 | Registration + port/parameter surface; WAV load (success, missing file, unreadable file, failed load keeps the previous sample, clear); Sample mode playback verified sample-exact against a ramp file at unity rate, at `pitch = +12` (2×), via MIDI note transpose, and with `start = 0.5`; monotonic anti-click fade-in; one-shot falls silent at the last frame vs loop keeps going; Granular mode produces bounded finite audio and stays silent with no sample loaded, including at max density × max grain size; gate precedence (free-run with nothing patched, trigger-CV latch silences a low gate, retrigger, a gate rising mid-block is not mistaken for an unpatched jack); bypass/mute clear; CV channels do not leak to the output; level CV sums with the parameter; zero-channel buffer is safe; `getExtraState`/`setExtraState` round trip, restored through `graphToJSON` → `applyJSONToGraph` on the trusted path and **dropped** on the untrusted path |
 | SampleWaveformPeaks | 4 | `SampleWaveformComponent::computePeaks` — empty inputs, columns span the buffer and track min/max extremes, channels averaged (opposite phase cancels), more columns than frames |
 | SampleWaveformPaint | 2 | Paints the empty state ("No sample loaded") and a loaded sample with a live playhead into a `juce::Image`; repeat `timerCallback()` with nothing changed is a no-op; zero-width component is safe |
 | SamplerFormats | 2 | `getSupportedFormatWildcard()` is non-empty and includes `*.wav`; `isSupportedAudioFile` accepts wav/WAV/aiff and rejects .json/.txt/extensionless/directories (extension-only check, so drag-hover stays cheap) |
-| Parametric EQ tests | 64 | `Tests/ParametricEQModuleTests.cpp`. `ParametricEQModuleTest` — identity, 6-in/2-out channel layout, port labels, mod targets, logical-port roles, slot types and row labels, **all four bands start disabled**, enable round-trip and count, a disabled band with a big gain still contributing nothing, setters clamping to range, bypass dry pass-through / CV clearing / mute. `ParametricEQPointPlacement` — `findBandForNewPoint` picks the nearest free slot on a log axis, skips slots in use, returns -1 when full, and resolves out-of-range frequencies. `ParametricEQResponse` — `bandMagnitudeDb` anchor points (bell hits its gain at centre and 0 dB two decades out; cut is the exact mirror of boost; higher Q narrows the bell; a shelf sits at half its gain at the corner; zero-gain bands are flat everywhere; degenerate inputs return unity, not NaN) and `responseDb` skipping disabled bands plus adding the output trim. `ParametricEQCoefficients` — the RBJ digital biquad agrees with the analog prototype it came from within 0.6 dB, zero gain yields a literal pass-through biquad (`b == a`), and centres past Nyquist / a zero sample rate stay finite. `ParametricEQAudio` — real-audio level measurements (all-off is a straight wire; a configured-but-disabled band does not touch audio; enabling applies and disabling restores unity; ±12 dB bells move their band by ±12 dB; a narrow boost leaves distant tones alone; shelves only touch their own end; output gain scales everything; stereo channels come out identical) plus `MeasuredResponseTracksTheAnalyticCurve`, which locks the drawn curve to the measured DSP within 1 dB. `ParametricEQCV` — freq CV is exponential over the full range, gain CV maps onto ±24 dB and clamps, near-silent CV is gated to exactly the unmodulated value while CV above the gate gets through, and the shelves are provably *not* CV-modulated. `ParametricEQEdgeCases` — zero-length/zero-channel/mono buffers, processing without `prepareToPlay`, re-preparing at a new sample rate, band response independent of sample rate, state round-trip preserving enable flags, and every band exposing the full parameter set |
+| Parametric EQ tests | 64 | `Tests/FX/ParametricEQModuleTests.cpp`. `ParametricEQModuleTest` — identity, 6-in/2-out channel layout, port labels, mod targets, logical-port roles, slot types and row labels, **all four bands start disabled**, enable round-trip and count, a disabled band with a big gain still contributing nothing, setters clamping to range, bypass dry pass-through / CV clearing / mute. `ParametricEQPointPlacement` — `findBandForNewPoint` picks the nearest free slot on a log axis, skips slots in use, returns -1 when full, and resolves out-of-range frequencies. `ParametricEQResponse` — `bandMagnitudeDb` anchor points (bell hits its gain at centre and 0 dB two decades out; cut is the exact mirror of boost; higher Q narrows the bell; a shelf sits at half its gain at the corner; zero-gain bands are flat everywhere; degenerate inputs return unity, not NaN) and `responseDb` skipping disabled bands plus adding the output trim. `ParametricEQCoefficients` — the RBJ digital biquad agrees with the analog prototype it came from within 0.6 dB, zero gain yields a literal pass-through biquad (`b == a`), and centres past Nyquist / a zero sample rate stay finite. `ParametricEQAudio` — real-audio level measurements (all-off is a straight wire; a configured-but-disabled band does not touch audio; enabling applies and disabling restores unity; ±12 dB bells move their band by ±12 dB; a narrow boost leaves distant tones alone; shelves only touch their own end; output gain scales everything; stereo channels come out identical) plus `MeasuredResponseTracksTheAnalyticCurve`, which locks the drawn curve to the measured DSP within 1 dB. `ParametricEQCV` — freq CV is exponential over the full range, gain CV maps onto ±24 dB and clamps, near-silent CV is gated to exactly the unmodulated value while CV above the gate gets through, and the shelves are provably *not* CV-modulated. `ParametricEQEdgeCases` — zero-length/zero-channel/mono buffers, processing without `prepareToPlay`, re-preparing at a new sample rate, band response independent of sample rate, state round-trip preserving enable flags, and every band exposing the full parameter set |
 | AntiClickTest | 4 | ADSR minimum release, smooth parameter transitions |
-| AutomationZipperTest / AutomationZipperCoverage | 131 | `Tests/AutomationZipperTests.cpp` — the zipper net for timeline automation. `EveryAutomatableFloatParam/AutomationZipperTest` is parameterised over **(factory module × float parameter), generated at runtime from `AIStateMapper::moduleFactoryTypeNames()` and each module's live parameter list**, so a new module or a new float parameter is swept without touching the test. Each case renders 62 blocks at 48 kHz: 50 walking the parameter's full range through the applier's own write path (`param->setValue(param->convertTo0to1(v))`, once per block), then a square wave between the two extremes — four instantaneous full-range jumps, which is the case smoothing exists for. Asserts every output sample is finite (universal, never relaxed) and that the worst inter-sample delta stays under 0.6, with per-module/per-parameter overrides carrying a written justification (Noise and Sample & Hold are staircases by construction; Bitcrusher is a quantiser; the EQ's `bandNGain` cannot absorb an instant ±24 dB coefficient swap). The three `AutomationZipperCoverage` tests are the enforcement half, mirroring `WavetableWarpAliasTest`: a factory module with float parameters that is neither configured nor excluded fails the build, a config entry naming a module with no float parameters is rejected as stale, every configured name must still resolve through the factory, and every exclusion / raised bound must carry a reason |
+| AutomationZipperTest / AutomationZipperCoverage | 131 | `Tests/Timeline/AutomationZipperTests.cpp` — the zipper net for timeline automation. `EveryAutomatableFloatParam/AutomationZipperTest` is parameterised over **(factory module × float parameter), generated at runtime from `AIStateMapper::moduleFactoryTypeNames()` and each module's live parameter list**, so a new module or a new float parameter is swept without touching the test. Each case renders 62 blocks at 48 kHz: 50 walking the parameter's full range through the applier's own write path (`param->setValue(param->convertTo0to1(v))`, once per block), then a square wave between the two extremes — four instantaneous full-range jumps, which is the case smoothing exists for. Asserts every output sample is finite (universal, never relaxed) and that the worst inter-sample delta stays under 0.6, with per-module/per-parameter overrides carrying a written justification (Noise and Sample & Hold are staircases by construction; Bitcrusher is a quantiser; the EQ's `bandNGain` cannot absorb an instant ±24 dB coefficient swap). The three `AutomationZipperCoverage` tests are the enforcement half, mirroring `WavetableWarpAliasTest`: a factory module with float parameters that is neither configured nor excluded fails the build, a config entry naming a module with no float parameters is rejected as stale, every configured name must still resolve through the factory, and every exclusion / raised bound must carry a reason |
 | EdgeCaseTests | 21 | Zero-length buffers, extreme parameters, single-sample buffers, rapid parameter changes, large buffers |
 | AudioRenderingTests | 26 | Snapshot-based tests comparing bit-perfect output against reference files; covers full chains (Osc->Filter->VCA), modulation accuracy, and External MIDI input |
 
@@ -57,20 +57,20 @@ The timeline's clock and the headless render harness built on it. No audio devic
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
 | TransportServiceTest | 21 | `Source/Transport/TransportService.*` in isolation — command FIFO ordering and drop-when-full, play/stop/locate/loop/BPM/time-signature, `BlockTimeInfo` per block, loop wrap (including the exact-boundary and tiny-loop cases), beats-are-canonical behaviour across BPM and sample-rate changes, `getPositionSnapshot()` / `juce::AudioPlayHead` reads staying consistent, including under concurrent readers |
-| AudioEngineTransportTest | 6 | `Tests/AudioEngineTransportTests.cpp` — the transport's wiring inside `AudioEngine`: exactly one `tick()` per rendered block in both host modes, a stopped transport freezing the position, `prepareForHost` handing the host sample rate to the transport, the playhead installed once on the graph and re-applied by JUCE to every node (including nodes re-created by an undo restore), a node reading block-start position through `getPlayHead()`, latency reported not compensated |
-| OfflineTransportDriverTest | 9 | `Tests/OfflineTransportDriverTests.cpp` — `synth::OfflineTransportDriver`: `renderBlocks(n)` returns exactly n×blockSize samples and advances the transport by one block per block; `renderToBeat` renders whole blocks until `endPpq` reaches the target (from beat 0 that is exactly `ceil(sampleFromBeat(beat) / blockSize) × blockSize` samples, overshooting by < 1 block) and returns an empty buffer without spinning when the transport is stopped or the target is behind the playhead; the per-block callback sees consecutive `BlockTimeInfo` (block start samples 0, 512, 1024 …); rendered audio is finite and in range; a free-running oscillator patched to Audio Output is audible **whether or not the transport is playing** — the transport is a conductor, not the engine. `renderBlocks`/`renderToBeat` delegate to the non-accumulating `streamBlocks`/`streamToBeat`, so every assertion here covers both shapes; the streaming pair's own consumer is `BounceExporterTest`; the optional pre-block `BlockGate` ends either stream* loop **without rendering the refused block** (the transport's position proves it never ran) and no gate means every requested block |
-| BounceExporterTest | 13 | `Tests/BounceExporterTests.cpp` — the offline bounce. Everything asserts on the **file**, opened with JUCE's own `WavAudioFormat` reader, using the same RMS windows and guard bands `TimelineE2ETest` uses on the in-memory render (the patch is duplicated from it, plus an optional fully-wet Delay for the tail): a `[0,8]`-beat bounce is exactly `ceil(sampleFromBeat(8) / blockSize) × blockSize` = 375 × 512 samples with the requested rate/depth/channels, and `bitDepth 32` really is an IEEE-float WAV; energy sits exactly inside each note window and each gap is silent; a 1 s tail is still ringing where the range ended and decays across it (RMS of the first 100 ms > the last 100 ms) while `tailSeconds = 0` stops dead at the range with the same Delay still ringing; two fixtures bounced once each are **byte-identical**; a bounce taken from a playing transport at beat 3 leaves the playhead at beat 3, **stopped**, the engine back on its previous prepare format and Track In still audible on the next live render; cancelling from the progress callback leaves neither the target nor a stray temp file and still restores the transport; a nonexistent destination directory fails with a message, writes nothing, creates no directories and leaves the engine renderable; invalid options (backwards range, 20-bit depth, zero sample rate) are rejected before anything is written; progress is non-decreasing, ≤ 1 and lands on exactly 1.0 over a range + tail render. Three more cover the parts a synth-only patch cannot reach: a bounced **Track Audio** clip is bit-exact against its 32-bit float asset from its **first frame** with `streamDropouts == 0` (with the prefetch thread paused, so the bounce's own `waitUntilPrimed` call is the only thing that ever fills a ring), the same holds for a range starting two beats *into* a clip with the **real** prefetch thread running, and cancelling on the first tail block writes exactly range + 1 blocks |
-| StemExportTest | 11 | `Tests/StemExportTests.cpp` — offline stem export (P9-8, `docs/mixer.md` §5.12): N strips produce N files named `"NN - <name>.<ext>"`, all the same length; THE correctness check — `sum(stems)` reproduces the pre-Master mix, proven against a **non-unity** Master gain (+6 dB) against a normal `BounceExporterTest`-style bounce of the same patch, since a post-Master tap would fail by exactly that gain factor, and separately with a non-zero tail so `StemSession::stepTail` is exercised too (every stem grows by the tail's block count and the sum property holds through it); non-default strip gain/pan land in each stem exactly (proving the tap is post-fader); a muted strip's file is silent while the sum property still holds; a soloed strip during export still writes every strip (non-soloed ones silent) and leaves solo/mute state unchanged; a no-strips patch fails with a clear message before touching the destination; cancellation and an unwritable/blocked destination leave no stem files, never touch a pre-existing file, and disarm every `ChannelStripModule` tap; two module-level tests pin the tap's exact post-fader/muted/solo-gated output directly |
-| TimelineE2ETest | 6 | `Tests/TimelineE2ETests.cpp` — the clip → Track In → Poly MIDI → Oscillator/VCA → Audio Output regression net every later scheduling change must keep tripping: rendered RMS is high exactly inside each timeline note's window and silent exactly inside each gap (guard bands ±2400/4800 samples absorb the ADSR-free chain's only shaping, PolyMidi's 5 ms gate smoothing); a stopped transport, a muted track and a bypassed Track In all render full silence; a looped range re-fires the same note every pass; the note's audio frequency (not just its gate) measures 440 Hz end to end |
-| AutomationApplierTest | 10 | `Tests/AutomationApplierTests.cpp` — the engine-level net for a `TimelineDoc` lane reaching a live `juce::RangedAudioParameter`: a ramp tracked block by block against the transport's beat position; a stopped transport leaving the knob untouched; deleting the bound node mid-render staying safe (the binding's refcounted `Node::Ptr`) and dropping out on the next `publishTimeline`; unresolvable lanes (unknown uuid, unknown paramID) producing no binding without poisoning the resolvable ones; a lane authored against a wider range clamping at the parameter's endpoints; 100 publishes interleaved with render passes swapping tables cleanly and reclaiming retirees. Plus three record-mode branches driven against a hand-built binding table in `Tests/AutomationRecordTests.cpp` (no engine needed): an `Off` lane never writing, a `Write` lane reading like `Read` until global record is armed and going silent once it is, and a `Touch` lane yielding to a claimed parameter and resuming the block after the claim is released |
-| AutomationRecordTest | 15 | `Tests/AutomationRecordTests.cpp` — the capture half. Mostly headless (bare `TransportService` + a standalone `FilterModule` for a real parameter): a `Touch` gesture committing as **exactly one** undo step whose undo restores the lane byte for byte; the programmatic-write guard (`setValueNotifyingHost` with no gesture captures nothing, on an armed and rolling `Touch` lane) and `ScopedProgrammaticApply` suppressing even a fully gestured write without latching; RDP thinning collapsing 100 collinear points to 2 and keeping a triangle's corner at its **exact** captured value; `Write` overwriting its span, closing with a terminal anchor and auto-dropping to `Touch` on stop *without* undo re-arming it; `Latch` still capturing after the gesture ends; an empty `Touch` gesture being a total no-op vs. an empty `Write` span writing flat anchors; ring overflow raising the flag and still committing; `recordMode` round-tripping through `toVar`/`fromVar` (absent ⇒ `Read`, out of range ⇒ rejected) and reaching `TimelineSnapshot::LaneInfo`. Two hosted-engine tests: `ApplierRespectsClaims` and `RecorderNeverHearsTheApplier` (200 blocks of playback into an armed lane capture nothing) |
-| AutomationSlicingTest | 5 | `Tests/AutomationSlicingTests.cpp` — the control-rate slicing flag. The flag defaults off; with it on, automation leads the unsliced value by exactly `slope × (blockSize − 64) / samplesPerBeat` at the end of every block (it really does slice); a per-sample chain (Osc → Filter → VCA, DC from a Macro bank into the VCA's CV) renders **bit-identical** audio either way; a Chorus with an LFO on its block-rate Rate CV does **not** — that test asserts only finiteness/audibility and *reports* the measured difference, which is the documented reason the flag ships off; plus a cost tripwire over a 49-node patch that fails only on a >4× blow-up |
+| AudioEngineTransportTest | 6 | `Tests/Engine/AudioEngineTransportTests.cpp` — the transport's wiring inside `AudioEngine`: exactly one `tick()` per rendered block in both host modes, a stopped transport freezing the position, `prepareForHost` handing the host sample rate to the transport, the playhead installed once on the graph and re-applied by JUCE to every node (including nodes re-created by an undo restore), a node reading block-start position through `getPlayHead()`, latency reported not compensated |
+| OfflineTransportDriverTest | 9 | `Tests/Engine/OfflineTransportDriverTests.cpp` — `synth::OfflineTransportDriver`: `renderBlocks(n)` returns exactly n×blockSize samples and advances the transport by one block per block; `renderToBeat` renders whole blocks until `endPpq` reaches the target (from beat 0 that is exactly `ceil(sampleFromBeat(beat) / blockSize) × blockSize` samples, overshooting by < 1 block) and returns an empty buffer without spinning when the transport is stopped or the target is behind the playhead; the per-block callback sees consecutive `BlockTimeInfo` (block start samples 0, 512, 1024 …); rendered audio is finite and in range; a free-running oscillator patched to Audio Output is audible **whether or not the transport is playing** — the transport is a conductor, not the engine. `renderBlocks`/`renderToBeat` delegate to the non-accumulating `streamBlocks`/`streamToBeat`, so every assertion here covers both shapes; the streaming pair's own consumer is `BounceExporterTest`; the optional pre-block `BlockGate` ends either stream* loop **without rendering the refused block** (the transport's position proves it never ran) and no gate means every requested block |
+| BounceExporterTest | 13 | `Tests/Engine/BounceExporterTests.cpp` — the offline bounce. Everything asserts on the **file**, opened with JUCE's own `WavAudioFormat` reader, using the same RMS windows and guard bands `TimelineE2ETest` uses on the in-memory render (the patch is duplicated from it, plus an optional fully-wet Delay for the tail): a `[0,8]`-beat bounce is exactly `ceil(sampleFromBeat(8) / blockSize) × blockSize` = 375 × 512 samples with the requested rate/depth/channels, and `bitDepth 32` really is an IEEE-float WAV; energy sits exactly inside each note window and each gap is silent; a 1 s tail is still ringing where the range ended and decays across it (RMS of the first 100 ms > the last 100 ms) while `tailSeconds = 0` stops dead at the range with the same Delay still ringing; two fixtures bounced once each are **byte-identical**; a bounce taken from a playing transport at beat 3 leaves the playhead at beat 3, **stopped**, the engine back on its previous prepare format and Track In still audible on the next live render; cancelling from the progress callback leaves neither the target nor a stray temp file and still restores the transport; a nonexistent destination directory fails with a message, writes nothing, creates no directories and leaves the engine renderable; invalid options (backwards range, 20-bit depth, zero sample rate) are rejected before anything is written; progress is non-decreasing, ≤ 1 and lands on exactly 1.0 over a range + tail render. Three more cover the parts a synth-only patch cannot reach: a bounced **Track Audio** clip is bit-exact against its 32-bit float asset from its **first frame** with `streamDropouts == 0` (with the prefetch thread paused, so the bounce's own `waitUntilPrimed` call is the only thing that ever fills a ring), the same holds for a range starting two beats *into* a clip with the **real** prefetch thread running, and cancelling on the first tail block writes exactly range + 1 blocks |
+| StemExportTest | 11 | `Tests/Engine/StemExportTests.cpp` — offline stem export (P9-8, `docs/mixer.md` §5.12): N strips produce N files named `"NN - <name>.<ext>"`, all the same length; THE correctness check — `sum(stems)` reproduces the pre-Master mix, proven against a **non-unity** Master gain (+6 dB) against a normal `BounceExporterTest`-style bounce of the same patch, since a post-Master tap would fail by exactly that gain factor, and separately with a non-zero tail so `StemSession::stepTail` is exercised too (every stem grows by the tail's block count and the sum property holds through it); non-default strip gain/pan land in each stem exactly (proving the tap is post-fader); a muted strip's file is silent while the sum property still holds; a soloed strip during export still writes every strip (non-soloed ones silent) and leaves solo/mute state unchanged; a no-strips patch fails with a clear message before touching the destination; cancellation and an unwritable/blocked destination leave no stem files, never touch a pre-existing file, and disarm every `ChannelStripModule` tap; two module-level tests pin the tap's exact post-fader/muted/solo-gated output directly |
+| TimelineE2ETest | 6 | `Tests/Timeline/TimelineE2ETests.cpp` — the clip → Track In → Poly MIDI → Oscillator/VCA → Audio Output regression net every later scheduling change must keep tripping: rendered RMS is high exactly inside each timeline note's window and silent exactly inside each gap (guard bands ±2400/4800 samples absorb the ADSR-free chain's only shaping, PolyMidi's 5 ms gate smoothing); a stopped transport, a muted track and a bypassed Track In all render full silence; a looped range re-fires the same note every pass; the note's audio frequency (not just its gate) measures 440 Hz end to end |
+| AutomationApplierTest | 10 | `Tests/Timeline/AutomationApplierTests.cpp` — the engine-level net for a `TimelineDoc` lane reaching a live `juce::RangedAudioParameter`: a ramp tracked block by block against the transport's beat position; a stopped transport leaving the knob untouched; deleting the bound node mid-render staying safe (the binding's refcounted `Node::Ptr`) and dropping out on the next `publishTimeline`; unresolvable lanes (unknown uuid, unknown paramID) producing no binding without poisoning the resolvable ones; a lane authored against a wider range clamping at the parameter's endpoints; 100 publishes interleaved with render passes swapping tables cleanly and reclaiming retirees. Plus three record-mode branches driven against a hand-built binding table in `Tests/Timeline/AutomationRecordTests.cpp` (no engine needed): an `Off` lane never writing, a `Write` lane reading like `Read` until global record is armed and going silent once it is, and a `Touch` lane yielding to a claimed parameter and resuming the block after the claim is released |
+| AutomationRecordTest | 15 | `Tests/Timeline/AutomationRecordTests.cpp` — the capture half. Mostly headless (bare `TransportService` + a standalone `FilterModule` for a real parameter): a `Touch` gesture committing as **exactly one** undo step whose undo restores the lane byte for byte; the programmatic-write guard (`setValueNotifyingHost` with no gesture captures nothing, on an armed and rolling `Touch` lane) and `ScopedProgrammaticApply` suppressing even a fully gestured write without latching; RDP thinning collapsing 100 collinear points to 2 and keeping a triangle's corner at its **exact** captured value; `Write` overwriting its span, closing with a terminal anchor and auto-dropping to `Touch` on stop *without* undo re-arming it; `Latch` still capturing after the gesture ends; an empty `Touch` gesture being a total no-op vs. an empty `Write` span writing flat anchors; ring overflow raising the flag and still committing; `recordMode` round-tripping through `toVar`/`fromVar` (absent ⇒ `Read`, out of range ⇒ rejected) and reaching `TimelineSnapshot::LaneInfo`. Two hosted-engine tests: `ApplierRespectsClaims` and `RecorderNeverHearsTheApplier` (200 blocks of playback into an armed lane capture nothing) |
+| AutomationSlicingTest | 5 | `Tests/Timeline/AutomationSlicingTests.cpp` — the control-rate slicing flag. The flag defaults off; with it on, automation leads the unsliced value by exactly `slope × (blockSize − 64) / samplesPerBeat` at the end of every block (it really does slice); a per-sample chain (Osc → Filter → VCA, DC from a Macro bank into the VCA's CV) renders **bit-identical** audio either way; a Chorus with an LFO on its block-rate Rate CV does **not** — that test asserts only finiteness/audibility and *reports* the measured difference, which is the documented reason the flag ships off; plus a cost tripwire over a 49-node patch that fails only on a >4× blow-up |
 
 **Writing an engine-level timeline test:** use `synth::OfflineTransportDriver` rather than hand-rolling a `processHostBlock` loop. Construct the engine `Hosted`, `initialise()` it, wire whatever the patch needs (before the driver is constructed — its constructor calls `prepareForHost`, which prepares the nodes), then `renderBlocks` / `renderToBeat` and assert on the returned buffer or on the `BlockTimeInfo` stream the block callback hands you. At 48000 Hz / 120 BPM one beat is exactly 24000 samples, which keeps the expected sample counts integers. The default patch may legitimately be silent with no MIDI input, so a non-silence assertion needs a source that runs without MIDI (an `OscillatorModule` is a drone in mono mode) patched to the graph's Audio Output node.
 
 ### Audio input / device state tests (11 tests)
 
-`Tests/AudioInputTests.cpp`. The first tests in the repo that drive `AudioEngine`'s **device-callback** half (before them, no test did — see the apology in `StatusBarTests.cpp`'s `MasterMute_ZeroesOutput`). The fake device itself lives in `Tests/FakeAudioIODevice.h` so the following suite drives the same one.
+`Tests/Engine/AudioInputTests.cpp`. The first tests in the repo that drive `AudioEngine`'s **device-callback** half (before them, no test did — see the apology in `StatusBarTests.cpp`'s `MasterMute_ZeroesOutput`). The fake device itself lives in `Tests/FakeAudioIODevice.h` so the following suite drives the same one.
 
 **The `FakeAudioIODevice` pattern.** A test-local `juce::AudioIODevice` subclass that opens nothing, **starts no thread** (`start()` ignores the callback it is handed) and reports fixed numbers — name "Fake", type "Test", 48000 Hz / 512 samples, settable active input/output channel `BigInteger`s, latency 64 in / 128 out. The test then calls `engine.audioDeviceAboutToStart(&fake)` and `engine.audioDeviceIOCallbackWithContext(...)` **by hand**, in the order a real device would, with synthetic input arrays it can assert against — so there is exactly one thread and every block lands where the test put it. Extend this fake rather than writing a second one. The engine is `HostMode::Standalone` here (that is the mode with a device callback) but `initialise()` is **never** called on it — that is still the rule; the two tests that do exercise `initialise()` subclass the engine and override the `initialiseDevices` seam, which is the only part of it that touches hardware.
 
@@ -88,7 +88,7 @@ The timeline's clock and the headless render harness built on it. No audio devic
 
 ### Audio Input module tests (11 tests)
 
-`Tests/AudioInputModuleTests.cpp` — the module that replaced the graph's raw `audioInputNode`. Two layers: **module-level** tests drive an `AudioInputModule` directly with a bare `synth::TransportService` on its playhead (exactly what the engine does per block, minus the engine — one of them, `NoTransportRendersSilence`, is the no-playhead caveat described in [`architecture.md § AudioEngine`](architecture.md#1-audioengine)), and **engine-level** tests drive the whole path through a real `AudioEngine`, exercising the playhead the engine itself installs.
+`Tests/Modules/AudioInputModuleTests.cpp` — the module that replaced the graph's raw `audioInputNode`. Two layers: **module-level** tests drive an `AudioInputModule` directly with a bare `synth::TransportService` on its playhead (exactly what the engine does per block, minus the engine — one of them, `NoTransportRendersSilence`, is the no-playhead caveat described in [`architecture.md § AudioEngine`](architecture.md#1-audioengine)), and **engine-level** tests drive the whole path through a real `AudioEngine`, exercising the playhead the engine itself installs.
 
 | What it covers | |
 |-------|-------|
@@ -106,7 +106,7 @@ The timeline's clock and the headless render harness built on it. No audio devic
 
 ### Rec Tap / audio recording tests (13 tests)
 
-`Tests/RecordTapTests.cpp`. Three layers. **Module-level** tests drive a `RecordTapModule` directly (no engine, no device, no graph), exactly the way `MidiRecorderTests.cpp` drives `synth::MidiRecorder`. **Registration** tests are the internal-only checklist Track In established. **Flow** tests drive `MainComponent` with the device callback suspended, the transport ticked by hand and the tap's `processBlock` called directly. The last two groups exercise the factory entry and the record wiring, both unconditional, always-compiled code.
+`Tests/Timeline/RecordTapTests.cpp`. Three layers. **Module-level** tests drive a `RecordTapModule` directly (no engine, no device, no graph), exactly the way `MidiRecorderTests.cpp` drives `synth::MidiRecorder`. **Registration** tests are the internal-only checklist Track In established. **Flow** tests drive `MainComponent` with the device callback suspended, the transport ticked by hand and the tap's `processBlock` called directly. The last two groups exercise the factory entry and the record wiring, both unconditional, always-compiled code.
 
 | What it covers | |
 |-------|-------|
@@ -124,7 +124,7 @@ The timeline's clock and the headless render harness built on it. No audio devic
 
 ### Mixer channel tests (32 tests)
 
-`Tests/ChannelStripTests.cpp` and `Tests/MixerSoloTests.cpp` — the P9-2 `Channel Strip` / `Master` nodes and the solo gate ([`mixer.md`](mixer.md)). Headless. **Module-level** tests (`ChannelStripTest`, `MasterModuleTest`) drive the processors directly, with a bare `synth::TransportService` on the playhead when the gate matters. **Engine-level** `MixerSoloTest` cases build a hosted `AudioEngine` rig (two strips into Master's Mix, one constant source into Direct) and render through it, so the per-block gate is exercised exactly as the engine publishes it. The `MasterSplice*` cases give their bare graph `setPlayConfigDetails(2, 2, ...)` first — without it Audio Output has zero channels and every connection into it is silently refused. Channel macro bypass is covered by `MacroBypassMute.ChannelMacroBypassSkipsSourceAndStripButMuteIncludesTheStrip`.
+`Tests/Mixer/ChannelStripTests.cpp` and `Tests/Mixer/MixerSoloTests.cpp` — the P9-2 `Channel Strip` / `Master` nodes and the solo gate ([`mixer.md`](mixer.md)). Headless. **Module-level** tests (`ChannelStripTest`, `MasterModuleTest`) drive the processors directly, with a bare `synth::TransportService` on the playhead when the gate matters. **Engine-level** `MixerSoloTest` cases build a hosted `AudioEngine` rig (two strips into Master's Mix, one constant source into Direct) and render through it, so the per-block gate is exercised exactly as the engine publishes it. The `MasterSplice*` cases give their bare graph `setPlayConfigDetails(2, 2, ...)` first — without it Audio Output has zero channels and every connection into it is silently refused. Channel macro bypass is covered by `MacroBypassMute.ChannelMacroBypassSkipsSourceAndStripButMuteIncludesTheStrip`.
 
 | What it covers | |
 |-------|-------|
@@ -149,7 +149,7 @@ The timeline's clock and the headless render harness built on it. No audio devic
 | `buildChannelForFeeds` exit handling (T184) | exit edges are removed before the chain is built, and wired through to a freshly spliced Master (`RemovesExitEdgesAndWiresThroughToANewMaster`) or an existing one, clearing prior Direct feeds (`ReusesAnExistingMasterAndClearsDirectFeeds`) |
 | `ChannelFlowTest.AutoChannelOnConnect_*` (T184, real mouse drag) | toggle ON builds exactly one channel as one undo step (`ToggleOnBuildsOneChannelAsOneUndoStep`); toggle OFF only makes the connection, byte-identical to pre-T184 behaviour (`ToggleOffOnlyConnectsNoChannel`); an instrument that already has a channel gets nothing new when a second Track In connects (`AlreadyChanneledInstrumentGetsNoNewStrip`); the new EQ/Compressor/Strip join the instrument's existing macro when boxing applies (`NewChainNodesJoinTheInstrumentsExistingMacro`) |
 
-**`ChannelFlowTest` file layout.** The suite is split by topic under `Tests/ChannelFlow/`, all sharing the `ChannelFlowTest` fixture, `MockProviderCFT`, the plugin-scan stub backend and the FRO25 rig helpers in `Tests/ChannelFlow/ChannelFlowTestFixture.h` (header-only, not built on its own):
+**`ChannelFlowTest` file layout.** The suite is split by topic under `Tests/Mixer/ChannelFlow/`, all sharing the `ChannelFlowTest` fixture, `MockProviderCFT`, the plugin-scan stub backend and the FRO25 rig helpers in `Tests/Mixer/ChannelFlow/ChannelFlowTestFixture.h` (header-only, not built on its own):
 
 | File | Covers |
 |------|--------|
@@ -163,7 +163,7 @@ The timeline's clock and the headless render harness built on it. No audio devic
 
 ### Audio clip playback tests (24 tests)
 
-`Tests/AudioClipPlaybackTests.cpp`. Five layers. Playback tests render through `synth::OfflineTransportDriver` exactly the way `TimelineE2ETests.cpp` does, but assert **bit-exact sample content** rather than RMS windows, which two things make possible: the test WAV is 32-bit IEEE float carrying exactly-representable values (`n / 65536`), and the streamer's prefetch thread is **paused** (`setPrefetchPausedForTest`) and driven by `pumpForTest()` from the render loop's per-block callback. There is no sleep and no "eventually the ring fills" wait anywhere in the file.
+`Tests/Timeline/AudioClipPlaybackTests.cpp`. Five layers. Playback tests render through `synth::OfflineTransportDriver` exactly the way `TimelineE2ETests.cpp` does, but assert **bit-exact sample content** rather than RMS windows, which two things make possible: the test WAV is 32-bit IEEE float carrying exactly-representable values (`n / 65536`), and the streamer's prefetch thread is **paused** (`setPrefetchPausedForTest`) and driven by `pumpForTest()` from the render loop's per-block callback. There is no sleep and no "eventually the ring fills" wait anywhere in the file.
 
 | What it covers | |
 |-------|-------|
@@ -187,7 +187,7 @@ The timeline's clock and the headless render harness built on it. No audio devic
 
 ### Hosted plugin tests (15 tests)
 
-`Tests/HostedPluginTests.cpp`. Not gated: hosting is independent of the timeline. **No third-party binary is involved.** `Tests/StubPluginInstance.h` supplies a `juce::AudioPluginInstance` subclass (constructor-set channel counts, a ×0.5 gain marker, a round-trippable state blob, a settable latency, and a record of the thread its destructor ran on) plus a `StubBackend` that resolves any identity to it. The stub matches the real formats' threading — `MessageManager::callAsync`, never re-entrant — so every test pumps the message loop with the bounded-poll idiom from `AccountServiceTests`.
+`Tests/Plugin/HostedPluginTests.cpp`. Not gated: hosting is independent of the timeline. **No third-party binary is involved.** `Tests/StubPluginInstance.h` supplies a `juce::AudioPluginInstance` subclass (constructor-set channel counts, a ×0.5 gain marker, a round-trippable state blob, a settable latency, and a record of the thread its destructor ran on) plus a `StubBackend` that resolves any identity to it. The stub matches the real formats' threading — `MessageManager::callAsync`, never re-entrant — so every test pumps the message loop with the bounded-poll idiom from `AccountServiceTests`.
 
 | What it covers | |
 |-------|-------|
@@ -243,9 +243,9 @@ Test UI component interactions using in-process construction (no window, no disp
 | PreferencesSettingsTabTests | 50 | Preferences tab defaults (`NewAndUnwired`, double-click disconnect on) and persistence/push-to-`GraphEditor` for every toggle, including the T184 `mixerAutoCreateChannelOnConnect` toggle (default ON, persists `"0"`/`"1"`, pushes to a live `GraphEditor`); the Dual I/O per-module popup (`dualIOCapableModuleTypes()`-derived rows, override-vs-global consumption in `GraphEditor::applyDefaultDualIOForNewModule`); the live search filter (label/tooltip matching, grouped-row visibility, divider collapse, Esc-to-clear via `onEscapeKey`); the "Scroll up to zoom in" checkbox's boolean-key persistence (migration-free across its round 3 relabel, round 5 dropdown detour and round 6 revert) and its OS-derived `platformCommandKeyName()` modifier text; muted-hint-label layout (two-line-tall box, no horizontal squeeze); the tab's own `wantsKeyboardFocus` so its search field cannot steal initial focus; paint/resize smoke |
 | ShortcutManagerTest | 11 | Default bindings, reverse lookup, conflict detection, persistence round-trip, reset to defaults, display strings. `CopyPasteDuplicateUseThePlatformStandardKeys` pins Cmd+C/V/D. Two table-wide invariants that stop a new action from shipping broken: `EveryDefaultBindingIsUnique` (a duplicate binding silently shadows one of the two in `getActionForKeyPress`) and `EveryActionIdHasABindingACommandAndADescription` (an action with no `AppCommands` mapping binds a key that does nothing) |
 
-**Poly connection creation coverage.** `GraphEditorTest` covers poly fan-out on drag (dragging a cable between two poly jacks creates all N per-voice connections) and poly-toggle rewire (toggling a module's `poly` parameter re-anchors its existing cables via `rewireForPolyChange`). `Tests/LogicalPortTests.cpp` adds pure, headless coverage of jack-target resolution — `ModuleBase::getJackTargets` and `GraphEditor::resolvePolyLink`'s pairing/scoring rules — independent of the audio graph.
+**Poly connection creation coverage.** `GraphEditorTest` covers poly fan-out on drag (dragging a cable between two poly jacks creates all N per-voice connections) and poly-toggle rewire (toggling a module's `poly` parameter re-anchors its existing cables via `rewireForPolyChange`). `Tests/Engine/LogicalPortTests.cpp` adds pure, headless coverage of jack-target resolution — `ModuleBase::getJackTargets` and `GraphEditor::resolvePolyLink`'s pairing/scoring rules — independent of the audio graph.
 
-**`GraphEditorTest`/`SmartConnection*Test` file layout.** The suite is split by topic under `Tests/GraphEditor/`, all sharing the `GraphEditorTest` fixture and drag/connection helpers in `Tests/GraphEditor/GraphEditorTestHelpers.h` (header-only, not built on its own):
+**`GraphEditorTest`/`SmartConnection*Test` file layout.** The suite is split by topic under `Tests/UI/Graph/GraphEditor/`, all sharing the `GraphEditorTest` fixture and drag/connection helpers in `Tests/UI/Graph/GraphEditor/GraphEditorTestHelpers.h` (header-only, not built on its own):
 
 | File | Covers |
 |------|--------|
@@ -261,7 +261,7 @@ Test UI component interactions using in-process construction (no window, no disp
 | `GraphEditorSmartConnectionMatrixTests.cpp` | The three `TestWithParam` matrices: every FX insertable at the gap, vertical aim, and the full gesture-matrix contract table |
 | `GraphEditorNodeActionsTests.cpp` | Per-node actions/identity: module title rename, double-click port disconnect (issue #216), output-card identity, Locate Master (FRO45) |
 
-**`MacroContainerTest`/`MacroCollapse`/etc. file layout.** Split by topic under `Tests/MacroContainer/`, sharing `addModuleAt`/`uuidOf`/`nodeIdForUuid`/`findComponent`/`makeCanvasMouseEvent` in `Tests/MacroContainer/MacroContainerTestHelpers.h` (header-only, not built on its own):
+**`MacroContainerTest`/`MacroCollapse`/etc. file layout.** Split by topic under `Tests/Macros/MacroContainer/`, sharing `addModuleAt`/`uuidOf`/`nodeIdForUuid`/`findComponent`/`makeCanvasMouseEvent` in `Tests/Macros/MacroContainer/MacroContainerTestHelpers.h` (header-only, not built on its own):
 
 | File | Covers |
 |------|--------|
@@ -269,7 +269,7 @@ Test UI component interactions using in-process construction (no window, no disp
 | `MacroContainerGeometryTests.cpp` | Geometry/canvas: collapse, group-or-toggle dispatch, hull/chip bounds, chip drag (incl. the real mouse path), rename-dialog guard, undo/redo, boundary-cable re-anchoring, the untrusted-patch trust boundary |
 | `MacroContainerInteractionTests.cpp` | Chrome/interaction: collapse button, recolour (preview + one-undo-step commit), card double-click-to-rename vs. expand, member right-click context menu, card right-click membership menu |
 
-**`AIChatComponentTest` file layout.** Split by topic under `Tests/AIChatComponent/`, sharing the mock `AIProvider`s, `findMessageList`/`findDescendantWithText`, and the `AIChatComponentTest` fixture in `Tests/AIChatComponent/AIChatComponentTestFixture.h` (header-only, not built on its own):
+**`AIChatComponentTest` file layout.** Split by topic under `Tests/UI/Assistant/AIChatComponent/`, sharing the mock `AIProvider`s, `findMessageList`/`findDescendantWithText`, and the `AIChatComponentTest` fixture in `Tests/UI/Assistant/AIChatComponent/AIChatComponentTestFixture.h` (header-only, not built on its own):
 
 | File | Covers |
 |------|--------|
@@ -277,7 +277,7 @@ Test UI component interactions using in-process construction (no window, no disp
 | `AIChatComponentHistoryTests.cpp` | P6-8/P6-9 history: unified history UI, upsell/downgrade strips, per-plan backend selection, clear-history, restoring a saved conversation, local save-on-every-exchange, rating sync, wrapped-height UX-polish regressions |
 | `AIChatComponentArrangeTests.cpp` | Arrange mode: selector gating on the timeline preference, explicit capability/prompt routing, validated/rejected timeline-card response flow |
 
-**`MacroAutoPort*Test` file layout.** Split by topic under `Tests/MacroAutoPort/`, sharing the test module stand-ins and graph/mouse helpers in `Tests/MacroAutoPort/MacroAutoPortTestHelpers.h` (header-only, not built on its own):
+**`MacroAutoPort*Test` file layout.** Split by topic under `Tests/Macros/MacroAutoPort/`, sharing the test module stand-ins and graph/mouse helpers in `Tests/Macros/MacroAutoPort/MacroAutoPortTestHelpers.h` (header-only, not built on its own):
 
 | File | Covers |
 |------|--------|
@@ -285,7 +285,7 @@ Test UI component interactions using in-process construction (no window, no disp
 | `MacroAutoPortUngroupTests.cpp` | Ungroup removes auto-created ports and splices cables back; presentation-count/tooltip rules; the auto-create-ports preference's modal-firing conditions |
 | `MacroAutoPortDeleteTests.cpp` | T148/T154: auto-delete a macro port once its last cable is gone, via `disconnectCable`/`disconnectPort` and via whole-node deletion |
 
-**PianoRoll file layout.** The piano-roll editor's suite (234 tests) is split by topic under `Tests/PianoRoll/`, all sharing the `PianoRollFixture` (a `CountingRoll`-backed roll wired to a bare `TimelineDoc` + `AppUndoManager`, no `TimelinePanelComponent` needed) and mouse/keyboard-gesture helpers in `Tests/PianoRoll/PianoRollTestHelpers.h` (header-only, not built on its own):
+**PianoRoll file layout.** The piano-roll editor's suite (234 tests) is split by topic under `Tests/UI/PianoRoll/`, all sharing the `PianoRollFixture` (a `CountingRoll`-backed roll wired to a bare `TimelineDoc` + `AppUndoManager`, no `TimelinePanelComponent` needed) and mouse/keyboard-gesture helpers in `Tests/UI/PianoRoll/PianoRollTestHelpers.h` (header-only, not built on its own):
 
 | File | Covers |
 |------|--------|
@@ -341,7 +341,7 @@ Test persistence, serialization, and state restoration.
 
 ### Output Level Tests (18 tests)
 
-`Tests/OutputLevelTests.cpp` — the shared opt-in output-level stage (`ModuleBase::addOutputLevelParameter` / `prepareOutputLevel` / `applyOutputLevel`) and the modules that adopt it. Headless.
+`Tests/Engine/OutputLevelTests.cpp` — the shared opt-in output-level stage (`ModuleBase::addOutputLevelParameter` / `prepareOutputLevel` / `applyOutputLevel`) and the modules that adopt it. Headless.
 
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
@@ -350,7 +350,7 @@ Test persistence, serialization, and state restoration.
 
 ### Stereo Declaration Tests (8 tests)
 
-`Tests/StereoVoiceModuleTests.cpp` (suite `StereoDeclaration`) — the Dual I/O toggle is granted by `ModuleBase`'s constructor from a module's channel shape (`ModuleBase::StereoAudio`), so these sweep the whole module factory rather than checking modules one at a time. Headless.
+`Tests/Modules/StereoVoiceModuleTests.cpp` (suite `StereoDeclaration`) — the Dual I/O toggle is granted by `ModuleBase`'s constructor from a module's channel shape (`ModuleBase::StereoAudio`), so these sweep the whole module factory rather than checking modules one at a time. Headless.
 
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
@@ -358,7 +358,7 @@ Test persistence, serialization, and state restoration.
 
 ### Module Adoption Tests (3 tests)
 
-`Tests/ModuleAdoptionTests.cpp` — enforces the standing rule that **every module whose output carries audio has a level control**. Headless.
+`Tests/Modules/ModuleAdoptionTests.cpp` — enforces the standing rule that **every module whose output carries audio has a level control**. Headless.
 
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
@@ -366,7 +366,7 @@ Test persistence, serialization, and state restoration.
 
 ### Layout Tests (~8 tests)
 
-Pure/headless tests for the grid-layout and anti-overlap helpers in `Tests/LayoutUtilTests.cpp`.
+Pure/headless tests for the grid-layout and anti-overlap helpers in `Tests/UI/Layout/LayoutUtilTests.cpp`.
 No JUCE GUI components required.
 
 | Suite | Tests | What it covers |
@@ -375,7 +375,7 @@ No JUCE GUI components required.
 
 ### Theme Tests (~30 tests)
 
-Tests for the theme system — `Tests/ThemeTests.cpp`. All headless.
+Tests for the theme system — `Tests/UI/Theme/ThemeTests.cpp`. All headless.
 
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
@@ -388,7 +388,7 @@ Tests for the theme system — `Tests/ThemeTests.cpp`. All headless.
 
 ### Cable Colour Tests (22 tests)
 
-Suite `Tests/CableColourTests.cpp` covering `Source/UI/Graph/CableColour.h` and the cable
+Suite `Tests/UI/Graph/CableColourTests.cpp` covering `Source/UI/Graph/CableColour.h` and the cable
 enumeration / hit-testing added to `GraphEditor`. Layered: the pure resolver needs no GUI at
 all, the canvas fixture builds a real two-module patch headlessly.
 
@@ -403,7 +403,7 @@ all, the canvas fixture builds a real two-module patch headlessly.
 
 ### Icon Library Tests (~11 tests)
 
-Suite `Tests/IconLibraryTests.cpp` covering `Source/UI/Theme/IconLibrary.h/.cpp`.
+Suite `Tests/UI/Theme/IconLibraryTests.cpp` covering `Source/UI/Theme/IconLibrary.h/.cpp`.
 
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
@@ -411,7 +411,7 @@ Suite `Tests/IconLibraryTests.cpp` covering `Source/UI/Theme/IconLibrary.h/.cpp`
 
 ### Status Bar Tests (~9 tests)
 
-New suite `Tests/StatusBarTests.cpp` covering `Source/UI/Chrome/StatusBarComponent.h/.cpp` and AudioEngine additions.
+New suite `Tests/UI/Chrome/StatusBarTests.cpp` covering `Source/UI/Chrome/StatusBarComponent.h/.cpp` and AudioEngine additions.
 
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
@@ -419,7 +419,7 @@ New suite `Tests/StatusBarTests.cpp` covering `Source/UI/Chrome/StatusBarCompone
 
 ### Frequency Response Tests (~50 tests)
 
-`Tests/FrequencyResponseTests.cpp` covers `Source/UI/ModuleViews/FrequencyResponseComponent.h`; `Tests/EQCurveTests.cpp` covers the axis maths both frequency-domain views share (`Source/UI/ModuleViews/FrequencyGrid.h`), the Parametric EQ view and its interaction model (`Source/UI/ModuleViews/EQCurveComponent.h`), and the pop-out editor (`Source/UI/ModuleViews/EQWindow.h`).
+`Tests/UI/ModuleViews/FrequencyResponseTests.cpp` covers `Source/UI/ModuleViews/FrequencyResponseComponent.h`; `Tests/UI/ModuleViews/EQCurveTests.cpp` covers the axis maths both frequency-domain views share (`Source/UI/ModuleViews/FrequencyGrid.h`), the Parametric EQ view and its interaction model (`Source/UI/ModuleViews/EQCurveComponent.h`), and the pop-out editor (`Source/UI/ModuleViews/EQWindow.h`).
 
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
@@ -431,7 +431,7 @@ New suite `Tests/StatusBarTests.cpp` covering `Source/UI/Chrome/StatusBarCompone
 
 ### Scope Tests (~10 tests)
 
-New suite `Tests/ScopeTests.cpp` covering `Source/UI/ModuleViews/ScopeComponent.h`.
+New suite `Tests/UI/ModuleViews/ScopeTests.cpp` covering `Source/UI/ModuleViews/ScopeComponent.h`.
 
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
@@ -439,7 +439,7 @@ New suite `Tests/ScopeTests.cpp` covering `Source/UI/ModuleViews/ScopeComponent.
 
 ### Wavetable Oscillator Tests (76 tests)
 
-Suite `Tests/WavetableOscillatorModuleTests.cpp` covering `Source/Modules/WavetableOscillatorModule/`.
+Suite `Tests/Modules/WavetableOscillatorModuleTests.cpp` covering `Source/Modules/WavetableOscillatorModule/`.
 
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
@@ -451,7 +451,7 @@ Suite `Tests/WavetableOscillatorModuleTests.cpp` covering `Source/Modules/Waveta
 
 ### Wavetable Display Tests (8 tests)
 
-New suite `Tests/WavetableDisplayTests.cpp` covering `Source/UI/ModuleViews/WavetableDisplayComponent.h`.
+New suite `Tests/UI/ModuleViews/WavetableDisplayTests.cpp` covering `Source/UI/ModuleViews/WavetableDisplayComponent.h`.
 
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
@@ -459,7 +459,7 @@ New suite `Tests/WavetableDisplayTests.cpp` covering `Source/UI/ModuleViews/Wave
 
 ### Minimap Tests (25 tests)
 
-New suite `Tests/MinimapComponentTests.cpp` covering `Source/UI/Graph/MinimapComponent.h/.cpp` (issue #159). See [`layout_selection_canvas.md` §4](layout_selection_canvas.md#4-minimap-overlay-issue-159) for the feature.
+New suite `Tests/UI/Graph/MinimapComponentTests.cpp` covering `Source/UI/Graph/MinimapComponent.h/.cpp` (issue #159). See [`layout_selection_canvas.md` §4](layout_selection_canvas.md#4-minimap-overlay-issue-159) for the feature.
 
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
@@ -468,7 +468,7 @@ New suite `Tests/MinimapComponentTests.cpp` covering `Source/UI/Graph/MinimapCom
 
 ### E2E Workflow Tests (24 tests)
 
-Full application workflow tests in `Tests/E2EWorkflowTests.cpp`. Each test constructs a complete `MainComponent` with a mock AI provider and exercises real UI interaction code paths.
+Full application workflow tests in `Tests/App/E2EWorkflowTests.cpp`. Each test constructs a complete `MainComponent` with a mock AI provider and exercises real UI interaction code paths.
 
 | Area | Tests | What it covers |
 |------|-------|----------------|
@@ -490,7 +490,7 @@ Full application workflow tests in `Tests/E2EWorkflowTests.cpp`. Each test const
 
 ### AI Patch Validation Tests (~19 tests)
 
-`Tests/AIPatchValidationTests.cpp` is table-driven: one deliberately malformed patch per
+`Tests/AI/AIPatchValidationTests.cpp` is table-driven: one deliberately malformed patch per
 `PatchValidationError` value, each asserting the **exact** enumerator rather than merely "was
 rejected". `EveryErrorValueIsCovered` walks the enum and fails if a newly added value has no case,
 so the table cannot silently fall behind the enum.
@@ -499,14 +499,14 @@ The same file pins the `getPatchSchema()` contract — the module-type enum matc
 choice parameters are enumerated, `additionalProperties` stays open for numeric parameters, and no
 reference data is offered as an output field.
 
-`Tests/AIPatchRetryTests.cpp` covers `applyPatchWithRetry` with a scripted provider double that
+`Tests/AI/AIPatchRetryTests.cpp` covers `applyPatchWithRetry` with a scripted provider double that
 answers synchronously (so no message loop is needed): that the validation message reaches the
 model, that retries stop at `kMaxPatchRetries`, and that the mode repair fires only for a
 rejected, mode-less patch and never in the destructive merge-to-replace direction.
 
 ### AI Patch Fixture Replay Tests (corpus-driven, offline)
 
-`Tests/AIPatchFixtureReplayTests.cpp` is a **characterisation test**: it replays real model output,
+`Tests/AI/AIPatchFixtureReplayTests.cpp` is a **characterisation test**: it replays real model output,
 recorded once by `Tools/AIPatchHarness` against `gpt-oss:20b` (the confirmed production model)
 and at least one other local model, through the exact production path —
 `extractJsonFromResponse -> JSON::parse -> validatePatch -> applyPatchWithRetry` — with no model
@@ -557,7 +557,7 @@ ratchet against (unpinned sampling swings ~8 points run to run). `--runs` is har
 `--max-requests` bounds total outbound requests for the whole invocation (required, with no
 default, for `--provider remote`, since that path can reach a paid vendor). See
 `Tools/AIPatchHarness/RequestBudget.h` — its `RequestBudget` class is covered directly by
-`Tests/RequestBudgetTests.cpp`, independent of any live model.
+`Tests/AI/RequestBudgetTests.cpp`, independent of any live model.
 
 `.github/workflows/ai-eval-nightly.yml` runs this harness on a schedule, OFF by default (gated on
 the `AI_EVAL_ENABLED` repository variable) — see "Nightly scheduled eval (P1-11)" in
@@ -579,7 +579,7 @@ cmake --build build --target AIEvalHarness
 ```
 
 The structural checks themselves (`evaluatePatch()`) have no model dependency and are covered by
-`Tests/PatchEvalTests.cpp` in the regular suite — only the golden-prompt replay needs Ollama.
+`Tests/AI/PatchEvalTests.cpp` in the regular suite — only the golden-prompt replay needs Ollama.
 
 **Reproducibility/investigation flags**, `--provider ollama` only (all unset by default —
 this is for comparing corruption/rejection rates before and after a candidate fix, not a
@@ -891,7 +891,7 @@ Scope and limits, all deliberate: **comments are exempt** (this codebase writes 
 
 `bash scripts/check-file-sizes.sh --list [N]` prints the N largest scanned files (default 25), largest first, regardless of cap or baseline — for picking what to split next.
 
-**How to split an over-cap file** — full rules live in the root `CLAUDE.md`'s "Code structure" section; in short, a class that outgrows one file gets its own directory named after the class holding the header and every unit (e.g. `Source/UI/Graph/GraphEditor/GraphEditor.h` + `GraphEditor<Concern>.cpp` units, never `_Part1`, + shared private helpers in `GraphEditorInternal.h`), never flat siblings dropped next to unrelated files. Tests mirror it (`Tests/GraphEditor/GraphEditor<Topic>Tests.cpp` with shared fixtures in `GraphEditorTestFixture.h`). A directory itself gets split by area once it passes roughly 30 files — `Source/UI/` now holds only area directories (`Graph/`, `Timeline/`, `PianoRoll/`, `Library/`, `Macros/`, `ModuleViews/`, `Settings/`, `Assistant/`, `Chrome/`, `Layout/`, `Theme/`), each class directory nested in its area (FRO80).
+**How to split an over-cap file** — full rules live in the root `CLAUDE.md`'s "Code structure" section; in short, a class that outgrows one file gets its own directory named after the class holding the header and every unit (e.g. `Source/UI/Graph/GraphEditor/GraphEditor.h` + `GraphEditor<Concern>.cpp` units, never `_Part1`, + shared private helpers in `GraphEditorInternal.h`), never flat siblings dropped next to unrelated files. Tests mirror it (`Tests/UI/Graph/GraphEditor/GraphEditor<Topic>Tests.cpp` with shared fixtures in `GraphEditorTestFixture.h`). A directory itself gets split by area once it passes roughly 30 files — `Source/UI/` now holds only area directories (`Graph/`, `Timeline/`, `PianoRoll/`, `Library/`, `Macros/`, `ModuleViews/`, `Settings/`, `Assistant/`, `Chrome/`, `Layout/`, `Theme/`), each class directory nested in its area (FRO80). `Tests/` mirrors the code by area — `Modules/`, `FX/`, `Engine/`, `Plugin/`, `Timeline/`, `Mixer/`, `Macros/`, `AI/`, `Account/`, `Project/`, `App/` (MainComponent-level and E2E), and `UI/<area>/` matching `Source/UI/`; only shared helpers (`TestMain.cpp`, `TestAudioHelpers.h`, `FakeAudioIODevice.h`, `StubPluginInstance.h`) and the `fixtures/`/`reference/` data stay at the root. Data next to the test tree is resolved from the `TESTS_ROOT_DIR` compile definition, never from a test file's own `__FILE__` depth.
 
 Largest legacy files at the time of writing (see `scripts/file-size-baseline.txt` for the full, current list):
 

@@ -29,7 +29,7 @@ namespace synth {
  * `setEnabled`/`isEnabled` is the user-facing toggle (message thread writes, audio thread reads).
  * `setForcedOn`/`isForcedOn` is OR'd with it so a count-in pre-roll can force the click audible
  * regardless of the user toggle. With neither set, `renderClicks()` is a complete no-op (see
- * `DisabledMetronomeIsSilentAndFree` in `Tests/MetronomeTests.cpp`).
+ * `DisabledMetronomeIsSilentAndFree` in `Tests/Engine/MetronomeTests.cpp`).
  */
 class Metronome {
 public:

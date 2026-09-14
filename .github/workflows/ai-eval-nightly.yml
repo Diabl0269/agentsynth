@@ -1,7 +1,7 @@
 # P1-11 — nightly live-model AI patch eval, OFF by default.
 #
 # WHY this exists: Tools/AIPatchHarness measures how often real model output passes
-# validatePatch(). Tests/AIPatchFixtureReplayTests.cpp (P1-10) froze one recording as an offline
+# validatePatch(). Tests/AI/AIPatchFixtureReplayTests.cpp (P1-10) froze one recording as an offline
 # corpus, which catches a regression in OUR code but can never notice the MODEL getting worse, a
 # prompt edit quietly degrading output, or a new provider behaving differently — that needs real
 # inference. This workflow runs that live measurement on a schedule, with the cost/safety
