@@ -1,6 +1,9 @@
 #include "StemSession.h"
 
 #include "../AudioEngine.h"
+#include "../Mixer/ChannelFlows.h"
+#include "../Modules/AttenuverterModule.h"
+#include "../Timeline/TimelineDoc.h"
 #include "BounceGuards.h"
 #include "OfflineTransportDriver.h"
 #include <algorithm>
@@ -16,12 +19,14 @@ std::vector<StemStripEntry> collectStemStrips(juce::AudioProcessorGraph& graph) 
         if (auto* strip = dynamic_cast<ChannelStripModule*>(node->getProcessor()))
             result.push_back({node->nodeID, strip});
     }
-    // "else node id" (docs/mixer.md §5.12) - Transport has no dependency on the timeline/track
-    // model, so node id ascending is the stable order available at this layer. That stability is
-    // only WITHIN one export: node ids are reassigned whenever the graph is rebuilt from JSON (e.g.
-    // an undo/redo that crosses a rebuild - MixerSoloTests.UndoRedoAcrossAGraphRebuildSettlesTheGate
-    // is the proof such rebuilds happen), so "01 - ..." naming a given strip is not itself a
-    // cross-session guarantee, only a per-export one.
+    // "else node id" (docs/mixer.md §5.12) - this ENUMERATION ORDER still has no dependency on the
+    // timeline/track model, so node id ascending is the stable order available at this layer. That
+    // stability is only WITHIN one export: node ids are reassigned whenever the graph is rebuilt from
+    // JSON (e.g. an undo/redo that crosses a rebuild - MixerSoloTests.UndoRedoAcrossAGraphRebuildSettlesTheGate
+    // is the proof such rebuilds happen), so "NN" numbering a given strip is not itself a
+    // cross-session guarantee, only a per-export one. STEM NAMING (the "<name>" half of
+    // "NN - <name>.<ext>") is a separate concern, resolved in StemSession's constructor below, and
+    // that part DOES optionally look at a synth::TimelineDoc (FRO55) - see its own comment.
     std::sort(result.begin(), result.end(),
               [](const StemStripEntry& a, const StemStripEntry& b) { return a.nodeId.uid < b.nodeId.uid; });
     return result;
@@ -40,10 +45,125 @@ StemResult failure(juce::String message) {
     return result;
 }
 
+// ---- FRO55 (docs/mixer.md §5.12): stem file names, off the TRACK that feeds each strip ----------
+
+// True when `conn` carries signal (audio or MIDI) rather than a hidden modulation leg — the same
+// two exclusions ChannelFlows.cpp's own isSignalEdge rule uses (that function is private to this
+// codebase's "Make channel" implementation, so this mirrors just the parts a backward walk needs
+// rather than exposing it): never cross an AttenuverterModule on either end (AudioEngine::
+// addModRouting always wraps a hidden mod leg in one of these), and never treat an audio edge
+// landing on a PortRole::ModCV input as part of the signal path (a plain CV cable into some other
+// track's cutoff must not make that track "feed" this strip). Unlike ChannelFlows' full rule, this
+// does not resolve through macro ports first (resolveThroughPorts) - a CV cable that enters a strip's
+// macro through an auto-ported Mono jack is a rare enough patch shape that treating it as signal
+// here is an acceptable simplification for a stem FILE NAME, not a routing decision.
+bool isStemNamingSignalEdge(juce::AudioProcessorGraph& graph, const juce::AudioProcessorGraph::Connection& conn) {
+    auto* srcNode = graph.getNodeForId(conn.source.nodeID);
+    auto* dstNode = graph.getNodeForId(conn.destination.nodeID);
+    auto* srcProcessor = srcNode != nullptr ? srcNode->getProcessor() : nullptr;
+    auto* dstProcessor = dstNode != nullptr ? dstNode->getProcessor() : nullptr;
+    if (srcProcessor == nullptr || dstProcessor == nullptr)
+        return false;
+    if (dynamic_cast<AttenuverterModule*>(srcProcessor) != nullptr ||
+        dynamic_cast<AttenuverterModule*>(dstProcessor) != nullptr)
+        return false;
+    if (conn.source.isMIDI())
+        return true;
+    if (auto* module = dynamic_cast<ModuleBase*>(dstProcessor))
+        return module->mapInputChannel(conn.destination.channelIndex).role != PortRole::ModCV;
+    return true;
+}
+
+// BFS upstream from `stripId`, following every incoming SIGNAL edge (isStemNamingSignalEdge above),
+// transitively through the instrument/macro chain, collecting every distinct TimelineMidiSource /
+// TimelineAudioSource ("Track In" / "Track Audio") node reached — the track(s) whose signal feeds
+// this strip however many hops away. Mirrors ChannelFlows.cpp's findUnchanneledOutputFeeds in
+// reverse: never expands PAST a ChannelStripModule reached upstream (that strip is already another
+// channel's own terminus - whatever feeds IT is not this strip's track to claim), and a track-source
+// node is a pure source (no inputs of its own), so it is recorded but not enqueued either. Cycle-safe
+// via the visited set; a plain BFS terminates on any finite graph regardless.
+std::vector<juce::AudioProcessorGraph::NodeID> upstreamTrackSources(juce::AudioProcessorGraph& graph,
+                                                                    juce::AudioProcessorGraph::NodeID stripId) {
+    std::vector<juce::AudioProcessorGraph::NodeID> tracks;
+    std::vector<juce::AudioProcessorGraph::NodeID> visited{stripId};
+    std::vector<juce::AudioProcessorGraph::NodeID> queue{stripId};
+    const auto connections = graph.getConnections();
+
+    while (!queue.empty()) {
+        const auto nodeId = queue.front();
+        queue.erase(queue.begin());
+
+        for (const auto& conn : connections) {
+            if (conn.destination.nodeID != nodeId || !isStemNamingSignalEdge(graph, conn))
+                continue;
+            const auto sourceId = conn.source.nodeID;
+            if (std::find(visited.begin(), visited.end(), sourceId) != visited.end())
+                continue;
+            visited.push_back(sourceId);
+
+            auto* sourceNode = graph.getNodeForId(sourceId);
+            auto* sourceProcessor = sourceNode != nullptr ? sourceNode->getProcessor() : nullptr;
+            if (isTrackSourceNode(sourceProcessor)) {
+                if (std::find(tracks.begin(), tracks.end(), sourceId) == tracks.end())
+                    tracks.push_back(sourceId);
+                continue; // a track source has no inputs of its own - nothing to enqueue
+            }
+            if (dynamic_cast<ChannelStripModule*>(sourceProcessor) != nullptr)
+                continue; // never expand past another strip - see the function comment
+
+            queue.push_back(sourceId);
+        }
+    }
+    return tracks;
+}
+
+// `timelineDoc`'s track whose bindingUuid equals `nodeUuid`, or an empty string when there is no
+// doc, no uuid, or no such track (an unbound/untracked node - e.g. a graph built directly by a test
+// with no TimelineDoc behind it at all).
+juce::String trackNameForNodeUuid(const TimelineDoc* timelineDoc, const juce::String& nodeUuid) {
+    if (timelineDoc == nullptr || nodeUuid.isEmpty())
+        return {};
+    for (const auto& track : timelineDoc->getTracks())
+        if (track.bindingUuid == nodeUuid)
+            return track.name;
+    return {};
+}
+
+// The stem NAME for the strip at `stripId` (the part between "NN - " and the extension) - FRO55,
+// docs/mixer.md §5.12. `number` is the strip's own 1-based export position, reused verbatim for the
+// "Channel N" fallback so it always agrees with the file's own "NN" prefix. Exactly one upstream
+// track source resolving to a non-empty TimelineDoc track name wins; zero, several, or an
+// unresolvable/untracked source all fall back, which is also what keeps every name legal and
+// unique on its own (the "NN - " prefix already makes the full FILE name unique regardless - see
+// docs/mixer.md §5.12 - so no separate de-duplication pass is needed here even when two different
+// tracks share a user-given name).
+//
+// ChannelStripModule has no user-given name field of its own yet (checked at FRO55 time - its
+// getExtraState() carries only "shape"/"solo", docs/mixer.md §5.4-5.10 never added one either) - the
+// mixer-UI ticket that might add one is expected to make THIS function prefer it, ahead of the track
+// walk below, whenever it lands.
+juce::String stemStripName(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID stripId, int number,
+                           const TimelineDoc* timelineDoc) {
+    const juce::String fallback = "Channel " + juce::String(number);
+    const auto tracks = upstreamTrackSources(graph, stripId);
+    if (tracks.size() != 1)
+        return fallback;
+
+    auto* node = graph.getNodeForId(tracks.front());
+    if (node == nullptr)
+        return fallback;
+    // The message-thread-canonical uuid (ChannelFlows.cpp's own `inMacro` reads the same property
+    // for the same reason) - never ModuleBase::getNodeUuid(), which is the audio-thread-safe mirror
+    // and returns a raw const char* rather than a juce::String.
+    const juce::String uuid = node->properties["uuid"].toString();
+    const juce::String trackName = trackNameForNodeUuid(timelineDoc, uuid);
+    return trackName.isNotEmpty() ? trackName : fallback;
+}
+
 } // namespace
 
 StemSession::StemSession(AudioEngine& engine, const juce::File& destinationFolder, const BounceOptions& options,
-                         const BounceExporter::ProgressCallback& progress)
+                         const BounceExporter::ProgressCallback& progress, const TimelineDoc* timelineDoc)
     : engine_(engine)
     , destinationFolder_(destinationFolder)
     , options_(options)
@@ -125,7 +245,11 @@ StemSession::StemSession(AudioEngine& engine, const juce::File& destinationFolde
         StemWriter sw;
         sw.strip = entries[i].strip;
         const auto number = juce::String((int)i + 1).paddedLeft('0', nameWidth);
-        const auto legalName = juce::File::createLegalFileName(sw.strip->getName());
+        // FRO55: named after the track that feeds this strip, not the strip's own graph-node
+        // instance name (that used to be "Channel Strip N" - distinct across strips, but useless) -
+        // see stemStripName's own comment.
+        const auto legalName =
+            juce::File::createLegalFileName(stemStripName(graph, entries[i].nodeId, (int)i + 1, timelineDoc));
         sw.finalFile = destinationFolder_.getChildFile(number + " - " + legalName + "." + extension);
         sw.tapBuffer.setSize(2, options_.blockSize);
         sw.tapBuffer.clear();

@@ -24,7 +24,7 @@
 // format these tests parse.
 
 #include "../../Tools/AIPatchHarness/Scenarios.h"
-#include "AI/AIIntegrationService.h"
+#include "AI/AIIntegrationService/AIIntegrationService.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>

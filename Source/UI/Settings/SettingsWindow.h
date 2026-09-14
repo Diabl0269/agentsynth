@@ -1,8 +1,8 @@
 #pragma once
 
-#include "AI/AIIntegrationService.h"
+#include "AI/AIIntegrationService/AIIntegrationService.h"
 #include "AI/AccountService.h"
-#include "UI/Assistant/AIChatComponent.h"
+#include "UI/Assistant/AIChatComponent/AIChatComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Theme/ThemeManager.h"
 #include <juce_audio_utils/juce_audio_utils.h>

@@ -7,6 +7,9 @@ class AudioEngine;
 
 namespace synth {
 
+class TimelineDoc; // Forward declaration (Source/Timeline/TimelineDoc.h) - see exportStems'
+                   // `timelineDoc` parameter comment.
+
 // Offline stem export (P9-8, docs/mixer.md §5.12): ONE render pass through the exact same offline
 // path BounceExporter uses, writing one audio file per mixer channel strip instead of one file for
 // the whole mix. "Single render, parallel writers" — every ChannelStripModule in the graph gets an
@@ -60,8 +63,13 @@ public:
     //
     // Fails immediately (before creating `destinationFolder` or opening any file) when the graph has
     // no ChannelStrip nodes - there is nothing to export, and rendering N=0 files is not success.
+    //
+    // `timelineDoc` (FRO55, docs/mixer.md §5.12): the live document each stem's file name is
+    // resolved against - null is fine (every stem then falls back to "Channel N"; see
+    // StemSession's constructor comment for the full naming rule).
     static StemResult exportStems(AudioEngine& engine, const juce::File& destinationFolder,
-                                  const BounceOptions& options, const ProgressCallback& progress = {});
+                                  const BounceOptions& options, const ProgressCallback& progress = {},
+                                  const TimelineDoc* timelineDoc = nullptr);
 
     StemExporter() = delete;
 };

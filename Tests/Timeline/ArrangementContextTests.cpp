@@ -1,7 +1,7 @@
 // ArrangementContext::summarize, the read-path arrangement summary folded into the AI
 // request context beside the existing patch-JSON injection.
 
-#include "AI/AIIntegrationService.h"
+#include "AI/AIIntegrationService/AIIntegrationService.h"
 #include "Modules/FilterModule.h"
 #include "Modules/OscillatorModule.h"
 #include "Timeline/ArrangementContext.h"

@@ -71,7 +71,11 @@ add_executable(Tests
     Plugin/HostedPluginEditorWindowTests.cpp
     Plugin/HostedPluginLaneTests.cpp
     Plugin/HostedPluginLatencyTests.cpp
-    AI/AIStateMapperTests.cpp
+    AI/AIStateMapper/AIStateMapperSnapshotsTests.cpp
+    AI/AIStateMapper/AIStateMapperSchemaTests.cpp
+    AI/AIStateMapper/AIStateMapperValidationTests.cpp
+    AI/AIStateMapper/AIStateMapperAutoConnectTests.cpp
+    AI/AIStateMapper/AIStateMapperPatchFormatTests.cpp
     AI/AIPatchValidationTests.cpp
     AI/AIPatchRetryTests.cpp
     AI/AIPatchFixtureReplayTests.cpp
@@ -79,9 +83,18 @@ add_executable(Tests
     AI/PatchEvalTests.cpp
     AI/PatchDiffTests.cpp
     AI/AIProviderRegistryTests.cpp
-    AI/OllamaProviderTests.cpp
-    AI/RemoteProviderTests.cpp
-    Account/AuthClientTests.cpp
+    AI/OllamaProvider/OllamaProviderRequestTests.cpp
+    AI/OllamaProvider/OllamaProviderLifecycleTests.cpp
+    AI/OllamaProvider/OllamaProviderErrorMappingTests.cpp
+    AI/OllamaProvider/OllamaProviderCancellationTests.cpp
+    AI/RemoteProvider/RemoteProviderRequestShapeTests.cpp
+    AI/RemoteProvider/RemoteProviderResponseHandlingTests.cpp
+    AI/RemoteProvider/RemoteProviderTransportTests.cpp
+    AI/RemoteProvider/RemoteProviderCapabilityTests.cpp
+    Account/AuthClient/AuthClientDeviceAuthTests.cpp
+    Account/AuthClient/AuthClientAccountTests.cpp
+    Account/AuthClient/AuthClientConversationsTests.cpp
+    Account/AuthClient/AuthClientFeedbackTests.cpp
     Account/AccountServiceTests.cpp
     Account/KeychainTokenStoreTests.cpp
     Account/DeviceIdStoreTests.cpp
@@ -110,7 +123,12 @@ add_executable(Tests
     UI/Assistant/PlanBadgeTests.cpp
     Modules/PolyMidiModuleTests.cpp
     Modules/PolySequencerModuleTests.cpp
-    AI/AIIntegrationServiceTests.cpp
+    AI/AIIntegrationService/AIIntegrationServiceProviderConfigTests.cpp
+    AI/AIIntegrationService/AIIntegrationServiceHistoryTests.cpp
+    AI/AIIntegrationService/AIIntegrationServicePatchApplyTests.cpp
+    AI/AIIntegrationService/AIIntegrationServiceSystemPromptTests.cpp
+    AI/AIIntegrationService/AIIntegrationServiceTimelineToolsTests.cpp
+    AI/AIIntegrationService/AIIntegrationServiceArrangeModeTests.cpp
     AI/AIUndoTests.cpp
     UI/Graph/ModMatrixTests.cpp
     FX/FXModuleTests.cpp
@@ -193,6 +211,7 @@ add_executable(Tests
     UI/Timeline/TimelinePanel/TimelinePanelFollowPlayheadTests.cpp
     UI/Timeline/TimelinePlayheadTests.cpp
     UI/Timeline/TimelineTrackHeaderTests.cpp
+    UI/Timeline/TimelineTrackHeaderContextMenuTests.cpp
     UI/Timeline/TimelineTrackFocusTests.cpp
     UI/Timeline/TimelineClipLane/TimelineClipLaneAreaTests.cpp
     UI/Timeline/TimelineClipLane/TimelineClipLaneAuthoringTests.cpp
@@ -232,6 +251,7 @@ add_executable(Tests
     Engine/BounceExporterTests.cpp
     Engine/BounceRunnerTests.cpp
     Engine/StemExportTests.cpp
+    Engine/StemExportNamingTests.cpp
     Engine/StemRunnerTests.cpp
     UI/Chrome/ExportAudioDialogTests.cpp
     Engine/MetronomeTests.cpp
@@ -295,7 +315,11 @@ add_executable(Tests
     ../Source/UI/Graph/GraphEditor/GraphEditorPersistence.cpp
     ../Source/UI/Chrome/ExportAudioDialog.cpp
     ../Source/UI/Graph/ModMatrixComponent.cpp
-    ../Source/UI/Assistant/AIChatComponent.cpp
+    ../Source/UI/Assistant/AIChatComponent/AIChatComponent.cpp
+    ../Source/UI/Assistant/AIChatComponent/AIChatComponentMessageList.cpp
+    ../Source/UI/Assistant/AIChatComponent/AIChatComponentSending.cpp
+    ../Source/UI/Assistant/AIChatComponent/AIChatComponentProvider.cpp
+    ../Source/UI/Assistant/AIChatComponent/AIChatComponentHistory.cpp
     ../Source/UI/Assistant/AccountRow.cpp
     ../Source/UI/Assistant/PlanBadge.cpp
     ../Source/UI/Assistant/SignInDialog.cpp
