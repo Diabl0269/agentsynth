@@ -28,8 +28,6 @@
 #include <bit>
 #include <gtest/gtest.h>
 
-namespace {
-
 constexpr double kSampleRate = 44100.0;
 constexpr int kBlockSize = 512;
 
@@ -37,7 +35,7 @@ constexpr int kBlockSize = 512;
 // Helpers: set parameters via public JUCE API
 // ---------------------------------------------------------------------------
 
-void setParamValue(juce::AudioProcessor* proc, const juce::String& paramId, float denormalized) {
+inline void setParamValue(juce::AudioProcessor* proc, const juce::String& paramId, float denormalized) {
     for (auto* param : proc->getParameters()) {
         if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
             if (p->paramID == paramId)
@@ -48,7 +46,7 @@ void setParamValue(juce::AudioProcessor* proc, const juce::String& paramId, floa
     }
 }
 
-void setChoiceParam(juce::AudioProcessor* proc, const juce::String& paramId, int index) {
+inline void setChoiceParam(juce::AudioProcessor* proc, const juce::String& paramId, int index) {
     for (auto* param : proc->getParameters()) {
         if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
             if (p->paramID == paramId)
@@ -60,7 +58,7 @@ void setChoiceParam(juce::AudioProcessor* proc, const juce::String& paramId, int
 }
 
 // Tests/reference/, resolved from TESTS_ROOT_DIR (Tests/CMakeLists.txt) so this file's depth never matters.
-juce::String getReferencePath(const juce::String& filename) {
+inline juce::String getReferencePath(const juce::String& filename) {
     juce::File testsRoot(TESTS_ROOT_DIR);
     return testsRoot.getChildFile("reference").getChildFile(filename).getFullPathName();
 }
@@ -71,8 +69,8 @@ juce::String getReferencePath(const juce::String& filename) {
 // MIDI is injected on the first block only.
 // ---------------------------------------------------------------------------
 
-juce::AudioBuffer<float> renderModule(juce::AudioProcessor& module, juce::MidiBuffer& midi, int totalSamples,
-                                      int blockSize = kBlockSize) {
+inline juce::AudioBuffer<float> renderModule(juce::AudioProcessor& module, juce::MidiBuffer& midi, int totalSamples,
+                                             int blockSize = kBlockSize) {
     int numCh = std::max(module.getTotalNumInputChannels(), module.getTotalNumOutputChannels());
     if (numCh == 0)
         numCh = 2;
@@ -106,8 +104,9 @@ juce::AudioBuffer<float> renderModule(juce::AudioProcessor& module, juce::MidiBu
 // Process a chain: module A produces audio/MIDI, then B consumes it.
 // srcCh/dstCh control which channel to route between them.
 // midiThrough = true forwards the same MIDI buffer.
-juce::AudioBuffer<float> renderChainTwo(juce::AudioProcessor& a, juce::AudioProcessor& b, juce::MidiBuffer& midi,
-                                        int totalSamples, int srcCh = 0, int dstCh = 0, bool midiThrough = false) {
+inline juce::AudioBuffer<float> renderChainTwo(juce::AudioProcessor& a, juce::AudioProcessor& b, juce::MidiBuffer& midi,
+                                               int totalSamples, int srcCh = 0, int dstCh = 0,
+                                               bool midiThrough = false) {
     int aCh = std::max(a.getTotalNumInputChannels(), a.getTotalNumOutputChannels());
     int bCh = std::max(b.getTotalNumInputChannels(), b.getTotalNumOutputChannels());
     if (aCh == 0)
@@ -167,5 +166,3 @@ class AudioRenderingTest : public ::testing::Test {
 protected:
     void prepareModule(juce::AudioProcessor& m) { m.prepareToPlay(kSampleRate, kBlockSize); }
 };
-
-} // namespace
