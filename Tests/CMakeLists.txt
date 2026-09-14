@@ -16,12 +16,25 @@ add_executable(Tests
     UI/Layout/LayoutUtilTests.cpp
     Modules/OscillatorTests.cpp
     Modules/FilterTests.cpp
-    Modules/StereoVoiceModuleTests.cpp
+    Modules/StereoVoiceModule/StereoVoiceModulePanLawTests.cpp
+    Modules/StereoVoiceModule/StereoVoiceModuleOscillatorTests.cpp
+    Modules/StereoVoiceModule/StereoVoiceModuleFilterTests.cpp
+    Modules/StereoVoiceModule/StereoVoiceModuleSplitBlockTests.cpp
+    Modules/StereoVoiceModule/StereoVoiceModuleVCATests.cpp
+    Modules/StereoVoiceModule/StereoVoiceModuleDefaultPresetTests.cpp
+    Modules/StereoVoiceModule/StereoVoiceModuleDeclarationTests.cpp
     Modules/NoiseModuleTests.cpp
     Modules/MathModuleTests.cpp
     Modules/MacroControlModuleTests.cpp
     Modules/SamplerModuleTests.cpp
-    Modules/WavetableOscillatorModuleTests.cpp
+    Modules/WavetableOscillatorModule/WavetableOscillatorModulePortsTests.cpp
+    Modules/WavetableOscillatorModule/WavetableOscillatorModuleOutputTests.cpp
+    Modules/WavetableOscillatorModule/WavetableOscillatorModuleCVTests.cpp
+    Modules/WavetableOscillatorModule/WavetableOscillatorModuleImportTests.cpp
+    Modules/WavetableOscillatorModule/WavetableOscillatorModuleStateTests.cpp
+    Modules/WavetableOscillatorModule/WavetableOscillatorModuleWarpTests.cpp
+    Modules/WavetableOscillatorModule/WavetableOscillatorModuleStereoTests.cpp
+    Modules/WavetableOscillatorModule/WavetableOscillatorModuleVoiceTests.cpp
     UI/ModuleViews/WavetableDisplayTests.cpp
     Modules/ADSRTests.cpp
     Modules/EnvelopeFollowerModuleTests.cpp
@@ -37,8 +50,21 @@ add_executable(Tests
     Modules/ComparatorModuleTests.cpp
     Modules/SequencerModuleTests.cpp
     Engine/TransportServiceTests.cpp
-    Timeline/TimelineDocTests.cpp
-    Timeline/TimelineClipEditingTests.cpp
+    Timeline/TimelineDoc/TimelineDocCoreTests.cpp
+    Timeline/TimelineDoc/TimelineDocTracksTests.cpp
+    Timeline/TimelineDoc/TimelineDocClipsTests.cpp
+    Timeline/TimelineDoc/TimelineDocNotesTests.cpp
+    Timeline/TimelineDoc/TimelineDocAutomationTests.cpp
+    Timeline/TimelineDoc/TimelineDocSerializationTests.cpp
+    Timeline/TimelineDoc/TimelineDocMarkersTests.cpp
+    Timeline/TimelineClipEditing/TimelineClipEditingNotesTests.cpp
+    Timeline/TimelineClipEditing/TimelineClipEditingQuantiseTests.cpp
+    Timeline/TimelineClipEditing/TimelineClipEditingSplitJoinTests.cpp
+    Timeline/TimelineClipEditing/TimelineClipEditingSerializationTests.cpp
+    Timeline/TimelineClipEditing/TimelineClipEditingToolsTests.cpp
+    Timeline/TimelineClipEditing/TimelineClipEditingDragTests.cpp
+    Timeline/TimelineClipEditing/TimelineClipEditingContextTests.cpp
+    Timeline/TimelineClipEditing/TimelineClipEditingGridHierarchyTests.cpp
     Timeline/TimelineSnapshotTests.cpp
     Timeline/AutomationKernelTests.cpp
     Timeline/AutomationApplierTests.cpp
@@ -50,7 +76,13 @@ add_executable(Tests
     Timeline/TimelineOpsTests.cpp
     Timeline/TimelineOpsFixtureTests.cpp
     Timeline/ArrangementContextTests.cpp
-    Timeline/TimelineMidiSourceTests.cpp
+    Timeline/TimelineMidiSource/TimelineMidiSourceEmissionTests.cpp
+    Timeline/TimelineMidiSource/TimelineMidiSourceHeldNoteTests.cpp
+    Timeline/TimelineMidiSource/TimelineMidiSourceMuteSoloTests.cpp
+    Timeline/TimelineMidiSource/TimelineMidiSourceBindingTests.cpp
+    Timeline/TimelineMidiSource/TimelineMidiSourceLoopTests.cpp
+    Timeline/TimelineMidiSource/TimelineMidiSourceEngineTests.cpp
+    Timeline/TimelineMidiSource/TimelineMidiSourceAuditionTests.cpp
     Timeline/MidiRecorderTests.cpp
     Timeline/MidiClipFileTests.cpp
     Timeline/PeaksFileTests.cpp
@@ -67,7 +99,12 @@ add_executable(Tests
     Engine/LatencyAlignmentTests.cpp
     Timeline/AudioClipPlaybackTests.cpp
     Plugin/HostedPluginTests.cpp
-    Plugin/PluginScanTests.cpp
+    Plugin/PluginScan/PluginScanLifecycleTests.cpp
+    Plugin/PluginScan/PluginScanCrashTimeoutTests.cpp
+    Plugin/PluginScan/PluginScanBackendTests.cpp
+    Plugin/PluginScan/PluginScanChildProcessTests.cpp
+    Plugin/PluginScan/PluginScanLibraryTests.cpp
+    Plugin/PluginScan/PluginScanPersistenceTests.cpp
     Plugin/HostedPluginEditorWindowTests.cpp
     Plugin/HostedPluginLaneTests.cpp
     Plugin/HostedPluginLatencyTests.cpp
@@ -119,7 +156,13 @@ add_executable(Tests
     UI/Graph/GraphEditor/GraphEditorSmartConnectionMatrixTests.cpp
     UI/Graph/GraphEditor/GraphEditorNodeActionsTests.cpp
     UI/Layout/ZoomFrozenCachedImageTests.cpp
-    UI/Graph/ModuleComponentTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentLayoutTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentPortsTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentInteractionTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentAudioDropTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentMacroBankTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentWavetableTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentPaintTests.cpp
     UI/Graph/AutomationUiReflectionTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentHistoryTests.cpp
@@ -135,7 +178,17 @@ add_executable(Tests
     AI/AIIntegrationService/AIIntegrationServiceArrangeModeTests.cpp
     AI/AIUndoTests.cpp
     UI/Graph/ModMatrixTests.cpp
-    FX/FXModuleTests.cpp
+    FX/FXModule/FXModuleAttenuverterTests.cpp
+    FX/FXModule/FXModuleBitcrusherTests.cpp
+    FX/FXModule/FXModuleChorusTests.cpp
+    FX/FXModule/FXModuleCompressorTests.cpp
+    FX/FXModule/FXModuleDelayTests.cpp
+    FX/FXModule/FXModuleDistortionTests.cpp
+    FX/FXModule/FXModuleFlangerTests.cpp
+    FX/FXModule/FXModuleLimiterTests.cpp
+    FX/FXModule/FXModulePhaserTests.cpp
+    FX/FXModule/FXModulePortLabelsTests.cpp
+    FX/FXModule/FXModuleReverbTests.cpp
     FX/GateModuleTests.cpp
     FX/PitchShifterModuleTests.cpp
     FX/ParametricEQModuleTests.cpp
@@ -227,7 +280,12 @@ add_executable(Tests
     UI/Timeline/TimelineTrackHeaderTests.cpp
     UI/Timeline/TimelineTrackHeaderContextMenuTests.cpp
     UI/Timeline/TimelineTrackFocusTests.cpp
-    UI/Timeline/TimelineClipLaneTests.cpp
+    UI/Timeline/TimelineClipLane/TimelineClipLaneAreaTests.cpp
+    UI/Timeline/TimelineClipLane/TimelineClipLaneAuthoringTests.cpp
+    UI/Timeline/TimelineClipLane/TimelineClipLaneEditToolsTests.cpp
+    UI/Timeline/TimelineClipLane/TimelineClipLaneMouseTests.cpp
+    UI/Timeline/TimelineClipLane/TimelineClipLanePaintingTests.cpp
+    UI/Timeline/TimelineClipLane/TimelineClipLaneSelectionTests.cpp
     UI/PianoRoll/NoteSelectionModelTests.cpp
     UI/PianoRoll/NoteHitTestMarqueeTests.cpp
     UI/PianoRoll/PianoRollComponentTests.cpp

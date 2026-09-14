@@ -394,4 +394,33 @@ void PianoRollComponent::setScaleContext(std::function<bool(int)> isInScale, boo
     repaint();
 }
 
+//==============================================================================
+// ---- Simple accessors (moved out of the header — see PianoRollComponent.h for each contract) ----
+void PianoRollComponent::setTimelineDoc(synth::TimelineDoc* doc) noexcept { doc_ = doc; }
+synth::TimelineDoc* PianoRollComponent::getTimelineDoc() const noexcept { return doc_; }
+void PianoRollComponent::setUndoManager(AppUndoManager* undoManager) noexcept { undoManager_ = undoManager; }
+AppUndoManager* PianoRollComponent::getUndoManager() const noexcept { return undoManager_; }
+void PianoRollComponent::setTransport(synth::TransportService* transport) noexcept { transport_ = transport; }
+
+bool PianoRollComponent::isOpen() const noexcept { return clipId_.isValid(); }
+synth::ClipId PianoRollComponent::getClipId() const noexcept { return clipId_; }
+
+const TimelineViewState& PianoRollComponent::getRollViewState() const noexcept { return rollView_; }
+double PianoRollComponent::getPixelsPerBeat() const noexcept { return rollView_.pixelsPerBeat; }
+double PianoRollComponent::getFirstVisibleBeat() const noexcept { return rollView_.firstVisibleBeat; }
+double PianoRollComponent::getPixelsPerSemitone() const noexcept { return pixelsPerSemitone_; }
+
+int PianoRollComponent::leftGutterWidth() const noexcept {
+    return (int)std::llround((double)scalePanelOpenProgress_ * (double)kScalePanelWidth) + kKeysColumnWidth;
+}
+
+bool PianoRollComponent::isRowFilterActive() const noexcept { return pitchVisibilityOn_ && (bool)isInScale_; }
+
+int PianoRollComponent::getFirstVisiblePitchForTest() const noexcept { return firstVisiblePitch_; }
+double PianoRollComponent::getTopRowPositionForTest() const noexcept { return topRowPosition_; }
+void PianoRollComponent::setTopRowPositionForTest(double position) noexcept { setTopRowPosition(position); }
+double PianoRollComponent::getMinTopRowPositionForTest() const noexcept { return minTopRowPosition(); }
+double PianoRollComponent::getMaxTopRowPositionForTest() const noexcept { return maxTopRowPosition(); }
+const std::vector<int>& PianoRollComponent::getVisiblePitchesForTest() const noexcept { return visiblePitches_; }
+
 } // namespace synth::ui

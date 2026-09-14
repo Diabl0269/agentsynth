@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Timeline/PeaksFile.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Timeline/ClipSelectionModel.h"
 #include "UI/Timeline/EdgeAutoScroll.h"
 #include "UI/Timeline/EditTool.h"

@@ -163,7 +163,7 @@ Solo on a `Channel Strip` is a **render-time gate, never a parameter write** ([`
 
 ### 3. TimelineDoc (the timeline document model)
 
-`Source/Timeline/TimelineDoc.h/.cpp`
+`Source/Timeline/TimelineDoc/TimelineDoc.h/.cpp`
 
 The message-thread model behind the timeline: tracks → clips → notes, plus automation lanes and markers. Mutable, serialisable, headless — no GUI, editor or audio dependency. Everything downstream (the audio-thread snapshot, undo, `.agsproj` save) hangs off it.
 
@@ -799,7 +799,7 @@ The [Sampler](modules.md#sampler-module)'s retained-instance discipline, applied
 
 **The entry point.** `Source/Main.cpp` hand-rolls `main()` rather than using `START_JUCE_APPLICATION`, so the intercept happens before a `JUCEApplication` is ever constructed — otherwise a scan of 50 plugins bounces 50 Dock icons and each child pays for an `NSApplication` it never uses. Windows GUI builds have no `argv` at their entry point, so they keep JUCE's `WinMain` and intercept as the first statement of `initialise()` instead (JUCE's own AudioPluginHost does the same); both call the same Core function. **Plugin builds of ourselves never scan**, so there is no entry point to intercept there.
 
-**The three injectable seams**, which is what makes any of this testable with no plugin binaries in the repo: `CandidateSource` (what to scan — the default asks each format for its own search paths, which is machine-dependent), `ChildLauncher` (how to scan one — a test returns canned XML for a "good" plugin and `false` for a "crashing" one), and `setScanTimeoutMs`. `Tests/Plugin/PluginScanTests.cpp` drives everything above them through those three.
+**The three injectable seams**, which is what makes any of this testable with no plugin binaries in the repo: `CandidateSource` (what to scan — the default asks each format for its own search paths, which is machine-dependent), `ChildLauncher` (how to scan one — a test returns canned XML for a "good" plugin and `false` for a "crashing" one), and `setScanTimeoutMs`. `Tests/Plugin/PluginScan/` drives everything above them through those three.
 
 **Threading and ownership.** `scanAsync()` runs the whole scan on one background thread and posts progress/completion to the message thread; every read of the list is mutex-guarded, so the UI can query mid-scan. The destructor cancels and joins, and posted callbacks carry a shared liveness flag. Persistence is the **owner's** job — Core never touches `juce::ApplicationProperties`: the owner loads the list from the `"pluginScanList"` user setting, installs the service on the default backend, and saves `toXml()` (list **and** blacklist) after each scan. Same owner-drives-persistence shape as the audio device state. Both owners open the settings file through `synth::userSettingsOptions()` (`Source/UserSettings.h`), never a local copy of the fields.
 

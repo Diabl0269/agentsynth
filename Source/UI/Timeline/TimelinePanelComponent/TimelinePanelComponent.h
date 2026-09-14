@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/PianoRoll/PianoRollComponent/PianoRollComponent.h"
 #include "UI/Timeline/AutomationLaneEditor.h"
 #include "UI/Timeline/ClipSelectionModel.h"

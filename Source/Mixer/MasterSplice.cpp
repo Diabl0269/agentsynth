@@ -5,7 +5,7 @@
 #include "../Modules/ChannelStripModule.h"
 #include "../Modules/MasterModule.h"
 #include "../Modules/RecordTapModule.h"
-#include "../Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <vector>
 
 namespace synth {

@@ -25,8 +25,8 @@
 // state auto-scroll writes — is plain C++ state this file drives directly, exactly the way
 // ModuleLibraryKeyboardNavTests.cpp calls keyPressed() straight on the component under test.
 
-#include "ShortcutManager/ShortcutManager.h"
-#include "Timeline/TimelineDoc.h"
+#include "ShortcutManager.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"
 #include <gtest/gtest.h>

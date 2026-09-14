@@ -1,7 +1,8 @@
 #pragma once
 
+#include "PianoRollTypes.h"
 #include "Timeline/MusicalScale.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/PianoRoll/NoteColour.h"
 #include "UI/PianoRoll/NoteSelectionModel.h"
@@ -123,27 +124,10 @@ public:
     static constexpr int kResizeZonePx = 5;
     // Local playhead line: same width/strip margin the panel overlay uses, so the line reads as one
     // stroke across the ruler and the roll.
-    /** Where the NOTE CANVAS starts, in this component's y — the toolbar row plus the ruler band
-     *  below it (`kToolbarHeight + rulerBandHeight_`). THE single seam every grid/row/hit-test
-     *  coordinate goes through, which is what let the ruler move in between the chrome and the canvas
-     *  without a y-offset having to be found and fixed at twenty separate call sites.
-     *
-     *  With no ruler band (the default — a bare roll in a test, or any embedding that doesn't hand one
-     *  over) this is exactly kToolbarHeight, i.e. the pre-toolbar-row geometry, unchanged. */
-    int canvasTop() const noexcept { return kToolbarHeight + rulerBandHeight_; }
-
-    /** Height of the band the roll RESERVES, immediately under its toolbar row, for the panel's ruler
-     *  strip — which is a SIBLING component drawn on top of it, not something the roll paints. The
-     *  owner pushes the ruler's real height here (TimelinePanelComponent::resized) so the note canvas
-     *  starts below it; 0, the default, means "no ruler above me" and collapses the layout back to
-     *  toolbar-then-canvas.
-     *
-     *  This is what puts the chip toolbar ABOVE the ruler rather than sandwiched between the ruler and
-     *  the notes: the roll's rect spans the whole unit, its top row is chrome, and the ruler occupies
-     *  a band the roll deliberately leaves blank. Clamped at >= 0; re-lays-out and repaints on a
-     *  change, and is a no-op when the value is unchanged. */
+    // canvasTop()/setRulerBandHeight()/getRulerBandHeight() — see PianoRollEditTools.cpp.
+    int canvasTop() const noexcept;
     void setRulerBandHeight(int heightPx);
-    int getRulerBandHeight() const noexcept { return rulerBandHeight_; }
+    int getRulerBandHeight() const noexcept;
 
     static constexpr float kPlayheadLineWidth = TimelinePlayheadOverlay::kLineWidth;
     static constexpr int kPlayheadStripHalfWidth = TimelinePlayheadOverlay::kStripHalfWidth;
@@ -223,683 +207,320 @@ public:
 
     // Non-owning; may be null. Same degrade-gracefully contract as every other timeline
     // sub-component's setter.
-    void setTimelineDoc(synth::TimelineDoc* doc) noexcept { doc_ = doc; }
-    synth::TimelineDoc* getTimelineDoc() const noexcept { return doc_; }
-    void setUndoManager(AppUndoManager* undoManager) noexcept { undoManager_ = undoManager; }
-    AppUndoManager* getUndoManager() const noexcept { return undoManager_; }
+    void setTimelineDoc(synth::TimelineDoc* doc) noexcept;
+    synth::TimelineDoc* getTimelineDoc() const noexcept;
+    void setUndoManager(AppUndoManager* undoManager) noexcept;
+    AppUndoManager* getUndoManager() const noexcept;
     // Only consulted for Snap::Bar's beatsPerBar, same reasoning as
     // TimelineClipLaneArea::setTransport.
-    void setTransport(synth::TransportService* transport) noexcept { transport_ = transport; }
+    void setTransport(synth::TransportService* transport) noexcept;
 
-    /** The user's keyboard bindings for this surface's OWN keys (nudge, transpose, note navigation,
-     *  quantise, snap toggle, scale-panel toggle). Non-owning and may stay null — with no manager installed
-     * keyPressed() uses the hardcoded defaults below, which is what every headless test and every embedding that has no
-     * settings store gets.
-     *
-     *  Resolution is strict when a manager IS installed: an action whose binding is unset or invalid
-     *  (including an id this ShortcutManager has never heard of) has NO key, rather than quietly
-     *  falling back to its default. Mixing the two would mean a user who deliberately cleared a
-     *  binding still had the factory key working, which is exactly the bug rebinding exists to fix.
-     *
-     *  Escape and Delete/Backspace are NOT resolved through here — they are platform conventions
-     *  (cancel, delete the selection), not app shortcuts, and every surface in the app answers them
-     *  identically. The tool DIGITS are not here either: they belong to the panel (see
-     *  setActiveTool). */
-    void setShortcutManager(const ShortcutManager* manager) noexcept { shortcuts_ = manager; }
-    const ShortcutManager* getShortcutManager() const noexcept { return shortcuts_; }
+    // The user's keyboard bindings for this surface's OWN keys — see PianoRollComponent.cpp for
+    // the full resolution contract (strict-once-installed, Escape/Delete/tool-digits excluded).
+    void setShortcutManager(const ShortcutManager* manager) noexcept;
+    const ShortcutManager* getShortcutManager() const noexcept;
 
-    /** The app-level "invert my scroll wheel" preference, stacked ON TOP of the OS setting (which
-     *  JUCE has already folded into the deltas — see ScrollPolicy.h). false, the default, is
-     *  NATURAL: identical to what a juce::Viewport does with the same gesture, on both axes. */
-    void setScrollInverted(bool inverted) noexcept { scrollInverted_ = inverted; }
-    bool isScrollInverted() const noexcept { return scrollInverted_; }
+    // The app-level scroll/zoom-wheel-invert preferences — see PianoRollComponent.cpp.
+    void setScrollInverted(bool inverted) noexcept;
+    bool isScrollInverted() const noexcept;
+    void setZoomScrollInverted(bool inverted) noexcept;
+    bool isZoomScrollInverted() const noexcept;
 
-    /** The app-level "invert my zoom wheel direction" preference — a SEPARATE flag from
-     *  scrollInverted_ above, because zoom and plain scroll answer to different conventions: scroll
-     *  follows the OS's natural-scrolling setting (already folded into the deltas), while zoom
-     *  follows the PHYSICAL gesture (synth::ui::wheelGestureIsUpward) regardless of it. false, the
-     *  default, means wheel UP zooms IN — for both the Cmd+wheel (horizontal) and Cmd+Shift+wheel
-     *  (vertical) branches, which always agree with each other. */
-    void setZoomScrollInverted(bool inverted) noexcept { zoomScrollInverted_ = inverted; }
-    bool isZoomScrollInverted() const noexcept { return zoomScrollInverted_; }
-
-    /** Zoom the roll's own horizontal mapping by `factor` (> 1 in, < 1 out) around the CENTRE of the
-     *  visible grid, using the same anchored math the Cmd+wheel branch uses — so a menu/keyboard
-     *  zoom and a wheel zoom land in the same place, just with a different anchor. Clamped to
-     *  TimelineViewState's pixels-per-beat bounds. View-only: no doc mutation, no undo step. A
-     *  non-finite or non-positive factor is ignored. */
+    // Anchored horizontal/vertical zoom (menu/keyboard path, not the wheel) — see PianoRollZoom.cpp.
     void zoomHorizontal(double factor);
-
-    /** The vertical equivalent: scales pixelsPerSemitone_ (clamped to [kMinPixelsPerSemitone,
-     *  kMaxPixelsPerSemitone]) while keeping the pitch at the grid's vertical centre put. Same
-     *  view-only, no-undo contract. */
     void zoomVertical(double factor);
 
     // ---- Keys column labels ----
 
     // AllNotes labels every key row (subject to the row-height floor below); OctavesOnly labels
-    // only the C rows — the pre-scale-feature behaviour, kept as a mode rather than removed because
-    // a dense keyboard reading is not always what the user wants. See keyLabelFor for the exact
-    // per-row decision, including the shared "too short a row for per-key text" floor.
+    // only the C rows — see keyLabelFor (PianoRollScaleAssist.cpp) for the per-row decision.
     enum class KeyLabelMode { AllNotes, OctavesOnly };
 
-    void setKeyLabelMode(KeyLabelMode mode) noexcept { keyLabelMode_ = mode; }
-    KeyLabelMode getKeyLabelMode() const noexcept { return keyLabelMode_; }
+    void setKeyLabelMode(KeyLabelMode mode) noexcept;
+    KeyLabelMode getKeyLabelMode() const noexcept;
 
-    // Pure: no component, no theme, no LookAndFeel — what paintKeysColumn calls per row and what a
-    // test asserts on directly. Empty string means "draw no label at all". Below a 9px row height a
-    // per-key label becomes unreadable noise at any zoom worth calling "zoomed out", so BOTH modes
-    // fall back to C-only there; at or above it, AllNotes names every row ("C4", "C#4", ...) and
-    // OctavesOnly keeps naming only the Cs. Octave numbering matches the rest of the roll:
-    // pitch / 12 - 1.
     static juce::String keyLabelFor(int pitch, KeyLabelMode mode, int rowHeightPx);
-
-    // The colour paintKeysColumn draws a row's label in, given THAT row's own key fill (pianoKeyWhite
-    // or pianoKeyBlack) — never a single fill shared by both key colours. Factored out of the paint
-    // loop's `.contrasting()` call so a test can assert on it directly: the earlier bug was a sharp
-    // (black-key) label right-aligned across the FULL column width, which is wider than the black
-    // key's own (narrower, flush-left) rect, so a colour chosen to contrast against BLACK ended up
-    // drawn, for the portion past the black key's right edge, over the WHITE fill showing through —
-    // light-on-light, nearly invisible. Confining the black-key label's drawn rect to the black
-    // key's own area (see paintKeysColumn) is what makes every pixel of the label sit over the SAME
-    // fill this colour was chosen against.
-    static juce::Colour labelColourFor(juce::Colour keyFill) noexcept { return keyFill.contrasting(0.7f); }
+    // The colour paintKeysColumn draws a row's label in — see PianoRollPainting.cpp.
+    static juce::Colour labelColourFor(juce::Colour keyFill) noexcept;
 
     // ---- Note colouring & scale context ----
 
     // The per-pitch-class colour overrides (NoteColour.h) a note's fill is resolved through. See
     // synth::ui::resolveNoteColour for the precedence (out-of-scale beats an override beats the
     // theme default).
-    void setNoteColourOverrides(const synth::ui::NoteColourOverrides& overrides) {
-        overrides_ = overrides;
-        repaint();
-    }
-    const synth::ui::NoteColourOverrides& getNoteColourOverrides() const noexcept { return overrides_; }
+    void setNoteColourOverrides(const synth::ui::NoteColourOverrides& overrides);
+    const synth::ui::NoteColourOverrides& getNoteColourOverrides() const noexcept;
 
-    // The scale the grid checks notes/rows against. `isInScale` empty (the default) means no scale
-    // at all: nothing is ever out-of-scale and no row is ever hidden, regardless of
-    // `pitchVisibilityOn`. With a scale installed, `pitchVisibilityOn` decides whether out-of-scale
-    // ROWS collapse out of the grid entirely (true) or merely get paintNote's out-of-scale colour
-    // while every row still gets drawn (false) — a pitch that has a note in the OPEN clip is always
-    // kept visible even when it is out of scale, so an existing note can never become unreachable by
-    // turning this on. Rebuilds visiblePitches_ and re-clamps firstVisiblePitch_ immediately.
+    // The scale the grid checks notes/rows against — `isInScale` empty means no scale at all; see
+    // PianoRollComponent.cpp for the pitchVisibilityOn/out-of-scale contract in full.
     void setScaleContext(std::function<bool(int)> isInScale, bool pitchVisibilityOn);
 
     // ---- Scale assist panel ----
 
-    // Non-owning; may stay null (tests pass null). Hands the pointer straight to the panel (its
-    // own user-scale persistence) and restores THIS roll's own "was the panel open" flag under
-    // "pianoRollScalePanelVisible" (default false). Per-clip scale memory is deliberately NOT
-    // persisted here — see the class comment on clipScaleMemory_.
+    // Non-owning; may stay null (tests pass null) — see PianoRollScaleAssist.cpp.
     void setPropertiesFile(juce::PropertiesFile* props);
 
-    synth::ui::ScaleAssistPanel& getScaleAssistPanel() noexcept { return scalePanel_; }
-    const synth::ui::ScaleAssistPanel& getScaleAssistPanel() const noexcept { return scalePanel_; }
-    // The public toggle verb the header button, the Ctrl+S surface key and the tests all share —
-    // one entry point, so the three can never disagree about what "toggle" means (animation
-    // included; see setScalePanelVisible below for the animate/snap split).
+    synth::ui::ScaleAssistPanel& getScaleAssistPanel() noexcept;
+    const synth::ui::ScaleAssistPanel& getScaleAssistPanel() const noexcept;
     void toggleScalePanel();
-    juce::Rectangle<int> getScaleButtonBounds() const noexcept { return scaleButtonBounds_; }
+    juce::Rectangle<int> getScaleButtonBounds() const noexcept;
 
-    /** Moves the SELECTED notes (or, with nothing selected, every note in the open clip) to their
-     *  nearest in-scale pitch via MusicalScale::snapPitch. ONE undo step for the whole batch, a
-     *  no-op pushes nothing, and the selection is left exactly as it was — this only ever moves
-     *  pitches, never touches which notes are selected. */
+    // quantisePitchesToScale/quantisePitchesToActiveScale/isPitchQuantiseEnabled — see
+    // PianoRollScaleAssist.cpp for the full contract (undo-step shape, which scale each resolves).
     void quantisePitchesToScale(const synth::MusicalScale& scale);
-
-    /** The same verb, resolved against whatever scale is active for the OPEN clip — the ONE seam the
-     *  scale panel's "Quantize pitches" button, the header's pitch-quantize chip and the
-     *  "pianoRollQuantisePitches" key all share, so the three can never disagree about which scale
-     *  they quantise into. That scale comes from clipScaleMemory_ (which is what the panel is
-     *  showing — see restoreScaleMemoryForOpenClip).
-     *  @return false when there is nothing to do: roll closed, or no real scale chosen for this clip
-     *  ("No scale" quantises into nothing, so it is a no-op rather than an identity pass). */
     bool quantisePitchesToActiveScale();
-    /** True when quantisePitchesToActiveScale() would act — a scale is chosen AND the clip has at
-     *  least one note. What the header chip paints dimmed on. */
     bool isPitchQuantiseEnabled() const;
 
-    /** Grows the open clip to `lengthBeats` in its OWN undo step (never merged with the resize that
-     *  provoked it — the user answered a second question, and undo should take them back one answer
-     *  at a time). A no-op when the clip is already at least that long. Public because the async
-     *  overrun alert's callback lands here from outside the class (see promptExtendClipToFitNotes).
-     *
-     *  Takes the clip id EXPLICITLY and deliberately does not read clipId_: the async overrun alert
-     *  can be answered arbitrarily long after it was raised, and the roll may have been repointed at a
-     *  different clip in between (a message-thread openClip — an AI action, an undo/redo, a timer —
-     *  is not blocked by a modal window, it just isn't user input). Reading the live member there
-     *  silently grew whichever clip happened to be open instead, which is exactly the "the clip is
-     *  NOT grown behind the user's back" guarantee this feature is built on. A clip id that no longer
-     *  resolves is a no-op.
-     *  @return true when the doc was actually mutated. */
+    // extendClipTo/applyExtendPromptAnswer — see PianoRollAudition.cpp for the full contract
+    // (why the clip id is captured explicitly, what each overrun-prompt arm does).
     bool extendClipTo(synth::ClipId clipId, double lengthBeats);
-
-    /** What the overrun alert's two arms DO, factored out of the async callback so the real answer
-     *  path is one line there and fully testable here (a headless run has no message loop to answer a
-     *  juce::AlertWindow with, so a test that only drove the virtual seam below would leave this
-     *  logic uncovered). `extend` true is the "Extend" button, false is "Keep" — which is a genuine
-     *  no-op: the notes stay overrunning and playback truncates them at the clip boundary. */
     void applyExtendPromptAnswer(synth::ClipId clipId, double requiredLengthBeats, bool extend);
 
-    /** Fills the open clip with a fresh random pattern: `scale` may be null (every pitch in
-     *  [minPitch, maxPitch] is a candidate); the grid step is the snap selector's RAW division
-     *  (ignoring the on/off toggle), falling back to a sixteenth when that division is Off/0. ONE
-     *  undo step either way, and the generated notes become the selection.
-     *
-     *  `addToExisting` is the panel's "Add to existing" toggle. false (the default) REPLACES: the
-     *  single mutation removes every existing note and adds the generated ones, so undo restores the
-     *  old contents in one step rather than unwinding a clear-then-paste. true OVERLAYS: nothing is
-     *  cleared and a generated note that exactly duplicates an existing (pitch, startBeat) is
-     *  SKIPPED — generation places one note per grid step, so re-running it over its own output
-     *  would otherwise stack unison duplicates the user cannot see or click apart. Only the notes
-     *  actually added become the selection, which is what makes "generate again" reviewable.
-     *
-     *  `rng` is caller-owned, which is what makes this deterministically testable (the panel's
-     *  Generate button hands it a fresh, default-seeded juce::Random). */
+    // Fills the open clip with a fresh random pattern — see PianoRollScaleAssist.cpp for the full
+    // contract (addToExisting replace-vs-overlay semantics, grid-step/scale resolution).
     void generateRandomNotesIntoClip(const synth::MusicalScale* scale, int minPitch, int maxPitch, juce::Random& rng,
                                      bool addToExisting = false);
 
     // ---- Edit tools (Cubase-style; see EditTool.h) ----
 
-    /** The active tool. TimelinePanelComponent owns the choice (one strip drives whichever editor
-     *  is currently swapped into the lane rect) and pushes it here; the roll never switches tool by
-     *  itself. In particular keyPressed() deliberately does NOT consume the tool digits — they
-     *  bubble to the panel, which owns that binding, so the two can never disagree about which
-     *  tool is active.
-     *
-     *  Select keeps the whole pre-existing gesture table (click-select, drag-move, right-edge
-     *  resize, Cmd velocity scrub, drag-from-empty marquee, double-click create/delete). The other five
-     *  tools REPLACE it: they act on a single click and none of them starts a move/resize/scrub/
-     *  marquee, so a mis-aimed drag with the Erase tool can never silently move a note instead.
-     *  Switching tool also abandons any gesture already in flight — it belonged to the old tool. */
+    // The active tool — see PianoRollEditTools.cpp for the Select-vs-other-five gesture contract.
     void setActiveTool(EditTool tool);
-    EditTool getActiveTool() const noexcept { return activeTool_; }
+    EditTool getActiveTool() const noexcept;
 
     // ---- Note clipboard ----
 
-    /** One copied note, stored RELATIVE to the earliest note in the copied block rather than in
-     *  absolute (or even clip-relative) beats. That is what lets a copy survive being pasted into a
-     *  different clip at a different position — the block keeps its internal shape and only its
-     *  anchor moves. Every field a note carries is captured, `muted` included: a muted note pastes
-     *  back muted, the same way a split or a duplicate carries the flag (see MidiNote::muted). */
-    struct ClipboardNote {
-        double offsetFromEarliest = 0.0;
-        double lengthBeats = 1.0;
-        int pitch = 60;
-        int velocity = 100;
-        int channel = 1;
-        bool muted = false;
-    };
+    // ClipboardNote is defined in PianoRollTypes.h; re-exposed here as a nested-type alias so
+    // PianoRollComponent::ClipboardNote keeps resolving exactly as it did when it was nested.
+    using ClipboardNote = pianoroll::ClipboardNote;
 
-    /** Captures the current selection into the clipboard. The clipboard is a MEMBER of the roll,
-     *  not of a gesture: it deliberately outlives openClip(), so "copy here, open another clip,
-     *  paste there" works — which is the whole point of anchoring entries on the earliest note.
-     *  @return false (clipboard untouched) when nothing is selected. */
+    // copySelectedNotes/canPasteNotes/pasteNotesAtPlayhead/duplicateSelectedNotes/cutSelectedNotes/
+    // selectAllNotes/repeatSelectedNotes — see PianoRollClipboardAndKeys.cpp for the full contract
+    // of each (anchor/paste rules, undo-step shape, clipboard-vs-duplicate distinction).
     bool copySelectedNotes();
-
-    /** True when pasteNotesAtPlayhead() would have somewhere to put something: a non-empty
-     *  clipboard AND an open clip. The command wiring uses this for its menu-item enablement. */
     bool canPasteNotes() const noexcept;
-
-    /** Pastes the clipboard block into the OPEN clip, anchored at the playhead: the anchor is the
-     *  snapped, clip-relative playhead position when that lands inside [0, clip length), and 0.0
-     *  otherwise (a playhead parked outside the edited clip still pastes something visible rather
-     *  than nothing at all). Notes landing at/after the clip's end are skipped and a note's length
-     *  is clamped to the clip's end; see buildPastedNotes for the exact rules. One undo step
-     *  however many notes land, and the pasted notes become the selection.
-     *  @return false when nothing could be placed. */
     bool pasteNotesAtPlayhead();
-
-    /** Copies the selection to immediately after its own span (span = max end - min start), same
-     *  pitches, one undo step, and selects the copies. Does NOT touch the clipboard — duplicating
-     *  is not a copy, and stomping a clipboard the user filled deliberately would be a surprise. */
     bool duplicateSelectedNotes();
-
-    /** Copy + delete as ONE undo step (the clipboard is filled first, so a cut is always
-     *  pasteable). @return false when nothing is selected. */
     bool cutSelectedNotes();
-
-    /** Selects every note in the open clip. @return false when there is nothing to select. */
     bool selectAllNotes();
-
-    /** `count` back-to-back copies of the selection block, each one span further along, clipped at
-     *  the clip's end: placement STOPS at the first block that falls entirely outside the clip
-     *  rather than piling every remaining copy onto the last beat. One undo step for the whole
-     *  repeat; every created note ends up selected. */
     bool repeatSelectedNotes(int count);
-
-    bool hasNoteSelection() const noexcept { return !selection_.isEmpty(); }
+    bool hasNoteSelection() const noexcept;
 
     // ---- Entry/exit (panel API surface: openPianoRoll/closePianoRoll/isPianoRollOpen forward
     // straight to these three) ----
 
-    // Opens the roll for `id`. A no-op (stays/becomes closed) if doc_ is null or `id` does not
-    // resolve to a live clip. Clears the note selection, resets any in-flight gesture, centres the
-    // pitch scroll on the clip's median note pitch (60 for an empty clip), and frames the clip
-    // horizontally: its start sits at the keys column's right edge, zoomed so the whole clip fits
-    // (subject to the pixels-per-beat clamps).
+    // openClip/closeRoll — see PianoRollComponent.cpp for the full open/close contract.
     void openClip(synth::ClipId id);
     void closeRoll();
-    bool isOpen() const noexcept { return clipId_.isValid(); }
-    synth::ClipId getClipId() const noexcept { return clipId_; }
+    bool isOpen() const noexcept;
+    synth::ClipId getClipId() const noexcept;
 
-    // Fired when the roll asks to be closed: the back button, Escape with nothing selected, or
-    // refreshFromDoc() noticing the edited clip is gone. The owner (TimelinePanelComponent) wires
-    // this to its own closePianoRoll(), which also re-shows the clip-lane area. Not fired by a
-    // direct closeRoll() call (that IS the close — no need to ask again).
+    // Fired when the roll asks to be closed (back button, Escape, or the edited clip disappearing)
+    // — not fired by a direct closeRoll() call. See PianoRollComponent.cpp (refreshFromDoc).
     std::function<void()> onCloseRequested;
 
-    // Fired after toggleSnap() flipped the shared TimelineViewState::snapEnabled — the owner
-    // persists the choice and repaints whatever else paints the grid (the lanes behind us).
+    // Fired after toggleSnap() flipped the shared snap flag — see PianoRollClipboardAndKeys.cpp.
     std::function<void()> onSnapToggled;
 
-    // Fired whenever the roll's OWN horizontal mapping changed (openClip's framing, wheel
-    // zoom/scroll). While the roll is open the panel's ruler mirrors that mapping (see
-    // TimelineRulerComponent::setMappingOverride), so it has to repaint on this.
+    // Fired whenever the roll's OWN horizontal mapping changed — see PianoRollComponent.cpp.
     std::function<void()> onHorizontalViewChanged;
 
     /** NOTE AUDITION — "clicking a note plays it". Fired with `on == true` on a mouse-down that hits
-     *  a note (Select tool only: erasing, muting, splitting or gluing a note is not a request to
-     *  hear it), with `on == false` on the release, and as a noteOff/noteOn PAIR whenever a Move
-     *  drag carries the grabbed note onto a different pitch — so dragging up a scale sounds like
-     *  dragging up a scale instead of holding one note.
-     *
-     *  The roll deliberately knows NOTHING about the graph, the transport or which modules a track
-     *  plays through: it emits a pitch, a normalised velocity and an on/off edge, and the owner
-     *  (MainComponent, via TimelinePanelComponent) turns that into MIDI for the edited clip's track
-     *  destinations. That is what keeps this surface headless-testable — every audition test in
-     *  Tests/PianoRollTests.cpp just counts the callback.
+     *  a note (Select tool only), `on == false` on the release, and as a noteOff/noteOn PAIR
+     *  whenever a Move drag carries the grabbed note onto a different pitch.
      *
      *  THE CONTRACT, because a missed `false` is a note stuck on until the app quits: exactly one
-     *  `false` follows every `true`, and it is emitted from mouse-up, from a gesture cancelled by a
-     *  tool switch, from openClip/closeRoll, from visibilityChanged, and from the destructor.
-     *  Re-entrant safety is the caller's only obligation — this is called from the message thread. */
+     *  `false` follows every `true`, emitted from mouse-up, a gesture cancelled by a tool switch,
+     *  openClip/closeRoll, visibilityChanged, and the destructor. See PianoRollAudition.cpp. */
     std::function<void(int pitch, float velocity01, bool on)> onAuditionNote;
 
-    // The roll's own zoom/scroll — what the panel hands the ruler as its mapping override while
-    // the roll is open, so the bar numbers above show the clip's REAL timeline position.
-    const TimelineViewState& getRollViewState() const noexcept { return rollView_; }
+    // The roll's own zoom/scroll, exposed for the panel's ruler mapping override.
+    const TimelineViewState& getRollViewState() const noexcept;
 
-    // kKeysColumnWidth plus the scale-assist panel's CURRENT animated width — 0 while fully closed,
-    // kScalePanelWidth at rest open, anything between while the slide (see "Scale assist panel
-    // slide animation" below) is in flight — the ONE seam beatToX/xToBeat/gridRegion and every
-    // hit-test below route the grid's left offset through (see the class comment). Public because
-    // TimelineRulerComponent's mapping override reads this SAME offset (via
-    // TimelinePanelComponent::openPianoRoll and its onHorizontalViewChanged re-issue), so the
-    // ruler's ticks/scrub hit-testing track the scale panel's width — including mid-slide — instead
-    // of drifting from it.
-    int leftGutterWidth() const noexcept {
-        return (int)std::llround((double)scalePanelOpenProgress_ * (double)kScalePanelWidth) + kKeysColumnWidth;
-    }
+    // kKeysColumnWidth plus the scale-assist panel's CURRENT animated width — see
+    // PianoRollComponent.cpp for the full seam contract.
+    int leftGutterWidth() const noexcept;
 
-    // Flips the shared snap switch (TimelineViewState::snapEnabled), flashes the Snap chip and fires
-    // onSnapToggled. The Snap chip and the roll's "pianoRollSnapToggle" key (J by default) both land
-    // here. The switch itself is still the SHARED TimelineViewState one — only the KEY that reaches it
-    // is per-surface (the timeline panel keeps its own bare-Q binding), so snap is never on in one
-    // editor and off in the other.
+    // Flips the shared snap switch, flashes the Snap chip and fires onSnapToggled — see
+    // PianoRollClipboardAndKeys.cpp.
     void toggleSnap();
 
-    /** "Show only scale notes" — the row filter (see setScaleContext's `pitchVisibilityOn`). THE one
-     *  entry point the header chip, the "pianoRollToggleScaleFilter" key (Option+S) and the scale
-     *  panel's own checkbox all share, so the three can never disagree about the state: it writes the
-     *  open clip's ClipScaleMemory, pushes the context, and reflects the new value back INTO the panel
-     *  (setSelection, which fires no callback — it is a reflection, not an edit).
-     *
-     *  A no-op with no clip open. Deliberately NOT gated on a scale being chosen: the flag is
-     *  remembered per clip either way and simply has no visible effect until a scale exists, which is
-     *  what lets the user arm it first and pick the scale second. */
+    // "Show only scale notes" — the row filter; see PianoRollComponent.cpp for the full contract.
     void toggleScaleFilter();
-    /** The filter's logical state for the open clip — what the chip paints lit. False with no clip. */
     bool isScaleFilterOn() const noexcept;
-    /** Whether rows are ACTUALLY being filtered right now: the flag above AND a real scale to filter
-     *  by. This — not the flag — is what makes Up/Down step by scale degree (see
-     *  transposeSelectedNotesByRow). */
-    bool isRowFilterActive() const noexcept { return pitchVisibilityOn_ && (bool)isInScale_; }
+    bool isRowFilterActive() const noexcept;
 
     // ---- Follow playhead ----
 
-    /** When on, setPlayheadBeat page-flips the roll's OWN horizontal view the instant the drawn
-     *  beat would land outside gridRegion() — the roll chases the transport instead of leaving it
-     *  to scroll off the edge. Gated (see setPlayheadBeat) on no drag being in flight and the
-     *  edge-auto-scroll timer being idle, so a Move/Resize/Marquee/DrawNew gesture that is already
-     *  steering the view (or deliberately not) is never yanked out from under the user. Off by
-     *  default: existing embeddings/tests must see no new view movement until this is turned on. */
-    void setFollowPlayhead(bool follow) noexcept { followPlayhead_ = follow; }
-    bool isFollowPlayhead() const noexcept { return followPlayhead_; }
+    // When on, setPlayheadBeat page-flips the roll's own horizontal view rather than letting it
+    // scroll off the edge — see PianoRollPainting.cpp (autoScrollTick gating) for the full contract.
+    void setFollowPlayhead(bool follow) noexcept;
+    bool isFollowPlayhead() const noexcept;
 
-    // THE refresh seam, called by the panel's TimelineDoc::Listener on every doc mutation (mirrors
-    // TimelineClipLaneArea::refreshFromDoc): prunes the note selection of anything the mutation
-    // removed. If the EDITED CLIP itself is gone, closes the roll and fires onCloseRequested() so
-    // the owner swaps back to the clip lanes. A no-op while closed.
+    // THE refresh seam, called on every doc mutation — see PianoRollComponent.cpp.
     void refreshFromDoc();
 
     // ---- The roll's OWN horizontal mapping ----
 
-    // Absolute beat <-> this component's x. x == leftGutterWidth() is the first visible beat: the
-    // keys column (plus the scale panel, while open) is a gutter, NOT an overlay painted over the
-    // grid's leftmost pixels.
+    // Absolute beat <-> this component's x — see PianoRollComponent.cpp.
     double beatToX(double absBeat) const noexcept;
     double xToBeat(double x) const noexcept;
 
-    double getPixelsPerBeat() const noexcept { return rollView_.pixelsPerBeat; }
-    double getFirstVisibleBeat() const noexcept { return rollView_.firstVisibleBeat; }
-    double getPixelsPerSemitone() const noexcept { return pixelsPerSemitone_; }
+    double getPixelsPerBeat() const noexcept;
+    double getFirstVisibleBeat() const noexcept;
+    double getPixelsPerSemitone() const noexcept;
 
-    // Pins the horizontal mapping directly (pixelsPerBeat clamped to TimelineViewState's zoom
-    // bounds, firstVisibleBeat clamped >= 0). openClip() derives both from the clip; this is what
-    // a test (or a future "restore my zoom" path) uses to set them explicitly.
+    // Pins the horizontal mapping directly — see PianoRollComponent.cpp.
     void setHorizontalView(double pixelsPerBeat, double firstVisibleBeat);
     void setPixelsPerSemitone(double pixelsPerSemitone);
 
     // ---- TimelinePlayheadOverlay::LocalPlayheadClient ----
     // While open, the panel overlay hands the drawn beat here instead of drawing inside this rect
-    // (its shared mapping would put the line at the wrong x). Same discipline as the overlay's own
-    // refreshLine: a beat whose rounded x did not move requests NOTHING.
+    // — see PianoRollPainting.cpp (setPlayheadBeat) for the full contract.
     bool isLocalPlayheadActive() const override { return isOpen(); }
     void setPlayheadBeat(double absoluteBeat) override;
 
-    // The last absolute beat the overlay handed over. Exposed because paste targets it (see
-    // pasteNotesAtPlayhead) — the roll has no transport of its own to ask.
-    double getPlayheadBeat() const noexcept { return playheadBeat_; }
-
-    // The x the local playhead line is drawn at right now, in this component's coordinates.
+    double getPlayheadBeat() const noexcept;
     int getPlayheadLineX() const noexcept;
-    bool hasPlayheadPosition() const noexcept { return hasPlayheadX_; }
+    bool hasPlayheadPosition() const noexcept;
 
-    // ---- Test hooks (mirrors TimelineClipLaneArea's getClipRect / isMarqueeActiveForTest) ----
-    juce::Rectangle<int> getBackButtonBounds() const noexcept { return backButtonBounds_; }
-    juce::Rectangle<int> getSnapButtonBounds() const noexcept { return snapButtonBounds_; }
-    juce::Rectangle<int> getQuantiseButtonBounds() const noexcept { return quantiseButtonBounds_; }
-    juce::Rectangle<int> getQuantisePitchButtonBounds() const noexcept { return quantisePitchButtonBounds_; }
-    juce::Rectangle<int> getScaleFilterButtonBounds() const noexcept { return scaleFilterButtonBounds_; }
-    juce::Rectangle<int> getKeysColumnBounds() const noexcept { return keysColumnBounds_; }
-    juce::Rectangle<int> getNoteGridBounds() const noexcept { return noteGridBounds_; }
-    int getFirstVisiblePitchForTest() const noexcept { return firstVisiblePitch_; }
-    // The continuous vertical scroll anchor firstVisiblePitch_ is derived from — see the class
-    // comment's "Vertical row mapping" section. setTopRowPositionForTest goes through the same
-    // clamp/re-derive seam (setTopRowPosition) every real writer does, so a test can plant an exact
-    // fractional (or out-of-range) position without bypassing the invariants that seam enforces.
-    double getTopRowPositionForTest() const noexcept { return topRowPosition_; }
-    void setTopRowPositionForTest(double position) noexcept { setTopRowPosition(position); }
-    double getMinTopRowPositionForTest() const noexcept { return minTopRowPosition(); }
-    double getMaxTopRowPositionForTest() const noexcept { return maxTopRowPosition(); }
-    bool isMarqueeActiveForTest() const noexcept { return dragMode_ == DragMode::Marquee; }
-    NoteSelectionModel& getSelectionForTest() noexcept { return selection_; }
+    // ---- Test hooks (mirrors TimelineClipLaneArea's getClipRect / isMarqueeActiveForTest); each
+    // one's contract is documented next to its out-of-line definition in the matching
+    // PianoRoll<Concern>.cpp unit ----
+    juce::Rectangle<int> getBackButtonBounds() const noexcept;
+    juce::Rectangle<int> getSnapButtonBounds() const noexcept;
+    juce::Rectangle<int> getQuantiseButtonBounds() const noexcept;
+    juce::Rectangle<int> getQuantisePitchButtonBounds() const noexcept;
+    juce::Rectangle<int> getScaleFilterButtonBounds() const noexcept;
+    juce::Rectangle<int> getKeysColumnBounds() const noexcept;
+    juce::Rectangle<int> getNoteGridBounds() const noexcept;
+    int getFirstVisiblePitchForTest() const noexcept;
+    double getTopRowPositionForTest() const noexcept;
+    void setTopRowPositionForTest(double position) noexcept;
+    double getMinTopRowPositionForTest() const noexcept;
+    double getMaxTopRowPositionForTest() const noexcept;
+    bool isMarqueeActiveForTest() const noexcept;
+    NoteSelectionModel& getSelectionForTest() noexcept;
 
-    // ---- Edge auto-scroll test hooks (mirrors TimelineClipLaneArea::tickAutoScrollForTest /
-    // isAutoScrollTimerRunningForTest exactly) ----
-    // Drives one autoScrollTick() without a real juce::Timer — a headless test run cannot wait on
-    // wall-clock ticks, so this is the only way to exercise the timer's EFFECT deterministically.
-    void tickAutoScrollForTest() { autoScrollTick(); }
-    // The gating half of the timer contract a test pins: started only while a Move/Resize/
-    // Marquee/DrawNew drag is live AND the last-known pointer sits inside an edge zone of
-    // gridRegion(), stopped the instant either stops being true.
-    bool isAutoScrollTimerRunningForTest() const noexcept { return autoScrollTimer_.isTimerRunning(); }
+    void tickAutoScrollForTest();
+    bool isAutoScrollTimerRunningForTest() const noexcept;
 
-    // The row-mapping state a scale-context test asserts on directly, without going near paint():
-    // every pitch that currently gets a row, ascending, and whichever of those is at the top.
-    const std::vector<int>& getVisiblePitchesForTest() const noexcept { return visiblePitches_; }
+    const std::vector<int>& getVisiblePitchesForTest() const noexcept;
+    int blackKeyInsetForTest() const noexcept;
 
-    // The pixel width of the narrower black-key overlay drawn in paintKeysColumn, for the current
-    // keys-column width — a pure geometry seam, no pixel-reading required.
-    int blackKeyInsetForTest() const noexcept { return blackKeyWidthPx(keysColumnBounds_.getWidth()); }
-
-    // The colour paintNote would resolve `note` to right now (its OWN doc fields — never a mid-drag
-    // preview), so a scale-colouring test can assert on the resolved NotePaint instead of reading
-    // pixels.
     synth::ui::NotePaint notePaintFor(const synth::MidiNote& note) const;
 
-    // The snap division the grid currently draws its faintest lines at (0.0 for Snap::Off), and how
-    // many lines at a given spacing are inside the grid region — both computed from state alone, so
-    // a test can assert "the gridlines follow the snap division" without going near paint().
-    double getGridDivisionForTest() const noexcept { return currentGridBeats(); }
-    // The division the grid is DRAWN at, which (unlike the one above) survives the snap switch going
-    // off — see drawnGridBeats().
-    double getDrawnGridDivisionForTest() const noexcept { return drawnGridBeats(); }
+    double getGridDivisionForTest() const noexcept;
+    double getDrawnGridDivisionForTest() const noexcept;
     int getGridLineCountForTest(double spacingBeats) const noexcept;
 
-    // True while the "Q" button is showing its momentary pressed highlight, and whether it would do
-    // anything at all (a grid to snap to AND at least one note in the clip — it paints dimmed
-    // otherwise).
-    bool isQuantiseFlashingForTest() const noexcept { return quantiseFlash_; }
+    bool isQuantiseFlashingForTest() const noexcept;
     bool isQuantiseEnabled() const;
 
-    // The live rect for a note id, using its CURRENT doc geometry (never a mid-drag preview) — the
-    // same "what tests use to compute where to synthesize a mouse event" role
-    // TimelineClipLaneArea::getClipRect plays. Returns an empty rect if the id does not resolve
-    // (doc null, roll closed, or no such note).
     juce::Rectangle<int> getNoteRect(synth::NoteId id) const;
 
-    // Pure pitch<->y mapping for the current scroll position and vertical zoom (no component, no
-    // doc) — what a test uses to place a synthetic mouse event at a target pitch row.
     int yForPitch(int pitch) const noexcept;
     int pitchForY(int y) const noexcept;
 
-    // Split-tool hover preview state (the cut beat is CLIP-relative), and the clipboard's depth —
-    // all three are pure state a test can assert on without going near paint().
-    bool hasSplitPreviewForTest() const noexcept { return hasSplitPreview_; }
-    double getSplitPreviewBeatForTest() const noexcept { return splitPreviewBeat_; }
-    synth::NoteId getSplitPreviewNoteForTest() const noexcept { return splitPreviewNote_; }
-    int getClipboardSizeForTest() const noexcept { return (int)noteClipboard_.size(); }
-    // The Draw tool's in-flight preview length (0.0 when no draw gesture is running).
-    double getDrawPreviewLengthForTest() const noexcept {
-        return dragMode_ == DragMode::DrawNew ? drawLengthBeats_ : 0.0;
-    }
+    bool hasSplitPreviewForTest() const noexcept;
+    double getSplitPreviewBeatForTest() const noexcept;
+    synth::NoteId getSplitPreviewNoteForTest() const noexcept;
+    int getClipboardSizeForTest() const noexcept;
+    double getDrawPreviewLengthForTest() const noexcept;
 
-    // ---- Scale-panel slide animation test hooks ----
-    //
-    // Mirrors ModuleLibraryComponent::setSectionProgress: drives the SAME per-frame math the real
-    // AnimationDriver callback runs (see setScalePanelVisible), keyed by a normalised progress in
-    // [0, 1] (0 = fully closed, 1 = fully open) rather than a width. A headless test has no real
-    // VBlank reaching an off-screen component (setScalePanelVisible snaps immediately there — see
-    // isShowing()), so this is the only way to exercise the tween's geometry at an intermediate
-    // frame deterministically.
     void setScalePanelOpenProgressForTest(float progress);
-    float getScalePanelOpenProgressForTest() const noexcept { return scalePanelOpenProgress_; }
-    // The tween's captured START point for whichever toggle/restore most recently ran — what a test
-    // reads to prove a mid-flight toggle reverses from the CURRENT width rather than jumping to an
-    // extreme first (setScalePanelVisible captures this BEFORE deciding whether to animate at all).
-    float getScalePanelAnimFromForTest() const noexcept { return scalePanelAnimFrom_; }
-    bool isScalePanelAnimatingForTest() const noexcept { return scalePanelAnim_.isRunning(); }
-    // The logical (target) open/closed state — what the header button paints as lit/active and
-    // what persists, as opposed to scalePanelOpenProgress_'s mid-slide VISUAL value.
-    bool isScalePanelTargetVisibleForTest() const noexcept { return scalePanelVisible_; }
+    float getScalePanelOpenProgressForTest() const noexcept;
+    float getScalePanelAnimFromForTest() const noexcept;
+    bool isScalePanelAnimatingForTest() const noexcept;
+    bool isScalePanelTargetVisibleForTest() const noexcept;
 
-    // ---- Note-audition test hooks (see onAuditionNote) ----
-    // The pitch currently sounding, or -1 when nothing is. This is the roll's OWN idea of what it has
-    // told the owner to play, which is exactly what the no-stuck-note tests assert on.
-    int getAuditionPitchForTest() const noexcept { return auditionActive_ ? auditionPitch_ : -1; }
-    bool isAuditionActiveForTest() const noexcept { return auditionActive_; }
-    // The KEY the pointer is holding down in the keys column, or -1 — what paintKeysColumn draws
-    // pressed, and the state a keys-column drag walks.
-    int getPressedKeyForTest() const noexcept { return keysColumnPressing_ ? keysColumnPitch_ : -1; }
+    int getAuditionPitchForTest() const noexcept;
+    bool isAuditionActiveForTest() const noexcept;
+    int getPressedKeyForTest() const noexcept;
 
-    // ---- Resize test hooks ----
-    // The in-flight resize's LENGTH DELTA, shared by every note in the gesture (see resizeNotes_),
-    // and how many notes it is being applied to — the two pieces a multi-note-resize test needs
-    // without going near paint().
-    double getResizeDeltaForTest() const noexcept { return dragMode_ == DragMode::Resize ? previewLengthDelta_ : 0.0; }
-    int getResizeNoteCountForTest() const noexcept {
-        return dragMode_ == DragMode::Resize ? (int)resizeNotes_.size() : 0;
-    }
-    // True while the in-flight resize is bypassing the grid (the Cmd+right-edge gesture).
-    bool isResizeUnquantizedForTest() const noexcept { return dragMode_ == DragMode::Resize && resizeUnquantized_; }
-    // The clip length the last overrun prompt asked for, and whether one was ever raised — see
-    // promptExtendClipToFitNotes.
-    double getLastExtendPromptLengthForTest() const noexcept { return lastExtendPromptLength_; }
-    // The CLIP the last overrun prompt was raised for — the capture the async answer is routed by.
-    synth::ClipId getLastExtendPromptClipForTest() const noexcept { return lastExtendPromptClip_; }
+    double getResizeDeltaForTest() const noexcept;
+    int getResizeNoteCountForTest() const noexcept;
+    bool isResizeUnquantizedForTest() const noexcept;
+    double getLastExtendPromptLengthForTest() const noexcept;
+    synth::ClipId getLastExtendPromptClipForTest() const noexcept;
 
-    // ---- Header button hover test hooks (Task D chip affordance) ----
-    // Six chips, left to right: Back ("Clips"), Snap, Quantise, QuantisePitches, Scale,
+    // Six header chips, left to right: Back ("Clips"), Snap, Quantise, QuantisePitches, Scale,
     // ScaleFilter. Snap and ScaleFilter are TOGGLES (they paint lit); the other four are actions.
     enum class HeaderButtonId { None, Back, Snap, Quantise, QuantisePitches, Scale, ScaleFilter };
-    HeaderButtonId getHoveredHeaderButtonForTest() const noexcept { return hoveredHeaderButton_; }
-    bool isHeaderButtonHoveredForTest(HeaderButtonId which) const noexcept { return hoveredHeaderButton_ == which; }
+    HeaderButtonId getHoveredHeaderButtonForTest() const noexcept;
+    bool isHeaderButtonHoveredForTest(HeaderButtonId which) const noexcept;
 
 protected:
-    // THE paint-count seam for the local playhead line, mirroring
-    // TimelinePlayheadOverlay::requestRepaintStrip exactly (a test subclasses and counts). Every
-    // repaint the playhead costs here goes through it and nowhere else.
+    // requestRepaintStrip/requestRepaintPreviewStrip/requestRepaintHeaderButtonStrip — the
+    // paint-count seams for the local playhead line, the Split-tool hover preview, and the header
+    // buttons' hover wash respectively, each counted independently by tests. See
+    // PianoRollPainting.cpp for the full contract of each.
     virtual void requestRepaintStrip(juce::Rectangle<int> strip);
-
-    // The SAME seam for the Split tool's hover preview, kept separate from the playhead's so a
-    // test can count the two independently (a hover that repainted the playhead's strip would be
-    // a bug, not a rounding difference). Called ONLY when the previewed cut actually moved.
     virtual void requestRepaintPreviewStrip(juce::Rectangle<int> strip);
-
-    // THE paint-count seam for the header buttons' hover wash (Back/Quantise/Scale — see
-    // updateHeaderButtonHover), same discipline as the two above: called ONLY when the hovered
-    // chip actually changed, once per affected rect (the vacated chip, the newly hovered one),
-    // never per mouse move.
     virtual void requestRepaintHeaderButtonStrip(juce::Rectangle<int> strip);
 
     /** Raised on mouse-up when a just-committed resize left at least one note ending past the edited
-     *  clip's end (the resize gesture itself has NO clip-length clamp — see the Resize branch of
-     *  updateDragPreviewFromLastPointer): asks whether to grow `clipId` to `requiredLengthBeats` so
-     *  the notes fit, or leave them overrunning. The default implementation is an ASYNC
-     *  juce::AlertWindow (never a modal loop — the mouse-up is still unwinding) whose callback
-     *  forwards to applyExtendPromptAnswer through a Component::SafePointer.
-     *
-     *  `clipId` is CAPTURED here and carried through the answer — it is the clip whose notes
-     *  overran, not "whatever is open when the user finally clicks". See extendClipTo for why that
-     *  distinction is load-bearing rather than tidiness.
-     *
-     *  A protected virtual for the same reason requestRepaintStrip is one: a headless test has no
-     *  message loop to answer a real alert with, so it overrides this, records the request (the clip
-     *  id included — that is what lets a test pin the capture semantics), and drives whichever arm it
-     *  wants to assert on through applyExtendPromptAnswer. */
+     *  clip's end: asks whether to grow `clipId` to `requiredLengthBeats` so the notes fit, or leave
+     *  them overrunning. `clipId` is CAPTURED here and carried through the answer — see extendClipTo.
+     *  The default implementation is an ASYNC juce::AlertWindow; a headless test overrides this
+     *  protected virtual instead. See PianoRollAudition.cpp for the full contract. */
     virtual void promptExtendClipToFitNotes(synth::ClipId clipId, double requiredLengthBeats);
 
-    // THE edge-auto-scroll timer's seam, mirroring TimelineClipLaneArea::autoScrollTick() exactly
-    // (a test subclasses and drives it via tickAutoScrollForTest() rather than a real juce::Timer,
-    // which a headless run cannot wait on at wall-clock speed). One tick scrolls rollView_/
-    // firstVisiblePitch_ by edgeScrollVelocity's worth on whichever axis (or both) the last-known
-    // pointer sits inside an edge zone of gridRegion() on, re-derives whichever gesture is in
-    // flight from that SAME last-known pointer (an auto-scroll tick has no MouseEvent of its own —
-    // the pointer isn't moving, the view is), fires onHorizontalViewChanged when the horizontal
-    // mapping moved, and repaints.
+    // THE edge-auto-scroll timer's seam, mirroring TimelineClipLaneArea::autoScrollTick() exactly —
+    // see PianoRollMouse.cpp for the full contract (what one tick does, how it re-derives the
+    // in-flight gesture from the last-known pointer).
     virtual void autoScrollTick();
 
 private:
     enum class DragMode { None, Move, Resize, Marquee, VelocityScrub, DrawNew };
 
-    struct NoteHit {
-        synth::NoteId id;
-        juce::Rectangle<int> rect;
-        bool onRightEdge = false;
-    };
-
-    // One dragged/scrubbed note's ORIGIN (pre-gesture) state — every preview/commit computation
-    // reads from this, never from the accumulating pointer position (TimelineClipLaneArea's
-    // DragOrigin comment: this is what keeps rounding from accumulating frame to frame).
-    struct NoteOrigin {
-        synth::NoteId id;
-        double startBeat = 0.0; // clip-relative
-        double lengthBeats = 0.0;
-        int pitch = 0;
-        int velocity = 100;
-    };
+    // NoteHit/NoteOrigin are defined in PianoRollTypes.h; re-exposed as nested-type aliases so
+    // PianoRollComponent::NoteHit / ::NoteOrigin keep resolving exactly as when they were nested.
+    using NoteHit = pianoroll::NoteHit;
+    using NoteOrigin = pianoroll::NoteOrigin;
 
     std::optional<NoteHit> hitTestNote(juce::Point<int> pos) const;
     std::vector<std::pair<synth::NoteId, juce::Rectangle<int>>> collectNoteRects() const;
-    // Absolute-beat span + pitch -> the note's rect, through the roll's OWN mapping (beatToX).
     juce::Rectangle<int> computeNoteRect(double absStartBeat, double absLengthBeats, int pitch) const;
     double currentBeatsPerBar() const;
-    // MAGNETISM only: viewState_.divisionBeats(...), which is 0.0 while the snap switch is off. Every
-    // caller that snaps an edit reads this; nothing that PAINTS may.
+    // currentGridBeats (magnetism only) vs drawnGridBeats (drawing only, survives snap-off) — see
+    // PianoRollScaleAssist.cpp for why the two must never be merged back into one function.
     double currentGridBeats() const;
-    // DRAWING only: viewState_.divisionBeatsRaw(...) — the chosen division regardless of the snap
-    // switch. The two used to be the same function, which made turning snap off erase the sub-beat
-    // gridlines: the user lost the grid they were reading while free-hand editing, which is exactly
-    // when they need to see it. Snap governs whether edits are magnetic, never whether the grid is
-    // visible.
     double drawnGridBeats() const;
     double snappedBeatAt(double rawBeat) const;
-    // Clamps a clip-relative [start, start+length) span into [0, clip->lengthBeats) — notes can
-    // only exist inside the clip. TimelineDoc itself has no upper clamp (only startBeat >= 0), so
-    // this is the editor's own policy, applied before every doc write.
     void clampToClipWindow(double& start, double& length) const;
-    // The grid rect (right of the keys gutter, below the header) — what the local playhead strip
-    // and the gridline sweep are clipped to.
     juce::Rectangle<int> gridRegion() const noexcept;
 
-    // ---- Row mapping (visiblePitches_) ----
-
-    // Rebuilds visiblePitches_ from the current scale context (empty function or
-    // pitchVisibilityOn_ == false -> every pitch, unfiltered) plus the open clip's note pitches
-    // (always kept visible, scale or no scale), then re-clamps firstVisiblePitch_ onto whatever
-    // survived. Called from setScaleContext, openClip and refreshFromDoc — see the class comment.
+    // ---- Row mapping (visiblePitches_) ---- see PianoRollComponent.cpp for the full contract of
+    // rebuildVisiblePitches/nearestVisibleRowIndex/rowShiftedPitch (called from setScaleContext,
+    // openClip, refreshFromDoc; the seam every pitch<->row path routes through).
     void rebuildVisiblePitches();
-    // The index into visiblePitches_ closest to `pitch` — exact when `pitch` is itself visible
-    // (which firstVisiblePitch_ always is, by the invariant above), nearest otherwise. This is the
-    // one seam yForPitch/pitchForY and every vertical-scroll/zoom path route pitch<->row through.
     size_t nearestVisibleRowIndex(int pitch) const noexcept;
-    // `originPitch` shifted by `rowDelta` VISIBLE ROWS (not semitones) and re-resolved to whatever
-    // pitch sits at that row now — the seam a Move drag's preview and its mouseUp commit BOTH
-    // route through, so a drag can never land a note on a pitch that is not itself a row (out of
-    // scale, with pitch-visibility collapsing the rest). A rowDelta of 0 is the identity; when
-    // visiblePitches_ is unfiltered (the common case) this is exactly semitone arithmetic, because
-    // row index == pitch there.
     int rowShiftedPitch(int originPitch, long long rowDelta) const noexcept;
 
     // ---- topRowPosition_ (the continuous vertical scroll anchor — see the class comment) ----
-
-    // Clamps `raw` into [minTopRowPosition(), maxTopRowPosition()], stores it as the new
-    // topRowPosition_, and re-derives firstVisiblePitch_ from its floor — the ONE seam every write
-    // (the wheel, the edge auto-scroll, the anchored zoom, openClip/rebuildVisiblePitches, the test
-    // hook) goes through, so firstVisiblePitch_ can never read back stale against the continuous
-    // anchor it is derived from.
-    // @return true if topRowPosition_ actually moved — the repaint-gating callers' cue (mirrors the
-    // old "gate on the CLAMPED result" discipline the plain-wheel branch already used).
+    // setTopRowPosition/minTopRowPosition/maxTopRowPosition — see PianoRollComponent.cpp.
     bool setTopRowPosition(double raw) noexcept;
-    // The valid range for topRowPosition_: never scrolls past visiblePitches_.back() (the highest
-    // pitch) at the TOP, nor past visiblePitches_.front() (the lowest) at the BOTTOM — the vertical
-    // mirror of rollView_.firstVisibleBeat's own ">= 0" floor, enforced at BOTH ends here because
-    // (unlike a beat count, which has no defined far end) the pitch axis has a fixed, finite length.
-    // When there is more room on the grid than there are rows to show (a heavily scale-filtered
-    // clip, or zoomed far out), the two bounds collapse to the same value and no scroll is possible
-    // at all — correct, since every row already fits and there is nowhere further to go.
     double minTopRowPosition() const noexcept;
     double maxTopRowPosition() const noexcept;
 
-    // The colour resolution paintNote and notePaintFor share: builds the Colors value (themed, or a
-    // default-constructed fallback with no LookAndFeel installed) and the outOfScale flag, then
-    // defers to synth::ui::resolveNoteColour.
     synth::ui::NotePaint resolveNoteColourFor(int pitch, int velocity, bool selected, bool muted) const;
 
-    // Pixel width of the narrower black-key overlay for a keys-column of `columnWidth` px — flush
-    // left, about 62% of the column, so the remaining strip reads as the white-key colour showing
-    // through (the gap between black keys on a real keyboard viewed side-on).
+    // Pixel width of the narrower black-key overlay — see PianoRollPainting.cpp.
     static constexpr float kBlackKeyWidthFraction = 0.62f;
-    static int blackKeyWidthPx(int columnWidth) noexcept {
-        return (int)std::llround((double)columnWidth * (double)kBlackKeyWidthFraction);
-    }
+    static int blackKeyWidthPx(int columnWidth) noexcept;
 
-    // Effective (possibly mid-drag) clip-relative geometry / velocity for one note — read by
-    // paint() and by commit-on-mouseUp, exactly like TimelineClipLaneArea::effectiveGeometryFor.
-    struct NoteGeometry {
-        double startBeat = 0.0;
-        double lengthBeats = 0.0;
-        int pitch = 0;
-        int velocity = 100;
-    };
+    // NoteGeometry/LineRange are defined in PianoRollTypes.h; re-exposed as nested-type aliases so
+    // PianoRollComponent::NoteGeometry / ::LineRange keep resolving exactly as when nested.
+    using NoteGeometry = pianoroll::NoteGeometry;
+    using LineRange = pianoroll::LineRange;
     NoteGeometry effectiveGeometryFor(const synth::MidiNote& note) const;
 
-    // Double-click on empty grid: adds ONE note, snapped, exactly one snap division long (or
-    // kMinNoteLengthBeats when Snap is Off), selected, in one undo step.
+    // createNoteAt/computeNewNoteAnchor/commitNewNote/beginMoveOrResize/beginVelocityScrub/
+    // beginMarquee/updateMarquee/endMarquee — gesture-start helpers; see PianoRollEditTools.cpp for
+    // the full contract of each (snap-vs-floor anchor rules, the one-undo-step shape).
     void createNoteAt(juce::Point<int> pos);
-    // Where a new note would go for a click at `pos`, with everything both creators share: the
-    // one-division length, the "snapping up past the clip's end steps back a division instead of
-    // creating nothing" rule, and the clip-window clamp. `floorToGrid` is what separates the two
-    // callers — the Select tool's double-click snaps to the NEAREST division (it is aiming at a
-    // grid line), while the Draw tool's pencil FLOORS (it is filling the grid cell it is pointing
-    // at, which is what every DAW pencil does).
-    // @return false when no note could fit (no clip, or no room left inside it).
     bool computeNewNoteAnchor(juce::Point<int> pos, bool floorToGrid, double& startOut, double& lengthOut,
                               int& pitchOut) const;
-    // addNote + select + repaint, wrapped in ONE undo step. Shared by createNoteAt and the Draw
-    // tool's release.
     void commitNewNote(double startBeat, double lengthBeats, int pitch);
     void beginMoveOrResize(const NoteHit& hit, juce::Point<int> pos);
     void beginVelocityScrub(juce::Point<int> pos);
@@ -907,37 +528,16 @@ private:
     void updateMarquee(juce::Point<int> current);
     void endMarquee();
 
-    // ---- Edge auto-scroll (see EdgeAutoScroll.h) ----
-    //
-    // Re-runs whichever gesture's preview math mouseDrag() runs — Move/Resize/DrawNew's beat math
-    // plus Marquee's updateMarquee() — from lastDragPointer_ against the (possibly just-scrolled)
-    // rollView_/firstVisiblePitch_. The one thing a real pointer move and an auto-scroll tick
-    // share, factored out so they can never drift apart (mirrors TimelineClipLaneArea's own
-    // updateDragPreviewFromLastPointer). VelocityScrub's preview is included too — it is a valid
-    // dragMode_ to re-derive from, it simply never gets auto-scroll ARMED (see
-    // updateAutoScrollArming), so this branch of it is unreachable from a tick in practice.
+    // ---- Edge auto-scroll (see EdgeAutoScroll.h) ---- updateDragPreviewFromLastPointer/
+    // updateAutoScrollArming — see PianoRollMouse.cpp for the full contract.
     void updateDragPreviewFromLastPointer();
-    // Arms/disarms the edge-scroll timer for the CURRENT lastDragPointer_/dragMode_: started only
-    // while a Move/Resize/Marquee/DrawNew drag is live and the pointer sits inside an edge zone of
-    // gridRegion() on EITHER axis, stopped the instant neither holds. Called after every
-    // mouseDrag update; mouseUp always disarms unconditionally instead (the drag it would be
-    // gating on just ended).
     void updateAutoScrollArming();
 
-    // ---- Tool gestures (everything below acts on a single click; see setActiveTool) ----
-
-    // Routes a mouse-down for any tool other than Select. Returns with the gesture already done
-    // (Split/Glue/Erase/Mute act immediately) or with the Draw gesture armed.
+    // ---- Tool gestures (everything below acts on a single click; see setActiveTool) ---- see
+    // PianoRollEditTools.cpp for the full contract of each.
     void handleToolMouseDown(juce::Point<int> pos);
-    // The snapped, CLIP-relative beat a Split click at this x would cut `note` at, or nullopt when
-    // that beat is not strictly inside it — a cut has to leave at least kMinNoteLengthBeats on BOTH
-    // sides, otherwise "split" would silently mean "resize to nothing".
     std::optional<double> splitBeatFor(const synth::MidiNote& note, int x) const;
     void performSplit(synth::NoteId id, juce::Point<int> pos);
-    // The next note of the SAME pitch that a Glue click on `id` would absorb: the smallest
-    // startBeat at or after the clicked note's END. Gaps ARE bridged (the glued note runs from the
-    // clicked note's start to the absorbed note's end) — Cubase's behaviour, and the only one that
-    // makes gluing a staccato pair into one sustained note possible at all.
     std::optional<synth::NoteId> glueCandidateFor(const synth::MidiNote& note) const;
     void performGlue(synth::NoteId id);
     void performErase(synth::NoteId id);
@@ -954,132 +554,54 @@ private:
     void applyToolCursor();
     void updateHoverCursor(juce::Point<int> pos);
 
-    // ---- Header button hover (Back/Quantise/Scale chips — Task D affordance) ----
-    // bounds for `which` (empty for None) — the ONE seam updateHeaderButtonHover and paintHeader's
-    // hover wash both read, so the gated repaint rect and the painted rect can never drift apart.
+    // ---- Header button hover (Back/Quantise/Scale chips — Task D affordance) ---- see
+    // PianoRollPainting.cpp for the full contract.
     juce::Rectangle<int> headerButtonBoundsFor(HeaderButtonId which) const noexcept;
-    // Recomputes which chip (if any) `pos` is over; a no-op when it hasn't changed (the repaint
-    // invariant — a mouse hovering the SAME chip, or empty grid, costs nothing). On a real change,
-    // repaints the vacated chip's rect and the newly hovered one, through
-    // requestRepaintHeaderButtonStrip so a test can count exactly this.
     void updateHeaderButtonHover(juce::Point<int> pos);
 
-    // ---- Clipboard plumbing ----
-    // The selection as clipboard entries (offsets relative to the earliest selected note), plus
-    // that earliest start and the block's span (max end - min start). Empty when nothing is
-    // selected or the ids no longer resolve.
+    // ---- Clipboard plumbing ---- see PianoRollClipboardAndKeys.cpp for the full contract of each
+    // (anchor-block rules, clip-window clamp, one-undo-step shape).
     std::vector<ClipboardNote> captureSelectionEntries(double& earliestStartOut, double& spanBeatsOut) const;
-    // Turns one entry block anchored at `anchorBeat` into concrete notes, appended to `out`,
-    // applying the clip-window policy: a note starting at/after the clip's end is SKIPPED, a note
-    // whose length would overrun the end is clamped to it, and a note with less than
-    // kMinNoteLengthBeats of room left is skipped rather than shrunk below the editor's minimum.
-    // @return true if the block contributed at least one note — false is the repeat loop's cue to
-    // stop placing further blocks.
     bool buildPastedNotes(const std::vector<ClipboardNote>& entries, double anchorBeat,
                           std::vector<synth::MidiNote>& out) const;
-    // ONE undo step for the whole batch; the created notes become the selection.
     bool commitPastedNotes(const std::vector<synth::MidiNote>& notes);
 
-    // ---- Arrow-key editing ----
-    // One SHARED delta for the whole selection, clamped so the group stays inside the clip window
-    // / inside [0, 127] — never per-note clamping, which would silently reshape a chord.
+    // ---- Arrow-key editing ---- see PianoRollClipboardAndKeys.cpp for the full contract
+    // (shared-delta clamping, row-vs-semitone stepping).
     bool nudgeSelectedNotes(int direction);
     bool transposeSelectedNotes(int semitones);
-    /** Up/Down by ONE VISIBLE ROW rather than one semitone: `rowDelta` is a step through
-     *  visiblePitches_, resolved per note by rowShiftedPitch — the SAME seam a Move drag's vertical
-     *  half uses, so an arrow key and a drag can never land a note on a pitch the other one couldn't.
-     *
-     *  That single implementation is what makes Up/Down scale-aware for free. With "show only scale
-     *  notes" ON, visiblePitches_ is the scale's pitches (plus any the clip already uses), so a step
-     *  is the next SCALE DEGREE and an arrow key can no longer strand a note on a hidden
-     *  out-of-scale row. With the filter off, visiblePitches_ is all 128 and a row step IS a
-     *  semitone step — chromatic, bit for bit what it always was, by construction rather than by a
-     *  parallel code path that could drift.
-     *
-     *  One SHARED row delta for the whole selection, clamped so the group stays inside
-     *  visiblePitches_ (never per-note clamping, which would silently reshape a chord — the same rule
-     *  the drag's row clamp follows). The OCTAVE actions stay on transposeSelectedNotes(±12): an
-     *  octave is twelve semitones by definition, not twelve scale degrees. */
     bool transposeSelectedNotesByRow(int rowDelta);
 
-    // ---- Alt+Left/Right note navigation (selection only — never a mutation, never an undo step) ----
-    // Selects the note next to the current selection in the clip's CANONICAL order — (startBeat,
-    // then pitch, then id), which is the order TimelineDoc keeps Clip::notes in, so this walks that
-    // vector by index rather than re-deriving an order that could drift from the doc's.
-    //
-    // The anchor is the edge of the selection the walk is heading TOWARDS: forward starts from the
-    // selection's LAST note, backward from its FIRST. That is what makes a multi-selection collapse
-    // onto the neighbour just outside the block (and makes repeated presses sweep the clip) instead
-    // of landing back inside it. Alt is the modifier because plain arrows already nudge, Shift+Up/
-    // Down is the octave transpose, and Cmd+arrow carries OS jump-to-boundary meaning.
-    //
-    // @return false ONLY when there is nothing to navigate from (roll closed, or nothing selected in
-    // this clip) — that is the key's fall-through cue. At either END of the clip the selection is
-    // kept and true is still returned, the same "the key WAS applicable" contract a fully clamped
-    // nudge honours.
+    // ---- Alt+Left/Right note navigation (selection only — never a mutation, never an undo step)
+    // ---- see PianoRollClipboardAndKeys.cpp for the full contract (canonical order, anchor edge).
     bool selectAdjacentNote(bool forward);
-    // Minimal HORIZONTAL scroll so `note` is inside the grid region; a no-op (and no repaint) when
-    // it already is. Vertical scroll is deliberately not touched — see the definition.
     void scrollNoteIntoView(const synth::MidiNote& note);
 
-    // ---- Rebindable surface keys ----
-    // True when `key` is what the user has bound to `actionId`. With no ShortcutManager installed
-    // this is plain equality against `fallback` (the hardcoded default) — juce::KeyPress::operator==
-    // unchanged, which is what makes Left, Shift+Left and Alt+Left three different actions while
-    // letter keys still compare case-insensitively (so Shift+Q matches a 'q' binding). With one
-    // installed the manager is the ONLY source: an unset/unknown/invalid binding matches nothing,
-    // and `fallback` is not consulted — see setShortcutManager for why the two are never mixed.
-    //
-    // That installed-manager path is routed through ShortcutManager::keyPressMatches rather than
-    // raw juce::KeyPress::operator==: macOS delivers a Shift-chorded symbol key as the SHIFTED
-    // CHARACTER ('!' not '1', '+' not '='), never the base key plus a Shift modifier flag, so exact
-    // equality would silently never match a user rebind onto such a chord. keyPressMatches
-    // shift-normalizes exactly that case.
+    // ---- Rebindable surface keys ---- see PianoRollZoom.cpp for the full resolution contract
+    // (strict-once-installed, the Shift-chord normalisation matchesAction routes through).
     bool matchesAction(const juce::KeyPress& key, const juce::String& actionId, const juce::KeyPress& fallback) const;
 
-    // ---- Dynamic shortcut-hint tooltips (see synth::shortcutHintFor) ----
-    // Rebuilt fresh on every call by reading shortcuts_ live, so a rebind is reflected the very
-    // next time getTooltipFor() is queried — no cache, no listener needed (unlike
-    // TimelinePanelComponent's real juce::Button tooltips, which DO cache and therefore need one).
+    // ---- Dynamic shortcut-hint tooltips (see synth::shortcutHintFor) ---- rebuilt fresh on every
+    // call, no cache needed — see PianoRollAudition.cpp.
     juce::String snapTooltipText() const;
     juce::String quantiseTooltipText() const;
     juce::String quantisePitchTooltipText() const;
     juce::String scaleTooltipText() const;
     juce::String scaleFilterTooltipText() const;
 
-    // ---- Header chip glyphs (drawn vector paths — see paintHeader) ----
-    //
-    // Four one-off shapes, drawn rather than assetted (the "draw it, don't asset it" rule the Back
-    // arrow follows) and rendered in a colour the caller derives from the chip's ACTUAL fill, so they
-    // stay legible on the resting, hover and lit fills in every theme. No font is involved: the
-    // letters they replace were the problem — "Q" for the grid toggle was the same letter the timeline
-    // uses for snap, and a second "Q" beside it for pitch-quantize told the user nothing about which
-    // was which.
-    //
-    // Each takes the chip's rect and insets itself, so a chip-width change needs no glyph edit.
+    // ---- Header chip glyphs (drawn vector paths — see paintHeader, PianoRollPainting.cpp) ----
     static void drawSnapGlyph(juce::Graphics& g, juce::Rectangle<int> chip, juce::Colour colour);
     static void drawQuantiseGlyph(juce::Graphics& g, juce::Rectangle<int> chip, juce::Colour colour);
     static void drawQuantisePitchGlyph(juce::Graphics& g, juce::Rectangle<int> chip, juce::Colour colour);
     static void drawScaleFilterGlyph(juce::Graphics& g, juce::Rectangle<int> chip, juce::Colour colour);
 
-    // The in-flight resize's length for one snapshotted note: the grabbed note gets previewLength_
-    // verbatim (it is what the pointer says, snap and floor already applied), every other note gets
-    // its own original length plus previewLengthDelta_, floored at kMinNoteLengthBeats so a
-    // shortening drag can never invert a note. Deliberately NOT clamped to the clip's length — see
-    // the Resize branch of updateDragPreviewFromLastPointer and promptExtendClipToFitNotes.
+    // The in-flight resize's length for one snapshotted note — see PianoRollScaleAssist.cpp.
     double resizePreviewLengthFor(const NoteOrigin& origin) const noexcept;
 
-    // ---- Anchored zoom, shared by the wheel, the pinch and the public zoom API ----
-    // `anchorGridX` is measured from the GRID's left edge (x - leftGutterWidth()), which is the
-    // coordinate rollView_ maps; `anchorY` is a component y.
+    // ---- Anchored zoom, shared by the wheel, the pinch and the public zoom API ---- see
+    // PianoRollZoom.cpp.
     void zoomHorizontalAroundX(double factor, double anchorGridX);
     void zoomVerticalAroundY(double factor, double anchorY);
-
-    // The exp() factor for a Cmd/Cmd+Shift wheel zoom, shared by both mouseWheelMove branches so
-    // they can never disagree about which way is "in". Sign comes from the PHYSICAL gesture
-    // direction (synth::ui::wheelGestureIsUpward) XOR zoomScrollInverted_; magnitude comes from
-    // std::abs(dominantWheelDelta(wheel)) * kZoomWheelSensitivity — the exact amount each branch
-    // used before, just no longer signed by the raw delta.
     double wheelZoomFactor(const juce::MouseWheelDetails& wheel) const noexcept;
 
     void performQuantise();
@@ -1087,76 +609,33 @@ private:
     void timerCallback() override; // one-shot: ends the quantise flash and stops itself
     void requestClose();
 
-    // The largest clip-relative note END among `ids`, or 0.0 when none of them resolve — what the
-    // resize commit compares against the clip's length to decide whether to prompt at all.
     double maxNoteEndAmong(const std::vector<synth::NoteId>& ids) const;
 
-    // ---- Note audition (see onAuditionNote) ----
-    // Fires onAuditionNote(pitch, velocity/127, true) after stopping whatever was already sounding —
-    // so the "exactly one note at a time" invariant holds even if a second press somehow arrives
-    // without a release. A no-op with no callback wired.
+    // ---- Note audition (see onAuditionNote) ---- see PianoRollAudition.cpp for the full contract.
     void startAudition(int pitch, int velocity);
-    // The drag-retrigger seam: a no-op when `pitch` is already what is sounding, otherwise a noteOff
-    // for the old pitch immediately followed by a noteOn for the new one (velocity carried over from
-    // the note that started the gesture — a Move drag doesn't change velocity).
     void retriggerAudition(int pitch);
-    // Fires the matching noteOff, exactly once. Safe (and free) to call when nothing is sounding,
-    // which is what lets every cancel path call it unconditionally.
     void stopAudition();
 
     // ---- Scale assist panel plumbing (toggleScalePanel is public — see the accessors above) ----
-    // Shared by the header-button click (animate=true) and setPropertiesFile's restore
-    // (animate=false — a persisted restore must never itself play a slide). A no-op (no resize, no
-    // repaint, no persist write, no animation) when `visible` already matches the logical target,
-    // so restoring the SAME default (closed) on a fresh PropertiesFile costs nothing.
+    // see PianoRollScaleAssist.cpp for the full contract of each.
     void setScalePanelVisible(bool visible, bool animate = true);
-    // The per-frame tween math (also the test seam's implementation): pins scalePanelOpenProgress_,
-    // re-carves the layout and repaints, and re-issues onHorizontalViewChanged — the mapping
-    // genuinely moves every frame, and TimelinePanelComponent's ruler override has to track it.
     void applyScalePanelOpenProgress(float progress);
-    // Stops any running tween, pins scalePanelOpenProgress_ to its exact target value, and (only
-    // when the logical target is closed) hides the child component — called by the animation's
-    // own onComplete, by setScalePanelVisible when there is no VBlank to animate with, and by
-    // openClip/closeRoll to snap an in-flight slide instantly across a clip switch.
     void finishScalePanelAnimation();
-    // The scale currently chosen for the OPEN clip, or nullopt for "No scale" / no clip open. THE
-    // resolver every scale-consuming action goes through (quantisePitchesToActiveScale, the Generate
-    // handler, isPitchQuantiseEnabled), so none of them can read a different scale from the one the
-    // panel is showing. Returned BY VALUE, never as a pointer into clipScaleMemory_: the callers all
-    // mutate the doc, which can repaint and rebuild things whose lifetime the map entry is not
-    // guaranteed to outlive.
     std::optional<synth::MusicalScale> activeScaleForOpenClip() const;
-    // Pushes clipScaleMemory_[clipId_] (or the "no clip open" defaults) into setScaleContext —
-    // the single place both the panel's onScaleChanged/onPitchVisibilityChanged handlers and
-    // openClip's restore route through, so the roll's row-visibility/colouring can never disagree
-    // with what the panel is showing.
     void pushScaleContextFromMemory();
-    // Restores clipId_'s remembered scale (or "No scale" for a clip never opened before) into the
-    // panel AND the roll's own scale context. Called from openClip, after clipId_ is set.
     void restoreScaleMemoryForOpenClip();
 
-    // ---- Keys-column audition ----
-    // True when `pos` is inside the KEYS column proper (not the scale panel to its left, not the
-    // toolbar/ruler rows above) — i.e. somewhere a virtual key could be pressed.
+    // ---- Keys-column audition ---- see PianoRollAudition.cpp for the full contract.
     bool isKeysColumnPoint(juce::Point<int> pos) const noexcept;
-    // Presses the key under `pos`: auditions its pitch at kKeysColumnVelocity and paints it pressed.
-    // A no-op when the point isn't a key.
     void beginKeysColumnPress(juce::Point<int> pos);
-    // Drag across keys: retriggers on a pitch CHANGE only (so sliding inside one key costs nothing),
-    // repainting just the two key rows involved.
     void updateKeysColumnPress(juce::Point<int> pos);
-    // Releases the held key. Safe to call unconditionally — every gesture-cancel path does.
     void endKeysColumnPress();
-    // The key row's rect in the keys column, for the gated pressed-state repaints. Empty for -1.
     juce::Rectangle<int> keyRowRect(int pitch) const noexcept;
 
     void paintKeysColumn(juce::Graphics& g);
     void paintHeader(juce::Graphics& g);
     void paintGrid(juce::Graphics& g);
-    // `lineColour` is the theme token the grid is derived from (Colors::border) and `background` is
-    // what sits behind it (Colors::bg0) — both handed to the shared three-level colour policy
-    // (synth::ui::gridLineColourFor, in TimelineClipLaneArea.h), which is why the background is a
-    // parameter rather than something this function re-reads from the LookAndFeel.
+    // `lineColour`/`background` feed the shared three-level colour policy — see PianoRollPainting.cpp.
     void paintGridLines(juce::Graphics& g, juce::Colour lineColour, juce::Colour background);
     void paintNote(juce::Graphics& g, const synth::MidiNote& note);
     void paintPlayhead(juce::Graphics& g);
@@ -1164,14 +643,7 @@ private:
     void paintDrawPreview(juce::Graphics& g);
     void paintSplitPreview(juce::Graphics& g);
 
-    // [first, last] multiples of `spacingBeats` visible in the grid region — empty (last < first)
-    // when the lines would be closer together than kMinGridLinePixels. paintGridLines and
-    // getGridLineCountForTest walk the SAME range, so the seam can never drift from the paint.
-    struct LineRange {
-        long long first = 0;
-        long long last = -1;
-        int count() const noexcept { return last < first ? 0 : (int)(last - first + 1); }
-    };
+    // LineRange is defined in PianoRollTypes.h (aliased above, near NoteGeometry).
     LineRange visibleLineRange(double spacingBeats) const noexcept;
 
     juce::Rectangle<int> playheadStripFor(int x) const noexcept;
@@ -1392,15 +864,9 @@ private:
     // kPanelSlideMs (~190 ms) feel for the app's other show/hide sidebars.
     static constexpr double kScalePanelAnimMs = 200.0;
 
-    // Per-clip scale memory: SESSION-ONLY, deliberately never persisted (mirrors rollView_ and
-    // firstVisiblePitch_, which are not persisted either) — see setScaleContext's class-comment
-    // discussion of why a clip's row/colour context is view state, not document state. A clip id
-    // absent from this map has never had a scale chosen for it and reads back as "No scale" /
-    // pitch-visibility off, per the class's "a clip never opened starts at No scale" contract.
-    struct ClipScaleMemory {
-        std::optional<synth::MusicalScale> scale;
-        bool pitchVisibilityOn = false;
-    };
+    // ClipScaleMemory is defined in PianoRollTypes.h; re-exposed as a nested-type alias so
+    // PianoRollComponent::ClipScaleMemory keeps resolving exactly as when it was nested.
+    using ClipScaleMemory = pianoroll::ClipScaleMemory;
     std::map<synth::ClipId, ClipScaleMemory> clipScaleMemory_;
 
     // ---- Edge auto-scroll timer ----

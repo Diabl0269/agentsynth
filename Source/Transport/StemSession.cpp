@@ -2,10 +2,10 @@
 
 #include "../AudioEngine.h"
 #include "../Modules/AttenuverterModule.h"
-#include "../Timeline/TimelineDoc.h"
 #include "BounceGuards.h"
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "OfflineTransportDriver.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <algorithm>
 #include <cmath>
 

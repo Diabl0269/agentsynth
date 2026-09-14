@@ -1,6 +1,6 @@
 #include "AudioClipStreamer.h"
 
-#include "TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>

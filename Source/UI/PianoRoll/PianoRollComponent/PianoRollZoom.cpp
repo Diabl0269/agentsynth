@@ -236,4 +236,14 @@ bool PianoRollComponent::keyPressed(const juce::KeyPress& key) {
     return false;
 }
 
+//==============================================================================
+// ---- Simple accessors (moved out of the header — see PianoRollComponent.h for each contract) ----
+void PianoRollComponent::setScrollInverted(bool inverted) noexcept { scrollInverted_ = inverted; }
+bool PianoRollComponent::isScrollInverted() const noexcept { return scrollInverted_; }
+void PianoRollComponent::setZoomScrollInverted(bool inverted) noexcept { zoomScrollInverted_ = inverted; }
+bool PianoRollComponent::isZoomScrollInverted() const noexcept { return zoomScrollInverted_; }
+
+void PianoRollComponent::setShortcutManager(const ShortcutManager* manager) noexcept { shortcuts_ = manager; }
+const ShortcutManager* PianoRollComponent::getShortcutManager() const noexcept { return shortcuts_; }
+
 } // namespace synth::ui

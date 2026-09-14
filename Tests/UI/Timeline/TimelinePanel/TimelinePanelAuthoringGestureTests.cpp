@@ -9,7 +9,7 @@
 #include "AppUndoManager.h"
 #include "MainComponent/MainComponent.h"
 #include "ProjectBundle.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TimelinePanelTestFixture.h"
 #include "Transport/TransportService.h"
 #include "UI/Theme/AppLookAndFeel.h"
@@ -24,7 +24,7 @@
 
 // ============================================================================
 // 6. Authoring gestures reaching the panel. The lane-area half of the gesture (snapping, length,
-//    one undo step) lives in Tests/UI/Timeline/TimelineClipLaneTests.cpp group 7; the import half in
+//    one undo step) lives in Tests/UI/Timeline/TimelineClipLane/TimelineClipLaneAuthoringTests.cpp; the import half in
 //    Tests/AssetManagerTests.cpp.
 // ============================================================================
 

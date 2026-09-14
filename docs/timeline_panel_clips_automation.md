@@ -300,12 +300,13 @@ the selection (any row, ignoring anything unselected) and hands it outwards thro
 above. Nothing selected (or no owner listening) returns `false` so the key keeps its meaning
 elsewhere. The piano-roll surface has no equivalent yet.
 
-Tests: `Tests/UI/Timeline/TimelineClipLaneTests.cpp` — `ClipSelectionModel`/`clipHitTestMarquee` unit coverage,
-pure-geometry tests for `computeClipRect`, and interaction tests driven by hand-built
+Tests: `Tests/UI/Timeline/TimelineClipLane/` — `ClipSelectionModel`/`clipHitTestMarquee` unit coverage
+(`TimelineClipLaneSelectionTests.cpp`), pure-geometry tests for `computeClipRect`
+(`TimelineClipLaneAreaTests.cpp`), and interaction tests driven by hand-built
 `juce::MouseEvent`s (same pattern as the ruler tests in `docs/timeline_panel_core.md` §2, in `Tests/TimelinePanelTests.cpp`) against
 a bare `TimelineDoc` + `AppUndoManager` + `TimelineClipLaneArea`, no `MainComponent` needed. The
 authoring gestures are split across three files, each covering the half it owns: the lane area's
-(group 7 there — snapping, one-bar length, one undo step, the injected chooser, drag interest and the
+(`TimelineClipLaneAuthoringTests.cpp` — snapping, one-bar length, one undo step, the injected chooser, drag interest and the
 row highlight, the hint text and its paint), the panel's (`Tests/TimelinePanelTests.cpp` group 6 — a
 new clip really opens the piano roll), and the import's (`Tests/Project/AssetManagerTests.cpp` group 2 —
 saved-bundle vs `Recordings/` destination, length from the file, failure mutating nothing).

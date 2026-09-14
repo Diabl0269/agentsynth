@@ -475,4 +475,10 @@ void PianoRollComponent::performQuantise() {
     repaint();
 }
 
+//==============================================================================
+// ---- Simple accessors (moved out of the header — see PianoRollComponent.h for each contract) ----
+bool PianoRollComponent::hasNoteSelection() const noexcept { return !selection_.isEmpty(); }
+NoteSelectionModel& PianoRollComponent::getSelectionForTest() noexcept { return selection_; }
+int PianoRollComponent::getClipboardSizeForTest() const noexcept { return (int)noteClipboard_.size(); }
+
 } // namespace synth::ui

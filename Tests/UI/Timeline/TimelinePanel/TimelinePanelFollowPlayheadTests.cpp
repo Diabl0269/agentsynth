@@ -9,7 +9,7 @@
 #include "AppUndoManager.h"
 #include "MainComponent/MainComponent.h"
 #include "ProjectBundle.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TimelinePanelTestFixture.h"
 #include "Transport/TransportService.h"
 #include "UI/Theme/AppLookAndFeel.h"
@@ -26,7 +26,7 @@
 // 8. Follow-playhead: the toggle (state + button mirror + persistence) and the page-flip it
 //    drives inside updateFromTransport(). Panel level, ungated (see the file header) — backfilled
 //    for the already-landed TL implementation (see EdgeAutoScroll.h / TimelineClipLaneArea's
-//    beat-anchored drag, covered in TimelineClipLaneTests.cpp).
+//    beat-anchored drag, covered in TimelineClipLane/TimelineClipLaneMouseTests.cpp).
 // ============================================================================
 
 namespace {
@@ -322,7 +322,7 @@ TEST(TimelineFollowPlayheadTest, NoScrollWhileThePianoRollIsOpen) {
 
 namespace {
 // A local left-button mouse event for the clip-lane area — the same shape
-// TimelineClipLaneTests.cpp's makeClipMouseEvent builds. Kept local (rather than reusing
+// TimelineClipLane/TimelineClipLaneTestFixture.h's makeClipMouseEvent builds. Kept local (rather than reusing
 // TimelinePanelTestFixture.h's makeTimelineMouseEvent) since it always forces the left-button
 // modifier rather than taking one from the caller.
 juce::MouseEvent leftButtonEventOnLane(juce::Component& comp, juce::Point<float> pos, juce::Point<float> anchor,

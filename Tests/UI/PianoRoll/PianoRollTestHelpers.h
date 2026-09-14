@@ -4,8 +4,8 @@
 // Header-only; not compiled on its own and not registered in Tests/CMakeLists.txt.
 
 #include "AppUndoManager.h"
-#include "ShortcutManager/ShortcutManager.h"
-#include "Timeline/TimelineDoc.h"
+#include "ShortcutManager.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/PianoRoll/PianoRollComponent/PianoRollComponent.h"
 #include "UI/PianoRoll/ScaleAssistPanel.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
