@@ -249,6 +249,30 @@ Test UI component interactions using in-process construction (no window, no disp
 | `GraphEditorSmartConnectionMatrixTests.cpp` | The three `TestWithParam` matrices: every FX insertable at the gap, vertical aim, and the full gesture-matrix contract table |
 | `GraphEditorNodeActionsTests.cpp` | Per-node actions/identity: module title rename, double-click port disconnect (issue #216), output-card identity, Locate Master (FRO45) |
 
+**`MacroContainerTest`/`MacroCollapse`/etc. file layout.** Split by topic under `Tests/MacroContainer/`, sharing `addModuleAt`/`uuidOf`/`nodeIdForUuid`/`findComponent`/`makeCanvasMouseEvent` in `Tests/MacroContainer/MacroContainerTestHelpers.h` (header-only, not built on its own):
+
+| File | Covers |
+|------|--------|
+| `MacroContainerTests.cpp` | Lifecycle: wrap/unwrap, persistence, snippets, delete, membership (incl. port-splice on a newly crossing cable) |
+| `MacroContainerGeometryTests.cpp` | Geometry/canvas: collapse, group-or-toggle dispatch, hull/chip bounds, chip drag (incl. the real mouse path), rename-dialog guard, undo/redo, boundary-cable re-anchoring, the untrusted-patch trust boundary |
+| `MacroContainerInteractionTests.cpp` | Chrome/interaction: collapse button, recolour (preview + one-undo-step commit), card double-click-to-rename vs. expand, member right-click context menu, card right-click membership menu |
+
+**`AIChatComponentTest` file layout.** Split by topic under `Tests/AIChatComponent/`, sharing the mock `AIProvider`s, `findMessageList`/`findDescendantWithText`, and the `AIChatComponentTest` fixture in `Tests/AIChatComponent/AIChatComponentTestFixture.h` (header-only, not built on its own):
+
+| File | Covers |
+|------|--------|
+| `AIChatComponentTests.cpp` | Core: init/resize, send-message + classifier, `refreshModels()`/provider-install ordering, hosted-mode notices, account row, quota-error upgrade button, thumbs feedback, response-time/timeout display |
+| `AIChatComponentHistoryTests.cpp` | P6-8/P6-9 history: unified history UI, upsell/downgrade strips, per-plan backend selection, clear-history, restoring a saved conversation, local save-on-every-exchange, rating sync, wrapped-height UX-polish regressions |
+| `AIChatComponentArrangeTests.cpp` | Arrange mode: selector gating on the timeline preference, explicit capability/prompt routing, validated/rejected timeline-card response flow |
+
+**`MacroAutoPort*Test` file layout.** Split by topic under `Tests/MacroAutoPort/`, sharing the test module stand-ins and graph/mouse helpers in `Tests/MacroAutoPort/MacroAutoPortTestHelpers.h` (header-only, not built on its own):
+
+| File | Covers |
+|------|--------|
+| `MacroAutoPortCreationTests.cpp` | Auto-creating ports on grouping: mono crossing, jack dedup, collapsed-stereo, dual-I/O stereo merge, poly-N, MIDI-as-separate-node, mod-routing-knob splice (incl. T144), grouping-is-one-undo-step |
+| `MacroAutoPortUngroupTests.cpp` | Ungroup removes auto-created ports and splices cables back; presentation-count/tooltip rules; the auto-create-ports preference's modal-firing conditions |
+| `MacroAutoPortDeleteTests.cpp` | T148/T154: auto-delete a macro port once its last cable is gone, via `disconnectCable`/`disconnectPort` and via whole-node deletion |
+
 #### `createComponentSnapshot` smoke-test pattern
 
 Several new tests use `Component::createComponentSnapshot(bounds)` to verify that a component renders without crashing and produces non-empty pixels, without requiring a real display or window. Example: `StatusBarTests::RendersNonEmptyImage` and `ThemeTests::StyledWidgetSmokeTest.*`. The pattern is:
