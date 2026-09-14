@@ -31,9 +31,6 @@
 1397 Tests/Plugin/PluginScanTests.cpp
 1061 Tests/Project/SnippetManagerTests.cpp
 1187 Tests/Project/UndoRedoTests.cpp
-1254 Tests/Timeline/TimelineClipEditingTests.cpp
-1644 Tests/Timeline/TimelineDocTests.cpp
-1396 Tests/Timeline/TimelineMidiSourceTests.cpp
 1262 Tests/UI/Graph/ModuleComponentTests.cpp
 1184 Tests/UI/Settings/PreferencesSettingsTabTests.cpp
 1615 Tests/UI/Timeline/TimelineClipLaneTests.cpp
