@@ -1,0 +1,342 @@
+// Concern: larger end-to-end undo/redo scenarios -- the unit-interval parameter double-
+// conversion regression, poly-pad routing surviving a round trip, and auto-arrange as a single
+// undo step.
+#include "UndoRedoTestFixture.h"
+
+/**
+ * Test 11: RedoWithParameterValueInUnitInterval
+ * - Create a Filter module with a parameter that has range > [0,1]
+ * - Set parameter to a value within [0,1] (e.g., drive = 1.0, range 1.0-10.0)
+ * - Record a structural change (module addition)
+ * - Undo (module removed)
+ * - Redo (module restored)
+ * - Verify the parameter value is still correct (1.0, not 10.0)
+ *
+ * This tests the fix for GitHub issue #53: Redo after module replacement
+ * corrupts new module's parameters. The bug was that values in [0,1] were
+ * being double-converted: normalized value from state was incorrectly treated
+ * as a normalized value and converted again.
+ */
+TEST_F(UndoRedoTest, RedoWithParameterValueInUnitInterval) {
+    // Create a Filter module (has parameters with ranges > [0,1])
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    auto nodeId = filterNode->nodeID;
+
+    // Find the "drive" parameter (range 1.0-10.0)
+    juce::String driveParamId = "drive";
+    juce::RangedAudioParameter* driveParam = nullptr;
+    for (auto* param : filterNode->getProcessor()->getParameters()) {
+        if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param)) {
+            if (p->paramID == driveParamId) {
+                driveParam = dynamic_cast<juce::RangedAudioParameter*>(param);
+                break;
+            }
+        }
+    }
+    ASSERT_NE(driveParam, nullptr);
+
+    // Set drive to 1.0 (within [0,1] but valid for range 1.0-10.0)
+    float targetValue = 1.0f;
+    driveParam->setValueNotifyingHost(driveParam->getNormalisableRange().convertTo0to1(targetValue));
+
+    // Verify the value was set correctly
+    float denormalized = driveParam->getNormalisableRange().convertFrom0to1(driveParam->getValue());
+    ASSERT_NEAR(denormalized, targetValue, 0.001f);
+
+    // Record a structural change (add the Filter module)
+    // Note: We already added it above, so we'll remove it and re-add it via undo/redo
+    graph.removeNode(nodeId);
+    ASSERT_EQ(graph.getNumNodes(), 0);
+
+    // Now add it back via recordStructuralChange
+    undoManager.recordStructuralChange(graph, [this] {
+        auto node = graph.addNode(std::make_unique<FilterModule>());
+        // Set the same parameter to the same value
+        for (auto* param : node->getProcessor()->getParameters()) {
+            if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param)) {
+                if (p->paramID == "drive") {
+                    if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param)) {
+                        ranged->setValueNotifyingHost(ranged->getNormalisableRange().convertTo0to1(1.0f));
+                    }
+                }
+            }
+        }
+    });
+
+    ASSERT_EQ(graph.getNumNodes(), 1);
+
+    // Get the new module and verify parameter
+    auto newFilterNode = graph.getNodes().getFirst();
+    ASSERT_NE(newFilterNode, nullptr);
+    juce::RangedAudioParameter* newDriveParam = nullptr;
+    for (auto* param : newFilterNode->getProcessor()->getParameters()) {
+        if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param)) {
+            if (p->paramID == "drive") {
+                newDriveParam = dynamic_cast<juce::RangedAudioParameter*>(param);
+                break;
+            }
+        }
+    }
+    ASSERT_NE(newDriveParam, nullptr);
+
+    float valueAfterAdd = newDriveParam->getNormalisableRange().convertFrom0to1(newDriveParam->getValue());
+    ASSERT_NEAR(valueAfterAdd, 1.0f, 0.001f) << "Parameter value should be 1.0 after initial add";
+
+    // Undo (removes the module)
+    undoManager.undo();
+    ASSERT_EQ(graph.getNumNodes(), 0);
+
+    // Redo (restores the module with the same parameters)
+    undoManager.redo();
+    ASSERT_EQ(graph.getNumNodes(), 1);
+
+    // Verify the parameter value is still correct (not double-converted to 10.0)
+    auto redoFilterNode = graph.getNodes().getFirst();
+    ASSERT_NE(redoFilterNode, nullptr);
+    juce::RangedAudioParameter* redoDriveParam = nullptr;
+    for (auto* param : redoFilterNode->getProcessor()->getParameters()) {
+        if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param)) {
+            if (p->paramID == "drive") {
+                redoDriveParam = dynamic_cast<juce::RangedAudioParameter*>(param);
+                break;
+            }
+        }
+    }
+    ASSERT_NE(redoDriveParam, nullptr);
+
+    float valueAfterRedo = redoDriveParam->getNormalisableRange().convertFrom0to1(redoDriveParam->getValue());
+    ASSERT_NEAR(valueAfterRedo, 1.0f, 0.001f)
+        << "Parameter value should be 1.0 after redo, not 10.0 (double-converted)";
+}
+
+/**
+ * Test 12: PolyPad_RoutingSurvivesUndoRedo
+ *
+ * Verifies that the "Poly Pad" preset (index 6) connections survive a full
+ * undo/redo cycle modelled by the graphToJSON -> applyJSONToGraph round-trip
+ * (the same operation that AppUndoManager::SnapshotAction performs on
+ * undo and redo).
+ *
+ * The following connections must survive:
+ *   (A) 8 direct poly-bus edges: Amp Env ch0-7 → VCA ch8-15
+ *       (per-voice amplitude envelope modulation)
+ *
+ * The env->osc Level CV wire (Amp Env ch0 → Oscillator ch12) was removed from
+ * the factory preset because that channel is shared across all voices and was
+ * coupling all voices to voice-0's envelope. The capability itself still works
+ * (see IntegrationTests::PolyPad_EnvToOscModulatesOscLevel).
+ *
+ * Additionally, the restored patch must NOT introduce any new AttenuverterModule
+ * nodes — these connections are direct poly-bus connections, not mod-matrix
+ * routings, and the serializer must preserve them as-is without substituting
+ * attenuverter chains.
+ *
+ * Strategy (mirrors AppUndoManager behaviour):
+ *   1. Load Poly Pad (preset 6) into graph g.
+ *   2. Snapshot: J0 = graphToJSON(g).
+ *   3. Simulate "undo-apply-different-state": load preset 0 into g (clobbers Poly Pad).
+ *   4. Simulate "redo-restore-original-state": applyJSONToGraph(J0, g, clear=true, trusted=true).
+ *   5. Count the required connections; assert both groups are fully present.
+ *   6. Assert zero AttenuverterModule nodes were introduced for these paths.
+ */
+TEST_F(UndoRedoTest, PolyPad_RoutingSurvivesUndoRedo) {
+    // Step 1 — Load Poly Pad (preset 6) into graph
+    ASSERT_TRUE(synth::PresetManager::loadPreset(6, graph));
+
+    // Sanity: locate Amp Env (ADSR), Oscillator, and VCA by type
+    juce::AudioProcessorGraph::NodeID adsrID, oscID, vcaID;
+    for (auto* node : graph.getNodes()) {
+        auto* proc = node->getProcessor();
+        if (auto* mb = dynamic_cast<ADSRModule*>(proc)) {
+            // Preset 6 has one ADSR named "Amp Env"
+            if (mb->getName().contains("Amp Env") || mb->getName().contains("ADSR"))
+                adsrID = node->nodeID;
+        } else if (dynamic_cast<OscillatorModule*>(proc)) {
+            oscID = node->nodeID;
+        } else if (dynamic_cast<VCAModule*>(proc)) {
+            vcaID = node->nodeID;
+        }
+    }
+    ASSERT_NE(adsrID.uid, 0u) << "Poly Pad should have an Amp Env (ADSR) node";
+    ASSERT_NE(oscID.uid, 0u) << "Poly Pad should have an Oscillator node";
+    ASSERT_NE(vcaID.uid, 0u) << "Poly Pad should have a VCA node";
+
+    // Helper: count specific connections in the current graph
+    auto countConns = [&](juce::AudioProcessorGraph::NodeID srcID, int srcCh, juce::AudioProcessorGraph::NodeID dstID,
+                          int dstCh) -> int {
+        int count = 0;
+        for (const auto& conn : graph.getConnections()) {
+            if (conn.source.nodeID == srcID && conn.source.channelIndex == srcCh && conn.destination.nodeID == dstID &&
+                conn.destination.channelIndex == dstCh)
+                ++count;
+        }
+        return count;
+    };
+
+    // Verify the connections exist in the freshly loaded preset (pre-cycle baseline)
+    int envVcaConnsBaseline = 0;
+    for (int v = 0; v < 8; ++v)
+        envVcaConnsBaseline += countConns(adsrID, v, vcaID, 8 + v);
+
+    ASSERT_EQ(envVcaConnsBaseline, 8) << "Poly Pad baseline: expected 8 ADSR->VCA poly-bus connections";
+
+    // Step 2 — Snapshot the loaded Poly Pad state
+    juce::var J0 = synth::AIStateMapper::graphToJSON(graph);
+
+    // Step 3 — Overwrite with a completely different preset (simulates the
+    // modification that would be "undone")
+    ASSERT_TRUE(synth::PresetManager::loadPreset(0, graph)); // Default preset — no poly modules
+    EXPECT_EQ(countConns(adsrID, 0, vcaID, 8), 0)
+        << "After loading preset 0, original Poly Pad connections should be gone";
+
+    // Step 4 — Re-apply the Poly Pad snapshot (simulates undo/redo restore)
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(J0, graph, /*clearExisting=*/true, /*trusted=*/true))
+        << "applyJSONToGraph should succeed for a freshly-captured Poly Pad snapshot";
+
+    // Re-locate nodes by type after round-trip (node IDs may differ after clear+rebuild)
+    adsrID = vcaID = oscID = {};
+    for (auto* node : graph.getNodes()) {
+        auto* proc = node->getProcessor();
+        if (auto* mb = dynamic_cast<ADSRModule*>(proc)) {
+            if (mb->getName().contains("Amp Env") || mb->getName().contains("ADSR"))
+                adsrID = node->nodeID;
+        } else if (dynamic_cast<OscillatorModule*>(proc)) {
+            oscID = node->nodeID;
+        } else if (dynamic_cast<VCAModule*>(proc)) {
+            vcaID = node->nodeID;
+        }
+    }
+    ASSERT_NE(adsrID.uid, 0u) << "Post-roundtrip: Amp Env node should exist";
+    ASSERT_NE(oscID.uid, 0u) << "Post-roundtrip: Oscillator node should exist";
+    ASSERT_NE(vcaID.uid, 0u) << "Post-roundtrip: VCA node should exist";
+
+    // Step 5 — Verify all 8 ADSR->VCA poly-bus connections survived
+    int envVcaConnsAfter = 0;
+    for (int v = 0; v < 8; ++v)
+        envVcaConnsAfter += countConns(adsrID, v, vcaID, 8 + v);
+    EXPECT_EQ(envVcaConnsAfter, 8)
+        << "Post-undo/redo: expected 8 ADSR->VCA per-voice connections (ch0->ch8, ch1->ch9 ... ch7->ch15)";
+
+    // Step 6 — Assert NO AttenuverterModule nodes were introduced for these paths.
+    // Direct poly-bus connections must remain direct — serialization must not
+    // silently convert them to attenuverter-chain routings.
+    int attenuverterCount = 0;
+    for (auto* node : graph.getNodes()) {
+        if (dynamic_cast<AttenuverterModule*>(node->getProcessor()))
+            ++attenuverterCount;
+    }
+    EXPECT_EQ(attenuverterCount, 0) << "Post-undo/redo: Poly Pad should have ZERO AttenuverterModule nodes; "
+                                       "found "
+                                    << attenuverterCount
+                                    << " — direct poly connections were incorrectly "
+                                       "converted to attenuverter chains during serialization round-trip";
+}
+
+/**
+ * Test: AutoArrangeIsSingleUndoStep
+ *
+ * - Load a preset with N modules at known positions.
+ * - Record undo-stack depth before autoArrange.
+ * - Call autoArrange().
+ * - Verify that modules moved (at least one position changed).
+ * - ONE undo() restores ALL original x/y positions.
+ * - ONE redo() reapplies ALL arranged positions.
+ * - Undo stack depth increased by exactly 1 after autoArrange.
+ */
+TEST_F(UndoRedoTest, AutoArrangeIsSingleUndoStep) {
+    // Load a preset with several modules into the graph via PresetManager
+    ASSERT_TRUE(synth::PresetManager::loadPreset(0, graph)) << "Failed to load default preset";
+    ASSERT_GE(graph.getNumNodes(), 3) << "Default preset should have at least 3 nodes";
+
+    // Capture original positions
+    std::map<juce::AudioProcessorGraph::NodeID, juce::Point<int>> originalPositions;
+    for (auto* node : graph.getNodes()) {
+        int x = static_cast<int>(node->properties.getWithDefault("x", 0));
+        int y = static_cast<int>(node->properties.getWithDefault("y", 0));
+        originalPositions[node->nodeID] = {x, y};
+    }
+
+    // Clear undo history so we start with a known depth
+    undoManager.clearUndoHistory();
+    ASSERT_FALSE(undoManager.canUndo()) << "Undo stack should be empty before test";
+
+    // Build a GraphEditor with the undo manager so autoArrange() has access to both
+    AudioEngine engine;
+    // Load the same preset into the engine's graph
+    engine.getGraph().clear();
+    ASSERT_TRUE(synth::PresetManager::loadPreset(0, engine.getGraph()));
+
+    GraphEditor editor(engine, &undoManager);
+    // Wire the editor to the undo manager exactly as MainComponent does. Without this the undo/redo
+    // SnapshotActions cannot detach module components before clearing the graph, so a MidiKeyboardComponent
+    // outlives its module's MidiKeyboardState and removeListener()s on freed memory (heap-use-after-free).
+    undoManager.setGraphEditor(&editor);
+    editor.setSize(1200, 800);
+    editor.updateComponents();
+
+    // Capture positions from the engine graph before arrange
+    std::map<juce::AudioProcessorGraph::NodeID, juce::Point<int>> beforeArrange;
+    for (auto* node : engine.getGraph().getNodes()) {
+        int x = static_cast<int>(node->properties.getWithDefault("x", 0));
+        int y = static_cast<int>(node->properties.getWithDefault("y", 0));
+        beforeArrange[node->nodeID] = {x, y};
+    }
+
+    // Call autoArrange — this should use captureBeforeState + pushSnapshotFromCapture
+    editor.autoArrange();
+
+    // Capture positions after arrange
+    std::map<juce::AudioProcessorGraph::NodeID, juce::Point<int>> afterArrange;
+    for (auto* node : engine.getGraph().getNodes()) {
+        int x = static_cast<int>(node->properties.getWithDefault("x", 0));
+        int y = static_cast<int>(node->properties.getWithDefault("y", 0));
+        afterArrange[node->nodeID] = {x, y};
+    }
+
+    // At least some module should have moved
+    bool anyMoved = false;
+    for (auto& [id, pos] : afterArrange) {
+        if (beforeArrange.count(id) && beforeArrange[id] != pos) {
+            anyMoved = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(anyMoved) << "autoArrange should have moved at least one module";
+
+    // Undo stack should now have exactly 1 entry
+    EXPECT_TRUE(undoManager.canUndo()) << "Should be able to undo after autoArrange";
+    EXPECT_FALSE(undoManager.canRedo()) << "Should not be able to redo before undoing";
+
+    // ONE undo restores original positions
+    EXPECT_TRUE(undoManager.undo()) << "Undo should succeed";
+
+    // After undo, verify positions match pre-arrange state
+    for (auto* node : engine.getGraph().getNodes()) {
+        if (!beforeArrange.count(node->nodeID))
+            continue;
+        int x = static_cast<int>(node->properties.getWithDefault("x", 0));
+        int y = static_cast<int>(node->properties.getWithDefault("y", 0));
+        EXPECT_EQ(x, beforeArrange[node->nodeID].x)
+            << "After undo, node " << node->nodeID.uid << " x should be restored";
+        EXPECT_EQ(y, beforeArrange[node->nodeID].y)
+            << "After undo, node " << node->nodeID.uid << " y should be restored";
+    }
+
+    // No further undo available (only 1 step was pushed)
+    EXPECT_FALSE(undoManager.canUndo()) << "After undoing the single autoArrange step, stack should be empty";
+
+    // ONE redo reapplies arranged positions
+    EXPECT_TRUE(undoManager.canRedo()) << "Should be able to redo after undoing";
+    EXPECT_TRUE(undoManager.redo()) << "Redo should succeed";
+
+    for (auto* node : engine.getGraph().getNodes()) {
+        if (!afterArrange.count(node->nodeID))
+            continue;
+        int x = static_cast<int>(node->properties.getWithDefault("x", 0));
+        int y = static_cast<int>(node->properties.getWithDefault("y", 0));
+        EXPECT_EQ(x, afterArrange[node->nodeID].x)
+            << "After redo, node " << node->nodeID.uid << " x should match arranged position";
+        EXPECT_EQ(y, afterArrange[node->nodeID].y)
+            << "After redo, node " << node->nodeID.uid << " y should match arranged position";
+    }
+}

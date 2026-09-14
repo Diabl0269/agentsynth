@@ -4,7 +4,7 @@
 #include "AI/LocalHistoryStore.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Auth/InMemoryTokenStore.h"
-#include "ShortcutManager.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Assistant/AIChatComponent/AIChatComponent.h"
 #include "UI/PianoRoll/NoteColour.h"
 #include "UI/Settings/AppearanceSettingsTab.h"
