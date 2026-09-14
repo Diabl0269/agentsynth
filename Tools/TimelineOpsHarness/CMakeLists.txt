@@ -13,11 +13,15 @@ add_executable(TimelineOpsHarness
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngineApply.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorCanvas.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorSelection.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorMacroGeometry.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorMacroGrouping.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorMacroPortSplice.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorMacroCards.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/MacroGroupController/MacroGroupController.h
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/MacroGroupController/MacroGroupControllerGeometry.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/MacroGroupController/MacroGroupControllerGrouping.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/MacroGroupController/MacroGroupControllerBypassMute.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/MacroGroupController/MacroGroupControllerPortSplice.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/MacroGroupController/MacroGroupControllerPorts.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorChannels.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorMacroPorts.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorCommands.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorDragDrop.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorStereoWiring.cpp

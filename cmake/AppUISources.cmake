@@ -88,11 +88,15 @@ set(APPUI_SOURCES
     Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngineApply.cpp
     Source/UI/Graph/GraphEditor/GraphEditorCanvas.cpp
     Source/UI/Graph/GraphEditor/GraphEditorSelection.cpp
-    Source/UI/Graph/GraphEditor/GraphEditorMacroGeometry.cpp
-    Source/UI/Graph/GraphEditor/GraphEditorMacroGrouping.cpp
-    Source/UI/Graph/GraphEditor/GraphEditorMacroPortSplice.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorMacroCards.cpp
+    Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp
+    Source/UI/Graph/MacroGroupController/MacroGroupController.h
+    Source/UI/Graph/MacroGroupController/MacroGroupControllerGeometry.cpp
+    Source/UI/Graph/MacroGroupController/MacroGroupControllerGrouping.cpp
+    Source/UI/Graph/MacroGroupController/MacroGroupControllerBypassMute.cpp
+    Source/UI/Graph/MacroGroupController/MacroGroupControllerPortSplice.cpp
+    Source/UI/Graph/MacroGroupController/MacroGroupControllerPorts.cpp
     Source/UI/Graph/GraphEditor/GraphEditorChannels.cpp
-    Source/UI/Graph/GraphEditor/GraphEditorMacroPorts.cpp
     Source/UI/Graph/GraphEditor/GraphEditorCommands.cpp
     Source/UI/Graph/GraphEditor/GraphEditorDragDrop.cpp
     Source/UI/Graph/GraphEditor/GraphEditorStereoWiring.cpp

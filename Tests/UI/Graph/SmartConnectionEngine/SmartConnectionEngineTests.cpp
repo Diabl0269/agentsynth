@@ -8,7 +8,7 @@
 // the engine's own API works in isolation. The existing GraphEditorSmartConnection*Tests.cpp files
 // cover the full gesture chain through GraphEditor's forwarders and are unchanged by this PR.
 
-#include "GraphEditor/GraphEditorTestHelpers.h"
+#include "../GraphEditor/GraphEditorTestHelpers.h"
 
 #include "Modules/FilterModule.h"
 #include "Modules/OscillatorModule.h"

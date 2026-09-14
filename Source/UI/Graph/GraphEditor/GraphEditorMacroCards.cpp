@@ -1,0 +1,74 @@
+// GraphEditorMacroCards.cpp
+//
+// The two macro-presentation pieces that need a genuine GraphEditor& / juce::Component identity
+// and so were NOT moved into MacroGroupController (FRO77 PR2) — see MacroGroupController.h's
+// class comment: syncMacroCards() constructs `new MacroCardComponent(*this, ...)`, and
+// categoryPreviewColour() calls juce::Component::getLookAndFeel(). GraphEditor is declared in
+// GraphEditor.h; sibling GraphEditor*.cpp files in this directory hold the rest of the class.
+
+#include "GraphEditor.h"
+
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Macros/MacroCardComponent.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+
+void GraphEditor::syncMacroCards() {
+    auto& cards = content.getMacroCards();
+
+    // 1. Remove cards for macros that no longer exist.
+    for (int i = cards.size(); --i >= 0;) {
+        auto* card = cards.getUnchecked(i);
+        if (macros.find(card->getMacroId()) == nullptr) {
+            // This card's own mouseDown may have armed a live body drag (beginMacroCardDrag ->
+            // selectionDragActive) — its macro just vanished entirely (every member gone, so
+            // MacroSet::retainOnly erased it), and no mouseUp is ever coming once the card is
+            // destroyed below (FRO19). Cancel now rather than leaving selectionDragActive stuck.
+            if (card->isBodyDragActive())
+                cancelLiveDragGestures();
+            content.removeChildComponent(card);
+            cards.remove(i);
+        }
+    }
+
+    // 2. Add cards for new macros; every card's bounds/visibility follow its macro's collapsed
+    //    state (bounds are meaningless while expanded — see synth::Macro's comment).
+    for (const auto& macro : macros.getAll()) {
+        MacroCardComponent* card = nullptr;
+        for (auto* c : cards) {
+            if (c->getMacroId() == macro.id) {
+                card = c;
+                break;
+            }
+        }
+        if (card == nullptr) {
+            card = cards.add(new MacroCardComponent(*this, macro.id));
+            content.addAndMakeVisible(card);
+        }
+        card->setBounds(macro.bounds);
+        card->setVisible(macro.collapsed);
+    }
+
+    // 3. A member's own ModuleComponent is hidden exactly while its macro is collapsed — kept
+    //    alive (not removed), so its position keeps tracking a card drag underneath.
+    for (auto* comp : content.getModules()) {
+        if (comp == nullptr)
+            continue;
+        const juce::String uuid = nodeUuidFor(comp->getNodeId());
+        const auto* macro = uuid.isEmpty() ? nullptr : macros.findByMember(uuid);
+        comp->setVisible(macro == nullptr || !macro->collapsed);
+    }
+}
+
+juce::Colour GraphEditor::categoryPreviewColour(synth::ui::ModuleCategory category) const {
+    // Force the BySourceCategory branch of resolveCableBaseColour regardless of the user's actual
+    // cableColourMode: the task asks for the preview to echo the module's CATEGORY specifically,
+    // and this is also the one call that folds in a user's Appearance Settings category colour
+    // override (cableColourOverrides) -- without it, a customised category palette would make the
+    // collapsed-card preview lie about what expanding the macro shows. CableSignal::Audio is inert
+    // here; the BySourceCategory branch never reads it.
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    static const synth::theme::Colors fallbackColors{};
+    const auto& colors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
+    return synth::ui::resolveCableBaseColour(synth::ui::CableColourMode::BySourceCategory,
+                                             synth::ui::CableSignal::Audio, category, colors, cableColourOverrides);
+}
