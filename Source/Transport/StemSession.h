@@ -15,6 +15,8 @@ class AudioEngine;
 namespace synth {
 
 class OfflineTransportDriver;
+class TimelineDoc; // Forward declaration (Source/Timeline/TimelineDoc.h) — see StemSession's
+                   // constructor comment for why this layer now looks at it (FRO55).
 // Defined in BounceGuards.h; forward-declared here for the same compile-firewall reason
 // BounceSession.h does — StemSession.cpp includes the real definitions.
 struct MetronomeForceOffGuard;
@@ -30,9 +32,11 @@ struct StemStripEntry {
 };
 
 // Every ChannelStripModule node in `graph`, ordered by node id (ascending) — the "else node id"
-// fallback docs/mixer.md §5.12 allows when no mixer/track order is exposed to this layer (Transport
-// has no dependency on the timeline/track model). Node ids are assigned in creation order and never
-// reused within a session, so this order is stable across repeated calls against the same graph.
+// fallback docs/mixer.md §5.12 allows when no mixer/track order is exposed to this layer (this
+// enumeration itself still has no dependency on the timeline/track model — only STEM NAMING, in
+// StemSession's constructor below, optionally looks at a TimelineDoc). Node ids are assigned in
+// creation order and never reused within a session, so this order is stable across repeated calls
+// against the same graph.
 std::vector<StemStripEntry> collectStemStrips(juce::AudioProcessorGraph& graph);
 
 // The choreography behind StemExporter::exportStems(), split into resumable steps exactly the way
@@ -53,8 +57,15 @@ public:
     // (destinationFolder is created here if it doesn't exist yet). If anything fails, nothing further
     // is touched and no tap stays armed: the engine is restored immediately and failedDuringSetup()
     // is true.
+    //
+    // `timelineDoc` (FRO55, docs/mixer.md §5.12): the live document a stem file's name is resolved
+    // against — each strip is named after the ONE track (Track In / Track Audio, walked upstream
+    // through the instrument/macro chain) that feeds it, falling back to "Channel N" when zero or
+    // several tracks do, or when this is null (a caller with no timeline at all — every test rig
+    // built before this ticket, and any future headless caller that doesn't care about names).
+    // MESSAGE THREAD, read once here — never stored past the constructor.
     StemSession(AudioEngine& engine, const juce::File& destinationFolder, const BounceOptions& options,
-                const BounceExporter::ProgressCallback& progress = {});
+                const BounceExporter::ProgressCallback& progress = {}, const TimelineDoc* timelineDoc = nullptr);
 
     // Disarms every tap and restores the engine if finish() was never called.
     ~StemSession();
