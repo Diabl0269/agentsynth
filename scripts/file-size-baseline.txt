@@ -2,7 +2,6 @@
 # A file may never grow past its entry; when it shrinks, run `bash scripts/check-file-sizes.sh --update`
 # so the entry tightens; once under the cap the entry must be removed (--update does that).
 # Never add a NEW file here -- split it instead.
-1034 Source/AI/AIIntegrationService/AIIntegrationService.cpp
 1312 Source/AudioEngine.cpp
 1135 Source/MainComponent/MainComponent.cpp
 1213 Source/MainComponent/MainComponent.h
@@ -15,11 +14,6 @@
 1461 Source/UI/PianoRoll/PianoRollComponent/PianoRollComponent.h
 1206 Source/UI/Settings/PreferencesSettingsTab.cpp
 1223 Source/UI/Theme/AppLookAndFeel.cpp
-1421 Tests/AI/AIIntegrationServiceTests.cpp
-1549 Tests/AI/AIStateMapperTests.cpp
-1188 Tests/AI/OllamaProviderTests.cpp
-1156 Tests/AI/RemoteProviderTests.cpp
-1044 Tests/Account/AuthClientTests.cpp
 1440 Tests/App/FocusArbitrationTests.cpp
 1411 Tests/App/MainComponentTests.cpp
 1264 Tests/App/ShortcutManagerTests.cpp
