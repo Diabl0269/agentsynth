@@ -217,8 +217,8 @@ endif()
 
 # Create the core library
 add_library(Core STATIC
-    Source/AudioEngine.cpp
-    Source/AudioEngine.h
+    Source/AudioEngine/AudioEngine.cpp
+    Source/AudioEngine/AudioEngine.h
     Source/AppUndoManager.cpp
     Source/AppUndoManager.h
     Source/Branding.h

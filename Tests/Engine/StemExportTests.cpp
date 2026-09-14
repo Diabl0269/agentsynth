@@ -17,7 +17,7 @@
 // 48 kHz, 512-sample blocks, 120 BPM (the transport's own default) => 24000 samples/beat.
 
 #include "AI/AIStateMapper/AIStateMapper.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/MasterModule.h"
 #include "Transport/BounceExporter.h"
 #include "Transport/OfflineTransportDriver.h"

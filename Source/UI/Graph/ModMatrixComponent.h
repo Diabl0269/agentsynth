@@ -1,7 +1,7 @@
 #pragma once
 
 #include "AppUndoManager.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
 

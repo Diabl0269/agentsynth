@@ -1,7 +1,7 @@
 #pragma once
 
 #include "AppUndoManager.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "MacroSet.h"
 #include "Modules/MacroPortShape.h"
 #include "PatchDocument.h"

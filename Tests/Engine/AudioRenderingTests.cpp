@@ -1,5 +1,5 @@
 #include "../TestAudioHelpers.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/ADSRModule.h"
 #include "Modules/ExternalMidiModule.h"
 #include "Modules/FX/ChorusModule.h"

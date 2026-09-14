@@ -13,7 +13,7 @@
 
 #include "../TestAudioHelpers.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/ExternalMidiModule.h"
 #include "Timeline/TimelineDoc.h"
 #include "Timeline/TimelineSnapshot.h"

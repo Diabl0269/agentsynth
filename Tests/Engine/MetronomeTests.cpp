@@ -10,7 +10,7 @@
 // BlockTimeInfo structs, which needs no engine at all.
 
 #include "../TestAudioHelpers.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Transport/BounceExporter.h"
 #include "Transport/Metronome.h"
 #include "Transport/OfflineTransportDriver.h"

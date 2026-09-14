@@ -12,7 +12,7 @@
 // every rig below uses the shortest range that still produces at least one file.
 
 #include "AI/AIStateMapper/AIStateMapper.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/MasterModule.h"
 #include "Timeline/TimelineDoc.h"

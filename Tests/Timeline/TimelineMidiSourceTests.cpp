@@ -14,7 +14,7 @@
 // HostMode::Hosted), no network, no sleeps.
 
 #include "AI/AIStateMapper/AIStateMapper.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/PolyMidiModule.h"
 #include "Modules/TimelineMidiSourceModule.h"
 #include "Timeline/TimelineDoc.h"

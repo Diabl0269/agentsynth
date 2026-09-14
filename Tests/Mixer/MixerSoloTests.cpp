@@ -14,7 +14,7 @@
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Mixer/MasterSplice.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/MasterModule.h"

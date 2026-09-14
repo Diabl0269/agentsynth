@@ -15,7 +15,7 @@
 // GraphEditor, AudioEngine), so the whole file is gated like its sibling automation suites.
 
 #include "AppUndoManager.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/FilterModule.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/OscillatorModule.h"

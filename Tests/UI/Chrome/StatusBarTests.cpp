@@ -1,7 +1,7 @@
 // StatusBarTests.cpp
 // Headless unit tests for StatusBarComponent (§4.1) and AudioEngine voice/mute API (§4.2).
 
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/PolyMidiModule.h"
 #include "UI/Chrome/StatusBarComponent.h"
 #include "UI/Timeline/TimelineTransportBar.h"

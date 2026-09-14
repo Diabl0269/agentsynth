@@ -1,9 +1,9 @@
 #include "StemSession.h"
 
-#include "../AudioEngine.h"
 #include "../Mixer/ChannelFlows.h"
 #include "../Modules/AttenuverterModule.h"
 #include "../Timeline/TimelineDoc.h"
+#include "AudioEngine/AudioEngine.h"
 #include "BounceGuards.h"
 #include "OfflineTransportDriver.h"
 #include <algorithm>

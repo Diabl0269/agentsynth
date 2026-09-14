@@ -1,6 +1,6 @@
 #include "StemExporter.h"
 
-#include "../AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "StemSession.h"
 #include <limits>
 

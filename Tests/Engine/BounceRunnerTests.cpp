@@ -8,7 +8,7 @@
 // construction), no audio device. Ticks are pumped via juce::MessageManager::runDispatchLoopUntil,
 // the same idiom FeedbackSettingsTabTests/GraphEditorTests use for other Timer-driven code.
 
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Transport/BounceRunner.h"
 #include "Transport/OfflineTransportDriver.h"
 #include <functional>

@@ -29,7 +29,7 @@
 #include <vector>
 
 #include "AI/AIStateMapper/AIStateMapper.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Transport/OfflineTransportDriver.h"
 
 using synth::AutomationRecorder;

@@ -30,7 +30,7 @@
 
 #include "../FakeAudioIODevice.h"
 #include "../StubPluginInstance.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/AudioInputModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Plugin/PluginProcessor.h"

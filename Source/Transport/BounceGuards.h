@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Metronome.h"
 #include <juce_core/juce_core.h>
 

@@ -10,7 +10,7 @@
 // standalone device callback uses — so what is asserted here holds for both modes.
 
 #include "AppUndoManager.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/OscillatorModule.h"
 #include "Transport/TransportService.h"
 #include <gtest/gtest.h>
