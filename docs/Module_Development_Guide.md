@@ -135,7 +135,7 @@ Opt out or override the inference with the constructor's fourth argument, `Modul
 
 `StereoDeclaration.EveryFactoryModuleFollowsTheShapeRuleOrADocumentedException` sweeps every factory
 module against that rule, so if your module needs `Declared` or `None` you must also add it to the
-table in `Tests/Modules/StereoVoiceModuleTests.cpp` **with a written reason** — the build's test run fails
+table in `Tests/Modules/StereoVoiceModule/StereoVoiceModuleDeclarationTests.cpp` **with a written reason** — the build's test run fails
 until you do. That is deliberate: the decision cannot be skipped, only made explicitly. Details and
 the current exception list: [`fx_modules.md § The toggle is inherited, not registered`](fx_modules.md#the-toggle-is-inherited-not-registered).
 

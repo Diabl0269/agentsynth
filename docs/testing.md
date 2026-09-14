@@ -350,7 +350,7 @@ Test persistence, serialization, and state restoration.
 
 ### Stereo Declaration Tests (8 tests)
 
-`Tests/Modules/StereoVoiceModuleTests.cpp` (suite `StereoDeclaration`) — the Dual I/O toggle is granted by `ModuleBase`'s constructor from a module's channel shape (`ModuleBase::StereoAudio`), so these sweep the whole module factory rather than checking modules one at a time. Headless.
+`Tests/Modules/StereoVoiceModule/StereoVoiceModuleDeclarationTests.cpp` (suite `StereoDeclaration`) — the Dual I/O toggle is granted by `ModuleBase`'s constructor from a module's channel shape (`ModuleBase::StereoAudio`), so these sweep the whole module factory rather than checking modules one at a time. Headless.
 
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
@@ -439,7 +439,7 @@ New suite `Tests/UI/ModuleViews/ScopeTests.cpp` covering `Source/UI/ModuleViews/
 
 ### Wavetable Oscillator Tests (76 tests)
 
-Suite `Tests/Modules/WavetableOscillatorModuleTests.cpp` covering `Source/Modules/WavetableOscillatorModule/`.
+Suite `Tests/Modules/WavetableOscillatorModule/` covering `Source/Modules/WavetableOscillatorModule/`.
 
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
