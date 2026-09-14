@@ -246,7 +246,7 @@ misreport three things the patch itself never states —
   not the value the patch states.
 
 `AIIntegrationService::computePatchPreview(jsonString, mergeMode, before, after)`
-(`Source/AI/AIIntegrationService.h/.cpp`) produces the two snapshots without touching the live
+(`Source/AI/AIIntegrationService/AIIntegrationService.h/.cpp`) produces the two snapshots without touching the live
 graph:
 
 - `before` is `AIStateMapper::graphToJSON(audioGraph)` for replace mode. For merge mode it is

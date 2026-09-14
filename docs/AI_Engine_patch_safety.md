@@ -172,7 +172,7 @@ model produces a patch with no `Audio Output` node, or with nodes that are never
 one. The prompt's module/parameter tables and syntax snippets tell a model the *rules*; they never show
 it a complete, working patch end to end.
 
-`initSystemPrompt()` (`Source/AI/AIIntegrationService.cpp`, ~line 430) now embeds 5 hand-authored
+`initSystemPrompt()` (`Source/AI/AIIntegrationService/AIIntegrationService.cpp`, ~line 430) now embeds 5 hand-authored
 `(prompt → complete, correctly-connected patch)` worked examples, covering the categories the task
 called for:
 

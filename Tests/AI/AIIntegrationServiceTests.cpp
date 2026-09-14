@@ -1,4 +1,4 @@
-#include "AI/AIIntegrationService.h"
+#include "AI/AIIntegrationService/AIIntegrationService.h"
 #include "AI/PatchEval.h"
 #include "Modules/OscillatorModule.h"
 #include "Modules/SamplerModule.h"
@@ -743,10 +743,10 @@ TEST_F(AIIntegrationServiceTest, SendMessageWithoutProviderReturnsInvalidRequest
 // --- P2-9: worked few-shot examples in the system prompt ---
 //
 // The JSON below must stay in sync with the examples embedded in
-// AIIntegrationService::initSystemPrompt() (Source/AI/AIIntegrationService.cpp) — these tests exist to
-// catch a hand-authoring mistake (a dangling node, a bad param) that eyeballing the prompt string would
-// miss. They are necessary but not sufficient: the actual proof this feature works is a
-// Tools/AIEvalHarness pass-rate delta, documented in the PR, not asserted here.
+// AIIntegrationService::initSystemPrompt() (Source/AI/AIIntegrationService/AIIntegrationService.cpp) — these tests
+// exist to catch a hand-authoring mistake (a dangling node, a bad param) that eyeballing the prompt string would miss.
+// They are necessary but not sufficient: the actual proof this feature works is a Tools/AIEvalHarness pass-rate delta,
+// documented in the PR, not asserted here.
 
 namespace {
 

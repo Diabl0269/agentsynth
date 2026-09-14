@@ -1,7 +1,7 @@
 #include "AIIntegrationService.h"
-#include "../AppUndoManager.h"
-#include "../Branding.h"
-#include "PatchEval.h"
+#include "AI/PatchEval.h"
+#include "AppUndoManager.h"
+#include "Branding.h"
 #include <algorithm>
 
 namespace synth {

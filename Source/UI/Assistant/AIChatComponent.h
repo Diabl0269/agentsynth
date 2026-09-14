@@ -1,6 +1,6 @@
 #pragma once
 
-#include "AI/AIIntegrationService.h"
+#include "AI/AIIntegrationService/AIIntegrationService.h"
 #include "AI/AccountService.h"
 #include "AI/ConversationHistorySource.h"
 #include "AI/LocalHistoryStore.h"
