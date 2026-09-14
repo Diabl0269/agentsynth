@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Plugin/Hosting/HostedPluginBackend.h"
-#include "ShortcutManager.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include "SnippetManager.h"
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/UIAnimation.h"

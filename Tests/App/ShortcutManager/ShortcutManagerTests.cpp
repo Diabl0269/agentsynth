@@ -1,4 +1,4 @@
-#include "ShortcutManager.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Settings/ShortcutsSettingsTab.h"
 #include <gtest/gtest.h>
 

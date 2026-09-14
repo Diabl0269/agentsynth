@@ -88,7 +88,7 @@ add_executable(Tests
     AI/PatchFeedbackStoreTests.cpp
     Account/GeneralFeedbackStoreTests.cpp
     AI/LocalHistoryStoreTests.cpp
-    App/MainComponentTests.cpp
+    App/MainComponent/MainComponentTests.cpp
     UI/Chrome/WelcomeScreenTests.cpp
     UI/Graph/GraphEditor/GraphEditorTests.cpp
     UI/Graph/GraphEditor/GraphEditorLayoutTests.cpp
@@ -123,7 +123,7 @@ add_executable(Tests
     Modules/NoiseModuleTests.cpp
     Modules/EdgeCaseTests.cpp
     Engine/IntegrationTests.cpp
-    Project/UndoRedoTests.cpp
+    Project/UndoRedo/UndoRedoTests.cpp
     App/E2EWorkflowTests.cpp
     Modules/ExternalMidiModuleTests.cpp
     Project/PresetManagerTests.cpp
@@ -134,7 +134,7 @@ add_executable(Tests
     FX/DistortionSweepTests.cpp
     Modules/OscillatorCVModulationTests.cpp
     UI/Settings/SettingsWindowTests.cpp
-    App/ShortcutManagerTests.cpp
+    App/ShortcutManager/ShortcutManagerTests.cpp
     UI/Settings/ShortcutsSettingsTabTests.cpp
     UI/Settings/PreferencesSettingsTabTests.cpp
     UI/Settings/FeedbackSettingsTabTests.cpp
@@ -162,7 +162,7 @@ add_executable(Tests
     UI/Library/ModuleLibraryHelpPopupTests.cpp
     UI/Library/ModuleLibraryKeyboardNavTests.cpp
     UI/Graph/SelectionModelTests.cpp
-    Project/SnippetManagerTests.cpp
+    Project/SnippetManager/SnippetManagerTests.cpp
     UI/Graph/MultiSelectTests.cpp
     Macros/MacroContainer/MacroContainerTests.cpp
     Macros/MacroContainer/MacroContainerGeometryTests.cpp
@@ -212,7 +212,7 @@ add_executable(Tests
     UI/PianoRoll/NoteColourTests.cpp
     UI/Timeline/MidiDestinationPickerTests.cpp
     Modules/ModuleMidiFlagsTests.cpp
-    App/FocusArbitrationTests.cpp
+    App/FocusArbitration/FocusArbitrationTests.cpp
     UI/Layout/FocusRegionTests.cpp
     UI/Timeline/AutomationEditorTests.cpp
     UI/Timeline/TimelineTransportBarTests.cpp

@@ -12,7 +12,7 @@
 #include "ChannelFlowTestFixture.h"
 #include "MacroSet.h"
 #include "MainComponent/MainComponent.h"
-#include "Mixer/ChannelFlows.h"
+#include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Mixer/MasterSplice.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/MasterModule.h"
@@ -43,7 +43,7 @@
 // as ONE undo step, with {Track In, instrument, EQ, Compressor, Strip} boxed into one collapsed
 // macro named after the track — the MIDI-track mirror of the Audio Track tests above. See
 // MainComponent::addInstrumentTrack's own comment for why this stays a TrackKind::Midi track
-// rather than a new TrackKind, and Source/Mixer/ChannelFlows.h for the poly/Voice Mixer contract.
+// rather than a new TrackKind, and Source/Mixer/ChannelFlows/ChannelFlows.h for the poly/Voice Mixer contract.
 // ---------------------------------------------------------------------------------------------
 
 TEST_F(ChannelFlowTest, InstrumentTrackSamplerBuildsDefaultChannelDirectlyOnAContiguousPair) {

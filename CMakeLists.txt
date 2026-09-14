@@ -239,8 +239,8 @@ add_library(Core STATIC
     Source/SettingsMigration.cpp
     Source/SettingsMigration.h
     # Mixer
-    Source/Mixer/ChannelFlows.cpp
-    Source/Mixer/ChannelFlows.h
+    Source/Mixer/ChannelFlows/ChannelFlows.cpp
+    Source/Mixer/ChannelFlows/ChannelFlows.h
     Source/Mixer/MasterSplice.cpp
     Source/Mixer/MasterSplice.h
     # Transport

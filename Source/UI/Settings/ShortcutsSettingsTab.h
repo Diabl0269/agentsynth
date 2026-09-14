@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ShortcutManager.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 #include <optional>

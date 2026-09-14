@@ -1,7 +1,7 @@
 // synth::StemSession stem-file naming (FRO55, docs/mixer.md §5.12): each stem is named after the
 // ONE TimelineMidiSource/TimelineAudioSource ("Track In"/"Track Audio") track whose signal feeds
 // that strip, walked upstream through the graph transitively (through an EQ/Compressor, the way
-// buildDefaultAudioChannel's own chain does — Source/Mixer/ChannelFlows.cpp), not the strip's own
+// buildDefaultAudioChannel's own chain does — Source/Mixer/ChannelFlows/ChannelFlows.cpp), not the strip's own
 // graph-node instance name. Split out from StemExportTests.cpp (the file-size cap, and the sum/tap/
 // cancel suite there is a different concern from naming) — see that file's own
 // NStripsProduceNFilesWithExpectedNamesAndEqualLength for the "zero tracks feed it -> Channel N"
@@ -43,7 +43,7 @@ NodeID addFactoryNode(juce::AudioProcessorGraph& graph, const juce::String& type
 // Sets node->properties["uuid"] AND mirrors it into the processor via ModuleBase::setNodeUuid —
 // the two-step invariant every node-creation call site in this codebase follows (root CLAUDE.md /
 // Source/CLAUDE.md: "a node's uuid must be mirrored into its processor at every write site"; see
-// also Source/Mixer/ChannelFlows.cpp's own addChainNode). StemSession reads the properties copy
+// also Source/Mixer/ChannelFlows/ChannelFlows.cpp's own addChainNode). StemSession reads the properties copy
 // (message thread), so that half is the one that actually matters for these tests — the processor
 // mirror is set anyway so a rig built this way isn't a lie about the invariant.
 juce::String assignUuid(juce::AudioProcessorGraph& graph, NodeID id) {
@@ -63,7 +63,7 @@ void wireStripToMaster(juce::AudioProcessorGraph& graph, NodeID strip, NodeID ma
 }
 
 // Track Audio -> Parametric EQ -> Compressor -> Channel Strip, the same chain
-// buildDefaultAudioChannel builds (Source/Mixer/ChannelFlows.cpp) — proves the naming walk crosses
+// buildDefaultAudioChannel builds (Source/Mixer/ChannelFlows/ChannelFlows.cpp) — proves the naming walk crosses
 // an ordinary instrument/macro hop rather than only recognising a direct wire. The strip's own
 // output is NOT wired to Master here; callers do that once they know their strip's node id (so two
 // channels can be built in a controlled creation order — collectStemStrips sorts by ascending node

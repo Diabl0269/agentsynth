@@ -12,7 +12,7 @@
 #include "PresetManager.h"
 #include "ProjectBundle.h"
 #include "RecentProjects.h"
-#include "ShortcutManager.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include "SnippetManager.h"
 #include "Timeline/AutomationRecorder.h"
 #include "Timeline/MidiRecorder.h"

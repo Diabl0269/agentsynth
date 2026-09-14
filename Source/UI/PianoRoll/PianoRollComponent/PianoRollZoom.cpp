@@ -9,7 +9,7 @@
 
 #include "AppUndoManager.h"
 #include "PianoRollInternal.h"
-#include "ShortcutManager.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Timeline/ScrollPolicy.h"
 #include <algorithm>
 #include <cmath>

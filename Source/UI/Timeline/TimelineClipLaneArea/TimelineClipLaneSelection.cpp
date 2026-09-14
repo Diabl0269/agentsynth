@@ -7,7 +7,7 @@
 #include "TimelineClipLaneArea.h"
 
 #include "AppUndoManager.h"
-#include "ShortcutManager.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include <algorithm>
 #include <cmath>
 #include <set>

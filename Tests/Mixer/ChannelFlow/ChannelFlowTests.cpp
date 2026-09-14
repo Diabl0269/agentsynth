@@ -7,7 +7,7 @@
 //
 // with {Track Audio, EQ, Compressor, Strip} boxed into ONE collapsed macro named after the track.
 // Master stays OUTSIDE the macro and the Strip -> Master cable is a plain graph edge, never a macro
-// port — see MainComponent::addAudioTrack's own comment and Source/Mixer/ChannelFlows.h for why.
+// port — see MainComponent::addAudioTrack's own comment and Source/Mixer/ChannelFlows/ChannelFlows.h for why.
 //
 // Drives the flow through a real MainComponent via the same headless seam
 // AudioClipPlaybackTests.cpp's AddAudioTrackFlowTest uses (TimelinePanelComponent's
@@ -22,7 +22,7 @@
 #include "ChannelFlowTestFixture.h"
 #include "MacroSet.h"
 #include "MainComponent/MainComponent.h"
-#include "Mixer/ChannelFlows.h"
+#include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Mixer/MasterSplice.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/MasterModule.h"

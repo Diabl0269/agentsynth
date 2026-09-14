@@ -432,7 +432,7 @@ this: every surface already does it on `mouseDown` (`GraphEditor::mouseDown` is 
 original; `TimelineClipLaneArea`, `PianoRollComponent` and `AutomationLaneEditor` all copy it), so
 "the surface you last clicked owns the verbs" falls out of ordinary JUCE focus tracking with no
 extra bookkeeping. Headless tests can't always create a real focus grab (`grabKeyboardFocus()`
-needs a native peer — see `Tests/App/FocusArbitrationTests.cpp`'s `SurfaceResolverRealFocus`, which
+needs a native peer — see `Tests/App/FocusArbitration/FocusArbitrationTests.cpp`'s `SurfaceResolverRealFocus`, which
 documents why this repo doesn't attempt one), so `MainComponent::setEditSurfaceOverrideForTest()`
 is consulted FIRST and short-circuits the real-focus check when set.
 
@@ -507,11 +507,11 @@ this command.
 surface's own `keyPressed` already handles its own selection and falls through (`return false`) on
 an empty one, which is what let an unmodified `Delete` binding be surface-scoped for free since
 before this task. This section adds no new production code here, only
-`Tests/App/FocusArbitrationTests.cpp`'s `DeletePerSurface`, which pins that a clips-focused Delete never
+`Tests/App/FocusArbitration/FocusArbitrationTests.cpp`'s `DeletePerSurface`, which pins that a clips-focused Delete never
 touches the graph, a graph-focused Delete never touches the clips, and an empty selection on either
 falls through rather than eating the key.
 
-Tests: `Tests/App/FocusArbitrationTests.cpp` — one test per verb x surface (`resolveEditSurface()`
+Tests: `Tests/App/FocusArbitration/FocusArbitrationTests.cpp` — one test per verb x surface (`resolveEditSurface()`
 override coverage, clip copy/paste-at-playhead/duplicate incl. the missing-track fallback, the
 piano-roll inactive gap, Space from every surface, per-surface Delete, and the resolver's real-focus
 fallback behaviour).

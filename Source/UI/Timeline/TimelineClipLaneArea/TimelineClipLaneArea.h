@@ -20,7 +20,7 @@
 
 class AppUndoManager;  // Forward declaration (Source/AppUndoManager.h)
 class RecordTapModule; // Forward declaration (Source/Modules/RecordTapModule.h)
-class ShortcutManager; // Forward declaration (Source/ShortcutManager.h)
+class ShortcutManager; // Forward declaration (Source/ShortcutManager/ShortcutManager.h)
 
 namespace synth {
 class TransportService; // Forward declaration (Source/Transport/TransportService.h)

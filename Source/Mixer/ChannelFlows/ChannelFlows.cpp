@@ -1,14 +1,14 @@
 #include "ChannelFlows.h"
 
-#include "../AI/AIStateMapper/AIStateMapper.h"
-#include "../MacroSet.h"
-#include "../Modules/AttenuverterModule.h"
-#include "../Modules/ChannelStripModule.h"
-#include "../Modules/MasterModule.h"
-#include "../Modules/ModuleBase.h"
-#include "../Modules/RecordTapModule.h"
-#include "../Modules/VCAModule.h"
-#include "MasterSplice.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
+#include "MacroSet.h"
+#include "Mixer/MasterSplice.h"
+#include "Modules/AttenuverterModule.h"
+#include "Modules/ChannelStripModule.h"
+#include "Modules/MasterModule.h"
+#include "Modules/ModuleBase.h"
+#include "Modules/RecordTapModule.h"
+#include "Modules/VCAModule.h"
 #include <algorithm>
 
 namespace synth {

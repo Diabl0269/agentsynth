@@ -6,7 +6,7 @@
 // and the test target (Tests) in the root CMakeLists.txt and
 // Tests/CMakeLists.txt respectively before these tests will link.
 
-#include "ShortcutManager.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Settings/ShortcutsSettingsTab.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

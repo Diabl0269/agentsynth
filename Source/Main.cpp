@@ -2,7 +2,7 @@
 #include "MainComponent/MainComponent.h"
 #include "Plugin/Hosting/PluginScanService.h"
 #include "SettingsMigration.h"
-#include "ShortcutManager.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Theme/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
 #include "UserSettings.h"
