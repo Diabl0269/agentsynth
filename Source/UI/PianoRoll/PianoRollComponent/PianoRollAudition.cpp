@@ -274,4 +274,13 @@ juce::String PianoRollComponent::scaleFilterTooltipText() const {
     return text;
 }
 
+//==============================================================================
+// ---- Simple accessors (moved out of the header — see PianoRollComponent.h for each contract) ----
+int PianoRollComponent::getAuditionPitchForTest() const noexcept { return auditionActive_ ? auditionPitch_ : -1; }
+bool PianoRollComponent::isAuditionActiveForTest() const noexcept { return auditionActive_; }
+int PianoRollComponent::getPressedKeyForTest() const noexcept { return keysColumnPressing_ ? keysColumnPitch_ : -1; }
+
+double PianoRollComponent::getLastExtendPromptLengthForTest() const noexcept { return lastExtendPromptLength_; }
+synth::ClipId PianoRollComponent::getLastExtendPromptClipForTest() const noexcept { return lastExtendPromptClip_; }
+
 } // namespace synth::ui

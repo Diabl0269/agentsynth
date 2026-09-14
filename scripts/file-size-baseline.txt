@@ -12,7 +12,6 @@
 1999 Source/UI/Assistant/AIChatComponent.cpp
 1984 Source/UI/Graph/GraphEditor/GraphEditor.h
 1275 Source/UI/Macros/MacroPortConfigDialog.cpp
-1461 Source/UI/PianoRoll/PianoRollComponent/PianoRollComponent.h
 1206 Source/UI/Settings/PreferencesSettingsTab.cpp
 1223 Source/UI/Theme/AppLookAndFeel.cpp
 1421 Tests/AI/AIIntegrationServiceTests.cpp
@@ -37,4 +36,3 @@
 1396 Tests/Timeline/TimelineMidiSourceTests.cpp
 1262 Tests/UI/Graph/ModuleComponentTests.cpp
 1184 Tests/UI/Settings/PreferencesSettingsTabTests.cpp
-1615 Tests/UI/Timeline/TimelineClipLaneTests.cpp

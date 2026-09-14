@@ -533,7 +533,7 @@ struct ToolLaneFixture {
     float rowHeightF() const { return (float)lane.getRowHeight(); }
 };
 
-// Hand-built MouseEvents, same pattern as TimelineClipLaneTests.cpp/Tests/UI/Graph/GraphEditor/*.cpp — no OS
+// Hand-built MouseEvents, same pattern as TimelineClipLane/*.cpp/Tests/UI/Graph/GraphEditor/*.cpp — no OS
 // mouse source exists headlessly, and `mouseWasDragged` is the constructor's own bool.
 juce::MouseEvent makeToolMouseEvent(juce::Component& comp, juce::Point<float> position, juce::ModifierKeys mods,
                                     bool mouseWasDragged, juce::Point<float> mouseDownPos) {

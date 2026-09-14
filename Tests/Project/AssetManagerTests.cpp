@@ -3,8 +3,8 @@
 // synth::AssetManager — import-into-bundle + dedupe, the relink flow (MainComponent's half),
 // collect/clean of unused Audio/ + Peaks/ files, and the Recordings/-convention adoption pass that
 // runs immediately before ProjectBundle::save. The missing-asset placeholder half lives in
-// Tests/UI/Timeline/TimelineClipLaneTests.cpp (group 6) alongside the rest of TimelineClipLaneArea's paint
-// tests, since it's a lane-area concern rather than an AssetManager one.
+// Tests/UI/Timeline/TimelineClipLane/TimelineClipLanePaintingTests.cpp alongside the rest of
+// TimelineClipLaneArea's paint tests, since it's a lane-area concern rather than an AssetManager one.
 //
 // Groups:
 //   1. ImportCopiesAndDedupes — collision-free naming, identical-content reuse, non-audio rejection.
@@ -279,7 +279,7 @@ TEST_F(AssetManagerRelinkTest, RelinkRewritesAllSharingClips) {
 // ---- The authoring-gesture import (double-click an empty audio row / drop a file on one) ----
 //
 // Same policy as the relink above, one step further: it also creates the clip. The lane-area half
-// (which row, which beat) is covered in Tests/UI/Timeline/TimelineClipLaneTests.cpp group 7.
+// (which row, which beat) is covered in Tests/UI/Timeline/TimelineClipLane/TimelineClipLaneAuthoringTests.cpp.
 
 TEST_F(AssetManagerRelinkTest, DroppedAudioFileImportsIntoSavedBundleAsOneUndoStep) {
     MainComponent mc(std::make_unique<MockProviderAM>());

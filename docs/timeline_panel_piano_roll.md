@@ -19,8 +19,10 @@ per-clip note editor shown INSIDE the timeline panel's lanes region — no separ
 keyed on `synth::NoteId` with the identical add/remove/toggle/setSelection/retainOnly contract,
 plus a `noteHitTestMarquee` free function mirroring `clipHitTestMarquee`.
 
-**Source layout** (`Source/UI/PianoRoll/PianoRollComponent/`, split by concern — FRO64):
-- `PianoRollComponent.h` — the class declaration, shared by every unit below.
+**Source layout** (`Source/UI/PianoRoll/PianoRollComponent/`, split by concern — FRO64, FRO75):
+- `PianoRollComponent.h` — the class declaration, shared by every unit below. Each member's
+  detailed contract lives as a doc comment next to its out-of-line definition in the matching
+  `PianoRoll<Concern>.cpp` unit below, not in the header itself (kept under the file-size cap).
 - `PianoRollComponent.cpp` — construction/teardown, clip open/close entry points, horizontal geometry.
 - `PianoRollScaleAssist.cpp` — the scale-assist panel and its Generate action.
 - `PianoRollPainting.cpp` — `paint()`, header chip glyphs, the local playhead line.
@@ -30,6 +32,12 @@ plus a `noteHitTestMarquee` free function mirroring `clipHitTestMarquee`.
 - `PianoRollMouse.cpp` — mouse handling and edge-auto-scroll.
 - `PianoRollZoom.cpp` — anchored zoom and `keyPressed` dispatch.
 - `PianoRollInternal.h` — private shared constants/helpers (not a CMake source file).
+- `PianoRollGestureTypes.h`, `PianoRollClipboardTypes.h`, `PianoRollGeometryTypes.h`,
+  `PianoRollScaleTypes.h`, `PianoRollAutoScrollTimer.h` — nested-type bodies (`NoteHit`/`NoteOrigin`,
+  `ClipboardNote`, `NoteGeometry`/`LineRange`, `ClipScaleMemory`, `AutoScrollTimer`) `#include`d
+  mid-class-body from `PianoRollComponent.h` at the exact spot each used to be defined inline, so
+  every one stays nested (`PianoRollComponent::NoteHit` etc.) with no change to any qualified
+  reference elsewhere (not CMake source files, same as `PianoRollInternal.h`).
 
 **Entry/exit.** Double-clicking a clip in `TimelineClipLaneArea` fires its `onClipDoubleClicked(ClipId)`
 callback, which `TimelinePanelComponent`'s constructor wires to `openPianoRoll(ClipId)`. That call:
@@ -652,7 +660,7 @@ a lie in the ruler strip too, so the overlay's local-client region covers the ru
 the roll's (`TimelinePanelComponent::resized`) — the roll draws the only playhead line.
 
 Tests: `Tests/PianoRollTests.cpp` — `NoteSelectionModel`/`noteHitTestMarquee` unit coverage (mirrors
-`TimelineClipLaneTests.cpp`'s groups 1–2) and `PianoRollComponent` interaction tests driven by
+`TimelineClipLaneSelectionTests.cpp`'s `ClipSelectionModel`/`ClipMarqueeHitTest` coverage) and `PianoRollComponent` interaction tests driven by
 hand-built `juce::MouseEvent`s against a bare `TimelineDoc` + `AppUndoManager` +
 `PianoRollComponent`, no `TimelinePanelComponent` needed. The gesture table is pinned test by test
 (single click deselects and creates nothing; double-click creates one note per snap division, at two
