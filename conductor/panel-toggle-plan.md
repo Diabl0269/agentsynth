@@ -4,7 +4,7 @@
 Enable toggling of the Mod Matrix and AI Chat panels via keyboard shortcuts (Cmd+M/Ctrl+M for Mod Matrix, Cmd+A/Ctrl+A for AI Panel) and set both panels to be closed by default on application launch.
 
 ## Key Files & Context
-- `Source/ShortcutManager.h`: Update to include new command actions and default bindings.
+- `Source/ShortcutManager/ShortcutManager.h`: Update to include new command actions and default bindings.
 - `Source/MainComponent.h`: Change initial visibility state (`isAiPanelVisible` and default mod matrix state).
 - `Source/MainComponent.cpp`: Implement command handling for the new toggles, update the shortcut registration logic.
 
@@ -33,8 +33,8 @@ Enable toggling of the Mod Matrix and AI Chat panels via keyboard shortcuts (Cmd
   - Test Shortcuts: Cmd+M toggles Mod Matrix, Cmd+A toggles AI Panel.
   - Verify shortcut conflicts are handled by `ShortcutManager`.
 - **Tests**:
-  - Update `Tests/App/MainComponentTests.cpp` to verify initial state is "closed".
-  - Add unit tests for the new shortcut actions in `Tests/App/ShortcutManagerTests.cpp` (if exists).
+  - Update `Tests/App/MainComponent/MainComponentTests.cpp` to verify initial state is "closed".
+  - Add unit tests for the new shortcut actions in `Tests/App/ShortcutManager/ShortcutManagerTests.cpp` (if exists).
 
 ## Docs Updates
 - Update `CLAUDE.md` to document new keyboard shortcuts.

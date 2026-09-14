@@ -9,7 +9,7 @@
 // headers, layout/paint).
 
 #include "TimelinePanelComponent.h"
-#include "ShortcutManager.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include "Transport/TransportService.h"
 #include <algorithm>
 #include <cmath>

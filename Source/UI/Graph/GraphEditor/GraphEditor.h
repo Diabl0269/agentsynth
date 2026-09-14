@@ -292,10 +292,10 @@ public:
     void cancelSelectionDrag();
     bool isSelectionDragActive() const { return selectionDragActive; }
 
-    /** Test accessor: whether an expanded macro's chip drag (GraphEditor::mouseDown's
-     *  macroChipAt branch) is currently armed — FRO19 regression coverage for the drag-end
-     *  state-reset sweep (see MacroPortRealMouseDragTests.cpp's sibling file). */
-    bool isMacroChipDragActive() const { return macroChipDragId.isNotEmpty(); }
+    bool isMacroChipDragActive() const { return macroChipDragId.isNotEmpty(); } // FRO19 test accessor
+    /** FRO19: cancels a live drag when the component that armed it (ModuleComponent or
+     *  MacroCardComponent) is destroyed/detached mid-gesture (see docs/layout_selection_canvas.md §1.4). */
+    void cancelLiveDragGestures();
 
     // ---- Macros (P8-12) ------------------------------------------------------------------
     //

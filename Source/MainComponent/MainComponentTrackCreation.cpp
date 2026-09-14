@@ -7,7 +7,7 @@
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Branding.h"
-#include "Mixer/ChannelFlows.h"
+#include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Mixer/MasterSplice.h"
 #include "Modules/VCAModule.h" // VCAModule::kRightBase for the P9-3i envelope+VCA insertion below
 #include "Plugin/Hosting/HostedPluginModule.h"

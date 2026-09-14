@@ -32,6 +32,12 @@ public:
 
     const juce::String& getMacroId() const noexcept { return macroId; }
 
+    /** Whether this card's own body drag (mouseDown -> beginMacroCardDrag) is currently armed —
+     *  GraphEditor::syncMacroCards() checks this before destroying an orphaned card so a macro that
+     *  vanishes mid-drag (FRO19) cancels the drag rather than leaving it stuck with no mouseUp ever
+     *  coming. */
+    bool isBodyDragActive() const noexcept { return bodyDragActive; }
+
     void paint(juce::Graphics& g) override;
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;

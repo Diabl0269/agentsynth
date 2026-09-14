@@ -1,5 +1,5 @@
 #include "TimelineTrackHeaderComponent.h"
-#include "ShortcutManager.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include "TrackColour.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Layout/FocusRegion.h"

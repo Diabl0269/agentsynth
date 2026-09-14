@@ -4,11 +4,4 @@
 # Never add a NEW file here -- split it instead.
 1135 Source/MainComponent/MainComponent.cpp
 1213 Source/MainComponent/MainComponent.h
-1004 Source/Mixer/ChannelFlows.cpp
-1165 Source/ShortcutManager.h
 1984 Source/UI/Graph/GraphEditor/GraphEditor.h
-1440 Tests/App/FocusArbitrationTests.cpp
-1411 Tests/App/MainComponentTests.cpp
-1264 Tests/App/ShortcutManagerTests.cpp
-1061 Tests/Project/SnippetManagerTests.cpp
-1187 Tests/Project/UndoRedoTests.cpp

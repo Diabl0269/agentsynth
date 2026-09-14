@@ -97,23 +97,45 @@ visibly nudge the group.
 **Drag-in-progress flags and their reset sites (FRO19, founder review round 3).** `GraphEditor`
 owns a small family of gesture-scoped flags — `dragPreviewActive`/`dragPreviewGhost`,
 `marqueeActive`/`marqueeRect`, `selectionDragActive`/`selectionDragStartPositions`, and
-`macroChipDragId` — each cleared by exactly one or two functions (`endDragPreview`, `endMarquee`,
-`cancelSelectionDrag`/`finalizeSelectionDrag`), reached only from the real `mouseUp` of whichever
-component armed them (`ModuleComponent`, `MacroCardComponent`, or `GraphEditor` itself). A `mouseUp`
-that never runs its matching cleanup leaves a ghost or marquee rectangle drawn indefinitely. Two
-such gaps were found and fixed before this note: a double-click-to-rename on an expanded macro's
-chip, and on a collapsed macro's card, each opens a modal `AlertWindow` (`enterModalState(true,
-...)`) whose global input grab swallows the drag's own `mouseUp` — both `mouseDoubleClick`
-overrides now cancel the armed drag unconditionally rather than depending on that `mouseUp` ever
-arriving (see their own comments). `Tests/UI/Graph/DragStateResetTests.cpp` drives every flag-arming real
-gesture (plain and multi-select body drag, Ctrl-insert drag, marquee, macro chip drag, macro card
-drag, both double-click-rename cases, and a release reported far outside the pressed component's
-own bounds) through the actual `mouseDown`/`mouseDrag`/`mouseUp` callbacks and asserts every flag
-clears — a regression suite for the two known fixes, and a clean sweep (as of this writing) for
-every other gesture it can drive synthetically. Founder reports of a still-stuck ghost/selection
-after this sweep point at a gesture the sweep doesn't yet cover (an async graph reconcile
-racing a live drag is the leading remaining suspect, but unconfirmed) — reproduce it, then extend
-this file with the new case before touching the reset logic itself.
+`macroChipDragId` — each normally cleared by exactly one or two functions (`endDragPreview`,
+`endMarquee`, `cancelSelectionDrag`/`finalizeSelectionDrag`), reached from the real `mouseUp` of
+whichever component armed them (`ModuleComponent`, `MacroCardComponent`, or `GraphEditor` itself). A
+`mouseUp` that never runs its matching cleanup leaves a ghost or marquee rectangle drawn
+indefinitely. Three such gaps are known and fixed:
+
+1. A double-click-to-rename on an expanded macro's chip, and on a collapsed macro's card, each opens
+   a modal `AlertWindow` (`enterModalState(true, ...)`) whose global input grab swallows the drag's
+   own `mouseUp` — both `mouseDoubleClick` overrides cancel the armed drag unconditionally rather
+   than depending on that `mouseUp` ever arriving (see their own comments).
+2. **A component rebuild mid-gesture destroys the component that owns the live drag, so its
+   `mouseUp` can never arrive at all** — not swallowed, simply undeliverable, since JUCE has nothing
+   left to deliver it to. `ModuleComponent::mouseDown` arms `dragPreviewActive`/`selectionDragActive`
+   and `MacroCardComponent::mouseDown` (`beginMacroCardDrag`) arms `selectionDragActive`, both
+   resetting only from their own `mouseUp`. Two rebuild paths can destroy that component first: an
+   async apply — e.g. an AI patch landing mid-gesture via `MainComponent::aiPatchAboutToApply` ->
+   `GraphEditor::detachAllModuleComponents()`, which deletes every `ModuleComponent` unconditionally
+   — or the dragged node/macro itself being removed (undo, any other doc mutation) and pruned by the
+   next `GraphEditor::updateComponents()`/`syncMacroCards()` pass. `GraphEditor::cancelLiveDragGestures()`
+   (cancels `selectionDragActive` + `dragPreviewActive` together) is called from all three sites:
+   unconditionally in `detachAllModuleComponents()` (every component is going, so cancelling is
+   always correct there), and, in `updateComponents()`/`syncMacroCards()`, only when the SPECIFIC
+   component being removed is the drag's own initiator (`dragPreviewSelfId` for a module drag,
+   `MacroCardComponent::isBodyDragActive()` for a card drag) — a non-initiating group member
+   vanishing on its own is harmless, since the initiator survives, its real `mouseUp` is still
+   coming, and `finalizeSelectionDrag`'s lookup simply skips a stale id it can't find.
+   `marqueeActive`/`marqueeRect` and `macroChipDragId` need no such guard: both are armed and
+   reset entirely within `GraphEditor::mouseDown`/`mouseUp` itself, which is never one of the
+   components a rebuild destroys.
+
+`Tests/UI/Graph/DragStateResetTests.cpp` drives every flag-arming real gesture (plain and
+multi-select body drag, Ctrl-insert drag, marquee, macro chip drag, macro card drag, both
+double-click-rename cases, and a release reported far outside the pressed component's own bounds)
+through the actual `mouseDown`/`mouseDrag`/`mouseUp` callbacks and asserts every flag clears — this
+pins fix #1 and is a clean sweep for every gesture that DOES get a real `mouseUp`.
+`Tests/UI/Graph/DragStateAsyncRebuildTests.cpp` covers fix #2: it arms a drag through the same real
+gesture path, then drives `detachAllModuleComponents()`/`updateComponents()`/a member-removing
+`updateComponents()` in place of the `mouseUp` that a rebuild makes impossible, and asserts the
+flags still end clear with nothing crashing.
 
 ### 1.5 Snippets — `Source/SnippetManager.{h,cpp}`
 

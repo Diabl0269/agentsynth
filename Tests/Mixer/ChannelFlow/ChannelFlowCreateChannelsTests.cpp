@@ -12,7 +12,7 @@
 #include "ChannelFlowTestFixture.h"
 #include "MacroSet.h"
 #include "MainComponent/MainComponent.h"
-#include "Mixer/ChannelFlows.h"
+#include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Mixer/MasterSplice.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/MasterModule.h"

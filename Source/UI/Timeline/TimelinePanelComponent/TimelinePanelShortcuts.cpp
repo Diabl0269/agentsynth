@@ -7,7 +7,7 @@
 
 #include "TimelinePanelComponent.h"
 
-#include "ShortcutManager.h"
+#include "ShortcutManager/ShortcutManager.h"
 
 namespace synth::ui {
 

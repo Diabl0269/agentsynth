@@ -273,6 +273,12 @@ void GraphEditor::syncMacroCards() {
     for (int i = cards.size(); --i >= 0;) {
         auto* card = cards.getUnchecked(i);
         if (macros.find(card->getMacroId()) == nullptr) {
+            // This card's own mouseDown may have armed a live body drag (beginMacroCardDrag ->
+            // selectionDragActive) — its macro just vanished entirely (every member gone, so
+            // MacroSet::retainOnly erased it), and no mouseUp is ever coming once the card is
+            // destroyed below (FRO19). Cancel now rather than leaving selectionDragActive stuck.
+            if (card->isBodyDragActive())
+                cancelLiveDragGestures();
             content.removeChildComponent(card);
             cards.remove(i);
         }

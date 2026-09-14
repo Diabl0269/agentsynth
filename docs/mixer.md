@@ -610,7 +610,7 @@ Main line, in dependency order:
    - **T173a (audio track) — DONE.** "+ Track -> Audio Track" builds the whole channel — Track
      Audio -> Parametric EQ (bypassed) -> Compressor (bypassed) -> Channel Strip (Stereo) ->
      Master (Mix) — in ONE undo step (`AppUndoManager::recordGraphTimelineAndMacroChange`), via a
-     new Core helper `synth::buildDefaultAudioChannel` (`Source/Mixer/ChannelFlows.h`) that splices
+     new Core helper `synth::buildDefaultAudioChannel` (`Source/Mixer/ChannelFlows/ChannelFlows.h`) that splices
      Master (`synth::spliceMasterNode`, reusing the existing singleton after the first channel) and
      wires the strip into it. `{Track Audio, EQ, Compressor, Strip}` are boxed into ONE collapsed
      macro named after the track (`GraphEditor::addMacroForMembers`) — **Master stays outside the
@@ -642,7 +642,7 @@ Main line, in dependency order:
      their own — a held (or even released) note droned forever. "+ Track -> Instrument ->
      {Oscillator/Wavetable}" now inserts an ADSR + VCA ahead of the rest of the chain:
      `Track In --MIDI--> ADSR --Env--> VCA's Gain CV`, `chainSource -> VCA Audio -> EQ`
-     (`synth::addEnvelopeAndVCAForRawInstrument`, `Source/Mixer/ChannelFlows.h`/`.cpp`). Inserted
+     (`synth::addEnvelopeAndVCAForRawInstrument`, `Source/Mixer/ChannelFlows/ChannelFlows.h`/`.cpp`). Inserted
      AFTER any Voice Mixer stage, never before it, and both nodes are forced non-poly regardless of
      the instrument's own `poly` parameter: `ADSRModule`'s poly branch is CV-gate-only (it never
      reads the MIDI note-on/off fallback that drives its non-poly branch), so a poly ADSR fed only
@@ -670,7 +670,7 @@ Main line, in dependency order:
      instrument's poly Audio L (ch0-7) --> VCA's poly Audio L in (ch0-7)
      ```
      Both ADSR and VCA are now genuinely poly (`synth::addPolyEnvelopeAndVCAForInstrument`,
-     `Source/Mixer/ChannelFlows.h`/`.cpp`), giving each voice its own independent envelope instead
+     `Source/Mixer/ChannelFlows/ChannelFlows.h`/`.cpp`), giving each voice its own independent envelope instead
      of one shared mono envelope gating the whole poly-voice sum. No separate Voice Mixer is
      inserted for this case — the poly VCA already sums all 8 gated voices to a stereo-shaped pair
      itself (ch0 = left sum, ch1 = its own legacy duplicate), so `addVoiceMixerForPolyInstrument` is
@@ -754,7 +754,7 @@ Main line, in dependency order:
      wires straight in, same as any other MIDI-track-into-an-existing-instrument case (§5.2's
      table). Gated by a Preferences toggle, `mixerAutoCreateChannelOnConnect`, default **ON**; OFF
      restores exactly today's behaviour (wire freely, no channel appears).
-     - *Core* (`Source/Mixer/ChannelFlows.h`/`.cpp`, no AppUI/GraphEditor/AppUndoManager
+     - *Core* (`Source/Mixer/ChannelFlows/ChannelFlows.h`/`.cpp`, no AppUI/GraphEditor/AppUndoManager
        dependency): `synth::findUnchanneledOutputFeeds(graph, start)` does a forward BFS from the
        just-connected node over audio AND MIDI edges — never expanding past a
        `ChannelStripModule` (already channeled: stop, no exit), a `RecordTapModule`, a

@@ -12,7 +12,7 @@ namespace juce {
 class ApplicationProperties; // forward declaration — only a pointer crosses this header
 } // namespace juce
 
-class ShortcutManager; // forward declaration (Source/ShortcutManager.h) — same non-owning,
+class ShortcutManager; // forward declaration (Source/ShortcutManager/ShortcutManager.h) — same non-owning,
                        // may-stay-null pointer pattern as TimelinePanelComponent's own copy.
 
 // TimelineTrackHeaderComponent — one row in the timeline panel's track-header column.

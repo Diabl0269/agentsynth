@@ -112,6 +112,7 @@ Everything else below is a tripwire index. The full rule lives in the named area
 **UI & theming** (`Source/UI/CLAUDE.md`, `Source/Plugin/CLAUDE.md`):
 
 - No unconditional per-tick repaint; all animations use `AnimationDriver`; exactly two blessed exceptions. → [`docs/layout_visuals_animation.md §2–3`](docs/layout_visuals_animation.md)
+- A component rebuild mid-gesture (an async apply, or the dragged node/macro vanishing) cancels any live drag via `GraphEditor::cancelLiveDragGestures()` rather than leaving it waiting on a `mouseUp` that can no longer arrive. → [`docs/layout_selection_canvas.md §1.4`](docs/layout_selection_canvas.md)
 - A cable is not a graph edge — enumerate via `GraphEditor::buildVisibleCables()`, colour via `synth::ui::resolveCableColour`. → [`docs/layout_selection_canvas.md §3`](docs/layout_selection_canvas.md) · [`docs/theming.md §11`](docs/theming.md)
 - Themes never swap font families (JUCE 8 + CoreText corrupts text); colour/treatment/glow only. → [`docs/theming.md`](docs/theming.md)
 - A plugin editor never calls `Desktop::setDefaultLookAndFeel` — it's process-global inside the host. → [`docs/architecture.md`](docs/architecture.md)

@@ -362,7 +362,7 @@ set:
 1. `createTrackAudioNode(wireDirectlyToMasterBus=false)` creates the `Track Audio` node **unwired**
    — the direct-to-master-bus auto-wire the MIDI-entry-style flow used before T173a is now only
    `createAndBindTrackInNode()`'s behaviour (its ad hoc single-node rebind from the binding chip);
-2. `synth::buildDefaultAudioChannel` (Core, `Source/Mixer/ChannelFlows.h`) wires the node into the
+2. `synth::buildDefaultAudioChannel` (Core, `Source/Mixer/ChannelFlows/ChannelFlows.h`) wires the node into the
    factory default chain — `Track Audio -> Parametric EQ (bypassed) -> Compressor (bypassed) ->
    Channel Strip (Stereo)` — then splices Master (`synth::spliceMasterNode`, reusing the existing
    singleton after the first channel; the same "Rec Tap when spliced, else Audio Output" target
@@ -396,7 +396,7 @@ outputs CV/gate and Sequencer/Poly Sequencer generate MIDI, none of them audio. 
    unambiguous, since the instrument was just created for this track alone;
 3. a poly instrument's raw ch0-7 (up to 8 simultaneous voices) cannot feed
    `buildDefaultAudioChannel` directly, which wants one stereo pair — `synth::
-   addVoiceMixerForPolyInstrument` (Core, `Source/Mixer/ChannelFlows.h`) sums them into a Voice
+   addVoiceMixerForPolyInstrument` (Core, `Source/Mixer/ChannelFlows/ChannelFlows.h`) sums them into a Voice
    Mixer first when the instrument's own `poly` parameter is on (docs/mixer.md §5.4/§5.8). A
    factory-created instrument defaults to poly OFF, so this is a no-op on the golden path today;
 4. for an **Oscillator/Wavetable** instrument (P9-3i, FRO43, `docs/mixer.md`'s P9-3i entry): neither

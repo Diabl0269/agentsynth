@@ -20,7 +20,7 @@
 //                              for why the CallOutBox/floating split is implemented this way.
 // Mirrors MidiDestinationPickerTests.cpp's "talk to the component directly" approach.
 
-#include "ShortcutManager.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "UI/Library/ModuleLibraryHelpPopup.h"
 #include <gtest/gtest.h>
