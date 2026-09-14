@@ -250,3 +250,25 @@ void GraphEditor::cancelSelectionDrag() {
     selectionDragActive = false;
     selectionDragStartPositions.clear();
 }
+
+// ---- Live-drag cancellation on component destruction/detach (FRO19) --------------------------
+//
+// ModuleComponent::mouseDown arms selectionDragActive/dragPreviewActive itself and clears them only
+// from its own mouseUp (ModuleComponentInteraction.cpp); MacroCardComponent::mouseDown arms
+// selectionDragActive the same way via beginMacroCardDrag. Both rely on a real mouseUp that JUCE
+// never delivers to a component already destroyed. An async graph rebuild landing mid-gesture (an
+// AI patch apply's detachAllModuleComponents(), or the dragged node/macro itself vanishing via undo
+// or a doc removal, which updateComponents()/syncMacroCards() then prune) can destroy that component
+// with no mouseUp ever coming, leaving the drag-preview ghost and/or selection-drag bookkeeping
+// stuck armed forever. Call sites cancel this unconditionally when EVERY component is going
+// (detachAllModuleComponents), or only when the specific component being removed is the drag's own
+// initiator (updateComponents' dragPreviewSelfId check, syncMacroCards' isBodyDragActive() check) —
+// a non-initiating group member vanishing on its own is harmless: the initiator survives, its real
+// mouseUp is still coming, and finalizeSelectionDrag's lookup simply skips a stale id it can't find.
+// See docs/layout_selection_canvas.md §1.4.
+void GraphEditor::cancelLiveDragGestures() {
+    if (selectionDragActive)
+        cancelSelectionDrag();
+    if (dragPreviewActive)
+        endDragPreview();
+}

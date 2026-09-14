@@ -22,6 +22,11 @@ void GraphEditor::detachAllModuleComponents() {
     // set that no longer applies. Harmless either way (SafePointer guards it), but keeps the
     // zoomGestureActive state machine honest.
     endZoomGesture();
+    // Every ModuleComponent below is about to be destroyed — if one of them owned a live body drag
+    // (dragPreviewActive/selectionDragActive armed by its own mouseDown), no mouseUp is ever coming
+    // to reset it (FRO19: an AI patch apply landing mid-gesture is the reproducing case). Cancel
+    // unconditionally: harmless when nothing was active, correct when something was.
+    cancelLiveDragGestures();
     for (auto* comp : content.getModules())
         comp->detachFromProcessor();
     content.getModules().clear(); // Remove after detach so ~ModuleComponent doesn't double-detach freed params
@@ -52,6 +57,14 @@ void GraphEditor::updateComponents() {
             }
         }
         if (!stillExists) {
+            // The node this component tracked just vanished (undo, a doc removal) — if it was the
+            // one live-dragging (dragPreviewSelfId), no mouseUp is ever coming to reset the flags it
+            // armed (FRO19); cancel now, before the component itself is destroyed below. A
+            // non-initiating group member vanishing on its own is harmless: the initiator survives,
+            // its real mouseUp is still coming, and finalizeSelectionDrag's lookup simply skips a
+            // stale id it can't find (see cancelLiveDragGestures' own comment).
+            if (dragPreviewActive && comp->getNodeId() == dragPreviewSelfId)
+                cancelLiveDragGestures();
             content.removeChildComponent(comp);
             modules.remove(i);
         }
