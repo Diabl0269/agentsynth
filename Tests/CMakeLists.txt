@@ -227,6 +227,7 @@ add_executable(Tests
     Engine/BounceExporterTests.cpp
     Engine/BounceRunnerTests.cpp
     Engine/StemExportTests.cpp
+    Engine/StemExportNamingTests.cpp
     Engine/StemRunnerTests.cpp
     UI/Chrome/ExportAudioDialogTests.cpp
     Engine/MetronomeTests.cpp
