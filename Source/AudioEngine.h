@@ -21,7 +21,7 @@
 
 namespace synth {
 class MidiRecorder; // Forward declaration (Source/Timeline/MidiRecorder.h)
-class TimelineDoc;  // Forward declaration (Source/Timeline/TimelineDoc.h)
+class TimelineDoc;  // Forward declaration (Source/Timeline/TimelineDoc/TimelineDoc.h)
 } // namespace synth
 
 class AudioEngine

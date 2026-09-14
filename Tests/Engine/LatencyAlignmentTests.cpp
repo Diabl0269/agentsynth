@@ -34,7 +34,7 @@
 
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 
 namespace {
 

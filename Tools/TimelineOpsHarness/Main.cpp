@@ -26,7 +26,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/FilterModule.h"
 #include "Modules/OscillatorModule.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Timeline/TimelineOps.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>

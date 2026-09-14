@@ -8,7 +8,7 @@
 #include "AppUndoManager.h"
 #include "MainComponent/MainComponent.h"
 #include "ProjectBundle.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TimelinePanelTestFixture.h"
 #include "Transport/TransportService.h"
 #include "UI/Theme/AppLookAndFeel.h"
