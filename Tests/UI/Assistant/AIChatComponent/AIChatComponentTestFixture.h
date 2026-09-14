@@ -9,7 +9,7 @@
 #include "AI/AccountService.h"
 #include "AI/ConversationHistorySource.h"
 #include "AI/LocalHistoryStore.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Auth/InMemoryTokenStore.h"
 #include "Branding.h"
 #include "UI/Assistant/AIChatComponent/AIChatComponent.h"

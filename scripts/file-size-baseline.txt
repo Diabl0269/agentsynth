@@ -2,7 +2,6 @@
 # A file may never grow past its entry; when it shrinks, run `bash scripts/check-file-sizes.sh --update`
 # so the entry tightens; once under the cap the entry must be removed (--update does that).
 # Never add a NEW file here -- split it instead.
-1312 Source/AudioEngine.cpp
 1135 Source/MainComponent/MainComponent.cpp
 1213 Source/MainComponent/MainComponent.h
 1004 Source/Mixer/ChannelFlows.cpp
@@ -14,8 +13,6 @@
 1440 Tests/App/FocusArbitrationTests.cpp
 1411 Tests/App/MainComponentTests.cpp
 1264 Tests/App/ShortcutManagerTests.cpp
-1347 Tests/Engine/AudioRenderingTests.cpp
-1076 Tests/Engine/BounceExporterTests.cpp
 1057 Tests/Macros/MacroPortFlowTests.cpp
 1061 Tests/Project/SnippetManagerTests.cpp
 1187 Tests/Project/UndoRedoTests.cpp

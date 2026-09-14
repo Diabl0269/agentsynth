@@ -13,7 +13,7 @@
 #include "../FakeAudioIODevice.h"
 #include "AI/AIProvider.h"
 #include "AI/AIProviderRegistry.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "Modules/OscillatorModule.h"
 #include <gtest/gtest.h>

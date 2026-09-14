@@ -17,7 +17,7 @@
 // 48 kHz, 512-sample blocks, 120 BPM (the transport's own default) => 24000 samples/beat.
 
 #include "AI/AIStateMapper/AIStateMapper.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/MasterModule.h"
 #include "Transport/BounceExporter.h"
 #include "Transport/OfflineTransportDriver.h"
@@ -44,7 +44,7 @@ using NodeID = juce::AudioProcessorGraph::NodeID;
 
 // ============================================================================
 // Shared fixture plumbing — mirrors MixerSoloTests.cpp's SoloRig / ConstantSource and
-// BounceExporterTests.cpp's Fixture, duplicated locally per this codebase's own test-file
+// BounceExporterTestHelpers.h's Fixture, duplicated locally per this codebase's own test-file
 // convention (each render fixture stays self-contained and readable on its own).
 // ============================================================================
 

@@ -24,7 +24,7 @@
 
 #include "../TestAudioHelpers.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/TimelineMidiSourceModule.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Timeline/TimelineSnapshot.h"

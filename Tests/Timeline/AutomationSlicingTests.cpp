@@ -16,7 +16,7 @@
 // 48 kHz, 512-sample blocks, 120 BPM => 24000 samples/beat, 8 slices per block.
 
 #include "../TestAudioHelpers.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/FX/ChorusModule.h"
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"

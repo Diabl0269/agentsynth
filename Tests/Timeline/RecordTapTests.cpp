@@ -15,7 +15,7 @@
 
 #include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "Modules/RecordTapModule.h"
 #include "ProjectBundle.h"

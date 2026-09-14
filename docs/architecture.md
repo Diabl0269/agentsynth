@@ -23,7 +23,7 @@ The build produces four CMake targets:
 
 ### 1. AudioEngine
 
-`Source/AudioEngine.h/.cpp`
+`Source/AudioEngine/AudioEngine.h/.cpp`
 
 Manages audio device I/O (via `juce::AudioIODeviceCallback`), the `juce::AudioProcessorGraph`, and modulation-matrix routing. Key responsibilities:
 

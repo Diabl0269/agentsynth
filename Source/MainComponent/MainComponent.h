@@ -4,7 +4,7 @@
 #include "AI/AIProviderRegistry.h"
 #include "AI/AccountService.h"
 #include "AppUndoManager.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Branding.h"
 #include "Modules/RecordTapModule.h"
 #include "Plugin/Hosting/HostedPluginWindowManager.h"

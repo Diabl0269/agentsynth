@@ -21,7 +21,7 @@
 // Headless house rules as everywhere else: no real audio device, no sleeps.
 
 #include "../FakeAudioIODevice.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/AudioInputModule.h"
 #include "Modules/RecordTapModule.h"
 #include "Timeline/TakePlacement.h"

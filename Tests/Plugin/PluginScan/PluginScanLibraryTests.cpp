@@ -3,7 +3,7 @@
 
 #include "PluginScanTestHelpers.h"
 
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 

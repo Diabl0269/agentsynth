@@ -22,7 +22,7 @@
 
 #include "../StubPluginInstance.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/ModuleBase.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Plugin/PluginProcessor.h"

@@ -3,14 +3,14 @@
 // MainComponent-level choreography (MidiRecorder's punch-in filter, the forced-on click).
 //
 // Timing arithmetic throughout: 48 kHz, 512-sample blocks, 120 BPM => 24000 samples/beat, the same
-// convention MidiRecorderTests.cpp / BounceExporterTests.cpp use. 8 beats == 192000 samples == 375
-// whole blocks (see BounceExporterTests.cpp's own kEightBeatBlocks derivation) — tests 1/2/4/5/6
+// convention MidiRecorderTests.cpp / Tests/Engine/BounceExporter/ use. 8 beats == 192000 samples == 375
+// whole blocks (see BounceExporterTestHelpers.h's own kEightBeatBlocks derivation) — tests 1/2/4/5/6
 // use a hosted AudioEngine with an EMPTY (cleared) graph, so any energy measured is the metronome's
 // own click and nothing else; tests 3/9 drive synth::Metronome directly with hand-built
 // BlockTimeInfo structs, which needs no engine at all.
 
 #include "../TestAudioHelpers.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "Transport/BounceExporter.h"
 #include "Transport/Metronome.h"
 #include "Transport/OfflineTransportDriver.h"
@@ -45,7 +45,7 @@ constexpr float kOnsetThreshold = 0.02f;
 constexpr float kSilenceThreshold = 1.0e-4f;
 
 // Hosted engine, EMPTY graph — silent by construction, so any energy in a render is the
-// metronome's own click. Mirrors BounceExporterTests.cpp's Fixture exactly (same driver, same
+// metronome's own click. Mirrors BounceExporterTestHelpers.h's Fixture exactly (same driver, same
 // teardown order).
 struct Fixture {
     AudioEngine engine{AudioEngine::HostMode::Hosted};
