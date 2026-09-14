@@ -25,7 +25,7 @@
 #include "UI/ExportAudioDialog.h"
 #include "UI/FocusRegion.h"
 #include "UI/GraphEditor/GraphEditor.h"
-#include "UI/ModuleLibraryComponent.h"
+#include "UI/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "UI/StatusBarComponent.h"
 #include "UI/Theme/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"

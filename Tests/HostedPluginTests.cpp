@@ -28,7 +28,7 @@
 #include "../Source/UI/CableColour.h"
 #include "../Source/UI/GraphEditor/GraphEditor.h"
 #include "../Source/UI/ModuleComponent/ModuleComponent.h"
-#include "../Source/UI/ModuleLibraryComponent.h"
+#include "../Source/UI/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "StubPluginInstance.h"
 #include <atomic>
 #include <chrono>

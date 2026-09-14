@@ -268,6 +268,14 @@ add_executable(Tests
     ../Source/UI/ModuleComponent/ModuleComponentLayout.cpp
     ../Source/UI/ModuleComponent/ModuleComponentPaint.cpp
     ../Source/UI/ModuleComponent/ModuleComponentInteraction.cpp
+    ../Source/UI/ModuleLibraryComponent/ModuleLibraryComponent.cpp
+    ../Source/UI/ModuleLibraryComponent/ModuleLibrarySearch.cpp
+    ../Source/UI/ModuleLibraryComponent/ModuleLibraryRows.cpp
+    ../Source/UI/ModuleLibraryComponent/ModuleLibraryCollapse.cpp
+    ../Source/UI/ModuleLibraryComponent/ModuleLibraryLayout.cpp
+    ../Source/UI/ModuleLibraryComponent/ModuleLibraryPainting.cpp
+    ../Source/UI/ModuleLibraryComponent/ModuleLibraryInput.cpp
+    ../Source/UI/ModuleLibraryComponent/ModuleLibraryHelpPopover.cpp
     ../Source/UI/MacroCardComponent.cpp
     ../Source/UI/MacroPortConfigDialog.cpp
     ../Source/Plugin/Hosting/HostedPluginEditorWindow.cpp
