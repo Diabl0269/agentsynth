@@ -9,14 +9,14 @@
 #include "../../Source/ProjectBundle.h"
 #include "../../Source/Timeline/TimelineDoc.h"
 #include "../../Source/Transport/TransportService.h"
-#include "../../Source/UI/EdgeAutoScroll.h"
 #include "../../Source/UI/Theme/AppLookAndFeel.h"
 #include "../../Source/UI/Theme/BuiltInThemes.h"
-#include "../../Source/UI/TimelinePanelComponent/TimelinePanelComponent.h"
-#include "../../Source/UI/TrackColour.h"
 #include "../../Source/UserSettings.h"
 #include "MainComponent/MainComponent.h"
 #include "TimelinePanelTestFixture.h"
+#include "UI/Timeline/EdgeAutoScroll.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
+#include "UI/Timeline/TrackColour.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

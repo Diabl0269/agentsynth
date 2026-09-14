@@ -19,9 +19,9 @@
 #include "../Source/Modules/SamplerModule.h"
 #include "../Source/Modules/VCAModule.h"
 #include "../Source/SnippetManager.h"
-#include "../Source/UI/GraphEditor/GraphEditor.h"
-#include "../Source/UI/ModuleClipboard.h"
-#include "../Source/UI/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleClipboard.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 

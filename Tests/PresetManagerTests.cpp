@@ -7,7 +7,7 @@
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Modules/SequencerModule.h"
 #include "../Source/PresetManager.h"
-#include "../Source/UI/LayoutUtil.h"
+#include "UI/Layout/LayoutUtil.h"
 #include <gtest/gtest.h>
 
 TEST(PresetManagerTest, ListPresets) {

@@ -4,7 +4,7 @@
 // renders into an off-screen image (no audio device or GUI window required).
 
 #include "../Source/Modules/FilterModule.h"
-#include "../Source/UI/FrequencyResponseComponent.h"
+#include "UI/ModuleViews/FrequencyResponseComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 

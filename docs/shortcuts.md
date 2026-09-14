@@ -1,6 +1,6 @@
 # Keyboard Shortcuts
 
-Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/ShortcutsSettingsTab.h/.cpp`).
+Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/Settings/ShortcutsSettingsTab.h/.cpp`).
 `ShortcutManager` (`Source/ShortcutManager.h`) registers **73 actions** across four categories —
 **General** (30, app-wide or routed per focused editor), **Graph** (6), **Timeline** (25) and
 **Piano Roll** (12) — every one of them rebindable, including keys that used to be hardcoded:
@@ -82,7 +82,7 @@ selection AND always inactive on the Graph surface.
 
 ### Focus regions
 
-**T159** added a general-purpose keyboard focus-region framework (`Source/UI/FocusRegion.h`),
+**T159** added a general-purpose keyboard focus-region framework (`Source/UI/Layout/FocusRegion.h`),
 first of a 3-part epic — T160 (arrow-key navigation within the module library) and T161 (Up/Down +
 M/S/R within timeline track header rows, below) build on top of it without changing the registry
 itself. A
@@ -524,7 +524,7 @@ snap, and a second "Q" beside it for pitch-quantise told the user nothing. See
 [`timeline_panel_piano_roll.md §2`](timeline_panel_piano_roll.md).
 
 2 (Range Selection), 6 (Zoom) and 9 (Play/Scrub) are Cubase tools this app doesn't ship yet and stay
-**unassigned on purpose** — `editToolForKeyChar` (`Source/UI/EditTool.h`) returns `nullopt` for
+**unassigned on purpose** — `editToolForKeyChar` (`Source/UI/Timeline/EditTool.h`) returns `nullopt` for
 them, so those three digits are simply never consumed rather than remapping the six shipped tools
 onto 1–6. Shipping one of the missing three later costs no rebind: the digit is already reserved.
 

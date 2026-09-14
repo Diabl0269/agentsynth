@@ -134,7 +134,7 @@ accumulate in the current session. The restored id is adopted as this session's
 `aiService.setConversationId(id)`-continued cloud) saves keep appending to that same conversation
 rather than starting a new one.
 
-**UI chrome** (`Source/UI/AIChatComponent.h/.cpp`):
+**UI chrome** (`Source/UI/Assistant/AIChatComponent.h/.cpp`):
 - A **History** button (top toolbar, next to New Chat) opens a `juce::PopupMenu` — a "Clear my
   history" item, then one row per conversation (title + readable date). No custom list component
   needed; `PopupMenu` was already this codebase's pattern for a "pick one item" affordance
@@ -234,7 +234,7 @@ exactly). `Tests/AIChatComponentTests.cpp`
 ## 4. Opt-In Prompt Collection for Product Learning
 
 A single settings checkbox — "Help improve AgentSynth — share my hosted-mode prompts for product
-learning" (`Source/UI/SettingsWindow.cpp`'s `AISettingsTab`, next to the provider picker's hosted-
+learning" (`Source/UI/Settings/SettingsWindow.cpp`'s `AISettingsTab`, next to the provider picker's hosted-
 mode disclosure) — lets a signed-in user opt in to the team reviewing their hosted-mode prompt +
 resulting patch for **human review** (improving prompts/UX/features), off by default. This is
 explicitly **not** used to train or fine-tune AI models — the privacy policy's existing "we do not
@@ -291,8 +291,8 @@ signed in; toggling it calls into `AccountService::setPromptLearningOptIn()`).
 
 ## 5. Account Sign-In Surface (AccountRow / SignInDialog)
 
-The AI panel's account UI is `Source/UI/AccountRow.h/.cpp` (a slim status row: "Sign in" /
-"Signing in…" / email + "Sign out") and `Source/UI/SignInDialog.h/.cpp` (the modal device-code
+The AI panel's account UI is `Source/UI/Assistant/AccountRow.h/.cpp` (a slim status row: "Sign in" /
+"Signing in…" / email + "Sign out") and `Source/UI/Assistant/SignInDialog.h/.cpp` (the modal device-code
 flow, launched the same way `SettingsWindow` is — content handed to
 `juce::DialogWindow::LaunchOptions::content.setOwned(...)`, not a `DialogWindow` subclass).
 `AIChatComponent` owns an `AccountRow` member unconditionally; with no `AccountService` attached
@@ -778,7 +778,7 @@ runtime flag, not a build-time one: `RemoteProvider` is fully registered and con
 unknown-id fallback to `descriptors.front()` is unaffected — and stays that way deliberately: an
 unrecognised/corrupt persisted id fails safe to the provider that sends no data anywhere, never to
 the one that does), and today `hidden=false`, so `AISettingsTab`
-(`Source/UI/SettingsWindow.cpp`) offers it in the provider combo box alongside `"ollama"`. The
+(`Source/UI/Settings/SettingsWindow.cpp`) offers it in the provider combo box alongside `"ollama"`. The
 `visibleProviders` member (still present even with nothing currently hidden) is used consistently
 by both the population loop and `selectedDescriptor()` — indexing the combo's selected item
 against the *unfiltered* `providerRegistry.listAll()` would desync the moment a future hidden
@@ -886,7 +886,7 @@ of the flat error bubble every other kind gets:
   sign-in state, so a user who upgrades mid-session and immediately retries sees their new plan
   reflected (in `PlanBadge`, below) without restarting the app.
 
-**`PlanBadge`** (`Source/UI/PlanBadge.h/.cpp`) is a small usage indicator placed in the same
+**`PlanBadge`** (`Source/UI/Assistant/PlanBadge.h/.cpp`) is a small usage indicator placed in the same
 bottom-chrome stack as `AccountRow` and the model picker, showing `"Free · 240 / 1000 this month"`
 or `"Pro · 1,203 / 10,000 this month"`. It follows `AccountRow`'s exact zero-height-when-absent
 contract (`setAccountService()`/`refresh()`/`getPreferredHeight()`) — invisible and contributing

@@ -4,8 +4,8 @@
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"
 #include "Timeline/AssetManager.h"
-#include "UI/PreferencesSettingsTab.h"
-#include "UI/SettingsWindow.h"
+#include "UI/Settings/PreferencesSettingsTab.h"
+#include "UI/Settings/SettingsWindow.h"
 // Generated at CMake CONFIGURE time from local git history — see the root CMakeLists.txt's
 // "What's New" block. ${CMAKE_BINARY_DIR}/generated is on AppUI's private include path.
 #include "WhatsNewData.h"
@@ -1020,7 +1020,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // too, just no welcomeScreen_) after every region root above is fully constructed and wired.
     // Order matches the Tab-cycle order docs/shortcuts.md documents: Toolbar, Library, Canvas,
     // Timeline, AI Panel, Mod Matrix. Wraps the getters/toggles that already exist rather than
-    // migrating them to a new unified visibility enum — see Source/UI/FocusRegion.h's own header
+    // migrating them to a new unified visibility enum — see Source/UI/Layout/FocusRegion.h's own header
     // comment.
     // The toolbar is chrome, always visible in both the app and plugin editor -- no closed state,
     // same as the canvas below, and no direct-focus shortcut targets it (Tab-cycling only).

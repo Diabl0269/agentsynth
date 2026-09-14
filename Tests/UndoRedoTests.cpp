@@ -7,8 +7,8 @@
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Modules/VCAModule.h"
 #include "../Source/PresetManager.h"
-#include "../Source/UI/GraphEditor/GraphEditor.h"
-#include "../Source/UI/LayoutUtil.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/LayoutUtil.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>

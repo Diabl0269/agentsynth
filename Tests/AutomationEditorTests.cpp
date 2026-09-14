@@ -17,10 +17,10 @@
 #include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/AppUndoManager.h"
 #include "../Source/Timeline/TimelineDoc.h"
-#include "../Source/UI/AutomationLaneEditor.h"
-#include "../Source/UI/TimelinePanelComponent/TimelinePanelComponent.h"
-#include "../Source/UI/TimelineViewState.h"
 #include "MainComponent/MainComponent.h"
+#include "UI/Timeline/AutomationLaneEditor.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
+#include "UI/Timeline/TimelineViewState.h"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

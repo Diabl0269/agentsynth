@@ -11,9 +11,9 @@
 
 #include "../Source/AI/AIProvider.h"
 #include "../Source/AudioEngine.h"
-#include "../Source/UI/AIChatComponent.h"
-#include "../Source/UI/UIAnimation.h"
 #include "MainComponent/MainComponent.h"
+#include "UI/Assistant/AIChatComponent.h"
+#include "UI/Layout/UIAnimation.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 

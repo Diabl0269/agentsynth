@@ -8,7 +8,7 @@
 #include "PianoRollTestHelpers.h"
 
 #include "../../Source/Timeline/TimelineSnapshot.h"
-#include "../../Source/UI/EdgeAutoScroll.h"
+#include "UI/Timeline/EdgeAutoScroll.h"
 
 // ============================================================================
 // 7. Marquee multi-select from empty grid

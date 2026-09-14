@@ -1,4 +1,4 @@
-#include "../Source/UI/ZoomFrozenCachedImage.h"
+#include "UI/Layout/ZoomFrozenCachedImage.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 

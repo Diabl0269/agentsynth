@@ -28,13 +28,13 @@
 #include "../../Source/Plugin/Hosting/HostedPluginModule.h"
 #include "../../Source/Plugin/Hosting/PluginScanService.h"
 #include "../../Source/Timeline/TimelineDoc.h"
-#include "../../Source/UI/GraphEditor/GraphEditor.h"
-#include "../../Source/UI/ModuleComponent/ModuleComponent.h"
-#include "../../Source/UI/ModuleLibraryComponent/ModuleLibraryComponent.h"
-#include "../../Source/UI/TimelineTrackHeaderComponent.h"
 #include "../StubPluginInstance.h"
 #include "ChannelFlowTestFixture.h"
 #include "MainComponent/MainComponent.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent.h"
 #include <algorithm>
 #include <array>
 #include <chrono>

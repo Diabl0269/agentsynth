@@ -7,7 +7,7 @@
 //   • snippets section   — rows appear/disappear with the snippet list, empty hint when none
 //   • row layout         — paint and hit-testing agree because they share one layout pass
 
-#include "../Source/UI/ModuleLibraryComponent/ModuleLibraryComponent.h"
+#include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 

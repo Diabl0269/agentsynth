@@ -11,7 +11,7 @@
 #include "Mixer/MasterSplice.h"
 #include "Modules/VCAModule.h" // VCAModule::kRightBase for the P9-3i envelope+VCA insertion below
 #include "Plugin/Hosting/HostedPluginModule.h"
-#include "UI/TrackColour.h"
+#include "UI/Timeline/TrackColour.h"
 #include <algorithm>
 
 namespace {

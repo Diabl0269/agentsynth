@@ -5,7 +5,7 @@
 
 #include "PianoRollTestHelpers.h"
 
-#include "../../Source/UI/EditTool.h"
+#include "UI/Timeline/EditTool.h"
 
 // ============================================================================
 // 4. Edit tools

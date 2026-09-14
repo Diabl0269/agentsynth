@@ -17,12 +17,12 @@ track headers, playhead, transport bar, metronome/count-in and edit-tool strip l
 
 ## 1. Clip Lanes
 
-`Source/UI/TimelineClipLaneArea/` (`synth::ui::TimelineClipLaneArea`, declared in
+`Source/UI/Timeline/TimelineClipLaneArea/` (`synth::ui::TimelineClipLaneArea`, declared in
 `TimelineClipLaneArea.h`) fills the lanes region below the ruler (`getLanesBounds()` minus the
 ruler strip — the same rect the bar/beat grid is painted into) with per-track rows of
 `synth::Clip` rects: drag to move, drag an edge to trim, a context menu to split/duplicate/delete,
 and marquee (rubber-band) multi-select. Backed by `synth::ui::ClipSelectionModel`
-(`Source/UI/ClipSelectionModel.h`), the clip analogue of `SelectionModel`
+(`Source/UI/Timeline/ClipSelectionModel.h`), the clip analogue of `SelectionModel`
 (`docs/layout_selection_canvas.md` §1.2) — a `std::set<synth::ClipId>` with the same add/remove/toggle/
 setSelection/retainOnly contract, ordered ascending by id so a batched move or delete always walks
 clips in a stable order regardless of click order.
@@ -112,7 +112,7 @@ blur would be per-frame image filtering, which `docs/layout_visuals_animation.md
 painting where they are. Ghost geometry comes from one helper (`dragGhostRectFor`) shared with
 `getDragGhostRectsForTest()`, the same single-enumeration reasoning as `buildVisibleCables()`.
 
-**Edge auto-scroll during a drag.** `Source/UI/EdgeAutoScroll.h` is a small pure helper — one
+**Edge auto-scroll during a drag.** `Source/UI/Timeline/EdgeAutoScroll.h` is a small pure helper — one
 function, `edgeScrollVelocity(pos, lo, hi, zonePx, maxPerTick)`, plus the two shared constants
 `kEdgeZonePx` (24 px edge-zone width) and `kEdgeScrollHz` (30 Hz gated-timer rate) — deliberately
 holding no state, no timer and no component reference, so "how fast does an edge-drag scroll" is
@@ -343,7 +343,7 @@ canvas. Panel API: `showAutomationLane(LaneId)` / `closeAutomationStrip()` /
 `applyAutomationRecordModeChoice(int)` (juce::PopupMenu/ComboBox don't run in a test — the same
 "headless hook" idiom every other timeline sub-component's context menu already follows).
 
-**`Source/UI/AutomationLaneEditor.h/.cpp`** (`synth::ui::AutomationLaneEditor`) is the curve canvas,
+**`Source/UI/Timeline/AutomationLaneEditor.h/.cpp`** (`synth::ui::AutomationLaneEditor`) is the curve canvas,
 editing ONE `synth::AutomationLane` at a time. X is the SAME shared `TimelineViewState` the clip
 lanes use (so it lines up with the playhead pixel-for-pixel — the piano roll is the one surface that
 maps beats through its own zoom/scroll instead; see §2); Y maps the lane's own

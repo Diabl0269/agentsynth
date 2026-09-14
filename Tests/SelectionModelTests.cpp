@@ -5,7 +5,7 @@
 //   • hitTestMarquee  — intersection (not containment) semantics, degenerate marquee selects nothing
 //   • unionSelection  — additive marquee keeps the base selection
 
-#include "../Source/UI/SelectionModel.h"
+#include "UI/Graph/SelectionModel.h"
 #include <gtest/gtest.h>
 
 using synth::ui::SelectionModel;

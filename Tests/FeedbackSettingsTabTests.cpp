@@ -1,7 +1,7 @@
 #include "../Source/AI/AccountService.h"
 #include "../Source/Auth/InMemoryTokenStore.h"
 #include "../Source/Branding.h"
-#include "../Source/UI/FeedbackSettingsTab.h"
+#include "UI/Settings/FeedbackSettingsTab.h"
 #include <chrono>
 #include <cstdlib>
 #include <gtest/gtest.h>

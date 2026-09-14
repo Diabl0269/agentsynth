@@ -21,19 +21,19 @@
 #include "Transport/BounceRunner.h"
 #include "Transport/StemExporter.h"
 #include "Transport/StemRunner.h"
-#include "UI/AIChatComponent.h"
-#include "UI/ExportAudioDialog.h"
-#include "UI/FocusRegion.h"
-#include "UI/GraphEditor/GraphEditor.h"
-#include "UI/ModuleLibraryComponent/ModuleLibraryComponent.h"
-#include "UI/StatusBarComponent.h"
+#include "UI/Assistant/AIChatComponent.h"
+#include "UI/Chrome/ExportAudioDialog.h"
+#include "UI/Chrome/StatusBarComponent.h"
+#include "UI/Chrome/ToolbarComponent.h"
+#include "UI/Chrome/WelcomeScreenComponent.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Layout/FocusRegion.h"
+#include "UI/Layout/UIAnimation.h"
+#include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "UI/Theme/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
-#include "UI/TimelinePanelComponent/TimelinePanelComponent.h"
-#include "UI/TimelineTrackHeaderComponent.h"
-#include "UI/ToolbarComponent.h"
-#include "UI/UIAnimation.h"
-#include "UI/WelcomeScreenComponent.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent.h"
 #include "Update/UpdateManager.h"
 #include "UserSettings.h"
 #include <juce_audio_utils/juce_audio_utils.h>
@@ -1155,7 +1155,7 @@ private:
     // Consulted first by resolveEditSurface(); std::nullopt means "use real focus".
     std::optional<EditSurface> editSurfaceOverrideForTest_;
 
-    // T159: the focus-region registry (Source/UI/FocusRegion.h) — a plain member, not a
+    // T159: the focus-region registry (Source/UI/Layout/FocusRegion.h) — a plain member, not a
     // Desktop-global singleton, so a future separate-window mixer/timeline gets its own instance.
     // Populated once in initialiseCommon() after every region root exists; wraps the same
     // isLibraryVisible/isTimelineVisible/isAiPanelVisible/isModMatrixVisible getters the toolbar

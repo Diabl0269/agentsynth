@@ -5,8 +5,8 @@
 // loop involved at all. GraphEditor-side wiring (promptConfigureMacroIO) and the port-mutation
 // API these callbacks are meant to reach are covered separately in Tests/MacroPortFlowTests.cpp.
 
-#include "../Source/UI/MacroPortConfigDialog.h"
 #include "../Source/UI/Theme/AppLookAndFeel.h"
+#include "UI/Macros/MacroPortConfigDialog.h"
 #include <gtest/gtest.h>
 
 using synth::MacroPortKind;

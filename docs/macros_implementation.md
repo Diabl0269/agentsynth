@@ -436,7 +436,7 @@ In order, each independently shippable:
      resolve its combo selection against and would render blank. Rather than give
      `MacroInletModule` a real `ModulationTarget` (which would resurrect the auto-wrap problem for
      every ordinary cable drop, since `connectPorts()` reads that same list), `ModMatrixComponent`'s
-     own combo-population (`destinationCandidatesForCombo`, `Source/UI/ModMatrixComponent.cpp`)
+     own combo-population (`destinationCandidatesForCombo`, `Source/UI/Graph/ModMatrixComponent.cpp`)
      substitutes a display-only synthetic target at channel 0 whenever the module has none AND is a
      `MacroInletModule` — a spliced port from this fix is always Mono with its one active channel at
      0 (the internal jack an `AttenuverterChain` lands on is never poly-fanned), so channel 0 is the

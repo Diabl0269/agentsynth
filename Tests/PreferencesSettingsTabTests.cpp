@@ -1,8 +1,8 @@
 #include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/Modules/ModuleBase.h"
 #include "../Source/ShortcutManager.h"
-#include "../Source/UI/GraphEditor/GraphEditor.h"
-#include "../Source/UI/PreferencesSettingsTab.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Settings/PreferencesSettingsTab.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

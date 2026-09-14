@@ -1,6 +1,6 @@
 #include "../Source/AI/AccountService.h"
 #include "../Source/Auth/InMemoryTokenStore.h"
-#include "../Source/UI/PlanBadge.h"
+#include "UI/Assistant/PlanBadge.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 

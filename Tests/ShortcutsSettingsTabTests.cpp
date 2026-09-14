@@ -7,7 +7,7 @@
 // Tests/CMakeLists.txt respectively before these tests will link.
 
 #include "../Source/ShortcutManager.h"
-#include "../Source/UI/ShortcutsSettingsTab.h"
+#include "UI/Settings/ShortcutsSettingsTab.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 

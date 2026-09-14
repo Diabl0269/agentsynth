@@ -13,7 +13,7 @@ automation strip, and keyboard/focus arbitration live in
 
 ## 4. The Playhead
 
-`Source/UI/TimelinePlayheadOverlay.h/.cpp` (`synth::ui::TimelinePlayheadOverlay`) — a transparent,
+`Source/UI/Timeline/TimelinePlayheadOverlay.h/.cpp` (`synth::ui::TimelinePlayheadOverlay`) — a transparent,
 non-intercepting (`setInterceptsMouseClicks(false, false)`) overlay the panel adds **last** (so it is
 topmost) and sizes to `getLanesBounds()`, i.e. the whole ruler + lanes region. Its local `x == 0` is
 `lanesBounds_.getX()`, which is also the ruler's origin and therefore exactly `TimelineViewState`'s —
@@ -101,7 +101,7 @@ two independent view states.
 
 ## 5. The Transport Bar
 
-`Source/UI/TimelineTransportBar.h/.cpp` (`synth::ui::TimelineTransportBar`) — play/stop, record,
+`Source/UI/Timeline/TimelineTransportBar.h/.cpp` (`synth::ui::TimelineTransportBar`) — play/stop, record,
 loop, BPM and time-signature editors, and the bar:beat readout, left-aligned in the transport-bar
 strip (the snap combo stays docked right, §2 above). Buttons are **square** — `min(26 px, the
 strip height after padding)`, centred in their slot — with `kGap = 7px` between them and `kGap * 2`
@@ -277,7 +277,7 @@ strip grows by ~98 px, well inside the timeline panel's normal width.
 
 ## 7. Edit-Tool Strip
 
-`Source/UI/EditTool.h` declares the Cubase-style tool row shared by the clip lanes and the
+`Source/UI/Timeline/EditTool.h` declares the Cubase-style tool row shared by the clip lanes and the
 piano roll (`docs/timeline_panel_clips_automation.md` §§1–2): `enum class EditTool { Select, Split, Glue, Erase, Mute, Draw }`, plus
 `kAllEditTools` (an `std::array<EditTool, 6>` in that order), `editToolKeyDigit(tool)` and
 `editToolName(tool)`. It is deliberately JUCE-free — gesture routing in both editors and the
@@ -328,7 +328,7 @@ each icon from `AppLookAndFeel::getIcon` and sets the active-tool highlight as a
 (`colors.toolActive`, not a different icon tint — the glyph reads the same lit or not; see
 [`theming.md`](theming.md)), null-guarded on both a headless LnF and a headless icon library.
 
-**Custom per-tool cursors** (`Source/UI/ToolCursors.h`, `makeToolCursor(EditTool, const
+**Custom per-tool cursors** (`Source/UI/Timeline/ToolCursors.h`, `makeToolCursor(EditTool, const
 juce::Drawable*)`) render the SAME already-tinted `Icon::Tool*` drawable the strip button paints
 into a 24×24 `juce::Image` and wrap it in a `juce::MouseCursor`, so the cursor can never drift out of
 sync with whatever theme is active — there is no separate cursor-only asset or tint step to go stale.

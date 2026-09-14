@@ -18,7 +18,7 @@ Enable toggling of the Mod Matrix and AI Chat panels via keyboard shortcuts (Cmd
 
 2. **MainComponent Initial State**:
    - Change `isAiPanelVisible` in `Source/MainComponent.h` to `false`.
-   - Modify the default visibility of the Mod Matrix in `Source/UI/GraphEditor` or `Source/MainComponent` to be `false` on startup.
+   - Modify the default visibility of the Mod Matrix in `Source/UI/Graph/GraphEditor` or `Source/MainComponent` to be `false` on startup.
 
 3. **MainComponent Command Handling**:
    - Add the new commands to the array in `MainComponent` constructor (or `getCommandInfo`/`perform`).

@@ -14,9 +14,9 @@
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/MidiKeyboardModule.h"
 #include "../Source/Modules/OscillatorModule.h"
-#include "../Source/UI/GraphEditor/GraphEditor.h"
-#include "../Source/UI/MacroCardComponent.h"
-#include "../Source/UI/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Macros/MacroCardComponent.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <optional>

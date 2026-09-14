@@ -1,4 +1,4 @@
-// T159: the app-wide keyboard focus-region framework (Source/UI/FocusRegion.h) — Tab/Shift+Tab
+// T159: the app-wide keyboard focus-region framework (Source/UI/Layout/FocusRegion.h) — Tab/Shift+Tab
 // cycling between whichever regions are currently open, plus two direct-focus shortcuts
 // (Cmd+Shift+T/L) that open a closed target first. First of a 3-part epic; T160/T161 (module-library
 // and timeline-track-header navigation WITHIN a region) are NOT covered here.
@@ -18,7 +18,7 @@
 
 #include "../Source/AI/AIProvider.h"
 #include "../Source/MainComponent/MainComponent.h"
-#include "../Source/UI/FocusRegion.h"
+#include "UI/Layout/FocusRegion.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>

@@ -6,10 +6,10 @@
 #include "../../Source/AppUndoManager.h"
 #include "../../Source/ShortcutManager.h"
 #include "../../Source/Timeline/TimelineDoc.h"
-#include "../../Source/UI/PianoRollComponent/PianoRollComponent.h"
-#include "../../Source/UI/ScaleAssistPanel.h"
-#include "../../Source/UI/TimelinePanelComponent/TimelinePanelComponent.h"
-#include "../../Source/UI/TimelineViewState.h"
+#include "UI/PianoRoll/PianoRollComponent/PianoRollComponent.h"
+#include "UI/PianoRoll/ScaleAssistPanel.h"
+#include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
+#include "UI/Timeline/TimelineViewState.h"
 #include <cmath>
 #include <cstdint>
 #include <gtest/gtest.h>

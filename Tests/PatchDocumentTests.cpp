@@ -2,7 +2,7 @@
 #include "../Source/AudioEngine.h"
 #include "../Source/Modules/SamplerModule.h"
 #include "../Source/PatchDocument.h"
-#include "../Source/UI/GraphEditor/GraphEditor.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
 #include <gtest/gtest.h>
 
 // PatchDocument preserves top-level JSON keys this build doesn't understand (e.g. a

@@ -24,8 +24,8 @@
 #include "../Source/Modules/AudioInputModule.h"
 #include "../Source/Modules/RecordTapModule.h"
 #include "../Source/Timeline/TakePlacement.h"
-#include "../Source/UI/StatusBarComponent.h"
 #include "FakeAudioIODevice.h"
+#include "UI/Chrome/StatusBarComponent.h"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <juce_audio_formats/juce_audio_formats.h>

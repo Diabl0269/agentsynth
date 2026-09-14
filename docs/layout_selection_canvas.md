@@ -39,7 +39,7 @@ Two details that are easy to get wrong:
   `mouseDrag`/`mouseUp`, because `juce::ComponentDragger::dragComponent` must not run when
   `startDraggingComponent` was never called.
 
-### 1.2 SelectionModel — `Source/UI/SelectionModel.h`
+### 1.2 SelectionModel — `Source/UI/Graph/SelectionModel.h`
 
 Header-only, no Component or graph dependency, so the selection rules are testable headlessly
 (`Tests/SelectionModelTests.cpp`).
@@ -190,7 +190,7 @@ rather than the single-module estimate table.
 Insert is one undoable change (`recordStructuralChange`), and the newly landed group is left
 selected — it is what the user will want to move next.
 
-### 1.6 Copy / Paste / Duplicate — `Source/UI/ModuleClipboard.h`
+### 1.6 Copy / Paste / Duplicate — `Source/UI/Graph/ModuleClipboard.h`
 
 Cmd+C / Cmd+V / Cmd+D, plus the same three actions on the module and canvas context menus.
 
@@ -551,7 +551,7 @@ themselves). Its hover state (`helpButtonHovered`) is tracked independently of t
 strip's own hover flag so the tooltip can name the button specifically ("Open a quick guide…")
 rather than reusing the collapse-all strip's tooltip.
 
-Clicking it shows `synth::ui::ModuleLibraryHelpPopup` (`Source/UI/ModuleLibraryHelpPopup.h`) — a
+Clicking it shows `synth::ui::ModuleLibraryHelpPopup` (`Source/UI/Library/ModuleLibraryHelpPopup.h`) — a
 self-painted opaque panel, the same pattern `MidiDestinationPicker` documents (a parentless
 `CallOutBox` does not necessarily inherit `synth::theme::AppLookAndFeel`, and neither does a
 floating window — see "Pin / float it over the canvas" below). The popup holds three plain
@@ -657,7 +657,7 @@ mirroring `PreferencesSettingsTab::createDualIOPerModuleDefaultsPopupForTest`.
 
 ### Keyboard Shortcuts settings tab mirrors this pattern
 
-`Source/UI/ShortcutsSettingsTab.h/.cpp` — the Settings "Keyboard Shortcuts" tab — grew the same
+`Source/UI/Settings/ShortcutsSettingsTab.h/.cpp` — the Settings "Keyboard Shortcuts" tab — grew the same
 collapsible-section idiom once its row count passed 49 (see [`shortcuts.md`](shortcuts.md)): one
 collapsible section per `ShortcutCategory`, a search field above them, and a top strip whose label
 flips between "COLLAPSE ALL"/"EXPAND ALL", deliberately lifted from `ModuleLibraryComponent` so the
@@ -779,7 +779,7 @@ overrides it is handed via `setCableColourMode()` / `setCableColourOverrides()`;
 
 ## 4. Minimap Overlay (issue #159)
 
-`Source/UI/MinimapComponent.h/.cpp` — `synth::ui::MinimapComponent`, a small always-current
+`Source/UI/Graph/MinimapComponent.h/.cpp` — `synth::ui::MinimapComponent`, a small always-current
 overview of the graph.
 
 ### What it is

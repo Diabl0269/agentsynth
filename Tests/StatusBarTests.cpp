@@ -3,8 +3,8 @@
 
 #include "../Source/AudioEngine.h"
 #include "../Source/Modules/PolyMidiModule.h"
-#include "../Source/UI/StatusBarComponent.h"
-#include "../Source/UI/TimelineTransportBar.h"
+#include "UI/Chrome/StatusBarComponent.h"
+#include "UI/Timeline/TimelineTransportBar.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>

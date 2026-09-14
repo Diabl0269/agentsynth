@@ -20,11 +20,11 @@
 #include "../Source/ProjectBundle.h"
 #include "../Source/Timeline/TimelineDoc.h"
 #include "../Source/Transport/TransportService.h"
-#include "../Source/UI/CableColour.h"
-#include "../Source/UI/GraphEditor/GraphEditor.h"
-#include "../Source/UI/ModuleComponent/ModuleComponent.h"
-#include "../Source/UI/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "MainComponent/MainComponent.h"
+#include "UI/Graph/CableColour.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include <cmath>
 #include <cstring>
 #include <gtest/gtest.h>

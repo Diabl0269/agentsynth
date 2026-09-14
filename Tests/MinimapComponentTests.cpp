@@ -1,7 +1,7 @@
 // MinimapComponentTests.cpp
 // Headless unit tests for synth::ui::MinimapComponent / MinimapModel (issue #159).
 
-#include "../Source/UI/MinimapComponent.h"
+#include "UI/Graph/MinimapComponent.h"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

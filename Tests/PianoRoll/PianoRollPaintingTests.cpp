@@ -7,9 +7,9 @@
 
 #include "PianoRollTestHelpers.h"
 
-#include "../../Source/UI/NoteColour.h"
 #include "../../Source/UI/Theme/BuiltInThemes.h"
 #include "../../Source/UI/Theme/Theme.h"
+#include "UI/PianoRoll/NoteColour.h"
 
 namespace {
 // WCAG relative luminance / contrast ratio — same formula NoteColourTests.cpp uses, duplicated
