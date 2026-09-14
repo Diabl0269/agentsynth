@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(AgentSynth VERSION 0.13.2)
+project(AgentSynth VERSION 0.202.0)
 
 # Sparkle's update bridge (Source/Update/SparkleUpdateManager.mm) is Objective-C++. JUCE's own
 # project() only declares C/CXX, so this must be enabled explicitly before any .mm source is added.
