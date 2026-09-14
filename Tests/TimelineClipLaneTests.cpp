@@ -28,7 +28,7 @@
 #include "../Source/Timeline/TimelineDoc.h"
 #include "../Source/Transport/TransportService.h"
 #include "../Source/UI/ClipSelectionModel.h"
-#include "../Source/UI/TimelineClipLaneArea.h"
+#include "../Source/UI/TimelineClipLaneArea/TimelineClipLaneArea.h"
 #include "../Source/UI/TimelineViewState.h"
 #include <cmath>
 #include <gtest/gtest.h>

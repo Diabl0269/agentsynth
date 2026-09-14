@@ -14,8 +14,13 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentTrackHeaderHost.cpp
     Source/MainComponent/MainComponentTrackCreation.cpp
     Source/UserSettings.h
-    Source/UI/TimelinePanelComponent.h
-    Source/UI/TimelinePanelComponent.cpp
+    Source/UI/TimelinePanelComponent/TimelinePanelComponent.h
+    Source/UI/TimelinePanelComponent/TimelinePanelComponent.cpp
+    Source/UI/TimelinePanelComponent/TimelinePanelStrips.cpp
+    Source/UI/TimelinePanelComponent/TimelinePanelClipClipboard.cpp
+    Source/UI/TimelinePanelComponent/TimelinePanelShortcuts.cpp
+    Source/UI/TimelinePanelComponent/TimelinePanelTrackHeaders.cpp
+    Source/UI/TimelinePanelComponent/TimelinePanelLayout.cpp
     Source/UI/TimelineRulerComponent.h
     Source/UI/TimelineRulerComponent.cpp
     Source/UI/TimelinePlayheadOverlay.h
@@ -24,8 +29,13 @@ set(APPUI_SOURCES
     Source/UI/TimelineTrackHeaderComponent.cpp
     Source/UI/TimelineTransportBar.h
     Source/UI/TimelineTransportBar.cpp
-    Source/UI/TimelineClipLaneArea.h
-    Source/UI/TimelineClipLaneArea.cpp
+    Source/UI/TimelineClipLaneArea/TimelineClipLaneArea.h
+    Source/UI/TimelineClipLaneArea/TimelineClipLaneArea.cpp
+    Source/UI/TimelineClipLaneArea/TimelineClipLaneInternal.h
+    Source/UI/TimelineClipLaneArea/TimelineClipLanePainting.cpp
+    Source/UI/TimelineClipLaneArea/TimelineClipLaneMouse.cpp
+    Source/UI/TimelineClipLaneArea/TimelineClipLaneSelection.cpp
+    Source/UI/TimelineClipLaneArea/TimelineClipLaneEditTools.cpp
     Source/UI/ClipSelectionModel.h
     Source/UI/PianoRollComponent/PianoRollComponent.h
     Source/UI/PianoRollComponent/PianoRollComponent.cpp

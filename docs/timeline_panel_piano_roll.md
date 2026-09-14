@@ -180,7 +180,7 @@ see the CLAUDE.md font-swap invariant).
 
 **Gridlines** are drawn from state alone, faintest level first so a bar line always wins a shared
 pixel — and from the SAME `GridLineLevel`/`gridLineColourFor`/`gridLevelIsReadable` policy
-(`Source/UI/TimelineClipLaneArea.h`, see `docs/timeline_panel_core.md` §2) the clip lanes paint their own grid from, so the
+(`Source/UI/TimelineClipLaneArea/TimelineClipLaneArea.h`, see `docs/timeline_panel_core.md` §2) the clip lanes paint their own grid from, so the
 two surfaces can never disagree on what's visible or how dark it is at a given zoom: the current
 snap division (`GridLineLevel::Subdivision`, alpha 0.28 — only when it is finer than a beat,
 `Snap::Off` has no division at all), beats (`Beat`, 0.50), bars (`Bar`, 0.85), each lifted halfway

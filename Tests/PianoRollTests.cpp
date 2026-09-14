@@ -75,7 +75,7 @@
 // The audition INTEGRATION tests (section 20b) drive the real panel wiring, not just the roll.
 #include "../Source/UI/Theme/BuiltInThemes.h"
 #include "../Source/UI/Theme/Theme.h"
-#include "../Source/UI/TimelinePanelComponent.h"
+#include "../Source/UI/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "../Source/UI/TimelineViewState.h"
 #include <algorithm>
 #include <cmath>

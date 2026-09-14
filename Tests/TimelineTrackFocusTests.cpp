@@ -27,7 +27,7 @@
 
 #include "../Source/ShortcutManager.h"
 #include "../Source/Timeline/TimelineDoc.h"
-#include "../Source/UI/TimelinePanelComponent.h"
+#include "../Source/UI/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "../Source/UI/TimelineTrackHeaderComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

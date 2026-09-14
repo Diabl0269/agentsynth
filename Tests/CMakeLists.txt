@@ -213,12 +213,21 @@ add_executable(Tests
     ../Source/MainComponent/MainComponentTimeline.cpp
     ../Source/MainComponent/MainComponentTrackHeaderHost.cpp
     ../Source/MainComponent/MainComponentTrackCreation.cpp
-    ../Source/UI/TimelinePanelComponent.cpp
+    ../Source/UI/TimelinePanelComponent/TimelinePanelComponent.cpp
+    ../Source/UI/TimelinePanelComponent/TimelinePanelStrips.cpp
+    ../Source/UI/TimelinePanelComponent/TimelinePanelClipClipboard.cpp
+    ../Source/UI/TimelinePanelComponent/TimelinePanelShortcuts.cpp
+    ../Source/UI/TimelinePanelComponent/TimelinePanelTrackHeaders.cpp
+    ../Source/UI/TimelinePanelComponent/TimelinePanelLayout.cpp
     ../Source/UI/TimelineRulerComponent.cpp
     ../Source/UI/TimelinePlayheadOverlay.cpp
     ../Source/UI/TimelineTrackHeaderComponent.cpp
     ../Source/UI/TimelineTransportBar.cpp
-    ../Source/UI/TimelineClipLaneArea.cpp
+    ../Source/UI/TimelineClipLaneArea/TimelineClipLaneArea.cpp
+    ../Source/UI/TimelineClipLaneArea/TimelineClipLanePainting.cpp
+    ../Source/UI/TimelineClipLaneArea/TimelineClipLaneMouse.cpp
+    ../Source/UI/TimelineClipLaneArea/TimelineClipLaneSelection.cpp
+    ../Source/UI/TimelineClipLaneArea/TimelineClipLaneEditTools.cpp
     ../Source/UI/PianoRollComponent/PianoRollComponent.cpp
     ../Source/UI/PianoRollComponent/PianoRollScaleAssist.cpp
     ../Source/UI/PianoRollComponent/PianoRollPainting.cpp

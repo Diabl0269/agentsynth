@@ -11,7 +11,7 @@
 #include "../Source/AppUndoManager.h"
 #include "../Source/UI/ClipSelectionModel.h"
 #include "../Source/UI/EditTool.h"
-#include "../Source/UI/TimelineClipLaneArea.h"
+#include "../Source/UI/TimelineClipLaneArea/TimelineClipLaneArea.h"
 #include "../Source/UI/TimelineViewState.h"
 #include "Timeline/TimelineDoc.h"
 #include <algorithm>

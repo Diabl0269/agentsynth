@@ -17,12 +17,24 @@ automation strip, and the keyboard/focus arbitration rule live in
 
 ## 1. Timeline Panel
 
-`Source/UI/TimelinePanelComponent.h/.cpp` — `synth::ui::TimelinePanelComponent`, a bottom-docked
+`Source/UI/TimelinePanelComponent/` — `synth::ui::TimelinePanelComponent`, a bottom-docked
 panel owned by `MainComponent`. This section was written incrementally, one piece at a time — the
 shell came first, then the ruler, track headers, playhead and transport bar filled it with real
 content, and finally the keyboard/focus rule that arbitrates between it and the graph editor — each
 subsection below (or in the companion clips/automation document) is still the reference for its own
 piece, and this intro is only a map of how they compose.
+
+Source layout (FRO66 split, one file per concern; the class itself is declared in
+`TimelinePanelComponent.h`):
+
+| Unit | Concern |
+|------|---------|
+| `TimelinePanelComponent.cpp` | Ctor/dtor, shortcut-manager wiring, transport/doc/undo-manager setters |
+| `TimelinePanelStrips.cpp` | Edit-tool strip, piano-roll open/close, automation strip |
+| `TimelinePanelClipClipboard.cpp` | Clip clipboard: copy/paste/cut/duplicate/repeat/select-all |
+| `TimelinePanelShortcuts.cpp` | Panel-scoped keyboard shortcut dispatch (`matchesAction`/`keyPressed`) |
+| `TimelinePanelTrackHeaders.cpp` | Add-track menu, `timelineChanged`, header sync/layout, focus movement, drag-to-reorder |
+| `TimelinePanelLayout.cpp` | Preferences (snap/follow-playhead/scroll-invert), zoom/scroll helpers, `resized()`/`paint()`, the `ResizeHandle` child component |
 
 Region layout, low-rate transport poll aside (see §4 below), everything here is pure
 layout-plus-paint with no timer or animation of its own — one region diagram for the whole panel:
@@ -425,7 +437,7 @@ untouched.
 
 **Grid.** `TimelinePanelComponent::paint()` draws the SAME bar/beat/subdivision hierarchy directly
 into the lanes region below the ruler, from the shared three-level policy in
-`Source/UI/TimelineClipLaneArea.h` (`GridLineLevel::{Subdivision, Beat, Bar}`,
+`Source/UI/TimelineClipLaneArea/TimelineClipLaneArea.h` (`GridLineLevel::{Subdivision, Beat, Bar}`,
 `gridLineColourFor`/`gridLevelIsReadable`) — `PianoRollComponent` paints its own grid from the SAME
 policy (`docs/timeline_panel_piano_roll.md` §2), so the two surfaces can never drift apart in what's visible at a given zoom.
 Per-level alpha is monotonic (`Subdivision` 0.28, `Beat` 0.50, `Bar` 0.85) and each line is lifted
@@ -437,7 +449,7 @@ the line a LINE while keeping the theme's own hue in it, with no new token to re
 is DROPPED rather than drawn as a wall of touching pixels once its spacing falls under
 `kMinGridLinePixels = 3.0` px (`gridLevelIsReadable`) — the same "no grid is better than a smear"
 call the ruler's own adaptive density makes above, and Cubase's own rule. Beat lines gate at
-`pixelsPerBeat >= 8` (`kMinBeatLinePixelsPerBeat`, `TimelinePanelComponent.cpp` — the same threshold
+`pixelsPerBeat >= 8` (`kMinBeatLinePixelsPerBeat`, `TimelinePanelLayout.cpp` — the same threshold
 the ruler's beat ticks use); the subdivision level draws only when the current snap DIVISION is
 finer than a beat, the beat level is ALSO drawn (the hierarchy stays monotonic — a subdivision may
 never outlive its parent beat level, which the ~8px/~3px gap between the two gates would otherwise

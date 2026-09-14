@@ -1,16 +1,16 @@
 #pragma once
 
-#include "../Timeline/TimelineDoc.h"
-#include "AutomationLaneEditor.h"
-#include "ClipSelectionModel.h"
-#include "EditTool.h"
-#include "PianoRollComponent/PianoRollComponent.h"
-#include "TimelineClipLaneArea.h"
-#include "TimelinePlayheadOverlay.h"
-#include "TimelineRulerComponent.h"
-#include "TimelineTrackHeaderComponent.h"
-#include "TimelineTransportBar.h"
-#include "TimelineViewState.h"
+#include "../../Timeline/TimelineDoc.h"
+#include "../AutomationLaneEditor.h"
+#include "../ClipSelectionModel.h"
+#include "../EditTool.h"
+#include "../PianoRollComponent/PianoRollComponent.h"
+#include "../TimelineClipLaneArea/TimelineClipLaneArea.h"
+#include "../TimelinePlayheadOverlay.h"
+#include "../TimelineRulerComponent.h"
+#include "../TimelineTrackHeaderComponent.h"
+#include "../TimelineTransportBar.h"
+#include "../TimelineViewState.h"
 #include <array>
 #include <functional>
 #include <juce_data_structures/juce_data_structures.h>
