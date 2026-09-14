@@ -113,9 +113,20 @@ public:
     void setSmartConnectionMode(SmartConnectionMode mode) noexcept { smartConnectionMode_ = mode; }
     SmartConnectionMode getSmartConnectionMode() const noexcept { return smartConnectionMode_; }
 
-    /** Tests set the override; production leaves it empty and reads the real keyboard — see
-     *  GraphEditor::isInsertModifierDown's header comment for the CTRL/insert-in-series rationale. */
     void setInsertModifierOverrideForTests(std::optional<bool> down) { insertModifierOverride_ = down; }
+
+    /** CTRL turns a proximity suggestion into an insert-in-series. Ctrl on every platform (it is
+     *  the literal Control key on macOS too, NOT Cmd) — Cmd was tried first and lost, because
+     *  Cmd-click is the additive-selection modifier and the two gestures are indistinguishable at
+     *  mouse-down.
+     *
+     *  Sampled LIVE on every drag tick rather than latched at mouse-down, so BOTH orderings work:
+     *  press-then-Ctrl (the modifier is picked up on the next tick) and Ctrl-then-press (the
+     *  deferred classification in `ModuleComponent::mouseDown` arms a drag as well as a selection
+     *  toggle, and this read simply sees Ctrl already down).
+     *
+     *  Tests set the override (setInsertModifierOverrideForTests above); production leaves it
+     *  empty and reads the real keyboard. */
     bool isInsertModifierDown() const;
 
     /** Seeds the drag-tick comparison from the modifier state right now, so a drag started WITH

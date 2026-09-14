@@ -645,6 +645,8 @@ bool GraphEditor::isPortConnected(ModuleComponent* module, int portIndex, bool i
                    : !smartConnections_.isOutputJackFree(nodeId, portIndex, isMidi);
 }
 
+// `previousInputMap`/`previousOutputMap` are the only way to tell which visible jack each existing
+// raw connection was anchored to, since the live mapping already reflects the new state.
 void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector<LogicalPort>& previousInputMap,
                                       const std::vector<LogicalPort>& previousOutputMap) {
     if (module == nullptr)

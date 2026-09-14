@@ -3,7 +3,9 @@
 ; installer to run instead of a bare portable exe.
 ;
 ; Invoked from CI as:
-;   makensis /DVERSION=<PROJECT_VERSION> /DSTAGE_DIR=<dir containing "Agent Synth.exe" + WinSparkle.dll> installer\windows\AgentSynth.nsi
+;   makensis /DVERSION=<marketing version, computed by the version job — see CMakeLists.txt's
+;   SYNTH_MARKETING_VERSION> /DSTAGE_DIR=<dir containing "Agent Synth.exe" + WinSparkle.dll>
+;   installer\windows\AgentSynth.nsi
 ; Output filename is pinned to AgentSynthSetup.exe — the marketing site's download page
 ; (synth-platform/apps/web) references this exact name; don't rename without updating both.
 
