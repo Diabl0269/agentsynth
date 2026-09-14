@@ -320,7 +320,7 @@ graph:
   keep `computeDiff`'s original relative order. Used only for merge-mode `PatchCard` rendering;
   `computeDiff`'s own output order is untouched and still what its tests assert on.
 
-Tests: `Tests/PatchDiffTests.cpp` — pure `computeDiff` cases, `summarizePatch`/`groupChangesByKind`
+Tests: `Tests/AI/PatchDiffTests.cpp` — pure `computeDiff` cases, `summarizePatch`/`groupChangesByKind`
 coverage, plus two regression tests (`MergeModeAutoWireAppearsInDiff`,
 `UntrustedRescaleShowsLandedValueNotRawPatchValue`) proving the snapshot-diff catches what a
 raw-patch-vs-live-graph diff would miss.
@@ -399,5 +399,5 @@ Because the notifications are dispatched from the undoable action, they are wrap
 `juce::WeakReference<AIIntegrationService>` — the action can outlive nothing in practice, but the
 weak ref keeps the ordering safe if the service is ever destroyed before the undo manager.
 
-Tests live in `Tests/AIUndoTests.cpp`.
+Tests live in `Tests/AI/AIUndoTests.cpp`.
 

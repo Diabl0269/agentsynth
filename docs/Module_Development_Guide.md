@@ -135,7 +135,7 @@ Opt out or override the inference with the constructor's fourth argument, `Modul
 
 `StereoDeclaration.EveryFactoryModuleFollowsTheShapeRuleOrADocumentedException` sweeps every factory
 module against that rule, so if your module needs `Declared` or `None` you must also add it to the
-table in `Tests/StereoVoiceModuleTests.cpp` **with a written reason** — the build's test run fails
+table in `Tests/Modules/StereoVoiceModuleTests.cpp` **with a written reason** — the build's test run fails
 until you do. That is deliberate: the decision cannot be skipped, only made explicitly. Details and
 the current exception list: [`fx_modules.md § The toggle is inherited, not registered`](fx_modules.md#the-toggle-is-inherited-not-registered).
 
@@ -168,7 +168,7 @@ MyNewModule::MyNewModule()
 
 Adhering to these standards ensures the highest audio quality for Agent Synth modules:
 
-*   **Parameter Smoothing (enforced)**: **Every `juce::AudioParameterFloat` a module owns must either be smoothed or carry a one-line comment justifying why it isn't.** Timeline automation writes a parameter's base value once per block (or per 64-sample slice) through `param->setValue(...)`, so anything that reaches a DSP coefficient raw steps at block rate and zippers. `Tests/AutomationZipperTests.cpp` enforces the *coverage* half of this: it derives its cases from the live module factory, so a new module — or a new float parameter on an existing one — is swept automatically, and a module the config table neither covers nor excludes fails the build.
+*   **Parameter Smoothing (enforced)**: **Every `juce::AudioParameterFloat` a module owns must either be smoothed or carry a one-line comment justifying why it isn't.** Timeline automation writes a parameter's base value once per block (or per 64-sample slice) through `param->setValue(...)`, so anything that reaches a DSP coefficient raw steps at block rate and zippers. `Tests/Timeline/AutomationZipperTests.cpp` enforces the *coverage* half of this: it derives its cases from the live module factory, so a new module — or a new float parameter on an existing one — is swept automatically, and a module the config table neither covers nor excludes fails the build.
 
     ```cpp
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedGain;
@@ -280,7 +280,7 @@ All new modules **must** have unit tests in the `Tests/` directory.
 
 ### E2E Coverage
 
-New modules are automatically covered by E2E workflow tests in `Tests/E2EWorkflowTests.cpp`. The `DropAllModuleTypes_NoCrash` test drops every registered module type and verifies it creates a graph node without crashing. If you add a new module type, add its name string to the `moduleTypes` array in that test.
+New modules are automatically covered by E2E workflow tests in `Tests/App/E2EWorkflowTests.cpp`. The `DropAllModuleTypes_NoCrash` test drops every registered module type and verifies it creates a graph node without crashing. If you add a new module type, add its name string to the `moduleTypes` array in that test.
 
 ## 7. Poly Module Channel Conventions
 

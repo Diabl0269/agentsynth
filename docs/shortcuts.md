@@ -223,7 +223,7 @@ is the original of this idiom; `TimelineClipLaneArea`, `PianoRollComponent` and
 ordinary JUCE focus tracking — `resolveEditSurface()` adds no bookkeeping of its own beyond reading
 `getCurrentlyFocusedComponent()`. Headless tests can't always create a real focus grab (it needs a
 native peer), so `MainComponent::setEditSurfaceOverrideForTest()` short-circuits the resolver for
-`Tests/FocusArbitrationTests.cpp`.
+`Tests/App/FocusArbitrationTests.cpp`.
 
 What each surface does:
 
@@ -557,7 +557,7 @@ settings store), so old callers that never wired a manager keep working unchange
 surface-resolved id from `ShortcutManager`'s defaults table would make that key **silently inert**
 the moment a manager IS installed — the ordering tripwire test,
 `ShortcutManagerTest.EverySurfaceResolvedIdExistsInTheDefaultsTable`
-(`Tests/ShortcutManagerTests.cpp`), walks every id a component is known to consult and asserts it
+(`Tests/App/ShortcutManagerTests.cpp`), walks every id a component is known to consult and asserts it
 exists in the table with a valid default binding, precisely to catch that failure mode before it
 ships. Two complementary tests pin the rest of the split: `SurfaceActionsMapToNoCommand` (a surface
 id must never also claim a command id, or `MainComponent::keyPressed` would try to dispatch one
@@ -596,7 +596,7 @@ The canvas selection keys are handled by `GraphEditor::keyPressed()`, the clip-l
 Every one of these components takes keyboard focus on mouse-down (the same idiom
 `resolveEditSurface()` relies on) and returns `false` when its own selection is empty, so an
 unmodified Delete/Escape keeps its normal meaning elsewhere instead of being silently swallowed by
-an idle panel — `Tests/FocusArbitrationTests.cpp`'s `DeletePerSurface` pins exactly this: a
+an idle panel — `Tests/App/FocusArbitrationTests.cpp`'s `DeletePerSurface` pins exactly this: a
 clips-focused Delete never touches the graph, a graph-focused Delete never touches the clips, and an
 empty selection on either falls through. `AIChatComponent::keyPressed()`'s Escape only acts while a
 request is in flight; otherwise it is passed through so it keeps whatever meaning the enclosing

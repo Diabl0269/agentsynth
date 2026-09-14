@@ -914,7 +914,7 @@ endif()
 # Measurement harnesses for AI patch/timeline validity and quality. AIPatchHarness/AIEvalHarness
 # need a live Ollama; TimelineOpsHarness replays recorded fixtures instead and needs none, but is
 # gated the same way for consistency (it is a measurement instrument, not something CI gates on —
-# see Tests/TimelineOpsFixtureTests.cpp for the CI-enforced twin). None of the three is ever part
+# see Tests/Timeline/TimelineOpsFixtureTests.cpp for the CI-enforced twin). None of the three is ever part
 # of the default build or CI — see their READMEs under Tools/.
 if(ENABLE_AI_HARNESS)
     add_subdirectory(Tools/AIPatchHarness)

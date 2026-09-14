@@ -28,7 +28,7 @@ Enable hardware MIDI controller support by implementing MIDI input device select
   - Select the device and verify that playing notes triggers sound.
 - **Tests**:
   - `Tests/AudioEngineTests.cpp`: Add unit tests for MIDI message injection.
-  - `Tests/SettingsWindowTests.cpp`: Verify MIDI device selection persistence.
+  - `Tests/UI/Settings/SettingsWindowTests.cpp`: Verify MIDI device selection persistence.
 
 ## Docs Updates
 - `docs/modules.md`: Update MIDI input section.

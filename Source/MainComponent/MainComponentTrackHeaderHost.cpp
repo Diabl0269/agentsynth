@@ -201,7 +201,7 @@ synth::LaneId MainComponent::addPluginAutomationLane(const synth::ui::TrackHeade
 
 // The MIDI-destinations picker's row list — every node in the live graph that actually CONSUMES
 // MIDI in its processBlock (ModuleBase::acceptsMidi(), corrected per module by an audit of every
-// module's processBlock — see Tests/ModuleMidiFlagsTests.cpp for the full table — so this is no
+// module's processBlock — see Tests/Modules/ModuleMidiFlagsTests.cpp for the full table — so this is no
 // longer a hardcoded allowlist, and no module can advertise a MIDI jack that silently did
 // nothing). MIDI SOURCES are still deliberately excluded: a pure source
 // (Track In / External MIDI / MIDI Keyboard) has acceptsMidi()==false by construction — see

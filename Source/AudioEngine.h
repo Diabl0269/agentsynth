@@ -471,7 +471,7 @@ protected:
     // production — nothing calls it, so the optimizer removes it entirely — a test subclass
     // overrides it to record what it observes (e.g. the transport's rate) at each step, which is
     // what pins the ORDER those steps run in without instrumenting the production logic itself. See
-    // Tests/DeviceChangeTests.cpp's HookOrderPinned.
+    // Tests/Engine/DeviceChangeTests.cpp's HookOrderPinned.
     virtual void onFormatChangeStepForTest(int step) { juce::ignoreUnused(step); }
 
 private:

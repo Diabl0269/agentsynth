@@ -774,7 +774,7 @@ void AudioEngine::handleIncomingMidiMessage(juce::MidiInput* source, const juce:
     for (auto* node : mainProcessorGraph.getNodes()) {
         if (auto* extMidi = dynamic_cast<ExternalMidiModule*>(node->getProcessor())) {
             // source == nullptr only from a test driving this path directly (see
-            // Tests/DeviceChangeTests.cpp, Tests/BounceExporterTests.cpp) — real MIDI input
+            // Tests/Engine/DeviceChangeTests.cpp, Tests/Engine/BounceExporterTests.cpp) — real MIDI input
             // callbacks always hand back the device that called them.
             if (source != nullptr && source->getName() == extMidi->getName()) {
                 extMidi->pushMidiMessage(message);

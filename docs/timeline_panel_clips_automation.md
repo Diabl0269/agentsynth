@@ -300,16 +300,16 @@ the selection (any row, ignoring anything unselected) and hands it outwards thro
 above. Nothing selected (or no owner listening) returns `false` so the key keeps its meaning
 elsewhere. The piano-roll surface has no equivalent yet.
 
-Tests: `Tests/TimelineClipLaneTests.cpp` — `ClipSelectionModel`/`clipHitTestMarquee` unit coverage,
+Tests: `Tests/UI/Timeline/TimelineClipLaneTests.cpp` — `ClipSelectionModel`/`clipHitTestMarquee` unit coverage,
 pure-geometry tests for `computeClipRect`, and interaction tests driven by hand-built
 `juce::MouseEvent`s (same pattern as the ruler tests in `docs/timeline_panel_core.md` §2, in `Tests/TimelinePanelTests.cpp`) against
 a bare `TimelineDoc` + `AppUndoManager` + `TimelineClipLaneArea`, no `MainComponent` needed. The
 authoring gestures are split across three files, each covering the half it owns: the lane area's
 (group 7 there — snapping, one-bar length, one undo step, the injected chooser, drag interest and the
 row highlight, the hint text and its paint), the panel's (`Tests/TimelinePanelTests.cpp` group 6 — a
-new clip really opens the piano roll), and the import's (`Tests/AssetManagerTests.cpp` group 2 —
+new clip really opens the piano roll), and the import's (`Tests/Project/AssetManagerTests.cpp` group 2 —
 saved-bundle vs `Recordings/` destination, length from the file, failure mutating nothing).
-`Tests/TimelineClipEditingTests.cpp` covers the edit-tool layer added on top: each tool's
+`Tests/Timeline/TimelineClipEditingTests.cpp` covers the edit-tool layer added on top: each tool's
 click-acts-immediately behaviour and its empty-space no-op, `findGlueTarget`'s gap-bridging,
 Alt-copy vs plain move, the cross-track kind check (legal drop, illegal drop clamping the whole
 group back to 0), the split/draw preview seams' repaint-only-on-change discipline (via a counting
@@ -402,7 +402,7 @@ hook) resolves the node's uuid (ensure-uuid, mirrored into the processor, the sa
 is a no-op that returns the existing lane), opens the timeline panel via the SAME toggle-button
 click path `simulateToggleTimelineClick()` uses if it's hidden, and opens the strip on that lane.
 
-Tests: `Tests/AutomationEditorTests.cpp` — `AutomationLaneEditor` gesture/publish-discipline
+Tests: `Tests/UI/Timeline/AutomationEditorTests.cpp` — `AutomationLaneEditor` gesture/publish-discipline
 coverage (mirrors the `TimelineClipLaneArea`/`PianoRollComponent` hand-built-`juce::MouseEvent`
 idiom against a bare `TimelineDoc` + `AppUndoManager`), the panel's strip open/close/record-mode
 selector, and a `MainComponent` integration test for the knob
@@ -432,7 +432,7 @@ this: every surface already does it on `mouseDown` (`GraphEditor::mouseDown` is 
 original; `TimelineClipLaneArea`, `PianoRollComponent` and `AutomationLaneEditor` all copy it), so
 "the surface you last clicked owns the verbs" falls out of ordinary JUCE focus tracking with no
 extra bookkeeping. Headless tests can't always create a real focus grab (`grabKeyboardFocus()`
-needs a native peer — see `Tests/FocusArbitrationTests.cpp`'s `SurfaceResolverRealFocus`, which
+needs a native peer — see `Tests/App/FocusArbitrationTests.cpp`'s `SurfaceResolverRealFocus`, which
 documents why this repo doesn't attempt one), so `MainComponent::setEditSurfaceOverrideForTest()`
 is consulted FIRST and short-circuits the real-focus check when set.
 
@@ -507,11 +507,11 @@ this command.
 surface's own `keyPressed` already handles its own selection and falls through (`return false`) on
 an empty one, which is what let an unmodified `Delete` binding be surface-scoped for free since
 before this task. This section adds no new production code here, only
-`Tests/FocusArbitrationTests.cpp`'s `DeletePerSurface`, which pins that a clips-focused Delete never
+`Tests/App/FocusArbitrationTests.cpp`'s `DeletePerSurface`, which pins that a clips-focused Delete never
 touches the graph, a graph-focused Delete never touches the clips, and an empty selection on either
 falls through rather than eating the key.
 
-Tests: `Tests/FocusArbitrationTests.cpp` — one test per verb x surface (`resolveEditSurface()`
+Tests: `Tests/App/FocusArbitrationTests.cpp` — one test per verb x surface (`resolveEditSurface()`
 override coverage, clip copy/paste-at-playhead/duplicate incl. the missing-track fallback, the
 piano-roll inactive gap, Space from every surface, per-surface Delete, and the resolver's real-focus
 fallback behaviour).

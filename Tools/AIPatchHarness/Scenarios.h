@@ -1,7 +1,7 @@
 #pragma once
 
 // The fixed prompt set AIPatchHarness replays against a live model, factored out of Main.cpp so
-// Tests/AIPatchFixtureReplayTests.cpp can share the EXACT SAME table when replaying a recorded
+// Tests/AI/AIPatchFixtureReplayTests.cpp can share the EXACT SAME table when replaying a recorded
 // corpus. One source of truth: a fixture's "scenario" field is looked up here to rebuild the same
 // seed graph and mode the original run used, so the two can never silently drift apart.
 

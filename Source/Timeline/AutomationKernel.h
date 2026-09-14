@@ -17,7 +17,7 @@ namespace synth {
 // juce::String / juce::var / exceptions, and no branch on anything the message thread can mutate.
 // The kernel never reads the doc and never touches the snapshot beyond the run it is handed.
 //
-// Semantics (contract — pinned by Tests/AutomationKernelTests.cpp):
+// Semantics (contract — pinned by Tests/Timeline/AutomationKernelTests.cpp):
 //   - numPoints == 0 (or a null run) -> `fallbackValue`. Callers pass the lane's range default.
 //   - beat before the first point -> the first point's value; at or after the last -> the last
 //     point's value. There is no extrapolation: a lane is flat outside its own span. A NaN beat

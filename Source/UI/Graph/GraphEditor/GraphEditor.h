@@ -710,7 +710,7 @@ public:
      *  boundary cable back together (external endpoint(s) reconnected straight to internal
      *  endpoint(s), on the original raw channels — spliceOutMacroPort's cross product) rather than
      *  dropping it; removeMacroPort's drop-the-cables behaviour is pinned for the Configure I/O
-     *  "delete this port" action specifically (Tests/MacroPortFlowTests.cpp's
+     *  "delete this port" action specifically (Tests/Macros/MacroPortFlowTests.cpp's
      *  RemoveDeletesTheNodeAndDropsThePort) and is deliberately left alone. Dissolves the macro
      *  outright if this was its last member (matching MacroSet::removeMemberEverywhere's own
      *  "zero members is not a meaningful state" rule). One recordGraphAndMacroChange transaction.

@@ -99,7 +99,7 @@ public:
     // "BAR.BEAT.TICKS" — 1-based bar (zero-padded to 3 digits), 1-based beat (unpadded), and ticks
     // = 1/960 of a beat (zero-padded to 3 digits). Pure — no JUCE GUI dependency, so it is testable
     // headlessly with no component at all, same contract as StatusBarComponent's static helpers.
-    // See Tests/TimelineTransportBarTests.cpp's FormatBarBeatTable for the pinned strings.
+    // See Tests/UI/Timeline/TimelineTransportBarTests.cpp's FormatBarBeatTable for the pinned strings.
     static juce::String formatBarBeat(double ppq, int tsNumerator, int tsDenominator);
 
     // ---- test accessors ----

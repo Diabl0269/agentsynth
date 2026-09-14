@@ -26,7 +26,7 @@ Introduce an `ExternalMidiModule` that acts as a bridge for external hardware MI
   - Connect the module's MIDI output to a synth voice (e.g., Oscillator).
   - Verify that hardware MIDI triggers the synth.
 - **Tests**:
-  - `Tests/ExternalMidiModuleTests.cpp`: Verify MIDI message filtering by channel and device association.
+  - `Tests/Modules/ExternalMidiModuleTests.cpp`: Verify MIDI message filtering by channel and device association.
 
 ## Docs Updates
 - `docs/modules.md`: Add External MIDI Module section.

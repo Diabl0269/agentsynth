@@ -23,4 +23,4 @@ Replace current integer-based parameter knobs for MIDI device and channel select
   - Verify that the UI displays a ComboBox for device selection and another for channel selection.
   - Verify that changing these updates the active routing in `AudioEngine`.
 - **Tests**:
-  - `Tests/ExternalMidiModuleTests.cpp`: Add tests for parameter state persistence.
+  - `Tests/Modules/ExternalMidiModuleTests.cpp`: Add tests for parameter state persistence.

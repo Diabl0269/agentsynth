@@ -496,7 +496,7 @@ L = 0.2126×lin(R) + 0.7152×lin(G) + 0.0722×lin(B)
 ratio = (max(L1,L2) + 0.05) / (min(L1,L2) + 0.05)
 ```
 
-The ThemeTests suite (`Tests/ThemeTests.cpp`, case 15) enforces `ratio ≥ 4.5` for all built-ins
+The ThemeTests suite (`Tests/UI/Theme/ThemeTests.cpp`, case 15) enforces `ratio ≥ 4.5` for all built-ins
 automatically.
 
 ---
@@ -638,7 +638,7 @@ field the constructor doesn't set silently falls back to `Theme.h`'s Obsidian (d
 exactly the bug that shipped in `makeDaylight()`: it set every wire token except `midiWire` and
 never set `cableCategory`, so both fell back to Obsidian's dark-tuned values (a lavender MIDI wire
 that washes out on Daylight's near-white background). Guarded by
-`Tests/CableColourTests.cpp`'s `EveryBuiltInThemeWireIsLegibleAgainstItsOwnCanvas` (WCAG contrast
+`Tests/UI/Graph/CableColourTests.cpp`'s `EveryBuiltInThemeWireIsLegibleAgainstItsOwnCanvas` (WCAG contrast
 floor against both `bg1` and `surface`, every built-in theme) and
 `DaylightMidiAndCategoryColoursAreFixedNotInherited` (pinned regression for this specific bug).
 
@@ -652,7 +652,7 @@ at its exact token colour — the dark-theme dim law darkened every hue toward b
 canvas (indigo read navy, violet read near-black), destroying the palette's identity — and mark
 activity by darkening a touch (hover = `darker(0.3)`). Pinned by
 `LightThemeIdleWireKeepsTokenColourIdentity`, `DarkThemeIdleWireStillDimsTowardCanvas` and
-`HoverEmphasisFollowsThemePolarity` in `Tests/CableColourTests.cpp`.
+`HoverEmphasisFollowsThemePolarity` in `Tests/UI/Graph/CableColourTests.cpp`.
 
 ### User overrides
 
@@ -686,7 +686,7 @@ Piano-roll note bodies are coloured through a single resolver, `synth::ui::resol
 in `Source/UI/PianoRoll/NoteColour.h` — the note-colour analogue of §11's `resolveCableColour()`. Nothing in
 `PianoRollComponent::paint()` picks a note fill or border directly; the resolver is a pure
 function of `(theme colours, pitch, velocity, selected, muted, outOfScale, per-pitch-class
-overrides)` with no GUI state, so it is headless-testable on its own (`Tests/NoteColourTests.cpp`).
+overrides)` with no GUI state, so it is headless-testable on its own (`Tests/UI/PianoRoll/NoteColourTests.cpp`).
 
 **Precedence**, highest first: an out-of-scale note (Scale Assist's pitch-visibility/quantize
 context) always forces `noteOutOfScale` — a warning wins over any colour choice, including a

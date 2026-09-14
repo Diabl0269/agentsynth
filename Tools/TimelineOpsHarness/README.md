@@ -8,7 +8,7 @@ Unlike `Tools/AIPatchHarness` and `Tools/AIEvalHarness`, this is not a live-mode
 timeline-ops envelope's validity is a deterministic function of the envelope and a fixed graph, so
 there is no model to replay prompts against. What is replayed instead is a small set of fixture
 JSON files under `Fixtures/`, each pinning an envelope (or patch) and the outcome it must produce.
-`Tests/TimelineOpsFixtureTests.cpp` asserts the exact same fixtures as fast gtest cases and is what
+`Tests/Timeline/TimelineOpsFixtureTests.cpp` asserts the exact same fixtures as fast gtest cases and is what
 CI actually gates on; this tool exists to print the same kind of per-case table and summary rate its
 siblings do, so a change to `TimelineOps`/`TimelineValidator`/`MidiClipFile` can be eyeballed against
 every fixture at once.
@@ -64,5 +64,5 @@ Every row is expected-vs-actual: `valid`/`invalid` from the fixture against what
 patch error name) matched what the fixture pins. The summary rate is the fraction of fixtures whose
 actual outcome matched every expectation the fixture makes — with a fixed, deterministic input set
 this should always read 100%; anything less means `TimelineOps`, `TimelineValidator` or
-`MidiClipFile` moved out from under one of these fixtures, which `Tests/TimelineOpsFixtureTests.cpp`
+`MidiClipFile` moved out from under one of these fixtures, which `Tests/Timeline/TimelineOpsFixtureTests.cpp`
 would also catch (that file, not this histogram, is what CI gates on).

@@ -52,7 +52,7 @@ and tallies rejections by `PatchValidationError`. It needs a live Ollama, so it 
 `Tools/AIEvalHarness` answers a different question: of the patches that *do* pass validation and
 apply, are they usable — an output wired to a source, not just schema-legal JSON? It scores 40
 golden prompts against `Source/AI/PatchEval.h`'s structural checks (unit-tested in
-`Tests/PatchEvalTests.cpp`, model-independently) and is what makes switching to a cheaper or local
+`Tests/AI/PatchEvalTests.cpp`, model-independently) and is what makes switching to a cheaper or local
 model a measured decision instead of a guess. Same opt-in flag, same exclusion from CI — see its
 README.
 
@@ -159,8 +159,8 @@ against:
 One line per rejection and one per retry. Retries happen at user-click frequency, so this stays
 within the no-high-frequency-logging rule — never log per candidate token or per validation pass.
 
-Tests: `Tests/AIPatchValidationTests.cpp` (table-driven, one malformed patch per
-`PatchValidationError`, plus the schema contract) and `Tests/AIPatchRetryTests.cpp` (retry bound,
+Tests: `Tests/AI/AIPatchValidationTests.cpp` (table-driven, one malformed patch per
+`PatchValidationError`, plus the schema contract) and `Tests/AI/AIPatchRetryTests.cpp` (retry bound,
 error feedback, repair scope).
 
 ## 6. Few-Shot Patch Examples
@@ -193,7 +193,7 @@ called for:
 would be train/test contamination and invalidate the measurement. Each example's prompt text was
 checked by hand against `Tools/AIEvalHarness/Main.cpp`'s `scenarios()` for verbatim or near-paraphrase
 overlap, and `AIIntegrationServiceTest.WorkedExamplePromptsDoNotOverlapEvalScenarios`
-(`Tests/AIIntegrationServiceTests.cpp`) enforces it in CI against a manually-synced copy of the 40
+(`Tests/AI/AIIntegrationServiceTests.cpp`) enforces it in CI against a manually-synced copy of the 40
 prompts — a guard against future drift, not a substitute for the manual check when new examples are
 added.
 
@@ -319,7 +319,7 @@ document — the filesystem, opaque third-party state, or the user's own playing
 has an untrusted form. Widening `validateTimeline` to admit one is the same class of mistake as
 relaxing `validatePatch` to raise the AI pass rate.
 
-Tests: `Tests/TimelineValidatorTests.cpp` (table-driven, one deliberate defect per case, every
+Tests: `Tests/Timeline/TimelineValidatorTests.cpp` (table-driven, one deliberate defect per case, every
 `TimelineValidationError` value covered).
 
 ## 8. Arrangement Context: `ArrangementContext::summarize`
@@ -368,7 +368,7 @@ file name); then one line per automation lane (`"cutoff lane on Filter: 12 point
 not at all, so the result is never cut mid-line — and a dropped tail is marked deterministically
 with `"… [+K more tracks]"`.
 
-Tests: `Tests/ArrangementContextTests.cpp` (tracks/clips/lanes rendering across bound/unbound/
+Tests: `Tests/Timeline/ArrangementContextTests.cpp` (tracks/clips/lanes rendering across bound/unbound/
 orphaned states, track-granularity truncation, the empty-doc case, and the file-path-leak pin;
 plus a seam-level test that the injected request gains an "## Arrangement" section exactly when
 `buildPatchAugmentedContent` should add one).
@@ -518,7 +518,7 @@ AI-applied batch on the same shared undo stack as the user's own edits.
 the card with the reason and **no button**, because a suggestion that cannot be applied must still
 say why but must not look clickable.
 
-Tests: `Tests/TimelineOpsTests.cpp` (per-op apply, one-step undo, all-or-nothing with the failing
+Tests: `Tests/Timeline/TimelineOpsTests.cpp` (per-op apply, one-step undo, all-or-nothing with the failing
 op named by index, caps/bounds, the ungrammatical capabilities, pinned preview strings, the
 patch-grammar pin, and the service seam end to end).
 
@@ -538,7 +538,7 @@ pins its expected valid/invalid outcome plus a message (or, for the patch-smuggl
 `PatchValidationError` name) the actual result must contain, and the harness prints a
 per-fixture expected-vs-actual table and a summary match rate — gated behind
 `-DENABLE_AI_HARNESS=ON` like its siblings, though (having no live model in the loop) it needs none
-to build or run. `Tests/TimelineOpsFixtureTests.cpp` asserts the identical fixture files as fast
+to build or run. `Tests/Timeline/TimelineOpsFixtureTests.cpp` asserts the identical fixture files as fast
 gtest cases, which is what CI actually gates on.
 
 ## 10. The Agentic Timeline Security Model

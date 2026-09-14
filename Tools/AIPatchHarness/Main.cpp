@@ -63,7 +63,7 @@ using synth::harness::scenarios;
 // Wraps the real provider (Ollama or remote) and records the raw content of every completion
 // that passes through sendPrompt(), in call order. For a scenario with N applyPatchWithRetry
 // correction round-trips, capturedResponses() ends up [initial answer, retry 1 answer, retry 2
-// answer, ...] — exactly the sequence Tests/AIPatchFixtureReplayTests.cpp needs to feed a
+// answer, ...] — exactly the sequence Tests/AI/AIPatchFixtureReplayTests.cpp needs to feed a
 // provider double that replays this scenario offline. Everything else is a pure pass-through;
 // this must not change provider behaviour, only observe it.
 class RecordingProvider : public synth::AIProvider {
@@ -156,7 +156,7 @@ struct Outcome {
     // replay's provider double must hand back when the retry loop asks for one. Length equals
     // `retriesUsed`, unless a retry itself hit a provider error (rare), in which case it is
     // shorter than retriesUsed; a replay's double should repeat its last scripted entry rather
-    // than require an exact length match, mirroring Tests/AIPatchRetryTests.cpp's ScriptedProvider.
+    // than require an exact length match, mirroring Tests/AI/AIPatchRetryTests.cpp's ScriptedProvider.
     std::vector<juce::String> retryResponses;
 
     // P1-11: RequestBudget tripped during this scenario (initial send or a retry round-trip).

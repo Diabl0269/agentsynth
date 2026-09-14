@@ -210,7 +210,7 @@ the colour swatch's build/launch split, including `createMidiDestinationPickerFo
 callout). The candidate list is DYNAMIC ground truth, not an allowlist: every live graph node whose
 `ModuleBase`-level `acceptsMidi()` is true (the per-module flags now reflect what each
 `processBlock` actually consumes — see the module MIDI-flag audit in
-`Tests/ModuleMidiFlagsTests.cpp`'s expected table), which automatically excludes MIDI *sources*
+`Tests/Modules/ModuleMidiFlagsTests.cpp`'s expected table), which automatically excludes MIDI *sources*
 (Track In, External MIDI, MIDI Keyboard: they generate notes, they don't consume them). Rows render
 in two sections: **Instruments** first (`isMidiInstrumentType()`, `Source/Modules/ModuleBase.h` —
 the same set the add-track auto-wire target search uses) and **Other** for the remaining real MIDI
@@ -431,4 +431,4 @@ menu, `buildContextMenu()` plus `setShowContextMenuHookForTest()` capture the me
 `mouseDown()` builds, and `handleChipClick(showMenu=false)` exercises the selection affordance on its
 own. The row
 talks to the app exclusively through `synth::ui::TrackHeaderHost` (implemented by `MainComponent`),
-so it is fully testable against a stub with no graph — see `Tests/TimelineTrackHeaderTests.cpp`.
+so it is fully testable against a stub with no graph — see `Tests/UI/Timeline/TimelineTrackHeaderTests.cpp`.
