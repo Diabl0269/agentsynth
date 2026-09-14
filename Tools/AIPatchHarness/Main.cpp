@@ -38,7 +38,7 @@
     --think value, --provider remote with no --max-requests) — never for a low pass rate.
 */
 
-#include "AI/AIIntegrationService.h"
+#include "AI/AIIntegrationService/AIIntegrationService.h"
 #include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AI/OllamaProvider.h"

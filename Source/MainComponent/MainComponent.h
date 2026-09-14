@@ -1,6 +1,6 @@
 #pragma once
 
-#include "AI/AIIntegrationService.h"
+#include "AI/AIIntegrationService/AIIntegrationService.h"
 #include "AI/AIProviderRegistry.h"
 #include "AI/AccountService.h"
 #include "AppUndoManager.h"
