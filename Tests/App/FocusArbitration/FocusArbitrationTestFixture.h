@@ -5,7 +5,7 @@
 // FocusArbitrationClipboardTests.cpp for the one-focus-ownership-rule background comment.
 #include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
-#include "AudioEngine.h"
+#include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Settings/PreferencesSettingsTab.h"
