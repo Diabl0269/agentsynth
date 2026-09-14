@@ -681,4 +681,12 @@ void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::M
     }
 }
 
+//==============================================================================
+// ---- Simple accessors (moved out of the header — see PianoRollComponent.h for each contract) ----
+void PianoRollComponent::tickAutoScrollForTest() { autoScrollTick(); }
+bool PianoRollComponent::isAutoScrollTimerRunningForTest() const noexcept { return autoScrollTimer_.isTimerRunning(); }
+
+void PianoRollComponent::setFollowPlayhead(bool follow) noexcept { followPlayhead_ = follow; }
+bool PianoRollComponent::isFollowPlayhead() const noexcept { return followPlayhead_; }
+
 } // namespace synth::ui

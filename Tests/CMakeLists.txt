@@ -266,7 +266,12 @@ add_executable(Tests
     UI/Timeline/TimelineTrackHeaderTests.cpp
     UI/Timeline/TimelineTrackHeaderContextMenuTests.cpp
     UI/Timeline/TimelineTrackFocusTests.cpp
-    UI/Timeline/TimelineClipLaneTests.cpp
+    UI/Timeline/TimelineClipLane/TimelineClipLaneAreaTests.cpp
+    UI/Timeline/TimelineClipLane/TimelineClipLaneAuthoringTests.cpp
+    UI/Timeline/TimelineClipLane/TimelineClipLaneEditToolsTests.cpp
+    UI/Timeline/TimelineClipLane/TimelineClipLaneMouseTests.cpp
+    UI/Timeline/TimelineClipLane/TimelineClipLanePaintingTests.cpp
+    UI/Timeline/TimelineClipLane/TimelineClipLaneSelectionTests.cpp
     UI/PianoRoll/NoteSelectionModelTests.cpp
     UI/PianoRoll/NoteHitTestMarqueeTests.cpp
     UI/PianoRoll/PianoRollComponentTests.cpp
