@@ -49,7 +49,7 @@
     output, not a pass/fail verdict.
 */
 
-#include "AI/AIIntegrationService.h"
+#include "AI/AIIntegrationService/AIIntegrationService.h"
 #include "AI/AIProvider.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AI/OllamaProvider.h"

@@ -1,4 +1,4 @@
-#include "AI/AIIntegrationService.h"
+#include "AI/AIIntegrationService/AIIntegrationService.h"
 #include "AI/AIProvider.h"
 #include "AI/AccountService.h"
 #include "AI/LocalHistoryStore.h"

@@ -54,12 +54,14 @@ conversation id captured earlier in the session would otherwise still be sitting
 session never has an id to clear in the first place, since the server never sent one.
 
 Locked by `RemoteProviderTest.ConversationIdHeaderSentWhenSet` /
-`ConversationIdHeaderOnlySentWhenSet` / `ConversationIdHeaderCapturedFromResponseIntoAIResponse` /
-`MissingConversationIdHeaderLeavesAIResponseFieldEmpty` in `Tests/AI/RemoteProviderTests.cpp`, and
+`ConversationIdHeaderOnlySentWhenSet` in `Tests/AI/RemoteProvider/RemoteProviderRequestShapeTests.cpp`,
+`ConversationIdHeaderCapturedFromResponseIntoAIResponse` /
+`MissingConversationIdHeaderLeavesAIResponseFieldEmpty` in
+`Tests/AI/RemoteProvider/RemoteProviderResponseHandlingTests.cpp`, and
 `AIIntegrationServiceTest.ConversationIdCapturedFromResponseAndRePushedToProvider` /
 `EmptyConversationIdOnResponseDoesNotCallSetConversationId` /
 `SetConversationIdBeforeProviderInstalledIsRePushedBySetProvider` in
-`Tests/AI/AIIntegrationServiceTests.cpp`.
+`Tests/AI/AIIntegrationService/AIIntegrationServiceProviderConfigTests.cpp`.
 
 `Source/AI/AuthClient.h/.cpp` additionally exposes cloud-only conversation methods alongside
 `fetchEntitlement()` — `listConversations()`, `getConversation(id)`, `deleteConversation(id)`,
@@ -220,8 +222,9 @@ fake transport for the rating callback's locally-constructed `AuthClient`, mirro
 `setHistorySourcesForTesting()`'s fake-backend idiom but at the `HttpPerformer` layer (this call
 doesn't go through `ConversationHistorySource` at all).
 
-Locked by: `Tests/Account/AuthClientTests.cpp` (`SubmitMessageFeedback*` — request shape, comment
-omission, 404/403/400/transport-failure mapping). `Tests/AI/RemoteProviderTests.cpp`
+Locked by: `Tests/Account/AuthClient/AuthClientFeedbackTests.cpp` (`SubmitMessageFeedback*` — request
+shape, comment omission, 404/403/400/transport-failure mapping).
+`Tests/AI/RemoteProvider/RemoteProviderResponseHandlingTests.cpp`
 (`MessageIdHeaderCapturedFromResponseIntoAIResponse`,
 `MissingConversationIdHeaderLeavesAIResponseFieldEmpty` extended to also assert `messageId`).
 `Tests/AI/PatchFeedbackStoreTests.cpp` (`IncludesConversationAndMessageIdWhenProvided`,
@@ -280,7 +283,7 @@ make it an actual multicast rather than adding a third link to this chain.
   this off purges this feature's samples; it has no effect on the conversation history, and vice
   versa.
 
-Tests: `Tests/Account/AuthClientTests.cpp` (`fetchPromptLearningPreference`/`setPromptLearningPreference` —
+Tests: `Tests/Account/AuthClient/AuthClientAccountTests.cpp` (`fetchPromptLearningPreference`/`setPromptLearningPreference` —
 method/URL/headers/body, the off-by-default null-timestamp shape, unauthorized, transport failure).
 `Tests/Account/AccountServiceTests.cpp` (`setPromptLearningOptIn`/`refreshPromptLearningOptIn` go through
 the authenticated job/token path and update the snapshot; both are a no-op when signed out, asserted
@@ -366,7 +369,7 @@ server from an unreachable one using `juce::URL::InputStreamOptions::withStatusC
 
 Locked by `OllamaProviderTest.SendPromptWithNoModelFailsWithoutHittingNetwork` and
 `OllamaProviderTest.SendPromptIncludesSelectedModelInRequestBody` in
-`Tests/AI/OllamaProviderTests.cpp`.
+`Tests/AI/OllamaProvider/OllamaProviderRequestTests.cpp`.
 
 ## 8. Structured-Output Corruption, the Envelope Codegen, and the `params-openness` Tradeoff
 
@@ -751,8 +754,8 @@ narrower capability exists server-side for clients that only automate. If a dedi
 automation-only surface ever becomes worth it client-side, the seam is ready:
 `sendCapabilityRequest("automation.generate", …)` with the same body minus `availableTracks`.
 
-Tests: `Tests/AI/RemoteProviderTests.cpp` (capability URL/body/headers, fail-fast validation, the
-entitlement-error pass-through, envelope re-serialization), `Tests/AI/AIIntegrationServiceTests.cpp`
+Tests: `Tests/AI/RemoteProvider/RemoteProviderCapabilityTests.cpp` (capability URL/body/headers, fail-fast validation, the
+entitlement-error pass-through, envelope re-serialization), `Tests/AI/AIIntegrationService/AIIntegrationServiceArrangeModeTests.cpp`
 (`Arrange*` — request-body shape, the 64-target cap, empty-timeline explicitness, the shared
 history/conversation-id contract, the local transport's composed message + envelope-only schema +
 raw-text history, typed no-provider and hosted-without-capability failures), and
@@ -762,7 +765,7 @@ routing on both transports, and the card flow for a validated and a rejected can
 **HTTP transport seam.** `RemoteProvider::HttpPerformer` (`RemoteProvider.h`) parallels
 `OllamaProvider::InputStreamFactory`: a constructor taking just a host installs the real
 libcurl-backed performer, and a second constructor injects a fake one for tests (no real sockets —
-see `Tests/AI/RemoteProviderTests.cpp`).
+see `Tests/AI/RemoteProvider/RemoteProviderTestFixture.h`).
 
 **Windows is not supported yet.** `RemoteProvider.cpp`'s libcurl implementation is compiled only
 under `#ifndef _WIN32`; the `#else` branch is a stub returning `transportFailed=true` with a clear
