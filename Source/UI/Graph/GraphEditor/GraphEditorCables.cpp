@@ -533,7 +533,7 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     // ---- Drag-preview grid dots (only while a module is being dragged) ----
     // Draw subtle dots at kGridSize*5 = 40px spacing over the VISIBLE canvas region only.
     // This stays cheap: we compute the visible clip in canvas coords and skip everything outside.
-    if (editor.dragPreviewActive) {
+    if (editor.isDragPreviewActive()) {
         // The content component's transform maps canvas -> screen. The clip rect of g is
         // already in canvas coords (paint runs in local/canvas space), so getClipBounds()
         // gives us the visible region for free.
@@ -756,13 +756,13 @@ void GraphEditor::GraphContentComponent::resized() {}
 void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
     // ---- Drag-preview landing ghost (on top of module cards) ----
     // Draw a translucent rounded rect at the exact snapped+anti-overlapped landing position.
-    if (editor.dragPreviewActive && !editor.dragPreviewGhost.isEmpty()) {
+    if (editor.isDragPreviewActive() && !editor.getDragPreviewGhost().isEmpty()) {
         auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
         const juce::Colour accentColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
         const auto& m = lf != nullptr ? lf->getTheme().metrics : synth::theme::Metrics{};
         const float cornerRadius = m.cornerRadius;
 
-        auto ghostF = editor.dragPreviewGhost.toFloat();
+        auto ghostF = editor.getDragPreviewGhost().toFloat();
 
         // Fill: accent colour at ~18% alpha
         g.setColour(accentColour.withAlpha(0.18f));
@@ -776,14 +776,14 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
 
     // ---- Alignment guides (UI Phase 7 - Item 4) ----
     // Draw aligned edges when hovering near other modules (Figma-style)
-    if (editor.dragPreviewActive && !editor.alignmentGuides.empty() && editor.alignmentGuidesEnabled) {
+    if (editor.isDragPreviewActive() && !editor.getAlignmentGuides().empty() && editor.alignmentGuidesEnabled) {
         auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
         const juce::Colour guideColour = lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::white;
 
         // Solid lines, ~70% opacity for visibility without distraction
         const float guideAlpha = lf != nullptr ? lf->getTheme().metrics.guideAlpha : 0.7f;
         g.setColour(guideColour.withAlpha(guideAlpha));
-        for (const auto& guide : editor.alignmentGuides) {
+        for (const auto& guide : editor.getAlignmentGuides()) {
             const float dx = guide.end.x - guide.start.x;
             const float dy = guide.end.y - guide.start.y;
 
@@ -811,7 +811,7 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
     }
 
     // ---- Smart-connection frosted preview cables ----
-    if (editor.dragPreviewActive && !editor.getSmartSuggestions().empty()) {
+    if (editor.isDragPreviewActive() && !editor.getSmartSuggestions().empty()) {
         auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
 
         // Colours resolve only through colourForCable (→ synth::ui::resolveCableColour), so the

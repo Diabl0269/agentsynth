@@ -63,9 +63,15 @@ public:
         synth::ui::ModuleCategory category = synth::ui::ModuleCategory::Utility;
     };
 
-    /** One port's on-card jack, in the collapsed card's OWN local coordinates. See
-     *  GraphEditor::MacroCardPort (P8-15c, T141, docs/macros_ports.md §5.4) for the full layout
-     *  contract MacroCardComponent::paint/buildVisibleCables()/endConnectionDrag() all share. */
+    /** One port's on-card jack, in the collapsed card's OWN local coordinates (add the live
+     *  card's top-left — macroCableAnchorBounds — for canvas coords). Inputs run down the card's
+     *  left edge, outputs down its right edge, each side ordered by MacroPort::order — the SAME
+     *  order macroPortRowsForDialog sorts by, so a port's jack position and its row in the
+     *  Configure I/O dialog always agree on which port is "first". The ONE layout definition:
+     *  MacroCardComponent::paint(), buildVisibleCables()'s boundary-cable anchoring, and
+     *  endConnectionDrag()'s jack hit-test all read this rather than recomputing it, so the drawn
+     *  dot, the anchored cable and the drop target can never drift apart. (P8-15c, T141,
+     *  docs/macros_ports.md §5.4). Aliased as GraphEditor::MacroCardPort. */
     struct MacroCardPort {
         juce::String nodeUuid;
         bool isInput = false;
@@ -104,6 +110,14 @@ public:
     };
 
     // ---- Grouping / membership / collapse (docs/macros.md) -------------------------------------
+    //
+    // A Macro is a named, coloured, collapsible container: membership plus presentation, no
+    // graph change. Flat model — a node already in a macro cannot be grouped into a second one.
+    // Membership is by node UUID, so it survives save/load and undo/redo exactly like everything
+    // else in synth::MacroSet. Collapsed-macro selection/drag/delete are deliberately NOT a
+    // parallel mechanism: selecting a macro selects its members in the ordinary SelectionModel, so
+    // beginSelectionDrag/dragSelectionBy/finalizeSelectionDrag and deleteSelection all just work,
+    // unchanged, on a collapsed macro's members exactly as on any other multi-selection.
 
     juce::String groupSelectionIntoMacro(bool autoCreatePorts = false);
     juce::String addMacroForMembers(const std::vector<juce::String>& memberUuids, const juce::String& name,

@@ -63,7 +63,7 @@ void GraphEditor::updateComponents() {
             // non-initiating group member vanishing on its own is harmless: the initiator survives,
             // its real mouseUp is still coming, and finalizeSelectionDrag's lookup simply skips a
             // stale id it can't find (see cancelLiveDragGestures' own comment).
-            if (dragPreviewActive && comp->getNodeId() == dragPreviewSelfId)
+            if (isDragPreviewActive() && comp->getNodeId() == getDragPreviewSelfId())
                 cancelLiveDragGestures();
             content.removeChildComponent(comp);
             modules.remove(i);
@@ -497,6 +497,12 @@ bool GraphEditor::hasLocatableMasterOrOutput() const {
     return false;
 }
 
+// Reuses the exact select-by-NodeID path MainComponent::selectNodeInGraph already uses for the
+// timeline binding chip (GraphEditor::selectModule) rather than duplicating it, plus the same pan
+// primitive the minimap's own click-to-navigate uses (centreViewOn). The minimap highlight comes
+// for free: buildMinimapModel() derives Node::selected from the current selection, so selecting
+// Master IS the minimap highlight — refreshed immediately here rather than waiting for the next
+// 30 Hz tick, the same as centreViewOn's own immediate viewport push in updateTransform().
 GraphEditor::LocateMasterResult GraphEditor::locateMasterOrOutput() {
     auto& graph = audioEngine.getGraph();
 

@@ -1,14 +1,16 @@
 // GraphCanvasHost.h
 //
 // Narrow abstract seam GraphEditor's canvas collaborators (SmartConnectionEngine, PR1;
-// MacroGroupController, PR2; more follow in PR3) reach GraphEditor through, so a collaborator
-// depends on this interface rather than GraphEditor's whole public surface. GraphEditor
-// implements it privately (Source/UI/Graph/GraphEditor/GraphEditor.h) — only code holding a
-// GraphCanvasHost& can call through it; GraphEditor's own methods still call each other directly.
-// Self-contained: forward declares rather than pulling in AudioEngine.h/ModuleComponent.h/
-// AppUndoManager.h, so this header stays cheap for every collaborator that includes it.
+// MacroGroupController, PR2; GraphDragDropController, PR3) reach GraphEditor through, so a
+// collaborator depends on this interface rather than GraphEditor's whole public surface.
+// GraphEditor implements it privately (Source/UI/Graph/GraphEditor/GraphEditor.h) — only code
+// holding a GraphCanvasHost& can call through it; GraphEditor's own methods still call each other
+// directly. Self-contained: forward declares rather than pulling in AudioEngine.h/
+// ModuleComponent.h/AppUndoManager.h, so this header stays cheap for every collaborator that
+// includes it.
 #pragma once
 
+#include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <vector>
@@ -19,7 +21,8 @@ class ModuleComponent;
 class MacroCardComponent;
 namespace synth {
 class MacroSet;
-}
+struct PluginIdentity;
+} // namespace synth
 namespace synth::ui {
 class SelectionModel;
 }
@@ -128,4 +131,86 @@ public:
      *  returns exactly this, so it simply gains `override` (see GraphEditor.h) rather than
      *  growing a differently-named wrapper — autoDeleteOrphanedMacroPort's very first check. */
     virtual bool getAutoDeleteMacroPortsOnLastCableEnabled() const noexcept = 0;
+
+    // ---- FRO77 PR3: GraphDragDropController additions --------------------------------------
+    //
+    // Nine of these fourteen additions reuse an EXISTING GraphEditor method's name, the same
+    // dual-purpose-override trick PR2 used above — clearSmartSuggestions()/refreshSmartSuggestions()/
+    // applyDefaultDualIOForNewModule()/resolvePlacement()/estimateSnippetSize()/
+    // isSelectionDragActive()/insertSnippetAt()/addHostedPluginAtCanvasPosition()/
+    // addModuleAtCanvasPosition() already do exactly what GraphDragDropController needs, so each
+    // simply gains `override` (see GraphEditor.h). Only lookAndFeel()/seedInsertModifierSample()/
+    // canvasPositionOfLocalPoint()/estimateModuleSizeForType()/resolveSnippetPayload() are
+    // genuinely new.
+
+    /** Repaints suggestion candidacy from the current drag-preview state — GraphEditor's own
+     *  private forwarder onto SmartConnectionEngine::refreshSmartSuggestions(). */
+    virtual void refreshSmartSuggestions() = 0;
+
+    /** Drops the current suggestion set — GraphEditor's own private forwarder onto
+     *  SmartConnectionEngine::clearSmartSuggestions(). */
+    virtual void clearSmartSuggestions() = 0;
+
+    /** Applies the app/per-type Dual I/O default to a newly created (not yet on-canvas) processor —
+     *  GraphEditor's own method; unchanged by FRO77 PR3, just exposed for the drag-preview probe
+     *  and library-drop paths that used to reach it directly as a same-class private call. */
+    virtual void applyDefaultDualIOForNewModule(juce::AudioProcessor& processor,
+                                                const juce::String& moduleType) const = 0;
+
+    /** Snapped + anti-overlapped placement for a footprint at a desired canvas position —
+     *  GraphEditor's own (already public) resolvePlacement(), simply gaining `override`. */
+    virtual juce::Point<int> resolvePlacement(juce::Point<int> desired, int w, int h,
+                                              juce::AudioProcessorGraph::NodeID selfId) = 0;
+
+    /** Footprint of the group a snippet drag payload would drop — GraphEditor's own (private)
+     *  estimateSnippetSize(), simply gaining `override`. */
+    virtual juce::Point<int> estimateSnippetSize(const juce::String& payload) const = 0;
+
+    /** Whether a multi-selection group drag is currently live — GraphEditor's own (already
+     *  public) isSelectionDragActive(), needed by buildDragPreviewState's suggestion-suppression
+     *  guard now that the drag-preview fields it packages live off GraphEditor. */
+    virtual bool isSelectionDragActive() const = 0;
+
+    /** Inserts a resolved snippet payload at a canvas position — GraphEditor's own (already
+     *  public) insertSnippetAt(), simply gaining `override`. */
+    virtual bool insertSnippetAt(const juce::var& snippet, juce::Point<int> canvasPos) = 0;
+
+    /** Creates a Hosted Plugin node pointed at `identity` — GraphEditor's own (already public)
+     *  addHostedPluginAtCanvasPosition(), simply gaining `override`. */
+    virtual void addHostedPluginAtCanvasPosition(const synth::PluginIdentity& identity, juce::Point<int> dropPos) = 0;
+
+    /** Creates `name` at a canvas position with undo recorded — GraphEditor's own (already
+     *  public) addModuleAtCanvasPosition(), simply gaining `override`. Also the drop-side half of
+     *  the itemDropped/filesDropped bodies that moved into GraphDragDropController. */
+    virtual void addModuleAtCanvasPosition(const juce::String& name, juce::Point<int> dropPos,
+                                           const std::function<void(juce::AudioProcessor&)>& configure) = 0;
+
+    /** The canvas's active LookAndFeel — plain `Component::getLookAndFeel()`, exposed because
+     *  updateDragPreview's grid-metric lookup needs the theme's `AppLookAndFeel` (via dynamic_cast)
+     *  and GraphDragDropController is not itself a Component. */
+    virtual juce::LookAndFeel& lookAndFeel() = 0;
+
+    /** Seeds the drag-tick insert-modifier comparison from the state right now — GraphEditor's own
+     *  beginDragPreview used to reach smartConnections_.seedInsertModifierSample() directly as a
+     *  same-class private member; this is the host-mediated equivalent now that beginDragPreview
+     *  itself lives on GraphDragDropController. */
+    virtual void seedInsertModifierSample() = 0;
+
+    /** Converts a point expressed relative to the host Component (e.g. a SourceDetails::localPosition)
+     *  into canvas-content coordinates — GraphEditor's own `content.getLocalPoint(this, point)`,
+     *  exposed because GraphDragDropController holds no Component of its own to convert through. */
+    virtual juce::Point<int> canvasPositionOfLocalPoint(juce::Point<int> pointOnHost) const = 0;
+
+    /** Estimated (w, h) footprint for a module type name — GraphEditor's own STATIC
+     *  estimateModuleSize(), wrapped in a non-static forwarder: a static member can't itself
+     *  `override` a virtual, so this is a distinct name rather than the dual-purpose-override
+     *  trick used elsewhere on this interface. */
+    virtual juce::Point<int> estimateModuleSizeForType(const juce::String& typeName) const = 0;
+
+    /** Resolves a snippet drag payload's name to its JSON via the owner's snippetProvider
+     *  callback, or a default (non-object) juce::var when no provider is set — collapses
+     *  GraphEditor's former `if (!snippetProvider) return;` guard into the same isObject() check
+     *  itemDropped already makes for "provider returned something unusable", since an unset
+     *  provider and a default-constructed juce::var both fail isObject(). */
+    virtual juce::var resolveSnippetPayload(const juce::String& name) const = 0;
 };

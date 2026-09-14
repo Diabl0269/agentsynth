@@ -64,6 +64,10 @@ void GraphEditor::refreshOutputDeviceInfo() {
     }
 }
 
+// Deliberately separate from setDefaultDualIOForNewModules: that one is also called at startup
+// and whenever the Settings window opens, and retro-applying there would rewrite the user's
+// patch (collapsing the factory preset's voice modules on every launch). Only a deliberate
+// change of the preference calls this.
 void GraphEditor::applyDualIOToExistingModules(bool dual) {
     auto& graph = audioEngine.getGraph();
 
@@ -375,6 +379,8 @@ bool GraphEditor::audioChannelReachableFromJack(const ModuleBase& mb, int rawCha
     return false;
 }
 
+// The re-point is what keeps a collapse level across the stereo field: without it, collapsing
+// the default patch's VCA starved the whole FX tail's right channel and the mix jumped left.
 void GraphEditor::dropHiddenRightLegConnections(juce::AudioProcessorGraph::NodeID nodeId) {
     auto& graph = audioEngine.getGraph();
     auto* node = graph.getNodeForId(nodeId);
