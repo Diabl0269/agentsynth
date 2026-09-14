@@ -1,6 +1,6 @@
 #include "PreferencesSettingsTab.h"
 #include "PreferencesSettingsTabInternal.h"
-#include "ShortcutManager.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <functional>
 

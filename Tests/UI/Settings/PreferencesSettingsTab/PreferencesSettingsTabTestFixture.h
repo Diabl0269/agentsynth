@@ -4,7 +4,7 @@
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/ModuleBase.h"
-#include "ShortcutManager.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 #include <algorithm>

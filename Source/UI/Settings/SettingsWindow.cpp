@@ -4,7 +4,7 @@
 #include "AppearanceSettingsTab.h"
 #include "Branding.h"
 #include "FeedbackSettingsTab.h"
-#include "ShortcutManager.h"
+#include "ShortcutManager/ShortcutManager.h"
 #include "ShortcutsSettingsTab.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 
