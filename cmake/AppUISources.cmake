@@ -96,7 +96,10 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
     Source/UI/Macros/MacroCardComponent.cpp
-    Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.cpp
+    Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogLifecycle.cpp
+    Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogRowOrdering.cpp
+    Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogTestSeams.cpp
+    Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogAutoPortPrompt.cpp
     Source/UI/Macros/MacroCardComponent.h
     Source/UI/ModuleViews/FrequencyResponseComponent.h
     Source/UI/ModuleViews/FrequencyGrid.h
@@ -121,7 +124,10 @@ set(APPUI_SOURCES
     Source/UI/Settings/AppearanceSettingsTab.h
     Source/UI/Settings/FeedbackSettingsTab.cpp
     Source/UI/Settings/FeedbackSettingsTab.h
-    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGraphBehaviour.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviour.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAutosave.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h
     Source/UI/Settings/ShortcutsSettingsTab.cpp
     Source/ShortcutManager.h

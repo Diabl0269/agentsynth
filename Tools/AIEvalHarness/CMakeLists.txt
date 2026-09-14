@@ -28,7 +28,10 @@ add_executable(AIEvalHarness
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Macros/MacroCardComponent.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogLifecycle.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogRowOrdering.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogTestSeams.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogAutoPortPrompt.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModMatrixComponent.cpp
 )
 
