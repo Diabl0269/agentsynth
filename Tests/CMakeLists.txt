@@ -98,7 +98,9 @@ add_executable(Tests
     ZoomFrozenCachedImageTests.cpp
     ModuleComponentTests.cpp
     AutomationUiReflectionTests.cpp
-    AIChatComponentTests.cpp
+    AIChatComponent/AIChatComponentTests.cpp
+    AIChatComponent/AIChatComponentHistoryTests.cpp
+    AIChatComponent/AIChatComponentArrangeTests.cpp
     PlanBadgeTests.cpp
     PolyMidiModuleTests.cpp
     PolySequencerModuleTests.cpp
@@ -156,14 +158,18 @@ add_executable(Tests
     SelectionModelTests.cpp
     SnippetManagerTests.cpp
     MultiSelectTests.cpp
-    MacroContainerTests.cpp
+    MacroContainer/MacroContainerTests.cpp
+    MacroContainer/MacroContainerGeometryTests.cpp
+    MacroContainer/MacroContainerInteractionTests.cpp
     MacroSetTests.cpp
     MacroPortModuleTests.cpp
     MacroPortConfigDialogTests.cpp
     MacroPortFlowTests.cpp
     MacroPortRealMouseDragTests.cpp
     DragStateResetTests.cpp
-    MacroAutoPortTests.cpp
+    MacroAutoPort/MacroAutoPortCreationTests.cpp
+    MacroAutoPort/MacroAutoPortUngroupTests.cpp
+    MacroAutoPort/MacroAutoPortDeleteTests.cpp
     MacroCardJackTests.cpp
     MacroPortWidgetTests.cpp
     MacroBypassMuteTests.cpp

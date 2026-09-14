@@ -17,7 +17,6 @@
 1461 Source/UI/PianoRollComponent/PianoRollComponent.h
 1206 Source/UI/PreferencesSettingsTab.cpp
 1223 Source/UI/Theme/AppLookAndFeel.cpp
-2345 Tests/AIChatComponentTests.cpp
 1421 Tests/AIIntegrationServiceTests.cpp
 1549 Tests/AIStateMapperTests.cpp
 1348 Tests/AudioRenderingTests.cpp
@@ -26,8 +25,6 @@
 3549 Tests/ChannelFlowTests.cpp
 1095 Tests/FXModuleTests.cpp
 1440 Tests/FocusArbitrationTests.cpp
-2045 Tests/MacroAutoPortTests.cpp
-2459 Tests/MacroContainerTests.cpp
 1057 Tests/MacroPortFlowTests.cpp
 1411 Tests/MainComponentTests.cpp
 1262 Tests/ModuleComponentTests.cpp
