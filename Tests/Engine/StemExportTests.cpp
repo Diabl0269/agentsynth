@@ -44,7 +44,7 @@ using NodeID = juce::AudioProcessorGraph::NodeID;
 
 // ============================================================================
 // Shared fixture plumbing — mirrors MixerSoloTests.cpp's SoloRig / ConstantSource and
-// BounceExporterTests.cpp's Fixture, duplicated locally per this codebase's own test-file
+// BounceExporterTestHelpers.h's Fixture, duplicated locally per this codebase's own test-file
 // convention (each render fixture stays self-contained and readable on its own).
 // ============================================================================
 

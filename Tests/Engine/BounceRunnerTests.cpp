@@ -1,7 +1,7 @@
 // synth::BounceRunner — the chunked, message-thread-timer-driven twin of BounceExporter::bounce(),
 // used by the Export dialog so a progress bar can update and Cancel can work without blocking the
 // message thread for the whole render. The render loop itself (BounceSession) is already covered,
-// block-for-block identically, by BounceExporterTests.cpp; what is unique here is the state
+// block-for-block identically, by Tests/Engine/BounceExporter/; what is unique here is the state
 // machine that steps it a few blocks per timer tick and delivers exactly one completion callback.
 //
 // Headless/deterministic house rules apply: HostMode::Hosted, empty graph (silent by

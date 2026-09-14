@@ -6,7 +6,7 @@
 // HostMode::Hosted engines never touch the device manager, so they are used wherever a real,
 // initialised AudioEngine is required. HostMode::Standalone engines are only ever default- or
 // value-constructed and never have initialise() called on them here, to avoid opening real
-// hardware (see AudioRenderingTests.cpp / StatusBarTests.cpp for the same convention).
+// hardware (see Tests/Engine/AudioRendering/ / StatusBarTests.cpp for the same convention).
 
 #include "../StubPluginInstance.h"
 #include "AI/AIProvider.h"
