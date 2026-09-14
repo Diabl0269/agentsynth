@@ -1,6 +1,6 @@
 #include "PatchDiff.h"
 #include "../Modules/ModuleBase.h"
-#include "AIStateMapper.h"
+#include "AIStateMapper/AIStateMapper.h"
 #include <algorithm>
 #include <cmath>
 #include <juce_audio_processors/juce_audio_processors.h>

@@ -8,7 +8,7 @@
 // Headless/deterministic house rules apply: HostMode::Hosted, no audio device. Ticks are pumped via
 // juce::MessageManager::runDispatchLoopUntil, the same idiom BounceRunnerTests.cpp uses.
 
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/AudioEngine.h"
 #include "../Source/Modules/ChannelStripModule.h"
 #include "../Source/Modules/MasterModule.h"

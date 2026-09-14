@@ -24,7 +24,7 @@ get the **same three exclusions**: no library row, no replace-menu entry, **neve
 model**. **Done as of P8-15a** (§7 item 1).
 
 The enforcement point already exists and is cheap: `kNonAuthorableModuleTypes` in
-`AIStateMapper.cpp` is an explicit name set with a reason recorded against each entry, consulted
+`AIStateMapper/AIStateMapperInternal.h` is an explicit name set with a reason recorded against each entry, consulted
 by `isInternalOnlyModule`. Registering a module in `moduleFactory` makes it model-authorable **by
 default**, and the resulting allowlist is pinned by
 `AIStateMapperTest.AuthorableModuleTypesGolden` — so adding the four Macro I/O types to the

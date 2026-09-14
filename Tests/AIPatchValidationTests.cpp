@@ -5,7 +5,7 @@
 // the validation message back to the model and the repair path switches on the code, so a
 // patch misclassified into the wrong bucket would silently send the wrong correction.
 
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include <functional>
 #include <gtest/gtest.h>

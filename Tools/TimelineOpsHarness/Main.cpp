@@ -23,7 +23,7 @@
     (TIMELINE_OPS_FIXTURES_DIR, set by CMake), so no flag is needed for the common case.
 */
 
-#include "AI/AIStateMapper.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/FilterModule.h"
 #include "Modules/OscillatorModule.h"
 #include "Timeline/TimelineDoc.h"

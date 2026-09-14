@@ -18,7 +18,7 @@
 //                    pinned against the real rendered card (docs/macros_implementation.md §7 item 3's own
 //                    "estimateModuleSize needs an entry" requirement)
 
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/AppUndoManager.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/LFOModule.h"

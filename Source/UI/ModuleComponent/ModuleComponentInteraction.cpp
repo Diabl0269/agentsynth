@@ -4,7 +4,7 @@
 // ModuleComponent is declared in ModuleComponent.h; the rest of its implementation lives in the
 // sibling ModuleComponent*.cpp units next to this one (FRO65 split of the former single
 // ModuleComponent.cpp).
-#include "../../AI/AIStateMapper.h" // kMaxModuleDisplayNameChars — one cap for typed and loaded titles
+#include "../../AI/AIStateMapper/AIStateMapper.h" // kMaxModuleDisplayNameChars — one cap for typed and loaded titles
 #include "../../Modules/MacroControlModule.h"
 #include "../../Modules/ModuleBase.h"
 #include "../GraphEditor/GraphEditor.h"

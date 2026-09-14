@@ -12,7 +12,7 @@
 //   • shape   — a Stereo port's widget carries two distinct jacks a side and grows a second row;
 //               a MIDI port's widget carries a MIDI jack at the compact header position
 
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/AppUndoManager.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/MacroInletModule.h"

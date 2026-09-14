@@ -51,7 +51,7 @@
 
 #include "AI/AIIntegrationService.h"
 #include "AI/AIProvider.h"
-#include "AI/AIStateMapper.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "AI/OllamaProvider.h"
 #include "AI/PatchEval.h"
 #include "AI/RemoteProvider.h"
@@ -147,7 +147,7 @@ const std::vector<Scenario>& scenarios() {
     return s;
 }
 
-// A separate, small scenario set exercising getPatchSchemaWithTimelineOps() (AIStateMapper.cpp)
+// A separate, small scenario set exercising getPatchSchemaWithTimelineOps() (AIStateMapperSchema.cpp)
 // instead of getPatchSchema() — same request path, extended schema (P6-13). All merge-mode
 // against kBasicPatch so "## Automation targets" has a real uuid to write a lane against.
 const std::vector<Scenario>& timelineScenarios() {

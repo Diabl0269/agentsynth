@@ -28,7 +28,7 @@
 #include <thread>
 #include <vector>
 
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/AudioEngine.h"
 #include "../Source/Transport/OfflineTransportDriver.h"
 

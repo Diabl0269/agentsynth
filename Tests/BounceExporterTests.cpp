@@ -11,7 +11,7 @@
 // exactly 192000 samples = 375 whole blocks and the range render lands on a block boundary with no
 // overshoot to account for.
 
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/AudioEngine.h"
 #include "../Source/Modules/ExternalMidiModule.h"
 #include "../Source/Transport/BounceExporter.h"

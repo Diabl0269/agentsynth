@@ -24,7 +24,7 @@
 //   5. The add-audio-track FLOW through MainComponent.
 
 #include "../Source/AI/AIProvider.h"
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/AudioEngine.h"
 #include "../Source/Modules/TimelineAudioSourceModule.h"
 #include "../Source/Timeline/AudioClipStreamer.h"

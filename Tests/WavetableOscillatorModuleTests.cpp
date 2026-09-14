@@ -7,7 +7,7 @@
 //   • wavetable file loading, rejection of bad input, and state round-trip
 //   • mute / bypass contract (pure source module: both clear the output)
 
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/Modules/WavetableOscillatorModule.h"
 #include <cmath>
 #include <gtest/gtest.h>

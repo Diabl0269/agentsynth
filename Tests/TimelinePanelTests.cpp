@@ -20,7 +20,7 @@
 //      clip and opens the piano roll on it (panel level).
 
 #include "../Source/AI/AIProvider.h"
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/AppUndoManager.h"
 #include "../Source/ProjectBundle.h"
 #include "../Source/Timeline/TimelineDoc.h"

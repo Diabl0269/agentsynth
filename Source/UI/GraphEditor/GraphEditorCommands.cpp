@@ -8,7 +8,7 @@
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
 
-#include "../../AI/AIStateMapper.h"
+#include "../../AI/AIStateMapper/AIStateMapper.h"
 #include "../../Modules/AttenuverterModule.h"
 #include "../../SnippetManager.h"
 #include "../ModuleComponent/ModuleComponent.h"

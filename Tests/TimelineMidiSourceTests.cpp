@@ -13,7 +13,7 @@
 // Headless/deterministic house rules apply: no audio device (the one engine here is
 // HostMode::Hosted), no network, no sleeps.
 
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/AudioEngine.h"
 #include "../Source/Modules/PolyMidiModule.h"
 #include "../Source/Modules/TimelineMidiSourceModule.h"

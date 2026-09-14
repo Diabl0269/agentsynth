@@ -12,7 +12,7 @@
 //   • Master splice  -- one undo step that undoes cleanly; strips land on Mix, everything else on
 //                        Direct; singleton; goes in front of an existing Rec Tap
 
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/AppUndoManager.h"
 #include "../Source/AudioEngine.h"
 #include "../Source/Mixer/MasterSplice.h"

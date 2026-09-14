@@ -5,7 +5,7 @@
 // resolved by the time it returns and the assertions need no message loop.
 
 #include "AI/AIIntegrationService.h"
-#include "AI/AIStateMapper.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <vector>

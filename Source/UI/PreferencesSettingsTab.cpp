@@ -1,5 +1,5 @@
 #include "PreferencesSettingsTab.h"
-#include "../AI/AIStateMapper.h"
+#include "../AI/AIStateMapper/AIStateMapper.h"
 #include "../ShortcutManager.h"
 #include "Theme/AppLookAndFeel.h"
 #include <functional>

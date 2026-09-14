@@ -14,7 +14,7 @@
 //      master tap, the committed clip and its assetRef, and the MIDI path staying unaffected.
 
 #include "../Source/AI/AIProvider.h"
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/AudioEngine.h"
 #include "../Source/Modules/RecordTapModule.h"
 #include "../Source/ProjectBundle.h"

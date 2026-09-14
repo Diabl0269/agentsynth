@@ -9,7 +9,7 @@
 // this file too, or the two gates have drifted.
 
 #include "AI/AIIntegrationService.h"
-#include "AI/AIStateMapper.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
 #include "Modules/FilterModule.h"
 #include "Modules/OscillatorModule.h"

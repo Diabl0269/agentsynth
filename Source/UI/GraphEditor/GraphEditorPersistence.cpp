@@ -5,7 +5,7 @@
 
 #include "GraphEditor.h"
 
-#include "../../AI/AIStateMapper.h"
+#include "../../AI/AIStateMapper/AIStateMapper.h"
 #include "../../PresetManager.h"
 #include "../../SnippetManager.h"
 #include "../ModuleComponent/ModuleComponent.h"

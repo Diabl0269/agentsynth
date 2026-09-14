@@ -15,7 +15,7 @@
 // excluded with a reason; AutomationZipperCoverage fails the build if a factory module with float
 // parameters appears in neither.
 
-#include "AI/AIStateMapper.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/ModuleBase.h"
 #include <cmath>
 #include <gtest/gtest.h>

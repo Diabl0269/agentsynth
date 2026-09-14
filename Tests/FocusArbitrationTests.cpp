@@ -8,7 +8,7 @@
 // MainComponent's plain delegating ctor, the same pattern MainComponentTests.cpp uses throughout.
 
 #include "../Source/AI/AIProvider.h"
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/AudioEngine.h"
 #include "../Source/MainComponent/MainComponent.h"
 #include "../Source/Timeline/TimelineDoc.h"

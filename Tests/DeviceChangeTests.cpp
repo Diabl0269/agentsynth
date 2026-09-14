@@ -38,7 +38,7 @@
 #include <vector>
 
 #include "../Source/AI/AIProvider.h"
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/Modules/TimelineAudioSourceModule.h"
 #include "../Source/Timeline/AudioClipStreamer.h"
 #include "../Source/Timeline/TakePlacement.h"

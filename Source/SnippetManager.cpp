@@ -1,5 +1,5 @@
 #include "SnippetManager.h"
-#include "AI/AIStateMapper.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "Branding.h"
 #include "Modules/AttenuverterModule.h"
 #include "Modules/AudioInputModule.h"
@@ -483,7 +483,7 @@ std::vector<SnippetManager::NodeID> SnippetManager::insertSnippet(const juce::va
     // reject legitimate snippets.
     //
     // validatePatch's untrusted path refuses ANY payload carrying a "macros" key (see
-    // AIStateMapper.cpp) - including our own snippet's, since that refusal can't distinguish a
+    // AIStateMapperValidation.cpp) - including our own snippet's, since that refusal can't distinguish a
     // patch suggestion smuggling one in from a snippet that legitimately carries one. Strip it for
     // validation only; applyJSONToGraph never reads "macros" and the resolution below reads
     // `preparedObj` directly, so restoring it afterwards is all that's needed.

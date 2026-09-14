@@ -1,5 +1,5 @@
 #include "AI/AIIntegrationService.h"
-#include "AI/AIStateMapper.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "AppUndoManager.h"
 #include "MainComponent/MainComponent.h"
 #include <gtest/gtest.h>

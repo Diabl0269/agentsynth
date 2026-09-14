@@ -9,7 +9,7 @@
 //   • getExtraState/setExtraState round trip, including the trusted-only rule in AIStateMapper
 //   • SampleWaveformComponent::computePeaks (headless static helper)
 
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/Modules/SamplerModule.h"
 #include "../Source/UI/SampleWaveformComponent.h"
 #include "TestAudioHelpers.h"

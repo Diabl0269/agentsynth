@@ -1,5 +1,5 @@
 #include "AppUndoManager.h"
-#include "AI/AIStateMapper.h"
+#include "AI/AIStateMapper/AIStateMapper.h"
 #include "MacroSet.h"
 #include "Timeline/TimelineDoc.h"
 #include "UI/GraphEditor/GraphEditor.h"

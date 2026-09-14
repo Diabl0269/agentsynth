@@ -10,7 +10,7 @@
 //
 // Timing arithmetic: 48 kHz, 512-sample blocks, 120 BPM => 24000 samples/beat.
 
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/AudioEngine.h"
 #include "../Source/Modules/ModuleBase.h"
 #include "../Source/Transport/OfflineTransportDriver.h"

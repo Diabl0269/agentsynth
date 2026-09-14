@@ -8,7 +8,7 @@
 //                          verbatim (the normalised-rescale corruption regression)
 //   • persistence        — save / load / list / delete, name sanitisation, drag payload encoding
 
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/MacroSet.h"
 #include "../Source/Modules/AttenuverterModule.h"
 #include "../Source/Modules/FilterModule.h"

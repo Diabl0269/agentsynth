@@ -13,7 +13,7 @@
 // intentionally does NOT constrain "type" to an enum, or "params" values to per-parameter choice
 // enums: those come from THIS repo's live module registry (AIStateMapper::moduleFactory, built by
 // instantiating every registered AudioProcessor and reading AudioParameterChoice::choices), which
-// synth-platform has no way to see. AIStateMapper::getPatchSchema() (AIStateMapper.cpp) parses
+// synth-platform has no way to see. AIStateMapper::getPatchSchema() (AIStateMapperSchema.cpp) parses
 // this envelope and layers that enum injection on top of it.
 
 namespace synth::generated {

@@ -20,7 +20,7 @@
 //   7. Stream format — prepareToPlay propagates to the live instance.
 //   8. Registration — the internal-only checklist Track In / Rec Tap / Track Audio established.
 
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/AudioEngine.h"
 #include "../Source/Modules/ModuleBase.h"
 #include "../Source/Plugin/Hosting/HostedPluginModule.h"

@@ -7,7 +7,7 @@
 // Each fixture pins an envelope (or, for the two-door pin, a patch) and the outcome it must
 // produce. See Tools/TimelineOpsHarness/README.md for the fixture schema.
 
-#include "../Source/AI/AIStateMapper.h"
+#include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Timeline/TimelineDoc.h"
