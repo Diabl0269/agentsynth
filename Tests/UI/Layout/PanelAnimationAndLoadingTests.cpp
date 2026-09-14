@@ -12,7 +12,7 @@
 #include "AI/AIProvider.h"
 #include "AudioEngine.h"
 #include "MainComponent/MainComponent.h"
-#include "UI/Assistant/AIChatComponent.h"
+#include "UI/Assistant/AIChatComponent/AIChatComponent.h"
 #include "UI/Layout/UIAnimation.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
