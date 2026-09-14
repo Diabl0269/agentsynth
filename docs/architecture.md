@@ -557,7 +557,12 @@ there is no per-file class boundary. Source layout:
   recovery/patch-load-mode prompts, and document-lifecycle state (dirty tracking, autosave
   scheduling, `guardUnsavedChanges`).
 - `MainComponentCommands.cpp` — `paint()` plus the `getAllCommands`/`getCommandInfo`/`perform`
-  `juce::ApplicationCommandTarget` trio (kept together).
+  `juce::ApplicationCommandTarget` trio (kept together), all three now thin lookups over
+  `commandTable()` (FRO76).
+- `MainComponentCommandTable.cpp` — the `CommandSpec` table `commandTable()` returns (one row per
+  command, in `getAllCommands()` order), the named `perform*`/`apply*Command` bodies and
+  `is*`/`has*`/`can*`/`touches*` predicates its rows call into, and the snap-label/zoom-delta
+  helpers those bodies use.
 - `MainComponentPanels.cpp` — plugin/snippet library refresh, repeat selection, keyboard/focus
   arbitration, `resized()`/toolbar icons, panel-slide animation, welcome screen, scroll/zoom
   preferences.

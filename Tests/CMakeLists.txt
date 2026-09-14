@@ -143,6 +143,7 @@ add_executable(Tests
     App/MainComponent/MainComponentDocumentTests.cpp
     App/MainComponent/MainComponentUnsavedGuardTests.cpp
     App/MainComponent/MainComponentProviderMiscTests.cpp
+    App/MainComponent/MainComponentCommandTableTests.cpp
     UI/Chrome/WelcomeScreenTests.cpp
     UI/Graph/GraphEditor/GraphEditorTests.cpp
     UI/Graph/GraphEditor/GraphEditorLayoutTests.cpp
@@ -353,6 +354,7 @@ add_executable(Tests
     ../Source/MainComponent/MainComponentCallbacks.cpp
     ../Source/MainComponent/MainComponentFileIO.cpp
     ../Source/MainComponent/MainComponentCommands.cpp
+    ../Source/MainComponent/MainComponentCommandTable.cpp
     ../Source/MainComponent/MainComponentPanels.cpp
     ../Source/MainComponent/MainComponentTimeline.cpp
     ../Source/MainComponent/MainComponentTrackHeaderHost.cpp

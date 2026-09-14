@@ -94,6 +94,8 @@ public:
     void getAllCommands(juce::Array<juce::CommandID>& commands) override;
     void getCommandInfo(juce::CommandID commandID, juce::ApplicationCommandInfo& result) override;
     bool perform(const InvocationInfo& info) override;
+    // Test-only: CommandSpec itself stays private -- read via auto (MainComponentCommandTableTests.cpp).
+    const auto& getCommandTableForTest() const { return commandTable(); }
 
     bool keyPressed(const juce::KeyPress& key) override;
 
@@ -450,16 +452,47 @@ public:
     void rebuildGraphForLatencyChange();
 
 private:
+    // ---- Command table (FRO76) -- backs getAllCommands/getCommandInfo/perform, table order is
+    // getAllCommands() order; name == nullptr derives it via ShortcutManager::getActionDescription
+    // (the snap/zoom blocks). See MainComponentCommandTable.cpp.
+    struct CommandSpec {
+        juce::CommandID id;
+        const char* name;
+        const char* description;
+        const char* category;
+        const char* actionId;                               // nullptr = menu-only, no default keypress
+        std::function<bool(const MainComponent&)> isActive; // empty = always active
+        std::function<bool(MainComponent&)> run;            // returns what perform() returns for this case
+    };
+    const std::vector<CommandSpec>& commandTable() const;
+
+    // Named perform() bodies, too long for an inline table lambda.
+    bool performLocateMaster();
+    bool performSelectAllModules();
+    bool performCopySelection();
+    bool performPasteSelection();
+    bool performDuplicateSelection();
+    bool performCutSelection();
+    bool applySnapCommand(juce::CommandID commandID); // all 10 snap commands; id says which
+    bool applyZoomCommand(juce::CommandID commandID); // all 4 zoom commands; id says which
+
+    // Named isActive predicates shared by more than one row.
+    bool isExportAvailable() const { return !isBounceInProgress_; }
+    bool hasSelection() const { return graphEditor.getSelectionCount() > 0; }
+    bool canGroupSelection() const { return graphEditor.getSelectionCount() > 1 || touchesAnyMacro(); }
+    bool touchesAnyMacro() const;
+    bool isEditSurfaceCommandActive(juce::CommandID id) const; // Copy/Paste/Duplicate/Cut/Repeat
+    bool isTimelineVisibleForSnap() const { return isTimelineVisible; }
+    bool isZoomCommandActive(juce::CommandID id) const;
+    bool isWelcomeScreenHidden() const { return welcomeScreen_ == nullptr || !welcomeScreen_->isVisible(); }
+
     void pluginScanCompleted(const synth::PluginScanService::Result& result) override;
 
-    // AIIntegrationService::Listener
     void aiPatchAboutToApply() override;
     void aiPatchApplied() override;
 
     // ---- Timeline app wiring. ----
 
-    // TimelineDoc::Listener — fired once per effective doc mutation. THE publish seam: republishes
-    // the timeline to the audio thread and rebuilds the automation recorder's lane bindings.
     void timelineChanged(const synth::TimelineDoc& doc) override;
 
     void publishTimelineAndRebindRecorder();
@@ -546,12 +579,10 @@ private:
     void addInstrumentTrack(const juce::String& instrumentModuleType, bool poly) override;
     bool hasTracksNeedingChannels() const override;
     void createChannelsForExistingTracks() override;
-    // FRO25 (P9-3d): the header menu's "Make Channel".
     bool canMakeChannelForTrack(synth::TrackId track) const override;
     void makeChannelForTrack(synth::TrackId track) override;
     void makeChannelForNode(juce::AudioProcessorGraph::NodeID source);
     void duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& macroId);
-    // FRO42 (P9-3h): the Instrument submenu's "Plugin" entries.
     std::vector<synth::PluginIdentity> getInstrumentPluginOptions() const override;
     bool isPluginScanInProgress() const override { return getPluginScanService().isScanning(); }
     void ensureInstrumentPluginsScanned() override { maybeStartEagerPluginScan(); }
@@ -583,7 +614,6 @@ private:
 
     int cleanUnusedAssets();
 
-    // The graph node carrying this uuid, or nullptr.
     juce::AudioProcessorGraph::Node* findNodeByUuid(const juce::String& uuid) const;
 
     // ---- File handlers, minus the dialogs ----
@@ -596,14 +626,12 @@ private:
     void promptPatchLoadMode(std::function<void(PatchLoadMode)> onChoice);
     void performSaveProject(bool forceChooser, std::function<void(bool saved)> onFinished = {});
     void exportPatchOnly(const juce::File& file);
-    // The chooser-launching wrapper the "Export Patch Only" menu item actually calls.
     void promptExportPatchOnly();
     void promptExportAudio();
     void promptExportStems();
     void loadFactoryPresetAtIndex(int index);
     void loadPresetGuarded(int index);
     void openRecentProjectGuarded(const juce::File& file);
-    // New Patch empties the timeline as well as the canvas, as its own undoable step.
     void clearTimelineForNewPatch();
     void newPatch();
     void launchOpenPresetChooser();

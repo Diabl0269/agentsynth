@@ -29,6 +29,8 @@ constexpr double kMinAudioClipLengthBeats = 1.0 / 32.0;
 
 } // namespace
 
+// TimelineDoc::Listener — fired once per effective doc mutation. THE publish seam: republishes
+// the timeline to the audio thread and rebuilds the automation recorder's lane bindings.
 void MainComponent::timelineChanged(const synth::TimelineDoc&) { publishTimelineAndRebindRecorder(); }
 
 // Publishes the doc to the engine and re-resolves the recorder's per-lane parameter bindings
@@ -330,6 +332,7 @@ void MainComponent::commitAudioRecording() {
         statusBar.showMessage("Dropped audio during recording");
 }
 
+// New Patch empties the timeline as well as the canvas, as its own undoable step.
 void MainComponent::clearTimelineForNewPatch() {
     if (timelineDoc.isEmpty())
         return; // clear() on an empty doc is a genuine no-op — no undo step for it either
@@ -363,6 +366,7 @@ void MainComponent::newPatch() {
     hideWelcomeScreen();
 }
 
+// The graph node carrying this uuid, or nullptr.
 juce::AudioProcessorGraph::Node* MainComponent::findNodeByUuid(const juce::String& uuid) const {
     if (uuid.isEmpty())
         return nullptr;

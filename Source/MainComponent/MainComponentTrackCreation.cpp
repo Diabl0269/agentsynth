@@ -475,6 +475,7 @@ void MainComponent::createChannelsForExistingTracks() {
 
 // FRO25 (P9-3d, docs/mixer.md §5.8): "Make channel" on one track's bound node — the header menu's
 // enabled state is the same synth::planMakeChannel query the action itself runs.
+// FRO25 (P9-3d): the header menu's "Make Channel".
 bool MainComponent::canMakeChannelForTrack(synth::TrackId trackId) const {
     const auto* track = timelineDoc.getTrack(trackId);
     if (track == nullptr || track->bindingUuid.isEmpty())
@@ -558,6 +559,7 @@ void MainComponent::duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeI
 // juce::PluginDescription, which carries isInstrument) is read here rather than
 // getKnownPluginIdentities() (PluginIdentity alone, no isInstrument) precisely because the filter
 // needs that field.
+// FRO42 (P9-3h): the Instrument submenu's "Plugin" entries.
 std::vector<synth::PluginIdentity> MainComponent::getInstrumentPluginOptions() const {
     std::vector<synth::PluginIdentity> options;
     for (const auto& description : getPluginScanService().getKnownPlugins()) {

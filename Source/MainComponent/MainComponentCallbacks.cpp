@@ -358,6 +358,7 @@ void MainComponent::rebuildGraphForLatencyChange() {
     updateRoundTripLatencyReadout();
 }
 
+// AIIntegrationService::Listener
 void MainComponent::aiPatchAboutToApply() {
     // Runs synchronously before the AI patch clears/rebuilds the graph. Detach module components now so
     // their ScopeComponent timers stop and no component references a soon-to-be-freed VisualBuffer.
@@ -558,6 +559,7 @@ void MainComponent::exportPatchOnly(const juce::File& file) {
     statusBar.showMessage("Exported patch: " + file.getFileNameWithoutExtension());
 }
 
+// The chooser-launching wrapper the "Export Patch Only" menu item actually calls.
 void MainComponent::promptExportPatchOnly() {
     const auto suggested =
         resolveExportSubdirectory(currentBundleDir_, kPatchesFolderName).getChildFile(currentPatchName_ + ".json");

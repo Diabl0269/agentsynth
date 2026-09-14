@@ -12,6 +12,7 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentCallbacks.cpp
     Source/MainComponent/MainComponentFileIO.cpp
     Source/MainComponent/MainComponentCommands.cpp
+    Source/MainComponent/MainComponentCommandTable.cpp
     Source/MainComponent/MainComponentPanels.cpp
     Source/MainComponent/MainComponentTimeline.cpp
     Source/MainComponent/MainComponentTrackHeaderHost.cpp
