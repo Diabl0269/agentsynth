@@ -290,7 +290,7 @@ add_executable(Tests
     ../Source/UI/Graph/GraphEditor/GraphEditorPersistence.cpp
     ../Source/UI/Chrome/ExportAudioDialog.cpp
     ../Source/UI/Graph/ModMatrixComponent.cpp
-    ../Source/UI/Assistant/AIChatComponent.cpp
+    ../Source/UI/Assistant/AIChatComponent/AIChatComponent.cpp
     ../Source/UI/Assistant/AccountRow.cpp
     ../Source/UI/Assistant/PlanBadge.cpp
     ../Source/UI/Assistant/SignInDialog.cpp

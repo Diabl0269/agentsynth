@@ -12,7 +12,7 @@ conversation history, and quota mechanics live in
 
 ## 11. AIChatComponent and Logging
 
-`AIChatComponent` (`Source/UI/Assistant/AIChatComponent.cpp`) is the chat UI for AI-assisted patching. It wires user prompts to `AIIntegrationService` and displays the conversation history with optional JSON patch previews.
+`AIChatComponent` (`Source/UI/Assistant/AIChatComponent/AIChatComponent.cpp`) is the chat UI for AI-assisted patching. It wires user prompts to `AIIntegrationService` and displays the conversation history with optional JSON patch previews.
 
 ### Response timing marker
 
