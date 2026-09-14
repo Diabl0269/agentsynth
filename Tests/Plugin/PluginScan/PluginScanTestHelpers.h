@@ -3,6 +3,7 @@
 // Shared test doubles and helpers for the PluginScanService test suite (Tests/Plugin/PluginScan/PluginScan*Tests.cpp).
 
 #include "../../StubPluginInstance.h"
+#include "Plugin/Hosting/HostedPluginModule.h"
 #include "Plugin/Hosting/PluginScanService.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include <algorithm>
