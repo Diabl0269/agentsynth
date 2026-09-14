@@ -49,3 +49,13 @@ GraphEditor::GraphContentComponent::GraphContentComponent(GraphEditor& ed)
     // whatever is behind it on every frame — a real win for zoom/pan and the 30Hz wire animation.
     setOpaque(true);
 }
+
+// ---- GraphCanvasHost (see GraphEditor.h's private section for the rest, defined inline there) ----
+// Out-of-line only because it needs ModuleComponent's full definition (getNodeId()), which
+// GraphEditor.h deliberately keeps forward-declared.
+ModuleComponent* GraphEditor::moduleComponentFor(juce::AudioProcessorGraph::NodeID nodeId) {
+    for (auto* c : content.getModules())
+        if (c != nullptr && c->getNodeId() == nodeId)
+            return c;
+    return nullptr;
+}

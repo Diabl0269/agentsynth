@@ -7,8 +7,10 @@ add_executable(AIEvalHarness
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditor.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorCables.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorConnections.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorModuleTitles.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorSmartConnections.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorSmartConnectionsApply.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngine.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngineApply.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorCanvas.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorSelection.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorMacroGeometry.cpp

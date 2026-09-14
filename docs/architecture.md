@@ -501,8 +501,8 @@ Related: look parameters up with `findParameterByID(processor, "paramID")` rathe
 - `GraphEditor.cpp` — constructor/destructor, core lifecycle
 - `GraphEditorCables.cpp` — cable geometry/colour, `GraphContentComponent::paint`/`paintOverChildren`/`resized`
 - `GraphEditorConnections.cpp` — poly-link resolution, connection drag begin/drag/end
-- `GraphEditorSmartConnections.cpp` — smart-connection naming + eligibility helpers
-- `GraphEditorSmartConnectionsApply.cpp` — building/applying smart-connection suggestions
+- `GraphEditorSmartConnections.cpp` — forwarders onto `SmartConnectionEngine` (below), `nodeHasCables`, `estimatePortCenter`
+- `GraphEditorModuleTitles.cpp` — custom module title get/set/resolve, committing an open inline title editor
 - `GraphEditorCanvas.cpp` — component lifecycle, paint/resized, zoom/pan/minimap, canvas mouse handling
 - `GraphEditorSelection.cpp` — selection model, marquee, selection drag
 - `GraphEditorMacroGeometry.cpp` — macro hull/chip/card geometry, collapse button, port-dock layout
@@ -514,6 +514,14 @@ Related: look parameters up with `findParameterByID(processor, "paramID")` rathe
 - `GraphEditorDragDrop.cpp` — estimated module size, drag-preview API, file/plugin drop, drop placement
 - `GraphEditorStereoWiring.cpp` — dual-I/O wiring, stereo-pair completion, module-resize handling
 - `GraphEditorPersistence.cpp` — auto-arrange, patch save/load/new-patch
+
+`Source/UI/Graph/SmartConnectionEngine/` (FRO77 PR1) — `SmartConnectionEngine`, the first real
+collaborator class extracted out of `GraphEditor`: owns smart-connection mode/suggestion state and
+the proximity-suggestion algorithm (`refreshSmartSuggestions`/`applySmartSuggestions`), reaching its
+canvas only through `Source/UI/Graph/GraphCanvasHost.h` — the narrow interface GraphEditor
+implements privately. `GraphEditor` holds one instance (`smartConnections_`) and forwards its
+existing public smart-connection API to it unchanged. More collaborators (`MacroGroupController`,
+`GraphDragDropController`) follow in FRO77 PR2/PR3.
 
 The visual patching interface. Lives in the `AgentSynth` app target.
 
