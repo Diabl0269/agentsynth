@@ -75,7 +75,15 @@ Detailed specifications for Agent Synth's primary synthesis modules.
 - **The poly CV clear is bounded at `kRightBase`.** It used to run to the end of the buffer; with Audio R sitting above the CV block, an unbounded clear would erase the right leg.
 
 ## Wavetable Module
-Serum / Vital-style wavetable oscillator (`Source/Modules/WavetableOscillatorModule.h`). Type-name string: `"Wavetable"`.
+Serum / Vital-style wavetable oscillator (`Source/Modules/WavetableOscillatorModule/`). Type-name string: `"Wavetable"`.
+
+**Source layout** (FRO73 — the module outgrew one file):
+- `WavetableOscillatorModule.h`/`.cpp` — the module class: parameters, channel map, render path.
+- `WavetableTableBuilder.h`/`.cpp` — table geometry (mip constants, `Wavetable`) and `TableBuilder`,
+  the FFT-based mip-pyramid synthesiser (see [Table synthesis](#table-synthesis) below), in a
+  `wavetable` namespace. `WavetableOscillatorModule` aliases these names back onto itself
+  (`using Wavetable = wavetable::Wavetable;` etc.), so `WavetableOscillatorModule::Wavetable`,
+  `::TablePtr`, `::TableBuilder` and the mip-geometry functions still resolve exactly as before.
 
 - **Tables**: six built-ins — `Basic Shapes` (sine → triangle → saw → square), `Harmonic Sweep`, `Pulse` (duty-cycle morph), `Formant`, `Bell`, `Digital` — plus `Loaded File` for a table read from disk. Each built-in has 32 frames.
 - **Position (the "3D" scan)**: `Position` (0–1) scans continuously through the frame stack. Reads are **bilinear** — linear within the frame (phase) and linear between the two adjacent frames — so morphing is click-free. `Interp` switches the within-frame read to 4-point Catmull-Rom (see [Interpolation quality](#interpolation-quality)).

@@ -2,7 +2,7 @@
 // Headless unit tests for WavetableDisplayComponent: the quantisePosition helper, the
 // gated-repaint contract, and paint smoke tests for built-in and loaded tables.
 
-#include "../Source/Modules/WavetableOscillatorModule.h"
+#include "../Source/Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 #include "../Source/UI/WavetableDisplayComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

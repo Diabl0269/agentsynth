@@ -28,7 +28,7 @@
 #include "../../Source/Modules/SamplerModule.h"
 #include "../../Source/Modules/SequencerModule.h"
 #include "../../Source/Modules/VCAModule.h"
-#include "../../Source/Modules/WavetableOscillatorModule.h"
+#include "../../Source/Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 #include "../../Source/PresetManager.h"
 #include "../../Source/UI/LayoutUtil.h"
 #include "../../Source/UI/Theme/BuiltInThemes.h"

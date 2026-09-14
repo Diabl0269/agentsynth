@@ -51,7 +51,7 @@
 #include "../../Modules/TimelineMidiSourceModule.h"
 #include "../../Modules/VCAModule.h"
 #include "../../Modules/VoiceMixerModule.h"
-#include "../../Modules/WavetableOscillatorModule.h"
+#include "../../Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 #include "../../Plugin/Hosting/HostedPluginModule.h"
 #include <cmath>
 #include <functional> // For std::function

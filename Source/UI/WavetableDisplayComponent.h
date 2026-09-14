@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../Modules/WavetableOscillatorModule.h"
+#include "../Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 #include "Theme/AppLookAndFeel.h"
 #include "Theme/Theme.h"
 #include <cmath>
