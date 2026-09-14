@@ -3,7 +3,7 @@
 
 #include "AppUndoManager.h"
 #include "Modules/RecordTapModule.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Transport/TransportService.h"
 #include "UI/Timeline/ClipSelectionModel.h"
 #include "UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h"
