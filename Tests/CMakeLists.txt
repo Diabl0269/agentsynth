@@ -193,6 +193,7 @@ add_executable(Tests
     UI/Timeline/TimelinePanel/TimelinePanelFollowPlayheadTests.cpp
     UI/Timeline/TimelinePlayheadTests.cpp
     UI/Timeline/TimelineTrackHeaderTests.cpp
+    UI/Timeline/TimelineTrackHeaderContextMenuTests.cpp
     UI/Timeline/TimelineTrackFocusTests.cpp
     UI/Timeline/TimelineClipLaneTests.cpp
     UI/PianoRoll/NoteSelectionModelTests.cpp

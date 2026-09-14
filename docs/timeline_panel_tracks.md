@@ -425,10 +425,25 @@ It is enabled only while `TrackHeaderHost::canMakeChannelForTrack()` is true (th
 Channel Strip of its own yet), disabled — not hidden — afterwards, and `MainComponent` runs it as ONE
 graph + timeline + macro undo step followed by the reconcile pass.
 
+**"Right-click a header" means anywhere on the row (FRO60).** `TimelineTrackHeaderComponent::
+mouseDown()` only ever sees a click that lands on the row's own background — JUCE hands a click to
+whichever component is directly under the cursor and never bubbles it to an ancestor on its own, so
+before FRO60 a right-click on `nameLabel_` or the M/S/R/A toggles (almost every pixel of the row) was
+swallowed silently instead of reaching this menu at all; only the binding chip and the colour swatch
+happened to still show SOMETHING (their own menu/picker, opened for the wrong reason — `juce::Button`
+fires `onClick` from any mouse button). The fix is two small nested classes in
+`TimelineTrackHeaderComponent.h`: `ContextMenuForwardingLabel` (wraps `nameLabel_`) and
+`ContextMenuForwardingButton` (wraps `muteButton_`/`soloButton_`/`armButton_`/`automationButton_`) —
+each forwards a right-click straight to `showContextMenu()` and, for the buttons, never lets the
+click reach `juce::TextButton`'s own `onClick` (so a right-click on Mute no longer also toggles
+mute). The binding chip and colour swatch are untouched — they keep opening their own menu/picker.
+
 Headless test seams (a `juce::PopupMenu` never runs in the test binary): `collectBindingOptions()` /
 `applyBindingMenuChoice(id)` and `applyContextMenuChoice(id)` are the menus' semantics without the
 menu, `buildContextMenu()` plus `setShowContextMenuHookForTest()` capture the menu a real right-click
 `mouseDown()` builds, and `handleChipClick(showMenu=false)` exercises the selection affordance on its
 own. The row
 talks to the app exclusively through `synth::ui::TrackHeaderHost` (implemented by `MainComponent`),
-so it is fully testable against a stub with no graph — see `Tests/UI/Timeline/TimelineTrackHeaderTests.cpp`.
+so it is fully testable against a stub with no graph — see `Tests/UI/Timeline/TimelineTrackHeaderTests.cpp`
+and, for the real-child-dispatch right-click coverage above,
+`Tests/UI/Timeline/TimelineTrackHeaderContextMenuTests.cpp`.
