@@ -18,7 +18,7 @@
 #include "PresetManager.h"
 #include "Timeline/AutomationBinding.h"
 #include "Timeline/MidiRecorder.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <algorithm>
 #include <bit>
 #include <map>

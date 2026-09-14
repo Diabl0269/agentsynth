@@ -29,7 +29,7 @@
 #include "MainComponent/MainComponent.h"
 #include "Modules/TimelineAudioSourceModule.h"
 #include "Timeline/AudioClipStreamer.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Timeline/TimelineSnapshot.h"
 #include "Transport/OfflineTransportDriver.h"
 #include "UI/Graph/CableColour.h"

@@ -7,7 +7,6 @@
 1213 Source/MainComponent/MainComponent.h
 1004 Source/Mixer/ChannelFlows.cpp
 1165 Source/ShortcutManager.h
-1726 Source/Timeline/TimelineDoc.cpp
 1984 Source/UI/Graph/GraphEditor/GraphEditor.h
 1275 Source/UI/Macros/MacroPortConfigDialog.cpp
 1461 Source/UI/PianoRoll/PianoRollComponent/PianoRollComponent.h
@@ -21,8 +20,5 @@
 1057 Tests/Macros/MacroPortFlowTests.cpp
 1061 Tests/Project/SnippetManagerTests.cpp
 1187 Tests/Project/UndoRedoTests.cpp
-1254 Tests/Timeline/TimelineClipEditingTests.cpp
-1644 Tests/Timeline/TimelineDocTests.cpp
-1396 Tests/Timeline/TimelineMidiSourceTests.cpp
 1184 Tests/UI/Settings/PreferencesSettingsTabTests.cpp
 1615 Tests/UI/Timeline/TimelineClipLaneTests.cpp

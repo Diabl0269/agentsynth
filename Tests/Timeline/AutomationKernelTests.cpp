@@ -14,7 +14,7 @@
 // never let through — which is exactly why the kernel has to defend against them itself.
 
 #include "Timeline/AutomationKernel.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Timeline/TimelineSnapshot.h"
 #include <chrono>
 #include <cmath>

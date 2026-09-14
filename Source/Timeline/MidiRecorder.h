@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../Transport/BlockTimeInfo.h"
-#include "TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <array>
 #include <atomic>
 #include <juce_audio_basics/juce_audio_basics.h>

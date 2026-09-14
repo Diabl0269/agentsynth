@@ -6,7 +6,7 @@
 // exception — it drives both halves together to prove the export/import contract composes.
 
 #include "Timeline/MidiClipFile.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <juce_audio_basics/juce_audio_basics.h>

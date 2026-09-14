@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TimelineViewState.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include <juce_gui_basics/juce_gui_basics.h>

@@ -1,7 +1,7 @@
 #include "AppUndoManager.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "MacroSet.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 
 /**
