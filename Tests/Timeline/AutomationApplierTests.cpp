@@ -14,7 +14,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/ModuleBase.h"
 #include "Timeline/AutomationApplier.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Timeline/TimelineSnapshot.h"
 #include "Transport/OfflineTransportDriver.h"
 #include <cmath>

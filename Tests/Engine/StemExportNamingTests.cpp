@@ -15,7 +15,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/MasterModule.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Transport/OfflineTransportDriver.h"
 #include "Transport/StemExporter.h"
 #include <gtest/gtest.h>

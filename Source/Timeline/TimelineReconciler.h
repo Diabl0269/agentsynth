@@ -1,6 +1,6 @@
 #pragma once
 
-#include "TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 
 namespace synth {

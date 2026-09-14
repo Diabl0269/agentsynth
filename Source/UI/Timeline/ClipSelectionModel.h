@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <juce_graphics/juce_graphics.h>
 #include <set>
 #include <utility>

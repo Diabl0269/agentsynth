@@ -19,7 +19,7 @@
 #include "MainComponent/MainComponent.h"
 #include "Modules/RecordTapModule.h"
 #include "ProjectBundle.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Transport/TransportService.h"
 #include "UI/Graph/CableColour.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"

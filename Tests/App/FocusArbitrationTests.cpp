@@ -11,7 +11,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Settings/PreferencesSettingsTab.h"
 #include "UI/Theme/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"

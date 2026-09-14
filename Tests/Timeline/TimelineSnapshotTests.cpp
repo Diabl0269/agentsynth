@@ -13,8 +13,8 @@
 // Headless/deterministic house rules apply: no audio device (every engine here is
 // HostMode::Hosted), no network. The one thread this file starts is time-bounded and joined.
 
-#include "AudioEngine/AudioEngine.h"
-#include "Timeline/TimelineDoc.h"
+#include "AudioEngine.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Timeline/TimelineSnapshot.h"
 #include "Timeline/TimelineSnapshotExchange.h"
 #include <atomic>

@@ -18,7 +18,7 @@
 #include "Mixer/MasterSplice.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/MasterModule.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Transport/TransportService.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>

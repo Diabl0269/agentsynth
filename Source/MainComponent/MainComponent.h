@@ -16,7 +16,7 @@
 #include "SnippetManager.h"
 #include "Timeline/AutomationRecorder.h"
 #include "Timeline/MidiRecorder.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Timeline/TimelineOps.h"
 #include "Transport/BounceRunner.h"
 #include "Transport/StemExporter.h"

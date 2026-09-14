@@ -26,7 +26,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/TimelineMidiSourceModule.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Timeline/TimelineSnapshot.h"
 #include "Transport/OfflineTransportDriver.h"
 #include <cmath>

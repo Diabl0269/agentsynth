@@ -295,8 +295,15 @@ add_library(Core STATIC
     Source/Timeline/PeaksFile.h
     Source/Timeline/TakePlacement.cpp
     Source/Timeline/TakePlacement.h
-    Source/Timeline/TimelineDoc.cpp
-    Source/Timeline/TimelineDoc.h
+    Source/Timeline/TimelineDoc/TimelineDoc.h
+    Source/Timeline/TimelineDoc/TimelineDocAutomation.cpp
+    Source/Timeline/TimelineDoc/TimelineDocClips.cpp
+    Source/Timeline/TimelineDoc/TimelineDocCore.cpp
+    Source/Timeline/TimelineDoc/TimelineDocInternal.h
+    Source/Timeline/TimelineDoc/TimelineDocMarkers.cpp
+    Source/Timeline/TimelineDoc/TimelineDocNotes.cpp
+    Source/Timeline/TimelineDoc/TimelineDocSerialization.cpp
+    Source/Timeline/TimelineDoc/TimelineDocTracks.cpp
     Source/Timeline/TimelineOps.cpp
     Source/Timeline/TimelineOps.h
     Source/Timeline/TimelineReconciler.cpp

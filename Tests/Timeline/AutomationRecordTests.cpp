@@ -18,7 +18,7 @@
 #include "Modules/ModuleBase.h"
 #include "Timeline/AutomationApplier.h"
 #include "Timeline/AutomationRecorder.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Timeline/TimelineSnapshot.h"
 #include "Transport/TransportService.h"
 #include <atomic>

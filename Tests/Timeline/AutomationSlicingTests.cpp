@@ -24,7 +24,7 @@
 #include "Modules/ModuleBase.h"
 #include "Modules/OscillatorModule.h"
 #include "Modules/VCAModule.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Transport/OfflineTransportDriver.h"
 #include <chrono>
 #include <cmath>

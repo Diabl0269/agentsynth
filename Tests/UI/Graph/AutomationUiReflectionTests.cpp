@@ -21,7 +21,7 @@
 #include "Modules/OscillatorModule.h"
 #include "Timeline/AutomationApplier.h"
 #include "Timeline/AutomationRecorder.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Timeline/TimelineSnapshot.h"
 #include "Transport/TransportService.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"

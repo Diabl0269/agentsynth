@@ -7,7 +7,7 @@
 // TimelineDoc's mutation API, so callers stay responsible for how generated notes get inserted
 // (through the normal mutation API + undo, same as any other note edit).
 
-#include "TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <algorithm>
 #include <cstdint>
 #include <juce_core/juce_core.h>
