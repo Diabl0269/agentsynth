@@ -8,7 +8,7 @@
 #include "TimelinePanelComponent.h"
 
 #include "AppUndoManager.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
 

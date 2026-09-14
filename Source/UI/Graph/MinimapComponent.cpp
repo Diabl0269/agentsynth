@@ -1,6 +1,6 @@
 #include "MinimapComponent.h"
 #include "UI/Layout/UIAnimation.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 namespace synth::ui {
 

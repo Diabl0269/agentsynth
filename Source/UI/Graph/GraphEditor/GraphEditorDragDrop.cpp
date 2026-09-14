@@ -15,7 +15,7 @@
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "SnippetManager.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 // Returns an estimated (w, h) footprint for a module type name.
 // Used when the component does not yet exist (e.g. on drag-drop before layout).

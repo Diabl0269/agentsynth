@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/Theme.h"
 #include <cmath>
 #include <juce_gui_basics/juce_gui_basics.h>

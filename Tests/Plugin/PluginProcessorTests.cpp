@@ -19,7 +19,7 @@
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "Plugin/PluginEditor.h"
 #include "Plugin/PluginProcessor.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
 #include "UserSettings.h"
 #include <atomic>

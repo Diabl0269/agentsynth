@@ -19,7 +19,7 @@
 #include "Modules/MacroMidiOutletModule.h"
 #include "Modules/MacroOutletModule.h"
 #include "UI/Macros/MacroCardComponent.h"
-#include "UI/Settings/PreferencesSettingsTab.h"
+#include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 
 // ============================================================================
 // Ungroup removes the macro's ports and splices the cable back (founder-review fix G7,

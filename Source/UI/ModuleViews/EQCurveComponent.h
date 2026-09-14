@@ -3,7 +3,7 @@
 #include "FrequencyGrid.h"
 #include "Modules/FX/ParametricEQModule.h"
 #include "Modules/VisualBuffer.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/Theme.h"
 #include <algorithm>
 #include <cmath>

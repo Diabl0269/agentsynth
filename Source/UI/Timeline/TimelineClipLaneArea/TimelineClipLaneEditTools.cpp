@@ -8,7 +8,7 @@
 #include "TimelineClipLaneArea.h"
 
 #include "AppUndoManager.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/ToolCursors.h"
 #include <algorithm>
 #include <cmath>

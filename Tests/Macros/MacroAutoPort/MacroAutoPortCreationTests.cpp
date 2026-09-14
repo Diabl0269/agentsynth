@@ -19,7 +19,7 @@
 #include "Modules/MacroMidiOutletModule.h"
 #include "Modules/MacroOutletModule.h"
 #include "UI/Macros/MacroCardComponent.h"
-#include "UI/Settings/PreferencesSettingsTab.h"
+#include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 
 // ============================================================================
 // Preference off (LeaveCablesAsIs / plain default-false call) creates nothing

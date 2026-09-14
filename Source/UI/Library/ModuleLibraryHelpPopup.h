@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ShortcutManager/ShortcutManager.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>

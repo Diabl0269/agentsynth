@@ -14,7 +14,7 @@
 #include "AppUndoManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Chrome/ColourPickerPopup.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TrackColour.h"

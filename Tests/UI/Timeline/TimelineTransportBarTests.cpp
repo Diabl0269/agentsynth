@@ -13,7 +13,7 @@
 #include "MainComponent/MainComponent.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Transport/TransportService.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTransportBar.h"

@@ -3,8 +3,3 @@
 # so the entry tightens; once under the cap the entry must be removed (--update does that).
 # Never add a NEW file here -- split it instead.
 1984 Source/UI/Graph/GraphEditor/GraphEditor.h
-1275 Source/UI/Macros/MacroPortConfigDialog.cpp
-1206 Source/UI/Settings/PreferencesSettingsTab.cpp
-1223 Source/UI/Theme/AppLookAndFeel.cpp
-1057 Tests/Macros/MacroPortFlowTests.cpp
-1184 Tests/UI/Settings/PreferencesSettingsTabTests.cpp

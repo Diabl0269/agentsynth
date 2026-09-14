@@ -1,6 +1,6 @@
 #include "MacroCardComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
 MacroCardComponent::MacroCardComponent(GraphEditor& owner, juce::String macroId)
     : owner(owner)

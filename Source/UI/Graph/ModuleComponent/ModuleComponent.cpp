@@ -13,7 +13,7 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Layout/ZoomFrozenCachedImage.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <cmath>
 
 using namespace detail;
