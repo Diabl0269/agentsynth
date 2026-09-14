@@ -136,6 +136,7 @@ void MainComponent::wireTimelineRecordToggle() {
     timelinePanel.getTransportBar().onRecordToggled = [this](bool wantRecording) { handleRecordToggle(wantRecording); };
 }
 
+// The transport bar's onRecordToggled body, extracted out of wireTimelineRecordToggle() (FRO76).
 void MainComponent::handleRecordToggle(bool wantRecording) {
     if (!wantRecording) {
         // Both are no-ops unless their own kind of take is in flight, so Record-off can call

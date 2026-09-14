@@ -74,6 +74,7 @@ void MainComponent::addFileButtons() {
     loadButton.onClick = [this] { showLoadMenu(); };
 }
 
+// The Load button's popup menu body, extracted out of addFileButtons() (FRO76).
 void MainComponent::showLoadMenu() {
     juce::PopupMenu menu;
     auto presets = synth::PresetManager::getPresetList();

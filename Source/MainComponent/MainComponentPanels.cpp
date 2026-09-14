@@ -582,6 +582,7 @@ void MainComponent::setTimelinePanelHeight(int desiredHeight, bool persist) {
 
 // ---- Panel slides (one driver, three fractions) ----
 
+// The three fractions, addressed by name (test seams above; nothing else needs this).
 const synth::ui::PanelSlide& MainComponent::panelSlide(SlidingPanel p) const noexcept {
     switch (p) {
     case SlidingPanel::Library:
@@ -634,6 +635,7 @@ void MainComponent::beginPanelSlide() {
         [this] { finishPanelSlide(); });
 }
 
+// Per-frame body of the slide above: advance all three fractions, then re-lay-out.
 void MainComponent::applyPanelSlideFrame(float t) {
     librarySlide_.applyTweenAt(t);
     aiPanelSlide_.applyTweenAt(t);
@@ -645,6 +647,8 @@ void MainComponent::applyPanelSlideFrame(float t) {
     resized();
 }
 
+// End of the slide (its completion callback, and the synchronous path's whole body): stop the
+// driver, pin the exact end fractions, hide whatever finished closing, lay out.
 void MainComponent::finishPanelSlide() {
     // Time-bounded by construction: the driver auto-stops at t == 1 and this drops it, so nothing
     // is left registered with the VBlank updater between slides.
@@ -666,6 +670,7 @@ void MainComponent::finishPanelSlide() {
 }
 
 // ---- Collapsible library sidebar (slides, persisted) ----
+// Collapse/expand the library sidebar. Slides to the target layout (beginPanelSlide()).
 void MainComponent::setLibraryVisible(bool v) {
     isLibraryVisible = v;
     appProperties.getUserSettings()->setValue("librarySidebarVisible", v ? "1" : "0");

@@ -87,6 +87,7 @@ MainComponent::MainComponent(std::unique_ptr<synth::AIProvider> provider, synth:
 }
 
 // ---- Shared post-construction body ----
+// Shared initialisation body called from both constructors after appProperties is set up.
 void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider, synth::AIProviderRegistry registry) {
     restorePanelPreferences();       // ORDER: flags read before any addAndMakeVisible/setVisible
     restoreGraphEditorPreferences(); // ORDER: settings change listener registered here

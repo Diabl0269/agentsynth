@@ -315,6 +315,9 @@ void MainComponent::wireCommandsAndShortcuts() {
     startTimerHz(10);
 }
 
+// Returns false exactly where initialiseCommon() used to `return;` early on the plugin path
+// (ownedAudioEngine == nullptr) — the caller mirrors that with `if (!initialiseAudioEngine())
+// return;`. True means the rest of initialiseCommon() (welcome screen, focus regions) still runs.
 bool MainComponent::initialiseAudioEngine() {
     // Audio device state. Guarded the same way the engine-lifecycle block below is: on the plugin
     // path the host owns the device (there is not even an Audio tab), so this app's settings file

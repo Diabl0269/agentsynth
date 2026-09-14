@@ -382,6 +382,8 @@ void MainComponent::aiPatchApplied() {
     });
 }
 
+// Mirrors the loadButton factory-preset call site exactly (load + patch-name update), so
+// tests can verify the patch-name side effect without driving the async PopupMenu.
 void MainComponent::simulateLoadFactoryPresetForTest(int index) {
     auto presets = synth::PresetManager::getPresetList();
     if (index < 0 || index >= presets.size())

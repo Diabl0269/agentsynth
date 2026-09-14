@@ -657,6 +657,13 @@ int MainComponent::cleanUnusedAssets() {
     return synth::AssetManager::cleanUnusedAssets(timelineDoc, currentBundleDir_);
 }
 
+// Right-click-any-knob's headless hook, and the production entry point
+// GraphEditor::onAutomateParameterRequested is wired to. Resolves `nodeId`'s uuid (assigning
+// one if it has none yet — the same ensure-uuid idiom createTrackInNode() uses), finds-or-
+// creates the doc's Automation-kind track, binds a lane for `paramId` with the parameter's real
+// NormalisableRange, and opens the timeline panel's automation strip on it. A no-op (with a
+// status-bar message) if `nodeId` doesn't resolve to a live ModuleBase or `paramId` doesn't
+// resolve to a real parameter on it.
 void MainComponent::automateParameter(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
     auto* node = audioEngine.getGraph().getNodeForId(nodeId);
     auto* module = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;

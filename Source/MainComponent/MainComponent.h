@@ -229,13 +229,6 @@ public:
     // paths the buttons and file dialogs do, minus the dialogs.
     synth::TimelineDoc& getTimelineDoc() { return timelineDoc; }
     synth::AutomationRecorder& getAutomationRecorder() { return automationRecorder; }
-    // Right-click-any-knob's headless hook, and the production entry point
-    // GraphEditor::onAutomateParameterRequested is wired to. Resolves `nodeId`'s uuid (assigning
-    // one if it has none yet — the same ensure-uuid idiom createTrackInNode() uses), finds-or-
-    // creates the doc's Automation-kind track, binds a lane for `paramId` with the parameter's real
-    // NormalisableRange, and opens the timeline panel's automation strip on it. A no-op (with a
-    // status-bar message) if `nodeId` doesn't resolve to a live ModuleBase or `paramId` doesn't
-    // resolve to a real parameter on it.
     void automateParameter(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId);
     // The app's one live MidiRecorder — see docs/architecture.md's MidiRecorder wiring
     // entry. Test-only access mirrors getAutomationRecorder() above.
@@ -391,8 +384,6 @@ public:
     // instead of a mutation, so a test can assert the "+ Track" menu's own enabled/disabled state.
     bool hasTracksNeedingChannelsForTest() const { return hasTracksNeedingChannels(); }
     int getStatusBarTickCountForTest() const { return statusBarTickCount_; }
-    // Mirrors the loadButton factory-preset call site exactly (load + patch-name update), so
-    // tests can verify the patch-name side effect without driving the async PopupMenu.
     void simulateLoadFactoryPresetForTest(int index);
     void openPresetFromFile();
     void openProjectFromFile();
@@ -503,6 +494,27 @@ private:
 
     void buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProcessor> instrumentProcessor,
                                       const juce::String& trackNamePrefix, bool poly);
+
+    // ---- buildInstrumentTrackAndChain step state (FRO76 §C) -- see MainComponentTrackCreation.cpp ----
+    struct InstrumentChainBuild {
+        synth::TrackId trackId;
+        juce::AudioProcessorGraph::Node* trackInNode = nullptr;
+        juce::String trackInUuid;
+        juce::Point<int> trackInPosition, trackInSize;
+        juce::AudioProcessorGraph::Node* instrumentNode = nullptr;
+        juce::String instrumentModuleType, instrumentUuid;
+        juce::AudioProcessorGraph::Node* chainSource = nullptr;
+        int sourceRightChannel = 1;
+        juce::String chainSourceType;
+        juce::Point<int> chainSourcePosition;
+        juce::String voiceMixerUuid, polyMidiUuid, adsrUuid, vcaUuid;
+    };
+    bool createTrackInForInstrumentChain(int index, const juce::String& trackNamePrefix, juce::String& trackName,
+                                         InstrumentChainBuild& build);
+    bool adoptInstrumentNodeForChain(std::shared_ptr<std::unique_ptr<juce::AudioProcessor>> stagedInstrument, int index,
+                                     bool poly, InstrumentChainBuild& build);
+    void buildInstrumentEnvelopeChain(InstrumentChainBuild& build);
+    bool buildInstrumentChannelAndMacro(const juce::String& trackName, InstrumentChainBuild& build);
 
     // FRO42: hosted-plugin instrument loads in flight — see addInstrumentPluginTrack's own comment
     // for why THIS (an external, independent owner) holds the staged processor rather than a
@@ -641,7 +653,6 @@ private:
 
     void globalFocusChanged(juce::Component* focusedComponent) override;
 
-    // Shared initialisation body called from both constructors after appProperties is set up.
     void initialiseCommon(std::unique_ptr<synth::AIProvider> provider, synth::AIProviderRegistry registry);
 
     // ---- initialiseCommon()'s ordered setup steps (FRO76) ----
@@ -659,7 +670,6 @@ private:
     void addCanvasAndPanels();
     void addToolbarChrome();
     void addFileButtons();
-    // The Load button's popup menu body, extracted out of addFileButtons() (FRO76).
     void showLoadMenu();
     void addUndoButtons();
     void wireTimelinePanel();
@@ -667,14 +677,10 @@ private:
     void wireTimelineHookInventory();
     void wireTimelineClipLaneCallbacks();
     void wireTimelineRecordToggle();
-    // The transport bar's onRecordToggled body, extracted out of wireTimelineRecordToggle() (FRO76).
     void handleRecordToggle(bool wantRecording);
     void addToolbarToggleButtons();
     void assembleToolbar();
     void wireStatusBar();
-    // Returns false exactly where initialiseCommon() used to `return;` early on the plugin path
-    // (ownedAudioEngine == nullptr) — the caller mirrors that with `if (!initialiseAudioEngine())
-    // return;`. True means the rest of initialiseCommon() (welcome screen, focus regions) still runs.
     bool initialiseAudioEngine();
     void createWelcomeScreen();
     void registerFocusRegions();
@@ -685,7 +691,6 @@ private:
 
     juce::String computeOutputDeviceInfoText() const;
 
-    // Collapse/expand the library sidebar. Slides to the target layout (beginPanelSlide()).
     void setLibraryVisible(bool v);
 
     // ---- Welcome screen (T114/P8-10) ----
@@ -702,7 +707,6 @@ private:
 
     void setTimelinePanelHeight(int desiredHeight, bool persist);
 
-    // Update the displayed patch name (status bar). Immediate repaint, no timer delay.
     void setCurrentPatchName(const juce::String& name);
     void markDocumentClean();
     bool isRecordingActive() const;
@@ -969,7 +973,6 @@ private:
      *  have always slid for, now shared by all three of them. */
     static constexpr double kPanelSlideMs = 190.0;
 
-    // The three fractions, addressed by name (test seams above; nothing else needs this).
     const synth::ui::PanelSlide& panelSlide(SlidingPanel p) const noexcept;
     synth::ui::PanelSlide& panelSlide(SlidingPanel p) noexcept;
 
@@ -980,14 +983,10 @@ private:
      *  Callers flip the flag, persist it, refresh the toolbar, then call this. */
     void beginPanelSlide();
 
-    // Per-frame body of the slide above: advance all three fractions, then re-lay-out.
     void applyPanelSlideFrame(float t);
 
-    // End of the slide (its completion callback, and the synchronous path's whole body): stop the
-    // driver, pin the exact end fractions, hide whatever finished closing, lay out.
     void finishPanelSlide();
 
-    // Alignment guides toggle (UI Phase 7 - Item 4)
     void setAlignmentGuidesEnabled(bool enabled);
 
     // Provides native-style tooltips for any child Component that has a tooltip

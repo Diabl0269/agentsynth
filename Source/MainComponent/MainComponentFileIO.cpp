@@ -310,6 +310,7 @@ void MainComponent::promptPatchLoadMode(std::function<void(PatchLoadMode)> onCho
 }
 
 // ---- Patch name (status bar) ----
+// Update the displayed patch name (status bar). Immediate repaint, no timer delay.
 void MainComponent::setCurrentPatchName(const juce::String& name) {
     currentPatchName_ = name;
     statusBar.repaint();

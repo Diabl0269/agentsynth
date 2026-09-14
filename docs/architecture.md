@@ -571,7 +571,10 @@ there is no per-file class boundary. Source layout:
 - `MainComponentTrackHeaderHost.cpp` — the `synth::ui::TrackHeaderHost` query/binding surface
   (available Track In candidates, plugin lane options, MIDI destination options, note audition).
 - `MainComponentTrackCreation.cpp` — add/delete track, MIDI/audio/instrument/plugin track
-  creation, channel-strip build-out.
+  creation, channel-strip build-out. `buildInstrumentTrackAndChain`'s undo-transaction body is
+  split into 4 named steps (`createTrackInForInstrumentChain`/`adoptInstrumentNodeForChain`/
+  `buildInstrumentEnvelopeChain`/`buildInstrumentChannelAndMacro`, FRO76) sharing state through
+  the private `InstrumentChainBuild` struct.
 - `MainComponentInternal.h` — the handful of file-local helpers shared by more than one of the
   units above (`detail::kRecordingsFolderName`, `detail::isMidiInstrumentNode`,
   `detail::peaksRefForAssetRef`); not part of the public API.
