@@ -2,7 +2,7 @@
 
 #include "PianoRollTypes.h"
 #include "Timeline/MusicalScale.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/PianoRoll/NoteColour.h"
 #include "UI/PianoRoll/NoteSelectionModel.h"

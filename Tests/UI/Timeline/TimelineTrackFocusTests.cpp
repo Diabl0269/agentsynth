@@ -26,7 +26,7 @@
 // ModuleLibraryKeyboardNavTests.cpp calls keyPressed() straight on the component under test.
 
 #include "ShortcutManager.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"
 #include <gtest/gtest.h>

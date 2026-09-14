@@ -5,7 +5,7 @@
 #include <juce_data_structures/juce_data_structures.h>
 
 namespace synth {
-class TimelineDoc; // Forward declaration (Source/Timeline/TimelineDoc.h)
+class TimelineDoc; // Forward declaration (Source/Timeline/TimelineDoc/TimelineDoc.h)
 class MacroSet;    // Forward declaration (Source/MacroSet.h)
 } // namespace synth
 

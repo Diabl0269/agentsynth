@@ -37,8 +37,21 @@ add_executable(Tests
     Modules/ComparatorModuleTests.cpp
     Modules/SequencerModuleTests.cpp
     Engine/TransportServiceTests.cpp
-    Timeline/TimelineDocTests.cpp
-    Timeline/TimelineClipEditingTests.cpp
+    Timeline/TimelineDoc/TimelineDocCoreTests.cpp
+    Timeline/TimelineDoc/TimelineDocTracksTests.cpp
+    Timeline/TimelineDoc/TimelineDocClipsTests.cpp
+    Timeline/TimelineDoc/TimelineDocNotesTests.cpp
+    Timeline/TimelineDoc/TimelineDocAutomationTests.cpp
+    Timeline/TimelineDoc/TimelineDocSerializationTests.cpp
+    Timeline/TimelineDoc/TimelineDocMarkersTests.cpp
+    Timeline/TimelineClipEditing/TimelineClipEditingNotesTests.cpp
+    Timeline/TimelineClipEditing/TimelineClipEditingQuantiseTests.cpp
+    Timeline/TimelineClipEditing/TimelineClipEditingSplitJoinTests.cpp
+    Timeline/TimelineClipEditing/TimelineClipEditingSerializationTests.cpp
+    Timeline/TimelineClipEditing/TimelineClipEditingToolsTests.cpp
+    Timeline/TimelineClipEditing/TimelineClipEditingDragTests.cpp
+    Timeline/TimelineClipEditing/TimelineClipEditingContextTests.cpp
+    Timeline/TimelineClipEditing/TimelineClipEditingGridHierarchyTests.cpp
     Timeline/TimelineSnapshotTests.cpp
     Timeline/AutomationKernelTests.cpp
     Timeline/AutomationApplierTests.cpp
@@ -50,7 +63,13 @@ add_executable(Tests
     Timeline/TimelineOpsTests.cpp
     Timeline/TimelineOpsFixtureTests.cpp
     Timeline/ArrangementContextTests.cpp
-    Timeline/TimelineMidiSourceTests.cpp
+    Timeline/TimelineMidiSource/TimelineMidiSourceEmissionTests.cpp
+    Timeline/TimelineMidiSource/TimelineMidiSourceHeldNoteTests.cpp
+    Timeline/TimelineMidiSource/TimelineMidiSourceMuteSoloTests.cpp
+    Timeline/TimelineMidiSource/TimelineMidiSourceBindingTests.cpp
+    Timeline/TimelineMidiSource/TimelineMidiSourceLoopTests.cpp
+    Timeline/TimelineMidiSource/TimelineMidiSourceEngineTests.cpp
+    Timeline/TimelineMidiSource/TimelineMidiSourceAuditionTests.cpp
     Timeline/MidiRecorderTests.cpp
     Timeline/MidiClipFileTests.cpp
     Timeline/PeaksFileTests.cpp

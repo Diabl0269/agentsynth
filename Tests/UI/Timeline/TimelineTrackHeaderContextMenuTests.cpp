@@ -15,7 +15,7 @@
 // against this repo's 1000-line file cap — see root CLAUDE.md's Code structure section) and
 // registered in Tests/CMakeLists.txt next to it.
 
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

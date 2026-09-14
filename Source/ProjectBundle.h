@@ -3,7 +3,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "MacroSet.h"
 #include "PatchDocument.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
 

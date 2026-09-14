@@ -5,7 +5,7 @@
 #include "Modules/VCAModule.h"
 #include "PatchDocument.h"
 #include "ProjectBundle.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "Timeline/TimelineReconciler.h"
 #include <gtest/gtest.h>
 #include <initializer_list>

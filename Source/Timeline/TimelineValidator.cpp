@@ -17,7 +17,7 @@ using Error = TimelineValidationError;
 TimelineValidationResult fail(Error error, const juce::String& message) { return {false, error, message}; }
 
 // -- juce::var readers ---------------------------------------------------------------------
-// Deliberately the same shape as TimelineDoc.cpp's readers — an ABSENT property takes the
+// Deliberately the same shape as TimelineDocSerialization.cpp's readers — an ABSENT property takes the
 // field's default, a PRESENT one must be well-typed — because a var this gate accepts has to be
 // a var the loader then accepts. Where the two differ, they differ ON PURPOSE and the difference
 // is commented at the check itself (untrusted-strict vs. the loader's clamp/repair).

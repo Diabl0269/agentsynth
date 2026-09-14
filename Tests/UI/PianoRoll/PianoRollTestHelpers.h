@@ -5,7 +5,7 @@
 
 #include "AppUndoManager.h"
 #include "ShortcutManager.h"
-#include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/PianoRoll/PianoRollComponent/PianoRollComponent.h"
 #include "UI/PianoRoll/ScaleAssistPanel.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
