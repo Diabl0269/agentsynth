@@ -11,8 +11,8 @@
 
 #include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/Modules/SamplerModule.h"
-#include "../Source/UI/SampleWaveformComponent.h"
 #include "TestAudioHelpers.h"
+#include "UI/ModuleViews/SampleWaveformComponent.h"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <juce_audio_formats/juce_audio_formats.h>

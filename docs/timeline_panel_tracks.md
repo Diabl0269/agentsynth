@@ -13,7 +13,7 @@ roll, the automation strip, and keyboard/focus arbitration live in
 
 ## 3. Track Headers, Binding Chips, Add-Track
 
-`Source/UI/TimelineTrackHeaderComponent.h/.cpp` (`synth::ui::TimelineTrackHeaderComponent`) — one
+`Source/UI/Timeline/TimelineTrackHeaderComponent.h/.cpp` (`synth::ui::TimelineTrackHeaderComponent`) — one
 row per `synth::Track` (`Metrics::timelineTrackRowHeight`, 56 px — shared with the clip-lane area,
 see `docs/timeline_panel_clips_automation.md` §1, so header rows and clip rows always line up), living in the panel's track-header
 column. The column is a fixed
@@ -202,7 +202,7 @@ performs the real edit as ONE undo step whose undo target is the original colour
 `kMidiDestinationsMenuId`, offered only when `offersMidiDestinationsMenuEntryForTest()` says the
 track's binding resolves to something with MIDI to send. Choosing it (or a test calling
 `applyBindingMenuChoice(kMidiDestinationsMenuId)`) opens a `synth::ui::MidiDestinationPicker`
-(`Source/UI/MidiDestinationPicker.h`) — a searchable, multi-select list of every live
+(`Source/UI/Timeline/MidiDestinationPicker.h`) — a searchable, multi-select list of every live
 MIDI-instrument node the track's bound Track In node could send MIDI to — in a `juce::CallOutBox`
 anchored on the chip, via `openMidiDestinationsPicker()`/`buildMidiDestinationPicker()` (mirroring
 the colour swatch's build/launch split, including `createMidiDestinationPickerForTest()` and a
@@ -237,7 +237,7 @@ state itself, since it can't see whether another track's lane is the one current
 lanes closes the strip; anything else (closed, or open on a different track) opens the track's first
 lane.
 
-**Colour** resolves *only* through `synth::ui::resolveTrackColour` (`Source/UI/TrackColour.h`): the
+**Colour** resolves *only* through `synth::ui::resolveTrackColour` (`Source/UI/Timeline/TrackColour.h`): the
 track's stored `colourArgb` when non-zero, otherwise a deterministic 8-entry palette indexed by the
 track's position; a muted track comes back desaturated and dimmed (same hue). The palette is fixed
 rather than theme-derived because the add-track flow *writes* the resolved colour into the document —

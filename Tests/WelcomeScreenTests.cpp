@@ -17,7 +17,7 @@
 #include "../Source/ProjectBundle.h"
 #include "../Source/UI/Theme/AppLookAndFeel.h"
 #include "../Source/UI/Theme/ThemeManager.h"
-#include "../Source/UI/WelcomeScreenComponent.h"
+#include "UI/Chrome/WelcomeScreenComponent.h"
 #include "WhatsNewData.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

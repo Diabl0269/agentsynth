@@ -2,7 +2,7 @@
 // AudioEngine/TimelineDoc/BounceRunner, so these tests drive the real controls and read back the
 // BounceOptions/destination Export would send, with no audio device and no message loop needed.
 
-#include "../Source/UI/ExportAudioDialog.h"
+#include "UI/Chrome/ExportAudioDialog.h"
 #include <gtest/gtest.h>
 
 using synth::BounceFormat;

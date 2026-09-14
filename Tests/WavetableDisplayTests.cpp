@@ -3,7 +3,7 @@
 // gated-repaint contract, and paint smoke tests for built-in and loaded tables.
 
 #include "../Source/Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
-#include "../Source/UI/WavetableDisplayComponent.h"
+#include "UI/ModuleViews/WavetableDisplayComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 

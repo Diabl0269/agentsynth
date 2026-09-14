@@ -10,12 +10,12 @@
 #include "../Source/Modules/VCAModule.h"
 #include "../Source/Modules/VoiceMixerModule.h"
 #include "../Source/Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
-#include "../Source/UI/GraphEditor/GraphEditor.h"
-#include "../Source/UI/LayoutUtil.h"
-#include "../Source/UI/ModuleComponent/ModuleComponent.h"
-#include "../Source/UI/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "../Source/UI/Theme/AppLookAndFeel.h"
 #include "../Source/UI/Theme/BuiltInThemes.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/LayoutUtil.h"
+#include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>

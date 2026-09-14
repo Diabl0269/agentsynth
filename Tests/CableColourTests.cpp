@@ -7,12 +7,12 @@
 
 #include "../Source/AI/AIStateMapper/AIStateMapper.h"
 #include "../Source/Modules/ModuleBase.h"
-#include "../Source/UI/CableColour.h"
-#include "../Source/UI/GraphEditor/GraphEditor.h"
-#include "../Source/UI/ModuleComponent/ModuleComponent.h"
-#include "../Source/UI/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "../Source/UI/Theme/BuiltInThemes.h"
 #include "../Source/UI/Theme/ThemeLoader.h"
+#include "UI/Graph/CableColour.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

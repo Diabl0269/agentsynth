@@ -24,9 +24,9 @@
 #include "../Source/Plugin/Hosting/HostedPluginEditorWindow.h"
 #include "../Source/Plugin/Hosting/HostedPluginModule.h"
 #include "../Source/Plugin/Hosting/HostedPluginWindowManager.h"
-#include "../Source/UI/GraphEditor/GraphEditor.h"
-#include "../Source/UI/ModuleComponent/ModuleComponent.h"
 #include "StubPluginInstance.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include <chrono>
 #include <gtest/gtest.h>
 

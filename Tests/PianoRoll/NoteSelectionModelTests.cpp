@@ -4,7 +4,7 @@
 
 #include "PianoRollTestHelpers.h"
 
-#include "../../Source/UI/NoteSelectionModel.h"
+#include "UI/PianoRoll/NoteSelectionModel.h"
 
 // ============================================================================
 // 1. NoteSelectionModel

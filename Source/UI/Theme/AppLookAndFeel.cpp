@@ -1,5 +1,5 @@
 #include "AppLookAndFeel.h"
-#include "../CableColour.h"
+#include "UI/Graph/CableColour.h"
 
 #ifdef HAS_FONT_ASSETS
 #include "BinaryData.h"

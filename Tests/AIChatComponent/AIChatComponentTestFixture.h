@@ -12,8 +12,8 @@
 #include "../../Source/AudioEngine.h"
 #include "../../Source/Auth/InMemoryTokenStore.h"
 #include "../../Source/Branding.h"
-#include "../../Source/UI/AIChatComponent.h"
-#include "../../Source/UI/AccountRow.h"
+#include "UI/Assistant/AIChatComponent.h"
+#include "UI/Assistant/AccountRow.h"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

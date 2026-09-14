@@ -13,13 +13,13 @@ ruler/grid, track headers, playhead, transport bar, metronome/count-in and edit-
 
 ## 2. Piano Roll
 
-`Source/UI/PianoRollComponent/PianoRollComponent.h` (`synth::ui::PianoRollComponent`) is a minimal
+`Source/UI/PianoRoll/PianoRollComponent/PianoRollComponent.h` (`synth::ui::PianoRollComponent`) is a minimal
 per-clip note editor shown INSIDE the timeline panel's lanes region — no separate window. Backed by
-`synth::ui::NoteSelectionModel` (`Source/UI/NoteSelectionModel.h`), `ClipSelectionModel`'s sibling
+`synth::ui::NoteSelectionModel` (`Source/UI/PianoRoll/NoteSelectionModel.h`), `ClipSelectionModel`'s sibling
 keyed on `synth::NoteId` with the identical add/remove/toggle/setSelection/retainOnly contract,
 plus a `noteHitTestMarquee` free function mirroring `clipHitTestMarquee`.
 
-**Source layout** (`Source/UI/PianoRollComponent/`, split by concern — FRO64):
+**Source layout** (`Source/UI/PianoRoll/PianoRollComponent/`, split by concern — FRO64):
 - `PianoRollComponent.h` — the class declaration, shared by every unit below.
 - `PianoRollComponent.cpp` — construction/teardown, clip open/close entry points, horizontal geometry.
 - `PianoRollScaleAssist.cpp` — the scale-assist panel and its Generate action.
@@ -180,7 +180,7 @@ see the CLAUDE.md font-swap invariant).
 
 **Gridlines** are drawn from state alone, faintest level first so a bar line always wins a shared
 pixel — and from the SAME `GridLineLevel`/`gridLineColourFor`/`gridLevelIsReadable` policy
-(`Source/UI/TimelineClipLaneArea/TimelineClipLaneArea.h`, see `docs/timeline_panel_core.md` §2) the clip lanes paint their own grid from, so the
+(`Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h`, see `docs/timeline_panel_core.md` §2) the clip lanes paint their own grid from, so the
 two surfaces can never disagree on what's visible or how dark it is at a given zoom: the current
 snap division (`GridLineLevel::Subdivision`, alpha 0.28 — only when it is finer than a beat,
 `Snap::Off` has no division at all), beats (`Beat`, 0.50), bars (`Bar`, 0.85), each lifted halfway
@@ -197,7 +197,7 @@ per-key or C-only label in the keys column per `KeyLabelMode` (mono font via `ju
 getDefaultMonospacedFontName()`, resolved to the theme's mono family by `AppLookAndFeel::
 getTypefaceForFont` — never a raw family string), and the clip's span outside `[clipStart,
 clipEnd)` dimmed. Notes are rounded rects whose fill/border colours come from the single resolver
-`synth::ui::resolveNoteColour()` (`Source/UI/NoteColour.h` — see [`theming.md` §12](theming.md#12-note-colours)):
+`synth::ui::resolveNoteColour()` (`Source/UI/PianoRoll/NoteColour.h` — see [`theming.md` §12](theming.md#12-note-colours)):
 velocity brightens the fill, a note the active scale (Scale Assist, below) flags as outside it
 gets `noteOutOfScale` regardless of any per-pitch-class override, and selected notes get a
 `noteSelected`-coloured border. Repaints happen only on doc/listener refresh, interaction, and
@@ -500,7 +500,7 @@ its shared delta so the group's earliest start never goes below 0 and its latest
 Move branch, extended with an upper bound because notes, unlike clips, live inside one). A note
 whose available room shrinks to zero-length is rejected by `TimelineDoc::addNote`'s own validation.
 
-**Scale Assist panel.** `Source/UI/ScaleAssistPanel.h` (`synth::ui::ScaleAssistPanel`) is a
+**Scale Assist panel.** `Source/UI/PianoRoll/ScaleAssistPanel.h` (`synth::ui::ScaleAssistPanel`) is a
 deliberately dumb, `kScalePanelWidth` = 170 px wide sibling docked left of the keys column, shown
 by a header "Scale" button and hidden by default (persisted, see below). It holds no reference to
 the roll, the doc, or any undo manager — every user action travels OUT through a
@@ -604,7 +604,7 @@ decision, not scale data.
 
 **Edge auto-scroll (roll side).** The piano roll runs the identical gated-timer contract
 `TimelineClipLaneArea` established for the clip lanes (see **Edge auto-scroll during a drag** in
-§1 above) via the same `Source/UI/EdgeAutoScroll.h` helper and constants, extended to BOTH axes:
+§1 above) via the same `Source/UI/Timeline/EdgeAutoScroll.h` helper and constants, extended to BOTH axes:
 `updateAutoScrollArming()`/`autoScrollTick()` check `edgeScrollVelocity` against the grid rect's
 horizontal AND vertical edges (`kEdgeAutoScrollMaxPxPerTick` horizontal, matching the clip lanes'
 value exactly so a drag that crosses from one editor to the other feels identical; a separate

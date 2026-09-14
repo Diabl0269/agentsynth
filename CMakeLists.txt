@@ -394,15 +394,15 @@ add_library(Core STATIC
     Source/Auth/DeviceIdStore.h
     Source/Auth/DeviceIdStore.cpp
     # UI utilities
-    Source/UI/LayoutUtil.h
-    Source/UI/LayoutUtil.cpp
-    Source/UI/SelectionModel.h
-    Source/UI/StatusBarComponent.h
-    Source/UI/StatusBarComponent.cpp
-    Source/UI/ToolbarComponent.h
-    Source/UI/ToolbarComponent.cpp
-    Source/UI/MinimapComponent.h
-    Source/UI/MinimapComponent.cpp
+    Source/UI/Layout/LayoutUtil.h
+    Source/UI/Layout/LayoutUtil.cpp
+    Source/UI/Graph/SelectionModel.h
+    Source/UI/Chrome/StatusBarComponent.h
+    Source/UI/Chrome/StatusBarComponent.cpp
+    Source/UI/Chrome/ToolbarComponent.h
+    Source/UI/Chrome/ToolbarComponent.cpp
+    Source/UI/Graph/MinimapComponent.h
+    Source/UI/Graph/MinimapComponent.cpp
     # Theme system
     Source/UI/Theme/Theme.h
     Source/UI/Theme/ThemeManager.h

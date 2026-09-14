@@ -18,8 +18,8 @@
 #include "../../Source/Modules/MacroMidiInletModule.h"
 #include "../../Source/Modules/MacroMidiOutletModule.h"
 #include "../../Source/Modules/MacroOutletModule.h"
-#include "../../Source/UI/MacroCardComponent.h"
-#include "../../Source/UI/PreferencesSettingsTab.h"
+#include "UI/Macros/MacroCardComponent.h"
+#include "UI/Settings/PreferencesSettingsTab.h"
 
 // ============================================================================
 // Ungroup removes the macro's ports and splices the cable back (founder-review fix G7,

@@ -2,7 +2,7 @@
 // Headless unit tests for ScopeComponent static helpers and paint smoke tests.
 
 #include "../Source/Modules/VisualBuffer.h"
-#include "../Source/UI/ScopeComponent.h"
+#include "UI/ModuleViews/ScopeComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 

@@ -1,5 +1,5 @@
 #include "../Source/ShortcutManager.h"
-#include "../Source/UI/ShortcutsSettingsTab.h"
+#include "UI/Settings/ShortcutsSettingsTab.h"
 #include <gtest/gtest.h>
 
 namespace {
@@ -1002,7 +1002,7 @@ TEST_F(ShortcutManagerTest, ExportPatchOnlyDoesNotCollideWithNeighbouringChords)
 
 // ---------------------------------------------------------------------------
 // T159: the focus-region framework's four new General actions — Tab/Shift+Tab cycling plus the two
-// direct-focus shortcuts. See Source/UI/FocusRegion.h for the registry these dispatch into and
+// direct-focus shortcuts. See Source/UI/Layout/FocusRegion.h for the registry these dispatch into and
 // Tests/FocusRegionTests.cpp for the registry's own logic tests.
 // ---------------------------------------------------------------------------
 

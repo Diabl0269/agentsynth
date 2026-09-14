@@ -4,32 +4,32 @@ add_executable(TimelineOpsHarness
     # UI-refresh callbacks; Core doesn't compile GraphEditor itself (only AgentSynth/Tests do),
     # so any executable linking Core must supply it too or the link fails on GraphEditor's vtable
     # and typeinfo. Same reason Tools/AIPatchHarness and Tools/AIEvalHarness carry these.
-    ${CMAKE_SOURCE_DIR}/Source/UI/GraphEditor/GraphEditor.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/GraphEditor/GraphEditorCables.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/GraphEditor/GraphEditorConnections.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/GraphEditor/GraphEditorSmartConnections.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/GraphEditor/GraphEditorSmartConnectionsApply.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/GraphEditor/GraphEditorCanvas.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/GraphEditor/GraphEditorSelection.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/GraphEditor/GraphEditorMacroGeometry.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/GraphEditor/GraphEditorMacroGrouping.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/GraphEditor/GraphEditorMacroPortSplice.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/GraphEditor/GraphEditorChannels.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/GraphEditor/GraphEditorMacroPorts.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/GraphEditor/GraphEditorCommands.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/GraphEditor/GraphEditorDragDrop.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/GraphEditor/GraphEditorStereoWiring.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/GraphEditor/GraphEditorPersistence.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/ModuleComponent/ModuleComponent.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/ModuleComponent/ModuleComponentEQCard.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/ModuleComponent/ModuleComponentAudioDrop.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/ModuleComponent/ModuleComponentWavetable.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/ModuleComponent/ModuleComponentLayout.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/ModuleComponent/ModuleComponentPaint.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/ModuleComponent/ModuleComponentInteraction.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/MacroCardComponent.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/MacroPortConfigDialog.cpp
-    ${CMAKE_SOURCE_DIR}/Source/UI/ModMatrixComponent.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditor.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorCables.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorConnections.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorSmartConnections.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorSmartConnectionsApply.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorCanvas.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorSelection.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorMacroGeometry.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorMacroGrouping.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorMacroPortSplice.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorChannels.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorMacroPorts.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorCommands.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorDragDrop.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorStereoWiring.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorPersistence.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponent.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponentEQCard.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponentAudioDrop.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponentWavetable.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponentLayout.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Macros/MacroCardComponent.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Macros/MacroPortConfigDialog.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModMatrixComponent.cpp
 )
 
 target_link_libraries(TimelineOpsHarness PRIVATE

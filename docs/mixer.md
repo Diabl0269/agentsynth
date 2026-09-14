@@ -189,7 +189,7 @@ instrument. Linked means:
   versa.
 - **(b) Colour syncs live.** The track colour, the channel's macro colour and the mixer column
   colour always match, and they update **while the colour picker is still being dragged**, not
-  only on commit. `synth::ui::ColourPickerPopup` (`Source/UI/ColourPickerPopup.h`,
+  only on commit. `synth::ui::ColourPickerPopup` (`Source/UI/Chrome/ColourPickerPopup.h`,
   `docs/theming.md` §13) already separates a live-preview callback (fires on every drag/favourite
   click, writes straight into its target with **no undo step**) from a commit-once callback (fires
   once, on close, as the real edit). A linked track/channel fans the SAME preview write out to all
@@ -754,7 +754,7 @@ Main line, in dependency order:
        (`buildChannelChain`), generalized to accept arbitrary left/right feed lists instead of one
        fixed stereo pair (multiple feeds landing on the same side is fine — `AudioProcessorGraph`
        sums them).
-     - *GraphEditor hook* (`Source/UI/GraphEditor/`): `endConnectionDrag` gates on the drag
+     - *GraphEditor hook* (`Source/UI/Graph/GraphEditor/`): `endConnectionDrag` gates on the drag
        being MIDI and the real source node being `ModuleType::TimelineMidiSource`
        (`nodeIsTimelineMidiSource`), covering both the direct-jack path and the collapsed-macro-card
        "existing port jack" path — not the `createMacroPortFromDroppedCable` fallback (dropping a
@@ -808,7 +808,7 @@ Main line, in dependency order:
      short-circuiting on the first hit — backs both the menu's enabled state and the action's own
      no-op guard, so a project where every track already has a channel changes nothing and pushes
      no undo step. Both methods are non-pure `TrackHeaderHost` virtuals with inert defaults
-     (`Source/UI/TimelineTrackHeaderComponent.h`), the same pattern every other "+ Track" action
+     (`Source/UI/Timeline/TimelineTrackHeaderComponent.h`), the same pattern every other "+ Track" action
      uses, so existing test stubs keep compiling untouched.
      - Tests (`Tests/ChannelFlowTests.cpp`, `ChannelFlowTest` fixture):
        `CreateChannelsWrapsEveryChannellessTrackAsOneUndoStep` (two legacy tracks — a bare

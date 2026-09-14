@@ -100,7 +100,7 @@ The timeline's transport spine: play state, sample position, BPM, time signature
 
 #### Export Audio dialog and BounceRunner — chunked, not threaded
 
-The Export Audio dialog (`Source/UI/ExportAudioDialog.h/.cpp`, wired up by `MainComponent::promptExportAudio`) needs a responsive progress bar and a Cancel button that actually works, but `bounce()`'s "message thread, blocking" contract above is load-bearing, not incidental — `AudioEngine::suspendDeviceCallback`/`resumeDeviceCallback`/`prepareForHost` are message-thread only, and `OfflineTransportDriver`'s constructor calls `prepareForHost` too. Running the render on a second thread would call every one of those off the message thread.
+The Export Audio dialog (`Source/UI/Chrome/ExportAudioDialog.h/.cpp`, wired up by `MainComponent::promptExportAudio`) needs a responsive progress bar and a Cancel button that actually works, but `bounce()`'s "message thread, blocking" contract above is load-bearing, not incidental — `AudioEngine::suspendDeviceCallback`/`resumeDeviceCallback`/`prepareForHost` are message-thread only, and `OfflineTransportDriver`'s constructor calls `prepareForHost` too. Running the render on a second thread would call every one of those off the message thread.
 
 The fix is **`synth::BounceRunner`** (`Source/Transport/BounceRunner.h/.cpp`): it drives the *same* `BounceSession` a synchronous `bounce()` would, but from a repeating `juce::Timer` instead of one blocking call — each tick renders a small chunk (64 blocks by default) via `stepRange`/`stepTail`, then returns, letting the message thread's own event loop run in between. There is no second thread anywhere in this path; `BounceSession` never leaves the message thread, so every one of its message-thread-only calls stays exactly where the invariant above requires. At 64 blocks/tick on a 10 ms timer that is on the order of 70x realtime — chunking costs nothing anyone would notice.
 
@@ -368,7 +368,7 @@ The dialog is split in two — `promptUnsavedChanges` (an async `juce::AlertWind
 
 #### Welcome screen (T114/P8-10)
 
-`Source/UI/WelcomeScreenComponent.h/.cpp` — an **app-only** startup overlay replacing the old "always silently auto-load the factory Default preset" behavior (`AudioEngine::initialise()` still loads it, unconditionally; the overlay just sits on top, offering a real choice before the user does anything else with it). It is not a separate window: `MainComponent` adds it as a full-bounds child, last (`addAndMakeVisible` order controls JUCE z-order), so it also occludes the toolbar while visible — none of the toolbar actions make sense until a choice is made.
+`Source/UI/Chrome/WelcomeScreenComponent.h/.cpp` — an **app-only** startup overlay replacing the old "always silently auto-load the factory Default preset" behavior (`AudioEngine::initialise()` still loads it, unconditionally; the overlay just sits on top, offering a real choice before the user does anything else with it). It is not a separate window: `MainComponent` adds it as a full-bounds child, last (`addAndMakeVisible` order controls JUCE z-order), so it also occludes the toolbar while visible — none of the toolbar actions make sense until a choice is made.
 
 - **Gating.** `MainComponent` constructs `welcomeScreen_` only when `ownedAudioEngine != nullptr` — the same idiom `initialiseCommon()` already uses for every other app-only branch (audio-device-state restore, the permissions-gated `AudioEngine::initialise()` call). The plugin ctor is the only one where `ownedAudioEngine` stays null; a hosted plugin's document is host-owned via `getStateInformation`, so this overlay must never exist there. `getWelcomeScreenForTest()` returns null on that path, which is what `WelcomeScreenTests.cpp`'s `NeverConstructsInHostedMode` pins.
 - **Four actions**, each a `std::function` callback the component fires and `MainComponent` interprets — the component itself knows nothing about `AudioEngine`/`PresetManager`/`RecentProjects` beyond the `juce::File` list it's handed:
@@ -496,7 +496,7 @@ Related: look parameters up with `findParameterByID(processor, "paramID")` rathe
 
 ### 7. GraphEditor
 
-`Source/UI/GraphEditor/` — one class (declared in `GraphEditor.h`) split across per-concern translation units (FRO62), none over 1,000 lines, plus a private `GraphEditorInternal.h` for helpers shared by two or more of them. Source layout:
+`Source/UI/Graph/GraphEditor/` — one class (declared in `GraphEditor.h`) split across per-concern translation units (FRO62), none over 1,000 lines, plus a private `GraphEditorInternal.h` for helpers shared by two or more of them. Source layout:
 
 - `GraphEditor.cpp` — constructor/destructor, core lifecycle
 - `GraphEditorCables.cpp` — cable geometry/colour, `GraphContentComponent::paint`/`paintOverChildren`/`resized`
@@ -580,7 +580,7 @@ This is the definitive hook inventory. There are six kinds, and nothing else in 
 
 #### Focus regions (T159)
 
-`Source/UI/FocusRegion.h` — a `synth::ui::FocusRegionRegistry`, owned as a plain `MainComponent` member (deliberately not a `Desktop`-global singleton — a host process can run multiple plugin instances, and a future separate-window mixer/timeline needs its own registry), maps six `FocusRegion`s (`{id, root component, isOpen predicate, open callback}`) onto the toolbar, module library, graph canvas, timeline panel, AI panel and mod matrix. Tab/Shift+Tab cycle keyboard focus between whichever regions are currently *open* (a closed one is skipped, never opened); Cmd+Shift+T/L instead *open* their target first if it's closed, then focus it. Both paths are ordinary `AppCommands`/`ApplicationCommandManager` General actions dispatched through the same `MainComponent::keyPressed` loop every other command uses; the two Tab actions report `isDisabled` (and so are silently suppressed) while `welcomeScreen_` is on screen. Mod Matrix nests *inside* the Canvas region (it's a child component of `GraphEditor`), so `regionContaining` resolves to the most specific match rather than the first-registered one, and `GraphEditor::paintOverChildren` skips its own outline whenever the Mod Matrix holds focus so the two regions never double-paint. Every region root explicitly opts into keyboard focus (`setWantsKeyboardFocus(true)`) so a direct `grabKeyboardFocus()` always lands deterministically on the root itself, rather than depending on JUCE's Y/X-position child descent finding a focus-wanting widget; `MainComponent` is also a `juce::FocusChangeListener` (`globalFocusChanged`, registered/unregistered around `initialiseCommon`/the destructor) that repaints every region root on any focus change, since `Component::focusGained`/`focusLost` are no-op virtuals for most components and nothing would otherwise trigger the accent-outline repaint. See [`docs/shortcuts.md` §Focus regions](shortcuts.md#focus-regions) for the user-facing keybindings and the locked open/skip-when-closed decision.
+`Source/UI/Layout/FocusRegion.h` — a `synth::ui::FocusRegionRegistry`, owned as a plain `MainComponent` member (deliberately not a `Desktop`-global singleton — a host process can run multiple plugin instances, and a future separate-window mixer/timeline needs its own registry), maps six `FocusRegion`s (`{id, root component, isOpen predicate, open callback}`) onto the toolbar, module library, graph canvas, timeline panel, AI panel and mod matrix. Tab/Shift+Tab cycle keyboard focus between whichever regions are currently *open* (a closed one is skipped, never opened); Cmd+Shift+T/L instead *open* their target first if it's closed, then focus it. Both paths are ordinary `AppCommands`/`ApplicationCommandManager` General actions dispatched through the same `MainComponent::keyPressed` loop every other command uses; the two Tab actions report `isDisabled` (and so are silently suppressed) while `welcomeScreen_` is on screen. Mod Matrix nests *inside* the Canvas region (it's a child component of `GraphEditor`), so `regionContaining` resolves to the most specific match rather than the first-registered one, and `GraphEditor::paintOverChildren` skips its own outline whenever the Mod Matrix holds focus so the two regions never double-paint. Every region root explicitly opts into keyboard focus (`setWantsKeyboardFocus(true)`) so a direct `grabKeyboardFocus()` always lands deterministically on the root itself, rather than depending on JUCE's Y/X-position child descent finding a focus-wanting widget; `MainComponent` is also a `juce::FocusChangeListener` (`globalFocusChanged`, registered/unregistered around `initialiseCommon`/the destructor) that repaints every region root on any focus change, since `Component::focusGained`/`focusLost` are no-op virtuals for most components and nothing would otherwise trigger the accent-outline repaint. See [`docs/shortcuts.md` §Focus regions](shortcuts.md#focus-regions) for the user-facing keybindings and the locked open/skip-when-closed decision.
 
 #### Audio recording
 
@@ -871,13 +871,13 @@ A plugin's reported latency is the one number about it that can change *after* i
 
 ### LayoutUtil
 
-`Source/UI/LayoutUtil.h/.cpp`
+`Source/UI/Layout/LayoutUtil.h/.cpp`
 
 Stateless grid-layout helpers (`snap`, `intersectsAny`, `findFreeSlot`, `computeAutoArrange`). No JUCE GUI dependencies — fully headless-testable. See [`docs/layout.md`](layout.md) for the full API reference.
 
 ### ModuleComponent
 
-`Source/UI/ModuleComponent/` — one class (declared in `ModuleComponent.h`) split across per-concern
+`Source/UI/Graph/ModuleComponent/` — one class (declared in `ModuleComponent.h`) split across per-concern
 translation units (FRO65), none over 1,000 lines, plus a private `ModuleComponentInternal.h` for
 constants/helpers shared by two or more of them. Source layout:
 

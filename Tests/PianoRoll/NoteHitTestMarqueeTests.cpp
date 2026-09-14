@@ -4,7 +4,7 @@
 
 #include "PianoRollTestHelpers.h"
 
-#include "../../Source/UI/NoteSelectionModel.h"
+#include "UI/PianoRoll/NoteSelectionModel.h"
 
 // ============================================================================
 // 2. noteHitTestMarquee (named NoteSelectionMarqueeTest so it stays under the "NoteSelection*"

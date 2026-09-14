@@ -511,7 +511,7 @@ void MainComponent::promptExportPatchOnly() {
 }
 
 // The offline bounce/export flow (P8-5): show the options dialog, then drive a BounceRunner from
-// what it reports. See Source/Transport/BounceRunner.h and Source/UI/ExportAudioDialog.h for why
+// what it reports. See Source/Transport/BounceRunner.h and Source/UI/Chrome/ExportAudioDialog.h for why
 // the render is chunked rather than blocking, and docs/architecture.md for the full design.
 void MainComponent::promptExportAudio() {
     if (isBounceInProgress_)

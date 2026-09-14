@@ -5,7 +5,7 @@
 // TimelineTrackHeaderTests.cpp's own "talk to the app only through callbacks, stub the rest"
 // approach (see that file's header comment).
 
-#include "../Source/UI/MidiDestinationPicker.h"
+#include "UI/Timeline/MidiDestinationPicker.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 

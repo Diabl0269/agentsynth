@@ -18,10 +18,10 @@
 #include "../Source/Modules/VCAModule.h"
 #include "../Source/Modules/VoiceMixerModule.h"
 #include "../Source/PresetManager.h"
-#include "../Source/UI/GraphEditor/GraphEditor.h"
-#include "../Source/UI/LayoutUtil.h"
-#include "../Source/UI/ModuleComponent/ModuleComponent.h"
 #include "MainComponent/MainComponent.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/LayoutUtil.h"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <iostream>

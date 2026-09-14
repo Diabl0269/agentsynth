@@ -107,7 +107,7 @@ enum CommandIDs {
     // CMakeLists.txt's WhatsNewData.h generation and MainComponent::showWhatsNewDialog. Same
     // unconditional-registration, no-chord treatment as showWelcomeScreen above.
     whatsNew,
-    // T159: the focus-region framework (see Source/UI/FocusRegion.h and docs/shortcuts.md). Tab and
+    // T159: the focus-region framework (see Source/UI/Layout/FocusRegion.h and docs/shortcuts.md). Tab and
     // Shift+Tab cycle keyboard focus between whichever of the app's regions are currently OPEN
     // (Library/Canvas/Timeline/AI Panel/Mod Matrix); the two Focus* commands open their target
     // region first if it is closed, then focus it. All four are General, like every other
@@ -493,7 +493,7 @@ public:
             juce::KeyPress('-', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
 
         // T159: Tab/Shift+Tab cycle keyboard focus between the app's currently OPEN focus regions
-        // (Library, Canvas, Timeline, AI Panel, Mod Matrix — see Source/UI/FocusRegion.h; a closed
+        // (Library, Canvas, Timeline, AI Panel, Mod Matrix — see Source/UI/Layout/FocusRegion.h; a closed
         // region is skipped, never opened, by the cycle itself). Bare Tab is free to claim: this
         // codebase has never customized it (no KeyPress::tabKey/FocusTraverser/setExplicitFocusOrder
         // usage anywhere before T159) — the only prior behaviour was JUCE's own generic

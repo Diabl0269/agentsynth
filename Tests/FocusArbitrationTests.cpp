@@ -12,9 +12,9 @@
 #include "../Source/AudioEngine.h"
 #include "../Source/MainComponent/MainComponent.h"
 #include "../Source/Timeline/TimelineDoc.h"
-#include "../Source/UI/PreferencesSettingsTab.h"
 #include "../Source/UI/Theme/AppLookAndFeel.h"
 #include "../Source/UI/Theme/ThemeManager.h"
+#include "UI/Settings/PreferencesSettingsTab.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

@@ -87,7 +87,7 @@ std::pair<const void*, int> IconLibrary::binaryDataForIcon(Icon id) {
         // Minimap toggle (issue #159).
         {BinaryData::toggleminimap_svg, BinaryData::toggleminimap_svgSize},
         {BinaryData::moduledualio_svg, BinaryData::moduledualio_svgSize},
-        // Timeline edit-tool strip (Cubase-style tools; see Source/UI/EditTool.h).
+        // Timeline edit-tool strip (Cubase-style tools; see Source/UI/Timeline/EditTool.h).
         {BinaryData::toolselect_svg, BinaryData::toolselect_svgSize},
         {BinaryData::toolsplit_svg, BinaryData::toolsplit_svgSize},
         {BinaryData::toolglue_svg, BinaryData::toolglue_svgSize},

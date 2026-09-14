@@ -9,7 +9,7 @@
 // The animation itself is VBlank-driven and cannot tick headlessly, so these drive
 // setSectionProgress() directly — the same value the animator writes each frame.
 
-#include "../Source/UI/ModuleLibraryComponent/ModuleLibraryComponent.h"
+#include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 

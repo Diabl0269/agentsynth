@@ -9,9 +9,9 @@
 //                     (against whatever theme was active then) and being parented (which is
 //                     always after MainComponent applies the final persisted theme)
 
-#include "../Source/UI/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "../Source/UI/Theme/AppLookAndFeel.h"
 #include "../Source/UI/Theme/BuiltInThemes.h"
+#include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 

@@ -7,7 +7,7 @@
 // the pure-math and pure-string sections of UIAnimation.h, which have no JUCE
 // GUI dependencies.
 
-#include "../Source/UI/UIAnimation.h"
+#include "UI/Layout/UIAnimation.h"
 #include <cmath>
 #include <gtest/gtest.h>
 

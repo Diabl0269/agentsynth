@@ -4,8 +4,8 @@
 // (Tests/MacroAutoPort/MacroAutoPort*Tests.cpp). Header-only; not compiled on its own and not
 // registered in Tests/CMakeLists.txt.
 
-#include "../../Source/UI/GraphEditor/GraphEditor.h"
-#include "../../Source/UI/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include <atomic>
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>

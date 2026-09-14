@@ -16,11 +16,11 @@ exceptions), and the Figma-style alignment guides shown while dragging a module.
 
 Several in-module visualizer components provide real-time signal display inside module cards; one of them (`EQCurveComponent`) is also an editor.
 
-### FrequencyGrid (`Source/UI/FrequencyGrid.h`)
+### FrequencyGrid (`Source/UI/ModuleViews/FrequencyGrid.h`)
 
 Not a component — the pure log-frequency / dB coordinate maths shared by the two frequency-domain views (`FrequencyResponseComponent` for Filter, `EQCurveComponent` for Parametric EQ). Both plot over the same 20 Hz – 20 kHz log axis, so `freqToX` / `xToFreq` / `indexToFreq` / `formatHzLabel` / `findPeakBin` live here once. The dB axis is *not* fixed — `dbToY` / `yToDb` take `minDb` and `maxDb` per call, because the filter view needs an asymmetric −40…+50 dB window (resonance peaks overshoot a long way) while the EQ view uses a symmetric ±30 dB one. Each component still paints its own grid: they differ in dB step, label set, and whether the 0 dB line is emphasised.
 
-### FrequencyResponseComponent (`Source/UI/FrequencyResponseComponent.h`)
+### FrequencyResponseComponent (`Source/UI/ModuleViews/FrequencyResponseComponent.h`)
 
 Serum-style frequency-response curve with an optional FFT spectrum overlay, used by `FilterModule` cards. **Hidden by default** on the card — a "Show Response" toggle reveals it (same opt-in pattern as "Show Scope"); the nested "Show Spectrum" control only appears while the response view is open. The component's 30 Hz timer starts in `visibilityChanged` only while visible, so a closed Filter card pays no animation cost.
 
@@ -43,7 +43,7 @@ The stroked path is **not** clamped to the bottom of the view: magnitudes may fa
 
 All axis helpers forward to `synth::ui::FrequencyGrid`; they stay as the component's public API so existing callers and tests are unaffected.
 
-### EQCurveComponent (`Source/UI/EQCurveComponent.h`)
+### EQCurveComponent (`Source/UI/ModuleViews/EQCurveComponent.h`)
 
 Interactive response curve for `ParametricEQModule`, in the traditional DAW idiom. Used twice over the same module: inline on the card and inside the pop-out `EQWindow`. Both views stay in sync automatically — each one's timer picks the other's edits up on its next tick.
 
@@ -69,13 +69,13 @@ The mouse handlers are deliberately thin wrappers over public `addPointAt` / `re
 - **Spectrum overlay**: 1024-point FFT of the module's `VisualBuffer`, drawn *behind* the curve over its own −80…0 dB window, smoothed with an exponential moving average. **On by default** here (unlike the Filter card) because the curve is meant to be read against it.
 - **Repaint discipline**: 30 Hz timer that repaints when a band setting or the output trim changed, when hover/selection changed, or while the spectrum has actual signal. The analyser gates on peak < 1e-5 and repaints one final frame on the transition to silence, so a default-on spectrum still settles to **zero repaints on an idle patch** — that gate is what keeps this compliant with §2–3. Never make it unconditional.
 
-### EQWindow (`Source/UI/EQWindow.h`)
+### EQWindow (`Source/UI/ModuleViews/EQWindow.h`)
 
 Pop-out editor for a Parametric EQ, opened from the card's "Open EQ Window" button. Content-only `juce::Component` (same pattern as `SettingsWindow`); the caller wraps it in a `juce::DialogWindow` via `LaunchOptions::launchAsync()`. Hosts a second `EQCurveComponent` over the same module at 720×420 (resizable), plus a spectrum toggle and a gesture hint.
 
 `ModuleComponent` holds the dialog as a `Component::SafePointer` and **deletes it in `detachFromProcessor()`** — the window references the module, so leaving it open across a graph rebuild would dangle. Re-clicking the button brings the existing window to front rather than opening a second one.
 
-### ScopeComponent (`Source/UI/ScopeComponent.h`)
+### ScopeComponent (`Source/UI/ModuleViews/ScopeComponent.h`)
 
 Oscilloscope waveform display used by all modules that have a `VisualBuffer`.
 
@@ -93,7 +93,7 @@ Oscilloscope waveform display used by all modules that have a `VisualBuffer`.
 
 **Themed colours**: resolved via `dynamic_cast<AppLookAndFeel*>` — `border` for grid, `textDisabled` for no-signal label, `accent` for the waveform. When the cast fails (headless), hardcoded fallbacks are used (`0xff2A2F38`, `0xff5C6470`, limegreen).
 
-### ThresholdControlComponent (`Source/UI/ThresholdControlComponent.h`)
+### ThresholdControlComponent (`Source/UI/ModuleViews/ThresholdControlComponent.h`)
 
 Live threshold readout used by Sample & Hold (meter-only, bipolar), ADSR (slider + unipolar meter)
 and Comparator (slider + bipolar meter). The Decibels scale is ready for Compressor / Limiter to
@@ -127,7 +127,7 @@ moves past a visible amount (see `needsRepaint`), leaving the parent's cached im
 | `needsRepaint` | `static bool needsRepaint(...) noexcept` | Mirrors the `timerCallback` repaint gate |
 | `getFlashFrames` | `static constexpr int getFlashFrames() noexcept` | Ticks the fired-flash stays lit |
 
-### WavetableDisplayComponent (`Source/UI/WavetableDisplayComponent.h`)
+### WavetableDisplayComponent (`Source/UI/ModuleViews/WavetableDisplayComponent.h`)
 
 Wavetable frame view used by the `Wavetable` module card. Draws the frame currently under the scan position as a solid trace, with `kGhostFrames` (3) receding low-alpha traces sampled slightly further along the stack so the scan direction and the table's depth read as three-dimensional. Captioned with the table name and `frame/total`.
 
@@ -180,7 +180,7 @@ The final size is pinned by `EstimatedModuleSizesMatchTheRealComponents`; `Wavet
 
 Guidelines to preserve smooth frame rates:
 
-- **`ModuleComponent` is buffered to an image via `synth::ui::ZoomFrozenCachedImage`** (`Source/UI/ZoomFrozenCachedImage.h`), NOT raw `setBufferedToImage(true)`. JUCE's standard cached image keys on the *accumulated* device scale (`zoomLevel × deviceScale`), so every wheel tick used to re-rasterize every visible card. During a zoom gesture, `GraphEditor` freezes each card's raster scale (`setModuleRasterFrozen(true)`) — the existing image is resampled, not re-rendered — and thaws `kZoomSettleMs` (140 ms) after the last zoom event with exactly one crisp re-render. Never call `setBufferedToImage()` on `ModuleComponent` — JUCE asserts and silently deletes the custom cache. The `GraphEditor` 30 Hz connection animation blits these cached images rather than re-running JUCE text layout and parameter read on every animation frame. **Do not reintroduce unconditional `repaint()` calls in `timerCallback` on module components or their always-visible children.**
+- **`ModuleComponent` is buffered to an image via `synth::ui::ZoomFrozenCachedImage`** (`Source/UI/Layout/ZoomFrozenCachedImage.h`), NOT raw `setBufferedToImage(true)`. JUCE's standard cached image keys on the *accumulated* device scale (`zoomLevel × deviceScale`), so every wheel tick used to re-rasterize every visible card. During a zoom gesture, `GraphEditor` freezes each card's raster scale (`setModuleRasterFrozen(true)`) — the existing image is resampled, not re-rendered — and thaws `kZoomSettleMs` (140 ms) after the last zoom event with exactly one crisp re-render. Never call `setBufferedToImage()` on `ModuleComponent` — JUCE asserts and silently deletes the custom cache. The `GraphEditor` 30 Hz connection animation blits these cached images rather than re-running JUCE text layout and parameter read on every animation frame. **Do not reintroduce unconditional `repaint()` calls in `timerCallback` on module components or their always-visible children.**
 - **`buildVisibleCables()` is memoized.** `GraphEditor::repaintCanvas()` is the single "canvas changed" seam that drops the memo and repaints (`content.repaint()`); any new repaint of the canvas content must go through `repaintCanvas()`, never `content.repaint()` directly.
 - **Gated 15 Hz repaint**: `ModuleComponent::timerCallback` repaints only when the display needs to change — specifically when RMS level changes, active modulation routing changes, or the sequencer step index changes. The timer runs at 15 Hz (`startTimerHz(15)`).
 - **Single re-skin pass on theme switch**: `AppLookAndFeel::applyTheme()` → `sendLookAndFeelChangeMessage()` → one `repaint()`. No timer is started and no continuous repaint is added during or after a theme switch.
@@ -194,7 +194,7 @@ Guidelines to preserve smooth frame rates:
 
 ## 3. Animation System (Phase 5)
 
-Phase 5 introduces a shared animation infrastructure in `Source/UI/UIAnimation.h` (namespace `synth::ui`). All motion in the app uses this helper. The `juce_animation` module is linked into both `Core` and the `AgentSynth` app target.
+Phase 5 introduces a shared animation infrastructure in `Source/UI/Layout/UIAnimation.h` (namespace `synth::ui`). All motion in the app uses this helper. The `juce_animation` module is linked into both `Core` and the `AgentSynth` app target.
 
 ### Easing functions
 

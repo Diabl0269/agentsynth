@@ -30,8 +30,8 @@
 #include "../../Source/Modules/VCAModule.h"
 #include "../../Source/Modules/WavetableOscillatorModule/WavetableOscillatorModule.h"
 #include "../../Source/PresetManager.h"
-#include "../../Source/UI/LayoutUtil.h"
 #include "../../Source/UI/Theme/BuiltInThemes.h"
+#include "UI/Layout/LayoutUtil.h"
 
 TEST_F(GraphEditorTest, InitializationAndResizing) {
     AudioEngine engine;

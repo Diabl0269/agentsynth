@@ -13,11 +13,11 @@
 #include "../../Source/Modules/ModuleBase.h"
 #include "../../Source/Plugin/Hosting/HostedPluginModule.h"
 #include "../../Source/Plugin/Hosting/PluginScanService.h"
-#include "../../Source/UI/GraphEditor/GraphEditor.h"
-#include "../../Source/UI/ModuleComponent/ModuleComponent.h"
-#include "../../Source/UI/TimelineTrackHeaderComponent.h"
 #include "../StubPluginInstance.h"
 #include "MainComponent/MainComponent.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent.h"
 #include <array>
 #include <chrono>
 #include <gtest/gtest.h>

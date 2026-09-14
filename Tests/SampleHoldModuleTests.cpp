@@ -10,7 +10,7 @@
 //   • Edge cases: zero-length buffer, no trigger channel, prepare/reset
 
 #include "Modules/SampleHoldModule.h"
-#include "UI/TriggerMeterComponent.h"
+#include "UI/ModuleViews/TriggerMeterComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <set>

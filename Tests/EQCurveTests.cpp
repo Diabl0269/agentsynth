@@ -9,10 +9,10 @@
 //   • EQCurveComponent / EQWindow — paint smoke tests including the empty state and FFT overlay
 
 #include "../Source/Modules/FX/ParametricEQModule.h"
-#include "../Source/UI/EQCurveComponent.h"
-#include "../Source/UI/EQWindow.h"
-#include "../Source/UI/FrequencyGrid.h"
-#include "../Source/UI/FrequencyResponseComponent.h"
+#include "UI/ModuleViews/EQCurveComponent.h"
+#include "UI/ModuleViews/EQWindow.h"
+#include "UI/ModuleViews/FrequencyGrid.h"
+#include "UI/ModuleViews/FrequencyResponseComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 

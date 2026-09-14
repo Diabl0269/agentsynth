@@ -234,7 +234,7 @@ The four **waveform icons** (`WaveformSine`, `WaveformSaw`, `WaveformSquare`, `W
 
 **`Icon::ModuleDualIO`** (index 30) is the module-header toggle that splits a collapsed `"Audio"` jack into separate Left/Right jacks. There is no universal stereo-split glyph; this one is a Y-fork into two jacks. The button's tooltip carries the Dual I/O on/off copy. See [`fx_modules.md` § Stereo I/O](fx_modules.md#stereo-io-dual-io-toggle).
 
-**`Icon::ToolSelect` … `Icon::ToolDraw`** (indices 31–36) are the six glyphs for the timeline edit-tool strip (`synth::ui::EditTool` — Select, Split, Glue, Erase, Mute, Draw; see [`Source/UI/EditTool.h`](../Source/UI/EditTool.h)): a pointer arrow, scissors, a glue bottle, an angled eraser block, a crossed-out speaker (visually distinct from `ModuleMute` — that one is an outlined speaker with a small corner X; this one is a solid-filled speaker with a single strike-through slash), and a pencil at ~45°. `Source/UI/ToolCursors.h`'s `makeToolCursor()` renders these same tinted Drawables into the custom per-tool mouse cursor shown over the clip lanes / piano roll, rather than shipping a second cursor-only asset — see that header's doc comment for the per-tool hotspot table.
+**`Icon::ToolSelect` … `Icon::ToolDraw`** (indices 31–36) are the six glyphs for the timeline edit-tool strip (`synth::ui::EditTool` — Select, Split, Glue, Erase, Mute, Draw; see [`Source/UI/Timeline/EditTool.h`](../Source/UI/Timeline/EditTool.h)): a pointer arrow, scissors, a glue bottle, an angled eraser block, a crossed-out speaker (visually distinct from `ModuleMute` — that one is an outlined speaker with a small corner X; this one is a solid-filled speaker with a single strike-through slash), and a pencil at ~45°. `Source/UI/Timeline/ToolCursors.h`'s `makeToolCursor()` renders these same tinted Drawables into the custom per-tool mouse cursor shown over the clip lanes / piano roll, rather than shipping a second cursor-only asset — see that header's doc comment for the per-tool hotspot table.
 
 **`Icon::TrackMidi`, `Icon::TrackAudio`, `Icon::TrackAutomation`** (indices 37–39) are the timeline track header's kind-badge glyphs — one per `synth::TrackKind`, drawn in place of the old `"MIDI"`/`"AUD"`/`"AUTO"` text pill when a themed `AppLookAndFeel` and the asset library are both present (`TimelineTrackHeaderComponent::kindBadgeIcon`; see [`timeline_panel_tracks.md` §3](timeline_panel_tracks.md#3-track-headers-binding-chips-add-track)). The text pill remains the fallback in a headless build or when the icon asset is missing — the badge is identity chrome either way, never a control.
 
@@ -610,7 +610,7 @@ only called when the toolbar transitions **into** narrow mode (detected by compa
 ## 11. Cable colours
 
 Wires on the patch canvas are coloured through a single resolver,
-`synth::ui::resolveCableColour()` in `Source/UI/CableColour.h`. Nothing in the paint path picks a
+`synth::ui::resolveCableColour()` in `Source/UI/Graph/CableColour.h`. Nothing in the paint path picks a
 wire colour directly — `GraphEditor::colourForCable()` is the only caller, and the Appearance
 settings swatches resolve through the same function, so a swatch can never show a colour the
 canvas does not actually use.
@@ -645,7 +645,7 @@ floor against both `bg1` and `surface`, every built-in theme) and
 ### Wire activity/hover treatment is theme-polarity aware
 
 The core stroke's activity/hover treatment lives in `synth::ui::wireCoreColour`
-(`Source/UI/CableColour.h`), called from `AppLookAndFeel::drawConnectionWire` — never inline a
+(`Source/UI/Graph/CableColour.h`), called from `AppLookAndFeel::drawConnectionWire` — never inline a
 brightness ramp at a paint site. Dark themes keep the long-standing idle-dim law (50% brightness
 at idle, token colour at full activity; hover = `brighter(0.3)`). Light themes draw an idle wire
 at its exact token colour — the dark-theme dim law darkened every hue toward black on a light
@@ -683,7 +683,7 @@ that is what the settings swatches render, so a pinned colour is shown at full s
 ## 12. Note colours
 
 Piano-roll note bodies are coloured through a single resolver, `synth::ui::resolveNoteColour()`
-in `Source/UI/NoteColour.h` — the note-colour analogue of §11's `resolveCableColour()`. Nothing in
+in `Source/UI/PianoRoll/NoteColour.h` — the note-colour analogue of §11's `resolveCableColour()`. Nothing in
 `PianoRollComponent::paint()` picks a note fill or border directly; the resolver is a pure
 function of `(theme colours, pitch, velocity, selected, muted, outOfScale, per-pitch-class
 overrides)` with no GUI state, so it is headless-testable on its own (`Tests/NoteColourTests.cpp`).
@@ -719,7 +719,7 @@ cable-colour swatches in §11. "Reset all" clears every pitch class in one actio
 
 ## 13. Colour picker popup
 
-`synth::ui::ColourPickerPopup` (`Source/UI/ColourPickerPopup.h`) is the one full colour picker in
+`synth::ui::ColourPickerPopup` (`Source/UI/Chrome/ColourPickerPopup.h`) is the one full colour picker in
 the app — a `juce::ColourSelector` plus a favourites shelf — shared by the timeline track header's
 colour swatch and the Appearance tab's note-colour swatches (§12) rather than each rolling its own
 `juce::CallOutBox` + `ColourSelector`. Favourites persist under the single properties key

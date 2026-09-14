@@ -9,8 +9,8 @@
 #include "../../Source/Modules/ModuleBase.h"
 #include "../../Source/Modules/OscillatorModule.h"
 #include "../../Source/Modules/VCAModule.h"
-#include "../../Source/UI/LayoutUtil.h"
 #include "../../Source/UI/Theme/BuiltInThemes.h"
+#include "UI/Layout/LayoutUtil.h"
 
 // ============================================================================
 // Grid-layout / anti-overlap tests

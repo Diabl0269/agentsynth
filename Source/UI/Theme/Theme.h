@@ -70,7 +70,7 @@ struct Colors {
     juce::Colour trackArmOn{0xffE5484D};  // arm/record button, active
 
     // Active-tool highlight in the timeline edit-tool strip (Select/Split/Glue/Erase/Mute/Draw
-    // — see Source/UI/EditTool.h). Defaults to the same literal as `accent`'s Obsidian default:
+    // — see Source/UI/Timeline/EditTool.h). Defaults to the same literal as `accent`'s Obsidian default:
     // there is no existing precedent in this struct for one token defaulting FROM another at
     // construction time (accent2 merely repeats accent's literal too), so this follows that same
     // static-literal convention rather than introducing a new "derives from" mechanism.

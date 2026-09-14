@@ -5,8 +5,8 @@
 //   2. Persistence round-trip for the per-pitch-class override layer.
 //   3. A contrast guard over every built-in theme's new note/piano-key tokens.
 
-#include "../Source/UI/NoteColour.h"
 #include "../Source/UI/Theme/BuiltInThemes.h"
+#include "UI/PianoRoll/NoteColour.h"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>

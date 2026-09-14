@@ -27,9 +27,9 @@
 #include "../Source/Timeline/PeaksFile.h"
 #include "../Source/Timeline/TimelineDoc.h"
 #include "../Source/Transport/TransportService.h"
-#include "../Source/UI/ClipSelectionModel.h"
-#include "../Source/UI/TimelineClipLaneArea/TimelineClipLaneArea.h"
-#include "../Source/UI/TimelineViewState.h"
+#include "UI/Timeline/ClipSelectionModel.h"
+#include "UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h"
+#include "UI/Timeline/TimelineViewState.h"
 #include <cmath>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -690,7 +690,7 @@ TEST(TimelineClipLaneInteractionTest, SnapshotSmoke) {
 // 4b. Edge auto-scroll: the pure synth::ui::edgeScrollVelocity helper (EdgeAutoScroll.h), the
 //     beat-anchored drag mapping it exists to keep correct across a mid-drag view scroll, and the
 //     gated timer that drives it. Backfilled for the already-landed implementation — see
-//     Source/UI/EdgeAutoScroll.h and TimelineClipLaneArea's mouseDownBeat_/lastDragPointer_/
+//     Source/UI/Timeline/EdgeAutoScroll.h and TimelineClipLaneArea's mouseDownBeat_/lastDragPointer_/
 //     autoScrollTick() comments.
 // ============================================================================
 

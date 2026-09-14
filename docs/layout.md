@@ -264,7 +264,7 @@ The following `Metrics` struct fields govern chrome layout. They are **not parse
 
 ### StatusBarComponent
 
-The status bar (`Source/UI/StatusBarComponent.h/.cpp`) is a 24 px high strip rendered at the bottom of `MainComponent`.
+The status bar (`Source/UI/Chrome/StatusBarComponent.h/.cpp`) is a 24 px high strip rendered at the bottom of `MainComponent`.
 
 **Layout:**
 - Patch name: left-aligned (padded 6 px from left edge)
@@ -303,7 +303,7 @@ The status bar polls at 5 Hz, driven by `MainComponent`'s 10 Hz timer via an eve
 
 ### ModuleLibraryComponent source layout
 
-`Source/UI/ModuleLibraryComponent/` — one class (declared in `ModuleLibraryComponent.h`) split
+`Source/UI/Library/ModuleLibraryComponent/` — one class (declared in `ModuleLibraryComponent.h`) split
 across per-concern translation units (FRO72), none over 1,000 lines. Source layout:
 
 - `ModuleLibraryComponent.cpp` — construction/destruction, the snippet/plugin data setters, `activateRow`, `isEntryEnabled`
@@ -354,7 +354,7 @@ active before that — so without this, the field showed stale colours until the
 
 ### ModMatrixComponent chrome
 
-`Source/UI/ModMatrixComponent.h/.cpp` paints rows with the following visual rules:
+`Source/UI/Graph/ModMatrixComponent.h/.cpp` paints rows with the following visual rules:
 
 - **Row height**: `static constexpr int kRowHeight = 48` (was 40)
 - **Zebra striping**: odd rows (`isZebraRow(rowIndex)` — `rowIndex % 2 == 1`) are tinted with `theme.colors.surfaceHi.withAlpha(0.45f)`; even rows are transparent (parent background shows through)
@@ -428,15 +428,15 @@ serialized (below) for undo to restore it at all.
 ### ModuleComponent source layout
 
 `ModuleComponent` (the module card class referenced throughout this doc) outgrew one file and is
-split by concern under `Source/UI/ModuleComponent/` (FRO65), the same `<Class>/<Class><Concern>.cpp`
-pattern as `Source/UI/GraphEditor/` and `Source/MainComponent/` — see the unit-by-unit table in
+split by concern under `Source/UI/Graph/ModuleComponent/` (FRO65), the same `<Class>/<Class><Concern>.cpp`
+pattern as `Source/UI/Graph/GraphEditor/` and `Source/MainComponent/` — see the unit-by-unit table in
 [`docs/architecture.md § ModuleComponent`](architecture.md#modulecomponent). A follow-up ticket
 covers extracting the wavetable tab strip (`ModuleComponentWavetable.cpp`) into its own component
 class rather than a set of `ModuleComponent` methods.
 
 ### ModuleComponent header button layout
 
-The header area of each module card (`Source/UI/ModuleComponent/`) contains `DrawableButton` instances (not `TextButton`), positioned in `resized()` (`ModuleComponentPaint.cpp`):
+The header area of each module card (`Source/UI/Graph/ModuleComponent/`) contains `DrawableButton` instances (not `TextButton`), positioned in `resized()` (`ModuleComponentPaint.cpp`):
 
 | Button | Bounds | Action |
 |---|---|---|
@@ -679,7 +679,7 @@ The Poly Pad factory preset routes **Amp Env → VCA per-voice CV** (PolyBus, VC
 
 ## 7. LayoutUtil API Reference
 
-`Source/UI/LayoutUtil.h` / `Source/UI/LayoutUtil.cpp` — no JUCE GUI component dependencies;
+`Source/UI/Layout/LayoutUtil.h` / `Source/UI/Layout/LayoutUtil.cpp` — no JUCE GUI component dependencies;
 testable headlessly.
 
 ### Constants

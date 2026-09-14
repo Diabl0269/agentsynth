@@ -17,7 +17,7 @@ automation strip, and the keyboard/focus arbitration rule live in
 
 ## 1. Timeline Panel
 
-`Source/UI/TimelinePanelComponent/` — `synth::ui::TimelinePanelComponent`, a bottom-docked
+`Source/UI/Timeline/TimelinePanelComponent/` — `synth::ui::TimelinePanelComponent`, a bottom-docked
 panel owned by `MainComponent`. This section was written incrementally, one piece at a time — the
 shell came first, then the ruler, track headers, playhead and transport bar filled it with real
 content, and finally the keyboard/focus rule that arbitrates between it and the graph editor — each
@@ -155,7 +155,7 @@ rule tying it to the graph editor are covered in `docs/timeline_panel_clips_auto
 
 ## 2. Ruler, Grid, Zoom/Scroll, Snap, Loop Brace
 
-`Source/UI/TimelineViewState.h` (`synth::ui::TimelineViewState`) is the single pure,
+`Source/UI/Timeline/TimelineViewState.h` (`synth::ui::TimelineViewState`) is the single pure,
 headless-testable beat<->pixel mapping shared by every consumer: `pixelsPerBeat` (zoom, clamped to
 `[kMinPixelsPerBeat=1.5, kMaxPixelsPerBeat=512]`), `firstVisibleBeat` (horizontal scroll, clamped
 `>= 0`), `beatToX()`/`xToBeat()`, `zoomAroundX(factor, anchorX)` (keeps the beat under `anchorX`
@@ -196,7 +196,7 @@ persists under the `"timelineSnap"` int key (plus `"timelineSnapEnabled"` for th
 `TimelinePanelComponent::setApplicationProperties()` (non-owning pointer setter, same shape as
 `AIChatComponent::setAccountService()`).
 
-`Source/UI/TimelineRulerComponent.h/.cpp` (`synth::ui::TimelineRulerComponent`) is a thin strip
+`Source/UI/Timeline/TimelineRulerComponent.h/.cpp` (`synth::ui::TimelineRulerComponent`) is a thin strip
 (`Metrics::timelineRulerHeight = 24`) docked at the top of the lanes region. It owns nothing: a
 `TimelineViewState&` (shared with the panel), an optional `synth::TransportService*`, an optional
 `synth::TimelineDoc*` (the **markers** it draws and edits — see *Markers* below) and an optional
@@ -214,7 +214,7 @@ zoomed-out arrangement must not turn the strip into a grey smear):
    on both halves, faded to 65% alpha and two points smaller than the bar number) once
    `pixelsPerBeat >= 48` (`kMinBeatLabelSpacingPx`).
 
-`rulerTickPlanFor(pixelsPerBeat, beatsPerBar)` (`Source/UI/TimelineRulerComponent.h`) is the ONE
+`rulerTickPlanFor(pixelsPerBeat, beatsPerBar)` (`Source/UI/Timeline/TimelineRulerComponent.h`) is the ONE
 pure decision behind bands 2–3 (`RulerTickPlan{drawBeatTicks, drawBeatLabels}`) — a label implies a
 tick by construction (a label with no tick to sit against would float), and a bar of one beat or
 fewer draws no ticks at all (there is nothing non-bar to mark). `paint()` calls it once per frame,
@@ -437,7 +437,7 @@ untouched.
 
 **Grid.** `TimelinePanelComponent::paint()` draws the SAME bar/beat/subdivision hierarchy directly
 into the lanes region below the ruler, from the shared three-level policy in
-`Source/UI/TimelineClipLaneArea/TimelineClipLaneArea.h` (`GridLineLevel::{Subdivision, Beat, Bar}`,
+`Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h` (`GridLineLevel::{Subdivision, Beat, Bar}`,
 `gridLineColourFor`/`gridLevelIsReadable`) — `PianoRollComponent` paints its own grid from the SAME
 policy (`docs/timeline_panel_piano_roll.md` §2), so the two surfaces can never drift apart in what's visible at a given zoom.
 Per-level alpha is monotonic (`Subdivision` 0.28, `Beat` 0.50, `Bar` 0.85) and each line is lifted
@@ -471,7 +471,7 @@ modifier) maps plain pinch to horizontal zoom and Shift+pinch to vertical, on th
 the piano roll alike.
 
 **The two zoom-decided branches read `synth::ui::dominantWheelDelta(wheel)`
-(`Source/UI/ScrollPolicy.h`), never a single axis.** macOS folds a Shift-held wheel gesture into
+(`Source/UI/Timeline/ScrollPolicy.h`), never a single axis.** macOS folds a Shift-held wheel gesture into
 `deltaX` (the OS's own axis swap), so a branch that is selected by its MODIFIERS and reads only
 `deltaY` — Cmd+Shift+wheel here, and its Cmd+Shift+wheel twin in the piano roll below — would
 receive exactly `0.0` under that fold and silently do nothing; `dominantWheelDelta` (`deltaY != 0 ?
@@ -483,7 +483,7 @@ still "the amount to move by," so picking the dominant one there instead would b
 
 **Natural scrolling** (`Settings → Preferences → "Natural scrolling"`, default ON) is the one
 plain-scroll preference layered on top of the OS's own setting, and is where
-`Source/UI/ScrollPolicy.h`'s `scrollAmount(delta, invertScroll)` matters: JUCE's wheel deltas are
+`Source/UI/Timeline/ScrollPolicy.h`'s `scrollAmount(delta, invertScroll)` matters: JUCE's wheel deltas are
 already OS-direction-adjusted (`MouseWheelDetails::isReversed` only REPORTS whether the OS has
 "natural" scrolling on — the delta itself is pre-flipped so `juce::Viewport` can always apply
 `viewPosition -= delta` and feel native on every platform), so "natural" for every scrolling surface

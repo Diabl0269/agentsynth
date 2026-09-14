@@ -13,11 +13,11 @@
 
 #include "../Source/AppUndoManager.h"
 #include "../Source/Timeline/TimelineDoc.h"
-#include "../Source/UI/ColourPickerPopup.h"
 #include "../Source/UI/Theme/AppLookAndFeel.h"
 #include "../Source/UI/Theme/BuiltInThemes.h"
-#include "../Source/UI/TimelineTrackHeaderComponent.h"
-#include "../Source/UI/TrackColour.h"
+#include "UI/Chrome/ColourPickerPopup.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TrackColour.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
