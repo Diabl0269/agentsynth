@@ -210,6 +210,7 @@ add_executable(Tests
     Macros/MacroPortFlowTests.cpp
     Macros/MacroPortRealMouseDragTests.cpp
     UI/Graph/DragStateResetTests.cpp
+    UI/Graph/DragStateAsyncRebuildTests.cpp
     Macros/MacroAutoPort/MacroAutoPortCreationTests.cpp
     Macros/MacroAutoPort/MacroAutoPortUngroupTests.cpp
     Macros/MacroAutoPort/MacroAutoPortDeleteTests.cpp
