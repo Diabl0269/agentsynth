@@ -4,7 +4,7 @@
 // (Tests/UI/Assistant/AIChatComponent/AIChatComponent*Tests.cpp). Header-only; not compiled on its own and not
 // registered in Tests/CMakeLists.txt.
 
-#include "AI/AIIntegrationService.h"
+#include "AI/AIIntegrationService/AIIntegrationService.h"
 #include "AI/AIProvider.h"
 #include "AI/AccountService.h"
 #include "AI/ConversationHistorySource.h"
@@ -12,7 +12,7 @@
 #include "AudioEngine.h"
 #include "Auth/InMemoryTokenStore.h"
 #include "Branding.h"
-#include "UI/Assistant/AIChatComponent.h"
+#include "UI/Assistant/AIChatComponent/AIChatComponent.h"
 #include "UI/Assistant/AccountRow.h"
 #include <cmath>
 #include <gtest/gtest.h>

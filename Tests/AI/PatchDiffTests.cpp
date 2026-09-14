@@ -11,7 +11,7 @@
 //     noise. MergeModeAutoWireAppearsInDiff and UntrustedRescale... below are the regression tests
 //     proving snapshot-diffing catches what raw-patch-diffing would miss.
 
-#include "AI/AIIntegrationService.h"
+#include "AI/AIIntegrationService/AIIntegrationService.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AI/PatchDiff.h"
 #include <algorithm>
