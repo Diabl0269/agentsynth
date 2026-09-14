@@ -291,6 +291,10 @@ add_executable(Tests
     ../Source/UI/Chrome/ExportAudioDialog.cpp
     ../Source/UI/Graph/ModMatrixComponent.cpp
     ../Source/UI/Assistant/AIChatComponent/AIChatComponent.cpp
+    ../Source/UI/Assistant/AIChatComponent/AIChatComponentMessageList.cpp
+    ../Source/UI/Assistant/AIChatComponent/AIChatComponentSending.cpp
+    ../Source/UI/Assistant/AIChatComponent/AIChatComponentProvider.cpp
+    ../Source/UI/Assistant/AIChatComponent/AIChatComponentHistory.cpp
     ../Source/UI/Assistant/AccountRow.cpp
     ../Source/UI/Assistant/PlanBadge.cpp
     ../Source/UI/Assistant/SignInDialog.cpp

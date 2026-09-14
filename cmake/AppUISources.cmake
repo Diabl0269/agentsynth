@@ -61,6 +61,10 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TrackColour.h
     Source/UI/Timeline/TimelineViewState.h
     Source/UI/Assistant/AIChatComponent/AIChatComponent.cpp
+    Source/UI/Assistant/AIChatComponent/AIChatComponentMessageList.cpp
+    Source/UI/Assistant/AIChatComponent/AIChatComponentSending.cpp
+    Source/UI/Assistant/AIChatComponent/AIChatComponentProvider.cpp
+    Source/UI/Assistant/AIChatComponent/AIChatComponentHistory.cpp
     Source/UI/Assistant/AccountRow.cpp
     Source/UI/Assistant/AccountRow.h
     Source/UI/Assistant/PlanBadge.cpp
