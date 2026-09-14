@@ -8,18 +8,23 @@ covers how release builds get their version identity and how Sparkle (macOS) / W
 
 Two numbers are baked into every macOS build, and they mean different things:
 
-- **`CFBundleShortVersionString`** (`PROJECT_VERSION` in `CMakeLists.txt`, e.g. `0.13.2`) — the
-  human-facing marketing version. Hand-bumped by editing `project(AgentSynth VERSION ...)`.
+- **`CFBundleShortVersionString`** (`SYNTH_MARKETING_VERSION` cache var in `CMakeLists.txt`, e.g.
+  `0.13.2`) — the human-facing marketing version, also used as the plugin's own `VERSION` and the
+  Windows installer's Add/Remove Programs entry. It defaults to `PROJECT_VERSION` (the version
+  declared by `project(AgentSynth VERSION ...)`), which is what a plain local build gets. On CI,
+  `build-artifacts.yml` no longer relies on that default: a `version` job runs *before* the build
+  matrix and does a `dry_run` computation of the same tag the release job below is about to
+  publish (`mathieudutour/github-tag-action`), strips any dry-run prerelease suffix, and passes the
+  result to every build leg via `-DSYNTH_MARKETING_VERSION`. The release job then tags with
+  `custom_tag` set to that same computed value, so the version embedded in a release build is
+  guaranteed to equal the tag it ships under — nobody has to hand-bump `project()` to keep them in
+  sync.
 - **`CFBundleVersion`** (`SYNTH_BUILD_NUMBER` cache var) — the value Sparkle actually compares
-  to decide whether an update is available. This is **not** the same value on purpose:
-  `build-artifacts.yml`'s release job (`mathieudutour/github-tag-action`) auto-tags every push to
-  `main` with a semver bump, entirely independent of `CMakeLists.txt`. If `CFBundleVersion` only
-  advanced when a human remembered to bump `PROJECT_VERSION`, Sparkle would either never detect a
-  real update or always think one was available. Instead, CI passes
-  `-DSYNTH_BUILD_NUMBER=${{ github.run_number }}` at configure time — a value that's known
-  before the build starts and increases every workflow run, regardless of what tag gets minted
-  afterwards. Local/dev builds default to `0` and are never distributed, so this doesn't matter for
-  them.
+  to decide whether an update is available. This is **not** the same value as
+  `SYNTH_MARKETING_VERSION` on purpose: CI passes `-DSYNTH_BUILD_NUMBER=${{ github.run_number }}`
+  at configure time — a value that's known before the build starts and increases every workflow
+  run, independent of the `version` job's tag computation or of semver formatting. Local/dev
+  builds default to `0` and are never distributed, so this doesn't matter for them.
 
 ## What's New (build-time, no network)
 
@@ -305,9 +310,10 @@ step is a real trap for a tester and not just a one-off:
   — `CFBundleShortVersionString` had gone stale (hand-bumped, untouched since before the
   Gravisynth→AgentSynth rename) while the build number kept advancing normally, so both sides
   showed the same marketing version and the dialog read as broken even though it wasn't. Hand-bumped
-  to `0.202.0` as a one-time fix; making it track the release tag automatically needs a real
-  reorder of `build-artifacts.yml` (the build step runs before the tag is minted) — tracked
-  separately, not done here.
+  to `0.202.0` as a one-time fix at the time; `build-artifacts.yml` now reorders the build ahead of
+  the tag mint with a `version` job that computes the release tag first and feeds it to every build
+  leg as `SYNTH_MARKETING_VERSION` (see "Version identity" above), so this class of drift is no
+  longer possible.
 - Two short-lived helper processes (both `responsiblePid` = the main app) crashed with a
   `libmalloc` memory-corruption report within ~1s of the update relaunch, mid-`SecTrustVerify`/
   `SecKeyVerifySignature` activity — consistent with Sparkle's own verification subprocess, not

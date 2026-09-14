@@ -31,8 +31,60 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Computes the version that will be embedded in every build artifact BEFORE the build job
+  # configures CMake, so the marketing version baked into the app/plugin/installer is guaranteed
+  # to equal the tag the release job publishes below — instead of the old order (build first with
+  # a hand-bumped CMakeLists.txt version, tag afterwards), which let the two drift apart.
+  version:
+    name: Compute release version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.strip.outputs.version }}
+      new_tag: ${{ steps.tag_version.outputs.new_tag }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # Same inputs as the "Bump version and push tag" step in the release job below, plus
+      # dry_run: true — this only computes the next tag, it doesn't create or push it. The real
+      # tag/push happens once, in the release job, using THIS computed value via custom_tag (see
+      # below) so there's exactly one source of truth for the version, not two independent
+      # computations that could disagree.
+      - name: Dry-run next tag
+        id: tag_version
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: minor
+          tag_prefix: "v"
+          fetch_all_tags: true
+          dry_run: true
+
+      # On a push to main this is already a bare "vX.Y.Z". But workflow_dispatch runs (including
+      # from a feature branch, e.g. to validate this very change before merging) aren't on a
+      # release branch as far as the action is concerned, so it appends a prerelease suffix
+      # instead (e.g. "v0.204.0-branch.<sha>"). Strip the "v" prefix and everything from the
+      # first "-" to get a bare marketing version either way, and refuse to proceed if what's
+      # left isn't valid X.Y.Z — CMake's VERSION args and the NSIS installer both require that
+      # shape, and a malformed value here should fail loudly rather than produce a broken build.
+      - name: Strip prerelease suffix and validate
+        id: strip
+        shell: bash
+        run: |
+          raw="${{ steps.tag_version.outputs.new_tag }}"
+          version="${raw#v}"
+          version="${version%%-*}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Computed version '$version' (from tag '$raw') is not a bare X.Y.Z semver" >&2
+            exit 1
+          fi
+          echo "Computed marketing version: $version (from tag $raw)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build ${{ matrix.os }}
+    needs: [version]
     runs-on: ${{ matrix.os }}
     # CCACHE_DIR is pinned per platform rather than left to ccache's default, which varies by OS
     # AND by ccache version — a path that disagrees with the actions/cache `path:` means the cache
@@ -174,12 +226,15 @@ jobs:
 
     # Configure CMake — Ninja on every OS so this matches the PR CI build path
     # (see the "Setup MSVC" note above for why Ninja and not the VS generator).
-    # SYNTH_BUILD_NUMBER becomes CFBundleVersion, the value Sparkle actually compares to decide
-    # an update is available (see CMakeLists.txt's comment on SYNTH_BUILD_NUMBER for why this
-    # can't just be the project's marketing VERSION: that's hand-bumped in CMakeLists.txt, while
-    # this workflow's tag-and-release step below bumps semver tags independently). run_number is
-    # known before this step runs and increases every run, so it stays correct regardless of what
-    # tag the release job mints afterwards. SYNTH_SPARKLE_PUBLIC_KEY / SYNTH_WINSPARKLE_PUBLIC_KEY
+    # SYNTH_MARKETING_VERSION comes from the `version` job above (a dry run of the same
+    # mathieudutour/github-tag-action computation the release job below actually tags with), so
+    # the CFBundleShortVersionString / plugin VERSION / installer version embedded in this build
+    # is guaranteed to equal the tag that gets published for it — see CMakeLists.txt's comment on
+    # SYNTH_MARKETING_VERSION. SYNTH_BUILD_NUMBER becomes CFBundleVersion, the value Sparkle
+    # actually compares to decide an update is available (see CMakeLists.txt's comment on
+    # SYNTH_BUILD_NUMBER for why that's still kept as a separate value). run_number is known
+    # before this step runs and increases every run, so it stays correct regardless of what tag
+    # the release job mints afterwards. SYNTH_SPARKLE_PUBLIC_KEY / SYNTH_WINSPARKLE_PUBLIC_KEY
     # read from repo VARIABLES (not secrets — both are the public half of their key pair) that
     # don't exist yet; see docs/distribution.md. Both are harmless no-ops on the OSes where they're
     # unused.
@@ -190,6 +245,7 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DSYNTH_MARKETING_VERSION=${{ needs.version.outputs.version }} \
           -DSYNTH_BUILD_NUMBER=${{ github.run_number }} \
           -DSYNTH_SPARKLE_PUBLIC_KEY="${{ vars.SPARKLE_PUBLIC_KEY }}" \
           -DSYNTH_WINSPARKLE_PUBLIC_KEY="${{ vars.WINSPARKLE_PUBLIC_KEY }}"
@@ -202,16 +258,20 @@ jobs:
     # in the target's output dir (CMakeLists.txt's POST_BUILD copy step), which is exactly what
     # the .nsi's STAGE_DIR expects. Output filename is pinned to AgentSynthSetup.exe — see the
     # .nsi's header comment for why it must not change without a matching site update. Version is
-    # the human-facing marketing version (project(AgentSynth VERSION ...) in CMakeLists.txt), not
-    # SYNTH_BUILD_NUMBER — the installer's Add/Remove Programs entry should read "0.13.2", not a
-    # CI run number.
+    # the same needs.version.outputs.version the Configure CMake step above passed as
+    # -DSYNTH_MARKETING_VERSION (the human-facing marketing version), not SYNTH_BUILD_NUMBER — the
+    # installer's Add/Remove Programs entry should read "0.13.2", not a CI run number. Previously
+    # this regexed the version out of CMakeLists.txt's project() declaration directly, which kept
+    # shipping the stale hand-bumped value even after the app itself started embedding the
+    # computed release version.
     - name: Build Windows installer
       if: runner.os == 'Windows'
       shell: pwsh
+      env:
+        SYNTH_MARKETING_VERSION: ${{ needs.version.outputs.version }}
       run: |
         $stageDir = (Get-ChildItem -Path build -Recurse -Filter "Agent Synth.exe" | Select-Object -First 1).DirectoryName
-        $version = (Select-String -Path CMakeLists.txt -Pattern 'project\(AgentSynth VERSION ([\d.]+)\)').Matches[0].Groups[1].Value
-        makensis "/DVERSION=$version" "/DSTAGE_DIR=$stageDir" installer\windows\AgentSynth.nsi
+        makensis "/DVERSION=$env:SYNTH_MARKETING_VERSION" "/DSTAGE_DIR=$stageDir" installer\windows\AgentSynth.nsi
 
     # Report-only: a cold cache must never block a release. CACHE_WARM_EXPECTED is pinned false
     # so the check writes its summary table and annotates, but cannot fail the job — losing a
@@ -373,11 +433,15 @@ jobs:
 
   release:
     name: Tag and Release
-    needs: [build]
+    needs: [version, build]
     # Only tag + release on push to main. workflow_dispatch is therefore a
     # build-only dry-run, safe to trigger on a branch to validate the matrix
-    # (incl. the Windows build) before merging.
-    if: always() && !contains(needs.build.result, 'failure') && github.event_name == 'push'
+    # (incl. the Windows build) before merging. needs.version.result == 'success' is checked
+    # explicitly (not just needs.build.result) because always() bypasses the default
+    # needs-must-succeed gate for BOTH dependencies: if `version` failed, `build` never runs and
+    # comes back "skipped" — which does not contain "failure" — so without this check a broken
+    # `version` job would silently let `release` through with no version to tag with.
+    if: always() && needs.version.result == 'success' && !contains(needs.build.result, 'failure') && github.event_name == 'push'
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.tag_version.outputs.new_tag }}
@@ -386,6 +450,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      # custom_tag pins this to the EXACT version the `version` job computed and every build
+      # artifact was already configured with (tag_prefix "v" still applies on top of custom_tag,
+      # so the published tag is "v<version>" as before) — rather than letting the action compute
+      # its own bump here, which could disagree with the dry run above if a tag landed on main
+      # between the two (the workflow's concurrency group above serializes runs on main, so that
+      # race can't happen in practice, but pinning the value removes the possibility entirely).
       - name: Bump version and push tag
         id: tag_version
         uses: mathieudutour/github-tag-action@v6.2
@@ -394,6 +464,7 @@ jobs:
           default_bump: minor
           tag_prefix: "v"
           fetch_all_tags: true
+          custom_tag: ${{ needs.version.outputs.version }}
 
       - name: Download All Artifacts
         uses: actions/download-artifact@v8
