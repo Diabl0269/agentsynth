@@ -4,7 +4,7 @@
 #include "AutomationLaneEditor.h"
 #include "ClipSelectionModel.h"
 #include "EditTool.h"
-#include "PianoRollComponent.h"
+#include "PianoRollComponent/PianoRollComponent.h"
 #include "TimelineClipLaneArea.h"
 #include "TimelinePlayheadOverlay.h"
 #include "TimelineRulerComponent.h"

@@ -70,7 +70,7 @@
 #include "../Source/UI/EditTool.h"
 #include "../Source/UI/NoteColour.h"
 #include "../Source/UI/NoteSelectionModel.h"
-#include "../Source/UI/PianoRollComponent.h"
+#include "../Source/UI/PianoRollComponent/PianoRollComponent.h"
 #include "../Source/UI/ScaleAssistPanel.h"
 // The audition INTEGRATION tests (section 20b) drive the real panel wiring, not just the roll.
 #include "../Source/UI/Theme/BuiltInThemes.h"

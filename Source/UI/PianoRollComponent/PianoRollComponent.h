@@ -1,14 +1,14 @@
 #pragma once
 
-#include "../Timeline/MusicalScale.h"
-#include "../Timeline/TimelineDoc.h"
-#include "EditTool.h"
-#include "NoteColour.h"
-#include "NoteSelectionModel.h"
-#include "ScaleAssistPanel.h"
-#include "TimelinePlayheadOverlay.h"
-#include "TimelineViewState.h"
-#include "UIAnimation.h"
+#include "../../Timeline/MusicalScale.h"
+#include "../../Timeline/TimelineDoc.h"
+#include "../EditTool.h"
+#include "../NoteColour.h"
+#include "../NoteSelectionModel.h"
+#include "../ScaleAssistPanel.h"
+#include "../TimelinePlayheadOverlay.h"
+#include "../TimelineViewState.h"
+#include "../UIAnimation.h"
 #include <array>
 #include <cmath>
 #include <functional>

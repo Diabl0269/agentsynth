@@ -27,8 +27,15 @@ set(APPUI_SOURCES
     Source/UI/TimelineClipLaneArea.h
     Source/UI/TimelineClipLaneArea.cpp
     Source/UI/ClipSelectionModel.h
-    Source/UI/PianoRollComponent.h
-    Source/UI/PianoRollComponent.cpp
+    Source/UI/PianoRollComponent/PianoRollComponent.h
+    Source/UI/PianoRollComponent/PianoRollComponent.cpp
+    Source/UI/PianoRollComponent/PianoRollScaleAssist.cpp
+    Source/UI/PianoRollComponent/PianoRollPainting.cpp
+    Source/UI/PianoRollComponent/PianoRollEditTools.cpp
+    Source/UI/PianoRollComponent/PianoRollAudition.cpp
+    Source/UI/PianoRollComponent/PianoRollClipboardAndKeys.cpp
+    Source/UI/PianoRollComponent/PianoRollMouse.cpp
+    Source/UI/PianoRollComponent/PianoRollZoom.cpp
     Source/UI/NoteSelectionModel.h
     Source/UI/AutomationLaneEditor.h
     Source/UI/AutomationLaneEditor.cpp

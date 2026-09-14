@@ -219,7 +219,14 @@ add_executable(Tests
     ../Source/UI/TimelineTrackHeaderComponent.cpp
     ../Source/UI/TimelineTransportBar.cpp
     ../Source/UI/TimelineClipLaneArea.cpp
-    ../Source/UI/PianoRollComponent.cpp
+    ../Source/UI/PianoRollComponent/PianoRollComponent.cpp
+    ../Source/UI/PianoRollComponent/PianoRollScaleAssist.cpp
+    ../Source/UI/PianoRollComponent/PianoRollPainting.cpp
+    ../Source/UI/PianoRollComponent/PianoRollEditTools.cpp
+    ../Source/UI/PianoRollComponent/PianoRollAudition.cpp
+    ../Source/UI/PianoRollComponent/PianoRollClipboardAndKeys.cpp
+    ../Source/UI/PianoRollComponent/PianoRollMouse.cpp
+    ../Source/UI/PianoRollComponent/PianoRollZoom.cpp
     ../Source/UI/AutomationLaneEditor.cpp
     ../Source/Plugin/PluginProcessor.cpp
     ../Source/Plugin/PluginEditor.cpp
