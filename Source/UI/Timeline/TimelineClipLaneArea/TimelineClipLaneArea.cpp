@@ -10,7 +10,7 @@
 #include "TimelineClipLaneInternal.h"
 
 #include "Transport/TransportService.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TrackColour.h"
 #include <algorithm>

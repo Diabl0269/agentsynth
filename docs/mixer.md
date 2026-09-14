@@ -808,7 +808,7 @@ Main line, in dependency order:
        `AutoChannelOnConnect_ToggleOffOnlyConnectsNoChannel`,
        `AutoChannelOnConnect_AlreadyChanneledInstrumentGetsNoNewStrip`,
        `AutoChannelOnConnect_NewChainNodesJoinTheInstrumentsExistingMacro`. Plus
-       `Tests/UI/Settings/PreferencesSettingsTabTests.cpp`: default ON, persists `"0"`/`"1"` under
+       `Tests/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGraphBehaviourTests.cpp`: default ON, persists `"0"`/`"1"` under
        `mixerAutoCreateChannelOnConnect` and round-trips, and pushes to a live `GraphEditor` via
        `setGraphEditor`/on toggle, mirroring every T148 toggle test exactly.
    - **T173e (existing projects, "Create channels") — DONE (FRO26).** The "+ Track" menu's new

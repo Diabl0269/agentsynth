@@ -431,7 +431,7 @@ In order, each independently shippable:
      **The mod matrix's own destination combo needed a matching fix.** `MacroInletModule`
      deliberately declares no `getModulationTargets()` (`GraphEditor::connectPorts()` relies on that
      empty list to keep a plain cable drop onto a Macro In's jack a plain connection, never
-     auto-wrapped in a fresh attenuverter — `Tests/Macros/MacroPortFlowTests.cpp`'s drop-a-cable tests pin
+     auto-wrapped in a fresh attenuverter — `Tests/Macros/MacroPortFlow/MacroPortFlowCableDropTests.cpp`'s drop-a-cable tests pin
      that), so a `ModMatrixComponent::ModRow` whose destination is now a spliced port had nothing to
      resolve its combo selection against and would render blank. Rather than give
      `MacroInletModule` a real `ModulationTarget` (which would resurrect the auto-wrap problem for
@@ -538,7 +538,7 @@ In order, each independently shippable:
    **`GraphEditor::removeMacroPort()` (item 2's Configure I/O "delete this port" action) is
    deliberately UNCHANGED** — it still reuses the ordinary multi-select delete path and drops the
    cable rather than splicing it, pinned by
-   `Tests/Macros/MacroPortFlowTests.cpp`'s `RemoveDeletesTheNodeAndDropsThePort`. An explicit "delete this
+   `Tests/Macros/MacroPortFlow/MacroPortFlowEditTests.cpp`'s `RemoveDeletesTheNodeAndDropsThePort`. An explicit "delete this
    port" from a configuration dialog arguably SHOULD drop the cable rather than silently rewire the
    patch around it; `spliceOutMacroPort` is shared code, not shared semantics, and switching
    Configure I/O's own delete to splice-back too is a proposal for a future pass, not decided here.

@@ -3,7 +3,7 @@
 #include "Timeline/AutomationKernel.h"
 #include "Timeline/AutomationRecorder.h"
 #include "Transport/TransportService.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
 

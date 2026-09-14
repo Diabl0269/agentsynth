@@ -1,6 +1,6 @@
 #include "TimelineTransportBar.h"
 #include "Transport/Metronome.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
 

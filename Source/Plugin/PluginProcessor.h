@@ -2,7 +2,7 @@
 
 #include "AudioEngine/AudioEngine.h"
 #include "Plugin/Hosting/PluginScanService.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_data_structures/juce_data_structures.h>

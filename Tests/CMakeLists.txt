@@ -218,7 +218,10 @@ add_executable(Tests
     App/ShortcutManager/ShortcutManagerDefaultsTests.cpp
     App/ShortcutManager/ShortcutManagerKeyMatchingTests.cpp
     UI/Settings/ShortcutsSettingsTabTests.cpp
-    UI/Settings/PreferencesSettingsTabTests.cpp
+    UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGraphBehaviourTests.cpp
+    UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviourTests.cpp
+    UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAutosaveTests.cpp
+    UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycleTests.cpp
     UI/Settings/FeedbackSettingsTabTests.cpp
     Engine/AudioRendering/AudioRenderingBasicTests.cpp
     Engine/AudioRendering/AudioRenderingFXModuleTests.cpp
@@ -259,7 +262,11 @@ add_executable(Tests
     Macros/MacroSetTests.cpp
     Macros/MacroPortModuleTests.cpp
     Macros/MacroPortConfigDialogTests.cpp
-    Macros/MacroPortFlowTests.cpp
+    Macros/MacroPortFlow/MacroPortFlowAddTests.cpp
+    Macros/MacroPortFlow/MacroPortFlowEditTests.cpp
+    Macros/MacroPortFlow/MacroPortFlowShapeChangeTests.cpp
+    Macros/MacroPortFlow/MacroPortFlowCableDropTests.cpp
+    Macros/MacroPortFlow/MacroPortFlowAutoCreateOnDragTests.cpp
     Macros/MacroPortRealMouseDragTests.cpp
     UI/Graph/DragStateResetTests.cpp
     UI/Graph/DragStateAsyncRebuildTests.cpp
@@ -422,11 +429,17 @@ add_executable(Tests
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryInput.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryHelpPopover.cpp
     ../Source/UI/Macros/MacroCardComponent.cpp
-    ../Source/UI/Macros/MacroPortConfigDialog.cpp
+    ../Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogLifecycle.cpp
+    ../Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogRowOrdering.cpp
+    ../Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogTestSeams.cpp
+    ../Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogAutoPortPrompt.cpp
     ../Source/Plugin/Hosting/HostedPluginEditorWindow.cpp
     ../Source/UI/Settings/SettingsWindow.cpp
     ../Source/UI/Settings/AppearanceSettingsTab.cpp
-    ../Source/UI/Settings/PreferencesSettingsTab.cpp
+    ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp
+    ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGraphBehaviour.cpp
+    ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviour.cpp
+    ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAutosave.cpp
     ../Source/UI/Settings/ShortcutsSettingsTab.cpp
     ../Source/UI/Settings/FeedbackSettingsTab.cpp
     ../Source/UI/Chrome/WelcomeScreenComponent.cpp

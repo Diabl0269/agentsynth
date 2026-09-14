@@ -9,7 +9,7 @@
 #include "UI/Assistant/AccountRow.h"
 #include "UI/Assistant/PlanBadge.h"
 #include "UI/Layout/UIAnimation.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <atomic>
 #include <juce_animation/juce_animation.h>
 #include <juce_gui_basics/juce_gui_basics.h>

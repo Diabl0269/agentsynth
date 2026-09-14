@@ -12,7 +12,7 @@
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "TimelinePanelTestFixture.h"
 #include "Transport/TransportService.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/BuiltInThemes.h"
 #include "UI/Timeline/EdgeAutoScroll.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"

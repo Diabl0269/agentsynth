@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Modules/VisualBuffer.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
 class ScopeComponent

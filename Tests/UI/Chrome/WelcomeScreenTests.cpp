@@ -16,7 +16,7 @@
 #include "MainComponent/MainComponent.h"
 #include "ProjectBundle.h"
 #include "UI/Chrome/WelcomeScreenComponent.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
 #include "WhatsNewData.h"
 #include <gtest/gtest.h>

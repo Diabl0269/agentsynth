@@ -10,7 +10,7 @@
 
 #include "Modules/RecordTapModule.h"
 #include "Transport/TransportService.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/TrackColour.h"
 #include <algorithm>
 #include <cmath>

@@ -1,7 +1,7 @@
 #include "TimelineRulerComponent.h"
 #include "AppUndoManager.h"
 #include "Transport/TransportService.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
 

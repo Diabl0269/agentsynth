@@ -5,8 +5,3 @@
 1135 Source/MainComponent/MainComponent.cpp
 1213 Source/MainComponent/MainComponent.h
 1984 Source/UI/Graph/GraphEditor/GraphEditor.h
-1275 Source/UI/Macros/MacroPortConfigDialog.cpp
-1206 Source/UI/Settings/PreferencesSettingsTab.cpp
-1223 Source/UI/Theme/AppLookAndFeel.cpp
-1057 Tests/Macros/MacroPortFlowTests.cpp
-1184 Tests/UI/Settings/PreferencesSettingsTabTests.cpp

@@ -9,7 +9,7 @@
 #include "TimelinePanelComponent.h"
 
 #include "UI/Layout/FocusRegion.h"
-#include "UI/Theme/AppLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/ScrollPolicy.h"
 
 namespace synth::ui {
