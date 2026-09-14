@@ -180,7 +180,19 @@ add_executable(Tests
     TimelineTrackHeaderTests.cpp
     TimelineTrackFocusTests.cpp
     TimelineClipLaneTests.cpp
-    PianoRollTests.cpp
+    PianoRoll/NoteSelectionModelTests.cpp
+    PianoRoll/NoteHitTestMarqueeTests.cpp
+    PianoRoll/PianoRollComponentTests.cpp
+    PianoRoll/PianoRollEditToolsTests.cpp
+    PianoRoll/PianoRollClipboardTests.cpp
+    PianoRoll/PianoRollArrowKeyTests.cpp
+    PianoRoll/PianoRollShortcutsTests.cpp
+    PianoRoll/PianoRollZoomTests.cpp
+    PianoRoll/PianoRollPaintingTests.cpp
+    PianoRoll/PianoRollScaleAssistTests.cpp
+    PianoRoll/PianoRollHeaderChipsTests.cpp
+    PianoRoll/PianoRollAuditionTests.cpp
+    PianoRoll/PianoRollMouseTests.cpp
     MusicalScaleTests.cpp
     NoteColourTests.cpp
     MidiDestinationPickerTests.cpp
