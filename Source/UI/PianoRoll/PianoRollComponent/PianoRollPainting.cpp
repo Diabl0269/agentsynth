@@ -767,4 +767,37 @@ void PianoRollComponent::resized() {
     noteGridBounds_ = bounds; // a REAL gutter: beatToX(firstVisibleBeat) == this rect's left edge
 }
 
+//==============================================================================
+// ---- Simple accessors (moved out of the header — see PianoRollComponent.h for each contract) ----
+double PianoRollComponent::getPlayheadBeat() const noexcept { return playheadBeat_; }
+bool PianoRollComponent::hasPlayheadPosition() const noexcept { return hasPlayheadX_; }
+
+juce::Rectangle<int> PianoRollComponent::getBackButtonBounds() const noexcept { return backButtonBounds_; }
+juce::Rectangle<int> PianoRollComponent::getSnapButtonBounds() const noexcept { return snapButtonBounds_; }
+juce::Rectangle<int> PianoRollComponent::getQuantiseButtonBounds() const noexcept { return quantiseButtonBounds_; }
+juce::Rectangle<int> PianoRollComponent::getQuantisePitchButtonBounds() const noexcept {
+    return quantisePitchButtonBounds_;
+}
+juce::Rectangle<int> PianoRollComponent::getScaleFilterButtonBounds() const noexcept {
+    return scaleFilterButtonBounds_;
+}
+juce::Rectangle<int> PianoRollComponent::getKeysColumnBounds() const noexcept { return keysColumnBounds_; }
+juce::Rectangle<int> PianoRollComponent::getNoteGridBounds() const noexcept { return noteGridBounds_; }
+
+PianoRollComponent::HeaderButtonId PianoRollComponent::getHoveredHeaderButtonForTest() const noexcept {
+    return hoveredHeaderButton_;
+}
+bool PianoRollComponent::isHeaderButtonHoveredForTest(HeaderButtonId which) const noexcept {
+    return hoveredHeaderButton_ == which;
+}
+
+int PianoRollComponent::blackKeyWidthPx(int columnWidth) noexcept {
+    return (int)std::llround((double)columnWidth * (double)kBlackKeyWidthFraction);
+}
+int PianoRollComponent::blackKeyInsetForTest() const noexcept { return blackKeyWidthPx(keysColumnBounds_.getWidth()); }
+
+juce::Colour PianoRollComponent::labelColourFor(juce::Colour keyFill) noexcept { return keyFill.contrasting(0.7f); }
+
+bool PianoRollComponent::isQuantiseFlashingForTest() const noexcept { return quantiseFlash_; }
+
 } // namespace synth::ui

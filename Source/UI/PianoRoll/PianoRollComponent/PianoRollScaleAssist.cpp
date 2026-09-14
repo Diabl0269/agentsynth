@@ -390,4 +390,27 @@ PianoRollComponent::NoteGeometry PianoRollComponent::effectiveGeometryFor(const 
     return {note.startBeat, note.lengthBeats, note.pitch, note.velocity};
 }
 
+//==============================================================================
+// ---- Simple accessors (moved out of the header — see PianoRollComponent.h for each contract) ----
+void PianoRollComponent::setNoteColourOverrides(const synth::ui::NoteColourOverrides& overrides) {
+    overrides_ = overrides;
+    repaint();
+}
+const synth::ui::NoteColourOverrides& PianoRollComponent::getNoteColourOverrides() const noexcept { return overrides_; }
+
+synth::ui::ScaleAssistPanel& PianoRollComponent::getScaleAssistPanel() noexcept { return scalePanel_; }
+const synth::ui::ScaleAssistPanel& PianoRollComponent::getScaleAssistPanel() const noexcept { return scalePanel_; }
+juce::Rectangle<int> PianoRollComponent::getScaleButtonBounds() const noexcept { return scaleButtonBounds_; }
+
+void PianoRollComponent::setKeyLabelMode(KeyLabelMode mode) noexcept { keyLabelMode_ = mode; }
+PianoRollComponent::KeyLabelMode PianoRollComponent::getKeyLabelMode() const noexcept { return keyLabelMode_; }
+
+float PianoRollComponent::getScalePanelOpenProgressForTest() const noexcept { return scalePanelOpenProgress_; }
+float PianoRollComponent::getScalePanelAnimFromForTest() const noexcept { return scalePanelAnimFrom_; }
+bool PianoRollComponent::isScalePanelAnimatingForTest() const noexcept { return scalePanelAnim_.isRunning(); }
+bool PianoRollComponent::isScalePanelTargetVisibleForTest() const noexcept { return scalePanelVisible_; }
+
+double PianoRollComponent::getGridDivisionForTest() const noexcept { return currentGridBeats(); }
+double PianoRollComponent::getDrawnGridDivisionForTest() const noexcept { return drawnGridBeats(); }
+
 } // namespace synth::ui

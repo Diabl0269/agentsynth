@@ -528,4 +528,30 @@ void PianoRollComponent::setRulerBandHeight(int heightPx) {
     repaint();
 }
 
+int PianoRollComponent::canvasTop() const noexcept { return kToolbarHeight + rulerBandHeight_; }
+int PianoRollComponent::getRulerBandHeight() const noexcept { return rulerBandHeight_; }
+
+//==============================================================================
+// ---- Simple accessors (moved out of the header — see PianoRollComponent.h for each contract) ----
+EditTool PianoRollComponent::getActiveTool() const noexcept { return activeTool_; }
+
+bool PianoRollComponent::isMarqueeActiveForTest() const noexcept { return dragMode_ == DragMode::Marquee; }
+
+bool PianoRollComponent::hasSplitPreviewForTest() const noexcept { return hasSplitPreview_; }
+double PianoRollComponent::getSplitPreviewBeatForTest() const noexcept { return splitPreviewBeat_; }
+synth::NoteId PianoRollComponent::getSplitPreviewNoteForTest() const noexcept { return splitPreviewNote_; }
+double PianoRollComponent::getDrawPreviewLengthForTest() const noexcept {
+    return dragMode_ == DragMode::DrawNew ? drawLengthBeats_ : 0.0;
+}
+
+double PianoRollComponent::getResizeDeltaForTest() const noexcept {
+    return dragMode_ == DragMode::Resize ? previewLengthDelta_ : 0.0;
+}
+int PianoRollComponent::getResizeNoteCountForTest() const noexcept {
+    return dragMode_ == DragMode::Resize ? (int)resizeNotes_.size() : 0;
+}
+bool PianoRollComponent::isResizeUnquantizedForTest() const noexcept {
+    return dragMode_ == DragMode::Resize && resizeUnquantized_;
+}
+
 } // namespace synth::ui
