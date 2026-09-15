@@ -410,11 +410,25 @@ void MainComponent::registerFocusRegions() {
         {"library", &moduleLibrary, [this] { return isLibraryVisible; }, [this] { setLibraryVisible(true); }});
     // The canvas has no closed state at all -- null isOpen/open, so it is always in the open list.
     focusRegions_.addRegion({"canvas", &graphEditor, nullptr, nullptr});
-    focusRegions_.addRegion({"timeline", &timelinePanel, [this] { return isTimelineVisible; },
+    // FRO18 (plan (a)): "timeline" and "mixer" now share the SAME dock, one tab visible at a time
+    // -- isTimelineVisible alone (the dock's own open/closed state) is no longer enough to say the
+    // Timeline region is open, since the dock can be open on the MIXER tab instead. Both regions'
+    // `open` re-select their own tab first (mirroring modMatrix's "no open state of its own to
+    // open" precedent for the case that's already showing) before falling through to the shared
+    // "open the dock if it's closed" step every panel toggle already does.
+    focusRegions_.addRegion({"timeline", &timelinePanel,
+                             [this] { return isTimelineVisible && !mixerDock.isMixerTabActive(); },
                              [this] {
+                                 mixerDock.setActiveTab(synth::ui::MixerDockComponent::Tab::Timeline);
                                  if (!isTimelineVisible && toggleTimelineButton.onClick)
                                      toggleTimelineButton.onClick();
                              }});
+    // No `open` callback: a direct-focus shortcut never targets the mixer today (same reason
+    // modMatrix has none -- out of scope per this ticket), and Tab-cycling never opens a closed
+    // region regardless (FocusRegionRegistry::cycleFocus). Open only when the dock itself is open
+    // AND its Mixer tab is the one showing -- see MixerFocusRegionTests.cpp.
+    focusRegions_.addRegion({"mixer", &mixerDock.getMixerPanel(),
+                             [this] { return isTimelineVisible && mixerDock.isMixerTabActive(); }, nullptr});
     focusRegions_.addRegion({"aiPanel", &aiChatComponent, [this] { return isAiPanelVisible; },
                              [this] {
                                  if (!isAiPanelVisible && toggleAiPanelButton.onClick)
