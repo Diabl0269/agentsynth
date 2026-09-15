@@ -94,10 +94,18 @@ M/S/R within timeline track header rows, below) build on top of it without chang
 itself. A
 `synth::ui::FocusRegionRegistry` is a plain member of `MainComponent` (never a `Desktop`-global
 singleton — a host process can run multiple plugin instances, and a future separate-window
-mixer/timeline would need its own registry), populated with six regions once every root component
+mixer/timeline would need its own registry), populated with seven regions once every root component
 exists: **Toolbar** (always open — the top strip), **Library** (`isLibraryVisible`), **Canvas**
-(always open — the `graphEditor`), **Timeline** (`isTimelineVisible`), **AI Panel**
-(`isAiPanelVisible`) and **Mod Matrix** (`graphEditor.isModMatrixVisible()`).
+(always open — the `graphEditor`), **Timeline** (`isTimelineVisible && !mixerDock.isMixerTabActive()`),
+**Mixer** (FRO18: `isTimelineVisible && mixerDock.isMixerTabActive()`, no `open` callback — like Mod
+Matrix, no direct-focus shortcut targets it), **AI Panel** (`isAiPanelVisible`) and **Mod Matrix**
+(`graphEditor.isModMatrixVisible()`). Timeline and Mixer share one dock (`MixerDockComponent`,
+P9-5) with one tab visible at a time, so `isTimelineVisible` alone (the dock's own open/closed
+state) stopped being enough to say the Timeline region is on screen the moment the Mixer tab
+exists — each region's `isOpen` also checks which of the dock's two tabs is active, and each
+region's `open` re-selects its own tab before falling through to the same "open the dock if it's
+closed" step every panel toggle already does. See [**Mixer column navigation**](#mixer-column-navigation)
+below for the Mixer region's own keyboard behaviour.
 
 - **Tab / Shift+Tab cycle OPEN regions only** — a closed region is skipped entirely, never opened,
   by the cycle itself (`FocusRegionRegistry::cycleFocus`/`nextOpenRegionId`). Suppressed completely
@@ -378,6 +386,50 @@ Solo/Arm **Focused Track**" to keep the two rows from reading as the same featur
 narrows to "mute". A row's own keyboard-focus outline reuses `paintFocusRegionOutline` verbatim (see
 the Focus regions section above) — same colour/alpha/thickness as a whole region root's, just painted
 around one row via the row's own `paintOverChildren`.
+
+### Mixer column navigation
+
+**FRO18** — parallel to Track header focus (T161) above, but the region ROOT is the focusable leaf
+here, not a per-column child: `MixerPanelComponent` is the Mixer region's own root (see **Focus
+regions** above), `setWantsKeyboardFocus(true)`, and every child control inside a column (the
+fader/pan sliders, the M/S buttons, Direct's "Make channel" button) gives up keyboard focus
+(`setWantsKeyboardFocus(false)`) so it can never intercept these keys — the same T160 trap
+`TimelineTrackHeaderComponent` sidesteps by being the focusable leaf itself, just one level higher
+here because a column hosts several controls, not one. The focused column is
+`MixerPanelComponent::focusedColumnIndex_` — ephemeral UI state, an index into the same
+left-to-right order `rebuild()` lays columns out in (strips in track order, then Direct if visible,
+then Master if visible) — and survives a `rebuild()` of the same strip by re-resolving through the
+strip's own uuid (Direct/Master match by kind alone), never a raw index; the focused strip/Direct/
+Master column also paints its own outline, reusing `paintFocusRegionOutline`'s colour/alpha/
+thickness the same way a T161 row does.
+
+| Shortcut | Action |
+|----------|--------|
+| Left / Right | Move focus to the previous/next column (strips, then Direct, then Master), clamped at either end — never wraps. From nothing focused, either direction seeds column 0. Auto-scrolls the focused column into view |
+| Up / Down | Nudge the focused fader by 1.0 dB (undo: one step, the same `parameterGestureChanged` bracket a mouse drag uses). No-op on Direct (no fader) or with nothing focused |
+| Shift+Up / Shift+Down | Nudge by 0.1 dB — the gain parameter's own declared interval |
+| Enter | Select the focused column's macro (or bare node, if unboxed) on the canvas — mirrors clicking the column |
+| M | Mute Focused Track (`timelineMuteFocusedTrack`) — same action id and `performTrackEdit`-equivalent undo bracket the Timeline row's M key uses; Master has its own mute, Direct has none |
+| S | Solo Focused Track (`timelineSoloFocusedTrack`) — strips only, always through `AudioEngine::setChannelStripSoloed`, never a direct `setSoloed()` (root `CLAUDE.md`'s invariant); no-op on Direct/Master |
+| R | Arm Focused Track (`timelineArmFocusedTrack`) — only when the focused strip is linked to exactly one track (`MixerColumn.linkedToTrack`); routes through `MainComponent::performTrackEdit`, never a direct `TimelineDoc` write |
+
+M/S/R resolve the exact same rebindable Timeline-category action ids the track-header row above
+already binds — deliberately, so a user's rebind applies to whichever of the two surfaces has
+focus, and a new id would not have inherited an existing rebind. Falls back to hardcoded bare
+letters with no `ShortcutManager` installed, the same "no manager installed" contract every other
+surface action in this app follows.
+
+Accessibility (JUCE `AccessibilityHandler`, this ticket's other half): the fader and pan sliders
+report their value as spoken text (`"-3.0 dB"`, `"50% left"`) via `textFromValueFunction`; the
+meter is a read-only `staticText` value reporting its displayed level as a percentage; a column's
+own handler is a `group` role titled with the channel name; the M/S buttons carry an explicit
+on/off state in their title (`"Lead 1 mute, on"`) since they are built with
+`setClickingTogglesState(false)`, which would otherwise report a plain button to a screen reader
+rather than a toggle.
+
+**Known gap:** `MainComponent::resolveEditSurface()` (see **Surface routing** above) knows
+Graph/TimelineClips/PianoRoll only — Cmd+C/V/D/X/R with the Mixer focused falls through to the
+Graph surface. Out of scope for this ticket.
 
 **Snap toggles MAGNETISM, not the grid.** Turning snap off stops edits being pulled onto the
 division; it does **not** change which grid lines are drawn. Paint sites read

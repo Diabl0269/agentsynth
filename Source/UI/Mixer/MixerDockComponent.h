@@ -37,6 +37,11 @@ public:
     void setOnGraphTopologyChanged(std::function<void()> callback);
     /** MainComponent::makeChannelForNode -- fired by Direct's "Make channel" button. */
     void setOnMakeChannelForNode(std::function<void(juce::AudioProcessorGraph::NodeID)> callback);
+    /** FRO18: MainComponent wires this to performTrackEdit(setTrackArmed(...)) -- fired by the
+     *  Arm key (rebindable "timelineArmFocusedTrack") when a linked strip is focused. Sibling
+     *  forwarder to setOnGraphTopologyChanged/setOnMakeChannelForNode above: MainComponent talks
+     *  to the dock, never reaches through getMixerPanel() to set the panel's own callback field. */
+    void setOnArmTrack(std::function<void(synth::TrackId)> callback);
 
     Tab getActiveTab() const noexcept { return activeTab_; }
     bool isMixerTabActive() const noexcept { return activeTab_ == Tab::Mixer; }

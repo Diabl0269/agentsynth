@@ -54,6 +54,10 @@ void MixerDockComponent::setOnMakeChannelForNode(std::function<void(juce::AudioP
     mixer_.onMakeChannelForNode = std::move(callback);
 }
 
+void MixerDockComponent::setOnArmTrack(std::function<void(synth::TrackId)> callback) {
+    mixer_.onArmTrack = std::move(callback);
+}
+
 void MixerDockComponent::setActiveTab(Tab tab) {
     if (activeTab_ == tab)
         return;

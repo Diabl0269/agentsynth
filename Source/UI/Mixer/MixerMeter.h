@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 
 // MixerMeter.h -- FRO11 (P9-5, docs/mixer.md §5.10): a column's peak meter. Reads
 // ChannelStripModule/MasterModule::getMeterPeak via `peakProvider`, painted with the reserved
@@ -49,6 +50,10 @@ public:
     float getDisplayedLevelForTest() const noexcept { return displayedLevel_; }
 
     void paint(juce::Graphics& g) override;
+
+    /** FRO18: a read-only staticText handler reporting the current displayed level (0..1) as a
+     *  percentage -- the meter has nothing for VoiceOver to act on, only to read. */
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
 private:
     float displayedLevel_ = 0.0f;
