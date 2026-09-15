@@ -190,16 +190,19 @@ fi
 if [ "$FIRST_CONFIGURE" = true ]; then
     # shellcheck source=scripts/lib/deps-reuse.sh
     source "$REPO_ROOT/scripts/lib/deps-reuse.sh"
-    GIT_COMMON_DIR="$(git rev-parse --git-common-dir 2>/dev/null || true)"
-    MAIN_CHECKOUT_ROOT=""
-    if [ -n "$GIT_COMMON_DIR" ]; then
-        case "$GIT_COMMON_DIR" in
+    # Deliberately lowercase, unlike the real GIT_COMMON_DIR/GIT_WORK_TREE/etc. env vars this
+    # script `unset`s above (FRO82) -- keeping this a plain local avoids ever re-creating one of
+    # those exact names in a script that exists partly to strip them.
+    git_common_dir="$(git rev-parse --git-common-dir 2>/dev/null || true)"
+    main_checkout_root=""
+    if [ -n "$git_common_dir" ]; then
+        case "$git_common_dir" in
             /*) : ;;
-            *) GIT_COMMON_DIR="$REPO_ROOT/$GIT_COMMON_DIR" ;;
+            *) git_common_dir="$REPO_ROOT/$git_common_dir" ;;
         esac
-        MAIN_CHECKOUT_ROOT="$(cd "$GIT_COMMON_DIR/.." && pwd)"
+        main_checkout_root="$(cd "$git_common_dir/.." && pwd)"
     fi
-    deps_reuse_compute "$REPO_ROOT" "$MAIN_CHECKOUT_ROOT" "$BUILD_DIR"
+    deps_reuse_compute "$REPO_ROOT" "$main_checkout_root" "$BUILD_DIR"
     echo "$DEPS_REUSE_MESSAGE"
     # bash 3.2 (macOS's default /bin/bash) treats "${arr[@]}" on a zero-element array as an
     # unbound-variable error under `set -u` -- guard the expansion rather than relying on the
