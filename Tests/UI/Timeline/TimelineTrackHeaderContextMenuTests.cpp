@@ -56,9 +56,18 @@ public:
     bool canMakeChannelForTrack(TrackId) const override { return canMakeChannel; }
     void makeChannelForTrack(TrackId) override { ++makeChannelCalls; }
 
+    // FRO13 (P9-7): the "Save Track as Preset.../Set as Default Track Preset" pair, same
+    // disabled-not-hidden gate (canSaveTrackPresetForTrack) as canMakeChannelForTrack above.
+    bool canSaveTrackPresetForTrack(TrackId) const override { return canSaveTrackPreset; }
+    void saveTrackAsPreset(TrackId) override { ++saveTrackPresetCalls; }
+    void setTrackPresetAsDefault(TrackId) override { ++setTrackPresetDefaultCalls; }
+
     int deleteCalls = 0;
     int makeChannelCalls = 0;
     bool canMakeChannel = true;
+    int saveTrackPresetCalls = 0;
+    int setTrackPresetDefaultCalls = 0;
+    bool canSaveTrackPreset = true;
 };
 
 // A doc + one track + a header wired to the stub host above.
@@ -213,4 +222,50 @@ TEST(TimelineTrackHeaderContextMenuTest, ColourSwatchRightClickNeverReachesTheHe
 
     f.header->setShowContextMenuHookForTest(nullptr);
     EXPECT_FALSE(hookCalled) << "the colour swatch keeps its OWN right-click picker unchanged";
+}
+
+// =============================================================================
+// FRO13 (P9-7, docs/mixer.md §5.7): "Save Track as Preset.../Set as Default Track Preset" reached
+// through the SAME real-child-click path as Make Channel/Delete Track above.
+// =============================================================================
+
+TEST(TimelineTrackHeaderContextMenuTest, RightClickOnNameLabelShowsTrackPresetItems) {
+    HeaderFixture f;
+    const auto menu = rightClickChild(*f.header, f.header->getNameLabel());
+
+    EXPECT_NE(findItemByText(menu, "Save Track as Preset..."), nullptr);
+    EXPECT_NE(findItemByText(menu, "Set as Default Track Preset"), nullptr);
+}
+
+TEST(TimelineTrackHeaderContextMenuTest, ChoosingSaveTrackAsPresetAsksTheHost) {
+    HeaderFixture f;
+    const auto menu = rightClickChild(*f.header, f.header->getNameLabel());
+    const auto* item = findItemByText(menu, "Save Track as Preset...");
+    ASSERT_NE(item, nullptr);
+
+    f.header->applyContextMenuChoice(item->itemID);
+    EXPECT_EQ(f.host.saveTrackPresetCalls, 1);
+}
+
+TEST(TimelineTrackHeaderContextMenuTest, ChoosingSetAsDefaultTrackPresetAsksTheHost) {
+    HeaderFixture f;
+    const auto menu = rightClickChild(*f.header, f.header->getNameLabel());
+    const auto* item = findItemByText(menu, "Set as Default Track Preset");
+    ASSERT_NE(item, nullptr);
+
+    f.header->applyContextMenuChoice(item->itemID);
+    EXPECT_EQ(f.host.setTrackPresetDefaultCalls, 1);
+}
+
+TEST(TimelineTrackHeaderContextMenuTest, TrackPresetItemsDisabledWhenTrackHasNoChannel) {
+    HeaderFixture f;
+    f.host.canSaveTrackPreset = false;
+    const auto menu = rightClickChild(*f.header, f.header->getNameLabel());
+
+    const auto* saveItem = findItemByText(menu, "Save Track as Preset...");
+    const auto* defaultItem = findItemByText(menu, "Set as Default Track Preset");
+    ASSERT_NE(saveItem, nullptr);
+    ASSERT_NE(defaultItem, nullptr);
+    EXPECT_FALSE(saveItem->isEnabled) << "same disabled-not-hidden precedent as Make Channel";
+    EXPECT_FALSE(defaultItem->isEnabled);
 }
