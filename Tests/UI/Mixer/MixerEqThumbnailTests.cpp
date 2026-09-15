@@ -71,14 +71,14 @@ TEST(MixerEqThumbnailTests, PngRenderDarkThemeShowsBoostCutDifference) {
     synth::ui::MixerEqThumbnail flatThumbnail;
     flatThumbnail.setSize(140, 28);
     flatThumbnail.setEqModule(&flatEq);
-    const auto flatImage = renderUnderTheme(flatThumbnail, "Obsidian");
+    const auto flatImage = renderUnderTheme(flatThumbnail, "Obsidian Studio");
 
     ParametricEQModule boostedEq;
     enableBoostBand(boostedEq);
     synth::ui::MixerEqThumbnail boostedThumbnail;
     boostedThumbnail.setSize(140, 28);
     boostedThumbnail.setEqModule(&boostedEq);
-    const auto boostedImage = renderUnderTheme(boostedThumbnail, "Obsidian");
+    const auto boostedImage = renderUnderTheme(boostedThumbnail, "Obsidian Studio");
 
     ASSERT_GT(flatImage.getWidth(), 0);
     ASSERT_GT(boostedImage.getWidth(), 0);
@@ -95,14 +95,14 @@ TEST(MixerEqThumbnailTests, PngRenderLightThemeShowsBoostCutDifference) {
     synth::ui::MixerEqThumbnail flatThumbnail;
     flatThumbnail.setSize(140, 28);
     flatThumbnail.setEqModule(&flatEq);
-    const auto flatImage = renderUnderTheme(flatThumbnail, "Daylight");
+    const auto flatImage = renderUnderTheme(flatThumbnail, "Daylight Studio");
 
     ParametricEQModule boostedEq;
     enableBoostBand(boostedEq);
     synth::ui::MixerEqThumbnail boostedThumbnail;
     boostedThumbnail.setSize(140, 28);
     boostedThumbnail.setEqModule(&boostedEq);
-    const auto boostedImage = renderUnderTheme(boostedThumbnail, "Daylight");
+    const auto boostedImage = renderUnderTheme(boostedThumbnail, "Daylight Studio");
 
     ASSERT_GT(flatImage.getWidth(), 0);
     ASSERT_GT(boostedImage.getWidth(), 0);
@@ -121,12 +121,12 @@ TEST(MixerEqThumbnailTests, DimmedWhenBypassed) {
     thumbnail.setSize(140, 28);
     thumbnail.setEqModule(&eq);
 
-    const auto activeImage = renderUnderTheme(thumbnail, "Obsidian");
+    const auto activeImage = renderUnderTheme(thumbnail, "Obsidian Studio");
 
     eq.setBypassed(true);
     juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
 
-    const auto bypassedImage = renderUnderTheme(thumbnail, "Obsidian");
+    const auto bypassedImage = renderUnderTheme(thumbnail, "Obsidian Studio");
 
     ASSERT_GT(activeImage.getWidth(), 0);
     ASSERT_GT(bypassedImage.getWidth(), 0);
