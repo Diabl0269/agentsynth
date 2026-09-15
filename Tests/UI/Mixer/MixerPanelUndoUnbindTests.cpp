@@ -130,3 +130,47 @@ TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeNewPatchReplacesTheDocume
     EXPECT_EQ(countChannelStrips(mc.getAudioEngine().getGraph()), 0);
     EXPECT_EQ(mixerPanel.getStripColumnForTest(0), nullptr);
 }
+
+// FRO16 review follow-up: GraphEditor::deleteSelection() (a canvas "Delete", or
+// deleteMacroAndMembers -- the exact repro in MixerPanelKeyboardFocusTests.cpp's
+// DeletingTheFocusedStripClearsFocus) is a THIRD graph-freeing path, distinct from both a
+// graph-replacing restore above and MixerInsertList::removeRow()'s own single-row hook. It has no
+// rebuild of its own to lean on (reconcileTimelineBindingsOnly(), its only guaranteed post-apply
+// site, deliberately never rebuilds the mixer), so a stale fader binding could sit until an
+// UNRELATED later graph edit finally destroyed the old column and dereferenced it --
+// exit 124 + SIGABRT, deadlocked inside CriticalSection::enter on freed memory, same signature as
+// the two crashes this file already regression-tests. Fixed by also firing
+// onBeforeDetachAllModuleComponents from deleteSelection(), before it frees the selected nodes.
+TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeDeleteSelectionFreesTheStripsNodes) {
+    MainComponent mc(std::make_unique<MockProviderMPUT>());
+    mc.setSize(1400, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    mc.newPatchForTest();
+    mc.simulateAddAudioTrackClick();
+
+    auto& mixerPanel = mc.getMixerDock().getMixerPanel();
+    auto* column = mixerPanel.getStripColumnForTest(0);
+    ASSERT_NE(column, nullptr);
+    ASSERT_TRUE(column->isFaderBoundForTest());
+
+    auto& macros = mc.getGraphEditor().getMacros();
+    ASSERT_EQ(macros.size(), 1u) << "simulateAddAudioTrackClick boxes the strip's chain into one macro";
+    const auto macroId = macros.getAll()[0].id;
+
+    const int liveUnbindsBefore = synth::ui::MixerFader::getLiveUnbindCallCountForTest();
+
+    // deleteMacroAndMembers -> GraphCanvasHost::deleteSelection() frees every member node
+    // (including the ChannelStrip the fader is bound to) synchronously. No crash/hang is the
+    // primary assertion here; the counter proves the fix's own pre-removal hook actually ran
+    // rather than the test getting lucky on this run's heap layout.
+    mc.getGraphEditor().deleteMacroAndMembers(macroId);
+
+    EXPECT_GT(synth::ui::MixerFader::getLiveUnbindCallCountForTest(), liveUnbindsBefore)
+        << "deleteSelection() must unbind the strip's fader before removeNode() frees it";
+
+    // The eventual mixer rebuild (whenever it next runs, exactly like production) must not
+    // dereference anything freed above.
+    mixerPanel.rebuild();
+    EXPECT_EQ(countChannelStrips(mc.getAudioEngine().getGraph()), 0);
+    EXPECT_EQ(mixerPanel.getStripColumnForTest(0), nullptr);
+}

@@ -38,6 +38,15 @@ public:
     /** Fires after a mutation changed the graph -- the caller runs its own post-topology-change
      *  reconcile (MainComponent::reconcileTimelineAfterGraphChange). */
     std::function<void()> onMutated;
+    /** FRO16 UAF fix: fires from removeRow(), with the node about to be removed, BEFORE
+     *  graph_->removeNode() frees its processor. graph.removeNode() destroys the Node (and any
+     *  processor it owns) synchronously, but the caller's own reaction to onMutated -- bubbling up
+     *  to MixerPanelComponent::rebuild(), which destroys the OLD MixerColumnComponent (and its
+     *  MixerEqThumbnail member) -- only runs afterwards, still inside this same user gesture. A UI
+     *  object that holds a raw pointer into the node being removed right now (not the whole column
+     *  MixerColumnComponent::unbindFromGraph() already covers for graph-replacing restores) must
+     *  unbind from here instead, or its own later destruction dereferences freed memory. */
+    std::function<void(juce::AudioProcessorGraph::NodeID)> onBeforeNodeRemoved;
 
     int getPreferredHeight() const noexcept;
 

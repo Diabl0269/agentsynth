@@ -2,6 +2,7 @@
 
 #include "Mixer/MixerModel/MixerModel.h"
 #include "MixerColumnHeader.h"
+#include "MixerEqThumbnail.h"
 #include "MixerFader.h"
 #include "MixerInsertList.h"
 #include "MixerMeter.h"
@@ -48,6 +49,16 @@ public:
 
     /** True once bind() has run and unbindFromGraph()/rebindControls() hasn't cleared it since. */
     bool isFaderBoundForTest() const noexcept { return fader_.isBoundForTest(); }
+
+    /** A stable handle onto the column's own EQ thumbnail -- null-safe to call regardless of
+     *  whether the column currently has an EQ insert (the component always exists; it is just
+     *  hidden when there is nothing to show). */
+    MixerEqThumbnail& getEqThumbnailForTest() noexcept { return eqThumbnail_; }
+
+    /** The column's own insert list -- juce::PopupMenu never runs in a test process
+     *  (docs/testing.md), so a test drives MixerInsertList::removeRow()/moveRow()/addModule()
+     *  directly through this, exactly like the row menu's own async callbacks would. */
+    MixerInsertList& getInsertListForTest() noexcept { return insertList_; }
 
     /** FRO18: toggles this strip's mute/solo through exactly the same path the M/S buttons'
      *  onClick already used (undo bracket, ChannelStripModule::isSoloed via
@@ -132,10 +143,19 @@ private:
     juce::AudioProcessorGraph::NodeID nodeId_;
     juce::String uuid_;
     juce::String sourceLine_;
+    /** The uuid of the first (signal-order) Parametric EQ among this column's inserts -- see
+     *  rebindControls(). Empty when the column has no EQ insert. */
+    juce::String eqNodeUuid_;
+    /** The same EQ's NodeID -- compared against MixerInsertList::onBeforeNodeRemoved's argument to
+     *  unbind eqThumbnail_ before a live row-menu removal frees the module it's bound to (FRO16 UAF
+     *  fix; unbindFromGraph() above handles the graph-replacing-restore case, not this one). Empty
+     *  (default-constructed) when the column has no EQ insert. */
+    juce::AudioProcessorGraph::NodeID eqNodeId_;
 
     MixerColumnHeader header_;
     juce::Label sourceLineLabel_;
     MixerInsertList insertList_;
+    MixerEqThumbnail eqThumbnail_;
     MixerSendList sendList_;
     juce::Slider panSlider_;
     std::unique_ptr<juce::SliderParameterAttachment> panAttachment_;

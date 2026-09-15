@@ -43,7 +43,7 @@ public:
     AudioEngine& getAudioEngine() { return audioEngine; }
     ModMatrixComponent& getModMatrix() { return modMatrix; }
     juce::OwnedArray<ModuleComponent>& getModuleComponents() { return content.getModules(); }
-    std::function<void()> onBeforeDetachAllModuleComponents; // fires at the top of detachAllModuleComponents()
+    std::function<void()> onBeforeDetachAllModuleComponents; // fires here AND from deleteSelection()
     void detachAllModuleComponents();
 
     void paint(juce::Graphics& g) override;
