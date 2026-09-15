@@ -99,6 +99,19 @@ A toolbar toggle (`ToolbarComponent::Slot::ToggleTimeline`, right-hand group, im
 [`shortcuts.md`](shortcuts.md)) both flip `MainComponent::isTimelineVisible`. Visibility persists
 under the `timelinePanelVisible` key in `juce::ApplicationProperties`, default `false`.
 
+> **FRO11 (P9-5) note — this key/flag now gates the whole bottom dock, not just this panel.**
+> `TimelinePanelComponent` is nested inside `MixerDockComponent` (the Timeline/Mixer tab strip;
+> see [`mixer_implementation.md`](mixer_implementation.md) §8), and `mixerDock.setVisible(isTimelineVisible)`
+> is what the toggle/shortcut/persisted key actually drive. `isTimelineVisible` /
+> `timelinePanelVisible` mean "the dock is open", regardless of which tab is active; which of the
+> two panels is *showing* inside an open dock is the separate, independently persisted
+> `bottomDockActiveTab` key (`MixerDockComponent::kActiveTabKey`, default `"timeline"` — see
+> `mixer_implementation.md` §8). Names kept for compatibility with existing persisted settings
+> files; a component-local `TimelinePanelComponent::isVisible()` check no longer tells you whether
+> the dock is open (it only reflects "the Timeline tab is selected") — callers that need "is the
+> panel actually on screen" now compose `timelinePanel.isVisible() && mixerDock.isVisible()`
+> (`MainComponent::timerCallback()`'s 10 Hz poll gate is the reference call site).
+
 ### Height: user-resizable, persisted
 
 The panel's height is **not** fixed. `Metrics::timelinePanelHeight` (220) is the **default and the
@@ -117,6 +130,15 @@ minimum**, no longer the law:
 - **Persistence**: the `timelinePanelHeight` int key (same name as the metric) in
   `juce::ApplicationProperties`, absent by default — absence is what makes the metric the default.
   Written **once per gesture**, on drag end, never per pixel.
+- **FRO11 (P9-5) note**: this value is `MainComponent`'s own **total dock-carve height**, i.e. it
+  includes `MixerDockComponent::kTabStripHeight` (22px) on top of the timeline panel's own content
+  height. `TimelinePanelComponent::ResizeHandle::desiredHeightFor()` stays agnostic of whatever
+  chrome it sits inside and reports only its own desired *content* height; the
+  `onResizeHeight`/`onResizeHeightCommitted` wiring in `MainComponentSetupTimeline.cpp` is the one
+  seam that knows about both and adds the tab-strip height before calling
+  `setTimelinePanelHeight()`. A pre-FRO11 persisted height (written before the dock existed) is
+  therefore honoured as a total-carve value unchanged; only the panel's own *content* area is 22px
+  shorter than it used to be at the same persisted number, in exchange for the tab strip.
 - **The grab strip** (`TimelinePanelComponent::kResizeHandleHeight = 5`, `MouseCursor::
   UpDownResizeCursor`) spans the panel's full width along its top edge, *overlapping* the transport
   bar strip: `getTransportBarBounds()` still starts at `y == 0` (the three regions tile exactly, as

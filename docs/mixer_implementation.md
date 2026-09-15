@@ -335,11 +335,54 @@ Main line, in dependency order:
      `ChannelFlowTrackChannelLinkTests.cpp` (the behaviour through the real header buttons,
      including the mixed linked-solo + shared-solo case asserted on the rendered strip meters).
 
-4. **P9-5 (T174) — Mixer panel, tab beside the Timeline.** Columns, faders, meters, insert lists
-   (§5.6/§5.9); "track header M/S wired to strips" shipped in P9-4 above, inherited here.
-   - Tests: track header M/S toggles the bound strip's mute/solo state and nothing else; a
-     branching insert chain renders read-only with "Edit on canvas" rather than a reorderable
-     list.
+4. **P9-5 (T174) — Mixer panel, tab beside the Timeline. DONE.** `MixerDockComponent`
+   (`Source/UI/Mixer/`) hosts a two-tab strip (Timeline / Mixer, `kTabStripHeight = 22`px) above
+   whichever panel is active, replacing `TimelinePanelComponent` as `MainComponent`'s direct bottom
+   dock child; `MainComponent::isTimelineVisible`/the persisted `timelinePanelVisible` key now open
+   and close the whole dock (either tab), and `MixerDockComponent`'s own `bottomDockActiveTab` key
+   persists which tab is showing (default `"timeline"`) — see
+   [`timeline_panel_core.md`](timeline_panel_core.md)'s "Docking, toggle, shortcut" FRO11 note for
+   the full key-semantics change. `MixerPanelComponent` renders one `MixerColumnComponent` per
+   strip in track order, then strips with no track (by node id), then Direct, then Master (§5.10);
+   each column holds a `MixerFader` (linear-vertical slider bound 1:1 to the strip's gain param via
+   `juce::SliderParameterAttachment`, dB readout, undo bracket via `parameterGestureChanged` ->
+   `AppUndoManager::captureBeforeState`/`pushSnapshotFromCapture` so every fader/pan/M/S gesture is
+   exactly one undo step) plus pan, M/S (routed through `AudioEngine::setChannelStripSoloed` for
+   solo, never the module directly — §5.3), and a peak meter. Meters ride
+   `MainComponent`'s existing 10 Hz timer tick (no new timer), gated on
+   `mixerDock.isMixerTabActive() && mixerDock.isVisible()`. `Cmd+Alt+M` (`toggleMixerPanel`
+   command/shortcut) opens the dock on the Mixer tab, or closes it on a second press when already
+   open on Mixer (mirrors the existing Toggle Timeline button's open/close symmetry).
+   - Tests: `Tests/UI/Mixer/` (`MixerDockComponentTests.cpp` — tab switching, the toggle command's
+     open-on-Mixer/close-on-second-press behaviour, the command table round trip, active-tab
+     persistence across an `ApplicationProperties` reload; `MixerPanelComponentTests.cpp` — one
+     column per strip plus Direct plus Master, a themed PNG render smoke test in both built-in
+     themes, clicking a column selects its owning macro on the canvas; `MixerFaderTests.cpp` — the
+     slider/param binding and dB readout, including a regression test for a `parameterValueChanged`
+     UAF this ticket's implementation fixed, see "Deviations" below) plus
+     `Tests/Mixer/MixerModel/` for the headless column-ordering/query logic. Also updated: every
+     `Tests/UI/Timeline/TimelinePanel/*` and `Tests/UI/Layout/PanelAnimationAndLoadingTests.cpp`
+     case that asserted the panel's own bounds or visibility, since `TimelinePanelComponent` is now
+     nested inside `MixerDockComponent` instead of being `MainComponent`'s direct child (both a
+     different coordinate space and a different visibility-flag composition — see those files'
+     own FRO11 comments).
+   - Deviations found and fixed while implementing (not present before this ticket): (1) a
+     `MixerFader::parameterValueChanged` listener callback captured a raw `this` in a
+     `MessageManager::callAsync` lambda — a queued callback could fire after the fader was
+     destroyed (graph rebuild, or `MixerPanelComponent::rebuild()`), a use-after-free; fixed with a
+     `juce::Component::SafePointer`, this codebase's standing convention for this exact pattern. (2)
+     `MainComponent::timerCallback()`'s 10 Hz poll gate still read the renested
+     `timelinePanel.isVisible()` alone, which only reflects "the Timeline tab is selected" post-nesting,
+     not "the dock is open" — the poll kept running while the whole dock was closed; fixed by
+     composing `timelinePanel.isVisible() && mixerDock.isVisible()`. (3) the timeline panel's
+     resize-drag wiring (`MainComponentSetupTimeline.cpp`) passed the panel's self-reported content
+     height straight to `setTimelinePanelHeight()`, which owns the *total* dock-carve height —
+     every real resize-drag left the panel 22px (the tab strip) shorter than the user dragged to;
+     fixed by adding `MixerDockComponent::kTabStripHeight`, now public for exactly this seam. (4)
+     "Own panel" and "Window" placement (§5.9) and the Mixer tab's own resize grab strip are not
+     part of this ticket — the dock cannot be resized while the Mixer tab is active (the resize
+     handle lives on `TimelinePanelComponent`); tracked under P9-6/follow-up, not a regression from
+     before this ticket (there was no mixer panel to resize before it).
 
 5. **P9-6 (T175) — Detachable windows for Timeline + Mixer, and the placement preference.** One
    mechanism for both, icon-only detach control, keyboard focus scoped per window (T158).

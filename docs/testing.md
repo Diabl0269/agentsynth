@@ -161,6 +161,36 @@ The timeline's clock and the headless render harness built on it. No audio devic
 | `ChannelFlowMakeChannelCoreTests.cpp` | FRO25 (P9-3d): "Make channel" core behaviour through a standalone `GraphEditor` (render-identity comparisons), plus the adversarial no-double-drive / three-way-merge / chained-merge probes |
 | `ChannelFlowMakeChannelAppTests.cpp` | FRO25: the real app wiring — track header, canvas selection and module right-click menus, each as one undo step |
 
+### Mixer panel tests (FRO11/P9-5)
+
+`Tests/Mixer/MixerModel/` — headless query/ordering logic for the mixer panel's column set
+(`mixer.md` §5.10: strips in track order, then strips with no track by node id, then Direct, then
+Master), pure `Source/Mixer/MixerModel/` code with no component construction.
+
+`Tests/UI/Mixer/` — the panel UI, built on top of a real off-screen `MainComponent`
+(`newPatchForTest()` + `simulateAddAudioTrackClick()`, the `ChannelFlowTest` rig's own style):
+
+| File | Covers |
+|------|--------|
+| `MixerDockComponentTests.cpp` | the Timeline/Mixer tab strip switches without closing the dock; `toggleMixerPanel` (Cmd+Alt+M) opens the dock on Mixer then closes it on a second press; the command table row's actionId round-trips to `AppCommands::toggleMixerPanel`; the active tab persists across an `ApplicationProperties` reload |
+| `MixerPanelComponentTests.cpp` | one column per strip plus Direct plus Master; a themed PNG render smoke test in both the Obsidian and Daylight built-in themes (see the `createComponentSnapshot` pattern above); clicking a column selects its owning macro on the canvas |
+| `MixerFaderTests.cpp` | the fader's `juce::SliderParameterAttachment` binding and dB readout; also a regression test for a `MixerFader::parameterValueChanged` use-after-free this ticket's implementation found and fixed (a `MessageManager::callAsync` lambda captured a raw `this`, and the fader could be destroyed — a graph rebuild, or `MixerPanelComponent::rebuild()` — before the queued callback ran; fixed with `juce::Component::SafePointer`) |
+
+`MixerDockComponentTests.cpp`'s and `MixerPanelComponentTests.cpp`'s tests that call
+`dock.setActiveTab(...)` use `MixerDockActiveTabResetGuard.h`'s
+`MixerDockActiveTabResetGuardMDT` — see "Shared-settings-file reset-guard pattern" above.
+
+Also updated by this ticket (not new suites, but every case that asserted the timeline panel's own
+bounds or visibility, since `TimelinePanelComponent` moved from being `MainComponent`'s direct
+child to being nested inside `MixerDockComponent`): `Tests/UI/Timeline/TimelinePanel/TimelinePanelTests.cpp`,
+`TimelinePanelResizeTests.cpp`, `Tests/UI/Layout/PanelAnimationAndLoadingTests.cpp`,
+`Tests/UI/Timeline/TimelinePlayheadTests.cpp`. `TimelinePanelTestFixture.h` gained two shared
+helpers for this: `timelinePanelBoundsInMainComponent(mc)` (via `Component::getLocalArea`, since
+the panel's own `getBounds()` is now relative to the dock, not `MainComponent`) and
+`timelinePanelIsOpen(mc)` (composing `timelinePanel.isVisible() && mixerDock.isVisible()` —
+`Component::isShowing()` is not usable here or in production code, since it additionally requires
+a real Desktop peer at the tree's root, which a headless `MainComponent` test never has).
+
 ### Audio clip playback tests (24 tests)
 
 `Tests/Timeline/AudioClipPlaybackTests.cpp`. Five layers. Playback tests render through `synth::OfflineTransportDriver` exactly the way `TimelineE2ETests.cpp` does, but assert **bit-exact sample content** rather than RMS windows, which two things make possible: the test WAV is 32-bit IEEE float carrying exactly-representable values (`n / 65536`), and the streamer's prefetch thread is **paused** (`setPrefetchPausedForTest`) and driven by `pumpForTest()` from the render loop's per-block callback. There is no sleep and no "eventually the ring fills" wait anywhere in the file.
@@ -326,6 +356,21 @@ tmpDir.createDirectory();
 comp.getAppPropertiesForTest().getUserSettings()->setValue("librarySidebarVisible", "0");
 // TearDown(): reset to defaults, then tmpDir.deleteRecursively()
 ```
+
+#### Shared-settings-file reset-guard pattern (an alternative to tmp-dir isolation)
+
+A full headless `MainComponent` (`newPatchForTest()`) has no `getAppPropertiesForTest()` seam — it
+reads/writes the real, shared on-disk "Agent Synth" `ApplicationProperties` file directly, so a
+test that persists a setting through it pollutes that file for every other such test in the
+binary. The established fix (`ChannelFlowTestFixture.h`'s `ChannelFlowTest::resetKeys()`, and
+FRO11/P9-5's `Tests/UI/Mixer/MixerDockActiveTabResetGuard.h`) is a small RAII guard, declared as a
+local at the top of each affected test, that opens the same `ApplicationProperties`/`Options` the
+app itself uses and `removeValue()`s only the specific key(s) that suite touches — in its
+constructor AND destructor, so it's safe regardless of test order or a prior crashed run.
+`MixerDockActiveTabResetGuardMDT` resets `"bottomDockActiveTab"` this way for
+`MixerDockComponentTests.cpp` and `MixerPanelComponentTests.cpp`'s PNG-snapshot tests, which
+otherwise persist the Mixer tab as active and leak that into a later test's "Timeline is the
+default tab" assumption.
 
 ### State Management Tests (~82 tests)
 
