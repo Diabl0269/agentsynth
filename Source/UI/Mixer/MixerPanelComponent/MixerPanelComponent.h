@@ -44,6 +44,16 @@ public:
      *  graph/timeline/macro change (a handful of strips, never per-frame) -- see MixerModel.h. */
     void rebuild();
 
+    /** FRO11: unbinds every strip column's + Master's fader/pan/mute/solo/meter from whatever
+     *  processor/parameters they currently reference, WITHOUT destroying or rebuilding anything --
+     *  wired to GraphEditor::onBeforeDetachAllModuleComponents (MainComponent's own setup), so it
+     *  runs before every graph-replacing mutation (undo/redo restore, New Patch, Load, AI patch
+     *  apply) frees the nodes those bindings point at. rebuild()'s own stripColumns_.clear() (which
+     *  destroys the strip columns' MixerFaders, calling their now-safe idempotent unbind() again)
+     *  and buildMixerSnapshot()'s eventual re-bind against the NEW graph both then run afterwards,
+     *  from the after-restore hook -- see docs/mixer_implementation.md's FRO11 crash-fix entry. */
+    void unbindAllColumns();
+
     int getColumnCount() const noexcept;
 
     /** The Nth strip column (in the same track order buildMixerSnapshot returns), or null out of

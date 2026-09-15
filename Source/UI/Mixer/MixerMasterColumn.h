@@ -19,6 +19,13 @@ public:
     void configure(juce::AudioProcessorGraph& graph, AppUndoManager& undoManager);
     void setNodeId(juce::AudioProcessorGraph::NodeID nodeId);
 
+    /** FRO11: same contract as MixerColumnComponent::unbindFromGraph() -- unlike a strip column,
+     *  this component survives a MixerPanelComponent::rebuild() (it's a persistent member, not
+     *  recreated), so without this its fader would otherwise stay bound to Master's OLD gain param
+     *  across a graph-replacing restore until setNodeId() ran again, which is exactly the freed-
+     *  parameter window the FRO11 crash needs. */
+    void unbindFromGraph();
+
     /** One 10 Hz tick, same driving chain as MixerColumnComponent::refreshMeter(). */
     void refreshMeter();
 

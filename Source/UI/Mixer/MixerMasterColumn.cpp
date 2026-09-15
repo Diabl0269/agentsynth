@@ -58,6 +58,12 @@ void MixerMasterColumn::setNodeId(juce::AudioProcessorGraph::NodeID nodeId) {
     };
 }
 
+void MixerMasterColumn::unbindFromGraph() {
+    fader_.unbind();
+    muteButton_.onClick = nullptr;
+    meter_.peakProvider = nullptr;
+}
+
 void MixerMasterColumn::refreshMeter() {
     meter_.peakProvider = [this](int leg) -> float {
         if (graph_ == nullptr)

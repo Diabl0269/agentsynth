@@ -336,6 +336,7 @@ add_executable(Tests
     UI/Timeline/TimelineTransportBarTests.cpp
     UI/Timeline/TimelineViewStateTests.cpp
     UI/Mixer/MixerPanelComponentTests.cpp
+    UI/Mixer/MixerPanelUndoUnbindTests.cpp
     UI/Mixer/MixerFaderTests.cpp
     UI/Mixer/MixerDockComponentTests.cpp
     UI/Graph/MinimapComponentTests.cpp

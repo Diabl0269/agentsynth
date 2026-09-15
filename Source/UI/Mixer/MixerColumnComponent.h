@@ -33,6 +33,19 @@ public:
 
     juce::AudioProcessorGraph::NodeID getNodeId() const noexcept { return nodeId_; }
 
+    /** FRO11: unbinds the fader/pan/mute/solo/meter from whatever live processor/parameters they
+     *  currently reference, and clears this column's own raw pointers into the graph -- called by
+     *  MixerPanelComponent::unbindAllColumns() from GraphEditor::onBeforeDetachAllModuleComponents,
+     *  i.e. BEFORE a graph-replacing mutation (undo/redo restore, New Patch, Load, AI patch apply)
+     *  frees the nodes/parameters this column is bound to. The column itself is left alive --
+     *  MixerPanelComponent::rebuild() destroys and replaces it afterwards; this only makes that
+     *  eventual destruction (and this method itself, idempotent/null-safe like MixerFader::unbind())
+     *  safe to run against freed memory in between. */
+    void unbindFromGraph();
+
+    /** True once bind() has run and unbindFromGraph()/rebindControls() hasn't cleared it since. */
+    bool isFaderBoundForTest() const noexcept { return fader_.isBoundForTest(); }
+
     /** Fires when the header (or empty column background) is clicked -- MixerPanelComponent wires
      *  this to select the strip's macro (or the strip itself, if unboxed) on the canvas. */
     std::function<void()> onColumnClicked;

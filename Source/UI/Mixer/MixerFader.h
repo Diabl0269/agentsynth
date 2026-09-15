@@ -28,7 +28,19 @@ public:
      *  every gesture made while bound. Call unbind() (or bind() again) before the param's owning
      *  node can be destroyed. */
     void bind(juce::AudioProcessorGraph& graph, AppUndoManager& undoManager, juce::AudioParameterFloat& param);
+    /** Idempotent and null-safe -- a call with nothing bound (param_ already null) is a no-op, so
+     *  destruction, a defensive rebind, and FRO11's pre-restore unbind hook can all call it freely
+     *  without checking bind state first. */
     void unbind();
+
+    bool isBoundForTest() const noexcept { return param_ != nullptr; }
+
+    /** Counts only unbind() calls that actually detached a live parameter (param_ was non-null at
+     *  entry) -- a defensive no-op unbind() on an already-unbound fader never bumps this. Lets a
+     *  test prove the FRO11 pre-restore hook (MixerPanelComponent::unbindAllColumns(), reached via
+     *  GraphEditor::onBeforeDetachAllModuleComponents) actually ran and did real work, not just
+     *  that nothing crashed. */
+    static int getLiveUnbindCallCountForTest() noexcept { return liveUnbindCallCountForTest_; }
 
     juce::Slider& getSlider() noexcept { return slider_; }
 
@@ -46,6 +58,8 @@ private:
     AppUndoManager* undoManager_ = nullptr;
     juce::AudioParameterFloat* param_ = nullptr;
     bool gestureActive_ = false;
+
+    static int liveUnbindCallCountForTest_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerFader)
 };

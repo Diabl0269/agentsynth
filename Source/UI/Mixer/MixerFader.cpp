@@ -5,6 +5,8 @@
 
 namespace synth::ui {
 
+int MixerFader::liveUnbindCallCountForTest_ = 0;
+
 MixerFader::MixerFader() {
     slider_.setSliderStyle(juce::Slider::LinearVertical);
     slider_.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
@@ -36,8 +38,10 @@ void MixerFader::bind(juce::AudioProcessorGraph& graph, AppUndoManager& undoMana
 }
 
 void MixerFader::unbind() {
-    if (param_ != nullptr)
+    if (param_ != nullptr) {
+        ++liveUnbindCallCountForTest_;
         param_->removeListener(this);
+    }
     attachment_.reset();
     param_ = nullptr;
     graph_ = nullptr;

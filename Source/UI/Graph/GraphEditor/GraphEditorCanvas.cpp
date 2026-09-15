@@ -18,6 +18,10 @@
 using namespace detail;
 
 void GraphEditor::detachAllModuleComponents() {
+    // THE seam other UI hooks to unbind from live processors/parameters before they're freed by
+    // whatever mutation the caller is about to run (see the member's own doc comment).
+    if (onBeforeDetachAllModuleComponents)
+        onBeforeDetachAllModuleComponents();
     // A teardown can't be allowed to leave the settle animator holding a SafePointer to a card
     // set that no longer applies. Harmless either way (SafePointer guards it), but keeps the
     // zoomGestureActive state machine honest.

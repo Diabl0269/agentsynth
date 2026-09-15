@@ -121,6 +121,17 @@ void MixerPanelComponent::rebuild() {
     resized();
 }
 
+void MixerPanelComponent::unbindAllColumns() {
+    for (auto& column : stripColumns_)
+        if (column != nullptr)
+            column->unbindFromGraph();
+    if (masterColumn_ != nullptr)
+        masterColumn_->unbindFromGraph();
+    // directColumn_ binds no parameters (no fader/pan/M-S -- MixerDirectColumn.h's own comment),
+    // just a graph_ pointer to the (never freed here) AudioProcessorGraph object itself, so it has
+    // nothing to unbind.
+}
+
 bool MixerPanelComponent::revealColumn(juce::AudioProcessorGraph::NodeID stripId) {
     MixerColumnComponent* target = nullptr;
     for (auto& column : stripColumns_) {

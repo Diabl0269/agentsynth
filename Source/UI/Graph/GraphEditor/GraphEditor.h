@@ -43,12 +43,12 @@ public:
     AudioEngine& getAudioEngine() { return audioEngine; }
     ModMatrixComponent& getModMatrix() { return modMatrix; }
     juce::OwnedArray<ModuleComponent>& getModuleComponents() { return content.getModules(); }
+    std::function<void()> onBeforeDetachAllModuleComponents; // fires at the top of detachAllModuleComponents()
     void detachAllModuleComponents();
 
     void paint(juce::Graphics& g) override;
-    /** Draws the empty-canvas onboarding hint centred in the visible viewport (untransformed
-     *  GraphEditor local coordinates).  Called after all children have painted, so it draws
-     *  on top of the inner canvas without being affected by the content transform. */
+    /** Draws the empty-canvas onboarding hint centred in the visible, untransformed viewport,
+     *  after children paint -- so it draws over the canvas unaffected by the content transform. */
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
     void lookAndFeelChanged() override;

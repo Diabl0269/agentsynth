@@ -42,6 +42,17 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     mixerDock.setApplicationProperties(&appProperties);
     mixerDock.setOnGraphTopologyChanged([this] { reconcileTimelineAfterGraphChange(); });
     mixerDock.setOnMakeChannelForNode([this](juce::AudioProcessorGraph::NodeID source) { makeChannelForNode(source); });
+    // FRO11 crash fix: the mixer's fader/pan bindings are raw pointers into live processor
+    // parameters, exactly like ModuleComponent's own -- so they unbind through the SAME seam
+    // ModuleComponent already uses (GraphEditor::onBeforeDetachAllModuleComponents, fired at the
+    // top of detachAllModuleComponents() -- every graph-replacing path funnels through it,
+    // undo/redo's lazy preRestore included). Without this, a graph-structural undo/redo that frees
+    // a ChannelStripModule while the mixer still held its gain param destroys the stale
+    // MixerColumnComponent from mixerDock.rebuildMixer() (reconcileTimelineAfterGraphChange(),
+    // called from the AFTER-restore hook) AFTER the restore already freed the param --
+    // MixerFader::unbind()'s removeListener() on that freed memory is what hung the Linux CI build
+    // (deadlock inside CriticalSection::enter on freed memory) that this fixes.
+    graphEditor.onBeforeDetachAllModuleComponents = [this] { mixerDock.getMixerPanel().unbindAllColumns(); };
     // The channel chip's click (TrackChannelLinkSurface::revealChannelForTrack, "THE P9-5 HOOK"
     // per its own comment): open the dock (same sequence performToggleMixerPanel's own "closed"
     // branch runs) before revealColumnForStrip switches tabs and scrolls to the column -- a closed

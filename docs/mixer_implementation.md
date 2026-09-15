@@ -382,7 +382,30 @@ Main line, in dependency order:
      "Own panel" and "Window" placement (§5.9) and the Mixer tab's own resize grab strip are not
      part of this ticket — the dock cannot be resized while the Mixer tab is active (the resize
      handle lives on `TimelinePanelComponent`); tracked under P9-6/follow-up, not a regression from
-     before this ticket (there was no mixer panel to resize before it).
+     before this ticket (there was no mixer panel to resize before it). (5) FRO11 follow-up (PR
+     #374 CI): a graph-structural undo/redo (or New Patch/Load/AI patch apply) froze the affected
+     `ChannelStripModule`/`MasterModule` nodes' parameters before the mixer's own `MixerFader`/pan
+     `SliderParameterAttachment` had let go of them — `MixerPanelComponent::rebuild()` (reached from
+     the AFTER-restore hook, `reconcileTimelineAfterGraphChange()`) destroyed the stale column
+     *after* the restore had already freed what it pointed at, so `~MixerFader` -> `unbind()` ->
+     `AudioProcessorParameter::removeListener()` ran on freed memory (a Linux CI hang:
+     `ChannelFlowTest.CreateChannelsIsANoOpWhenNothingNeedsAChannel`, exit 124 + SIGABRT — a
+     deadlock inside `CriticalSection::enter` on freed memory; macOS/Windows passed only by luck).
+     Fixed the same way `ModuleComponent` already handles this class of bug
+     (`GraphEditor::detachAllModuleComponents()`, called before every graph-replacing mutation):
+     added `GraphEditor::onBeforeDetachAllModuleComponents`, fired at the top of
+     `detachAllModuleComponents()` — the one seam every such call site already funnels through —
+     wired by `MainComponent` to `MixerPanelComponent::unbindAllColumns()` (unbinds every strip
+     column's + Master's fader/pan/mute/solo/meter and clears their raw pointers, without
+     destroying anything; `MixerColumnComponent::unbindFromGraph()` /
+     `MixerMasterColumn::unbindFromGraph()`, both idempotent/null-safe like `MixerFader::unbind()`
+     itself). `~MainComponent()`'s own `graphEditor.detachAllModuleComponents()` call (already
+     ordered before `audioEngine.shutdown()`) now covers the same teardown-ordering hazard for the
+     mixer for free. Regression tests: `Tests/UI/Mixer/MixerPanelUndoUnbindTests.cpp`
+     (`MixerPanelUnbindsBeforeAGraphRestoreSoUndoNeverTouchesFreedParameters`,
+     `MixerPanelUnbindsBeforeNewPatchReplacesTheDocument`), asserting via
+     `MixerFader::getLiveUnbindCallCountForTest()` that the hook actually ran, not just that
+     nothing crashed.
 
 5. **P9-6 (T175) — Detachable windows for Timeline + Mixer, and the placement preference.** One
    mechanism for both, icon-only detach control, keyboard focus scoped per window (T158).

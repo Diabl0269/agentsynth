@@ -135,6 +135,17 @@ void MixerColumnComponent::rebindControls() {
     juce::ignoreUnused(module);
 }
 
+void MixerColumnComponent::unbindFromGraph() {
+    panAttachment_.reset();
+    fader_.unbind();
+    muteButton_.onClick = nullptr;
+    soloButton_.onClick = nullptr;
+    meter_.peakProvider = nullptr;
+    graph_ = nullptr;
+    undoManager_ = nullptr;
+    audioEngine_ = nullptr;
+}
+
 void MixerColumnComponent::refreshMeter() {
     meter_.peakProvider = [this](int leg) -> float {
         if (graph_ == nullptr)
