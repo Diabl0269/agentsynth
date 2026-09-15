@@ -309,6 +309,34 @@ in §5.2) — has its own default preset.
   names. `"timeline"` stays a reserved field, refused on the untrusted path, exactly as it is
   today.
 
+**As implemented (P9-7, FRO13).** `synth::TrackPresetManager` (`Source/Mixer/TrackPresetManager.h`)
+is a thin wrapper over `SnippetManager::extractSnippet`/`insertSnippet`, adding only what a track
+preset needs beyond a plain snippet: `extractTrackPreset` walks outside modulators
+(`collectOutsideModulatorsForTrackPreset`, the §5.7 "stops at another channel's strip" rule) and
+scrubs `"solo"` from the captured Channel Strip's extra state before the preset is ever written to
+disk — an imported `soloed_=true` would otherwise silence the whole mix render-wide (root
+`CLAUDE.md` tripwire); `insertTrackPreset` is `SnippetManager::insertSnippet` with
+`trustedPayload=false`, so the untrusted `validatePatch` gate still runs on every disk-sourced
+preset. Entry points: the track header's right-click menu and the channel macro's own menu both
+offer **"Save Track as Preset..."**/**"Set as Default Track Preset"**, gated on
+`synth::isChannelMacro` (omitted entirely — not merely disabled — for an ordinary, non-channel
+macro, same as the header's own disabled-not-hidden gate when the track has no channel yet); the
+two per-type defaults are read from Preferences -> Mixer's `mixerDefaultTrackPresetAudio`/
+`mixerDefaultTrackPresetInstrument` settings keys and consulted by `+ Track -> Audio Track` /
+`Instrument Track` before the factory EQ -> Compressor -> Strip chain is built; `+ Track` also
+lists every OTHER saved preset by type as its own submenu entries, and "Insert Track Preset from
+File..." loads one saved anywhere on disk (`TimelinePanelTrackHeaders.cpp`), both resolved against
+a menu-open-time snapshot (`audioTrackPresetMenuSnapshot_`/`instrumentTrackPresetMenuSnapshot_`,
+same "resolve against the snapshot, not a live re-query" reason the plugin list submenu already
+uses) since a preset can be saved or deleted between the menu opening and the click landing. Tests:
+`Tests/Mixer/TrackPreset/TrackPresetTests.cpp` (round-trip render identity, two inserts never
+collide, a smuggled `"timeline"` key has no effect because `prepareForInsert` only ever copies
+`"nodes"`/`"connections"`/`"macros"`, a malformed preset is refused whole),
+`TrackPresetCaptureTests.cpp` (the outside-modulator walk, the other-channel-strip stop rule, the
+solo scrub, and the macro-menu gate), `TrackPresetDefaultsTests.cpp` (the per-type default actually
+consulted by `+ Track -> Audio Track`), and four cases in
+`Tests/UI/Timeline/TimelineTrackHeaderContextMenuTests.cpp` for the header menu's own wiring.
+
 ### 5.8 Make channel / shared modules
 
 "Make channel" gathers the chain from a track's source to the output into a channel macro plus
@@ -892,13 +920,15 @@ Main line, in dependency order:
      docked panel in a headless test; keyboard focus in one detached window does not leak into the
      other; switching the placement preference moves the panel without losing its state.
 
-6. **P9-7 (T176) — Track presets.** Save/set-default from the track header and channel menu,
-   Preferences -> Mixer defaults, `+ Track` preset listing, the outside-module walk-and-copy rule
-   (§5.7).
-   - Tests: a track preset round-trips through `validatePatch(trusted=false)` before a trusted
-     apply; a hand-edited preset containing a `"timeline"` key is refused; a preset whose channel
-     depends on an outside shared module imports with a fresh copy of that module wired to the
-     same ports, not a reference to the original.
+6. **P9-7 (T176) — Track presets. DONE.** See §5.7 for the design as it landed
+   (`TrackPresetManager`, the outside-modulator walk-and-copy rule, the solo scrub, the header/macro
+   menu entry points, the per-type defaults consulted by `+ Track`).
+   - Tests: `Tests/Mixer/TrackPreset/TrackPresetTests.cpp`,
+     `TrackPresetCaptureTests.cpp`, `TrackPresetDefaultsTests.cpp` (see §5.7's "As implemented" for
+     what each proves) plus four cases in `TimelineTrackHeaderContextMenuTests.cpp`.
+   - Not yet covered by a test (manual verification only): the `+ Track` submenu listing every
+     saved preset by type and "Insert Track Preset from File..." (`TimelinePanelTrackHeaders.cpp`),
+     both implemented but exercised only by clicking through the app.
 
 Side tracks (each independent of the main line beyond its own listed dependency):
 
