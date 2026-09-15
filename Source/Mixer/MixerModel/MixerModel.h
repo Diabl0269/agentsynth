@@ -56,17 +56,24 @@ struct MixerColumn {
     std::vector<TrackId> feedingTracks;
 
     /** The feeding track's own source node -- the insert chain's implicit predecessor (needed to
-     *  splice a new FIRST insert in ahead of an empty/one-entry chain). Invalid for Direct/Master
-     *  and for an orphan strip. */
+     *  splice a new FIRST insert in ahead of an empty/one-entry chain). Invalid for Direct/Master,
+     *  for a non-bus orphan strip, and for a Kind::Bus column (FRO15: a bus's own chain has no
+     *  external source -- nothing feeds its EQ from outside -- so MixerInsertList::moveRow refuses
+     *  to move a row to the very front of a bus's chain rather than splice against an invalid id). */
     juce::AudioProcessorGraph::NodeID sourceNodeId;
 
-    /** The chain between the feeding track's source and this strip, in signal order (§5.6). Empty
-     *  for Direct/Master and for an orphan strip with no track to walk from. */
+    /** The chain between this strip and its own upstream source, in signal order (§5.6): the
+     *  feeding track's source for an ordinary strip, or (FRO15, §5.15 D6) the strip's own
+     *  EQ/Compressor chain walked BACKWARD for a Kind::Bus column, which has no feeding track to
+     *  walk forward from. A send feeding the bus (landing on the same strip input channels an
+     *  insert's own output would) is excluded from this walk, never counted as a bus insert or as
+     *  branching. Empty for Direct/Master and for a non-bus orphan strip with no track to walk
+     *  from. */
     std::vector<MixerInsertEntry> inserts;
 
-    /** False => `inserts` is read-only (a branch or a shared node sits between source and strip);
-     *  the column shows "Edit on canvas" instead of add/reorder/remove. Meaningless when `inserts`
-     *  is empty. */
+    /** False => `inserts` is read-only (a branch, a shared node, or -- for a bus -- more than one
+     *  send/insert landing on the same strip input sits upstream); the column shows "Edit on
+     *  canvas" instead of add/reorder/remove. Meaningless when `inserts` is empty. */
     bool insertChainIsLinear = false;
 
     /** This strip's active send slots, in slot order (§5.15). Empty for Direct/Master and for any

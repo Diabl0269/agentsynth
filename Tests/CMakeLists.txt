@@ -348,6 +348,7 @@ add_executable(Tests
     UI/Mixer/MixerDockComponentTests.cpp
     UI/Mixer/MixerEqThumbnailTests.cpp
     UI/Mixer/MixerColumnComponentTests.cpp
+    UI/Mixer/MixerInsertListTests.cpp
     UI/Mixer/MixerPlacementControllerTests.cpp
     UI/Layout/DetachablePanelHost/DetachablePanelHostTests.cpp
     UI/Layout/DetachablePanelHost/DetachedPanelWindowTests.cpp

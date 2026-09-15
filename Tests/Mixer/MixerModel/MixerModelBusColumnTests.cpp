@@ -1,6 +1,7 @@
 // MixerModelBusColumnTests.cpp -- FRO15 (P9-9, docs/mixer.md §5.15): how buildMixerSnapshot sees
 // buses and sends. Headless, same bare AudioEngine/TimelineDoc/MacroSet rig as the rest of the
 // MixerModel suite.
+#include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Mixer/MasterSplice.h"
 #include "Mixer/MixerModel/MixerModel.h"
 #include "Mixer/MixerSends/MixerSends.h"
@@ -141,4 +142,68 @@ TEST(MixerModelBusColumnTests, ABoxedBusTakesItsMacroName) {
     ASSERT_EQ(snapshot.columns.size(), 1u);
     EXPECT_EQ(snapshot.columns[0].kind, synth::MixerColumn::Kind::Bus);
     EXPECT_EQ(snapshot.columns[0].name, "Reverb Bus") << "the macro name wins over the Bus N fallback";
+}
+
+// FRO15 in-app finding: a bus created through "+ Bus" showed no insert rows and no EQ thumbnail.
+// Root cause -- buildInsertsForColumn only ever walked FORWARD from a feeding track's source, and a
+// bus has none, so it bailed out before ever looking at the EQ/Compressor buildBusChannel really
+// built. This calls the same Core flow the button's MixerPanelComponent::createBus wraps
+// (synth::buildBusChannel) directly -- headless, no GraphEditor/undo transaction needed to prove
+// what the graph looks like afterward.
+TEST(MixerModelBusColumnTests, ANewlyCreatedBusListsItsBypassedEqAndCompressorInSignalOrder) {
+    AudioEngine engine;
+    auto& graph = engine.getGraph();
+    graph.setPlayConfigDetails(0, 2, 44100.0, 512);
+    synth::TimelineDoc doc;
+    synth::MacroSet macros;
+
+    const synth::DefaultChannelLayout layout{{0, 0}, {100, 0}, {200, 0}, {300, 0}};
+    const auto channel = synth::buildBusChannel(graph, layout);
+    ASSERT_NE(channel.strip, nullptr) << "buildBusChannel must succeed with a fresh graph";
+
+    const auto snapshot = synth::buildMixerSnapshot(graph, doc, macros);
+    ASSERT_EQ(snapshot.columns.size(), 1u);
+    const auto& busColumn = snapshot.columns[0];
+    EXPECT_EQ(busColumn.kind, synth::MixerColumn::Kind::Bus);
+    EXPECT_TRUE(busColumn.feedingTracks.empty()) << "a bus has no feeding track to walk forward from";
+
+    ASSERT_EQ(busColumn.inserts.size(), 2u) << "the bypassed EQ -> Compressor chain must show up";
+    EXPECT_EQ(busColumn.inserts[0].name, "Parametric EQ");
+    EXPECT_TRUE(busColumn.inserts[0].bypassed);
+    EXPECT_EQ(busColumn.inserts[1].name, "Compressor");
+    EXPECT_TRUE(busColumn.inserts[1].bypassed);
+    EXPECT_TRUE(busColumn.insertChainIsLinear) << "no send is wired in yet -- nothing branches";
+    EXPECT_EQ(busColumn.sourceNodeId, NodeID{}) << "a bus's own chain has no external source";
+}
+
+// A send lands on the SAME strip input channels (ch0/kRightBase) an insert's own output would
+// (docs/mixer.md §5.15 D2) -- so without the ChannelStripModule-predecessor exclusion, a wired send
+// would either misclassify the bus's own chain as "branching" (losing add/reorder/remove) or have
+// the walk wander into the SENDING strip's own chain and list its inserts as this bus's.
+TEST(MixerModelBusColumnTests, ASendWiredIntoABusIsNeverListedAsAnInsertAndStaysLinear) {
+    AudioEngine engine;
+    auto& graph = engine.getGraph();
+    graph.setPlayConfigDetails(0, 2, 44100.0, 512);
+    synth::TimelineDoc doc;
+    synth::MacroSet macros;
+
+    const auto track = doc.addTrack(synth::TrackKind::Audio, "Vocals");
+    const auto rig = buildLinearChannelRigMMT(graph, doc, track);
+    ASSERT_NE(rig.strip, nullptr);
+
+    const synth::DefaultChannelLayout layout{{0, 0}, {100, 0}, {200, 0}, {300, 0}};
+    const auto channel = synth::buildBusChannel(graph, layout);
+    ASSERT_NE(channel.strip, nullptr);
+
+    ASSERT_EQ(synth::addSend(graph, rig.strip->nodeID, channel.strip->nodeID), 0)
+        << "the source strip's send lands on the bus's own strip ch0/kRightBase";
+
+    const auto snapshot = synth::buildMixerSnapshot(graph, doc, macros);
+    const auto* busColumn = columnFor(snapshot, channel.strip->nodeID);
+    ASSERT_NE(busColumn, nullptr);
+
+    ASSERT_EQ(busColumn->inserts.size(), 2u) << "still just the bus's own EQ/Compressor";
+    EXPECT_EQ(busColumn->inserts[0].name, "Parametric EQ");
+    EXPECT_EQ(busColumn->inserts[1].name, "Compressor");
+    EXPECT_TRUE(busColumn->insertChainIsLinear) << "a feeding send is a source, not a branch";
 }

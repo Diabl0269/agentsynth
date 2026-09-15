@@ -50,6 +50,12 @@ public:
 
     int getPreferredHeight() const noexcept;
 
+    /** FRO15 test seams: what setEntries() last recorded, without a juce::Image round-trip --
+     *  Tests/UI/Mixer/MixerColumnComponentTests.cpp's bus-column layout cases and
+     *  MixerInsertListTests.cpp's overlap regression use these directly. */
+    int getEntryCountForTest() const noexcept { return (int)entries_.size(); }
+    bool isLinearForTest() const noexcept { return linear_; }
+
     // ---- Headless test seams -- juce::PopupMenu never runs in a test process
     // (docs/testing.md), so these are the same real methods the async menu callbacks below call,
     // exposed directly (the ChannelFlow suite's own `applyAddTrackMenuChoice` precedent). Only
