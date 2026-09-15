@@ -66,6 +66,27 @@ TEST(FocusRegionRegistryTest, RegionContainingPrefersTheMostSpecificNestedRegion
         << "focus on the outer root itself (not inside the nested region) still resolves to the outer one";
 }
 
+// FRO12 (P9-6, docs/mixer.md §5.9): a DetachedPanelWindow owns its OWN FocusRegionRegistry,
+// separate from MainComponent's -- Tab inside it must cycle only its own region(s). Modeled here
+// as two plain registries (no need for a real DetachedPanelWindow to prove the pure logic never
+// crosses); DetachedPanelWindowTests.cpp's TabCyclesOnlyItsOwnOneRegionRegistry is the real-class
+// version, and FocusRegionMainComponentTest below proves the DOCKED side's registry drops the
+// region while detached.
+TEST(FocusRegionRegistryTest, TwoIndependentRegistriesNeverCrossResolve) {
+    juce::Component dockedRoot, detachedRoot;
+    synth::ui::FocusRegionRegistry dockRegistry;
+    dockRegistry.addRegion({"canvas", &dockedRoot, nullptr, nullptr});
+    synth::ui::FocusRegionRegistry windowRegistry;
+    windowRegistry.addRegion({"mixer", &detachedRoot, nullptr, nullptr});
+
+    EXPECT_EQ(dockRegistry.regionContaining(&detachedRoot), nullptr)
+        << "a component only in the OTHER registry must never resolve here";
+    EXPECT_EQ(windowRegistry.regionContaining(&dockedRoot), nullptr);
+
+    EXPECT_EQ(dockRegistry.nextOpenRegionId({}, true), "canvas");
+    EXPECT_EQ(windowRegistry.nextOpenRegionId({}, true), "mixer");
+}
+
 TEST(FocusRegionRegistryTest, NullIsOpenMeansAlwaysOpen) {
     juce::Component root;
     synth::ui::FocusRegion region{"canvas", &root, nullptr, nullptr};
@@ -495,4 +516,23 @@ TEST_F(FocusRegionMainComponentTest, DirectFocusShortcutsAreNotSuppressedByTheWe
     EXPECT_TRUE(commandIsActive(mc, AppCommands::focusTimeline));
     EXPECT_TRUE(commandIsActive(mc, AppCommands::focusLibrary));
     EXPECT_TRUE(commandIsActive(mc, AppCommands::focusLibrarySearch));
+}
+
+// ============================================================================
+// 3. FRO12 (P9-6) -- detach/redock re-runs MainComponent's own registration pass.
+// ============================================================================
+
+TEST_F(FocusRegionMainComponentTest, DetachingAPanelDropsItFromMainComponentsRegistryUntilRedocked) {
+    MainComponent mc(std::make_unique<FocusRegionMockProvider>());
+    ASSERT_NE(mc.getFocusRegionsForTest().findById("timeline"), nullptr)
+        << "docked by default -- the region must already be registered";
+
+    // addToDesktop=false internally (DetachedPanelWindow's own contract) -- this never creates a
+    // native peer, so it is safe on a headless CI runner exactly like every other detach test here.
+    mc.getMixerDock().getTimelineHost().setDetached(true);
+    EXPECT_EQ(mc.getFocusRegionsForTest().findById("timeline"), nullptr)
+        << "a panel detached to its own window has nothing docked here to Tab-cycle to";
+
+    mc.getMixerDock().getTimelineHost().setDetached(false);
+    EXPECT_NE(mc.getFocusRegionsForTest().findById("timeline"), nullptr) << "redocking must re-register it";
 }

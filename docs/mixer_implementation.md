@@ -407,11 +407,39 @@ Main line, in dependency order:
      `MixerFader::getLiveUnbindCallCountForTest()` that the hook actually ran, not just that
      nothing crashed.
 
-5. **P9-6 (T175) — Detachable windows for Timeline + Mixer, and the placement preference.** One
-   mechanism for both, icon-only detach control, keyboard focus scoped per window (T158).
-   - Tests: a detached mixer window built with `addToDesktop=false` behaves identically to the
-     docked panel in a headless test; keyboard focus in one detached window does not leak into the
-     other; switching the placement preference moves the panel without losing its state.
+5. **P9-6 (T175) — Detachable windows for Timeline + Mixer, and the placement preference. DONE.**
+   One mechanism for both (`Source/UI/Layout/DetachablePanelHost/`), icon-only detach control,
+   keyboard focus scoped per window (T158). See §5.9 for the design as it landed (the placement
+   state table, `MixerPlacementController`, and the per-window focus mechanics).
+   - `DetachablePanelHost` holds its panel by reference and only ever reparents it (dock slot <->
+     `DetachedPanelWindow`'s own content) — never rebuilds it, so scroll/zoom/selection survive
+     untouched. `MixerDockComponent` owns two hosts (`timelineHost_`/`mixerHost_`); Tab placement's
+     single tab-strip detach button acts on whichever tab is active rather than literally
+     reparenting either host's own button through three different parents — a deliberate
+     simplification from the original design note, called out as a deviation.
+   - `MixerPlacementController` (the one collaborator `MainComponent.h` adds) owns the placement
+     preference and moves `mixerHost_` between its three homes; Own-panel ships without the
+     Timeline dock's animated slide or a persisted height (fixed `kOwnPanelHeight`, no resize
+     handle — an explicit scope cut, same reasoning as the resize-handle cut above).
+   - Tests: `Tests/UI/Layout/DetachablePanelHost/DetachablePanelHostTests.cpp` (detach/redock
+     preserves panel identity + a mutated state field; tooltip toggle; icon-only button text always
+     empty; embedded-header suppression; a window-driven redock via its own close button fires the
+     same callback); `DetachedPanelWindowTests.cpp` (mirrors
+     `HostedPluginEditorWindowTests.cpp`: `addToDesktop=false` creates no peer; bounds round-trip
+     through the persisted key; close button fires `onCloseRequested` and never self-destroys;
+     `Desktop::getDefaultLookAndFeel()` unchanged before/after construction + `setVisible(true)`,
+     and `window.getLookAndFeel() == &handedInstance`; per-window Tab-cycle resolution).
+     `DetachRedockStateTests.cpp` proves the SAME invariant against real production panels (not a
+     stub): Timeline zoom/scroll (`TimelineViewState`) and a selected Mixer column both survive a
+     real detach/redock through `MixerDockComponent`/`MainComponent`. `FocusRegionTests.cpp`
+     additions: two independent registries never cross-resolve; detaching a panel drops it from
+     `MainComponent`'s own registry until redocked. `MixerPlacementControllerTests.cpp`: each
+     placement's launch-time state (Tab strip / reparented-out own panel / hidden-until-revealed
+     window); a live settings-file write applies immediately. `IconLibraryTests.cpp`: `kCount`
+     bump, the new ordinal, non-null `Drawable`, `BinaryData` symbol.
+   - Not covered by an automated test (manual verification only, noted in the PR): the real visual
+     layout of a detached window's header/content, and the "Own panel" strip's on-screen
+     appearance — this session could not launch the real app (see the PR's click-paths).
 
 6. **P9-7 (T176) — Track presets. DONE.** See §5.7 for the design as it landed
    (`TrackPresetManager`, the outside-modulator walk-and-copy rule, the solo scrub, the header/macro
