@@ -82,6 +82,10 @@ bool MixerSendList::isAttachedForTest(int rowIndex) const {
     return rowIndex >= 0 && rowIndex < (int)rows_.size() && rows_[(size_t)rowIndex].attachment != nullptr;
 }
 
+juce::Slider* MixerSendList::getKnobForTest(int rowIndex) const {
+    return rowIndex >= 0 && rowIndex < (int)rows_.size() ? rows_[(size_t)rowIndex].knob.get() : nullptr;
+}
+
 int MixerSendList::getPreferredHeight() const noexcept {
     return ((int)entries_.size() + (canAddSend() ? 1 : 0)) * kRowHeight;
 }

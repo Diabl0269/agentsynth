@@ -18,6 +18,7 @@
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "AudioEngine/AudioEngine.h"
+#include "Mixer/MixerSends/MixerSends.h"
 #include "Modules/MasterModule.h"
 #include "Transport/BounceExporter.h"
 #include "Transport/OfflineTransportDriver.h"
@@ -672,4 +673,144 @@ TEST(StemExportTest, TapCapturesSilenceWhenMutedAndWhenSoloGated) {
     }
 
     strip.setStemTapBuffer(nullptr);
+}
+
+// ============================================================================
+// 8. FRO15 (docs/mixer.md §5.15/§5.12): a group/send bus is a ChannelStrip, so it gets a stem for
+//    free -- and the §5.12 identity has to survive the extra path. A source's stem stays PRE-send
+//    (the tap copies the main legs only), so nothing is double-counted for a post-fader send and
+//    nothing is lost for a pre-fader one: it appears only in the bus's own stem.
+// ============================================================================
+
+namespace {
+
+// One source strip whose SEND 0 feeds a bus strip; both land on Master's Mix. Same construction
+// order and param-before-driver discipline as StemRig above.
+struct SendStemRig {
+    AudioEngine engine{AudioEngine::HostMode::Hosted};
+    std::unique_ptr<synth::OfflineTransportDriver> driver;
+    NodeID source, bus, master, out;
+
+    bool build(bool preFader) {
+        engine.initialise();
+        auto& graph = engine.getGraph();
+        graph.setPlayConfigDetails(2, 2, kSampleRate, kBlockSize);
+
+        out = addFactoryNode(graph, "Audio Output");
+        master = addFactoryNode(graph, "Master");
+        source = addFactoryNode(graph, "Channel Strip");
+        bus = addFactoryNode(graph, "Channel Strip");
+        if (out == NodeID{} || master == NodeID{} || source == NodeID{} || bus == NodeID{})
+            return false;
+
+        const auto src = graph.addNode(std::make_unique<ConstantSource>(kSourceA))->nodeID;
+        graph.addConnection({{src, 0}, {source, 0}});
+        graph.addConnection({{src, 1}, {source, kRight}});
+        for (auto strip : {source, bus}) {
+            graph.addConnection({{strip, 0}, {master, MasterModule::kMixLeft}});
+            graph.addConnection({{strip, kRight}, {master, MasterModule::kMixRight}});
+        }
+        graph.addConnection({{master, 0}, {out, 0}});
+        graph.addConnection({{master, 1}, {out, 1}});
+
+        auto* sourceStrip = stripAt(graph, source);
+        auto* busStrip = stripAt(graph, bus);
+        if (sourceStrip == nullptr || busStrip == nullptr)
+            return false;
+        busStrip->setIsBus(true);
+        if (synth::addSend(graph, source, bus) != 0)
+            return false;
+        sourceStrip->setSendPreFader(0, preFader);
+
+        setParam(*sourceStrip, "gain", kGainADb);
+        setParam(*sourceStrip, "pan", kPanA);
+        setParam(*masterAt(graph, master), "gain", kMasterGainDb);
+
+        driver = std::make_unique<synth::OfflineTransportDriver>(engine, kSampleRate, kBlockSize, kNumChannels);
+        return true;
+    }
+
+    ~SendStemRig() {
+        if (driver) {
+            engine.releaseFromHost();
+            engine.shutdown();
+        }
+    }
+};
+
+} // namespace
+
+TEST(StemExportTest, BusStripsGetTheirOwnStemAndSourceStemsStayPreSend) {
+    ScopedTempDir out("agentsynth_stems_bus");
+    StemResult stems;
+    {
+        SendStemRig rig;
+        ASSERT_TRUE(rig.build(/*preFader=*/false));
+        // collectStemStrips scans for ChannelStripModule, so the bus is picked up with no change at
+        // all -- and its name falls back to "Bus N" rather than "Channel N" (MixerSends.h).
+        stems = StemExporter::exportStems(rig.engine, out.dir, oneBeatOptions());
+        ASSERT_TRUE(stems.ok) << stems.message;
+    }
+
+    ASSERT_EQ(stems.stemFiles.size(), 2);
+    EXPECT_EQ(stems.stemFiles[0].getFileName(), "01 - Channel 1.wav");
+    EXPECT_EQ(stems.stemFiles[1].getFileName(), "02 - Bus 1.wav") << "a bus has no track to name its stem";
+
+    const auto sourceStem = readWav(stems.stemFiles[0]);
+    const auto busStem = readWav(stems.stemFiles[1]);
+    ASSERT_TRUE(sourceStem.ok);
+    ASSERT_TRUE(busStem.ok);
+
+    // The source's stem is its MAIN legs only -- post-fader, pre-send. With a unity post-fader send
+    // the bus carries the same signal, but the source's own stem must not have it added twice.
+    const float expectedLeft = expectedStripSample(kSourceA, kGainADb, kPanA, /*leftLeg=*/true);
+    const int probe = (int)sourceStem.lengthInSamples - 1;
+    EXPECT_NEAR(sourceStem.audio.getSample(0, probe), expectedLeft, 1.0e-4f)
+        << "the source's stem is exactly what it hands Master, with no send leg folded in";
+    EXPECT_NEAR(busStem.audio.getSample(0, probe), expectedLeft, 1.0e-4f)
+        << "and the send's copy appears in the BUS's stem instead";
+}
+
+TEST(StemExportTest, StemsStillSumToThePreMasterMixWithAPreFaderSend) {
+    // The §5.12 identity, re-proven with a send in the patch: sum(stems) * masterGain == the bounce.
+    // A pre-fader send is the harder case -- it carries a signal that appears in NO source stem.
+    ScopedTempDir stemsOut("agentsynth_stems_send_sum");
+    ScopedTempFile bounceOut("agentsynth_stems_send_sum_bounce.wav");
+
+    StemResult stems;
+    {
+        SendStemRig rig;
+        ASSERT_TRUE(rig.build(/*preFader=*/true));
+        stems = StemExporter::exportStems(rig.engine, stemsOut.dir, oneBeatOptions());
+        ASSERT_TRUE(stems.ok) << stems.message;
+    }
+    {
+        SendStemRig rig;
+        ASSERT_TRUE(rig.build(/*preFader=*/true));
+        const auto bounce = BounceExporter::bounce(rig.engine, bounceOut.file, oneBeatOptions());
+        ASSERT_TRUE(bounce.ok) << bounce.message;
+    }
+
+    ASSERT_EQ(stems.stemFiles.size(), 2);
+    const auto sourceStem = readWav(stems.stemFiles[0]);
+    const auto busStem = readWav(stems.stemFiles[1]);
+    const auto mix = readWav(bounceOut.file);
+    ASSERT_TRUE(sourceStem.ok);
+    ASSERT_TRUE(busStem.ok);
+    ASSERT_TRUE(mix.ok);
+    ASSERT_EQ(sourceStem.lengthInSamples, mix.lengthInSamples);
+
+    const float masterGain = juce::Decibels::decibelsToGain(kMasterGainDb, MasterModule::kMinGainDb);
+    for (int ch = 0; ch < kNumChannels; ++ch)
+        for (int i = 0; i < (int)mix.lengthInSamples; ++i) {
+            const float summed = (sourceStem.audio.getSample(ch, i) + busStem.audio.getSample(ch, i)) * masterGain;
+            ASSERT_NEAR(summed, mix.audio.getSample(ch, i), 1.0e-3f)
+                << "sum(stems) must still reproduce the pre-Master mix (ch " << ch << ", sample " << i << ")";
+        }
+
+    // And the pre-fader tap really is pre-fader: the bus's stem carries the UNFADED signal, which
+    // the source's own (post-fader) stem does not.
+    const int probe = (int)mix.lengthInSamples - 1;
+    EXPECT_NEAR(busStem.audio.getSample(0, probe), kSourceA, 1.0e-4f);
+    EXPECT_NEAR(sourceStem.audio.getSample(0, probe), expectedStripSample(kSourceA, kGainADb, kPanA, true), 1.0e-4f);
 }

@@ -62,6 +62,8 @@ public:
     std::vector<juce::AudioProcessorGraph::NodeID> availableTargets() const;
     bool canAddSend() const;
     bool isAttachedForTest(int rowIndex) const;
+    juce::Slider* getKnobForTest(int rowIndex) const;
+    int getRowCountForTest() const noexcept { return (int)entries_.size(); }
 
     void paint(juce::Graphics& g) override;
     void resized() override;
