@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MidiDestinationPicker.h"
+#include "Mixer/TrackPresetManager.h"
 #include "Plugin/Hosting/HostedPluginBackend.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Chrome/ColourPickerPopup.h"
@@ -215,6 +216,36 @@ struct TrackHeaderHost {
      *  thread. Non-pure with an inert default so every existing TrackHeaderHost implementer — and
      *  every test stub — keeps compiling. */
     virtual void auditionTrackNote(synth::TrackId, int /*pitch*/, int /*velocity*/, bool /*noteOn*/) {}
+
+    /** FRO13 (P9-7, docs/mixer.md §5.7): true when `track`'s bound node has a channel of its own
+     *  (its macro boxes a Channel Strip) — gates the header menu's "Save track as preset.../Set as
+     *  default" pair, same disabled-not-hidden precedent canMakeChannelForTrack states. Non-pure
+     *  with an inert `false` default. */
+    virtual bool canSaveTrackPresetForTrack(synth::TrackId track) const {
+        juce::ignoreUnused(track);
+        return false;
+    }
+
+    /** Opens the naming prompt and saves `track`'s channel (plus every outside module feeding it
+     *  through a port) as a track preset. A no-op when canSaveTrackPresetForTrack() is false.
+     *  Non-pure no-op default. */
+    virtual void saveTrackAsPreset(synth::TrackId track) { juce::ignoreUnused(track); }
+
+    /** One-click "Set as default for <type>": saves (auto-naming if nothing was saved yet this
+     *  session) and writes the per-type Preferences -> Mixer default in one step. A no-op when
+     *  canSaveTrackPresetForTrack() is false. Non-pure no-op default. */
+    virtual void setTrackPresetAsDefault(synth::TrackId track) { juce::ignoreUnused(track); }
+
+    /** The "+ Track" menu's grouped preset-list click: inserts the named saved preset as a new
+     *  track, independent of the per-type default. Non-pure no-op default. */
+    virtual void addTrackFromPreset(const juce::String& presetName, synth::TrackPresetKind kind) {
+        juce::ignoreUnused(presetName, kind);
+    }
+
+    /** The "+ Track" menu's "Insert Track Preset from File..." entry: a native chooser filtered to
+     *  `*.agtrackpreset`, then the same insert path as addTrackFromPreset(). Non-pure no-op
+     *  default. */
+    virtual void addTrackFromPresetFile() {}
 };
 
 class TimelineTrackHeaderComponent : public juce::Component {
@@ -241,6 +272,9 @@ public:
     static constexpr int kDeleteTrackMenuId = 2000;
     // FRO25 (P9-3d): the header context menu's "Make Channel", same id space as kDeleteTrackMenuId.
     static constexpr int kMakeChannelMenuId = 2001;
+    // FRO13 (P9-7): "Save track as preset.../Set as default", same id space.
+    static constexpr int kSaveTrackPresetMenuId = 2002;
+    static constexpr int kSetTrackPresetDefaultMenuId = 2003;
 
     TimelineTrackHeaderComponent(synth::TimelineDoc& doc, synth::TrackId trackId, TrackHeaderHost* host);
 

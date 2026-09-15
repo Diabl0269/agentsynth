@@ -16,6 +16,27 @@ namespace synth {
 
 // ---- FRO25 (P9-3d): "Make channel" --------------------------------------------------------------
 
+// FRO13 (P9-7): lifted out of the anonymous namespace below (was: private to this file) so
+// ChannelFlowsTrackPreset.cpp's outside-modulator walk can reuse them too — see
+// ChannelFlowsInternal.h's extern declarations for why this is the one definition.
+juce::AudioProcessor* processorFor(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID id) {
+    auto* node = graph.getNodeForId(id);
+    return node != nullptr ? node->getProcessor() : nullptr;
+}
+
+bool isAttenuverter(const juce::AudioProcessor* p) { return dynamic_cast<const AttenuverterModule*>(p) != nullptr; }
+
+bool isStrip(const juce::AudioProcessor* p) { return dynamic_cast<const ChannelStripModule*>(p) != nullptr; }
+
+bool isMacroPortNode(const juce::AudioProcessor* p) {
+    auto* module = dynamic_cast<const ModuleBase*>(p);
+    if (module == nullptr)
+        return false;
+    const auto type = module->getModuleType();
+    return type == ModuleType::MacroInlet || type == ModuleType::MacroOutlet || type == ModuleType::MacroMidiInlet ||
+           type == ModuleType::MacroMidiOutlet;
+}
+
 namespace {
 
 using NodeID = juce::AudioProcessorGraph::NodeID;
@@ -36,28 +57,10 @@ void addUniquePin(std::vector<NodeAndChannel>& pins, const NodeAndChannel& pin) 
         pins.push_back(pin);
 }
 
-juce::AudioProcessor* processorFor(juce::AudioProcessorGraph& graph, NodeID id) {
-    auto* node = graph.getNodeForId(id);
-    return node != nullptr ? node->getProcessor() : nullptr;
-}
-
-bool isAttenuverter(const juce::AudioProcessor* p) { return dynamic_cast<const AttenuverterModule*>(p) != nullptr; }
-
-bool isStrip(const juce::AudioProcessor* p) { return dynamic_cast<const ChannelStripModule*>(p) != nullptr; }
-
 // findUnchanneledOutputFeeds' own terminal set: Audio Output, Record Tap, Master.
 bool isTerminal(const juce::AudioProcessor* p) {
     return p != nullptr && (dynamic_cast<const RecordTapModule*>(p) != nullptr ||
                             dynamic_cast<const MasterModule*>(p) != nullptr || p->getName() == "Audio Output");
-}
-
-bool isMacroPortNode(const juce::AudioProcessor* p) {
-    auto* module = dynamic_cast<const ModuleBase*>(p);
-    if (module == nullptr)
-        return false;
-    const auto type = module->getModuleType();
-    return type == ModuleType::MacroInlet || type == ModuleType::MacroOutlet || type == ModuleType::MacroMidiInlet ||
-           type == ModuleType::MacroMidiOutlet;
 }
 
 // The device-input singleton (GraphEditor::isSingletonIOModule): walked through like any other hop

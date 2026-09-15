@@ -17,6 +17,7 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentTimeline.cpp
     Source/MainComponent/MainComponentTrackHeaderHost.cpp
     Source/MainComponent/MainComponentTrackCreation.cpp
+    Source/MainComponent/MainComponentTrackPresets.cpp
     Source/UserSettings.h
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.cpp
@@ -146,6 +147,7 @@ set(APPUI_SOURCES
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGraphBehaviour.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviour.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAutosave.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMixerDefaults.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h
     Source/UI/Settings/ShortcutsSettingsTab.cpp
     Source/ShortcutManager/AppCommands.h

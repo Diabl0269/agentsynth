@@ -22,6 +22,12 @@ namespace {
 // overlap regardless of how wide an individual card is (e.g. Parametric EQ's double-width card).
 constexpr int kChannelCardGapX = 40;
 
+// FRO13 (P9-7, docs/mixer.md §7 D3): the per-type default track preset settings keys — duplicated
+// from PreferencesSettingsTabInternal.h's own copy for the same "one-line string not worth a
+// header dependency" reason every other cross-file settings key in this codebase is.
+constexpr const char* kMixerDefaultTrackPresetAudioKey = "mixerDefaultTrackPresetAudio";
+constexpr const char* kMixerDefaultTrackPresetInstrumentKey = "mixerDefaultTrackPresetInstrument";
+
 } // namespace
 
 void MainComponent::deleteTrack(synth::TrackId track) {
@@ -94,6 +100,25 @@ void MainComponent::addAudioTrack() {
     // subtask depends on.
     const bool pushed = undoManager.recordGraphTimelineAndMacroChange(
         audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(), [this, index, &trackName] {
+            // FRO13 (P9-7, docs/mixer.md §5.7/§7 D3): consult the per-type default BEFORE any node
+            // is created. Defaults only steer this plain "+ Track -> Audio" gesture — a saved
+            // preset is always reachable regardless via the grouped list / file insert
+            // (TimelinePanelTrackHeaders.cpp), independent of what's set here.
+            const juce::String defaultPresetName =
+                appProperties.getUserSettings()->getValue(kMixerDefaultTrackPresetAudioKey, {});
+            if (defaultPresetName.isNotEmpty()) {
+                auto preset = synth::TrackPresetManager::loadTrackPreset(
+                    synth::TrackPresetManager::getDefaultTrackPresetsDirectory(), defaultPresetName);
+                if (preset.isObject()) {
+                    trackName = insertTrackFromPresetVar(preset, synth::TrackPresetKind::Audio, "Audio");
+                    if (trackName.isNotEmpty())
+                        return; // inserted from the default preset - skip the factory chain below
+                }
+                // else: the name resolves to nothing (deleted file) -> fall through to the
+                // unchanged factory path below, SILENTLY (docs/mixer.md gives no "tell the user
+                // their default vanished" requirement for v1).
+            }
+
             // Doc side FIRST, for the reason addMidiTrack() spells out: a node created before the
             // kMaxTracks refusal would be left orphaned in the graph.
             trackName = "Audio " + juce::String(index + 1);
@@ -224,6 +249,21 @@ void MainComponent::buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProc
     const bool pushed = undoManager.recordGraphTimelineAndMacroChange(
         audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(),
         [this, index, &trackName, trackNamePrefix, poly, stagedInstrument] {
+            // FRO13 (P9-7, docs/mixer.md §5.7/§7 D3): same default-consulting branch as
+            // addAudioTrack's own, before any node is created (including `stagedInstrument`,
+            // which is simply discarded unused when a default wins — never added to the graph).
+            const juce::String defaultPresetName =
+                appProperties.getUserSettings()->getValue(kMixerDefaultTrackPresetInstrumentKey, {});
+            if (defaultPresetName.isNotEmpty()) {
+                auto preset = synth::TrackPresetManager::loadTrackPreset(
+                    synth::TrackPresetManager::getDefaultTrackPresetsDirectory(), defaultPresetName);
+                if (preset.isObject()) {
+                    trackName = insertTrackFromPresetVar(preset, synth::TrackPresetKind::Instrument, trackNamePrefix);
+                    if (trackName.isNotEmpty())
+                        return; // inserted from the default preset - skip the whole build below
+                }
+            }
+
             InstrumentChainBuild build;
             if (!createTrackInForInstrumentChain(index, trackNamePrefix, trackName, build))
                 return;

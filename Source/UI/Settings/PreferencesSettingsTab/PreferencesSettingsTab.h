@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
 #include <memory>
@@ -74,6 +75,14 @@ public:
     // autosave.json. Any exact integer 0-50; 0 disables the backup history entirely. DEFAULT 5.
     int getAutosaveBackupCount() const;
     void setAutosaveBackupCount(int count);
+    // FRO13 (P9-7, docs/mixer.md §5.7/§7 D3): per-type default track preset. Empty string ==
+    // "Factory Default" (the sentinel row, id kMixerDefaultPresetFactoryComboId) == the unchanged
+    // buildDefaultAudioChannel-based chain; a non-empty name that no longer resolves to a listed
+    // preset is silently ignored by the setter (the combo keeps its current selection).
+    juce::String getMixerDefaultTrackPresetAudio() const;
+    void setMixerDefaultTrackPresetAudio(const juce::String& presetName);
+    juce::String getMixerDefaultTrackPresetInstrument() const;
+    void setMixerDefaultTrackPresetInstrument(const juce::String& presetName);
     // "all" (every key labelled) vs "c" (only the Cs) — PianoRollComponent::KeyLabelMode, read by
     // TimelinePanelComponent::reloadPianoRollAppearancePrefs(). true == "all" (the default).
     bool isPianoRollKeyLabelModeAll() const;
@@ -163,8 +172,15 @@ private:
     void persistAutosaveEnabled(bool enabled);
     void persistAutosaveIntervalMinutes(int minutes);
     void persistAutosaveBackupCount(int count);
+    void persistMixerDefaultTrackPresetAudio(const juce::String& presetName);
+    void persistMixerDefaultTrackPresetInstrument(const juce::String& presetName);
     void persistPianoRollKeyLabelMode(bool labelEveryKey);
     void persistDualIOPerModuleOverrides();
+
+    // FRO13 (P9-7): constructs/wires the two Mixer -> per-type default track preset combos.
+    // Pulled out of the constructor (which was tripping the function-size ratchet) into its own
+    // named step, in PreferencesSettingsTabMixerDefaults.cpp alongside this group's other members.
+    void setupMixerDefaultTrackPresetControls();
 
     // Shared by the real button and createDualIOPerModuleDefaultsPopupForTest() so the test seam
     // exercises the exact component a click would open, not a lookalike.
@@ -189,6 +205,15 @@ private:
     // its rows. Sliced out of resized() so a search filter can re-run just this content pass
     // (applySearchFilter -> resized -> layoutContent) without re-laying the pinned chrome.
     void layoutContent(int contentWidth);
+
+    // FRO13 (P9-7): lays out the "Group 9" mixer-defaults row pair. Pulled out of layoutContent
+    // (which was tripping the function-size ratchet) into its own named step; `groupMatches`/
+    // `setGroupVisible`/`beginGroup` are layoutContent's own search-filter helpers, forwarded
+    // through rather than duplicated.
+    void layoutMixerDefaultTrackPresetGroup(
+        int& y, int contentWidth, const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
+        const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible,
+        const std::function<void(bool)>& beginGroup);
 
     // Paints the group-separator hairlines. Called by ContentHost::paint (the viewport's viewed
     // component), so the rules scroll along with the groups they separate — same owner-delegation
@@ -277,6 +302,12 @@ private:
     juce::Label autosaveBackupCountLabel;
     juce::TextEditor autosaveBackupCountEditor;
     juce::Label autosaveBackupCountUnitLabel;
+    // FRO13 (P9-7): Mixer -> per-type default track preset, one combo each, "Factory Default" as
+    // the leading sentinel row (see PreferencesSettingsTabInternal.h's combo-id constants).
+    juce::Label mixerDefaultTrackPresetAudioLabel;
+    juce::ComboBox mixerDefaultTrackPresetAudioCombo;
+    juce::Label mixerDefaultTrackPresetInstrumentLabel;
+    juce::ComboBox mixerDefaultTrackPresetInstrumentCombo;
 
     // Hairline rules between preference groups, painted in paint() from these bounds.
     std::vector<juce::Rectangle<int>> dividerBounds;
