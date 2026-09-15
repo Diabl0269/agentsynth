@@ -72,6 +72,19 @@ public:
     // what keeps an untouched install on the legacy defaults path above. Owners must null-check.
     std::function<void(std::unique_ptr<juce::XmlElement>)> onDeviceStateChanged;
 
+    // MESSAGE THREAD, installed by the OWNER before initialise(). Fires as the very first thing
+    // shutdown() does, before mainProcessorGraph.clear() frees every node and its
+    // AudioProcessorParameters. This is the seam the UI owner uses to detach live parameter
+    // attachments (e.g. GraphEditor's ModuleComponents -- a ThresholdControlComponent's
+    // SliderParameterAttachment holds a raw AudioProcessorParameter pointer) BEFORE those
+    // parameters go away, so shutdown() is safe to call directly from any caller -- a test, or a
+    // future/hosted code path -- without that caller having to separately remember to detach UI
+    // first (FRO87: a heap-use-after-free reached exactly this way, calling shutdown() on an
+    // externally-owned Hosted-mode engine while a MainComponent built around it was still alive).
+    // Parallel to GraphEditor::onBeforeDetachAllModuleComponents (Source/UI/Graph/GraphEditor/
+    // GraphEditorCanvas.cpp), which plays the same role one layer up the call chain.
+    std::function<void()> onBeforeShutdown;
+
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
 
     HostMode getHostMode() const noexcept { return hostMode_; }

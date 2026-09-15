@@ -146,6 +146,46 @@ TEST_F(WelcomeScreenTest, NeverConstructsInHostedMode) {
     engine.shutdown();
 }
 
+// FRO87 regression: AudioEngine::shutdown() called directly (not through MainComponent's own
+// destructor) while a MainComponent built around the SAME Hosted-mode engine is still alive --
+// the same bad ordering as NeverConstructsInHostedMode above, but exercised against a patch that
+// actually has live UI-owned parameter attachments. Before the fix, shutdown() freed every node's
+// AudioProcessorParameters via mainProcessorGraph.clear() while GraphEditor's ModuleComponents --
+// e.g. an ADSR module's ThresholdControlComponent, which owns a juce::SliderParameterAttachment
+// holding a raw AudioProcessorParameter pointer -- were still attached to them: a
+// heap-use-after-free that only surfaced later, when `mc` went out of scope and
+// ~MainComponent()'s detachAllModuleComponents() walked those now-dangling attachments.
+// AudioEngine::onBeforeShutdown (fired as the very first thing inside shutdown()) now detaches
+// them before the graph is cleared, so this must survive clean under ASAN.
+TEST_F(WelcomeScreenTest, ShutdownWhileMainComponentAliveDetachesLiveParameterAttachmentsFirst) {
+    synth::theme::ThemeManager tm;
+    synth::theme::AppLookAndFeel lf;
+
+    AudioEngine engine(AudioEngine::HostMode::Hosted);
+    // Builds the engine's default patch (PresetManager::loadDefaultPreset, or
+    // AudioEngine::createDefaultPatch() as its fallback) -- which includes an ADSR module, whose
+    // ThresholdControlComponent (below) is exactly the live attachment this regression is about.
+    engine.initialise();
+    ASSERT_GT(engine.getGraph().getNumNodes(), 0);
+
+    MainComponent mc(tm, lf, engine, std::make_unique<MockProvider>());
+    auto& moduleComponents = mc.getGraphEditor().getModuleComponents();
+    ASSERT_GT(moduleComponents.size(), 0)
+        << "MainComponent must have built ModuleComponents (and their parameter attachments) for "
+           "the engine's default patch";
+
+    // The bad ordering under test: shutdown() frees the graph's nodes/parameters while `mc` --
+    // and every ModuleComponent's attachment into them -- is still alive.
+    engine.shutdown();
+
+    // onBeforeShutdown must have detached everything synchronously, inside shutdown() itself,
+    // before mainProcessorGraph.clear() ran.
+    EXPECT_EQ(moduleComponents.size(), 0);
+
+    // `mc` goes out of scope here; ~MainComponent()'s own explicit detachAllModuleComponents()
+    // call (the second, independent line of defense) must be a safe no-op over the now-empty list.
+}
+
 TEST_F(WelcomeScreenTest, ExistsOnTheStandaloneAppPath) {
     MainComponent mc(std::make_unique<MockProvider>());
     ASSERT_NE(mc.getWelcomeScreenForTest(), nullptr);
