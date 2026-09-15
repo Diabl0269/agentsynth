@@ -56,6 +56,17 @@ public:
      *  ahead of the slider's own value text below. */
     void setChannelName(const juce::String& name);
 
+    /** FRO18 review fix: moves REAL accessibility focus (not keyboard focus) to the fader slider's
+     *  handler when the column it belongs to becomes the panel's keyboard-walked focus. Safe to
+     *  call unconditionally -- getAccessibilityHandler() returns null with no native peer yet
+     *  (headless CI, or before the window is shown), the exact case slider_.getAccessibilityHandler()
+     *  guards below. AccessibilityHandler::grabFocus() only calls Component::grabKeyboardFocus()
+     *  when the component itself wants keyboard focus, which the slider deliberately doesn't
+     *  (setWantsKeyboardFocus(false) above, the T160 trap) -- so this moves VoiceOver's cursor
+     *  without stealing the panel's own real OS keyboard focus (MixerPanelComponent is the single
+     *  focusable leaf). */
+    void grabAccessibilityFocus();
+
     void resized() override;
 
 private:

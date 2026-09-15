@@ -30,6 +30,15 @@ public:
     void setKeyboardFocused(bool focused);
     bool isKeyboardFocusedForTest() const noexcept { return keyboardFocused_; }
 
+    /** FRO18 review fix: same contract as MixerColumnComponent::grabAccessibilityFocus() --
+     *  Direct has no fader of its own, so this targets the column itself (setTitle("Direct") in
+     *  the ctor is what its default, unspecified-role AccessibilityHandler reads). */
+    void grabAccessibilityFocus() {
+        if (auto* handler = getAccessibilityHandler())
+            handler->grabFocus();
+    }
+    juce::Component& getAccessibilityFocusTargetForTest() noexcept { return *this; }
+
     void paint(juce::Graphics& g) override;
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;

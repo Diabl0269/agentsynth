@@ -138,7 +138,40 @@ void MixerPanelComponent::setFocusedColumnIndex(int index) {
     focusedColumnIndex_ = index;
     syncFocusVisuals();
     revealFocusedColumn();
+    grabAccessibilityFocusForFocusedColumn();
     repaint(); // globalFocusChanged never fires for this -- it isn't real OS focus movement.
+}
+
+juce::Component* MixerPanelComponent::getAccessibilityFocusTargetForTest() const {
+    if (focusedColumnIndex_ < 0 || focusedColumnIndex_ >= (int)columnEntries_.size())
+        return nullptr;
+    const auto& entry = columnEntries_[(size_t)focusedColumnIndex_];
+    switch (entry.kind) {
+    case ColumnEntry::Kind::Strip:
+        return &static_cast<MixerColumnComponent*>(entry.component)->getAccessibilityFocusTargetForTest();
+    case ColumnEntry::Kind::Master:
+        return &static_cast<MixerMasterColumn*>(entry.component)->getAccessibilityFocusTargetForTest();
+    case ColumnEntry::Kind::Direct:
+        return &static_cast<MixerDirectColumn*>(entry.component)->getAccessibilityFocusTargetForTest();
+    }
+    return nullptr;
+}
+
+void MixerPanelComponent::grabAccessibilityFocusForFocusedColumn() {
+    if (focusedColumnIndex_ < 0 || focusedColumnIndex_ >= (int)columnEntries_.size())
+        return;
+    auto& entry = columnEntries_[(size_t)focusedColumnIndex_];
+    switch (entry.kind) {
+    case ColumnEntry::Kind::Strip:
+        static_cast<MixerColumnComponent*>(entry.component)->grabAccessibilityFocus();
+        return;
+    case ColumnEntry::Kind::Master:
+        static_cast<MixerMasterColumn*>(entry.component)->grabAccessibilityFocus();
+        return;
+    case ColumnEntry::Kind::Direct:
+        static_cast<MixerDirectColumn*>(entry.component)->grabAccessibilityFocus();
+        return;
+    }
 }
 
 void MixerPanelComponent::syncFocusVisuals() {

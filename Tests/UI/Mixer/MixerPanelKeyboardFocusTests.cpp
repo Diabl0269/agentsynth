@@ -137,6 +137,37 @@ TEST(MixerPanelKeyboardFocusTest, RightIncludesDirectAndMasterColumnsInOrder) {
     EXPECT_FALSE(f.panel->getDirectColumnForTest()->isKeyboardFocusedForTest());
 }
 
+TEST(MixerPanelKeyboardFocusTest, ArrowWalkPointsAccessibilityFocusAtEachColumnsFader) {
+    // FRO18 review fix: the app's own Left/Right column-walk must move REAL accessibility focus
+    // (not just the visual outline setKeyboardFocused() paints), or VoiceOver never announces the
+    // newly-focused column at all. getAccessibilityFocusTargetForTest() resolves WHICH control
+    // MixerPanelComponent::grabAccessibilityFocusForFocusedColumn() targets for the current
+    // focusedColumnIndex_ -- real AccessibilityHandler::hasFocus() movement itself needs a native
+    // peer this suite deliberately never creates (see MixerAccessibilityTests.cpp's header), so
+    // this is the headlessly-testable half: proving the walk targets the right control.
+    PanelFixture f; // strip0, strip1, Direct, Master
+    EXPECT_EQ(f.panel->getAccessibilityFocusTargetForTest(), nullptr) << "nothing focused yet";
+
+    f.panel->keyPressed(rightKey()); // -> strip 0
+    EXPECT_EQ(f.panel->getAccessibilityFocusTargetForTest(),
+              &f.panel->getStripColumnForTest(0)->getAccessibilityFocusTargetForTest())
+        << "a strip's own fader slider -- the control the ticket's click path names";
+
+    f.panel->keyPressed(rightKey()); // -> strip 1
+    EXPECT_EQ(f.panel->getAccessibilityFocusTargetForTest(),
+              &f.panel->getStripColumnForTest(1)->getAccessibilityFocusTargetForTest());
+
+    f.panel->keyPressed(rightKey()); // -> Direct
+    EXPECT_EQ(f.panel->getAccessibilityFocusTargetForTest(),
+              &f.panel->getDirectColumnForTest()->getAccessibilityFocusTargetForTest())
+        << "Direct has no fader -- targets the column itself";
+
+    f.panel->keyPressed(rightKey()); // -> Master
+    EXPECT_EQ(f.panel->getAccessibilityFocusTargetForTest(),
+              &f.panel->getMasterColumnForTest()->getAccessibilityFocusTargetForTest())
+        << "Master's own fader, same as a strip";
+}
+
 TEST(MixerPanelKeyboardFocusTest, UpNudgesFocusedFaderByOneDbAsOneUndoStep) {
     PanelFixture f;
     f.panel->keyPressed(rightKey()); // focus strip 0

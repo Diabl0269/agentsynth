@@ -9,6 +9,9 @@
 namespace synth::ui {
 
 MixerDirectColumn::MixerDirectColumn() {
+    // FRO18 review fix: grabAccessibilityFocus() grabs focus on `this` (Direct has no fader to
+    // target) -- without a title, its default unspecified-role AccessibilityHandler reads nothing.
+    setTitle("Direct");
     addAndMakeVisible(header_);
     header_.setDisplayName("Direct");
     addAndMakeVisible(makeChannelButton_);

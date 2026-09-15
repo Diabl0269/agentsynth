@@ -96,6 +96,14 @@ public:
      *  rebuild() lays out (strips, then Direct if visible, then Master if visible). */
     int getFocusedColumnIndexForTest() const noexcept { return focusedColumnIndex_; }
 
+    /** FRO18 review fix: the component setFocusedColumnIndex() would call grabAccessibilityFocus()
+     *  toward for the CURRENTLY focused column -- null when nothing is focused. Lets a test assert
+     *  WHICH control (a strip/Master's fader slider, or the Direct column itself) the arrow-walk
+     *  points real accessibility focus at, without needing the native peer real focus movement
+     *  itself needs (getAccessibilityHandler() returns null headless regardless -- see
+     *  MixerAccessibilityTests.cpp's own header comment for this suite's established gap). */
+    juce::Component* getAccessibilityFocusTargetForTest() const;
+
     /** FRO11's revealChannelForTrack redirect: scrolls the column for `stripId` into view and
      *  selects it (MixerColumnComponent::setSelected), clearing selection on every other column.
      *  False when no column matches (nothing to reveal -- the caller falls back to the canvas). */
@@ -142,6 +150,13 @@ private:
     void setFocusedColumnIndex(int index);
     void syncFocusVisuals();
     void revealFocusedColumn();
+    /** FRO18 review fix: moves REAL accessibility focus (VoiceOver's cursor) onto whatever
+     *  getAccessibilityFocusTargetForTest() currently resolves to. Called ONLY from
+     *  setFocusedColumnIndex() -- i.e. real user navigation -- never from rebuild()'s
+     *  resolveFocusAfterRebuild() path, which writes focusedColumnIndex_ directly and calls
+     *  syncFocusVisuals() on its own: an unrelated graph/timeline/macro change re-running rebuild()
+     *  must never yank VoiceOver's cursor into the mixer from wherever the user actually is. */
+    void grabAccessibilityFocusForFocusedColumn();
 
     juce::Viewport viewport_;
     juce::Component content_;

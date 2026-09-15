@@ -40,6 +40,11 @@ public:
     void setKeyboardFocused(bool focused);
     bool isKeyboardFocusedForTest() const noexcept { return keyboardFocused_; }
 
+    /** FRO18 review fix: same contract as MixerColumnComponent::grabAccessibilityFocus() -- moves
+     *  VoiceOver's cursor to Master's own fader when Master becomes the keyboard-walked focus. */
+    void grabAccessibilityFocus() { fader_.grabAccessibilityFocus(); }
+    juce::Component& getAccessibilityFocusTargetForTest() noexcept { return fader_.getSlider(); }
+
     void paint(juce::Graphics& g) override;
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;

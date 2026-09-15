@@ -92,6 +92,11 @@ void MixerFader::setChannelName(const juce::String& name) {
     slider_.setTitle(name.isEmpty() ? juce::String("Fader") : name + " fader");
 }
 
+void MixerFader::grabAccessibilityFocus() {
+    if (auto* handler = slider_.getAccessibilityHandler())
+        handler->grabFocus();
+}
+
 void MixerFader::parameterGestureChanged(int, bool gestureIsStarting) {
     if (graph_ == nullptr || undoManager_ == nullptr)
         return;

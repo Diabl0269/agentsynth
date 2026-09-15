@@ -73,6 +73,19 @@ public:
     void setKeyboardFocused(bool focused);
     bool isKeyboardFocusedForTest() const noexcept { return keyboardFocused_; }
 
+    /** FRO18 review fix: MixerPanelComponent calls this from setFocusedColumnIndex() (real
+     *  navigation only, never from a rebuild()-preserved refocus -- see MixerPanelKeyboard.cpp's
+     *  own comment on why) so VoiceOver's accessibility cursor tracks the visual keyboard-focus
+     *  outline instead of only painting it. Targets the fader -- the control the ticket's own
+     *  click path names ("arrow through columns ... it should announce each fader's dB value") --
+     *  not the column group, so arrowing to a strip reads its dB value directly. */
+    void grabAccessibilityFocus() { fader_.grabAccessibilityFocus(); }
+
+    /** The component grabAccessibilityFocus() targets -- exposed so a test can assert WHICH
+     *  control the arrow-walk points accessibility focus at without needing the native peer real
+     *  focus movement itself needs (getAccessibilityHandler() returns null headless either way). */
+    juce::Component& getAccessibilityFocusTargetForTest() noexcept { return fader_.getSlider(); }
+
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
     void paint(juce::Graphics& g) override;
