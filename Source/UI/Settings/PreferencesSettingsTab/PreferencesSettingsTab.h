@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
 #include <memory>
@@ -176,6 +177,11 @@ private:
     void persistPianoRollKeyLabelMode(bool labelEveryKey);
     void persistDualIOPerModuleOverrides();
 
+    // FRO13 (P9-7): constructs/wires the two Mixer -> per-type default track preset combos.
+    // Pulled out of the constructor (which was tripping the function-size ratchet) into its own
+    // named step, in PreferencesSettingsTabMixerDefaults.cpp alongside this group's other members.
+    void setupMixerDefaultTrackPresetControls();
+
     // Shared by the real button and createDualIOPerModuleDefaultsPopupForTest() so the test seam
     // exercises the exact component a click would open, not a lookalike.
     std::unique_ptr<juce::Component> buildDualIOPerModuleDefaultsPopup();
@@ -199,6 +205,15 @@ private:
     // its rows. Sliced out of resized() so a search filter can re-run just this content pass
     // (applySearchFilter -> resized -> layoutContent) without re-laying the pinned chrome.
     void layoutContent(int contentWidth);
+
+    // FRO13 (P9-7): lays out the "Group 9" mixer-defaults row pair. Pulled out of layoutContent
+    // (which was tripping the function-size ratchet) into its own named step; `groupMatches`/
+    // `setGroupVisible`/`beginGroup` are layoutContent's own search-filter helpers, forwarded
+    // through rather than duplicated.
+    void layoutMixerDefaultTrackPresetGroup(
+        int& y, int contentWidth, const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
+        const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible,
+        const std::function<void(bool)>& beginGroup);
 
     // Paints the group-separator hairlines. Called by ContentHost::paint (the viewport's viewed
     // component), so the rules scroll along with the groups they separate — same owner-delegation

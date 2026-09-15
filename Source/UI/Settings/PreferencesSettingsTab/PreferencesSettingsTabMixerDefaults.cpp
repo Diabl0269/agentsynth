@@ -72,3 +72,60 @@ void PreferencesSettingsTab::setMixerDefaultTrackPresetInstrument(const juce::St
     selectMixerDefaultPreset(mixerDefaultTrackPresetInstrumentCombo, presetName);
     persistMixerDefaultTrackPresetInstrument(getMixerDefaultTrackPresetInstrument());
 }
+
+// Constructs/wires the two combos — pulled out of PreferencesSettingsTab's constructor
+// (PreferencesSettingsTabLifecycle.cpp) into its own named step so that constructor stays under
+// the function-size ratchet; populateMixerDefaultPresetCombo() lists "Factory Default" plus every
+// saved preset of that type, snapshotted once here (same posture the "+ Track" menu's own
+// submenus take).
+void PreferencesSettingsTab::setupMixerDefaultTrackPresetControls() {
+    contentHost.addAndMakeVisible(mixerDefaultTrackPresetAudioLabel);
+    mixerDefaultTrackPresetAudioLabel.setText("Default Audio track preset:", juce::dontSendNotification);
+    mixerDefaultTrackPresetAudioLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
+    contentHost.addAndMakeVisible(mixerDefaultTrackPresetAudioCombo);
+    populateMixerDefaultPresetCombo(mixerDefaultTrackPresetAudioCombo, synth::TrackPresetKind::Audio);
+    // setMixerDefaultTrackPresetAudio also re-persists the value it just read, which is harmless
+    // (idempotent) and keeps this to one code path rather than duplicating the combo-selection walk.
+    setMixerDefaultTrackPresetAudio(appProperties.getUserSettings()->getValue(kMixerDefaultTrackPresetAudioKey, {}));
+    mixerDefaultTrackPresetAudioCombo.onChange = [this] {
+        persistMixerDefaultTrackPresetAudio(getMixerDefaultTrackPresetAudio());
+    };
+
+    contentHost.addAndMakeVisible(mixerDefaultTrackPresetInstrumentLabel);
+    mixerDefaultTrackPresetInstrumentLabel.setText("Default Instrument track preset:", juce::dontSendNotification);
+    mixerDefaultTrackPresetInstrumentLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
+    contentHost.addAndMakeVisible(mixerDefaultTrackPresetInstrumentCombo);
+    populateMixerDefaultPresetCombo(mixerDefaultTrackPresetInstrumentCombo, synth::TrackPresetKind::Instrument);
+    setMixerDefaultTrackPresetInstrument(
+        appProperties.getUserSettings()->getValue(kMixerDefaultTrackPresetInstrumentKey, {}));
+    mixerDefaultTrackPresetInstrumentCombo.onChange = [this] {
+        persistMixerDefaultTrackPresetInstrument(getMixerDefaultTrackPresetInstrument());
+    };
+}
+
+// Lays out the "Group 9" row pair — pulled out of layoutContent for the same ratchet reason.
+// `groupMatches`/`setGroupVisible`/`beginGroup` are layoutContent's own search-filter helpers,
+// forwarded through rather than duplicated.
+void PreferencesSettingsTab::layoutMixerDefaultTrackPresetGroup(
+    int& y, int contentWidth, const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
+    const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible,
+    const std::function<void(bool)>& beginGroup) {
+    const std::initializer_list<juce::Component*> mixerDefaultComps = {
+        &mixerDefaultTrackPresetAudioLabel, &mixerDefaultTrackPresetAudioCombo, &mixerDefaultTrackPresetInstrumentLabel,
+        &mixerDefaultTrackPresetInstrumentCombo};
+    const bool visible = groupMatches(mixerDefaultComps);
+    setGroupVisible(mixerDefaultComps, visible);
+    beginGroup(visible);
+    if (!visible)
+        return;
+    juce::Rectangle<int> row(0, y, contentWidth, 24);
+    mixerDefaultTrackPresetAudioLabel.setBounds(row.removeFromLeft(170));
+    row.removeFromLeft(4);
+    mixerDefaultTrackPresetAudioCombo.setBounds(row.removeFromLeft(160));
+    y += 28;
+    juce::Rectangle<int> row2(0, y, contentWidth, 24);
+    mixerDefaultTrackPresetInstrumentLabel.setBounds(row2.removeFromLeft(170));
+    row2.removeFromLeft(4);
+    mixerDefaultTrackPresetInstrumentCombo.setBounds(row2.removeFromLeft(160));
+    y += 24;
+}
