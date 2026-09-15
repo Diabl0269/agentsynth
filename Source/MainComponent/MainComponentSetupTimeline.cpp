@@ -42,6 +42,17 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     mixerDock.setApplicationProperties(&appProperties);
     mixerDock.setOnGraphTopologyChanged([this] { reconcileTimelineAfterGraphChange(); });
     mixerDock.setOnMakeChannelForNode([this](juce::AudioProcessorGraph::NodeID source) { makeChannelForNode(source); });
+    // FRO12 (P9-6): each panel's ONE detached-window focus region (T159/docs/shortcuts.md) --
+    // stored on the host now, applied to whichever DetachedPanelWindow it builds later. Re-running
+    // MainComponent's own registration pass on every detach/redock (rather than reordering/renaming
+    // anything already registered above) is the guard rule the plan's focus section spells out.
+    mixerDock.getTimelineHost().setHostedPanelFocusRegion("timeline", timelinePanel);
+    mixerDock.getMixerHost().setHostedPanelFocusRegion("mixer", mixerDock.getMixerPanel());
+    mixerDock.onPanelDetachStateChanged = [this] { rebuildFocusRegions(); };
+    // Placement preference (Tab/Own panel/Window, docs/mixer.md §5.9) -- read once here (both
+    // panels already exist by this point in initialiseCommon()'s ORDER) and again on every
+    // settings-file write, see MainComponent::changeListenerCallback's settings branch.
+    mixerPlacement_.applyPlacementPreference();
     // FRO11 crash fix: the mixer's fader/pan bindings are raw pointers into live processor
     // parameters, exactly like ModuleComponent's own -- so they unbind through the SAME seam
     // ModuleComponent already uses (GraphEditor::onBeforeDetachAllModuleComponents, fired at the

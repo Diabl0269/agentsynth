@@ -396,6 +396,16 @@ bool MainComponent::initialiseAudioEngine() {
 }
 
 void MainComponent::registerFocusRegions() {
+    rebuildFocusRegions();
+
+    // Repaint whichever region gains/loses focus — see FocusRegion.h's comment on
+    // paintFocusRegionOutline for why nothing repaints on its own. Removed in the destructor.
+    // ONE-TIME registration: rebuildFocusRegions() re-runs on every detach/redock (FRO12), but
+    // this listener must not — see that method's own call site (mixerDock.onPanelDetachStateChanged).
+    juce::Desktop::getInstance().addFocusChangeListener(this);
+}
+
+void MainComponent::rebuildFocusRegions() {
     // ---- T159: focus-region registry ---------------------------------------------------------
     // Registered unconditionally (app AND plugin path — the plugin has every one of these panels
     // too, just no welcomeScreen_) after every region root above is fully constructed and wired.
@@ -403,6 +413,13 @@ void MainComponent::registerFocusRegions() {
     // Timeline, AI Panel, Mod Matrix. Wraps the getters/toggles that already exist rather than
     // migrating them to a new unified visibility enum — see Source/UI/Layout/FocusRegion.h's own header
     // comment.
+    //
+    // FRO12 (P9-6): cleared and rebuilt on every call so re-running it after a detach/redock never
+    // duplicates entries -- see the class-level call site in wireTimelinePanel()
+    // (mixerDock.onPanelDetachStateChanged). Each hosted panel's ONE detached-window focus region
+    // is registered once on its host, not here -- see DetachablePanelHost::setHostedPanelFocusRegion.
+    focusRegions_.clear();
+
     // The toolbar is chrome, always visible in both the app and plugin editor -- no closed state,
     // same as the canvas below, and no direct-focus shortcut targets it (Tab-cycling only).
     focusRegions_.addRegion({"toolbar", &toolbar, nullptr, nullptr});
@@ -410,11 +427,15 @@ void MainComponent::registerFocusRegions() {
         {"library", &moduleLibrary, [this] { return isLibraryVisible; }, [this] { setLibraryVisible(true); }});
     // The canvas has no closed state at all -- null isOpen/open, so it is always in the open list.
     focusRegions_.addRegion({"canvas", &graphEditor, nullptr, nullptr});
-    focusRegions_.addRegion({"timeline", &timelinePanel, [this] { return isTimelineVisible; },
-                             [this] {
-                                 if (!isTimelineVisible && toggleTimelineButton.onClick)
-                                     toggleTimelineButton.onClick();
-                             }});
+    // FRO12: guarded -- a Timeline detached to its own window has nothing docked here to cycle
+    // to; Tab inside that window cycles its OWN one-region registry instead (see
+    // DetachedPanelWindow::keyPressed). Wrapping only -- never reorder/rename the regions below.
+    if (!mixerDock.getTimelineHost().isDetached())
+        focusRegions_.addRegion({"timeline", &timelinePanel, [this] { return isTimelineVisible; },
+                                 [this] {
+                                     if (!isTimelineVisible && toggleTimelineButton.onClick)
+                                         toggleTimelineButton.onClick();
+                                 }});
     focusRegions_.addRegion({"aiPanel", &aiChatComponent, [this] { return isAiPanelVisible; },
                              [this] {
                                  if (!isAiPanelVisible && toggleAiPanelButton.onClick)
@@ -424,8 +445,4 @@ void MainComponent::registerFocusRegions() {
     // the task), and Tab-cycling never opens a closed region — see FocusRegionRegistry::cycleFocus.
     focusRegions_.addRegion(
         {"modMatrix", &graphEditor.getModMatrix(), [this] { return graphEditor.isModMatrixVisible(); }, nullptr});
-
-    // Repaint whichever region gains/loses focus — see FocusRegion.h's comment on
-    // paintFocusRegionOutline for why nothing repaints on its own. Removed in the destructor.
-    juce::Desktop::getInstance().addFocusChangeListener(this);
 }

@@ -115,6 +115,11 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
     if (source != nullptr && source == appProperties.getUserSettings()) {
         applyNaturalScrollingPreference();
         applyZoomScrollPreference();
+        // FRO12 (P9-6): a live Preferences placement change applies immediately, no restart --
+        // idempotent (mixerPlacement_ no-ops when the persisted value already matches), so this is
+        // also safe against the same broadcast a DetachedPanelWindow's own bounds-persist
+        // (moved()/resized()) fires on every drag frame.
+        mixerPlacement_.applyPlacementPreference();
         // Piano-roll key-label mode and note colour overrides live in the same properties file —
         // re-read them on every settings write so an Appearance-tab edit shows up immediately,
         // the same "re-read on notify" treatment as the two calls above. No startup call needed:

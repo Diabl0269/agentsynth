@@ -83,6 +83,12 @@ public:
     void setMixerDefaultTrackPresetAudio(const juce::String& presetName);
     juce::String getMixerDefaultTrackPresetInstrument() const;
     void setMixerDefaultTrackPresetInstrument(const juce::String& presetName);
+    // FRO12 (P9-6, docs/mixer.md §5.9): where the Mixer panel lives -- "tab"/"ownPanel"/"window",
+    // default "tab" (D4 = A, made configurable). Read once at launch by
+    // MainComponent/MixerPlacementController and re-applied immediately on every change (no
+    // restart) via the same settings-file ChangeListener every other live preference here uses.
+    juce::String getMixerPlacement() const;
+    void setMixerPlacement(const juce::String& placement);
     // "all" (every key labelled) vs "c" (only the Cs) — PianoRollComponent::KeyLabelMode, read by
     // TimelinePanelComponent::reloadPianoRollAppearancePrefs(). true == "all" (the default).
     bool isPianoRollKeyLabelModeAll() const;
@@ -174,6 +180,7 @@ private:
     void persistAutosaveBackupCount(int count);
     void persistMixerDefaultTrackPresetAudio(const juce::String& presetName);
     void persistMixerDefaultTrackPresetInstrument(const juce::String& presetName);
+    void persistMixerPlacement(const juce::String& placement);
     void persistPianoRollKeyLabelMode(bool labelEveryKey);
     void persistDualIOPerModuleOverrides();
 
@@ -181,6 +188,9 @@ private:
     // Pulled out of the constructor (which was tripping the function-size ratchet) into its own
     // named step, in PreferencesSettingsTabMixerDefaults.cpp alongside this group's other members.
     void setupMixerDefaultTrackPresetControls();
+    // FRO12 (P9-6): constructs/wires the Mixer placement combo, same "own named step" reason as
+    // setupMixerDefaultTrackPresetControls() above.
+    void setupMixerPlacementControls();
 
     // Shared by the real button and createDualIOPerModuleDefaultsPopupForTest() so the test seam
     // exercises the exact component a click would open, not a lookalike.
@@ -214,6 +224,17 @@ private:
         int& y, int contentWidth, const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
         const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible,
         const std::function<void(bool)>& beginGroup);
+
+    // FRO12 (P9-6): lays out the Mixer placement combo row -- chained from the TAIL of
+    // layoutMixerDefaultTrackPresetGroup() (not called from layoutContent directly, and not
+    // taking its `beginGroup` closure): layoutContent's own `pendingDivider` local (which
+    // `beginGroup` updates) is a baselined function this ticket must not grow, so
+    // `previousGroupWasVisible` carries the one bit that closure would otherwise have tracked,
+    // and this draws its own divider directly into `dividerBounds` (a plain member) when needed.
+    void layoutMixerPlacementGroup(
+        int& y, int contentWidth, bool previousGroupWasVisible,
+        const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
+        const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible);
 
     // Paints the group-separator hairlines. Called by ContentHost::paint (the viewport's viewed
     // component), so the rules scroll along with the groups they separate — same owner-delegation
@@ -308,6 +329,10 @@ private:
     juce::ComboBox mixerDefaultTrackPresetAudioCombo;
     juce::Label mixerDefaultTrackPresetInstrumentLabel;
     juce::ComboBox mixerDefaultTrackPresetInstrumentCombo;
+    // FRO12 (P9-6, docs/mixer.md §5.9): Mixer placement -- Tab beside the Timeline (default,
+    // combo id 1) / Own panel (2) / Window (3).
+    juce::Label mixerPlacementLabel;
+    juce::ComboBox mixerPlacementCombo;
 
     // Hairline rules between preference groups, painted in paint() from these bounds.
     std::vector<juce::Rectangle<int>> dividerBounds;

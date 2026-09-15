@@ -400,6 +400,13 @@ void MainComponent::resized() {
         mixerDock.setBounds(bounds.removeFromBottom(timelineSlide_.sizeBetween(0, timelinePanelHeight_)));
     }
 
+    // FRO12 (P9-6): the Mixer's "Own panel" placement -- a second, INDEPENDENT bottom strip below
+    // the Timeline dock above. Fixed height, no slide (the ticket's own scope cut -- see
+    // MixerPlacementController's class comment): a plain visible/hidden carve, same "|| isVisible()
+    // frame-0" guard as every other panel above.
+    if (mixerPlacement_.isOwnPanelShowing())
+        mixerPlacement_.setBounds(bounds.removeFromBottom(synth::ui::MixerPlacementController::kOwnPanelHeight));
+
     if (aiW > 0 || aiChatComponent.isVisible())
         aiChatComponent.setBounds(bounds.removeFromRight(aiW));
     if (libW > 0 || moduleLibrary.isVisible())
@@ -674,6 +681,12 @@ void MainComponent::finishPanelSlide() {
 // close. The dock's own open/close state (isTimelineVisible/timelineSlide_) stays keyed to "is
 // the DOCK open" regardless of which tab is active (see MixerDockComponent's own class comment).
 void MainComponent::performToggleMixerPanel() {
+    // FRO12 (P9-6): Own-panel/Window placements have nothing to do with the Timeline dock's own
+    // open/close state below -- mixerPlacement_ handles the reveal itself and says so by
+    // returning true. Tab placement (the default) returns false and falls through to the
+    // unchanged FRO11 behaviour.
+    if (mixerPlacement_.revealOrToggle())
+        return;
     if (!isTimelineVisible) {
         isTimelineVisible = true;
         appProperties.getUserSettings()->setValue("timelinePanelVisible", "1");

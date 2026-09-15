@@ -128,6 +128,15 @@ exists: **Toolbar** (always open — the top strip), **Library** (`isLibraryVisi
   so the two focus regions nest rather than sit side by side. `FocusRegionRegistry::regionContaining`
   resolves this to the most specific match (Mod Matrix, not Canvas) whenever real focus sits inside
   it, so Tab-cycling and the outline both track the right one.
+- **A detached window (FRO12, P9-6, `docs/mixer.md §5.9`) cycles only its OWN regions** — the
+  Timeline or Mixer panel, popped out into its own `DetachedPanelWindow`, owns a SEPARATE
+  `FocusRegionRegistry` with exactly one region (its hosted panel); Tab/Shift+Tab there resolves via
+  the same shared `synth::ui::resolveFocusCycleKeyPress()` translation this app's command table
+  uses, so the SAME bound key does the same thing everywhere, but the cycle itself never crosses
+  into MainComponent's own registry or vice versa. No new binding — Tab/Shift+Tab stay exactly what
+  they already are. While a panel is detached, MainComponent's own registry drops that region
+  entirely (re-added the moment it redocks), so Tab-cycling in the MAIN window never lands on
+  something that isn't there.
 - **Visual indicator** — a region's root component paints a translucent outline (55% alpha) in the
   theme's `accent` colour (`docs/theming.md`), at the theme's normal border weight (1px in every
   built-in theme, `theme.metrics.borderWidth`) rather than an arbitrary heavier one, whenever it or a
