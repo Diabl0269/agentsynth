@@ -107,14 +107,14 @@ TEST_F(DetachedPanelWindowTest, CloseButtonFiresCallbackAndNeverSelfDestroys) {
 
 TEST_F(DetachedPanelWindowTest, NeverTouchesTheProcessGlobalDefaultLookAndFeel) {
     synth::theme::AppLookAndFeel handedInstance;
-    auto* defaultBefore = juce::Desktop::getInstance().getDefaultLookAndFeel();
+    auto* defaultBefore = &juce::Desktop::getInstance().getDefaultLookAndFeel();
 
     {
         DetachedPanelWindow window(panel, button, title, "testWindowBounds", &appProperties, &handedInstance,
                                    &shortcutManager);
         EXPECT_EQ(&window.getLookAndFeel(), &handedInstance)
             << "must set its OWN LookAndFeel to the instance its owner handed it";
-        EXPECT_EQ(juce::Desktop::getInstance().getDefaultLookAndFeel(), defaultBefore)
+        EXPECT_EQ(&juce::Desktop::getInstance().getDefaultLookAndFeel(), defaultBefore)
             << "must never call Desktop::setDefaultLookAndFeel -- that is process-global inside a host";
 
         // addToDesktop=false still lets setVisible(true) run without creating a real peer on a
@@ -122,12 +122,12 @@ TEST_F(DetachedPanelWindowTest, NeverTouchesTheProcessGlobalDefaultLookAndFeel) 
         // nullptr there) -- guard exactly like HostedPluginWindowManager::openEditorFor does.
         if (juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() != nullptr) {
             window.setVisible(true);
-            EXPECT_EQ(juce::Desktop::getInstance().getDefaultLookAndFeel(), defaultBefore)
+            EXPECT_EQ(&juce::Desktop::getInstance().getDefaultLookAndFeel(), defaultBefore)
                 << "must stay untouched after setVisible(true) too";
         }
     }
 
-    EXPECT_EQ(juce::Desktop::getInstance().getDefaultLookAndFeel(), defaultBefore)
+    EXPECT_EQ(&juce::Desktop::getInstance().getDefaultLookAndFeel(), defaultBefore)
         << "destruction must not have touched the process-global default either";
 }
 
