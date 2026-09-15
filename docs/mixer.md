@@ -639,7 +639,22 @@ would give you the source dry **plus** the source through the bus, and a group b
 because its sources' MAIN legs stay open. `synth::computeSoloAudibleLegs` computes the map on the
 message thread (every graph change already reaches `refreshSoloGate` via `publishTimeline`), reusing
 `synth::isSignalEdge` for every walk and stopping at the first strip and at the terminals, exactly
-as `findStripFedByTrackSource` does. `refreshSoloGate` publishes in two passes — pass 1 ORs the new
+as `findStripFedByTrackSource` does.
+
+**One walk is not enough — the set of contributing strips is closed to a fixed point.** A single
+first-strip-stopping walk answers only "does this leg reach the soloed set in ONE hop?", which is
+narrower than rule (c) above ("lies on a signal path reaching"). With nested buses — source ->
+inner bus -> soloed outer bus — it closes the source's main leg, so the audible inner bus is fed
+silence and soloing the outer bus produces nothing at all. So the soloed set is first grown by the
+same leg walk, repeatedly, until no further strip joins: a strip with any open leg feeds the soloed
+path, and so does a strip whose leg reaches it. Feeding the path is not the same as being downstream
+of a solo — a contributing strip still gets a **per-leg** mask, not all-ones, so a source that
+reaches a soloed bus only through its send keeps its dry main leg closed no matter how many buses
+sit in between. (This is a deliberate correction to the decided design's step 4, which as written
+contradicted its own rule (c); pinned by `MixerBusSoloTest`'s
+`SoloingABusFedByAnotherBusKeepsTheWholeChainAudible` and `ASendThroughABusChainStaysOpenToo`.)
+
+`refreshSoloGate` publishes in two passes — pass 1 ORs the new
 mask in, pass 2 assigns — so a render pass landing between them sees a strip momentarily *more*
 audible, never wrongly silent. The strip's default mask is **0**, i.e. a strip the engine never
 published for behaves exactly as the pre-FRO15 whole-buffer clear did; a strip that is itself soloed

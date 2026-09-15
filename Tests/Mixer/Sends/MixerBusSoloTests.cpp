@@ -132,6 +132,66 @@ TEST(MixerBusSoloTest, SoloingAGroupBusOpensItsSourcesMainLegs) {
     EXPECT_EQ(maskOf(masks, other), 0u);
 }
 
+TEST(MixerBusSoloTest, SoloingABusFedByAnotherBusKeepsTheWholeChainAudible) {
+    // Nested group buses -- source -> inner bus -> outer bus -> Master -- with the OUTER one soloed.
+    // §5.15 D5's rule (c) is "that leg lies on a signal path reaching a soloed strip", and the
+    // source's path does reach it, two strips away. A walk that answered only "is the FIRST strip I
+    // meet soloed?" would close the source's main leg, and the soloed bus would then be fed silence
+    // by a bus that is itself audible -- soloing a nested bus would produce nothing at all.
+    juce::AudioProcessorGraph graph;
+    graph.setPlayConfigDetails(2, 2, kSampleRate, kBlockSize);
+    const auto output = addFactoryNode(graph, "Audio Output");
+    const auto master = addFactoryNode(graph, "Master");
+    const auto source = addFactoryNode(graph, "Channel Strip");
+    const auto innerBus = addFactoryNode(graph, "Channel Strip");
+    const auto outerBus = addFactoryNode(graph, "Channel Strip");
+    const auto other = addFactoryNode(graph, "Channel Strip");
+    stripAt(graph, innerBus)->setIsBus(true);
+    stripAt(graph, outerBus)->setIsBus(true);
+
+    wireMainTo(graph, source, innerBus, 0, kRight);
+    wireMainTo(graph, innerBus, outerBus, 0, kRight);
+    wireMainTo(graph, outerBus, master, MasterModule::kMixLeft, MasterModule::kMixRight);
+    wireMainTo(graph, other, master, MasterModule::kMixLeft, MasterModule::kMixRight);
+    graph.addConnection({{master, 0}, {output, 0}});
+
+    stripAt(graph, outerBus)->setSoloed(true);
+    const auto masks = synth::computeSoloAudibleLegs(graph);
+
+    EXPECT_EQ(maskOf(masks, outerBus), ~0u);
+    EXPECT_EQ(maskOf(masks, innerBus) & kMain, kMain) << "it feeds the soloed bus directly";
+    EXPECT_EQ(maskOf(masks, source) & kMain, kMain)
+        << "and the source feeds it THROUGH that bus -- a chain of buses must not break the walk";
+    EXPECT_EQ(maskOf(masks, other), 0u) << "a strip off the soloed path is still fully silenced";
+}
+
+TEST(MixerBusSoloTest, ASendThroughABusChainStaysOpenToo) {
+    // The same closure, reached by a SEND rather than a main leg: source -> send 0 -> inner bus ->
+    // outer bus (soloed). Only the send leg may open -- the source's dry main leg goes to Master.
+    juce::AudioProcessorGraph graph;
+    graph.setPlayConfigDetails(2, 2, kSampleRate, kBlockSize);
+    const auto output = addFactoryNode(graph, "Audio Output");
+    const auto master = addFactoryNode(graph, "Master");
+    const auto source = addFactoryNode(graph, "Channel Strip");
+    const auto innerBus = addFactoryNode(graph, "Channel Strip");
+    const auto outerBus = addFactoryNode(graph, "Channel Strip");
+    stripAt(graph, innerBus)->setIsBus(true);
+    stripAt(graph, outerBus)->setIsBus(true);
+
+    wireMainTo(graph, source, master, MasterModule::kMixLeft, MasterModule::kMixRight);
+    wireSendTo(graph, source, 0, innerBus);
+    wireMainTo(graph, innerBus, outerBus, 0, kRight);
+    wireMainTo(graph, outerBus, master, MasterModule::kMixLeft, MasterModule::kMixRight);
+    graph.addConnection({{master, 0}, {output, 0}});
+
+    stripAt(graph, outerBus)->setSoloed(true);
+    const auto masks = synth::computeSoloAudibleLegs(graph);
+
+    EXPECT_EQ(maskOf(masks, innerBus) & kMain, kMain);
+    EXPECT_EQ(maskOf(masks, source), ChannelStripModule::sendLegBit(0))
+        << "the send leg reaches the soloed bus through the chain; the dry main leg does not";
+}
+
 TEST(MixerBusSoloTest, SoloingASourceKeepsTheBusesItFeedsAudible) {
     SendRig rig;
     stripAt(rig.graph, rig.sourceA)->setSoloed(true);

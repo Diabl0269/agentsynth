@@ -139,6 +139,30 @@ juce::uint32 maskForGatedStrip(juce::AudioProcessorGraph& graph, const std::vect
     return mask;
 }
 
+/** Step 5 of the rule: grows `contributing` (seeded with D) to a FIXED POINT — a strip whose leg
+ *  reaches a strip that itself contributes is contributing too. Without this, a walk that stops at
+ *  the first strip answers "does this leg reach D in ONE hop?", which silences every source behind a
+ *  chain of buses: source -> inner bus -> soloed outer bus would leave the source closed and feed
+ *  the soloed bus silence. Monotone (a leg can only ever open), so the loop runs at most once per
+ *  strip and the legs a pass opens stay open in the next. */
+void closeOverContributingStrips(juce::AudioProcessorGraph& graph, const std::vector<Connection>& connections,
+                                 const std::vector<NodeID>& strips, std::set<NodeID>& contributing) {
+    for (bool grew = true; grew;) {
+        grew = false;
+        for (auto id : strips) {
+            if (contributing.count(id) != 0)
+                continue;
+            auto* strip = stripAt(graph, id);
+            if (strip == nullptr)
+                continue;
+            if (maskForGatedStrip(graph, connections, id, *strip, contributing) != 0) {
+                contributing.insert(id);
+                grew = true;
+            }
+        }
+    }
+}
+
 } // namespace
 
 std::map<NodeID, juce::uint32> computeSoloAudibleLegs(juce::AudioProcessorGraph& graph) {
@@ -166,13 +190,19 @@ std::map<NodeID, juce::uint32> computeSoloAudibleLegs(juce::AudioProcessorGraph&
     const auto connections = graph.getConnections();
     collectDownstreamStrips(graph, connections, audible);
 
+    // D is "fully audible"; `contributing` additionally holds every strip that merely FEEDS the
+    // soloed path, however many buses away. Each of those still gets a per-leg mask below (only the
+    // legs that actually reach the path open) — being a feeder is not the same as being audible.
+    std::set<NodeID> contributing = audible;
+    closeOverContributingStrips(graph, connections, strips, contributing);
+
     for (auto id : strips) {
         if (audible.count(id) != 0) {
             masks[id] = ~0u;
             continue;
         }
         auto* strip = stripAt(graph, id);
-        masks[id] = strip != nullptr ? maskForGatedStrip(graph, connections, id, *strip, audible) : 0u;
+        masks[id] = strip != nullptr ? maskForGatedStrip(graph, connections, id, *strip, contributing) : 0u;
     }
     return masks;
 }

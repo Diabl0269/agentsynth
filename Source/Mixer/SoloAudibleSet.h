@@ -38,8 +38,15 @@ namespace synth {
  *   4. Every other strip is decided leg by leg: a forward walk from that leg's raw output channel,
  *      stopping at the first strip it meets (never expanding past it -- the same rule
  *      findStripFedByTrackSource uses) and at the terminals (Audio Output, Rec Tap, Master). The
- *      bit is set iff the walk lands on a strip in D. The left and right legs of a pair are OR'd,
- *      since they are silenced together.
+ *      bit is set iff the walk lands on a CONTRIBUTING strip (below). The left and right legs of a
+ *      pair are OR'd, since they are silenced together.
+ *   5. "Contributing" is D grown to a FIXED POINT: a strip with any open leg feeds the soloed path,
+ *      so a strip whose leg reaches IT feeds the path too. Step 4 alone stops at the first strip and
+ *      would therefore only ever answer "does this leg reach D in one hop?", which silences every
+ *      source sitting behind a chain of buses (source -> inner bus -> soloed outer bus) -- rule (c)
+ *      above says "a signal path reaching", not "an edge landing on". Feeding the path is not the
+ *      same as being in D: a contributing strip still gets a per-leg mask, not ~0u, so only the legs
+ *      that actually reach the path open.
  *
  * Every walk uses synth::isSignalEdge, the one shared signal-edge rule, and carries a visited-set
  * cycle guard.

@@ -61,8 +61,9 @@ StemResult failure(juce::String message) {
 // link rule FRO14 decides the same way - see that file. With no TimelineDoc at all (a graph built
 // directly by a test), there is no name to find and every strip keeps its "Channel N" fallback.
 //
-// ChannelStripModule has no user-given name field of its own yet (checked at FRO55 time - its
-// getExtraState() carries only "shape"/"solo", docs/mixer.md §5.4-5.10 never added one either) - the
+// ChannelStripModule has no user-given name field of its own yet (re-checked at FRO15 time - its
+// getExtraState() carries "shape"/"solo"/"isBus"/"sends" and no name, and docs/mixer.md §5.4-5.15
+// never added one either; a bus takes its name from its MACRO, not from the strip) - the
 // mixer-UI ticket that might add one is expected to make THIS function prefer it, ahead of the
 // shared track walk, whenever it lands.
 juce::String stemStripName(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID stripId, int number,
