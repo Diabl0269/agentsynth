@@ -86,6 +86,12 @@ jobs:
     name: Build ${{ matrix.os }}
     needs: [version]
     runs-on: ${{ matrix.os }}
+    # Overrides the workflow-level `contents: write` (only `release`/`publish-appcast*` need that,
+    # for tagging and uploading release assets): this job only checks out (contents: read) and
+    # needs actions: write for the main-only "Prune superseded main cache generations" step below.
+    permissions:
+      contents: read
+      actions: write
     # CCACHE_DIR is pinned per platform rather than left to ccache's default, which varies by OS
     # AND by ccache version — a path that disagrees with the actions/cache `path:` means the cache
     # silently never saves (that is exactly how ci.yml's Linux ccache went missing entirely).
@@ -105,6 +111,13 @@ jobs:
             arch: x64
             artifact_name: AgentSynth-Linux-x64
             ccache_dir: /home/runner/.ccache
+            # This is a Release build with no tests (ENABLE_TESTS is never set here), so it has
+            # fewer translation units than ci.yml's Debug+coverage Linux job (which needs 2G) or
+            # even its Release+tests macOS/Windows jobs (512M) — a measured Windows-release-ccache
+            # entry was 42 MB on 2026-09-15. 512M leaves generous headroom while still bounding
+            # what a single main-only save (see the Save ccache step below) adds to the repo's
+            # 10 GB cache budget.
+            ccache_max_size: 512M
 
           # macOS arm64 (Apple Silicon)
           - os: macos-latest
@@ -112,6 +125,7 @@ jobs:
             arch: arm64
             artifact_name: AgentSynth-macOS-arm64
             ccache_dir: /Users/runner/.ccache
+            ccache_max_size: 512M
 
           # Windows x64
           - os: windows-latest
@@ -119,6 +133,7 @@ jobs:
             arch: x64
             artifact_name: AgentSynth-Windows-x64
             ccache_dir: C:/Users/runneradmin/AppData/Local/ccache
+            ccache_max_size: 512M
 
     steps:
     - uses: actions/checkout@v6
@@ -193,7 +208,7 @@ jobs:
       shell: bash
       run: |
         mkdir -p "$CCACHE_DIR"
-        ccache --set-config=max_size=2G
+        ccache --set-config=max_size=${{ matrix.ccache_max_size }}
         # See ci.yml for why these two are needed: checkout rewrites every file's mtime on each
         # run, and the compiler binary's mtime changes when GitHub rebuilds the runner image.
         ccache --set-config=compiler_check=content
@@ -286,19 +301,63 @@ jobs:
         CACHE_CHECK_ENFORCE: 'false'
       run: bash scripts/ci-cache-check.sh
 
+    # Only a push-to-main run saves (see ci.yml's build-and-test "Save FetchContent Dependencies"
+    # comment for the full PR-scoped-cache-bloat story this fixes). A workflow_dispatch dry-run
+    # from a feature branch — this workflow's own documented way to validate the matrix before
+    # merging — must not write a cache entry under that branch's scope either.
     - name: Save FetchContent Dependencies
-      if: always() && steps.deps-cache.outputs.cache-hit != 'true'
+      if: always() && steps.deps-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
       uses: actions/cache/save@v5
       with:
         path: build/_deps
         key: ${{ steps.deps-cache.outputs.cache-primary-key }}
 
     - name: Save ccache
-      if: always()
+      id: ccache-save
+      if: always() && github.ref == 'refs/heads/main'
       uses: actions/cache/save@v5
       with:
         path: ${{ env.CCACHE_DIR }}
         key: ${{ steps.ccache-cache.outputs.cache-primary-key }}
+
+    # This family is also keyed per-commit (<os>-release-ccache-<sha>) and immutable, so it
+    # accumulates the same way ci.yml's ccache-main family does — see that workflow's
+    # build-and-test "Prune superseded main cache generations" step for the full rationale and
+    # concurrency-safety note (only deletes entries older than this run's own save, keeps the 2
+    # most recent generations regardless, tolerates a missing/partial listing). The release-deps
+    # family is NOT pruned here: it's keyed on the DependencyVersions.cmake hash alone, like
+    # ci.yml's deps3, and deliberately kept in a separate key namespace from it (see this
+    # workflow's own "release-deps-ninja3" key comment above) rather than merged, so there is
+    # nothing shared to prune from this job's own history.
+    - name: Prune superseded main cache generations
+      if: github.ref == 'refs/heads/main' && steps.ccache-save.outcome == 'success'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -uo pipefail
+        prune() { # prune <key-prefix> <key-just-saved>
+          local prefix="$1" keep_key="$2" list keep_created
+          if ! list="$(gh cache list --ref refs/heads/main --key "$prefix" --limit 100 \
+                          --json id,key,createdAt 2>&1)" || [ -z "$list" ] || [ "$list" = "[]" ]; then
+            echo "prune: nothing to list for $prefix (or listing failed), skipping: $list"
+            return 0
+          fi
+          keep_created="$(printf '%s' "$list" | jq -r --arg k "$keep_key" \
+                             '.[] | select(.key==$k) | .createdAt' | head -1)"
+          if [ -z "$keep_created" ]; then
+            echo "prune: could not find just-saved key $keep_key in the $prefix listing, skipping"
+            return 0
+          fi
+          printf '%s' "$list" | jq -r --arg cutoff "$keep_created" \
+            'sort_by(.createdAt) | reverse | .[2:] | .[] | select(.createdAt < $cutoff) | "\(.id)\t\(.key)"' |
+          while IFS=$'\t' read -r id key; do
+            [ -z "$id" ] && continue
+            echo "prune: deleting $prefix cache id=$id key=$key"
+            gh cache delete "$id" || echo "prune: failed to delete id=$id (non-fatal)"
+          done
+        }
+        prune "${{ runner.os }}-release-ccache-" "${{ steps.ccache-cache.outputs.cache-primary-key }}"
 
     # Package Linux
     - name: Package Linux Artifact
