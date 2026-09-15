@@ -501,6 +501,28 @@ Side tracks (each independent of the main line beyond its own listed dependency)
   - `Tests/Engine/StemExportTests.cpp` (extended) — a bus gets its own stem named "Bus N", the
     source's stem stays pre-send, and `sum(stems)` still reproduces the pre-Master mix with a
     pre-fader send in the patch.
+  - **Follow-up fix (in-app finding, post-DONE):** a freshly added bus showed no insert rows and no
+    EQ thumbnail, and a short mixer column overlapped two of its own texts. Root causes:
+    `MixerModelInserts.cpp::buildInsertsForColumn` only ever walked FORWARD from a feeding track's
+    source, so a bus (which has none) bailed out with an empty `inserts` before it ever looked at
+    the EQ/Compressor `buildBusChannel` really did build; `MixerInsertList::paint()`/`mouseDown()`
+    anchored the "Edit on canvas" link at `entries_.size() * kRowHeight`, which is 0 when the list is
+    empty -- the same row the "(no inserts)" placeholder draws at, so the two painted on top of each
+    other (height-independent; reproduced at every column height). Fixes: a new
+    `buildBusInsertsForColumn` walks BACKWARD from a `Kind::Bus` column's strip along signal
+    predecessors, excluding a `ChannelStripModule` predecessor (a send, never an insert -- the same
+    "that strip IS a source" rule `findStripsFeedingStrip` applies the other way) so a wired send
+    never marks the bus's own chain branching; the link row now anchors at
+    `jmax(1, entries_.size()) * kRowHeight` in both methods, matching `getPreferredHeight()`'s own
+    math. Also closed: `MixerInsertList::moveRow` now refuses to move a row to index 0 when
+    `sourceNodeId_` is invalid (true for every bus, which has no external predecessor to splice
+    against) rather than silently orphaning the node -- `reorderInsert`'s second step has no
+    rollback of its own. Tests: `Tests/Mixer/MixerModel/MixerModelBusColumnTests.cpp` (a fresh
+    `buildBusChannel` bus lists `[EQ, Compressor]` in signal order and stays linear; a send wired
+    into a bus stays linear and is never listed as an insert); `Tests/UI/Mixer/
+    MixerColumnComponentTests.cpp` (a bus column shows 2 insert rows and a visible EQ thumbnail at
+    both 181px and 420px column heights); `Tests/UI/Mixer/MixerInsertListTests.cpp` (new -- the
+    empty+branching placeholder/link anchoring, and the moveRow-to-front guard).
 - **P9-10 (T179) — EQ curve thumbnail on mixer columns.** After P9-5. **DONE.** How it landed:
   - *Curve maths* — `synth::ui::EqResponseCurve::compute` (`Source/UI/Mixer/EqResponseCurve.h`), 48
     log-spaced points over +/-18 dB, built the same way `EQCurveComponent::recomputeMagnitudes()`

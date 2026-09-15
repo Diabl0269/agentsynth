@@ -61,10 +61,17 @@ void MixerInsertList::paint(juce::Graphics& g) {
     const auto disabled = laf != nullptr ? laf->getTheme().colors.textDisabled : juce::Colour(0xff5C6470);
     const auto accent = laf != nullptr ? laf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
 
+    // FRO15 fix: the empty-state placeholder always occupies row 0 (jmax(1, size) below matches
+    // getPreferredHeight()'s own row count), so anchor the "Edit on canvas" link AFTER it rather
+    // than at entries_.size() * kRowHeight -- with zero entries that was also 0, drawing both texts
+    // in the same row on top of each other (a bus with no inserts and a branching chain, before the
+    // insert-discovery fix above, hit exactly this).
+    const int contentRows = juce::jmax(1, (int)entries_.size());
+
     g.setFont(juce::Font(juce::FontOptions(11.0f)));
     if (entries_.empty()) {
         g.setColour(muted);
-        g.drawText("(no inserts)", getLocalBounds().removeFromTop(kRowHeight), juce::Justification::centredLeft);
+        g.drawText("(no inserts)", getLocalBounds().removeFromTop(kRowHeight), juce::Justification::centredLeft, true);
     }
     for (int i = 0; i < (int)entries_.size(); ++i) {
         const auto& entry = entries_[(size_t)i];
@@ -73,9 +80,9 @@ void MixerInsertList::paint(juce::Graphics& g) {
         g.drawText(entry.name, row.reduced(2, 0), juce::Justification::centredLeft, true);
     }
     if (!linear_) {
-        auto linkRow = getLocalBounds().withY((int)entries_.size() * kRowHeight).withHeight(kRowHeight);
+        auto linkRow = getLocalBounds().withY(contentRows * kRowHeight).withHeight(kRowHeight);
         g.setColour(accent);
-        g.drawText("Edit on canvas", linkRow.reduced(2, 0), juce::Justification::centredLeft);
+        g.drawText("Edit on canvas", linkRow.reduced(2, 0), juce::Justification::centredLeft, true);
     }
 }
 
@@ -83,7 +90,9 @@ void MixerInsertList::resized() {}
 
 void MixerInsertList::mouseDown(const juce::MouseEvent& event) {
     if (!linear_) {
-        const auto linkRowTop = (int)entries_.size() * kRowHeight;
+        // Same anchor as paint()'s linkRow -- see that method's own comment on why this is
+        // jmax(1, size) and not the raw entry count.
+        const auto linkRowTop = juce::jmax(1, (int)entries_.size()) * kRowHeight;
         if (event.y >= linkRowTop && onEditOnCanvas)
             onEditOnCanvas(editOnCanvasTargetUuid_);
         return;
@@ -153,6 +162,15 @@ void MixerInsertList::moveRow(int rowIndex, int delta) {
     const int insertAt = juce::jlimit(0, (int)without.size(), targetIndex);
     const auto predecessorId = insertAt == 0 ? sourceNodeId_ : without[(size_t)insertAt - 1].nodeId;
     const auto successorId = insertAt >= (int)without.size() ? stripNodeId_ : without[(size_t)insertAt].nodeId;
+
+    // FRO15: a bus's own chain has no external source (sourceNodeId_ stays invalid -- nothing feeds
+    // its EQ from outside, docs/mixer.md §5.15 D6), so moving a row to the very front would ask
+    // spliceInInsert to splice against a predecessor that doesn't exist. reorderInsert's second step
+    // (spliceInInsert) has no rollback of its own on failure, so refuse up front -- same "nothing
+    // changed" guard addModule already applies for its own empty-chain edge case -- rather than leave
+    // the node spliced out but not back in.
+    if (predecessorId == juce::AudioProcessorGraph::NodeID{})
+        return;
 
     mutateAndNotify([&] { return synth::reorderInsert(*graph_, nodeId, predecessorId, successorId); });
 }

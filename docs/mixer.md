@@ -283,6 +283,17 @@ and strip, or a shared node feeding more than one channel — the column instead
 list read-only with an "Edit on canvas" link, rather than presenting a branching chain as if it
 were a reorderable list.
 
+**A bus has no source to walk from (FRO15).** A bus column carries no feeding track, so
+`buildInsertsForColumn` walks its chain the other way: BACKWARD from the strip along signal
+predecessors, collecting the EQ/Compressor "Add bus" builds (or whatever the user has since
+rearranged) until it reaches a node with no predecessor of its own. A send into the bus (§5.15 D2)
+lands on the same strip input channels an insert's own output would and is excluded from this walk
+— a feeding strip is a source, never an insert, the same rule `findStripsFeedingStrip` applies
+walking the opposite direction — so an active send never marks a bus's own chain "branching" and is
+never mistaken for one of its inserts. `MixerColumn::sourceNodeId` therefore stays invalid for a
+bus, which is also why `MixerInsertList::moveRow` refuses to move a row to the very front of a
+bus's chain (there is no external predecessor to splice against).
+
 ### 5.7 Track presets
 
 **Naming.** The product says **track** everywhere, in the UI and in this doc. "Lane" stays reserved
@@ -717,7 +728,9 @@ delay-compensated per-edge mute node — out of scope.
 
 **D6 — UI.** A bus column is an ordinary strip column with three differences: a "BUS" badge instead
 of the `+R` linked badge, a source line listing the feeding strips' names instead of tracks, and no
-track chip or colour link. Buses sit after the track-driven strips and before Direct — the existing
+track chip or colour link. Its own insert list works exactly like any other column's — including
+the bypassed EQ/Compressor "Add bus" builds — via the backward-walk §5.6 describes for a column
+with no feeding track. Buses sit after the track-driven strips and before Direct — the existing
 orphan-strip append already produces exactly that position. On a source column, a compact
 `MixerSendList` sits under the insert list: one row per active slot (target-bus button, a rotary
 level knob attached straight onto `sendNLevel`, a `PRE`/`POST` toggle, an `x`), plus a `+ Send` row

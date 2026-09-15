@@ -1,10 +1,13 @@
 // Concern: FRO11 (P9-5, docs/mixer.md §5.6) -- a column's insert list: the chain between its
 // feeding track's source and the strip, in signal order, plus linear-vs-branching classification,
-// plus the three insert-list mutation primitives (splice out / splice in / reorder).
+// plus the three insert-list mutation primitives (splice out / splice in / reorder). Also FRO15
+// (§5.15 D6): a bus has no feeding track, so its own EQ/Compressor chain is discovered by walking
+// BACKWARD from the strip instead (buildBusInsertsForColumn).
 #include "MixerModel.h"
 
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "MixerModelInternal.h"
+#include "Modules/ChannelStripModule.h"
 #include "Modules/ModuleBase.h"
 #include <algorithm>
 
@@ -52,19 +55,106 @@ NodeID resolveTrackSourceNode(juce::AudioProcessorGraph& graph, const TimelineDo
             return node->nodeID;
     return {};
 }
+
+// Builds one MixerInsertEntry off a live node -- shared by the forward (track-anchored) and
+// backward (bus-anchored) chain walks below.
+MixerInsertEntry entryFor(juce::AudioProcessorGraph& graph, NodeID nodeId) {
+    auto* processor = processorFor(graph, nodeId);
+    auto* module = dynamic_cast<ModuleBase*>(processor);
+    MixerInsertEntry entry;
+    entry.nodeId = nodeId;
+    entry.uuid = module != nullptr ? juce::String(module->getNodeUuid()) : juce::String();
+    entry.name = processor != nullptr ? processor->getName() : juce::String("Module");
+    entry.bypassed = module != nullptr && module->isBypassed();
+    return entry;
+}
+
+// "Edit on canvas" points at the owning macro of the first boxed node in `chain`, else `chain`'s
+// own first node -- shared by both walks' branching case.
+void resolveEditOnCanvasTarget(juce::AudioProcessorGraph& graph, const MacroSet& macros,
+                               const std::vector<NodeID>& chain, MixerColumn& column) {
+    for (auto nodeId : chain) {
+        auto* module = dynamic_cast<ModuleBase*>(processorFor(graph, nodeId));
+        if (module == nullptr)
+            continue;
+        if (const auto* macro = macros.findByMember(module->getNodeUuid())) {
+            column.editOnCanvasTargetUuid = macro->id;
+            return;
+        }
+    }
+    if (auto* module = dynamic_cast<ModuleBase*>(processorFor(graph, chain.front())))
+        column.editOnCanvasTargetUuid = module->getNodeUuid();
+}
+
+// FRO15 (§5.15 D6): a bus has no feeding track (feedingTracks is empty by construction -- nothing
+// in the timeline plays into it), so there is no source node to walk FORWARD from. Its own
+// EQ/Compressor chain -- built by "Add bus"/buildBusChannel, or rearranged since -- instead sits
+// immediately upstream of the strip, so walk BACKWARD from the strip along signal predecessors.
+//
+// A send into a bus (D2) lands on the SAME strip input channels (ch0/kRightBase) an insert's own
+// output would, and IS a signal edge (isSignalEdge has no send-vs-insert concept) -- so a
+// ChannelStripModule predecessor is excluded here exactly like findStripsFeedingStrip excludes one
+// walking the other direction: "that strip IS a source, not something to expand through", never an
+// insert and never itself grounds to call the bus's own chain "branching".
+void buildBusInsertsForColumn(juce::AudioProcessorGraph& graph, const std::vector<Connection>& connections,
+                              const MacroSet& macros, MixerColumn& column) {
+    bool branching = false;
+    std::vector<NodeID> reverseChain;
+    std::vector<NodeID> visited{column.nodeId};
+    NodeID current = column.nodeId;
+
+    for (;;) {
+        std::vector<NodeID> preds;
+        for (const auto& c : connections) {
+            if (c.destination.nodeID != current || !isSignalEdge(graph, connections, c))
+                continue;
+            if (dynamic_cast<ChannelStripModule*>(processorFor(graph, c.source.nodeID)) != nullptr)
+                continue; // a feeding strip is a send, never an insert
+            if (std::find(preds.begin(), preds.end(), c.source.nodeID) == preds.end())
+                preds.push_back(c.source.nodeID);
+        }
+        if (preds.empty())
+            break; // reached the head of the bus's own chain -- nothing feeds it from outside
+        if (preds.size() > 1)
+            branching = true;
+
+        const NodeID prev = preds.front();
+        if (signalSuccessorCount(graph, connections, prev) > 1)
+            branching = true;
+        if (std::find(visited.begin(), visited.end(), prev) != visited.end())
+            break; // cycle guard -- should not happen in a real patch, never hang if it does
+        reverseChain.push_back(prev);
+        visited.push_back(prev);
+        current = prev;
+        if (reverseChain.size() > 64)
+            break; // sane upper bound
+    }
+    std::reverse(reverseChain.begin(), reverseChain.end());
+
+    column.insertChainIsLinear = !branching;
+    for (auto nodeId : reverseChain)
+        column.inserts.push_back(entryFor(graph, nodeId));
+
+    if (!branching || reverseChain.empty())
+        return;
+    resolveEditOnCanvasTarget(graph, macros, reverseChain, column);
+}
 } // namespace
 
 void buildInsertsForColumn(juce::AudioProcessorGraph& graph, const TimelineDoc& doc, const MacroSet& macros,
                            MixerColumn& column) {
-    if (column.feedingTracks.empty())
-        return; // an orphan strip has no track-anchored chain to walk
+    const auto connections = graph.getConnections();
+
+    if (column.feedingTracks.empty()) {
+        if (column.kind == MixerColumn::Kind::Bus)
+            buildBusInsertsForColumn(graph, connections, macros, column);
+        return; // a non-bus orphan strip has no track-anchored chain to walk
+    }
 
     const auto sourceId = resolveTrackSourceNode(graph, doc, column.feedingTracks.front());
     if (sourceId == NodeID{})
         return;
     column.sourceNodeId = sourceId;
-
-    const auto connections = graph.getConnections();
 
     // Forward walk from the source along signal edges, collecting the chain up to (not including)
     // the strip. A node with more than one signal predecessor or successor within the reach is a
@@ -104,33 +194,12 @@ void buildInsertsForColumn(juce::AudioProcessorGraph& graph, const TimelineDoc& 
     }
 
     column.insertChainIsLinear = !branching;
-    for (auto nodeId : chain) {
-        auto* processor = processorFor(graph, nodeId);
-        auto* module = dynamic_cast<ModuleBase*>(processor);
-        MixerInsertEntry entry;
-        entry.nodeId = nodeId;
-        entry.uuid = module != nullptr ? juce::String(module->getNodeUuid()) : juce::String();
-        entry.name = processor != nullptr ? processor->getName() : juce::String("Module");
-        entry.bypassed = module != nullptr && module->isBypassed();
-        column.inserts.push_back(std::move(entry));
-    }
+    for (auto nodeId : chain)
+        column.inserts.push_back(entryFor(graph, nodeId));
 
     if (!branching || chain.empty())
         return;
-
-    // "Edit on canvas" points at the owning macro of the first boxed node in the chain, else the
-    // chain's first node itself.
-    for (auto nodeId : chain) {
-        auto* module = dynamic_cast<ModuleBase*>(processorFor(graph, nodeId));
-        if (module == nullptr)
-            continue;
-        if (const auto* macro = macros.findByMember(module->getNodeUuid())) {
-            column.editOnCanvasTargetUuid = macro->id;
-            return;
-        }
-    }
-    if (auto* module = dynamic_cast<ModuleBase*>(processorFor(graph, chain.front())))
-        column.editOnCanvasTargetUuid = module->getNodeUuid();
+    resolveEditOnCanvasTarget(graph, macros, chain, column);
 }
 
 bool spliceOutInsert(juce::AudioProcessorGraph& graph, NodeID node) {

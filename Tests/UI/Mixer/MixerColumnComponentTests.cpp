@@ -8,6 +8,7 @@
 // nodes need not be wired into an actual signal chain for this.
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
+#include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Mixer/MixerModel/MixerModel.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/FX/ParametricEQModule.h"
@@ -45,7 +46,53 @@ void synthesizeMouseUp(juce::Component& component) {
                                        centre.toFloat(), juce::Time::getCurrentTime(), 1, false));
 }
 
+// FRO15 in-app finding: at the dock's real Mixer-tab column height (~181px) a freshly created
+// bus's insert list and EQ thumbnail must actually be visible -- not hidden behind the model bug
+// (buildInsertsForColumn never looking at a bus's own chain; MixerModelBusColumnTests.cpp covers
+// that half) or a resized() overlap. Checked at both the height the user actually saw (181) and a
+// taller one (420) that was never in question, per the finding's own request.
+void expectBusColumnShowsItsInserts(int height) {
+    AudioEngine engine;
+    auto& graph = engine.getGraph();
+    graph.setPlayConfigDetails(0, 2, 44100.0, 512);
+    AppUndoManager undoManager;
+    GraphEditor editor(engine, &undoManager);
+    editor.setSize(900, 600);
+    synth::TimelineDoc doc;
+
+    const synth::DefaultChannelLayout layout{{0, 0}, {100, 0}, {200, 0}, {300, 0}};
+    const auto channel = synth::buildBusChannel(graph, layout);
+    ASSERT_NE(channel.strip, nullptr);
+
+    const auto snapshot = synth::buildMixerSnapshot(graph, doc, editor.getMacros());
+    const synth::MixerColumn* busColumn = nullptr;
+    for (const auto& column : snapshot.columns)
+        if (column.nodeId == channel.strip->nodeID)
+            busColumn = &column;
+    ASSERT_NE(busColumn, nullptr);
+    ASSERT_EQ(busColumn->inserts.size(), 2u) << "the model half of this fix must already hold";
+
+    synth::ui::MixerColumnComponent column;
+    column.configure(graph, undoManager, editor.getMacros(), editor, engine);
+    column.setSize(140, height);
+    column.setColumn(*busColumn, "");
+
+    EXPECT_EQ(column.getInsertListForTest().getEntryCountForTest(), 2)
+        << "at height " << height << ", both the EQ and Compressor rows must show";
+    EXPECT_TRUE(column.getInsertListForTest().isLinearForTest());
+    EXPECT_TRUE(column.getEqThumbnailForTest().isVisible())
+        << "at height " << height << ", the bus's own EQ must get the curve thumbnail";
+}
+
 } // namespace
+
+TEST(MixerColumnComponentTests, BusColumnShowsInsertsAndEqThumbnailAtTheDockMixerTabHeight) {
+    expectBusColumnShowsItsInserts(181);
+}
+
+TEST(MixerColumnComponentTests, BusColumnShowsInsertsAndEqThumbnailAtATallerHeight) {
+    expectBusColumnShowsItsInserts(420);
+}
 
 TEST(MixerColumnComponentTests, ClickForwardsEqUuidThroughOnClicked) {
     AudioEngine engine;
