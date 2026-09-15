@@ -10,6 +10,14 @@ int MixerFader::liveUnbindCallCountForTest_ = 0;
 MixerFader::MixerFader() {
     slider_.setSliderStyle(juce::Slider::LinearVertical);
     slider_.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
+    // FRO18: the panel is the single focusable leaf (MixerPanelComponent::keyPressed) -- a
+    // focused Slider would otherwise eat Up/Down before the panel ever saw them (the T160 trap
+    // docs/shortcuts.md documents).
+    slider_.setWantsKeyboardFocus(false);
+    // FRO18: what VoiceOver reads for the slider's current value, e.g. "-3.0 dB" (spoken "minus
+    // 3 dB") -- same formatting as readout_ below, so the visible label and the accessible value
+    // never drift apart.
+    slider_.textFromValueFunction = [](double db) { return juce::String(db, 1) + " dB"; };
     addAndMakeVisible(slider_);
 
     readout_.setJustificationType(juce::Justification::centred);
@@ -63,6 +71,25 @@ void MixerFader::parameterValueChanged(int, float) {
         if (safeThis != nullptr)
             safeThis->readout_.setText(juce::String(db, 1) + " dB", juce::dontSendNotification);
     });
+}
+
+bool MixerFader::nudge(float deltaDb) {
+    if (param_ == nullptr)
+        return false;
+    const auto range = param_->getNormalisableRange();
+    const float target = juce::jlimit(range.start, range.end, param_->get() + deltaDb);
+    // Same bracket a real slider drag produces (juce::SliderParameterAttachment calls these two
+    // around every drag) -- parameterGestureChanged (already listening, see the class comment)
+    // brackets exactly one captureBeforeState()/pushSnapshotFromCapture() pair around them, so a
+    // key nudge costs one undo step, same as a mouse drag.
+    param_->beginChangeGesture();
+    param_->setValueNotifyingHost(range.convertTo0to1(target));
+    param_->endChangeGesture();
+    return true;
+}
+
+void MixerFader::setChannelName(const juce::String& name) {
+    slider_.setTitle(name.isEmpty() ? juce::String("Fader") : name + " fader");
 }
 
 void MixerFader::parameterGestureChanged(int, bool gestureIsStarting) {

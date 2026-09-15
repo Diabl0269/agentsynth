@@ -29,10 +29,24 @@ public:
     /** One 10 Hz tick, same driving chain as MixerColumnComponent::refreshMeter(). */
     void refreshMeter();
 
+    /** FRO18: toggles Master's mute through the same undo bracket the M button's onClick already
+     *  used -- MixerPanelComponent's keyPressed calls this directly, same seam as
+     *  MixerColumnComponent::toggleMuted(). A no-op after unbindFromGraph(). */
+    void toggleMuted();
+
+    /** FRO18: the fader nudged one undo step, or false when nothing is bound. */
+    bool nudgeFader(float deltaDb) { return fader_.nudge(deltaDb); }
+
+    void setKeyboardFocused(bool focused);
+    bool isKeyboardFocusedForTest() const noexcept { return keyboardFocused_; }
+
     void paint(juce::Graphics& g) override;
+    void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
 
 private:
+    void refreshMuteAccessibility();
+
     juce::AudioProcessorGraph* graph_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;
     juce::AudioProcessorGraph::NodeID nodeId_;
@@ -41,6 +55,7 @@ private:
     MixerFader fader_;
     MixerMeter meter_;
     juce::TextButton muteButton_{"M"};
+    bool keyboardFocused_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerMasterColumn)
 };

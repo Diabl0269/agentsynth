@@ -12,6 +12,9 @@ MixerDirectColumn::MixerDirectColumn() {
     addAndMakeVisible(header_);
     header_.setDisplayName("Direct");
     addAndMakeVisible(makeChannelButton_);
+    // FRO18: MixerPanelComponent is the single focusable leaf -- see
+    // MixerColumnComponent.cpp's ctor comment for why every child control does this.
+    makeChannelButton_.setWantsKeyboardFocus(false);
     makeChannelButton_.onClick = [this] {
         const auto source = resolveDirectFeeder();
         if (source != juce::AudioProcessorGraph::NodeID{} && onMakeChannelRequested)
@@ -40,6 +43,13 @@ void MixerDirectColumn::refreshEnablement() {
     makeChannelButton_.setEnabled(resolveDirectFeeder() != juce::AudioProcessorGraph::NodeID{});
 }
 
+void MixerDirectColumn::setKeyboardFocused(bool focused) {
+    if (keyboardFocused_ == focused)
+        return;
+    keyboardFocused_ = focused;
+    repaint();
+}
+
 void MixerDirectColumn::paint(juce::Graphics& g) {
     const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     const auto bg = laf != nullptr ? laf->getTheme().colors.surface : juce::Colour(0xff1B1F26);
@@ -48,6 +58,15 @@ void MixerDirectColumn::paint(juce::Graphics& g) {
     g.fillRect(getLocalBounds());
     g.setColour(border);
     g.drawRect(getLocalBounds(), 1);
+}
+
+void MixerDirectColumn::paintOverChildren(juce::Graphics& g) {
+    if (!keyboardFocused_)
+        return;
+    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    const auto accent = laf != nullptr ? laf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    g.setColour(accent.withAlpha(0.85f));
+    g.drawRect(getLocalBounds(), 2);
 }
 
 void MixerDirectColumn::resized() {
