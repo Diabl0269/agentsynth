@@ -103,6 +103,11 @@ add_executable(Tests
     Mixer/TrackPreset/TrackPresetDefaultsTests.cpp
     Mixer/MixerModel/MixerModelColumnTests.cpp
     Mixer/MixerModel/MixerModelInsertTests.cpp
+    Mixer/MixerModel/MixerModelBusColumnTests.cpp
+    Mixer/Sends/MixerSendLevelTests.cpp
+    Mixer/Sends/MixerSendFlowTests.cpp
+    Mixer/Sends/MixerBusSoloTests.cpp
+    Mixer/Sends/MixerSendLatencyTests.cpp
     Engine/LatencyAlignmentTests.cpp
     Timeline/AudioClipPlaybackTests.cpp
     Plugin/HostedPluginTests.cpp
@@ -338,6 +343,7 @@ add_executable(Tests
     UI/Mixer/MixerPanelComponentTests.cpp
     UI/Mixer/MixerPanelUndoUnbindTests.cpp
     UI/Mixer/MixerFaderTests.cpp
+    UI/Mixer/MixerSendListTests.cpp
     UI/Mixer/MixerDockComponentTests.cpp
     UI/Mixer/MixerEqThumbnailTests.cpp
     UI/Mixer/MixerColumnComponentTests.cpp
@@ -402,6 +408,7 @@ add_executable(Tests
     ../Source/UI/Mixer/MixerFader.cpp
     ../Source/UI/Mixer/MixerInsertList.cpp
     ../Source/UI/Mixer/MixerEqThumbnail.cpp
+    ../Source/UI/Mixer/MixerSendList.cpp
     ../Source/UI/Mixer/MixerColumnComponent.cpp
     ../Source/UI/Mixer/MixerDirectColumn.cpp
     ../Source/UI/Mixer/MixerMasterColumn.cpp

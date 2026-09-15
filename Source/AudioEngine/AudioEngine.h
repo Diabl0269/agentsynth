@@ -152,6 +152,13 @@ public:
     // setStateInformation) calls refreshSoloGate() itself. The audio thread reads the count once
     // per render pass and publishes "any soloed?" to TransportService::setMixerSoloActiveForBlock.
     //
+    // WHAT is silenced while the gate is closed is decided PER LEG, not per strip (FRO15,
+    // docs/mixer.md §5.15): refreshSoloGate() also runs synth::computeSoloAudibleLegs() and hands
+    // each strip its own audible-leg mask, open-before-close, so soloing a send bus keeps its
+    // sources' SEND legs open while their dry main legs close, and soloing a source keeps the buses
+    // it feeds audible. The count itself stays a plain global "is anything soloed?" — that is still
+    // what MasterModule's Direct gate needs.
+    //
     // setChannelStripSoloed() is the one call a UI should make: it flips the strip's own flag and
     // recounts, ordered so no render pass ever sees the gate closed with nothing soloed. Returns
     // false when `node` is not a Channel Strip in this graph. Not undoable and not a parameter

@@ -88,7 +88,11 @@ TEST(MacroPortSerialization, ColourDefaultsToUnsetAndOmitsTheKeyEntirely) {
     const MacroPort original = makePort("node-4", false, "Wet Out", 0, MacroPortKind::AudioCV);
     ASSERT_FALSE(original.colour.has_value());
 
-    auto* obj = original.toVar().getDynamicObject();
+    // Hold the var: toVar() builds a FRESH DynamicObject that the temporary solely owns, so
+    // `original.toVar().getDynamicObject()` frees it at the end of that expression and every
+    // assertion below would read freed memory (caught by the ASAN job).
+    const juce::var serialised = original.toVar();
+    auto* obj = serialised.getDynamicObject();
     ASSERT_NE(obj, nullptr);
     EXPECT_FALSE(obj->hasProperty("colour")) << "unset colour must be OMITTED, not written as a sentinel";
 

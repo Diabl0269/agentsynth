@@ -59,6 +59,12 @@ MixerColumnComponent::MixerColumnComponent() {
             onEditOnCanvas(eqNodeUuid_);
     };
 
+    addAndMakeVisible(sendList_);
+    sendList_.onMutated = [this] {
+        if (onMutated)
+            onMutated();
+    };
+
     panSlider_.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     panSlider_.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
     // FRO18: MixerPanelComponent is the single focusable leaf -- every child control gives up
@@ -91,6 +97,7 @@ void MixerColumnComponent::configure(juce::AudioProcessorGraph& graph, AppUndoMa
     undoManager_ = &undoManager;
     audioEngine_ = &audioEngine;
     insertList_.configure(graph, undoManager, macros, graphEditor);
+    sendList_.configure(graph, undoManager, macros, graphEditor);
 }
 
 void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juce::String& sourceLine) {
@@ -101,6 +108,7 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
     header_.setColour(column.colour);
     header_.setDisplayName(column.name);
     header_.setLinkedBadgeVisible(column.linkedToTrack);
+    header_.setBusBadgeVisible(column.kind == synth::MixerColumn::Kind::Bus);
 
     // Doubles as §5.10's "the tracks that play into it" row -- `sourceLine` is the caller-resolved
     // (comma-joined) names of column.feedingTracks, the same tracks a "source line" names for a
@@ -108,6 +116,7 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
     sourceLineLabel_.setText(sourceLine_, juce::dontSendNotification);
     insertList_.setEntries(column.inserts, column.insertChainIsLinear, column.editOnCanvasTargetUuid,
                            column.sourceNodeId, column.nodeId);
+    sendList_.setEntries(column.sends, column.nodeId);
 
     // FRO16 (P9-10): the first Parametric EQ in signal order gets the column's curve thumbnail --
     // Cubase's own single-slot idiom. A second EQ further down the chain stays reachable through
@@ -224,6 +233,9 @@ void MixerColumnComponent::toggleSoloed() {
 void MixerColumnComponent::unbindFromGraph() {
     panAttachment_.reset();
     fader_.unbind();
+    // FRO15: the send rows hold SliderParameterAttachments onto the strip's own sendNLevel
+    // parameters -- the same use-after-free-on-undo the fader/pan pair above exist to avoid.
+    sendList_.unbindFromGraph();
     muteButton_.onClick = nullptr;
     soloButton_.onClick = nullptr;
     meter_.peakProvider = nullptr;
@@ -298,7 +310,8 @@ void MixerColumnComponent::resized() {
     auto bounds = getLocalBounds().reduced(2);
     header_.setBounds(bounds.removeFromTop(24));
     sourceLineLabel_.setBounds(bounds.removeFromTop(14));
-    insertList_.setBounds(bounds.removeFromTop(juce::jmin(bounds.getHeight() / 2, insertList_.getPreferredHeight())));
+    insertList_.setBounds(bounds.removeFromTop(juce::jmin(bounds.getHeight() / 3, insertList_.getPreferredHeight())));
+    sendList_.setBounds(bounds.removeFromTop(juce::jmin(bounds.getHeight() / 3, sendList_.getPreferredHeight())));
 
     // Reserves 0 px when there is no EQ to show -- MixerEqThumbnail::setEqModule(nullptr) already
     // hid it, this just keeps the layout from leaving a gap behind it.

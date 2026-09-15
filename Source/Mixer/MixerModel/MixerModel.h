@@ -22,10 +22,23 @@ struct MixerInsertEntry {
     bool bypassed = false;
 };
 
-/** One column of the mixer panel: a ChannelStrip, the always-present Direct bus once Master
- *  exists, or Master itself. */
+/** One of a source column's active send slots, in slot order (FRO15, §5.15). The slot index is the
+ *  identity -- it names the jack, the row, and the `sendNLevel` parameter alike -- and the target is
+ *  read off the graph every rebuild, never stored. */
+struct MixerSendEntry {
+    int slot = 0;
+    bool preFader = false;
+    /** The bus this slot feeds. Invalid when the slot's cable has been cut on the canvas, in which
+     *  case `targetName` is the "no target" placeholder. */
+    juce::AudioProcessorGraph::NodeID targetNodeId;
+    juce::String targetName;
+};
+
+/** One column of the mixer panel: a ChannelStrip, a group/send bus (also a ChannelStrip -- §5.15's
+ *  D1: there is no separate bus node type), the always-present Direct bus once Master exists, or
+ *  Master itself. */
 struct MixerColumn {
-    enum class Kind { Strip, Direct, Master };
+    enum class Kind { Strip, Bus, Direct, Master };
 
     Kind kind = Kind::Strip;
 
@@ -56,6 +69,14 @@ struct MixerColumn {
      *  is empty. */
     bool insertChainIsLinear = false;
 
+    /** This strip's active send slots, in slot order (§5.15). Empty for Direct/Master and for any
+     *  strip with no sends. */
+    std::vector<MixerSendEntry> sends;
+
+    /** Kind::Bus only: the names of the strips feeding this bus, in ascending NodeID -- what a bus
+     *  column shows on its source line instead of feeding-track names. */
+    std::vector<juce::String> busSources;
+
     /** Set only when `insertChainIsLinear` is false: the owning macro's id when the branching/
      *  shared node is boxed, else that node's own uuid. Empty otherwise. */
     juce::String editOnCanvasTargetUuid;
@@ -67,8 +88,8 @@ struct MixerSnapshot {
     bool hasMaster = false;
 };
 
-/** Builds the full column set (§8 item 4 / §5.10: strips in track order, then Direct, then
- *  Master -- nothing else). Recomputed on demand; cheap enough to call on every graph/timeline/
+/** Builds the full column set (§8 item 4 / §5.10: strips in track order, then buses, then Direct,
+ *  then Master -- nothing else). Recomputed on demand; cheap enough to call on every graph/timeline/
  *  macro change notification (a handful of strips, never per-frame). */
 MixerSnapshot buildMixerSnapshot(juce::AudioProcessorGraph& graph, const TimelineDoc& doc, const MacroSet& macros);
 
