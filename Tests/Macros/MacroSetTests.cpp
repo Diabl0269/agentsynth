@@ -91,18 +91,12 @@ TEST(MacroPortSerialization, ColourDefaultsToUnsetAndOmitsTheKeyEntirely) {
     const MacroPort original = makePort("node-4", false, "Wet Out", 0, MacroPortKind::AudioCV);
     ASSERT_FALSE(original.colour.has_value());
 
-    // Bind the var to a local first: `toVar()` returns a temporary juce::var owning the
-    // DynamicObject, and getDynamicObject() only hands back a raw pointer into it (no added
-    // reference) — calling it straight off the temporary lets that var's destructor free the
-    // object at the end of THIS statement, leaving `obj` dangling for the next line's use. An
-    // ASAN run caught this heap-use-after-free while chasing FRO95 (unrelated).
-    const juce::var v = original.toVar();
-    auto* obj = v.getDynamicObject();
+    auto* obj = original.toVar().getDynamicObject();
     ASSERT_NE(obj, nullptr);
     EXPECT_FALSE(obj->hasProperty("colour")) << "unset colour must be OMITTED, not written as a sentinel";
 
     MacroPort parsed;
-    ASSERT_TRUE(MacroPort::fromVar(v, parsed));
+    ASSERT_TRUE(MacroPort::fromVar(original.toVar(), parsed));
     EXPECT_FALSE(parsed.colour.has_value());
 }
 
