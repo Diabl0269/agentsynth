@@ -2,6 +2,7 @@
 // gate it keeps honest.
 
 #include "AudioEngine.h"
+#include "Mixer/SoloAudibleSet.h"
 #include "Modules/ChannelStripModule.h"
 #include "Timeline/AutomationBinding.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
@@ -97,9 +98,45 @@ int countSoloedStrips(juce::AudioProcessorGraph& graph, juce::AudioProcessorGrap
     }
     return count;
 }
+
+// FRO15 (docs/mixer.md §5.15): hand each strip the per-leg mask synth::computeSoloAudibleLegs
+// worked out, OPEN BEFORE CLOSE. Pass 1 only ever ORs bits in, pass 2 assigns: a render pass
+// landing between the two sees a strip momentarily MORE audible, never one wrongly silent. (A
+// single pass would let strip A close its send leg a block before strip B's bus opens, which is
+// audible as a dropout on every solo click.)
+void publishSoloAudibleMasks(juce::AudioProcessorGraph& graph) {
+    const auto masks = synth::computeSoloAudibleLegs(graph);
+    for (int pass = 0; pass < 2; ++pass) {
+        for (auto* node : graph.getNodes()) {
+            if (node == nullptr)
+                continue;
+            auto* strip = dynamic_cast<ChannelStripModule*>(node->getProcessor());
+            if (strip == nullptr)
+                continue;
+            const auto found = masks.find(node->nodeID);
+            const juce::uint32 mask = found != masks.end() ? found->second : ~0u;
+            if (pass == 0)
+                strip->orSoloAudibleMask(mask);
+            else
+                strip->setSoloAudibleMask(mask);
+        }
+    }
+}
+
+// Opens every leg of every strip. Used on the un-solo path BEFORE the flag drops, so the gate can
+// never be seen closed against a mask that was computed while something was still soloed.
+void openEverySoloAudibleMask(juce::AudioProcessorGraph& graph) {
+    for (auto* node : graph.getNodes())
+        if (node != nullptr)
+            if (auto* strip = dynamic_cast<ChannelStripModule*>(node->getProcessor()))
+                strip->setSoloAudibleMask(~0u);
+}
 } // namespace
 
 void AudioEngine::refreshSoloGate() {
+    // Masks first, count second: while the count is still 0 the gate is open and the masks are not
+    // consulted at all, so this order can never expose a half-published mask set.
+    publishSoloAudibleMasks(mainProcessorGraph);
     soloedStripCount_.store(countSoloedStrips(mainProcessorGraph), std::memory_order_relaxed);
 }
 
@@ -115,8 +152,10 @@ bool AudioEngine::setChannelStripSoloed(juce::AudioProcessorGraph::NodeID nodeId
         strip->setSoloed(true);
         refreshSoloGate();
     } else {
+        openEverySoloAudibleMask(mainProcessorGraph);
         soloedStripCount_.store(countSoloedStrips(mainProcessorGraph, nodeId, false), std::memory_order_relaxed);
         strip->setSoloed(false);
+        refreshSoloGate(); // re-close whatever is still gated by any OTHER soloed strip
     }
     return true;
 }

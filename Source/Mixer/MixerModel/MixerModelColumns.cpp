@@ -6,6 +6,7 @@
 
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Mixer/MasterSplice.h"
+#include "Mixer/MixerSends/MixerSends.h"
 #include "Mixer/TrackChannelLink.h"
 #include "MixerModelInternal.h"
 #include "Modules/ChannelStripModule.h"
@@ -80,22 +81,23 @@ MixerSnapshot buildMixerSnapshot(juce::AudioProcessorGraph& graph, const Timelin
             continue;
 
         MixerColumn column;
-        column.kind = MixerColumn::Kind::Strip;
+        // FRO15 (§5.15): a bus IS a ChannelStrip -- the Kind only changes what the column PAINTS
+        // (a BUS badge and a feeding-strips source line instead of a track chip and colour link).
+        column.kind = isBusStrip(graph, entry.stripId) ? MixerColumn::Kind::Bus : MixerColumn::Kind::Strip;
         column.nodeId = entry.stripId;
         column.uuid = node->properties["uuid"].toString();
         column.feedingTracks = entry.feedingTracks;
 
-        if (const auto* macro = macros.findByMember(column.uuid)) {
-            column.name = macro->name;
+        if (const auto* macro = macros.findByMember(column.uuid))
             column.colour = macro->colour;
-        } else {
-            column.name = channelDisplayName(graph, entry.stripId, doc, "Channel");
-        }
+        column.name = stripColumnName(graph, doc, macros, entry.stripId);
 
         const auto feeders = findTrackSourcesFeedingStrip(graph, entry.stripId);
-        column.linkedToTrack = feeders.size() == 1;
+        column.linkedToTrack = column.kind == MixerColumn::Kind::Strip && feeders.size() == 1;
 
         buildInsertsForColumn(graph, doc, macros, column);
+        buildBusSourcesForColumn(graph, doc, macros, column);
+        buildSendsForColumn(graph, doc, macros, column);
         snapshot.columns.push_back(std::move(column));
     }
 

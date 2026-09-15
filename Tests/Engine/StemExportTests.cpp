@@ -599,7 +599,7 @@ TEST(StemExportTest, DestinationThatIsAlreadyAFileFailsCleanlyAndDisarmsEveryTap
 
 namespace {
 juce::AudioBuffer<float> stripInputForTap(float left, float right) {
-    juce::AudioBuffer<float> buffer(ChannelStripModule::kNumChannels, kBlockSize);
+    juce::AudioBuffer<float> buffer(ChannelStripModule::kNumOutputs, kBlockSize);
     buffer.clear();
     for (int i = 0; i < kBlockSize; ++i) {
         buffer.setSample(0, i, left);
