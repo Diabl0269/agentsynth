@@ -88,13 +88,15 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     mixerDock.getMixerPanel().setShortcutManager(&shortcutManager);
     // FRO18: Arm reaches the focused strip's linked track through the SAME performTrackEdit
     // one-undo-step path the Timeline header row's own R key uses -- never a direct TimelineDoc
-    // write (that would skip the undo bracket every other track edit goes through).
-    mixerDock.getMixerPanel().onArmTrack = [this](synth::TrackId id) {
+    // write (that would skip the undo bracket every other track edit goes through). Routed through
+    // setOnArmTrack, the sibling forwarder to setOnGraphTopologyChanged/setOnMakeChannelForNode
+    // above, rather than reaching through getMixerPanel() to set the panel's callback directly.
+    mixerDock.setOnArmTrack([this](synth::TrackId id) {
         performTrackEdit([this, id] {
             if (auto* track = timelineDoc.getTrack(id))
                 timelineDoc.setTrackArmed(id, !track->armed);
         });
-    };
+    });
 
     // The panel's top-edge drag reports a desired height; THIS component owns it — clamp, lay out
     // live, and persist once the drag ends (not per pixel).
