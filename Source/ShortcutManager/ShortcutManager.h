@@ -172,9 +172,19 @@ public:
         return {};
     }
 
+    /** Rebuilds `bindings` from scratch. Split by category (General/Graph/Timeline/Piano roll)
+     *  into the addXDefaultBindings() helpers below purely to keep this function itself under the
+     *  file's function-size cap -- the category split already existed as `// ---- X ----` comments
+     *  in a single function; this promotes it to real structure. */
     void resetToDefaults() {
         bindings.clear();
+        addGeneralDefaultBindings();
+        addGraphDefaultBindings();
+        addTimelineDefaultBindings();
+        addPianoRollDefaultBindings();
+    }
 
+    void addGeneralDefaultBindings() {
         // ---- General ----
         bindings["openSettings"] = juce::KeyPress(',', juce::ModifierKeys::commandModifier, 0);
         bindings["savePreset"] = juce::KeyPress('s', juce::ModifierKeys::commandModifier, 0);
@@ -224,6 +234,13 @@ public:
         // K / A / L / B, Shift+A, Shift+S, C / V / D) — safe to claim for the timeline panel
         // toggle.
         bindings["toggleTimelinePanel"] = juce::KeyPress('t', juce::ModifierKeys::commandModifier, 0);
+        // FRO11 (P9-5): Cmd+Alt+M, the Cmd+Alt+<letter> family collapseMacro already established
+        // below. Not bare Cmd+M (toggleModMatrix) nor Cmd+Shift+M (locateMaster, which spent the
+        // chord "focusTimeline"'s own comment had earmarked for this before the mixer panel
+        // existed — see locateMaster's comment) — neither is available, so this claims a fresh
+        // chord in the same modifier family instead of contesting either.
+        bindings["toggleMixerPanel"] =
+            juce::KeyPress('m', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
         // The platform-standard Select All chord (Cubase, and every text field, read Cmd+A this
         // way); it routes per focused editor. The AI panel moved to Cmd+Shift+A to free it (above).
         bindings["selectAllModules"] = juce::KeyPress('a', juce::ModifierKeys::commandModifier, 0);
@@ -290,7 +307,9 @@ public:
         // unmodified 'f' for timelineFollowPlayheadToggle, a different chord entirely). Cmd+F reads
         // as "find" the way it does in almost every app, which is exactly what this does.
         bindings["focusLibrarySearch"] = juce::KeyPress('f', juce::ModifierKeys::commandModifier, 0);
+    }
 
+    void addGraphDefaultBindings() {
         // ---- Graph ----
         bindings["autoArrange"] = juce::KeyPress('l', juce::ModifierKeys::commandModifier, 0);
         bindings["saveSnippet"] =
@@ -313,7 +332,9 @@ public:
         // hardcodes it either.
         bindings["locateMaster"] =
             juce::KeyPress('m', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+    }
 
+    void addTimelineDefaultBindings() {
         // ---- Timeline ----
         // The bare-key DAW conventions. All three are already what TimelinePanelComponent's
         // keyPressed() hardcoded before it started resolving them through here, so the defaults are
@@ -406,7 +427,9 @@ public:
         // bare/Shift/Alt, so Ctrl+Shift is clear of all six of those as well.
         bindings["snapCyclePrev"] = juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys(ctrlShift), 0);
         bindings["snapCycleNext"] = juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(ctrlShift), 0);
+    }
 
+    void addPianoRollDefaultBindings() {
         // ---- Piano roll ----
         // Exactly the defaults PianoRollComponent::keyPressed() falls back to when no manager is
         // installed — see its matchesAction(). Registering them here is what makes them rebindable;
@@ -572,6 +595,8 @@ public:
             return "Toggle Playback";
         if (actionId == "toggleTimelinePanel")
             return "Toggle Timeline Panel";
+        if (actionId == "toggleMixerPanel")
+            return "Toggle Mixer Panel";
         if (actionId == "zoomInHorizontal")
             return "Zoom In";
         if (actionId == "zoomOutHorizontal")
@@ -762,6 +787,7 @@ private:
             {"toggleAiPanel", ShortcutCategory::General},
             {"toggleLibrary", ShortcutCategory::General},
             {"toggleTimelinePanel", ShortcutCategory::General},
+            {"toggleMixerPanel", ShortcutCategory::General},
             {"selectAllModules", ShortcutCategory::General},
             {"copySelection", ShortcutCategory::General},
             {"pasteSelection", ShortcutCategory::General},

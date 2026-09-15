@@ -393,11 +393,11 @@ void MainComponent::resized() {
     // rect at its docked edge rather than left showing the bounds it had when it was last open.
     // A panel that is both closed AND hidden is skipped entirely — its bounds are dead state, and
     // removeFrom*(0) would carve nothing from the canvas anyway.
-    if (timelineSlide_.getProgress() > 0.0f || timelinePanel.isVisible()) {
+    if (timelineSlide_.getProgress() > 0.0f || mixerDock.isVisible()) {
         // Re-clamped every pass: the window may have shrunk since the height was set (or persisted
         // on a larger one), and the canvas must stay usable.
         timelinePanelHeight_ = clampTimelinePanelHeight(timelinePanelHeight_);
-        timelinePanel.setBounds(bounds.removeFromBottom(timelineSlide_.sizeBetween(0, timelinePanelHeight_)));
+        mixerDock.setBounds(bounds.removeFromBottom(timelineSlide_.sizeBetween(0, timelinePanelHeight_)));
     }
 
     if (aiW > 0 || aiChatComponent.isVisible())
@@ -608,7 +608,7 @@ void MainComponent::beginPanelSlide() {
     if (isAiPanelVisible)
         aiChatComponent.setVisible(true);
     if (isTimelineVisible)
-        timelinePanel.setVisible(true);
+        mixerDock.setVisible(true);
 
     // No VBlank reaches an off-screen component, so an off-screen toggle has to land NOW rather
     // than wait for frames that will never arrive (headless tests; a restore before the window
@@ -664,9 +664,34 @@ void MainComponent::finishPanelSlide() {
     if (!isAiPanelVisible)
         aiChatComponent.setVisible(false);
     if (!isTimelineVisible)
-        timelinePanel.setVisible(false);
+        mixerDock.setVisible(false);
 
     resized();
+}
+
+// FRO11 (P9-5): mirrors toggleTimelineButton's own open/close symmetry (plan (f)) -- closed ->
+// open on the Mixer tab; open on Timeline -> switch to Mixer without closing; open on Mixer ->
+// close. The dock's own open/close state (isTimelineVisible/timelineSlide_) stays keyed to "is
+// the DOCK open" regardless of which tab is active (see MixerDockComponent's own class comment).
+void MainComponent::performToggleMixerPanel() {
+    if (!isTimelineVisible) {
+        isTimelineVisible = true;
+        appProperties.getUserSettings()->setValue("timelinePanelVisible", "1");
+        appProperties.getUserSettings()->saveIfNeeded();
+        mixerDock.setActiveTab(synth::ui::MixerDockComponent::Tab::Mixer);
+        applyToolbarIcons();
+        beginPanelSlide();
+        return;
+    }
+    if (mixerDock.isMixerTabActive()) {
+        isTimelineVisible = false;
+        appProperties.getUserSettings()->setValue("timelinePanelVisible", "0");
+        appProperties.getUserSettings()->saveIfNeeded();
+        applyToolbarIcons();
+        beginPanelSlide();
+        return;
+    }
+    mixerDock.setActiveTab(synth::ui::MixerDockComponent::Tab::Mixer);
 }
 
 // ---- Collapsible library sidebar (slides, persisted) ----

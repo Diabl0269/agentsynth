@@ -37,6 +37,48 @@ bool isMacroPortNode(const juce::AudioProcessor* p) {
            type == ModuleType::MacroMidiOutlet;
 }
 
+// planMakeChannel's signal-edge rule (ChannelFlows.h): every MIDI edge, and every audio edge that
+// neither touches a hidden modulation attenuverter nor lands on a PortRole::ModCV pin. The pin a
+// cable into `pin` ultimately lands on, looking through macro port nodes (each a pure per-channel
+// pass-through). An auto-created port reports a plain Audio role and no stereo side of its own, so
+// both the ModCV check below and crossingIsRight's L/R read must use the module behind it -- a
+// Cutoff CV cable into a bus through its port is still a CV cable.
+//
+// FRO11 (P9-5): promoted out of this file's anonymous namespace to synth-namespace/external
+// linkage (declared in ChannelFlows.h) so MixerModelInserts.cpp's insert-list walk can reuse the
+// exact same rule instead of re-deriving it -- the whole point being that "what counts as signal"
+// answers identically for "what would Make Channel do" and "what does the mixer column show".
+static juce::AudioProcessorGraph::NodeAndChannel
+resolveThroughPorts(juce::AudioProcessorGraph& graph,
+                    const std::vector<juce::AudioProcessorGraph::Connection>& connections,
+                    juce::AudioProcessorGraph::NodeAndChannel pin) {
+    using Connection = juce::AudioProcessorGraph::Connection;
+    for (int hop = 0; hop < 16 && isMacroPortNode(processorFor(graph, pin.nodeID)); ++hop) {
+        const auto next = std::find_if(connections.begin(), connections.end(), [&](const Connection& c) {
+            return c.source.nodeID == pin.nodeID && c.source.channelIndex == pin.channelIndex;
+        });
+        if (next == connections.end())
+            break;
+        pin = next->destination;
+    }
+    return pin;
+}
+
+bool isSignalEdge(juce::AudioProcessorGraph& graph,
+                  const std::vector<juce::AudioProcessorGraph::Connection>& connections,
+                  const juce::AudioProcessorGraph::Connection& c) {
+    auto* src = processorFor(graph, c.source.nodeID);
+    auto* dst = processorFor(graph, c.destination.nodeID);
+    if (src == nullptr || dst == nullptr || isAttenuverter(src) || isAttenuverter(dst))
+        return false;
+    if (c.source.isMIDI())
+        return true;
+    const auto pin = resolveThroughPorts(graph, connections, c.destination);
+    if (auto* module = dynamic_cast<ModuleBase*>(processorFor(graph, pin.nodeID)))
+        return module->mapInputChannel(pin.channelIndex).role != PortRole::ModCV;
+    return true;
+}
+
 namespace {
 
 using NodeID = juce::AudioProcessorGraph::NodeID;
@@ -66,38 +108,6 @@ bool isTerminal(const juce::AudioProcessor* p) {
 // The device-input singleton (GraphEditor::isSingletonIOModule): walked through like any other hop
 // so its exits are still found, but never boxed into a channel macro.
 bool isAudioInput(const juce::AudioProcessor* p) { return p != nullptr && p->getName() == "Audio Input"; }
-
-// planMakeChannel's signal-edge rule (ChannelFlows.h): every MIDI edge, and every audio edge that
-// neither touches a hidden modulation attenuverter nor lands on a PortRole::ModCV pin.
-// The pin a cable into `pin` ultimately lands on, looking through macro port nodes (each a pure
-// per-channel pass-through). An auto-created port reports a plain Audio role and no stereo side of
-// its own, so both the ModCV check below and crossingIsRight's L/R read must use the module behind
-// it — a Cutoff CV cable into a bus through its port is still a CV cable.
-NodeAndChannel resolveThroughPorts(juce::AudioProcessorGraph& graph, const std::vector<Connection>& connections,
-                                   NodeAndChannel pin) {
-    for (int hop = 0; hop < 16 && isMacroPortNode(processorFor(graph, pin.nodeID)); ++hop) {
-        const auto next = std::find_if(connections.begin(), connections.end(), [&](const Connection& c) {
-            return c.source.nodeID == pin.nodeID && c.source.channelIndex == pin.channelIndex;
-        });
-        if (next == connections.end())
-            break;
-        pin = next->destination;
-    }
-    return pin;
-}
-
-bool isSignalEdge(juce::AudioProcessorGraph& graph, const std::vector<Connection>& connections, const Connection& c) {
-    auto* src = processorFor(graph, c.source.nodeID);
-    auto* dst = processorFor(graph, c.destination.nodeID);
-    if (src == nullptr || dst == nullptr || isAttenuverter(src) || isAttenuverter(dst))
-        return false;
-    if (c.source.isMIDI())
-        return true;
-    const auto pin = resolveThroughPorts(graph, connections, c.destination);
-    if (auto* module = dynamic_cast<ModuleBase*>(processorFor(graph, pin.nodeID)))
-        return module->mapInputChannel(pin.channelIndex).role != PortRole::ModCV;
-    return true;
-}
 
 struct Reach {
     std::vector<NodeID> nodes; // BFS order, `start` first; never a terminal or an attenuverter

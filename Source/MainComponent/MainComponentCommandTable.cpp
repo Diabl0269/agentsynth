@@ -379,13 +379,17 @@ bool MainComponent::isZoomCommandActive(juce::CommandID id) const {
     return true;
 }
 
-// ---- The table itself ----
-// Row order IS getAllCommands()'s order (the menu order contract) -- built once and cached the
-// same way a static local in a member function normally is: the vector's contents don't depend on
-// `this`, only its lambdas capture nothing but a per-row literal id, so one shared table safely
-// backs every MainComponent instance.
-const std::vector<MainComponent::CommandSpec>& MainComponent::commandTable() const {
-    static const std::vector<CommandSpec> table = {
+// ---- The table itself, split into category-grouped builder functions purely to keep
+// commandTable() itself under the function-size cap (FRO11) -- category boundaries are the
+// same ones the row comments below already used. Row order across the four still IS
+// getAllCommands()'s order (the menu order contract), built once and cached the same way a
+// static local in a member function normally is: the vector's contents don't depend on `this`,
+// only its lambdas capture nothing but a per-row literal id, so one shared table safely backs
+// every MainComponent instance. Groups: general/file, edit/graph toggles, timeline/zoom/panels,
+// then focus/help.
+
+std::vector<MainComponent::CommandSpec> MainComponent::buildGeneralCommandRows() {
+    return {
         {AppCommands::openSettings,
          "Open Settings",
          "Open the settings window",
@@ -477,6 +481,11 @@ const std::vector<MainComponent::CommandSpec>& MainComponent::commandTable() con
              m.guardUnsavedChanges("New Patch", [&m] { m.newPatch(); });
              return true;
          }},
+    };
+}
+
+std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandRows() {
+    return {
         {AppCommands::undo,
          "Undo",
          "Undo the last action",
@@ -639,6 +648,11 @@ const std::vector<MainComponent::CommandSpec>& MainComponent::commandTable() con
              m.timelinePanel.getTransportBar().getPlayStopButton().triggerClick();
              return true;
          }},
+    };
+}
+
+std::vector<MainComponent::CommandSpec> MainComponent::buildTimelineAndPanelCommandRows() {
+    return {
         // ---- Grid division: registered in every build, inactive whenever the panel is off screen ----
         {AppCommands::snapSetWhole, nullptr, "Set the timeline's snap grid", "Timeline", "snapSetWhole",
          [](const MainComponent& m) { return m.isTimelineVisibleForSnap(); },
@@ -693,6 +707,25 @@ const std::vector<MainComponent::CommandSpec>& MainComponent::commandTable() con
              m.toggleTimelineButton.triggerClick();
              return true;
          }},
+        // FRO11 (P9-5): mirrors toggleTimelinePanel's own row exactly, but through
+        // performToggleMixerPanel() rather than the toggle button -- the dock is shared between two
+        // tabs now, so "toggle the mixer" also has to switch tabs, which a plain triggerClick() on
+        // the (still Timeline-only) dock-open button cannot express.
+        {AppCommands::toggleMixerPanel,
+         "Toggle Mixer Panel",
+         "Toggle the mixer tab in the bottom-docked panel",
+         "View",
+         "toggleMixerPanel",
+         {},
+         [](MainComponent& m) {
+             m.performToggleMixerPanel();
+             return true;
+         }},
+    };
+}
+
+std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandRows() {
+    return {
         // T159: suppressed while the launch overlay is up front -- every region it would cycle to
         // is sitting behind it, so there is nowhere useful for Tab to land.
         {AppCommands::focusNextRegion, "Focus Next Region",
@@ -772,5 +805,20 @@ const std::vector<MainComponent::CommandSpec>& MainComponent::commandTable() con
          }},
 #endif
     };
+}
+
+const std::vector<MainComponent::CommandSpec>& MainComponent::commandTable() const {
+    static const std::vector<CommandSpec> table = [] {
+        std::vector<CommandSpec> t;
+        auto append = [&](std::vector<CommandSpec> part) {
+            for (auto& c : part)
+                t.push_back(std::move(c));
+        };
+        append(buildGeneralCommandRows());
+        append(buildEditAndGraphCommandRows());
+        append(buildTimelineAndPanelCommandRows());
+        append(buildFocusAndHelpCommandRows());
+        return t;
+    }();
     return table;
 }

@@ -31,6 +31,7 @@
 #include "UI/Layout/FocusRegion.h"
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
+#include "UI/Mixer/MixerDockComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
@@ -179,6 +180,11 @@ public:
     static constexpr double kZoomOutFactor = 1.0 / kZoomInFactor;
     bool isTimelineConfiguredVisible() const { return isTimelineVisible; }
     synth::ui::TimelinePanelComponent& getTimelinePanel() { return timelinePanel; }
+    synth::ui::MixerDockComponent& getMixerDock() { return mixerDock; }
+    /** Opens the dock on the Mixer tab (switching tabs, or opening the dock, as needed); closes it
+     *  when already open on the Mixer tab. Mirrors toggleTimelineButton's own open/close symmetry
+     *  -- see MainComponentPanels.cpp. */
+    void performToggleMixerPanel();
 
     /** The settings key the user-dragged timeline height round-trips through; the theme metric is
      *  only the DEFAULT — see clampTimelinePanelHeight(). */
@@ -399,6 +405,11 @@ private:
         std::function<bool(MainComponent&)> run;            // returns what perform() returns for this case
     };
     const std::vector<CommandSpec>& commandTable() const;
+    // FRO11: commandTable()'s own row groups, split out to keep it under the function-size cap.
+    static std::vector<CommandSpec> buildGeneralCommandRows();
+    static std::vector<CommandSpec> buildEditAndGraphCommandRows();
+    static std::vector<CommandSpec> buildTimelineAndPanelCommandRows();
+    static std::vector<CommandSpec> buildFocusAndHelpCommandRows();
 
     // Named perform() bodies, too long for an inline table lambda.
     bool performLocateMaster();
@@ -767,6 +778,12 @@ private:
 
     // Bottom-docked timeline panel shell.
     synth::ui::TimelinePanelComponent timelinePanel;
+    // FRO11 (P9-5): the ONE member this ticket adds here (MainComponent.h's tight line budget --
+    // see docs/mixer_implementation.md item 4). Takes timelinePanel by reference, constructed
+    // after it in this same member list so the reference is valid; owns the tab strip and the
+    // mixer panel itself, and becomes the dock's direct child in place of timelinePanel (which
+    // becomes MixerDockComponent's own child instead -- see MainComponentSetupToolbar.cpp).
+    synth::ui::MixerDockComponent mixerDock{timelinePanel, audioEngine, timelineDoc, undoManager, graphEditor};
     bool isTimelineVisible = false;
     // The panel's docked height. Resolved in initialiseCommon() from kTimelinePanelHeightKey (theme
     // metric when absent) and moved by the panel's top-edge drag; 0 only before that, and forever in

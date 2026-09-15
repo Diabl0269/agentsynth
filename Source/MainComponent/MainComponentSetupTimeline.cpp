@@ -35,6 +35,28 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     timelinePanel.setMetronome(&audioEngine.getMetronome());
     timelinePanel.setApplicationProperties(&appProperties);
 
+    // FRO11 (P9-5): the dock's own persisted-tab key, read once and written on every tab click
+    // (docs/layout.md's "Panel collapse and persistence" table); the graph-topology-mutated and
+    // Direct's "Make channel" callbacks route the mixer's own actions through the SAME funnels
+    // every other "Make channel" trigger and every other graph-structural edit already use.
+    mixerDock.setApplicationProperties(&appProperties);
+    mixerDock.setOnGraphTopologyChanged([this] { reconcileTimelineAfterGraphChange(); });
+    mixerDock.setOnMakeChannelForNode([this](juce::AudioProcessorGraph::NodeID source) { makeChannelForNode(source); });
+    // The channel chip's click (TrackChannelLinkSurface::revealChannelForTrack, "THE P9-5 HOOK"
+    // per its own comment): open the dock (same sequence performToggleMixerPanel's own "closed"
+    // branch runs) before revealColumnForStrip switches tabs and scrolls to the column -- a closed
+    // dock has nothing on screen to scroll to yet.
+    trackChannelLink_.setMixerRevealHook([this](juce::AudioProcessorGraph::NodeID stripId) {
+        if (!isTimelineVisible) {
+            isTimelineVisible = true;
+            appProperties.getUserSettings()->setValue("timelinePanelVisible", "1");
+            appProperties.getUserSettings()->saveIfNeeded();
+            applyToolbarIcons();
+            beginPanelSlide();
+        }
+        return mixerDock.revealColumnForStrip(stripId);
+    });
+
     // The user's bindings for the three surfaces that resolve their OWN keys (see
     // PianoRollComponent::setShortcutManager for the strict-resolution contract). All three are
     // installed together and MUST stay together: with a manager installed, resolution is strict —
@@ -48,11 +70,17 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
 
     // The panel's top-edge drag reports a desired height; THIS component owns it — clamp, lay out
     // live, and persist once the drag ends (not per pixel).
+    //
+    // FRO11 (P9-5): the panel reports its own desired CONTENT height (TimelinePanelComponent::
+    // ResizeHandle::desiredHeightFor stays agnostic of whatever chrome it sits inside), but
+    // setTimelinePanelHeight owns the TOTAL dock-carve height -- mixerDock's own tab strip above
+    // that content, whenever the timeline is showing inside the shared dock rather than
+    // standalone. This is the one seam that knows about both, so it adds the difference.
     timelinePanel.onResizeHeight = [this](int desiredHeight) {
-        setTimelinePanelHeight(desiredHeight, /*persist=*/false);
+        setTimelinePanelHeight(desiredHeight + synth::ui::MixerDockComponent::kTabStripHeight, /*persist=*/false);
     };
     timelinePanel.onResizeHeightCommitted = [this](int desiredHeight) {
-        setTimelinePanelHeight(desiredHeight, /*persist=*/true);
+        setTimelinePanelHeight(desiredHeight + synth::ui::MixerDockComponent::kTabStripHeight, /*persist=*/true);
     };
 }
 
