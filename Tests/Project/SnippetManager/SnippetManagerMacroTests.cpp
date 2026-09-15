@@ -112,16 +112,13 @@ TEST(SnippetMacro, InsertingTwiceProducesTwoIndependentMacrosWithDistinctIds) {
     std::vector<Macro> first;
     ASSERT_EQ(SnippetManager::insertSnippet(snippet, target, {0, 0}, false, &first).size(), 2u);
     ASSERT_EQ(first.size(), 1u);
-    // MacroSet::add returns a reference INTO its own std::vector<Macro>, so the second add below can
-    // reallocate and dangle this one. Copy what the assertions need out by value rather than holding
-    // the reference across another add (caught by the ASAN job, which this test crashed).
-    const Macro storedFirst = targetMacros.add(first[0]);
+    auto& storedFirst = targetMacros.add(first[0]);
     const auto firstId = storedFirst.id;
 
     std::vector<Macro> second;
     ASSERT_EQ(SnippetManager::insertSnippet(snippet, target, {900, 0}, false, &second).size(), 2u);
     ASSERT_EQ(second.size(), 1u);
-    const Macro storedSecond = targetMacros.add(second[0]);
+    auto& storedSecond = targetMacros.add(second[0]);
     const auto secondId = storedSecond.id;
 
     EXPECT_EQ(targetMacros.size(), 2);
