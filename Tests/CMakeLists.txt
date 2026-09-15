@@ -232,6 +232,7 @@ add_executable(Tests
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviourTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAutosaveTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycleTests.cpp
+    UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMixerPlacementTests.cpp
     UI/Settings/FeedbackSettingsTabTests.cpp
     Engine/AudioRendering/AudioRenderingBasicTests.cpp
     Engine/AudioRendering/AudioRenderingFXModuleTests.cpp
@@ -339,6 +340,10 @@ add_executable(Tests
     UI/Mixer/MixerPanelUndoUnbindTests.cpp
     UI/Mixer/MixerFaderTests.cpp
     UI/Mixer/MixerDockComponentTests.cpp
+    UI/Mixer/MixerPlacementControllerTests.cpp
+    UI/Layout/DetachablePanelHost/DetachablePanelHostTests.cpp
+    UI/Layout/DetachablePanelHost/DetachedPanelWindowTests.cpp
+    UI/Layout/DetachablePanelHost/DetachRedockStateTests.cpp
     UI/Graph/MinimapComponentTests.cpp
     Plugin/PluginProcessorTests.cpp
     Engine/AudioEngineTransportTests.cpp
@@ -401,6 +406,9 @@ add_executable(Tests
     ../Source/UI/Mixer/MixerMasterColumn.cpp
     ../Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.cpp
     ../Source/UI/Mixer/MixerDockComponent.cpp
+    ../Source/UI/Mixer/MixerPlacementController.cpp
+    ../Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.cpp
+    ../Source/UI/Layout/DetachablePanelHost/DetachedPanelWindow.cpp
     ../Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.cpp
     ../Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLanePainting.cpp
     ../Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneMouse.cpp
