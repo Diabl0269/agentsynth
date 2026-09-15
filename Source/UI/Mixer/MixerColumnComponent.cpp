@@ -5,6 +5,7 @@
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/ChannelStripModule.h"
+#include "Modules/FX/ParametricEQModule.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -40,6 +41,12 @@ MixerColumnComponent::MixerColumnComponent() {
     insertList_.onMutated = [this] {
         if (onMutated)
             onMutated();
+    };
+
+    addChildComponent(eqThumbnail_); // hidden by default -- MixerEqThumbnail::setVisible(false)
+    eqThumbnail_.onClicked = [this] {
+        if (onEditOnCanvas)
+            onEditOnCanvas(eqNodeUuid_);
     };
 
     panSlider_.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
@@ -78,6 +85,24 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
     sourceLineLabel_.setText(sourceLine_, juce::dontSendNotification);
     insertList_.setEntries(column.inserts, column.insertChainIsLinear, column.editOnCanvasTargetUuid,
                            column.sourceNodeId, column.nodeId);
+
+    // FRO16 (P9-10): the first Parametric EQ in signal order gets the column's curve thumbnail --
+    // Cubase's own single-slot idiom. A second EQ further down the chain stays reachable through
+    // the insert list itself; this is a deliberate scope trim, not an oversight.
+    ParametricEQModule* firstEq = nullptr;
+    eqNodeUuid_.clear();
+    if (graph_ != nullptr) {
+        for (const auto& entry : column.inserts) {
+            auto* node = graph_->getNodeForId(entry.nodeId);
+            auto* processor = node != nullptr ? node->getProcessor() : nullptr;
+            if (auto* eq = dynamic_cast<ParametricEQModule*>(processor)) {
+                firstEq = eq;
+                eqNodeUuid_ = entry.uuid;
+                break;
+            }
+        }
+    }
+    eqThumbnail_.setEqModule(firstEq);
 
     rebindControls();
     resized();
@@ -141,6 +166,10 @@ void MixerColumnComponent::unbindFromGraph() {
     muteButton_.onClick = nullptr;
     soloButton_.onClick = nullptr;
     meter_.peakProvider = nullptr;
+    // Same pre-restore discipline as the fader: detach the thumbnail's parameter listeners before
+    // the graph-replacing mutation frees the module they point at (rebuild()'s eventual
+    // setColumn()/setEqModule() re-binds against the NEW graph afterwards).
+    eqThumbnail_.setEqModule(nullptr);
     graph_ = nullptr;
     undoManager_ = nullptr;
     audioEngine_ = nullptr;
@@ -182,6 +211,11 @@ void MixerColumnComponent::resized() {
     header_.setBounds(bounds.removeFromTop(24));
     sourceLineLabel_.setBounds(bounds.removeFromTop(14));
     insertList_.setBounds(bounds.removeFromTop(juce::jmin(bounds.getHeight() / 2, insertList_.getPreferredHeight())));
+
+    // Reserves 0 px when there is no EQ to show -- MixerEqThumbnail::setEqModule(nullptr) already
+    // hid it, this just keeps the layout from leaving a gap behind it.
+    if (eqThumbnail_.isVisible())
+        eqThumbnail_.setBounds(bounds.removeFromTop(28));
 
     auto controls = bounds;
     panSlider_.setBounds(controls.removeFromTop(28).reduced(8, 0));

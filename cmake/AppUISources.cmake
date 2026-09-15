@@ -54,6 +54,9 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerFader.cpp
     Source/UI/Mixer/MixerInsertList.h
     Source/UI/Mixer/MixerInsertList.cpp
+    Source/UI/Mixer/EqResponseCurve.h
+    Source/UI/Mixer/MixerEqThumbnail.h
+    Source/UI/Mixer/MixerEqThumbnail.cpp
     Source/UI/Mixer/MixerColumnComponent.h
     Source/UI/Mixer/MixerColumnComponent.cpp
     Source/UI/Mixer/MixerDirectColumn.h

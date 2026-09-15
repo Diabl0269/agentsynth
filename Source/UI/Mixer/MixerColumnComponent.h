@@ -2,6 +2,7 @@
 
 #include "Mixer/MixerModel/MixerModel.h"
 #include "MixerColumnHeader.h"
+#include "MixerEqThumbnail.h"
 #include "MixerFader.h"
 #include "MixerInsertList.h"
 #include "MixerMeter.h"
@@ -46,6 +47,11 @@ public:
     /** True once bind() has run and unbindFromGraph()/rebindControls() hasn't cleared it since. */
     bool isFaderBoundForTest() const noexcept { return fader_.isBoundForTest(); }
 
+    /** A stable handle onto the column's own EQ thumbnail -- null-safe to call regardless of
+     *  whether the column currently has an EQ insert (the component always exists; it is just
+     *  hidden when there is nothing to show). */
+    MixerEqThumbnail& getEqThumbnailForTest() noexcept { return eqThumbnail_; }
+
     /** Fires when the header (or empty column background) is clicked -- MixerPanelComponent wires
      *  this to select the strip's macro (or the strip itself, if unboxed) on the canvas. */
     std::function<void()> onColumnClicked;
@@ -76,10 +82,14 @@ private:
     juce::AudioProcessorGraph::NodeID nodeId_;
     juce::String uuid_;
     juce::String sourceLine_;
+    /** The uuid of the first (signal-order) Parametric EQ among this column's inserts -- see
+     *  rebindControls(). Empty when the column has no EQ insert. */
+    juce::String eqNodeUuid_;
 
     MixerColumnHeader header_;
     juce::Label sourceLineLabel_;
     MixerInsertList insertList_;
+    MixerEqThumbnail eqThumbnail_;
     juce::Slider panSlider_;
     std::unique_ptr<juce::SliderParameterAttachment> panAttachment_;
     MixerFader fader_;

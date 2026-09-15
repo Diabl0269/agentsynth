@@ -416,6 +416,15 @@ arbitration.
 Strips, Direct, and Master. Nothing else — never an arbitrary module's output. To put something in
 the mixer, make it a channel.
 
+**EQ curve thumbnail (P9-10, T179).** When a strip's insert chain contains a Parametric EQ, its
+column shows a small frequency-response curve (Cubase's top-mixer-row idiom) — computed from the
+EQ's own parameters, never audio, and cached so a busy graph never pays for an unconditional
+per-tick repaint (root `CLAUDE.md`). Clicking it selects that EQ on the canvas through the same
+`onEditOnCanvas` seam the insert list's own "Edit on canvas" link and a column header click use. A
+bypassed EQ draws dimmed; a strip with no EQ insert shows no thumbnail; a strip with two shows the
+thumbnail for only the first one in signal order. See
+[`docs/mixer_implementation.md`](mixer_implementation.md) for how it landed.
+
 ### 5.11 Hosted plugin
 
 Nothing channel-specific. The graph stays flat in both host modes, so a `Master` splice sits in
@@ -619,7 +628,6 @@ P9-11 Gate module, T181 mixer accessibility. Item numbers there match every exis
 
 - **Sends and group buses** — P9-9 (T178), after the mixer panel ships and its own short design
   pass is done.
-- **An EQ curve thumbnail on a channel column** — P9-10 (T179), after the mixer panel ships.
 - **Mixer accessibility** (keyboard navigation, screen-reader labels) — T181, in the Accessibility
   epic rather than P9, alongside T158's app-wide keyboard focus work.
 
