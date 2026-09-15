@@ -191,6 +191,14 @@ TEST(TimelineToolStripTest, FollowPlayheadTooltipTracksALiveRebindAndDropsTheOld
     const auto tooltip = followButton.getTooltip();
     EXPECT_TRUE(tooltip.contains("(g)")) << "the tooltip now names the current key";
     EXPECT_FALSE(tooltip.contains("(f)")) << "and not the stale one";
+
+    // Detach before `shortcuts` (declared after `f`, so destroyed first) goes out of scope — an
+    // ASAN run caught the heap-use-after-free this leaves otherwise (unrelated to FRO95, but hit
+    // while chasing it): TimelinePanelComponent::~TimelinePanelComponent() removes itself as a
+    // change listener from whatever ShortcutManager is still installed, which is a dangling
+    // pointer once `shortcuts` is gone. Every other test in this file that installs one already
+    // does this (see ClearingTheSharedShortcutManagerRestoresTheHardcodedTooltipDefaults below).
+    f.panel.setShortcutManager(nullptr);
 }
 
 TEST(TimelineToolStripTest, ToolStripAndSnapToggleTooltipsTrackTheirLiveBindings) {
@@ -210,6 +218,9 @@ TEST(TimelineToolStripTest, ToolStripAndSnapToggleTooltipsTrackTheirLiveBindings
     EXPECT_TRUE(selectButton->getTooltip().contains("(k)"));
     EXPECT_FALSE(selectButton->getTooltip().contains("(1)"));
     EXPECT_TRUE(f.panel.getSnapToggleButton().getTooltip().contains("(y)"));
+
+    // Detach before `shortcuts` goes out of scope — see the comment in the previous test.
+    f.panel.setShortcutManager(nullptr);
 }
 
 TEST(TimelineToolStripTest, ClearingTheSharedShortcutManagerRestoresTheHardcodedTooltipDefaults) {
@@ -265,6 +276,10 @@ TEST(TimelineToolStripTest, ClipLanePLoopSelectionFollowsTheShortcutManager) {
     f.select({clip});
     EXPECT_TRUE(lane.keyPressed(juce::KeyPress(juce::KeyPress::deleteKey)));
     EXPECT_EQ(f.doc.getClip(clip), nullptr);
+
+    // Detach before `shortcuts` goes out of scope — see the comment on
+    // FollowPlayheadTooltipTracksALiveRebindAndDropsTheOldKey above.
+    lane.setShortcutManager(nullptr);
 }
 
 TEST(TimelineToolStripTest, ButtonsMirrorTheActiveToolAndCarryTheirShortcutInTheTooltip) {

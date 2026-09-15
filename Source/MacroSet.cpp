@@ -79,11 +79,12 @@ const Macro* MacroSet::findByMember(const juce::String& memberUuid) const {
     return nullptr;
 }
 
-Macro& MacroSet::add(Macro macro) {
+juce::String MacroSet::add(Macro macro) {
     if (macro.id.isEmpty())
         macro.id = juce::Uuid().toDashedString();
+    const juce::String id = macro.id;
     macros_.push_back(std::move(macro));
-    return macros_.back();
+    return id;
 }
 
 bool MacroSet::remove(const juce::String& macroId) {

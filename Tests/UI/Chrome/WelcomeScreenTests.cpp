@@ -140,8 +140,17 @@ TEST_F(WelcomeScreenTest, NeverConstructsInHostedMode) {
     AudioEngine engine(AudioEngine::HostMode::Hosted);
     engine.initialise();
 
-    MainComponent mc(tm, lf, engine, std::make_unique<MockProvider>());
-    EXPECT_EQ(mc.getWelcomeScreenForTest(), nullptr);
+    // `mc` must be gone before engine.shutdown() runs, not after: MainComponent::~MainComponent
+    // detaches the UI's module components (e.g. a MidiKeyboardComponent borrowing its processor's
+    // MidiKeyboardState) BEFORE the graph is torn down — see MainComponent.cpp's own ordering
+    // comment on the "FRO11 class of bug". shutdown() frees that processor-owned state, so calling
+    // it while `mc` (and the UI still pointing at that state) is alive is a heap-use-after-free
+    // the moment `mc` finally destructs, exactly like ExternalEngineSurvivesMainComponentDestruction
+    // scopes it below. An ASAN run caught this ordering bug while it was chasing FRO95 (unrelated).
+    {
+        MainComponent mc(tm, lf, engine, std::make_unique<MockProvider>());
+        EXPECT_EQ(mc.getWelcomeScreenForTest(), nullptr);
+    }
 
     engine.shutdown();
 }
