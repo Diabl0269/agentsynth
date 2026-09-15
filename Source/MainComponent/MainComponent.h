@@ -182,6 +182,9 @@ public:
     bool isTimelineConfiguredVisible() const { return isTimelineVisible; }
     synth::ui::TimelinePanelComponent& getTimelinePanel() { return timelinePanel; }
     synth::ui::MixerDockComponent& getMixerDock() { return mixerDock; }
+    // Test-only: Own-panel placement reparents the Mixer host INTO this controller (it IS the
+    // second strip), not to nullptr -- see MixerPlacementController.h's class comment.
+    synth::ui::MixerPlacementController& getMixerPlacementControllerForTest() { return mixerPlacement_; }
     /** Opens the dock on the Mixer tab (switching tabs, or opening the dock, as needed); closes it
      *  when already open on the Mixer tab. Mirrors toggleTimelineButton's own open/close symmetry
      *  -- see MainComponentPanels.cpp. */

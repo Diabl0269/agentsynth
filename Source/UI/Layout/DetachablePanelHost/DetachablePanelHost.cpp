@@ -18,6 +18,10 @@ DetachablePanelHost::DetachablePanelHost(juce::Component& panel, juce::String ti
     addAndMakeVisible(titleLabel_);
 
     detachButton_.setClickingTogglesState(false);
+    // Button's ctor seeds its text from the component name passed to DrawableButton's ctor
+    // ("detachPanel") -- clear it explicitly so an ImageFitted, icon-only button never draws or
+    // reports button text (Button::getButtonText() otherwise returns that name verbatim).
+    detachButton_.setButtonText({});
     detachButton_.onClick = [this] { toggleDetach(); };
     addAndMakeVisible(detachButton_);
 

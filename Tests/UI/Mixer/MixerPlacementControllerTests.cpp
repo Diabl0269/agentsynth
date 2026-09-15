@@ -88,7 +88,10 @@ TEST(MixerPlacementControllerTests, OwnPanelPlacementHonouredAtLaunch) {
     MainComponent mc(std::make_unique<MockProviderMPCXT>());
     mc.setSize(1400, 900);
 
-    EXPECT_EQ(mc.getMixerDock().getMixerHost().getParentComponent(), nullptr) << "reparented out of the dock";
+    // Own panel reparents the Mixer host OUT of the dock and INTO the placement controller itself
+    // -- it IS the second strip (MixerPlacementController.h's class comment) -- not to nullptr.
+    EXPECT_EQ(mc.getMixerDock().getMixerHost().getParentComponent(), &mc.getMixerPlacementControllerForTest())
+        << "reparented out of the dock, into the controller's own second strip";
     EXPECT_FALSE(mc.getMixerDock().getMixerHost().isDetached());
 }
 
@@ -117,7 +120,11 @@ TEST(MixerPlacementControllerTests, LivePreferenceChangeAppliesWithoutRestart) {
     // on appProperties.getUserSettings() is what applies this live (MainComponentCallbacks.cpp).
     mc.getAppPropertiesForTest().getUserSettings()->setValue("mixerPlacement", "ownPanel");
     mc.getAppPropertiesForTest().getUserSettings()->saveIfNeeded();
+    // juce::PropertiesFile's ChangeBroadcaster notification is posted, not synchronous -- the loop
+    // has to turn once before MainComponent::changeListenerCallback sees it. Same idiom as
+    // FocusArbitrationZoomGridTests.cpp's NaturalScrollingPreferenceReachesTheTimelineAndTheRoll.
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
 
-    EXPECT_EQ(mc.getMixerDock().getMixerHost().getParentComponent(), nullptr)
+    EXPECT_EQ(mc.getMixerDock().getMixerHost().getParentComponent(), &mc.getMixerPlacementControllerForTest())
         << "a live Preferences change must move the Mixer immediately, no restart";
 }

@@ -22,6 +22,15 @@ DetachedPanelWindow::DetachedPanelWindow(juce::Component& panel, juce::DrawableB
     // addToDesktop=false above: constructing this window (what every headless test does) never
     // creates a native peer -- only a later setVisible(true) does, for real use. See
     // HostedPluginEditorWindow's sibling comment.
+    //
+    // restoreBoundsOrDefault() MUST run before setUsingNativeTitleBar/setResizable/
+    // setContentNonOwned below: each of those can synchronously fire OUR OWN resized()/moved()
+    // overrides against whatever transient default bounds a freshly constructed DocumentWindow
+    // starts with (persistBounds() runs on every such callback). Restoring first means those
+    // early callbacks just re-persist the (already-correct) restored value instead of clobbering
+    // the real persisted key with the pre-restore default before it's ever been read.
+    restoreBoundsOrDefault();
+
     setUsingNativeTitleBar(true);
     setResizable(true, false);
 
@@ -40,8 +49,6 @@ DetachedPanelWindow::DetachedPanelWindow(juce::Component& panel, juce::DrawableB
     // window needs its own, or the detach button's tooltip (and every control inside the hosted
     // panel) never shows here.
     tooltipWindow_ = std::make_unique<juce::TooltipWindow>(this);
-
-    restoreBoundsOrDefault();
 
     // Repaints our own focus-region root's accent outline on focus changes -- see
     // MainComponent::globalFocusChanged, the same idiom, scoped to this window's own registry.
@@ -105,7 +112,14 @@ void DetachedPanelWindow::globalFocusChanged(juce::Component*) {
 void DetachedPanelWindow::persistBounds() {
     if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
         return;
-    appProperties_->getUserSettings()->setValue(boundsKey_, getWindowStateAsString());
+    // Deliberately NOT getWindowStateAsString(): that persists ResizableWindow's own
+    // lastNonFullScreenPos, which only updates while the window isShowing() (see
+    // ResizableWindow::updateLastPosIfShowing()) -- a window built addToDesktop=false and never
+    // shown (every headless test here, and this window's own constructor calling
+    // restoreBoundsOrDefault() before its owner ever calls setVisible(true)) would otherwise
+    // always persist ResizableWindow's built-in default (50, 50, 256, 256) no matter what bounds
+    // were actually set. A plain Rectangle<int> round trip has no such gate.
+    appProperties_->getUserSettings()->setValue(boundsKey_, getBounds().toString());
     appProperties_->getUserSettings()->saveIfNeeded();
 }
 
@@ -113,8 +127,13 @@ void DetachedPanelWindow::restoreBoundsOrDefault() {
     juce::String saved;
     if (appProperties_ != nullptr && appProperties_->getUserSettings() != nullptr)
         saved = appProperties_->getUserSettings()->getValue(boundsKey_, {});
-    if (saved.isNotEmpty() && restoreWindowStateFromString(saved))
-        return;
+    if (saved.isNotEmpty()) {
+        const auto bounds = juce::Rectangle<int>::fromString(saved);
+        if (!bounds.isEmpty()) {
+            setBounds(bounds);
+            return;
+        }
+    }
     centreWithSize(kDefaultWidth, kDefaultHeight);
 }
 
