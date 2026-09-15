@@ -325,22 +325,6 @@ run_update() {
     baseline_existed=0
     [ -f "$BASELINE_FILE" ] && baseline_existed=1
 
-    # File-level renames git can confirm for THIS tree -- same two sources check-file-sizes.sh
-    # uses. A function's baseline KEY is "<path>::<name>", so a same-name, same-size function that
-    # moved counts as a rename exactly when its FILE move does.
-    : >"$workdir/renames.txt"
-    git -C "$ROOT" diff --cached -M --name-status 2>/dev/null |
-        awk -F'\t' '$1 ~ /^R/ { print $2, $3 }' >>"$workdir/renames.txt"
-    git -C "$ROOT" status --porcelain 2>/dev/null |
-        awk '
-            /^R/ {
-                line = $0
-                sub(/^R[ MDACU?!]?[ \t]+/, "", line)
-                n = split(line, parts, " -> ")
-                if (n == 2) print parts[1], parts[2]
-            }
-        ' >>"$workdir/renames.txt"
-
     growth_errors=0
     growth_warnings=0
 
@@ -362,7 +346,19 @@ run_update() {
         done <"$workdir/new.txt"
 
         # (b) a key scanned now the OLD baseline didn't cover -- a genuinely new over-cap function,
-        # UNLESS it's the SAME function name at the SAME size whose FILE git confirms was renamed.
+        # UNLESS the SAME qualified name shows up at a DIFFERENT path in the old baseline (and
+        # that old entry no longer exists at its own path): the function itself moved, which is
+        # the expected way to fix an over-cap function (split it into a new file), not a new
+        # violation. Deliberately NOT gated on git's file-rename detection the way the file-size
+        # guard's --update is: that only fires for a whole-file `git mv`, but splitting a function
+        # out of a file that otherwise keeps the rest of its content (FRO77's drag-drop extraction
+        # is exactly this shape) is a plain modify on the old file plus an add on the new one --
+        # git never reports that pair as a rename, so requiring one here would refuse every
+        # legitimate function-level split. The qualified NAME match is the signal instead: a
+        # collision would need an unrelated function deliberately given the exact same qualified
+        # name (namespace/class-scoped, not just a bare identifier) as one just removed, which is
+        # a far higher bar than the old file-similarity heuristic. Growth is still never silent
+        # either way -- a moved function that also grew still needs --allow-growth below.
         while IFS=$'\t' read -r new_count key; do
             [ -n "$key" ] || continue
             if awk -F'\t' -v k="$key" '$2 == k { f = 1 } END { exit !f }' "$workdir/old.txt"; then
@@ -372,40 +368,45 @@ run_update() {
             new_path="${key%%::*}"
             new_name="${key#*::}"
             candidate=""
-            is_rename=0
+            candidate_count=0
+            is_move=0
             while IFS=$'\t' read -r old_count old_key; do
                 [ -n "$old_key" ] || continue
-                [ "$old_count" = "$new_count" ] || continue
                 old_path="${old_key%%::*}"
                 old_name="${old_key#*::}"
                 [ "$old_name" = "$new_name" ] || continue
-                # still scanned under its old key at the same size? then it didn't move.
+                [ "$old_path" != "$new_path" ] || continue
+                # still scanned under its own old key? then THAT one didn't move -- not our source.
                 awk -F'\t' -v k="$old_key" '$2 == k' "$workdir/new.txt" | grep -q . && continue
                 candidate="$old_key"
-                if grep -qF -- "$old_path $new_path" "$workdir/renames.txt"; then
-                    is_rename=1
+                candidate_count="$old_count"
+                if [ "$new_count" -le "$old_count" ]; then
+                    is_move=1
                     break
                 fi
             done <"$workdir/old.txt"
 
-            if [ "$is_rename" -eq 1 ]; then
-                continue   # confirmed git mv of the file, same function/size -- accept silently
+            if [ "$is_move" -eq 1 ]; then
+                continue   # same qualified name, moved to a new path, did not grow -- accept silently
             fi
 
-            if [ "$ALLOW_GROWTH" -eq 1 ]; then
-                if [ -n "$candidate" ]; then
-                    echo "::warning::$key is a new over-cap function ($new_count lines, cap $CAP) -- same name/size as removed entry $candidate but git couldn't confirm the file rename; allowed via --allow-growth (reviewed exception)"
+            if [ -n "$candidate" ]; then
+                # same qualified name found at its old path, but it GREW while moving.
+                if [ "$ALLOW_GROWTH" -eq 1 ]; then
+                    echo "::warning::$key raised from $candidate_count to $new_count lines while moving from $candidate -- allowed via --allow-growth (reviewed exception)"
+                    growth_warnings=$((growth_warnings + 1))
                 else
-                    echo "::warning::$key is a new over-cap function ($new_count lines, cap $CAP) -- allowed via --allow-growth (reviewed exception)"
+                    echo "::error::$key would raise the baseline from $candidate_count to $new_count lines while moving from $candidate -- the ratchet only tightens; pass --allow-growth only for a deliberate, reviewed exception"
+                    growth_errors=$((growth_errors + 1))
                 fi
-                growth_warnings=$((growth_warnings + 1))
             else
-                if [ -n "$candidate" ]; then
-                    echo "::error::$key is a new over-cap function ($new_count lines, cap $CAP) -- same name/size as removed entry $candidate, but git couldn't confirm the file rename; if this is a git mv, stage it as one, or pass --allow-growth only for a deliberate, reviewed exception"
+                if [ "$ALLOW_GROWTH" -eq 1 ]; then
+                    echo "::warning::$key is a new over-cap function ($new_count lines, cap $CAP) -- allowed via --allow-growth (reviewed exception)"
+                    growth_warnings=$((growth_warnings + 1))
                 else
                     echo "::error::$key is a new over-cap function ($new_count lines, cap $CAP) -- the baseline never grows by adding functions; extract a named step / collaborator, or pass --allow-growth only for a deliberate, reviewed exception"
+                    growth_errors=$((growth_errors + 1))
                 fi
-                growth_errors=$((growth_errors + 1))
             fi
         done <"$workdir/new.txt"
     fi

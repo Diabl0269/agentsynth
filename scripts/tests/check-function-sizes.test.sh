@@ -360,6 +360,116 @@ else
     fail=$((fail + 1))
 fi
 
+
+# FRO78 re-sync (2026-09): a function extracted into a NEW file while its OLD file keeps other
+# content -- exactly the shape of FRO77's drag-drop extraction (GraphEditorDragDrop.cpp kept most
+# of its content; the extracted bodies landed in a brand-new GraphDragDropController.cpp) -- must
+# be accepted by --update WITHOUT --allow-growth, even though git never reports that pair as a
+# rename (the old file wasn't deleted, just shrunk, so git's own -M rename detection never fires).
+reset_repo
+write_file "Combined.cpp" <<'EOF'
+void movedFunc() {
+    int f1 = 1;
+    int f2 = 2;
+    int f3 = 3;
+    int f4 = 4;
+}
+void stayingFunc() {
+    int f1 = 1;
+    int f2 = 2;
+    int f3 = 3;
+    int f4 = 4;
+}
+EOF
+commit_all
+bash "$CHECK" --root "$REPO" --update >/dev/null 2>&1
+write_file "Combined.cpp" <<'EOF'
+void stayingFunc() {
+    int f1 = 1;
+    int f2 = 2;
+    int f3 = 3;
+    int f4 = 4;
+}
+EOF
+write_file "Extracted.cpp" <<'EOF'
+void movedFunc() {
+    int f1 = 1;
+    int f2 = 2;
+    int f3 = 3;
+    int f4 = 4;
+}
+EOF
+commit_all
+split_output="$(bash "$CHECK" --root "$REPO" --update 2>&1)"
+split_status=$?
+split_baseline="$(cat "$BASELINE")"
+if [ "$split_status" -eq 0 ] && echo "$split_baseline" | grep -qF -- "6 Source/Extracted.cpp::movedFunc" \
+    && echo "$split_baseline" | grep -qF -- "6 Source/Combined.cpp::stayingFunc" \
+    && ! echo "$split_baseline" | grep -q "Combined.cpp::movedFunc" \
+    && ! echo "$split_output" | grep -q "::error::"; then
+    echo "PASS: a function split into a brand-new file (old file survives, git confirms no rename) is accepted without --allow-growth"
+    pass=$((pass + 1))
+else
+    echo "FAIL: a function split into a brand-new file (old file survives, git confirms no rename) is accepted without --allow-growth"
+    echo "exit=$split_status"
+    echo "$split_output"
+    fail=$((fail + 1))
+fi
+
+# Same split shape, but the moved function also GREW -- still needs --allow-growth like any raise.
+reset_repo
+write_file "Combined2.cpp" <<'EOF'
+void movedGrowFunc() {
+    int f1 = 1;
+    int f2 = 2;
+    int f3 = 3;
+    int f4 = 4;
+}
+void stayingFunc2() {
+    int f1 = 1;
+    int f2 = 2;
+    int f3 = 3;
+    int f4 = 4;
+}
+EOF
+commit_all
+bash "$CHECK" --root "$REPO" --update >/dev/null 2>&1
+baseline_before_split_grow="$(cat "$BASELINE")"
+write_file "Combined2.cpp" <<'EOF'
+void stayingFunc2() {
+    int f1 = 1;
+    int f2 = 2;
+    int f3 = 3;
+    int f4 = 4;
+}
+EOF
+write_file "Extracted2.cpp" <<'EOF'
+void movedGrowFunc() {
+    int f1 = 1;
+    int f2 = 2;
+    int f3 = 3;
+    int f4 = 4;
+    int f5 = 5;
+    int f6 = 6;
+    int f7 = 7;
+}
+EOF
+commit_all
+splitgrow_output="$(bash "$CHECK" --root "$REPO" --update 2>&1)"
+splitgrow_status=$?
+baseline_after_split_grow="$(cat "$BASELINE")"
+if [ "$splitgrow_status" -ne 0 ] \
+    && echo "$splitgrow_output" | grep -qF -- "Source/Extracted2.cpp::movedGrowFunc would raise the baseline from 6 to 9 lines while moving from Source/Combined2.cpp::movedGrowFunc" \
+    && [ "$baseline_before_split_grow" = "$baseline_after_split_grow" ]; then
+    echo "PASS: a function that moved AND grew still needs --allow-growth (baseline left untouched)"
+    pass=$((pass + 1))
+else
+    echo "FAIL: a function that moved AND grew still needs --allow-growth (baseline left untouched)"
+    echo "exit=$splitgrow_status"
+    echo "$splitgrow_output"
+    fail=$((fail + 1))
+fi
+
 reset_repo
 make_function "Existing.cpp" existingFunc 6
 commit_all
