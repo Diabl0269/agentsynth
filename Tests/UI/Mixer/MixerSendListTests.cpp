@@ -9,8 +9,9 @@
 //                        parameter (and therefore host automation) with no lane plumbing
 //   * PRE/POST       -- one undo step, restored by undo
 //   * bus column     -- "+ Bus" on the dock adds a Kind::Bus column
-//   * unbind         -- a graph-replacing undo tears the row attachments down FIRST, the same
-//                        crash MixerPanelUndoUnbindTests.cpp pins for the fader and pan
+//   * unbind         -- a document replacement tears the row attachments down FIRST, the same
+//                        crash MixerPanelUndoUnbindTests.cpp pins for the fader and pan, plus a
+//                        full undo drain as the crash pin
 
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
@@ -175,11 +176,15 @@ TEST(MixerSendListTests, RemovingASendClearsTheCableAndTheRow) {
     EXPECT_EQ(rig.sourceColumn()->getSendListForTest().getRowCountForTest(), 0);
 }
 
-TEST(MixerSendListTests, SendRowsUnbindBeforeAGraphRestoreFreesTheirParameters) {
+TEST(MixerSendListTests, SendRowsUnbindBeforeADocumentReplacementFreesTheirParameters) {
     // The same crash MixerPanelUndoUnbindTests.cpp pins for the fader/pan pair: a row holds a
-    // SliderParameterAttachment onto the strip's sendNLevel, and an undo that REBUILDS the graph
-    // frees that parameter. A regression here looks like a crash or a deadlock inside
-    // AudioProcessorParameter::removeListener, not a failed EXPECT.
+    // SliderParameterAttachment onto the strip's sendNLevel, and anything that frees that strip
+    // while the row still points at it is a use-after-free inside
+    // AudioProcessorParameter::removeListener. New Patch is the cleanest way to prove the seam --
+    // GraphEditor::newPatch()'s doClear() calls detachAllModuleComponents() directly, which is
+    // MixerPanelComponent::unbindAllColumns() -> MixerColumnComponent::unbindFromGraph() ->
+    // MixerSendList::unbindFromGraph(). The counter only moves for a row that really was attached,
+    // so this asserts the hook fired and did work, not merely that nothing crashed.
     SendRig rig;
     auto* column = rig.sourceColumn();
     ASSERT_NE(column, nullptr);
@@ -187,8 +192,30 @@ TEST(MixerSendListTests, SendRowsUnbindBeforeAGraphRestoreFreesTheirParameters) 
     rig.panel().rebuild();
     ASSERT_TRUE(rig.sourceColumn()->getSendListForTest().isAttachedForTest(0));
 
-    // Undo the send, then undo the bus, then undo the track: three graph-replacing restores in a
-    // row, each one freeing whatever the mixer was last bound to.
+    const int liveUnbindsBefore = synth::ui::MixerSendList::getLiveUnbindCallCountForTest();
+    rig.mc->newPatchForTest();
+
+    EXPECT_GT(synth::ui::MixerSendList::getLiveUnbindCallCountForTest(), liveUnbindsBefore)
+        << "New Patch must drop the send row's live sendNLevel attachment BEFORE it clears the graph";
+    EXPECT_EQ(rig.panel().getStripColumnForTest(0), nullptr);
+}
+
+TEST(MixerSendListTests, AFullUndoDrainNeverTouchesAFreedSendParameter) {
+    // Undoing the send itself does NOT go through that hook, and must not: AppUndoManager's
+    // preRestore is deliberately LAZY (see its comment) -- a send is connections only, so the
+    // node-preserving apply keeps the strip and its sendNLevel parameters alive and there is
+    // nothing to detach from. The hazard is the steps AFTER it, which do remove nodes. A
+    // regression here looks like a crash or a deadlock inside AudioProcessorParameter::
+    // removeListener, not a failed EXPECT.
+    SendRig rig;
+    auto* column = rig.sourceColumn();
+    ASSERT_NE(column, nullptr);
+    column->getSendListForTest().addSendTo(rig.bus);
+    rig.panel().rebuild();
+    ASSERT_TRUE(rig.sourceColumn()->getSendListForTest().isAttachedForTest(0));
+
+    // Undo the send, then the bus, then the track: each later step is a graph-replacing restore
+    // that frees whatever the mixer was last bound to.
     while (rig.mc->getUndoManager().canUndo())
         ASSERT_TRUE(rig.mc->getUndoManager().undo());
 

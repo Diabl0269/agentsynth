@@ -52,6 +52,12 @@ public:
      *  the parameters those attachments point at. Idempotent and null-safe. */
     void unbindFromGraph();
 
+    /** Counts only an unbindFromGraph() that actually detached a LIVE parameter attachment, never a
+     *  defensive no-op on an already-unbound list -- the same seam (and the same reason)
+     *  MixerFader::getLiveUnbindCallCountForTest exists for: it lets a test prove the pre-restore
+     *  hook really ran and did real work, rather than that the process merely didn't crash. */
+    static int getLiveUnbindCallCountForTest() noexcept { return liveUnbindCalls_; }
+
     // ---- Headless test seams. juce::PopupMenu never runs in a test process (docs/testing.md), so
     // the menu callbacks below call these same real methods. Row indices address the VISIBLE rows,
     // i.e. positions in `entries_`, not slot numbers.
@@ -95,6 +101,8 @@ private:
     std::vector<synth::MixerSendEntry> entries_;
     std::vector<Row> rows_;
     juce::AudioProcessorGraph::NodeID stripNodeId_;
+
+    static int liveUnbindCalls_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerSendList)
 };

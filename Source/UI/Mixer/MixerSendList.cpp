@@ -69,9 +69,14 @@ void MixerSendList::rebuildKnobs() {
     }
 }
 
+int MixerSendList::liveUnbindCalls_ = 0;
+
 void MixerSendList::unbindFromGraph() {
     for (auto& row : rows_)
-        row.attachment.reset();
+        if (row.attachment != nullptr) {
+            row.attachment.reset();
+            ++liveUnbindCalls_;
+        }
     graph_ = nullptr;
     undoManager_ = nullptr;
     macros_ = nullptr;
