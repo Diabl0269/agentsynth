@@ -68,7 +68,8 @@ public:
 
     // ---- Testing hooks (DetachablePanelHostTests.cpp) ----
     DetachedPanelWindow* getDetachedWindowForTest() const { return window_.get(); }
-    juce::String getButtonTooltipForTest() const { return detachButton_.getTooltip(); }
+    // Not const: juce::SettableTooltipClient::getTooltip() isn't const either.
+    juce::String getButtonTooltipForTest() { return detachButton_.getTooltip(); }
     juce::String getButtonTextForTest() const { return detachButton_.getButtonText(); }
     bool isDetachButtonVisibleForTest() const noexcept { return detachButton_.isVisible(); }
     juce::Component& getPanelForTest() noexcept { return panel_; }
