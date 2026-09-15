@@ -37,6 +37,7 @@ bash scripts/tests/ci-install-linux-deps.test.sh   # Linux apt install + mirror 
 bash scripts/tests/check-nonascii-literals.test.sh # no raw/escaped non-ASCII in string literals (fromUTF8/CharPointer_UTF8 exempt)
 bash scripts/tests/utf8-literal-check.test.sh      # non-ASCII \x escape wrapping (also runs directly in the Lint job)
 bash scripts/check-file-sizes.sh            # 1000-line cap, strict ratchet baseline (--list / --update)
+bash scripts/check-function-sizes.sh        # 200-line-per-function cap, strict ratchet baseline (--list / --update)
 
 # Reproduce CI locally (lint + build every CMake target CI builds + full test suite; prints the
 # built app bundle path on success). Single source of truth for "what CI will check" — also what
@@ -65,7 +66,7 @@ Every implementation plan **must** include:
 - A class that outgrows one file gets its own directory named after the class, never flat siblings dropped next to dozens of others: `<Class>/<Class>.h` + `<Class><Concern>.cpp` units (never `_Part1`) + shared private helpers in `<Class>Internal.h` — e.g. `Source/UI/Graph/GraphEditor/`, `Source/MainComponent/`. Tests mirror it: `Tests/<Area>/<Class>/<Class><Topic>Tests.cpp` with shared fixtures in `<Class>TestFixture.h`/`<Class>TestHelpers.h`. Each unit opens with a comment naming its concern.
 - A directory past roughly 30 files gets split by area too. `Source/UI/` holds only area directories (`Graph/`, `Timeline/`, `PianoRoll/`, `Library/`, `Macros/`, `ModuleViews/`, `Settings/`, `Assistant/`, `Chrome/`, `Layout/`, `Theme/`) with class directories nested inside them — a new UI file goes into its area, never back into `Source/UI/` itself. Include moved-or-shared headers Source-rooted (`"UI/Layout/LayoutUtil.h"`), so a file's depth never matters.
 - Docs: one topic per doc, split at section boundaries; keep the Docs map current.
-- Functions do one thing — extract when a function needs section comments or exceeds roughly a screen (~60–80 lines); a new function must never be 200+ lines. Prefer extracting a real collaborator class over a per-concern unit when the concern has its own state.
+- Functions do one thing — extract when a function needs section comments or exceeds roughly a screen (~60–80 lines); a new function must never be 200+ lines, enforced by `scripts/check-function-sizes.sh` (ratchet baseline `scripts/function-size-baseline.txt`) — mechanism in [`docs/testing.md`](docs/testing.md). Prefer extracting a real collaborator class over a per-concern unit when the concern has its own state.
 
 ## Critical invariants (break these and you ship bugs)
 

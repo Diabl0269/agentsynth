@@ -136,6 +136,17 @@ jobs:
       # legacy files already over it. See scripts/check-file-sizes.sh's own doc comment and
       # docs/testing.md "File-size cap" for the full mechanism.
       run: bash scripts/check-file-sizes.sh
+    - name: Test function-size guard
+      # Same story as the file-size guard's own test above, one level down: a hole in the scanner
+      # that measures individual FUNCTIONS (a mis-scanned comment/string, a brace-depth bug) makes
+      # the 200-line function cap decorative. ~10s (real C++ parsing, not just `wc -l`), no compiler.
+      run: bash scripts/tests/check-function-sizes.test.sh
+    - name: Check function sizes
+      # FRO78: hard 200-line cap per function + strict ratchet baseline
+      # (scripts/function-size-baseline.txt) for legacy functions already over it. See
+      # scripts/check-function-sizes.sh's own doc comment and docs/testing.md "Function-size cap"
+      # for the full mechanism.
+      run: bash scripts/check-function-sizes.sh
 
   build-and-test:
     name: Build, Test, and Coverage
