@@ -44,6 +44,15 @@ public:
         repaint();
     }
 
+    /** FRO15 (§5.15): a "BUS" badge in place of the linked badge when this column is a group/send
+     *  bus -- a bus has no track to link to, so the two are mutually exclusive by construction. */
+    void setBusBadgeVisible(bool visible) {
+        if (busBadgeVisible_ == visible)
+            return;
+        busBadgeVisible_ = visible;
+        repaint();
+    }
+
     /** Fires on a click anywhere in the header background -- §5.10's "clicking a column selects
      *  its macro on the canvas". Left null (the default) for Direct/Master, which have no macro of
      *  their own to select. */
@@ -65,11 +74,11 @@ public:
             g.fillRoundedRectangle(swatch.toFloat(), 2.0f);
             bounds.removeFromLeft(4);
         }
-        if (linkedBadgeVisible_) {
-            auto badge = bounds.removeFromRight(20);
-            g.setColour(accent);
+        if (busBadgeVisible_ || linkedBadgeVisible_) {
+            auto badge = bounds.removeFromRight(busBadgeVisible_ ? 26 : 20);
+            g.setColour(busBadgeVisible_ ? text.withAlpha(0.7f) : accent);
             g.setFont(juce::Font(juce::FontOptions(10.0f)));
-            g.drawText("+R", badge, juce::Justification::centred, false);
+            g.drawText(busBadgeVisible_ ? "BUS" : "+R", badge, juce::Justification::centred, false);
         }
         g.setColour(text);
         g.setFont(juce::Font(juce::FontOptions(12.0f, juce::Font::bold)));
@@ -93,6 +102,7 @@ private:
     juce::Colour colour_; // alpha 0 by default -- see setColour()
     juce::String name_;
     bool linkedBadgeVisible_ = false;
+    bool busBadgeVisible_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerColumnHeader)
 };

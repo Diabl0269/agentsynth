@@ -556,6 +556,11 @@ MadeChannel buildMakeChannel(juce::AudioProcessorGraph& graph, const MakeChannel
         members.push_back(built.channel.eqUuid);
         members.push_back(built.channel.compressorUuid);
         members.push_back(built.channel.stripUuid);
+        // FRO15 (docs/mixer.md §5.15): a merge-point bus IS a bus — mark it so its mixer column
+        // gets the BUS badge and a feeding-strips source line instead of a track chip.
+        if (built.channel.strip != nullptr)
+            if (auto* busStrip = dynamic_cast<ChannelStripModule*>(built.channel.strip->getProcessor()))
+                busStrip->setIsBus(true);
         MadeChannel::Bus madeBus;
         madeBus.channel = built.channel;
         madeBus.headUuid = members.front();

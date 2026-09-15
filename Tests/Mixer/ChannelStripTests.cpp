@@ -36,7 +36,7 @@ void setParam(juce::AudioProcessor& processor, const juce::String& id, float val
 // A strip-sized buffer with a constant on the left input and (optionally) the right input, junk on
 // the reserved channels so the hygiene clear is exercised on every test.
 juce::AudioBuffer<float> stripInput(float left, float right, int numSamples = kBlockSize) {
-    juce::AudioBuffer<float> buffer(ChannelStripModule::kNumChannels, numSamples);
+    juce::AudioBuffer<float> buffer(ChannelStripModule::kNumOutputs, numSamples);
     buffer.clear();
     for (int i = 0; i < numSamples; ++i) {
         buffer.setSample(0, i, left);

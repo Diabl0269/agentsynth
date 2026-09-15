@@ -5,6 +5,7 @@
 #include "MixerFader.h"
 #include "MixerInsertList.h"
 #include "MixerMeter.h"
+#include "MixerSendList.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -98,8 +99,16 @@ public:
     std::function<void()> onColumnClicked;
     /** Forwarded from the insert list -- see MixerInsertList::onEditOnCanvas. */
     std::function<void(const juce::String&)> onEditOnCanvas;
-    /** Forwarded from the insert list after a topology-changing mutation. */
+    /** Forwarded from the insert list and the send list after a topology-changing mutation. */
     std::function<void()> onMutated;
+
+    /** FRO15: forwarded to the send list's "+ Send > New bus..." -- see MixerSendList::createBus. */
+    void setCreateBusProvider(std::function<juce::AudioProcessorGraph::NodeID()> provider) {
+        sendList_.createBus = std::move(provider);
+    }
+
+    /** FRO15 test seam: the send rows this column is showing. */
+    MixerSendList& getSendListForTest() noexcept { return sendList_; }
 
     /** One 10 Hz tick -- see MixerMeter's own header comment for the driving chain. */
     void refreshMeter();
@@ -127,6 +136,7 @@ private:
     MixerColumnHeader header_;
     juce::Label sourceLineLabel_;
     MixerInsertList insertList_;
+    MixerSendList sendList_;
     juce::Slider panSlider_;
     std::unique_ptr<juce::SliderParameterAttachment> panAttachment_;
     MixerFader fader_;

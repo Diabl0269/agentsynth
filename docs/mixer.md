@@ -225,8 +225,15 @@ Each `ChannelStrip` carries its own solo flag: **not** an `AudioParameter`, **no
 **not** automatable, persisted only in the strip's trusted extra state
 (`ModuleBase::setExtraState`, applied on the trusted path only, per the root `CLAUDE.md`
 invariant). A shared "is anything soloed?" count, owned by the engine, is readable from the audio
-thread with no locks and no allocation. While the count is nonzero, every non-soloed strip **and**
-Master's Direct input output silence.
+thread with no locks and no allocation. While the count is nonzero, Master's Direct input outputs
+silence, and every strip silences the output legs that do not contribute to the soloed path.
+
+**Per-leg, not per-strip (FRO15).** Sends (§5.15) make "is this strip soloed?" the wrong question,
+so the count answers only "is anything soloed?" and a second, per-strip **audible-leg mask** answers
+"which of this strip's legs may be written". `synth::computeSoloAudibleLegs`
+(`Source/Mixer/SoloAudibleSet.{h,cpp}`) recomputes the whole map on the message thread inside
+`AudioEngine::refreshSoloGate`, and each strip reads its own mask once per block. With nothing
+soloed every mask is all-ones and the behaviour is byte-for-byte what it was before.
 
 Solo acts **after** each strip's own inserts, so a shared reverb or a decaying tail on a
 non-soloed channel is genuinely silenced rather than continuing to ring into a mix that other
@@ -455,8 +462,9 @@ exists.
 
 ### 5.10 What the mixer shows
 
-Strips, Direct, and Master. Nothing else — never an arbitrary module's output. To put something in
-the mixer, make it a channel.
+Strips, buses, Direct, and Master. Nothing else — never an arbitrary module's output. To put
+something in the mixer, make it a channel. (A bus IS a strip — §5.15 D1 — so "buses" here names a
+badge and a source line, not a fourth column widget.)
 
 ### 5.11 Hosted plugin
 
@@ -507,6 +515,14 @@ its own even when a `TimelineDoc` isn't available). `ChannelStripModule` has no 
 field of its own yet; when the mixer-UI work adds one, stem naming is expected to prefer it ahead
 of the track walk. `StemSession`'s constructor takes an optional `const TimelineDoc*` for this —
 null is exactly the pre-FRO55 "no timeline" behaviour (every strip falls back to `"Channel N"`).
+
+**Buses are stems too (FRO15).** A group/send bus is an ordinary `ChannelStripModule`, so
+`collectStemStrips` picks it up with no code change at all. A source's stem stays **pre-send** —
+the tap copies the main legs only and never a send leg — so nothing is double-counted for a
+post-fader send, and a pre-fader send is not lost either: it appears in the bus's stem and nowhere
+else. The §5.12 identity survives exactly: `sum(stems) = source main outs + bus outs = everything
+Master receives on Mix`. A bus has no feeding track, so its stem name falls back to `"Bus N"`
+(`synth::busFallbackName`) rather than the misleading `"Channel N"`.
 
 **Two decisions, both load-bearing for "the stems sum back to the mix":**
 
@@ -592,7 +608,131 @@ seed's canvas origin) while Master jumped to the far side of the chain, and the 
 run back across the whole canvas — caught live via computer-use testing while verifying T187. Only
 fires the first time Master is created; once it exists, later tracks don't reshuffle the canvas.
 
-### 5.15 Keyboard navigation and accessibility (FRO18)
+### 5.15 Sends and group buses (FRO15 / P9-9)
+
+**DONE.** A send is a **strip-owned output leg**, and a bus is an **ordinary Channel Strip** whose
+inputs are other strips' outputs. Neither is a new node type.
+
+**D1 — a bus is a `ChannelStrip`.** Three mechanisms already treat it as one: `MakeChannelPlan`'s
+merge-point `buses` build the same EQ -> Comp -> Strip -> Master chain, `collectStemStrips` scans
+for `ChannelStripModule`, and the mixer's orphan-strip pass already renders one as a column. Keeping
+one type leaves the solo gate, the stem tap, the column model and `spliceMasterNode`'s
+`Strip -> Master(Mix)` classification all unchanged. `MixerColumn::Kind::Bus` is display only, set
+when the strip carries `"isBus": true` in its trusted extra state (written by "Add bus" and by
+`buildMakeChannel`'s merge-point buses) **or**, as a structural fallback for patches built before
+that flag existed, when one of its signal predecessors is another strip. The flag is what a freshly
+added, still-unfed bus has to go on.
+
+**D2 — a send is an output leg, not a `SendModule`.** `ChannelStripModule` declares `kMaxSends = 4`
+fixed slots, each a stereo pair of real output channels, and a send is a plain
+`AudioProcessorGraph` connection from those channels into the target strip's `ch0`/`kRightBase`.
+Only a real graph edge is visible to the three things that must see it: JUCE's parallel-path delay
+compensation (D4), stem export, and the canvas cable renderer.
+
+| | channels |
+|---|---|
+| inputs (unchanged) | `0` = In/Left, `1..3` reserved, `kRightBase = 4` = Right -> `kNumInputs = 5` |
+| main out | `0` = Left, `1..3` reserved, `4` = Right, `5..7` reserved |
+| send L block | `kSendBase = 8`, slot *k* at `8 + k` |
+| send R block | slot *k* at `kSendBase + kMaxSends + k` |
+| | `kNumOutputs = 16` |
+
+Each send's right leg is on its own block, so the "right leg never on ch1" invariant
+(`Source/Modules/CLAUDE.md`) holds per send. `hasStereoOutputPairShape(5, 16)` is false, so no Dual
+I/O toggle is inherited — unchanged from before.
+
+**What is a parameter, what is state.** Level is four `juce::AudioParameterFloat`s,
+`send1Level`..`send4Level` (-60..+12 dB, default **0 dB** so a new send is audible rather than
+looking broken), added in the constructor **unconditionally** — adding one later renumbers the
+host-visible layout and detaches saved host automation. The **target is never stored**: node ids
+are reassigned on every rebuild-from-JSON, so a stored id goes stale on undo; "which bus does slot
+*k* feed?" is answered by walking forward from slot *k*'s own output channel to the first strip
+(`synth::findSendTarget`, which therefore also resolves through a module the user inserted on the
+send path). Which slots exist and each slot's pre/post are trusted extra state, `"sends": [{"slot",
+"pre"}]`, same path as `"shape"`/`"solo"`.
+
+**Slots are sparse.** Removing a middle send clears its bit and its cable and leaves every higher
+slot on its own raw channels — no cable is re-wired and no parameter value is copied, so host
+automation stays attached to the right send. Only the VISIBLE jack indices renumber; the jack LABEL
+keeps naming the slot, so a jack, its mixer row and its `sendNLevel` parameter always agree.
+
+**D3 — pre vs post, mute, bypass.** Pre-fader is tapped after the hygiene/mono duplication and
+before gain and pan; post-fader after them, i.e. exactly what the strip hands Master, and before the
+solo gate. **Mute silences all sends, pre and post** — the mute branch stays `buffer.clear()` per
+the root `CLAUDE.md` two-branch contract; keeping a pre-fader cue alive under mute would mean making
+that branch selective, which is the erosion the invariant exists to prevent. A deliberate departure
+from DAWs that do keep pre-fader cue sends alive. Under bypass the strip's own gain and pan are off,
+so pre and post coincide. Every branch writes every send channel (the reserved `5..7` and all of
+`8..15` are cleared unconditionally up front), or a stale block from the previous callback leaks
+into a bus.
+
+**D4 — latency across the parallel path.** Nothing new is written: `juce::AudioProcessorGraph`'s
+built-in delay compensation already aligns `strip -> Master` against `strip -> bus -> Master`.
+`Tests/Mixer/Sends/MixerSendLatencyTests.cpp` pins it with the same impulse/one-hit shape as
+`Tests/Plugin/HostedPluginLatencyTests.cpp`, plus a negative control. Measured, not assumed: adding
+a send is a **topology** change, so the graph schedules its own rebuild and alignment is restored as
+soon as the message loop runs — no send flow calls `MainComponent::rebuildGraphForLatencyChange()`,
+and `MixerSendLatencyTest.AddingASendSchedulesItsOwnRebuild` is what keeps that true.
+
+**D5 — solo is a per-leg audible mask.** A strip's output leg is audible iff (a) the strip is itself
+soloed, (b) it is downstream of a soloed strip, or (c) that leg lies on a signal path reaching such
+a strip. Everything else is silenced. A single whole-strip flag is not enough: soloing a reverb bus
+would give you the source dry **plus** the source through the bus, and a group bus only works
+because its sources' MAIN legs stay open. `synth::computeSoloAudibleLegs` computes the map on the
+message thread (every graph change already reaches `refreshSoloGate` via `publishTimeline`), reusing
+`synth::isSignalEdge` for every walk and stopping at the first strip and at the terminals, exactly
+as `findStripFedByTrackSource` does.
+
+**One walk is not enough — the set of contributing strips is closed to a fixed point.** A single
+first-strip-stopping walk answers only "does this leg reach the soloed set in ONE hop?", which is
+narrower than rule (c) above ("lies on a signal path reaching"). With nested buses — source ->
+inner bus -> soloed outer bus — it closes the source's main leg, so the audible inner bus is fed
+silence and soloing the outer bus produces nothing at all. So the soloed set is first grown by the
+same leg walk, repeatedly, until no further strip joins: a strip with any open leg feeds the soloed
+path, and so does a strip whose leg reaches it. Feeding the path is not the same as being downstream
+of a solo — a contributing strip still gets a **per-leg** mask, not all-ones, so a source that
+reaches a soloed bus only through its send keeps its dry main leg closed no matter how many buses
+sit in between. (This is a deliberate correction to the decided design's step 4, which as written
+contradicted its own rule (c); pinned by `MixerBusSoloTest`'s
+`SoloingABusFedByAnotherBusKeepsTheWholeChainAudible` and `ASendThroughABusChainStaysOpenToo`.)
+
+`refreshSoloGate` publishes in two passes — pass 1 ORs the new
+mask in, pass 2 assigns — so a render pass landing between them sees a strip momentarily *more*
+audible, never wrongly silent. The strip's default mask is **0**, i.e. a strip the engine never
+published for behaves exactly as the pre-FRO15 whole-buffer clear did; a strip that is itself soloed
+short-circuits the mask entirely.
+
+**Documented limitation.** The gate is per-*leg*, not per-*edge*: a main leg that feeds both Master
+and a soloed bus stays open, so that strip's dry signal is still heard. Splitting it would need a
+delay-compensated per-edge mute node — out of scope.
+
+**D6 — UI.** A bus column is an ordinary strip column with three differences: a "BUS" badge instead
+of the `+R` linked badge, a source line listing the feeding strips' names instead of tracks, and no
+track chip or colour link. Buses sit after the track-driven strips and before Direct — the existing
+orphan-strip append already produces exactly that position. On a source column, a compact
+`MixerSendList` sits under the insert list: one row per active slot (target-bus button, a rotary
+level knob attached straight onto `sendNLevel`, a `PRE`/`POST` toggle, an `x`), plus a `+ Send` row
+while a slot is free. Each mutation is ONE `recordGraphAndMacroChange` around
+`Source/Mixer/MixerSends`' Core flows. Cyclic targets are excluded from the menu by a forward walk
+from the candidate back to this strip, and `synth::addSend` applies the same check, so the walk is
+the **only** cycle defence — `juce::AudioProcessorGraph::addConnection` is not a backstop here, as
+measured: it checks node existence, channel bounds and "not already connected" and accepts a cycle
+without complaint (`FeedbackGuardTests`' render-time guard is what catches an audible runaway if one
+is ever wired by hand on the canvas). A refusal changes nothing at all, so no empty undo step is
+recorded. "Add bus" (`+ Bus` on the dock's tab
+strip, and "New bus..." in every send menu) builds a bypassed-EQ -> bypassed-Compressor -> Stereo
+Strip -> Master(Mix) chain via the shared chain builder, boxed in a macro named "Bus N". On the
+canvas a send is an ordinary cable on the strip's new visible jacks — no new cable concept.
+
+**D7 — stem export.** See §5.12: buses get stems for free, sources' stems stay pre-send.
+
+**Out of scope for v1.** A send lane in the automation strip (the parameter is host-visible and
+lane-resolvable, which is the whole v1 promise); sidechain sends; mono-send / send-pan; per-send
+mute; a per-edge solo gate (above); reordering send slots; AI authorability (`ChannelStrip` stays in
+`kNonAuthorableModuleTypes`, and `"sends"` is trusted-path extra state); and bus-specific track
+presets.
+
+### 5.16 Keyboard navigation and accessibility (FRO18)
 
 The mixer panel is its own T159 keyboard focus region (Left/Right walk columns, Up/Down nudge the
 focused fader, Enter selects the focused column's macro on canvas, and the rebindable Mute/Solo/
@@ -670,8 +810,6 @@ P9-11 Gate module, T181 mixer accessibility. Item numbers there match every exis
 
 ## 9. Out of scope
 
-- **Sends and group buses** — P9-9 (T178), after the mixer panel ships and its own short design
-  pass is done.
 - **An EQ curve thumbnail on a channel column** — P9-10 (T179), after the mixer panel ships.
 - **Mixer accessibility** (keyboard navigation, screen-reader labels) — T181, in the Accessibility
   epic rather than P9, alongside T158's app-wide keyboard focus work.

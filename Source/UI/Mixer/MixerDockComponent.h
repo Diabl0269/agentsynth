@@ -108,6 +108,9 @@ public:
      *  contract between this component and its caller, not an implementation detail. */
     static constexpr int kTabStripHeight = 22;
 
+    /** FRO15 test seam: the "Add bus" button the tab strip shows on the Mixer tab. */
+    juce::TextButton& getAddBusButtonForTest() noexcept { return addBusButton_; }
+
 private:
     void applyTabVisibility();
     void persistActiveTab();
@@ -129,6 +132,9 @@ private:
     // DetachablePanelHost's class comment on why this is a separate button instance rather than a
     // literal shared one across three different parents).
     juce::DrawableButton detachButton_{"detachActiveTab", juce::DrawableButton::ImageFitted};
+    // FRO15 (docs/mixer.md §5.15): "Add bus" sits on the tab strip and is visible only on the Mixer
+    // tab -- it has no meaning while the Timeline tab is showing.
+    juce::TextButton addBusButton_{"+ Bus"};
     Tab activeTab_ = Tab::Timeline;
     bool mixerTabEnabled_ = true;
     juce::ApplicationProperties* appProperties_ = nullptr;

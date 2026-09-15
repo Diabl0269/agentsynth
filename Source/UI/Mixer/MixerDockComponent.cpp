@@ -8,6 +8,10 @@
 
 namespace synth::ui {
 
+namespace {
+constexpr int kAddBusButtonWidth = 54;
+} // namespace
+
 MixerDockComponent::MixerDockComponent(TimelinePanelComponent& timelinePanel, AudioEngine& audioEngine,
                                        synth::TimelineDoc& doc, AppUndoManager& undoManager, GraphEditor& graphEditor,
                                        juce::ApplicationProperties& appProperties,
@@ -29,6 +33,10 @@ MixerDockComponent::MixerDockComponent(TimelinePanelComponent& timelinePanel, Au
     addAndMakeVisible(detachButton_);
 
     // Both hosts draw no header of their own while docked here -- this tab strip IS their header.
+    // Each host's own constructor already parents its panel (timelinePanel_ / mixer_) into itself
+    // via addAndMakeVisible -- FRO15's own direct addAndMakeVisible(timelinePanel_)/addAndMakeVisible(mixer_)
+    // calls are folded into that (adding them a second time, directly to this component, would just
+    // steal them back out from under their host and break detach/redock).
     timelineHost_.setEmbeddedHeader(true);
     mixerHost_.setEmbeddedHeader(true);
     auto onEitherHostDetachStateChanged = [this] {
@@ -40,6 +48,15 @@ MixerDockComponent::MixerDockComponent(TimelinePanelComponent& timelinePanel, Au
     mixerHost_.onDetachedStateChanged = onEitherHostDetachStateChanged;
     addAndMakeVisible(timelineHost_);
     addAndMakeVisible(mixerHost_);
+
+    // FRO15 (docs/mixer.md §5.15): "Add bus" sits on the tab strip and is visible only on the
+    // Mixer tab -- it has no meaning while the Timeline tab is showing.
+    addAndMakeVisible(addBusButton_);
+    addBusButton_.setClickingTogglesState(false);
+    addBusButton_.onClick = [this] {
+        mixer_.createBus();
+        mixer_.rebuild(); // the new bus's own column, without waiting for the owner's reconcile
+    };
 
     mixer_.configure(audioEngine.getGraph(), doc, graphEditor.getMacros(), undoManager, graphEditor, audioEngine);
 
@@ -124,6 +141,7 @@ void MixerDockComponent::applyTabVisibility() {
     mixerTabButton_.setVisible(mixerTabEnabled_);
     timelineTabButton_.setToggleState(!mixerActive, juce::dontSendNotification);
     mixerTabButton_.setToggleState(mixerActive, juce::dontSendNotification);
+    addBusButton_.setVisible(mixerActive);
     if (mixerActive)
         mixer_.rebuild();
     refreshDetachButton();
@@ -145,7 +163,13 @@ bool MixerDockComponent::revealColumnForStrip(juce::AudioProcessorGraph::NodeID 
 void MixerDockComponent::resized() {
     auto bounds = getLocalBounds();
     auto tabStrip = bounds.removeFromTop(kTabStripHeight);
+    // Rightmost: the FRO12 detach button (always present, acts on whichever tab is active), then
+    // the FRO15 "+ Bus" button (only visible -- and so only carved -- on the Mixer tab), then
+    // whatever's left splits between the two tab buttons, unless FRO12's Own-panel/Window
+    // placement has disabled the Mixer tab entirely, in which case Timeline gets the full width.
     detachButton_.setBounds(tabStrip.removeFromRight(kTabStripHeight));
+    if (addBusButton_.isVisible())
+        addBusButton_.setBounds(tabStrip.removeFromRight(kAddBusButtonWidth));
     if (mixerTabEnabled_) {
         timelineTabButton_.setBounds(tabStrip.removeFromLeft(tabStrip.getWidth() / 2));
         mixerTabButton_.setBounds(tabStrip);

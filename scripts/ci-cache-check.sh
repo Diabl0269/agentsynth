@@ -147,14 +147,17 @@ fi
 if [ "$CACHE_WARM_EXPECTED" = "true" ] && [ "$inputs_suspect" -eq 0 ]; then
     if [ -z "$DEPS_MATCHED_KEY" ]; then
         annotate error "build/_deps cache did not restore. Every dependency is being re-fetched \
-and rebuilt from scratch. Check that the push-to-main run seeded a cache for this runner OS and \
-that the repo is under GitHub's 10 GB cache limit (gh api repos/:owner/:repo/actions/caches)."
+and rebuilt from scratch. PR runs restore only now — only a push to main (or a manual \
+workflow_dispatch run of this workflow on main) seeds or re-seeds this cache, so check that one \
+has run and saved an entry for this runner OS, and that the repo is under GitHub's 10 GB cache \
+limit (gh api repos/:owner/:repo/actions/caches)."
         failures=$((failures + 1))
     fi
     if [ -z "$CACHE_MATCHED_KEY" ]; then
         annotate error "ccache cache did not restore — this build compiled every translation unit \
-from cold. Verify CCACHE_DIR matches the actions/cache path for this OS, and that a \
-push-to-main run has seeded the cache."
+from cold. Verify CCACHE_DIR matches the actions/cache path for this OS. PR runs restore only \
+now — only a push to main (or a manual workflow_dispatch run of this workflow on main) seeds or \
+re-seeds this cache."
         failures=$((failures + 1))
     fi
 elif [ "$CACHE_WARM_EXPECTED" != "true" ] &&

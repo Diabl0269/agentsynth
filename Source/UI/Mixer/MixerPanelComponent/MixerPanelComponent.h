@@ -47,6 +47,12 @@ public:
      *  MixerDockComponent wires this to MainComponent::reconcileTimelineAfterGraphChange. */
     std::function<void()> onGraphMutated;
 
+    /** FRO15 (docs/mixer.md §5.15): creates a group/send bus channel -- bypassed EQ -> bypassed
+     *  Compressor -> Stereo Strip -> Master(Mix), boxed in a macro named "Bus N" -- as ONE
+     *  recordGraphAndMacroChange step, and returns its strip's node id (invalid on failure). Wired
+     *  to the dock's "Add bus" button and to every send row's "New bus..." item. */
+    juce::AudioProcessorGraph::NodeID createBus();
+
     /** FRO18: fires when the Arm key (rebindable "timelineArmFocusedTrack") is pressed with a
      *  linked strip focused -- MixerDockComponent wires this to
      *  MainComponent::performTrackEdit([&doc,id]{ doc.setTrackArmed(id, !doc.getTrack(id)->armed); }),

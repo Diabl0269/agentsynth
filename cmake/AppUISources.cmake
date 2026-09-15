@@ -54,6 +54,8 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerFader.cpp
     Source/UI/Mixer/MixerInsertList.h
     Source/UI/Mixer/MixerInsertList.cpp
+    Source/UI/Mixer/MixerSendList.h
+    Source/UI/Mixer/MixerSendList.cpp
     Source/UI/Mixer/MixerColumnComponent.h
     Source/UI/Mixer/MixerColumnComponent.cpp
     Source/UI/Mixer/MixerDirectColumn.h

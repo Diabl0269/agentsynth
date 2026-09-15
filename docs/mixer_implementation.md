@@ -461,9 +461,46 @@ Side tracks (each independent of the main line beyond its own listed dependency)
   strip's file is silent and the sum property still holds; a soloed strip during export does not
   affect which strips get written and leaves solo/mute state unchanged; a cancelled or failed
   export leaves no stem files behind, never touches a pre-existing file, and disarms every tap.
-- **P9-9 (T178) — Sends and group buses.** After P9-5; needs a short design pass of its own before
-  implementation (a send is a tap on a strip feeding a bus channel, per §9, but the mechanism
-  itself isn't specified here).
+- **P9-9 (T178) — Sends and group buses. DONE.** See [`mixer.md` §5.15](mixer.md) for the design as
+  it landed: a send is a strip-owned OUTPUT leg (four fixed slots, raw channels 8..15, target read
+  off the graph and never stored), a bus is an ordinary `ChannelStrip`, and solo becomes a per-leg
+  audible mask (`Source/Mixer/SoloAudibleSet.{h,cpp}`) rather than a whole-strip clear. Core flows
+  live in `Source/Mixer/MixerSends/`, the column/send half of the snapshot in
+  `Source/Mixer/MixerModel/MixerModelSends.cpp`, the UI in `Source/UI/Mixer/MixerSendList.{h,cpp}`.
+  - `Tests/Mixer/Sends/MixerSendLevelTests.cpp` — a post-fader leg equals what the strip hands
+    Master and a pre-fader one the signal before gain/pan; the level is a dB gain on both legs;
+    mute silences every send; bypass makes pre and post coincide; **every branch clears every
+    reserved and inactive send channel** (the stale-block-into-a-bus risk); removing a middle send
+    leaves higher slots on their own raw channels and only renumbers the visible jacks; all four
+    level parameters exist from construction; the slots and their pre/post round-trip through the
+    trusted extra state (and a pre-FRO15 state simply has none).
+  - `Tests/Mixer/Sends/MixerBusSoloTests.cpp` — soloing a send bus opens only its sources' SEND
+    legs; soloing a group bus opens its sources' MAIN legs; soloing a source keeps the buses it
+    feeds audible, transitively; a leg feeding both Master and a soloed bus stays open (the
+    documented per-leg limitation); a non-contributing strip is fully silenced; a cycle does not
+    hang the walk; `refreshSoloGate` publishes every mask and un-soloing restores them; an
+    undo/redo across a graph REBUILD settles the masks against the new node ids; Master's Direct is
+    still gated by the plain global count.
+  - `Tests/Mixer/Sends/MixerSendFlowTests.cpp` — add/remove/retarget and their refusals (non-strip,
+    self, out of slots, cyclic), each refusal changing nothing; `findSendTarget` walks through a
+    module the user inserted on the send path and returns nothing for a cut cable; cyclic targets
+    are excluded from the menu; `buildBusChannel` makes a flagged, bypassed-inserts channel into
+    Master's Mix.
+  - `Tests/Mixer/Sends/MixerSendLatencyTests.cpp` — **acceptance:** the dry path and the send path
+    through a latent bus land on ONE output sample; **negative control:** a latency that moves with
+    the topology unchanged drifts by exactly the delta until a rebuild; adding a send schedules its
+    own rebuild (so no send flow needs `rebuildGraphForLatencyChange`); removing the send removes
+    the second copy.
+  - `Tests/Mixer/MixerModel/MixerModelBusColumnTests.cpp` — a bus column is `Kind::Bus` and lists
+    its feeding strips; an empty new bus still classifies (via the flag); the send rows mirror the
+    strip's active slots including a sparse hole and a cut cable; a boxed bus takes its macro name.
+  - `Tests/UI/Mixer/MixerSendListTests.cpp` — "+ Bus" adds a bus column after the track strips;
+    adding a send wires the cable and shows a row; the knob drives the strip's own `sendNLevel`;
+    PRE/POST is one undo step; removing clears the cable and the row; and the rows unbind before a
+    graph-replacing undo frees their parameters (the FRO11 crash class, re-pinned for sends).
+  - `Tests/Engine/StemExportTests.cpp` (extended) — a bus gets its own stem named "Bus N", the
+    source's stem stays pre-send, and `sum(stems)` still reproduces the pre-Master mix with a
+    pre-fader send in the patch.
 - **P9-10 (T179) — EQ curve thumbnail on mixer columns.** After P9-5.
 - **P9-11 (T180) — Gate module.** Done — `GateModule` (`Source/Modules/FX/GateModule.h`,
   [`fx_modules.md` § Gate Module](fx_modules.md#gate-module)). No dependency on the rest of P9;
