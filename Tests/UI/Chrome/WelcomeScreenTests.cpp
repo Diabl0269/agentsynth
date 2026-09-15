@@ -140,8 +140,17 @@ TEST_F(WelcomeScreenTest, NeverConstructsInHostedMode) {
     AudioEngine engine(AudioEngine::HostMode::Hosted);
     engine.initialise();
 
-    MainComponent mc(tm, lf, engine, std::make_unique<MockProvider>());
-    EXPECT_EQ(mc.getWelcomeScreenForTest(), nullptr);
+    // `mc` must be destroyed BEFORE the engine is shut down: ~MainComponent detaches its module
+    // components (dropping every SliderParameterAttachment they hold into graph nodes), while
+    // AudioEngine::shutdown() clears the graph and frees those very parameters. With `engine`
+    // declared first, the two would run in exactly the wrong order at the end of this body, which
+    // is a heap-use-after-free the ASAN job catches and an ordinary build does not. Scoped rather
+    // than reordered, because on this (external, Hosted-mode) path the engine deliberately
+    // outlives the editor.
+    {
+        MainComponent mc(tm, lf, engine, std::make_unique<MockProvider>());
+        EXPECT_EQ(mc.getWelcomeScreenForTest(), nullptr);
+    }
 
     engine.shutdown();
 }
