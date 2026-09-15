@@ -440,7 +440,46 @@ Side tracks (each independent of the main line beyond its own listed dependency)
 - **P9-11 (T180) — Gate module.** Done — `GateModule` (`Source/Modules/FX/GateModule.h`,
   [`fx_modules.md` § Gate Module](fx_modules.md#gate-module)). No dependency on the rest of P9;
   wiring it into a default track preset (§5.7/§7 D3) is still open.
-- **T181 — Mixer accessibility**, in the Accessibility epic: column navigation, the existing
-  rebindable M/S keys acting on the focused column, fader nudge, screen-reader labels for faders
-  and meters, alongside T158's app-wide keyboard focus work.
+- **T181 (FRO18) — Mixer accessibility. DONE.** After P9-5. `MixerPanelComponent` joins T159's
+  focus-region registry as a 7th region (sharing the dock with "timeline" — see
+  [`docs/shortcuts.md`](shortcuts.md#mixer-column-navigation)'s Focus regions section for the two
+  regions' `isOpen`/`open` split) and becomes the mixer's own focusable leaf
+  (`setWantsKeyboardFocus(true)`); every child control inside a column gives it back up, the same
+  T160 trap avoidance `TimelineTrackHeaderComponent` uses, just one level higher since a column
+  hosts several controls. New `MixerPanelKeyboard.cpp` (`Source/UI/Mixer/MixerPanelComponent/`)
+  owns keyPressed(): Left/Right walk `focusedColumnIndex_` across strips/Direct/Master (clamped,
+  never wraps), Up/Down nudge the focused fader 1.0 dB (Shift: 0.1 dB) as one undo step via a new
+  `MixerFader::nudge()` (begin/endChangeGesture bracketing a single `setValueNotifyingHost`, same
+  as a real drag), Enter selects the focused column's macro/node on canvas, and M/S/R resolve the
+  SAME rebindable `timelineMuteFocusedTrack`/`timelineSoloFocusedTrack`/`timelineArmFocusedTrack`
+  action ids the Timeline track-header row already binds (deliberately — a new id would not
+  inherit an existing rebind), through `MixerColumnComponent::toggleMuted()`/`toggleSoloed()`/
+  `MixerMasterColumn::toggleMuted()` extracted from the M/S buttons' own `onClick` so a keypress and
+  a real click can never diverge, and a new `onArmTrack` callback routed through
+  `MainComponent::performTrackEdit`. Focus re-resolves after every `rebuild()` by the column's own
+  identity (a strip's uuid; Direct/Master by kind) rather than by raw index, so an unrelated strip
+  insert/removal elsewhere in the column order never silently reattaches it to the wrong column,
+  and a deleted focused strip clears focus instead.
+
+  JUCE `AccessibilityHandler` support (the first real consumer in this repo): `MixerFader`'s
+  `textFromValueFunction` speaks "-3.0 dB"; the pan slider's speaks "50% left"/"Center"/"50%
+  right"; `MixerMeter::createAccessibilityHandler()` reports a read-only `staticText` value (the
+  displayed level as a percentage); `MixerColumnComponent::createAccessibilityHandler()` returns a
+  `group` role titled with the channel name; the M/S buttons (built with
+  `setClickingTogglesState(false)`) now mirror `isMuted()`/`isSoloed()` into `setToggleState()` so
+  their own paint AND the stock toggle-button accessibility role track reality — a latent
+  "never shows pressed" bug fixed alongside this.
+  - Tests: `Tests/UI/Mixer/MixerPanelKeyboardFocusTests.cpp` (column focus seed/walk/clamp
+    including Direct and Master in order, fader nudge as one undo step plain and Shift-fine, the
+    Direct-column fader no-op, Enter's macro selection, M/S/R through the shared click path with
+    and without an installed/rebound `ShortcutManager`, unrelated keys falling through unclaimed,
+    and focus surviving/clearing across a rebuild); `Tests/UI/Mixer/MixerAccessibilityTests.cpp`
+    (fader/pan value-text formatting, a column's title and group role, M/S toggle-state mirroring,
+    the meter's read-only percentage value); `Tests/UI/Mixer/MixerFocusRegionTests.cpp` (the
+    "mixer" region opens only with the dock open AND its Mixer tab active, "timeline" closes when
+    Mixer is active, and the two are never open together); `Tests/UI/Layout/FocusRegionTests.cpp`'s
+    `RegistersExactlyTheSevenDocumentedRegionsInOrder` updated for the new region.
+  - Known gap, documented rather than fixed here: `MainComponent::resolveEditSurface()` still
+    knows Graph/TimelineClips/PianoRoll only, so Cmd+C/V/D/X/R with the Mixer focused falls through
+    to the Graph surface.
 
