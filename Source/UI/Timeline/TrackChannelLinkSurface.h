@@ -43,6 +43,15 @@ struct TrackChannelLinkSurface {
 
     virtual ChannelInfo getChannelInfo(synth::TrackId track) const = 0;
 
+    /** JUST the chip meter's level, for the shared 15 Hz tick. Deliberately not getChannelInfo():
+     *  that re-derives the whole link from the live graph (a node scan plus two BFS walks over a
+     *  fresh copy of every connection), which is fine per click and far too much per frame per row.
+     *  This answers from the strip id the last getChannelInfo()/reconcile resolved, so the tick
+     *  costs a map lookup and two atomic reads. A stale id is safe by construction: it either no
+     *  longer resolves (0) or still names the right strip, and refreshFromDoc() re-resolves on every
+     *  doc change anyway. Returns 0 when the track reaches no channel. */
+    virtual float getChannelMeterPeak(synth::TrackId track) const = 0;
+
     /** §5.2 (a): renames the track AND its channel macro as ONE undo step. Returns false when the
      *  track is not linked (or has no macro to rename) -- the caller then performs its ordinary
      *  track-only rename, byte-for-byte as before. */

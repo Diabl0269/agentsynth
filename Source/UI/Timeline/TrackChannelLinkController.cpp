@@ -71,6 +71,7 @@ TrackChannelLinkSurface::ChannelInfo TrackChannelLinkController::getChannelInfo(
 
     out.hasChannel = true;
     out.linked = info.linked;
+    meterStripIds_[track.value] = info.stripId; // keeps the 15 Hz meter read off the graph walk
     // A channel's name IS its macro's name when it is boxed (the macro is the container, §5.2);
     // otherwise the shared Core rule -- the one feeding track's name, else the fallback.
     const auto* macro = macroForStrip(info.stripUuid);
@@ -84,6 +85,20 @@ TrackChannelLinkSurface::ChannelInfo TrackChannelLinkController::getChannelInfo(
         out.meterPeak = std::max(strip->getMeterPeak(0), strip->getMeterPeak(1));
     }
     return out;
+}
+
+float TrackChannelLinkController::getChannelMeterPeak(synth::TrackId track) const {
+    // The tick path. No resolve() here on purpose (see the surface's contract): the id was resolved
+    // by the last getChannelInfo(), and anything that could change it -- a doc edit, a graph change
+    // -- already drives refreshFromDoc()/reconcileLinkedTracks(), both of which re-resolve.
+    const auto it = meterStripIds_.find(track.value);
+    if (it == meterStripIds_.end())
+        return 0.0f;
+    auto* node = graph().getNodeForId(it->second);
+    auto* strip = node != nullptr ? dynamic_cast<ChannelStripModule*>(node->getProcessor()) : nullptr;
+    if (strip == nullptr)
+        return 0.0f;
+    return std::max(strip->getMeterPeak(0), strip->getMeterPeak(1));
 }
 
 // ---- (a) Names sync both ways -------------------------------------------------------------
@@ -221,6 +236,7 @@ void TrackChannelLinkController::reconcileLinkedTracks() {
         if (!track.muted && !track.soloed)
             continue;
         const auto info = resolve(track.id);
+        meterStripIds_[track.id.value] = info.stripId;
         if (!info.linked || stripFor(info) == nullptr)
             continue;
         if (track.muted)

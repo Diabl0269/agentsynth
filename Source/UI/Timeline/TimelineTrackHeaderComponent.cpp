@@ -320,9 +320,10 @@ bool TimelineTrackHeaderComponent::tickChannelMeter() {
     auto* link = linkSurface();
     if (link == nullptr)
         return false;
-    // The level is read fresh (the strip's meter atomics move every block); the CHIP decides
-    // whether that is worth a repaint.
-    return channelChip_.setMeterLevel(link->getChannelInfo(trackId_).meterPeak);
+    // The level is read fresh (the strip's meter atomics move every block) through the seam's CHEAP
+    // read -- never getChannelInfo(), which re-walks the graph and is a per-click cost, not a
+    // per-frame one. The CHIP then decides whether the new level is worth a repaint at all.
+    return channelChip_.setMeterLevel(link->getChannelMeterPeak(trackId_));
 }
 
 std::unique_ptr<synth::ui::ColourPickerPopup> TimelineTrackHeaderComponent::createColourPickerForTest() {

@@ -2,7 +2,9 @@
 
 #include "Mixer/TrackChannelLink.h"
 #include "TrackChannelLinkSurface.h"
+#include <cstdint>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <map>
 
 // TrackChannelLinkController.h -- FRO14 (P9-4, docs/mixer.md §5.2): the app-side half of the track
 // <-> channel link. The rule itself is Core (Source/Mixer/TrackChannelLink.h, a pure query); this
@@ -47,6 +49,7 @@ public:
     ~TrackChannelLinkController() override;
 
     ChannelInfo getChannelInfo(synth::TrackId track) const override;
+    float getChannelMeterPeak(synth::TrackId track) const override;
     bool renameLinkedTrackAndChannel(synth::TrackId track, const juce::String& newName) override;
     std::unique_ptr<ColourPickerPopup> buildLinkedChannelColourPicker(synth::TrackId track,
                                                                       juce::PropertiesFile* favourites) override;
@@ -77,6 +80,12 @@ private:
     /** The single track linked to the channel `macroId` boxes, invalid when it boxes none. */
     synth::TrackId linkedTrackForMacro(const juce::String& macroId) const;
     void installMacroRenameHook();
+
+    /** TrackId -> the strip that track plays into, as last resolved by getChannelInfo() or
+     *  reconcileLinkedTracks(). ONLY the 15 Hz meter read uses it, and only as a hint -- see
+     *  TrackChannelLinkSurface::getChannelMeterPeak on why a stale entry cannot mislead. Mutable
+     *  because the const display query is what keeps it warm. */
+    mutable std::map<std::int64_t, juce::AudioProcessorGraph::NodeID> meterStripIds_;
 
     AudioEngine& engine_;
     synth::TimelineDoc& doc_;

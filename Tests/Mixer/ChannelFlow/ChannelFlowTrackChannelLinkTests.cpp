@@ -431,6 +431,65 @@ TEST_F(ChannelFlowTest, TheChipMeterRepaintsOnlyWhenTheDrawnLevelActuallyMoves) 
     EXPECT_TRUE(chip.setMeterLevel(0.0f)) << "and silence is always drawn, however small the step";
 }
 
+TEST_F(ChannelFlowTest, TheMeterTickReportsTheChannelsRealLevelThroughTheCheapRead) {
+    LinkRigApp rig;
+    auto& header = rig.header(rig.lead);
+    ASSERT_EQ(rig.link.getChannelMeterPeak(rig.lead), 0.0f) << "silent before anything has rendered";
+
+    rig.render(4);
+    const float level = rig.strip(rig.leadStrip)->getMeterPeak(0);
+    ASSERT_GT(level, 0.0f);
+
+    // The tick path proper: the level reaches the chip through getChannelMeterPeak()'s cached strip
+    // id -- two atomic reads -- NOT through a per-frame getChannelInfo() walk of the whole graph.
+    EXPECT_FLOAT_EQ(rig.link.getChannelMeterPeak(rig.lead), level);
+    EXPECT_TRUE(header.tickChannelMeter()) << "a level that moved is drawn";
+    EXPECT_NEAR(header.getChannelChip().getMeterLevel(), juce::jlimit(0.0f, 1.0f, level), 1.0e-6f);
+    EXPECT_FALSE(header.tickChannelMeter()) << "...and the next tick at the same level repaints nothing";
+
+    EXPECT_EQ(rig.link.getChannelMeterPeak(synth::TrackId{}), 0.0f)
+        << "a track with no resolved channel reads silent rather than walking the graph to find out";
+}
+
+// -------------------------------------------------------------------------------------------
+// A hand-built (unboxed) chain: linked, but with no macro to carry the channel's name or colour
+// -------------------------------------------------------------------------------------------
+
+TEST_F(ChannelFlowTest, AnUnboxedLinkedChainDrivesTheChannelsMuteButKeepsTheOrdinaryNameAndColour) {
+    LinkRigApp rig;
+
+    // Same shape as "Lead", deliberately never passed to addMacroForMembers.
+    juce::String inUuid, oscUuid, stripUuid;
+    auto* trackIn = addPlainNodeCFT(rig.graph(), "Track In", {0, 800}, inUuid);
+    auto* osc = addPlainNodeCFT(rig.graph(), "Oscillator", {200, 800}, oscUuid);
+    auto* stripNode = addPlainNodeCFT(rig.graph(), "Channel Strip", {400, 800}, stripUuid);
+    rig.wireMidi(trackIn, osc);
+    rig.wireStereo(osc, stripNode);
+    rig.wireStripToOutput(stripNode);
+    const auto bare = rig.addTrack("Bare", inUuid);
+    rig.headers.push_back(std::make_unique<TimelineTrackHeaderComponent>(rig.doc, bare, &rig.host));
+    auto& header = rig.header(bare);
+    ASSERT_TRUE(synth::resolveTrackChannelLink(rig.graph(), rig.doc, bare).linked);
+
+    // The chip still names it -- unboxed, the name falls back to the one feeding track's.
+    EXPECT_TRUE(header.getChannelChip().isVisible());
+    EXPECT_EQ(header.getChannelChip().getChannelName(), "Bare");
+
+    // Name and colour need a macro to sync INTO, so both decline and the header keeps its ordinary
+    // track-only behaviour...
+    EXPECT_FALSE(rig.link.renameLinkedTrackAndChannel(bare, "Renamed"));
+    EXPECT_EQ(rig.link.buildLinkedChannelColourPicker(bare, nullptr), nullptr);
+    header.getNameLabel().setText("Renamed", juce::sendNotificationSync);
+    EXPECT_EQ(rig.doc.getTrack(bare)->name, "Renamed") << "the track itself still renames";
+
+    // ...but M/S do not: they drive the STRIP, which exists with or without a macro around it.
+    auto* strip = dynamic_cast<ChannelStripModule*>(stripNode->getProcessor());
+    ASSERT_NE(strip, nullptr);
+    header.getMuteButton().onClick();
+    EXPECT_TRUE(strip->isMuted()) << "the mute lands on the channel even with no macro";
+    EXPECT_FALSE(rig.doc.getTrack(bare)->muted) << "...and never on the track, so there is only ever one";
+}
+
 // -------------------------------------------------------------------------------------------
 // End to end, on a real MainComponent: the link is reachable from the shipped flow
 // -------------------------------------------------------------------------------------------
@@ -440,6 +499,8 @@ TEST_F(ChannelFlowTest, AddAudioTrackProducesALinkedTrackWhoseHeaderShowsAndRena
     mc.setSize(1600, 900);
     mc.getAudioEngine().suspendDeviceCallback();
     mc.newPatchForTest();
+    mc.simulateToggleTimelineClick(); // the panel starts hidden; the headers only lay out once shown
+    ASSERT_TRUE(mc.isTimelineConfiguredVisible());
 
     addAudioTrack(mc);
     ASSERT_EQ(mc.getTimelineDoc().getTracks().size(), 1u);
@@ -450,6 +511,14 @@ TEST_F(ChannelFlowTest, AddAudioTrackProducesALinkedTrackWhoseHeaderShowsAndRena
     const auto info = synth::resolveTrackChannelLink(mc.getAudioEngine().getGraph(), mc.getTimelineDoc(), track);
     EXPECT_TRUE(info.linked) << "an audio track is its channel's only source";
     EXPECT_TRUE(header->getChannelChip().isVisible());
+
+    // Laid out at a REAL size, so this is the one place the chip's geometry is provable: calling
+    // onClick() by hand (as the rig tests do) would pass just as happily on a zero-sized chip no
+    // mouse could ever hit, and it shares its row with the binding chip.
+    const auto chipBounds = header->getChannelChip().getBounds();
+    EXPECT_FALSE(chipBounds.isEmpty()) << "a chip with no bounds is a chip nobody can click";
+    EXPECT_FALSE(chipBounds.intersects(header->getBindingChip().getBounds()))
+        << "the two chips split the bottom row, they do not sit on top of each other";
 
     header->getNameLabel().setText("Vocals", juce::sendNotificationSync);
     EXPECT_EQ(mc.getTimelineDoc().getTrack(track)->name, "Vocals");

@@ -47,6 +47,11 @@ void TimelinePanelComponent::setTrackHeaderHost(TrackHeaderHost* host) {
 // ModuleComponent's own 15 Hz meter poll uses. A header whose track reaches no channel has no chip
 // visible and costs a bool read.
 void TimelinePanelComponent::timerCallback() {
+    // The panel is hidden by setVisible(false) when the user closes it (MainComponentPanels), and
+    // the timer runs from setTrackHeaderHost onwards regardless -- so the cheapest gate of all is
+    // first: a hidden meter is a repaint nobody can see.
+    if (!isVisible())
+        return;
     for (auto* header : trackHeaderList_.headers)
         if (header != nullptr)
             header->tickChannelMeter();
