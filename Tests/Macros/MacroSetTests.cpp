@@ -13,6 +13,9 @@
 //   • MacroSet::removeMemberEverywhere — drops a port when its fronting member is removed singly
 //   • Macro::memberIsPort/moduleMemberCount — the user-facing MODULE count excludes port nodes
 //                                  (founder-review fix G6) without touching members.size() itself
+//   • MacroSet::add               — returns the new macro's id BY VALUE (FRO95 regression): a
+//                                  Macro&/Macro* must never be held across a further add() call,
+//                                  since push_back can reallocate macros_ out from under it
 
 #include "MacroSet.h"
 #include <algorithm>
@@ -435,4 +438,62 @@ TEST(MacroModuleCount, DeletingAPortUpdatesTheCount) {
 
     EXPECT_EQ((int)m.members.size(), 2);
     EXPECT_EQ(m.moduleMemberCount(), 2) << "with no ports left, the module count equals member count";
+}
+
+// ---------------------------------------------------------------------------------------------
+// MacroSet::add — id-by-value contract (FRO95)
+// ---------------------------------------------------------------------------------------------
+
+// Regression for the ASAN heap-use-after-free FRO95 fixed: add() used to return `Macro&` into
+// macros_, so a caller that held the reference from an earlier add() and read it after a LATER
+// add() (which can reallocate the vector) had a dangling reference. add() now returns the id by
+// value instead, so there is nothing to dangle — this test drives several adds back-to-back and
+// confirms every earlier id is still resolvable (and correct) via find() afterwards.
+TEST(MacroSetAdd, IdsFromEarlierAddsStayResolvableAfterLaterAdds) {
+    MacroSet set;
+
+    Macro a;
+    a.members = {"member-a"};
+    const auto idA = set.add(a);
+
+    Macro b;
+    b.members = {"member-b"};
+    const auto idB = set.add(b);
+
+    Macro c;
+    c.members = {"member-c"};
+    const auto idC = set.add(c);
+
+    ASSERT_EQ(set.size(), 3);
+    EXPECT_FALSE(idA.isEmpty());
+    EXPECT_FALSE(idB.isEmpty());
+    EXPECT_FALSE(idC.isEmpty());
+    EXPECT_NE(idA, idB);
+    EXPECT_NE(idB, idC);
+    EXPECT_NE(idA, idC);
+
+    // Looked up only now, after every mutating call — the correct way to get back at a macro's
+    // state once you're done adding, per MacroSet::add()'s doc comment.
+    const auto* storedA = set.find(idA);
+    const auto* storedB = set.find(idB);
+    const auto* storedC = set.find(idC);
+    ASSERT_NE(storedA, nullptr);
+    ASSERT_NE(storedB, nullptr);
+    ASSERT_NE(storedC, nullptr);
+    EXPECT_EQ(storedA->members[0], "member-a");
+    EXPECT_EQ(storedB->members[0], "member-b");
+    EXPECT_EQ(storedC->members[0], "member-c");
+}
+
+TEST(MacroSetAdd, EmptyIdIsAssignedAFreshOne) {
+    MacroSet set;
+    Macro m;
+    m.members = {"member-1"};
+    ASSERT_TRUE(m.id.isEmpty());
+
+    const auto id = set.add(m);
+
+    EXPECT_FALSE(id.isEmpty());
+    ASSERT_NE(set.find(id), nullptr);
+    EXPECT_EQ(set.find(id)->id, id);
 }

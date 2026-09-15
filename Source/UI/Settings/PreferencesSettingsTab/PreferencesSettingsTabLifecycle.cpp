@@ -660,7 +660,7 @@ void PreferencesSettingsTab::layoutContent(int contentWidth) {
         }
         pendingDivider = pendingDivider || visible;
     }
-    // Group 9 (FRO13, P9-7, last - no divider after it):
+    // Group 9 (FRO13, P9-7); chains Group 10 (FRO12, P9-6, last) itself -- see that function.
     layoutMixerDefaultTrackPresetGroup(y, contentWidth, groupMatches, setGroupVisible, beginGroup);
     // Size the content host to whatever the visible groups consumed; the viewport scrolls it
     // (T157). Width spans the full viewport so the dividers reach the edges; the scrollbar

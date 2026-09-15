@@ -522,6 +522,8 @@ Library sidebar and AI panel can each be fully hidden (width = 0). State persist
 
 Both keys are read at the top of `initialiseCommon()` before any `setVisible()` or `addAndMakeVisible()` call. Cmd+B toggles the library sidebar (wired via `ShortcutManager`).
 
+The Timeline and Mixer panels are a separate mechanism — each can additionally DETACH into its own top-level window (`Source/UI/Layout/DetachablePanelHost/`) rather than only hide/show in place, and the Mixer's dock-vs-own-panel-vs-window placement is itself a Preferences setting. See [`docs/mixer.md §5.9`](mixer.md#59-mixer-panel--windows).
+
 ### Welcome screen overlay (T114/P8-10)
 
 `Source/UI/WelcomeScreenComponent` is a full-window overlay, not a docked panel — it covers the toolbar and canvas alike while shown, rather than carving a strip out of either. Two rules keep it correctly positioned and stacked:

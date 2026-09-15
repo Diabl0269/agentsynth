@@ -66,6 +66,15 @@ constexpr const char* kMixerDefaultTrackPresetInstrumentKey = "mixerDefaultTrack
 constexpr int kMixerDefaultPresetFactoryComboId = 1;
 constexpr int kMixerDefaultPresetComboIdBase = 2;
 
+// FRO12 (P9-6, docs/mixer.md §5.9): where the Mixer panel lives. Value is "tab"/"ownPanel"/
+// "window", default "tab" (D4 = A, made configurable) -- read at use time by
+// MixerPlacementController, duplicated here for the same "one-line string not worth a header
+// dependency" reason as kAutosaveEnabledKey above.
+constexpr const char* kMixerPlacementKey = "mixerPlacement";
+constexpr int kMixerPlacementTabComboId = 1;
+constexpr int kMixerPlacementOwnPanelComboId = 2;
+constexpr int kMixerPlacementWindowComboId = 3;
+
 } // namespace
 
 // Combo-id <-> enum helpers, defined in PreferencesSettingsTabLifecycle.cpp (where the constructor

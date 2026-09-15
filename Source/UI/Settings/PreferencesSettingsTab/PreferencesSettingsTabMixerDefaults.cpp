@@ -101,6 +101,9 @@ void PreferencesSettingsTab::setupMixerDefaultTrackPresetControls() {
     mixerDefaultTrackPresetInstrumentCombo.onChange = [this] {
         persistMixerDefaultTrackPresetInstrument(getMixerDefaultTrackPresetInstrument());
     };
+    // FRO12 (P9-6): chained here rather than added as its own call in the constructor -- that
+    // function is baselined (scripts/function-size-baseline.txt) and must not grow.
+    setupMixerPlacementControls();
 }
 
 // Lays out the "Group 9" row pair — pulled out of layoutContent for the same ratchet reason.
@@ -116,16 +119,93 @@ void PreferencesSettingsTab::layoutMixerDefaultTrackPresetGroup(
     const bool visible = groupMatches(mixerDefaultComps);
     setGroupVisible(mixerDefaultComps, visible);
     beginGroup(visible);
+    if (visible) {
+        juce::Rectangle<int> row(0, y, contentWidth, 24);
+        mixerDefaultTrackPresetAudioLabel.setBounds(row.removeFromLeft(170));
+        row.removeFromLeft(4);
+        mixerDefaultTrackPresetAudioCombo.setBounds(row.removeFromLeft(160));
+        y += 28;
+        juce::Rectangle<int> row2(0, y, contentWidth, 24);
+        mixerDefaultTrackPresetInstrumentLabel.setBounds(row2.removeFromLeft(170));
+        row2.removeFromLeft(4);
+        mixerDefaultTrackPresetInstrumentCombo.setBounds(row2.removeFromLeft(160));
+        y += 24;
+    }
+    // FRO12 (P9-6): chained here rather than called from layoutContent directly -- that function
+    // is baselined (scripts/function-size-baseline.txt) and must not grow by even one line; this
+    // one isn't, so the new group's call lives here instead. See layoutMixerPlacementGroup's own
+    // comment for why it takes `visible` rather than the `beginGroup` closure.
+    layoutMixerPlacementGroup(y, contentWidth, visible, groupMatches, setGroupVisible);
+}
+
+// ---------------------------------------------------------------------------------------------
+// FRO12 (P9-6, docs/mixer.md §5.9): Mixer placement -- Tab beside the Timeline / Own panel /
+// Window. Same "own named step, pulled out of the constructor/layoutContent" pattern the two
+// functions above follow.
+// ---------------------------------------------------------------------------------------------
+
+juce::String PreferencesSettingsTab::getMixerPlacement() const {
+    switch (mixerPlacementCombo.getSelectedId()) {
+    case kMixerPlacementOwnPanelComboId:
+        return "ownPanel";
+    case kMixerPlacementWindowComboId:
+        return "window";
+    default:
+        return "tab";
+    }
+}
+
+void PreferencesSettingsTab::setMixerPlacement(const juce::String& placement) {
+    int id = kMixerPlacementTabComboId;
+    if (placement == "ownPanel")
+        id = kMixerPlacementOwnPanelComboId;
+    else if (placement == "window")
+        id = kMixerPlacementWindowComboId;
+    mixerPlacementCombo.setSelectedId(id, juce::dontSendNotification);
+    persistMixerPlacement(getMixerPlacement());
+}
+
+void PreferencesSettingsTab::persistMixerPlacement(const juce::String& placement) {
+    appProperties.getUserSettings()->setValue(kMixerPlacementKey, placement);
+    appProperties.getUserSettings()->saveIfNeeded();
+}
+
+void PreferencesSettingsTab::setupMixerPlacementControls() {
+    contentHost.addAndMakeVisible(mixerPlacementLabel);
+    mixerPlacementLabel.setText("Mixer placement:", juce::dontSendNotification);
+    mixerPlacementLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
+
+    contentHost.addAndMakeVisible(mixerPlacementCombo);
+    mixerPlacementCombo.addItem("Tab beside the Timeline", kMixerPlacementTabComboId);
+    mixerPlacementCombo.addItem("Own panel", kMixerPlacementOwnPanelComboId);
+    mixerPlacementCombo.addItem("Window", kMixerPlacementWindowComboId);
+    // setMixerPlacement also re-persists the value it just read, harmless (idempotent) and keeps
+    // this to one code path -- same idiom setupMixerDefaultTrackPresetControls() uses above.
+    setMixerPlacement(appProperties.getUserSettings()->getValue(kMixerPlacementKey, "tab"));
+    mixerPlacementCombo.onChange = [this] { persistMixerPlacement(getMixerPlacement()); };
+}
+
+void PreferencesSettingsTab::layoutMixerPlacementGroup(
+    int& y, int contentWidth, bool previousGroupWasVisible,
+    const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
+    const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible) {
+    const std::initializer_list<juce::Component*> mixerPlacementComps = {&mixerPlacementLabel, &mixerPlacementCombo};
+    const bool visible = groupMatches(mixerPlacementComps);
+    setGroupVisible(mixerPlacementComps, visible);
     if (!visible)
         return;
+    if (previousGroupWasVisible) {
+        // Same divider math as layoutContent's own addDivider() closure -- inlined rather than
+        // shared, since that closure (and the pendingDivider local it tracks) lives inside a
+        // baselined function this ticket must not grow; dividerBounds is a plain member field,
+        // reachable directly.
+        y += 10;
+        dividerBounds.push_back(juce::Rectangle<int>{0, y, contentWidth, 1});
+        y += 11;
+    }
     juce::Rectangle<int> row(0, y, contentWidth, 24);
-    mixerDefaultTrackPresetAudioLabel.setBounds(row.removeFromLeft(170));
+    mixerPlacementLabel.setBounds(row.removeFromLeft(170));
     row.removeFromLeft(4);
-    mixerDefaultTrackPresetAudioCombo.setBounds(row.removeFromLeft(160));
-    y += 28;
-    juce::Rectangle<int> row2(0, y, contentWidth, 24);
-    mixerDefaultTrackPresetInstrumentLabel.setBounds(row2.removeFromLeft(170));
-    row2.removeFromLeft(4);
-    mixerDefaultTrackPresetInstrumentCombo.setBounds(row2.removeFromLeft(160));
+    mixerPlacementCombo.setBounds(row.removeFromLeft(160));
     y += 24;
 }

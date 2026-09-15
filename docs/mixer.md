@@ -418,6 +418,48 @@ everything else the host owns (root `CLAUDE.md` / `Source/UI/CLAUDE.md` invarian
 is scoped per window, consistent with what T158 already expects for app-wide keyboard focus
 arbitration.
 
+**As implemented (FRO12, P9-6):** the mechanism is `Source/UI/Layout/DetachablePanelHost/`
+(`DetachablePanelHost` + `DetachedPanelWindow`) — a slot that moves a panel BY REFERENCE (never
+copied or rebuilt) between its dock and a `DetachedPanelWindow`. `MixerDockComponent` owns two
+hosts, `timelineHost_`/`mixerHost_`, both wrapping the SAME `TimelinePanelComponent`/
+`MixerPanelComponent` instances it already held. In Tab placement neither host draws its own
+header (`setEmbeddedHeader(true)`) — the dock's existing 22 px tab strip carries a single icon-only
+detach button instead, acting on whichever tab is active; the header (and the real button, now
+reading "Dock back") only appears on the DETACHED window itself.
+
+Placement lives in `synth::ui::MixerPlacementController` (the one collaborator `MainComponent.h`
+adds for this ticket), which moves `mixerHost_` between its three homes:
+
+| Placement      | Mixer lives                                    | Timeline dock | Detach state                |
+|----------------|-------------------------------------------------|---------------|------------------------------|
+| Tab (default)  | `MixerDockComponent`'s own tab strip             | unaffected    | tab-strip button             |
+| Own panel      | `MixerPlacementController` itself (a second, independent bottom strip MainComponent adds below the Timeline dock) | unaffected | its own header (embedded=false) |
+| Window         | a `DetachedPanelWindow`, opened on first reveal — never eagerly at launch | unaffected | `mixerHost_` stays parented (and hidden) inside the dock until revealed |
+
+"Own panel" ships without the Timeline dock's animated open/close slide or a persisted height —
+a plain visible/hidden strip at `MixerPlacementController::kOwnPanelHeight` (220 px), the same
+kind of explicit scope cut item 4's "no resize handle" already made for this row. The
+`MixerDockComponent`/`isTimelineVisible` rename stays deferred, as before.
+
+Preference changes apply live: `MixerPlacementController::applyPlacementPreference()` runs once at
+launch (`MainComponent::wireTimelinePanel`) and again on every settings-file write
+(`MainComponent::changeListenerCallback`'s existing ChangeListener path — the same one
+`applyNaturalScrollingPreference` uses), idempotent against its own current state so a
+`DetachedPanelWindow`'s bounds-persist-on-drag (which fires that same broadcast) never does
+real work.
+
+**Per-window focus (T159):** `MainComponent::keyPressed` is the sole Tab dispatch point and is
+unreachable from a separate top-level window, so `DetachedPanelWindow` resolves Tab/Shift+Tab
+itself against its OWN one-region `FocusRegionRegistry`, via the shared
+`synth::ui::resolveFocusCycleKeyPress()` (`Source/UI/Layout/FocusRegion.h`) — the same
+action-id-to-direction translation `MainComponent`'s own command table uses. `MainComponent`'s own
+registry drops a region while its panel is detached: `registerFocusRegions()` was split into a
+one-time `addFocusChangeListener` call plus `rebuildFocusRegions()` (clear + re-add, wrapping the
+existing `"timeline"` `addRegion` call in `!mixerDock.getTimelineHost().isDetached()`), re-run via
+`MixerDockComponent::onPanelDetachStateChanged` after every detach/redock. FRO18's own `{"mixer",
+...}` registration lands inside that same guarded pass later; this ticket only wraps what already
+exists.
+
 ### 5.10 What the mixer shows
 
 Strips, buses, Direct, and Master. Nothing else — never an arbitrary module's output. To put

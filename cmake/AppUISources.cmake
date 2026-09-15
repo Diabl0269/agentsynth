@@ -71,6 +71,12 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerPanelComponent/MixerFocusRegion.h
     Source/UI/Mixer/MixerDockComponent.h
     Source/UI/Mixer/MixerDockComponent.cpp
+    Source/UI/Mixer/MixerPlacementController.h
+    Source/UI/Mixer/MixerPlacementController.cpp
+    Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.h
+    Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.cpp
+    Source/UI/Layout/DetachablePanelHost/DetachedPanelWindow.h
+    Source/UI/Layout/DetachablePanelHost/DetachedPanelWindow.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollComponent.h
     Source/UI/PianoRoll/PianoRollComponent/PianoRollComponent.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollScaleAssist.cpp

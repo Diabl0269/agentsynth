@@ -101,6 +101,8 @@ std::pair<const void*, int> IconLibrary::binaryDataForIcon(Icon id) {
         {BinaryData::followplayhead_svg, BinaryData::followplayhead_svgSize},
         // I/O category icon (Audio Input/Output library rows + Audio Output card chrome).
         {BinaryData::catio_svg, BinaryData::catio_svgSize},
+        // FRO12 (P9-6): DetachablePanelHost's icon-only detach/dock-back control.
+        {BinaryData::actiondetachwindow_svg, BinaryData::actiondetachwindow_svgSize},
     };
     static_assert(std::size(kTable) == (size_t)Icon::kCount,
                   "kTable size does not match Icon::kCount - update binaryDataForIcon lookup table");

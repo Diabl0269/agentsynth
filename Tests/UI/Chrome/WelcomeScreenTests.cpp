@@ -140,13 +140,16 @@ TEST_F(WelcomeScreenTest, NeverConstructsInHostedMode) {
     AudioEngine engine(AudioEngine::HostMode::Hosted);
     engine.initialise();
 
-    // `mc` must be destroyed BEFORE the engine is shut down: ~MainComponent detaches its module
-    // components (dropping every SliderParameterAttachment they hold into graph nodes), while
-    // AudioEngine::shutdown() clears the graph and frees those very parameters. With `engine`
-    // declared first, the two would run in exactly the wrong order at the end of this body, which
-    // is a heap-use-after-free the ASAN job catches and an ordinary build does not. Scoped rather
-    // than reordered, because on this (external, Hosted-mode) path the engine deliberately
-    // outlives the editor.
+    // `mc` must be gone before engine.shutdown() runs, not after: MainComponent::~MainComponent
+    // detaches the UI's module components BEFORE the graph is torn down — see MainComponent.cpp's
+    // own ordering comment on the "FRO11 class of bug" — which matters because those components
+    // hold processor-owned state (a MidiKeyboardComponent's MidiKeyboardState, a
+    // SliderParameterAttachment's parameter) that AudioEngine::shutdown() is about to free when it
+    // clears the graph. Calling shutdown() while `mc` (and the UI still pointing at that state) is
+    // alive is a heap-use-after-free the moment `mc` finally destructs — caught by the ASAN job,
+    // invisible to an ordinary build. Scoped rather than reordered, because on this (external,
+    // Hosted-mode) path the engine deliberately outlives the editor, exactly like
+    // ExternalEngineSurvivesMainComponentDestruction below.
     {
         MainComponent mc(tm, lf, engine, std::make_unique<MockProvider>());
         EXPECT_EQ(mc.getWelcomeScreenForTest(), nullptr);

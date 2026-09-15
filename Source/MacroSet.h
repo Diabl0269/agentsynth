@@ -130,9 +130,17 @@ public:
     Macro* findByMember(const juce::String& memberUuid);
     const Macro* findByMember(const juce::String& memberUuid) const;
 
-    /** Adds a new macro (an empty `id` is assigned a fresh one) and returns a reference to the
-     *  stored copy — stable until the next mutating call. */
-    Macro& add(Macro macro);
+    /** Adds a new macro (an empty `id` is assigned a fresh one) and returns its id.
+     *
+     *  Deliberately returns the id BY VALUE, not a reference to the stored copy: this used to
+     *  return `Macro&`, and every real caller only ever wanted the id off it anyway
+     *  (`macros.add(macro).id`) — but a `Macro&` held across a *second* `add()` dangles the
+     *  moment that call reallocates `macros_`, which is exactly the ASAN heap-use-after-free
+     *  FRO95 caught (SnippetManagerMacroTests.cpp held a reference from the first of two `add()`
+     *  calls and read it after the second). Look the macro back up via `find(id)` any time after
+     *  a further mutating call — never hold a `Macro&`/`Macro*` obtained from `add()` across
+     *  another mutator. */
+    juce::String add(Macro macro);
 
     /** Removes the macro. Does NOT touch its former members' graph nodes itself — this call is
      *  purely a metadata change, same as every other MacroSet mutator. GraphEditor::

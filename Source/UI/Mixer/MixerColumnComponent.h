@@ -128,6 +128,9 @@ public:
      *  chip's click has a visible "found it" result the same way Locate Master's canvas select
      *  does. Exactly one column is selected at a time (MixerPanelComponent enforces it). */
     void setSelected(bool selected);
+    // FRO12 (P9-6): proves a detach/redock (a plain reparent, never a rebuild()) leaves selection
+    // untouched -- see Tests/UI/Layout/DetachablePanelHost/DetachRedockStateTests.cpp.
+    bool isSelectedForTest() const noexcept { return selected_; }
 
 private:
     void rebindControls();

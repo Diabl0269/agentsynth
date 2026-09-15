@@ -112,21 +112,29 @@ TEST(SnippetMacro, InsertingTwiceProducesTwoIndependentMacrosWithDistinctIds) {
     std::vector<Macro> first;
     ASSERT_EQ(SnippetManager::insertSnippet(snippet, target, {0, 0}, false, &first).size(), 2u);
     ASSERT_EQ(first.size(), 1u);
-    auto& storedFirst = targetMacros.add(first[0]);
-    const auto firstId = storedFirst.id;
+    // MacroSet::add() returns the new macro's id BY VALUE, not a reference into the stored copy
+    // (FRO95: it used to return `Macro&`, and holding that across the SECOND add() below — which
+    // reallocates the underlying storage — was an ASAN heap-use-after-free). Look macros back up
+    // via find() only after every add() call has already happened.
+    const auto firstId = targetMacros.add(first[0]);
 
     std::vector<Macro> second;
     ASSERT_EQ(SnippetManager::insertSnippet(snippet, target, {900, 0}, false, &second).size(), 2u);
     ASSERT_EQ(second.size(), 1u);
-    auto& storedSecond = targetMacros.add(second[0]);
-    const auto secondId = storedSecond.id;
+    const auto secondId = targetMacros.add(second[0]);
 
     EXPECT_EQ(targetMacros.size(), 2);
     EXPECT_FALSE(firstId.isEmpty());
     EXPECT_FALSE(secondId.isEmpty());
     EXPECT_NE(firstId, secondId);
-    for (const auto& uuid : storedFirst.members)
-        EXPECT_EQ(std::find(storedSecond.members.begin(), storedSecond.members.end(), uuid), storedSecond.members.end())
+
+    const auto* storedFirst = targetMacros.find(firstId);
+    const auto* storedSecond = targetMacros.find(secondId);
+    ASSERT_NE(storedFirst, nullptr);
+    ASSERT_NE(storedSecond, nullptr);
+    for (const auto& uuid : storedFirst->members)
+        EXPECT_EQ(std::find(storedSecond->members.begin(), storedSecond->members.end(), uuid),
+                  storedSecond->members.end())
             << "the two pasted copies must not share member uuids";
 }
 
