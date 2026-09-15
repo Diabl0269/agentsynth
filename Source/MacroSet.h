@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <deque>
 #include <juce_core/juce_core.h>
 #include <juce_graphics/juce_graphics.h>
 #include <optional>
@@ -120,7 +121,7 @@ public:
     bool empty() const { return macros_.empty(); }
     int size() const { return (int)macros_.size(); }
 
-    const std::vector<Macro>& getAll() const { return macros_; }
+    const std::deque<Macro>& getAll() const { return macros_; }
 
     Macro* find(const juce::String& macroId);
     const Macro* find(const juce::String& macroId) const;
@@ -131,7 +132,12 @@ public:
     const Macro* findByMember(const juce::String& memberUuid) const;
 
     /** Adds a new macro (an empty `id` is assigned a fresh one) and returns a reference to the
-     *  stored copy — stable until the next mutating call. */
+     *  stored copy. Unlike a `std::vector`, `macros_` is a `std::deque` specifically so this
+     *  reference (and any `Macro*`/`Macro&` obtained from find()/findByMember()/getAll() before
+     *  this call) stays valid across subsequent add() calls on the same set: deque never
+     *  reallocates its existing elements on push_back, only vector does. It is still invalidated
+     *  by remove()/removeMemberEverywhere()/retainOnly() actually erasing the entry it points to,
+     *  same as any container. */
     Macro& add(Macro macro);
 
     /** Removes the macro. Does NOT touch its former members' graph nodes itself — this call is
@@ -179,7 +185,11 @@ public:
     bool fromVar(const juce::var& state);
 
 private:
-    std::vector<Macro> macros_;
+    // deque, not vector: add() returns a reference into this storage (see its doc comment above),
+    // and a vector's push_back can reallocate the whole backing array — invalidating every
+    // existing Macro&/Macro* a caller is holding, not just the one just returned. deque's
+    // push_back/push_front never invalidate existing elements, only erase does.
+    std::deque<Macro> macros_;
 };
 
 } // namespace synth

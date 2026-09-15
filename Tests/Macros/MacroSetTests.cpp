@@ -432,3 +432,82 @@ TEST(MacroModuleCount, DeletingAPortUpdatesTheCount) {
     EXPECT_EQ((int)m.members.size(), 2);
     EXPECT_EQ(m.moduleMemberCount(), 2) << "with no ports left, the module count equals member count";
 }
+
+// ---------------------------------------------------------------------------------------------
+// MacroSet::add — reference stability across reallocation (FRO96)
+// ---------------------------------------------------------------------------------------------
+// add() returns a reference into MacroSet's internal storage. Tests/Project/SnippetManager/
+// SnippetManagerMacroTests.cpp's InsertingTwiceProducesTwoIndependentMacrosWithDistinctIds is
+// the test that originally caught this as an ASAN heap-use-after-free (a caller held the
+// reference from one add() call across a second add() on the same set, which used to reallocate
+// a std::vector and invalidate it). These tests pin the fix at the MacroSet level directly: the
+// backing store is a std::deque specifically because push_back on it never invalidates existing
+// elements, unlike a vector.
+
+TEST(MacroSetAddStability, ReferenceFromAddSurvivesASubsequentAdd) {
+    MacroSet set;
+
+    Macro first;
+    first.id = "first";
+    first.members = {"member-1"};
+    Macro& storedFirst = set.add(first);
+    const juce::String firstName = "unchanged";
+    storedFirst.name = firstName;
+
+    Macro second;
+    second.id = "second";
+    second.members = {"member-2"};
+    set.add(second);
+
+    // storedFirst must still refer to the live "first" entry, not dangle or alias "second".
+    EXPECT_EQ(storedFirst.id, "first");
+    EXPECT_EQ(storedFirst.name, firstName);
+    EXPECT_EQ(storedFirst.members.size(), 1u);
+    EXPECT_EQ(storedFirst.members[0], "member-1");
+}
+
+TEST(MacroSetAddStability, ReferencesFromManyAddsAllStayValidAcrossFurtherAdds) {
+    // Forces MacroSet well past any small-buffer/single-chunk case, exercising every internal
+    // growth step a deque can take, and holds a reference from EVERY add() call, not just the
+    // first — so a regression that only fixed the immediately-preceding entry would still be
+    // caught here.
+    MacroSet set;
+    std::vector<Macro*> stored;
+    static constexpr int kCount = 64;
+
+    for (int i = 0; i < kCount; ++i) {
+        Macro m;
+        m.id = "macro-" + juce::String(i);
+        m.members = {"member-" + juce::String(i)};
+        stored.push_back(&set.add(m));
+    }
+
+    ASSERT_EQ(set.size(), kCount);
+    for (int i = 0; i < kCount; ++i) {
+        EXPECT_EQ(stored[(size_t)i]->id, "macro-" + juce::String(i))
+            << "reference held from add() #" << i << " must still point at its own entry";
+        ASSERT_EQ(stored[(size_t)i]->members.size(), 1u);
+        EXPECT_EQ(stored[(size_t)i]->members[0], "member-" + juce::String(i));
+    }
+}
+
+TEST(MacroSetAddStability, PointerFromFindSurvivesASubsequentAdd) {
+    // The same hazard applies to find()/findByMember(): any pointer into MacroSet's storage,
+    // not only add()'s own return value, must survive a later add() call.
+    MacroSet set;
+    Macro first;
+    first.id = "first";
+    first.members = {"member-1"};
+    set.add(first);
+
+    Macro* found = set.find("first");
+    ASSERT_NE(found, nullptr);
+
+    Macro second;
+    second.id = "second";
+    second.members = {"member-2"};
+    set.add(second);
+
+    EXPECT_EQ(found->id, "first");
+    EXPECT_EQ(found, set.find("first")) << "must resolve to the same live entry, not a stale address";
+}

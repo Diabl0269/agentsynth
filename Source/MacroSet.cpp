@@ -191,7 +191,7 @@ bool MacroSet::fromVar(const juce::var& state) {
     if (arr == nullptr)
         return false;
 
-    std::vector<Macro> parsed;
+    std::deque<Macro> parsed;
     std::set<juce::String> seenIds;
     std::set<juce::String> seenMembers;
 
