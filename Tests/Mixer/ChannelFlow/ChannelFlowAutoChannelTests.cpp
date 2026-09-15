@@ -513,7 +513,7 @@ TEST_F(ChannelFlowTest, AutoChannelOnConnect_NewChainNodesJoinTheInstrumentsExis
     ASSERT_NE(strip, nullptr);
     EXPECT_TRUE(macro->hasMember(nodeUuid(strip)));
 
-    // docs/mixer.md §8 item 2: Master stays OUTSIDE the macro, and Strip -> Master is a PLAIN
+    // docs/mixer_implementation.md item 2: Master stays OUTSIDE the macro, and Strip -> Master is a PLAIN
     // graph edge, never a macro port — spliceMasterNode/ensureMasterNode classify Mix vs Direct by
     // checking whether the connection's SOURCE NODE is itself a ChannelStripModule, which a
     // MacroOutlet sitting in between would defeat.

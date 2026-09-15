@@ -589,7 +589,7 @@ In order, each independently shippable:
    together, the same pattern `createMacroPortFromDroppedCable`/`spliceMacroPorts` already use.
 
    **`maybeAutoCreateMacroPortsForDrag` gained a trailing `recordUndo = true` parameter (T184,
-   docs/mixer.md §5.2/§8 item 2).** A caller that is already inside its own undo transaction — T184's
+   docs/mixer.md §5.2 / docs/mixer_implementation.md item 2).** A caller that is already inside its own undo transaction — T184's
    auto-channel hook in `endConnectionDrag`, which must cover macro-port creation, the connection,
    AND a possible new channel as ONE step — passes `recordUndo=false` to fold this function's own
    mutation into that outer transaction instead of opening a nested one, and takes over calling
