@@ -166,6 +166,11 @@ void MixerInsertList::removeRow(int rowIndex) {
     mutateAndNotify([&] {
         if (!synth::spliceOutInsert(*graph_, nodeId))
             return false;
+        // FRO16 UAF fix: unbind any UI object holding a raw pointer into `nodeId` (the column's
+        // own MixerEqThumbnail, if this is its bound EQ) BEFORE removeNode() frees the processor
+        // it points at -- see onBeforeNodeRemoved's own comment.
+        if (onBeforeNodeRemoved)
+            onBeforeNodeRemoved(nodeId);
         graph_->removeNode(nodeId);
         macros_->removeMemberEverywhere(uuid);
         return true;

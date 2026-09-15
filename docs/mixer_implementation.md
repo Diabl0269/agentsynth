@@ -501,7 +501,74 @@ Side tracks (each independent of the main line beyond its own listed dependency)
   - `Tests/Engine/StemExportTests.cpp` (extended) — a bus gets its own stem named "Bus N", the
     source's stem stays pre-send, and `sum(stems)` still reproduces the pre-Master mix with a
     pre-fader send in the patch.
-- **P9-10 (T179) — EQ curve thumbnail on mixer columns.** After P9-5.
+- **P9-10 (T179) — EQ curve thumbnail on mixer columns.** After P9-5. **DONE.** How it landed:
+  - *Curve maths* — `synth::ui::EqResponseCurve::compute` (`Source/UI/Mixer/EqResponseCurve.h`), 48
+    log-spaced points over +/-18 dB, built the same way `EQCurveComponent::recomputeMagnitudes()`
+    does: snapshot the bands + output gain once, then sample `ParametricEQModule::responseDb`. No
+    second approximation of the DSP — that header's own comment forbids one.
+  - *Component* — `synth::ui::MixerEqThumbnail` (`Source/UI/Mixer/MixerEqThumbnail.{h,cpp}`), a
+    `juce::Component` that registers as a `juce::AudioProcessorParameter::Listener` on every one of
+    the bound EQ's parameters. `parameterValueChanged` (any thread — a CV-modulated bell writes its
+    resolved value from the audio thread) only calls the allocation-free, coalescing
+    `juce::AsyncUpdater`; the actual recompute + repaint happens once, on the message thread, in
+    `handleAsyncUpdate()` — the same thread-hop `HostedPluginModule::InstanceListener` uses for its
+    own `audioProcessorChanged`. `paint()` reads only the cached magnitudes/bypass flag, never the
+    module, satisfying "no unconditional per-tick repaint" by construction (there is no Timer).
+    Destruction (and every rebind) cancels the pending update and detaches every listener before
+    the module pointer can go stale — the same ordering `MixerFader::unbind()` uses.
+  - *Finding "the" EQ* — `MixerColumnComponent::setColumn()` walks `column.inserts` (already
+    signal-ordered) and binds the first `ParametricEQModule` it finds; a second EQ further down the
+    chain stays reachable through the insert list itself but gets no thumbnail of its own (Cubase's
+    own single-slot idiom — a deliberate scope trim, not an oversight).
+  - *Click* — forwarded through the column's EXISTING `onEditOnCanvas` seam with the EQ node's own
+    uuid, so `MixerPanelComponent::selectOnCanvas` resolves it exactly like a column header click or
+    the insert list's own "Edit on canvas" link (macro id, then `findByMember`, else the bare node).
+    No new canvas plumbing.
+  - *Lifetime* — two seams, not one. `MixerColumnComponent::unbindFromGraph()` (the FRO11
+    pre-restore hook, `MixerPanelComponent::unbindAllColumns()` reached via
+    `GraphEditor::onBeforeDetachAllModuleComponents`) detaches the thumbnail's listeners for every
+    graph-*replacing* mutation (undo/redo restore, New Patch, Load, AI apply) AND, since a review
+    follow-up hang in `MixerPanelKeyboardFocusTests.cpp`'s `DeletingTheFocusedStripClearsFocus`,
+    `GraphEditor::deleteSelection()` (a canvas "Delete", `deleteMacroAndMembers`) too — that path had
+    no unbind seam of its own and no rebuild to lean on either, so a stale `MixerFader` binding sat
+    until an unrelated later graph edit finally destroyed the column and dereferenced it (exit 124 +
+    SIGABRT, deadlocked inside `CriticalSection::enter` on freed memory —
+    `Tests/UI/Mixer/MixerPanelUndoUnbindTests.cpp`'s
+    `MixerPanelUnbindsBeforeDeleteSelectionFreesTheStripsNodes` is the regression test). Same as it
+    already does for the fader/pan/mute/solo/meter. A **live single-insert removal** from the mixer's own
+    row menu is a different path — `MixerInsertList::removeRow()` calls `graph.removeNode()`
+    directly (synchronous, frees the processor immediately) and only *afterwards* does that
+    mutation's `onMutated` bubble into `MixerPanelComponent::rebuild()`, which is what would
+    destroy this column's `eqThumbnail_` — too late to save it from a stale `eq_` pointer, and
+    `onBeforeDetachAllModuleComponents` never fires for this path at all. Fixed by
+    `MixerInsertList::onBeforeNodeRemoved` (fired from `removeRow()`, with the node about to be
+    freed, before `graph.removeNode()`): `MixerColumnComponent` wires it to unbind
+    `eqThumbnail_` whenever the node being removed is the one it's bound to. An earlier draft of
+    this plan's own risk notes ("EQ node deleted between snapshot and paint: covered by the column
+    rebuild lifetime") got this ordering backwards — the rebuild happens strictly *after* the
+    module is freed on this path, not before; the notes below are the corrected version.
+    Belt-and-braces: `MixerInsertList::removeRow()` is not the only single-node
+    `graph.removeNode()` call site with no pre-removal unbind hook — a canvas "Delete" on the same
+    EQ module's card (`GraphEditor::requestDeleteModule()`) is another. Rather than chase every
+    such call site with its own hook, `setEqModule()` also takes the owning graph + NodeID
+    (`MixerColumnComponent` always has both), and `detachListeners()` checks the node is still
+    actually in the graph before touching `eq_` at all — if it's already gone, its parameters died
+    with it and there is nothing left to call `removeListener()` on.
+  - Tests: `Tests/UI/Mixer/MixerEqThumbnailTests.cpp` — hidden with no EQ; visible with an enabled
+    band; dark- and light-theme PNG renders of a flat vs. a +12 dB/1 kHz curve are not pixel-
+    identical; bypass visibly dims the fill; recompute count stays flat across repeated paints and
+    bumps by exactly one per parameter-change-plus-dispatch-pump; a synthesized click fires
+    `onClicked`. `Tests/UI/Mixer/MixerColumnComponentTests.cpp` — a column's click forwards the EQ's
+    own uuid (not the strip's); with two EQ inserts only the first gets the thumbnail; a strip with
+    no EQ insert shows none; removing the currently-bound EQ insert through
+    `MixerInsertList::removeRow()` (a real, signal-connected TrackAudio->EQ->Compressor->Strip
+    chain, so `spliceOutInsert` actually runs) unbinds the thumbnail before the node is freed,
+    proven by `MixerEqThumbnail::getLiveUnbindCallCountForTest()` (same accounting as
+    `MixerFader::getLiveUnbindCallCountForTest()`) rather than by the absence of a crash alone.
+    `MixerEqThumbnailTests.cpp`'s own
+    `DoesNotTouchFreedParametersWhenTheNodeWasRemovedWithoutUnbindingFirst` covers the
+    belt-and-braces liveness check directly — a node removed from the graph with NO unbind call at
+    all (the canvas-delete shape) must still not touch the freed module.
 - **P9-11 (T180) — Gate module.** Done — `GateModule` (`Source/Modules/FX/GateModule.h`,
   [`fx_modules.md` § Gate Module](fx_modules.md#gate-module)). No dependency on the rest of P9;
   wiring it into a default track preset (§5.7/§7 D3) is still open.

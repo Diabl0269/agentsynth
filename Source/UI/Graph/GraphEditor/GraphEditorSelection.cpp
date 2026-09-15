@@ -126,6 +126,18 @@ void GraphEditor::deleteSelection() {
     auto doDelete = [this, ids, &graph] {
         modMatrix.clearRows();
         const auto portNeighbors = macroPortDeletionNeighbors(ids); // T154: capture BEFORE removal
+        // FRO16 review follow-up: graph.removeNode() below frees each node's processor
+        // synchronously, same as a full graph-replacing restore -- but nothing here reaches
+        // MixerPanelComponent::rebuild() until the NEXT unrelated graph edit (this path's own
+        // reconcileTimelineBindingsOnly(), installed on onGraphStructureChanged, deliberately does
+        // not rebuild the mixer -- see its own comment). A mixer column bound to one of these
+        // NodeIDs (fader/pan/EQ thumbnail/send rows) would sit on a dangling pointer until that
+        // eventual rebuild destroys it and dereferences it. Reuse the exact seam every
+        // graph-replacing restore already unbinds through, same as MixerInsertList::
+        // onBeforeNodeRemoved does for a single mixer-row removal -- unbind BEFORE freeing, not
+        // after.
+        if (onBeforeDetachAllModuleComponents)
+            onBeforeDetachAllModuleComponents();
         for (auto id : ids)
             graph.removeNode(id);
         for (auto n : portNeighbors)
