@@ -98,6 +98,9 @@ add_executable(Tests
     Mixer/ChannelFlow/ChannelFlowMakeChannelAppTests.cpp
     Mixer/ChannelFlow/ChannelFlowTrackChannelLinkCoreTests.cpp
     Mixer/ChannelFlow/ChannelFlowTrackChannelLinkTests.cpp
+    Mixer/TrackPreset/TrackPresetTests.cpp
+    Mixer/TrackPreset/TrackPresetCaptureTests.cpp
+    Mixer/TrackPreset/TrackPresetDefaultsTests.cpp
     Engine/LatencyAlignmentTests.cpp
     Timeline/AudioClipPlaybackTests.cpp
     Plugin/HostedPluginTests.cpp
@@ -371,6 +374,7 @@ add_executable(Tests
     ../Source/MainComponent/MainComponentTimeline.cpp
     ../Source/MainComponent/MainComponentTrackHeaderHost.cpp
     ../Source/MainComponent/MainComponentTrackCreation.cpp
+    ../Source/MainComponent/MainComponentTrackPresets.cpp
     ../Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.cpp
     ../Source/UI/Timeline/TimelinePanelComponent/TimelinePanelStrips.cpp
     ../Source/UI/Timeline/TimelinePanelComponent/TimelinePanelClipClipboard.cpp
@@ -460,6 +464,7 @@ add_executable(Tests
     ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGraphBehaviour.cpp
     ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviour.cpp
     ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAutosave.cpp
+    ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMixerDefaults.cpp
     ../Source/UI/Settings/ShortcutsSettingsTab.cpp
     ../Source/UI/Settings/FeedbackSettingsTab.cpp
     ../Source/UI/Chrome/WelcomeScreenComponent.cpp

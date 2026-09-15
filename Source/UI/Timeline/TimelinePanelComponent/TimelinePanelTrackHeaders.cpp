@@ -84,7 +84,22 @@ void TimelinePanelComponent::applyAddTrackMenuChoice(int menuId) {
         trackHeaderHost_->addInstrumentTrack("Wavetable", true);
     else if (menuId == kCreateChannelsMenuId)
         trackHeaderHost_->createChannelsForExistingTracks();
-    else if (menuId >= kAddInstrumentPluginMenuIdBase) {
+    else if (menuId == kInsertTrackPresetFromFileMenuId)
+        trackHeaderHost_->addTrackFromPresetFile();
+    else if (menuId >= kAddTrackPresetInstrumentMenuIdBase) {
+        // FRO13: resolved against the snapshot buildAddTrackMenu() captured, same reason the
+        // plugin list is (a preset can be saved/deleted between menu-open and click) — see
+        // instrumentTrackPresetMenuSnapshot_'s own comment.
+        const int index = menuId - kAddTrackPresetInstrumentMenuIdBase;
+        if (index >= 0 && index < (int)instrumentTrackPresetMenuSnapshot_.size())
+            trackHeaderHost_->addTrackFromPreset(instrumentTrackPresetMenuSnapshot_[(size_t)index].name,
+                                                 synth::TrackPresetKind::Instrument);
+    } else if (menuId >= kAddTrackPresetAudioMenuIdBase) {
+        const int index = menuId - kAddTrackPresetAudioMenuIdBase;
+        if (index >= 0 && index < (int)audioTrackPresetMenuSnapshot_.size())
+            trackHeaderHost_->addTrackFromPreset(audioTrackPresetMenuSnapshot_[(size_t)index].name,
+                                                 synth::TrackPresetKind::Audio);
+    } else if (menuId >= kAddInstrumentPluginMenuIdBase) {
         // FRO42: resolved against the SNAPSHOT buildAddTrackMenu() captured when this menu was
         // built, never by re-running collectInstrumentPluginMenuOptions() here — the known-plugin
         // list can be mutated by a background scan between the menu opening and this click landing
@@ -180,6 +195,35 @@ juce::PopupMenu TimelinePanelComponent::buildAddTrackMenu() {
     instrumentMenu.addSubMenu("Plugin", pluginMenu);
 
     menu.addSubMenu("Instrument Track", instrumentMenu);
+
+    // FRO13 (P9-7, docs/mixer.md §5.7): every saved track preset, grouped by type — independent of
+    // the per-type default (Preferences -> Mixer), which only steers the two plain entries above.
+    // Snapshotted at build time, same reason instrumentPluginMenuSnapshot_ is: a preset can be
+    // saved/deleted between the menu opening and the click landing.
+    menu.addSeparator();
+    auto dir = synth::TrackPresetManager::getDefaultTrackPresetsDirectory();
+    // listTrackPresets returns a juce::Array; converted to std::vector here (rather than changing
+    // the member type) so the rest of this file can keep using std::vector's std::size_t indexing,
+    // same as instrumentPluginMenuSnapshot_ below it.
+    const auto audioPresets = synth::TrackPresetManager::listTrackPresets(dir, synth::TrackPresetKind::Audio);
+    audioTrackPresetMenuSnapshot_.assign(audioPresets.begin(), audioPresets.end());
+    const auto instrumentPresets = synth::TrackPresetManager::listTrackPresets(dir, synth::TrackPresetKind::Instrument);
+    instrumentTrackPresetMenuSnapshot_.assign(instrumentPresets.begin(), instrumentPresets.end());
+    if (!audioTrackPresetMenuSnapshot_.empty()) {
+        juce::PopupMenu audioPresetMenu;
+        for (int i = 0; i < (int)audioTrackPresetMenuSnapshot_.size(); ++i)
+            audioPresetMenu.addItem(kAddTrackPresetAudioMenuIdBase + i, audioTrackPresetMenuSnapshot_[(size_t)i].name);
+        menu.addSubMenu("Audio Track from Preset", audioPresetMenu);
+    }
+    if (!instrumentTrackPresetMenuSnapshot_.empty()) {
+        juce::PopupMenu instrumentPresetMenu;
+        for (int i = 0; i < (int)instrumentTrackPresetMenuSnapshot_.size(); ++i)
+            instrumentPresetMenu.addItem(kAddTrackPresetInstrumentMenuIdBase + i,
+                                         instrumentTrackPresetMenuSnapshot_[(size_t)i].name);
+        menu.addSubMenu("Instrument Track from Preset", instrumentPresetMenu);
+    }
+    menu.addItem(kInsertTrackPresetFromFileMenuId, "Insert Track Preset from File...");
+
     // Separated because it is not a track at all: a marker adds no row to the header column and
     // nothing to the graph, it drops a flag on the ruler.
     menu.addSeparator();

@@ -197,13 +197,10 @@ instrument. Linked means:
   cancel restores all three to their original colour, exactly like today's single-target case;
   a commit is **one** undo step covering all three, not three separate edits, matching the existing
   "one `Cmd+Z` undoes a dozen preview colours" semantics `docs/theming.md` §13 already documents,
-  now fanned out. **P9-4 implements this over TWO stored targets, not three** — a channel's colour
-  IS its macro's colour, so the mixer column reads the macro rather than a third copy on the strip;
-  a linked channel that is not boxed in a macro has no colour to sync and the picker stays
-  single-target there (§8 item 3).
+  now fanned out over TWO stored targets, not three: a channel's colour IS its macro's colour, so
+  the mixer column reads the macro rather than a third copy on the strip (§8 item 3).
 - **(c) The track header's M/S drive the strip.** Not note gating — the linked channel's mute/solo.
-  Implemented in P9-4 (§8 item 3) as a redirect, not a mirror: a linked track's `muted`/`soloed`
-  stay false in the `TimelineDoc` and the strip holds the only copy, so the two can never disagree.
+  A redirect, not a mirror: the track's own `muted`/`soloed` stay false, so there is only one copy.
 
 A channel fed by **more than one** track (Kick/Snare/Hats into one sampler) is **not** linked: it
 keeps its own independently-chosen name and colour, lists every track that feeds it, and each of
@@ -313,6 +310,34 @@ in §5.2) — has its own default preset.
   `SnippetManager::insertSnippet` / `ProjectBundle::load` reference pairing the root `CLAUDE.md`
   names. `"timeline"` stays a reserved field, refused on the untrusted path, exactly as it is
   today.
+
+**As implemented (P9-7, FRO13).** `synth::TrackPresetManager` (`Source/Mixer/TrackPresetManager.h`)
+is a thin wrapper over `SnippetManager::extractSnippet`/`insertSnippet`, adding only what a track
+preset needs beyond a plain snippet: `extractTrackPreset` walks outside modulators
+(`collectOutsideModulatorsForTrackPreset`, the §5.7 "stops at another channel's strip" rule) and
+scrubs `"solo"` from the captured Channel Strip's extra state before the preset is ever written to
+disk — an imported `soloed_=true` would otherwise silence the whole mix render-wide (root
+`CLAUDE.md` tripwire); `insertTrackPreset` is `SnippetManager::insertSnippet` with
+`trustedPayload=false`, so the untrusted `validatePatch` gate still runs on every disk-sourced
+preset. Entry points: the track header's right-click menu and the channel macro's own menu both
+offer **"Save Track as Preset..."**/**"Set as Default Track Preset"**, gated on
+`synth::isChannelMacro` (omitted entirely — not merely disabled — for an ordinary, non-channel
+macro, same as the header's own disabled-not-hidden gate when the track has no channel yet); the
+two per-type defaults are read from Preferences -> Mixer's `mixerDefaultTrackPresetAudio`/
+`mixerDefaultTrackPresetInstrument` settings keys and consulted by `+ Track -> Audio Track` /
+`Instrument Track` before the factory EQ -> Compressor -> Strip chain is built; `+ Track` also
+lists every OTHER saved preset by type as its own submenu entries, and "Insert Track Preset from
+File..." loads one saved anywhere on disk (`TimelinePanelTrackHeaders.cpp`), both resolved against
+a menu-open-time snapshot (`audioTrackPresetMenuSnapshot_`/`instrumentTrackPresetMenuSnapshot_`,
+same "resolve against the snapshot, not a live re-query" reason the plugin list submenu already
+uses) since a preset can be saved or deleted between the menu opening and the click landing. Tests:
+`Tests/Mixer/TrackPreset/TrackPresetTests.cpp` (round-trip render identity, two inserts never
+collide, a smuggled `"timeline"` key has no effect because `prepareForInsert` only ever copies
+`"nodes"`/`"connections"`/`"macros"`, a malformed preset is refused whole),
+`TrackPresetCaptureTests.cpp` (the outside-modulator walk, the other-channel-strip stop rule, the
+solo scrub, and the macro-menu gate), `TrackPresetDefaultsTests.cpp` (the per-type default actually
+consulted by `+ Track -> Audio Track`), and four cases in
+`Tests/UI/Timeline/TimelineTrackHeaderContextMenuTests.cpp` for the header menu's own wiring.
 
 ### 5.8 Make channel / shared modules
 
@@ -877,58 +902,37 @@ Main line, in dependency order:
        menu driven through its real right-click `mouseDown` and test hook, every action checked to
        undo in one step against graph/timeline/macro JSON snapshots and to redo.
 
-3. **P9-4 (T177) — Track/channel link — DONE.** Name sync both ways, live colour sync, M/S driving
-   the strip, the channel chip.
+3. **P9-4 (T177) — Track/channel link — DONE.** §5.2 states the behaviour; this is how it is built.
    - **The rule is a pure query, never a cached flag.** `synth::resolveTrackChannelLink`
      (`Source/Mixer/TrackChannelLink.h`) walks a track's bound node forward to the first
-     `ChannelStripModule` it reaches (`findStripFedByTrackSource`), then that strip's feeders back
-     out (`findTrackSourcesFeedingStrip`): exactly one feeder, and it is this track, **is** the link
-     rule. Recomputed on every refresh and every click, which is also why break/re-form needs no
-     bookkeeping. `findTrackSourcesFeedingStrip` is `StemSession`'s former private
-     `upstreamTrackSources` promoted to Core — stem naming (§5.12) asks the same question, and
-     `synth::channelDisplayName` is now the one "which track names this channel" answer for both.
-   - **One interface, one collaborator.** `synth::ui::TrackChannelLinkSurface` is what a track
-     header sees; `TrackChannelLinkController` implements it, owned by `MainComponent`, which gains
-     only the member and a one-line `TrackHeaderHost::getChannelLinkSurface()` override (the
-     `GraphCanvasHost`/`MacroGroupController` seam pattern). Every "not linked" answer is
-     false/null and the header falls through to its existing behaviour unchanged.
-   - **(a) Names.** A linked track's rename writes track AND channel macro in ONE
-     `recordGraphTimelineAndMacroChange` step; the other direction goes through the new
-     `MacroGroupController::recordMacroRenameHook`, which hands the controller the mutation
-     `renameMacro` would otherwise record itself, so the track name joins that same transaction
-     instead of becoming a second Cmd+Z.
-   - **(b) Colour.** The linked picker's preview writes track + macro colour every drag frame with
-     no undo step; a no-net-change close restores both and records nothing; a commit restores both
-     and performs the real edit as ONE compound step. **A channel's colour IS its macro's colour** —
-     the strip grew no colour field, so P9-5's column reads the macro. A linked channel that is not
-     boxed in a macro still links for name/M/S, but colour sync is a no-op: nothing to sync to.
-   - **(c) M/S.** A linked track's M toggles the **strip's** mute parameter and its S goes through
-     `AudioEngine::setChannelStripSoloed` (never `ChannelStripModule::setSoloed` — §5.3), each ONE
-     graph-snapshot undo step; `Track::muted`/`soloed` stay false, so exactly one mute and one solo
-     are stored, and the buttons display the strip's state. Unlinked tracks keep note gating
-     byte-for-byte. A link FORMING around a note-gate muted/soloed track moves that state onto the
-     channel (`reconcileLinkedTracks`, run from `MainComponent::reconcileTimelineAfterGraphChange`,
-     non-undoable like the orphan-flag reconciliation next to it). **Consequence, intended:**
-     soloing a linked channel silences every other channel, a shared one included, even when that
-     shared channel's own track is note-gate soloed — a DAW mixer solo, not an interaction bug.
-   - **(d) The channel chip.** `ChannelChipComponent` on every header whose track reaches a channel,
-     linked or shared: the channel's name (its macro's when boxed, else the one feeding track's,
-     else "Channel") plus a meter off `getMeterPeak`. Clicking it calls `revealChannelForTrack`,
-     today selecting the channel and panning it into view (the Locate Master contract) — **the P9-5
-     hook**: the mixer panel changes that one override to open its column, with no change to the
-     chip or header. ONE 15 Hz `juce::Timer` on `TimelinePanelComponent` ticks every header's
-     meter, never one per row, and each chip repaints only past a coarse threshold — gated, not
-     unconditional (`docs/layout_visuals_animation.md` §2-3).
-   - Tests: `Tests/Mixer/ChannelFlow/ChannelFlowTrackChannelLinkCoreTests.cpp` (the rule: forward/
-     backward reach, the §5.2 rows, break/re-form, naming) and `ChannelFlowTrackChannelLinkTests.cpp`
-     (the behaviour through the real header buttons: rename both ways as one undo step each, live
-     preview with no undo step and a one-step commit, linked M/S driving the strip while a shared
-     channel keeps note gating, the mixed linked-solo + shared-solo case asserted on the rendered
-     strip meters, link-formation transfer, the chip's name/click, the gated meter repaint).
+     `ChannelStripModule` it reaches, then that strip's feeders back out: exactly one feeder, and it
+     is this track, **is** the link — so break and re-form need no bookkeeping. The backward walk is
+     `StemSession`'s former private `upstreamTrackSources` promoted to Core (stem naming, §5.12,
+     asks the same question), so `channelDisplayName` answers "which track names this" once for both.
+   - **One interface, one collaborator.** `synth::ui::TrackChannelLinkSurface` is all a track header
+     sees; `TrackChannelLinkController` implements it, owned by `MainComponent`, which gains only
+     the member and a one-line `TrackHeaderHost::getChannelLinkSurface()` override (the
+     `GraphCanvasHost` seam pattern). Every "not linked" answer is false/null, so the header falls
+     through to its existing behaviour unchanged. Renaming the channel joins `renameMacro`'s own
+     transaction through the new `MacroGroupController::recordMacroRenameHook` rather than becoming
+     a second Cmd+Z; a linked M/S is one graph-snapshot step, solo always via §5.3's engine entry.
+   - **Two decisions.** A channel's colour IS its macro's colour (no colour field on the strip), so
+     an unboxed linked channel syncs neither name nor colour while its M/S still drive the strip.
+     And soloing a linked channel silences every other channel, a shared one included, even when
+     that shared channel's own track is note-gate soloed: a DAW mixer solo, not a bug.
+   - **The channel chip** (`ChannelChipComponent`) appears on every header whose track reaches a
+     channel, linked or shared. Its click calls `revealChannelForTrack`, today selecting the channel
+     and panning it into view (the Locate Master contract) — **the P9-5 hook**: the mixer panel
+     changes that one override, with no change to chip or header. ONE 15 Hz `juce::Timer` on
+     `TimelinePanelComponent` ticks every header, never one per row; it idles while hidden, reads
+     only `getChannelMeterPeak` (a cached strip id, not a graph walk), and each chip repaints only
+     past a coarse threshold (`docs/layout_visuals_animation.md` §2-3).
+   - Tests: `ChannelFlowTrackChannelLinkCoreTests.cpp` (the rule) and
+     `ChannelFlowTrackChannelLinkTests.cpp` (the behaviour through the real header buttons,
+     including the mixed linked-solo + shared-solo case asserted on the rendered strip meters).
 
-4. **P9-5 (T174) — Mixer panel, tab beside the Timeline.** Note that "track header M/S wired to
-   strips" shipped in P9-4 above, not here — this item inherits it. Columns, faders, meters, insert lists,
-   track header M/S wired to strips (§5.6/§5.9).
+4. **P9-5 (T174) — Mixer panel, tab beside the Timeline.** Columns, faders, meters, insert lists
+   (§5.6/§5.9); "track header M/S wired to strips" shipped in P9-4 above, inherited here.
    - Tests: track header M/S toggles the bound strip's mute/solo state and nothing else; a
      branching insert chain renders read-only with "Edit on canvas" rather than a reorderable
      list.
@@ -939,13 +943,15 @@ Main line, in dependency order:
      docked panel in a headless test; keyboard focus in one detached window does not leak into the
      other; switching the placement preference moves the panel without losing its state.
 
-6. **P9-7 (T176) — Track presets.** Save/set-default from the track header and channel menu,
-   Preferences -> Mixer defaults, `+ Track` preset listing, the outside-module walk-and-copy rule
-   (§5.7).
-   - Tests: a track preset round-trips through `validatePatch(trusted=false)` before a trusted
-     apply; a hand-edited preset containing a `"timeline"` key is refused; a preset whose channel
-     depends on an outside shared module imports with a fresh copy of that module wired to the
-     same ports, not a reference to the original.
+6. **P9-7 (T176) — Track presets. DONE.** See §5.7 for the design as it landed
+   (`TrackPresetManager`, the outside-modulator walk-and-copy rule, the solo scrub, the header/macro
+   menu entry points, the per-type defaults consulted by `+ Track`).
+   - Tests: `Tests/Mixer/TrackPreset/TrackPresetTests.cpp`,
+     `TrackPresetCaptureTests.cpp`, `TrackPresetDefaultsTests.cpp` (see §5.7's "As implemented" for
+     what each proves) plus four cases in `TimelineTrackHeaderContextMenuTests.cpp`.
+   - Not yet covered by a test (manual verification only): the `+ Track` submenu listing every
+     saved preset by type and "Insert Track Preset from File..." (`TimelinePanelTrackHeaders.cpp`),
+     both implemented but exercised only by clicking through the app.
 
 Side tracks (each independent of the main line beyond its own listed dependency):
 

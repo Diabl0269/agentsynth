@@ -123,7 +123,6 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
             applySearchFilter({});
         }
     };
-
     // The preference groups live inside a scroll view's content host, exactly as the Keyboard
     // Shortcuts tab keeps its rows: the title and the search field stay pinned above the scroll
     // region, but the groups scroll when they outgrow the window instead of getting clipped (T157).
@@ -397,6 +396,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     contentHost.addAndMakeVisible(autosaveBackupCountUnitLabel);
     autosaveBackupCountUnitLabel.setText("backups", juce::dontSendNotification);
     autosaveBackupCountUnitLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
+    setupMixerDefaultTrackPresetControls();
 }
 
 void PreferencesSettingsTab::paint(juce::Graphics& g) {
@@ -472,7 +472,6 @@ void PreferencesSettingsTab::layoutContent(int contentWidth) {
         for (auto* c : comps)
             c->setVisible(visible);
     };
-
     // Each group is laid out top-down in CONTENT coordinates, accumulating a running y; the
     // host's total height (set at the end) is whatever the visible groups need, and the viewport
     // scrolls when that exceeds the visible area. addDivider reserves a hairline between two
@@ -490,7 +489,6 @@ void PreferencesSettingsTab::layoutContent(int contentWidth) {
         if (visible)
             pendingDivider = false;
     };
-
     // Group 1: smart connections
     {
         const bool visible = groupMatches({&smartConnectionLabel, &smartConnectionCombo});
@@ -634,7 +632,7 @@ void PreferencesSettingsTab::layoutContent(int contentWidth) {
         pendingDivider = pendingDivider || visible;
     }
 
-    // Group 8: autosave (last - no divider after it).
+    // Group 8: autosave.
     {
         const std::initializer_list<juce::Component*> autosaveComps = {
             &autosaveEnabledToggle,       &autosaveIntervalLabel,    &autosaveIntervalEditor,
@@ -660,8 +658,10 @@ void PreferencesSettingsTab::layoutContent(int contentWidth) {
             autosaveBackupCountUnitLabel.setBounds(row.removeFromLeft(55));
             y += 24;
         }
+        pendingDivider = pendingDivider || visible;
     }
-
+    // Group 9 (FRO13, P9-7, last - no divider after it):
+    layoutMixerDefaultTrackPresetGroup(y, contentWidth, groupMatches, setGroupVisible, beginGroup);
     // Size the content host to whatever the visible groups consumed; the viewport scrolls it
     // (T157). Width spans the full viewport so the dividers reach the edges; the scrollbar
     // gutter is already excluded from contentWidth.

@@ -6,6 +6,7 @@
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Branding.h"
+#include "Mixer/TrackPresetManager.h"
 #include "Modules/RecordTapModule.h"
 #include "Plugin/Hosting/HostedPluginWindowManager.h"
 #include "Plugin/Hosting/PluginScanService.h"
@@ -106,28 +107,16 @@ public:
     enum class EditSurface { Graph, TimelineClips, PianoRoll };
     EditSurface resolveEditSurface() const;
 
-    // Headless tests can't always create a real keyboard-focus grab (grabKeyboardFocus() needs a
-    // native peer — see FocusArbitrationTests.cpp's SurfaceResolverRealFocus for why this repo
-    // doesn't attempt one). Consulted FIRST, before any real-focus check; std::nullopt (the
-    // default) falls through to that check.
+    // Test-only edit-surface override; consulted before any real focus check. See docs/testing.md.
     void setEditSurfaceOverrideForTest(std::optional<EditSurface> surface) { editSurfaceOverrideForTest_ = surface; }
 
     bool performRepeatSelection(int count);
 
-    /** Repeat's count bounds, shared by the dialog's clamp and performRepeatSelection's own. 64 is a
-     *  deliberate ceiling, not a technical one: every copy is a real doc mutation inside one undo
-     *  transaction, and a mistyped four-digit count would stall the message thread. */
-    static constexpr int kMinRepeatCount = 1;
+    static constexpr int kMinRepeatCount = 1; // Repeat's count bounds (dialog clamp + performRepeatSelection).
     static constexpr int kMaxRepeatCount = 64;
 
-    // P4-6: pure decision function for the AI provider id used when no "aiProvider" key is
-    // persisted yet. A brand new install (no pre-existing settings file at all) defaults to
-    // "remote" (hosted); an install that has launched before but never touched AI settings — the
-    // common case, since that key is only ever written by AISettingsTab::updateSettings() —
-    // keeps its working "ollama" default rather than being silently moved to hosted on upgrade.
-    // Extracted as a free function so this decision is unit-testable without touching a real
-    // properties file — see initialiseCommon() for the caller and the existsAsFile() check it's
-    // based on.
+    // P4-6: default AI provider id when none is persisted yet ("remote" for a brand-new install,
+    // else the existing "ollama" default). See initialiseCommon() for the caller.
     static juce::String resolveDefaultProviderId(bool hasExistingSettingsFile) {
         return hasExistingSettingsFile ? juce::String("ollama") : juce::String("remote");
     }
@@ -159,59 +148,40 @@ public:
     /** The three sliding panels this component docks, for the slide test seams below. */
     enum class SlidingPanel { Library, AiChat, Timeline };
 
-    /** Panel-slide test seams, mirroring PianoRollComponent's scale-panel ones (and used the same
-     *  way: the component is never added to a real window in the test suite, so every toggle takes
-     *  the SNAP path — the tween's own per-frame geometry is exercised by writing a fraction here
-     *  and reading the resulting bounds back).
-     *
-     *  The fractions ARE the layout: resized() derives every panel's size from them (see
-     *  synth::ui::PanelSlide), so setPanelOpenProgressForTest() also re-lays-out. */
+    // Panel-slide test seams (docs/layout.md §11); the fractions ARE the layout.
     float getPanelOpenProgressForTest(SlidingPanel p) const noexcept { return panelSlide(p).getProgress(); }
     void setPanelOpenProgressForTest(SlidingPanel p, float progress) {
         panelSlide(p).snapTo(progress);
         resized();
     }
-    /** The fraction the in-flight tween STARTED from — 'no jump' means this is the panel's
-     *  mid-slide value at the moment of the re-toggle, never 0 or 1. */
+    /** The fraction the in-flight tween STARTED from (never 0 or 1 mid-slide). */
     float getPanelSlideStartForTest(SlidingPanel p) const noexcept { return panelSlide(p).getTweenStart(); }
-    /** True only while the shared slide driver is actually running (it auto-stops at t == 1 —
-     *  there is exactly one driver for all three panels). */
+    /** True only while the shared slide driver is actually running. */
     bool isPanelSlideAnimatingForTest() const noexcept { return panelSlideAnim_.isRunning(); }
-    /** The Preferences "Natural scrolling" key. DEFAULT TRUE (natural) — the value every scrolling
-     *  surface in the app already behaves as, so an install that never opens Preferences is
-     *  unaffected. Owned here rather than by the tab because MainComponent is what applies it. */
+    /** The Preferences "Natural scrolling" key. DEFAULT TRUE. See applyNaturalScrollingPreference. */
     static constexpr const char* kNaturalScrollingKey = "naturalScrolling";
 
-    /** Re-reads kNaturalScrollingKey and pushes `!natural` into the two surfaces that have an
-     *  inversion flag (the timeline panel and its piano roll — the graph canvas pans rather than
-     *  scrolls). Called once at startup and again on every settings-file change, which is how a
-     *  Preferences toggle reaches the panel live: PreferencesSettingsTab writes the key, the
-     *  PropertiesFile broadcasts, and changeListenerCallback lands here. Idempotent, so being
-     *  called for an unrelated settings write costs a bool read. */
+    /** Re-reads kNaturalScrollingKey and pushes `!natural` into the timeline panel + piano roll.
+     *  Called at startup and on every settings-file change; idempotent. */
     void applyNaturalScrollingPreference();
 
-    /** The Preferences "Scroll up to zoom in" checkbox's key. The persisted name and its boolean
-     *  semantics have been migration-free across every relabelling round. DEFAULT TRUE: what both
-     *  wheel-zoom surfaces already did before the preference existed, so an install that never opens
-     *  Preferences is unaffected. Owned here for the same reason kNaturalScrollingKey is. */
+    /** The Preferences "Scroll up to zoom in" checkbox's key. DEFAULT TRUE. See
+     *  applyZoomScrollPreference. */
     static constexpr const char* kZoomScrollUpZoomsInKey = "zoomScrollUpZoomsIn";
 
-    /** Re-reads kZoomScrollUpZoomsInKey and pushes `!upZoomsIn` into the timeline panel, which
-     *  forwards it to the piano roll. A SIBLING of applyNaturalScrollingPreference, not an extension:
-     *  plain-scroll and wheel-ZOOM direction are separate flags on both surfaces, and a user who
-     *  inverts one has said nothing about the other. Same propagation path, equally idempotent. */
+    /** Re-reads kZoomScrollUpZoomsInKey and pushes `!upZoomsIn` into the timeline panel (which
+     *  forwards it to the piano roll) — independent of applyNaturalScrollingPreference; same
+     *  propagation path and idempotence. */
     void applyZoomScrollPreference();
 
-    /** Per-press zoom step for the four zoom commands. 1.25 is the same "a quarter bigger" feel a
-     *  couple of wheel notches gives, and the out factor is its exact reciprocal so in-then-out
-     *  returns to where you started rather than drifting. */
+    /** Per-press zoom step for the four zoom commands; the out factor is the exact reciprocal. */
     static constexpr double kZoomInFactor = 1.25;
     static constexpr double kZoomOutFactor = 1.0 / kZoomInFactor;
     bool isTimelineConfiguredVisible() const { return isTimelineVisible; }
     synth::ui::TimelinePanelComponent& getTimelinePanel() { return timelinePanel; }
 
-    /** The settings key the user-dragged timeline height round-trips through. The theme metric
-     *  (Metrics::timelinePanelHeight) is only the DEFAULT — see clampTimelinePanelHeight(). */
+    /** The settings key the user-dragged timeline height round-trips through; the theme metric is
+     *  only the DEFAULT — see clampTimelinePanelHeight(). */
     static constexpr const char* kTimelinePanelHeightKey = "timelinePanelHeight";
 
     /** The panel's current docked height in px, always clamped (see clampTimelinePanelHeight()). */
@@ -222,37 +192,31 @@ public:
     synth::TimelineDoc& getTimelineDoc() { return timelineDoc; }
     synth::AutomationRecorder& getAutomationRecorder() { return automationRecorder; }
     void automateParameter(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId);
-    // The app's one live MidiRecorder — see docs/architecture.md's MidiRecorder wiring
-    // entry. Test-only access mirrors getAutomationRecorder() above.
+    // The app's one live MidiRecorder — see docs/architecture.md. Test-only, mirrors
+    // getAutomationRecorder() above.
     synth::MidiRecorder& getMidiRecorderForTest() { return midiRecorder; }
-    // The "+ Track" button opens a MIDI/Audio menu rather than adding a track outright, and a
-    // juce::PopupMenu never runs in a test process — so these drive the menu's own headless seam
-    // (TimelinePanelComponent::applyAddTrackMenuChoice), which is exactly what the async callback
-    // calls when the user picks an item.
+    // juce::PopupMenu never runs in a test process — these drive the "+ Track" menu's own headless
+    // seam (TimelinePanelComponent::applyAddTrackMenuChoice) directly.
     void simulateAddMidiTrackClick() {
         timelinePanel.applyAddTrackMenuChoice(synth::ui::TimelinePanelComponent::kAddMidiTrackMenuId);
     }
     void simulateAddAudioTrackClick() {
         timelinePanel.applyAddTrackMenuChoice(synth::ui::TimelinePanelComponent::kAddAudioTrackMenuId);
     }
-    /** T183 (P9-3b): drives the Instrument submenu's headless seam directly, by menu id, so a test
-     *  can pick which of the three instrument entries to simulate. */
+    /** T183 (P9-3b): drives the Instrument submenu's headless seam directly, by menu id. */
     void simulateAddInstrumentTrackClick(int menuId) { timelinePanel.applyAddTrackMenuChoice(menuId); }
-    /** Exactly what the Save dialog's callback runs: a name ending in `.agsproj` writes a project
-     *  bundle (graph + timeline), anything else writes a plain `.json` preset. */
+    /** Exactly what the Save dialog's callback runs: `.agsproj` writes a bundle, else a preset. */
     bool saveProjectForTest(const juce::File& file) { return saveToFile(file); }
-    /** The post-guard half of New Patch only — bypasses guardUnsavedChanges, same idiom as
-     *  saveProjectForTest bypassing the save chooser. Tests that want the guard itself go through
-     *  the AppCommands::newPatch command or unsavedChangesPrompt instead. */
+    /** The post-guard half of New Patch only — bypasses guardUnsavedChanges (same idiom as
+     *  saveProjectForTest bypassing the save chooser). */
     void newPatchForTest() { newPatch(); }
     /** Exactly what the Open dialog's callback runs: an `.agsproj` bundle directory loads graph +
      *  timeline, anything else a plain `.json` preset. A bundle carrying a pending autosave sidecar
      *  kicks off the async recovery prompt instead and returns true before any load has happened -
      *  a test drives autosaveRecoveryPrompt directly, the same idiom unsavedChangesPrompt uses. */
     bool openProjectForTest(const juce::File& file) { return openFromFile(file); }
-    // P8-31: reaches openFromFile's PATCH branch with an explicit load mode, so a test can drive the
-    // replace-vs-append behaviour without a native file chooser (`append == true` adds onto the live
-    // graph; false replaces it).
+    // P8-31: reaches openFromFile's PATCH branch with an explicit load mode (`append == true` adds
+    // onto the live graph; false replaces it), without a native file chooser.
     bool openPatchForTest(const juce::File& file, bool append) { return openFromFile(file, append); }
     /** Runs performAutosave()'s exact gate check once, synchronously — the same call
      *  timerCallback() makes on every tick, exposed so a test can drive it without a real
@@ -301,12 +265,9 @@ public:
     synth::ui::WelcomeScreenComponent* getWelcomeScreenForTest() const { return welcomeScreen_.get(); }
     ToolbarComponent& getToolbar() { return toolbar; }
     StatusBarComponent& getStatusBar() { return statusBar; }
-    // The docked AI chat panel — same plain-accessor role getGraphEditor()/getTimelinePanel() play
-    // (the panel-slide tests read its bounds mid-slide).
+    // The docked AI chat panel — plain accessor (the panel-slide tests read its bounds mid-slide).
     synth::AIChatComponent& getAiChatComponent() { return aiChatComponent; }
     ShortcutManager& getShortcutManager() { return shortcutManager; }
-    // T159: the registry itself is plain-old-data/pure-logic (see FocusRegion.h), so tests exercise
-    // it directly rather than through a maze of test-only wrapper methods here.
     synth::ui::FocusRegionRegistry& getFocusRegionsForTest() { return focusRegions_; }
     void simulateNewPatchClick() {
         if (newButton.onClick)
@@ -327,15 +288,11 @@ public:
      *  notifyDocumentTitleChanged(). Main.cpp's MainWindow wires this to its own setName(). */
     std::function<void(const juce::String&)> onDocumentTitleChanged;
 
-    /** What the user picked in the unsaved-changes dialog. Save runs performSaveProject and only
-     *  continues if the save actually succeeded; Discard continues immediately; Cancel abandons the
-     *  action that asked. */
+    /** What the user picked in the unsaved-changes dialog: Save runs performSaveProject; Discard
+     *  continues immediately; Cancel abandons the action that asked. */
     enum class UnsavedChangesChoice { Save, Discard, Cancel };
 
-    /** Test/automation seam for the unsaved-changes dialog, same idiom as onDocumentTitleChanged:
-     *  when set it REPLACES the real async juce::AlertWindow, so a headless run (which has no message
-     *  loop to answer a real modal with) can drive whichever arm it wants. The first argument is the
-     *  human-readable name of the action that is about to discard the document ("New Patch", "Quit"). */
+    /** Test/automation seam: when set, REPLACES the real async juce::AlertWindow. */
     std::function<void(const juce::String& actionLabel, std::function<void(UnsavedChangesChoice)> onChoice)>
         unsavedChangesPrompt;
 
@@ -501,6 +458,13 @@ private:
                                      bool poly, InstrumentChainBuild& build);
     void buildInstrumentEnvelopeChain(InstrumentChainBuild& build);
     bool buildInstrumentChannelAndMacro(const juce::String& trackName, InstrumentChainBuild& build);
+    // Shared by the default-consulting branch in addAudioTrack/buildInstrumentTrackAndChain, the
+    // "+ Track" preset-list click and "Insert Track Preset from File...". NO UNDO TRANSACTION OF
+    // ITS OWN (the default-consulting branch is already inside addAudioTrack's own) — callers that
+    // aren't already inside one wrap this in recordGraphTimelineAndMacroChange themselves. Returns
+    // the created track's name, or an empty string on rejection/failure.
+    juce::String insertTrackFromPresetVar(const juce::var& preset, synth::TrackPresetKind kind,
+                                          const juce::String& trackNamePrefix);
 
     // FRO42: hosted-plugin instrument loads in flight — see addInstrumentPluginTrack's own comment
     // for why THIS (an external, independent owner) holds the staged processor rather than a
@@ -574,6 +538,12 @@ private:
     void createChannelsForExistingTracks() override;
     bool canMakeChannelForTrack(synth::TrackId track) const override;
     void makeChannelForTrack(synth::TrackId track) override;
+    // FRO13 (P9-7, docs/mixer.md §5.7): track presets.
+    bool canSaveTrackPresetForTrack(synth::TrackId track) const override;
+    void saveTrackAsPreset(synth::TrackId track) override;
+    void setTrackPresetAsDefault(synth::TrackId track) override;
+    void addTrackFromPreset(const juce::String& presetName, synth::TrackPresetKind kind) override;
+    void addTrackFromPresetFile() override;
     void makeChannelForNode(juce::AudioProcessorGraph::NodeID source);
     void duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& macroId);
     std::vector<synth::PluginIdentity> getInstrumentPluginOptions() const override;

@@ -319,6 +319,18 @@ same split the binding and context menus use, since a `juce::PopupMenu` never ru
 binary. `MainComponent::simulateAddMidiTrackClick()` / `simulateAddAudioTrackClick()` /
 `simulateAddInstrumentTrackClick(menuId)` call straight into it.
 
+**Track presets in "+ Track" (P9-7, FRO13).** Below the Instrument submenu, "+ Track" also lists
+every saved preset for each track kind (own **Audio** / **Instrument** submenus, one item per
+preset via `synth::TrackPresetManager::listTrackPresets`), then a final **"Insert Track Preset from
+File..."** entry that loads one saved anywhere on disk. Like the Instrument Plugin sub-submenu,
+the preset lists are resolved against a menu-open-time snapshot
+(`audioTrackPresetMenuSnapshot_`/`instrumentTrackPresetMenuSnapshot_`, ids
+`kAddTrackPresetAudioMenuIdBase`/`kAddTrackPresetInstrumentMenuIdBase`), never re-queried at click
+time, since a preset can be saved or deleted between the menu opening and the click landing. This
+is a **separate** path from the plain MIDI/Audio/Instrument entries above: those consult only each
+type's *default* preset (Preferences -> Mixer), while this submenu can insert ANY saved preset
+regardless of which one is currently the default — see [`mixer.md`](mixer.md) §5.7.
+
 **The Instrument submenu's Plugin sub-submenu (FRO42, P9-3h)** lists the scanned INSTRUMENT hosted
 plugins (`TrackHeaderHost::getInstrumentPluginOptions()`, filtered on
 `juce::PluginDescription::isInstrument` — effects are never offered — and on this app's OWN VST3/AU
@@ -454,6 +466,14 @@ chain into a mixer channel — see [`mixer.md`](mixer.md) §5.8 for what moves a
 It is enabled only while `TrackHeaderHost::canMakeChannelForTrack()` is true (the chain has no
 Channel Strip of its own yet), disabled — not hidden — afterwards, and `MainComponent` runs it as ONE
 graph + timeline + macro undo step followed by the reconcile pass.
+
+**"Save Track as Preset..." / "Set as Default Track Preset" (right-click a header, P9-7, FRO13)**
+sit beside Make Channel, gated on the SAME `TrackHeaderHost::canSaveTrackPresetForTrack()`
+disabled-not-hidden rule (a track needs a channel before it has anything to save). The channel
+macro's own right-click menu offers the identical pair, gated instead on `synth::isChannelMacro` —
+there it is omitted entirely rather than disabled, matching that menu's existing "Mute Macro"
+omit-when-meaningless precedent (see [`mixer.md`](mixer.md) §5.7/§5.8 for what a saved preset
+carries and how loading it is gated).
 
 **"Right-click a header" means anywhere on the row (FRO60).** `TimelineTrackHeaderComponent::
 mouseDown()` only ever sees a click that lands on the row's own background — JUCE hands a click to

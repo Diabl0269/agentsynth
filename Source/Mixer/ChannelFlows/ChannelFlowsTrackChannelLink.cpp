@@ -12,8 +12,7 @@
 
 #include "ChannelFlows.h"
 
-#include "Modules/AttenuverterModule.h"
-#include "Modules/ChannelStripModule.h"
+#include "ChannelFlowsInternal.h"
 #include "Modules/MasterModule.h"
 #include "Modules/ModuleBase.h"
 #include "Modules/RecordTapModule.h"
@@ -34,16 +33,14 @@ namespace {
 // auto-ported Mono jack is a rare enough patch shape that treating it as signal here is an
 // acceptable simplification for a display/naming decision, not a routing one.
 //
-// Moved here UNCHANGED from StemSession.cpp's isStemNamingSignalEdge (FRO55) - see the file comment.
+// Moved here from StemSession.cpp's isStemNamingSignalEdge (FRO55) - see the file comment - and
+// expressed through ChannelFlowsInternal.h's shared node predicates rather than its own casts.
 bool isLinkSignalEdge(juce::AudioProcessorGraph& graph, const juce::AudioProcessorGraph::Connection& conn) {
-    auto* srcNode = graph.getNodeForId(conn.source.nodeID);
-    auto* dstNode = graph.getNodeForId(conn.destination.nodeID);
-    auto* srcProcessor = srcNode != nullptr ? srcNode->getProcessor() : nullptr;
-    auto* dstProcessor = dstNode != nullptr ? dstNode->getProcessor() : nullptr;
+    auto* srcProcessor = processorFor(graph, conn.source.nodeID);
+    auto* dstProcessor = processorFor(graph, conn.destination.nodeID);
     if (srcProcessor == nullptr || dstProcessor == nullptr)
         return false;
-    if (dynamic_cast<AttenuverterModule*>(srcProcessor) != nullptr ||
-        dynamic_cast<AttenuverterModule*>(dstProcessor) != nullptr)
+    if (isAttenuverter(srcProcessor) || isAttenuverter(dstProcessor))
         return false;
     if (conn.source.isMIDI())
         return true;
@@ -91,9 +88,8 @@ juce::AudioProcessorGraph::NodeID findStripFedByTrackSource(juce::AudioProcessor
                 continue;
             visited.push_back(destId);
 
-            auto* destNode = graph.getNodeForId(destId);
-            auto* destProcessor = destNode != nullptr ? destNode->getProcessor() : nullptr;
-            if (dynamic_cast<ChannelStripModule*>(destProcessor) != nullptr)
+            auto* destProcessor = processorFor(graph, destId);
+            if (isStrip(destProcessor))
                 return destId; // the first strip this track's signal reaches - see the header comment
             if (isReachTerminal(destProcessor))
                 continue; // the signal left the patch here without ever passing a strip
@@ -126,14 +122,13 @@ std::vector<juce::AudioProcessorGraph::NodeID> findTrackSourcesFeedingStrip(juce
                 continue;
             visited.push_back(sourceId);
 
-            auto* sourceNode = graph.getNodeForId(sourceId);
-            auto* sourceProcessor = sourceNode != nullptr ? sourceNode->getProcessor() : nullptr;
+            auto* sourceProcessor = processorFor(graph, sourceId);
             if (isTrackSourceNode(sourceProcessor)) {
                 if (!contains(tracks, sourceId))
                     tracks.push_back(sourceId);
                 continue; // a track source has no inputs of its own - nothing to enqueue
             }
-            if (dynamic_cast<ChannelStripModule*>(sourceProcessor) != nullptr)
+            if (isStrip(sourceProcessor))
                 continue; // never expand past another strip - see the header comment
 
             queue.push_back(sourceId);

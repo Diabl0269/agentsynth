@@ -7,6 +7,7 @@
 namespace synth {
 
 class MacroSet;
+struct Macro;
 
 /** The nodes buildDefaultAudioChannel() created (or, for `master`, spliced/reused) — every field
  *  empty/null when the build failed partway (out-of-memory-class failures only; see the function
@@ -405,6 +406,37 @@ MadeChannel buildMakeChannel(juce::AudioProcessorGraph& graph, const MakeChannel
  */
 juce::AudioProcessorGraph::NodeID resolveChannelSource(juce::AudioProcessorGraph& graph,
                                                        const std::vector<juce::AudioProcessorGraph::NodeID>& nodes);
+
+// ---- FRO13 (P9-7, docs/mixer.md §5.7): track presets ---------------------------------------------
+
+/**
+ * The outside-macro modules that feed `channelMacroId`'s members through a port (or a raw
+ * un-ported jack) — the founder's "saving a track also captures a shared LFO" requirement.
+ *
+ * Seeds from every connection landing on a member of `channelMacroId` whose SOURCE is not itself a
+ * member (this scans every member's incoming edges rather than only the macro's own ports, which
+ * subsumes the ported case for free and also catches a boundary crossing with T148 auto-porting
+ * off). From each seed, walks further upstream along every incoming edge to a fixpoint
+ * (visited-set, cycle-safe): an Attenuverter on the path IS entered (unlike planMakeChannel's
+ * FORWARD walk, which never enters one — here the modulator behind it is invisible otherwise) but
+ * never itself added to the result, since it is rebuilt from "modulations" on import, same as
+ * every other snippet/macro-port case. The walk stops at, and never adds, another channel's own
+ * Channel Strip, or any member of a DIFFERENT macro that is itself a channel (isChannelMacro) — a
+ * node reached only through such a boundary is that other channel's business, not this preset's; a
+ * node in some third, non-channel macro (a plain FX group) is captured normally.
+ *
+ * Pure query, NO GRAPH MUTATION. Empty when `channelMacroId` doesn't resolve in `macros` or has
+ * nothing feeding it from outside.
+ */
+std::vector<juce::AudioProcessorGraph::NodeID>
+collectOutsideModulatorsForTrackPreset(juce::AudioProcessorGraph& graph, const MacroSet& macros,
+                                       const juce::String& channelMacroId);
+
+/** True when `macro` boxes a ChannelStripModule, i.e. it is a mixer channel rather than an
+ *  ordinary group — gates the channel macro's own "Save track as preset.../Set as default" menu
+ *  items (GraphEditorMacroPrompts.cpp::buildMacroMenu) and the outside-modulator walk's own
+ *  "stop at another CHANNEL's strip, but not at a plain FX group" rule above. */
+bool isChannelMacro(const Macro& macro, juce::AudioProcessorGraph& graph);
 
 // ---- FRO14 (P9-4, docs/mixer.md §5.2): which channel a track plays into, and back ---------------
 //

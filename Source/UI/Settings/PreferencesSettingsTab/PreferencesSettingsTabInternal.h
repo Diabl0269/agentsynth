@@ -4,6 +4,7 @@
 // (Lifecycle.cpp) writes into controls and the matching getter/setter/persist units read back, plus
 // the combo-id <-> enum helpers the constructor and the getter/setter units both need.
 
+#include "Mixer/TrackPresetManager.h"
 #include "PreferencesSettingsTab.h"
 
 namespace {
@@ -54,6 +55,17 @@ constexpr int kDefaultAutosaveIntervalMinutes = 2;
 constexpr const char* kAutosaveBackupCountKey = "autosaveBackupCount";
 constexpr int kDefaultAutosaveBackupCount = 5;
 
+// FRO13 (P9-7, docs/mixer.md §5.7/§7 D3): the per-type default track preset. Value is the preset's
+// sanitised file NAME (no extension), or absent/empty = "use the factory chain". Read at use time
+// by MainComponent::addAudioTrack/addInstrumentTrack, duplicated here for the same "one-line
+// string not worth a header dependency" reason as kAutosaveEnabledKey above.
+constexpr const char* kMixerDefaultTrackPresetAudioKey = "mixerDefaultTrackPresetAudio";
+constexpr const char* kMixerDefaultTrackPresetInstrumentKey = "mixerDefaultTrackPresetInstrument";
+// juce::ComboBox reserves id 0 for "nothing selected", so the "Factory Default" sentinel row (which
+// must itself be selectable) takes id 1; every listed preset starts at id 2.
+constexpr int kMixerDefaultPresetFactoryComboId = 1;
+constexpr int kMixerDefaultPresetComboIdBase = 2;
+
 } // namespace
 
 // Combo-id <-> enum helpers, defined in PreferencesSettingsTabLifecycle.cpp (where the constructor
@@ -65,3 +77,5 @@ extern GraphEditor::SmartConnectionMode modeFromComboId(int id);
 extern int comboIdFromMacroAutoPortPreference(GraphEditor::MacroAutoPortPreference pref);
 extern GraphEditor::MacroAutoPortPreference macroAutoPortPreferenceFromComboId(int id);
 extern GraphEditor::MacroAutoPortPreference macroAutoPortPreferenceFromString(const juce::String& s);
+// FRO13 (P9-7), defined in PreferencesSettingsTabMixerDefaults.cpp, called from the constructor.
+extern void populateMixerDefaultPresetCombo(juce::ComboBox& combo, synth::TrackPresetKind kind);

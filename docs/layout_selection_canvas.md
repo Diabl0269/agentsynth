@@ -240,6 +240,18 @@ The clipboard has no such exposure: its payload comes straight from the live gra
 the process, so it opts in and a duplicated Sampler keeps its sample.
 (`SnippetExtraState.*`, `ClipboardCopy.CarriesNonParameterModuleStateSoADuplicatedSamplerKeepsItsSample`.)
 
+**A track preset (P9-7, FRO13) is the second `includeExtraState=true` caller, and the one that DOES
+leave the process.** `TrackPresetManager::extractTrackPreset` forces it on — a track preset must
+carry the Channel Strip's shape/gain/pan, or a Mono strip would silently reload as the Stereo
+default — even though, unlike the clipboard, the resulting file is written to disk and can be
+handed to `insertTrackPreset` on a different project or a different day. This is safe for the same
+reason a `.agsnip` file being untrusted is safe: `insertTrackPreset` is `SnippetManager::
+insertSnippet` with `trustedPayload=false`, so `validatePatch` still gates the load; the one piece
+of Channel Strip state that would be actively dangerous on import — `"solo"`, which would silence
+the whole mix render-wide if it came back `true` — is scrubbed from the captured state at save
+time instead of relying on the untrusted load path to catch it (`TrackPresetManager.cpp`, root
+`CLAUDE.md` tripwire).
+
 **Placement.** `SnippetManager::selectionOrigin()` returns the top-left corner extraction normalises
 against — the clipboard's anchor. Both paste and duplicate offset from it by
 `ModuleClipboard::kOffsetStep` (40 px = 5 grid units, so an offset copy stays on-grid):

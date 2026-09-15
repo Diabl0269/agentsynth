@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Mixer/TrackPresetManager.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/PianoRoll/PianoRollComponent/PianoRollComponent.h"
 #include "UI/Timeline/AutomationLaneEditor.h"
@@ -464,6 +465,15 @@ public:
     // kAddInstrumentPluginMenuIdBase (100) with no collisions between them.
     static constexpr int kAddInstrumentPluginNoneMenuId = 10;
     static constexpr int kAddInstrumentPluginMenuIdBase = 100;
+    // FRO13 (P9-7, docs/mixer.md §5.7): "Insert Track Preset from File..." (next free fixed id
+    // after 10), and the two grouped preset submenus (Audio/Instrument), each `base + index` into
+    // its own snapshot vector below — same click-time-collector hazard as the plugin list
+    // (a preset can be saved/deleted between menu-open and click), same snapshot-resolution fix.
+    // 5000/6000 leave ~900 ids of headroom per kind above the plugin range (100..a few hundred in
+    // practice) with no plausible collision.
+    static constexpr int kInsertTrackPresetFromFileMenuId = 11;
+    static constexpr int kAddTrackPresetAudioMenuIdBase = 5000;
+    static constexpr int kAddTrackPresetInstrumentMenuIdBase = 6000;
 
     /** Adds a marker at the transport's current position, named "Marker N", coloured from the
      *  theme (see defaultMarkerColourArgb) — ONE recordTimelineChange when an undo manager is
@@ -602,6 +612,9 @@ private:
     // (never cleared on dismiss/apply): a stale snapshot from a menu that was shown but never acted
     // on is harmless, since nothing indexes it until another click arrives.
     std::vector<synth::PluginIdentity> instrumentPluginMenuSnapshot_;
+    // FRO13 (P9-7): same snapshot-not-re-collect contract, for the two grouped preset submenus.
+    std::vector<synth::TrackPresetInfo> audioTrackPresetMenuSnapshot_;
+    std::vector<synth::TrackPresetInfo> instrumentTrackPresetMenuSnapshot_;
 
     // ---- T166: track-reorder drag (whole-row drag — see TimelineTrackHeaderComponent::
     // onRowDragStarted's own comment for why the row hands us raw screen Y instead of computing an

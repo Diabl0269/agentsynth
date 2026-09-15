@@ -9,6 +9,16 @@
 
 namespace synth {
 
+// Shared across the several ChannelFlows*.cpp concern units — defined once in
+// ChannelFlowsMakeChannel.cpp (FRO13, P9-7: lifted out of that file's anonymous namespace so
+// ChannelFlowsTrackPreset.cpp's outside-modulator walk can reuse them too), same "extern
+// declaration in the shared internal header, one definition in one .cpp" pattern
+// PreferencesSettingsTabInternal.h uses for comboIdFromMode/modeFromComboId.
+extern juce::AudioProcessor* processorFor(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID id);
+extern bool isAttenuverter(const juce::AudioProcessor* p);
+extern bool isStrip(const juce::AudioProcessor* p);
+extern bool isMacroPortNode(const juce::AudioProcessor* p);
+
 // Shared internals behind ChannelFlows.cpp's several concern units (ChannelFlowsDefaultChannel.cpp,
 // ChannelFlowsAutoChannel.cpp, ChannelFlowsMakeChannel.cpp): the one node-creation helper and the one
 // EQ->Compressor->Strip chain builder every one of them calls into.

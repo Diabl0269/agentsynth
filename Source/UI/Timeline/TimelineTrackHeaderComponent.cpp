@@ -739,6 +739,10 @@ void TimelineTrackHeaderComponent::applyContextMenuChoice(int menuId) {
         host_->deleteTrack(trackId_);
     else if (menuId == kMakeChannelMenuId && host_->canMakeChannelForTrack(trackId_))
         host_->makeChannelForTrack(trackId_);
+    else if (menuId == kSaveTrackPresetMenuId && host_->canSaveTrackPresetForTrack(trackId_))
+        host_->saveTrackAsPreset(trackId_);
+    else if (menuId == kSetTrackPresetDefaultMenuId && host_->canSaveTrackPresetForTrack(trackId_))
+        host_->setTrackPresetAsDefault(trackId_);
 }
 
 juce::PopupMenu TimelineTrackHeaderComponent::buildContextMenu() const {
@@ -746,6 +750,11 @@ juce::PopupMenu TimelineTrackHeaderComponent::buildContextMenu() const {
     // FRO25 (P9-3d): disabled rather than hidden once the track has a channel, so the row sits in
     // a stable place (the canvas menu's "Locate Master" idiom).
     menu.addItem(kMakeChannelMenuId, "Make Channel", host_ != nullptr && host_->canMakeChannelForTrack(trackId_));
+    // FRO13 (P9-7): same disabled-not-hidden precedent, gated on the track already having a
+    // channel of its own (canSaveTrackPresetForTrack).
+    const bool canSavePreset = host_ != nullptr && host_->canSaveTrackPresetForTrack(trackId_);
+    menu.addItem(kSaveTrackPresetMenuId, "Save Track as Preset...", canSavePreset);
+    menu.addItem(kSetTrackPresetDefaultMenuId, "Set as Default Track Preset", canSavePreset);
     menu.addSeparator();
     menu.addItem(kDeleteTrackMenuId, "Delete Track");
     return menu;
