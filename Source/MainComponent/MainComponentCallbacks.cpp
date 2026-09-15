@@ -246,7 +246,16 @@ void MainComponent::timerCallback() {
     // timer, and nothing at all when the panel is hidden (a collapsed timeline must cost exactly
     // what it did before). This is what starts/stops the playhead's playing-only 30 Hz strip
     // repaint; see docs/layout.md §11.
-    if (timelinePanel.isVisible()) {
+    //
+    // FRO11 (P9-5): timelinePanel is now nested inside mixerDock (the Timeline/Mixer tab
+    // strip), so its own isVisible() flag only reflects "the Timeline tab is selected", not "the
+    // dock is open" -- AND mixerDock.isVisible(), composing both local flags without walking up
+    // to a real OS peer, matching mixerDock's own isMixerTabActive() && isVisible() gate for the
+    // meters just below. Deliberately not isShowing(): it additionally requires the ROOT
+    // component to have a real Desktop peer (juce::Component::isShowing()'s own implementation),
+    // which is never true in a headless test -- this codebase's own tests construct MainComponent
+    // without ever calling addToDesktop().
+    if (timelinePanel.isVisible() && mixerDock.isVisible()) {
         // Device-buffer latency only. The graph's own reported latency is deliberately left out:
         // it is report-only, patch-dependent and mostly zero, whereas the output buffer is the term
         // that actually separates "rendered" from "heard".
@@ -270,6 +279,13 @@ void MainComponent::timerCallback() {
         }
         timelinePanel.getClipLaneArea().updateLiveRecording(liveInfo);
     }
+
+    // FRO11 (P9-5): the mixer's meters, on the SAME existing 10 Hz tick -- no new timer, nothing
+    // at all while the Mixer tab isn't visible, exactly the Timeline panel's own precedent just
+    // above (docs/layout_visuals_animation.md §2: "rides MainComponent's existing 10 Hz tick, only
+    // while the panel is visible"; isVisible(), not isShowing() -- see that block's own comment).
+    if (mixerDock.isMixerTabActive() && mixerDock.isVisible())
+        mixerDock.refreshMeters();
 
     // Status bar polls at 5 Hz (every 2nd tick of the 10 Hz timer). update() is gated — it
     // only repaints the status bar when a displayed value actually changes. ZERO logging.

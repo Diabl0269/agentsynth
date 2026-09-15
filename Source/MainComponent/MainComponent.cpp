@@ -184,6 +184,12 @@ MainComponent::~MainComponent() {
     audioEngine.setMidiCaptureSink(nullptr);
     automationRecorder.detach();
     undoManager.setRestoreHooks({}, {});
+    // Also unbinds mixerDock's own fader/pan bindings via GraphEditor::onBeforeDetachAllModuleComponents
+    // (wired in wireTimelinePanelServicesAndShortcuts) -- mixerDock is declared AFTER graphEditor in
+    // MainComponent.h, so its own destructor runs BEFORE graphEditor's once this body returns;
+    // without this call happening first, that destructor would unbind a fader still pointing at a
+    // param audioEngine.shutdown() below is about to free (the FRO11 class of bug, same root cause
+    // as the undo/redo crash this fixes).
     graphEditor.detachAllModuleComponents();
     // Only tear down an engine we own. On the plugin path the processor's engine must survive
     // the editor being closed and reopened.

@@ -694,6 +694,13 @@ void TimelinePanelComponent::ResizeHandle::mouseExit(const juce::MouseEvent&) {
 int TimelinePanelComponent::ResizeHandle::desiredHeightFor(const juce::MouseEvent& e) const {
     // Absolute, not a delta: the owner moves the panel's top edge (and this handle with it) on
     // every callback, so only the panel's FIXED bottom edge is a stable reference.
+    //
+    // This returns the PANEL's OWN desired content height -- deliberately with no notion of
+    // whatever chrome an owner might sit inside (FRO11: MixerDockComponent's 22px tab strip,
+    // when the panel is showing inside the mixer dock rather than standalone). Translating that
+    // into MainComponent's own total-carve height is the callback wiring's job
+    // (MainComponentSetupTimeline.cpp's onResizeHeight/onResizeHeightCommitted), since that's the
+    // one place that knows about the tab strip; TimelinePanelComponent itself stays agnostic.
     const int topY = e.getScreenPosition().y - grabOffsetY_;
     return owner_.getScreenBounds().getBottom() - topY;
 }

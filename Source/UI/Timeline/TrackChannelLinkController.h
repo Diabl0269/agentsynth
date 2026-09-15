@@ -3,6 +3,7 @@
 #include "Mixer/TrackChannelLink.h"
 #include "TrackChannelLinkSurface.h"
 #include <cstdint>
+#include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <map>
 
@@ -69,6 +70,17 @@ public:
      *  note gating simply resumes for them. */
     void reconcileLinkedTracks();
 
+    /** FRO11 (P9-5): the mixer panel's own reveal, installed once the panel exists (wired in
+     *  MainComponent::wireTimelinePanelServicesAndShortcuts, the same late-setter pattern
+     *  timelinePanel.setShortcutManager already uses). Takes the resolved strip's NodeID and opens/
+     *  focuses its mixer column, returning true on success; revealChannelForTrack() falls back to
+     *  its existing canvas-reveal behaviour when this is unset or returns false (mixer hidden by
+     *  preference -- no such preference exists yet, see docs/mixer.md §5.9, so today that only
+     *  happens before this hook is installed or if the strip has no column for some reason). */
+    void setMixerRevealHook(std::function<bool(juce::AudioProcessorGraph::NodeID)> hook) {
+        mixerRevealHook_ = std::move(hook);
+    }
+
 private:
     juce::AudioProcessorGraph& graph() const;
     synth::MacroSet& macros() const;
@@ -91,6 +103,7 @@ private:
     synth::TimelineDoc& doc_;
     AppUndoManager& undo_;
     GraphEditor& graphEditor_;
+    std::function<bool(juce::AudioProcessorGraph::NodeID)> mixerRevealHook_;
     // Re-entrancy guard: reconcileLinkedTracks() writes the doc, which notifies, which can land
     // back in the same reconcile funnel.
     bool reconciling_ = false;

@@ -140,7 +140,7 @@ The timeline's clock and the headless render harness built on it. No audio devic
 
 ### Channel creation flow tests (29 tests)
 
-`Tests/ChannelFlowTests.cpp` — `Source/Mixer/ChannelFlows/ChannelFlows.h`/`.cpp`'s builders and the three "+ Track"/drag flows that call them ([`mixer.md`](mixer.md) §5.2/§8 item 2: T173a's audio track, T183's instrument track, T184's MIDI-track auto-channel-on-connect). Headless except the `ChannelFlowTest` fixture below, which drives a real `MainComponent` off-screen. `ChannelFlowAutoChannelCore` cases build a bare `AudioEngine`/graph directly (`graph.setPlayConfigDetails(0, 2, 44100.0, 512)` before adding an "Audio Output" node, mirroring `MixerSoloTests.cpp`'s rig, since `AudioEngine`'s default constructor has no IO yet); `ChannelFlowTest` cases go through `MainComponent::newPatchForTest()` for a real, empty-but-seeded graph and drive `ModuleComponent::mouseDown/mouseDrag/mouseUp` with synthesized `juce::MouseEvent`s for the drag gestures (see "Test the real mouse path" below) rather than `GraphEditor`'s own drag API. The P9-3d "Make channel" cases (FRO25, [`mixer.md`](mixer.md) §5.8/§8 item 2) add a render-identity rig — `HostedPatchCFT`, a `HostMode::Hosted` engine rendered offline through `processHostBlock`, built twice from the same legacy patch so a standalone `GraphEditor` can convert one and the two renders be compared sample for sample (`ChannelFlowMakeChannelCore`) — and drive the track header, canvas and module-card right-click menus through their `setShowContextMenuHookForTest`/`setShowCanvasContextMenuHookForTest` seams (`ChannelFlowTest`).
+`Tests/ChannelFlowTests.cpp` — `Source/Mixer/ChannelFlows/ChannelFlows.h`/`.cpp`'s builders and the three "+ Track"/drag flows that call them ([`mixer.md`](mixer.md) §5.2 / [`mixer_implementation.md`](mixer_implementation.md) item 2: T173a's audio track, T183's instrument track, T184's MIDI-track auto-channel-on-connect). Headless except the `ChannelFlowTest` fixture below, which drives a real `MainComponent` off-screen. `ChannelFlowAutoChannelCore` cases build a bare `AudioEngine`/graph directly (`graph.setPlayConfigDetails(0, 2, 44100.0, 512)` before adding an "Audio Output" node, mirroring `MixerSoloTests.cpp`'s rig, since `AudioEngine`'s default constructor has no IO yet); `ChannelFlowTest` cases go through `MainComponent::newPatchForTest()` for a real, empty-but-seeded graph and drive `ModuleComponent::mouseDown/mouseDrag/mouseUp` with synthesized `juce::MouseEvent`s for the drag gestures (see "Test the real mouse path" below) rather than `GraphEditor`'s own drag API. The P9-3d "Make channel" cases (FRO25, [`mixer.md`](mixer.md) §5.8 / [`mixer_implementation.md`](mixer_implementation.md) item 2) add a render-identity rig — `HostedPatchCFT`, a `HostMode::Hosted` engine rendered offline through `processHostBlock`, built twice from the same legacy patch so a standalone `GraphEditor` can convert one and the two renders be compared sample for sample (`ChannelFlowMakeChannelCore`) — and drive the track header, canvas and module-card right-click menus through their `setShowContextMenuHookForTest`/`setShowCanvasContextMenuHookForTest` seams (`ChannelFlowTest`).
 
 | What it covers | |
 |-------|-------|
@@ -160,6 +160,25 @@ The timeline's clock and the headless render harness built on it. No audio devic
 | `ChannelFlowCreateChannelsTests.cpp` | FRO26 (P9-3e): "Create Channels" for existing projects, wrapping every channel-less track's chain as one undo step |
 | `ChannelFlowMakeChannelCoreTests.cpp` | FRO25 (P9-3d): "Make channel" core behaviour through a standalone `GraphEditor` (render-identity comparisons), plus the adversarial no-double-drive / three-way-merge / chained-merge probes |
 | `ChannelFlowMakeChannelAppTests.cpp` | FRO25: the real app wiring — track header, canvas selection and module right-click menus, each as one undo step |
+
+### Mixer panel tests (FRO11/P9-5)
+
+`Tests/Mixer/MixerModel/` — headless column-ordering logic (`mixer.md` §5.10), pure `Source/Mixer/MixerModel/` code. `Tests/UI/Mixer/` — the panel UI, on a real off-screen `MainComponent` (`newPatchForTest()` + `simulateAddAudioTrackClick()`, the `ChannelFlowTest` rig's style):
+
+| File | Covers |
+|------|--------|
+| `MixerDockComponentTests.cpp` | tab strip switches without closing the dock; `toggleMixerPanel` (Cmd+Alt+M) opens on Mixer then closes on a second press; actionId round-trips to `AppCommands::toggleMixerPanel`; active tab persists across an `ApplicationProperties` reload |
+| `MixerPanelComponentTests.cpp` | one column per strip plus Direct plus Master; themed PNG render smoke test (Obsidian + Daylight, see the `createComponentSnapshot` pattern above); clicking a column selects its owning macro |
+| `MixerFaderTests.cpp` | the fader's `SliderParameterAttachment` binding and dB readout, plus a regression test for a `MixerFader::parameterValueChanged` use-after-free (a `callAsync` lambda captured raw `this`; fixed with `SafePointer`) |
+
+Tests calling `dock.setActiveTab(...)` use `MixerDockActiveTabResetGuardMDT` (see the reset-guard
+pattern above). Also updated (not new suites): every `Tests/UI/Timeline/TimelinePanel/*Tests.cpp`,
+`PanelAnimationAndLoadingTests.cpp` and `TimelinePlayheadTests.cpp` case asserting the timeline
+panel's own bounds/visibility, now that `TimelinePanelComponent` nests inside `MixerDockComponent`
+instead of being `MainComponent`'s direct child. `TimelinePanelTestFixture.h` gained
+`timelinePanelBoundsInMainComponent(mc)` (`getLocalArea`, bounds now dock-relative) and
+`timelinePanelIsOpen(mc)` (`isVisible() && mixerDock.isVisible()`; `isShowing()` needs a real
+Desktop peer, unavailable headless).
 
 ### Audio clip playback tests (24 tests)
 
@@ -326,6 +345,17 @@ tmpDir.createDirectory();
 comp.getAppPropertiesForTest().getUserSettings()->setValue("librarySidebarVisible", "0");
 // TearDown(): reset to defaults, then tmpDir.deleteRecursively()
 ```
+
+#### Shared-settings-file reset-guard pattern (an alternative to tmp-dir isolation)
+
+A headless `MainComponent` (`newPatchForTest()`) has no `getAppPropertiesForTest()` seam — it
+hits the real, shared on-disk "Agent Synth" `ApplicationProperties` file, so a persisted setting
+leaks into every other such test. Fix (`ChannelFlowTestFixture.h`'s `ChannelFlowTest::resetKeys()`;
+FRO11/P9-5's `MixerDockActiveTabResetGuard.h`): a local RAII guard per affected test that opens the
+same `ApplicationProperties`/`Options` and `removeValue()`s only the key(s) that suite touches, in
+both its constructor and destructor (safe regardless of test order or a prior crashed run).
+`MixerDockActiveTabResetGuardMDT` resets `"bottomDockActiveTab"` so a PNG-snapshot test's Mixer-tab
+switch can't leak into a later test's "Timeline is default" assumption.
 
 ### State Management Tests (~82 tests)
 

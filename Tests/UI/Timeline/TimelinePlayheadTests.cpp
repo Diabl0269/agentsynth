@@ -20,6 +20,7 @@
 
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
+#include "TimelinePanel/TimelinePanelTestFixture.h" // timelinePanelIsOpen (FRO11)
 #include "Transport/TransportService.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelinePlayheadOverlay.h"
@@ -362,7 +363,12 @@ TEST_F(TimelinePlayheadPollTest, TenHzPollOnlyReachesAVisiblePanel) {
     mc.setSize(1600, 900);
 
     auto& panel = mc.getTimelinePanel();
-    ASSERT_FALSE(panel.isVisible()) << "the timeline panel is hidden by default";
+    // FRO11 (P9-5): timelinePanelIsOpen(), not panel.isVisible() -- the panel now lives inside
+    // MixerDockComponent's tab strip, so its own visibility flag reflects only "the Timeline tab
+    // is selected" (true by default), not "the dock is open". timelinePanelIsOpen's own comment
+    // (TimelinePanelTestFixture.h) explains why this composes the two local isVisible() flags
+    // rather than isShowing() (which needs a real Desktop peer this headless test never has).
+    ASSERT_FALSE(timelinePanelIsOpen(mc)) << "the timeline panel is hidden by default";
 
     for (int i = 0; i < 10; ++i)
         mc.timerCallback();
@@ -370,7 +376,7 @@ TEST_F(TimelinePlayheadPollTest, TenHzPollOnlyReachesAVisiblePanel) {
     EXPECT_FALSE(panel.getPlayhead().isPlayheadTimerRunning());
 
     mc.simulateToggleTimelineClick();
-    ASSERT_TRUE(panel.isVisible());
+    ASSERT_TRUE(timelinePanelIsOpen(mc));
 
     mc.timerCallback();
     EXPECT_EQ(panel.getTransportUpdateCountForTest(), 1) << "a visible panel is polled once per 10 Hz tick";

@@ -96,6 +96,13 @@ void MainComponent::reconcileTimelineAfterGraphChange() {
     for (int i = 0; i < timelinePanel.getTrackHeaderCount(); ++i)
         if (auto* header = timelinePanel.getTrackHeaderAt(i))
             header->refreshFromDoc();
+
+    // FRO11 (P9-5): the mixer's own column set (strips/inserts/links) can change from ANY graph
+    // edit that reaches here -- undo/redo, a canvas delete, a macro regroup, not just the mixer's
+    // own insert-list mutations -- so it rebuilds unconditionally here too, the same "cheap enough
+    // to call on every change" contract buildMixerSnapshot documents (a handful of strips, never
+    // per-frame).
+    mixerDock.rebuildMixer();
 }
 
 // The cheap half of the above, with no republish of its own: installed on

@@ -265,6 +265,14 @@ void TrackChannelLinkController::revealChannelForTrack(synth::TrackId track) {
     if (!info.hasChannel)
         return;
 
+    // FRO11 (P9-5): the mixer panel's own reveal, when it exists and can show the strip's column
+    // -- open/focus the dock on the Mixer tab and flash/select the column, per the ticket. Falls
+    // through to the canvas reveal below when unset or unsuccessful (§5.9's "mixer hidden by
+    // preference" case -- no such preference exists yet, so today this only differs before the
+    // hook is installed).
+    if (mixerRevealHook_ && mixerRevealHook_(info.stripId))
+        return;
+
     // Scroll into view AND select -- the Locate Master contract (a chip's whole point is finding
     // something that may be off-screen), not the binding chip's highlight-only one.
     const auto* macro = macroForStrip(info.stripUuid);

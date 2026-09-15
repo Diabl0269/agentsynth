@@ -361,7 +361,7 @@ between the menu opening and the click landing could otherwise change what index
 resolving the click against a plugin the menu never actually showed there (the BLOCKER this fixed:
 live repro was a menu showing "Massive", clicking it, and getting a Sampler track instead).
 `applyAddTrackMenuChoice` therefore resolves strictly against the snapshot, never by re-collecting.
-Choosing one calls `TrackHeaderHost::addInstrumentPluginTrack(identity)` — see `docs/mixer.md` §8's
+Choosing one calls `TrackHeaderHost::addInstrumentPluginTrack(identity)` — see `docs/mixer_implementation.md`'s
 P9-3h entry for what it builds, why the load has to be asynchronous, and how a document replaced
 mid-load (New Patch/Open/Load preset) is handled.
 
@@ -394,7 +394,7 @@ node uuid):
 4. bind the track to the new node's uuid and give it the palette colour for its index.
 
 **The Audio entry** (T173a) now builds a **whole mixer channel**, not just a `Track Audio` node —
-see [`docs/mixer.md` §8 item 2](mixer.md) for the full design. Steps 1-2 are the same as the MIDI
+see [`docs/mixer_implementation.md` item 2](mixer_implementation.md) for the full design. Steps 1-2 are the same as the MIDI
 entry (doc side first, so `kMaxTracks` refuses before any node is created; factory-created node,
 uuid minted and mirrored, placed at the left edge), but everything downstream of step 2 is
 different, and it is all still ONE undo step — `AppUndoManager::recordGraphTimelineAndMacroChange`,
@@ -412,7 +412,7 @@ set:
 3. `GraphEditor::addMacroForMembers` boxes `{Track Audio, EQ, Compressor, Channel Strip}` into ONE
    collapsed macro named after the track. **Master stays outside the macro**, and the
    Strip -> Master cable is left a plain graph edge, deliberately never a macro port — see
-   `docs/mixer.md`'s §8 item 2 for why (the Mix-vs-Direct classification `spliceMasterNode` does
+   `docs/mixer_implementation.md`'s item 2 for why (the Mix-vs-Direct classification `spliceMasterNode` does
    would break behind a `MacroOutlet`);
 4. bind the track to the `Track Audio` node's uuid and give it the palette colour for its index —
    same as every other entry.
@@ -422,7 +422,7 @@ set:
 
 **The Instrument entries** (T183) are the MIDI-track mirror of the Audio entry above — a `Track In`
 feeding a chosen instrument, then the same factory default chain — see
-[`docs/mixer.md` §8 item 2](mixer.md) for the full design. The picker offers exactly the
+[`docs/mixer_implementation.md` item 2](mixer_implementation.md) for the full design. The picker offers exactly the
 audio-producing MIDI instruments (**Oscillator**, **Wavetable**, **Sampler**) — deliberately not
 every module the MIDI entry's own auto-wire search above recognises as "MIDI-driven": Poly MIDI
 outputs CV/gate and Sequencer/Poly Sequencer generate MIDI, none of them audio. One undo step

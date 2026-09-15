@@ -407,6 +407,22 @@ MadeChannel buildMakeChannel(juce::AudioProcessorGraph& graph, const MakeChannel
 juce::AudioProcessorGraph::NodeID resolveChannelSource(juce::AudioProcessorGraph& graph,
                                                        const std::vector<juce::AudioProcessorGraph::NodeID>& nodes);
 
+// ---- FRO11 (P9-5, docs/mixer.md §5.6): the signal-edge rule, shared -------------------------------
+//
+// planMakeChannel's own "what counts as signal" test (never an attenuverter's hidden modulation
+// leg, never an audio edge landing on a PortRole::ModCV pin), promoted out of
+// ChannelFlowsMakeChannel.cpp's anonymous namespace so the mixer's insert-list query
+// (Source/Mixer/MixerModel/MixerModelInserts.cpp) can walk a chain "in signal order" with the
+// identical rule instead of re-implementing the ModCV/attenuverter exclusion a second time.
+
+/** True when `c` is a signal edge by the rule above: every MIDI edge; every audio edge that
+ *  neither touches an AttenuverterModule nor lands (after following any macro ports) on a
+ *  PortRole::ModCV input. `connections` is the full connection list the caller already has (this
+ *  never re-fetches it), since callers walking a whole chain call this once per candidate edge. */
+bool isSignalEdge(juce::AudioProcessorGraph& graph,
+                  const std::vector<juce::AudioProcessorGraph::Connection>& connections,
+                  const juce::AudioProcessorGraph::Connection& c);
+
 // ---- FRO13 (P9-7, docs/mixer.md §5.7): track presets ---------------------------------------------
 
 /**

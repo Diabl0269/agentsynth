@@ -39,6 +39,7 @@ when reasoning about a key that "does nothing."
 | Ctrl+A (macOS) / Cmd+Shift+A (elsewhere) | Toggle AI Panel — moved off Cmd+A so Select All could take the platform-standard chord. One of the very few per-platform defaults: on macOS Ctrl is a real separate modifier, on Windows/Linux JUCE's Cmd IS Ctrl so Ctrl+A would collide with Select All |
 | Cmd+B | Toggle Module Library |
 | Cmd+T | Toggle Timeline Panel (see [`timeline_panel_core.md §1`](timeline_panel_core.md)) |
+| Cmd+Alt+M | Toggle Mixer Panel (`toggleMixerPanel`) — opens the bottom dock on the Mixer tab if closed, or on Timeline; closes it on a second press only when the dock is already open on Mixer, mirroring Cmd+T's own open/close symmetry. See [`mixer_implementation.md §8`](mixer_implementation.md) |
 | Cmd+A | Select All in Focused Editor (actionId/`AppCommands` name still `selectAllModules` — see "Surface routing" below) |
 | Cmd+Shift+S | Save Selection as Snippet |
 | Cmd+C | Copy (Selected Modules, or — see "Surface routing" below — the timeline's selected clips/notes) |
@@ -67,6 +68,11 @@ Ctrl, so a Ctrl+A default there would be the same chord as Select All and the tw
 collide. `Cmd+Shift+S` keeps its Shift variant because `Cmd+S` (Save Preset) is bound. Like every row above, all of these are rebindable in
 Settings — and note that a machine which already persisted the old bindings keeps them until
 "Reset to Defaults" (bindings are stored per actionId, defaults only fill the gaps).
+
+`Cmd+Alt+M` (Toggle Mixer Panel) is neither bare `Cmd+M` (already Toggle Mod Matrix) nor
+`Cmd+Shift+M` (already Locate Master, see [**Locate Master (FRO45)**](#locate-master-fro45)
+below) — Alt claims a fresh chord in the same `m` family without contesting either, the same move
+`Cmd+Alt+G` (Collapse/Expand Macro) makes next to Graph's own bare-letter bindings.
 
 `Cmd+C` / `Cmd+V` (and, by the same reasoning, Space) are safe to claim app-wide because JUCE's
 `TextEditor` consumes them itself while it has focus — Cmd+C/V by copying/pasting text, Space by

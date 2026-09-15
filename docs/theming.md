@@ -61,7 +61,7 @@ shorthand, each digit doubled, full alpha).
 | `error` | `#FFE5484D` | Error / muted state |
 | `knobBody` | `#FF13161B` | Knob body gradient inner stop |
 | `knobPointer` | `#FFEAEEF3` | Knob pointer line |
-| `meterFill` | `#FF00D1FF` | Output meter fill (top of gradient) |
+| `meterFill` | `#FF00D1FF` | Output meter fill (top of gradient). First real consumer: `synth::ui::MixerMeter` (FRO11/P9-5, `Source/UI/Mixer/MixerMeter.cpp`), the mixer panel's per-strip peak meter |
 | `modRingPositive` | `#FF00E5FF` | Modulation ring, positive modulation |
 | `modRingNegative` | `#FFFF6E00` | Modulation ring, negative modulation |
 | `toolActive` | `#FF00D1FF` | Timeline edit-tool strip — active-tool button highlight. Defaults to the same literal as `accent`'s Obsidian default (no token in this table dynamically re-reads another token's *live* value at construction — `accent2` is the closest precedent and it likewise just repeats `accent`'s literal — so this is a static default, not a derived one) |

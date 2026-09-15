@@ -8,10 +8,8 @@
 239 Source/AI/AIStateMapper/AIStateMapperSnapshots.cpp::AIStateMapper::applySnapshotPreservingNodes
 276 Source/AI/AIStateMapper/AIStateMapperValidation.cpp::AIStateMapper::validatePatch
 213 Source/AudioEngine/AudioEngineModRouting.cpp::AudioEngine::getModulationRoutings
-390 Source/MainComponent/MainComponentCommandTable.cpp::MainComponent::commandTable
 251 Source/Modules/OscillatorModule.h::processPolyMode
 380 Source/PresetManager.cpp::PresetManager::getPresetJSON
-280 Source/ShortcutManager/ShortcutManager.h::resetToDefaults
 329 Source/Timeline/TimelineDoc/TimelineDocSerialization.cpp::TimelineDoc::fromVar
 230 Source/UI/Graph/GraphEditor/GraphEditorCables.cpp::GraphEditor::GraphContentComponent::paint
 303 Source/UI/Graph/GraphEditor/GraphEditorCables.cpp::GraphEditor::rebuildVisibleCables
