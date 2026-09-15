@@ -438,4 +438,33 @@ collectOutsideModulatorsForTrackPreset(juce::AudioProcessorGraph& graph, const M
  *  "stop at another CHANNEL's strip, but not at a plain FX group" rule above. */
 bool isChannelMacro(const Macro& macro, juce::AudioProcessorGraph& graph);
 
+// ---- FRO14 (P9-4, docs/mixer.md §5.2): which channel a track plays into, and back ---------------
+//
+// Both are pure signal-reach reads (no mutation, no undo, no TimelineDoc), defined in
+// ChannelFlowsTrackChannelLink.cpp. They follow the same signal-edge rule as each other: never
+// cross an AttenuverterModule (a hidden modulation leg), never treat an audio edge landing on a
+// PortRole::ModCV input as signal.
+
+/** Forward from a track's own source node (isTrackSourceNode) to the FIRST ChannelStripModule its
+ *  signal reaches, stopping there; a branch that leaves the patch at a terminal (Audio Output,
+ *  Record Tap, Master) without passing a strip just ends. An invalid NodeID means "this track
+ *  reaches no channel yet" (no chip, no link).
+ *
+ *  A track whose signal fans out and reaches TWO distinct strips gets whichever the BFS visits
+ *  first -- arbitrary but deterministic. §5.2's link rule is defined channel-side ("is THIS track
+ *  the channel's only source"), so a track feeding two channels at once is out of scope. */
+juce::AudioProcessorGraph::NodeID findStripFedByTrackSource(juce::AudioProcessorGraph& graph,
+                                                            juce::AudioProcessorGraph::NodeID trackSourceId);
+
+/** Backward from a strip, collecting every distinct track-source node whose signal reaches it,
+ *  transitively through the instrument/macro chain. Never expands PAST another ChannelStripModule
+ *  reached upstream (that strip is another channel's terminus -- whatever feeds IT is not this
+ *  strip's to claim).
+ *
+ *  `result.size() == 1` IS §5.2's link predicate ("the track is the channel's only source"), and it
+ *  is also FRO55's stem-naming rule ("exactly one feeding track names the file"), computed once for
+ *  both -- see ChannelFlowsTrackChannelLink.cpp's file comment. */
+std::vector<juce::AudioProcessorGraph::NodeID> findTrackSourcesFeedingStrip(juce::AudioProcessorGraph& graph,
+                                                                            juce::AudioProcessorGraph::NodeID stripId);
+
 } // namespace synth

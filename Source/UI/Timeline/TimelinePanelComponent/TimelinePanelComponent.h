@@ -61,7 +61,11 @@ namespace synth::ui {
 class TimelinePanelComponent
     : public juce::Component
     , private synth::TimelineDoc::Listener
-    , private juce::ChangeListener {
+    , private juce::ChangeListener
+    // FRO14: ONE 15 Hz timer for the whole header column's channel-chip meters -- never one per
+    // row (up to TimelineDoc::kMaxTracks of them). Each chip gates its own repaint on the drawn
+    // level actually moving, so this is not an unconditional per-tick repaint (Source/UI/CLAUDE.md).
+    , private juce::Timer {
 public:
     TimelinePanelComponent();
     ~TimelinePanelComponent() override;
@@ -573,6 +577,9 @@ private:
     // Rebuilds the header components when the set of track ids changed, and otherwise just
     // refreshes the existing ones in place (a mute toggle must not destroy and re-create rows).
     void syncTrackHeaders();
+    // FRO14: ticks every header's channel chip. Started by setTrackHeaderHost() (nothing to meter
+    // before the app wires one up) and defined in TimelinePanelTrackHeaders.cpp.
+    void timerCallback() override;
     void layoutTrackHeaders();
 
     // ---- T161: focused track index -------------------------------------------

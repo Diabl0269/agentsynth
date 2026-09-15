@@ -32,6 +32,7 @@
 #include "UI/Graph/CableColour.h"
 #include "UI/Graph/GraphCanvasHost.h"
 #include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
+#include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
@@ -134,6 +135,16 @@ public:
     const synth::Macro* macroForNode(juce::AudioProcessorGraph::NodeID nodeId) const;
     void setMacroCollapsed(const juce::String& macroId, bool collapsed);
     void renameMacro(const juce::String& macroId, const juce::String& newName);
+
+    /** FRO14 (docs/mixer.md 5.2): installed by the app when renaming a macro may also have to
+     *  rename a LINKED track, so both halves land in ONE undo step. Called by renameMacro INSTEAD
+     *  of its own recordGraphAndMacroChange, with the macro id, the new name, and the rename
+     *  mutation to run inside whatever transaction the hook opens; returning false (nothing linked)
+     *  leaves renameMacro to record exactly as it always has. Unset by default -- a standalone
+     *  editor and every test keep today's behaviour with no wiring at all. */
+    std::function<bool(const juce::String& macroId, const juce::String& newName,
+                       const std::function<void()>& renameMutation)>
+        recordMacroRenameHook;
     void setMacroColour(const juce::String& macroId, juce::Colour colour);
     void deleteMacroAndMembers(const juce::String& macroId);
     std::vector<MacroMemberPreview> macroMemberPreviews(const juce::String& macroId) const;

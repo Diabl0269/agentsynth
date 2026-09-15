@@ -738,6 +738,14 @@ undo-recorded mutation) and then performs the real edit as the ONE undo step who
 the original colour — so dragging through a dozen preview colours before landing on a choice costs
 exactly one `Cmd+Z`, not a dozen.
 
+**Known caller with a fanned-out target set** (FRO14, `docs/mixer.md` §5.2): a timeline track that
+is LINKED to a mixer channel builds its picker through `TrackChannelLinkController` instead, whose
+preview callback writes the track colour AND the channel macro's colour on every drag frame, whose
+no-net-change close restores both, and whose commit restores both and then performs ONE compound
+undo step covering them. **The popup's own contract is unchanged** — fanning out is entirely the
+caller's business, exactly as it already is for the macro-colour caller with its single target; this
+paragraph records that one caller now has more than one target, nothing more.
+
 Committing always reconciles with `juce::ColourSelector::getCurrentColour()` rather than trusting
 whatever the last dispatched preview happened to be. A real slider drag or hex-field edit updates
 the selector's own displayed state (the header swatch and the R/G/B/hex fields) synchronously, but

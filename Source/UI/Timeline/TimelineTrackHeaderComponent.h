@@ -1,9 +1,11 @@
 #pragma once
 
+#include "ChannelChipComponent.h"
 #include "MidiDestinationPicker.h"
 #include "Mixer/TrackPresetManager.h"
 #include "Plugin/Hosting/HostedPluginBackend.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "TrackChannelLinkSurface.h"
 #include "UI/Chrome/ColourPickerPopup.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -246,6 +248,14 @@ struct TrackHeaderHost {
      *  `*.agtrackpreset`, then the same insert path as addTrackFromPreset(). Non-pure no-op
      *  default. */
     virtual void addTrackFromPresetFile() {}
+
+    /** FRO14 (P9-4, docs/mixer.md 5.2): everything the header needs about the CHANNEL its track
+     *  plays into -- the channel chip, and the linked-track name/colour/mute/solo fan-out. ONE
+     *  accessor rather than a method per feature, so this interface (and MainComponent, which
+     *  implements it) does not grow one line per channel behaviour; the real surface is
+     *  TrackChannelLinkSurface. Non-pure with a null default: a header built against a stub host
+     *  simply has no channel behaviour, and every existing implementer keeps compiling. */
+    virtual TrackChannelLinkSurface* getChannelLinkSurface() { return nullptr; }
 };
 
 class TimelineTrackHeaderComponent : public juce::Component {
@@ -422,6 +432,12 @@ public:
      *  affordance without opening an async menu. `showMenu` false does the highlight only. */
     void handleChipClick(bool showMenu);
 
+    /** FRO14: one meter tick for the channel chip, driven by TimelinePanelComponent's single 15 Hz
+     *  timer rather than a per-row one (see ChannelChipComponent's header). Returns true only when
+     *  the chip actually repainted -- the gate that keeps this off the "unconditional per-tick
+     *  repaint" list. A no-op (false) for a row with no channel chip showing. */
+    bool tickChannelMeter();
+
     /** Applies a header context-menu choice (kDeleteTrackMenuId today). Same test seam as
      *  applyBindingMenuChoice. */
     void applyContextMenuChoice(int menuId);
@@ -443,6 +459,7 @@ public:
     juce::Button& getArmButton() noexcept { return armButton_; }
     juce::Button& getColourSwatch() noexcept { return colourSwatch_; }
     juce::Button& getBindingChip() noexcept { return bindingChip_; }
+    ChannelChipComponent& getChannelChip() noexcept { return channelChip_; }
     juce::Button& getAutomationButton() noexcept { return automationButton_; }
     juce::Colour getResolvedColour() const noexcept { return resolvedColour_; }
 
@@ -537,6 +554,15 @@ private:
     void showBindingMenu();
     void showContextMenu();
 
+    // FRO14: the app's channel surface, or null (no host, or a host that wires none -- a test
+    // stub). Every caller re-asks rather than caching: one cable drag can form or break the link.
+    synth::ui::TrackChannelLinkSurface* linkSurface() const {
+        return host_ != nullptr ? host_->getChannelLinkSurface() : nullptr;
+    }
+    // FRO14: the channel state refreshFromDoc() last read, so paint/resized and the M/S toggles
+    // agree with what is on screen without each re-walking the graph.
+    TrackChannelLinkSurface::ChannelInfo channelInfo_;
+
     // Shared by the real swatch click and createColourPickerForTest(): builds the popup with the
     // preview-writes-directly / commit-restores-then-one-undo-step wiring described on the class'
     // colour-swatch behaviour, WITHOUT launching it in a juce::CallOutBox.
@@ -589,6 +615,9 @@ private:
     ContextMenuForwardingButton armButton_{*this, "R"};
     ContextMenuForwardingButton automationButton_{*this, "A"};
     juce::TextButton bindingChip_;
+    // FRO14: the CHANNEL chip -- what this track's audio ends up in, as opposed to bindingChip_'s
+    // "which node feeds it". Hidden whenever the track reaches no channel yet.
+    ChannelChipComponent channelChip_;
 
     juce::Colour resolvedColour_{juce::Colours::grey};
     bool chipWarning_ = false;

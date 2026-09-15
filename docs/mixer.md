@@ -197,8 +197,10 @@ instrument. Linked means:
   cancel restores all three to their original colour, exactly like today's single-target case;
   a commit is **one** undo step covering all three, not three separate edits, matching the existing
   "one `Cmd+Z` undoes a dozen preview colours" semantics `docs/theming.md` §13 already documents,
-  now fanned out.
+  now fanned out over TWO stored targets, not three: a channel's colour IS its macro's colour, so
+  the mixer column reads the macro rather than a third copy on the strip (§8 item 3).
 - **(c) The track header's M/S drive the strip.** Not note gating — the linked channel's mute/solo.
+  A redirect, not a mirror: the track's own `muted`/`soloed` stay false, so there is only one copy.
 
 A channel fed by **more than one** track (Kick/Snare/Hats into one sampler) is **not** linked: it
 keeps its own independently-chosen name and colour, lists every track that feeds it, and each of
@@ -900,16 +902,37 @@ Main line, in dependency order:
        menu driven through its real right-click `mouseDown` and test hook, every action checked to
        undo in one step against graph/timeline/macro JSON snapshots and to redo.
 
-3. **P9-4 (T177) — Track/channel link.** Name sync, live colour sync across track/macro/column
-    through `ColourPickerPopup`'s preview/commit split, M/S driving the strip, the channel chip.
-   - Tests: renaming either side of a linked track/channel renames the other; a colour drag
-     previews on all three surfaces with no undo step per frame and commits as one; adding a
-     second source track to a linked channel breaks the link (name/colour become independent,
-     M/S reverts to note gating) and removing it back down to one source re-forms the link;
-     clicking a channel chip reveals the right mixer column.
+3. **P9-4 (T177) — Track/channel link — DONE.** §5.2 states the behaviour; this is how it is built.
+   - **The rule is a pure query, never a cached flag.** `synth::resolveTrackChannelLink`
+     (`Source/Mixer/TrackChannelLink.h`) walks a track's bound node forward to the first
+     `ChannelStripModule` it reaches, then that strip's feeders back out: exactly one feeder, and it
+     is this track, **is** the link — so break and re-form need no bookkeeping. The backward walk is
+     `StemSession`'s former private `upstreamTrackSources` promoted to Core (stem naming, §5.12,
+     asks the same question), so `channelDisplayName` answers "which track names this" once for both.
+   - **One interface, one collaborator.** `synth::ui::TrackChannelLinkSurface` is all a track header
+     sees; `TrackChannelLinkController` implements it, owned by `MainComponent`, which gains only
+     the member and a one-line `TrackHeaderHost::getChannelLinkSurface()` override (the
+     `GraphCanvasHost` seam pattern). Every "not linked" answer is false/null, so the header falls
+     through to its existing behaviour unchanged. Renaming the channel joins `renameMacro`'s own
+     transaction through the new `MacroGroupController::recordMacroRenameHook` rather than becoming
+     a second Cmd+Z; a linked M/S is one graph-snapshot step, solo always via §5.3's engine entry.
+   - **Two decisions.** A channel's colour IS its macro's colour (no colour field on the strip), so
+     an unboxed linked channel syncs neither name nor colour while its M/S still drive the strip.
+     And soloing a linked channel silences every other channel, a shared one included, even when
+     that shared channel's own track is note-gate soloed: a DAW mixer solo, not a bug.
+   - **The channel chip** (`ChannelChipComponent`) appears on every header whose track reaches a
+     channel, linked or shared. Its click calls `revealChannelForTrack`, today selecting the channel
+     and panning it into view (the Locate Master contract) — **the P9-5 hook**: the mixer panel
+     changes that one override, with no change to chip or header. ONE 15 Hz `juce::Timer` on
+     `TimelinePanelComponent` ticks every header, never one per row; it idles while hidden, reads
+     only `getChannelMeterPeak` (a cached strip id, not a graph walk), and each chip repaints only
+     past a coarse threshold (`docs/layout_visuals_animation.md` §2-3).
+   - Tests: `ChannelFlowTrackChannelLinkCoreTests.cpp` (the rule) and
+     `ChannelFlowTrackChannelLinkTests.cpp` (the behaviour through the real header buttons,
+     including the mixed linked-solo + shared-solo case asserted on the rendered strip meters).
 
-4. **P9-5 (T174) — Mixer panel, tab beside the Timeline.** Columns, faders, meters, insert lists,
-   track header M/S wired to strips (§5.6/§5.9).
+4. **P9-5 (T174) — Mixer panel, tab beside the Timeline.** Columns, faders, meters, insert lists
+   (§5.6/§5.9); "track header M/S wired to strips" shipped in P9-4 above, inherited here.
    - Tests: track header M/S toggles the bound strip's mute/solo state and nothing else; a
      branching insert chain renders read-only with "Edit on canvas" rather than a reorderable
      list.

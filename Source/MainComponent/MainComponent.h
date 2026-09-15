@@ -35,6 +35,7 @@
 #include "UI/Theme/ThemeManager.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TrackChannelLinkController.h"
 #include "Update/UpdateManager.h"
 #include "UserSettings.h"
 #include <juce_audio_utils/juce_audio_utils.h>
@@ -210,11 +211,9 @@ public:
      *  saveProjectForTest bypassing the save chooser). */
     void newPatchForTest() { newPatch(); }
     /** Exactly what the Open dialog's callback runs: an `.agsproj` bundle directory loads graph +
-     *  timeline, anything else loads a plain `.json` preset. If the bundle carries a pending
-     *  autosave sidecar, this kicks off the async recovery prompt instead (see
-     *  autosaveRecoveryPrompt) and returns true without the load having happened yet — a test
-     *  exercising that path drives autosaveRecoveryPrompt directly, the same idiom
-     *  unsavedChangesPrompt uses. */
+     *  timeline, anything else a plain `.json` preset. A bundle carrying a pending autosave sidecar
+     *  kicks off the async recovery prompt instead and returns true before any load has happened -
+     *  a test drives autosaveRecoveryPrompt directly, the same idiom unsavedChangesPrompt uses. */
     bool openProjectForTest(const juce::File& file) { return openFromFile(file); }
     // P8-31: reaches openFromFile's PATCH branch with an explicit load mode (`append == true` adds
     // onto the live graph; false replaces it), without a native file chooser.
@@ -349,15 +348,11 @@ public:
 
     // ---- Hosted plugins ----
     //
-    // MainComponent owns a scan list because Core must not read or write settings, and scanning is a
-    // standalone-app affair: a scan is refused outright when the engine is Hosted, so a DAW session
-    // can never trigger a nested plugin scan.
-    //
-    // It is not always the list in use. On the plugin path AgentSynthAudioProcessor restores and
-    // installs its OWN service before any editor exists (a host restores a session without ever
-    // opening our window), and that service outlives every editor — so an editor started on an
-    // external engine ADOPTS whatever is already installed instead of replacing it. Everything below
-    // therefore goes through getPluginScanService(), never the member directly.
+    // MainComponent owns a scan list (Core must not touch settings; a scan is refused outright on a
+    // Hosted engine, so a DAW session can never trigger a nested scan) but it is not always the list
+    // in use: on the plugin path AgentSynthAudioProcessor installs its OWN, longer-lived service
+    // before any editor exists, and an editor on an external engine ADOPTS that rather than replacing
+    // it. Everything below goes through getPluginScanService(), never the member directly.
 
     synth::PluginScanService& getPluginScanService() noexcept { return *activeScanService; }
     const synth::PluginScanService& getPluginScanService() const noexcept { return *activeScanService; }
@@ -503,16 +498,11 @@ private:
         juce::String assetRef;    // what the committed clip stores (see synth::Clip::assetRef)
         juce::AudioProcessorGraph::NodeID tapNode;
 
-        // The transport's rate/tempo and the engine's round-trip latency, frozen at the
-        // moment the capture started — NOT re-read at commit time. Recording anchors
-        // (captureStartTimelineSample, the WAV itself) are all in THIS rate's sample domain; a
-        // device/sample-rate change mid-take (which forces an early commit — see
-        // AudioEngine::handleStreamFormatChange) would otherwise leave commitAudioRecording() reading
-        // the engine's CURRENT (post-change) sampleRate/bpm/latency to convert an anchor that was
-        // captured under the OLD ones, silently mixing two rates into one beat conversion. Freezing
-        // these here makes the commit rate-independent unconditionally — a no-op for the (overwhelmingly
-        // common) case where the rate never changes during a take, since these values never differ
-        // from the live ones then.
+        // Rate/tempo/latency FROZEN at capture start, never re-read at commit: every recording
+        // anchor is in THIS rate's sample domain, and a device/sample-rate change mid-take (which
+        // forces an early commit - AudioEngine::handleStreamFormatChange) would otherwise have
+        // commitAudioRecording() convert an old-rate anchor with the new rate. A no-op when the rate
+        // never changes, which is the overwhelmingly common case.
         double captureSampleRate = 44100.0;
         double captureBpm = 120.0;
         int captureRecordingLatencySamples = 0;
@@ -569,6 +559,7 @@ private:
     getMidiDestinationOptions(synth::TrackId forTrack) override;
     void setMidiDestinationConnected(synth::TrackId forTrack, juce::uint32 nodeUid, bool connect) override;
     void auditionTrackNote(synth::TrackId forTrack, int pitch, int velocity, bool noteOn) override;
+    synth::ui::TrackChannelLinkSurface* getChannelLinkSurface() override { return &trackChannelLink_; }
 
     juce::String createTrackInNode();
 
@@ -689,14 +680,11 @@ private:
     synth::theme::ThemeManager* themeManager{nullptr};
     synth::theme::AppLookAndFeel* lookAndFeel{nullptr};
 
-    // The app's ONE live timeline document, and the recorder that captures parameter
-    // gestures into its automation lanes.
+    // The app's ONE live timeline document, and the recorder that captures parameter gestures into
+    // its automation lanes.
     //
-    // DECLARATION ORDER IS LOAD-BEARING — both are declared before `undoManager`, so both outlive
-    // it: a TimelineSnapshotAction sitting on the undo stack holds a reference to this doc (see
-    // AppUndoManager::recordTimelineChange), and members are destroyed in reverse declaration
-    // order. The recorder likewise must not be destroyed while an undo action could still commit
-    // into it.
+    // DECLARATION ORDER IS LOAD-BEARING - both precede `undoManager` so both outlive it: a
+    // TimelineSnapshotAction on the undo stack holds a reference to this doc, and to the recorder.
     synth::TimelineDoc timelineDoc;
     synth::AutomationRecorder automationRecorder;
     // The app's one live MidiRecorder — no lifetime constraint against undoManager the way
@@ -722,14 +710,10 @@ private:
     // initialiseCommon()), so it paints on top of the toolbar/canvas while visible.
     std::unique_ptr<synth::ui::WelcomeScreenComponent> welcomeScreen_;
 
-    // Every open hosted-plugin editor window. Declared AFTER ownedAudioEngine/audioEngine
-    // (and graphEditor) so it is destroyed BEFORE them — members are torn down in REVERSE
-    // declaration order, and a window's content can hold a live juce::AudioPluginInstance editor
-    // that must not outlive the graph node it came from. ~MainComponent() ALSO calls
-    // pluginWindowManager.closeAll() explicitly, as its very first line — a second, independent
-    // line of defence against the same hazard; see HostedPluginWindowManager's class comment for
-    // why both exist. Declaration-order safety alone would still work if that explicit call were
-    // ever accidentally removed.
+    // Every open hosted-plugin editor window. Declared AFTER ownedAudioEngine/audioEngine (and
+    // graphEditor) so reverse-order destruction kills it FIRST: a window's content can hold a live
+    // juce::AudioPluginInstance editor that must not outlive its graph node. ~MainComponent() also
+    // calls closeAll() as its first line - a second, independent defence (see that class' comment).
     synth::HostedPluginWindowManager pluginWindowManager;
 
     ModuleLibraryComponent moduleLibrary;
@@ -758,30 +742,28 @@ private:
 
     std::unique_ptr<juce::FileChooser> fileChooser;
 
-    // Declared BEFORE aiChatComponent: its constructor reads a persisted setting straight out of
-    // appProperties (see AIChatComponent's kDefaultRequestTimeoutMs restore), and members are
-    // constructed in declaration order regardless of initializer-list order — appProperties being
-    // any later than aiChatComponent left that read touching a not-yet-constructed object (UB,
-    // observed as a hang inside juce::PropertySet::getIntValue). setStorageParameters() itself
-    // still runs later, in the constructor body (initialiseCommon()'s ORDERING CONTRACT re-syncs
-    // whatever the too-early read missed) — this fixes the crash, not the file-not-loaded-yet gap.
+    // Declared BEFORE aiChatComponent, whose constructor reads a persisted setting straight out of
+    // this (kDefaultRequestTimeoutMs): members construct in declaration order, and the other order
+    // was UB (observed as a hang in juce::PropertySet::getIntValue). setStorageParameters() still
+    // runs later, in initialiseCommon() - this fixes the crash, not the file-not-loaded-yet gap.
     juce::ApplicationProperties appProperties;
     juce::PropertiesFile::Options propertiesOptions;
 
     synth::AIIntegrationService aiService;
-    // Declared BEFORE aiChatComponent: members are destroyed in reverse declaration order, so
-    // aiChatComponent (which installs AccountService::onStateChanged/onAccessTokenChanged in
-    // setAccountService(), see its header comment) is torn down first, while accountService is
-    // still alive to have those callback slots cleared.
-    // P4-6: explicit production host — the AccountService(host) default of localhost:8787 is a
-    // dev/test convenience only, and MainComponent is the real composition root. A Debug build can
-    // still redirect this to a local synth-platform server via AGENTSYNTH_LOCAL_API_URL — see
-    // synth::branding::resolveApiBaseUrl().
+    // Declared BEFORE aiChatComponent so reverse-order destruction tears the chat component down
+    // first, while this is still alive to have the callback slots it installed (setAccountService)
+    // cleared. P4-6: explicit production host - AccountService's own localhost:8787 default is a
+    // dev convenience and MainComponent is the real composition root; a Debug build redirects via
+    // AGENTSYNTH_LOCAL_API_URL (synth::branding::resolveApiBaseUrl()).
     synth::AccountService accountService{synth::branding::resolveApiBaseUrl()};
     synth::AIChatComponent aiChatComponent;
     bool isAiPanelVisible = false;
     bool isLibraryVisible{true};
     bool isAlignmentGuidesEnabled{true}; // NEW: default TRUE for backward compatibility
+
+    // FRO14 (docs/mixer.md 5.2): the track <-> channel link, its own collaborator rather than more
+    // methods here. Declared after the members it references. Contract: TrackChannelLinkController.h.
+    synth::ui::TrackChannelLinkController trackChannelLink_{audioEngine, timelineDoc, undoManager, graphEditor};
 
     // Bottom-docked timeline panel shell.
     synth::ui::TimelinePanelComponent timelinePanel;
@@ -843,14 +825,11 @@ private:
     // the document was reset and must be able to recompute rather than blindly re-dirty it.
     int savedEditSerial_ = 0;
 
-    // FRO42 review fix: bumped exactly once by guardUnsavedChanges() immediately before it actually
-    // runs `proceed` — i.e. once per New Patch/Open/Load-preset/Quit that really goes ahead, never
-    // on Cancel or a failed/cancelled Save arm. A hosted-plugin instrument load started against the
-    // PREVIOUS document is asynchronous (see pendingInstrumentPluginLoads_); addInstrumentPluginTrack
-    // captures this value when the load starts, and its onLoadCompleted lambda compares it against
-    // the live value before building a track — a mismatch means the document underneath that load
-    // is already gone, so the completion is dropped (graph/undo untouched) instead of landing a new
-    // track in the freshly loaded/created document.
+    // FRO42: bumped once by guardUnsavedChanges() immediately before it runs `proceed` - never on
+    // Cancel or a failed Save arm. addInstrumentPluginTrack captures it when an async hosted-plugin
+    // load starts (pendingInstrumentPluginLoads_) and its completion compares it against the live
+    // value before building a track: a mismatch means the document that load belonged to is gone, so
+    // the completion is dropped (graph/undo untouched).
     int documentGeneration_ = 0;
 
     // Autosave's own baseline — a SEPARATE serial from savedEditSerial_ above (see
@@ -865,23 +844,17 @@ private:
     // 10 Hz timer's actual firing rate is not guaranteed exact.
     juce::uint32 lastAutosaveMs_ = 0;
 
-    // True from the moment an Export Audio (bounce) OR Export Stems render starts until its
-    // completion callback runs — checked by maybeAutosave() (a sidecar write mid-render is
-    // pointless and autosave has no business touching the document while the engine is
-    // offline-prepared) and by guardUnsavedChanges() (New Patch/Open/Load preset/Quit must not
-    // mutate or replace the graph out from under a live render — see BounceRunner.h/StemRunner.h).
-    // ONE flag, deliberately, for both: the offline render path (suspendDeviceCallback + reprepare)
-    // is exclusive regardless of which of the two is running, so "one render in flight at a time"
-    // has to mean across both, not per-kind.
+    // True while an Export Audio (bounce) OR Export Stems render is in flight - checked by
+    // maybeAutosave() and guardUnsavedChanges(), neither of which may touch the document while the
+    // engine is offline-prepared (see BounceRunner.h/StemRunner.h). ONE flag for both, deliberately:
+    // the offline render path is exclusive across the two, not per-kind.
     bool isBounceInProgress_ = false;
     std::unique_ptr<synth::BounceRunner> bounceRunner_;
     std::unique_ptr<synth::StemRunner> stemRunner_;
-    // The currently-shown Export Audio/Export Stems dialog, polled for progress by timerCallback() -
-    // a SafePointer because the modal window (and its content) can go away independently, and
-    // reportProgress() must simply become a no-op rather than a dangling call. Owned by the
-    // DialogWindow that shows it, never by MainComponent. Shared by both flows (ExportAudioDialog's
-    // stems mode is the same class) since only one of bounceRunner_/stemRunner_ is ever non-null at
-    // a time.
+    // The currently-shown Export Audio/Export Stems dialog, polled for progress by timerCallback().
+    // A SafePointer because the modal window can go away independently and reportProgress() must
+    // become a no-op rather than dangle; owned by its DialogWindow, never by MainComponent. Shared
+    // by both flows - only one of bounceRunner_/stemRunner_ is ever non-null at a time.
     juce::Component::SafePointer<synth::ui::ExportAudioDialog> exportDialog_;
 
     // Declared here (not in AudioEngine or Core) because it is settings-backed and
@@ -919,11 +892,9 @@ private:
 
     // ---- Panel slide animations (fraction-driven, time-bounded, auto-stop) ----
     //
-    // Each sliding panel owns a [0..1] open fraction; resized() derives its size from that
-    // fraction, so a layout pass is correct whenever it runs and a toggle only has to move the
-    // fraction (docs/layout.md §11). ONE driver moves ALL THREE fractions — the panels share a
-    // window, so their slides must share a clock: a per-panel animator would leave whichever
-    // slide the next toggle didn't mention frozen half-open.
+    // Each sliding panel owns a [0..1] open fraction and resized() derives its size from that, so a
+    // layout pass is correct whenever it runs (docs/layout.md §11). ONE driver moves ALL THREE: the
+    // panels share a window, so a per-panel animator would leave one slide frozen half-open.
     juce::VBlankAnimatorUpdater vblankUpdater{this};
     synth::ui::AnimationDriver panelSlideAnim_;
     synth::ui::PanelSlide librarySlide_;

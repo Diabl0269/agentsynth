@@ -77,12 +77,25 @@ void MainComponent::publishTimelineAndRebindRecorder() {
 // ONLY when the reconcile itself changed nothing — a reconcile that flips a flag is a doc
 // mutation, so timelineChanged has already published by the time it returns.
 void MainComponent::reconcileTimelineAfterGraphChange() {
+    // FRO14 (docs/mixer.md §5.2): a link forming around an already-muted/soloed track moves that
+    // state onto its channel (and a link can only form or break via a graph change, which is
+    // exactly what reaches here). Runs FIRST so the reconcile/publish below already sees the
+    // transferred doc flags. Deliberately not undoable — same rule as the orphan flag next to it.
+    trackChannelLink_.reconcileLinkedTracks();
+
     // reconcileBindings routes through the doc's single mutation choke point when (and only when) a
     // flag actually flips, which fires timelineChanged and therefore publishes. Publishing again
     // here would be a wasted snapshot build, so this only publishes for the "nothing flipped" case
     // — where the graph still changed under us and the recorder's bindings must be re-resolved.
     if (!synth::TimelineReconciler::reconcile(timelineDoc, audioEngine.getGraph()))
         publishTimelineAndRebindRecorder();
+
+    // FRO14: a LINKED track's M/S live on its channel strip, not in the doc, so a graph change (an
+    // undo of a channel mute/solo included) moves state no doc notification would ever report.
+    // Every header re-reads its channel here; refreshFromDoc() is idempotent and cheap.
+    for (int i = 0; i < timelinePanel.getTrackHeaderCount(); ++i)
+        if (auto* header = timelinePanel.getTrackHeaderAt(i))
+            header->refreshFromDoc();
 }
 
 // The cheap half of the above, with no republish of its own: installed on
