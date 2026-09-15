@@ -341,6 +341,9 @@ add_executable(Tests
     UI/Mixer/MixerDockComponentTests.cpp
     UI/Mixer/MixerEqThumbnailTests.cpp
     UI/Mixer/MixerColumnComponentTests.cpp
+    UI/Mixer/MixerPanelKeyboardFocusTests.cpp
+    UI/Mixer/MixerAccessibilityTests.cpp
+    UI/Mixer/MixerFocusRegionTests.cpp
     UI/Graph/MinimapComponentTests.cpp
     Plugin/PluginProcessorTests.cpp
     Engine/AudioEngineTransportTests.cpp
@@ -403,6 +406,7 @@ add_executable(Tests
     ../Source/UI/Mixer/MixerDirectColumn.cpp
     ../Source/UI/Mixer/MixerMasterColumn.cpp
     ../Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.cpp
+    ../Source/UI/Mixer/MixerPanelComponent/MixerPanelKeyboard.cpp
     ../Source/UI/Mixer/MixerDockComponent.cpp
     ../Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.cpp
     ../Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLanePainting.cpp

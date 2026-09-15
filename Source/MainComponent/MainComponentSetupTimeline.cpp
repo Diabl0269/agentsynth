@@ -78,6 +78,25 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     timelinePanel.setShortcutManager(&shortcutManager);
     timelinePanel.getPianoRoll().setShortcutManager(&shortcutManager);
     timelinePanel.getClipLaneArea().setShortcutManager(&shortcutManager);
+    // FRO18: the mixer panel resolves the SAME "timelineMuteFocusedTrack"/"timelineSoloFocusedTrack"/
+    // "timelineArmFocusedTrack" action ids the track-header row above already binds -- a user's
+    // rebind of M/S/R applies to whichever of the two surfaces has focus. Not part of the "MUST
+    // stay together" strict-resolution group above: the mixer panel falls back to hardcoded bare
+    // letters with no manager installed (MixerPanelComponent::matchesAction), same "no manager
+    // installed" contract every other surface action in this app follows, rather than requiring
+    // every id it consults to be pre-registered.
+    mixerDock.getMixerPanel().setShortcutManager(&shortcutManager);
+    // FRO18: Arm reaches the focused strip's linked track through the SAME performTrackEdit
+    // one-undo-step path the Timeline header row's own R key uses -- never a direct TimelineDoc
+    // write (that would skip the undo bracket every other track edit goes through). Routed through
+    // setOnArmTrack, the sibling forwarder to setOnGraphTopologyChanged/setOnMakeChannelForNode
+    // above, rather than reaching through getMixerPanel() to set the panel's callback directly.
+    mixerDock.setOnArmTrack([this](synth::TrackId id) {
+        performTrackEdit([this, id] {
+            if (auto* track = timelineDoc.getTrack(id))
+                timelineDoc.setTrackArmed(id, !track->armed);
+        });
+    });
 
     // The panel's top-edge drag reports a desired height; THIS component owns it — clamp, lay out
     // live, and persist once the drag ends (not per pixel).

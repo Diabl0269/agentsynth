@@ -559,6 +559,17 @@ seed's canvas origin) while Master jumped to the far side of the chain, and the 
 run back across the whole canvas — caught live via computer-use testing while verifying T187. Only
 fires the first time Master is created; once it exists, later tracks don't reshuffle the canvas.
 
+### 5.15 Keyboard navigation and accessibility (FRO18)
+
+The mixer panel is its own T159 keyboard focus region (Left/Right walk columns, Up/Down nudge the
+focused fader, Enter selects the focused column's macro on canvas, and the rebindable Mute/Solo/
+Arm Focused Track actions act on it — the same action ids the Timeline track-header row already
+binds), and every fader/pan/meter/M/S control carries a JUCE `AccessibilityHandler` name and value
+so VoiceOver can read the mix (e.g. "Lead 1 fader, -3.0 dB"). Full key table, the region's open
+predicate, and the accessibility handler details live in
+[`docs/shortcuts.md`](shortcuts.md#mixer-column-navigation) (§ Focus regions / § Mixer column
+navigation) — this section only cross-links it, per this doc's own "one topic per doc" rule.
+
 ---
 
 ## 6. AI authorability

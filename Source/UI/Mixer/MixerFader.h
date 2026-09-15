@@ -35,6 +35,14 @@ public:
 
     bool isBoundForTest() const noexcept { return param_ != nullptr; }
 
+    /** FRO18: nudges the bound param by `deltaDb` (clamped to the param's own range), as exactly
+     *  ONE undo step -- begin/end the gesture around a single setValueNotifyingHost the same way a
+     *  slider drag does, so parameterGestureChanged (already listening -- see the class comment)
+     *  brackets it, not a second undo mechanism. A no-op (false) when nothing is bound, so the
+     *  keyboard path stays inert after unbindFromGraph() the same way the click handlers already
+     *  are (MixerColumnComponent::unbindFromGraph nulls onClick). */
+    bool nudge(float deltaDb);
+
     /** Counts only unbind() calls that actually detached a live parameter (param_ was non-null at
      *  entry) -- a defensive no-op unbind() on an already-unbound fader never bumps this. Lets a
      *  test prove the FRO11 pre-restore hook (MixerPanelComponent::unbindAllColumns(), reached via
@@ -43,6 +51,21 @@ public:
     static int getLiveUnbindCallCountForTest() noexcept { return liveUnbindCallCountForTest_; }
 
     juce::Slider& getSlider() noexcept { return slider_; }
+
+    /** FRO18: "<channel name> fader" (e.g. "Lead 1 fader") -- the accessible name VoiceOver reads
+     *  ahead of the slider's own value text below. */
+    void setChannelName(const juce::String& name);
+
+    /** FRO18 review fix: moves REAL accessibility focus (not keyboard focus) to the fader slider's
+     *  handler when the column it belongs to becomes the panel's keyboard-walked focus. Safe to
+     *  call unconditionally -- getAccessibilityHandler() returns null with no native peer yet
+     *  (headless CI, or before the window is shown), the exact case slider_.getAccessibilityHandler()
+     *  guards below. AccessibilityHandler::grabFocus() only calls Component::grabKeyboardFocus()
+     *  when the component itself wants keyboard focus, which the slider deliberately doesn't
+     *  (setWantsKeyboardFocus(false) above, the T160 trap) -- so this moves VoiceOver's cursor
+     *  without stealing the panel's own real OS keyboard focus (MixerPanelComponent is the single
+     *  focusable leaf). */
+    void grabAccessibilityFocus();
 
     void resized() override;
 
