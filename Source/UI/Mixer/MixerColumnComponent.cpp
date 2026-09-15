@@ -42,6 +42,15 @@ MixerColumnComponent::MixerColumnComponent() {
         if (onMutated)
             onMutated();
     };
+    // FRO16 UAF fix: a live "Remove" from the row menu frees the removed node's processor
+    // synchronously (see MixerInsertList::onBeforeNodeRemoved's own comment), before the eventual
+    // MixerPanelComponent::rebuild() this column's own onMutated triggers gets a chance to destroy
+    // eqThumbnail_ -- so unbind it here, synchronously, whenever the node being removed is the one
+    // it's currently bound to. A no-op for every other row.
+    insertList_.onBeforeNodeRemoved = [this](juce::AudioProcessorGraph::NodeID nodeId) {
+        if (nodeId == eqNodeId_)
+            eqThumbnail_.setEqModule(nullptr);
+    };
 
     addChildComponent(eqThumbnail_); // hidden by default -- MixerEqThumbnail::setVisible(false)
     eqThumbnail_.onClicked = [this] {
@@ -91,6 +100,7 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
     // the insert list itself; this is a deliberate scope trim, not an oversight.
     ParametricEQModule* firstEq = nullptr;
     eqNodeUuid_.clear();
+    eqNodeId_ = {};
     if (graph_ != nullptr) {
         for (const auto& entry : column.inserts) {
             auto* node = graph_->getNodeForId(entry.nodeId);
@@ -98,6 +108,7 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
             if (auto* eq = dynamic_cast<ParametricEQModule*>(processor)) {
                 firstEq = eq;
                 eqNodeUuid_ = entry.uuid;
+                eqNodeId_ = entry.nodeId;
                 break;
             }
         }

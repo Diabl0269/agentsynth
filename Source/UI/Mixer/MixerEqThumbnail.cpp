@@ -7,6 +7,8 @@
 
 namespace synth::ui {
 
+int MixerEqThumbnail::liveUnbindCallCountForTest_ = 0;
+
 MixerEqThumbnail::MixerEqThumbnail() { setInterceptsMouseClicks(true, false); }
 
 MixerEqThumbnail::~MixerEqThumbnail() {
@@ -41,6 +43,7 @@ void MixerEqThumbnail::setEqModule(ParametricEQModule* eq) {
 void MixerEqThumbnail::detachListeners() {
     if (eq_ == nullptr)
         return;
+    ++liveUnbindCallCountForTest_;
     for (auto* param : eq_->getParameters())
         if (param != nullptr)
             param->removeListener(this);

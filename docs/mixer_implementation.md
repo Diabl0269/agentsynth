@@ -459,17 +459,33 @@ Side tracks (each independent of the main line beyond its own listed dependency)
     uuid, so `MixerPanelComponent::selectOnCanvas` resolves it exactly like a column header click or
     the insert list's own "Edit on canvas" link (macro id, then `findByMember`, else the bare node).
     No new canvas plumbing.
-  - *Lifetime* — `MixerColumnComponent::unbindFromGraph()` (the FRO11 pre-restore hook,
-    `MixerPanelComponent::unbindAllColumns()` reached via
-    `GraphEditor::onBeforeDetachAllModuleComponents`) also detaches the thumbnail's listeners, same
-    as it already does for the fader/pan/mute/solo/meter.
+  - *Lifetime* — two seams, not one. `MixerColumnComponent::unbindFromGraph()` (the FRO11
+    pre-restore hook, `MixerPanelComponent::unbindAllColumns()` reached via
+    `GraphEditor::onBeforeDetachAllModuleComponents`) detaches the thumbnail's listeners for every
+    graph-*replacing* mutation (undo/redo restore, New Patch, Load, AI apply), same as it already
+    does for the fader/pan/mute/solo/meter. A **live single-insert removal** from the mixer's own
+    row menu is a different path — `MixerInsertList::removeRow()` calls `graph.removeNode()`
+    directly (synchronous, frees the processor immediately) and only *afterwards* does that
+    mutation's `onMutated` bubble into `MixerPanelComponent::rebuild()`, which is what would
+    destroy this column's `eqThumbnail_` — too late to save it from a stale `eq_` pointer, and
+    `onBeforeDetachAllModuleComponents` never fires for this path at all. Fixed by
+    `MixerInsertList::onBeforeNodeRemoved` (fired from `removeRow()`, with the node about to be
+    freed, before `graph.removeNode()`): `MixerColumnComponent` wires it to unbind
+    `eqThumbnail_` whenever the node being removed is the one it's bound to. An earlier draft of
+    this plan's own risk notes ("EQ node deleted between snapshot and paint: covered by the column
+    rebuild lifetime") got this ordering backwards — the rebuild happens strictly *after* the
+    module is freed on this path, not before; the notes below are the corrected version.
   - Tests: `Tests/UI/Mixer/MixerEqThumbnailTests.cpp` — hidden with no EQ; visible with an enabled
     band; dark- and light-theme PNG renders of a flat vs. a +12 dB/1 kHz curve are not pixel-
     identical; bypass visibly dims the fill; recompute count stays flat across repeated paints and
     bumps by exactly one per parameter-change-plus-dispatch-pump; a synthesized click fires
     `onClicked`. `Tests/UI/Mixer/MixerColumnComponentTests.cpp` — a column's click forwards the EQ's
     own uuid (not the strip's); with two EQ inserts only the first gets the thumbnail; a strip with
-    no EQ insert shows none.
+    no EQ insert shows none; removing the currently-bound EQ insert through
+    `MixerInsertList::removeRow()` (a real, signal-connected TrackAudio->EQ->Compressor->Strip
+    chain, so `spliceOutInsert` actually runs) unbinds the thumbnail before the node is freed,
+    proven by `MixerEqThumbnail::getLiveUnbindCallCountForTest()` (same accounting as
+    `MixerFader::getLiveUnbindCallCountForTest()`) rather than by the absence of a crash alone.
 - **P9-11 (T180) — Gate module.** Done — `GateModule` (`Source/Modules/FX/GateModule.h`,
   [`fx_modules.md` § Gate Module](fx_modules.md#gate-module)). No dependency on the rest of P9;
   wiring it into a default track preset (§5.7/§7 D3) is still open.

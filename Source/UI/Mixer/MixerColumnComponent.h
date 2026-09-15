@@ -52,6 +52,11 @@ public:
      *  hidden when there is nothing to show). */
     MixerEqThumbnail& getEqThumbnailForTest() noexcept { return eqThumbnail_; }
 
+    /** The column's own insert list -- juce::PopupMenu never runs in a test process
+     *  (docs/testing.md), so a test drives MixerInsertList::removeRow()/moveRow()/addModule()
+     *  directly through this, exactly like the row menu's own async callbacks would. */
+    MixerInsertList& getInsertListForTest() noexcept { return insertList_; }
+
     /** Fires when the header (or empty column background) is clicked -- MixerPanelComponent wires
      *  this to select the strip's macro (or the strip itself, if unboxed) on the canvas. */
     std::function<void()> onColumnClicked;
@@ -85,6 +90,11 @@ private:
     /** The uuid of the first (signal-order) Parametric EQ among this column's inserts -- see
      *  rebindControls(). Empty when the column has no EQ insert. */
     juce::String eqNodeUuid_;
+    /** The same EQ's NodeID -- compared against MixerInsertList::onBeforeNodeRemoved's argument to
+     *  unbind eqThumbnail_ before a live row-menu removal frees the module it's bound to (FRO16 UAF
+     *  fix; unbindFromGraph() above handles the graph-replacing-restore case, not this one). Empty
+     *  (default-constructed) when the column has no EQ insert. */
+    juce::AudioProcessorGraph::NodeID eqNodeId_;
 
     MixerColumnHeader header_;
     juce::Label sourceLineLabel_;

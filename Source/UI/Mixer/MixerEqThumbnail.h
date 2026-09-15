@@ -11,6 +11,16 @@
 // insert is a Parametric EQ (MixerColumnComponent::rebindControls() decides that); hidden
 // otherwise.
 //
+// Lifetime: setEqModule(nullptr) must run BEFORE the bound module's owning node is removed from
+// the graph, not only before a full graph-replacing restore. MixerColumnComponent calls it from
+// two seams: unbindFromGraph() (the FRO11 pre-restore hook, for undo/redo/New Patch/Load/AI
+// apply) AND MixerInsertList::onBeforeNodeRemoved (fired from MixerInsertList::removeRow, for a
+// live single-insert removal via the mixer's own row menu -- graph.removeNode() frees the
+// processor synchronously, so without this second seam the column's later rebuild
+// (MixerPanelComponent::rebuild(), reached through onMutated) would destroy this thumbnail's
+// still-bound eq_ pointer AFTER the module was already freed, and ~MixerEqThumbnail's
+// detachListeners() would dereference it).
+//
 // Repaint discipline (root CLAUDE.md "No unconditional per-tick repaint"): no Timer, no
 // AnimationDriver. A parameter write on ANY thread (the audio thread included -- CV-modulated
 // bands write their resolved value there) can only call the allocation-free, coalescing
@@ -47,6 +57,12 @@ public:
      *  parameter-change burst. */
     int getRecomputeCountForTest() const noexcept { return recomputeCount_; }
 
+    /** Counts only detachListeners() calls that actually had a live `eq_` to detach from (not a
+     *  defensive no-op with nothing bound) -- same accounting as MixerFader::
+     *  getLiveUnbindCallCountForTest(). Lets a test prove a pre-removal unbind hook actually ran
+     *  and did real work, not just that nothing crashed. */
+    static int getLiveUnbindCallCountForTest() noexcept { return liveUnbindCallCountForTest_; }
+
     void paint(juce::Graphics& g) override;
     void mouseUp(const juce::MouseEvent& event) override;
 
@@ -63,6 +79,8 @@ private:
     std::vector<float> cachedMagnitudesDb_;
     bool cachedBypassed_ = false;
     int recomputeCount_ = 0;
+
+    static int liveUnbindCallCountForTest_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerEqThumbnail)
 };
