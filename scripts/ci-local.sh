@@ -174,9 +174,41 @@ cmake_args=(-B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=ON -DENABL
 # is locked to whatever generator created it -- re-passing -G Ninja against an existing Makefiles
 # (or vice versa) cache is a hard "does not match the generator used previously" error with no
 # recovery short of deleting the directory, which would defeat the point of an incremental hook.
-if [ ! -f "$BUILD_DIR/CMakeCache.txt" ] && command -v ninja >/dev/null 2>&1; then
-    cmake_args+=(-G Ninja)
+FIRST_CONFIGURE=false
+if [ ! -f "$BUILD_DIR/CMakeCache.txt" ]; then
+    FIRST_CONFIGURE=true
+    if command -v ninja >/dev/null 2>&1; then
+        cmake_args+=(-G Ninja)
+    fi
 fi
+
+# Worktree dependency-source reuse (FIRST configure only): a fresh worktree's build-ci-local/_deps
+# starts empty, so FetchContent would otherwise re-download JUCE/GoogleTest/Sparkle from scratch
+# even though the main checkout right next to it already has them on disk. See
+# scripts/lib/deps-reuse.sh for the full rationale and the pin-match safety check.
+# CI_LOCAL_NO_DEPS_REUSE=1 opts out.
+if [ "$FIRST_CONFIGURE" = true ]; then
+    # shellcheck source=scripts/lib/deps-reuse.sh
+    source "$REPO_ROOT/scripts/lib/deps-reuse.sh"
+    GIT_COMMON_DIR="$(git rev-parse --git-common-dir 2>/dev/null || true)"
+    MAIN_CHECKOUT_ROOT=""
+    if [ -n "$GIT_COMMON_DIR" ]; then
+        case "$GIT_COMMON_DIR" in
+            /*) : ;;
+            *) GIT_COMMON_DIR="$REPO_ROOT/$GIT_COMMON_DIR" ;;
+        esac
+        MAIN_CHECKOUT_ROOT="$(cd "$GIT_COMMON_DIR/.." && pwd)"
+    fi
+    deps_reuse_compute "$REPO_ROOT" "$MAIN_CHECKOUT_ROOT" "$BUILD_DIR"
+    echo "$DEPS_REUSE_MESSAGE"
+    # bash 3.2 (macOS's default /bin/bash) treats "${arr[@]}" on a zero-element array as an
+    # unbound-variable error under `set -u` -- guard the expansion rather than relying on the
+    # bash 4.4+ fix this script cannot assume.
+    if [ "${#DEPS_REUSE_ARGS[@]}" -gt 0 ]; then
+        cmake_args+=("${DEPS_REUSE_ARGS[@]}")
+    fi
+fi
+
 cmake -S . "${cmake_args[@]}"
 
 step "Build (all CMake targets: Core, AppUI, AgentSynth, AgentSynthPlugin, Tests)"

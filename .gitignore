@@ -2,6 +2,7 @@
 build/
 bin/
 lib/
+!scripts/lib/
 *.app/
 *.o
 *.a
