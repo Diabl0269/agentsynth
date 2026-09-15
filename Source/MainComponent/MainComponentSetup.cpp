@@ -6,6 +6,7 @@
 #include "AI/AIProviderRegistry.h"
 #include "MainComponent.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "UI/Mixer/MixerPanelComponent/MixerFocusRegion.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 
 void MainComponent::restorePanelPreferences() {
@@ -423,12 +424,11 @@ void MainComponent::registerFocusRegions() {
                                  if (!isTimelineVisible && toggleTimelineButton.onClick)
                                      toggleTimelineButton.onClick();
                              }});
-    // No `open` callback: a direct-focus shortcut never targets the mixer today (same reason
-    // modMatrix has none -- out of scope per this ticket), and Tab-cycling never opens a closed
-    // region regardless (FocusRegionRegistry::cycleFocus). Open only when the dock itself is open
-    // AND its Mixer tab is the one showing -- see MixerFocusRegionTests.cpp.
-    focusRegions_.addRegion({"mixer", &mixerDock.getMixerPanel(),
-                             [this] { return isTimelineVisible && mixerDock.isMixerTabActive(); }, nullptr});
+    // FRO18 plan (a)'s "FRO12 seam": the actual registration (open predicate + no `open` callback
+    // -- see MixerFocusRegion.h's own comment) lives in the free `registerMixerFocusRegion` helper
+    // so a future detached mixer window (FRO12) can register the same region against its own
+    // FocusRegionRegistry with a different `dockOpen` predicate instead of re-deriving this logic.
+    synth::ui::registerMixerFocusRegion(focusRegions_, mixerDock, [this] { return isTimelineVisible; });
     focusRegions_.addRegion({"aiPanel", &aiChatComponent, [this] { return isAiPanelVisible; },
                              [this] {
                                  if (!isAiPanelVisible && toggleAiPanelButton.onClick)

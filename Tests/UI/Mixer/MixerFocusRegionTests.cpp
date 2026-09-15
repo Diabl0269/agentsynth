@@ -9,6 +9,7 @@
 #include "MainComponent/MainComponent.h"
 #include "MixerDockActiveTabResetGuard.h"
 #include "UI/Layout/FocusRegion.h"
+#include "UI/Mixer/MixerPanelComponent/MixerFocusRegion.h"
 #include <gtest/gtest.h>
 
 namespace {
@@ -113,4 +114,60 @@ TEST(MixerFocusRegionTest, TabCycleNeverLandsOnAHiddenDockPanel) {
     mc.getMixerDock().setActiveTab(synth::ui::MixerDockComponent::Tab::Mixer);
     EXPECT_TRUE(isOpen("mixer"));
     EXPECT_FALSE(isOpen("timeline"));
+}
+
+TEST(MixerFocusRegionTest, RegisterMixerFocusRegionIsReusableAcrossIndependentRegistries) {
+    // FRO18 plan (a)'s FRO12 seam: registerMixerFocusRegion() must work unmodified against a
+    // SECOND, independent FocusRegionRegistry driven by a DIFFERENT dockOpen predicate -- exactly
+    // what a future detached mixer window (FRO12) would do, constructing its own registry and
+    // calling this same helper with its own open/closed notion instead of MainComponent's
+    // isTimelineVisible-backed one. MainComponent::registerFocusRegions() (registerFocusRegions'
+    // "mixer" region -- MainComponentSetup.cpp) exercises the helper with ITS predicate elsewhere;
+    // this proves the helper itself, not MainComponent's one call site.
+    MixerDockActiveTabResetGuardMDT resetGuard;
+    MainComponent mc(std::make_unique<MockProviderMFRT>());
+    mc.setSize(1400, 900);
+    mc.newPatchForTest();
+    ensureDockOpen(mc);
+    mc.getMixerDock().setActiveTab(synth::ui::MixerDockComponent::Tab::Mixer);
+
+    synth::ui::FocusRegionRegistry secondRegistry;
+    bool alwaysOpenFlag = true;
+    synth::ui::registerMixerFocusRegion(secondRegistry, mc.getMixerDock(),
+                                        [&alwaysOpenFlag] { return alwaysOpenFlag; });
+
+    auto* region = secondRegistry.findById("mixer");
+    ASSERT_NE(region, nullptr);
+    EXPECT_EQ(region->root, &mc.getMixerDock().getMixerPanel());
+    EXPECT_TRUE(region->isCurrentlyOpen()) << "dockOpen() true AND Mixer tab active";
+
+    alwaysOpenFlag = false;
+    EXPECT_FALSE(region->isCurrentlyOpen())
+        << "the same helper call must keep honouring ITS OWN dockOpen predicate, not some fixed rule";
+
+    // Registering against a second registry must not touch MainComponent's own -- still exactly
+    // the seven regions RegistersExactlyTheSevenDocumentedRegionsInOrder documents.
+    EXPECT_EQ(mc.getFocusRegionsForTest().getRegions().size(), 7u);
+}
+
+TEST(MixerFocusRegionTest, RegisterMixerFocusRegionTreatsANullDockOpenAsAlwaysOpen) {
+    // FocusRegion::isOpen's own contract: null means "always open" (the graph canvas has no closed
+    // state at all). A detached FRO12 window with no closed state of its own passes a null/empty
+    // std::function rather than `[]{ return true; }` -- must not crash and must behave identically.
+    MixerDockActiveTabResetGuardMDT resetGuard;
+    MainComponent mc(std::make_unique<MockProviderMFRT>());
+    mc.setSize(1400, 900);
+    mc.newPatchForTest();
+    ensureDockOpen(mc);
+    mc.getMixerDock().setActiveTab(synth::ui::MixerDockComponent::Tab::Mixer);
+
+    synth::ui::FocusRegionRegistry registry;
+    synth::ui::registerMixerFocusRegion(registry, mc.getMixerDock(), nullptr);
+
+    auto* region = registry.findById("mixer");
+    ASSERT_NE(region, nullptr);
+    EXPECT_TRUE(region->isCurrentlyOpen()) << "null dockOpen -- always open, gated only by the Mixer tab";
+
+    mc.getMixerDock().setActiveTab(synth::ui::MixerDockComponent::Tab::Timeline);
+    EXPECT_FALSE(region->isCurrentlyOpen()) << "still gated by isMixerTabActive() regardless of dockOpen";
 }

@@ -461,6 +461,14 @@ Side tracks (each independent of the main line beyond its own listed dependency)
   insert/removal elsewhere in the column order never silently reattaches it to the wrong column,
   and a deleted focused strip clears focus instead.
 
+  The mixer's own "mixer" focus-region registration (open predicate + no `open` callback) is a
+  free helper, `registerMixerFocusRegion(FocusRegionRegistry&, MixerDockComponent&,
+  std::function<bool()> dockOpen)` (`MixerFocusRegion.h`, next to `MixerPanelComponent.h`) —
+  `MainComponent::registerFocusRegions()` calls it with `dockOpen = [this]{ return
+  isTimelineVisible; }` rather than inlining the region-registration lambda, so a future detached
+  mixer window (P9-6/FRO12) can call the SAME helper against its own `FocusRegionRegistry` with a
+  different `dockOpen` (e.g. always-open) instead of re-deriving this logic.
+
   JUCE `AccessibilityHandler` support (the first real consumer in this repo): `MixerFader`'s
   `textFromValueFunction` speaks "-3.0 dB"; the pan slider's speaks "50% left"/"Center"/"50%
   right"; `MixerMeter::createAccessibilityHandler()` reports a read-only `staticText` value (the
@@ -468,18 +476,34 @@ Side tracks (each independent of the main line beyond its own listed dependency)
   `group` role titled with the channel name; the M/S buttons (built with
   `setClickingTogglesState(false)`) now mirror `isMuted()`/`isSoloed()` into `setToggleState()` so
   their own paint AND the stock toggle-button accessibility role track reality — a latent
-  "never shows pressed" bug fixed alongside this.
+  "never shows pressed" bug fixed alongside this. The Left/Right column-walk also moves REAL
+  accessibility focus, not just the visual outline: each column kind exposes
+  `grabAccessibilityFocus()` (a strip/Master's own fader slider; Direct has none, so it targets the
+  column itself, `setTitle("Direct")`), and `MixerPanelComponent::setFocusedColumnIndex()` — real
+  user navigation ONLY, never `rebuild()`'s focus-preserving path — calls it via
+  `AccessibilityHandler::grabFocus()`. That call only asks the underlying `Component` for real
+  keyboard focus when the component itself wants it, which every mixer child deliberately doesn't
+  (the T160 trap avoidance above), so VoiceOver's cursor moves without stealing the panel's own
+  real keyboard focus.
   - Tests: `Tests/UI/Mixer/MixerPanelKeyboardFocusTests.cpp` (column focus seed/walk/clamp
     including Direct and Master in order, fader nudge as one undo step plain and Shift-fine, the
     Direct-column fader no-op, Enter's macro selection, M/S/R through the shared click path with
     and without an installed/rebound `ShortcutManager`, unrelated keys falling through unclaimed,
-    and focus surviving/clearing across a rebuild); `Tests/UI/Mixer/MixerAccessibilityTests.cpp`
-    (fader/pan value-text formatting, a column's title and group role, M/S toggle-state mirroring,
-    the meter's read-only percentage value); `Tests/UI/Mixer/MixerFocusRegionTests.cpp` (the
-    "mixer" region opens only with the dock open AND its Mixer tab active, "timeline" closes when
-    Mixer is active, and the two are never open together); `Tests/UI/Layout/FocusRegionTests.cpp`'s
+    focus surviving/clearing across a rebuild, and which control each column kind's arrow-walk
+    points `grabAccessibilityFocus()` at); `Tests/UI/Mixer/MixerAccessibilityTests.cpp` (fader/pan
+    value-text formatting, a column's title and group role, M/S toggle-state mirroring, the
+    meter's read-only percentage value); `Tests/UI/Mixer/MixerFocusRegionTests.cpp` (the "mixer"
+    region opens only with the dock open AND its Mixer tab active, "timeline" closes when Mixer is
+    active, the two are never open together, and `registerMixerFocusRegion()` itself — reused
+    against a second, independent `FocusRegionRegistry` with a different `dockOpen`, and with a
+    null `dockOpen` treated as always-open); `Tests/UI/Layout/FocusRegionTests.cpp`'s
     `RegistersExactlyTheSevenDocumentedRegionsInOrder` updated for the new region.
-  - Known gap, documented rather than fixed here: `MainComponent::resolveEditSurface()` still
+  - Known gaps, documented rather than fixed here: `MainComponent::resolveEditSurface()` still
     knows Graph/TimelineClips/PianoRoll only, so Cmd+C/V/D/X/R with the Mixer focused falls through
-    to the Graph surface.
+    to the Graph surface. `AccessibilityHandler::getAccessibilityHandler()` returns null without a
+    native peer (`Component::addToDesktop()`), which this suite deliberately never creates (the
+    same headless-CI flakiness/hang risk `TimelineTrackFocusTests.cpp`/`FocusRegionTests.cpp`
+    document) — so `grabAccessibilityFocus()`'s real focus movement, and whether VoiceOver actually
+    announces it against the click path below, is unverified by CI; a manual VoiceOver pass against
+    a locally built app is still owed before fully trusting the announced-value claim.
 
