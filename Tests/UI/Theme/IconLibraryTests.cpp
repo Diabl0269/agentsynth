@@ -256,12 +256,10 @@ TEST(IconLibraryTest, WaveformIconBinaryDataSymbols) {
 // 11. WaveformIconEnumCountCoversNewIcons
 // ---------------------------------------------------------------------------
 TEST(IconLibraryTest, WaveformIconEnumCountCoversNewIcons) {
-    // The enum must now contain 42 entries (22 Phase-3 + ActionNew + ThemeToggle + ActionFeedback
-    // (P6-17) + 4 waveform + ToggleMinimap + ModuleDualIO + the 6 edit-tool icons + the 3
-    // track-kind badges and FollowPlayhead + CatIO). The static_assert in IconLibrary.cpp
-    // enforces kTable alignment at compile time; this runtime check catches any mismatch that
-    // slips through without a rebuild.
-    EXPECT_EQ((int)Icon::kCount, 42);
+    // kCount's own value is asserted by ActionDetachWindowIconEnumCountAndOrdinal below (FRO12
+    // appended one more entry after this test was written -- 43, not 42). The static_assert in
+    // IconLibrary.cpp enforces kTable alignment at compile time regardless; this test only spot-
+    // checks that appending later entries never shifted the waveform ordinals below.
     // Spot-check ordinal positions of the new waveform icons (shifted +2 by ActionNew at index 6
     // and ThemeToggle at index 13, then +1 more by ActionFeedback at index 9; CatIO is appended
     // after FollowPlayhead so it doesn't shift anything before it).
@@ -294,6 +292,35 @@ TEST(IconLibraryTest, CatIOBinaryDataSymbol) {
 #ifdef HAS_FONT_ASSETS
     EXPECT_NE(BinaryData::catio_svg, nullptr);
     EXPECT_GT(BinaryData::catio_svgSize, 0);
+#else
+    GTEST_SKIP() << "BinaryData not linked in this build";
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// 14. ActionDetachWindowIconEnumCountAndOrdinal (FRO12, P9-6, docs/mixer.md §5.9)
+// ---------------------------------------------------------------------------
+TEST(IconLibraryTest, ActionDetachWindowIconEnumCountAndOrdinal) {
+    // Appended immediately before kCount, same append-only convention CatIO used -- kCount grows
+    // from 42 to 43, and ActionDetachWindow lands at CatIO's old kCount slot (41), now 42.
+    EXPECT_EQ((int)Icon::kCount, 43);
+    EXPECT_EQ((int)Icon::ActionDetachWindow, 42);
+
+    IconLibrary lib;
+    auto d = lib.getDrawable(Icon::ActionDetachWindow);
+    if (kAssetsPresent)
+        EXPECT_NE(d, nullptr) << "ActionDetachWindow icon returned null with assets present";
+}
+
+// ---------------------------------------------------------------------------
+// 15. ActionDetachWindowBinaryDataSymbol
+// ---------------------------------------------------------------------------
+TEST(IconLibraryTest, ActionDetachWindowBinaryDataSymbol) {
+    // 'action-detach-window.svg' -> BinaryData::actiondetachwindow_svg (hyphens stripped, same
+    // mangling as every other icon).
+#ifdef HAS_FONT_ASSETS
+    EXPECT_NE(BinaryData::actiondetachwindow_svg, nullptr);
+    EXPECT_GT(BinaryData::actiondetachwindow_svgSize, 0);
 #else
     GTEST_SKIP() << "BinaryData not linked in this build";
 #endif
