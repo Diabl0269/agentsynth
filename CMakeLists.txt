@@ -261,8 +261,11 @@ add_library(Core STATIC
     Source/Mixer/ChannelFlows/ChannelFlowsDefaultChannel.cpp
     Source/Mixer/ChannelFlows/ChannelFlowsInternal.h
     Source/Mixer/ChannelFlows/ChannelFlowsMakeChannel.cpp
+    Source/Mixer/ChannelFlows/ChannelFlowsTrackChannelLink.cpp
     Source/Mixer/MasterSplice.cpp
     Source/Mixer/MasterSplice.h
+    Source/Mixer/TrackChannelLink.cpp
+    Source/Mixer/TrackChannelLink.h
     # Transport
     Source/Transport/BlockTimeInfo.h
     Source/Transport/BounceExporter.cpp
