@@ -77,7 +77,10 @@ TEST_F(TimelinePanelIntegrationTest, HiddenByDefaultAndCarvesNothing) {
     mc.setSize(1600, 900);
 
     EXPECT_FALSE(mc.isTimelineConfiguredVisible());
-    EXPECT_FALSE(mc.getTimelinePanel().isVisible());
+    // FRO11 (P9-5): timelinePanelIsOpen(), not isVisible() -- the panel now lives inside
+    // MixerDockComponent (see its own comment), and its own visibility flag reflects only "the
+    // Timeline tab is selected" (true by default), not "the dock is open".
+    EXPECT_FALSE(timelinePanelIsOpen(mc));
     // No carve: the graph editor still reaches all the way down to the status bar.
     EXPECT_EQ(mc.getGraphEditor().getBounds().getBottom(), mc.getStatusBar().getBounds().getY());
 }
@@ -91,17 +94,24 @@ TEST_F(TimelinePanelIntegrationTest, ToggleCarvesFullWidthAboveStatusBar) {
 
     mc.simulateToggleTimelineClick();
     ASSERT_TRUE(mc.isTimelineConfiguredVisible());
-    ASSERT_TRUE(mc.getTimelinePanel().isVisible());
+    ASSERT_TRUE(timelinePanelIsOpen(mc));
 
-    const auto panelBounds = mc.getTimelinePanel().getBounds();
+    // FRO11 (P9-5): MainComponent-relative bounds -- see timelinePanelBoundsInMainComponent's own
+    // comment for why a raw mc.getTimelinePanel().getBounds() can no longer be compared directly
+    // against the status bar / graph editor (different coordinate origins now that the panel is
+    // nested inside MixerDockComponent).
+    const auto panelBounds = timelinePanelBoundsInMainComponent(mc);
     EXPECT_EQ(panelBounds.getX(), 0);
     EXPECT_EQ(panelBounds.getWidth(), 1600);
-    EXPECT_EQ(panelBounds.getHeight(), 220); // Metrics::timelinePanelHeight literal default
+    // Metrics::timelinePanelHeight literal default (220) minus MixerDockComponent's own 22px tab
+    // strip -- the dock's TOTAL carve is still 220, but the tab strip now eats part of it.
+    EXPECT_EQ(panelBounds.getHeight(), 198);
     // Sits directly above the status bar.
     EXPECT_EQ(panelBounds.getBottom(), mc.getStatusBar().getBounds().getY());
 
-    // Graph editor shrunk by exactly the panel height.
-    EXPECT_EQ(mc.getGraphEditor().getBounds().getBottom(), panelBounds.getY());
+    // Graph editor shrunk by exactly the dock's total carve (220), NOT just the panel's own
+    // (smaller) content height -- the graph editor sits above the WHOLE dock, tab strip included.
+    EXPECT_EQ(mc.getGraphEditor().getBounds().getBottom(), panelBounds.getY() - 22);
 
     // Library/AI panels unaffected horizontally (default: library visible at 200px, AI hidden).
     EXPECT_EQ(mc.getGraphEditor().getBounds().getX(), libraryX);
@@ -118,7 +128,7 @@ TEST_F(TimelinePanelIntegrationTest, ToggleBackRestores) {
 
     mc.simulateToggleTimelineClick();
     EXPECT_FALSE(mc.isTimelineConfiguredVisible());
-    EXPECT_FALSE(mc.getTimelinePanel().isVisible());
+    EXPECT_FALSE(timelinePanelIsOpen(mc)); // see HiddenByDefaultAndCarvesNothing's comment
     EXPECT_EQ(mc.getGraphEditor().getBounds(), initialBounds);
 }
 

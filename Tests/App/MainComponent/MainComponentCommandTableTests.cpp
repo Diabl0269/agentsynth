@@ -57,6 +57,9 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::zoomInVertical,
     AppCommands::zoomOutVertical,
     AppCommands::toggleTimelinePanel,
+    // FRO11 (P9-5): the new row sits right after toggleTimelinePanel in
+    // MainComponentCommandTable.cpp -- see that file's own comment for why.
+    AppCommands::toggleMixerPanel,
     AppCommands::focusNextRegion,
     AppCommands::focusPrevRegion,
     AppCommands::focusTimeline,

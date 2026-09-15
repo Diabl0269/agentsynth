@@ -71,6 +71,32 @@ inline juce::MouseEvent makeDragEvent(juce::Component& comp, juce::Point<float> 
 constexpr float kLoopZoneY = 5.0f;
 constexpr float kPlayheadZoneY = 18.0f;
 
+// FRO11 (P9-5): mc.getTimelinePanel() is no longer a direct child of MainComponent -- it now
+// lives inside MixerDockComponent (the Timeline/Mixer tab strip), inset by the tab strip's own
+// height. getBounds() therefore returns coordinates relative to the DOCK, not MainComponent, so a
+// raw `mc.getTimelinePanel().getBounds()` can no longer be compared directly against another
+// MainComponent-level rect (the status bar, the graph editor...) -- that comparison silently
+// mixed two different coordinate origins before this helper existed. Converts through
+// MainComponent's own coordinate space via Component::getLocalArea(), the standard JUCE idiom for
+// "this component's bounds as seen from an ancestor".
+inline juce::Rectangle<int> timelinePanelBoundsInMainComponent(MainComponent& mc) {
+    auto& panel = mc.getTimelinePanel();
+    return mc.getLocalArea(&panel, panel.getLocalBounds());
+}
+
+// FRO11 (P9-5): "is the timeline panel actually open and on screen" now takes both of
+// timelinePanel's own isVisible() (true only when the Timeline tab is selected) AND
+// mixerDock's isVisible() (true only when the dock itself is open) -- composing the two LOCAL
+// flags, not juce::Component::isShowing(), because isShowing() additionally requires the ROOT
+// component to have a real Desktop peer (its own implementation walks up to the top-level
+// component and checks getPeer()), which is never true in a headless test: this codebase's own
+// MainComponent tests never call addToDesktop() (see PanelAnimationAndLoadingTests.cpp's own
+// "test premise: headless, no real window" comment). isVisible() at each level needs no peer, so
+// it composes correctly in both headless tests and the real app.
+inline bool timelinePanelIsOpen(MainComponent& mc) {
+    return mc.getTimelinePanel().isVisible() && mc.getMixerDock().isVisible();
+}
+
 class TimelinePanelIntegrationTest : public ::testing::Test {
 protected:
     // Same pattern as MainComponentTests.cpp / PanelAnimationAndLoadingTests.cpp: the delegating

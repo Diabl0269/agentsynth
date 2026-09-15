@@ -9,6 +9,7 @@
 // Does NOT register in CMakeLists.txt — add it manually when ready.
 // Mirrors the pattern in MainComponentTests.cpp and AIChatComponentTests.cpp.
 
+#include "../Timeline/TimelinePanel/TimelinePanelTestFixture.h" // timelinePanelBoundsInMainComponent (FRO11)
 #include "AI/AIProvider.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
@@ -248,14 +249,17 @@ TEST_F(PanelSlideLayoutTest, TheTimelineSlidesAgainstAPinnedBottomEdge) {
     MainComponent mc(std::make_unique<MockProviderPAL>());
     mc.setSize(1600, 900);
     mc.simulateToggleTimelineClick();
-    ASSERT_EQ(mc.getTimelinePanel().getBounds().getHeight(), 220);
+    // FRO11 (P9-5): 220 total carve minus MixerDockComponent's 22px tab strip -- see
+    // timelinePanelBoundsInMainComponent's own comment.
+    ASSERT_EQ(mc.getTimelinePanel().getBounds().getHeight(), 198);
 
     mc.setPanelOpenProgressForTest(SlidingPanel::Timeline, 0.5f);
-    const auto panelBounds = mc.getTimelinePanel().getBounds();
-    EXPECT_EQ(panelBounds.getHeight(), 110);
+    // MainComponent-relative bounds (the panel is nested inside the dock's tab strip now).
+    const auto panelBounds = timelinePanelBoundsInMainComponent(mc);
+    EXPECT_EQ(panelBounds.getHeight(), 88); // (220 * 0.5) - 22
     EXPECT_EQ(panelBounds.getWidth(), 1600) << "full width at every point of the slide";
     EXPECT_EQ(panelBounds.getBottom(), mc.getStatusBar().getBounds().getY()) << "bottom edge pinned";
-    EXPECT_EQ(mc.getGraphEditor().getBounds().getBottom(), panelBounds.getY());
+    EXPECT_EQ(mc.getGraphEditor().getBounds().getBottom(), panelBounds.getY() - 22);
 }
 
 // The jump this whole design removes: the tween starts from the fraction's CURRENT value, so

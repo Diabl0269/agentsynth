@@ -172,7 +172,10 @@ TEST_F(TimelinePanelIntegrationTest, AbsentSettingFallsBackToTheThemeMetric) {
     mc.simulateToggleTimelineClick();
 
     EXPECT_EQ(mc.getTimelinePanelHeight(), 220); // Metrics::timelinePanelHeight literal default
-    EXPECT_EQ(mc.getTimelinePanel().getBounds().getHeight(), 220);
+    // FRO11 (P9-5): the panel's own local height is the dock's total carve (220) minus
+    // MixerDockComponent's 22px tab strip -- getTimelinePanelHeight() stays the dock-level
+    // concept, unaffected (see timelinePanelBoundsInMainComponent's own comment).
+    EXPECT_EQ(mc.getTimelinePanel().getBounds().getHeight(), 198);
     EXPECT_EQ(readPersistedTimelinePanelHeight(mc), -1) << "showing the panel writes no height";
 }
 
@@ -182,13 +185,17 @@ TEST_F(TimelinePanelIntegrationTest, PersistedHeightIsHonouredAtStartup) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     mc.setSize(1600, 900);
     mc.simulateToggleTimelineClick();
-    ASSERT_TRUE(mc.getTimelinePanel().isVisible());
+    ASSERT_TRUE(timelinePanelIsOpen(mc));
 
-    const auto panelBounds = mc.getTimelinePanel().getBounds();
+    // FRO11 (P9-5): MainComponent-relative bounds (see timelinePanelBoundsInMainComponent's own
+    // comment) -- the panel is nested inside MixerDockComponent's 22px tab strip now, so its raw
+    // getBounds() can't be compared against the status bar / graph editor directly.
+    const auto panelBounds = timelinePanelBoundsInMainComponent(mc);
     EXPECT_EQ(mc.getTimelinePanelHeight(), 400);
-    EXPECT_EQ(panelBounds.getHeight(), 400);
+    EXPECT_EQ(panelBounds.getHeight(), 378); // 400 - the dock's 22px tab strip
     EXPECT_EQ(panelBounds.getBottom(), mc.getStatusBar().getBounds().getY());
-    EXPECT_EQ(mc.getGraphEditor().getBounds().getBottom(), panelBounds.getY());
+    // Graph editor sits above the WHOLE dock (tab strip included), not just the nested panel.
+    EXPECT_EQ(mc.getGraphEditor().getBounds().getBottom(), panelBounds.getY() - 22);
 }
 
 TEST_F(TimelinePanelIntegrationTest, DraggingTheGrabStripResizesLiveAndPersistsOnDragEnd) {
@@ -197,7 +204,9 @@ TEST_F(TimelinePanelIntegrationTest, DraggingTheGrabStripResizesLiveAndPersistsO
     mc.simulateToggleTimelineClick();
 
     auto& panel = mc.getTimelinePanel();
-    ASSERT_EQ(panel.getBounds().getHeight(), 220);
+    // 220 total carve minus MixerDockComponent's 22px tab strip -- see
+    // timelinePanelBoundsInMainComponent's own comment.
+    ASSERT_EQ(panel.getBounds().getHeight(), 198);
 
     auto& handle = panel.getResizeHandle();
     handle.mouseDown(makeClickEvent(handle, {10.0f, 2.0f}));
@@ -206,9 +215,10 @@ TEST_F(TimelinePanelIntegrationTest, DraggingTheGrabStripResizesLiveAndPersistsO
 
     // LIVE: the owner already re-laid out, before any mouse-up.
     EXPECT_EQ(mc.getTimelinePanelHeight(), 362);
-    EXPECT_EQ(panel.getBounds().getHeight(), 362);
-    EXPECT_EQ(panel.getBounds().getBottom(), mc.getStatusBar().getBounds().getY());
-    EXPECT_EQ(mc.getGraphEditor().getBounds().getBottom(), panel.getBounds().getY());
+    const auto liveBounds = timelinePanelBoundsInMainComponent(mc);
+    EXPECT_EQ(liveBounds.getHeight(), 340); // 362 - 22
+    EXPECT_EQ(liveBounds.getBottom(), mc.getStatusBar().getBounds().getY());
+    EXPECT_EQ(mc.getGraphEditor().getBounds().getBottom(), liveBounds.getY() - 22);
     EXPECT_EQ(readPersistedTimelinePanelHeight(mc), -1) << "not persisted per pixel";
 
     handle.mouseUp(makeClickEvent(handle, {10.0f, -140.0f}));
@@ -230,12 +240,12 @@ TEST_F(TimelinePanelIntegrationTest, HeightIsClampedToTheMetricFloorAndThreeQuar
 
     panel.onResizeHeight(5000);
     EXPECT_EQ(mc.getTimelinePanelHeight(), 675) << "75% of the 900 px window";
-    EXPECT_EQ(panel.getBounds().getHeight(), 675);
+    EXPECT_EQ(panel.getBounds().getHeight(), 653); // 675 - the dock's 22px tab strip
     EXPECT_GT(mc.getGraphEditor().getBounds().getHeight(), 0);
 
     panel.onResizeHeight(10);
     EXPECT_EQ(mc.getTimelinePanelHeight(), 220) << "the theme metric is the floor";
-    EXPECT_EQ(panel.getBounds().getHeight(), 220);
+    EXPECT_EQ(panel.getBounds().getHeight(), 198); // 220 - 22
 
     EXPECT_EQ(readPersistedTimelinePanelHeight(mc), -1) << "only the drag-end callback persists";
 }
@@ -250,9 +260,10 @@ TEST_F(TimelinePanelIntegrationTest, ASmallerWindowReclampsTheHeightSoTheCanvasS
 
     mc.setSize(1000, 400);
     EXPECT_EQ(mc.getTimelinePanelHeight(), 300) << "75% of the 400 px window";
-    EXPECT_EQ(mc.getTimelinePanel().getBounds().getHeight(), 300);
+    const auto smallBounds = timelinePanelBoundsInMainComponent(mc);
+    EXPECT_EQ(smallBounds.getHeight(), 278); // 300 - the dock's 22px tab strip
     EXPECT_GT(mc.getGraphEditor().getBounds().getHeight(), 0);
-    EXPECT_EQ(mc.getTimelinePanel().getBounds().getBottom(), mc.getStatusBar().getBounds().getY());
+    EXPECT_EQ(smallBounds.getBottom(), mc.getStatusBar().getBounds().getY());
 
     // Shorter than 4/3 of the floor (below the enforced minWindowHeight, so a corner case only):
     // the floor wins rather than the cap.
@@ -266,15 +277,21 @@ TEST_F(TimelinePanelIntegrationTest, HidingThePanelReturnsTheCanvasAndReshowingK
     const auto canvasWithNoPanel = mc.getGraphEditor().getBounds();
 
     mc.simulateToggleTimelineClick();
+    // FRO11 (P9-5): onResizeHeight's argument is the panel's own desired CONTENT height (see
+    // TimelinePanelComponent::ResizeHandle::desiredHeightFor's own comment) -- the
+    // onResizeHeight/onResizeHeightCommitted wiring (MainComponentSetupTimeline.cpp) adds
+    // MixerDockComponent::kTabStripHeight (22) to get the total dock-carve height this component
+    // owns, so 420 here means the panel's CONTENT ends up 420, not the total carve.
     mc.getTimelinePanel().onResizeHeight(420);
-    ASSERT_EQ(mc.getTimelinePanel().getBounds().getHeight(), 420);
+    ASSERT_EQ(timelinePanelBoundsInMainComponent(mc).getHeight(), 420);
 
-    mc.simulateToggleTimelineClick(); // hide
-    EXPECT_FALSE(mc.getTimelinePanel().isVisible());
+    mc.simulateToggleTimelineClick();      // hide
+    EXPECT_FALSE(timelinePanelIsOpen(mc)); // see HiddenByDefaultAndCarvesNothing's comment
     EXPECT_EQ(mc.getGraphEditor().getBounds(), canvasWithNoPanel) << "a hidden panel carves nothing, at any height";
-    EXPECT_EQ(mc.getTimelinePanelHeight(), 420) << "the height outlives a hide";
+    EXPECT_EQ(mc.getTimelinePanelHeight(), 442) << "the height outlives a hide"; // 420 + the 22px tab strip
 
     mc.simulateToggleTimelineClick(); // show again
-    EXPECT_EQ(mc.getTimelinePanel().getBounds().getHeight(), 420);
-    EXPECT_EQ(mc.getTimelinePanel().getBounds().getBottom(), mc.getStatusBar().getBounds().getY());
+    const auto reshownBounds = timelinePanelBoundsInMainComponent(mc);
+    EXPECT_EQ(reshownBounds.getHeight(), 420);
+    EXPECT_EQ(reshownBounds.getBottom(), mc.getStatusBar().getBounds().getY());
 }
