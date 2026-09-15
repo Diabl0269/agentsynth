@@ -1,0 +1,27 @@
+# Legacy functions over the cap. STRICT ratchet: an entry is the exact current line count.
+# A function may never grow past its entry; when it shrinks, run
+# `bash scripts/check-function-sizes.sh --update` so the entry tightens; once under the cap
+# the entry must be removed (--update does that).
+# Never add a NEW function here -- extract a named step / collaborator instead.
+284 Source/AI/AIIntegrationService/AIIntegrationServiceSystemPrompt.cpp::AIIntegrationService::buildSystemPrompt
+409 Source/AI/AIStateMapper/AIStateMapper.cpp::AIStateMapper::applyJSONToGraph
+239 Source/AI/AIStateMapper/AIStateMapperSnapshots.cpp::AIStateMapper::applySnapshotPreservingNodes
+276 Source/AI/AIStateMapper/AIStateMapperValidation.cpp::AIStateMapper::validatePatch
+213 Source/AudioEngine/AudioEngineModRouting.cpp::AudioEngine::getModulationRoutings
+390 Source/MainComponent/MainComponentCommandTable.cpp::MainComponent::commandTable
+251 Source/Modules/OscillatorModule.h::processPolyMode
+380 Source/PresetManager.cpp::PresetManager::getPresetJSON
+280 Source/ShortcutManager/ShortcutManager.h::resetToDefaults
+329 Source/Timeline/TimelineDoc/TimelineDocSerialization.cpp::TimelineDoc::fromVar
+230 Source/UI/Graph/GraphEditor/GraphEditorCables.cpp::GraphEditor::GraphContentComponent::paint
+303 Source/UI/Graph/GraphEditor/GraphEditorCables.cpp::GraphEditor::rebuildVisibleCables
+208 Source/UI/Graph/GraphEditor/GraphEditorStereoWiring.cpp::GraphEditor::completeStereoPairConnections
+206 Source/UI/Graph/ModuleComponent/ModuleComponent.cpp::ModuleComponent::createControls
+202 Source/UI/Graph/ModuleComponent/ModuleComponentLayout.cpp::ModuleComponent::layoutDefaultContent
+231 Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp::ModuleComponent::paint
+550 Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngineApply.cpp::SmartConnectionEngine::refreshSmartSuggestions
+319 Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp::PreferencesSettingsTab::PreferencesSettingsTab
+234 Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp::PreferencesSettingsTab::layoutContent
+361 Source/UI/Theme/ThemeLoader.cpp::ThemeLoader::parseTheme
+261 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.cpp::TimelinePanelComponent::TimelinePanelComponent
+222 Tools/AIPatchHarness/Main.cpp::main
