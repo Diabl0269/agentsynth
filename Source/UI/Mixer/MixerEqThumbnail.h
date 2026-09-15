@@ -21,6 +21,16 @@
 // still-bound eq_ pointer AFTER the module was already freed, and ~MixerEqThumbnail's
 // detachListeners() would dereference it).
 //
+// Belt-and-braces: the row menu is not the only way to free a single node out from under a bound
+// thumbnail (a canvas "Delete" on the same EQ module's card goes through
+// GraphEditor::requestDeleteModule(), a different removeNode() call site with no equivalent
+// pre-removal hook). setEqModule()'s optional `graph`/`nodeId` let detachListeners() check the
+// node is still actually in the graph before touching `eq_`'s parameters at all -- if it's
+// already gone, its parameters died with it and there is nothing left to call removeListener()
+// on. A null `graph` (the default -- e.g. a test binding a stack-allocated module never added to
+// any graph) means no liveness info is available, so detachListeners() assumes live and detaches
+// unconditionally, same as before this existed.
+//
 // Repaint discipline (root CLAUDE.md "No unconditional per-tick repaint"): no Timer, no
 // AnimationDriver. A parameter write on ANY thread (the audio thread included -- CV-modulated
 // bands write their resolved value there) can only call the allocation-free, coalescing
@@ -44,8 +54,12 @@ public:
      *  parameters (band on/freq/gain/Q x4, output gain, and the inherited "bypassed" -- all of
      *  ModuleBase::getParameters()), so a change from ANYWHERE (the module card's own knobs, an
      *  undo/redo, CV automation) keeps the thumbnail in sync, not just edits made through this
-     *  column. */
-    void setEqModule(ParametricEQModule* eq);
+     *  column. `graph`/`nodeId` are optional liveness info (see the header comment's
+     *  "Belt-and-braces" paragraph) -- pass the graph `eq` lives in and its own NodeID whenever
+     *  the caller has them (MixerColumnComponent always does); omit only when there genuinely is
+     *  none (a headless test binding a module with no graph at all). */
+    void setEqModule(ParametricEQModule* eq, juce::AudioProcessorGraph* graph = nullptr,
+                     juce::AudioProcessorGraph::NodeID nodeId = {});
 
     /** Fires on mouseUp -- MixerColumnComponent forwards this through its existing onEditOnCanvas
      *  seam with the EQ node's own uuid, exactly like a column header click or the insert list's
@@ -57,10 +71,12 @@ public:
      *  parameter-change burst. */
     int getRecomputeCountForTest() const noexcept { return recomputeCount_; }
 
-    /** Counts only detachListeners() calls that actually had a live `eq_` to detach from (not a
-     *  defensive no-op with nothing bound) -- same accounting as MixerFader::
-     *  getLiveUnbindCallCountForTest(). Lets a test prove a pre-removal unbind hook actually ran
-     *  and did real work, not just that nothing crashed. */
+    /** Counts only detachListeners() calls that actually removed a live listener registration --
+     *  neither a defensive no-op with nothing bound (eq_ already null) NOR the belt-and-braces
+     *  no-op when the bound node is already gone from the graph (its parameters died with it) --
+     *  same accounting as MixerFader::getLiveUnbindCallCountForTest(). Lets a test prove a
+     *  pre-removal unbind hook actually ran BEFORE the node was freed, not just that nothing
+     *  crashed. */
     static int getLiveUnbindCallCountForTest() noexcept { return liveUnbindCallCountForTest_; }
 
     void paint(juce::Graphics& g) override;
@@ -75,6 +91,8 @@ private:
     void recompute();
 
     ParametricEQModule* eq_ = nullptr;
+    juce::AudioProcessorGraph* graph_ = nullptr;
+    juce::AudioProcessorGraph::NodeID nodeId_;
 
     std::vector<float> cachedMagnitudesDb_;
     bool cachedBypassed_ = false;

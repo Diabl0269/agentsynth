@@ -18,13 +18,16 @@ MixerEqThumbnail::~MixerEqThumbnail() {
     detachListeners();
 }
 
-void MixerEqThumbnail::setEqModule(ParametricEQModule* eq) {
+void MixerEqThumbnail::setEqModule(ParametricEQModule* eq, juce::AudioProcessorGraph* graph,
+                                   juce::AudioProcessorGraph::NodeID nodeId) {
     if (eq == eq_)
         return;
 
     cancelPendingUpdate();
     detachListeners();
     eq_ = eq;
+    graph_ = graph;
+    nodeId_ = nodeId;
 
     if (eq_ == nullptr) {
         cachedMagnitudesDb_.clear();
@@ -42,6 +45,16 @@ void MixerEqThumbnail::setEqModule(ParametricEQModule* eq) {
 
 void MixerEqThumbnail::detachListeners() {
     if (eq_ == nullptr)
+        return;
+    // Belt-and-braces (see the header's own comment): if the caller gave us liveness info and the
+    // node is already gone from the graph, its parameters were freed along with it -- touching
+    // eq_->getParameters() here would be the exact use-after-free this whole mechanism exists to
+    // prevent. A null graph_ (no liveness info available) falls through to the unconditional
+    // detach every caller got before this existed. Checked BEFORE the live-unbind counter bumps,
+    // not after -- getLiveUnbindCallCountForTest() must count only a detach that actually touched
+    // live parameters, or a test could pass on this defensive no-op instead of on a caller (e.g.
+    // MixerInsertList::onBeforeNodeRemoved) actually unbinding before the node was freed.
+    if (graph_ != nullptr && graph_->getNodeForId(nodeId_) == nullptr)
         return;
     ++liveUnbindCallCountForTest_;
     for (auto* param : eq_->getParameters())

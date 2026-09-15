@@ -113,7 +113,7 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
             }
         }
     }
-    eqThumbnail_.setEqModule(firstEq);
+    eqThumbnail_.setEqModule(firstEq, graph_, eqNodeId_);
 
     rebindControls();
     resized();

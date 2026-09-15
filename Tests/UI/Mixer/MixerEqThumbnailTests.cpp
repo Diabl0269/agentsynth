@@ -3,6 +3,7 @@
 // band, dark/light PNG render showing a boost/cut difference, dimmed when bypassed, and the
 // recompute-only-on-parameter-change discipline (root CLAUDE.md "No unconditional per-tick
 // repaint") -- plus the click-forwards-to-onClicked seam MixerColumnComponent binds to.
+#include "AudioEngine/AudioEngine.h"
 #include "Modules/FX/ParametricEQModule.h"
 #include "UI/Mixer/MixerEqThumbnail.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
@@ -186,4 +187,35 @@ TEST(MixerEqThumbnailTests, ClickFiresOnClicked) {
     EXPECT_TRUE(clicked);
 
     thumbnail.setEqModule(nullptr);
+}
+
+// FRO16 review follow-up: MixerInsertList::removeRow's onBeforeNodeRemoved hook (see
+// MixerColumnComponentTests.cpp's own regression test) is not the only way a single node can be
+// freed out from under a bound thumbnail -- a canvas "Delete" on the same EQ module's card
+// (GraphEditor::requestDeleteModule) is a different graph.removeNode() call site with no
+// equivalent pre-removal hook. setEqModule()'s optional graph/nodeId liveness check in
+// detachListeners() is the belt-and-braces fix: it must never dereference eq_ once the node it
+// came from is already gone, regardless of which caller forgot to unbind first.
+TEST(MixerEqThumbnailTests, DoesNotTouchFreedParametersWhenTheNodeWasRemovedWithoutUnbindingFirst) {
+    AudioEngine engine;
+    auto& graph = engine.getGraph();
+    graph.setPlayConfigDetails(0, 2, 44100.0, 512);
+    auto node = graph.addNode(std::make_unique<ParametricEQModule>());
+    ASSERT_NE(node, nullptr);
+    auto* eq = dynamic_cast<ParametricEQModule*>(node->getProcessor());
+    ASSERT_NE(eq, nullptr);
+    const auto nodeId = node->nodeID;
+
+    synth::ui::MixerEqThumbnail thumbnail;
+    thumbnail.setSize(140, 28);
+    thumbnail.setEqModule(eq, &graph, nodeId);
+    ASSERT_TRUE(thumbnail.isVisible());
+
+    // Free the node WITHOUT unbinding first -- exactly what a caller with no pre-removal hook
+    // does.
+    graph.removeNode(nodeId);
+
+    // No crash/UAF is the point: this must not dereference the now-freed ParametricEQModule*.
+    thumbnail.setEqModule(nullptr);
+    EXPECT_FALSE(thumbnail.isVisible());
 }

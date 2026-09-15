@@ -475,6 +475,13 @@ Side tracks (each independent of the main line beyond its own listed dependency)
     this plan's own risk notes ("EQ node deleted between snapshot and paint: covered by the column
     rebuild lifetime") got this ordering backwards — the rebuild happens strictly *after* the
     module is freed on this path, not before; the notes below are the corrected version.
+    Belt-and-braces: `MixerInsertList::removeRow()` is not the only single-node
+    `graph.removeNode()` call site with no pre-removal unbind hook — a canvas "Delete" on the same
+    EQ module's card (`GraphEditor::requestDeleteModule()`) is another. Rather than chase every
+    such call site with its own hook, `setEqModule()` also takes the owning graph + NodeID
+    (`MixerColumnComponent` always has both), and `detachListeners()` checks the node is still
+    actually in the graph before touching `eq_` at all — if it's already gone, its parameters died
+    with it and there is nothing left to call `removeListener()` on.
   - Tests: `Tests/UI/Mixer/MixerEqThumbnailTests.cpp` — hidden with no EQ; visible with an enabled
     band; dark- and light-theme PNG renders of a flat vs. a +12 dB/1 kHz curve are not pixel-
     identical; bypass visibly dims the fill; recompute count stays flat across repeated paints and
@@ -486,6 +493,10 @@ Side tracks (each independent of the main line beyond its own listed dependency)
     chain, so `spliceOutInsert` actually runs) unbinds the thumbnail before the node is freed,
     proven by `MixerEqThumbnail::getLiveUnbindCallCountForTest()` (same accounting as
     `MixerFader::getLiveUnbindCallCountForTest()`) rather than by the absence of a crash alone.
+    `MixerEqThumbnailTests.cpp`'s own
+    `DoesNotTouchFreedParametersWhenTheNodeWasRemovedWithoutUnbindingFirst` covers the
+    belt-and-braces liveness check directly — a node removed from the graph with NO unbind call at
+    all (the canvas-delete shape) must still not touch the freed module.
 - **P9-11 (T180) — Gate module.** Done — `GateModule` (`Source/Modules/FX/GateModule.h`,
   [`fx_modules.md` § Gate Module](fx_modules.md#gate-module)). No dependency on the rest of P9;
   wiring it into a default track preset (§5.7/§7 D3) is still open.
