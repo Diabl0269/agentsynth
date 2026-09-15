@@ -26,6 +26,13 @@ AgentSynthPluginEditor::AgentSynthPluginEditor(AgentSynthAudioProcessor& p)
 
     const auto saved = processor.getSavedEditorSize();
     setSize(juce::jlimit(kMinWidth, kMaxWidth, saved.x), juce::jlimit(kMinHeight, kMaxHeight, saved.y));
+
+    // FRO12 follow-up: this is the plugin's ONE construction site for MainComponent (no test
+    // builds an AgentSynthPluginEditor directly) — opt both detach hosts into actually creating a
+    // native window on detach, same as Main.cpp's MainWindow does for the standalone app. See
+    // DetachablePanelHost::setCreatesNativeWindows()'s doc comment.
+    mainComponent.getMixerDock().getTimelineHost().setCreatesNativeWindows(true);
+    mainComponent.getMixerDock().getMixerHost().setCreatesNativeWindows(true);
 }
 
 AgentSynthPluginEditor::~AgentSynthPluginEditor() {
