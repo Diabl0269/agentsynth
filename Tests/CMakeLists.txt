@@ -339,6 +339,9 @@ add_executable(Tests
     UI/Mixer/MixerPanelUndoUnbindTests.cpp
     UI/Mixer/MixerFaderTests.cpp
     UI/Mixer/MixerDockComponentTests.cpp
+    UI/Mixer/MixerPanelKeyboardFocusTests.cpp
+    UI/Mixer/MixerAccessibilityTests.cpp
+    UI/Mixer/MixerFocusRegionTests.cpp
     UI/Graph/MinimapComponentTests.cpp
     Plugin/PluginProcessorTests.cpp
     Engine/AudioEngineTransportTests.cpp
