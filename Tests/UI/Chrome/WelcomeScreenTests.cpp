@@ -140,8 +140,16 @@ TEST_F(WelcomeScreenTest, NeverConstructsInHostedMode) {
     AudioEngine engine(AudioEngine::HostMode::Hosted);
     engine.initialise();
 
-    MainComponent mc(tm, lf, engine, std::make_unique<MockProvider>());
-    EXPECT_EQ(mc.getWelcomeScreenForTest(), nullptr);
+    {
+        MainComponent mc(tm, lf, engine, std::make_unique<MockProvider>());
+        EXPECT_EQ(mc.getWelcomeScreenForTest(), nullptr);
+        // mc goes out of scope here, BEFORE engine.shutdown() below -- same idiom as
+        // PluginProcessorTests.cpp's ExternalEngineSurvivesMainComponentDestruction. mc's own
+        // destructor unbinds every ModuleComponent (graphEditor.detachAllModuleComponents()) while
+        // the engine's graph is still alive; calling engine.shutdown() first would free the graph's
+        // processors out from under mc's still-bound UI components (a heap-use-after-free once
+        // mc's own destructor ran and tried to unbind them from already-freed memory).
+    }
 
     engine.shutdown();
 }
