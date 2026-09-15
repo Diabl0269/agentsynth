@@ -122,6 +122,11 @@ jobs:
       # Development identity installed (neither is true here), but its identity-selection logic
       # is still worth testing -- via fake uname/security/codesign shims -- on every platform.
       run: bash scripts/tests/dev-sign-app.test.sh
+    - name: Test ci-local worktree dependency-source reuse
+      # FRO92: scripts/ci-local.sh's first-configure-in-a-worktree FetchContent reuse
+      # (scripts/lib/deps-reuse.sh) is only ever exercised locally otherwise -- this runs the
+      # reuse/no-reuse decision against fixture directory trees, no cmake or compiler involved.
+      run: bash scripts/tests/ci-local-deps-reuse.test.sh
     - name: Check for un-decoded UTF-8 escapes
       # juce::String(const char*) decodes as ASCII, not UTF-8 -- a "\xe2\x80\x94"-style escape
       # passed straight to a String-taking API silently renders as mojibake (P6-16, 2026-08-26).
