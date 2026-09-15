@@ -1,0 +1,40 @@
+#pragma once
+
+#include "MixerColumnHeader.h"
+#include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_gui_basics/juce_gui_basics.h>
+
+// MixerDirectColumn.h -- FRO11 (P9-5, docs/mixer.md §5.10): Direct's column. Not a channel --
+// name fixed to "Direct", no colour/fader/pan/insert list/M-S (§5.10) -- just a "Make channel"
+// button for whatever feeds Master's Direct bus today, reusing the P9-3d "Make channel" flow
+// verbatim (MainComponent::makeChannelForNode).
+namespace synth::ui {
+
+class MixerDirectColumn : public juce::Component {
+public:
+    MixerDirectColumn();
+
+    void configure(juce::AudioProcessorGraph& graph);
+
+    /** Fires with the resolved chain source (synth::resolveChannelSource against whatever feeds
+     *  Master's Direct input) when "Make channel" is clicked and a source resolves; never fires
+     *  on an invalid/ambiguous resolution (the button itself is disabled then). */
+    std::function<void(juce::AudioProcessorGraph::NodeID)> onMakeChannelRequested;
+
+    /** Re-checks whether anything currently feeds Direct -- call after every graph change. */
+    void refreshEnablement();
+
+    void paint(juce::Graphics& g) override;
+    void resized() override;
+
+private:
+    juce::AudioProcessorGraph::NodeID resolveDirectFeeder() const;
+
+    juce::AudioProcessorGraph* graph_ = nullptr;
+    MixerColumnHeader header_;
+    juce::TextButton makeChannelButton_{"Make channel"};
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerDirectColumn)
+};
+
+} // namespace synth::ui

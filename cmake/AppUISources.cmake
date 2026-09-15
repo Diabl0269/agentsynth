@@ -47,6 +47,23 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneSelection.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneEditTools.cpp
     Source/UI/Timeline/ClipSelectionModel.h
+    Source/UI/Mixer/MixerColumnHeader.h
+    Source/UI/Mixer/MixerMeter.h
+    Source/UI/Mixer/MixerMeter.cpp
+    Source/UI/Mixer/MixerFader.h
+    Source/UI/Mixer/MixerFader.cpp
+    Source/UI/Mixer/MixerInsertList.h
+    Source/UI/Mixer/MixerInsertList.cpp
+    Source/UI/Mixer/MixerColumnComponent.h
+    Source/UI/Mixer/MixerColumnComponent.cpp
+    Source/UI/Mixer/MixerDirectColumn.h
+    Source/UI/Mixer/MixerDirectColumn.cpp
+    Source/UI/Mixer/MixerMasterColumn.h
+    Source/UI/Mixer/MixerMasterColumn.cpp
+    Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.h
+    Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.cpp
+    Source/UI/Mixer/MixerDockComponent.h
+    Source/UI/Mixer/MixerDockComponent.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollComponent.h
     Source/UI/PianoRoll/PianoRollComponent/PianoRollComponent.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollScaleAssist.cpp

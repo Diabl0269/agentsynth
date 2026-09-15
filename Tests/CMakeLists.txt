@@ -101,6 +101,8 @@ add_executable(Tests
     Mixer/TrackPreset/TrackPresetTests.cpp
     Mixer/TrackPreset/TrackPresetCaptureTests.cpp
     Mixer/TrackPreset/TrackPresetDefaultsTests.cpp
+    Mixer/MixerModel/MixerModelColumnTests.cpp
+    Mixer/MixerModel/MixerModelInsertTests.cpp
     Engine/LatencyAlignmentTests.cpp
     Timeline/AudioClipPlaybackTests.cpp
     Plugin/HostedPluginTests.cpp
@@ -333,6 +335,9 @@ add_executable(Tests
     UI/Timeline/AutomationEditorTests.cpp
     UI/Timeline/TimelineTransportBarTests.cpp
     UI/Timeline/TimelineViewStateTests.cpp
+    UI/Mixer/MixerPanelComponentTests.cpp
+    UI/Mixer/MixerFaderTests.cpp
+    UI/Mixer/MixerDockComponentTests.cpp
     UI/Graph/MinimapComponentTests.cpp
     Plugin/PluginProcessorTests.cpp
     Engine/AudioEngineTransportTests.cpp
@@ -387,6 +392,14 @@ add_executable(Tests
     ../Source/UI/Timeline/ChannelChipComponent.cpp
     ../Source/UI/Timeline/TrackChannelLinkController.cpp
     ../Source/UI/Timeline/TimelineTransportBar.cpp
+    ../Source/UI/Mixer/MixerMeter.cpp
+    ../Source/UI/Mixer/MixerFader.cpp
+    ../Source/UI/Mixer/MixerInsertList.cpp
+    ../Source/UI/Mixer/MixerColumnComponent.cpp
+    ../Source/UI/Mixer/MixerDirectColumn.cpp
+    ../Source/UI/Mixer/MixerMasterColumn.cpp
+    ../Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.cpp
+    ../Source/UI/Mixer/MixerDockComponent.cpp
     ../Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.cpp
     ../Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLanePainting.cpp
     ../Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneMouse.cpp

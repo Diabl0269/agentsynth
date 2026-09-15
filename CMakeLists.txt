@@ -269,6 +269,10 @@ add_library(Core STATIC
     Source/Mixer/TrackChannelLink.h
     Source/Mixer/TrackPresetManager.cpp
     Source/Mixer/TrackPresetManager.h
+    Source/Mixer/MixerModel/MixerModel.h
+    Source/Mixer/MixerModel/MixerModelInternal.h
+    Source/Mixer/MixerModel/MixerModelColumns.cpp
+    Source/Mixer/MixerModel/MixerModelInserts.cpp
     # Transport
     Source/Transport/BlockTimeInfo.h
     Source/Transport/BounceExporter.cpp
