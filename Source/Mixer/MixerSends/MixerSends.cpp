@@ -60,9 +60,10 @@ bool reaches(juce::AudioProcessorGraph& graph, const std::vector<Connection>& co
     return false;
 }
 
-/** Removes every connection leaving `slot`'s two raw output channels. Collect-then-remove: removing
- *  while iterating the list it came from invalidates it (spliceMasterNode's own reasoning). */
-void dropSlotCables(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot) {
+/** Removes every connection leaving `slot`'s two raw output channels, and RETURNS them, so a caller
+ *  that fails half-way can put them back. Collect-then-remove: removing while iterating the list it
+ *  came from invalidates it (spliceMasterNode's own reasoning). */
+std::vector<Connection> dropSlotCables(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot) {
     const int left = ChannelStripModule::sendLeftChannel(slot);
     const int right = ChannelStripModule::sendRightChannel(slot);
 
@@ -73,6 +74,7 @@ void dropSlotCables(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int sl
             doomed.push_back(conn);
     for (const auto& conn : doomed)
         graph.removeConnection(conn);
+    return doomed;
 }
 
 /** Wires `slot`'s stereo pair into `target`'s own ch0 / kRightBase. Rolls the left leg back if the
@@ -239,8 +241,20 @@ bool retargetSend(juce::AudioProcessorGraph& graph, NodeID sourceStrip, int slot
     if (findSendTarget(graph, sourceStrip, slot) == target)
         return true; // already there
 
-    dropSlotCables(graph, sourceStrip, slot);
-    return wireSlot(graph, sourceStrip, slot, target);
+    // Put the old cables back if the new pair is refused, or a failed retarget would leave the slot
+    // silently unwired -- the header promises the same "nothing changed" as addSend. DEFENSIVE, not
+    // a path anything reaches today: juce::AudioProcessorGraph::canConnect checks node existence,
+    // channel bounds and "not already connected" and nothing else -- notably it does NOT refuse a
+    // cycle (measured: wiring one straight back through an Attenuverter is accepted), and
+    // targetIsLegal has already ruled out every case left. Same shape, one level up, as wireSlot's
+    // own left-leg rollback; it is what keeps the contract true if a future guard or channel-map
+    // change ever makes a refusal reachable.
+    const auto previous = dropSlotCables(graph, sourceStrip, slot);
+    if (wireSlot(graph, sourceStrip, slot, target))
+        return true;
+    for (const auto& conn : previous)
+        graph.addConnection(conn);
+    return false;
 }
 
 } // namespace synth

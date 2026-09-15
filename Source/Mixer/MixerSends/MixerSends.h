@@ -50,9 +50,10 @@ juce::AudioProcessorGraph::NodeID findSendTarget(juce::AudioProcessorGraph& grap
 
 /** Every strip a new (or retargeted) send from `sourceStrip` may legally feed: every OTHER
  *  ChannelStripModule in the graph, in ascending NodeID, minus any whose own signal already reaches
- *  `sourceStrip` -- those would close a feedback loop. (AudioProcessorGraph refusing the connection
- *  is the backstop; this is the menu's own guard, so a cyclic target is never offered in the first
- *  place.) Pure query. */
+ *  `sourceStrip` -- those would close a feedback loop. This walk is the ONLY cycle defence, not
+ *  merely the menu's half of one: juce::AudioProcessorGraph does not refuse a cycle (canConnect
+ *  checks node existence, channel bounds and "not already connected", nothing more), so addSend
+ *  applies the same check rather than leaning on a backstop that isn't there. Pure query. */
 std::vector<juce::AudioProcessorGraph::NodeID> enumerateSendTargets(juce::AudioProcessorGraph& graph,
                                                                     juce::AudioProcessorGraph::NodeID sourceStrip);
 
@@ -70,7 +71,9 @@ int addSend(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID 
 bool removeSend(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, int slot);
 
 /** Repoints an active slot at a different target: drops its current cables and wires the new pair.
- *  False (and nothing changed) on the same refusals as addSend. */
+ *  False (and nothing changed) on the same refusals as addSend — including one the GRAPH refuses
+ *  after the legality check passed, in which case the slot's previous cables are put back rather
+ *  than left cut. */
 bool retargetSend(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID sourceStrip, int slot,
                   juce::AudioProcessorGraph::NodeID target);
 

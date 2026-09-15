@@ -672,8 +672,12 @@ orphan-strip append already produces exactly that position. On a source column, 
 level knob attached straight onto `sendNLevel`, a `PRE`/`POST` toggle, an `x`), plus a `+ Send` row
 while a slot is free. Each mutation is ONE `recordGraphAndMacroChange` around
 `Source/Mixer/MixerSends`' Core flows. Cyclic targets are excluded from the menu by a forward walk
-from the candidate back to this strip, with `addConnection` refusing as the backstop; a refusal
-changes nothing at all, so no empty undo step is recorded. "Add bus" (`+ Bus` on the dock's tab
+from the candidate back to this strip, and `synth::addSend` applies the same check, so the walk is
+the **only** cycle defence — `juce::AudioProcessorGraph::addConnection` is not a backstop here, as
+measured: it checks node existence, channel bounds and "not already connected" and accepts a cycle
+without complaint (`FeedbackGuardTests`' render-time guard is what catches an audible runaway if one
+is ever wired by hand on the canvas). A refusal changes nothing at all, so no empty undo step is
+recorded. "Add bus" (`+ Bus` on the dock's tab
 strip, and "New bus..." in every send menu) builds a bypassed-EQ -> bypassed-Compressor -> Stereo
 Strip -> Master(Mix) chain via the shared chain builder, boxed in a macro named "Bus N". On the
 canvas a send is an ordinary cable on the strip's new visible jacks — no new cable concept.
