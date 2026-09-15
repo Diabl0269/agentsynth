@@ -120,6 +120,13 @@ void AudioEngine::changeListenerCallback(juce::ChangeBroadcaster* source) {
 }
 
 void AudioEngine::shutdown() {
+    // FRO87: fire first, before anything below is touched -- this is what makes shutdown() safe
+    // to call directly from ANY caller (a test, a future/hosted code path) without the caller
+    // having to separately remember to detach UI-owned parameter attachments first. See the
+    // member's own doc comment in AudioEngine.h.
+    if (onBeforeShutdown)
+        onBeforeShutdown();
+
     if (!isHosted()) {
         deviceManager.removeChangeListener(this);
         deviceManager.removeAudioCallback(this);
