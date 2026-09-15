@@ -400,6 +400,7 @@ add_executable(Tests
     ../Source/UI/Mixer/MixerDirectColumn.cpp
     ../Source/UI/Mixer/MixerMasterColumn.cpp
     ../Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.cpp
+    ../Source/UI/Mixer/MixerPanelComponent/MixerPanelKeyboard.cpp
     ../Source/UI/Mixer/MixerDockComponent.cpp
     ../Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.cpp
     ../Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLanePainting.cpp

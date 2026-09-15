@@ -62,6 +62,7 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerMasterColumn.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.h
     Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.cpp
+    Source/UI/Mixer/MixerPanelComponent/MixerPanelKeyboard.cpp
     Source/UI/Mixer/MixerDockComponent.h
     Source/UI/Mixer/MixerDockComponent.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollComponent.h
