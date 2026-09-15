@@ -291,14 +291,20 @@ TimelinePanelComponent::TimelinePanelComponent() {
 TimelinePanelComponent::~TimelinePanelComponent() {
     if (doc_ != nullptr)
         doc_->removeListener(this);
-    if (shortcuts_ != nullptr)
-        shortcuts_->removeChangeListener(this);
+    // Resolved through the weak reference, not `shortcuts_` itself — see its declaration comment.
+    // `shortcuts_` cannot distinguish a live manager from one that already destructed (a locally-
+    // scoped ShortcutManager going out of scope before this component, in a test that skipped the
+    // explicit setShortcutManager(nullptr) detach); `shortcutsWeak_` goes null automatically the
+    // moment that happens, making removeChangeListener safe to skip instead of a use-after-free.
+    if (shortcutsWeak_ != nullptr)
+        shortcutsWeak_->removeChangeListener(this);
 }
 
 void TimelinePanelComponent::setShortcutManager(ShortcutManager* manager) {
     if (shortcuts_ != nullptr)
         shortcuts_->removeChangeListener(this);
     shortcuts_ = manager;
+    shortcutsWeak_ = manager;
     if (shortcuts_ != nullptr)
         shortcuts_->addChangeListener(this);
     refreshShortcutTooltips();

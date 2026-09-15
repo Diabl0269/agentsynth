@@ -915,6 +915,18 @@ private:
     // drift apart.
     juce::StringArray actionIds;
 
+    // FRO97: a ShortcutManager is usually a MainComponent-owned member that outlives every UI
+    // surface holding a raw pointer to it, but a test that declares one as a LOCAL after the
+    // component under test gets the opposite lifetime — the manager destructs first (reverse
+    // declaration order) and a component whose OWN destructor unconditionally dereferences its
+    // `shortcuts_` pointer (TimelinePanelComponent, which removeChangeListener()s itself) is a
+    // heap-use-after-free the moment it destructs afterwards. Weak-referenceable so a holder that
+    // cares (see TimelinePanelComponent::shortcutsWeak_) can guard its teardown against exactly
+    // that instead of trusting every call site to remember an explicit setShortcutManager(nullptr)
+    // before scope exit — the idiom PR #381 established and FRO97 applied to the remaining test
+    // files, but which is a test-authoring convention, not a compiler-enforced guarantee.
+    JUCE_DECLARE_WEAK_REFERENCEABLE(ShortcutManager)
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ShortcutManager)
 };
 

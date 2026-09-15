@@ -877,16 +877,25 @@ private:
     // add/removeChangeListener on it (rebinding itself still belongs to Settings — this pointer is
     // never used to mutate a binding, only to subscribe to changes and read the current one).
     //
-    // LIFETIME REQUIREMENT: the installed ShortcutManager must outlive this component, exactly
-    // like every other "non-owning, may stay null" pointer here — the destructor's
-    // removeChangeListener call dereferences it. MainComponent.h currently declares `timelinePanel`
-    // BEFORE `shortcutManager`, so MEMBER teardown destroys shortcutManager FIRST and would leave
-    // this pointer dangling by the time ~TimelinePanelComponent() runs; that call site needs an
-    // explicit `timelinePanel.setShortcutManager(nullptr);` in ~MainComponent(), ahead of the
-    // member cascade — the same pattern already used there for themeManager/appProperties — before
-    // this feature is safe to ship. Not added here: MainComponent.cpp is outside this component's
-    // own file boundary.
+    // LIFETIME CONTRACT: the installed ShortcutManager is expected to outlive this component —
+    // MainComponent.cpp's explicit `timelinePanel.setShortcutManager(nullptr);` ahead of its own
+    // member cascade is what makes that true for the real app (`shortcutManager` is declared AFTER
+    // `timelinePanel`, so it would otherwise destruct first). Every read of `shortcuts_` during
+    // normal operation (tooltips, keyPressed) still trusts that contract.
+    //
+    // The DESTRUCTOR is different: it runs unconditionally, including in tests that forgot the
+    // explicit detach (FRO97 found this pattern in five test files — a locally-scoped
+    // ShortcutManager declared AFTER a locally-scoped component, so the manager destructs FIRST at
+    // scope exit). `shortcuts_` alone can't tell a live manager from a dangling one, so the
+    // destructor resolves through `shortcutsWeak_` instead — a genuine guard against exactly the
+    // bug class this ticket fixed, rather than one more call site relying on every future test
+    // remembering the idiom.
     ShortcutManager* shortcuts_ = nullptr;
+    // Mirrors `shortcuts_` (set together in setShortcutManager), used ONLY by the destructor to
+    // decide whether removeChangeListener is safe to call — see the LIFETIME CONTRACT comment
+    // above. Automatically null once the referenced ShortcutManager is destroyed, unlike
+    // `shortcuts_` itself, which cannot know.
+    juce::WeakReference<ShortcutManager> shortcutsWeak_;
     // juce::ChangeListener — rebuilds the tool-strip/snap/follow tooltips on every bindings change.
     void changeListenerCallback(juce::ChangeBroadcaster*) override;
     // Rebuilds every dynamic shortcut-hint tooltip this panel owns (see synth::shortcutHintFor):
