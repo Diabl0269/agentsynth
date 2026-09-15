@@ -451,16 +451,26 @@ void MainComponent::rebuildFocusRegions() {
     // so a future detached mixer window (FRO12) can register the same region against its own
     // FocusRegionRegistry with a different `dockOpen` predicate instead of re-deriving this logic.
     //
-    // FRO12: same guard shape as "timeline" above -- this dock-tab-gated region only makes sense
-    // in Tab placement with the host still docked. Own-panel and Window placement (and a detached
-    // Mixer window) have no docked tab to cycle to here; Window placement's region registers
-    // against the DetachedPanelWindow's own one-region registry instead (see
-    // DetachablePanelHost::setHostedPanelFocusRegion). Own-panel placement (still the same
-    // top-level window, not a DetachedPanelWindow) getting its own MainComponent-level focus
-    // region is a known gap, out of this merge's scope -- see the PR notes.
-    if (!mixerDock.getMixerHost().isDetached() &&
-        mixerPlacement_.getPlacement() == synth::ui::MixerPlacementController::Placement::Tab)
-        synth::ui::registerMixerFocusRegion(focusRegions_, mixerDock, [this] { return isTimelineVisible; });
+    // FRO12: three placements, three shapes -- never reorder/rename "mixer" once registered:
+    //  - Tab: same guard shape as "timeline" above; registerMixerFocusRegion's own dockOpen AND
+    //    dock.isMixerTabActive() gate is exactly right here (the host is still docked, one tab
+    //    visible at a time).
+    //  - Window: the detached window's OWN one-region registry covers it instead (see
+    //    DetachablePanelHost::setHostedPanelFocusRegion) -- no MainComponent-level region while
+    //    detached, same as "timeline" while the Timeline is detached.
+    //  - Own panel: still the SAME top-level window (not a DetachedPanelWindow), so it needs its
+    //    OWN MainComponent-level region here too, or Tab-cycling in the main window can never
+    //    reach it -- registerMixerFocusRegion's helper hardcodes dock.isMixerTabActive(), which is
+    //    always false once the dock's Mixer tab is disabled for this placement (see
+    //    MixerPlacementController::applyPlacement), so this is a direct addRegion against
+    //    mixerPlacement_'s own visibility instead of that helper.
+    if (!mixerDock.getMixerHost().isDetached()) {
+        if (mixerPlacement_.getPlacement() == synth::ui::MixerPlacementController::Placement::Tab)
+            synth::ui::registerMixerFocusRegion(focusRegions_, mixerDock, [this] { return isTimelineVisible; });
+        else if (mixerPlacement_.getPlacement() == synth::ui::MixerPlacementController::Placement::OwnPanel)
+            focusRegions_.addRegion(
+                {"mixer", &mixerDock.getMixerPanel(), [this] { return mixerPlacement_.isOwnPanelShowing(); }, nullptr});
+    }
     focusRegions_.addRegion({"aiPanel", &aiChatComponent, [this] { return isAiPanelVisible; },
                              [this] {
                                  if (!isAiPanelVisible && toggleAiPanelButton.onClick)

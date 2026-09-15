@@ -118,8 +118,13 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
         // FRO12 (P9-6): a live Preferences placement change applies immediately, no restart --
         // idempotent (mixerPlacement_ no-ops when the persisted value already matches), so this is
         // also safe against the same broadcast a DetachedPanelWindow's own bounds-persist
-        // (moved()/resized()) fires on every drag frame.
+        // (moved()/resized()) fires on every drag frame. applyPlacementPreference() only moves the
+        // Mixer between its three homes; it does NOT re-evaluate the "mixer"/"timeline" focus-
+        // region guards in rebuildFocusRegions() (MainComponentSetup.cpp), so without this call a
+        // placement switch away from Tab would leave the "mixer" region pointing at a component
+        // that's no longer showing there -- rebuild every time, same as a detach/redock.
         mixerPlacement_.applyPlacementPreference();
+        rebuildFocusRegions();
         // Piano-roll key-label mode and note colour overrides live in the same properties file —
         // re-read them on every settings write so an Appearance-tab edit shows up immediately,
         // the same "re-read on notify" treatment as the two calls above. No startup call needed:

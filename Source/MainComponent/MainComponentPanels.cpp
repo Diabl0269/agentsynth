@@ -393,19 +393,21 @@ void MainComponent::resized() {
     // rect at its docked edge rather than left showing the bounds it had when it was last open.
     // A panel that is both closed AND hidden is skipped entirely — its bounds are dead state, and
     // removeFrom*(0) would carve nothing from the canvas anyway.
+    // FRO12 (P9-6): the Mixer's "Own panel" placement -- a second, INDEPENDENT bottom strip BELOW
+    // the Timeline dock carved next. Fixed height, no slide (the ticket's own scope cut -- see
+    // MixerPlacementController's class comment): a plain visible/hidden carve, same "|| isVisible()
+    // frame-0" guard as every other panel above. Carved FIRST (before the Timeline dock below)
+    // so it claims the window's actual bottom edge -- carving it second would instead stack it
+    // ABOVE the Timeline dock, the opposite of docs/mixer.md §5.9's own layout.
+    if (mixerPlacement_.isOwnPanelShowing())
+        mixerPlacement_.setBounds(bounds.removeFromBottom(synth::ui::MixerPlacementController::kOwnPanelHeight));
+
     if (timelineSlide_.getProgress() > 0.0f || mixerDock.isVisible()) {
         // Re-clamped every pass: the window may have shrunk since the height was set (or persisted
         // on a larger one), and the canvas must stay usable.
         timelinePanelHeight_ = clampTimelinePanelHeight(timelinePanelHeight_);
         mixerDock.setBounds(bounds.removeFromBottom(timelineSlide_.sizeBetween(0, timelinePanelHeight_)));
     }
-
-    // FRO12 (P9-6): the Mixer's "Own panel" placement -- a second, INDEPENDENT bottom strip below
-    // the Timeline dock above. Fixed height, no slide (the ticket's own scope cut -- see
-    // MixerPlacementController's class comment): a plain visible/hidden carve, same "|| isVisible()
-    // frame-0" guard as every other panel above.
-    if (mixerPlacement_.isOwnPanelShowing())
-        mixerPlacement_.setBounds(bounds.removeFromBottom(synth::ui::MixerPlacementController::kOwnPanelHeight));
 
     if (aiW > 0 || aiChatComponent.isVisible())
         aiChatComponent.setBounds(bounds.removeFromRight(aiW));
