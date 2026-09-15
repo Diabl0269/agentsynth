@@ -176,6 +176,13 @@ TEST(TimelineTrackFocusTest, MSRKeysAreRebindableThroughAnInstalledShortcutManag
 
     EXPECT_TRUE(header->keyPressed(juce::KeyPress('u', juce::ModifierKeys::noModifiers, 0)));
     EXPECT_TRUE(f.doc.getTrack(id)->muted);
+
+    // Detach before `manager` (declared after `f`, so destroyed first) goes out of scope — an ASAN
+    // run catches the heap-use-after-free this leaves otherwise: TimelinePanelComponent::
+    // ~TimelinePanelComponent() removes itself as a change listener from whatever ShortcutManager
+    // is still installed, which is a dangling pointer once `manager` is gone. See PR #381's fix for
+    // TimelinePanelToolStripTests.cpp for the idiom this follows.
+    f.panel.setShortcutManager(nullptr);
 }
 
 TEST(TimelineTrackFocusTest, ShortcutManagerInstalledAfterHeadersExistStillReachesThem) {
@@ -192,6 +199,10 @@ TEST(TimelineTrackFocusTest, ShortcutManagerInstalledAfterHeadersExistStillReach
     ASSERT_NE(header, nullptr);
     EXPECT_FALSE(header->keyPressed(sKey())) << "bare 's' was rebound away on a header built earlier";
     EXPECT_TRUE(header->keyPressed(juce::KeyPress('u', juce::ModifierKeys::noModifiers, 0)));
+
+    // Detach before `manager` (declared after `f`, so destroyed first) goes out of scope — see the
+    // comment in MSRKeysAreRebindableThroughAnInstalledShortcutManager above.
+    f.panel.setShortcutManager(nullptr);
 }
 
 TEST(TimelineTrackFocusTest, UnrelatedKeysAreNotClaimedByTheRow) {
