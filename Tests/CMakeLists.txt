@@ -103,6 +103,11 @@ add_executable(Tests
     Mixer/TrackPreset/TrackPresetDefaultsTests.cpp
     Mixer/MixerModel/MixerModelColumnTests.cpp
     Mixer/MixerModel/MixerModelInsertTests.cpp
+    Mixer/MixerModel/MixerModelBusColumnTests.cpp
+    Mixer/Sends/MixerSendLevelTests.cpp
+    Mixer/Sends/MixerSendFlowTests.cpp
+    Mixer/Sends/MixerBusSoloTests.cpp
+    Mixer/Sends/MixerSendLatencyTests.cpp
     Engine/LatencyAlignmentTests.cpp
     Timeline/AudioClipPlaybackTests.cpp
     Plugin/HostedPluginTests.cpp
@@ -338,7 +343,11 @@ add_executable(Tests
     UI/Mixer/MixerPanelComponentTests.cpp
     UI/Mixer/MixerPanelUndoUnbindTests.cpp
     UI/Mixer/MixerFaderTests.cpp
+    UI/Mixer/MixerSendListTests.cpp
     UI/Mixer/MixerDockComponentTests.cpp
+    UI/Mixer/MixerPanelKeyboardFocusTests.cpp
+    UI/Mixer/MixerAccessibilityTests.cpp
+    UI/Mixer/MixerFocusRegionTests.cpp
     UI/Graph/MinimapComponentTests.cpp
     Plugin/PluginProcessorTests.cpp
     Engine/AudioEngineTransportTests.cpp
@@ -396,10 +405,12 @@ add_executable(Tests
     ../Source/UI/Mixer/MixerMeter.cpp
     ../Source/UI/Mixer/MixerFader.cpp
     ../Source/UI/Mixer/MixerInsertList.cpp
+    ../Source/UI/Mixer/MixerSendList.cpp
     ../Source/UI/Mixer/MixerColumnComponent.cpp
     ../Source/UI/Mixer/MixerDirectColumn.cpp
     ../Source/UI/Mixer/MixerMasterColumn.cpp
     ../Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.cpp
+    ../Source/UI/Mixer/MixerPanelComponent/MixerPanelKeyboard.cpp
     ../Source/UI/Mixer/MixerDockComponent.cpp
     ../Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.cpp
     ../Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLanePainting.cpp

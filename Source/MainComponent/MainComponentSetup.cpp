@@ -6,6 +6,7 @@
 #include "AI/AIProviderRegistry.h"
 #include "MainComponent.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "UI/Mixer/MixerPanelComponent/MixerFocusRegion.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 
 void MainComponent::restorePanelPreferences() {
@@ -410,11 +411,24 @@ void MainComponent::registerFocusRegions() {
         {"library", &moduleLibrary, [this] { return isLibraryVisible; }, [this] { setLibraryVisible(true); }});
     // The canvas has no closed state at all -- null isOpen/open, so it is always in the open list.
     focusRegions_.addRegion({"canvas", &graphEditor, nullptr, nullptr});
-    focusRegions_.addRegion({"timeline", &timelinePanel, [this] { return isTimelineVisible; },
+    // FRO18 (plan (a)): "timeline" and "mixer" now share the SAME dock, one tab visible at a time
+    // -- isTimelineVisible alone (the dock's own open/closed state) is no longer enough to say the
+    // Timeline region is open, since the dock can be open on the MIXER tab instead. Both regions'
+    // `open` re-select their own tab first (mirroring modMatrix's "no open state of its own to
+    // open" precedent for the case that's already showing) before falling through to the shared
+    // "open the dock if it's closed" step every panel toggle already does.
+    focusRegions_.addRegion({"timeline", &timelinePanel,
+                             [this] { return isTimelineVisible && !mixerDock.isMixerTabActive(); },
                              [this] {
+                                 mixerDock.setActiveTab(synth::ui::MixerDockComponent::Tab::Timeline);
                                  if (!isTimelineVisible && toggleTimelineButton.onClick)
                                      toggleTimelineButton.onClick();
                              }});
+    // FRO18 plan (a)'s "FRO12 seam": the actual registration (open predicate + no `open` callback
+    // -- see MixerFocusRegion.h's own comment) lives in the free `registerMixerFocusRegion` helper
+    // so a future detached mixer window (FRO12) can register the same region against its own
+    // FocusRegionRegistry with a different `dockOpen` predicate instead of re-deriving this logic.
+    synth::ui::registerMixerFocusRegion(focusRegions_, mixerDock, [this] { return isTimelineVisible; });
     focusRegions_.addRegion({"aiPanel", &aiChatComponent, [this] { return isAiPanelVisible; },
                              [this] {
                                  if (!isAiPanelVisible && toggleAiPanelButton.onClick)

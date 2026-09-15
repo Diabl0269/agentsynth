@@ -1,6 +1,15 @@
 name: Agent Synth CI
 
 on:
+  # Manual re-seeding run. PR runs restore caches only and never save (see the cache-save `if:`
+  # conditions below) so a PR can never re-populate main's caches after they're evicted or
+  # 7-day-GC'd. Before that change a failed PR attempt would leave behind a PR-scoped cache and a
+  # rerun would restore it, so main being cold was self-healing; now the only way to reseed is a
+  # push to main (which needs a real commit) or this manual trigger. It is build-only on any ref:
+  # `lint`/`Run Tests`/`Check Coverage` all gate on `github.event_name == 'pull_request'`, and
+  # `CACHE_WARM_EXPECTED` below evaluates false for workflow_dispatch, so a cold cache here is
+  # reported as expected, not a failure.
+  workflow_dispatch:
   pull_request:
     branches: [ "main" ]
     types: [opened, synchronize, reopened, labeled]
@@ -156,6 +165,13 @@ jobs:
   build-and-test:
     name: Build, Test, and Coverage
     runs-on: ubuntu-latest
+    # actions: write is only for the main-only "Prune superseded main cache generations" step
+    # below (gh cache delete needs it); contents: read replaces what an unset permissions block
+    # would otherwise grant by default, since declaring any permissions here narrows every other
+    # scope to none.
+    permissions:
+      contents: read
+      actions: write
 
     steps:
     - uses: actions/checkout@v6
@@ -206,7 +222,10 @@ jobs:
     - name: Configure ccache
       run: |
         # 500M was too small to hold a Debug + coverage build of the whole tree (268 translation
-        # units as of Aug 2026, up from 185 in July), so entries evicted mid-build.
+        # units as of Aug 2026, up from 185 in July), so entries evicted mid-build. Kept at 2G
+        # (unlike the smaller per-OS caps on the macOS/Windows jobs below): a seeded
+        # Linux-ccache-main entry measured 1.96 GB on 2026-09-15 — already saturating a 1G cap —
+        # because this is the Debug+coverage+AI-harness build, the heaviest of the three.
         ccache --set-config=max_size=2G
         # actions/checkout writes fresh mtimes on every file every run, and the compiler binary's
         # mtime changes whenever GitHub rebuilds the runner image — both cause false misses under
@@ -241,19 +260,71 @@ jobs:
     # Saved right after the build, `if: always()`, so a compile that succeeded is never thrown
     # away because a later test failed. `_deps` is skipped on an exact hit — re-uploading an
     # identical ~350 MB entry only burns budget.
+    # Only a push-to-main run (or a workflow_dispatch run on main, see the trigger comment above)
+    # saves. A PR run always restores only: every PR push used to mint its own ~350 MB deps entry
+    # and ~150 MB-2 GB ccache entry under refs/pull/<n>/merge, and those PR-scoped entries were
+    # never cleaned up until GC — at one point 6.3 GB of the repo's 10 GB cache budget was PR-scope
+    # duplicates, LRU-evicting main's seeded entries so the NEXT PR restored nothing and failed
+    # Check Cache Health by design. main is the only ref that needs to write here since every PR
+    # restore-key falls back to it.
     - name: Save FetchContent Dependencies
-      if: always() && steps.deps-cache.outputs.cache-hit != 'true'
+      if: always() && steps.deps-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
       uses: actions/cache/save@v5
       with:
         path: build/_deps
         key: ${{ steps.deps-cache.outputs.cache-primary-key }}
 
     - name: Save ccache
-      if: always()
+      id: ccache-save
+      if: always() && github.ref == 'refs/heads/main'
       uses: actions/cache/save@v5
       with:
         path: ${{ env.CCACHE_DIR }}
         key: ${{ steps.ccache-cache.outputs.cache-primary-key }}
+
+    # ccache keys are per-commit (<os>-ccache-main-<sha>) and cache entries are immutable, so
+    # every merge to main mints a brand-new one instead of updating in place — without this,
+    # 3-4 merges alone would re-blow the repo past GitHub's 10 GB cache budget the same way
+    # PR-scoped entries used to. `if: always()` is deliberately NOT used here: pruning only runs
+    # once the save above has actually produced a new generation to keep, never on a failed or
+    # skipped save (which would otherwise delete every existing generation and leave main cold).
+    # Concurrency safety: main pushes are queued, not cancelled, by the concurrency group at the
+    # top of this file (cancel-in-progress is pull_request-only), so two main runs never prune the
+    # same OS family at once — but as a second, cheap guard, this only ever deletes entries OLDER
+    # than the entry this run just saved (never "everything but mine"), and always keeps the 2
+    # most recent generations regardless, so a run working off a stale cache listing can't delete
+    # a sibling run's fresher save. Also prunes superseded build/_deps entries for old
+    # DependencyVersions.cmake hashes, which accumulate the same way (slower cadence, same fix).
+    # Tolerates a missing/partial cache listing (logs and skips rather than failing the job).
+    - name: Prune superseded main cache generations
+      if: github.ref == 'refs/heads/main' && steps.ccache-save.outcome == 'success'
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -uo pipefail
+        prune() { # prune <key-prefix> <key-just-saved>
+          local prefix="$1" keep_key="$2" list keep_created
+          if ! list="$(gh cache list --ref refs/heads/main --key "$prefix" --limit 100 \
+                          --json id,key,createdAt 2>&1)" || [ -z "$list" ] || [ "$list" = "[]" ]; then
+            echo "prune: nothing to list for $prefix (or listing failed), skipping: $list"
+            return 0
+          fi
+          keep_created="$(printf '%s' "$list" | jq -r --arg k "$keep_key" \
+                             '.[] | select(.key==$k) | .createdAt' | head -1)"
+          if [ -z "$keep_created" ]; then
+            echo "prune: could not find just-saved key $keep_key in the $prefix listing, skipping"
+            return 0
+          fi
+          printf '%s' "$list" | jq -r --arg cutoff "$keep_created" \
+            'sort_by(.createdAt) | reverse | .[2:] | .[] | select(.createdAt < $cutoff) | "\(.id)\t\(.key)"' |
+          while IFS=$'\t' read -r id key; do
+            [ -z "$id" ] && continue
+            echo "prune: deleting $prefix cache id=$id key=$key"
+            gh cache delete "$id" || echo "prune: failed to delete id=$id (non-fatal)"
+          done
+        }
+        prune "${{ runner.os }}-ccache-main-" "${{ steps.ccache-cache.outputs.cache-primary-key }}"
+        prune "${{ runner.os }}-deps3-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
 
     # Test execution, coverage and its artifact are pull-request concerns; a push run is only here
     # to seed the cache (see the note above the `lint` job).
@@ -311,8 +382,13 @@ jobs:
         packages: cmake ninja-build libasound2-dev libx11-dev libxinerama-dev libxext-dev libxcomposite-dev libxcursor-dev libxrandr-dev libxrender-dev libfontconfig1-dev libfreetype6-dev libglu1-mesa-dev libcurl4-openssl-dev libgtk-3-dev libjack-jackd2-dev freeglut3-dev pkg-config clang xvfb
         version: 1.0
 
-    - name: Cache FetchContent Dependencies
-      uses: actions/cache@v5
+    # Restore-only, like every other PR-facing cache step (see the Save FetchContent Dependencies
+    # comment in build-and-test above): this job only ever runs on a PR (label-gated, no push:main
+    # trigger of its own), so it can never be the ref that legitimately saves. It shares the exact
+    # same key as build-and-test's Linux deps cache, so it restores from that job's main-seeded
+    # entry with no save step of its own needed here.
+    - name: Restore FetchContent Dependencies
+      uses: actions/cache/restore@v5
       with:
         path: build/_deps
         # See the build-and-test job for why this keys on the pins file alone.
@@ -342,6 +418,10 @@ jobs:
   build-and-test-macos:
     name: Build and Test (macOS)
     runs-on: macos-latest
+    # See build-and-test's permissions comment: actions: write is only for the cache-pruning step.
+    permissions:
+      contents: read
+      actions: write
 
     steps:
     - uses: actions/checkout@v6
@@ -376,7 +456,12 @@ jobs:
 
     - name: Configure ccache
       run: |
-        ccache --set-config=max_size=2G
+        # Right-sized, not the Linux job's 2G: a seeded macOS-ccache-main entry measured 117 MB on
+        # 2026-09-15 (this Release build has no coverage instrumentation and is the smallest of the
+        # three), so 2G was headroom this job will never use — and every byte configured here is a
+        # byte a single `Save ccache` run (main-only, see that step below) could write toward the
+        # repo's 10 GB cache budget. 512M leaves >4x headroom over the measured size.
+        ccache --set-config=max_size=512M
         ccache --set-config=compiler_check=content
         ccache --set-config=sloppiness=time_macros,include_file_mtime,include_file_ctime
         ccache --zero-stats
@@ -408,19 +493,61 @@ jobs:
         DEPS_MATCHED_KEY: ${{ steps.deps-cache.outputs.cache-matched-key }}
       run: bash scripts/ci-cache-check.sh
 
+    # Only a push-to-main run (or a workflow_dispatch run on main, see the trigger comment above)
+    # saves. A PR run always restores only: every PR push used to mint its own ~350 MB deps entry
+    # and ~150 MB-2 GB ccache entry under refs/pull/<n>/merge, and those PR-scoped entries were
+    # never cleaned up until GC — at one point 6.3 GB of the repo's 10 GB cache budget was PR-scope
+    # duplicates, LRU-evicting main's seeded entries so the NEXT PR restored nothing and failed
+    # Check Cache Health by design. main is the only ref that needs to write here since every PR
+    # restore-key falls back to it.
     - name: Save FetchContent Dependencies
-      if: always() && steps.deps-cache.outputs.cache-hit != 'true'
+      if: always() && steps.deps-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
       uses: actions/cache/save@v5
       with:
         path: build/_deps
         key: ${{ steps.deps-cache.outputs.cache-primary-key }}
 
     - name: Save ccache
-      if: always()
+      id: ccache-save
+      if: always() && github.ref == 'refs/heads/main'
       uses: actions/cache/save@v5
       with:
         path: ${{ env.CCACHE_DIR }}
         key: ${{ steps.ccache-cache.outputs.cache-primary-key }}
+
+    # See build-and-test's "Prune superseded main cache generations" step for the full rationale
+    # (per-commit ccache keys are immutable, so unpruned entries re-blow the cache budget) and its
+    # concurrency-safety note (only deletes entries older than this run's own save, keeps the 2
+    # most recent generations regardless, tolerates a missing/partial listing).
+    - name: Prune superseded main cache generations
+      if: github.ref == 'refs/heads/main' && steps.ccache-save.outcome == 'success'
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -uo pipefail
+        prune() { # prune <key-prefix> <key-just-saved>
+          local prefix="$1" keep_key="$2" list keep_created
+          if ! list="$(gh cache list --ref refs/heads/main --key "$prefix" --limit 100 \
+                          --json id,key,createdAt 2>&1)" || [ -z "$list" ] || [ "$list" = "[]" ]; then
+            echo "prune: nothing to list for $prefix (or listing failed), skipping: $list"
+            return 0
+          fi
+          keep_created="$(printf '%s' "$list" | jq -r --arg k "$keep_key" \
+                             '.[] | select(.key==$k) | .createdAt' | head -1)"
+          if [ -z "$keep_created" ]; then
+            echo "prune: could not find just-saved key $keep_key in the $prefix listing, skipping"
+            return 0
+          fi
+          printf '%s' "$list" | jq -r --arg cutoff "$keep_created" \
+            'sort_by(.createdAt) | reverse | .[2:] | .[] | select(.createdAt < $cutoff) | "\(.id)\t\(.key)"' |
+          while IFS=$'\t' read -r id key; do
+            [ -z "$id" ] && continue
+            echo "prune: deleting $prefix cache id=$id key=$key"
+            gh cache delete "$id" || echo "prune: failed to delete id=$id (non-fatal)"
+          done
+        }
+        prune "${{ runner.os }}-ccache-main-" "${{ steps.ccache-cache.outputs.cache-primary-key }}"
+        prune "${{ runner.os }}-deps3-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
 
     # Pull-request only — a push run seeds the cache (see the note above the `lint` job). This is
     # the starkest case: an 8-second cached build was carrying 118 seconds of test execution.
@@ -432,6 +559,10 @@ jobs:
   build-and-test-windows:
     name: Build and Test (Windows)
     runs-on: windows-latest
+    # See build-and-test's permissions comment: actions: write is only for the cache-pruning step.
+    permissions:
+      contents: read
+      actions: write
     env:
       # Overrides the workflow-level default. `github.workspace` on Windows is a backslash path
       # (D:\a\agentsynth\agentsynth), and these steps run under bash, where backslashes in a
@@ -471,7 +602,10 @@ jobs:
       shell: bash
       run: |
         mkdir -p "$CCACHE_DIR"
-        ccache --set-config=max_size=2G
+        # Right-sized, not the Linux job's 2G: a seeded Windows-ccache-main entry measured 160 MB
+        # on 2026-09-15, so 512M leaves >3x headroom while bounding what a single main-only save
+        # (see the Save ccache step below) can add to the repo's 10 GB cache budget.
+        ccache --set-config=max_size=512M
         ccache --set-config=compiler_check=content
         ccache --set-config=sloppiness=time_macros,include_file_mtime,include_file_ctime
         ccache --zero-stats
@@ -497,19 +631,60 @@ jobs:
         DEPS_MATCHED_KEY: ${{ steps.deps-cache.outputs.cache-matched-key }}
       run: bash scripts/ci-cache-check.sh
 
+    # Only a push-to-main run (or a workflow_dispatch run on main, see the trigger comment above)
+    # saves. A PR run always restores only: every PR push used to mint its own ~350 MB deps entry
+    # and ~150 MB-2 GB ccache entry under refs/pull/<n>/merge, and those PR-scoped entries were
+    # never cleaned up until GC — at one point 6.3 GB of the repo's 10 GB cache budget was PR-scope
+    # duplicates, LRU-evicting main's seeded entries so the NEXT PR restored nothing and failed
+    # Check Cache Health by design. main is the only ref that needs to write here since every PR
+    # restore-key falls back to it.
     - name: Save FetchContent Dependencies
-      if: always() && steps.deps-cache.outputs.cache-hit != 'true'
+      if: always() && steps.deps-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
       uses: actions/cache/save@v5
       with:
         path: build/_deps
         key: ${{ steps.deps-cache.outputs.cache-primary-key }}
 
     - name: Save ccache
-      if: always()
+      id: ccache-save
+      if: always() && github.ref == 'refs/heads/main'
       uses: actions/cache/save@v5
       with:
         path: ${{ env.CCACHE_DIR }}
         key: ${{ steps.ccache-cache.outputs.cache-primary-key }}
+
+    # See build-and-test's "Prune superseded main cache generations" step for the full rationale
+    # and concurrency-safety note. shell: bash because this job's default shell is pwsh.
+    - name: Prune superseded main cache generations
+      if: github.ref == 'refs/heads/main' && steps.ccache-save.outcome == 'success'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -uo pipefail
+        prune() { # prune <key-prefix> <key-just-saved>
+          local prefix="$1" keep_key="$2" list keep_created
+          if ! list="$(gh cache list --ref refs/heads/main --key "$prefix" --limit 100 \
+                          --json id,key,createdAt 2>&1)" || [ -z "$list" ] || [ "$list" = "[]" ]; then
+            echo "prune: nothing to list for $prefix (or listing failed), skipping: $list"
+            return 0
+          fi
+          keep_created="$(printf '%s' "$list" | jq -r --arg k "$keep_key" \
+                             '.[] | select(.key==$k) | .createdAt' | head -1)"
+          if [ -z "$keep_created" ]; then
+            echo "prune: could not find just-saved key $keep_key in the $prefix listing, skipping"
+            return 0
+          fi
+          printf '%s' "$list" | jq -r --arg cutoff "$keep_created" \
+            'sort_by(.createdAt) | reverse | .[2:] | .[] | select(.createdAt < $cutoff) | "\(.id)\t\(.key)"' |
+          while IFS=$'\t' read -r id key; do
+            [ -z "$id" ] && continue
+            echo "prune: deleting $prefix cache id=$id key=$key"
+            gh cache delete "$id" || echo "prune: failed to delete id=$id (non-fatal)"
+          done
+        }
+        prune "${{ runner.os }}-ccache-main-" "${{ steps.ccache-cache.outputs.cache-primary-key }}"
+        prune "${{ runner.os }}-deps3-" "${{ steps.deps-cache.outputs.cache-primary-key }}"
 
     # Pull-request only — a push run seeds the cache (see the note above the `lint` job).
     - name: Run Tests

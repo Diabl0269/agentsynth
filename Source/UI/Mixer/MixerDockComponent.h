@@ -37,6 +37,11 @@ public:
     void setOnGraphTopologyChanged(std::function<void()> callback);
     /** MainComponent::makeChannelForNode -- fired by Direct's "Make channel" button. */
     void setOnMakeChannelForNode(std::function<void(juce::AudioProcessorGraph::NodeID)> callback);
+    /** FRO18: MainComponent wires this to performTrackEdit(setTrackArmed(...)) -- fired by the
+     *  Arm key (rebindable "timelineArmFocusedTrack") when a linked strip is focused. Sibling
+     *  forwarder to setOnGraphTopologyChanged/setOnMakeChannelForNode above: MainComponent talks
+     *  to the dock, never reaches through getMixerPanel() to set the panel's own callback field. */
+    void setOnArmTrack(std::function<void(synth::TrackId)> callback);
 
     Tab getActiveTab() const noexcept { return activeTab_; }
     bool isMixerTabActive() const noexcept { return activeTab_ == Tab::Mixer; }
@@ -71,6 +76,9 @@ public:
      *  contract between this component and its caller, not an implementation detail. */
     static constexpr int kTabStripHeight = 22;
 
+    /** FRO15 test seam: the "Add bus" button the tab strip shows on the Mixer tab. */
+    juce::TextButton& getAddBusButtonForTest() noexcept { return addBusButton_; }
+
 private:
     void applyTabVisibility();
     void persistActiveTab();
@@ -79,6 +87,9 @@ private:
     MixerPanelComponent mixer_;
     juce::TextButton timelineTabButton_{"Timeline"};
     juce::TextButton mixerTabButton_{"Mixer"};
+    // FRO15 (docs/mixer.md §5.15): "Add bus" sits on the tab strip and is visible only on the Mixer
+    // tab -- it has no meaning while the Timeline tab is showing.
+    juce::TextButton addBusButton_{"+ Bus"};
     Tab activeTab_ = Tab::Timeline;
     juce::ApplicationProperties* appProperties_ = nullptr;
     static constexpr const char* kActiveTabKey = "bottomDockActiveTab";

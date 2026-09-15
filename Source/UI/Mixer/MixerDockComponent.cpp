@@ -6,6 +6,10 @@
 
 namespace synth::ui {
 
+namespace {
+constexpr int kAddBusButtonWidth = 54;
+} // namespace
+
 MixerDockComponent::MixerDockComponent(TimelinePanelComponent& timelinePanel, AudioEngine& audioEngine,
                                        synth::TimelineDoc& doc, AppUndoManager& undoManager, GraphEditor& graphEditor)
     : timelinePanel_(timelinePanel) {
@@ -17,6 +21,13 @@ MixerDockComponent::MixerDockComponent(TimelinePanelComponent& timelinePanel, Au
     mixerTabButton_.onClick = [this] { setActiveTab(Tab::Mixer); };
 
     addAndMakeVisible(timelinePanel_);
+    addAndMakeVisible(addBusButton_);
+    addBusButton_.setClickingTogglesState(false);
+    addBusButton_.onClick = [this] {
+        mixer_.createBus();
+        mixer_.rebuild(); // the new bus's own column, without waiting for the owner's reconcile
+    };
+
     addAndMakeVisible(mixer_);
     mixer_.configure(audioEngine.getGraph(), doc, graphEditor.getMacros(), undoManager, graphEditor, audioEngine);
 
@@ -43,6 +54,10 @@ void MixerDockComponent::setOnMakeChannelForNode(std::function<void(juce::AudioP
     mixer_.onMakeChannelForNode = std::move(callback);
 }
 
+void MixerDockComponent::setOnArmTrack(std::function<void(synth::TrackId)> callback) {
+    mixer_.onArmTrack = std::move(callback);
+}
+
 void MixerDockComponent::setActiveTab(Tab tab) {
     if (activeTab_ == tab)
         return;
@@ -57,6 +72,7 @@ void MixerDockComponent::applyTabVisibility() {
     mixer_.setVisible(mixerActive);
     timelineTabButton_.setToggleState(!mixerActive, juce::dontSendNotification);
     mixerTabButton_.setToggleState(mixerActive, juce::dontSendNotification);
+    addBusButton_.setVisible(mixerActive);
     if (mixerActive)
         mixer_.rebuild();
     resized();
@@ -77,6 +93,8 @@ bool MixerDockComponent::revealColumnForStrip(juce::AudioProcessorGraph::NodeID 
 void MixerDockComponent::resized() {
     auto bounds = getLocalBounds();
     auto tabStrip = bounds.removeFromTop(kTabStripHeight);
+    if (addBusButton_.isVisible())
+        addBusButton_.setBounds(tabStrip.removeFromRight(kAddBusButtonWidth));
     timelineTabButton_.setBounds(tabStrip.removeFromLeft(tabStrip.getWidth() / 2));
     mixerTabButton_.setBounds(tabStrip);
 

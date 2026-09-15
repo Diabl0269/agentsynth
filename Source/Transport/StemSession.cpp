@@ -2,6 +2,7 @@
 
 #include "AudioEngine/AudioEngine.h"
 #include "BounceGuards.h"
+#include "Mixer/MixerSends/MixerSends.h"
 #include "Mixer/TrackChannelLink.h"
 #include "OfflineTransportDriver.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
@@ -60,13 +61,19 @@ StemResult failure(juce::String message) {
 // link rule FRO14 decides the same way - see that file. With no TimelineDoc at all (a graph built
 // directly by a test), there is no name to find and every strip keeps its "Channel N" fallback.
 //
-// ChannelStripModule has no user-given name field of its own yet (checked at FRO55 time - its
-// getExtraState() carries only "shape"/"solo", docs/mixer.md §5.4-5.10 never added one either) - the
+// ChannelStripModule has no user-given name field of its own yet (re-checked at FRO15 time - its
+// getExtraState() carries "shape"/"solo"/"isBus"/"sends" and no name, and docs/mixer.md §5.4-5.15
+// never added one either; a bus takes its name from its MACRO, not from the strip) - the
 // mixer-UI ticket that might add one is expected to make THIS function prefer it, ahead of the
 // shared track walk, whenever it lands.
 juce::String stemStripName(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID stripId, int number,
                            const TimelineDoc* timelineDoc) {
-    const juce::String fallback = "Channel " + juce::String(number);
+    // FRO15 (docs/mixer.md §5.15): a group/send bus is a ChannelStrip too, so collectStemStrips
+    // picks it up with no change at all - but it has no feeding track, so "Channel N" would be a
+    // lie about what the file holds. Its fallback is "Bus N" instead (MixerSends.h). A bus that IS
+    // also fed by a track directly still takes the track name below, same as any other strip.
+    const juce::String fallback =
+        isBusStrip(graph, stripId) ? busFallbackName(graph, stripId) : "Channel " + juce::String(number);
     if (timelineDoc == nullptr)
         return fallback;
     return channelDisplayName(graph, stripId, *timelineDoc, fallback);
