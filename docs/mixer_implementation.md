@@ -527,8 +527,15 @@ Side tracks (each independent of the main line beyond its own listed dependency)
   - *Lifetime* — two seams, not one. `MixerColumnComponent::unbindFromGraph()` (the FRO11
     pre-restore hook, `MixerPanelComponent::unbindAllColumns()` reached via
     `GraphEditor::onBeforeDetachAllModuleComponents`) detaches the thumbnail's listeners for every
-    graph-*replacing* mutation (undo/redo restore, New Patch, Load, AI apply), same as it already
-    does for the fader/pan/mute/solo/meter. A **live single-insert removal** from the mixer's own
+    graph-*replacing* mutation (undo/redo restore, New Patch, Load, AI apply) AND, since a review
+    follow-up hang in `MixerPanelKeyboardFocusTests.cpp`'s `DeletingTheFocusedStripClearsFocus`,
+    `GraphEditor::deleteSelection()` (a canvas "Delete", `deleteMacroAndMembers`) too — that path had
+    no unbind seam of its own and no rebuild to lean on either, so a stale `MixerFader` binding sat
+    until an unrelated later graph edit finally destroyed the column and dereferenced it (exit 124 +
+    SIGABRT, deadlocked inside `CriticalSection::enter` on freed memory —
+    `Tests/UI/Mixer/MixerPanelUndoUnbindTests.cpp`'s
+    `MixerPanelUnbindsBeforeDeleteSelectionFreesTheStripsNodes` is the regression test). Same as it
+    already does for the fader/pan/mute/solo/meter. A **live single-insert removal** from the mixer's own
     row menu is a different path — `MixerInsertList::removeRow()` calls `graph.removeNode()`
     directly (synchronous, frees the processor immediately) and only *afterwards* does that
     mutation's `onMutated` bubble into `MixerPanelComponent::rebuild()`, which is what would
