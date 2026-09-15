@@ -157,6 +157,7 @@ add_executable(Tests
     UI/Graph/GraphEditor/GraphEditorSmartConnectionMatrixTests.cpp
     UI/Graph/GraphEditor/GraphEditorNodeActionsTests.cpp
     UI/Graph/SmartConnectionEngine/SmartConnectionEngineTests.cpp
+    UI/Graph/GraphDragDropController/GraphDragDropControllerTests.cpp
     UI/Layout/ZoomFrozenCachedImageTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentLayoutTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentPortsTests.cpp
@@ -415,6 +416,8 @@ add_executable(Tests
     ../Source/UI/Graph/GraphEditor/GraphEditorChannels.cpp
     ../Source/UI/Graph/GraphEditor/GraphEditorCommands.cpp
     ../Source/UI/Graph/GraphEditor/GraphEditorDragDrop.cpp
+    ../Source/UI/Graph/GraphDragDropController/GraphDragDropController.h
+    ../Source/UI/Graph/GraphDragDropController/GraphDragDropController.cpp
     ../Source/UI/Graph/GraphEditor/GraphEditorStereoWiring.cpp
     ../Source/UI/Graph/GraphEditor/GraphEditorPersistence.cpp
     ../Source/UI/Chrome/ExportAudioDialog.cpp

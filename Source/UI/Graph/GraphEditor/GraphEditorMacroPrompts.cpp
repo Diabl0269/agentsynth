@@ -31,6 +31,16 @@ bool GraphEditor::isChannelMacroForTrack(const juce::String& memberUuid) const {
     return macro != nullptr && synth::isChannelMacro(*macro, audioEngine.getGraph());
 }
 
+// MacroAutoPortPreference (GraphEditor.h) rationale:
+// Tri-state, not a bool: "ask, then remember" needs a third value beyond on/off. Unset (the
+// default) means "ask on the next group that has a crossing
+// cable"; the other two mean "always do X, never ask." Persisted through
+// juce::ApplicationProperties by PreferencesSettingsTab, mirroring its own
+// key/getter/setter/*ForTest pattern exactly (see setDefaultDualIOForNewModules for the
+// precedent), and pushed down here via setMacroAutoPortPreference(). The modal's own "Remember my
+// choice" also persists directly through propertiesFile_ (see setPropertiesFile) — the same macro
+// recolour favourites use — since the modal can fire before a Settings window (and therefore a
+// PreferencesSettingsTab) has ever been constructed.
 void GraphEditor::requestGroupSelectionIntoMacro() {
     const bool hasCrossing = selectionHasCrossingMacroCable();
 
@@ -94,6 +104,10 @@ void GraphEditor::showMacroAutoPortModal(std::function<void(bool createPorts, bo
     };
 }
 
+// Mirrors MainComponent::promptSaveSnippet's `juce::AlertWindow` idiom exactly (SafePointer +
+// ModalCallbackFunction + a unique_ptr taken inside the callback). The collapsed card keeps its
+// own nicer inline rename (MacroCardComponent::beginRename) — this is only for the case that has
+// no card.
 void GraphEditor::promptRenameMacro(const juce::String& macroId) {
     const auto* macro = macros.find(macroId);
     if (macro == nullptr)
@@ -131,6 +145,11 @@ void GraphEditor::promptRenameMacro(const juce::String& macroId) {
                             false);
 }
 
+// The same picker the timeline ruler's marker menu and the track header swatch use
+// (TimelineRulerComponent::buildMarkerColourPicker is the exact pattern this mirrors). Live
+// preview while the user drags (writes straight to the macro, no undo step, so dragging never
+// floods the undo stack); ONE undo step on commit, recorded via setMacroColour so the undo
+// restores the ORIGINAL colour rather than the last preview value.
 std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::buildMacroColourPicker(const juce::String& macroId) {
     const auto* macro = macros.find(macroId);
     if (macro == nullptr)
@@ -189,6 +208,22 @@ std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::createMacroColourPick
     return buildMacroColourPicker(macroId);
 }
 
+// `renameAction`, when supplied, replaces the default "Rename..." item's handler — the collapsed
+// card passes its own inline-editor opener (MacroCardComponent::beginRename) here; every other
+// caller (the hull menu) leaves it empty and gets promptRenameMacro's dialog, since there is no
+// card to host an inline editor there.
+//
+// `addCandidateSelection` (T138): both the collapsed card's own right-click
+// (MacroCardComponent::mouseDown) and the expanded hull's empty-space right-click
+// (GraphEditor::mouseDown's macroHullAt branch) call selectMacro(macroId, false) BEFORE this
+// method ever runs, so by the time it reads the CURRENT selection, any external batch the user
+// picked before right-clicking is already gone — replaced by the macro's own members. Both call
+// sites therefore capture the selection themselves right before that reselect and pass it here;
+// "Add Selection to Macro" is computed against THIS list (falling back to the current live
+// selection only when null — the ModuleComponent member-submenu graft, whose own narrower
+// retarget-if-not-already-selected never destroys an external batch the same way). "Remove from
+// Macro" always reads the CURRENT live selection regardless — after either reselect it correctly
+// equals the macro's own members, which is exactly what removal should see.
 juce::PopupMenu
 GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> renameAction,
                             const std::vector<juce::AudioProcessorGraph::NodeID>* addCandidateSelection) {

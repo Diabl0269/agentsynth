@@ -3,6 +3,14 @@
 // Auto-create-channel-on-connect, and "Make channel" / "Duplicate into this channel" (FRO25).
 // GraphEditor is declared in GraphEditor.h; sibling GraphEditor*.cpp files in this directory
 // hold the rest of the class.
+//
+// MacroPortCrossingEdge/MacroPortCrossingGroup (GraphEditor.h's "Auto-create-ports-on-group"
+// section) are aliased from MacroGroupController, which now owns the crossing-plan math
+// (buildMacroPortCrossingPlan and its add/remove-member variants, spliceMacroPorts/
+// spliceOutMacroPort) outright. Five of them keep a private one-line forwarder on GraphEditor
+// because this file's duplicate-channel-strip path (buildChannelStripMacroBox /
+// duplicateChannelStrip) calls them by their original name — autoMacroPortName/
+// mintMacroPortForAutoCreate have no such caller and moved with none.
 
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
@@ -35,6 +43,18 @@ namespace {
 constexpr int kAutoChannelCardGapX = 40;
 } // namespace
 
+// Runs synth::findUnchanneledOutputFeeds() from `searchFrom` (the real destination instrument for
+// a direct module-jack drop, or the MacroMidiInlet port node itself for the collapsed-macro-card
+// existing-jack drop — a port is a plain pass-through, so the BFS reaches the interior instrument
+// through it on its own) and, if it finds any exit, builds a channel there via
+// synth::buildChannelForFeeds. Lays EQ/Compressor/Strip (and Master, if newly spliced) to the
+// right of the first exit's source node, using estimateModuleSize() widths and the same
+// real-card-width stride MainComponent::addAudioTrack uses (mirrored here as
+// kAutoChannelCardGapX — the gap constant lives in MainComponent.cpp, which GraphEditor can't
+// reach into). If every exit's source node is an ordinary (non-port) member of the SAME macro, the
+// three new chain nodes join that macro (macros.addMember) — never boxes when a source is itself a
+// macro port (that would insert between an inner node and its outlet) or when sources span more
+// than one macro.
 void GraphEditor::maybeAutoCreateChannelAfterConnect(juce::AudioProcessorGraph::NodeID searchFrom) {
     auto& graph = audioEngine.getGraph();
     const auto exits = synth::findUnchanneledOutputFeeds(graph, searchFrom);
@@ -116,6 +136,21 @@ void GraphEditor::maybeAutoCreateChannelAfterConnect(juce::AudioProcessorGraph::
     }
 }
 
+// FRO26 (P9-3e, docs/mixer.md §5.13): "Create channels" for existing projects — runs the exact
+// same per-node channel-creation maybeAutoCreateChannelAfterConnect() already does for T184's
+// connect-triggered case, once per entry in `trackSourceNodeIds` (each track's own bound node — a
+// "Track Audio" or "Track In" — as MainComponent resolves from TimelineDoc, which GraphEditor
+// deliberately owns no reference to). A track that already reaches the output through an existing
+// ChannelStripModule (or reaches nothing at all — an unbound/orphaned entry the caller should not
+// have passed) is silently skipped, same as maybeAutoCreateChannelAfterConnect's own
+// "exits.empty()" early return — a caller can safely pass every track's source node without
+// pre-filtering.
+//
+// NO UNDO OF ITS OWN and no updateComponents() call, same contract as
+// maybeAutoCreateChannelAfterConnect — the caller (MainComponent::createChannelsForExistingTracks)
+// wraps the whole call in ONE recordGraphTimelineAndMacroChange transaction covering every
+// track, and calls updateComponents() itself afterward, so the whole multi-track sweep is a
+// SINGLE undo step.
 void GraphEditor::createChannelsForUnchanneledTracks(
     const std::vector<juce::AudioProcessorGraph::NodeID>& trackSourceNodeIds) {
     for (const auto& nodeId : trackSourceNodeIds)
@@ -146,6 +181,12 @@ bool isAttenuverterNode(juce::AudioProcessorGraph& graph, juce::AudioProcessorGr
 
 } // namespace
 
+// Ports come from the same group-time crossing plan groupSelectionIntoMacro(true) uses
+// (buildMacroPortCrossingPlan + spliceMacroPorts) — always created, regardless of the auto-port
+// preference, since a shared LFO reaching into the channel is exactly what the port is for —
+// except the new strip's own outputs, which stay plain edges (Strip -> Master must never be a
+// port; see ChannelFlows.h). Master stays outside every macro; a first-ever Master relocates
+// Audio Output (T187 mirror).
 bool GraphEditor::makeChannelFromNode(juce::AudioProcessorGraph::NodeID source, const juce::String& channelName) {
     auto& graph = audioEngine.getGraph();
     const auto plan = synth::planMakeChannel(graph, source, macros);
@@ -331,6 +372,8 @@ std::vector<juce::String> GraphEditor::duplicateIntoChannelTargets(juce::AudioPr
     return targets;
 }
 
+// ...and joins the macro — a port only that cable used is spliced back out, and the copy's
+// remaining boundary crossings get ports (addSelectionToMacro's T138 passes).
 bool GraphEditor::duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& macroId) {
     const auto targets = duplicateIntoChannelTargets(nodeId);
     if (std::find(targets.begin(), targets.end(), macroId) == targets.end())

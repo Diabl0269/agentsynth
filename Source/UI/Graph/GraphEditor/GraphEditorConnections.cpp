@@ -13,6 +13,12 @@
 
 using namespace detail;
 
+// When both ends front equally wide fans the cable covers all N voices; otherwise it degrades to
+// one head-to-head wire. The one exception is a mono source landing on a per-voice *mod-CV* fan:
+// that is broadcast to every voice (one LFO shakes all eight), which is what sourceStride == 0
+// means. Where a jack fronts more than one fan (Poly MIDI's "Poly Out" carries both Pitch and
+// Gate) the pairing whose roles agree wins. A null end (the graph's audio I/O nodes, which have no
+// logical ports) is treated as a plain mono jack whose index is its raw channel.
 GraphEditor::PolyLink GraphEditor::resolvePolyLink(const ModuleBase* source, int sourceVisibleJack,
                                                    const ModuleBase* dest, int destVisibleJack) {
     PolyLink link{sourceVisibleJack, destVisibleJack, 1};

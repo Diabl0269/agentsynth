@@ -80,6 +80,7 @@ set(APPUI_SOURCES
     Source/UI/Chrome/ExportAudioDialog.h
     Source/UI/Graph/GraphEditor/GraphEditor.cpp
     Source/UI/Graph/GraphEditor/GraphEditor.h
+    Source/UI/Graph/GraphEditor/GraphEditorTypes.h
     Source/UI/Graph/GraphEditor/GraphEditorCables.cpp
     Source/UI/Graph/GraphEditor/GraphEditorConnections.cpp
     Source/UI/Graph/GraphEditor/GraphEditorModuleTitles.cpp
@@ -100,6 +101,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/GraphEditor/GraphEditorChannels.cpp
     Source/UI/Graph/GraphEditor/GraphEditorCommands.cpp
     Source/UI/Graph/GraphEditor/GraphEditorDragDrop.cpp
+    Source/UI/Graph/GraphDragDropController/GraphDragDropController.h
+    Source/UI/Graph/GraphDragDropController/GraphDragDropController.cpp
     Source/UI/Graph/GraphEditor/GraphEditorStereoWiring.cpp
     Source/UI/Graph/GraphEditor/GraphEditorPersistence.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponent.cpp
