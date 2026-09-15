@@ -365,6 +365,15 @@ bool MainComponent::initialiseAudioEngine() {
     // about staying null until the user explicitly touches the Audio tab).
     graphEditor.setOutputDeviceInfoProvider([this] { return computeOutputDeviceInfoText(); });
 
+    // Also installed unconditionally, same reasoning: on the Hosted path (ownedAudioEngine ==
+    // nullptr) the processor -- not this MainComponent -- calls audioEngine.shutdown(), and
+    // nothing enforces that it only does so after this MainComponent (and the parameter
+    // attachments its GraphEditor's ModuleComponents hold) has already been destroyed. Wiring the
+    // hook here, rather than only inside the `ownedAudioEngine != nullptr` block below, is what
+    // closes that gap (FRO87) -- detachAllModuleComponents() runs before shutdown() frees the
+    // graph's nodes/parameters no matter which path called shutdown().
+    audioEngine.onBeforeShutdown = [this] { graphEditor.detachAllModuleComponents(); };
+
     // Engine lifecycle is the owner's job. On the plugin path the processor already called
     // initialise() (and will call shutdown()), and its graph may already hold host-restored
     // state — re-initialising here would overwrite the user's session with the default patch.

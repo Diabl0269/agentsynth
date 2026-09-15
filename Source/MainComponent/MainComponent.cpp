@@ -191,6 +191,13 @@ MainComponent::~MainComponent() {
     // param audioEngine.shutdown() below is about to free (the FRO11 class of bug, same root cause
     // as the undo/redo crash this fixes).
     graphEditor.detachAllModuleComponents();
+    // Unconditionally, both Standalone and Hosted: the hosted-mode engine outlives `this` (the
+    // processor owns it, not this MainComponent), so a dangling `this`-capturing lambda left
+    // wired here would fire out from under freed memory the next time something calls
+    // audioEngine.shutdown() (FRO87). Cleared BEFORE the guarded shutdown() call below so
+    // Standalone's own behaviour is unchanged: detachAllModuleComponents() has already run once
+    // (immediately above) by the time shutdown() could otherwise re-fire it via the hook.
+    audioEngine.onBeforeShutdown = nullptr;
     // Only tear down an engine we own. On the plugin path the processor's engine must survive
     // the editor being closed and reopened.
     if (ownedAudioEngine != nullptr) {
