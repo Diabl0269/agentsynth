@@ -15,6 +15,11 @@ constexpr int kColumnGap = 4;
 } // namespace
 
 MixerPanelComponent::MixerPanelComponent() {
+    // FRO18: the mixer's own keyboard-focus region ROOT (docs/shortcuts.md's "Mixer column
+    // navigation") -- every child control gives up keyboard focus (see MixerColumnComponent's own
+    // ctor comment), so this panel must claim it instead, or grabKeyboardFocus() has nothing to
+    // land on.
+    setWantsKeyboardFocus(true);
     addAndMakeVisible(viewport_);
     viewport_.setViewedComponent(&content_, false);
     viewport_.setScrollBarsShown(false, true);
@@ -38,15 +43,6 @@ void MixerPanelComponent::configure(juce::AudioProcessorGraph& graph, synth::Tim
     };
     masterColumn_ = std::make_unique<MixerMasterColumn>();
     masterColumn_->configure(graph, undoManager);
-}
-
-int MixerPanelComponent::getColumnCount() const noexcept {
-    int count = (int)stripColumns_.size();
-    if (directColumn_ != nullptr && directColumn_->isVisible())
-        ++count;
-    if (masterColumn_ != nullptr && masterColumn_->isVisible())
-        ++count;
-    return count;
 }
 
 void MixerPanelComponent::selectOnCanvas(const juce::String& targetId) {
@@ -76,6 +72,16 @@ void MixerPanelComponent::rebuild() {
     if (graph_ == nullptr || doc_ == nullptr || macros_ == nullptr)
         return;
 
+    // FRO18: capture the currently focused column's IDENTITY before the columns it points at are
+    // destroyed below -- resolveFocusAfterRebuild() re-finds it afterwards by identity (uuid, or
+    // kind alone for Direct), never by the raw index, which an unrelated strip insert/removal
+    // elsewhere in the column order would otherwise silently reattach to the wrong column.
+    const bool hadFocus = focusedColumnIndex_ >= 0 && focusedColumnIndex_ < (int)columnEntries_.size();
+    const auto previousKind = hadFocus ? columnEntries_[(size_t)focusedColumnIndex_].kind : ColumnEntry::Kind::Strip;
+    const auto previousUuid = hadFocus ? columnEntries_[(size_t)focusedColumnIndex_].uuid : juce::String();
+    columnEntries_.clear();
+    focusedColumnIndex_ = -1;
+
     const auto snapshot = synth::buildMixerSnapshot(*graph_, *doc_, *macros_);
 
     stripColumns_.clear();
@@ -98,6 +104,16 @@ void MixerPanelComponent::rebuild() {
                 onGraphMutated();
         };
         content_.addAndMakeVisible(*widget);
+
+        ColumnEntry entry;
+        entry.kind = ColumnEntry::Kind::Strip;
+        entry.component = widget.get();
+        entry.nodeId = column.nodeId;
+        entry.uuid = column.uuid;
+        entry.linkedToTrack = column.linkedToTrack;
+        entry.feedingTracks = column.feedingTracks;
+        columnEntries_.push_back(std::move(entry));
+
         stripColumns_.push_back(std::move(widget));
     }
 
@@ -106,17 +122,33 @@ void MixerPanelComponent::rebuild() {
         if (snapshot.hasDirect) {
             directColumn_->refreshEnablement();
             content_.addAndMakeVisible(*directColumn_);
+
+            ColumnEntry entry;
+            entry.kind = ColumnEntry::Kind::Direct;
+            entry.component = directColumn_.get();
+            columnEntries_.push_back(std::move(entry));
         }
     }
     if (masterColumn_ != nullptr) {
         masterColumn_->setVisible(snapshot.hasMaster);
         if (snapshot.hasMaster) {
             for (const auto& column : snapshot.columns)
-                if (column.kind == synth::MixerColumn::Kind::Master)
+                if (column.kind == synth::MixerColumn::Kind::Master) {
                     masterColumn_->setNodeId(column.nodeId);
+
+                    ColumnEntry entry;
+                    entry.kind = ColumnEntry::Kind::Master;
+                    entry.component = masterColumn_.get();
+                    entry.nodeId = column.nodeId;
+                    entry.uuid = column.uuid;
+                    columnEntries_.push_back(std::move(entry));
+                }
             content_.addAndMakeVisible(*masterColumn_);
         }
     }
+
+    resolveFocusAfterRebuild(hadFocus, previousKind, previousUuid);
+    syncFocusVisuals();
 
     resized();
 }

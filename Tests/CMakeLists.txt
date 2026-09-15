@@ -344,6 +344,9 @@ add_executable(Tests
     UI/Layout/DetachablePanelHost/DetachablePanelHostTests.cpp
     UI/Layout/DetachablePanelHost/DetachedPanelWindowTests.cpp
     UI/Layout/DetachablePanelHost/DetachRedockStateTests.cpp
+    UI/Mixer/MixerPanelKeyboardFocusTests.cpp
+    UI/Mixer/MixerAccessibilityTests.cpp
+    UI/Mixer/MixerFocusRegionTests.cpp
     UI/Graph/MinimapComponentTests.cpp
     Plugin/PluginProcessorTests.cpp
     Engine/AudioEngineTransportTests.cpp
@@ -405,6 +408,7 @@ add_executable(Tests
     ../Source/UI/Mixer/MixerDirectColumn.cpp
     ../Source/UI/Mixer/MixerMasterColumn.cpp
     ../Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.cpp
+    ../Source/UI/Mixer/MixerPanelComponent/MixerPanelKeyboard.cpp
     ../Source/UI/Mixer/MixerDockComponent.cpp
     ../Source/UI/Mixer/MixerPlacementController.cpp
     ../Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.cpp

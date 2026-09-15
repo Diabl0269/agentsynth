@@ -11,6 +11,8 @@
 class AppUndoManager;
 class GraphEditor;
 class AudioEngine;
+class ModuleBase;
+class ChannelStripModule;
 
 // MixerColumnComponent.h -- FRO11 (P9-5, docs/mixer.md §5.10): one ChannelStrip's column --
 // header, source line, insert list, pan, fader + meter, dB readout (inside MixerFader), M/S, and
@@ -46,6 +48,51 @@ public:
     /** True once bind() has run and unbindFromGraph()/rebindControls() hasn't cleared it since. */
     bool isFaderBoundForTest() const noexcept { return fader_.isBoundForTest(); }
 
+    /** FRO18: toggles this strip's mute/solo through exactly the same path the M/S buttons'
+     *  onClick already used (undo bracket, ChannelStripModule::isSoloed via
+     *  AudioEngine::setChannelStripSoloed -- never a direct setSoloed(), root CLAUDE.md's
+     *  invariant). Reachable both from a real click and from MixerPanelComponent's keyPressed, so
+     *  the two paths can never diverge. A no-op after unbindFromGraph() (graph_/undoManager_/
+     *  audioEngine_ null then), same guard the former inline lambdas already had. */
+    void toggleMuted();
+    void toggleSoloed();
+
+    /** FRO18: the fader nudged one undo step, or false when nothing is bound (Direct-column-style
+     *  no-op) or the fader has no live param (post-unbind). */
+    bool nudgeFader(float deltaDb) { return fader_.nudge(deltaDb); }
+
+    MixerFader& getFaderForTest() noexcept { return fader_; }
+    juce::Slider& getPanSliderForTest() noexcept { return panSlider_; }
+    juce::Button& getMuteButtonForTest() noexcept { return muteButton_; }
+    juce::Button& getSoloButtonForTest() noexcept { return soloButton_; }
+
+    /** FRO18: the strip's own leaf-level keyboard-focus outline, painted in paintOverChildren --
+     *  distinct from setSelected()'s reveal highlight (they may co-paint). MixerPanelComponent
+     *  sets this when focusedColumnIndex_ changes (real hasKeyboardFocus() is always false
+     *  headless with no native peer -- same accepted gap TimelineTrackFocusTests documents). */
+    void setKeyboardFocused(bool focused);
+    bool isKeyboardFocusedForTest() const noexcept { return keyboardFocused_; }
+
+    /** FRO18 review fix: MixerPanelComponent calls this from setFocusedColumnIndex() (real
+     *  navigation only, never from a rebuild()-preserved refocus -- see MixerPanelKeyboard.cpp's
+     *  own comment on why) so VoiceOver's accessibility cursor tracks the visual keyboard-focus
+     *  outline instead of only painting it. Targets the fader -- the control the ticket's own
+     *  click path names ("arrow through columns ... it should announce each fader's dB value") --
+     *  not the column group, so arrowing to a strip reads its dB value directly. */
+    void grabAccessibilityFocus() { fader_.grabAccessibilityFocus(); }
+
+    /** The component grabAccessibilityFocus() targets -- exposed so a test can assert WHICH
+     *  control the arrow-walk points accessibility focus at without needing the native peer real
+     *  focus movement itself needs (getAccessibilityHandler() returns null headless either way). */
+    juce::Component& getAccessibilityFocusTargetForTest() noexcept { return fader_.getSlider(); }
+
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
+
+    void paint(juce::Graphics& g) override;
+    void paintOverChildren(juce::Graphics& g) override;
+    void resized() override;
+    void mouseUp(const juce::MouseEvent& event) override;
+
     /** Fires when the header (or empty column background) is clicked -- MixerPanelComponent wires
      *  this to select the strip's macro (or the strip itself, if unboxed) on the canvas. */
     std::function<void()> onColumnClicked;
@@ -65,12 +112,9 @@ public:
     // untouched -- see Tests/UI/Layout/DetachablePanelHost/DetachRedockStateTests.cpp.
     bool isSelectedForTest() const noexcept { return selected_; }
 
-    void paint(juce::Graphics& g) override;
-    void resized() override;
-    void mouseUp(const juce::MouseEvent& event) override;
-
 private:
     void rebindControls();
+    void refreshMuteSoloAccessibility(ModuleBase* module, ChannelStripModule* strip);
 
     juce::AudioProcessorGraph* graph_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;
@@ -90,6 +134,7 @@ private:
     juce::TextButton muteButton_{"M"};
     juce::TextButton soloButton_{"S"};
     bool selected_ = false;
+    bool keyboardFocused_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerColumnComponent)
 };
