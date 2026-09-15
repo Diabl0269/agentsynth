@@ -186,4 +186,14 @@ PolyEnvelopeAndVCA addPolyEnvelopeAndVCAForInstrument(juce::AudioProcessorGraph&
     return result;
 }
 
+// FRO15 (P9-9): an empty bus channel. The shared chain builder with no feeds at all, plus the
+// display-only isBus flag -- see ChannelFlows.h for why this is not a separate node type.
+DefaultChannel buildBusChannel(juce::AudioProcessorGraph& graph, const DefaultChannelLayout& layout) {
+    auto channel = buildChannelChain(graph, {}, {}, layout);
+    if (channel.strip != nullptr)
+        if (auto* strip = dynamic_cast<ChannelStripModule*>(channel.strip->getProcessor()))
+            strip->setIsBus(true);
+    return channel;
+}
+
 } // namespace synth

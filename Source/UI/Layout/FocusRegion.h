@@ -1,8 +1,10 @@
 #pragma once
 
+#include "ShortcutManager/ShortcutManager.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <optional>
 #include <vector>
 
 // T159: the app-wide keyboard focus-region framework — Tab/Shift+Tab cycling plus two direct-focus
@@ -174,6 +176,24 @@ inline void paintFocusRegionOutline(juce::Component& comp, juce::Graphics& g) {
     // 0.5px inset convention).
     g.setColour(colour.withAlpha(0.55f));
     g.drawRect(comp.getLocalBounds().toFloat().reduced(thickness * 0.5f), thickness);
+}
+
+// FRO12 (P9-6, docs/mixer.md §5.9): resolves a keypress to a Tab-cycle direction the same way
+// MainComponent::keyPressed's command-table dispatch does (focusNextRegion/focusPrevRegion), but as
+// a free function so a top-level window with no ApplicationCommandTarget of its own -- a
+// DetachedPanelWindow -- can reach the same verdict without one. Returns true for forward
+// (Tab)/false for backward (Shift+Tab)/nullopt if `key` isn't bound to either action right now (a
+// user rebind is honoured automatically, same as the command table). Pure: never touches real
+// focus, so it's exactly as testable as FocusRegionRegistry's own pure helpers above.
+inline std::optional<bool> resolveFocusCycleKeyPress(const juce::KeyPress& key,
+                                                     const ShortcutManager& shortcutManager) {
+    for (const auto& action : shortcutManager.getActionsForKeyPress(key)) {
+        if (action == "focusNextRegion")
+            return true;
+        if (action == "focusPrevRegion")
+            return false;
+    }
+    return std::nullopt;
 }
 
 } // namespace synth::ui

@@ -1,6 +1,9 @@
 #pragma once
 
 #include "MixerPanelComponent/MixerPanelComponent.h"
+#include "ShortcutManager/ShortcutManager.h"
+#include "UI/Layout/DetachablePanelHost/DetachablePanelHost.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -25,8 +28,14 @@ class MixerDockComponent : public juce::Component {
 public:
     enum class Tab { Timeline, Mixer };
 
+    // FRO12 (P9-6, docs/mixer.md §5.9): `appProperties`/`lookAndFeel`/`shortcutManager` are
+    // forwarded straight into timelineHost_/mixerHost_ (both DetachablePanelHost) -- see that
+    // class for what each is for. `lookAndFeel`/`shortcutManager` may be null in a headless test
+    // that never detaches a panel.
     MixerDockComponent(TimelinePanelComponent& timelinePanel, AudioEngine& audioEngine, synth::TimelineDoc& doc,
-                       AppUndoManager& undoManager, GraphEditor& graphEditor);
+                       AppUndoManager& undoManager, GraphEditor& graphEditor,
+                       juce::ApplicationProperties& appProperties, synth::theme::AppLookAndFeel* lookAndFeel,
+                       ShortcutManager* shortcutManager);
 
     /** Reads the persisted active tab once ("bottomDockActiveTab", default "timeline" --
      *  docs/layout.md's "Panel collapse and persistence" table); writes it on every tab switch. */
@@ -37,6 +46,11 @@ public:
     void setOnGraphTopologyChanged(std::function<void()> callback);
     /** MainComponent::makeChannelForNode -- fired by Direct's "Make channel" button. */
     void setOnMakeChannelForNode(std::function<void(juce::AudioProcessorGraph::NodeID)> callback);
+    /** FRO18: MainComponent wires this to performTrackEdit(setTrackArmed(...)) -- fired by the
+     *  Arm key (rebindable "timelineArmFocusedTrack") when a linked strip is focused. Sibling
+     *  forwarder to setOnGraphTopologyChanged/setOnMakeChannelForNode above: MainComponent talks
+     *  to the dock, never reaches through getMixerPanel() to set the panel's own callback field. */
+    void setOnArmTrack(std::function<void(synth::TrackId)> callback);
 
     Tab getActiveTab() const noexcept { return activeTab_; }
     bool isMixerTabActive() const noexcept { return activeTab_ == Tab::Mixer; }
@@ -61,7 +75,30 @@ public:
      *  (docs/layout_visuals_animation.md §2). */
     void refreshMeters() { mixer_.refreshMeters(); }
 
+    // FRO12 (P9-6): whether the Mixer tab itself is offered at all -- false when the Mixer
+    // placement preference is "Own panel" or "Window" (MixerPlacementController owns mixerHost_
+    // entirely in those modes; see that class). Forces the active tab back to Timeline if it was
+    // Mixer. True (the default) is the existing Tab-placement behaviour, unchanged.
+    void setMixerTabEnabled(bool enabled);
+
+    /** The Timeline's own detach-to-window host -- always owned and shown here, in every Mixer
+     *  placement (docs/mixer.md §5.9's placement table: "Timeline dock: unaffected"). */
+    synth::ui::DetachablePanelHost& getTimelineHost() noexcept { return timelineHost_; }
+    /** The Mixer's detach-to-window host. Owned here always, but only PARENTED here in Tab
+     *  placement -- MixerPlacementController reparents it into its own "Own panel" strip, or
+     *  leaves it unparented (never eagerly shown) in "Window" placement until first reveal. */
+    synth::ui::DetachablePanelHost& getMixerHost() noexcept { return mixerHost_; }
+
+    /** Fires whenever either host's detach state changes (docked<->detached, either direction --
+     *  including a window's own close button). MainComponent hooks this to re-run its focus-region
+     *  registration pass (docs/shortcuts.md "Focus regions": a detached region must stop appearing
+     *  in the DOCKED window's Tab-cycle order). Separate from either DetachablePanelHost's own
+     *  onDetachedStateChanged, which this class's constructor already claims for
+     *  applyTabVisibility() -- both fire from the one place, in that order. */
+    std::function<void()> onPanelDetachStateChanged;
+
     void resized() override;
+    void lookAndFeelChanged() override; // refreshes the tab-strip detach button's themed icon
 
     /** Height of the tab strip above the timeline panel's own content -- the amount
      *  MainComponentSetupTimeline.cpp's onResizeHeight/onResizeHeightCommitted wiring must add to
@@ -71,15 +108,35 @@ public:
      *  contract between this component and its caller, not an implementation detail. */
     static constexpr int kTabStripHeight = 22;
 
+    /** FRO15 test seam: the "Add bus" button the tab strip shows on the Mixer tab. */
+    juce::TextButton& getAddBusButtonForTest() noexcept { return addBusButton_; }
+
 private:
     void applyTabVisibility();
     void persistActiveTab();
+    // FRO12: the active tab's DetachablePanelHost -- whichever the tab-strip detach button acts
+    // on (docs/mixer.md §5.9: "the tab-strip button detaches whichever tab is active").
+    synth::ui::DetachablePanelHost& activeHost() noexcept;
+    void refreshDetachButton();
 
     TimelinePanelComponent& timelinePanel_;
     MixerPanelComponent mixer_;
+    // FRO12 (P9-6): both panels' detach-to-window hosts. Declared after timelinePanel_/mixer_ so
+    // both references are valid -- see DetachablePanelHost's own "held by reference, never
+    // copied" contract.
+    synth::ui::DetachablePanelHost timelineHost_;
+    synth::ui::DetachablePanelHost mixerHost_;
     juce::TextButton timelineTabButton_{"Timeline"};
     juce::TextButton mixerTabButton_{"Mixer"};
+    // FRO12: icon-only, embedded in this tab strip (not either host's own header -- see
+    // DetachablePanelHost's class comment on why this is a separate button instance rather than a
+    // literal shared one across three different parents).
+    juce::DrawableButton detachButton_{"detachActiveTab", juce::DrawableButton::ImageFitted};
+    // FRO15 (docs/mixer.md §5.15): "Add bus" sits on the tab strip and is visible only on the Mixer
+    // tab -- it has no meaning while the Timeline tab is showing.
+    juce::TextButton addBusButton_{"+ Bus"};
     Tab activeTab_ = Tab::Timeline;
+    bool mixerTabEnabled_ = true;
     juce::ApplicationProperties* appProperties_ = nullptr;
     static constexpr const char* kActiveTabKey = "bottomDockActiveTab";
 

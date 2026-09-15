@@ -245,7 +245,7 @@ bool GraphEditor::makeChannelFromNode(juce::AudioProcessorGraph::NodeID source, 
         macro.members = memberUuids;
         macro.collapsed = true;
         macro.bounds = juce::Rectangle<int>(origin.x, origin.y, synth::LayoutUtil::kSingleWidth, kMacroCardHeight);
-        const auto macroId = macros.add(macro).id;
+        const auto macroId = macros.add(macro);
         if (!portPlan.empty())
             spliceMacroPorts(macroId, portPlan);
     };

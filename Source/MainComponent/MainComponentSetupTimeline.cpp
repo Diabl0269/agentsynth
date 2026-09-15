@@ -42,6 +42,17 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     mixerDock.setApplicationProperties(&appProperties);
     mixerDock.setOnGraphTopologyChanged([this] { reconcileTimelineAfterGraphChange(); });
     mixerDock.setOnMakeChannelForNode([this](juce::AudioProcessorGraph::NodeID source) { makeChannelForNode(source); });
+    // FRO12 (P9-6): each panel's ONE detached-window focus region (T159/docs/shortcuts.md) --
+    // stored on the host now, applied to whichever DetachedPanelWindow it builds later. Re-running
+    // MainComponent's own registration pass on every detach/redock (rather than reordering/renaming
+    // anything already registered above) is the guard rule the plan's focus section spells out.
+    mixerDock.getTimelineHost().setHostedPanelFocusRegion("timeline", timelinePanel);
+    mixerDock.getMixerHost().setHostedPanelFocusRegion("mixer", mixerDock.getMixerPanel());
+    mixerDock.onPanelDetachStateChanged = [this] { rebuildFocusRegions(); };
+    // Placement preference (Tab/Own panel/Window, docs/mixer.md §5.9) -- read once here (both
+    // panels already exist by this point in initialiseCommon()'s ORDER) and again on every
+    // settings-file write, see MainComponent::changeListenerCallback's settings branch.
+    mixerPlacement_.applyPlacementPreference();
     // FRO11 crash fix: the mixer's fader/pan bindings are raw pointers into live processor
     // parameters, exactly like ModuleComponent's own -- so they unbind through the SAME seam
     // ModuleComponent already uses (GraphEditor::onBeforeDetachAllModuleComponents, fired at the
@@ -78,6 +89,25 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     timelinePanel.setShortcutManager(&shortcutManager);
     timelinePanel.getPianoRoll().setShortcutManager(&shortcutManager);
     timelinePanel.getClipLaneArea().setShortcutManager(&shortcutManager);
+    // FRO18: the mixer panel resolves the SAME "timelineMuteFocusedTrack"/"timelineSoloFocusedTrack"/
+    // "timelineArmFocusedTrack" action ids the track-header row above already binds -- a user's
+    // rebind of M/S/R applies to whichever of the two surfaces has focus. Not part of the "MUST
+    // stay together" strict-resolution group above: the mixer panel falls back to hardcoded bare
+    // letters with no manager installed (MixerPanelComponent::matchesAction), same "no manager
+    // installed" contract every other surface action in this app follows, rather than requiring
+    // every id it consults to be pre-registered.
+    mixerDock.getMixerPanel().setShortcutManager(&shortcutManager);
+    // FRO18: Arm reaches the focused strip's linked track through the SAME performTrackEdit
+    // one-undo-step path the Timeline header row's own R key uses -- never a direct TimelineDoc
+    // write (that would skip the undo bracket every other track edit goes through). Routed through
+    // setOnArmTrack, the sibling forwarder to setOnGraphTopologyChanged/setOnMakeChannelForNode
+    // above, rather than reaching through getMixerPanel() to set the panel's callback directly.
+    mixerDock.setOnArmTrack([this](synth::TrackId id) {
+        performTrackEdit([this, id] {
+            if (auto* track = timelineDoc.getTrack(id))
+                timelineDoc.setTrackArmed(id, !track->armed);
+        });
+    });
 
     // The panel's top-edge drag reports a desired height; THIS component owns it — clamp, lay out
     // live, and persist once the drag ends (not per pixel).

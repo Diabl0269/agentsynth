@@ -22,9 +22,14 @@ MixerMasterColumn::MixerMasterColumn() {
     addAndMakeVisible(header_);
     header_.setDisplayName("Master");
     addAndMakeVisible(fader_);
+    fader_.setChannelName("Master");
     addAndMakeVisible(meter_);
+    meter_.setTitle("Master meter");
     addAndMakeVisible(muteButton_);
     muteButton_.setClickingTogglesState(false);
+    // FRO18: MixerPanelComponent is the single focusable leaf -- see
+    // MixerColumnComponent.cpp's ctor comment for why every child control does this.
+    muteButton_.setWantsKeyboardFocus(false);
 }
 
 void MixerMasterColumn::configure(juce::AudioProcessorGraph& graph, AppUndoManager& undoManager) {
@@ -44,18 +49,37 @@ void MixerMasterColumn::setNodeId(juce::AudioProcessorGraph::NodeID nodeId) {
     if (auto* gainParam = findFloatParam(*processor, "gain"))
         fader_.bind(*graph_, *undoManager_, *gainParam);
 
-    muteButton_.onClick = [this] {
-        if (graph_ == nullptr || undoManager_ == nullptr)
-            return;
-        auto* n = graph_->getNodeForId(nodeId_);
-        auto* m = n != nullptr ? dynamic_cast<ModuleBase*>(n->getProcessor()) : nullptr;
-        if (m == nullptr)
-            return;
-        undoManager_->captureBeforeState(*graph_);
-        m->setMuted(!m->isMuted());
-        undoManager_->pushSnapshotFromCapture(*graph_);
-        repaint();
-    };
+    muteButton_.onClick = [this] { toggleMuted(); };
+    refreshMuteAccessibility();
+}
+
+void MixerMasterColumn::refreshMuteAccessibility() {
+    auto* n = graph_ != nullptr ? graph_->getNodeForId(nodeId_) : nullptr;
+    auto* m = n != nullptr ? dynamic_cast<ModuleBase*>(n->getProcessor()) : nullptr;
+    const bool muted = m != nullptr && m->isMuted();
+    muteButton_.setToggleState(muted, juce::dontSendNotification);
+    muteButton_.setTitle(juce::String("Master mute, ") + (muted ? "on" : "off"));
+}
+
+void MixerMasterColumn::toggleMuted() {
+    if (graph_ == nullptr || undoManager_ == nullptr)
+        return;
+    auto* n = graph_->getNodeForId(nodeId_);
+    auto* m = n != nullptr ? dynamic_cast<ModuleBase*>(n->getProcessor()) : nullptr;
+    if (m == nullptr)
+        return;
+    undoManager_->captureBeforeState(*graph_);
+    m->setMuted(!m->isMuted());
+    undoManager_->pushSnapshotFromCapture(*graph_);
+    refreshMuteAccessibility();
+    repaint();
+}
+
+void MixerMasterColumn::setKeyboardFocused(bool focused) {
+    if (keyboardFocused_ == focused)
+        return;
+    keyboardFocused_ = focused;
+    repaint();
 }
 
 void MixerMasterColumn::unbindFromGraph() {
@@ -84,6 +108,15 @@ void MixerMasterColumn::paint(juce::Graphics& g) {
     g.fillRect(getLocalBounds());
     g.setColour(border);
     g.drawRect(getLocalBounds(), 1);
+}
+
+void MixerMasterColumn::paintOverChildren(juce::Graphics& g) {
+    if (!keyboardFocused_)
+        return;
+    const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    const auto accent = laf != nullptr ? laf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    g.setColour(accent.withAlpha(0.85f));
+    g.drawRect(getLocalBounds(), 2);
 }
 
 void MixerMasterColumn::resized() {

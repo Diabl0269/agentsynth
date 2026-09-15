@@ -140,8 +140,20 @@ TEST_F(WelcomeScreenTest, NeverConstructsInHostedMode) {
     AudioEngine engine(AudioEngine::HostMode::Hosted);
     engine.initialise();
 
-    MainComponent mc(tm, lf, engine, std::make_unique<MockProvider>());
-    EXPECT_EQ(mc.getWelcomeScreenForTest(), nullptr);
+    // `mc` must be gone before engine.shutdown() runs, not after: MainComponent::~MainComponent
+    // detaches the UI's module components BEFORE the graph is torn down — see MainComponent.cpp's
+    // own ordering comment on the "FRO11 class of bug" — which matters because those components
+    // hold processor-owned state (a MidiKeyboardComponent's MidiKeyboardState, a
+    // SliderParameterAttachment's parameter) that AudioEngine::shutdown() is about to free when it
+    // clears the graph. Calling shutdown() while `mc` (and the UI still pointing at that state) is
+    // alive is a heap-use-after-free the moment `mc` finally destructs — caught by the ASAN job,
+    // invisible to an ordinary build. Scoped rather than reordered, because on this (external,
+    // Hosted-mode) path the engine deliberately outlives the editor, exactly like
+    // ExternalEngineSurvivesMainComponentDestruction below.
+    {
+        MainComponent mc(tm, lf, engine, std::make_unique<MockProvider>());
+        EXPECT_EQ(mc.getWelcomeScreenForTest(), nullptr);
+    }
 
     engine.shutdown();
 }

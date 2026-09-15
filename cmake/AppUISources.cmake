@@ -54,6 +54,8 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerFader.cpp
     Source/UI/Mixer/MixerInsertList.h
     Source/UI/Mixer/MixerInsertList.cpp
+    Source/UI/Mixer/MixerSendList.h
+    Source/UI/Mixer/MixerSendList.cpp
     Source/UI/Mixer/MixerColumnComponent.h
     Source/UI/Mixer/MixerColumnComponent.cpp
     Source/UI/Mixer/MixerDirectColumn.h
@@ -62,8 +64,16 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerMasterColumn.cpp
     Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.h
     Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.cpp
+    Source/UI/Mixer/MixerPanelComponent/MixerPanelKeyboard.cpp
+    Source/UI/Mixer/MixerPanelComponent/MixerFocusRegion.h
     Source/UI/Mixer/MixerDockComponent.h
     Source/UI/Mixer/MixerDockComponent.cpp
+    Source/UI/Mixer/MixerPlacementController.h
+    Source/UI/Mixer/MixerPlacementController.cpp
+    Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.h
+    Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.cpp
+    Source/UI/Layout/DetachablePanelHost/DetachedPanelWindow.h
+    Source/UI/Layout/DetachablePanelHost/DetachedPanelWindow.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollComponent.h
     Source/UI/PianoRoll/PianoRollComponent/PianoRollComponent.cpp
     Source/UI/PianoRoll/PianoRollComponent/PianoRollScaleAssist.cpp

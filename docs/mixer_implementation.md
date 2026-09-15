@@ -407,11 +407,39 @@ Main line, in dependency order:
      `MixerFader::getLiveUnbindCallCountForTest()` that the hook actually ran, not just that
      nothing crashed.
 
-5. **P9-6 (T175) — Detachable windows for Timeline + Mixer, and the placement preference.** One
-   mechanism for both, icon-only detach control, keyboard focus scoped per window (T158).
-   - Tests: a detached mixer window built with `addToDesktop=false` behaves identically to the
-     docked panel in a headless test; keyboard focus in one detached window does not leak into the
-     other; switching the placement preference moves the panel without losing its state.
+5. **P9-6 (T175) — Detachable windows for Timeline + Mixer, and the placement preference. DONE.**
+   One mechanism for both (`Source/UI/Layout/DetachablePanelHost/`), icon-only detach control,
+   keyboard focus scoped per window (T158). See §5.9 for the design as it landed (the placement
+   state table, `MixerPlacementController`, and the per-window focus mechanics).
+   - `DetachablePanelHost` holds its panel by reference and only ever reparents it (dock slot <->
+     `DetachedPanelWindow`'s own content) — never rebuilds it, so scroll/zoom/selection survive
+     untouched. `MixerDockComponent` owns two hosts (`timelineHost_`/`mixerHost_`); Tab placement's
+     single tab-strip detach button acts on whichever tab is active rather than literally
+     reparenting either host's own button through three different parents — a deliberate
+     simplification from the original design note, called out as a deviation.
+   - `MixerPlacementController` (the one collaborator `MainComponent.h` adds) owns the placement
+     preference and moves `mixerHost_` between its three homes; Own-panel ships without the
+     Timeline dock's animated slide or a persisted height (fixed `kOwnPanelHeight`, no resize
+     handle — an explicit scope cut, same reasoning as the resize-handle cut above).
+   - Tests: `Tests/UI/Layout/DetachablePanelHost/DetachablePanelHostTests.cpp` (detach/redock
+     preserves panel identity + a mutated state field; tooltip toggle; icon-only button text always
+     empty; embedded-header suppression; a window-driven redock via its own close button fires the
+     same callback); `DetachedPanelWindowTests.cpp` (mirrors
+     `HostedPluginEditorWindowTests.cpp`: `addToDesktop=false` creates no peer; bounds round-trip
+     through the persisted key; close button fires `onCloseRequested` and never self-destroys;
+     `Desktop::getDefaultLookAndFeel()` unchanged before/after construction + `setVisible(true)`,
+     and `window.getLookAndFeel() == &handedInstance`; per-window Tab-cycle resolution).
+     `DetachRedockStateTests.cpp` proves the SAME invariant against real production panels (not a
+     stub): Timeline zoom/scroll (`TimelineViewState`) and a selected Mixer column both survive a
+     real detach/redock through `MixerDockComponent`/`MainComponent`. `FocusRegionTests.cpp`
+     additions: two independent registries never cross-resolve; detaching a panel drops it from
+     `MainComponent`'s own registry until redocked. `MixerPlacementControllerTests.cpp`: each
+     placement's launch-time state (Tab strip / reparented-out own panel / hidden-until-revealed
+     window); a live settings-file write applies immediately. `IconLibraryTests.cpp`: `kCount`
+     bump, the new ordinal, non-null `Drawable`, `BinaryData` symbol.
+   - Not covered by an automated test (manual verification only, noted in the PR): the real visual
+     layout of a detached window's header/content, and the "Own panel" strip's on-screen
+     appearance — this session could not launch the real app (see the PR's click-paths).
 
 6. **P9-7 (T176) — Track presets. DONE.** See §5.7 for the design as it landed
    (`TrackPresetManager`, the outside-modulator walk-and-copy rule, the solo scrub, the header/macro
@@ -433,14 +461,114 @@ Side tracks (each independent of the main line beyond its own listed dependency)
   strip's file is silent and the sum property still holds; a soloed strip during export does not
   affect which strips get written and leaves solo/mute state unchanged; a cancelled or failed
   export leaves no stem files behind, never touches a pre-existing file, and disarms every tap.
-- **P9-9 (T178) — Sends and group buses.** After P9-5; needs a short design pass of its own before
-  implementation (a send is a tap on a strip feeding a bus channel, per §9, but the mechanism
-  itself isn't specified here).
+- **P9-9 (T178) — Sends and group buses. DONE.** See [`mixer.md` §5.15](mixer.md) for the design as
+  it landed: a send is a strip-owned OUTPUT leg (four fixed slots, raw channels 8..15, target read
+  off the graph and never stored), a bus is an ordinary `ChannelStrip`, and solo becomes a per-leg
+  audible mask (`Source/Mixer/SoloAudibleSet.{h,cpp}`) rather than a whole-strip clear. Core flows
+  live in `Source/Mixer/MixerSends/`, the column/send half of the snapshot in
+  `Source/Mixer/MixerModel/MixerModelSends.cpp`, the UI in `Source/UI/Mixer/MixerSendList.{h,cpp}`.
+  - `Tests/Mixer/Sends/MixerSendLevelTests.cpp` — a post-fader leg equals what the strip hands
+    Master and a pre-fader one the signal before gain/pan; the level is a dB gain on both legs;
+    mute silences every send; bypass makes pre and post coincide; **every branch clears every
+    reserved and inactive send channel** (the stale-block-into-a-bus risk); removing a middle send
+    leaves higher slots on their own raw channels and only renumbers the visible jacks; all four
+    level parameters exist from construction; the slots and their pre/post round-trip through the
+    trusted extra state (and a pre-FRO15 state simply has none).
+  - `Tests/Mixer/Sends/MixerBusSoloTests.cpp` — soloing a send bus opens only its sources' SEND
+    legs; soloing a group bus opens its sources' MAIN legs; soloing a source keeps the buses it
+    feeds audible, transitively; a leg feeding both Master and a soloed bus stays open (the
+    documented per-leg limitation); a non-contributing strip is fully silenced; a cycle does not
+    hang the walk; `refreshSoloGate` publishes every mask and un-soloing restores them; an
+    undo/redo across a graph REBUILD settles the masks against the new node ids; Master's Direct is
+    still gated by the plain global count.
+  - `Tests/Mixer/Sends/MixerSendFlowTests.cpp` — add/remove/retarget and their refusals (non-strip,
+    self, out of slots, cyclic), each refusal changing nothing; `findSendTarget` walks through a
+    module the user inserted on the send path and returns nothing for a cut cable; cyclic targets
+    are excluded from the menu; `buildBusChannel` makes a flagged, bypassed-inserts channel into
+    Master's Mix.
+  - `Tests/Mixer/Sends/MixerSendLatencyTests.cpp` — **acceptance:** the dry path and the send path
+    through a latent bus land on ONE output sample; **negative control:** a latency that moves with
+    the topology unchanged drifts by exactly the delta until a rebuild; adding a send schedules its
+    own rebuild (so no send flow needs `rebuildGraphForLatencyChange`); removing the send removes
+    the second copy.
+  - `Tests/Mixer/MixerModel/MixerModelBusColumnTests.cpp` — a bus column is `Kind::Bus` and lists
+    its feeding strips; an empty new bus still classifies (via the flag); the send rows mirror the
+    strip's active slots including a sparse hole and a cut cable; a boxed bus takes its macro name.
+  - `Tests/UI/Mixer/MixerSendListTests.cpp` — "+ Bus" adds a bus column after the track strips;
+    adding a send wires the cable and shows a row; the knob drives the strip's own `sendNLevel`;
+    PRE/POST is one undo step; removing clears the cable and the row; and the rows unbind before a
+    graph-replacing undo frees their parameters (the FRO11 crash class, re-pinned for sends).
+  - `Tests/Engine/StemExportTests.cpp` (extended) — a bus gets its own stem named "Bus N", the
+    source's stem stays pre-send, and `sum(stems)` still reproduces the pre-Master mix with a
+    pre-fader send in the patch.
 - **P9-10 (T179) — EQ curve thumbnail on mixer columns.** After P9-5.
 - **P9-11 (T180) — Gate module.** Done — `GateModule` (`Source/Modules/FX/GateModule.h`,
   [`fx_modules.md` § Gate Module](fx_modules.md#gate-module)). No dependency on the rest of P9;
   wiring it into a default track preset (§5.7/§7 D3) is still open.
-- **T181 — Mixer accessibility**, in the Accessibility epic: column navigation, the existing
-  rebindable M/S keys acting on the focused column, fader nudge, screen-reader labels for faders
-  and meters, alongside T158's app-wide keyboard focus work.
+- **T181 (FRO18) — Mixer accessibility. DONE.** After P9-5. `MixerPanelComponent` joins T159's
+  focus-region registry as a 7th region (sharing the dock with "timeline" — see
+  [`docs/shortcuts.md`](shortcuts.md#mixer-column-navigation)'s Focus regions section for the two
+  regions' `isOpen`/`open` split) and becomes the mixer's own focusable leaf
+  (`setWantsKeyboardFocus(true)`); every child control inside a column gives it back up, the same
+  T160 trap avoidance `TimelineTrackHeaderComponent` uses, just one level higher since a column
+  hosts several controls. New `MixerPanelKeyboard.cpp` (`Source/UI/Mixer/MixerPanelComponent/`)
+  owns keyPressed(): Left/Right walk `focusedColumnIndex_` across strips/Direct/Master (clamped,
+  never wraps), Up/Down nudge the focused fader 1.0 dB (Shift: 0.1 dB) as one undo step via a new
+  `MixerFader::nudge()` (begin/endChangeGesture bracketing a single `setValueNotifyingHost`, same
+  as a real drag), Enter selects the focused column's macro/node on canvas, and M/S/R resolve the
+  SAME rebindable `timelineMuteFocusedTrack`/`timelineSoloFocusedTrack`/`timelineArmFocusedTrack`
+  action ids the Timeline track-header row already binds (deliberately — a new id would not
+  inherit an existing rebind), through `MixerColumnComponent::toggleMuted()`/`toggleSoloed()`/
+  `MixerMasterColumn::toggleMuted()` extracted from the M/S buttons' own `onClick` so a keypress and
+  a real click can never diverge, and a new `onArmTrack` callback routed through
+  `MainComponent::performTrackEdit`. Focus re-resolves after every `rebuild()` by the column's own
+  identity (a strip's uuid; Direct/Master by kind) rather than by raw index, so an unrelated strip
+  insert/removal elsewhere in the column order never silently reattaches it to the wrong column,
+  and a deleted focused strip clears focus instead.
+
+  The mixer's own "mixer" focus-region registration (open predicate + no `open` callback) is a
+  free helper, `registerMixerFocusRegion(FocusRegionRegistry&, MixerDockComponent&,
+  std::function<bool()> dockOpen)` (`MixerFocusRegion.h`, next to `MixerPanelComponent.h`) —
+  `MainComponent::registerFocusRegions()` calls it with `dockOpen = [this]{ return
+  isTimelineVisible; }` rather than inlining the region-registration lambda, so a future detached
+  mixer window (P9-6/FRO12) can call the SAME helper against its own `FocusRegionRegistry` with a
+  different `dockOpen` (e.g. always-open) instead of re-deriving this logic.
+
+  JUCE `AccessibilityHandler` support (the first real consumer in this repo): `MixerFader`'s
+  `textFromValueFunction` speaks "-3.0 dB"; the pan slider's speaks "50% left"/"Center"/"50%
+  right"; `MixerMeter::createAccessibilityHandler()` reports a read-only `staticText` value (the
+  displayed level as a percentage); `MixerColumnComponent::createAccessibilityHandler()` returns a
+  `group` role titled with the channel name; the M/S buttons (built with
+  `setClickingTogglesState(false)`) now mirror `isMuted()`/`isSoloed()` into `setToggleState()` so
+  their own paint AND the stock toggle-button accessibility role track reality — a latent
+  "never shows pressed" bug fixed alongside this. The Left/Right column-walk also moves REAL
+  accessibility focus, not just the visual outline: each column kind exposes
+  `grabAccessibilityFocus()` (a strip/Master's own fader slider; Direct has none, so it targets the
+  column itself, `setTitle("Direct")`), and `MixerPanelComponent::setFocusedColumnIndex()` — real
+  user navigation ONLY, never `rebuild()`'s focus-preserving path — calls it via
+  `AccessibilityHandler::grabFocus()`. That call only asks the underlying `Component` for real
+  keyboard focus when the component itself wants it, which every mixer child deliberately doesn't
+  (the T160 trap avoidance above), so VoiceOver's cursor moves without stealing the panel's own
+  real keyboard focus.
+  - Tests: `Tests/UI/Mixer/MixerPanelKeyboardFocusTests.cpp` (column focus seed/walk/clamp
+    including Direct and Master in order, fader nudge as one undo step plain and Shift-fine, the
+    Direct-column fader no-op, Enter's macro selection, M/S/R through the shared click path with
+    and without an installed/rebound `ShortcutManager`, unrelated keys falling through unclaimed,
+    focus surviving/clearing across a rebuild, and which control each column kind's arrow-walk
+    points `grabAccessibilityFocus()` at); `Tests/UI/Mixer/MixerAccessibilityTests.cpp` (fader/pan
+    value-text formatting, a column's title and group role, M/S toggle-state mirroring, the
+    meter's read-only percentage value); `Tests/UI/Mixer/MixerFocusRegionTests.cpp` (the "mixer"
+    region opens only with the dock open AND its Mixer tab active, "timeline" closes when Mixer is
+    active, the two are never open together, and `registerMixerFocusRegion()` itself — reused
+    against a second, independent `FocusRegionRegistry` with a different `dockOpen`, and with a
+    null `dockOpen` treated as always-open); `Tests/UI/Layout/FocusRegionTests.cpp`'s
+    `RegistersExactlyTheSevenDocumentedRegionsInOrder` updated for the new region.
+  - Known gaps, documented rather than fixed here: `MainComponent::resolveEditSurface()` still
+    knows Graph/TimelineClips/PianoRoll only, so Cmd+C/V/D/X/R with the Mixer focused falls through
+    to the Graph surface. `AccessibilityHandler::getAccessibilityHandler()` returns null without a
+    native peer (`Component::addToDesktop()`), which this suite deliberately never creates (the
+    same headless-CI flakiness/hang risk `TimelineTrackFocusTests.cpp`/`FocusRegionTests.cpp`
+    document) — so `grabAccessibilityFocus()`'s real focus movement, and whether VoiceOver actually
+    announces it against the click path below, is unverified by CI; a manual VoiceOver pass against
+    a locally built app is still owed before fully trusting the announced-value claim.
 

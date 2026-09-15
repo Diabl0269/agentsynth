@@ -32,6 +32,7 @@
 #include "UI/Layout/UIAnimation.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
 #include "UI/Mixer/MixerDockComponent.h"
+#include "UI/Mixer/MixerPlacementController.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
@@ -181,6 +182,9 @@ public:
     bool isTimelineConfiguredVisible() const { return isTimelineVisible; }
     synth::ui::TimelinePanelComponent& getTimelinePanel() { return timelinePanel; }
     synth::ui::MixerDockComponent& getMixerDock() { return mixerDock; }
+    // Test-only: Own-panel placement reparents the Mixer host INTO this controller (it IS the
+    // second strip), not to nullptr -- see MixerPlacementController.h's class comment.
+    synth::ui::MixerPlacementController& getMixerPlacementControllerForTest() { return mixerPlacement_; }
     /** Opens the dock on the Mixer tab (switching tabs, or opening the dock, as needed); closes it
      *  when already open on the Mixer tab. Mirrors toggleTimelineButton's own open/close symmetry
      *  -- see MainComponentPanels.cpp. */
@@ -647,6 +651,11 @@ private:
     bool initialiseAudioEngine();
     void createWelcomeScreen();
     void registerFocusRegions();
+    // FRO12: the clear+rebuild half of registerFocusRegions(), re-run after every detach/redock
+    // (mixerDock.onPanelDetachStateChanged) so a region currently detached to its own window stops
+    // appearing in the DOCKED window's Tab-cycle order -- split out so the one-time
+    // addFocusChangeListener(this) call in registerFocusRegions() itself never re-registers.
+    void rebuildFocusRegions();
 
     void applyToolbarIcons();
 
@@ -783,7 +792,17 @@ private:
     // after it in this same member list so the reference is valid; owns the tab strip and the
     // mixer panel itself, and becomes the dock's direct child in place of timelinePanel (which
     // becomes MixerDockComponent's own child instead -- see MainComponentSetupToolbar.cpp).
-    synth::ui::MixerDockComponent mixerDock{timelinePanel, audioEngine, timelineDoc, undoManager, graphEditor};
+    // FRO12: appProperties/lookAndFeel/shortcutManager are declared earlier in this class (see
+    // each field's own declaration) so all three are already valid pointers/references here,
+    // even though shortcutManager itself finishes constructing later -- see
+    // DetachablePanelHost.h's "held by reference" contract; only the ADDRESS is taken now.
+    synth::ui::MixerDockComponent mixerDock{timelinePanel, audioEngine,   timelineDoc, undoManager,
+                                            graphEditor,   appProperties, lookAndFeel, &shortcutManager};
+    // FRO12 (P9-6, docs/mixer.md §5.9): Mixer placement (Tab/Own panel/Window) + both panels'
+    // detach-to-window support -- ONE collaborator so this header doesn't grow a field per panel
+    // (see the plan's own MainComponent.h budget note). Declared after mixerDock so its Mixer-
+    // panel reference stays valid.
+    synth::ui::MixerPlacementController mixerPlacement_{mixerDock, appProperties};
     bool isTimelineVisible = false;
     // The panel's docked height. Resolved in initialiseCommon() from kTimelinePanelHeightKey (theme
     // metric when absent) and moved by the panel's top-edge drag; 0 only before that, and forever in

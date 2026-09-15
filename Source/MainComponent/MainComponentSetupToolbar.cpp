@@ -53,6 +53,10 @@ void MainComponent::addCanvasAndPanels() {
     // tabs is visible stays keyed to isTimelineVisible/timelineSlide_ regardless of active tab.
     addAndMakeVisible(mixerDock);
     mixerDock.setVisible(isTimelineVisible);
+    // FRO12 (P9-6): the Mixer's "Own panel" placement is a second independent bottom strip --
+    // added here (Own-panel visibility is unrelated to isTimelineVisible above) and given real
+    // bounds only by resized(), gated on mixerPlacement_.isOwnPanelShowing().
+    addAndMakeVisible(mixerPlacement_);
     graphEditor.getModMatrix().setVisible(graphEditor.isModMatrixVisible());
 }
 

@@ -71,7 +71,7 @@ juce::String MacroGroupController::groupSelectionIntoMacro(bool autoCreatePorts)
     auto& graph = host_.graph();
     juce::String newId;
     auto doGroup = [this, macro, portPlan, &newId] {
-        newId = host_.getMacros().add(macro).id;
+        newId = host_.getMacros().add(macro);
         // Splice BEFORE updateComponents(): the spliced port nodes must exist, and be macro
         // members, before the card/hull layout that updateComponents() triggers runs against
         // them — never group-then-add as a second pass.
@@ -109,7 +109,7 @@ juce::String MacroGroupController::addMacroForMembers(const std::vector<juce::St
     macro.collapsed = true;
     macro.bounds = juce::Rectangle<int>(origin.x, origin.y, synth::LayoutUtil::kSingleWidth, kMacroCardHeight);
 
-    return host_.getMacros().add(macro).id;
+    return host_.getMacros().add(macro);
 }
 
 void MacroGroupController::addSelectionToMacro(const juce::String& macroId,
