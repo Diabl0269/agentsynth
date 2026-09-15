@@ -397,6 +397,32 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     contentHost.addAndMakeVisible(autosaveBackupCountUnitLabel);
     autosaveBackupCountUnitLabel.setText("backups", juce::dontSendNotification);
     autosaveBackupCountUnitLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
+
+    // FRO13 (P9-7, docs/mixer.md §5.7/§7 D3): Mixer -> per-type default track preset, one combo
+    // each — populateMixerDefaultPresetCombo() lists "Factory Default" plus every saved preset of
+    // that type, snapshotted once here (same posture the "+ Track" menu's own submenus take).
+    contentHost.addAndMakeVisible(mixerDefaultTrackPresetAudioLabel);
+    mixerDefaultTrackPresetAudioLabel.setText("Default Audio track preset:", juce::dontSendNotification);
+    mixerDefaultTrackPresetAudioLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
+    contentHost.addAndMakeVisible(mixerDefaultTrackPresetAudioCombo);
+    populateMixerDefaultPresetCombo(mixerDefaultTrackPresetAudioCombo, synth::TrackPresetKind::Audio);
+    // setMixerDefaultTrackPresetAudio also re-persists the value it just read, which is harmless
+    // (idempotent) and keeps this to one code path rather than duplicating the combo-selection walk.
+    setMixerDefaultTrackPresetAudio(appProperties.getUserSettings()->getValue(kMixerDefaultTrackPresetAudioKey, {}));
+    mixerDefaultTrackPresetAudioCombo.onChange = [this] {
+        persistMixerDefaultTrackPresetAudio(getMixerDefaultTrackPresetAudio());
+    };
+
+    contentHost.addAndMakeVisible(mixerDefaultTrackPresetInstrumentLabel);
+    mixerDefaultTrackPresetInstrumentLabel.setText("Default Instrument track preset:", juce::dontSendNotification);
+    mixerDefaultTrackPresetInstrumentLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
+    contentHost.addAndMakeVisible(mixerDefaultTrackPresetInstrumentCombo);
+    populateMixerDefaultPresetCombo(mixerDefaultTrackPresetInstrumentCombo, synth::TrackPresetKind::Instrument);
+    setMixerDefaultTrackPresetInstrument(
+        appProperties.getUserSettings()->getValue(kMixerDefaultTrackPresetInstrumentKey, {}));
+    mixerDefaultTrackPresetInstrumentCombo.onChange = [this] {
+        persistMixerDefaultTrackPresetInstrument(getMixerDefaultTrackPresetInstrument());
+    };
 }
 
 void PreferencesSettingsTab::paint(juce::Graphics& g) {
@@ -634,7 +660,7 @@ void PreferencesSettingsTab::layoutContent(int contentWidth) {
         pendingDivider = pendingDivider || visible;
     }
 
-    // Group 8: autosave (last - no divider after it).
+    // Group 8: autosave.
     {
         const std::initializer_list<juce::Component*> autosaveComps = {
             &autosaveEnabledToggle,       &autosaveIntervalLabel,    &autosaveIntervalEditor,
@@ -658,6 +684,29 @@ void PreferencesSettingsTab::layoutContent(int contentWidth) {
             autosaveBackupCountEditor.setBounds(row.removeFromLeft(36));
             row.removeFromLeft(4);
             autosaveBackupCountUnitLabel.setBounds(row.removeFromLeft(55));
+            y += 24;
+        }
+        pendingDivider = pendingDivider || visible;
+    }
+
+    // Group 9 (FRO13, P9-7): Mixer defaults (last - no divider after it).
+    {
+        const std::initializer_list<juce::Component*> mixerDefaultComps = {
+            &mixerDefaultTrackPresetAudioLabel, &mixerDefaultTrackPresetAudioCombo,
+            &mixerDefaultTrackPresetInstrumentLabel, &mixerDefaultTrackPresetInstrumentCombo};
+        const bool visible = groupMatches(mixerDefaultComps);
+        setGroupVisible(mixerDefaultComps, visible);
+        beginGroup(visible);
+        if (visible) {
+            juce::Rectangle<int> row(0, y, contentWidth, 24);
+            mixerDefaultTrackPresetAudioLabel.setBounds(row.removeFromLeft(170));
+            row.removeFromLeft(4);
+            mixerDefaultTrackPresetAudioCombo.setBounds(row.removeFromLeft(160));
+            y += 28;
+            juce::Rectangle<int> row2(0, y, contentWidth, 24);
+            mixerDefaultTrackPresetInstrumentLabel.setBounds(row2.removeFromLeft(170));
+            row2.removeFromLeft(4);
+            mixerDefaultTrackPresetInstrumentCombo.setBounds(row2.removeFromLeft(160));
             y += 24;
         }
     }

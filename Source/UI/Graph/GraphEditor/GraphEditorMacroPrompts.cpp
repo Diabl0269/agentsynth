@@ -20,7 +20,16 @@
 
 #include "GraphEditor.h"
 
+#include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "UI/Macros/MacroCardComponent.h"
+
+// FRO13 (P9-7): canSaveTrackPresetForTrack's const-callable query — getMacros() itself is
+// non-const, so MainComponent (a const TrackHeaderHost override) can't call findByMember() on it
+// directly.
+bool GraphEditor::isChannelMacroForTrack(const juce::String& memberUuid) const {
+    const auto* macro = macros.findByMember(memberUuid);
+    return macro != nullptr && synth::isChannelMacro(*macro, audioEngine.getGraph());
+}
 
 void GraphEditor::requestGroupSelectionIntoMacro() {
     const bool hasCrossing = selectionHasCrossingMacroCable();
@@ -308,6 +317,25 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
         if (safeThis->onSaveSnippetRequested)
             safeThis->onSaveSnippetRequested();
     });
+    // FRO13 (P9-7, docs/mixer.md §5.7): only a mixer channel (a macro boxing a Channel Strip) can
+    // be saved as a track preset — omitted entirely on an ordinary group, same "Mute Macro"
+    // omit-when-meaningless precedent above.
+    if (synth::isChannelMacro(*macro, audioEngine.getGraph())) {
+        m.addItem("Save Track as Preset...", [safeThis, macroId] {
+            if (safeThis == nullptr)
+                return;
+            safeThis->selectMacro(macroId, false);
+            if (safeThis->onTrackPresetMenuAction)
+                safeThis->onTrackPresetMenuAction(macroId, false);
+        });
+        m.addItem("Set as Default Track Preset", [safeThis, macroId] {
+            if (safeThis == nullptr)
+                return;
+            safeThis->selectMacro(macroId, false);
+            if (safeThis->onTrackPresetMenuAction)
+                safeThis->onTrackPresetMenuAction(macroId, true);
+        });
+    }
     m.addItem("Ungroup", [safeThis, macroId] {
         if (safeThis == nullptr)
             return;

@@ -74,6 +74,14 @@ public:
     // autosave.json. Any exact integer 0-50; 0 disables the backup history entirely. DEFAULT 5.
     int getAutosaveBackupCount() const;
     void setAutosaveBackupCount(int count);
+    // FRO13 (P9-7, docs/mixer.md §5.7/§7 D3): per-type default track preset. Empty string ==
+    // "Factory Default" (the sentinel row, id kMixerDefaultPresetFactoryComboId) == the unchanged
+    // buildDefaultAudioChannel-based chain; a non-empty name that no longer resolves to a listed
+    // preset is silently ignored by the setter (the combo keeps its current selection).
+    juce::String getMixerDefaultTrackPresetAudio() const;
+    void setMixerDefaultTrackPresetAudio(const juce::String& presetName);
+    juce::String getMixerDefaultTrackPresetInstrument() const;
+    void setMixerDefaultTrackPresetInstrument(const juce::String& presetName);
     // "all" (every key labelled) vs "c" (only the Cs) — PianoRollComponent::KeyLabelMode, read by
     // TimelinePanelComponent::reloadPianoRollAppearancePrefs(). true == "all" (the default).
     bool isPianoRollKeyLabelModeAll() const;
@@ -163,6 +171,8 @@ private:
     void persistAutosaveEnabled(bool enabled);
     void persistAutosaveIntervalMinutes(int minutes);
     void persistAutosaveBackupCount(int count);
+    void persistMixerDefaultTrackPresetAudio(const juce::String& presetName);
+    void persistMixerDefaultTrackPresetInstrument(const juce::String& presetName);
     void persistPianoRollKeyLabelMode(bool labelEveryKey);
     void persistDualIOPerModuleOverrides();
 
@@ -277,6 +287,12 @@ private:
     juce::Label autosaveBackupCountLabel;
     juce::TextEditor autosaveBackupCountEditor;
     juce::Label autosaveBackupCountUnitLabel;
+    // FRO13 (P9-7): Mixer -> per-type default track preset, one combo each, "Factory Default" as
+    // the leading sentinel row (see PreferencesSettingsTabInternal.h's combo-id constants).
+    juce::Label mixerDefaultTrackPresetAudioLabel;
+    juce::ComboBox mixerDefaultTrackPresetAudioCombo;
+    juce::Label mixerDefaultTrackPresetInstrumentLabel;
+    juce::ComboBox mixerDefaultTrackPresetInstrumentCombo;
 
     // Hairline rules between preference groups, painted in paint() from these bounds.
     std::vector<juce::Rectangle<int>> dividerBounds;

@@ -690,6 +690,9 @@ public:
     /** Set by the owner to resolve a snippet name (from a library drag payload) to its JSON. */
     std::function<juce::var(const juce::String&)> snippetProvider;
 
+    // FRO13: the channel macro menu's Save-preset/Set-default pair; 2nd arg true = set default.
+    std::function<void(const juce::String& macroId, bool setAsDefault)> onTrackPresetMenuAction;
+
     /** right-click-any-knob -> "Automate '<Param>'" (ModuleComponent's generic auto-UI slider
      *  branch). Set by the owner (MainComponent::automateParameter) to resolve the node's uuid,
      *  find-or-create the doc's Automation track, bind a lane and open the automation strip —
@@ -704,12 +707,8 @@ public:
     std::function<void(juce::AudioProcessorGraph::NodeID)> onOpenPluginEditorRequested;
 
     // ---- Copy / paste / duplicate -------------------------------------------------------
-    //
-    // All three run through the snippet pipeline rather than a parallel copy format, which is what
-    // makes the wiring right: a snippet keeps only connections with BOTH endpoints inside the
-    // group and re-expresses modulation as intent, and insertion renumbers every id. The copies
-    // therefore wire to each other, never back to the originals, and nothing is spliced into the
-    // surrounding patch — the same rule a snippet dropped from the library follows.
+    // All three run through the snippet pipeline (self-contained connections, modulation as
+    // intent, ids renumbered on insert) — see docs/layout_selection_canvas.md §1.5.
 
     /** Copies the current selection into the in-app clipboard.
      *  @return false when the selection holds nothing copyable (empty, or only graph I/O nodes),
@@ -755,11 +754,8 @@ public:
     void setAutoCreateMacroPortsOnDragEnabled(bool enabled) { autoCreateMacroPortsOnDragEnabled = enabled; }
     bool getAutoCreateMacroPortsOnDragEnabled() const noexcept { return autoCreateMacroPortsOnDragEnabled; }
 
-    // T184 (P9-3c, docs/mixer.md §5.2 "main workflow"): auto-create a mixer channel when a MIDI
-    // cable from a Track In node connects to an instrument/macro whose audio reaches the output
-    // without already passing through a ChannelStrip. On by default; a Preferences toggle
-    // ("mixerAutoCreateChannelOnConnect") lets a user turn this off, leaving endConnectionDrag's
-    // plain connect behaviour exactly as it was before T184.
+    // T184 (P9-3c, docs/mixer.md §5.2): auto-creates a mixer channel on a qualifying MIDI connect;
+    // Preferences ("mixerAutoCreateChannelOnConnect") can turn this off.
     void setAutoCreateChannelOnConnectEnabled(bool enabled) { autoCreateChannelOnConnectEnabled = enabled; }
     bool getAutoCreateChannelOnConnectEnabled() const noexcept { return autoCreateChannelOnConnectEnabled; }
 
@@ -801,6 +797,10 @@ public:
     /** True when "Make channel" on `source` would build something — the menu items' enabled state.
      *  Pure read (synth::planMakeChannel). */
     bool nodeNeedsChannel(juce::AudioProcessorGraph::NodeID source) const;
+
+    // FRO13 (P9-7): true when memberUuid's macro is a mixer channel (synth::isChannelMacro) — a
+    // const-callable query since getMacros() itself is non-const.
+    bool isChannelMacroForTrack(const juce::String& memberUuid) const;
 
     /** The chain source the canvas/module "Make Channel" item acts on for the current selection
      *  (synth::resolveChannelSource), or an invalid NodeID when none/ambiguous. */
