@@ -49,6 +49,22 @@ public:
     void setEmbeddedHeader(bool embedded);
     bool isEmbeddedHeader() const noexcept { return embeddedHeader_; }
 
+    /** When true, setDetached(true) gives the freshly built DetachedPanelWindow a REAL native
+     *  top-level window (a peer), so it actually shows up on screen -- see the FRO12 follow-up bug
+     *  fixed here: `DetachedPanelWindow` is built `addToDesktop=false` (a deliberate headless-test
+     *  seam -- see that class's header comment) and nothing ever promoted it, so `setVisible(true)`
+     *  alone left the panel detached from its dock with no window anywhere (JUCE only creates a
+     *  peer from a TopLevelWindow constructor's own addToDesktop=true, or an explicit
+     *  addToDesktop() call -- never from setVisible()). `Main.cpp`'s `MainWindow` and
+     *  `PluginEditor.cpp`'s `AgentSynthPluginEditor` -- the app's and the plugin's only REAL
+     *  construction sites for a `MainComponent` -- call this true, once, right after construction.
+     *  Every headless test builds a `MainComponent`/`MixerDockComponent`/`DetachablePanelHost`
+     *  directly and leaves this at its default of false, so `setDetached(true)` there stays exactly
+     *  as before: no native peer, ever (`DetachRedockStateTests.cpp` detaches a real, off-screen
+     *  `MainComponent` this way). */
+    void setCreatesNativeWindows(bool shouldCreate) noexcept { createsNativeWindows_ = shouldCreate; }
+    bool isCreatingNativeWindows() const noexcept { return createsNativeWindows_; }
+
     /** The one focus region the hosted panel resolves to once detached -- id + root are exactly
      *  what the owner would otherwise pass to MainComponent::registerFocusRegions(). Stored so a
      *  later setDetached(true) can hand it to the freshly built window (see
@@ -74,6 +90,27 @@ public:
     bool isDetachButtonVisibleForTest() const noexcept { return detachButton_.isVisible(); }
     juce::Component& getPanelForTest() noexcept { return panel_; }
 
+protected:
+    // ---- Native-window seam (DetachablePanelHostTests.cpp's "native window" group) ----
+    // setDetached(true) calls these two, in that order, to decide whether the freshly built window
+    // gets a real native peer and to perform that call. Split into two overridable points (rather
+    // than folding the display check into the first) so a test subclass can simulate "no primary
+    // display" or "call reached" deterministically on ANY runner -- including a developer's Mac,
+    // which always has a real display -- without this base implementation ever creating one.
+    virtual bool hasPrimaryDisplayForNativeWindow() const {
+        // A genuinely headless runner (Linux CI, no Xvfb) has zero displays; dereferencing one
+        // segfaults rather than returning a degenerate result -- same guard
+        // DetachedPanelWindow::restoreBoundsOrDefault() already uses.
+        return juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() != nullptr;
+    }
+    virtual void addDetachedWindowToDesktop(DetachedPanelWindow& window) {
+        // The flag-less TopLevelWindow overload -- it derives its style flags from
+        // getDesktopWindowStyleFlags() (native title bar / resizable, matching what
+        // DetachedPanelWindow's constructor already configured via setUsingNativeTitleBar/
+        // setResizable) rather than us guessing them again here.
+        window.addToDesktop();
+    }
+
 private:
     void toggleDetach() { setDetached(!isDetached()); }
     void applyIcon();
@@ -89,6 +126,7 @@ private:
     juce::Label titleLabel_;
     juce::DrawableButton detachButton_{"detachPanel", juce::DrawableButton::ImageFitted};
     bool embeddedHeader_ = false;
+    bool createsNativeWindows_ = false;
     juce::String focusRegionId_;
     juce::Component* focusRegionRoot_ = nullptr;
     std::unique_ptr<DetachedPanelWindow> window_;

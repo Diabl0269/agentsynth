@@ -64,6 +64,15 @@ void DetachablePanelHost::setDetached(bool detached) {
         window_->onCloseRequested = [this] { setDetached(false); };
         if (focusRegionRoot_ != nullptr)
             window_->registerHostedPanelFocusRegion(focusRegionId_, *focusRegionRoot_);
+        // FRO12 follow-up: promote the window to a real native peer BEFORE setVisible(true) --
+        // setVisible() alone never creates one (see setCreatesNativeWindows()'s doc comment on
+        // DetachablePanelHost.h). window_'s bounds are already the restored/centred-default ones
+        // from its own constructor's restoreBoundsOrDefault(); TopLevelWindow::addToDesktop() reads
+        // the component's CURRENT bounds to size/position the native peer (juce_Component.cpp's
+        // addToDesktop() takes getScreenPosition() and never touches the existing size), so those
+        // bounds survive the promotion unchanged -- no bounds re-apply needed after this call.
+        if (createsNativeWindows_ && hasPrimaryDisplayForNativeWindow())
+            addDetachedWindowToDesktop(*window_);
         window_->setVisible(true);
         window_->toFront(true);
     } else {

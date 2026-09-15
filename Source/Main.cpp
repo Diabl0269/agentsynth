@@ -145,6 +145,13 @@ private:
                 // call itself only flips an atomic and (at most) spawns that thread, so it is not on
                 // this window's construction critical path.
                 mc->maybeStartEagerPluginScan();
+
+                // FRO12 follow-up: this is the real app's ONE construction site for MainComponent
+                // (every test builds one directly and never reaches here) — opt both detach hosts
+                // into actually creating a native window on detach. See
+                // DetachablePanelHost::setCreatesNativeWindows()'s doc comment.
+                mc->getMixerDock().getTimelineHost().setCreatesNativeWindows(true);
+                mc->getMixerDock().getMixerHost().setCreatesNativeWindows(true);
             }
 
 #if JUCE_IOS || JUCE_ANDROID

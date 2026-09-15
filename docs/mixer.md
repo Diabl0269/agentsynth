@@ -471,6 +471,28 @@ existing `"timeline"` `addRegion` call in `!mixerDock.getTimelineHost().isDetach
 ...}` registration lands inside that same guarded pass later; this ticket only wraps what already
 exists.
 
+**FRO12 follow-up — detaching created no window:** the original implementation above never
+promoted `DetachedPanelWindow` off its `addToDesktop=false` construction — `setDetached(true)`
+called only `window_->setVisible(true)` + `toFront(true)`, and JUCE creates a native peer from a
+`TopLevelWindow` **only** via its own constructor's `addToDesktop=true`, `recreateDesktopWindow()`/
+`lookAndFeelChanged()` when a peer already exists, or an explicit `addToDesktop()` call — never
+from `setVisible()` alone. So clicking the tab-strip detach button removed the panel from the dock
+and no window ever appeared on screen; clicking again redocked correctly (the redock path never
+touched the desktop at all), which is what made the bug easy to miss. Fixed by
+`DetachablePanelHost::setCreatesNativeWindows(bool)`: false (the default, and every headless test's
+value) leaves `setDetached(true)` exactly as before; true — set once, right after construction, by
+`Main.cpp`'s `MainWindow` and `PluginEditor.cpp`'s `AgentSynthPluginEditor`, the app's and plugin's
+only real `MainComponent` construction sites — makes `setDetached(true)` call
+`window_->addToDesktop()` (gated additionally on a primary display existing, for a genuinely
+headless runner) before `setVisible(true)`. `DetachedPanelWindow`'s already-restored/centred-default
+bounds survive that promotion unchanged (`Component::addToDesktop()` positions the peer from the
+component's current bounds, never a native default).
+
+`Source/Plugin/Hosting/HostedPluginEditorWindow.cpp` uses the identical `addToDesktop=false` +
+`setVisible(true)`-only pattern (`HostedPluginWindowManager::openEditorFor`, wired from a hosted
+plugin module's "Open Editor" action) and has the same latent no-window bug. Deliberately left
+unfixed here — out of scope for this ticket; flagged for its own follow-up.
+
 ### 5.10 What the mixer shows
 
 Strips, buses, Direct, and Master. Nothing else — never an arbitrary module's output. To put

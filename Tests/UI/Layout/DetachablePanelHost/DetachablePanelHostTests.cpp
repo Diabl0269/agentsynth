@@ -10,6 +10,8 @@
 //   2. Tooltip + button-text/idempotence of the detach control.
 //   3. Embedded-header suppression (Tab-placement chrome).
 //   4. onDetachedStateChanged fires for both directions, including a window-driven redock.
+//   5. Native-window promotion (FRO12 follow-up: setDetached(true) alone never created a peer) --
+//      see DetachablePanelHost.h's setCreatesNativeWindows() doc comment for the bug this guards.
 
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/DetachablePanelHost/DetachablePanelHost.h"
@@ -161,4 +163,68 @@ TEST_F(DetachablePanelHostTest, WindowCloseButtonRedocksThroughTheSameCallback) 
     EXPECT_TRUE(changed);
     EXPECT_FALSE(host.isDetached()) << "the close button must redock, not just hide the window";
     EXPECT_EQ(&host.getPanelForTest(), &panel);
+}
+
+// ============================================================================
+// 5. Native-window promotion (FRO12 follow-up)
+// ============================================================================
+
+namespace {
+
+// Overrides both native-window seam points (DetachablePanelHost.h's protected
+// hasPrimaryDisplayForNativeWindow()/addDetachedWindowToDesktop()) so a test can simulate either
+// environment deterministically on ANY runner -- including a developer's Mac, which always has a
+// real display. addDetachedWindowToDesktop() deliberately never forwards to the base
+// implementation: this must never create an actual native peer, no matter which machine runs the
+// test suite.
+class RecordingNativeWindowHost : public DetachablePanelHost {
+public:
+    using DetachablePanelHost::DetachablePanelHost;
+
+    bool simulatedPrimaryDisplay = true;
+    bool addToDesktopCallReached = false;
+
+protected:
+    bool hasPrimaryDisplayForNativeWindow() const override { return simulatedPrimaryDisplay; }
+    void addDetachedWindowToDesktop(synth::ui::DetachedPanelWindow&) override {
+        addToDesktopCallReached = true; // recorded only -- never creates a real peer
+    }
+};
+
+} // namespace
+
+TEST_F(DetachablePanelHostTest, FlagFalseNeverCreatesAPeerEvenWhenADisplayExists) {
+    DetachablePanelHost host(panel, "Test Panel", "testPanelWindowBounds", &appProperties, nullptr, &shortcutManager);
+    ASSERT_FALSE(host.isCreatingNativeWindows()) << "false is the default -- every headless test relies on this";
+
+    host.setDetached(true);
+    ASSERT_NE(host.getDetachedWindowForTest(), nullptr);
+    EXPECT_EQ(host.getDetachedWindowForTest()->getPeer(), nullptr)
+        << "the flag is off -- setDetached(true) must never promote the window to a real peer";
+}
+
+TEST_F(DetachablePanelHostTest, FlagTrueButNoPrimaryDisplayStillCreatesNoPeer) {
+    RecordingNativeWindowHost host(panel, "Test Panel", "testPanelWindowBounds", &appProperties, nullptr,
+                                   &shortcutManager);
+    host.setCreatesNativeWindows(true);
+    host.simulatedPrimaryDisplay = false; // simulates a genuinely headless runner, on ANY machine
+
+    host.setDetached(true);
+    EXPECT_FALSE(host.addToDesktopCallReached) << "no display -- the promotion call must never be reached";
+    ASSERT_NE(host.getDetachedWindowForTest(), nullptr);
+    EXPECT_EQ(host.getDetachedWindowForTest()->getPeer(), nullptr);
+}
+
+TEST_F(DetachablePanelHostTest, FlagTrueWithAPrimaryDisplayReachesThePromotionCall) {
+    RecordingNativeWindowHost host(panel, "Test Panel", "testPanelWindowBounds", &appProperties, nullptr,
+                                   &shortcutManager);
+    host.setCreatesNativeWindows(true);
+    host.simulatedPrimaryDisplay = true;
+
+    host.setDetached(true);
+    EXPECT_TRUE(host.addToDesktopCallReached) << "flag on + a display -- production code would promote the window here";
+    // The override never forwarded to the real addToDesktop() -- this must still be no real peer,
+    // regardless of whether the machine running this test actually has a display.
+    ASSERT_NE(host.getDetachedWindowForTest(), nullptr);
+    EXPECT_EQ(host.getDetachedWindowForTest()->getPeer(), nullptr);
 }
