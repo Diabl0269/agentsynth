@@ -1,0 +1,453 @@
+// =================================================================================================
+// FRO14 (P9-4, docs/mixer.md §5.2) — what a LINK actually does, driven through the real track-header
+// buttons: names sync both ways, colour previews live and commits as one undo step, a linked track's
+// M/S drive its CHANNEL (not note gating) while a shared channel's tracks keep today's note gating,
+// and the channel chip names/reveals the channel with a repaint-gated meter.
+//
+// Most cases run on a rig of real collaborators (AudioEngine + GraphEditor + TimelineDoc +
+// AppUndoManager + TrackChannelLinkController + real TimelineTrackHeaderComponents over a stub
+// TrackHeaderHost) rather than a whole MainComponent: that rig is renderable, so the mixed
+// linked-solo/shared-solo case can assert what the mix actually does rather than only what a flag
+// says. The last test closes the loop on a REAL MainComponent, proving the wiring is reachable from
+// the shipped "+ Track -> Audio" flow and not just from this file.
+//
+// The link rule itself is proved at the Core layer in ChannelFlowTrackChannelLinkCoreTests.cpp.
+// =================================================================================================
+
+#include "AppUndoManager.h"
+#include "ChannelFlowTestFixture.h"
+#include "MacroSet.h"
+#include "MainComponent/MainComponent.h"
+#include "Mixer/TrackChannelLink.h"
+#include "Modules/ChannelStripModule.h"
+#include "Timeline/TimelineDoc/TimelineDoc.h"
+#include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Timeline/ChannelChipComponent.h"
+#include "UI/Timeline/TimelineTrackHeaderComponent.h"
+#include "UI/Timeline/TrackChannelLinkController.h"
+#include <gtest/gtest.h>
+#include <memory>
+
+using synth::ui::TimelineTrackHeaderComponent;
+using synth::ui::TrackChannelLinkController;
+
+namespace {
+
+// The minimum TrackHeaderHost a header needs, plus the one thing this file is about: the channel
+// link surface. Doc edits route through a REAL AppUndoManager so the undo-step assertions below
+// exercise the actual contract.
+class LinkStubHost : public synth::ui::TrackHeaderHost {
+public:
+    LinkStubHost(synth::TimelineDoc& doc, AppUndoManager& undo, synth::ui::TrackChannelLinkSurface& link)
+        : doc_(doc)
+        , undo_(undo)
+        , link_(link) {}
+
+    std::vector<BindingOption> getAvailableTrackInNodes(synth::TrackId) override { return {}; }
+    juce::String getNodeDisplayName(const juce::String&) override { return "Track In"; }
+    void bindTrackTo(synth::TrackId track, const juce::String& uuid) override { doc_.setTrackBinding(track, uuid); }
+    void createAndBindTrackInNode(synth::TrackId) override {}
+    void selectNodeInGraph(const juce::String&) override {}
+    void deleteTrack(synth::TrackId) override {}
+    void performTrackEdit(const std::function<void()>& mutation) override {
+        undo_.recordTimelineChange(doc_, mutation);
+    }
+    void addMidiTrack() override {}
+    void addAudioTrack() override {}
+    void addInstrumentTrack(const juce::String&, bool) override {}
+    std::vector<PluginLaneOption> getAvailablePluginLaneOptions() const override { return {}; }
+    synth::LaneId addPluginAutomationLane(const PluginLaneOption&) override { return {}; }
+
+    synth::ui::TrackChannelLinkSurface* getChannelLinkSurface() override { return &link_; }
+
+private:
+    synth::TimelineDoc& doc_;
+    AppUndoManager& undo_;
+    synth::ui::TrackChannelLinkSurface& link_;
+};
+
+// One linked channel (track "Lead" alone into Osc -> Strip -> Audio Output, boxed as macro "Lead")
+// and one SHARED channel (tracks "Kick"/"Snare" both into one Sampler -> Strip -> Audio Output,
+// boxed as macro "Drums"). Both strips render into the same output, which is what lets the mixed
+// solo case below assert on the real mix.
+struct LinkRigApp {
+    HostedPatchCFT patch;
+    AppUndoManager undo;
+    synth::TimelineDoc doc;
+    GraphEditor editor{patch.engine, &undo};
+    TrackChannelLinkController link{patch.engine, doc, undo, editor};
+    LinkStubHost host{doc, undo, link};
+
+    synth::TrackId lead, kick, snare;
+    juce::AudioProcessorGraph::Node* leadStrip = nullptr;
+    juce::AudioProcessorGraph::Node* sharedStrip = nullptr;
+    juce::String leadMacroId, drumsMacroId;
+    std::vector<std::unique_ptr<TimelineTrackHeaderComponent>> headers;
+
+    juce::AudioProcessorGraph& graph() { return patch.engine.getGraph(); }
+
+    LinkRigApp() {
+        // Mirrors MainComponent's own restore hooks: every undo/redo ends in the reconcile + publish
+        // seam, which is what re-settles the engine's solo count and the headers' displayed state.
+        undo.setRestoreHooks({}, [this] {
+            link.reconcileLinkedTracks();
+            patch.engine.publishTimeline(doc);
+            for (auto& header : headers)
+                header->refreshFromDoc();
+        });
+
+        juce::String leadInUuid, leadStripUuid, oscUuid;
+        auto* leadIn = addPlainNodeCFT(graph(), "Track In", {0, 0}, leadInUuid);
+        auto* osc = addPlainNodeCFT(graph(), "Oscillator", {200, 0}, oscUuid);
+        leadStrip = addPlainNodeCFT(graph(), "Channel Strip", {400, 0}, leadStripUuid);
+        wireMidi(leadIn, osc);
+        wireStereo(osc, leadStrip);
+        wireStripToOutput(leadStrip);
+        lead = addTrack("Lead", leadInUuid);
+        leadMacroId = editor.addMacroForMembers({leadInUuid, oscUuid, leadStripUuid}, "Lead", {0, 0});
+
+        juce::String kickInUuid, snareInUuid, samplerUuid, sharedStripUuid;
+        auto* kickIn = addPlainNodeCFT(graph(), "Track In", {0, 400}, kickInUuid);
+        auto* snareIn = addPlainNodeCFT(graph(), "Track In", {0, 500}, snareInUuid);
+        auto* sampler = addPlainNodeCFT(graph(), "Oscillator", {200, 400}, samplerUuid);
+        sharedStrip = addPlainNodeCFT(graph(), "Channel Strip", {400, 400}, sharedStripUuid);
+        wireMidi(kickIn, sampler);
+        wireMidi(snareIn, sampler);
+        wireStereo(sampler, sharedStrip);
+        wireStripToOutput(sharedStrip);
+        kick = addTrack("Kick", kickInUuid);
+        snare = addTrack("Snare", snareInUuid);
+        drumsMacroId =
+            editor.addMacroForMembers({kickInUuid, snareInUuid, samplerUuid, sharedStripUuid}, "Drums", {0, 400});
+
+        editor.updateComponents();
+        for (const auto& track : doc.getTracks())
+            headers.push_back(std::make_unique<TimelineTrackHeaderComponent>(doc, track.id, &host));
+    }
+
+    synth::TrackId addTrack(const juce::String& name, const juce::String& bindingUuid) {
+        const auto id = doc.addTrack(synth::TrackKind::Midi, name);
+        doc.setTrackBinding(id, bindingUuid);
+        return id;
+    }
+    void wireMidi(juce::AudioProcessorGraph::Node* from, juce::AudioProcessorGraph::Node* to) {
+        constexpr int midi = juce::AudioProcessorGraph::midiChannelIndex;
+        graph().addConnection({{from->nodeID, midi}, {to->nodeID, midi}});
+    }
+    void wireStereo(juce::AudioProcessorGraph::Node* from, juce::AudioProcessorGraph::Node* strip) {
+        const int fromRight = dynamic_cast<ModuleBase*>(from->getProcessor())->rightAudioLegChannel();
+        graph().addConnection({{from->nodeID, 0}, {strip->nodeID, 0}});
+        graph().addConnection({{from->nodeID, fromRight}, {strip->nodeID, ChannelStripModule::kRightBase}});
+    }
+    void wireStripToOutput(juce::AudioProcessorGraph::Node* strip) {
+        graph().addConnection({{strip->nodeID, 0}, {patch.output->nodeID, 0}});
+        graph().addConnection({{strip->nodeID, ChannelStripModule::kRightBase}, {patch.output->nodeID, 1}});
+    }
+
+    TimelineTrackHeaderComponent& header(synth::TrackId track) {
+        for (auto& h : headers)
+            if (h->getTrackId() == track)
+                return *h;
+        jassertfalse;
+        return *headers.front();
+    }
+    ChannelStripModule* strip(juce::AudioProcessorGraph::Node* node) {
+        return dynamic_cast<ChannelStripModule*>(node->getProcessor());
+    }
+    /** Re-resolves a strip by uuid: an undo rebuilds the graph from JSON and REASSIGNS NodeIDs, so
+     *  no pointer or id taken before one survives it. */
+    ChannelStripModule* stripForMacro(const juce::String& macroId) {
+        const auto* macro = editor.getMacros().find(macroId);
+        if (macro == nullptr)
+            return nullptr;
+        for (const auto& uuid : macro->members)
+            if (auto* node = nodeForUuidCFT(graph(), uuid))
+                if (auto* s = dynamic_cast<ChannelStripModule*>(node->getProcessor()))
+                    return s;
+        return nullptr;
+    }
+    void render(int blocks) {
+        patch.engine.publishTimeline(doc);
+        patch.render(blocks);
+    }
+};
+
+} // namespace
+
+// -------------------------------------------------------------------------------------------
+// (a) Names sync both ways
+// -------------------------------------------------------------------------------------------
+
+TEST_F(ChannelFlowTest, RenamingALinkedTrackRenamesItsChannelAsOneUndoStep) {
+    LinkRigApp rig;
+    const int serialBefore = rig.undo.getEditSerial();
+
+    // The REAL label edit path, not a direct doc write.
+    auto& label = rig.header(rig.lead).getNameLabel();
+    label.setText("Vocals", juce::sendNotificationSync);
+
+    EXPECT_EQ(rig.doc.getTrack(rig.lead)->name, "Vocals");
+    EXPECT_EQ(rig.editor.getMacros().find(rig.leadMacroId)->name, "Vocals");
+    EXPECT_EQ(rig.undo.getEditSerial(), serialBefore + 1) << "one action, one undo step";
+
+    ASSERT_TRUE(rig.undo.undo());
+    EXPECT_EQ(rig.doc.getTrack(rig.lead)->name, "Lead");
+    EXPECT_EQ(rig.editor.getMacros().find(rig.leadMacroId)->name, "Lead") << "one Cmd+Z restores BOTH";
+}
+
+TEST_F(ChannelFlowTest, RenamingAChannelMacroRenamesItsLinkedTrackAsOneUndoStep) {
+    LinkRigApp rig;
+    const int serialBefore = rig.undo.getEditSerial();
+
+    rig.editor.renameMacro(rig.leadMacroId, "Vocals");
+
+    EXPECT_EQ(rig.editor.getMacros().find(rig.leadMacroId)->name, "Vocals");
+    EXPECT_EQ(rig.doc.getTrack(rig.lead)->name, "Vocals") << "renaming the channel renames the track";
+    EXPECT_EQ(rig.undo.getEditSerial(), serialBefore + 1);
+
+    ASSERT_TRUE(rig.undo.undo());
+    EXPECT_EQ(rig.doc.getTrack(rig.lead)->name, "Lead");
+    EXPECT_EQ(rig.editor.getMacros().find(rig.leadMacroId)->name, "Lead");
+}
+
+TEST_F(ChannelFlowTest, RenamingASharedChannelsTrackLeavesTheChannelAlone) {
+    LinkRigApp rig;
+    rig.header(rig.kick).getNameLabel().setText("Kik", juce::sendNotificationSync);
+
+    EXPECT_EQ(rig.doc.getTrack(rig.kick)->name, "Kik");
+    EXPECT_EQ(rig.editor.getMacros().find(rig.drumsMacroId)->name, "Drums")
+        << "a channel fed by several tracks keeps its own independently-chosen name";
+}
+
+// -------------------------------------------------------------------------------------------
+// (b) Colour syncs live
+// -------------------------------------------------------------------------------------------
+
+TEST_F(ChannelFlowTest, LiveColourPreviewUpdatesTrackAndChannelOnEveryTickWithNoUndoStep) {
+    LinkRigApp rig;
+    const int serialBefore = rig.undo.getEditSerial();
+    auto picker = rig.header(rig.lead).createColourPickerForTest();
+    ASSERT_NE(picker, nullptr);
+
+    for (const auto colour : {juce::Colours::red, juce::Colours::green, juce::Colours::blue}) {
+        picker->setCurrentColourForTest(colour);
+        EXPECT_EQ(rig.doc.getTrack(rig.lead)->colourArgb, colour.getARGB()) << "the track follows every tick";
+        EXPECT_EQ(rig.editor.getMacros().find(rig.leadMacroId)->colour, colour) << "and so does the channel";
+    }
+    EXPECT_EQ(rig.undo.getEditSerial(), serialBefore) << "a drag pushes no undo step at all";
+}
+
+TEST_F(ChannelFlowTest, ColourPickerCancelRestoresBothTargets) {
+    LinkRigApp rig;
+    const juce::uint32 originalTrack = rig.doc.getTrack(rig.lead)->colourArgb;
+    const juce::Colour originalMacro = rig.editor.getMacros().find(rig.leadMacroId)->colour;
+    const int serialBefore = rig.undo.getEditSerial();
+
+    auto picker = rig.header(rig.lead).createColourPickerForTest();
+    ASSERT_NE(picker, nullptr);
+    picker->setCurrentColourForTest(juce::Colours::magenta);
+    picker->setCurrentColourForTest(juce::Colour(originalTrack)); // dragged back to where it started
+    picker->commitForTest();
+
+    EXPECT_EQ(rig.doc.getTrack(rig.lead)->colourArgb, originalTrack);
+    EXPECT_EQ(rig.editor.getMacros().find(rig.leadMacroId)->colour, originalMacro);
+    EXPECT_EQ(rig.undo.getEditSerial(), serialBefore) << "a no-net-change close records nothing";
+}
+
+TEST_F(ChannelFlowTest, ColourPickerCommitIsOneUndoStepCoveringTrackAndChannel) {
+    LinkRigApp rig;
+    const juce::uint32 originalTrack = rig.doc.getTrack(rig.lead)->colourArgb;
+    const juce::Colour originalMacro = rig.editor.getMacros().find(rig.leadMacroId)->colour;
+    const int serialBefore = rig.undo.getEditSerial();
+
+    auto picker = rig.header(rig.lead).createColourPickerForTest();
+    ASSERT_NE(picker, nullptr);
+    picker->setCurrentColourForTest(juce::Colours::magenta);
+    picker->setCurrentColourForTest(juce::Colours::orange);
+    picker->commitForTest();
+
+    EXPECT_EQ(rig.doc.getTrack(rig.lead)->colourArgb, juce::Colours::orange.getARGB());
+    EXPECT_EQ(rig.editor.getMacros().find(rig.leadMacroId)->colour, juce::Colours::orange);
+    EXPECT_EQ(rig.undo.getEditSerial(), serialBefore + 1) << "a dozen preview colours, ONE undo step";
+
+    ASSERT_TRUE(rig.undo.undo());
+    EXPECT_EQ(rig.doc.getTrack(rig.lead)->colourArgb, originalTrack);
+    EXPECT_EQ(rig.editor.getMacros().find(rig.leadMacroId)->colour, originalMacro) << "one Cmd+Z, both targets";
+}
+
+TEST_F(ChannelFlowTest, ASharedChannelsTrackKeepsTheOrdinarySingleTargetColourPicker) {
+    LinkRigApp rig;
+    const juce::Colour originalMacro = rig.editor.getMacros().find(rig.drumsMacroId)->colour;
+
+    auto picker = rig.header(rig.kick).createColourPickerForTest();
+    ASSERT_NE(picker, nullptr);
+    picker->setCurrentColourForTest(juce::Colours::magenta);
+
+    EXPECT_EQ(rig.doc.getTrack(rig.kick)->colourArgb, juce::Colours::magenta.getARGB());
+    EXPECT_EQ(rig.editor.getMacros().find(rig.drumsMacroId)->colour, originalMacro)
+        << "a shared channel keeps its own colour";
+}
+
+// -------------------------------------------------------------------------------------------
+// (c) The track header's M/S drive the strip
+// -------------------------------------------------------------------------------------------
+
+TEST_F(ChannelFlowTest, MuteOnALinkedTrackDrivesTheChannelMuteAndNotNoteGating) {
+    LinkRigApp rig;
+    auto& header = rig.header(rig.lead);
+    ASSERT_FALSE(rig.strip(rig.leadStrip)->isMuted());
+    const int serialBefore = rig.undo.getEditSerial();
+
+    header.getMuteButton().onClick(); // the real button's own handler
+
+    EXPECT_TRUE(rig.stripForMacro(rig.leadMacroId)->isMuted()) << "the CHANNEL is muted";
+    EXPECT_FALSE(rig.doc.getTrack(rig.lead)->muted) << "one mute, not two - the doc flag stays off";
+    EXPECT_TRUE(header.getMuteButton().getToggleState()) << "the button shows the channel's state";
+    EXPECT_EQ(rig.undo.getEditSerial(), serialBefore + 1);
+
+    ASSERT_TRUE(rig.undo.undo());
+    EXPECT_FALSE(rig.stripForMacro(rig.leadMacroId)->isMuted());
+    EXPECT_FALSE(header.getMuteButton().getToggleState()) << "and follows it back across an undo";
+}
+
+TEST_F(ChannelFlowTest, SoloOnALinkedTrackEngagesTheEngineGateAndOneUndoRevertsFlagAndCount) {
+    LinkRigApp rig;
+    auto& header = rig.header(rig.lead);
+    ASSERT_EQ(rig.patch.engine.getSoloedStripCount(), 0);
+    const int serialBefore = rig.undo.getEditSerial();
+
+    header.getSoloButton().onClick();
+
+    EXPECT_TRUE(rig.stripForMacro(rig.leadMacroId)->isSoloed());
+    EXPECT_EQ(rig.patch.engine.getSoloedStripCount(), 1) << "the render-time gate is engaged";
+    EXPECT_FALSE(rig.doc.getTrack(rig.lead)->soloed) << "one solo, not two";
+    EXPECT_TRUE(header.getSoloButton().getToggleState());
+    EXPECT_EQ(rig.undo.getEditSerial(), serialBefore + 1);
+
+    ASSERT_TRUE(rig.undo.undo());
+    EXPECT_FALSE(rig.stripForMacro(rig.leadMacroId)->isSoloed()) << "undo restores the strip's flag...";
+    EXPECT_EQ(rig.patch.engine.getSoloedStripCount(), 0) << "...AND the engine's count";
+    EXPECT_FALSE(header.getSoloButton().getToggleState());
+}
+
+TEST_F(ChannelFlowTest, MuteOnASharedChannelTrackKeepsNoteGatingAndNeverTouchesTheStrip) {
+    LinkRigApp rig;
+    auto& header = rig.header(rig.kick);
+
+    header.getMuteButton().onClick();
+
+    EXPECT_TRUE(rig.doc.getTrack(rig.kick)->muted) << "a shared channel's tracks keep today's note gating";
+    EXPECT_FALSE(rig.strip(rig.sharedStrip)->isMuted()) << "and never touch the shared strip";
+    EXPECT_FALSE(rig.doc.getTrack(rig.snare)->muted) << "nor the other track sharing it";
+
+    header.getSoloButton().onClick();
+    EXPECT_TRUE(rig.doc.getTrack(rig.kick)->soloed);
+    EXPECT_FALSE(rig.strip(rig.sharedStrip)->isSoloed());
+    EXPECT_EQ(rig.patch.engine.getSoloedStripCount(), 0) << "the mixer gate is not engaged by a track solo";
+}
+
+// THE decided semantics (plan review): soloing a linked channel silences every OTHER channel,
+// including a shared one whose own track is note-gate-soloed. That is a DAW mixer solo, not a bug.
+TEST_F(ChannelFlowTest, SoloOnALinkedTrackSilencesASharedChannelEvenWhenItsOwnTrackIsSoloed) {
+    LinkRigApp rig;
+    rig.render(4);
+    ASSERT_GT(rig.strip(rig.leadStrip)->getMeterPeak(0), 0.0f) << "both channels must be audible to start with";
+    ASSERT_GT(rig.strip(rig.sharedStrip)->getMeterPeak(0), 0.0f);
+
+    rig.header(rig.lead).getSoloButton().onClick(); // a CHANNEL solo (linked)
+    rig.header(rig.kick).getSoloButton().onClick(); // a NOTE-GATE solo (shared channel)
+    rig.render(4);
+
+    // The strip meter is post gain, pan, mute AND solo (ChannelStripModule), so this is what the mix
+    // actually carries, not merely what a flag says.
+    EXPECT_GT(rig.strip(rig.leadStrip)->getMeterPeak(0), 0.0f) << "the soloed channel is audible";
+    EXPECT_EQ(rig.strip(rig.sharedStrip)->getMeterPeak(0), 0.0f)
+        << "every non-soloed channel is silenced by the render-time gate, shared ones included";
+}
+
+TEST_F(ChannelFlowTest, AFormingLinkTakesOverTheTracksMuteSoThereIsOnlyEverOne) {
+    LinkRigApp rig;
+    // "Snare" leaves the shared sampler: "Kick" becomes that channel's only source, so the link
+    // forms around a track that is currently note-gate-muted.
+    rig.header(rig.kick).getMuteButton().onClick();
+    ASSERT_TRUE(rig.doc.getTrack(rig.kick)->muted);
+    ASSERT_FALSE(rig.strip(rig.sharedStrip)->isMuted());
+
+    constexpr int midi = juce::AudioProcessorGraph::midiChannelIndex;
+    auto* snareIn = nodeForUuidCFT(rig.graph(), rig.doc.getTrack(rig.snare)->bindingUuid);
+    ASSERT_NE(snareIn, nullptr);
+    for (const auto& conn : rig.graph().getConnections())
+        if (conn.source.nodeID == snareIn->nodeID && conn.source.channelIndex == midi)
+            rig.graph().removeConnection(conn);
+    ASSERT_TRUE(synth::resolveTrackChannelLink(rig.graph(), rig.doc, rig.kick).linked);
+
+    rig.link.reconcileLinkedTracks(); // what MainComponent::reconcileTimelineAfterGraphChange runs
+
+    EXPECT_TRUE(rig.strip(rig.sharedStrip)->isMuted()) << "the mute moved onto the channel...";
+    EXPECT_FALSE(rig.doc.getTrack(rig.kick)->muted) << "...and off the track, so exactly one is stored";
+}
+
+// -------------------------------------------------------------------------------------------
+// The channel chip
+// -------------------------------------------------------------------------------------------
+
+TEST_F(ChannelFlowTest, TheChannelChipNamesTheChannelForLinkedAndSharedTracksAlike) {
+    LinkRigApp rig;
+    auto& linkedChip = rig.header(rig.lead).getChannelChip();
+    auto& sharedChip = rig.header(rig.kick).getChannelChip();
+
+    EXPECT_TRUE(linkedChip.isVisible());
+    EXPECT_EQ(linkedChip.getChannelName(), "Lead");
+    EXPECT_TRUE(sharedChip.isVisible()) << "every track playing into a channel gets a chip, linked or not";
+    EXPECT_EQ(sharedChip.getChannelName(), "Drums") << "a shared channel shows its OWN name";
+}
+
+TEST_F(ChannelFlowTest, ClickingTheChannelChipSelectsThatChannelInTheGraph) {
+    LinkRigApp rig;
+    rig.editor.selectMacro(rig.drumsMacroId, /*additive=*/false);
+    ASSERT_FALSE(rig.editor.isMacroSelected(rig.leadMacroId));
+
+    rig.header(rig.lead).getChannelChip().onClick();
+
+    EXPECT_TRUE(rig.editor.isMacroSelected(rig.leadMacroId)) << "the chip reveals its own channel";
+    EXPECT_FALSE(rig.editor.isMacroSelected(rig.drumsMacroId));
+}
+
+TEST_F(ChannelFlowTest, TheChipMeterRepaintsOnlyWhenTheDrawnLevelActuallyMoves) {
+    synth::ui::ChannelChipComponent chip;
+    ASSERT_TRUE(chip.setMeterLevel(0.5f)) << "the first real level is always drawn";
+
+    const float belowThreshold = 0.5f + synth::ui::ChannelChipComponent::kMeterRepaintThreshold * 0.5f;
+    EXPECT_FALSE(chip.setMeterLevel(belowThreshold)) << "a tick that moved nothing visible repaints nothing";
+    EXPECT_FALSE(chip.setMeterLevel(0.5f));
+
+    EXPECT_TRUE(chip.setMeterLevel(0.9f)) << "a tick past the threshold repaints once";
+    EXPECT_TRUE(chip.setMeterLevel(0.0f)) << "and silence is always drawn, however small the step";
+}
+
+// -------------------------------------------------------------------------------------------
+// End to end, on a real MainComponent: the link is reachable from the shipped flow
+// -------------------------------------------------------------------------------------------
+
+TEST_F(ChannelFlowTest, AddAudioTrackProducesALinkedTrackWhoseHeaderShowsAndRenamesItsChannel) {
+    MainComponent mc(std::make_unique<MockProviderCFT>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    mc.newPatchForTest();
+
+    addAudioTrack(mc);
+    ASSERT_EQ(mc.getTimelineDoc().getTracks().size(), 1u);
+    const auto track = mc.getTimelineDoc().getTracks().front().id;
+    auto* header = headerForCFT(mc, track);
+    ASSERT_NE(header, nullptr);
+
+    const auto info = synth::resolveTrackChannelLink(mc.getAudioEngine().getGraph(), mc.getTimelineDoc(), track);
+    EXPECT_TRUE(info.linked) << "an audio track is its channel's only source";
+    EXPECT_TRUE(header->getChannelChip().isVisible());
+
+    header->getNameLabel().setText("Vocals", juce::sendNotificationSync);
+    EXPECT_EQ(mc.getTimelineDoc().getTrack(track)->name, "Vocals");
+    ASSERT_EQ(mc.getGraphEditor().getMacros().size(), 1);
+    EXPECT_EQ(mc.getGraphEditor().getMacros().getAll().front().name, "Vocals")
+        << "the whole link is wired through MainComponent, not just this test file's rig";
+}

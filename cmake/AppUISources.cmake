@@ -31,6 +31,11 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelinePlayheadOverlay.cpp
     Source/UI/Timeline/TimelineTrackHeaderComponent.h
     Source/UI/Timeline/TimelineTrackHeaderComponent.cpp
+    Source/UI/Timeline/ChannelChipComponent.h
+    Source/UI/Timeline/ChannelChipComponent.cpp
+    Source/UI/Timeline/TrackChannelLinkSurface.h
+    Source/UI/Timeline/TrackChannelLinkController.h
+    Source/UI/Timeline/TrackChannelLinkController.cpp
     Source/UI/Timeline/TimelineTransportBar.h
     Source/UI/Timeline/TimelineTransportBar.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h

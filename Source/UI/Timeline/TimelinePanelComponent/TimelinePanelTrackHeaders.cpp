@@ -33,6 +33,23 @@ void TimelinePanelComponent::setTrackHeaderHost(TrackHeaderHost* host) {
     // the new one rather than refreshed.
     trackHeaderList_.headers.clear();
     syncTrackHeaders();
+    // FRO14: the channel-chip meter tick. Started here rather than in the constructor -- there is
+    // nothing to meter until an app host exists, and the constructor is already at its size cap.
+    if (host != nullptr)
+        startTimerHz(15);
+    else
+        stopTimer();
+}
+
+// FRO14: one tick for every header's channel chip. Unconditional iteration, deliberately GATED
+// repaints: TimelineTrackHeaderComponent::tickChannelMeter() only repaints when the drawn level
+// actually moved (ChannelChipComponent::kMeterRepaintThreshold), which is the same shape
+// ModuleComponent's own 15 Hz meter poll uses. A header whose track reaches no channel has no chip
+// visible and costs a bool read.
+void TimelinePanelComponent::timerCallback() {
+    for (auto* header : trackHeaderList_.headers)
+        if (header != nullptr)
+            header->tickChannelMeter();
 }
 
 void TimelinePanelComponent::applyAddTrackMenuChoice(int menuId) {

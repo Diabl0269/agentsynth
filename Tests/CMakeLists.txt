@@ -97,6 +97,7 @@ add_executable(Tests
     Mixer/ChannelFlow/ChannelFlowMakeChannelCoreTests.cpp
     Mixer/ChannelFlow/ChannelFlowMakeChannelAppTests.cpp
     Mixer/ChannelFlow/ChannelFlowTrackChannelLinkCoreTests.cpp
+    Mixer/ChannelFlow/ChannelFlowTrackChannelLinkTests.cpp
     Engine/LatencyAlignmentTests.cpp
     Timeline/AudioClipPlaybackTests.cpp
     Plugin/HostedPluginTests.cpp

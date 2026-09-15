@@ -443,10 +443,14 @@ void MacroGroupController::renameMacro(const juce::String& macroId, const juce::
             m->name = newName;
     };
 
-    if (host_.undo())
-        host_.undo()->recordGraphAndMacroChange(graph, host_.getMacros(), doRename);
-    else
-        doRename();
+    // FRO14: an installed hook owns the whole transaction (so a linked track's rename joins this
+    // one); anything else falls through to the plain graph+macro step this has always pushed.
+    if (!(recordMacroRenameHook && recordMacroRenameHook(macroId, newName, doRename))) {
+        if (host_.undo())
+            host_.undo()->recordGraphAndMacroChange(graph, host_.getMacros(), doRename);
+        else
+            doRename();
+    }
 
     host_.syncMacroCards();
     host_.requestRepaint();

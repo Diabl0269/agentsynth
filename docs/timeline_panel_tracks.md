@@ -256,6 +256,36 @@ An `Automation`-kind track shows **no chip at all** (`setVisible(false)`, decide
 `refreshFromDoc()`) — that track hosts lanes, and a node binding is meaningless for it; the bottom
 half-row is simply empty. `Midi`/`Audio` tracks are unaffected.
 
+**The CHANNEL chip** (FRO14, `docs/mixer.md` §5.2) shares that bottom half-row, right of the
+binding chip, whenever the track's notes/audio actually reach a `ChannelStripModule` —
+**linked or shared alike**. The two chips answer different questions, which is why there are two:
+the binding chip names the node *upstream* of the track (what plays it), the channel chip names the
+mixer channel *downstream* of it (where the sound ends up). This is how a MIDI track shows where its
+audio went without anyone creating an extra audio track for it.
+
+`ChannelChipComponent` (`Source/UI/Timeline/ChannelChipComponent.h`) draws the channel's name —
+its macro's when the strip is boxed, else the one feeding track's name, else `"Channel"` — plus a
+compact level meter. Clicking it **selects the channel and pans it into view** (the Locate Master
+contract, not the binding chip's highlight-only one: a chip's whole point is finding something that
+may be off-screen). The header itself stays graph-free: everything it knows about the channel comes
+through `synth::ui::TrackChannelLinkSurface`, the one seam `TrackHeaderHost::getChannelLinkSurface()`
+hands back, and clicking routes to `revealChannelForTrack` — the hook P9-5's mixer panel redirects
+to its own column with no change here.
+
+The meter has **no timer of its own**. `TimelinePanelComponent` owns ONE 15 Hz `juce::Timer` (started
+by `setTrackHeaderHost`) that ticks every header's `tickChannelMeter()`; each chip repaints only when
+its drawn level crosses `ChannelChipComponent::kMeterRepaintThreshold`. With up to
+`TimelineDoc::kMaxTracks` rows, a timer per chip would be 256 timers, and an ungated repaint would
+breach the per-tick repaint rule (`docs/layout_visuals_animation.md` §2) — this is the same gated
+15 Hz shape `ModuleComponent`'s own meter poll uses.
+
+**A linked track's M/S show and drive its CHANNEL, not note gating** (`docs/mixer.md` §5.2 (c)):
+`refreshFromDoc()` reads the strip's mute/solo for a linked track and the doc's own flags for every
+other one, and the toggles write through the link surface first, falling back to the unchanged
+`doc.setTrackMuted`/`setTrackSoloed` path when the track is not linked. Because a strip write is not
+a document change, nothing notifies the header afterwards — the toggle refreshes the row itself, and
+`MainComponent::reconcileTimelineAfterGraphChange` refreshes every row after an undo/redo restore.
+
 The chip always carries a tooltip explaining what it shows and, when amber, how to fix it; the
 `"#id"` suffix a bound name used to carry unconditionally is now added only in the re-bind menu, and
 only to an option whose display name collides with another live candidate

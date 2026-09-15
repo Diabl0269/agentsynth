@@ -152,10 +152,9 @@ public:
      *  MainComponent owns no PatchDocument. */
     synth::PatchDocument& getPatchDocument() noexcept { return patchDocument; }
 
-    /** GraphEditor's live set of Macros for the current patch (see Source/MacroSet.h). Exposed
-     *  for the same reason as getPatchDocument() above: the app's project-bundle save/load path
-     *  (owned by MainComponent/ProjectBundle) needs to reach it, and GraphEditor owns no file
-     *  dialogs of its own. */
+    /** GraphEditor's live set of Macros for the current patch (see Source/MacroSet.h). Exposed for
+     *  the same reason as getPatchDocument() above: the app's project-bundle save/load path (owned
+     *  by MainComponent/ProjectBundle) needs to reach it, and GraphEditor owns no file dialogs. */
     synth::MacroSet& getMacros() noexcept override { return macros; }
 
     // ---- Macros (P8-12, docs/macros.md) — owned by MacroGroupController since FRO77 PR2 --------
@@ -311,6 +310,8 @@ public:
 
     /** Ungroups (Cmd+Shift+G). See MacroGroupController::ungroupSelection. */
     void ungroupSelection() { macroController_.ungroupSelection(); }
+    /** The controller itself, for the app to install its hooks on (FRO14's macro-rename hook). */
+    MacroGroupController& getMacroController() noexcept { return macroController_; }
 
     /** T138: adds every uuid in `memberUuids` to the EXISTING macro `macroId`. See
      *  MacroGroupController::addSelectionToMacro. */
@@ -1278,9 +1279,8 @@ private:
         return macroController_.macroHasMuteEligibleMember(macroId);
     }
 
-    /** The rectangle to anchor a collapsed macro's boundary cables against. One-line forwarder
-     *  kept because GraphEditorCables.cpp's rebuildVisibleCables() calls it by its original
-     *  name. */
+    /** The rectangle to anchor a collapsed macro's boundary cables against. One-line forwarder kept
+     *  because GraphEditorCables.cpp's rebuildVisibleCables() calls it by its original name. */
     juce::Rectangle<int> macroCableAnchorBounds(const synth::Macro& macro) const {
         return macroController_.macroCableAnchorBounds(macro);
     }

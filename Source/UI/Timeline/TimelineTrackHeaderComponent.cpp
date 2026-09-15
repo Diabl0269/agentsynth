@@ -137,6 +137,10 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     nameLabel_.setEditable(false, true, false);
     nameLabel_.onTextChange = [this] {
         const juce::String newName = nameLabel_.getText();
+        // FRO14 (docs/mixer.md 5.2 (a)): a LINKED track renames its channel too, as one undo step.
+        // Unlinked (or no host) falls through to the plain track-only edit, unchanged.
+        if (auto* link = linkSurface(); link != nullptr && link->renameLinkedTrackAndChannel(trackId_, newName))
+            return;
         performEdit([this, newName] { doc_.setTrackName(trackId_, newName); });
     };
 
@@ -183,6 +187,15 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     bindingChip_.setComponentID("trackBindingChip");
     bindingChip_.onClick = [this] { handleChipClick(true); };
 
+    // FRO14: the channel chip. Visibility and text are doc/graph-driven (refreshFromDoc); the click
+    // goes straight back to the app, which owns "where is that channel" (P9-5 redirects it to the
+    // mixer column with no change here).
+    addAndMakeVisible(channelChip_);
+    channelChip_.onClick = [this] {
+        if (auto* link = linkSurface())
+            link->revealChannelForTrack(trackId_);
+    };
+
     openMidiDestinationsPickerHook_ = [this] { openMidiDestinationsPicker(); };
 
     refreshFromDoc();
@@ -223,6 +236,14 @@ void TimelineTrackHeaderComponent::toggleMuted() {
     const auto* t = track();
     if (t == nullptr)
         return;
+    // FRO14 (docs/mixer.md 5.2 (c)): a LINKED track's M IS the channel's mute -- one mute, not two.
+    // The surface returns false for a shared channel (or no channel at all), and note gating below
+    // is then exactly what it has always been. The refresh is explicit because a strip write is not
+    // a doc change: nothing notifies the header otherwise.
+    if (auto* link = linkSurface(); link != nullptr && link->toggleLinkedChannelMuted(trackId_)) {
+        refreshFromDoc();
+        return;
+    }
     const bool next = !t->muted;
     performEdit([this, next] { doc_.setTrackMuted(trackId_, next); });
 }
@@ -231,6 +252,10 @@ void TimelineTrackHeaderComponent::toggleSoloed() {
     const auto* t = track();
     if (t == nullptr)
         return;
+    if (auto* link = linkSurface(); link != nullptr && link->toggleLinkedChannelSoloed(trackId_)) {
+        refreshFromDoc(); // see toggleMuted
+        return;
+    }
     const bool next = !t->soloed;
     performEdit([this, next] { doc_.setTrackSoloed(trackId_, next); });
 }
@@ -252,6 +277,14 @@ std::unique_ptr<synth::ui::ColourPickerPopup> TimelineTrackHeaderComponent::buil
     const juce::uint32 originalColour = t->colourArgb;
 
     juce::ApplicationProperties* props = host_ != nullptr ? host_->getAppProperties() : nullptr;
+    // FRO14 (docs/mixer.md 5.2 (b)): a LINKED track's picker fans every preview write out to the
+    // channel macro as well, and commits both as ONE undo step. Null for anything else -- the
+    // single-target body below is then reached byte-for-byte as before.
+    if (auto* link = linkSurface(); link != nullptr) {
+        if (auto popup =
+                link->buildLinkedChannelColourPicker(trackId_, props != nullptr ? props->getUserSettings() : nullptr))
+            return popup;
+    }
     juce::Component::SafePointer<TimelineTrackHeaderComponent> safeThis(this);
 
     return std::make_unique<synth::ui::ColourPickerPopup>(
@@ -279,6 +312,17 @@ std::unique_ptr<synth::ui::ColourPickerPopup> TimelineTrackHeaderComponent::buil
             self->performEdit(
                 [self, finalColour] { self->doc_.setTrackColour(self->trackId_, finalColour.getARGB()); });
         });
+}
+
+bool TimelineTrackHeaderComponent::tickChannelMeter() {
+    if (!channelChip_.isVisible())
+        return false;
+    auto* link = linkSurface();
+    if (link == nullptr)
+        return false;
+    // The level is read fresh (the strip's meter atomics move every block); the CHIP decides
+    // whether that is worth a repaint.
+    return channelChip_.setMeterLevel(link->getChannelInfo(trackId_).meterPeak);
 }
 
 std::unique_ptr<synth::ui::ColourPickerPopup> TimelineTrackHeaderComponent::createColourPickerForTest() {
@@ -333,12 +377,38 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
 
     nameLabel_.setText(t->name, juce::dontSendNotification);
 
-    resolvedColour_ = resolveTrackColour(t->colourArgb, trackIndex(), t->muted);
+    // FRO14: re-derived from the live graph on every refresh rather than cached across edits --
+    // a cable drag elsewhere can form or break this track's link with no doc change at all.
+    channelInfo_ = {};
+    if (auto* link = linkSurface())
+        channelInfo_ = link->getChannelInfo(trackId_);
+
+    // A LINKED track's mute/solo live on its CHANNEL (5.2 (c)), so that is what the buttons show --
+    // and what dims the row's colour. An unlinked track reads its own doc flags, exactly as before.
+    const bool showMuted = channelInfo_.linked ? channelInfo_.channelMuted : t->muted;
+    const bool showSoloed = channelInfo_.linked ? channelInfo_.channelSoloed : t->soloed;
+
+    resolvedColour_ = resolveTrackColour(t->colourArgb, trackIndex(), showMuted);
     colourSwatch_.colour = resolvedColour_;
 
-    muteButton_.setToggleState(t->muted, juce::dontSendNotification);
-    soloButton_.setToggleState(t->soloed, juce::dontSendNotification);
+    muteButton_.setToggleState(showMuted, juce::dontSendNotification);
+    soloButton_.setToggleState(showSoloed, juce::dontSendNotification);
     armButton_.setToggleState(t->armed, juce::dontSendNotification);
+
+    // 5.2: every track whose notes/audio play into a channel shows the chip -- linked or not.
+    const bool showChannelChip = channelInfo_.hasChannel && t->kind != synth::TrackKind::Automation;
+    if (channelChip_.isVisible() != showChannelChip) {
+        channelChip_.setVisible(showChannelChip);
+        resized(); // the chip shares the bottom row with the binding chip
+    }
+    if (showChannelChip) {
+        channelChip_.setChannelName(channelInfo_.channelName);
+        channelChip_.setTooltip(channelInfo_.linked
+                                    ? "This track is the only source of the '" + channelInfo_.channelName +
+                                          "' channel. Click to find it in the graph."
+                                    : "This track plays into the '" + channelInfo_.channelName +
+                                          "' channel, shared with other tracks. Click to find it.");
+    }
 
     automationButton_.setVisible(!t->lanes.empty());
 
@@ -422,7 +492,13 @@ void TimelineTrackHeaderComponent::resized() {
     kindBadgeBounds_ = topRow.removeFromLeft(kKindBadgeWidth);
     nameLabel_.setBounds(topRow);
 
-    bindingChip_.setBounds(bounds.reduced(0, 1));
+    // Bottom row: the binding chip, sharing with the channel chip when one is showing (FRO14).
+    auto bottomRow = bounds.reduced(0, 1);
+    if (channelChip_.isVisible()) {
+        channelChip_.setBounds(bottomRow.removeFromRight(bottomRow.getWidth() / 2));
+        bottomRow.removeFromRight(kRowPadding);
+    }
+    bindingChip_.setBounds(bottomRow);
 }
 
 void TimelineTrackHeaderComponent::paint(juce::Graphics& g) {
