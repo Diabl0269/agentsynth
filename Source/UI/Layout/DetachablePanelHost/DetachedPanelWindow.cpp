@@ -134,7 +134,15 @@ void DetachedPanelWindow::restoreBoundsOrDefault() {
             return;
         }
     }
-    centreWithSize(kDefaultWidth, kDefaultHeight);
+    // centreWithSize() reaches into juce::Component::centreWithSize ->
+    // detail::ComponentHelpers::getParentOrMainMonitorBounds, which dereferences the primary
+    // display unconditionally -- a genuinely headless runner with zero displays (Linux CI, no
+    // Xvfb) segfaults here outright rather than returning a degenerate result. Same guard this
+    // file's own tests already use before calling setVisible(true).
+    if (juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() != nullptr)
+        centreWithSize(kDefaultWidth, kDefaultHeight);
+    else
+        setBounds(0, 0, kDefaultWidth, kDefaultHeight);
 }
 
 } // namespace synth::ui
