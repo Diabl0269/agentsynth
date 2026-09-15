@@ -3,7 +3,9 @@
 #include "MixerPanelComponent.h"
 
 #include "AppUndoManager.h"
+#include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Mixer/MixerModel/MixerModel.h"
+#include "Mixer/MixerSends/MixerSends.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 
@@ -12,6 +14,8 @@ namespace synth::ui {
 namespace {
 constexpr int kColumnWidth = 140;
 constexpr int kColumnGap = 4;
+// Horizontal step between the four cards a new bus channel places on the canvas.
+constexpr int kBusCardGap = 220;
 } // namespace
 
 MixerPanelComponent::MixerPanelComponent() {
@@ -80,16 +84,24 @@ void MixerPanelComponent::rebuild() {
 
     stripColumns_.clear();
     for (const auto& column : snapshot.columns) {
-        if (column.kind != synth::MixerColumn::Kind::Strip)
+        // Strips AND buses: a bus is an ordinary strip column with a BUS badge and a feeding-strips
+        // source line (§5.15 D6), not a column kind of its own with its own widget.
+        if (column.kind != synth::MixerColumn::Kind::Strip && column.kind != synth::MixerColumn::Kind::Bus)
             continue;
         auto widget = std::make_unique<MixerColumnComponent>();
         widget->configure(*graph_, *undoManager_, *macros_, *graphEditor_, *audioEngine_);
 
-        juce::StringArray trackNames;
-        for (auto trackId : column.feedingTracks)
-            if (const auto* track = doc_->getTrack(trackId))
-                trackNames.add(track->name);
-        widget->setColumn(column, trackNames.joinIntoString(", "));
+        juce::StringArray sourceNames;
+        if (column.kind == synth::MixerColumn::Kind::Bus) {
+            for (const auto& name : column.busSources)
+                sourceNames.add(name);
+        } else {
+            for (auto trackId : column.feedingTracks)
+                if (const auto* track = doc_->getTrack(trackId))
+                    sourceNames.add(track->name);
+        }
+        widget->setColumn(column, sourceNames.joinIntoString(", "));
+        widget->setCreateBusProvider([this] { return createBus(); });
 
         widget->onColumnClicked = [this, uuid = column.uuid] { selectOnCanvas(uuid); };
         widget->onEditOnCanvas = [this](const juce::String& target) { selectOnCanvas(target); };
@@ -119,6 +131,39 @@ void MixerPanelComponent::rebuild() {
     }
 
     resized();
+}
+
+juce::AudioProcessorGraph::NodeID MixerPanelComponent::createBus() {
+    if (graph_ == nullptr || macros_ == nullptr || undoManager_ == nullptr || graphEditor_ == nullptr)
+        return {};
+
+    // Core cannot size canvas cards (ChannelFlows.h's DefaultChannelLayout contract), so the
+    // positions are worked out here: one card row to the right of everything already placed.
+    int rightmost = 0;
+    for (auto* node : graph_->getNodes())
+        if (node != nullptr)
+            rightmost = juce::jmax(rightmost, (int)node->properties["x"]);
+    const int x = rightmost + kBusCardGap;
+    const synth::DefaultChannelLayout layout{
+        {x, 0}, {x + kBusCardGap, 0}, {x + 2 * kBusCardGap, 0}, {x + 3 * kBusCardGap, 0}};
+
+    juce::AudioProcessorGraph::NodeID created;
+    undoManager_->recordGraphAndMacroChange(*graph_, *macros_, [&] {
+        const auto channel = synth::buildBusChannel(*graph_, layout);
+        if (channel.strip == nullptr)
+            return;
+        created = channel.strip->nodeID;
+
+        synth::Macro macro;
+        macro.name = synth::busFallbackName(*graph_, created);
+        macro.members = {channel.eqUuid, channel.compressorUuid, channel.stripUuid};
+        macros_->add(macro);
+        graphEditor_->updateComponents();
+    });
+
+    if (created != juce::AudioProcessorGraph::NodeID{} && onGraphMutated)
+        onGraphMutated();
+    return created;
 }
 
 void MixerPanelComponent::unbindAllColumns() {
