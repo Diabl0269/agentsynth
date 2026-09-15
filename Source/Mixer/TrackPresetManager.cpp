@@ -1,6 +1,5 @@
 #include "TrackPresetManager.h"
 
-#include "AI/AIStateMapper/AIStateMapper.h"
 #include "Branding.h"
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "Modules/ChannelStripModule.h"
@@ -81,13 +80,13 @@ juce::var TrackPresetManager::extractTrackPreset(juce::AudioProcessorGraph& grap
         if (std::find(selection.begin(), selection.end(), id) == selection.end())
             selection.push_back(id);
 
-    // Step 3: extract verbatim through AIStateMapper::extractSnippet — its existing "capture a
+    // Step 3: extract verbatim through SnippetManager::extractSnippet — its existing "capture a
     // macro only when EVERY member is inside selection" rule is exactly what makes the channel
     // macro travel intact while an outside module (never fully enclosed, by construction) stays a
     // bare, unmacro'd node, per the founder's "arrive as fresh copies beside the track's box"
     // requirement. includeExtraState=true is forced: a track preset must always carry strip
     // shape/gain/pan, or a Mono strip would silently reload as the Stereo default.
-    auto preset = AIStateMapper::extractSnippet(graph, selection, name, /*includeExtraState=*/true, macros);
+    auto preset = SnippetManager::extractSnippet(graph, selection, name, /*includeExtraState=*/true, macros);
     auto* root = preset.getDynamicObject();
     if (root == nullptr)
         return {};

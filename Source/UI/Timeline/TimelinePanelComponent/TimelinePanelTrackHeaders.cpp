@@ -180,9 +180,13 @@ juce::PopupMenu TimelinePanelComponent::buildAddTrackMenu() {
     // saved/deleted between the menu opening and the click landing.
     menu.addSeparator();
     auto dir = synth::TrackPresetManager::getDefaultTrackPresetsDirectory();
-    audioTrackPresetMenuSnapshot_ = synth::TrackPresetManager::listTrackPresets(dir, synth::TrackPresetKind::Audio);
-    instrumentTrackPresetMenuSnapshot_ =
-        synth::TrackPresetManager::listTrackPresets(dir, synth::TrackPresetKind::Instrument);
+    // listTrackPresets returns a juce::Array; converted to std::vector here (rather than changing
+    // the member type) so the rest of this file can keep using std::vector's std::size_t indexing,
+    // same as instrumentPluginMenuSnapshot_ below it.
+    const auto audioPresets = synth::TrackPresetManager::listTrackPresets(dir, synth::TrackPresetKind::Audio);
+    audioTrackPresetMenuSnapshot_.assign(audioPresets.begin(), audioPresets.end());
+    const auto instrumentPresets = synth::TrackPresetManager::listTrackPresets(dir, synth::TrackPresetKind::Instrument);
+    instrumentTrackPresetMenuSnapshot_.assign(instrumentPresets.begin(), instrumentPresets.end());
     if (!audioTrackPresetMenuSnapshot_.empty()) {
         juce::PopupMenu audioPresetMenu;
         for (int i = 0; i < (int)audioTrackPresetMenuSnapshot_.size(); ++i)
