@@ -180,7 +180,7 @@ struct LinkRigApp {
 
 TEST_F(ChannelFlowTest, RenamingALinkedTrackRenamesItsChannelAsOneUndoStep) {
     LinkRigApp rig;
-    const int serialBefore = rig.undo.getEditSerial();
+    ASSERT_FALSE(rig.undo.canUndo()) << "the rig is built without recording, so the stack starts empty";
 
     // The REAL label edit path, not a direct doc write.
     auto& label = rig.header(rig.lead).getNameLabel();
@@ -188,26 +188,30 @@ TEST_F(ChannelFlowTest, RenamingALinkedTrackRenamesItsChannelAsOneUndoStep) {
 
     EXPECT_EQ(rig.doc.getTrack(rig.lead)->name, "Vocals");
     EXPECT_EQ(rig.editor.getMacros().find(rig.leadMacroId)->name, "Vocals");
-    EXPECT_EQ(rig.undo.getEditSerial(), serialBefore + 1) << "one action, one undo step";
 
+    // ONE undo step: a single Cmd+Z restores BOTH halves and leaves nothing behind. (Counting
+    // getEditSerial() would read 2 here -- a compound transaction pushes one action per DOMAIN,
+    // timeline and macro; what "one step" means to the user is one undo(), which is what this
+    // asserts.)
     ASSERT_TRUE(rig.undo.undo());
     EXPECT_EQ(rig.doc.getTrack(rig.lead)->name, "Lead");
     EXPECT_EQ(rig.editor.getMacros().find(rig.leadMacroId)->name, "Lead") << "one Cmd+Z restores BOTH";
+    EXPECT_FALSE(rig.undo.canUndo()) << "...and there is no second step left to undo";
 }
 
 TEST_F(ChannelFlowTest, RenamingAChannelMacroRenamesItsLinkedTrackAsOneUndoStep) {
     LinkRigApp rig;
-    const int serialBefore = rig.undo.getEditSerial();
+    ASSERT_FALSE(rig.undo.canUndo());
 
     rig.editor.renameMacro(rig.leadMacroId, "Vocals");
 
     EXPECT_EQ(rig.editor.getMacros().find(rig.leadMacroId)->name, "Vocals");
     EXPECT_EQ(rig.doc.getTrack(rig.lead)->name, "Vocals") << "renaming the channel renames the track";
-    EXPECT_EQ(rig.undo.getEditSerial(), serialBefore + 1);
 
     ASSERT_TRUE(rig.undo.undo());
     EXPECT_EQ(rig.doc.getTrack(rig.lead)->name, "Lead");
     EXPECT_EQ(rig.editor.getMacros().find(rig.leadMacroId)->name, "Lead");
+    EXPECT_FALSE(rig.undo.canUndo()) << "one Cmd+Z, not two - the track name joined renameMacro's transaction";
 }
 
 TEST_F(ChannelFlowTest, RenamingASharedChannelsTrackLeavesTheChannelAlone) {
@@ -258,7 +262,7 @@ TEST_F(ChannelFlowTest, ColourPickerCommitIsOneUndoStepCoveringTrackAndChannel) 
     LinkRigApp rig;
     const juce::uint32 originalTrack = rig.doc.getTrack(rig.lead)->colourArgb;
     const juce::Colour originalMacro = rig.editor.getMacros().find(rig.leadMacroId)->colour;
-    const int serialBefore = rig.undo.getEditSerial();
+    ASSERT_FALSE(rig.undo.canUndo());
 
     auto picker = rig.header(rig.lead).createColourPickerForTest();
     ASSERT_NE(picker, nullptr);
@@ -268,11 +272,13 @@ TEST_F(ChannelFlowTest, ColourPickerCommitIsOneUndoStepCoveringTrackAndChannel) 
 
     EXPECT_EQ(rig.doc.getTrack(rig.lead)->colourArgb, juce::Colours::orange.getARGB());
     EXPECT_EQ(rig.editor.getMacros().find(rig.leadMacroId)->colour, juce::Colours::orange);
-    EXPECT_EQ(rig.undo.getEditSerial(), serialBefore + 1) << "a dozen preview colours, ONE undo step";
 
+    // A dozen preview colours, ONE undo step (see the rename test on why this is undo()-counted
+    // rather than getEditSerial()-counted).
     ASSERT_TRUE(rig.undo.undo());
     EXPECT_EQ(rig.doc.getTrack(rig.lead)->colourArgb, originalTrack);
     EXPECT_EQ(rig.editor.getMacros().find(rig.leadMacroId)->colour, originalMacro) << "one Cmd+Z, both targets";
+    EXPECT_FALSE(rig.undo.canUndo()) << "the preview frames left no steps of their own behind";
 }
 
 TEST_F(ChannelFlowTest, ASharedChannelsTrackKeepsTheOrdinarySingleTargetColourPicker) {

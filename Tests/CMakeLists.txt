@@ -380,6 +380,8 @@ add_executable(Tests
     ../Source/UI/Timeline/TimelineRulerComponent.cpp
     ../Source/UI/Timeline/TimelinePlayheadOverlay.cpp
     ../Source/UI/Timeline/TimelineTrackHeaderComponent.cpp
+    ../Source/UI/Timeline/ChannelChipComponent.cpp
+    ../Source/UI/Timeline/TrackChannelLinkController.cpp
     ../Source/UI/Timeline/TimelineTransportBar.cpp
     ../Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.cpp
     ../Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLanePainting.cpp
