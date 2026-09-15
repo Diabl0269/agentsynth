@@ -300,6 +300,19 @@ DefaultChannel buildChannelForFeeds(juce::AudioProcessorGraph& graph,
                                     const std::vector<juce::AudioProcessorGraph::Connection>& exits,
                                     const DefaultChannelLayout& layout);
 
+/**
+ * FRO15 (P9-9, docs/mixer.md §5.15): an EMPTY group/send bus — the same bypassed EQ -> bypassed
+ * Compressor -> Channel Strip (Stereo) -> Master (Mix) chain every other channel gets, with nothing
+ * feeding the EQ yet, and the strip marked isBus() so the mixer gives its column the BUS badge.
+ * This lives here rather than in MixerSends because it IS that shared chain builder with an empty
+ * feed list — a bus is an ordinary channel whose inputs happen to be other strips' outputs (D1), so
+ * there is deliberately no separate bus node type and no second chain builder.
+ *
+ * NO UNDO, NO MACROS — same contract as buildDefaultAudioChannel; the caller boxes the returned
+ * uuids into a macro inside its own transaction.
+ */
+DefaultChannel buildBusChannel(juce::AudioProcessorGraph& graph, const DefaultChannelLayout& layout);
+
 // ---- FRO25 (P9-3d, docs/mixer.md §5.8): "Make channel" ------------------------------------------
 
 /** True for a track's own source node — a Track In (ModuleType::TimelineMidiSource) or Track Audio

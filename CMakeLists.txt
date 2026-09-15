@@ -269,10 +269,15 @@ add_library(Core STATIC
     Source/Mixer/TrackChannelLink.h
     Source/Mixer/TrackPresetManager.cpp
     Source/Mixer/TrackPresetManager.h
+    Source/Mixer/SoloAudibleSet.h
+    Source/Mixer/SoloAudibleSet.cpp
     Source/Mixer/MixerModel/MixerModel.h
     Source/Mixer/MixerModel/MixerModelInternal.h
     Source/Mixer/MixerModel/MixerModelColumns.cpp
     Source/Mixer/MixerModel/MixerModelInserts.cpp
+    Source/Mixer/MixerModel/MixerModelSends.cpp
+    Source/Mixer/MixerSends/MixerSends.h
+    Source/Mixer/MixerSends/MixerSends.cpp
     # Transport
     Source/Transport/BlockTimeInfo.h
     Source/Transport/BounceExporter.cpp

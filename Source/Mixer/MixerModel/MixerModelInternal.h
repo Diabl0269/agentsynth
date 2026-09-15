@@ -15,4 +15,22 @@ namespace synth {
 void buildInsertsForColumn(juce::AudioProcessorGraph& graph, const TimelineDoc& doc, const MacroSet& macros,
                            MixerColumn& column);
 
+// ---- FRO15 (P9-9, docs/mixer.md §5.15), defined in MixerModelSends.cpp. The bus/send graph
+// queries these build on (isBusStrip, busFallbackName, findSendTarget) are public Core surface in
+// Mixer/MixerSends/MixerSends.h. ----------------------------------------------------------------
+
+/** What a strip column calls itself: its macro's name, else "Bus N" for a bus, else
+ *  channelDisplayName's feeding-track name. Shared by the column build, a bus's source line and a
+ *  send row's target label, so all three always agree. */
+juce::String stripColumnName(juce::AudioProcessorGraph& graph, const TimelineDoc& doc, const MacroSet& macros,
+                             juce::AudioProcessorGraph::NodeID stripId);
+
+/** Fills `column.busSources` with the feeding strips' names. No-op unless `column` is Kind::Bus. */
+void buildBusSourcesForColumn(juce::AudioProcessorGraph& graph, const TimelineDoc& doc, const MacroSet& macros,
+                              MixerColumn& column);
+
+/** Fills `column.sends` from the strip's active slots, resolving each slot's target off the graph. */
+void buildSendsForColumn(juce::AudioProcessorGraph& graph, const TimelineDoc& doc, const MacroSet& macros,
+                         MixerColumn& column);
+
 } // namespace synth
