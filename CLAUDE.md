@@ -20,6 +20,11 @@ Modular synthesizer (JUCE, C++20) with a node-based graph editor for sound desig
 
 ```bash
 # Build (ENABLE_PLUGIN defaults ON, so this also builds the VST3/AU plugin — pass -DENABLE_PLUGIN=OFF for an app-only loop)
+# NOTE: bare `cmake --build` defaults to the Unix Makefiles generator (serial, no -j) unless
+# ninja is installed and -G Ninja is passed — CI always uses Ninja (see .github/workflows/ci.yml).
+# scripts/ci-local.sh already does this right (auto-picks Ninja, passes --parallel); for a quick
+# manual build, do the same: `brew install ninja` once, then
+#   cmake -S . -B build -G Ninja && cmake --build build
 cmake -S . -B build && cmake --build build
 
 # Test  (ENABLE_TESTS defaults OFF — must opt in)

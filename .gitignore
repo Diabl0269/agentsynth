@@ -54,3 +54,6 @@ build-*/
 
 # Scratch logs/output for local verification runs (e.g. gtest_list_tests snapshots).
 .buildlogs/
+
+# Local, untracked agent notes
+AGENTS.local.md
