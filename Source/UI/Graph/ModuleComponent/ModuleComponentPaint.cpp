@@ -692,14 +692,14 @@ void ModuleComponent::resized() {
     if (getType(module) == ModuleType::ADSR) {
         int y = getContentTopY();
         int sliderWidth = 50;
-        int sliderHeight = 120;
+        int sliderHeight = detail::kAdsrSliderHeight;
         int margin = 30;
 
         // Reserve a row per auto-generated toggle (the "Poly" checkbox) below the sliders. This
         // branch used to lay out only the sliders and return, leaving every toggle at its default
         // (0,0,0,0) bounds — present in the component tree but invisible and unclickable, which made
         // poly mode unreachable on this module.
-        int afterSliders = y + 20 + sliderHeight + 10;
+        int afterSliders = detail::adsrAfterSlidersY(y, sliders.size());
         if (thresholdControl != nullptr) {
             const int contentX = margin;
             const int contentW = getWidth() - margin * 2;
@@ -710,11 +710,17 @@ void ModuleComponent::resized() {
         setSize(220 + margin * 2, toggleY + toggles.size() * 30 + 10);
         int contentWidth = getWidth() - margin * 2;
 
-        // We expect 4 sliders: A, D, S, R (Threshold lives in thresholdControl).
+        // ADSRModule's float params (Threshold excluded — it lives in thresholdControl) fill rows
+        // of at most kAdsrSlidersPerRow left-to-right, wrapping downward as more are added; row
+        // count/height come from the same adsrSliderBlockHeight the measure pass above used, so
+        // the two can never disagree about how tall this block is.
         for (int i = 0; i < sliders.size(); ++i) {
-            int x = margin + 10 + i * sliderWidth;
-            sliderLabels[i]->setBounds(x, y, sliderWidth, 20);
-            sliders[i]->setBounds(x, y + 20, sliderWidth, sliderHeight);
+            int row = i / detail::kAdsrSlidersPerRow;
+            int col = i % detail::kAdsrSlidersPerRow;
+            int x = margin + 10 + col * sliderWidth;
+            int rowY = y + row * (detail::kAdsrSliderLabelHeight + sliderHeight + detail::kAdsrSliderRowGap);
+            sliderLabels[i]->setBounds(x, rowY, sliderWidth, detail::kAdsrSliderLabelHeight);
+            sliders[i]->setBounds(x, rowY + detail::kAdsrSliderLabelHeight, sliderWidth, sliderHeight);
         }
 
         for (int i = 0; i < toggles.size(); ++i) {

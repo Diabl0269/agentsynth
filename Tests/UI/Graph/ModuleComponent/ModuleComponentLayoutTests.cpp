@@ -4,11 +4,15 @@
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/ADSRModule.h"
+#include "Modules/ModuleBase.h"
 #include "Modules/OscillatorModule.h"
 #include "Modules/SamplerModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <cstdlib>
+#include <iostream>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -111,4 +115,172 @@ TEST_F(ModuleComponentTest, AdsrPolyToggleIsLaidOutInsideTheModule) {
     EXPECT_FALSE(polyToggle->getBounds().isEmpty()) << "Poly toggle must be given real bounds, not (0,0,0,0)";
     EXPECT_TRUE(moduleComponent.getLocalBounds().contains(polyToggle->getBounds()))
         << "Poly toggle must sit inside the module's bounds to be visible and clickable";
+}
+
+// FRO110 added hold/attackCurve/decayCurve/releaseCurve, taking ADSR from 4 float sliders to 8 —
+// the layout used to place every slider on one row (`x = margin + 10 + i * sliderWidth`), which
+// ran the last four off the right edge of the fixed 280px-wide card, making HOLD and the curve
+// controls clipped and unreachable. The fix wraps sliders into rows of at most 4.
+TEST_F(ModuleComponentTest, AdsrSlidersWrapIntoRowsThatFitTheModule) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ADSRModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    std::vector<juce::Slider*> adsrSliders;
+    for (auto* child : moduleComponent.getChildren())
+        if (auto* slider = dynamic_cast<juce::Slider*>(child))
+            adsrSliders.push_back(slider);
+
+    ASSERT_EQ(adsrSliders.size(), 8u) << "attack/decay/sustain/release/hold/attackCurve/decayCurve/releaseCurve";
+
+    const auto moduleBounds = moduleComponent.getLocalBounds();
+    int maxSliderBottom = 0;
+    for (auto* slider : adsrSliders) {
+        EXPECT_TRUE(moduleBounds.contains(slider->getBounds()))
+            << "slider '" << slider->getComponentID() << "' bounds " << slider->getBounds().toString()
+            << " must sit fully inside the module's own bounds " << moduleBounds.toString()
+            << " -- a slider running past the module's width is clipped and unreachable";
+        maxSliderBottom = juce::jmax(maxSliderBottom, slider->getBounds().getBottom());
+    }
+
+    // Every auto-generated toggle (e.g. "Poly") must be laid out below the last slider row, not
+    // overlapping it, and the module must be tall enough to contain both the last row and every
+    // toggle. Skip toggles with no component ID: those are generic chrome (e.g. "Show Scope",
+    // ModuleComponent.cpp's ScopeComponent toggle) positioned by the default body layout that the
+    // ADSR branch never calls, not one of ADSRModule's own bool parameters.
+    for (auto* child : moduleComponent.getChildren()) {
+        if (auto* toggle = dynamic_cast<juce::ToggleButton*>(child)) {
+            if (toggle->getComponentID().isEmpty())
+                continue;
+            EXPECT_GE(toggle->getBounds().getY(), maxSliderBottom)
+                << "toggle '" << toggle->getComponentID() << "' must sit below the slider rows";
+            EXPECT_TRUE(moduleBounds.contains(toggle->getBounds()))
+                << "toggle '" << toggle->getComponentID() << "' must sit inside the module's bounds";
+        }
+    }
+
+    EXPECT_GE(moduleComponent.getHeight(), maxSliderBottom)
+        << "module must be tall enough to contain the last slider row";
+}
+
+namespace {
+juce::Slider* findAdsrSlider(ModuleComponent& moduleComponent, const juce::String& componentId) {
+    for (auto* child : moduleComponent.getChildren())
+        if (auto* slider = dynamic_cast<juce::Slider*>(child))
+            if (slider->getComponentID() == componentId)
+                return slider;
+    return nullptr;
+}
+} // namespace
+
+// FRO110 fix (skew-regression): attack/hold/decay/release keep a LINEAR parameter range (see
+// ADSRModule.h/docs/modules.md) so AIStateMapper's untrusted rescale heuristic is unaffected, but
+// the knob must still feel skewed at the 1 ms attack default. That skew lives on the SLIDER,
+// applied AFTER its SliderParameterAttachment is built -- setting it before (or relying on
+// NormalisableRange::skew once SliderParameterAttachment has installed its own lambda-based
+// range) is a silent no-op in JUCE, so this pins the slider's actual runtime behaviour, not just
+// that some setSkewFactor call happened.
+TEST_F(ModuleComponentTest, AdsrTimeSlidersAreSkewedButParameterRangeStaysLinear) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ADSRModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    for (const char* timeSliderName : {"Attack", "Hold", "Decay", "Release"}) {
+        auto* slider = findAdsrSlider(moduleComponent, timeSliderName);
+        ASSERT_NE(slider, nullptr) << timeSliderName;
+        EXPECT_NEAR(slider->getSkewFactor(), 0.3, 1.0e-9) << timeSliderName << " must be skewed for knob feel";
+
+        // Skew formula: convertFrom0to1(0.5) == start + (end-start) * exp(ln(0.5)/skew). For a
+        // linear 0..5 range this would be 2.5 -- if the skew were silently dropped (the exact
+        // regression this test guards against), this would read 2.5 instead of ~0.497.
+        const double midpointValue = slider->proportionOfLengthToValue(0.5);
+        EXPECT_NEAR(midpointValue, 0.4966, 0.01)
+            << timeSliderName << " proportionOfLengthToValue(0.5) must reflect the 0.3 skew, not a linear mapping";
+    }
+
+    // Sustain and the curve params must stay linear on the slider too -- only the four time
+    // params get the UI-side skew.
+    for (const char* linearSliderName : {"Sustain", "Attack Curve", "Decay Curve", "Release Curve"}) {
+        auto* slider = findAdsrSlider(moduleComponent, linearSliderName);
+        ASSERT_NE(slider, nullptr) << linearSliderName;
+        EXPECT_NEAR(slider->getSkewFactor(), 1.0, 1.0e-9) << linearSliderName << " must stay linear";
+    }
+
+    // The parameter's own range must stay linear regardless of the slider's skew -- this is the
+    // actual FRO110 fix: AIStateMapper's untrusted rescale reads the PARAMETER's range, never the
+    // slider's.
+    for (const char* paramId : {"attack", "hold", "decay", "release"}) {
+        auto* param = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&processor, paramId));
+        ASSERT_NE(param, nullptr) << paramId;
+        EXPECT_NEAR(param->getNormalisableRange().skew, 1.0f, 1.0e-6f)
+            << paramId << "'s own NormalisableRange must stay linear";
+    }
+}
+
+// Renders the ADSR card to a juce::Image headlessly so a human can eyeball the row-wrapped
+// slider layout (see AdsrSlidersWrapIntoRowsThatFitTheModule above) without driving the real GUI
+// app -- two app instances would collide over the same bundle id in this environment. The image
+// content assertion always runs; the PNG is only written to disk when ADSR_CARD_PNG is set, so a
+// normal CI run never touches the filesystem for this.
+TEST_F(ModuleComponentTest, AdsrCardRendersToPngForVisualInspection) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ADSRModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    // Install the app's real LookAndFeel before painting -- without it the card renders as flat
+    // default JUCE grey instead of the themed look the real app shows (see
+    // ModuleComponentPaintTests.cpp's WavetableCardPaintsAndTicksWithoutCrashing /
+    // MidiKeyboardKeysFollowThemeChange for the same pattern).
+    synth::theme::AppLookAndFeel lf;
+    moduleComponent.setLookAndFeel(&lf);
+
+    const int width = moduleComponent.getWidth();
+    const int height = moduleComponent.getHeight();
+    ASSERT_GT(width, 0);
+    ASSERT_GT(height, 0);
+
+    juce::Image img(juce::Image::ARGB, width, height, true);
+    juce::Graphics g(img);
+    // paintEntireComponent recurses into children (paint() + paintOverChildren() + each child's
+    // own paintEntireComponent), unlike a bare paint() call -- this is the same call
+    // ZoomFrozenCachedImage.h uses to flatten a component tree into an offscreen image.
+    EXPECT_NO_THROW(moduleComponent.paintEntireComponent(g, true));
+
+    // Meaningful-content assertion that always runs, regardless of whether the PNG gets written.
+    bool hasOpaquePixel = false;
+    for (int y = 0; y < img.getHeight() && !hasOpaquePixel; ++y)
+        for (int x = 0; x < img.getWidth() && !hasOpaquePixel; ++x)
+            if (img.getPixelAt(x, y).getAlpha() > 0)
+                hasOpaquePixel = true;
+    EXPECT_TRUE(hasOpaquePixel) << "rendered ADSR card image should have at least one opaque pixel";
+
+    // Same slider traversal as AdsrSlidersWrapIntoRowsThatFitTheModule, so the printed bounds
+    // describe exactly what that test asserts on.
+    std::vector<juce::Slider*> adsrSliders;
+    for (auto* child : moduleComponent.getChildren())
+        if (auto* slider = dynamic_cast<juce::Slider*>(child))
+            adsrSliders.push_back(slider);
+
+    std::cout << "AdsrCardRendersToPngForVisualInspection: image " << width << "x" << height << ", "
+              << adsrSliders.size() << " ADSR sliders:" << std::endl;
+    for (auto* slider : adsrSliders) {
+        std::cout << "  '" << slider->getComponentID() << "' bounds " << slider->getBounds().toString() << std::endl;
+    }
+
+    moduleComponent.setLookAndFeel(nullptr);
+
+    const char* pngPath = std::getenv("ADSR_CARD_PNG");
+    if (pngPath == nullptr || juce::String(pngPath).isEmpty())
+        GTEST_SKIP() << "set ADSR_CARD_PNG=<path> to write the rendered card for visual inspection";
+
+    juce::File outFile(pngPath);
+    outFile.getParentDirectory().createDirectory();
+    outFile.deleteFile();
+    juce::FileOutputStream stream(outFile);
+    ASSERT_TRUE(stream.openedOk()) << "failed to open " << pngPath << " for writing";
+    juce::PNGImageFormat png;
+    ASSERT_TRUE(png.writeImageToStream(img, stream)) << "failed to encode PNG to " << pngPath;
 }

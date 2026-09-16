@@ -435,6 +435,10 @@ std::vector<float> renderPolyIntoAdsr(const std::vector<std::vector<Event>>& blo
     setParam(adsr, "decay", 0.01f);
     setParam(adsr, "sustain", 1.0f);
     setParam(adsr, "release", 0.01f);
+    // FRO110: releaseCurve pinned to linear. The default (0.65, fast-first/slow-tail) front-
+    // loads most of the level drop, which would make the re-articulation dip measured below
+    // much deeper than the "roughly two-thirds height" this test's timing math assumes.
+    setParam(adsr, "releaseCurve", 0.0f);
     poly.prepareToPlay(kSampleRate, kBlockSize);
     adsr.prepareToPlay(kSampleRate, kBlockSize);
 

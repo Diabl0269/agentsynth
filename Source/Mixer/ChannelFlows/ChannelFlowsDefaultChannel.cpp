@@ -90,8 +90,8 @@ EnvelopeAndVCA addEnvelopeAndVCAForRawInstrument(juce::AudioProcessorGraph& grap
     // Forced non-poly regardless of the instrument's own poly flag — see this function's header
     // comment for why a poly ADSR fed only Track In's MIDI would never fire.
     setBoolParam(*adsr->getProcessor(), "poly", false);
-    // Overrides ADSR's stock sustain default (0.0) so a held note sustains instead of
-    // plucking-and-dying after ~0.25s — see the header comment.
+    // Explicit sustain override so this auto-wired chain's level doesn't depend on ADSR's own
+    // stock default (1.0 as of FRO110) — see the header comment.
     setFloatParam(*adsr->getProcessor(), "sustain", 0.7f);
 
     juce::String vcaUuid;

@@ -36,7 +36,11 @@ add_executable(Tests
     Modules/WavetableOscillatorModule/WavetableOscillatorModuleStereoTests.cpp
     Modules/WavetableOscillatorModule/WavetableOscillatorModuleVoiceTests.cpp
     UI/ModuleViews/WavetableDisplayTests.cpp
-    Modules/ADSRTests.cpp
+    Modules/ADSR/ADSRStageTests.cpp
+    Modules/ADSR/ADSRGateTests.cpp
+    Modules/ADSR/ADSRPolyTests.cpp
+    Modules/ADSR/ADSRThresholdTests.cpp
+    Modules/Envelope/EnvelopeGeneratorTests.cpp
     Modules/EnvelopeFollowerModuleTests.cpp
     Modules/ModuleBaseTests.cpp
     Engine/VisualBufferTests.cpp

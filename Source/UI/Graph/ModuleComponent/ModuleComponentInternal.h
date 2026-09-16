@@ -69,4 +69,34 @@ inline bool isAudioOutputIONode(juce::AudioProcessor* module) {
     return io != nullptr && io->getType() == IOProcessor::audioOutputNode;
 }
 
+// ---- ADSR slider-grid metrics (see ModuleComponentLayout.cpp / ModuleComponentPaint.cpp) -----
+// ADSRModule's float params (attack/decay/sustain/release, hold, and the per-segment curve
+// controls — gateThreshold is filtered out into thresholdControl before it ever reaches
+// `sliders`) are laid out left-to-right in rows of at most kAdsrSlidersPerRow, wrapping to
+// additional rows rather than running off the card's fixed 280px width. Both the measure pass
+// (updateLayout, which needs only the block's total height) and the apply pass (which also needs
+// each row's Y to position its sliders) must agree on the block height exactly, so both call
+// adsrSliderBlockHeight/adsrAfterSlidersY instead of repeating the arithmetic.
+inline constexpr int kAdsrSlidersPerRow = 4;
+inline constexpr int kAdsrSliderLabelHeight = 20;
+inline constexpr int kAdsrSliderHeight = 120;
+inline constexpr int kAdsrSliderRowGap = 10; // vertical gap between slider rows
+
+/** Number of rows needed to fit `sliderCount` sliders at kAdsrSlidersPerRow per row. */
+inline int adsrSliderRowCount(int sliderCount) {
+    return juce::jmax(1, (sliderCount + kAdsrSlidersPerRow - 1) / kAdsrSlidersPerRow);
+}
+
+/** Total height of the slider grid (every row's label+slider, plus the gaps between rows). */
+inline int adsrSliderBlockHeight(int sliderCount) {
+    const int rows = adsrSliderRowCount(sliderCount);
+    return rows * (kAdsrSliderLabelHeight + kAdsrSliderHeight) + (rows - 1) * kAdsrSliderRowGap;
+}
+
+/** Y coordinate immediately below the slider grid — where the threshold control or, absent one,
+ *  the toggle rows begin. `contentTopY` is the grid's own top (ModuleComponent::getContentTopY()). */
+inline int adsrAfterSlidersY(int contentTopY, int sliderCount) {
+    return contentTopY + adsrSliderBlockHeight(sliderCount) + kAdsrSliderRowGap;
+}
+
 } // namespace detail
