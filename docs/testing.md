@@ -1,7 +1,6 @@
 # Testing Guide
 
-All tests use GoogleTest and run headless (no audio device, no GUI window). 1283 tests across 156 suites
-(`./build/Tests/Tests` reports the authoritative count; the per-section totals below are approximate).
+All tests use GoogleTest and run headless (no audio device, no GUI window). 4696 tests across 483 suites (`./build/Tests/Tests` reports the authoritative count; the per-section totals below are approximate).
 
 ```bash
 # Run all tests (ENABLE_TESTS defaults OFF — must be passed explicitly)
@@ -488,6 +487,7 @@ New suite `Tests/UI/ModuleViews/WavetableDisplayTests.cpp` covering `Source/UI/M
 |-------|-------|----------------|
 | WavetableDisplayTest | 8 | `QuantisePositionEndpointsAndClamping`/`QuantisePositionIsMonotonicAndCollapsesTinyChanges` — `quantisePosition` pins 0→0 and 1→`steps`, clamps out-of-range input, is monotonic, and maps sub-bucket jitter to the same bucket (this is the repaint gate); `RepeatedTimerTicksOnAnUnchangedModuleAreIdempotent` — five ticks leave the trace bit-identical, a real position change is still picked up; `DisplayWaveformTracksScanPosition` — position 0 and 1 traces differ by >0.2 and both stay bounded; `DisplayWaveformHandlesTinyPointCounts` — 0 and 1 requested points still yield ≥2 samples; `PaintSmokeBuiltInTable`/`PaintSmokeAtEveryScanPosition`/`PaintSmokeAtDegenerateSizes` — paints into a `juce::Image` with no crash at 11 scan positions and at 0×0/1×1/4×80 bounds |
 
+`Tests/UI/ModuleViews/CurveEditor/` (FRO111; not yet wired into a module card — see [`layout_visuals_animation.md` §1](layout_visuals_animation.md#curveeditorcomponent-sourceuimoduleviewscurveeditor)) covers the reusable breakpoint curve editor at `Source/UI/ModuleViews/CurveEditor/` across four suites, 60 tests, sharing an `EnvelopeShape`/`buildEnvelopeModel` fixture (`CurveEditorTestHelpers.h`) for the fixed origin/attack-peak/hold-end/sustain/release-end topology the envelope card will use: **CurveModelTest** (18) — node/segment bookkeeping, `valueAt` matching `synth::EnvelopeGenerator::shape` exactly, Fixed-mode ripple x-edits (`minSegment`/`maxSegment` clamping, `y` ignored when `!yMovable`, the origin never moving), Free-mode `addPoint`/`removePoint`/reorder; **CurveEditorGeometryTest** (20) — time/level↔pixel round trips, the zero-duration segment's exact 12px display plateau and absent bend handle, hit-testing (nearest wins, exact tie goes to the earlier index, a pinned node is never hit, a node beats a bend handle), the handle tracking the curve's actual midpoint as bend changes, playhead mapping, grid ticks/labels; **CurveEditorInteractionTest** (18) — the public drag/bend/add/remove primitives plus the REAL mouse path via synthesized `juce::MouseEvent`s (a plain click opens no gesture, a drag opens exactly one); **CurveEditorPaintTest** (4) — a themed paint smoke test (accent-coloured curve pixels vs. plain background) plus an opt-in `CURVE_EDITOR_SNAPSHOT` PNG dump (same pattern as `ADSR_CARD_PNG` in `ModuleComponentLayoutTests.cpp`).
 ### Minimap Tests (25 tests)
 
 New suite `Tests/UI/Graph/MinimapComponentTests.cpp` covering `Source/UI/Graph/MinimapComponent.h/.cpp` (issue #159). See [`layout_selection_canvas.md` §4](layout_selection_canvas.md#4-minimap-overlay-issue-159) for the feature.
