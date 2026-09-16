@@ -157,5 +157,7 @@ Everything else below is a tripwire index. The full rule lives in the named area
 - [`docs/AI_Engine_chat_component.md`](docs/AI_Engine_chat_component.md) — AIChatComponent and its logging rules
 - [`docs/AI_Engine_providers_accounts.md`](docs/AI_Engine_providers_accounts.md) — conversation history, provider registry (OllamaProvider/RemoteProvider), account sign-in, device id/trial, quota UI
 - [`docs/midi_input.md`](docs/midi_input.md) · [`docs/shortcuts.md`](docs/shortcuts.md) — external MIDI routing, keyboard shortcuts
+- [`docs/midi_remote.md`](docs/midi_remote.md) · [`docs/midi_remote_ui.md`](docs/midi_remote_ui.md) — MIDI Remote (decided 2026-09-17, FRO121): external controller profiles, drawn surfaces, right-click MIDI Learn on every control, message-thread apply with gestures, scope-by-target-type persistence; the panel, coverage table and tracker
+- [`docs/plugin_card_layout.md`](docs/plugin_card_layout.md) — hosted plugin cards showing a chosen set of parameters as knobs (decided 2026-09-17, FRO122): `CardLayout`, instance/type/automatic precedence, `HostedParameterAttachment`, the knob picker with presets; and what carries over to editing any module's layout (FRO123)
 - [`docs/distribution.md`](docs/distribution.md) — version identity, Sparkle auto-update (macOS), EdDSA key generation, CI appcast publishing, WinSparkle status
 - Feature planning artifacts (timeline concept & task tracker) live in a private repo, kept out of this public repo on purpose.

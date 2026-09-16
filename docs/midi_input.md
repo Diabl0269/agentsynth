@@ -57,3 +57,7 @@ A survey of every MIDI producer/consumer in the codebase and how each handles a 
 Block-granularity is an accepted trade-off for hand-played/CV-triggered input today — the poly path (gate-CV, sample-accurate via `PolyMidiModule`) is the timeline's actual route, so per-module fixes for the mono/legacy paths above are deferred to their own tasks rather than bundled here.
 
 `SequencerModule` / `PolySequencerModule`'s hardcoded offsets are left as-is deliberately: existing presets are golden-tested byte-identical against those exact sample positions, and computing the true beat-crossing sample is revisited under a future transport-sync task.
+
+## MIDI Remote (designed, not yet built)
+
+[`midi_remote.md`](midi_remote.md) designs a controller-mapping layer that sits **in front of** the path above: `AudioEngine::handleIncomingMidiMessage` will consult a `RemoteMessageSink` before the collector push and the `ExternalMidiModule` fan-out, and a message matched to an assigned control is consumed there by default (so it never reaches a recording take or an External MIDI module — a per-controller toggle passes it through). Nothing in this doc changes until that tracker's items are ticked.

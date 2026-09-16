@@ -1,0 +1,469 @@
+# MIDI Remote — external controllers, surfaces and MIDI Learn
+
+Design decided 2026-09-17 (founder design session). This doc holds the **model and the
+decisions**: what exists, what the feature has to do, the questions that had more than one
+sensible answer, and the answer picked for each with its reason. The user-facing interaction
+(right-click MIDI Learn, the MIDI Remote panel, the controller surface, the settings) and the
+implementation tracker live in [`midi_remote_ui.md`](midi_remote_ui.md). The sibling feature
+that lets a hosted plugin card show a chosen set of its parameters as knobs — the knobs MIDI
+Remote then maps like any other — is [`plugin_card_layout.md`](plugin_card_layout.md).
+
+**Status:** designed, not built. The tracker in `midi_remote_ui.md` §8 is the record of what
+actually exists; until an item there is ticked, nothing below is shipped.
+
+---
+
+## 1. What exists today
+
+External MIDI today is a **note path only** ([`midi_input.md`](midi_input.md)):
+
+- `AudioEngine::handleIncomingMidiMessage` (MIDI driver thread,
+  `Source/AudioEngine/AudioEngineMidi.cpp`) is the single convergence point for every opened
+  `juce::MidiInput`. It forwards each message to the engine's own `MidiMessageCollector`
+  (the graph-input stream) and to any `ExternalMidiModule` whose **display name equals the
+  device name** (`setMidiDeviceName` → `setModuleName`; renaming the module breaks the binding).
+- Devices are opened by name via `AudioEngine::ensureMidiDeviceOpen(name)`; refused in
+  `HostMode::Hosted` — the host owns MIDI and hands it in through `processHostBlock`.
+- There is no persistent "enabled MIDI devices" list beyond what the stock
+  `juce::AudioDeviceSelectorComponent` (Settings → Audio) ticks in `AudioDeviceManager`.
+- **Nothing interprets CC, pitch-bend, aftertouch or program change.** No `MidiLearn`,
+  `controllerNumber`, `isController` anywhere in `Source/`. This is a from-scratch feature.
+- **No MIDI output.** The Audio tab's MIDI-output selector is a dead control: nothing reads
+  `deviceManager.getDefaultMidiOutput()`.
+- Parameters are plain `juce::AudioParameterFloat/Int/Bool/Choice` on a `ModuleBase`
+  (no APVTS). A parameter is addressed persistently as **(node uuid, `paramID`)** —
+  `ModuleBase::getNodeUuid()` + `findParameterByID`, never by index — and every lane / binding
+  in the app resolves through `synth::resolveLaneParameter`
+  (`Source/Timeline/AutomationBinding.h`), which also knows how to address a **hosted plugin's**
+  parameters (`HostedAudioProcessorParameter`, exact-id match first, `paramIndexHint` as a
+  rescue, version drift → orphan, never a silent rebind).
+- Two precedents for writing a parameter from outside the UI: `synth::AutomationApplier`
+  (audio thread, `setValue` only — never `setValueNotifyingHost` — with UI reflection over the
+  lock-free `AutomationUiFeed` ring), and every mouse gesture
+  (`juce::SliderParameterAttachment`, message thread, `beginChangeGesture` /
+  `setValueNotifyingHost` / `endChangeGesture`, one undo snapshot per gesture via
+  `AppUndoManager::captureBeforeState` / `pushSnapshotFromCapture`).
+- `synth::TransportService` producers (`play/stop/locateBeat/setLoop/setBpm`) are
+  **message-thread only**. `ShortcutManager` is a real action registry (74 named actions), but
+  only *command-dispatched* actions carry a `juce::CommandID` (`AppCommands::getCommandForAction`);
+  `togglePlayback`, `undo`, `redo` do, while `timelineToggleLoop` and friends are
+  *surface-resolved* (the panel's own `keyPressed` matches them). Record and metronome have no
+  action at all — the transport bar reports intent through `onRecordToggled` and `MainComponent`
+  decides.
+- The module card's generic controls come from one function, `ModuleComponent::createControls()`
+  (`Source/UI/Graph/ModuleComponent/ModuleComponent.cpp`): a rotary `juce::Slider` per
+  float/int parameter (each registered with `slider->addMouseListener(this)` — the
+  "right-click-any-knob" hook), a `ComboBox` per choice, a `ToggleButton` per bool (no mouse
+  listener today), parallel `sliders`/`sliderParams` arrays. Right-click on a knob today shows one
+  item, **"Automate '<Param>'"** (`showAutomateMenuForSlider`,
+  `ModuleComponentInteraction.cpp`). A hosted plugin card shows **no parameters at all** — only
+  "Open Editor".
+
+---
+
+## 2. Goals and non-goals
+
+**Goals (v1):**
+
+1. **Right-click any control → MIDI Learn.** Every knob, slider, toggle and combo on every
+   module card, the mixer strips (fader, pan, mute, solo, sends), the master, and the transport
+   bar's buttons. Move a hardware control; it is bound. No panel needs to be open first.
+2. **Zero-setup path.** The first Learn on a controller the app has never seen creates that
+   controller's profile and adds the touched control to its surface automatically. Configuring a
+   controller up front is optional, never required.
+3. **One place to see and manage it all** — a MIDI Remote panel that shows each controller as a
+   drawn surface (its knobs/faders/buttons/pads in the app's own look, moving live as you touch
+   the hardware), each control labelled with what it drives, with an inspector to change any
+   assignment, and a mapping assistant to assign from the panel side.
+4. **Transport and commands** are mappable targets alongside parameters.
+5. **Hosted plugin knobs** ([`plugin_card_layout.md`](plugin_card_layout.md)) are mapped
+   exactly like built-in ones.
+6. **Behaves like a mouse.** A hardware knob turn is indistinguishable from a mouse drag to the
+   rest of the app: automation Touch/Latch records it, undo groups it per gesture, the plugin
+   host is notified, the card's knob follows.
+7. **The plugin build degrades honestly** (§4.8): no device management inside a host, but
+   mappings on the host-supplied MIDI stream still work.
+
+**Non-goals (v1)** — each is a named v2 item in §9, not an accident: 14-bit CC / NRPN,
+feedback to the controller (LED rings, motor faders, MIDI out), MCU/HUI protocol surfaces,
+MPE per-note expression, a "focused module" bank that follows selection, a device template
+library beyond a few generic ones, OSC.
+
+---
+
+## 3. What the survey of other DAWs contributes
+
+Studied: Cubase MIDI Remote, Ableton Live MIDI Map, Bitwig, Logic Controller Assignments,
+Reaper, Studio One Control Link, FL Studio, Reason Remote, VCV Rack MIDI-Map, Renoise. What
+each contributes to this design, and nothing else is borrowed:
+
+| From | Borrowed | Why it fits a modular synth |
+|---|---|---|
+| **VCV Rack MIDI-Map** | The mental model: a hardware control is *patched* 1:1 to a module parameter and saved with the patch. | Our users already think in cables; a mapping is a cable from a physical knob. |
+| **Ableton** | The right-click-the-target learn idiom and the three takeover words **Jump / Pick-up / Scale** (Ableton: None / Pick-up / Value Scaling). | Most field-tested vocabulary; no need to invent terms. |
+| **Cubase MIDI Remote** | Separating the **surface** (what the hardware is) from the **mapping** (what it drives); a drawn surface; a mapping assistant you drive from the surface side. | One surface serves every project. The drawn surface is the "visualise them in that area" ask. |
+| **Studio One Control Link** | The explicit **global vs. project** split. | Transport/commands must survive across projects; parameter mappings must travel with the project that owns the nodes. |
+| **Reaper** | An explicit **relative-encoder encoding** selector, never a silent guess. | Three incompatible relative encodings exist; guessing wrong spins the wrong way. |
+| **Bitwig Remote Controls pages** | Per-device-type editable ~8-knob pages. | This is the plugin-card feature, `plugin_card_layout.md`; also the shape a future focus-bank would use. |
+
+Rejected outright: Ableton's whole-app blue overlay as the *only* learn entry (a modal mode is
+one more thing to explain; right-click on the thing you want is what our users already do for
+Automate), vendor scripting as the primary configuration path (Bitwig/Reason/Cubase scripts —
+nobody writes JavaScript to map a knob), and an MCU-first design (a fixed protocol is a
+separate integration, §9).
+
+---
+
+## 4. Decisions
+
+Each subsection is one question, the options considered, the decision, and the reason.
+
+### 4.1 Where does a mapping live — global or in the project?
+
+*Options:* (A) everything global per controller (Cubase); (B) everything in the project
+(Ableton); (C) the user chooses a scope per mapping (Studio One); (D) the **target type
+decides**.
+
+**Decision: D.** An assignment whose target is a **parameter** (node uuid + paramID) lives in
+the **project**, because node uuids only exist in that project. An assignment whose target is an
+**action** (transport, undo, panel toggles — anything in the `ShortcutManager` registry) lives in
+the **controller profile**, globally, because it means the same thing in every project. The
+**surface** (what the hardware is: its controls, their messages, their encodings, its layout) is
+always global — one profile per physical controller.
+
+*Why not C:* asking is the one thing every survey user complained about; nobody wants a
+"where should I save this?" prompt while performing. The type rule gives the right answer
+every time without a question, and the panel shows a small **Project** / **Global** tag on each
+assignment so the rule is visible rather than hidden.
+
+*Consequence — a project references a global profile that may not exist on this machine.* Each
+project assignment therefore carries a **denormalised copy of the control's message spec**
+(type, channel, number, encoding, button mode, and the control's display name) next to the
+`profileId`/`controlId` reference. When the project opens on a machine without that profile, the
+assignments still resolve to *messages*; the panel shows the controller as an **orphan
+controller** ("Launchkey Mini — not on this machine") and offers **Re-link** (pick a present
+profile; controls match by message spec) or **Recreate** (mint a profile from the carried
+specs). Mappings never silently die because a settings folder is elsewhere. This is the same
+shape as the timeline's rule that a binding is never re-established automatically
+(`timeline_panel_tracks.md` §3): degrade visibly, repair explicitly.
+
+### 4.2 How does a hardware value reach a parameter?
+
+*Options:* (A) on the MIDI thread / audio thread, `param->setValue()` only, UI reflected over a
+ring — the `AutomationApplier` shape; (B) hop to the **message thread** and drive the parameter
+exactly as a mouse drag does: `beginChangeGesture` on the first message, `setValueNotifyingHost`
+per value, `endChangeGesture` after a short idle.
+
+**Decision: B.** The MIDI thread classifies and decodes the message and pushes a small POD event
+onto a lock-free SPSC FIFO; a message-thread drain (a 60 Hz `juce::Timer`, kicked early by an
+`AsyncUpdater` on the first event so an idle app reacts within a frame) applies it.
+
+*Why:* goal 6. Option A is right for playback automation because automation must *not* be
+recorded, undone or host-notified — it is a transient effect. A hardware knob is the opposite: it
+is the user editing. With B, `AutomationRecorder` hears it (Touch/Latch record from hardware for
+free), `AppUndoManager` gets one snapshot per gesture through the same
+`parameterGestureChanged` listener every card already uses (`ModuleComponentInteraction.cpp`,
+`MixerFader`), the VST3/AU host sees a proper gesture, and every `SliderParameterAttachment`
+follows without a reflection path. Latency is one frame (≤ 16 ms), which is invisible on a knob
+and irrelevant to audio: **sample-accurate control of a parameter is what CV cables and the
+modulation matrix are for** (`modulation.md`), and this feature never competes with them.
+
+*Gesture end:* `endChangeGesture` fires **250 ms** after the last message for that assignment
+(a constant, `kGestureIdleMs`), so a slow sweep is one undo step and one automation touch, not
+hundreds. A button press is begin+set+end in one drain.
+
+*Interaction with the automation-record claim:* `AutomationRecorder::isClaimed(param)` /
+`ScopedProgrammaticApply` treat the parameter as "hand on the knob" for the gesture's duration,
+identically to a mouse. Nothing new to design; the point of B is that there is nothing new.
+
+### 4.3 Are mapped messages consumed, or also forwarded to the graph?
+
+**Decision: consumed by default**, per-profile toggle ("Also pass mapped messages to the
+patch", default off). A message that matches a control with an assignment is handled by the
+remote engine and **not** pushed into the engine's `MidiMessageCollector` nor into
+`ExternalMidiModule`s. Everything else (notes on an unmapped channel, unmapped CCs) flows exactly
+as today.
+
+*Why:* a knob bound to filter cutoff must not also land in a MIDI clip being recorded, and a pad
+bound to "Play" must not also trigger a note in the patch. *Stated consequence, so nobody files
+it as a recording bug:* mapped CCs are absent from `MidiRecorder`'s take and from any
+`ExternalMidiModule` on that device while the assignment exists. The toggle exists for the rare
+"I want both" case. Unassigned controls on a profile are **not** consumed — detecting a control
+onto a surface never changes what the patch hears until you assign it.
+
+### 4.4 Threading: the mapping table crosses threads
+
+The MIDI thread needs the consume filter and the learn-armed state inside
+`handleIncomingMidiMessage`; the message thread edits assignments and profiles.
+
+**Decision — a tripwire:** the engine never takes a lock on the MIDI path. The live mapping
+table is an **immutable snapshot** (`RemoteMappingSnapshot`: flat arrays of
+`{messageKey → assignment}` built on the message thread) published by **atomic pointer swap**
+(the same discipline as `EpochExchange` / the automation binding table: build, publish, retire
+the old one only after a grace period or via `std::atomic<std::shared_ptr<>>`). The learn-armed
+state is a single `std::atomic<LearnArm>` (target token + a settle-window start time). The
+only thing the MIDI thread writes is the SPSC FIFO. Anyone reaching for a `CriticalSection`
+here is doing it wrong.
+
+### 4.5 Learn: what does the first message mean?
+
+A learn is armed on a **target** (right-click a control → "MIDI Learn 'Cutoff'"; or from the
+panel side, a **control** is armed and the target is picked next — `midi_remote_ui.md` §2–3).
+
+*Resolution rule:* the engine opens a **300 ms settle window** at the first eligible message and
+binds the **message key with the most messages** in that window (a knob sweep produces many
+CCs; a stray touch-strip blip produces one). Eligible: CC, note-on, pitch-bend, channel
+pressure, program change. **Ignored while learning:** note-off, per-note (poly) aftertouch,
+clock/active-sensing/sysex, and any message on a channel the profile marks as MPE member
+channels (§9 — no MPE in v1; this rule just stops MPE traffic from binding garbage). A learn
+on a *button-like* target (bool param, action) prefers note-on / CC 0-or-127 patterns and sets
+`buttonMode` from the observed behaviour (a CC that returns to 0 on release → momentary).
+
+*Auto-profile:* if the message came from a device with no profile, a profile is **created** named
+after the device, and if the message key is not a known control on that profile, a control is
+**added** (kind guessed: CC → knob, note → button; encoding absolute-7; layout: next free grid
+cell; name "CC 21" / "Note C3"). The user renames and retypes later in the panel, or never.
+This is what makes goal 2 true.
+
+*Cancel:* Esc, clicking anywhere, or 10 s without an eligible message. Only one learn can be
+armed at a time; arming another replaces it.
+
+### 4.6 Takeover
+
+Applies only to **absolute continuous** encodings (a 7-bit CC knob/fader; not relative
+encoders, not buttons). Per-assignment setting, three values borrowed verbatim from Ableton:
+
+- **Jump** — the parameter jumps to the hardware value immediately.
+- **Pick-up** — nothing changes until the hardware crosses the current value, then it tracks.
+- **Scale** — the parameter moves toward the hardware value proportionally, converging without a
+  jump (Ableton "Value Scaling").
+
+**Default: Scale.** Pick-up is the classic answer but produces the "stuck fader" support
+ticket (the user moves a fader and nothing happens); Scale never sticks and never jumps. The
+default is a Preferences setting (`midi_remote_ui.md` §5); each assignment can override it.
+
+### 4.7 The surface is detected, not drawn
+
+**Decision:** the primary way a surface comes to exist is by *touching the hardware* — in the
+panel's **Detect** mode or implicitly during a Learn (§4.5) — and the panel lays detected
+controls out on a grid in touch order. The user can then drag to rearrange, rename, change
+kind (knob / fader / button / pad / encoder / wheel) and encoding. A **template** (a few
+generic ones shipped: "8 knobs", "8 faders + 8 buttons", "Transport", "Generic keyboard with 8
+knobs") is an optional starting point, and a profile can be exported/imported as JSON so a
+community template library can grow without code. Nobody has to draw their controller to map a
+knob — Cubase's surface editor is the power tool, not the entrance.
+
+### 4.8 The plugin build (VST3/AU inside a host)
+
+`HostMode::Hosted` never opens MIDI devices (`architecture.md`); that stays true. In the
+hosted build the remote engine has exactly **one source, a pseudo-controller named "Host MIDI"**
+fed from the MIDI buffer the host passes to `processHostBlock`. Learn, assignments, takeover and
+consume all work on that stream; the panel hides device management (no Add controller, no device
+picker, no Detect-by-device) and shows Host MIDI's surface only. Whether the host actually
+forwards a controller's CCs to a plugin is the host's business (most do for instrument tracks).
+
+### 4.9 Action targets
+
+*Options:* invoke `ShortcutManager` actions generically, or only the command-dispatched subset.
+
+**Decision:** an action target invokes a **`juce::CommandID`** through
+`ApplicationCommandManager::invokeDirectly` on the message thread — i.e. only
+**command-dispatched** actions are targets. The transport verbs users actually want on hardware
+buttons — **Play, Stop, Play/Stop toggle, Record, Loop toggle, Metronome toggle, Return to
+start** — are today either surface-resolved (loop) or not actions at all (record, metronome,
+stop, return-to-start). They get **promoted to command-dispatched actions** first (a
+prerequisite task in the tracker; it also gives them keyboard shortcuts, which they lack). The
+panel's action picker lists actions by `ShortcutCategory` with the same display names as the
+Keyboard Shortcuts settings tab, so the two lists can never disagree.
+
+A button target's `buttonMode` (momentary / toggle) decides whether note-off / CC 0 fires
+anything (momentary: nothing; toggle: the action fires on every press only). BPM and playhead
+position as *continuous* action targets are v2 (§9).
+
+---
+
+## 5. Data model
+
+All types live in Core under `Source/MidiRemote/` (headless-testable, no `ApplicationProperties`
+— the stores are injected from the app layer, §7). Names are the ones the tracker uses.
+
+```text
+ControllerProfile                         // GLOBAL — one per physical controller
+  id            : uuid string
+  name          : "Launchkey Mini MK3"
+  input         : { identifier, name }    // juce::MidiDeviceInfo; identifier matches first, name is the fallback
+  output        : { identifier, name } | null   // reserved for v2 feedback; never read in v1
+  passMapped    : bool (default false)    // §4.3 toggle
+  controls[]    : Control
+  actions[]     : Assignment              // GLOBAL assignments: target.kind == action only
+  version       : 1
+
+Control
+  id            : uuid string
+  name          : "Knob 1"
+  kind          : knob | fader | button | pad | encoder | wheel
+  message       : MessageSpec
+  encoding      : abs7 | relTwos | relBinOffset | relSignMag      // abs14 is v2
+  buttonMode    : momentary | toggle       // buttons/pads only
+  layout        : { col, row }             // grid cell on the drawn surface
+
+MessageSpec     // the KEY the engine matches on
+  type          : cc | note | pitchBend | channelPressure | programChange
+  channel       : 1..16 | 0 (= any)
+  number        : 0..127                   // cc number / note number; ignored for pitchBend/channelPressure
+
+Assignment
+  id            : uuid string
+  control       : { profileId, controlId }
+  spec          : MessageSpec + encoding + buttonMode + control name   // DENORMALISED copy, §4.1
+  target        : Target
+  takeover      : jump | pickup | scale | default   // "default" = the Preferences value
+  range         : { min: 0.0, max: 1.0 }   // normalised; invert = min > max
+  enabled       : bool
+
+Target (exactly one)
+  parameter     : { nodeUuid, paramId, paramIndexHint }   // same triple as an automation lane
+  action        : { actionId }                            // ShortcutManager action id
+
+Project "midiRemote" (reserved top-level key in project.json)
+  version       : 1
+  assignments[] : Assignment               // target.kind == parameter only
+  controllers[] : { profileId, name }      // for the orphan-controller display, §4.1
+```
+
+Rules:
+
+- A `MessageSpec` is the engine's lookup key; two controls on one profile may not share a key
+  (the panel refuses; Detect merges into the existing control instead).
+- A parameter assignment resolves through `synth::resolveLaneParameter` and nothing else — the
+  hosted-plugin rules (exact id, index hint rescue, drift → orphan) come for free.
+- Deleting a node orphans its assignments (they stay in the project, flagged; the control does
+  nothing). Deleting the assignment is explicit. Duplicating / pasting a module does **not**
+  copy its assignments in v1.
+- A **relative** encoding delivers a signed delta; the engine applies `delta × sensitivity` to
+  the *current* normalised value (sensitivity per assignment, default 1/127 per detent). Takeover
+  is skipped. Auto-detect of the encoding is a Detect-mode helper ("turn it left, now right"),
+  never a runtime guess.
+- `range` maps the hardware's 0..1 onto `[min, max]` of the parameter's normalised range;
+  `min > max` inverts. Buttons on a float parameter toggle between `min` and `max`.
+
+---
+
+## 6. The engine
+
+`synth::midi::RemoteEngine` (Core, `Source/MidiRemote/RemoteEngine*.cpp` split by concern):
+
+```text
+MIDI thread (or the host's audio thread in Hosted mode)
+  RemoteEngine::handleMessage(sourceKey, const MidiMessage&)   // called from AudioEngine::handleIncomingMidiMessage
+    1. learn-armed?  → feed the settle window (atomic state + a tiny fixed-size histogram); return consumed=false
+    2. snapshot = table.load(acquire); look up (sourceKey, MessageSpec) → assignment slot
+    3. no slot → return consumed=false (message flows to the graph as today)
+    4. decode: abs7 → 0..1 | relative → delta | button → pressed/released
+    5. push RemoteEvent{slotIndex, kind, value} onto the SPSC FIFO; return consumed = !profile.passMapped
+
+message thread
+  RemoteEngine::drain()   // 60 Hz timer + AsyncUpdater kick on first event
+    per event: resolve slot → live target (cached from the last reconcile)
+      parameter: takeover(value, current) → if first in gesture: beginChangeGesture; setValueNotifyingHost; arm idle timer
+      action   : commandManager.invokeDirectly(commandId, asynchronously=false) on press (per buttonMode)
+    expire gestures idle ≥ kGestureIdleMs → endChangeGesture
+
+  RemoteEngine::reconcile(graph)        // MainComponent's existing reconcile funnel after any graph change
+    rebuild slot→target cache via resolveLaneParameter; orphan what no longer resolves; republish snapshot
+
+  RemoteEngine::setAssignments(...) / setProfiles(...)   // rebuild + atomic publish of the snapshot
+  RemoteEngine::armLearn(LearnRequest) / cancelLearn(); onLearned callback (message thread)
+```
+
+`AudioEngine` gains one seam: a `RemoteMessageSink*` (an interface `RemoteEngine`
+implements) consulted in `handleIncomingMidiMessage` **before** the collector push and the
+`ExternalMidiModule` fan-out; if the sink reports consumed, the message goes nowhere else. The
+source key is the `juce::MidiInput`'s device identifier (standalone) or the constant
+`"host"` (Hosted). Hosted mode calls the same sink per message from `processHostBlock`'s input
+buffer — on the audio thread, which the sink is already built for (no locks, no allocation,
+§4.4).
+
+Device opening: the standalone engine opens every input device that has a profile
+(`ensureMidiDeviceOpen`) at startup and on device-list change, in addition to the Audio tab's
+ticked devices — a profiled controller must never need a second checkbox to work.
+
+Live activity for the panel (`midi_remote_ui.md` §3) rides the same FIFO: every event carries its
+decoded value; the panel drains a separate mirror ring at its own rate, and an unassigned control
+still produces an activity-only event so Detect mode and the surface's "it lit up" feedback work
+without an assignment.
+
+---
+
+## 7. Persistence and the trust boundary
+
+- **Profiles** are JSON files, one per controller, under the settings folder:
+  `<settings>/MidiRemote/Controllers/<profileId>.json` (`branding::kSettingsFolderName`, the
+  same folder as the `PropertiesFile`, but *not inside* it — a profile is a shareable document).
+  Export / import is a file copy with a name check. Generic templates ship as resources.
+- **Project assignments** are the reserved top-level key **`"midiRemote"`** in `project.json`,
+  written by `ProjectBundle` **last**, exactly like `"timeline"` and `"macros"`: detached before
+  validation and reattached after; **refused on the untrusted path** by
+  `AIStateMapper::validatePatch` with a new `PatchValidationError::MidiRemoteNotAllowed`
+  (a provider-authored mapping could never resolve to real hardware and is one more channel
+  for smuggling state). `"midiRemote"` joins the reserved-keys list in `AI_Engine.md` /
+  `layout_selection_canvas.md §1.7`. A plain preset (`GraphEditor::savePreset`) carries no
+  assignments.
+- **Core layering:** Core never touches `juce::ApplicationProperties`
+  (`UserSettings.h`, `Source/CLAUDE.md`). `RemoteEngine` receives profiles and assignments as
+  values; the file stores (`ControllerProfileStore`, project load/save) live in the app layer
+  (`Source/MidiRemote/` for the pure serialisation + a thin `MainComponent`-owned store), and the
+  three `PropertiesFile` owners (`Main.cpp`, `MainComponent`, `AgentSynthAudioProcessor`) stay
+  in agreement because nothing new goes into the `PropertiesFile` except two scalar preferences
+  (default takeover, panel visibility).
+- **Versioning:** both documents carry `version: 1`; a loader refuses a higher version with a
+  visible message and never partially applies.
+
+---
+
+## 8. Undo
+
+- **Parameter values** driven from hardware: one undo step per gesture, produced by the existing
+  gesture listeners — nothing new (§4.2).
+- **Project assignments** (create via Learn, edit, delete, re-link): undoable through a new
+  `AppUndoManager::recordMidiRemoteChange(before, after)` snapshotting the `"midiRemote"`
+  document, the same before/after-JSON shape as `recordTimelineChange`. A Learn that also
+  auto-creates a profile records only the project half; the profile stays.
+- **Profile edits** (rename, retype, rearrange, templates, delete controller): global settings,
+  **not undoable**, same as keyboard-shortcut rebinds. The panel confirms destructive ones
+  (delete controller with N assignments in this project).
+
+---
+
+## 9. Explicitly deferred (v2 items, each its own ticket when wanted)
+
+1. **Feedback to the controller** — LED rings, motor faders, pad colours via MIDI out. The
+   profile's `output` field and the per-event value path exist so this is additive: a
+   `RemoteFeedback` stage that echoes parameter changes (with a same-value gate and a short
+   cool-down after a hardware-originated change, or faders hunt).
+2. **14-bit CC (MSB/LSB pairs) and NRPN** — `encoding: abs14` plus a pairing rule in the
+   classifier. Rare on the controllers this app's users own; deferred past v1 like most DAWs.
+3. **Focus bank** — a set of controls marked "follows the selected module", mapped to that
+   module's card layout order (`plugin_card_layout.md` §8 is why the card layout is the right
+   list to follow). Cubase Focus Quick Controls / Bitwig device pages.
+4. **Mapping pages** — several assignment sets per profile switched by a button.
+5. **Continuous action targets** — BPM, playhead scrub, master volume as actions.
+6. **MPE** — zone detection and per-note ownership; an explicit, separate model, never a
+   "smarter" CC learn.
+7. **MCU / HUI** — a dedicated protocol integration, not a profile.
+8. **Device template library** — vendor templates for popular controllers, imported as JSON.
+9. **OSC** — a second `RemoteMessageSink` source.
+10. **Copy/paste of modules carrying their assignments**, and assignment transfer on
+    "Replace with...".
+
+---
+
+## Related
+
+- [`midi_remote_ui.md`](midi_remote_ui.md) — the interaction design, the panel, coverage of
+  every control surface, tests and the implementation tracker.
+- [`plugin_card_layout.md`](plugin_card_layout.md) — which hosted-plugin parameters show as
+  knobs (and the future "edit any module's layout").
+- [`midi_input.md`](midi_input.md) — the existing note path this feature sits in front of.
+- [`modulation.md`](modulation.md) — sample-accurate control is CV, not MIDI Remote.
+- [`shortcuts.md`](shortcuts.md) — the action registry action targets invoke.
