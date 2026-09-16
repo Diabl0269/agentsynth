@@ -113,6 +113,7 @@ add_executable(Tests
     Plugin/HostedPluginTests.cpp
     Plugin/PluginScan/PluginScanLifecycleTests.cpp
     Plugin/PluginScan/PluginScanCrashTimeoutTests.cpp
+    Plugin/PluginScan/PluginScanCrashGuardTests.cpp
     Plugin/PluginScan/PluginScanBackendTests.cpp
     Plugin/PluginScan/PluginScanChildProcessTests.cpp
     Plugin/PluginScan/PluginScanLibraryTests.cpp

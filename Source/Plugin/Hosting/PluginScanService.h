@@ -31,7 +31,9 @@ namespace synth {
  *
  * A crash kills the child; a hang is killed by us on a timeout. Either way the parent records the
  * failure, blacklists the candidate so the next scan does not step on the same mine, and moves on to
- * the next one.
+ * the next one. FRO59: a crash also exits the child quietly, before macOS's own "quit unexpectedly"
+ * crash reporter can pop a dialog in front of the user — see runPluginScanChildMode()'s
+ * `suppressCrashDialog` and PluginScanCrashGuard.h.
  *
  * -- The three seams ----------------------------------------------------------------------------
  *
@@ -367,7 +369,15 @@ private:
  * Lives in Core (not in Main.cpp) so its argument handling and exit-code semantics are unit-testable
  * in process. Only the standalone app calls it: a VST3/AU build of ourselves never scans, so it has
  * no entry point to intercept.
+ *
+ * `suppressCrashDialog` (FRO59): when true, installs `installQuietCrashHandlers()`
+ * (PluginScanCrashGuard.h) before touching the candidate's binary, so a crash inside
+ * `scanAndAddFile` exits this process quietly instead of popping macOS's own crash-reporter dialog.
+ * Defaults to false ON PURPOSE — this function is also called IN-PROCESS by tests
+ * (PluginScanChildProcessTests.cpp) that must never install process-wide signal handlers into the
+ * test binary itself. Only Main.cpp's real re-exec'd child process opts in.
  */
-std::optional<int> runPluginScanChildMode(const juce::StringArray& args, juce::String& xmlOut);
+std::optional<int> runPluginScanChildMode(const juce::StringArray& args, juce::String& xmlOut,
+                                          bool suppressCrashDialog = false);
 
 } // namespace synth

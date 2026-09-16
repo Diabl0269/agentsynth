@@ -1,4 +1,5 @@
 #include "PluginScanService.h"
+#include "PluginScanCrashGuard.h"
 #include <algorithm>
 #include <chrono>
 
@@ -482,7 +483,8 @@ bool PluginScanService::launchScanChildProcess(const juce::String& formatName, c
 // Child mode
 //==============================================================================
 
-std::optional<int> runPluginScanChildMode(const juce::StringArray& args, juce::String& xmlOut) {
+std::optional<int> runPluginScanChildMode(const juce::StringArray& args, juce::String& xmlOut,
+                                          bool suppressCrashDialog) {
     const int flagIndex = args.indexOf(PluginScanService::kScanArgvFlag);
     if (flagIndex < 0)
         return std::nullopt; // an ordinary app launch — the caller starts the application
@@ -498,6 +500,11 @@ std::optional<int> runPluginScanChildMode(const juce::StringArray& args, juce::S
         return 1;
     if (!PluginScanService::isValidScanToken(token))
         return 1; // no token, no way to stamp output the parent will accept
+
+    // FRO59: every early-return above has already happened, so this really is the isolated scan
+    // child — safe to go quiet on a crash from here on, if the caller asked us to.
+    if (suppressCrashDialog)
+        installQuietCrashHandlers();
 
     // GUI initialisation before touching a format: AudioUnit needs a run loop to enumerate
     // components, and several VST3s assume a message thread exists during instantiation. This is
