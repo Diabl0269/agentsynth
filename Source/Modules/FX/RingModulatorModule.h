@@ -8,6 +8,14 @@
 // Diode-ring modulator after Parker, "A Simple Digital Model of the Diode-Based
 // Ring Modulator" (DAFx-11). Clean four-quadrant multiply lives on Math's Mult
 // output; this module is the nonlinear, oversampled, mixable audio effect.
+//
+// Drive sets how hard the diodes are pushed - it's a saturation/character control, not a level
+// control: `diodeRing` is linear above the diode breakpoint `vl`, so scaling both inputs by drive
+// and NOT normalising back out made drive an uncompensated gain of up to 8x (+18 dB) for any patch
+// where the carrier and modulator carry comparable energy (FRO120 - a hot filter output fanned into
+// both inputs drove the Master bus into hard clipping). The wet signal is divided back down by the
+// same drive used for that sample, so drive changes the diode nonlinearity's shape without changing
+// loudness; drive = 1 is bit-identical to the undivided form.
 class RingModulatorModule
     : public ModuleBase
     , public juce::AudioProcessorParameter::Listener {
@@ -138,7 +146,7 @@ public:
                 float vb = 0.0f, vl = 0.0f;
                 characterToBreakpoints(juce::jlimit(0.0f, 1.0f, smoothedCharacter.getNextValue() + characterMod), vb,
                                        vl);
-                const float wet = diodeRing(carrier[i] * drive, modulator[i] * drive, vb, vl);
+                const float wet = diodeRing(carrier[i] * drive, modulator[i] * drive, vb, vl) / drive;
                 carrier[i] = wet;
                 modulator[i] = wet;
             }
@@ -168,7 +176,8 @@ public:
                             currentVl);
                     }
                     const float wet =
-                        diodeRing(carrier[i] * currentDrive, modulator[i] * currentDrive, currentVb, currentVl);
+                        diodeRing(carrier[i] * currentDrive, modulator[i] * currentDrive, currentVb, currentVl) /
+                        currentDrive;
                     carrier[i] = wet;
                     modulator[i] = wet;
                 }

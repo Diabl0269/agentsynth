@@ -218,6 +218,7 @@ add_executable(Tests
     Modules/VoiceMixerModuleTests.cpp
     FX/BitcrusherModuleTests.cpp
     FX/RingModulatorModuleTests.cpp
+    FX/RingModulatorGainTests.cpp
     Modules/NoiseModuleTests.cpp
     Modules/EdgeCaseTests.cpp
     Engine/IntegrationTests.cpp
