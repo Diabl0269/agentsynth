@@ -299,7 +299,33 @@ TEST(MixerPanelUndoUnbindTests, MixerColumnsAreReboundAfterAnUnrelatedModuleIsDe
     ASSERT_EQ(countChannelStrips(graph), 1) << "only the EQ insert was deleted";
     auto* column = mixerPanel.getStripColumnForTest(0);
     ASSERT_NE(column, nullptr);
-    EXPECT_TRUE(column->isFaderBoundForTest())
-        << "the pre-removal unbind left every column detached; onAfterGraphNodesRemoved must have "
-           "rebuilt the panel so the surviving strip's fader drives its gain parameter again";
+    ASSERT_TRUE(column->isFaderBoundForTest())
+        << "the pre-removal unbind left every column detached; the panel must have rebuilt so the "
+           "surviving strip's fader is attached to its gain parameter again";
+
+    // ...and prove the binding is live rather than merely present: drive the fader the way a user
+    // does (the panel's own Up-arrow nudge, MixerPanelKeyboardFocusTests' path) and hold the
+    // strip's real "gain" parameter to having moved. A rebuilt-but-dead column would pass the
+    // flag check above and fail here.
+    auto* stripNode = findChannelStripNode(graph);
+    ASSERT_NE(stripNode, nullptr);
+    float gainBefore = 0.0f;
+    for (auto* param : stripNode->getProcessor()->getParameters())
+        if (auto* f = dynamic_cast<juce::AudioParameterFloat*>(param); f != nullptr && f->paramID == "gain")
+            gainBefore = f->get();
+
+    // Right once moves focus from "nothing focused" onto the first column (the same step
+    // MixerPanelKeyboardFocusTests' own navigation tests take); there is no public setter.
+    ASSERT_TRUE(mixerPanel.keyPressed(juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::noModifiers, 0)));
+    ASSERT_EQ(mixerPanel.getFocusedColumnIndexForTest(), 0);
+    ASSERT_TRUE(mixerPanel.keyPressed(juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::noModifiers, 0)))
+        << "the panel must claim Up as a fader nudge on the focused column";
+
+    float gainAfter = gainBefore;
+    for (auto* param : stripNode->getProcessor()->getParameters())
+        if (auto* f = dynamic_cast<juce::AudioParameterFloat*>(param); f != nullptr && f->paramID == "gain")
+            gainAfter = f->get();
+    EXPECT_GT(gainAfter, gainBefore)
+        << "the rebuilt column's fader must actually move the strip's gain parameter -- this is the "
+           "user-visible half of the fix, not just that a pointer is non-null";
 }
