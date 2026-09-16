@@ -274,9 +274,13 @@ Loads an audio file from disk and plays it back one of two ways.
   next — every stage owns a `p` in `[0, 1]` advanced by `1 / (time * sampleRate)`, and level is
   always `stageStart + (stageTarget - stageStart) * shape(p, curve)`. This is what removed the
   cliffs a rate-based envelope (the previous `juce::ADSR`-backed implementation) is prone to: a
-  stage's duration and endpoints are exact regardless of curve, a 0 ms stage costs no samples of
+  stage's duration and endpoints are exact regardless of curve, a 0 ms Hold costs no samples of
   its own (it cascades straight into the next stage rather than sitting for one flat sample),
-  and changing a stage's time mid-ramp only changes slope, never the level.
+  and changing a stage's time mid-ramp only changes slope, never the level. Attack/Decay/Release
+  floor their *effective* time to a fixed, sub-millisecond/millisecond minimum instead of
+  cascading for free (see below) -- a one-sample full-scale level step is an audible click, and
+  Hold is exempt only because it is pinned flat (start == target) and so has no level to step
+  across.
 - **Stages**: Attack, Hold, Decay, Sustain, Release. Hold is new (FRO110) — a flat segment
   pinned at 1.0 between Attack finishing and Decay starting, default 0 s (no hold).
 - **Curves**: `attackCurve` (default -0.3), `decayCurve` (default 0.65), `releaseCurve` (default
@@ -284,12 +288,21 @@ Loads an audio file from disk and plays it back one of two ways.
   shape); `< 0` is slow-first/fast-finish. Exact endpoints hold for every curve amount:
   `shape(0, c) == 0`, `shape(1, c) == 1`. Not exposed to the AI few-shot examples.
 - **Times retired their minimum clamps (FRO110)**: `attack`/`hold`/`decay`/`release` move to a
-  **linear** `NormalisableRange(0.0, 5.0)` — minimum is genuinely 0 s now (an explicit 0 is
-  honoured, not silently raised to 2 ms / 5 ms the way the old clamps did), and the maximum stays
-  5.0 (widening it would quadruple the existing misfire of `AIStateMapper`'s in-`[0,1]` rescale
-  heuristic for untrusted patches — see below). New defaults: attack 0.001 s, hold 0 s, decay
-  1.0 s, **sustain 1.0**, release 0.015 s — a held note sustains by default now, matching how
-  most other synths default.
+  **linear** `NormalisableRange(0.0, 5.0)` — the parameter's own minimum is genuinely 0 s (an
+  explicit 0 is honoured and displayed, not silently raised the way the old 2 ms / 5 ms clamps
+  did), and the maximum stays 5.0 (widening it would quadruple the existing misfire of
+  `AIStateMapper`'s in-`[0,1]` rescale heuristic for untrusted patches — see below). New
+  defaults: attack 0.001 s, hold 0 s, decay 1.0 s, **sustain 1.0**, release 0.015 s — a held note
+  sustains by default now, matching how most other synths default.
+  **Click floor (FRO116)**: a 0 s Attack/Decay/Release parameter is a real, displayed value, but
+  `synth::EnvelopeGenerator` internally floors that stage's *effective* time to a fixed
+  click-free minimum — 0.1 ms for Attack, 1 ms for Decay and Release — before turning it into a
+  per-sample ramp rate. A one-sample full-scale level step is audible regardless of whether the
+  user dialled in 0 explicitly or an automation lane swept down to it, the same way an analog
+  envelope circuit has its own sub-millisecond physical floor. Hold is the one stage still
+  genuinely instant at 0 s: it is pinned flat (its start and target are both 1.0), so there is no
+  level to step across. The floor is internal to the generator only — the parameter range, its
+  displayed "0 ms", and the AI-authorable schema are all unchanged by it.
   The knob feel at the new 1 ms attack default lives on the **slider**, not the parameter: the
   0.3 skew that used to sit on these four `NormalisableRange`s now lives purely in the UI layer
   (`ModuleComponent.cpp`'s ADSR special case, `applyAdsrTimeSliderSkew`, runs on the four time

@@ -1,17 +1,20 @@
 // ADSRClickDiagnosticsTests.cpp
 //
-// FRO116 diagnostic suite (measure, do NOT fix): the user reports an audible click on a
-// "pluck" patch -- attack=0, hold=0, release=0, decay in the 100-300ms range, sustain=0 -- on
-// top of the intended percussive attack. FRO110 deliberately removed the old 2ms/5ms
-// anti-click clamps so 0ms stage times are reachable; these tests measure, sample-by-sample,
-// every discontinuity a 0ms stage can introduce, to find which one the user is actually
-// hearing as a "cut". No production code changes here.
+// FRO116 regression suite: the user reported an audible click on a "pluck" patch --
+// attack=0, hold=0, release=0, decay in the 100-300ms range, sustain=0 -- on top of the
+// intended percussive attack. FRO110 had removed the old 2ms/5ms anti-click PARAMETER clamps so
+// 0ms stage times are reachable and displayed; that made a 0ms Attack/Decay/Release a genuine
+// one-sample full-scale level step, which is exactly the click reported here. The fix (see
+// EnvelopeGenerator.h's kMinAttackSeconds / kMinRampSeconds) floors those stages' *effective*
+// time internally to a fixed, much smaller click-free minimum without changing the parameter's
+// own range or displayed value. These tests, originally written to pinpoint the click
+// sample-by-sample, now assert that fix: no single sample looks like an instant cut/jump, and
+// each floored ramp is still fast (completes within about the floor's own duration, not
+// noticeably longer).
 //
-// Method: EnvelopeGenerator's contract is that a stage's start/target/curve are exact, so the
-// *only* way to get a real jump is a stage transition where progress reaches 1.0 in a single
-// sample (a 0-second stage) while stageStart_ != the new target -- everything else is a
-// continuous ramp. Each test below isolates one such transition and reports the exact
-// per-sample magnitude, printed via std::cout so it shows up in the test log.
+// Method: EnvelopeGenerator's contract is that a stage's start/target/curve are exact, so a
+// jump only ever happens across a stage transition. Each test below isolates one such
+// transition and bounds its per-sample magnitude and duration against the floor.
 
 #include "ADSRTestFixture.h"
 #include "Modules/OscillatorModule.h"
@@ -66,10 +69,11 @@ MaxJump maxSampleJump(const std::vector<float>& trace) {
 
 // ---------------------------------------------------------------------------
 // (a) Isolated note: attack=0, hold=0, decay in the reported range, sustain=0, release=0.
-// Confirms the attack's instant 0 -> 1.0 step is the only jump in an isolated note's life --
-// the decay curve's own approach to 0 and the Decay -> Sustain cascade are exact and smooth.
+// Confirms the (floored, no longer instant) attack ramp is click-free -- no single sample
+// jumps anywhere near full scale -- while still completing quickly, and that the decay curve's
+// own approach to 0 and the Decay -> Sustain cascade remain exact and smooth.
 // ---------------------------------------------------------------------------
-TEST_F(ADSRTest, FRO116_IsolatedNote_AttackStepIsTheOnlyJump) {
+TEST_F(ADSRTest, FRO116_IsolatedNote_AttackRampIsClickFreeAndFast) {
     setFloat(adsr, "attack", 0.0f);
     setFloat(adsr, "hold", 0.0f);
     setFloat(adsr, "decay", 0.2f);
@@ -80,13 +84,23 @@ TEST_F(ADSRTest, FRO116_IsolatedNote_AttackStepIsTheOnlyJump) {
     auto trace = runMonoSamples(adsr, numSamples, {{0, juce::MidiMessage::noteOn(1, 60, (juce::uint8)100)}});
 
     const auto jump = maxSampleJump(trace);
-    std::cout << "FRO116(a) isolated note: max jump = " << jump.value << " at sample " << jump.index
-              << " (attack step is sample 0)" << std::endl;
 
-    // The attack step (Idle 0.0 -> Attack/Hold cascade to 1.0, all within sample 0) is expected
-    // to be the single largest discontinuity in an isolated note's life.
-    EXPECT_EQ(jump.index, 0) << "expected the attack step at sample 0 to dominate";
-    EXPECT_NEAR(jump.value, 1.0f, 1e-4f) << "0ms attack/hold is a genuine one-sample 0->1.0 step, by design";
+    // FRO116: attack is floored to kMinAttackSeconds (0.1 ms, ~5 samples at 44.1kHz) rather than
+    // a genuine one-sample 0 -> 1.0 step -- no single sample should look anywhere near a
+    // full-scale cliff, and the largest step should still land within the attack's short ramp.
+    EXPECT_LT(jump.value, 0.5f) << "no single sample of the attack should jump anywhere near full scale";
+    EXPECT_LE(jump.index, 10) << "the largest step should still land within the floored attack's short ramp";
+
+    // But it IS fast: full level reached within about the floor's own duration.
+    int fullLevelIndex = -1;
+    for (size_t i = 0; i < trace.size(); ++i) {
+        if (trace[i] >= 0.99f) {
+            fullLevelIndex = static_cast<int>(i);
+            break;
+        }
+    }
+    ASSERT_GE(fullLevelIndex, 0) << "attack never reached (near) full level within the window";
+    EXPECT_LE(fullLevelIndex, 10) << "the floored ~0.1 ms attack should reach full level within about 10 samples";
 
     // The decay curve must reach exactly 0 and cascade into Sustain (also 0) with no further
     // step: find the sample where the trace settles at 0 and confirm the step INTO it is tiny.
@@ -100,19 +114,17 @@ TEST_F(ADSRTest, FRO116_IsolatedNote_AttackStepIsTheOnlyJump) {
     ASSERT_GE(settleIndex, 0) << "envelope never settled to exactly 0 within the window";
     const float stepIntoSettle =
         std::abs(trace[static_cast<size_t>(settleIndex)] - trace[static_cast<size_t>(settleIndex) - 1]);
-    std::cout << "FRO116(a) decay end: settles to 0 at sample " << settleIndex << ", step into it = " << stepIntoSettle
-              << std::endl;
     EXPECT_LT(stepIntoSettle, 0.01f) << "decay's approach to sustain=0 should be a smooth curve tail, not a step";
 }
 
 // ---------------------------------------------------------------------------
 // (b) Back-to-back notes: note-off then note-on on the SAME sample, landing mid-decay (not
 // after settling), sustain=0 -- the gapless mono legato case FRO110 fixed re-articulation for.
-// Confirms the retrigger jump is bounded by (1.0 - currentLevel), the same "jump to 1.0" as an
-// isolated attack, and NOT an extra release-to-0 cut (the code path never calls noteOff() for
-// the same-sample transition -- see ADSRModule::processBlock's midiNoteOnThisSample guard).
+// Confirms the retrigger climbs toward 1.0 gradually over the floored attack ramp, not in a
+// single full jump, and NOT via an extra release-to-0 cut (the code path never calls noteOff()
+// for the same-sample transition -- see ADSRModule::processBlock's midiNoteOnThisSample guard).
 // ---------------------------------------------------------------------------
-TEST_F(ADSRTest, FRO116_BackToBackNotesMidDecay_RetriggerJumpBoundedByOneMinusCurrentLevel) {
+TEST_F(ADSRTest, FRO116_BackToBackNotesMidDecay_RetriggerRampsRatherThanJumpingToOne) {
     setFloat(adsr, "attack", 0.0f);
     setFloat(adsr, "hold", 0.0f);
     setFloat(adsr, "decay", 0.2f);
@@ -132,27 +144,42 @@ TEST_F(ADSRTest, FRO116_BackToBackNotesMidDecay_RetriggerJumpBoundedByOneMinusCu
     const float levelBeforeRetrigger = trace[static_cast<size_t>(retriggerSample) - 1];
     const float levelAtRetrigger = trace[static_cast<size_t>(retriggerSample)];
     const float retriggerJump = std::abs(levelAtRetrigger - levelBeforeRetrigger);
+    const float fullClimbRemaining = 1.0f - levelBeforeRetrigger;
 
-    std::cout << "FRO116(b) back-to-back mid-decay: level before = " << levelBeforeRetrigger
-              << ", level at retrigger = " << levelAtRetrigger << ", jump = " << retriggerJump << std::endl;
-
-    // The retrigger must jump TOWARD 1.0 (a fresh attack target), not down toward 0 -- if this
-    // were instead cut to 0 first (the release=0 behaviour) and then re-attacked, the jump would
-    // be far larger and levelAtRetrigger would read near 1.0 with an intermediate 0 never
-    // observable at 1-sample resolution here, so this also confirms no extra hidden zero-cross.
+    // The retrigger must move TOWARD 1.0 (a fresh attack target), not down toward 0 -- if this
+    // were instead cut to 0 first (the release=0 behaviour) and then re-attacked, levelAtRetrigger
+    // would read far closer to 0 than to levelBeforeRetrigger.
     EXPECT_GT(levelAtRetrigger, levelBeforeRetrigger) << "retrigger should move toward the Attack target (1.0)";
-    EXPECT_NEAR(retriggerJump, 1.0f - levelBeforeRetrigger, 1e-4f)
-        << "retrigger jump should be exactly (1.0 - currentLevel), matching the isolated-attack step";
+
+    // FRO116: the retrigger re-enters Attack, which is floored to a short but real ~0.1 ms ramp
+    // (kMinAttackSeconds) -- the very first sample of that ramp should cover only a small
+    // fraction of the remaining climb to 1.0, not jump straight there in one step.
+    EXPECT_LT(retriggerJump, 0.25f * fullClimbRemaining)
+        << "a same-sample retrigger must not jump straight to its Attack target in one step";
+
+    // But the climb IS fast: full level reached within about the floor's own duration.
+    int samplesToNearOne = -1;
+    for (size_t i = static_cast<size_t>(retriggerSample); i < trace.size(); ++i) {
+        if (trace[i] >= 0.99f) {
+            samplesToNearOne = static_cast<int>(i) - retriggerSample;
+            break;
+        }
+    }
+    ASSERT_GE(samplesToNearOne, 0) << "retrigger never reached near-full level within the trace window";
+    EXPECT_LE(samplesToNearOne, 10)
+        << "the floored ~0.1 ms attack ramp should reach full level within about 10 samples of retrigger";
 }
 
 // ---------------------------------------------------------------------------
-// (c) Note-off landing MID-DECAY with release=0 -- the scenario this suite pins as the likely
-// cause of the user's click: a short/staccato pluck whose gate closes before the decay curve
-// has reached sustain=0. A 0ms Release stage means noteOff() -> getNextSample() cascades
-// stageStart_ (the live decay level) straight to target 0.0 within one sample -- a real,
-// full-magnitude-of-whatever-was-left step, indistinguishable from "something got cut".
+// (c) Note-off landing MID-DECAY with release=0 -- the scenario this suite pinned as the cause
+// of the user's click: a short/staccato pluck whose gate closes before the decay curve has
+// reached sustain=0. Before the fix, a 0ms Release stage meant noteOff() -> getNextSample()
+// cascaded stageStart_ (the live decay level) straight to target 0.0 within one sample -- a
+// real, full-magnitude-of-whatever-was-left step. EnvelopeGenerator now floors Release's
+// effective time to kMinRampSeconds (1 ms, ~44 samples at 44.1kHz), so this must no longer
+// happen: this is the regression test for the click report itself.
 // ---------------------------------------------------------------------------
-TEST_F(ADSRTest, FRO116_NoteOffMidDecay_ZeroReleaseCutsAtWhateverLevelDecayHadReached) {
+TEST_F(ADSRTest, FRO116_NoteOffMidDecay_ReleaseFloorPreventsInstantCut) {
     setFloat(adsr, "attack", 0.0f);
     setFloat(adsr, "hold", 0.0f);
     setFloat(adsr, "decay", 0.2f);
@@ -164,27 +191,40 @@ TEST_F(ADSRTest, FRO116_NoteOffMidDecay_ZeroReleaseCutsAtWhateverLevelDecayHadRe
         {0, juce::MidiMessage::noteOn(1, 60, (juce::uint8)100)},
         {noteOffSample, juce::MidiMessage::noteOff(1, 60)},
     };
-    auto trace = runMonoSamples(adsr, noteOffSample + 10, events);
+    // Extended past the old +10 window: the floored ~1 ms release needs ~44 samples to run its
+    // course, and the test also checks it has fully faded by ~2 ms (88 samples).
+    auto trace = runMonoSamples(adsr, noteOffSample + 120, events);
 
     const float levelBeforeNoteOff = trace[static_cast<size_t>(noteOffSample) - 1];
     const float levelAtNoteOff = trace[static_cast<size_t>(noteOffSample)];
     const float cutJump = std::abs(levelAtNoteOff - levelBeforeNoteOff);
 
-    std::cout << "FRO116(c) note-off mid-decay: level before note-off = " << levelBeforeNoteOff
-              << ", level at note-off sample = " << levelAtNoteOff << ", cut jump = " << cutJump << std::endl;
-
-    // With release=0, note-off drops straight to 0 regardless of the level decay had reached.
     ASSERT_GT(levelBeforeNoteOff, 0.3f) << "expected a substantial mid-decay level before note-off, got "
                                         << levelBeforeNoteOff;
-    EXPECT_NEAR(levelAtNoteOff, 0.0f, 1e-4f) << "0ms release is an instant, unconditional drop to 0";
-    EXPECT_NEAR(cutJump, levelBeforeNoteOff, 1e-4f)
-        << "the cut's magnitude is exactly whatever level decay had reached -- this is the click";
+
+    // NOT an instant cut: the very first sample after note-off must still carry most of the
+    // level, and no single sample should account for most of what eventually gets cut.
+    EXPECT_GT(levelAtNoteOff, 0.5f * levelBeforeNoteOff)
+        << "the first sample after note-off should not read as an instant cut";
+    EXPECT_LT(cutJump, 0.25f * levelBeforeNoteOff)
+        << "no single sample should account for most of the level that gets released";
+
+    // Still a real ramp a fraction of a millisecond in -- not already silent.
+    const float levelAt0p2ms = trace[static_cast<size_t>(noteOffSample) + 9];
+    EXPECT_GT(levelAt0p2ms, 0.1f * levelBeforeNoteOff)
+        << "the release should still be audible a fraction of a millisecond after note-off";
+
+    // But the click IS gone quickly: fully faded (<1% of the pre-release level) within ~2 ms.
+    const float levelAt2ms = trace[static_cast<size_t>(noteOffSample) + 88];
+    EXPECT_LT(levelAt2ms, 0.01f * levelBeforeNoteOff)
+        << "the release should still complete within about 2 ms, not linger";
 }
 
 // ---------------------------------------------------------------------------
-// (d) Poly mode: the same mid-decay, zero-release cut, per-voice, via Gate CV instead of MIDI.
+// (d) Poly mode: the same mid-decay, zero-release scenario, per-voice, via Gate CV instead of
+// MIDI -- confirms the fix applies identically off the Gate CV / Schmitt-trigger path.
 // ---------------------------------------------------------------------------
-TEST_F(ADSRTest, FRO116_PolyMode_NoteOffMidDecay_SameZeroReleaseCut) {
+TEST_F(ADSRTest, FRO116_PolyMode_NoteOffMidDecay_ReleaseFloorPreventsInstantCut) {
     setPoly(adsr, true);
     setFloat(adsr, "attack", 0.0f);
     setFloat(adsr, "hold", 0.0f);
@@ -192,13 +232,14 @@ TEST_F(ADSRTest, FRO116_PolyMode_NoteOffMidDecay_SameZeroReleaseCut) {
     setFloat(adsr, "sustain", 0.0f);
     setFloat(adsr, "release", 0.0f);
 
-    const int gateOffSample = 2205; // 0.05s in
+    const int gateOffSample = 2205;               // 0.05s in
+    const int totalSamples = gateOffSample + 120; // see the mono test above for why +120
     juce::AudioBuffer<float> polyBuffer(8, 1);
     juce::MidiBuffer emptyMidi;
     std::vector<float> trace;
-    trace.reserve(static_cast<size_t>(gateOffSample) + 10);
+    trace.reserve(static_cast<size_t>(totalSamples));
 
-    for (int i = 0; i < gateOffSample + 10; ++i) {
+    for (int i = 0; i < totalSamples; ++i) {
         polyBuffer.clear();
         if (i < gateOffSample)
             polyBuffer.setSample(0, 0, 1.0f); // voice 0 gate high
@@ -211,13 +252,15 @@ TEST_F(ADSRTest, FRO116_PolyMode_NoteOffMidDecay_SameZeroReleaseCut) {
     const float levelAtGateOff = trace[static_cast<size_t>(gateOffSample)];
     const float cutJump = std::abs(levelAtGateOff - levelBeforeGateOff);
 
-    std::cout << "FRO116(d) poly mid-decay: level before gate-off = " << levelBeforeGateOff
-              << ", level at gate-off = " << levelAtGateOff << ", cut jump = " << cutJump << std::endl;
-
     ASSERT_GT(levelBeforeGateOff, 0.3f) << "expected a substantial mid-decay level before gate-off, got "
                                         << levelBeforeGateOff;
-    EXPECT_NEAR(levelAtGateOff, 0.0f, 1e-4f) << "poly voices see the same instant 0ms-release cut";
-    EXPECT_NEAR(cutJump, levelBeforeGateOff, 1e-4f);
+
+    EXPECT_GT(levelAtGateOff, 0.5f * levelBeforeGateOff) << "poly voices must not read as an instant cut either";
+    EXPECT_LT(cutJump, 0.25f * levelBeforeGateOff)
+        << "no single sample should account for most of the level that gets released";
+
+    const float levelAt2ms = trace[static_cast<size_t>(gateOffSample) + 88];
+    EXPECT_LT(levelAt2ms, 0.01f * levelBeforeGateOff) << "poly release should still complete within about 2 ms";
 }
 
 // ---------------------------------------------------------------------------
@@ -243,9 +286,6 @@ TEST_F(ADSRTest, FRO116_NoteOffAfterDecayAlreadySettled_NoDiscontinuity) {
     const float levelBeforeNoteOff = trace[static_cast<size_t>(noteOffSample) - 1];
     const float levelAtNoteOff = trace[static_cast<size_t>(noteOffSample)];
     const float jump = std::abs(levelAtNoteOff - levelBeforeNoteOff);
-
-    std::cout << "FRO116(e) note-off after settle: level before = " << levelBeforeNoteOff
-              << ", level at note-off = " << levelAtNoteOff << ", jump = " << jump << std::endl;
 
     ASSERT_NEAR(levelBeforeNoteOff, 0.0f, 1e-4f) << "expected the envelope to have already settled to 0";
     EXPECT_NEAR(jump, 0.0f, 1e-4f) << "no click when the gate outlasts the decay";
@@ -289,19 +329,20 @@ TEST_F(ADSRTest, FRO116_DecayToSustainCascade_NoStepAtNonZeroSustain) {
     ASSERT_GE(cascadeIndex, 0) << "envelope never reached sustain=0.4 within the window";
     const float stepAtCascade =
         std::abs(trace[static_cast<size_t>(cascadeIndex)] - trace[static_cast<size_t>(cascadeIndex) - 1]);
-    std::cout << "FRO116(f) decay->sustain cascade at sample " << cascadeIndex << ", step = " << stepAtCascade
-              << std::endl;
     EXPECT_LT(stepAtCascade, 0.01f) << "the decay-end/sustain-smoother boundary should not itself click";
 }
 
 // ---------------------------------------------------------------------------
 // (g) Oscillator phase interaction: the oscillator is free-running and never resets phase on
-// note-on (by design -- see AntiClickTests.cpp's OscillatorNoPhaseReset). A 0ms attack means
-// the VCA'd output jumps from 0 (envelope was Idle/silent) to 1.0 * (whatever the oscillator's
-// instantaneous sample value is) in one sample -- so the AUDIBLE size of the attack click
-// depends on the oscillator's phase at that instant, not just on the envelope. Two runs that
-// differ only in how long the oscillator warmed up before the note-on demonstrate this: the
-// output-domain jump magnitude changes even though the envelope-domain jump is identical (1.0).
+// note-on (by design -- see AntiClickTests.cpp's OscillatorNoPhaseReset). Even with the FRO116
+// floor, the envelope-domain step at the very first sample of a 0ms attack is a small, FIXED
+// fraction of full scale (the same fraction every time -- it depends only on the floor and the
+// curve, not on anything oscillator-related), so the VCA'd output at that sample is that fixed
+// fraction times whatever the oscillator's instantaneous sample value happens to be -- the
+// AUDIBLE size of the (now much smaller) attack step still depends on the oscillator's phase,
+// not just on the envelope. Two runs that differ only in how long the oscillator warmed up
+// before the note-on demonstrate this: the output-domain jump magnitude changes even though the
+// envelope-domain jump is identical between the two runs.
 // ---------------------------------------------------------------------------
 TEST_F(ADSRTest, FRO116_ZeroAttack_OutputJumpMagnitudeDependsOnOscillatorPhase) {
     auto measureAttackOutputJump = [](int oscWarmupSamples) -> float {
@@ -365,13 +406,11 @@ TEST_F(ADSRTest, FRO116_ZeroAttack_OutputJumpMagnitudeDependsOnOscillatorPhase) 
     const float jumpShortWarmup = measureAttackOutputJump(3);
     const float jumpLongWarmup = measureAttackOutputJump(37);
 
-    std::cout << "FRO116(g) oscillator-phase-at-attack: output jump with 3-sample warmup = " << jumpShortWarmup
-              << ", with 37-sample warmup = " << jumpLongWarmup << std::endl;
-
     // The two jumps should differ (the phase moved between the two warmup lengths), and both
     // should be well below 1.0 -- proving the attack's audible size in the real osc->VCA signal
-    // path is modulated by oscillator phase, not fixed at "envelope jumps 0->1.0" the way the
-    // pure-envelope tests above measure it in isolation.
+    // path is modulated by oscillator phase, not fixed at a single output-domain magnitude the
+    // way the pure-envelope tests above measure the (now floored, much smaller) envelope-domain
+    // step in isolation.
     EXPECT_NE(jumpShortWarmup, jumpLongWarmup)
         << "expected the output-domain attack jump to depend on the oscillator's instantaneous phase";
     EXPECT_GT(jumpShortWarmup, 0.0f);

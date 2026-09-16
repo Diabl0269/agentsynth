@@ -17,13 +17,19 @@ public:
     ADSRModule(const juce::String& name = "ADSR")
         : ModuleBase(name, 9, 9) // 8 gate CV per voice + shared Threshold CV; 8 env + silent ch8
     {
-        // Times move to a LINEAR [0, 5] range; the retired minimum-time clamps are gone on
-        // purpose -- 0 ms is a real, reachable, click-is-your-choice value, not a bug. The knob
-        // feel at the new 1 ms attack default lives on the slider itself (ModuleComponent.cpp's
-        // ADSR special case, applyAdsrTimeSliderSkew), never on the parameter's own range -- a
-        // skewed NormalisableRange here would badly worsen AIStateMapper's pre-existing untrusted
-        // in-[0,1] rescale misfire. See docs/modules.md for the full rationale and for why 5.0
-        // stays the ceiling.
+        // Times move to a LINEAR [0, 5] range; the retired minimum-time clamps (2 ms attack /
+        // 5 ms release) are gone from the PARAMETER on purpose -- 0 ms is a real, reachable,
+        // displayable value, not a bug, and nothing here silently raises it. `EnvelopeGenerator`
+        // still floors the stage's *effective* time internally to a fixed, much smaller
+        // click-free minimum (0.1 ms attack, 1 ms decay/release; see its `kMinAttackSeconds` /
+        // `kMinRampSeconds`) -- a one-sample full-scale level jump is audible regardless of
+        // whether the user asked for 0 ms explicitly or an automation lane swept down to it, so
+        // "0 ms" reads as "as fast as is click-free", not as a literal single-sample cliff. The
+        // knob feel at the new 1 ms attack default lives on the slider itself
+        // (ModuleComponent.cpp's ADSR special case, applyAdsrTimeSliderSkew), never on the
+        // parameter's own range -- a skewed NormalisableRange here would badly worsen
+        // AIStateMapper's pre-existing untrusted in-[0,1] rescale misfire. See docs/modules.md
+        // for the full rationale and for why 5.0 stays the ceiling.
         addParameter(attackParam = new juce::AudioParameterFloat("attack", "Attack",
                                                                  juce::NormalisableRange<float>(0.0f, 5.0f), 0.001f));
         addParameter(decayParam = new juce::AudioParameterFloat("decay", "Decay",
