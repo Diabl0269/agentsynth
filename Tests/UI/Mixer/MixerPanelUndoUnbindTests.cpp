@@ -21,6 +21,7 @@
 #include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
 #include "Modules/ChannelStripModule.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Mixer/MixerColumnComponent.h"
 #include "UI/Mixer/MixerFader.h"
 #include <gtest/gtest.h>
@@ -61,6 +62,17 @@ int countChannelStrips(juce::AudioProcessorGraph& graph) {
         if (node != nullptr && dynamic_cast<ChannelStripModule*>(node->getProcessor()) != nullptr)
             ++count;
     return count;
+}
+
+// The mixer column binds to the ChannelStripModule's own gain/pan/sendNLevel parameters, NOT to
+// the track-audio node the timeline track's bindingUuid points at -- resolving the node any other
+// way would hand these tests a node the mixer never bound, and the live-unbind counter would sit
+// still whether the fix is present or not.
+juce::AudioProcessorGraph::Node* findChannelStripNode(juce::AudioProcessorGraph& graph) {
+    for (auto* node : graph.getNodes())
+        if (node != nullptr && dynamic_cast<ChannelStripModule*>(node->getProcessor()) != nullptr)
+            return node;
+    return nullptr;
 }
 
 } // namespace
@@ -173,4 +185,82 @@ TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeDeleteSelectionFreesTheSt
     mixerPanel.rebuild();
     EXPECT_EQ(countChannelStrips(mc.getAudioEngine().getGraph()), 0);
     EXPECT_EQ(mixerPanel.getStripColumnForTest(0), nullptr);
+}
+
+// FRO16's review follow-up closed GraphEditor::deleteSelection() (above), but left the two OTHER
+// single-node removal commands open: requestDeleteModule() -- a module card's own delete button
+// (ModuleComponent.cpp) and its "Delete Module" context-menu item -- and replaceModule(), the
+// "Replace with..." submenu, offered for every module except the singleton Audio Input/Output.
+// Both can free a ChannelStripModule (or MasterModule, which is deliberately kept OUT of any
+// collapsed macro and so is always individually addressable on the canvas) that a mixer column's
+// fader, pan attachment or send rows are still bound to, and neither has a rebuild of its own to
+// lean on: updateComponents() only reaches reconcileTimelineBindingsOnly(), which deliberately
+// never rebuilds the mixer. The dangling binding then sat until an unrelated later graph edit
+// destroyed the old column and dereferenced it -- the exact heap-use-after-free signature (or,
+// non-deterministically, the exit-124 deadlock inside CriticalSection::enter) this file's other
+// three tests exist for.
+TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeRequestDeleteModuleFreesTheStripsNode) {
+    MainComponent mc(std::make_unique<MockProviderMPUT>());
+    mc.setSize(1400, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    mc.newPatchForTest();
+    mc.simulateAddAudioTrackClick();
+
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto& mixerPanel = mc.getMixerDock().getMixerPanel();
+    auto* column = mixerPanel.getStripColumnForTest(0);
+    ASSERT_NE(column, nullptr);
+    ASSERT_TRUE(column->isFaderBoundForTest()) << "the strip's fader must be bound before the delete";
+
+    auto* stripNode = findChannelStripNode(graph);
+    ASSERT_NE(stripNode, nullptr);
+
+    const int liveUnbindsBefore = synth::ui::MixerFader::getLiveUnbindCallCountForTest();
+
+    // The card's delete button and "Delete Module" both land here, with the strip's own NodeID.
+    mc.getGraphEditor().requestDeleteModule(stripNode->nodeID);
+
+    EXPECT_GT(synth::ui::MixerFader::getLiveUnbindCallCountForTest(), liveUnbindsBefore)
+        << "requestDeleteModule() must unbind the strip's fader before removeNode() frees it";
+
+    // The eventual mixer rebuild -- whenever it next runs, exactly like production -- must not
+    // dereference anything freed above.
+    mixerPanel.rebuild();
+    EXPECT_EQ(countChannelStrips(graph), 0);
+    EXPECT_EQ(mixerPanel.getStripColumnForTest(0), nullptr);
+}
+
+TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeReplaceModuleFreesTheStripsNode) {
+    MainComponent mc(std::make_unique<MockProviderMPUT>());
+    mc.setSize(1400, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    mc.newPatchForTest();
+    mc.simulateAddAudioTrackClick();
+
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto& mixerPanel = mc.getMixerDock().getMixerPanel();
+    auto* column = mixerPanel.getStripColumnForTest(0);
+    ASSERT_NE(column, nullptr);
+    ASSERT_TRUE(column->isFaderBoundForTest()) << "the strip's fader must be bound before the replace";
+
+    auto* stripNode = findChannelStripNode(graph);
+    ASSERT_NE(stripNode, nullptr);
+
+    // replaceModule() resolves the old node by processor pointer, so it wants the card, not the id.
+    ModuleComponent* stripCard = nullptr;
+    for (auto* card : mc.getGraphEditor().getModuleComponents())
+        if (card != nullptr && card->getModule() == stripNode->getProcessor())
+            stripCard = card;
+    ASSERT_NE(stripCard, nullptr) << "the strip has a canvas card, which is what carries the menu";
+
+    const int liveUnbindsBefore = synth::ui::MixerFader::getLiveUnbindCallCountForTest();
+
+    // "Replace with... Oscillator" frees the ChannelStripModule the fader points at.
+    mc.getGraphEditor().replaceModule(stripCard, "Oscillator");
+
+    EXPECT_GT(synth::ui::MixerFader::getLiveUnbindCallCountForTest(), liveUnbindsBefore)
+        << "replaceModule() must unbind the strip's fader before removeNode() frees it";
+
+    mixerPanel.rebuild();
+    EXPECT_EQ(countChannelStrips(graph), 0);
 }

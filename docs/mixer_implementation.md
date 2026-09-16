@@ -556,7 +556,15 @@ Side tracks (each independent of the main line beyond its own listed dependency)
     until an unrelated later graph edit finally destroyed the column and dereferenced it (exit 124 +
     SIGABRT, deadlocked inside `CriticalSection::enter` on freed memory —
     `Tests/UI/Mixer/MixerPanelUndoUnbindTests.cpp`'s
-    `MixerPanelUnbindsBeforeDeleteSelectionFreesTheStripsNodes` is the regression test). Same as it
+    `MixerPanelUnbindsBeforeDeleteSelectionFreesTheStripsNodes` is the regression test). FRO103
+    closed the two remaining single-node commands the same way, for the same reason:
+    `GraphEditor::requestDeleteModule()` (a module card's own delete button and its "Delete Module"
+    menu item) and `GraphEditor::replaceModule()` (the "Replace with..." submenu, offered for every
+    module except the singleton Audio Input/Output — so it reaches a `ChannelStripModule`, and a
+    `MasterModule`, which is deliberately kept out of every collapsed macro and is therefore always
+    individually addressable). Both now fire `onBeforeDetachAllModuleComponents` immediately before
+    their `graph.removeNode()`; `MixerPanelUnbindsBeforeRequestDeleteModuleFreesTheStripsNode` and
+    `MixerPanelUnbindsBeforeReplaceModuleFreesTheStripsNode` are the regression tests. Same as it
     already does for the fader/pan/mute/solo/meter. A **live single-insert removal** from the mixer's own
     row menu is a different path — `MixerInsertList::removeRow()` calls `graph.removeNode()`
     directly (synchronous, frees the processor immediately) and only *afterwards* does that
@@ -569,10 +577,12 @@ Side tracks (each independent of the main line beyond its own listed dependency)
     this plan's own risk notes ("EQ node deleted between snapshot and paint: covered by the column
     rebuild lifetime") got this ordering backwards — the rebuild happens strictly *after* the
     module is freed on this path, not before; the notes below are the corrected version.
-    Belt-and-braces: `MixerInsertList::removeRow()` is not the only single-node
+    Belt-and-braces: `MixerInsertList::removeRow()` was not the only single-node
     `graph.removeNode()` call site with no pre-removal unbind hook — a canvas "Delete" on the same
-    EQ module's card (`GraphEditor::requestDeleteModule()`) is another. Rather than chase every
-    such call site with its own hook, `setEqModule()` also takes the owning graph + NodeID
+    EQ module's card (`GraphEditor::requestDeleteModule()`) was another. FRO103 has since given
+    that one, and `replaceModule()`, the same pre-removal seam every other path uses, but the
+    liveness check below stays: it is what keeps the thumbnail safe on a call site nobody has
+    hooked yet. Rather than rely on chasing every such call site, `setEqModule()` also takes the owning graph + NodeID
     (`MixerColumnComponent` always has both), and `detachListeners()` checks the node is still
     actually in the graph before touching `eq_` at all — if it's already gone, its parameters died
     with it and there is nothing left to call `removeListener()` on.
