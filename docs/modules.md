@@ -269,12 +269,64 @@ Loads an audio file from disk and plays it back one of two ways.
 - **`isAutoPromotableModTarget`**: Returns `false` in poly mode (poly CV connections stay plain `DirectCV`, not auto-wrapped in attenuverters).
 
 ## ADSR (Envelope) Module
-- **Stages**: Attack, Decay, Sustain, Release.
-- **Mono output**: Generates a single control signal (0.0 to 1.0) on channel 0. The envelope is held while **either** MIDI is down **or** the Gate CV is high, and releases only when both are low. Unpatched Gate stays silent, so existing MIDI-only patches are unchanged.
-- **Gate CV**: a Schmitt trigger on ch0 (same `SchmittTrigger` helper as Sample & Hold / Comparator). Arms above `Threshold` and only re-arms once the signal falls a fixed 0.05 below it. Poly mode already did this; mono used to ignore the jack and overwrite the incoming CV (issue #187).
+- **Engine**: `synth::EnvelopeGenerator` (`Source/Modules/Envelope/EnvelopeGenerator.h`), a
+  progress-based AHDSR generator with no rate/coefficient state cached from one sample to the
+  next — every stage owns a `p` in `[0, 1]` advanced by `1 / (time * sampleRate)`, and level is
+  always `stageStart + (stageTarget - stageStart) * shape(p, curve)`. This is what removed the
+  cliffs a rate-based envelope (the previous `juce::ADSR`-backed implementation) is prone to: a
+  stage's duration and endpoints are exact regardless of curve, a 0 ms stage costs no samples of
+  its own (it cascades straight into the next stage rather than sitting for one flat sample),
+  and changing a stage's time mid-ramp only changes slope, never the level.
+- **Stages**: Attack, Hold, Decay, Sustain, Release. Hold is new (FRO110) — a flat segment
+  pinned at 1.0 between Attack finishing and Decay starting, default 0 s (no hold).
+- **Curves**: `attackCurve` (default -0.3), `decayCurve` (default 0.65), `releaseCurve` (default
+  0.65), each -1..+1. `0` is linear; `> 0` is fast-first/slow-tail (the natural decay/release
+  shape); `< 0` is slow-first/fast-finish. Exact endpoints hold for every curve amount:
+  `shape(0, c) == 0`, `shape(1, c) == 1`. Not exposed to the AI few-shot examples.
+- **Times retired their minimum clamps (FRO110)**: `attack`/`hold`/`decay`/`release` move to
+  `NormalisableRange(0.0, 5.0, 0.0, 0.3)` — minimum is genuinely 0 s now (an explicit 0 is
+  honoured, not silently raised to 2 ms / 5 ms the way the old clamps did), the 0.3 skew keeps
+  the knob usable at the new 1 ms attack default, and the maximum stays 5.0 (widening it would
+  quadruple the existing misfire of `AIStateMapper`'s in-`[0,1]` rescale heuristic for untrusted
+  patches). New defaults: attack 0.001 s, hold 0 s, decay 1.0 s, **sustain 1.0**, release 0.015 s
+  — a held note sustains by default now, matching how most other synths default. The 0.3 skew is
+  safe for every persistence path that matters: `graphToJSON` stores denormalised (real-unit)
+  values (`AIStateMapper.cpp`'s `convertFrom0to1` call) and so does timeline automation
+  (`AutomationRecorder::denormalisedValueOf`). The one place a skew change is visible is a
+  **host's own** VST3/AU automation lane, which is normalised — an existing host automation
+  curve on one of these four parameters will shift. Acceptable pre-V1.
+- **Retrigger is two different rules, on purpose**: a MIDI note-on always calls `noteOn()` at
+  the event itself — driven by the event, not by an edge in a held/not-held flag — so a
+  gapless back-to-back note sequence (a note-off and the next note-on landing on the very same
+  sample) still re-articulates. `noteOn()` enters Attack from the envelope's *current* level,
+  over the *full* attack time, from any stage including mid-release — continuous, no click, no
+  jump; a retrigger from above where Attack would otherwise be at that point in time can only
+  climb toward Attack's target (never dip below where it started). A Gate CV that stays high is
+  legato by modular convention and does **not** retrigger on its own; only a rising edge (via
+  the shared `SchmittTrigger`) or a MIDI note-on starts a new envelope. Mono note-offs are
+  tracked per note number in a `std::bitset<128>` (channel-agnostic); release only fires once
+  every held note is gone **and** the Gate CV is low — the OR between the two is unchanged.
+  CC123 (all notes off) and CC120 (all sound off) clear every held note.
+- **Mono output**: Generates a single control signal (0.0 to 1.0) on channel 0. The envelope is
+  held while **either** MIDI is down **or** the Gate CV is high, and releases only when both are
+  low. Unpatched Gate stays silent, so existing MIDI-only patches are unchanged.
+- **Gate CV**: a Schmitt trigger on ch0 (same `SchmittTrigger` helper as Sample & Hold /
+  Comparator). Arms above `Threshold` and only re-arms once the signal falls a fixed 0.05 below
+  it. **Sampled per sample in both mono and poly mode** — a mid-block retrigger is seen on the
+  exact sample it happens, wherever it falls in the block.
 - **Threshold**: `gateThreshold` (0.0–1.0, default 0.5) plus Threshold CV on ch8. The id is `gateThreshold` rather than `threshold` / `trigThreshold` because Compressor / Limiter / Gate own `threshold` as dB and Sample & Hold / Comparator own `trigThreshold` as bipolar CV.
-- **Poly mode**: 8 gate CV inputs (ch0-7) drive 8 independent ADSR instances; outputs 8 per-voice envelopes (ch0-7). Threshold CV (ch8) is shared across voices.
-- **Smoothing**: Sustain is smoothed over 20 ms (a block at a time — `juce::ADSR` only takes parameters through `setParameters`). It is the one stage that is a *level*: `juce::ADSR` emits it verbatim while a note is held, so an automated step steps every destination. Attack/Decay/Release are ramp *rates* and are deliberately not smoothed.
+- **Poly mode**: 8 gate CV inputs (ch0-7) drive 8 independent envelope generators; outputs 8
+  per-voice envelopes (ch0-7). Threshold CV (ch8) is shared across voices, and one
+  `EnvelopeParameters` is built once per sample (not once per voice) since every voice shares
+  the same attack/hold/decay/sustain/release/curve values.
+- **Smoothing**: Sustain is smoothed over 20 ms, read fresh **per sample** (not a block at a
+  time) and fed to `EnvelopeGenerator` as both Decay's live target and the flat Sustain output,
+  so an in-flight decay or a held note retargets smoothly instead of stepping. It is the one
+  parameter that is a *level*, not a stage time; attack/hold/decay/release are deliberately left
+  unsmoothed — `EnvelopeGenerator` turns a time change mid-ramp into a slope change on its own.
+- **UI playhead (not yet consumed by any UI)**: `getPlayheadStage()` / `getPlayheadProgress()` /
+  `getPlayheadLevel()` expose the stage/progress/level of the most recently (re)triggered voice,
+  written lock-free (`std::atomic`, relaxed) once per block, for a future graph-editor overlay.
 - **Uses**: Modulation of VCA gain, Filter cutoff, or Oscillator Level.
 - **Threshold control**: `ThresholdControlComponent` in slider+meter mode — a live unipolar bar of the Gate jack with the Threshold slider attached, so the slice can be set by eye.
 - **Default instrument-track chain (P9-3i, FRO43)**: "+ Track -> Instrument -> {Oscillator/Wavetable}" auto-wires one ADSR (MIDI-gated, forced non-poly, `sustain` overridden to 0.7) driving a VCA ahead of the rest of the chain — see [mixer.md](mixer.md)'s P9-3i entry for the full wiring and why it's forced non-poly. When the instrument is poly (P9-3j, FRO46), the ADSR is genuinely poly instead — gated by a Poly MIDI node's per-voice Gate CV rather than raw MIDI — see mixer.md's P9-3j entry.
@@ -326,7 +378,7 @@ Hand-played MIDI rarely repeats a pitch inside an envelope's attack; **machine-g
 - **Note-off is unchanged**: gate target 0 with the 5 ms smoothing, pitch held.
 - **`Vel → Gate` (`velToGate`, default off).** Off: the gate rises to exactly 1.0, as it always has — a preset saved before this parameter existed loads with the default and renders byte-identically. On: the gate rises to the note-on velocity (0..1), stored per voice, so held voices keep their own levels.
 - **Chord larger than the voice count.** Nine same-sample note-ons on eight voices in `Oldest` mode drop the chord's **first** note: stamps are strictly increasing (`stampFor` clamps to `lastStamp_ + 1`), so note 1 is the oldest by one count and note 9 steals it. Notes 2–9 sound, and the stolen voice re-attacks by the rule above rather than gliding.
-- **Downstream reality check (`ADSRModule`)**: the ADSR's poly branch samples its gate input **once per block** (`gateData[0]`), so the 1 ms gap re-articulates it only when the gap covers a block boundary; a mid-block retrigger is invisible to *that* module even though the CV is correct. Pinned end-to-end by `PolyMidiToAdsrTest.RetriggerReArticulatesAdsrWhenTheGapSpansABlockBoundary`. Fix belongs in ADSR's edge detection, not by widening this gap.
+- **Downstream reality check (`ADSRModule`)**: the ADSR's poly branch samples its gate input **per sample** (FRO110 fixed the stale once-per-block sampling), so the 1 ms gap re-articulates it on the exact sample it happens, wherever it falls in the block — a mid-block retrigger is seen identically to one that spans a block boundary. Pinned end-to-end by `PolyMidiToAdsrTest.RetriggerReArticulatesAdsrRegardlessOfBlockAlignment`.
 
 ## Voice Mixer Module
 - **Purpose**: Explicit 8-to-stereo voice summing with level control and soft saturation. An alternative to VCA's internal poly summing for patches that need a separate mix stage.

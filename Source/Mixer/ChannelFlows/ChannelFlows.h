@@ -145,16 +145,18 @@ struct EnvelopeAndVCA {
  *     chainSource L/R -----------------------> VCA Audio L/R (ch0 / VCAModule::kRightBase)
  *
  * Both nodes are forced non-poly, regardless of the instrument's own "poly" parameter: ADSRModule's
- * poly branch is CV-gate-only (it never reads the MIDI note-on/off fallback `midiGateHeld`, which
- * exists solely in its non-poly branch), so a poly ADSR fed only Track In's MIDI would output a
- * permanent zero envelope -> total silence, not degraded polyphony. Non-poly composes correctly
- * whether or not `chainSource` is already a Voice Mixer's poly-voice sum (addVoiceMixerForPolyInstrument
- * above) — this is deliberately called AFTER that stage, never before it, so a poly instrument's
- * per-voice audio is summed to one stereo pair before the (necessarily-mono) VCA gates it.
+ * poly branch is CV-gate-only (it never reads the MIDI note-on/off fallback tracked via the
+ * `heldNotes` bitset, which exists solely in its non-poly branch), so a poly ADSR fed only Track
+ * In's MIDI would output a permanent zero envelope -> total silence, not degraded polyphony.
+ * Non-poly composes correctly whether or not `chainSource` is already a Voice Mixer's poly-voice
+ * sum (addVoiceMixerForPolyInstrument above) — this is deliberately called AFTER that stage,
+ * never before it, so a poly instrument's per-voice audio is summed to one stereo pair before the
+ * (necessarily-mono) VCA gates it.
  *
- * ADSR's sustain (stock factory default 0.0) is overridden to 0.7 so a held note actually sustains
- * instead of plucking and decaying to silence after ~0.25s regardless of how long the key is held;
- * the release stage (stock default, unchanged) is what fixes the drone-after-note-off bug. VCA's
+ * ADSR's sustain (stock factory default 1.0 as of FRO110; this override predates that and is kept
+ * for clarity/explicitness) is set to 0.7 so a held note settles at a musical level instead of the
+ * full peak; the release stage (stock default, unchanged) is what fixes the drone-after-note-off
+ * bug. VCA's
  * gain (stock factory default 0.5) is overridden to 1.0 so the envelope alone governs perceived
  * level, not an extra silent 50% attenuation stacked under it.
  *
@@ -196,8 +198,8 @@ struct PolyEnvelopeAndVCA {
 /**
  * FRO46 (P9-3j): addEnvelopeAndVCAForRawInstrument's ADSR+VCA are forced non-poly because
  * ADSRModule's poly branch is CV-gate-only — it never reads the MIDI note-on/off fallback that
- * drives its mono branch (ADSRModule.h's `midiGateHeld`), so a poly ADSR fed only Track In's raw
- * MIDI would output a permanent zero envelope. This is the poly counterpart: instead of MIDI
+ * drives its mono branch (ADSRModule.h's `heldNotes` bitset), so a poly ADSR fed only Track In's
+ * raw MIDI would output a permanent zero envelope. This is the poly counterpart: instead of MIDI
  * driving a mono ADSR, a Poly MIDI node (the codebase's existing per-voice MIDI-to-CV converter —
  * docs/modules.md "Poly MIDI Module") turns Track In's MIDI into per-voice pitch/gate CV, which
  * drives a genuinely poly ADSR and VCA:

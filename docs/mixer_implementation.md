@@ -80,10 +80,11 @@ Main line, in dependency order:
      AFTER any Voice Mixer stage, never before it, and both nodes are forced non-poly regardless of
      the instrument's own `poly` parameter: `ADSRModule`'s poly branch is CV-gate-only (it never
      reads the MIDI note-on/off fallback that drives its non-poly branch), so a poly ADSR fed only
-     Track In's MIDI would output a permanent zero envelope. ADSR's `sustain` (stock default 0.0)
-     is overridden to 0.7 so a held note actually sustains instead of plucking-and-dying after
-     ~0.25s; VCA's `gain` (stock default 0.5) is overridden to 1.0 so the envelope alone governs
-     level. Sampler is untouched — it already has its own one-shot playback envelope, out of scope.
+     Track In's MIDI would output a permanent zero envelope. ADSR's `sustain` is explicitly set
+     to 0.7 (independent of its own stock default, 1.0 as of FRO110) so this auto-wired chain
+     settles at a musical level; VCA's `gain` (stock default 0.5) is overridden to 1.0 so the
+     envelope alone governs level. Sampler is untouched — it already has its own one-shot
+     playback envelope, out of scope.
      `{Track In, instrument, [Voice Mixer if poly], ADSR, VCA, EQ, Compressor, Strip}` join the same
      one collapsed macro. See `Tests/ChannelFlowTests.cpp`'s
      `InstrumentTrackOscillatorEnvelopeActuallySilencesAfterNoteOff` for the render-level proof (not
