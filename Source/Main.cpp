@@ -49,7 +49,8 @@ public:
         // no window, no engine and no settings file — this runs before all of that.
         {
             juce::String scanXml;
-            if (const auto exitCode = synth::runPluginScanChildMode(getCommandLineParameterArray(), scanXml)) {
+            if (const auto exitCode = synth::runPluginScanChildMode(getCommandLineParameterArray(), scanXml,
+                                                                    /*suppressCrashDialog=*/true)) {
                 emitPluginScanChildOutput(scanXml);
                 setApplicationReturnValue(*exitCode);
                 quit();
@@ -265,7 +266,7 @@ int main(int argc, char* argv[]) {
         args.add(juce::String::fromUTF8(argv[i]));
 
     juce::String scanXml;
-    if (const auto exitCode = synth::runPluginScanChildMode(args, scanXml)) {
+    if (const auto exitCode = synth::runPluginScanChildMode(args, scanXml, /*suppressCrashDialog=*/true)) {
         emitPluginScanChildOutput(scanXml);
         return *exitCode;
     }

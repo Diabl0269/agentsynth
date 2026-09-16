@@ -400,6 +400,8 @@ add_library(Core STATIC
     Source/Plugin/Hosting/HostedPluginModule.h
     Source/Plugin/Hosting/PluginScanService.cpp
     Source/Plugin/Hosting/PluginScanService.h
+    Source/Plugin/Hosting/PluginScanCrashGuard.cpp
+    Source/Plugin/Hosting/PluginScanCrashGuard.h
     # AI
     Source/AI/AIProvider.h
     Source/AI/OllamaProvider.h
