@@ -5,16 +5,35 @@ namespace synth::ui {
 CurveEditorComponent::CurveEditorComponent() { setWantsKeyboardFocus(false); }
 
 CurveEditorGeometry CurveEditorComponent::currentGeometry() const {
-    return CurveEditorGeometry(model_, getLocalBounds().toFloat(), geometryConfig_);
+    CurveGeometryConfig config = geometryConfig_;
+    if (!config.explicitVisibleRange.has_value() && dragFrozenRange_.has_value())
+        config.explicitVisibleRange = dragFrozenRange_;
+    return CurveEditorGeometry(model_, getLocalBounds().toFloat(), config);
 }
 
 void CurveEditorComponent::setModel(CurveModel model) {
+    const int oldNumNodes = model_.getNumNodes();
+    const CurveMode oldMode = model_.getMode();
     model_ = std::move(model);
-    dragKind_ = DragKind::None;
-    dragIndex_ = -1;
-    hoveredKind_ = CurveHitKind::None;
-    hoveredIndex_ = -1;
-    selectedIndex_ = -1;
+
+    const int newNumNodes = model_.getNumNodes();
+    const bool topologyChanged = newNumNodes != oldNumNodes || model_.getMode() != oldMode;
+    const bool indexOutOfRange =
+        dragIndex_ >= newNumNodes || hoveredIndex_ >= newNumNodes || selectedIndex_ >= newNumNodes;
+
+    if (topologyChanged || indexOutOfRange) {
+        if (gestureActive_) {
+            endGesture(); // pair the gesture right here -- a mouseUp can no longer arrive
+                          // meaningfully for the old topology
+            gestureActive_ = false;
+        }
+        dragKind_ = DragKind::None;
+        dragIndex_ = -1;
+        dragFrozenRange_.reset();
+        hoveredKind_ = CurveHitKind::None;
+        hoveredIndex_ = -1;
+        selectedIndex_ = -1;
+    }
     repaint();
 }
 
@@ -178,8 +197,13 @@ void CurveEditorComponent::mouseDown(const juce::MouseEvent& e) {
     dragIndex_ = hit.index;
     lastDragPos_ = e.position;
 
-    if (hit.kind == CurveHitKind::Node)
+    if (hit.kind == CurveHitKind::Node) {
+        // Freeze the visible range for the duration of this drag, computed from the model as it
+        // stood right now (before any state changes) -- see `dragFrozenRange_`'s doc comment.
+        // Never frozen for a bend-handle drag: bend never moves x, nothing to freeze against.
+        dragFrozenRange_ = currentGeometry().getVisibleRange();
         selectedIndex_ = hit.index;
+    }
     if (dragKind_ != DragKind::None)
         repaint();
 }
@@ -209,6 +233,10 @@ void CurveEditorComponent::mouseUp(const juce::MouseEvent&) {
     }
     dragKind_ = DragKind::None;
     dragIndex_ = -1;
+    if (dragFrozenRange_.has_value()) {
+        dragFrozenRange_.reset();
+        repaint(); // re-fit the view now that the frozen range no longer applies
+    }
 }
 
 void CurveEditorComponent::mouseMove(const juce::MouseEvent& e) { updateHover(e.position); }

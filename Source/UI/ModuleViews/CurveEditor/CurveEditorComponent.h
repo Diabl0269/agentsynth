@@ -126,6 +126,15 @@ private:
     juce::Point<float> lastDragPos_;
     bool gestureActive_ = false;
 
+    /** Frozen visible-range snapshot for the duration of a node drag started via the real mouse
+     *  path (set in `mouseDown` on a Node hit, cleared in `mouseUp`). Without this, `currentGeometry()`
+     *  would recompute the visible range off the model's just-edited total duration on every
+     *  `mouseDrag`, rescaling the mapping under the cursor mid-gesture (a runaway feedback loop
+     *  when dragging the last node near the view's edge). Bend drags never set this -- they don't
+     *  move x, so there's nothing to freeze against. Not used by `dragNodeTo` called directly
+     *  (outside a real mouse gesture), which keeps its original always-auto-fit behaviour. */
+    std::optional<double> dragFrozenRange_;
+
     CurveHitKind hoveredKind_ = CurveHitKind::None;
     int hoveredIndex_ = -1;
     int selectedIndex_ = -1;

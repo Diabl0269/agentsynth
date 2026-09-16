@@ -290,3 +290,165 @@ TEST(CurveEditorInteractionTest, RealDoubleClickOnABendHandleResetsIt) {
     comp.mouseDoubleClick(curveDoubleClick(comp, *handle));
     EXPECT_FLOAT_EQ(comp.getModel().getBend(kDecaySeg), 0.0f);
 }
+
+// ---------------------------------------------------------------------------
+// Bug 1: frozen visible range during a node drag
+// ---------------------------------------------------------------------------
+// currentGeometry() derives its visible range from the model's CURRENT total duration, so a
+// Fixed-mode x-drag of the last node re-maps pixels-to-time on every mouseDrag off a duration
+// that the previous event just changed. Holding the pointer still in the drag headroom past the
+// last node would runaway-grow (or, dragged left, runaway-shrink) the duration every event. The
+// fix freezes the visible range at mouseDown (Node hits only) and restores auto-fit at mouseUp.
+
+TEST(CurveEditorInteractionTest, NodeDragFreezesVisibleRangeAcrossRepeatedEventsAtTheSamePosition) {
+    CurveEditorComponent comp;
+    comp.setSize(kWidth, kHeight);
+    comp.setModel(buildEnvelopeModel());
+
+    const CurveEditorGeometry geometry(comp.getModel(), comp.getLocalBounds().toFloat());
+    const auto releasePos = geometry.nodePosition(kReleaseEnd);
+    // Well into the visible-range headroom past the last node.
+    const juce::Point<float> target{(float)kWidth - 5.0f, releasePos.y};
+
+    comp.mouseDown(curveLeftClick(comp, releasePos));
+
+    comp.mouseDrag(curveLeftDrag(comp, target, releasePos));
+    const double duration1 = comp.getModel().getMaxX();
+    comp.mouseDrag(curveLeftDrag(comp, target, releasePos));
+    const double duration2 = comp.getModel().getMaxX();
+    comp.mouseDrag(curveLeftDrag(comp, target, releasePos));
+    const double duration3 = comp.getModel().getMaxX();
+    comp.mouseDrag(curveLeftDrag(comp, target, releasePos));
+    const double duration4 = comp.getModel().getMaxX();
+
+    // Without the fix, each identical-target event would re-fit off the just-grown duration and
+    // grow it further (~5% per event, since range = 1.1x duration recomputes off an ever-growing
+    // duration); with the frozen range, every event maps the same pixel to the same time.
+    EXPECT_NEAR(duration2, duration1, 1e-9);
+    EXPECT_NEAR(duration3, duration1, 1e-9);
+    EXPECT_NEAR(duration4, duration1, 1e-9);
+
+    comp.mouseUp(curveLeftClick(comp, target));
+}
+
+TEST(CurveEditorInteractionTest, NodeDragFrozenRangeMapsBackToTheOriginalDurationExactly) {
+    CurveEditorComponent comp;
+    comp.setSize(kWidth, kHeight);
+    comp.setModel(buildEnvelopeModel());
+
+    const CurveEditorGeometry geometry(comp.getModel(), comp.getLocalBounds().toFloat());
+    const auto releasePos = geometry.nodePosition(kReleaseEnd);
+    const double originalDuration = comp.getModel().getMaxX();
+    const juce::Point<float> target{(float)kWidth - 5.0f, releasePos.y};
+
+    comp.mouseDown(curveLeftClick(comp, releasePos));
+    comp.mouseDrag(curveLeftDrag(comp, target, releasePos));
+    EXPECT_NE(comp.getModel().getMaxX(), originalDuration) << "the node should have actually moved";
+
+    // Drive it back to the original on-screen position within the SAME gesture.
+    comp.mouseDrag(curveLeftDrag(comp, releasePos, releasePos));
+    EXPECT_NEAR(comp.getModel().getMaxX(), originalDuration, 1e-6);
+
+    comp.mouseUp(curveLeftClick(comp, releasePos));
+}
+
+TEST(CurveEditorInteractionTest, MouseUpClearsTheFrozenRangeAndRefitsTheGeometry) {
+    CurveEditorComponent comp;
+    comp.setSize(kWidth, kHeight);
+    comp.setModel(buildEnvelopeModel());
+
+    const CurveEditorGeometry geometry(comp.getModel(), comp.getLocalBounds().toFloat());
+    const auto releasePos = geometry.nodePosition(kReleaseEnd);
+    const juce::Point<float> target{(float)kWidth - 5.0f, releasePos.y};
+
+    comp.mouseDown(curveLeftClick(comp, releasePos));
+    comp.mouseDrag(curveLeftDrag(comp, target, releasePos));
+    comp.mouseUp(curveLeftClick(comp, target));
+
+    // A lingering frozen range would put the release node at a different on-screen pixel than a
+    // freshly auto-fit geometry predicts, so hit-testing the fresh position would miss.
+    const CurveEditorGeometry freshGeometry(comp.getModel(), comp.getLocalBounds().toFloat());
+    const auto expectedPos = freshGeometry.nodePosition(kReleaseEnd);
+
+    const CurveHitResult hit = comp.hitTest(expectedPos);
+    EXPECT_EQ(hit.kind, CurveHitKind::Node);
+    EXPECT_EQ(hit.index, kReleaseEnd);
+}
+
+// ---------------------------------------------------------------------------
+// Bug 2: setModel mid-gesture
+// ---------------------------------------------------------------------------
+// setModel() used to unconditionally reset drag/hover/selection state. The envelope card calls
+// setModel from its own parameter-listener while the user is mid-drag (the drag writes a
+// parameter, the listener pushes the model back), which would cancel the gesture after its very
+// first event. The fix only resets when the topology actually changed (node count or mode) or an
+// active index is now out of range.
+
+TEST(CurveEditorInteractionTest, SetModelPreservesALiveDragWhenTopologyIsUnchanged) {
+    CurveEditorComponent comp;
+    comp.setSize(kWidth, kHeight);
+    comp.setModel(buildEnvelopeModel());
+
+    int startCount = 0, endCount = 0;
+    comp.onGestureStart = [&] { ++startCount; };
+    comp.onGestureEnd = [&] { ++endCount; };
+
+    const CurveEditorGeometry geometry(comp.getModel(), comp.getLocalBounds().toFloat());
+    const auto sustainPos = geometry.nodePosition(kSustain);
+
+    comp.mouseDown(curveLeftClick(comp, sustainPos));
+    comp.mouseDrag(curveLeftDrag(comp, sustainPos.translated(5.0f, 0.0f), sustainPos));
+    EXPECT_EQ(startCount, 1);
+
+    // Same topology (5 nodes, Fixed) but different EnvelopeShape values -- as the envelope card's
+    // parameter-listener round trip would push mid-drag.
+    EnvelopeShape shape;
+    shape.sustain = 0.6f;
+    shape.decay = 0.250;
+    comp.setModel(buildEnvelopeModel(shape));
+    EXPECT_EQ(endCount, 0) << "an unchanged topology must not cancel the live gesture";
+
+    const double xBeforeSecondDrag = comp.getModel().getNode(kSustain).x;
+    const float yBeforeSecondDrag = comp.getModel().getNode(kSustain).y;
+    comp.mouseDrag(curveLeftDrag(comp, sustainPos.translated(15.0f, -5.0f), sustainPos));
+    EXPECT_EQ(startCount, 1) << "the drag must not have been reopened as a new gesture";
+    EXPECT_TRUE(comp.getModel().getNode(kSustain).x != xBeforeSecondDrag ||
+                comp.getModel().getNode(kSustain).y != yBeforeSecondDrag)
+        << "the second drag must not be a no-op";
+
+    comp.mouseUp(curveLeftClick(comp, sustainPos));
+    EXPECT_EQ(endCount, 1);
+}
+
+TEST(CurveEditorInteractionTest, SetModelCancelsALiveDragOnATopologyChange) {
+    CurveEditorComponent comp;
+    comp.setSize(kWidth, kHeight);
+    comp.setModel(buildEnvelopeModel());
+
+    int startCount = 0, endCount = 0;
+    comp.onGestureStart = [&] { ++startCount; };
+    comp.onGestureEnd = [&] { ++endCount; };
+
+    const CurveEditorGeometry geometry(comp.getModel(), comp.getLocalBounds().toFloat());
+    const auto sustainPos = geometry.nodePosition(kSustain);
+
+    comp.mouseDown(curveLeftClick(comp, sustainPos));
+    comp.mouseDrag(curveLeftDrag(comp, sustainPos.translated(5.0f, 0.0f), sustainPos));
+    EXPECT_EQ(startCount, 1);
+
+    // Different topology: 3 nodes, Free mode (vs. 5 nodes, Fixed).
+    comp.setModel(buildFreeModel());
+    EXPECT_EQ(endCount, 1) << "the topology change must pair the still-open gesture right here";
+
+    const CurveModel modelBeforeStaleDrag = comp.getModel();
+    comp.mouseDrag(curveLeftDrag(comp, sustainPos.translated(50.0f, 50.0f), sustainPos));
+    EXPECT_EQ(startCount, 1) << "a stale drag must not reopen a gesture";
+    EXPECT_EQ(endCount, 1) << "a stale drag must not fire a second end";
+    for (int i = 0; i < comp.getModel().getNumNodes(); ++i) {
+        EXPECT_DOUBLE_EQ(comp.getModel().getNode(i).x, modelBeforeStaleDrag.getNode(i).x) << "node " << i;
+        EXPECT_FLOAT_EQ(comp.getModel().getNode(i).y, modelBeforeStaleDrag.getNode(i).y) << "node " << i;
+    }
+
+    comp.mouseUp(curveLeftClick(comp, sustainPos));
+    EXPECT_EQ(endCount, 1) << "mouseUp after cancellation must not double-fire onGestureEnd";
+}

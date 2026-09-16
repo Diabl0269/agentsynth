@@ -191,7 +191,7 @@ default (the model accepts an alternative shape function, e.g. for a future LFO-
 This is deliberate: the curve the editor draws is exactly what the envelope's DSP plays, never a
 separately re-derived approximation.
 
-**Three decided display/interaction rules:**
+**Five decided display/interaction rules:**
 
 - **A zero-duration segment always occupies exactly `kZeroSegmentPx` (12px) on screen** — the
   model value stays 0 (this is a display convention only). The remaining width is shared among
@@ -209,6 +209,16 @@ separately re-derived approximation.
   returns `nullopt` (not drawn, not hittable) rather than a handle that does nothing when dragged.
   The handle that IS shown sits at the point ON THE CURVE at progress 0.5, so it visibly tracks
   the curve as bend changes rather than sitting at a fixed geometric midpoint.
+- **A node drag freezes the visible range for its duration** (captured at `mouseDown` on a Node
+  hit, cleared at `mouseUp`) — without this, `currentGeometry()` would recompute the range off the
+  model's just-edited total duration on every `mouseDrag`, rescaling the pixel-to-time mapping
+  under the cursor mid-gesture (a runaway feedback loop when dragging the last node near the
+  view's drag headroom). A bend-handle drag never freezes anything, since bend never moves x.
+- **`setModel()` preserves a live drag/hover/selection when the new model's topology matches** (same
+  node count and `CurveMode`) — only an actual topology change, or an active index now out of
+  range, resets that state (and pairs a still-open gesture's `onGestureEnd` right there). This is
+  what lets a host push a fresh model back mid-drag (e.g. the envelope card's own parameter
+  round trip) without cancelling the user's gesture after its first event.
 
 **No `juce::Timer`** — repaints only when the model, hover/selection, or playhead actually change.
 `setPlayhead(std::optional<Playhead>)` (`Playhead { int segment; float progress; }`) is a plain
