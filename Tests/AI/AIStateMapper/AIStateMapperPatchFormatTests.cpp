@@ -117,10 +117,10 @@ TEST(AIStateMapperTest, PolySequencerSurvivesRoundTrip) {
 // removing a parameter edits one row.
 TEST(AIStateMapperTest, ParamIdsGolden) {
     const std::map<juce::String, juce::String> golden = {
-        {"ADSR", "attack, attackCurve, bypassed, decay, decayCurve, gateThreshold, hold, muted, poly, release, "
-                 "releaseCurve, sustain"},
-        {"Amp Env", "attack, attackCurve, bypassed, decay, decayCurve, gateThreshold, hold, muted, poly, release, "
-                    "releaseCurve, sustain"},
+        {"ADSR", "attack, attackCurve, attackDiv, bypassed, decay, decayCurve, decayDiv, gateThreshold, hold, "
+                 "holdDiv, muted, poly, release, releaseCurve, releaseDiv, sustain, tempoSync"},
+        {"Amp Env", "attack, attackCurve, attackDiv, bypassed, decay, decayCurve, decayDiv, gateThreshold, hold, "
+                    "holdDiv, muted, poly, release, releaseCurve, releaseDiv, sustain, tempoSync"},
         {"Attenuverter", "amount, bypassed"},
         // Audio Input is a ModuleBase, so it has ModuleBase's bypass parameter. Audio
         // Output is still the graph's raw IO node and still has none.
@@ -138,8 +138,8 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Envelope Follower", "attack, bypassed, detection, muted, release, sensitivity"},
         {"External MIDI", "bypassed, channel, deviceIndex"},
         {"Filter", "bypassed, cutoff, drive, dualIO, filterType, muted, outputLevel, poly, resonance"},
-        {"Filter Env", "attack, attackCurve, bypassed, decay, decayCurve, gateThreshold, hold, muted, poly, release, "
-                       "releaseCurve, sustain"},
+        {"Filter Env", "attack, attackCurve, attackDiv, bypassed, decay, decayCurve, decayDiv, gateThreshold, hold, "
+                       "holdDiv, muted, poly, release, releaseCurve, releaseDiv, sustain, tempoSync"},
         {"Flanger", "bypassed, centreDelay, depth, dualIO, feedback, mix, muted, outputLevel, rate"},
         {"Gate", "attack, bypassed, dualIO, hold, muted, outputLevel, range, release, threshold"},
         // The host module has no parameters of its own beyond bypass/mute — the hosted

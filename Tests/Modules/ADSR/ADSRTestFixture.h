@@ -16,6 +16,10 @@ inline juce::AudioParameterBool* boolParam(ADSRModule& m, const juce::String& id
     return dynamic_cast<juce::AudioParameterBool*>(findParameterByID(&m, id));
 }
 
+inline juce::AudioParameterChoice* choiceParam(ADSRModule& m, const juce::String& id) {
+    return dynamic_cast<juce::AudioParameterChoice*>(findParameterByID(&m, id));
+}
+
 inline void setFloat(ADSRModule& m, const juce::String& id, float actual) {
     auto* p = floatParam(m, id);
     ASSERT_NE(p, nullptr);
@@ -26,6 +30,18 @@ inline void setPoly(ADSRModule& m, bool on) {
     auto* p = boolParam(m, "poly");
     ASSERT_NE(p, nullptr);
     *p = on;
+}
+
+inline void setBoolParam(ADSRModule& m, const juce::String& id, bool on) {
+    auto* p = boolParam(m, id);
+    ASSERT_NE(p, nullptr);
+    *p = on;
+}
+
+inline void setChoiceIndex(ADSRModule& m, const juce::String& id, int index) {
+    auto* p = choiceParam(m, id);
+    ASSERT_NE(p, nullptr);
+    *p = index;
 }
 
 class ADSRTest : public ::testing::Test {
