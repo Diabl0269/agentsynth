@@ -131,6 +131,86 @@ TEST(TrackPresetCapture, SoloScrubbedFromCapturedChannelStrip) {
     EXPECT_TRUE(foundStrip);
 }
 
+TEST(TrackPresetCapture, IsBusScrubbedFromCapturedChannelStrip) {
+    // FRO98 follow-up to the solo scrub above: a preset captured from a bus strip must not carry
+    // "isBus" into wherever it's inserted, or it badges an ordinary track channel as BUS (§5.15).
+    HostedPatchCFT patch;
+    GraphEditor editor(patch.engine);
+    const auto rig = buildSimpleTrackRigCFT(editor, patch.engine, patch.output);
+    ASSERT_NE(rig.macro, nullptr);
+
+    auto* stripNode = findNodeOfTypeCFT(patch.engine.getGraph(), ModuleType::ChannelStrip);
+    ASSERT_NE(stripNode, nullptr);
+    auto* stripModule = dynamic_cast<ChannelStripModule*>(stripNode->getProcessor());
+    ASSERT_NE(stripModule, nullptr);
+    stripModule->setIsBus(true);
+    ASSERT_TRUE(stripModule->getExtraState().getDynamicObject()->hasProperty("isBus"))
+        << "getExtraState() always writes \"isBus\" -- if this ever stops being true, the "
+           "EXPECT_FALSE below would pass vacuously instead of proving the scrub ran";
+
+    auto preset = synth::TrackPresetManager::extractTrackPreset(
+        patch.engine.getGraph(), editor.getMacros(), rig.macro->id, synth::TrackPresetKind::Audio, "BusScrub");
+    ASSERT_TRUE(preset.isObject());
+    auto* root = preset.getDynamicObject();
+    ASSERT_NE(root, nullptr);
+    auto* nodes = root->getProperty("nodes").getArray();
+    ASSERT_NE(nodes, nullptr);
+
+    bool foundStrip = false;
+    for (const auto& n : *nodes) {
+        auto* obj = n.getDynamicObject();
+        if (obj == nullptr || obj->getProperty("type").toString() != "Channel Strip")
+            continue;
+        foundStrip = true;
+        auto* state = obj->getProperty("state").getDynamicObject();
+        ASSERT_NE(state, nullptr) << "includeExtraState=true must still carry shape/gain/pan state";
+        EXPECT_FALSE(state->hasProperty("isBus"))
+            << "an imported isBus=true would badge an ordinary track channel as BUS wherever the preset lands";
+    }
+    EXPECT_TRUE(foundStrip);
+}
+
+TEST(TrackPresetCapture, SendsScrubbedFromCapturedChannelStrip) {
+    // FRO98 follow-up to the solo scrub above: a preset captured from a strip with configured
+    // sends must not carry "sends" slot state -- a send's target is a graph edge that is never
+    // stored (§5.15), so a captured slot would restore with no cable, showing a "No target" row.
+    HostedPatchCFT patch;
+    GraphEditor editor(patch.engine);
+    const auto rig = buildSimpleTrackRigCFT(editor, patch.engine, patch.output);
+    ASSERT_NE(rig.macro, nullptr);
+
+    auto* stripNode = findNodeOfTypeCFT(patch.engine.getGraph(), ModuleType::ChannelStrip);
+    ASSERT_NE(stripNode, nullptr);
+    auto* stripModule = dynamic_cast<ChannelStripModule*>(stripNode->getProcessor());
+    ASSERT_NE(stripModule, nullptr);
+    ASSERT_GE(stripModule->addSend(), 0) << "test setup: activating a send slot must succeed";
+    ASSERT_TRUE(stripModule->getExtraState().getDynamicObject()->getProperty("sends").getArray() != nullptr &&
+                !stripModule->getExtraState().getDynamicObject()->getProperty("sends").getArray()->isEmpty())
+        << "getExtraState() must actually carry the active send, or the EXPECT_FALSE below would "
+           "pass vacuously instead of proving the scrub ran";
+
+    auto preset = synth::TrackPresetManager::extractTrackPreset(
+        patch.engine.getGraph(), editor.getMacros(), rig.macro->id, synth::TrackPresetKind::Audio, "SendsScrub");
+    ASSERT_TRUE(preset.isObject());
+    auto* root = preset.getDynamicObject();
+    ASSERT_NE(root, nullptr);
+    auto* nodes = root->getProperty("nodes").getArray();
+    ASSERT_NE(nodes, nullptr);
+
+    bool foundStrip = false;
+    for (const auto& n : *nodes) {
+        auto* obj = n.getDynamicObject();
+        if (obj == nullptr || obj->getProperty("type").toString() != "Channel Strip")
+            continue;
+        foundStrip = true;
+        auto* state = obj->getProperty("state").getDynamicObject();
+        ASSERT_NE(state, nullptr) << "includeExtraState=true must still carry shape/gain/pan state";
+        EXPECT_FALSE(state->hasProperty("sends"))
+            << "a captured send slot with no re-resolved cable target would show a \"No target\" row on insert";
+    }
+    EXPECT_TRUE(foundStrip);
+}
+
 TEST(TrackPresetCapture, MacroMenuOffersTrackPresetItemsOnlyForAChannelMacro) {
     // GraphEditorMacroPrompts.cpp's buildMacroMenu gates "Save Track as Preset..."/"Set as Default
     // Track Preset" on synth::isChannelMacro(*macro, graph) -- omitted entirely (not merely
