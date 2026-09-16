@@ -41,6 +41,7 @@ add_executable(Tests
     Modules/ADSR/ADSRPolyTests.cpp
     Modules/ADSR/ADSRThresholdTests.cpp
     Modules/ADSR/ADSRClickDiagnosticsTests.cpp
+    Modules/ADSR/ADSRReadoutFormattingTests.cpp
     Modules/Envelope/EnvelopeGeneratorTests.cpp
     Modules/EnvelopeFollowerModuleTests.cpp
     Modules/ModuleBaseTests.cpp
@@ -184,6 +185,7 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentMacroBankTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentWavetableTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentPaintTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentEnvelopeCardTests.cpp
     UI/Graph/AutomationUiReflectionTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentHistoryTests.cpp
@@ -491,6 +493,7 @@ add_executable(Tests
     ../Source/UI/Graph/ModuleComponent/ModuleComponentLayout.cpp
     ../Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
     ../Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
+    ../Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibrarySearch.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryRows.cpp

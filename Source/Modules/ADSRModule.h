@@ -30,21 +30,35 @@ public:
         // parameter's own range -- a skewed NormalisableRange here would badly worsen
         // AIStateMapper's pre-existing untrusted in-[0,1] rescale misfire. See docs/modules.md
         // for the full rationale and for why 5.0 stays the ceiling.
-        addParameter(attackParam = new juce::AudioParameterFloat("attack", "Attack",
-                                                                 juce::NormalisableRange<float>(0.0f, 5.0f), 0.001f));
-        addParameter(decayParam = new juce::AudioParameterFloat("decay", "Decay",
-                                                                juce::NormalisableRange<float>(0.0f, 5.0f), 1.0f));
-        addParameter(sustainParam = new juce::AudioParameterFloat("sustain", "Sustain", 0.0f, 1.0f, 1.0f));
-        addParameter(releaseParam = new juce::AudioParameterFloat("release", "Release",
-                                                                  juce::NormalisableRange<float>(0.0f, 5.0f), 0.015f));
-        addParameter(holdParam = new juce::AudioParameterFloat("hold", "Hold",
-                                                               juce::NormalisableRange<float>(0.0f, 5.0f), 0.0f));
-        addParameter(attackCurveParam = new juce::AudioParameterFloat(
-                         "attackCurve", "Attack Curve", juce::NormalisableRange<float>(-1.0f, 1.0f), -0.3f));
-        addParameter(decayCurveParam = new juce::AudioParameterFloat(
-                         "decayCurve", "Decay Curve", juce::NormalisableRange<float>(-1.0f, 1.0f), 0.65f));
-        addParameter(releaseCurveParam = new juce::AudioParameterFloat(
-                         "releaseCurve", "Release Curve", juce::NormalisableRange<float>(-1.0f, 1.0f), 0.65f));
+        //
+        // FRO112: every float param below also carries readout Attributes (ms/s for the four
+        // stage times, dB for sustain, plain for the three curve amounts) so the envelope card's
+        // knobs and any host's generic automation UI show clean text ("1.0 ms", "-6.0 dB")
+        // instead of the raw linear value ("0.0010000000...") -- see adsrTimeAttributes() /
+        // adsrSustainAttributes() / adsrCurveAttributes() below. This is display-only: the
+        // NormalisableRange stays exactly as it was (linear, unskewed) for patch compatibility
+        // and the AIStateMapper rescale heuristic.
+        addParameter(attackParam = new juce::AudioParameterFloat(
+                         "attack", "Attack", juce::NormalisableRange<float>(0.0f, 5.0f), 0.001f, adsrTimeAttributes()));
+        addParameter(decayParam = new juce::AudioParameterFloat(
+                         "decay", "Decay", juce::NormalisableRange<float>(0.0f, 5.0f), 1.0f, adsrTimeAttributes()));
+        addParameter(sustainParam =
+                         new juce::AudioParameterFloat("sustain", "Sustain", juce::NormalisableRange<float>(0.0f, 1.0f),
+                                                       1.0f, adsrSustainAttributes()));
+        addParameter(releaseParam =
+                         new juce::AudioParameterFloat("release", "Release", juce::NormalisableRange<float>(0.0f, 5.0f),
+                                                       0.015f, adsrTimeAttributes()));
+        addParameter(holdParam = new juce::AudioParameterFloat(
+                         "hold", "Hold", juce::NormalisableRange<float>(0.0f, 5.0f), 0.0f, adsrTimeAttributes()));
+        addParameter(attackCurveParam = new juce::AudioParameterFloat("attackCurve", "Attack Curve",
+                                                                      juce::NormalisableRange<float>(-1.0f, 1.0f),
+                                                                      -0.3f, adsrCurveAttributes()));
+        addParameter(decayCurveParam = new juce::AudioParameterFloat("decayCurve", "Decay Curve",
+                                                                     juce::NormalisableRange<float>(-1.0f, 1.0f), 0.65f,
+                                                                     adsrCurveAttributes()));
+        addParameter(releaseCurveParam = new juce::AudioParameterFloat("releaseCurve", "Release Curve",
+                                                                       juce::NormalisableRange<float>(-1.0f, 1.0f),
+                                                                       0.65f, adsrCurveAttributes()));
         // `gateThreshold`, not `threshold` / `trigThreshold`: Compressor owns `threshold` as dB,
         // Sample & Hold / Comparator own `trigThreshold` as bipolar CV. ADSR gates are unipolar.
         addParameter(thresholdParam = new juce::AudioParameterFloat("gateThreshold", "Threshold", 0.0f, 1.0f, 0.5f));
@@ -330,6 +344,57 @@ public:
 private:
     static constexpr int MAX_VOICES = 8;
     static constexpr int kThresholdChannel = 8;
+
+    // Readout formatting for attack/hold/decay/release: below 1 s in milliseconds, at or above
+    // 1 s in seconds. Decimal count shrinks as the magnitude grows so "0.10 ms" and "4999 ms"
+    // both fit the knob's compact text box. valueFromString accepts an explicit "ms"/"s" suffix
+    // (case-insensitive); a bare number is read as seconds, matching the parameter's own unit.
+    static juce::AudioParameterFloatAttributes adsrTimeAttributes() {
+        return juce::AudioParameterFloatAttributes()
+            .withStringFromValueFunction([](float v, int) {
+                if (v < 1.0f) {
+                    const float ms = v * 1000.0f;
+                    const int decimals = ms < 10.0f ? 2 : (ms < 100.0f ? 1 : 0);
+                    return juce::String(ms, decimals) + " ms";
+                }
+                return juce::String(v, 2) + " s";
+            })
+            .withValueFromStringFunction([](const juce::String& text) -> float {
+                juce::String t = text.trim();
+                if (t.endsWithIgnoreCase("ms"))
+                    return juce::jmax(0.0f, t.dropLastCharacters(2).trim().getFloatValue() / 1000.0f);
+                if (t.endsWithIgnoreCase("s"))
+                    return juce::jmax(0.0f, t.dropLastCharacters(1).trim().getFloatValue());
+                return juce::jmax(0.0f, t.getFloatValue());
+            });
+    }
+
+    // Sustain is a LEVEL (0..1), read out as dB with 0.0 dB at unity and "-inf dB" at exactly
+    // zero -- the parameter itself stays linear (see the constructor comment above).
+    static juce::AudioParameterFloatAttributes adsrSustainAttributes() {
+        return juce::AudioParameterFloatAttributes()
+            .withStringFromValueFunction([](float v, int) {
+                if (v <= 0.0f)
+                    return juce::String("-inf dB");
+                return juce::String(20.0f * std::log10(v), 1) + " dB";
+            })
+            .withValueFromStringFunction([](const juce::String& text) -> float {
+                juce::String t = text.trim();
+                if (t.endsWithIgnoreCase("dB"))
+                    t = t.dropLastCharacters(2).trim();
+                if (t.equalsIgnoreCase("-inf") || t.equalsIgnoreCase("-infinity"))
+                    return 0.0f;
+                const float db = t.getFloatValue();
+                return juce::jlimit(0.0f, 1.0f, std::pow(10.0f, db / 20.0f));
+            });
+    }
+
+    // The three bend amounts (-1..1): not shown as their own knob (FRO112 moved them onto the
+    // envelope graph's bend handles), but a host's generic automation UI still reads this.
+    static juce::AudioParameterFloatAttributes adsrCurveAttributes() {
+        return juce::AudioParameterFloatAttributes().withStringFromValueFunction(
+            [](float v, int) { return juce::String(v, 2); });
+    }
 
     static synth::EnvelopeParameters makeParameters(float attack, float hold, float decay, float sustain, float release,
                                                     float attackCurve, float decayCurve, float releaseCurve) {

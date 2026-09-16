@@ -20,12 +20,15 @@ using namespace detail;
 
 namespace {
 
-// ADSR's float-param sliders are vertical/linear-styled; every other module's are rotary. Set
-// before addAndMakeVisible so the slider is already styled when first shown.
+// Every module's float-param sliders are rotary knobs. ADSR's five (attack/hold/decay/sustain/
+// release — FRO112 moved its three curve params onto the envelope graph's bend handles instead,
+// see createControls()) put their text box ABOVE the dial rather than below, so the numeric
+// readout reads as a value sitting over its knob rather than a caption under it; every other
+// module keeps the readout below, matching the label above.
 void setAdsrAwareSliderStyle(juce::Slider& slider, ModuleType type) {
-    slider.setSliderStyle(type == ModuleType::ADSR ? juce::Slider::LinearVertical
-                                                   : juce::Slider::RotaryHorizontalVerticalDrag);
-    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 20);
+    slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    slider.setTextBoxStyle(type == ModuleType::ADSR ? juce::Slider::TextBoxAbove : juce::Slider::TextBoxBelow, false,
+                           50, 20);
 }
 
 // attack/hold/decay/release: the four ADSR TIME params. Their AudioParameterFloat range is
@@ -52,6 +55,18 @@ void applyAdsrTimeSliderSkew(juce::Slider& slider, const juce::AudioParameterFlo
     const auto& r = param.getNormalisableRange();
     slider.setNormalisableRange(
         juce::NormalisableRange<double>((double)r.start, (double)r.end, (double)r.interval, 0.3));
+}
+
+// True for a float param createControls()'s generic auto-slider loop must NOT build a knob for:
+// the threshold slider (it lives inside ThresholdControlComponent instead), or -- ADSR only,
+// FRO112 -- the three curve amounts (edited only via the envelope graph's bend handles).
+bool shouldSkipGenericFloatSlider(juce::AudioProcessor* module, const juce::AudioParameterFloat& floatParam) {
+    if (auto* src = dynamic_cast<ThresholdMeterSource*>(module))
+        if (getType(module) != ModuleType::SampleHold && floatParam.paramID == src->getThresholdParamID())
+            return true;
+    return getType(module) == ModuleType::ADSR &&
+           (floatParam.paramID == "attackCurve" || floatParam.paramID == "decayCurve" ||
+            floatParam.paramID == "releaseCurve");
 }
 
 } // namespace
@@ -191,6 +206,13 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         setCachedComponentImage(cache.release()); // Component takes ownership
     }
     createControls();
+    // ADSR only (createEnvelopeCardControls() no-ops the componentID rename otherwise); after
+    // createControls() so its five remaining knobs (sliders/sliderLabels) already exist to
+    // shorten and read.
+    if (getType(module) == ModuleType::ADSR) {
+        applyEnvelopeKnobShortLabels();
+        createEnvelopeCardControls();
+    }
     createWavetableTabs(); // after createControls(): it groups the sliders/combos that call made
     applyHeaderButtonIcons();
     startTimerHz(15); // 15 FPS is plenty for activity glow / step indicator; lower CPU than 30
@@ -409,6 +431,12 @@ void ModuleComponent::timerCallback() {
         }
     }
 
+    // Envelope playhead: reuses this existing gated 15 Hz tick rather than a new Timer (see
+    // docs/layout_visuals_animation.md §2-3) — self-guards on type/visibility, and setPlayhead
+    // itself no-ops when the (segment, progress) pair is unchanged, so an idle or collapsed card
+    // costs nothing beyond the guard check.
+    updateEnvelopePlayhead();
+
     // Gate repaint: only invalidate the buffered image when something has
     // visually changed.  Idle modules (no signal, no modulation) produce no
     // repaint, so the parent content.repaint() from GraphEditor composites the
@@ -585,11 +613,8 @@ void ModuleComponent::createControls() {
                 auto* label = comboLabels.add(new juce::Label(param->getName(100), param->getName(100)));
                 addAndMakeVisible(label);
             } else if (auto* floatParam = dynamic_cast<juce::AudioParameterFloat*>(param)) {
-                if (auto* src = dynamic_cast<ThresholdMeterSource*>(module)) {
-                    // ADSR / Comparator: the threshold slider lives inside ThresholdControlComponent.
-                    if (getType(module) != ModuleType::SampleHold && floatParam->paramID == src->getThresholdParamID())
-                        continue;
-                }
+                if (shouldSkipGenericFloatSlider(module, *floatParam))
+                    continue;
                 auto* slider = sliders.add(new juce::Slider());
                 slider->setComponentID(param->getName(100)); // ID for lookup
                 setAdsrAwareSliderStyle(*slider, getType(module));

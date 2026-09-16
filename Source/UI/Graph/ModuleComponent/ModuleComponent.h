@@ -4,6 +4,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/FilterModule.h"
 #include "Modules/MidiKeyboardModule.h"
+#include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
 #include "UI/ModuleViews/EQWindow.h"
 #include "UI/ModuleViews/FrequencyResponseComponent.h"
@@ -306,6 +307,23 @@ private:
     std::unique_ptr<juce::TextButton> openPluginEditorButton;
     std::unique_ptr<juce::MidiKeyboardComponent> keyboardComponent;
     std::unique_ptr<ThresholdControlComponent> thresholdControl;
+
+    // --- Envelope (ADSR) card: knob-and-graph panel (FRO112) ---
+    // The breakpoint curve editor, collapsed by default (not persisted — matches the scope/
+    // frequency-response toggles, not Macro Group's persisted collapse; see docs/modules.md).
+    std::unique_ptr<synth::ui::CurveEditorComponent> envelopeCurveEditor;
+    std::unique_ptr<juce::ToggleButton> envelopeGraphToggle;
+    // BPM|MS segmented control. MS is fully functional (today's ms-based params); BPM is a
+    // visual placeholder — FRO113 (a parallel ticket) owns the tempoSync/*Div parameters and
+    // DSP behind it and will wire this toggle once they land (see writeEnvelopeParamsFromCurve's
+    // comment for the seam).
+    std::unique_ptr<juce::TextButton> envelopeMsButton;
+    std::unique_ptr<juce::TextButton> envelopeBpmButton;
+    // True between the curve editor's onGestureStart/onGestureEnd (a live node/bend drag): the
+    // graph is the gesture's source of truth for that span, so parameterValueChanged's reverse
+    // sync (params -> graph) skips rebuilding the model out from under the drag.
+    bool envelopeCurveGestureActive = false;
+
     std::unique_ptr<WavetableDisplayComponent> wavetableDisplay;
     std::unique_ptr<juce::TextButton> loadWavetableButton;
     std::unique_ptr<juce::FileChooser> wavetableChooser;
@@ -431,6 +449,11 @@ private:
     // Returns the total height the body needs, including bottom padding.
     int layoutDefaultContent(bool apply);
 
+    // The generic auto-UI knob grid (kKnobColumns across, wrapping; doubled on a double-width
+    // card). Extracted out of layoutDefaultContent (which is at its own ratchet ceiling) so a
+    // new block — the envelope graph section — has room to be inserted right after it.
+    int layoutKnobGrid(int y, int contentX, int contentW, int width, bool apply);
+
     // Builds the Sampler's waveform view / load button / file-name label. No-op for other modules.
     void createSamplerControls();
 
@@ -493,6 +516,35 @@ private:
     // createControls), which keeps the layout independent of parameter ordering.
     juce::ToggleButton* findToggleByName(const juce::String& name) const;
     void layoutNamedKnob(const juce::String& name, int x, int y, int w, int h);
+
+    // --- Envelope (ADSR) card ---
+    // Builds the graph disclosure toggle, the curve editor (fixed 5-node topology) and the
+    // BPM|MS row; called from createControls() for ADSR only. Must run AFTER the generic
+    // float-param loop above (it needs `sliders`/`sliderLabels` already built, to shorten their
+    // captions and read attack/hold/decay/sustain/release's current values).
+    void createEnvelopeCardControls();
+    // Renames the five knob labels ("Attack" -> "ATK", ...) for ADSR only — componentIDs (used
+    // for lookup/automation) are untouched, this is a display-only caption swap.
+    void applyEnvelopeKnobShortLabels();
+    // Brackets a whole curve drag in one undo step (mirrors wireEqGestureCallbacks) and toggles
+    // envelopeCurveGestureActive around it.
+    void wireEnvelopeGestureCallbacks();
+    // Forward sync: reads envelopeCurveEditor's current model and writes attack/hold/decay/
+    // release/sustain/*Curve back via setValueNotifyingHost (epsilon-gated, so an unmoved value
+    // never emits a redundant host-automation write). Installed as onNodeChanged/onBendChanged.
+    void writeEnvelopeParamsFromCurve();
+    // Reverse sync: rebuilds a fresh CurveModel from the module's current parameter values and
+    // hands it to envelopeCurveEditor->setModel(). No-op while envelopeCurveGestureActive (the
+    // graph is already the source of truth mid-drag) or outside ADSR/without a curve editor.
+    void syncEnvelopeCurveFromParams();
+    // Polls ADSRModule's lock-free playhead accessors and maps EnvelopeStage -> the curve's
+    // segment/progress, called from the existing gated 15 Hz timerCallback (no new Timer).
+    void updateEnvelopePlayhead();
+    // The disclosure-toggle+BPM|MS row, then the curve editor itself when expanded — extracted
+    // out of layoutDefaultContent (shared by every module) to keep that function under its own
+    // ratchet. A no-op returning `y` unchanged when envelopeGraphToggle is null (every non-ADSR
+    // module). Mirrors the freqResponseToggle/scopeToggle blocks it sits beside.
+    int layoutEnvelopeGraphSection(int y, int contentX, int contentW, bool apply);
 
     // Apply SVG icons to bypass/mute/delete DrawableButtons from the active LnF.
     // No-op when the themed LnF is not installed (headless tests).

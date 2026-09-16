@@ -14,8 +14,6 @@
 230 Source/UI/Graph/GraphEditor/GraphEditorCables.cpp::GraphEditor::GraphContentComponent::paint
 303 Source/UI/Graph/GraphEditor/GraphEditorCables.cpp::GraphEditor::rebuildVisibleCables
 208 Source/UI/Graph/GraphEditor/GraphEditorStereoWiring.cpp::GraphEditor::completeStereoPairConnections
-201 Source/UI/Graph/ModuleComponent/ModuleComponent.cpp::ModuleComponent::createControls
-202 Source/UI/Graph/ModuleComponent/ModuleComponentLayout.cpp::ModuleComponent::layoutDefaultContent
 231 Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp::ModuleComponent::paint
 550 Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngineApply.cpp::SmartConnectionEngine::refreshSmartSuggestions
 319 Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp::PreferencesSettingsTab::PreferencesSettingsTab
