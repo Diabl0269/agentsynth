@@ -10,6 +10,9 @@
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 #include "UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h"
+#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <cstdlib>
+#include <iostream>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -214,4 +217,70 @@ TEST_F(ModuleComponentTest, AdsrTimeSlidersAreSkewedButParameterRangeStaysLinear
         EXPECT_NEAR(param->getNormalisableRange().skew, 1.0f, 1.0e-6f)
             << paramId << "'s own NormalisableRange must stay linear";
     }
+}
+
+// Renders the ADSR card to a juce::Image headlessly so a human can eyeball the row-wrapped
+// slider layout (see AdsrSlidersWrapIntoRowsThatFitTheModule above) without driving the real GUI
+// app -- two app instances would collide over the same bundle id in this environment. The image
+// content assertion always runs; the PNG is only written to disk when ADSR_CARD_PNG is set, so a
+// normal CI run never touches the filesystem for this.
+TEST_F(ModuleComponentTest, AdsrCardRendersToPngForVisualInspection) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ADSRModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    // Install the app's real LookAndFeel before painting -- without it the card renders as flat
+    // default JUCE grey instead of the themed look the real app shows (see
+    // ModuleComponentPaintTests.cpp's WavetableCardPaintsAndTicksWithoutCrashing /
+    // MidiKeyboardKeysFollowThemeChange for the same pattern).
+    synth::theme::AppLookAndFeel lf;
+    moduleComponent.setLookAndFeel(&lf);
+
+    const int width = moduleComponent.getWidth();
+    const int height = moduleComponent.getHeight();
+    ASSERT_GT(width, 0);
+    ASSERT_GT(height, 0);
+
+    juce::Image img(juce::Image::ARGB, width, height, true);
+    juce::Graphics g(img);
+    // paintEntireComponent recurses into children (paint() + paintOverChildren() + each child's
+    // own paintEntireComponent), unlike a bare paint() call -- this is the same call
+    // ZoomFrozenCachedImage.h uses to flatten a component tree into an offscreen image.
+    EXPECT_NO_THROW(moduleComponent.paintEntireComponent(g, true));
+
+    // Meaningful-content assertion that always runs, regardless of whether the PNG gets written.
+    bool hasOpaquePixel = false;
+    for (int y = 0; y < img.getHeight() && !hasOpaquePixel; ++y)
+        for (int x = 0; x < img.getWidth() && !hasOpaquePixel; ++x)
+            if (img.getPixelAt(x, y).getAlpha() > 0)
+                hasOpaquePixel = true;
+    EXPECT_TRUE(hasOpaquePixel) << "rendered ADSR card image should have at least one opaque pixel";
+
+    // Same slider traversal as AdsrSlidersWrapIntoRowsThatFitTheModule, so the printed bounds
+    // describe exactly what that test asserts on.
+    std::vector<juce::Slider*> adsrSliders;
+    for (auto* child : moduleComponent.getChildren())
+        if (auto* slider = dynamic_cast<juce::Slider*>(child))
+            adsrSliders.push_back(slider);
+
+    std::cout << "AdsrCardRendersToPngForVisualInspection: image " << width << "x" << height << ", "
+              << adsrSliders.size() << " ADSR sliders:" << std::endl;
+    for (auto* slider : adsrSliders) {
+        std::cout << "  '" << slider->getComponentID() << "' bounds " << slider->getBounds().toString() << std::endl;
+    }
+
+    moduleComponent.setLookAndFeel(nullptr);
+
+    const char* pngPath = std::getenv("ADSR_CARD_PNG");
+    if (pngPath == nullptr || juce::String(pngPath).isEmpty())
+        GTEST_SKIP() << "set ADSR_CARD_PNG=<path> to write the rendered card for visual inspection";
+
+    juce::File outFile(pngPath);
+    outFile.getParentDirectory().createDirectory();
+    outFile.deleteFile();
+    juce::FileOutputStream stream(outFile);
+    ASSERT_TRUE(stream.openedOk()) << "failed to open " << pngPath << " for writing";
+    juce::PNGImageFormat png;
+    ASSERT_TRUE(png.writeImageToStream(img, stream)) << "failed to encode PNG to " << pngPath;
 }
