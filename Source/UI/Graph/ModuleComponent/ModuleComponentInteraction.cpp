@@ -151,6 +151,18 @@ void ModuleComponent::parameterValueChanged(int parameterIndex, float newValue) 
                     safeThis->syncEnvelopeCurveFromParams();
             });
         }
+    } else if (getType(module) == ModuleType::ADSR && param->paramID == "tempoSync") {
+        // FRO117: keep the MS|BPM toggle pair in sync with automation/undo/preset loads, the
+        // same reverse-sync shape as the envelope graph branch above.
+        if (juce::MessageManager::existsAndIsCurrentThread()) {
+            syncEnvelopeSyncToggleFromParam();
+        } else {
+            juce::Component::SafePointer<ModuleComponent> safeThis(this);
+            juce::MessageManager::callAsync([safeThis] {
+                if (safeThis != nullptr)
+                    safeThis->syncEnvelopeSyncToggleFromParam();
+            });
+        }
     }
 }
 

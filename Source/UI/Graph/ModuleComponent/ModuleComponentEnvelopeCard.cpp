@@ -130,10 +130,9 @@ void ModuleComponent::createEnvelopeCardControls() {
     };
     addAndMakeVisible(envelopeGraphToggle.get());
 
-    // BPM|MS segmented control. MS is fully functional (today's ms-based attack/hold/decay/
-    // release). BPM is a visual placeholder: FRO113 (a parallel ticket) owns the tempoSync/
-    // attackDiv/holdDiv/decayDiv/releaseDiv parameters and the DSP behind them; wiring this
-    // button to `tempoSync` is the one seam left for that ticket once its parameters land.
+    // BPM|MS segmented control, wired to FRO113's `tempoSync` bool param (FRO117). Its four
+    // *Div note-division params have no UI yet (FRO118); they're excluded from the generic
+    // per-param grid (shouldSkipGenericChoiceCombo in ModuleComponent.cpp) but otherwise inert.
     envelopeMsButton = std::make_unique<juce::TextButton>("MS");
     envelopeBpmButton = std::make_unique<juce::TextButton>("BPM");
     // setRadioGroupId gives the pair JUCE's own mutual-exclusion for free: Button::setToggleState
@@ -149,9 +148,14 @@ void ModuleComponent::createEnvelopeCardControls() {
     envelopeMsButton->setToggleState(true, juce::dontSendNotification);
     envelopeMsButton->setConnectedEdges(juce::TextButton::ConnectedOnRight);
     envelopeBpmButton->setConnectedEdges(juce::TextButton::ConnectedOnLeft);
-    envelopeBpmButton->setTooltip("Tempo sync (coming soon)");
+    envelopeMsButton->onClick = [this] { writeEnvelopeTempoSync(false); };
+    envelopeBpmButton->onClick = [this] { writeEnvelopeTempoSync(true); };
     addAndMakeVisible(envelopeMsButton.get());
     addAndMakeVisible(envelopeBpmButton.get());
+
+    // Reflect a real starting `tempoSync` value (e.g. loaded from a preset) rather than always
+    // defaulting the buttons to MS.
+    syncEnvelopeSyncToggleFromParam();
 
     // createControls()'s own tail already ran updateLayout() once, before these children
     // existed -- mirrors createWavetableTabs()'s identical need to re-lay the card after adding
@@ -211,6 +215,31 @@ void ModuleComponent::writeEnvelopeParamsFromCurve() {
     writeParam("attackCurve", model.getBend(0));
     writeParam("decayCurve", model.getBend(2));
     writeParam("releaseCurve", model.getBend(3));
+}
+
+void ModuleComponent::writeEnvelopeTempoSync(bool bpmMode) {
+    if (module == nullptr)
+        return;
+    auto* p = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(module, "tempoSync"));
+    if (p == nullptr)
+        return;
+    if (p->get() == bpmMode)
+        return;
+    p->setValueNotifyingHost(bpmMode ? 1.0f : 0.0f);
+}
+
+void ModuleComponent::syncEnvelopeSyncToggleFromParam() {
+    if (envelopeMsButton == nullptr || envelopeBpmButton == nullptr || module == nullptr)
+        return;
+    auto* p = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(module, "tempoSync"));
+    if (p == nullptr)
+        return;
+    const bool bpmMode = p->get();
+    // dontSendNotification: this reflects the param, it must never re-fire writeEnvelopeTempoSync.
+    if (envelopeBpmButton->getToggleState() != bpmMode)
+        envelopeBpmButton->setToggleState(bpmMode, juce::dontSendNotification);
+    if (envelopeMsButton->getToggleState() == bpmMode)
+        envelopeMsButton->setToggleState(!bpmMode, juce::dontSendNotification);
 }
 
 void ModuleComponent::syncEnvelopeCurveFromParams() {
