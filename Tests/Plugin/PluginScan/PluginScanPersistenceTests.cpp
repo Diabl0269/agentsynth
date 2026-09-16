@@ -226,3 +226,99 @@ TEST_F(PluginScanPersistenceTest, EagerScanPopulatesTheSidebarWithoutItEverBeing
     juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
     EXPECT_EQ(launcher.launchCountFor(kAlpha), 1);
 }
+
+TEST_F(PluginScanPersistenceTest, MaybeStartEagerPluginScanShowsAScanningBannerOnTheStatusBar) {
+    // FRO105: maybeStartEagerPluginScan() — the actual production entry point Main.cpp calls, not
+    // ensureScanned() directly — used to start the scan with no progress callback at all, so nothing
+    // told the user a scan was even running until the one "Found N plugins" completion message.
+    FakeLauncher launcher;
+    launcher.xmlByFile[kAlpha] = descriptionXml("Alpha", 0xA1FA, kAlpha);
+
+    MainComponent main(std::make_unique<SilentProvider>());
+    main.getPluginScanService().setCandidateSource(
+        [](const juce::String& format) { return format == "VST3" ? juce::StringArray(kAlpha) : juce::StringArray(); });
+    main.getPluginScanService().setChildLauncher(launcher.fn());
+
+    // Deterministic, no polling needed: the "Scanning..." banner is posted synchronously, inline
+    // inside maybeStartEagerPluginScan() itself, BEFORE it returns — only the scan's own progress and
+    // completion callbacks are posted asynchronously via MessageManager::callAsync (see
+    // PluginScanService::postToMessageThread), so nothing has had a chance to overwrite it yet.
+    main.maybeStartEagerPluginScan();
+    EXPECT_EQ(main.getStatusBar().getTransientMessageForTest(), juce::String("Scanning for plugins..."))
+        << "the eager scan must announce itself immediately, not stay silent until it finishes";
+
+    ASSERT_TRUE(pumpUntil([&] { return main.getModuleLibrary().getPluginCount() > 0; }))
+        << "the eager scan never reached completion";
+    EXPECT_TRUE(main.getStatusBar().getTransientMessageForTest().startsWith("Found"))
+        << "completion must still show the existing 'Found N plugins' message";
+
+    // A later call is the documented no-op and must not re-show the banner for a scan that already
+    // ran — it would stomp right back over the completion message a caller might be showing.
+    main.getStatusBar().showMessage("sentinel");
+    main.maybeStartEagerPluginScan();
+    EXPECT_EQ(main.getStatusBar().getTransientMessageForTest(), juce::String("sentinel"));
+}
+
+// ============================================================================
+// 10. Surviving a quit mid-scan (FRO105)
+// ============================================================================
+
+TEST_F(PluginScanPersistenceTest, DestroyingMainComponentMidScanPersistsWhatWasFoundSoFar) {
+    // Quitting while a large or slow plugin folder is still being probed must not throw away
+    // everything that scan already found -- pluginScanCompleted() (the only place that used to call
+    // savePluginScanList()) never fires here, because ~MainComponent() unregisters the Listener
+    // before cancelling the scan. Three candidates, a generous per-candidate delay: destroy `main`
+    // while Alpha is already known but the scan is still running. Cancellation is only checked
+    // between candidates (see PluginScanService::runScan), so whichever candidate is in flight at
+    // that moment still finishes and gets saved -- the assertions below intentionally don't pin down
+    // WHICH of Beta/Gamma that was (a poll landing a few ms later than expected would otherwise make
+    // this flaky), only that at least Alpha survived and the scan really was cut short somewhere.
+    constexpr const char* kGamma = "/plugins/Gamma.vst3";
+    FakeLauncher launcher;
+    launcher.delayMs = 400;
+    launcher.xmlByFile[kAlpha] = descriptionXml("Alpha", 0xA1FA, kAlpha);
+    launcher.xmlByFile[kBeta] = descriptionXml("Beta", 0xB2FB, kBeta);
+    // kGamma has no entry on purpose: it must never even be launched (see the assertion below), so
+    // what it would have resolved to is irrelevant.
+
+    // `launcher` outlives `main` (declared first) -- ~MainComponent()'s cancelScan() joins the scan
+    // thread, and that thread can still be calling into `&launcher` while it winds down.
+    auto main = std::make_unique<MainComponent>(std::make_unique<SilentProvider>());
+    main->getPluginScanService().setCandidateSource(candidates({kAlpha, kBeta, kGamma}));
+    main->getPluginScanService().setChildLauncher(launcher.fn());
+
+    main->maybeStartEagerPluginScan();
+    ASSERT_TRUE(pumpUntil([&] {
+        return main->getPluginScanService().getNumKnownPlugins() > 0 && main->getPluginScanService().isScanning();
+    })) << "never landed in the mid-scan window (Alpha known, scan still running)";
+
+    main.reset(); // ~MainComponent(): cancels the scan, then must still save what it already had.
+
+    juce::PropertiesFile::Options options;
+    options.applicationName = "Agent Synth";
+    options.folderName = "Agent Synth";
+    options.filenameSuffix = "settings";
+    options.osxLibrarySubFolder = "Application Support";
+    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    juce::ApplicationProperties properties;
+    properties.setStorageParameters(options);
+    auto savedList = juce::parseXML(properties.getUserSettings()->getValue(MainComponent::kPluginScanListKey));
+    ASSERT_NE(savedList, nullptr) << "an interrupted scan must still persist whatever it found before the quit";
+
+    PluginScanService restored;
+    restored.loadFromXml(*savedList);
+    // Not pinned to exactly 2: whichever candidate was "currently in flight" at the moment of the
+    // quit still finishes and gets saved (cancellation is only checked BETWEEN candidates), so the
+    // saved count is Alpha alone or Alpha+Beta depending on exactly when the poll below landed —
+    // either is a correct outcome. Gamma (no xmlByFile entry) can only ever be blacklisted, never
+    // added, so it can never push this above 2 regardless.
+    EXPECT_GE(restored.getNumKnownPlugins(), 1) << "at least Alpha (found before the quit) must survive";
+    EXPECT_LE(restored.getNumKnownPlugins(), 2);
+
+    PluginIdentity alpha;
+    alpha.format = "VST3";
+    alpha.name = "Alpha";
+    EXPECT_TRUE(restored.resolve(alpha).has_value());
+    EXPECT_EQ(launcher.launchCountFor(kGamma), 0)
+        << "Gamma was never reached -- this really was an interrupted scan, not a slow-but-complete one";
+}

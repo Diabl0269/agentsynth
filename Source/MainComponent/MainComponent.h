@@ -375,6 +375,10 @@ public:
 
     void maybeStartEagerPluginScan();
 
+    /** The status-bar progress message both scan triggers above post while a scan is running —
+     *  factored out so the eager startup scan reports progress identically to the manual row. */
+    synth::PluginScanService::ProgressFn makePluginScanProgressReporter();
+
     /** Writes the scan list into appProperties under "pluginScanList". */
     void savePluginScanList();
 
