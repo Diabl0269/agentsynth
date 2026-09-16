@@ -253,6 +253,8 @@ add_executable(Tests
     Engine/AudioRendering/AudioRenderingModulationTests.cpp
     Engine/AudioRendering/AudioRenderingPresetTests.cpp
     Engine/AudioRendering/AudioRenderingSnapshotTests.cpp
+    Engine/GainStaging/ModuleGainAuditTests.cpp
+    Engine/GainStaging/MixAudibilityTests.cpp
     Engine/LogicalPortTests.cpp
     Engine/OutputLevelTests.cpp
     Modules/ModuleAdoptionTests.cpp
