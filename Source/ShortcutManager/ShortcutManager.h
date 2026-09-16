@@ -454,6 +454,10 @@ public:
         // the user cannot reason about. One binding, one key, whichever surface has focus, exactly as
         // before — only the key it lands on changed.
         bindings["pianoRollQuantise"] = juce::KeyPress('q', juce::ModifierKeys::noModifiers, 0);
+        // Alt+Q: the length twin of bare Q -- quantises note LENGTHS instead of note starts. Clear
+        // of both bare Q and Option+Shift+Q below on every platform: modifier equality is exact, and
+        // keyPressMatches never normalizes Alt out of a chord.
+        bindings["pianoRollQuantiseLength"] = juce::KeyPress('q', juce::ModifierKeys::altModifier, 0);
         // Pitch quantise keeps Option+Shift+Q: still recognisably the same "Q family" verb, and one
         // chord away from anything destructive. Stored as a KEY CODE plus a modifier set, never as the
         // Unicode glyph macOS actually delivers for Option+letter ('œ' for Option+Q) — keyPressMatches
@@ -690,6 +694,8 @@ public:
             return "Select Next Note";
         if (actionId == "pianoRollQuantise")
             return "Quantise Selected Notes";
+        if (actionId == "pianoRollQuantiseLength")
+            return "Quantise Selected Note Lengths";
         if (actionId == "pianoRollQuantisePitches")
             return "Quantise Note Pitches to Scale";
         if (actionId == "pianoRollToggleScaleFilter")
@@ -848,6 +854,7 @@ private:
             {"pianoRollNavPrevNote", ShortcutCategory::PianoRoll},
             {"pianoRollNavNextNote", ShortcutCategory::PianoRoll},
             {"pianoRollQuantise", ShortcutCategory::PianoRoll},
+            {"pianoRollQuantiseLength", ShortcutCategory::PianoRoll},
             {"pianoRollQuantisePitches", ShortcutCategory::PianoRoll},
             {"pianoRollToggleScalePanel", ShortcutCategory::PianoRoll},
             {"pianoRollToggleScaleFilter", ShortcutCategory::PianoRoll},

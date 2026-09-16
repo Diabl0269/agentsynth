@@ -129,6 +129,15 @@ bool PianoRollComponent::keyPressed(const juce::KeyPress& key) {
         performQuantise();
         return true;
     }
+    // Alt+Q: the length twin of bare Q above. Exact modifier equality (keyPressMatches) keeps this
+    // clear of both bare Q (position quantise) and Alt+Shift+Q (pitch quantise) — no ordering needed
+    // between the three. It has its own header chip (QuantiseLength, FRO107) now, so this flashes it
+    // exactly like bare Q flashes its own chip above.
+    if (matchesAction(key, "pianoRollQuantiseLength", modKey('q', juce::ModifierKeys::altModifier))) {
+        flashQuantiseLengthButton();
+        performQuantiseLength();
+        return true;
+    }
     if (matchesAction(key, "timelineSnapToggle", plainKey('j'))) {
         toggleSnap();
         return true;

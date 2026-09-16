@@ -397,7 +397,7 @@ TEST(PianoRollLayoutTest, ChipsStayInTheToolbarRowAndTheCanvasStartsBelowTheRule
 
     // The chips did NOT move: they are the top row, above the band.
     for (const auto& rect :
-         {f.roll.getBackButtonBounds(), f.roll.getSnapButtonBounds(), f.roll.getQuantiseButtonBounds(),
+         {f.roll.getBackButtonBounds(), f.roll.getQuantiseButtonBounds(), f.roll.getQuantiseLengthButtonBounds(),
           f.roll.getQuantisePitchButtonBounds(), f.roll.getScaleButtonBounds(), f.roll.getScaleFilterButtonBounds()}) {
         EXPECT_LE(rect.getBottom(), PianoRollComponent::kToolbarHeight);
     }
@@ -454,8 +454,7 @@ TEST(PianoRollLayoutTest, ThePanelPutsTheToolbarRowAboveTheRulerWithNoOverlap) {
     EXPECT_EQ(canvasTopInPanel, rulerBounds.getBottom()) << "the note canvas begins where the ruler ends";
 
     // 3. The three bands tile without overlapping: chips above the ruler, canvas below it.
-    for (const auto& chip : {r.getSnapButtonBounds(), r.getQuantiseButtonBounds(), r.getScaleButtonBounds(),
-                             r.getScaleFilterButtonBounds()}) {
+    for (const auto& chip : {r.getQuantiseButtonBounds(), r.getScaleButtonBounds(), r.getScaleFilterButtonBounds()}) {
         const int chipBottomInPanel = rollBounds.getY() + chip.getBottom();
         EXPECT_LE(chipBottomInPanel, rulerBounds.getY()) << "a chip overlaps the ruler";
     }

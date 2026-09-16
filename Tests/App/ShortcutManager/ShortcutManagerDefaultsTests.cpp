@@ -19,6 +19,7 @@ const juce::StringArray& surfaceResolvedActionIds() {
     static const juce::StringArray ids{
         // PianoRollComponent::keyPressed
         "pianoRollQuantise",
+        "pianoRollQuantiseLength",
         "pianoRollQuantisePitches",
         "pianoRollToggleScaleFilter",
         "pianoRollNavNextNote",

@@ -153,4 +153,33 @@ bool TimelineDoc::quantiseNotes(ClipId clipId, double gridBeats, double strength
     });
 }
 
+bool TimelineDoc::quantiseNoteLengths(ClipId clipId, double gridBeats) {
+    auto* clip = findClip(clipId);
+    if (clip == nullptr)
+        return false;
+    if (!std::isfinite(gridBeats) || gridBeats <= 0.0)
+        return false;
+
+    std::vector<double> newLengths(clip->notes.size());
+    bool anyChanged = false;
+    for (size_t i = 0; i < clip->notes.size(); ++i) {
+        const double length = clip->notes[i].lengthBeats;
+        double nearestGrid = std::round(length / gridBeats) * gridBeats;
+        if (nearestGrid < gridBeats)
+            nearestGrid = gridBeats; // floored at one grid unit -- a note can never become zero-length
+        newLengths[i] = nearestGrid;
+        if (nearestGrid != length)
+            anyChanged = true;
+    }
+    if (!anyChanged)
+        return true; // nothing actually changes: no-op, no revision bump
+
+    return applyMutation([&] {
+        for (size_t i = 0; i < clip->notes.size(); ++i)
+            clip->notes[i].lengthBeats = newLengths[i];
+        // Lengths don't participate in note ordering (see resizeNote), so no re-sort is needed.
+        return true;
+    });
+}
+
 } // namespace synth

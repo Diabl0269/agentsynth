@@ -20,10 +20,10 @@ juce::KeyPress ctrlPress(int keyCode) { return juce::KeyPress(keyCode, juce::Mod
 // broken) by whatever ShortcutManager::resetToDefaults() happens to know about these ids in any
 // given build. That matters because the defaults land in ShortcutManager in a separate phase.
 const char* const kRollActionIds[] = {
-    "pianoRollNudgeLeft",         "pianoRollNudgeRight",          "pianoRollTransposeUp", "pianoRollTransposeDown",
-    "pianoRollTransposeOctaveUp", "pianoRollTransposeOctaveDown", "pianoRollNavPrevNote", "pianoRollNavNextNote",
-    "pianoRollQuantise",          "pianoRollQuantisePitches",     "timelineSnapToggle",   "pianoRollToggleScalePanel",
-    "pianoRollToggleScaleFilter"};
+    "pianoRollNudgeLeft",         "pianoRollNudgeRight",          "pianoRollTransposeUp",     "pianoRollTransposeDown",
+    "pianoRollTransposeOctaveUp", "pianoRollTransposeOctaveDown", "pianoRollNavPrevNote",     "pianoRollNavNextNote",
+    "pianoRollQuantise",          "pianoRollQuantiseLength",      "pianoRollQuantisePitches", "timelineSnapToggle",
+    "pianoRollToggleScalePanel",  "pianoRollToggleScaleFilter"};
 
 void clearRollBindings(ShortcutManager& mgr) {
     for (const char* id : kRollActionIds)
@@ -130,6 +130,7 @@ TEST(PianoRollShortcutTest, AnUnboundActionHasNoKeyAndNeverFallsBackToItsDefault
     EXPECT_FALSE(f.roll.keyPressed(altArrow(juce::KeyPress::leftKey)));
     EXPECT_FALSE(f.roll.keyPressed(plainPress('q')));
     EXPECT_FALSE(f.roll.keyPressed(shiftPress('q')));
+    EXPECT_FALSE(f.roll.keyPressed(juce::KeyPress('q', juce::ModifierKeys::altModifier, 0)));
 
     EXPECT_DOUBLE_EQ(f.doc.getNote(bed.note)->startBeat, 2.0);
     EXPECT_EQ(f.doc.getNote(bed.note)->pitch, 60);

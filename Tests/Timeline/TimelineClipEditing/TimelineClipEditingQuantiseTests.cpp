@@ -64,3 +64,60 @@ TEST_F(TimelineClipEditingTest, QuantiseRejectsInvalidGrid) {
     EXPECT_FALSE(doc.quantiseNotes(ClipId{999}, 1.0, 1.0));
     EXPECT_EQ(doc.getRevision(), revisionBefore);
 }
+
+// ------------------------------------------------------------- quantiseNoteLengths --
+// FRO107: the length twin of quantiseNotes above -- rounds lengthBeats to the nearest grid
+// multiple instead of startBeat, floored at one grid unit so a note can never zero out.
+
+TEST_F(TimelineClipEditingTest, QuantiseNoteLengthsRoundsToNearestGridMultiple) {
+    const auto track = doc.addTrack(TrackKind::Midi, "T");
+    const auto clip = doc.addClip(track, 0.0, 16.0, "c");
+    const auto a = doc.addNote(clip, makeNote(0.0, 60, 1.4)); // nearest 1-beat grid -> 1.0
+    const auto b = doc.addNote(clip, makeNote(2.0, 64, 1.6)); // nearest -> 2.0
+    const auto c = doc.addNote(clip, makeNote(4.0, 67, 2.5)); // nearest -> 3.0 (round-half-up)
+    ASSERT_TRUE(a.isValid() && b.isValid() && c.isValid());
+    const auto revisionBefore = doc.getRevision();
+
+    ASSERT_TRUE(doc.quantiseNoteLengths(clip, 1.0));
+    EXPECT_EQ(doc.getRevision(), revisionBefore + 1); // one mutation, however many notes changed
+
+    EXPECT_DOUBLE_EQ(doc.getNote(a)->lengthBeats, 1.0);
+    EXPECT_DOUBLE_EQ(doc.getNote(a)->startBeat, 0.0); // starts untouched
+    EXPECT_DOUBLE_EQ(doc.getNote(b)->lengthBeats, 2.0);
+    EXPECT_DOUBLE_EQ(doc.getNote(c)->lengthBeats, 3.0);
+}
+
+TEST_F(TimelineClipEditingTest, QuantiseNoteLengthsFlooredAtOneGridUnit) {
+    const auto track = doc.addTrack(TrackKind::Midi, "T");
+    const auto clip = doc.addClip(track, 0.0, 16.0, "c");
+    // Well under half a grid unit: a plain round() would collapse this to 0.
+    const auto tiny = doc.addNote(clip, makeNote(0.0, 60, 0.1));
+    ASSERT_TRUE(tiny.isValid());
+
+    ASSERT_TRUE(doc.quantiseNoteLengths(clip, 1.0));
+    EXPECT_DOUBLE_EQ(doc.getNote(tiny)->lengthBeats, 1.0) << "floored at one grid unit, never zero";
+    EXPECT_GT(doc.getNote(tiny)->lengthBeats, 0.0);
+}
+
+TEST_F(TimelineClipEditingTest, QuantiseNoteLengthsNoOpWhenNothingChanges) {
+    const auto track = doc.addTrack(TrackKind::Midi, "T");
+    const auto clip = doc.addClip(track, 0.0, 16.0, "c");
+    ASSERT_TRUE(doc.addNote(clip, makeNote(0.0, 60, 2.0)).isValid()); // already a whole multiple
+    const auto revisionBefore = doc.getRevision();
+
+    EXPECT_TRUE(doc.quantiseNoteLengths(clip, 1.0));
+    EXPECT_EQ(doc.getRevision(), revisionBefore);
+}
+
+TEST_F(TimelineClipEditingTest, QuantiseNoteLengthsRejectsInvalidGrid) {
+    const auto track = doc.addTrack(TrackKind::Midi, "T");
+    const auto clip = doc.addClip(track, 0.0, 16.0, "c");
+    ASSERT_TRUE(doc.addNote(clip, makeNote(0.0, 60, 1.4)).isValid());
+    const auto revisionBefore = doc.getRevision();
+
+    EXPECT_FALSE(doc.quantiseNoteLengths(clip, 0.0));
+    EXPECT_FALSE(doc.quantiseNoteLengths(clip, -1.0));
+    EXPECT_FALSE(doc.quantiseNoteLengths(clip, std::numeric_limits<double>::quiet_NaN()));
+    EXPECT_FALSE(doc.quantiseNoteLengths(ClipId{999}, 1.0));
+    EXPECT_EQ(doc.getRevision(), revisionBefore);
+}

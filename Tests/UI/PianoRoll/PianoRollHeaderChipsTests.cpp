@@ -176,9 +176,12 @@ TEST(PianoRollGenerateTest, PanelToggleDrivesTheAddPathThroughTheRollsOwnHandler
 TEST(PianoRollHeaderButtonTest, AllSixChipsAreDistinctNonOverlappingAndInReadingOrder) {
     PianoRollFixture f;
     const std::vector<std::pair<const char*, juce::Rectangle<int>>> chips{
-        {"Clips", f.roll.getBackButtonBounds()},        {"Snap", f.roll.getSnapButtonBounds()},
-        {"Quantise", f.roll.getQuantiseButtonBounds()}, {"QuantisePitches", f.roll.getQuantisePitchButtonBounds()},
-        {"Scale", f.roll.getScaleButtonBounds()},       {"ScaleFilter", f.roll.getScaleFilterButtonBounds()},
+        {"Clips", f.roll.getBackButtonBounds()},
+        {"Quantise", f.roll.getQuantiseButtonBounds()},
+        {"QuantiseLength", f.roll.getQuantiseLengthButtonBounds()},
+        {"QuantisePitches", f.roll.getQuantisePitchButtonBounds()},
+        {"Scale", f.roll.getScaleButtonBounds()},
+        {"ScaleFilter", f.roll.getScaleFilterButtonBounds()},
     };
 
     for (const auto& [name, rect] : chips) {
@@ -196,8 +199,8 @@ TEST(PianoRollHeaderButtonTest, AllSixChipsAreDistinctNonOverlappingAndInReading
     // mismatch here would mean the drawn wash and the clickable area had drifted apart.
     const std::vector<std::pair<PianoRollComponent::HeaderButtonId, juce::Rectangle<int>>> ids{
         {PianoRollComponent::HeaderButtonId::Back, f.roll.getBackButtonBounds()},
-        {PianoRollComponent::HeaderButtonId::Snap, f.roll.getSnapButtonBounds()},
         {PianoRollComponent::HeaderButtonId::Quantise, f.roll.getQuantiseButtonBounds()},
+        {PianoRollComponent::HeaderButtonId::QuantiseLength, f.roll.getQuantiseLengthButtonBounds()},
         {PianoRollComponent::HeaderButtonId::QuantisePitches, f.roll.getQuantisePitchButtonBounds()},
         {PianoRollComponent::HeaderButtonId::Scale, f.roll.getScaleButtonBounds()},
         {PianoRollComponent::HeaderButtonId::ScaleFilter, f.roll.getScaleFilterButtonBounds()},

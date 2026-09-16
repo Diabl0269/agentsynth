@@ -52,14 +52,17 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
     }
     // Each chip now does exactly ONE thing on a plain click — no modifier variants anywhere in the
     // header. Snap and quantise used to share the single "Q" chip (plain click vs Shift+click), which
-    // is precisely the ambiguity the split into separate glyph chips removes.
-    if (snapButtonBounds_.contains(pos)) {
-        toggleSnap();
-        return;
-    }
+    // is precisely the ambiguity the split into separate glyph chips removes. The Snap chip itself
+    // was later removed (FRO108) — it duplicated the timeline toolbar's own Snap button on the same
+    // shared TimelineViewState::snapEnabled; toggleSnap() and the J key still work unchanged.
     if (quantiseButtonBounds_.contains(pos)) {
         flashQuantiseButton(); // feedback even when the click is a no-op
         performQuantise();
+        return;
+    }
+    if (quantiseLengthButtonBounds_.contains(pos)) {
+        flashQuantiseLengthButton(); // mirrors the Quantise chip above: same isQuantiseEnabled() gate
+        performQuantiseLength();
         return;
     }
     if (quantisePitchButtonBounds_.contains(pos)) {

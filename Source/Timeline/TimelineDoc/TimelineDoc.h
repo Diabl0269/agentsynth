@@ -488,6 +488,12 @@ public:
     // mutation, however many notes move. A call that moves nothing is a no-op.
     bool quantiseNotes(ClipId clipId, double gridBeats, double strength);
 
+    // Rounds every note's lengthBeats in the clip to the nearest positive multiple of gridBeats
+    // (rejected if <= 0 or non-finite), floored at one grid unit so a note can never become
+    // zero-length. Start beats are untouched. One mutation, however many notes change; a call that
+    // changes nothing is a no-op (no revision bump, no notification).
+    bool quantiseNoteLengths(ClipId clipId, double gridBeats);
+
     const MidiNote* getNote(NoteId id) const;
     const Clip* getClipForNote(NoteId id) const;
 
