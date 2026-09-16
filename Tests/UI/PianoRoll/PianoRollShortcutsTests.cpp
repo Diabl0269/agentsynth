@@ -136,6 +136,10 @@ TEST(PianoRollShortcutTest, AnUnboundActionHasNoKeyAndNeverFallsBackToItsDefault
     EXPECT_EQ(f.state.snapEnabled, snapBefore);
     EXPECT_FALSE(f.undo.canUndo());
     EXPECT_FALSE(f.roll.isQuantiseFlashingForTest()) << "an unbound Q never even flashes the button";
+
+    // Detach before `mgr` (declared after `f`, so destroyed first) goes out of scope — see PR
+    // #381's fix for TimelinePanelToolStripTests.cpp for the idiom this follows.
+    f.roll.setShortcutManager(nullptr);
 }
 
 // The snap toggle and the one-shot quantise are two independent PianoRoll-category bindings — the
@@ -170,6 +174,9 @@ TEST(PianoRollShortcutTest, SnapToggleAndQuantiseFollowTheirOwnBindings) {
     EXPECT_DOUBLE_EQ(f.doc.getNote(bed.note)->startBeat, 1.0) << "Shift+G quantised, from the RAW division";
     EXPECT_FALSE(f.state.snapEnabled) << "and never flipped the switch";
     EXPECT_EQ(toggles, 1);
+
+    // Detach before `mgr` (declared after `f`, so destroyed first) goes out of scope.
+    f.roll.setShortcutManager(nullptr);
 }
 
 // Rebinding the octave transpose alone must not shadow (or be shadowed by) the semitone one — the
@@ -192,6 +199,9 @@ TEST(PianoRollShortcutTest, RebindingTheOctaveTransposeLeavesTheSemitoneOneAlone
     EXPECT_EQ(f.doc.getNote(bed.note)->pitch, 61);
     EXPECT_TRUE(f.roll.keyPressed(plainPress('u')));
     EXPECT_EQ(f.doc.getNote(bed.note)->pitch, 73);
+
+    // Detach before `mgr` (declared after `f`, so destroyed first) goes out of scope.
+    f.roll.setShortcutManager(nullptr);
 }
 
 // Alt+Left/Right stay resolvable too — and navigation is still selection-only, never an undo step.
@@ -221,6 +231,9 @@ TEST(PianoRollShortcutTest, NoteNavigationIsRebindableAndStillNeverTouchesTheDoc
     EXPECT_TRUE(f.roll.keyPressed(plainPress('[')));
     EXPECT_TRUE(onlySelected(f, first));
     EXPECT_FALSE(f.undo.canUndo()) << "navigation is selection-only";
+
+    // Detach before `mgr` (declared after `f`, so destroyed first) goes out of scope.
+    f.roll.setShortcutManager(nullptr);
 }
 
 // Escape and Delete/Backspace are platform conventions, not app shortcuts: they answer identically
@@ -248,6 +261,9 @@ TEST(PianoRollShortcutTest, EscapeAndDeleteStayFixedRegardlessOfTheManager) {
     EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::deleteKey)));
     EXPECT_EQ(f.doc.getNote(bed.note), nullptr);
     EXPECT_TRUE(f.undo.canUndo()) << "and it is still one undo step";
+
+    // Detach before `mgr` (declared after `f`, so destroyed first) goes out of scope.
+    f.roll.setShortcutManager(nullptr);
 }
 
 // Ctrl+S (the actual Control key — never Cmd, which is Save Preset) toggles the scale-assist
@@ -283,4 +299,7 @@ TEST(PianoRollShortcutTest, WithManagerInstalledAndBindingClearedCtrlSDoesNothin
 
     EXPECT_FALSE(f.roll.keyPressed(ctrlPress('s')));
     EXPECT_FALSE(f.roll.getScaleAssistPanel().isVisible());
+
+    // Detach before `mgr` (declared after `f`, so destroyed first) goes out of scope.
+    f.roll.setShortcutManager(nullptr);
 }

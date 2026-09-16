@@ -201,6 +201,24 @@ TEST(TimelineToolStripTest, FollowPlayheadTooltipTracksALiveRebindAndDropsTheOld
     f.panel.setShortcutManager(nullptr);
 }
 
+// FRO97 regression: the product-side guard. `shortcuts` is declared AFTER `f` (same shape as the
+// bug the ASAN job caught, and deliberately WITHOUT the explicit setShortcutManager(nullptr)
+// detach every other test in this file uses), so at scope exit `shortcuts` destructs FIRST and
+// `f.panel` (and its own ~TimelinePanelComponent) runs after with a manager that is already gone.
+// This must not crash: ~TimelinePanelComponent() now resolves through a juce::WeakReference
+// (shortcutsWeak_) rather than dereferencing `shortcuts_` directly, so it sees the manager is gone
+// and simply skips removeChangeListener instead of touching freed memory. A build without the
+// guard is exactly the heap-use-after-free ASAN reported at this file's history (see PR #381 and
+// FRO97).
+TEST(TimelineToolStripTest, DestructorSurvivesAManagerThatDestructsFirstWithNoExplicitDetach) {
+    ToolPanelFixture f;
+    ShortcutManager shortcuts;
+    f.panel.setShortcutManager(&shortcuts);
+    ASSERT_TRUE(f.panel.getFollowPlayheadButtonForTest().getTooltip().contains("(f)"));
+    // No f.panel.setShortcutManager(nullptr) here — that is the point of this test. `shortcuts`
+    // destructs now (reverse declaration order), then `f` (and f.panel) destructs after.
+}
+
 TEST(TimelineToolStripTest, ToolStripAndSnapToggleTooltipsTrackTheirLiveBindings) {
     ToolPanelFixture f;
     ShortcutManager shortcuts;

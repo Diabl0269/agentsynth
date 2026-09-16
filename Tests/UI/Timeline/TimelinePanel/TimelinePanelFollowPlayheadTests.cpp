@@ -229,6 +229,13 @@ TEST(TimelineFollowPlayheadTest, FKeyTogglesFollowThroughTheShortcutManager) {
     EXPECT_TRUE(panel.isFollowPlayheadEnabled()) << "and did not toggle";
     EXPECT_TRUE(panel.keyPressed(juce::KeyPress('g')));
     EXPECT_FALSE(panel.isFollowPlayheadEnabled());
+
+    // Detach before `shortcuts` (declared after `panel`, so destroyed first) goes out of scope —
+    // an ASAN run caught the heap-use-after-free this leaves otherwise: TimelinePanelComponent::
+    // ~TimelinePanelComponent() removes itself as a change listener from whatever ShortcutManager
+    // is still installed, which is a dangling pointer once `shortcuts` is gone. See PR #381's fix
+    // for TimelinePanelToolStripTests.cpp, which established this idiom.
+    panel.setShortcutManager(nullptr);
 }
 
 namespace {
@@ -304,8 +311,13 @@ TEST(TimelineFollowPlayheadTest, NoScrollWhenFollowIsOff) {
 }
 
 TEST(TimelineFollowPlayheadTest, NoScrollWhileThePianoRollIsOpen) {
-    FollowPlayheadFixture f;
+    // `doc` declared BEFORE `f` (see the FRO97 comment on FKeyTogglesFollowThroughTheShortcutManager
+    // above): TimelinePanelComponent::~TimelinePanelComponent() unconditionally dereferences `doc_`
+    // (doc_->removeListener(this)), so if `doc` destructed first — the shape every other affected
+    // test in this file had — that call would be a use-after-free/stack-use-after-scope on `doc`.
+    // An ASAN run confirmed this reproduces with the reverse order.
     synth::TimelineDoc doc;
+    FollowPlayheadFixture f;
     f.panel.setTimelineDoc(&doc);
     const auto track = doc.addTrack(synth::TrackKind::Midi, "Midi");
     const auto clip = doc.addClip(track, 0.0, 4.0, "Clip");
@@ -335,8 +347,10 @@ juce::MouseEvent leftButtonEventOnLane(juce::Component& comp, juce::Point<float>
 } // namespace
 
 TEST(TimelineFollowPlayheadTest, NoScrollWhileAClipDragIsInProgress) {
-    FollowPlayheadFixture f;
+    // `doc` declared BEFORE `f` — see the comment on NoScrollWhileThePianoRollIsOpen above (`undo`
+    // has no such requirement: ~TimelinePanelComponent() never touches undoManager_, only doc_).
     synth::TimelineDoc doc;
+    FollowPlayheadFixture f;
     AppUndoManager undo;
     f.panel.setTimelineDoc(&doc);
     f.panel.setUndoManager(&undo);
