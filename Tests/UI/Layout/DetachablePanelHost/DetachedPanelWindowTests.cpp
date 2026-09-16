@@ -7,10 +7,11 @@
 //
 // Groups:
 //   1. Headless construction -- no native peer until setVisible(true).
-//   2. Bounds persistence round trip.
+//   2. Bounds persistence round trip, including FRO101's implausible-bounds rejection.
 //   3. Close button -- fires onCloseRequested, never self-destroys.
 //   4. Plugin-mode LookAndFeel seam -- own scope, Desktop's default untouched.
 //   5. Per-window focus-region Tab cycling (T159/docs/shortcuts.md).
+//   6. FRO102 -- themed background (theme's surface token, re-applied on lookAndFeelChanged()).
 
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/DetachablePanelHost/DetachedPanelWindow.h"
@@ -85,6 +86,40 @@ TEST_F(DetachedPanelWindowTest, NoPersistedKeyFallsBackToACentredDefault) {
     EXPECT_GT(window.getHeight(), 0);
 }
 
+// FRO101: a real bug report -- a headless test run polluted the REAL on-disk settings with
+// "0 62 128 128" (128x128 being juce::ComponentBoundsConstrainer's own default minimum, never a
+// value a user actually dragged to), and the detached window restored it verbatim: 128x128 pinned
+// at the screen edge instead of the documented centred default. Asserting SIZE only (not
+// position) keeps this portable to a genuinely headless CI runner, where the "no displays"
+// fallback below picks the same kDefaultWidth/kDefaultHeight but setBounds(0, 0, ...) instead of
+// centreWithSize(...).
+TEST_F(DetachedPanelWindowTest, TinyPersistedBoundsRejectedFallsBackToCentredDefaultSize) {
+    if (auto* settings = appProperties.getUserSettings())
+        settings->setValue("testWindowBounds", juce::Rectangle<int>(0, 62, 128, 128).toString());
+
+    DetachedPanelWindow window(panel, button, title, "testWindowBounds", &appProperties, nullptr, &shortcutManager);
+    EXPECT_EQ(window.getWidth(), 640) << "a 128x128 persisted rect must be rejected as implausible";
+    EXPECT_EQ(window.getHeight(), 420);
+}
+
+// A plausibly-SIZED rect that sits nowhere any connected display can show it (e.g. left behind by
+// a display that's since been unplugged) must fall back the same way. Only meaningful when this
+// runner actually has a display to test "off of" -- a genuinely headless CI runner (no displays at
+// all) has nothing to validate placement against, so isPlausibleRestoredBounds() deliberately skips
+// the intersects-a-display check there and this case is a no-op (there's no persisted geometry that
+// COULD be "off-screen" with zero screens).
+TEST_F(DetachedPanelWindowTest, OffscreenPersistedBoundsRejectedFallsBackToCentredDefaultSize) {
+    if (juce::Desktop::getInstance().getDisplays().displays.isEmpty())
+        GTEST_SKIP() << "no display available to test off-screen rejection against";
+
+    if (auto* settings = appProperties.getUserSettings())
+        settings->setValue("testWindowBounds", juce::Rectangle<int>(200000, 200000, 640, 420).toString());
+
+    DetachedPanelWindow window(panel, button, title, "testWindowBounds", &appProperties, nullptr, &shortcutManager);
+    EXPECT_EQ(window.getWidth(), 640) << "a persisted rect off every display must be rejected too";
+    EXPECT_EQ(window.getHeight(), 420);
+}
+
 // ============================================================================
 // 3. Close button
 // ============================================================================
@@ -156,4 +191,48 @@ TEST_F(DetachedPanelWindowTest, UnboundKeyIsNotHandled) {
 
     const juce::KeyPress unbound('z', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
     EXPECT_FALSE(window.keyPressed(unbound));
+}
+
+// ============================================================================
+// 6. FRO102 -- themed background
+// ============================================================================
+
+namespace {
+// A theme whose surface token is deliberately far from both the darkgrey literal FRO102 replaces
+// AND from Theme.h's own default surface (0xff1B1F26, also the hardcoded fallback several
+// Source/UI/Mixer/*.cpp paint() overrides use) -- asserting against either of those would pass even
+// if DetachedPanelWindow never read the theme at all.
+synth::theme::Theme themeWithDistinctiveSurface(juce::Colour surface) {
+    synth::theme::Theme theme;
+    theme.colors.surface = surface;
+    return theme;
+}
+} // namespace
+
+TEST_F(DetachedPanelWindowTest, BackgroundColourMatchesThemeSurfaceWhenLookAndFeelProvided) {
+    const juce::Colour distinctiveSurface{0xff7744CC};
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(themeWithDistinctiveSurface(distinctiveSurface));
+
+    DetachedPanelWindow window(panel, button, title, "testWindowBounds", &appProperties, &lf, &shortcutManager);
+    EXPECT_EQ(window.getBackgroundColour(), distinctiveSurface)
+        << "must read the theme's OWN surface token, not the darkgrey literal or Theme.h's default";
+}
+
+TEST_F(DetachedPanelWindowTest, BackgroundColourUpdatesAfterLookAndFeelSwap) {
+    const juce::Colour firstSurface{0xff7744CC};
+    const juce::Colour secondSurface{0xff22AA66};
+    synth::theme::AppLookAndFeel lfA;
+    lfA.applyTheme(themeWithDistinctiveSurface(firstSurface));
+    synth::theme::AppLookAndFeel lfB;
+    lfB.applyTheme(themeWithDistinctiveSurface(secondSurface));
+
+    DetachedPanelWindow window(panel, button, title, "testWindowBounds", &appProperties, &lfA, &shortcutManager);
+    ASSERT_EQ(window.getBackgroundColour(), firstSurface);
+
+    // lookAndFeelChanged() must re-read the CURRENT LookAndFeel, not a value cached at
+    // construction -- setLookAndFeel() fires it synchronously (Component::sendLookAndFeelChange()).
+    window.setLookAndFeel(&lfB);
+    EXPECT_EQ(window.getBackgroundColour(), secondSurface)
+        << "must follow a later setLookAndFeel() swap, not stay pinned to the constructor's instance";
 }

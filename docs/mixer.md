@@ -502,6 +502,37 @@ once, right after construction, by `Main.cpp`'s `MainWindow` and `PluginEditor.c
 call `window->addToDesktop()` (gated additionally on a primary display existing) before
 `setVisible(true)`.
 
+**FRO101 — a detached window trusted its persisted bounds unconditionally:** a headless test that
+detached a panel against a REAL `MainComponent` (no `ApplicationProperties` override) wrote
+`persistBounds()`'s bounds straight into the real, on-disk `Agent Synth.settings` file every shipped
+build reads. That let a 128x128 rect (JUCE's own `ComponentBoundsConstrainer` default minimum, never
+a size a real drag produces) leak into `mixerWindowBounds`/`timelineWindowBounds`, and the next real
+launch restored it verbatim: a Mixer or Timeline window pinned to the screen edge at 128x128 instead
+of the documented centred default. Fixed two ways. First, `DetachedPanelWindow::restoreBoundsOrDefault()`
+now runs the parsed rect through `isPlausibleRestoredBounds()` before trusting it — reject (and fall
+back to the existing centred-default path) when the rect is smaller than a plausible real window
+(under 320x240) or doesn't intersect any currently-connected display (skipped on a genuinely
+headless runner with zero displays, where there's nothing to validate placement against). Second,
+every test that builds a real `MainComponent` and detaches a real panel now wraps itself in a
+`PersistedKeysGuard` for the affected key(s) (`Tests/UI/Layout/DetachablePanelHost/DetachRedockStateTests.cpp`,
+`Tests/UI/Layout/FocusRegionTests.cpp`) — the same snapshot-and-restore idiom `E2EWorkflowTests.cpp`/
+`FocusArbitrationTestFixture.h` already use for other real-settings-file keys, so a test run can no
+longer change a developer's (or CI's) actual persisted window geometry.
+
+**FRO102 — a detached window's own background never followed the theme:** the constructor passed
+`juce::Colours::darkgrey` to `juce::DocumentWindow`'s background-colour argument unconditionally, so
+any area the hosted panel itself doesn't paint (an empty Mixer, the space around columns) showed
+flat stock-JUCE grey instead of the app's themed surface. Fixed by a new
+`DetachedPanelWindow::lookAndFeelChanged()` override: whenever `getLookAndFeel()` resolves to a real
+`synth::theme::AppLookAndFeel` (the same `dynamic_cast` idiom `DetachablePanelHost::applyIcon()`
+already uses), it calls `setBackgroundColour(lf->getTheme().colors.surface)` — the same `surface`
+token the mixer's own column/insert-list `paint()` overrides read. `setLookAndFeel()` fires this
+synchronously, so it applies at construction (right after the existing null-guarded `setLookAndFeel`
+call), on any later theme swap, and once more (harmlessly) as the destructor clears it. No change was
+needed to `Content` (the window's borrowed-header + panel wrapper): `ResizableWindow::setBackgroundColour`
+fills the whole window itself, behind `Content`, so a hosted panel's own unpainted area already falls
+through to the corrected colour without `Content` needing a `paint()` override of its own.
+
 ### 5.10 What the mixer shows
 
 Strips, buses, Direct, and Master. Nothing else — never an arbitrary module's output. To put

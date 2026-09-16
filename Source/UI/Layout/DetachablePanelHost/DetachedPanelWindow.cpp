@@ -7,6 +7,34 @@ namespace synth::ui {
 namespace {
 constexpr int kDefaultWidth = 640;
 constexpr int kDefaultHeight = 420;
+
+// A persisted rect this small (or smaller) is never something a user actually resized to --
+// 128x128 is juce::ComponentBoundsConstrainer's OWN default minimum, i.e. the value a
+// ResizableWindow settles on when something drives it through setBounds() without ever going
+// through a real interactive resize (FRO101: a headless test detaching a panel against a real
+// MainComponent, before the settings-key leak those tests had was fixed). Anything under a
+// plausible real window size is rejected the same way an absent/malformed persisted key already
+// is, below.
+constexpr int kMinPlausibleWidth = 320;
+constexpr int kMinPlausibleHeight = 240;
+
+// True when `rect` is both a plausible SIZE for a real window and actually reachable on at least
+// one connected display -- a persisted rect from a display that's since been unplugged (or the
+// implausible near-origin rect FRO101 was filed against) is otherwise silently restored off-screen
+// or too small to use. Skips the display check entirely when there are no displays at all (a
+// genuinely headless CI runner) since there is nothing to validate placement against there --
+// restoreBoundsOrDefault()'s own centreWithSize()/setBounds() fallback already handles that case.
+bool isPlausibleRestoredBounds(const juce::Rectangle<int>& rect) {
+    if (rect.getWidth() < kMinPlausibleWidth || rect.getHeight() < kMinPlausibleHeight)
+        return false;
+    const auto& displays = juce::Desktop::getInstance().getDisplays().displays;
+    if (displays.isEmpty())
+        return true;
+    for (const auto& display : displays)
+        if (display.totalArea.intersects(rect))
+            return true;
+    return false;
+}
 } // namespace
 
 DetachedPanelWindow::DetachedPanelWindow(juce::Component& panel, juce::DrawableButton& headerButton,
@@ -83,6 +111,19 @@ void DetachedPanelWindow::resized() {
     persistBounds();
 }
 
+void DetachedPanelWindow::lookAndFeelChanged() {
+    juce::DocumentWindow::lookAndFeelChanged();
+    // FRO102: the constructor's juce::Colours::darkgrey literal above is only ever the fallback for
+    // a null `lookAndFeel` (headless tests) -- once a real synth::theme::AppLookAndFeel is in play,
+    // replace it with the theme's own surface token (same accessor DetachablePanelHost::applyIcon()
+    // and the mixer columns already use: lf->getTheme().colors), so an empty/undersized hosted
+    // panel shows the app's themed surface behind it, not a flat stock-JUCE grey. setLookAndFeel()
+    // fires this synchronously (Component::sendLookAndFeelChange()), so it applies on construction,
+    // on any later setLookAndFeel() swap, and once more (harmlessly) as the destructor clears it.
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        setBackgroundColour(lf->getTheme().colors.surface);
+}
+
 bool DetachedPanelWindow::keyPressed(const juce::KeyPress& key) {
     // MainComponent's keyPressed dispatch (and its command-table focusNextRegion/focusPrevRegion
     // rows) is unreachable from here -- this is a separate top-level window, and MainComponent
@@ -129,7 +170,7 @@ void DetachedPanelWindow::restoreBoundsOrDefault() {
         saved = appProperties_->getUserSettings()->getValue(boundsKey_, {});
     if (saved.isNotEmpty()) {
         const auto bounds = juce::Rectangle<int>::fromString(saved);
-        if (!bounds.isEmpty()) {
+        if (!bounds.isEmpty() && isPlausibleRestoredBounds(bounds)) {
             setBounds(bounds);
             return;
         }
