@@ -33,6 +33,10 @@ AgentSynthPluginEditor::AgentSynthPluginEditor(AgentSynthAudioProcessor& p)
     // DetachablePanelHost::setCreatesNativeWindows()'s doc comment.
     mainComponent.getMixerDock().getTimelineHost().setCreatesNativeWindows(true);
     mainComponent.getMixerDock().getMixerHost().setCreatesNativeWindows(true);
+
+    // FRO100: same reasoning, for the hosted-plugin "Open Editor" window. See
+    // HostedPluginWindowManager::setCreatesNativeWindows()'s doc comment.
+    mainComponent.getPluginWindowManager().setCreatesNativeWindows(true);
 }
 
 AgentSynthPluginEditor::~AgentSynthPluginEditor() {

@@ -27,11 +27,29 @@ namespace synth {
  * `audioEngine`/`ownedAudioEngine` and `graphEditor`: members are destroyed in REVERSE declaration
  * order, so the manager is torn down before the engine/graph members even without the explicit call.
  * Losing either mechanism silently would only show up as an intermittent crash on app close.
+ *
+ * FRO100 (the same FRO12 follow-up bug, fixed here): `HostedPluginEditorWindow` is built
+ * `addToDesktop=false` (a deliberate headless-test seam), and JUCE only ever creates a native peer
+ * from a TopLevelWindow constructor's own `addToDesktop=true`, `recreateDesktopWindow()`/
+ * `lookAndFeelChanged()` when a peer already exists, or an explicit `addToDesktop()` call — never
+ * from `setVisible()` alone. `setCreatesNativeWindows(bool)` gates that explicit call, mirroring
+ * `DetachablePanelHost::setCreatesNativeWindows()`: false (the default, and every headless test's
+ * value) leaves `openEditorFor()` exactly as before; true — set once, right after construction, by
+ * `Main.cpp`'s `MainWindow` and `PluginEditor.cpp`'s `AgentSynthPluginEditor`, the app's and
+ * plugin's only real `MainComponent` construction sites — makes `openEditorFor()` call
+ * `window->addToDesktop()` (gated additionally on a primary display existing, for a genuinely
+ * headless runner) before `setVisible(true)`.
  */
 class HostedPluginWindowManager {
 public:
     HostedPluginWindowManager() = default;
-    ~HostedPluginWindowManager() { closeAll(); }
+    virtual ~HostedPluginWindowManager() { closeAll(); }
+
+    /** When true, `openEditorFor()` gives the freshly built window a REAL native top-level window
+     *  (a peer), so it actually shows up on screen — see the FRO100 class-comment paragraph above.
+     *  Defaults to false so every headless test stays exactly as before. */
+    void setCreatesNativeWindows(bool shouldCreate) noexcept { createsNativeWindows_ = shouldCreate; }
+    bool isCreatingNativeWindows() const noexcept { return createsNativeWindows_; }
 
     /** Opens the editor window for `nodeId`'s HostedPluginModule, or brings the existing one to
      *  front if it's already open (one window per node). `module` must be the live processor
@@ -52,13 +70,20 @@ public:
         window->onCloseRequested = [this](juce::AudioProcessorGraph::NodeID id) { closeAllForNode(id); };
         // A DocumentWindow's default position is the screen origin, i.e. top-left UNDER the menu
         // bar and behind the app's main window — "Open Editor did nothing" to the user. Centre it
-        // at its content size and bring it forward, in that order, before/after the one
-        // setVisible(true) that creates the native peer. Guarded on a display existing:
-        // centreWithSize dereferences getPrimaryDisplay(), which is NULL on a headless test
-        // runner (Linux CI has no display server; this crashed there and nowhere else).
-        if (juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() != nullptr)
+        // at its content size and bring it forward, in that order, around the addToDesktop() call
+        // that promotes it to a real native peer (see the FRO100 class-comment paragraph). Guarded
+        // on a display existing: centreWithSize dereferences getPrimaryDisplay(), which is NULL on
+        // a headless test runner (Linux CI has no display server; this crashed there and nowhere
+        // else) — the same guard the promotion itself needs, so both share it.
+        if (hasPrimaryDisplayForNativeWindow())
             window->centreWithSize(juce::jmax(1, window->getWidth()), juce::jmax(1, window->getHeight()));
-        window->setVisible(true); // the one call in this class that creates a native peer
+        // FRO100: promote the window to a real native peer BEFORE setVisible(true) — setVisible()
+        // alone never creates one (see setCreatesNativeWindows()'s doc comment above). window's
+        // bounds are already the just-centred ones, and TopLevelWindow::addToDesktop() reads the
+        // component's CURRENT bounds to size/position the native peer, so they survive unchanged.
+        if (createsNativeWindows_ && hasPrimaryDisplayForNativeWindow())
+            addWindowToDesktop(*window);
+        window->setVisible(true);
         window->toFront(true);
         windows_.emplace(nodeId, std::move(window));
     }
@@ -95,7 +120,27 @@ public:
         return it != windows_.end() ? it->second.get() : nullptr;
     }
 
+protected:
+    // ---- Native-window seam (HostedPluginEditorWindowTests.cpp's "native window" group) ----
+    // openEditorFor() calls these two, in that order, to decide whether the freshly built window
+    // gets a real native peer and to perform that call. Split into two overridable points (rather
+    // than folding the display check into the first) so a test subclass can simulate "no primary
+    // display" or "call reached" deterministically on ANY runner — including a developer's Mac,
+    // which always has a real display — without this base implementation ever creating one. Mirrors
+    // DetachablePanelHost's identical seam (DetachablePanelHost.h) exactly.
+    virtual bool hasPrimaryDisplayForNativeWindow() const {
+        return juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() != nullptr;
+    }
+    virtual void addWindowToDesktop(HostedPluginEditorWindow& window) {
+        // The flag-less TopLevelWindow overload — it derives its style flags from
+        // getDesktopWindowStyleFlags() (native title bar, matching what HostedPluginEditorWindow's
+        // constructor already configured via setUsingNativeTitleBar) rather than us guessing them
+        // again here.
+        window.addToDesktop();
+    }
+
 private:
+    bool createsNativeWindows_ = false;
     std::map<juce::AudioProcessorGraph::NodeID, std::unique_ptr<HostedPluginEditorWindow>> windows_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(HostedPluginWindowManager)

@@ -488,10 +488,16 @@ headless runner) before `setVisible(true)`. `DetachedPanelWindow`'s already-rest
 bounds survive that promotion unchanged (`Component::addToDesktop()` positions the peer from the
 component's current bounds, never a native default).
 
-`Source/Plugin/Hosting/HostedPluginEditorWindow.cpp` uses the identical `addToDesktop=false` +
+**FRO100 follow-up — hosted-plugin "Open Editor" had the identical bug:**
+`Source/Plugin/Hosting/HostedPluginEditorWindow.cpp` used the identical `addToDesktop=false` +
 `setVisible(true)`-only pattern (`HostedPluginWindowManager::openEditorFor`, wired from a hosted
-plugin module's "Open Editor" action) and has the same latent no-window bug. Deliberately left
-unfixed here — out of scope for this ticket; flagged for its own follow-up.
+plugin module's "Open Editor" action), left unfixed by the FRO12 work above as out of scope.
+Fixed the same way: `HostedPluginWindowManager::setCreatesNativeWindows(bool)` — false (the
+default, and every headless test's value) leaves `openEditorFor()` exactly as before; true — set
+once, right after construction, by `Main.cpp`'s `MainWindow` and `PluginEditor.cpp`'s
+`AgentSynthPluginEditor`, the same two real construction sites FRO12 uses — makes `openEditorFor()`
+call `window->addToDesktop()` (gated additionally on a primary display existing) before
+`setVisible(true)`.
 
 ### 5.10 What the mixer shows
 

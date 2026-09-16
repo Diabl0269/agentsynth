@@ -18,7 +18,8 @@ HostedPluginEditorWindow::HostedPluginEditorWindow(HostedPluginModule& module, j
     , nodeId_(nodeId) {
     // addToDesktop=false above: constructing this window (what every headless test below does)
     // never creates a native peer. Only HostedPluginWindowManager::openEditorFor's later
-    // setVisible(true) does that, for real use.
+    // addToDesktop() call does that (gated on setCreatesNativeWindows(true), for real use — see
+    // HostedPluginWindowManager.h's FRO100 class comment).
     setUsingNativeTitleBar(true);
 
     // The seam this window reacts to for the rest of its life — see the class comment.

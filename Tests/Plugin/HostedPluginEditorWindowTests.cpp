@@ -10,8 +10,10 @@
 // HostedPluginEditorWindow.h. Every HostedPluginEditorWindow constructed directly (not through
 // HostedPluginWindowManager::openEditorFor) stays headless for its whole life: the base
 // juce::DocumentWindow is built with addToDesktop=false, so no native peer is ever created unless
-// something explicitly calls setVisible(true) — the one place that happens is openEditorFor()
-// itself, which is exercised by the manager-level tests below.
+// something explicitly promotes it. That promotion (FRO100) is openEditorFor()'s own
+// addToDesktop() call, gated on HostedPluginWindowManager::setCreatesNativeWindows(true) — false
+// by default, so every manager-level test below except group 6 stays exactly as headless as a
+// directly-constructed window.
 //
 // Groups:
 //   1. Content — custom editor vs. the GenericAudioProcessorEditor fallback.
@@ -19,6 +21,7 @@
 //   3. Instance-change reactions — swap rebuilds, unload closes.
 //   4. Resize — the editor drives the window's size.
 //   5. ModuleComponent — the card's "Open Editor" button.
+//   6. Native-window promotion (FRO100) — setCreatesNativeWindows() gates the real peer.
 
 #include "../StubPluginInstance.h"
 #include "AudioEngine/AudioEngine.h"
@@ -334,4 +337,83 @@ TEST(ModuleComponentHostedPluginTest, CardButtonWiring) {
     openEditorButton->onClick(); // headless click — no real mouse event needed
     EXPECT_TRUE(fired);
     EXPECT_EQ(firedNodeId, nodeId);
+}
+
+// ============================================================================
+// 6. Native-window promotion (FRO100 — the FRO12 follow-up applied here)
+// ============================================================================
+
+namespace {
+
+// Overrides both native-window seam points (HostedPluginWindowManager.h's protected
+// hasPrimaryDisplayForNativeWindow()/addWindowToDesktop()) so a test can simulate either
+// environment deterministically on ANY runner — including a developer's Mac, which always has a
+// real display. addWindowToDesktop() deliberately never forwards to the base implementation: this
+// must never create an actual native peer, no matter which machine runs the test suite. Mirrors
+// DetachablePanelHostTests.cpp's RecordingNativeWindowHost exactly.
+class RecordingHostedPluginWindowManager : public HostedPluginWindowManager {
+public:
+    bool simulatedPrimaryDisplay = true;
+    bool addToDesktopCallReached = false;
+
+protected:
+    bool hasPrimaryDisplayForNativeWindow() const override { return simulatedPrimaryDisplay; }
+    void addWindowToDesktop(HostedPluginEditorWindow&) override {
+        addToDesktopCallReached = true; // recorded only -- never creates a real peer
+    }
+};
+
+} // namespace
+
+TEST(HostedPluginWindowManagerNativeWindowTest, FlagFalseNeverCreatesAPeerEvenWhenADisplayExists) {
+    StubBackend backend;
+    HostedPluginModule module;
+    module.prepareToPlay(kSampleRate, kBlockSize);
+    loadAndWait(module, backend);
+
+    HostedPluginWindowManager manager;
+    ASSERT_FALSE(manager.isCreatingNativeWindows()) << "false is the default -- every headless test relies on this";
+
+    manager.openEditorFor(&module, juce::AudioProcessorGraph::NodeID(1));
+    auto* window = manager.getWindowForTest(juce::AudioProcessorGraph::NodeID(1));
+    ASSERT_NE(window, nullptr);
+    EXPECT_EQ(window->getPeer(), nullptr)
+        << "the flag is off -- openEditorFor() must never promote the window to a real peer";
+}
+
+TEST(HostedPluginWindowManagerNativeWindowTest, FlagTrueButNoPrimaryDisplayStillCreatesNoPeer) {
+    StubBackend backend;
+    HostedPluginModule module;
+    module.prepareToPlay(kSampleRate, kBlockSize);
+    loadAndWait(module, backend);
+
+    RecordingHostedPluginWindowManager manager;
+    manager.setCreatesNativeWindows(true);
+    manager.simulatedPrimaryDisplay = false; // simulates a genuinely headless runner, on ANY machine
+
+    manager.openEditorFor(&module, juce::AudioProcessorGraph::NodeID(1));
+    EXPECT_FALSE(manager.addToDesktopCallReached) << "no display -- the promotion call must never be reached";
+    auto* window = manager.getWindowForTest(juce::AudioProcessorGraph::NodeID(1));
+    ASSERT_NE(window, nullptr);
+    EXPECT_EQ(window->getPeer(), nullptr);
+}
+
+TEST(HostedPluginWindowManagerNativeWindowTest, FlagTrueWithAPrimaryDisplayReachesThePromotionCall) {
+    StubBackend backend;
+    HostedPluginModule module;
+    module.prepareToPlay(kSampleRate, kBlockSize);
+    loadAndWait(module, backend);
+
+    RecordingHostedPluginWindowManager manager;
+    manager.setCreatesNativeWindows(true);
+    manager.simulatedPrimaryDisplay = true;
+
+    manager.openEditorFor(&module, juce::AudioProcessorGraph::NodeID(1));
+    EXPECT_TRUE(manager.addToDesktopCallReached)
+        << "flag on + a display -- production code would promote the window here";
+    // The override never forwarded to the real addToDesktop() -- this must still be no real peer,
+    // regardless of whether the machine running this test actually has a display.
+    auto* window = manager.getWindowForTest(juce::AudioProcessorGraph::NodeID(1));
+    ASSERT_NE(window, nullptr);
+    EXPECT_EQ(window->getPeer(), nullptr);
 }
