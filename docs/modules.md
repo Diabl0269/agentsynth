@@ -283,18 +283,34 @@ Loads an audio file from disk and plays it back one of two ways.
   0.65), each -1..+1. `0` is linear; `> 0` is fast-first/slow-tail (the natural decay/release
   shape); `< 0` is slow-first/fast-finish. Exact endpoints hold for every curve amount:
   `shape(0, c) == 0`, `shape(1, c) == 1`. Not exposed to the AI few-shot examples.
-- **Times retired their minimum clamps (FRO110)**: `attack`/`hold`/`decay`/`release` move to
-  `NormalisableRange(0.0, 5.0, 0.0, 0.3)` — minimum is genuinely 0 s now (an explicit 0 is
-  honoured, not silently raised to 2 ms / 5 ms the way the old clamps did), the 0.3 skew keeps
-  the knob usable at the new 1 ms attack default, and the maximum stays 5.0 (widening it would
-  quadruple the existing misfire of `AIStateMapper`'s in-`[0,1]` rescale heuristic for untrusted
-  patches). New defaults: attack 0.001 s, hold 0 s, decay 1.0 s, **sustain 1.0**, release 0.015 s
-  — a held note sustains by default now, matching how most other synths default. The 0.3 skew is
-  safe for every persistence path that matters: `graphToJSON` stores denormalised (real-unit)
-  values (`AIStateMapper.cpp`'s `convertFrom0to1` call) and so does timeline automation
-  (`AutomationRecorder::denormalisedValueOf`). The one place a skew change is visible is a
-  **host's own** VST3/AU automation lane, which is normalised — an existing host automation
-  curve on one of these four parameters will shift. Acceptable pre-V1.
+- **Times retired their minimum clamps (FRO110)**: `attack`/`hold`/`decay`/`release` move to a
+  **linear** `NormalisableRange(0.0, 5.0)` — minimum is genuinely 0 s now (an explicit 0 is
+  honoured, not silently raised to 2 ms / 5 ms the way the old clamps did), and the maximum stays
+  5.0 (widening it would quadruple the existing misfire of `AIStateMapper`'s in-`[0,1]` rescale
+  heuristic for untrusted patches — see below). New defaults: attack 0.001 s, hold 0 s, decay
+  1.0 s, **sustain 1.0**, release 0.015 s — a held note sustains by default now, matching how
+  most other synths default.
+  The knob feel at the new 1 ms attack default lives on the **slider**, not the parameter: the
+  0.3 skew that used to sit on these four `NormalisableRange`s now lives purely in the UI layer
+  (`ModuleComponent.cpp`'s ADSR special case, `applyAdsrTimeSliderSkew`, runs on the four time
+  sliders, identified by `paramID`). It has to run **after** the slider's
+  `SliderParameterAttachment` is built, not before: that constructor always installs its own
+  `NormalisableRange<double>` built from lambda `convertFrom0to1`/`convertTo0to1` functions, and
+  JUCE's `NormalisableRange::convertFrom0to1` returns through that lambda immediately whenever one
+  is installed — its own `skew` field is never consulted once a lambda is present, so a plain
+  `Slider::setSkewFactor()` call, whether before or after the attachment, is a silent no-op.
+  Installing a plain (function-free), already-skewed `NormalisableRange<double>` on the slider
+  after the attachment restores a real pixel-to-value skew curve while leaving
+  `slider.getValue()`/`setValue()` — what the attachment reads and writes — exchanging real units
+  exactly as before, with no effect on the parameter's stored or automated value. Keeping the
+  parameter range linear means `AIStateMapper`'s untrusted-apply heuristic (`AIStateMapper.cpp`'s
+  in-`[0,1]` rescale — the AI few-shot examples emit envelope times as real seconds like
+  `attack: 0.01`, `decay: 0.15`–`0.3`, all of which land inside `[0,1]`) behaves exactly as it did
+  before FRO110's range change: a linear `convertFrom0to1` against `0..5`, not the badly-distorted
+  curve a range-level 0.3 skew would produce (a requested 0.3 s decay would land around 0.02 s
+  instead of roughly 1.5 s). The one place a **host's own** VST3/AU automation lane still shifts is
+  the negligible range-start change from the old clamped minimum (0.01) to 0.0 — a linear offset,
+  not a curve change. Acceptable pre-V1.
 - **Retrigger is two different rules, on purpose**: a MIDI note-on always calls `noteOn()` at
   the event itself — driven by the event, not by an edge in a held/not-held flag — so a
   gapless back-to-back note sequence (a note-off and the next note-on landing on the very same

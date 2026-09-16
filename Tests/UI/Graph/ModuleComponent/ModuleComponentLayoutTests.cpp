@@ -4,6 +4,7 @@
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/ADSRModule.h"
+#include "Modules/ModuleBase.h"
 #include "Modules/OscillatorModule.h"
 #include "Modules/SamplerModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -158,4 +159,59 @@ TEST_F(ModuleComponentTest, AdsrSlidersWrapIntoRowsThatFitTheModule) {
 
     EXPECT_GE(moduleComponent.getHeight(), maxSliderBottom)
         << "module must be tall enough to contain the last slider row";
+}
+
+namespace {
+juce::Slider* findAdsrSlider(ModuleComponent& moduleComponent, const juce::String& componentId) {
+    for (auto* child : moduleComponent.getChildren())
+        if (auto* slider = dynamic_cast<juce::Slider*>(child))
+            if (slider->getComponentID() == componentId)
+                return slider;
+    return nullptr;
+}
+} // namespace
+
+// FRO110 fix (skew-regression): attack/hold/decay/release keep a LINEAR parameter range (see
+// ADSRModule.h/docs/modules.md) so AIStateMapper's untrusted rescale heuristic is unaffected, but
+// the knob must still feel skewed at the 1 ms attack default. That skew lives on the SLIDER,
+// applied AFTER its SliderParameterAttachment is built -- setting it before (or relying on
+// NormalisableRange::skew once SliderParameterAttachment has installed its own lambda-based
+// range) is a silent no-op in JUCE, so this pins the slider's actual runtime behaviour, not just
+// that some setSkewFactor call happened.
+TEST_F(ModuleComponentTest, AdsrTimeSlidersAreSkewedButParameterRangeStaysLinear) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ADSRModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    for (const char* timeSliderName : {"Attack", "Hold", "Decay", "Release"}) {
+        auto* slider = findAdsrSlider(moduleComponent, timeSliderName);
+        ASSERT_NE(slider, nullptr) << timeSliderName;
+        EXPECT_NEAR(slider->getSkewFactor(), 0.3, 1.0e-9) << timeSliderName << " must be skewed for knob feel";
+
+        // Skew formula: convertFrom0to1(0.5) == start + (end-start) * exp(ln(0.5)/skew). For a
+        // linear 0..5 range this would be 2.5 -- if the skew were silently dropped (the exact
+        // regression this test guards against), this would read 2.5 instead of ~0.497.
+        const double midpointValue = slider->proportionOfLengthToValue(0.5);
+        EXPECT_NEAR(midpointValue, 0.4966, 0.01)
+            << timeSliderName << " proportionOfLengthToValue(0.5) must reflect the 0.3 skew, not a linear mapping";
+    }
+
+    // Sustain and the curve params must stay linear on the slider too -- only the four time
+    // params get the UI-side skew.
+    for (const char* linearSliderName : {"Sustain", "Attack Curve", "Decay Curve", "Release Curve"}) {
+        auto* slider = findAdsrSlider(moduleComponent, linearSliderName);
+        ASSERT_NE(slider, nullptr) << linearSliderName;
+        EXPECT_NEAR(slider->getSkewFactor(), 1.0, 1.0e-9) << linearSliderName << " must stay linear";
+    }
+
+    // The parameter's own range must stay linear regardless of the slider's skew -- this is the
+    // actual FRO110 fix: AIStateMapper's untrusted rescale reads the PARAMETER's range, never the
+    // slider's.
+    for (const char* paramId : {"attack", "hold", "decay", "release"}) {
+        auto* param = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&processor, paramId));
+        ASSERT_NE(param, nullptr) << paramId;
+        EXPECT_NEAR(param->getNormalisableRange().skew, 1.0f, 1.0e-6f)
+            << paramId << "'s own NormalisableRange must stay linear";
+    }
 }

@@ -18,6 +18,44 @@
 
 using namespace detail;
 
+namespace {
+
+// ADSR's float-param sliders are vertical/linear-styled; every other module's are rotary. Set
+// before addAndMakeVisible so the slider is already styled when first shown.
+void setAdsrAwareSliderStyle(juce::Slider& slider, ModuleType type) {
+    slider.setSliderStyle(type == ModuleType::ADSR ? juce::Slider::LinearVertical
+                                                   : juce::Slider::RotaryHorizontalVerticalDrag);
+    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 20);
+}
+
+// attack/hold/decay/release: the four ADSR TIME params. Their AudioParameterFloat range is
+// deliberately linear (see docs/modules.md) -- a skewed NormalisableRange there would badly
+// worsen AIStateMapper's untrusted in-[0,1] rescale heuristic for AI-authored patches. Sustain
+// and the three curve params are excluded on purpose and stay linear on the slider too.
+bool isAdsrTimeParamId(const juce::String& paramID) {
+    return paramID == "attack" || paramID == "hold" || paramID == "decay" || paramID == "release";
+}
+
+// Gives an ADSR time slider the 0.3 skew that keeps it usable at the new 1 ms attack default,
+// without touching the parameter's own (linear) range. MUST run AFTER the slider's
+// SliderParameterAttachment is constructed: that constructor installs a NormalisableRange<double>
+// built from lambda convertFrom0to1/convertTo0to1 functions, and NormalisableRange::convertFrom0to1
+// returns via that function early whenever one is set -- its own `skew` field is never consulted
+// once a lambda is installed, so a plain Slider::setSkewFactor() call before or after the
+// attachment is a silent no-op. Replacing the slider's range with a plain (function-free),
+// already-skewed NormalisableRange<double> here restores a real pixel<->value skew curve while
+// leaving slider.getValue()/setValue() -- what the attachment reads and writes -- exchanging real
+// units exactly as before.
+void applyAdsrTimeSliderSkew(juce::Slider& slider, const juce::AudioParameterFloat& param) {
+    if (!isAdsrTimeParamId(param.paramID))
+        return;
+    const auto& r = param.getNormalisableRange();
+    slider.setNormalisableRange(
+        juce::NormalisableRange<double>((double)r.start, (double)r.end, (double)r.interval, 0.3));
+}
+
+} // namespace
+
 juce::Point<int> ModuleComponent::getMidiPortCenter(bool isOutput) const {
     return {isOutput ? getWidth() - 10 : 10, midiJackY(module)};
 }
@@ -554,13 +592,7 @@ void ModuleComponent::createControls() {
                 }
                 auto* slider = sliders.add(new juce::Slider());
                 slider->setComponentID(param->getName(100)); // ID for lookup
-                if (getType(module) == ModuleType::ADSR) {
-                    slider->setSliderStyle(juce::Slider::LinearVertical);
-                    slider->setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 20);
-                } else {
-                    slider->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-                    slider->setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 20);
-                }
+                setAdsrAwareSliderStyle(*slider, getType(module));
                 addAndMakeVisible(slider);
                 // Right-click-any-knob. `this` outlives every child slider (sliders is a member
                 // OwnedArray, destroyed as part of this component's own teardown before the outer
@@ -569,6 +601,7 @@ void ModuleComponent::createControls() {
                 slider->addMouseListener(this, false);
 
                 auto* attach = sliderAttachments.add(new juce::SliderParameterAttachment(*floatParam, *slider));
+                applyAdsrTimeSliderSkew(*slider, *floatParam);
                 sliderParams.add(floatParam); // param -> control mapping for reflection
 
                 auto* label = sliderLabels.add(new juce::Label(param->getName(100), param->getName(100)));

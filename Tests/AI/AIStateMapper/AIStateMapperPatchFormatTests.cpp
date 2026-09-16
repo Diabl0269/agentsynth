@@ -3,6 +3,7 @@
 // the authorable-module allowlist, and the reserved "timeline" key.
 // ---------------------------------------------------------------------------------------------
 #include "AIStateMapperTestHelpers.h"
+#include "Modules/ModuleBase.h"
 #include <gtest/gtest.h>
 #include <map>
 
@@ -504,4 +505,35 @@ TEST(AIStateMapperTest, TimelineIsRefusedFromUntrustedPatchesOnly) {
     EXPECT_TRUE(trusted.ok) << trusted.message;
     EXPECT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, graph, /*clearExisting=*/true, /*trusted=*/true));
     EXPECT_EQ(graph.getNumNodes(), 1);
+}
+
+// FRO110 regression pin: the AI few-shot examples teach the model to emit ADSR times in real
+// seconds (attack ~0.01, decay ~0.15-0.3 -- AIIntegrationServiceSystemPrompt.cpp), and every one
+// of those lands inside [0,1]. applyParamsToProcessor's untrusted-apply heuristic therefore
+// treats them as normalized values the model "forgot" to denormalize and rescales via
+// range.convertFrom0to1 (AIStateMapper.cpp). ADSRModule.h keeps attack/hold/decay/release on a
+// LINEAR NormalisableRange(0.0, 5.0) specifically so that rescale lands at a predictable 5x the
+// input -- a 0.3-skewed range on the parameter itself would instead distort it into something
+// wildly different (a requested 0.3 s decay would land around 0.02 s instead of ~1.5 s). The 0.3
+// skew for knob feel lives only on the UI slider (ModuleComponent.cpp), which never touches the
+// parameter's stored value, so it cannot affect this. This test pins the exact landed values so
+// a future skew added back onto the parameter's own NormalisableRange fails loudly instead of
+// silently reintroducing the misfire.
+TEST(AIStateMapperTest, UntrustedAdsrFewShotTimesRescaleAgainstLinearRange) {
+    juce::AudioProcessorGraph graph;
+    juce::var json = juce::JSON::parse(
+        R"({"nodes":[{"id":1,"type":"ADSR","params":{"attack":0.01,"decay":0.3}}],"connections":[]})");
+
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, graph, /*clearExisting=*/true, /*trusted=*/false));
+    ASSERT_EQ(graph.getNumNodes(), 1);
+
+    auto* processor = graph.getNodes().getUnchecked(0)->getProcessor();
+    auto* attack = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(processor, "attack"));
+    auto* decay = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(processor, "decay"));
+    ASSERT_NE(attack, nullptr);
+    ASSERT_NE(decay, nullptr);
+
+    // Linear range(0, 5): convertFrom0to1(v) == 5 * v, exactly what a linear 0..5 range gives.
+    EXPECT_NEAR(attack->get(), 0.05f, 1.0e-4f) << "0.01 rescaled against a linear 0..5 range";
+    EXPECT_NEAR(decay->get(), 1.5f, 1.0e-4f) << "0.3 rescaled against a linear 0..5 range";
 }
