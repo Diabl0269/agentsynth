@@ -182,6 +182,10 @@ public:
     bool isTimelineConfiguredVisible() const { return isTimelineVisible; }
     synth::ui::TimelinePanelComponent& getTimelinePanel() { return timelinePanel; }
     synth::ui::MixerDockComponent& getMixerDock() { return mixerDock; }
+    // FRO100: the app's/plugin's real construction site calls
+    // getPluginWindowManager().setCreatesNativeWindows(true) here, same as it does for the two
+    // detach hosts via getMixerDock() above.
+    synth::HostedPluginWindowManager& getPluginWindowManager() { return pluginWindowManager; }
     // Test-only: Own-panel placement reparents the Mixer host INTO this controller (it IS the
     // second strip), not to nullptr -- see MixerPlacementController.h's class comment.
     synth::ui::MixerPlacementController& getMixerPlacementControllerForTest() { return mixerPlacement_; }

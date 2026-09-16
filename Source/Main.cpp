@@ -152,6 +152,10 @@ private:
                 // DetachablePanelHost::setCreatesNativeWindows()'s doc comment.
                 mc->getMixerDock().getTimelineHost().setCreatesNativeWindows(true);
                 mc->getMixerDock().getMixerHost().setCreatesNativeWindows(true);
+
+                // FRO100: same reasoning, for the hosted-plugin "Open Editor" window. See
+                // HostedPluginWindowManager::setCreatesNativeWindows()'s doc comment.
+                mc->getPluginWindowManager().setCreatesNativeWindows(true);
             }
 
 #if JUCE_IOS || JUCE_ANDROID
