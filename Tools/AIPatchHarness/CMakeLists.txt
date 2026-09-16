@@ -35,6 +35,11 @@ add_executable(AIPatchHarness
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponentLayout.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/ModuleViews/CurveEditor/CurveModel.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/ModuleViews/CurveEditor/CurveEditorGeometry.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/ModuleViews/CurveEditor/CurveEditorComponent.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/ModuleViews/CurveEditor/CurveEditorPaint.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Macros/MacroCardComponent.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogLifecycle.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogRowOrdering.cpp

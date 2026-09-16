@@ -135,6 +135,22 @@ void ModuleComponent::parameterValueChanged(int parameterIndex, float newValue) 
             if (safeThis != nullptr)
                 safeThis->applyMacroCountChange();
         });
+    } else if (getType(module) == ModuleType::ADSR &&
+               (param->paramID == "attack" || param->paramID == "hold" || param->paramID == "decay" ||
+                param->paramID == "sustain" || param->paramID == "release" || param->paramID == "attackCurve" ||
+                param->paramID == "decayCurve" || param->paramID == "releaseCurve")) {
+        // FRO112: keep the envelope graph in sync with knob drags, automation, undo/redo and
+        // preset loads. syncEnvelopeCurveFromParams itself no-ops while envelopeCurveGestureActive
+        // (a live graph drag is already the source of truth for that span).
+        if (juce::MessageManager::existsAndIsCurrentThread()) {
+            syncEnvelopeCurveFromParams();
+        } else {
+            juce::Component::SafePointer<ModuleComponent> safeThis(this);
+            juce::MessageManager::callAsync([safeThis] {
+                if (safeThis != nullptr)
+                    safeThis->syncEnvelopeCurveFromParams();
+            });
+        }
     }
 }
 

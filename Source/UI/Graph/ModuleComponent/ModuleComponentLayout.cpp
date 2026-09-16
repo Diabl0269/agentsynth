@@ -44,18 +44,12 @@ void ModuleComponent::updateLayout() {
         return;
     }
 
-    if (getType(module) == ModuleType::ADSR) {
-        const int thresholdH = thresholdControl != nullptr ? thresholdControl->getPreferredHeight() : 0;
-        if (getWidth() != 280)
-            setSize(280, juce::jmax(getHeight(), 100));
-        // Slider rows (see adsrAfterSlidersY) + threshold control + a toggle row per checkbox.
-        int height = detail::adsrAfterSlidersY(getContentTopY(), sliders.size());
-        if (thresholdH > 0)
-            height += thresholdH + 8;
-        height += toggles.size() * 30 + 10;
-        setSize(280, height);
-        return;
-    }
+    // FRO112: ADSR no longer measures itself — its five remaining knobs (attack/hold/decay/
+    // sustain/release; the three curve params moved onto the envelope graph's bend handles) flow
+    // through the generic 3-per-row knob grid below exactly like every other module's, wrapping
+    // into two rows (3+2) at the shared 280px width. The envelope graph section and its BPM|MS
+    // row are generic-layout blocks too (see layoutDefaultContent, mirroring the scope/frequency-
+    // response toggle+component pattern) rather than a bespoke branch here.
 
     // Parametric EQ is double-width with a bespoke band grid, so it measures itself.
     if (getType(module) == ModuleType::ParametricEQ) {
@@ -284,25 +278,13 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
         y += thresholdControl->getPreferredHeight() + 6;
     }
 
-    // --- Knob grid: kKnobColumns across, wrapping. A double-width card doubles the columns so
-    // the knobs keep their standard cell width instead of stretching to twice the size. ---
-    const int knobColumns = (width >= synth::LayoutUtil::kDoubleWidth) ? (kKnobColumns * 2) : kKnobColumns;
-    const int knobWidth = contentW / knobColumns;
-    if (!tabbed) {
-        for (int i = 0; i < sliders.size(); ++i) {
-            const int row = i / knobColumns;
-            const int col = i % knobColumns;
-            const int x = contentX + col * knobWidth;
-            const int rowY = y + row * (kLabelHeight + kKnobHeight);
+    if (!tabbed)
+        y = layoutKnobGrid(y, contentX, contentW, width, apply);
 
-            if (apply) {
-                sliderLabels[i]->setBounds(x, rowY, knobWidth, kLabelHeight);
-                sliders[i]->setBounds(x, rowY + kLabelHeight, knobWidth, kKnobHeight);
-            }
-        }
-        const int knobRows = (sliders.size() + knobColumns - 1) / knobColumns;
-        y += knobRows * (kLabelHeight + kKnobHeight);
-    }
+    // Envelope (ADSR) graph section: a disclosure toggle sharing its row with the BPM|MS
+    // segmented control, then the curve editor itself when expanded — see
+    // ModuleComponentEnvelopeCard.cpp. A no-op (returns `y` unchanged) for every other module.
+    y = layoutEnvelopeGraphSection(y, contentX, contentW, apply);
 
     if (freqResponseToggle) {
         if (apply)
@@ -335,4 +317,22 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
     }
 
     return y + kBottomPadding;
+}
+
+int ModuleComponent::layoutKnobGrid(int y, int contentX, int contentW, int width, bool apply) {
+    const int knobColumns = (width >= synth::LayoutUtil::kDoubleWidth) ? (kKnobColumns * 2) : kKnobColumns;
+    const int knobWidth = contentW / knobColumns;
+    for (int i = 0; i < sliders.size(); ++i) {
+        const int row = i / knobColumns;
+        const int col = i % knobColumns;
+        const int x = contentX + col * knobWidth;
+        const int rowY = y + row * (kLabelHeight + kKnobHeight);
+
+        if (apply) {
+            sliderLabels[i]->setBounds(x, rowY, knobWidth, kLabelHeight);
+            sliders[i]->setBounds(x, rowY + kLabelHeight, knobWidth, kKnobHeight);
+        }
+    }
+    const int knobRows = (sliders.size() + knobColumns - 1) / knobColumns;
+    return y + knobRows * (kLabelHeight + kKnobHeight);
 }

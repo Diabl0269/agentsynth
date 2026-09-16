@@ -353,11 +353,62 @@ Loads an audio file from disk and plays it back one of two ways.
   so an in-flight decay or a held note retargets smoothly instead of stepping. It is the one
   parameter that is a *level*, not a stage time; attack/hold/decay/release are deliberately left
   unsmoothed — `EnvelopeGenerator` turns a time change mid-ramp into a slope change on its own.
-- **UI playhead (not yet consumed by any UI)**: `getPlayheadStage()` / `getPlayheadProgress()` /
-  `getPlayheadLevel()` expose the stage/progress/level of the most recently (re)triggered voice,
-  written lock-free (`std::atomic`, relaxed) once per block, for a future graph-editor overlay.
+- **UI playhead**: `getPlayheadStage()` / `getPlayheadProgress()` / `getPlayheadLevel()` expose
+  the stage/progress/level of the most recently (re)triggered voice, written lock-free
+  (`std::atomic`, relaxed) once per block. Consumed by the envelope graph's playhead marker (see
+  the card section below) — `getPlayheadLevel()` remains unused, held for a future level readout.
 - **Uses**: Modulation of VCA gain, Filter cutoff, or Oscillator Level.
 - **Threshold control**: `ThresholdControlComponent` in slider+meter mode — a live unipolar bar of the Gate jack with the Threshold slider attached, so the slice can be set by eye.
+- **Card UI (FRO112)**: `ModuleComponentEnvelopeCard.cpp`. Five rotary knobs
+  (attack/hold/decay/sustain/release, styled and readout-boxed identically to the generic auto-UI
+  — see below) flow through the same 3-per-row knob grid as every other module
+  (`ModuleComponentLayout.cpp`'s `layoutDefaultContent`), wrapping 3+2 at the shared 280px width;
+  `attackCurve`/`decayCurve`/`releaseCurve` are no longer sliders at all — they're edited only via
+  the breakpoint curve editor's bend handles (`Source/UI/ModuleViews/CurveEditor/`, FRO111), on a
+  fixed 5-node topology (origin, attack peak, hold end, sustain, release end) whose node x is
+  cumulative time and whose ripple contract (`CurveModel::setNodeX`) preserves every other
+  segment's own duration across a single-node drag.
+  - **Readout formatting**: `AudioParameterFloatAttributes` on all eight float params
+    (`ADSRModule.h`'s `adsrTimeAttributes()`/`adsrSustainAttributes()`/`adsrCurveAttributes()`) —
+    the four stage times show as `"<n> ms"` below 1 s and `"<n> s"` at or above it; sustain shows
+    as dB (`0.0 dB` at unity, `-inf dB` at exactly zero, never `log10(0)`); the three curve
+    amounts show as a plain 2-decimal value. Display-only: every `NormalisableRange` (including
+    the 0.3 UI-side skew on the four time sliders, unchanged from FRO110 — see above) stays
+    exactly what it was, for patch compatibility and the `AIStateMapper` rescale heuristic. Since
+    `SliderParameterAttachment` installs `param.getText()`/`getValueForText()` as the slider's own
+    `textFromValueFunction`/`valueFromTextFunction`, this is also what a host's generic automation
+    UI shows for these params now.
+  - **Two-way sync**: a node/bend drag on the graph writes the matching parameter(s) via
+    `setValueNotifyingHost` (epsilon-gated, one write per value that actually moved), bracketed
+    into ONE undo entry per whole drag gesture (`captureBeforeState`/`pushSnapshotFromCapture`
+    around the curve's own `onGestureStart`/`onGestureEnd`, mirroring the Parametric EQ card's
+    `wireEqGestureCallbacks`) — never `beginChangeGesture`/`endChangeGesture`, which would let
+    `parameterGestureChanged` push a second undo entry per parameter. The reverse direction (a
+    knob drag, host automation, undo/redo, or a preset load) rebuilds the curve model from the
+    module's current parameter values on every relevant `parameterValueChanged` callback, except
+    while a graph gesture is itself in flight (the graph is its own source of truth for that
+    span) — it snaps once more at the gesture's end to settle on the quantised/clamped values.
+  - **Graph section**: collapsed by default behind a disclosure toggle, sizing the card via the
+    same `setVisible()` -> `updateLayout()` idiom the scope/frequency-response toggles use. The
+    expanded/collapsed state is **not persisted** — it resets to collapsed on every construction,
+    matching the scope and frequency-response toggles rather than Macro Group's persisted
+    `collapsed` flag; persisting would need `ModuleBase::setExtraState`, which the root
+    `CLAUDE.md` flags as a trusted-path-only, security-sensitive surface not worth spending on a
+    view toggle.
+  - **Playhead marker**: maps `EnvelopeStage` to the curve's `(segment, progress)` — Attack/Hold/
+    Decay/Release map to their own segment 0-3; Sustain parks at `(segment 2, progress 1.0)`,
+    which is exactly the sustain node's own position, needing no special geometry. Polled from
+    `ModuleComponent`'s existing gated 15 Hz `timerCallback` (only while the graph is visible) —
+    no new `juce::Timer` — since `CurveEditorComponent::setPlayhead` already no-ops on an
+    unchanged value, an idle or collapsed card costs nothing beyond that one guard check. See
+    [`layout_visuals_animation.md`](layout_visuals_animation.md) §1.
+  - **BPM | MS toggle**: a segmented control beside the graph's disclosure toggle. MS is fully
+    functional (today's millisecond-based attack/hold/decay/release). BPM is a visual placeholder
+    only — FRO113 (tracked separately) owns a `tempoSync` bool plus one `AudioParameterChoice`
+    note-division param per stage time (`attackDiv`/`holdDiv`/`decayDiv`/`releaseDiv`) and the
+    tempo-following DSP behind them; wiring the BPM button to `tempoSync` is the one seam left
+    once those parameters land — FRO112 deliberately adds no tempo-sync parameter or logic of its
+    own.
 - **Default instrument-track chain (P9-3i, FRO43)**: "+ Track -> Instrument -> {Oscillator/Wavetable}" auto-wires one ADSR (MIDI-gated, forced non-poly, `sustain` overridden to 0.7) driving a VCA ahead of the rest of the chain — see [mixer.md](mixer.md)'s P9-3i entry for the full wiring and why it's forced non-poly. When the instrument is poly (P9-3j, FRO46), the ADSR is genuinely poly instead — gated by a Poly MIDI node's per-voice Gate CV rather than raw MIDI — see mixer.md's P9-3j entry.
 
 ## Envelope Follower Module

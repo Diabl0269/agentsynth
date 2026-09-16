@@ -41,10 +41,12 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         return {280, 253}; // +20 in #219: the Audio L/R input pair adds a jack row
                            // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "ADSR" || typeName == "Amp Env" || typeName == "Filter Env")
-        return {280, 489}; // sliders below 2 jacks + threshold control + Poly toggle
-                           // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
-                           // +150 (FRO110): hold/attackCurve/decayCurve/releaseCurve took ADSR
-                           // from 4 float sliders to 8, wrapping into a second row of 4.
+        // FRO112: five rotary knobs (attack/hold/decay/sustain/release) now flow through the
+        // generic 3-per-row knob grid (3+2, same shape as every other module), the three curve
+        // params moved onto the collapsed-by-default envelope graph's bend handles, and a
+        // collapsed graph adds one row (its disclosure toggle + BPM|MS). Below 2 jacks + Poly
+        // toggle + threshold control + knob grid (2 rows) + disclosure row, collapsed.
+        return {280, 389};
     if (typeName.containsIgnoreCase("Sequencer") && !typeName.containsIgnoreCase("Poly"))
         // +26 (one toggle row) for the Sync to Transport switch, appended below the step grid.
         return {synth::LayoutUtil::kDoubleWidth, 406};

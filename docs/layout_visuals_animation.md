@@ -180,10 +180,11 @@ Generic breakpoint curve editor (FRO111): a curve drawn through nodes, each segm
 bend value; drag nodes and bend handles. Split by concern — `CurveModel.h/.cpp` (pure data +
 edits, no `juce::Component`), `CurveEditorGeometry.h/.cpp` (pure pixel mapping, testable without a
 component), `CurveEditorComponent.h` + `CurveEditorComponent.cpp` (interaction/mouse) +
-`CurveEditorPaint.cpp` (paint). Used next by an envelope card (`CurveMode::Fixed`: a fixed
-origin/attack-peak/hold-end/sustain/release-end topology) and later by an LFO custom-waveform
-editor (`CurveMode::Free`: add/remove/reorder points). **Not wired into any module card by this
-change** — a later change does that.
+`CurveEditorPaint.cpp` (paint). Wired into the ADSR envelope card (FRO112,
+`ModuleComponentEnvelopeCard.cpp` — see [`modules.md`](modules.md)'s ADSR "Card UI" entry for the
+two-way sync/undo/playhead details) using `CurveMode::Fixed` (the fixed
+origin/attack-peak/hold-end/sustain/release-end topology this component was built for); a later
+change wires an LFO custom-waveform editor onto `CurveMode::Free` (add/remove/reorder points).
 
 **Bend = `EnvelopeGenerator::shape`.** A segment's value at `progress` is
 `start + (end - start) * shape(progress, bend)`, using `synth::EnvelopeGenerator::shape` by
@@ -220,11 +221,15 @@ separately re-derived approximation.
   what lets a host push a fresh model back mid-drag (e.g. the envelope card's own parameter
   round trip) without cancelling the user's gesture after its first event.
 
-**No `juce::Timer`** — repaints only when the model, hover/selection, or playhead actually change.
-`setPlayhead(std::optional<Playhead>)` (`Playhead { int segment; float progress; }`) is a plain
-setter that draws a marker dot on the curve plus a faint vertical line; `nullopt` hides it. A
-later change adds the gated animation that drives it during playback (see §2-3 below) — this one
-does not start a per-tick loop.
+**No `juce::Timer` of its own** — repaints only when the model, hover/selection, or playhead
+actually change. `setPlayhead(std::optional<Playhead>)` (`Playhead { int segment; float progress; }`)
+is a plain setter that draws a marker dot on the curve plus a faint vertical line and no-ops on an
+unchanged value; `nullopt` hides it. The envelope card (FRO112) drives this setter from
+`ModuleComponent`'s own EXISTING gated 15 Hz `timerCallback` rather than giving this component a
+second, independent timer — see §2's "one `timerCallback` per card" note and the ADSR "Card UI"
+entry in [`modules.md`](modules.md). This deliberately reuses the established per-module gated-tick
+pattern (§1's `FrequencyResponseComponent`/`ScopeComponent` visualizer timers) rather than arguing
+for a third exception to §3's two-exception time-bounded-animation rule.
 
 **Mouse handlers are thin wrappers** over public primitives (`dragNodeTo`, `dragBendBy`,
 `addPointAt`, `removeNode`), same pattern as `EQCurveComponent` above: `mouseDown` hit-tests and
