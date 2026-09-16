@@ -72,10 +72,13 @@ public:
         // bar and behind the app's main window — "Open Editor did nothing" to the user. Centre it
         // at its content size and bring it forward, in that order, around the addToDesktop() call
         // that promotes it to a real native peer (see the FRO100 class-comment paragraph). Guarded
-        // on a display existing: centreWithSize dereferences getPrimaryDisplay(), which is NULL on
-        // a headless test runner (Linux CI has no display server; this crashed there and nowhere
-        // else) — the same guard the promotion itself needs, so both share it.
-        if (hasPrimaryDisplayForNativeWindow())
+        // on a REAL display existing (never the overridable hasPrimaryDisplayForNativeWindow()
+        // seam below): centreWithSize dereferences getPrimaryDisplay() itself, unconditionally, so
+        // a test subclass simulating "display exists" to probe the promotion gate would otherwise
+        // also fool this call into running on a genuinely headless runner and segfault — exactly
+        // what happened on Linux CI before this comment existed.
+        const bool realPrimaryDisplayExists = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() != nullptr;
+        if (realPrimaryDisplayExists)
             window->centreWithSize(juce::jmax(1, window->getWidth()), juce::jmax(1, window->getHeight()));
         // FRO100: promote the window to a real native peer BEFORE setVisible(true) — setVisible()
         // alone never creates one (see setCreatesNativeWindows()'s doc comment above). window's
