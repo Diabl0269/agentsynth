@@ -421,14 +421,6 @@ void PianoRollComponent::paintHeader(juce::Graphics& g) {
     g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), buttonFontPx, juce::Font::plain));
     g.drawText("Clips", backButtonBounds_.withTrimmedLeft(12), juce::Justification::centredLeft, false);
 
-    // SNAP toggle: the one chip here that paints lit for grid magnetism (snapEnabled AND a division to
-    // snap to) — a real on/off switch, not an action. It used to be labelled "Q", which was the bug
-    // this glyph fixes: "Q" is the letter the TIMELINE binds to snap, so the same letter meant "snap"
-    // on one surface and "quantise" on the other. A drawn magnet says which it is in any language.
-    const bool snapOn = viewState_.snapEnabled && viewState_.snap != TimelineViewState::Snap::Off;
-    const auto snapFill = paintChip(snapButtonBounds_, snapOn, hoveredHeaderButton_ == HeaderButtonId::Snap);
-    drawSnapGlyph(g, snapButtonBounds_, snapFill.contrasting(0.9f));
-
     // QUANTISE (note starts -> grid): an ACTION, never lit, but dimmed when it would do nothing (no
     // division chosen, or an empty clip). The momentary press flash — ended by the one-shot timer in
     // timerCallback() — sits ON TOP of whichever base fill is showing, so every press is acknowledged
@@ -477,36 +469,6 @@ void PianoRollComponent::paintHeader(juce::Graphics& g) {
 // against the fill it actually painted), no state, no font. Stroke widths are fixed at 1.0-1.6 px
 // because these are ~16x16 px chips — a themed line-width token would round to the same pixel and
 // only add a way for them to disagree with each other.
-
-void PianoRollComponent::drawSnapGlyph(juce::Graphics& g, juce::Rectangle<int> chip, juce::Colour colour) {
-    // A MAGNET, horseshoe up: a half-annulus arc with two legs, the universal "magnetic snap" mark
-    // (Cubase, Blender, every CAD tool). Reads as a distinct silhouette at 16 px, which a letter
-    // sharing its shape with the timeline's own snap key did not.
-    const auto area = chip.toFloat().reduced(4.5f, 4.0f);
-    if (area.getWidth() < 4.0f || area.getHeight() < 4.0f)
-        return;
-
-    const float cx = area.getCentreX();
-    const float legTop = area.getCentreY() + area.getHeight() * 0.05f;
-    const float radius = area.getWidth() * 0.5f;
-    const float thickness = juce::jmax(1.2f, area.getWidth() * 0.28f);
-
-    juce::Path arc;
-    // Outer half-circle across the top, then back along the inner radius — one closed shape, so the
-    // horseshoe's opening is a real hole rather than a stroke that thins at the crown.
-    arc.addCentredArc(cx, legTop, radius, radius, 0.0f, -juce::MathConstants<float>::halfPi,
-                      juce::MathConstants<float>::halfPi, true);
-    arc.addCentredArc(cx, legTop, radius - thickness, radius - thickness, 0.0f, juce::MathConstants<float>::halfPi,
-                      -juce::MathConstants<float>::halfPi, false);
-    arc.closeSubPath();
-    g.setColour(colour);
-    g.fillPath(arc);
-
-    // The two poles below the crown, one per leg.
-    const float legBottom = area.getBottom();
-    g.fillRect(juce::Rectangle<float>(cx - radius, legTop, thickness, legBottom - legTop));
-    g.fillRect(juce::Rectangle<float>(cx + radius - thickness, legTop, thickness, legBottom - legTop));
-}
 
 void PianoRollComponent::drawQuantiseGlyph(juce::Graphics& g, juce::Rectangle<int> chip, juce::Colour colour) {
     // Note blocks LANDED on VERTICAL gridlines: two faint full-height lines, and two small filled
@@ -636,8 +598,6 @@ juce::Rectangle<int> PianoRollComponent::headerButtonBoundsFor(HeaderButtonId wh
     switch (which) {
     case HeaderButtonId::Back:
         return backButtonBounds_;
-    case HeaderButtonId::Snap:
-        return snapButtonBounds_;
     case HeaderButtonId::Quantise:
         return quantiseButtonBounds_;
     case HeaderButtonId::QuantisePitches:
@@ -656,8 +616,6 @@ void PianoRollComponent::updateHeaderButtonHover(juce::Point<int> pos) {
     HeaderButtonId next = HeaderButtonId::None;
     if (backButtonBounds_.contains(pos))
         next = HeaderButtonId::Back;
-    else if (snapButtonBounds_.contains(pos))
-        next = HeaderButtonId::Snap;
     else if (quantiseButtonBounds_.contains(pos))
         next = HeaderButtonId::Quantise;
     else if (quantisePitchButtonBounds_.contains(pos))
@@ -740,11 +698,10 @@ void PianoRollComponent::resized() {
     bounds.removeFromTop(rulerBandHeight_);
     backButtonBounds_ = header.removeFromLeft(60).reduced(3, 2);
     header.removeFromLeft(4);
-    // Six chips. The GAPS carry meaning: 4 px separates groups, 2 px separates members of one group,
-    // so "snap + the two quantise verbs" read as one cluster and "scale + its row filter" as another.
-    // Every glyph chip is the same 24 px so the row reads as a toolbar rather than a ransom note.
-    snapButtonBounds_ = header.removeFromLeft(24).reduced(2, 2);
-    header.removeFromLeft(2);
+    // Five chips. The GAPS carry meaning: 4 px separates groups, 2 px separates members of one
+    // group, so "the two quantise verbs" read as one cluster and "scale + its row filter" as
+    // another. Every glyph chip is the same 24 px so the row reads as a toolbar rather than a
+    // ransom note.
     quantiseButtonBounds_ = header.removeFromLeft(24).reduced(2, 2);
     header.removeFromLeft(2);
     quantisePitchButtonBounds_ = header.removeFromLeft(24).reduced(2, 2);
@@ -773,7 +730,6 @@ double PianoRollComponent::getPlayheadBeat() const noexcept { return playheadBea
 bool PianoRollComponent::hasPlayheadPosition() const noexcept { return hasPlayheadX_; }
 
 juce::Rectangle<int> PianoRollComponent::getBackButtonBounds() const noexcept { return backButtonBounds_; }
-juce::Rectangle<int> PianoRollComponent::getSnapButtonBounds() const noexcept { return snapButtonBounds_; }
 juce::Rectangle<int> PianoRollComponent::getQuantiseButtonBounds() const noexcept { return quantiseButtonBounds_; }
 juce::Rectangle<int> PianoRollComponent::getQuantisePitchButtonBounds() const noexcept {
     return quantisePitchButtonBounds_;

@@ -69,10 +69,6 @@ TEST(PianoRollScaleAssistTest, QuantiseAndScaleTooltipsTrackALiveRebindAndCleari
     EXPECT_TRUE(tooltip.contains("(g)"));
     EXPECT_FALSE(tooltip.contains("(q)"));
 
-    // The Snap chip reads the SHARED snap action, so rebinding quantise above left it alone.
-    mgr.setBinding("timelineSnapToggle", juce::KeyPress('k', juce::ModifierKeys::noModifiers, 0));
-    EXPECT_TRUE(f.roll.getTooltipFor(f.roll.getSnapButtonBounds().getCentre()).contains("(k)"));
-
     mgr.setBinding("pianoRollToggleScalePanel", juce::KeyPress('m', juce::ModifierKeys::commandModifier, 0));
     tooltip = f.roll.getTooltipFor(centreOf(f.roll.getScaleButtonBounds()).toInt());
     EXPECT_TRUE(tooltip.contains("M")) << "the current binding's key";

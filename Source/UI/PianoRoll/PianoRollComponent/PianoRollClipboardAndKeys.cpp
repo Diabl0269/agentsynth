@@ -475,6 +475,49 @@ void PianoRollComponent::performQuantise() {
     repaint();
 }
 
+// Alt+Q: quantises selected (or all, if none selected) note LENGTHS to the grid -- the length twin
+// of performQuantise() above, which quantises note STARTS. Same selection-vs-no-selection branching,
+// same grid source (viewState_.divisionBeatsRaw), same isQuantiseEnabled() gate (it deliberately
+// checks grid>0/valid clip/non-empty notes and not the snap toggle, so Alt+Q behaves consistently
+// with Q) -- and, like performQuantise(), one undo step regardless of how many notes change.
+void PianoRollComponent::performQuantiseLength() {
+    if (!isQuantiseEnabled())
+        return;
+    const double grid = viewState_.divisionBeatsRaw(currentBeatsPerBar());
+
+    const auto selectedIds = selection_.getSelected();
+    if (selectedIds.empty()) {
+        // Nothing selected: quantise every note's length in the clip — quantiseNoteLengths has no
+        // note-subset overload, so this is the only case it can serve directly.
+        auto mutate = [this, grid] { doc_->quantiseNoteLengths(clipId_, grid); };
+        if (undoManager_)
+            undoManager_->recordTimelineChange(*doc_, mutate);
+        else
+            mutate();
+    } else {
+        // Selected subset: quantiseNoteLengths can't take one, so this is per-note resizeNote in ONE
+        // mutation lambda instead (still one undo step). Floored at one grid unit, exactly like the
+        // TimelineDoc helper, so a note can never resize to zero length.
+        auto mutate = [this, grid, selectedIds] {
+            for (auto id : selectedIds) {
+                const auto* note = doc_->getNote(id);
+                if (note == nullptr)
+                    continue;
+                double nearestGrid = std::round(note->lengthBeats / grid) * grid;
+                if (nearestGrid < grid)
+                    nearestGrid = grid;
+                if (nearestGrid != note->lengthBeats)
+                    doc_->resizeNote(id, nearestGrid);
+            }
+        };
+        if (undoManager_)
+            undoManager_->recordTimelineChange(*doc_, mutate);
+        else
+            mutate();
+    }
+    repaint();
+}
+
 //==============================================================================
 // ---- Simple accessors (moved out of the header — see PianoRollComponent.h for each contract) ----
 bool PianoRollComponent::hasNoteSelection() const noexcept { return !selection_.isEmpty(); }

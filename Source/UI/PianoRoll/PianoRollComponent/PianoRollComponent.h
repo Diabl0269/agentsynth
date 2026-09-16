@@ -142,8 +142,8 @@ public:
     // getTooltipFor() builds the Q / Q♪ / Scale header buttons' tooltip text dynamically — see
     // quantiseTooltipText()/quantisePitchTooltipText()/scaleTooltipText() below — rather than a
     // static string with a hardcoded key name that would go stale the moment the user rebinds
-    // "timelineSnapToggle"/"pianoRollQuantise"/"pianoRollQuantisePitches"/
-    // "pianoRollToggleScalePanel" (see synth::shortcutHintFor).
+    // "pianoRollQuantise"/"pianoRollQuantisePitches"/"pianoRollToggleScalePanel" (see
+    // synth::shortcutHintFor).
 
     explicit PianoRollComponent(TimelineViewState& viewState);
     // Not '= default': the scale-panel slide's AnimationDriver callbacks capture 'this', so any
@@ -387,7 +387,6 @@ public:
     // one's contract is documented next to its out-of-line definition in the matching
     // PianoRoll<Concern>.cpp unit ----
     juce::Rectangle<int> getBackButtonBounds() const noexcept;
-    juce::Rectangle<int> getSnapButtonBounds() const noexcept;
     juce::Rectangle<int> getQuantiseButtonBounds() const noexcept;
     juce::Rectangle<int> getQuantisePitchButtonBounds() const noexcept;
     juce::Rectangle<int> getScaleFilterButtonBounds() const noexcept;
@@ -443,9 +442,11 @@ public:
     double getLastExtendPromptLengthForTest() const noexcept;
     synth::ClipId getLastExtendPromptClipForTest() const noexcept;
 
-    // Six header chips, left to right: Back ("Clips"), Snap, Quantise, QuantisePitches, Scale,
-    // ScaleFilter. Snap and ScaleFilter are TOGGLES (they paint lit); the other four are actions.
-    enum class HeaderButtonId { None, Back, Snap, Quantise, QuantisePitches, Scale, ScaleFilter };
+    // Five header chips, left to right: Back ("Clips"), Quantise, QuantisePitches, Scale,
+    // ScaleFilter. ScaleFilter is a TOGGLE (it paints lit); the other three are actions. (The Snap
+    // chip was removed — it duplicated the timeline toolbar's own Snap button, which reads/writes
+    // the SAME shared TimelineViewState::snapEnabled by reference; the J key still toggles it.)
+    enum class HeaderButtonId { None, Back, Quantise, QuantisePitches, Scale, ScaleFilter };
     HeaderButtonId getHoveredHeaderButtonForTest() const noexcept;
     bool isHeaderButtonHoveredForTest(HeaderButtonId which) const noexcept;
 
@@ -583,14 +584,12 @@ private:
 
     // ---- Dynamic shortcut-hint tooltips (see synth::shortcutHintFor) ---- rebuilt fresh on every
     // call, no cache needed — see PianoRollAudition.cpp.
-    juce::String snapTooltipText() const;
     juce::String quantiseTooltipText() const;
     juce::String quantisePitchTooltipText() const;
     juce::String scaleTooltipText() const;
     juce::String scaleFilterTooltipText() const;
 
     // ---- Header chip glyphs (drawn vector paths — see paintHeader, PianoRollPainting.cpp) ----
-    static void drawSnapGlyph(juce::Graphics& g, juce::Rectangle<int> chip, juce::Colour colour);
     static void drawQuantiseGlyph(juce::Graphics& g, juce::Rectangle<int> chip, juce::Colour colour);
     static void drawQuantisePitchGlyph(juce::Graphics& g, juce::Rectangle<int> chip, juce::Colour colour);
     static void drawScaleFilterGlyph(juce::Graphics& g, juce::Rectangle<int> chip, juce::Colour colour);
@@ -605,6 +604,7 @@ private:
     double wheelZoomFactor(const juce::MouseWheelDetails& wheel) const noexcept;
 
     void performQuantise();
+    void performQuantiseLength();
     void flashQuantiseButton();
     void timerCallback() override; // one-shot: ends the quantise flash and stops itself
     void requestClose();
@@ -905,8 +905,6 @@ private:
     std::vector<ClipboardNote> noteClipboard_;
 
     juce::Rectangle<int> backButtonBounds_;
-    // The grid-magnetism TOGGLE (a drawn magnet glyph) — the only chip here that paints lit for snap.
-    juce::Rectangle<int> snapButtonBounds_;
     // Quantise note STARTS to the grid (a drawn "blocks aligned on gridlines" glyph). An action.
     juce::Rectangle<int> quantiseButtonBounds_;
     // Quantise note PITCHES into the scale (a drawn "note head snapping onto a row" glyph).

@@ -400,10 +400,85 @@ TEST(PianoRollEditingTest, QuantiseNoOpWritesNoUndoStep) {
     EXPECT_FALSE(f.undo.canUndo());
 }
 
-// The SNAP chip (its own magnet-glyph chip now, no longer multiplexed onto the quantise chip by a
-// modifier) toggles grid magnetism — the shared snapEnabled switch — and moves no note. Its key is
-// the roll's OWN "pianoRollSnapToggle" (J); bare Q is the quantise verb, covered above.
-TEST(PianoRollEditingTest, SnapChipTogglesSnapWithoutMovingNotes) {
+// ---- Alt+Q: quantise LENGTH, selected subset (per-note resizeNote) vs none-selected
+// (doc.quantiseNoteLengths) -- the length twin of the QuantiseSelectedAndAll test above. No header
+// chip (FRO107 is keyboard-only), so this is driven entirely through keyPressed.
+
+TEST(PianoRollEditingTest, AltQQuantiseLengthSelectedAndAll) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    f.open(clipId);
+
+    const auto idA = f.doc.addNote(clipId, makeNote(0.0, 60, 1.4));
+    const auto idB = f.doc.addNote(clipId, makeNote(2.0, 64, 1.6));
+    ASSERT_TRUE(idA.isValid());
+    ASSERT_TRUE(idB.isValid());
+
+    const juce::KeyPress altQ('q', juce::ModifierKeys::altModifier, 0);
+
+    // Selected subset: only idA's length changes (per-note resizeNote path — quantiseNoteLengths has
+    // no subset overload).
+    f.roll.getSelectionForTest().setSelection({idA});
+    EXPECT_TRUE(f.roll.keyPressed(altQ));
+
+    EXPECT_DOUBLE_EQ(f.doc.getNote(idA)->lengthBeats, 1.0);
+    EXPECT_DOUBLE_EQ(f.doc.getNote(idB)->lengthBeats, 1.6) << "unselected note is untouched";
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_DOUBLE_EQ(f.doc.getNote(idA)->lengthBeats, 1.4);
+    EXPECT_FALSE(f.undo.canUndo());
+
+    // Nothing selected: quantises EVERY note's length in the clip via doc.quantiseNoteLengths.
+    f.roll.getSelectionForTest().clear();
+    EXPECT_TRUE(f.roll.keyPressed(altQ));
+
+    EXPECT_DOUBLE_EQ(f.doc.getNote(idA)->lengthBeats, 1.0);
+    EXPECT_DOUBLE_EQ(f.doc.getNote(idB)->lengthBeats, 2.0) << "an empty selection means ALL notes";
+    ASSERT_TRUE(f.undo.canUndo());
+}
+
+// A note shorter than half a grid unit must floor at one grid unit rather than vanish/go negative.
+TEST(PianoRollEditingTest, AltQQuantiseLengthFlooredAtOneGridUnit) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    f.open(clipId);
+    const auto tiny = f.doc.addNote(clipId, makeNote(0.0, 60, 0.1));
+    ASSERT_TRUE(tiny.isValid());
+
+    // Selected-subset path (per-note resizeNote), exercised separately from the all-notes path
+    // already covered at the TimelineDoc level (TimelineClipEditingQuantiseTests.cpp).
+    f.roll.getSelectionForTest().setSelection({tiny});
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress('q', juce::ModifierKeys::altModifier, 0)));
+    EXPECT_DOUBLE_EQ(f.doc.getNote(tiny)->lengthBeats, 1.0) << "floored at one grid unit, never zero";
+}
+
+// One undo step regardless of how many selected notes' lengths actually change.
+TEST(PianoRollEditingTest, AltQQuantiseLengthIsOneUndoStep) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    f.open(clipId);
+    const auto idA = f.doc.addNote(clipId, makeNote(0.0, 60, 1.4));
+    const auto idB = f.doc.addNote(clipId, makeNote(2.0, 64, 1.6));
+    ASSERT_TRUE(idA.isValid());
+    ASSERT_TRUE(idB.isValid());
+
+    f.roll.getSelectionForTest().clear(); // quantise-all path
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress('q', juce::ModifierKeys::altModifier, 0)));
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_DOUBLE_EQ(f.doc.getNote(idA)->lengthBeats, 1.4) << "ONE undo returns both notes to their "
+                                                              "pre-quantise lengths";
+    EXPECT_DOUBLE_EQ(f.doc.getNote(idB)->lengthBeats, 1.6);
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+// Snap no longer has its own header chip (FRO108: it duplicated the timeline toolbar's own Snap
+// button, which reads/writes the SAME shared TimelineViewState::snapEnabled by reference) — the J
+// key is now the only piano-roll-local way to flip it. It toggles grid magnetism and moves no note.
+TEST(PianoRollEditingTest, JKeyTogglesSnapWithoutMovingNotes) {
     PianoRollFixture f;
     const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
     const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
@@ -415,8 +490,8 @@ TEST(PianoRollEditingTest, SnapChipTogglesSnapWithoutMovingNotes) {
     int toggles = 0;
     f.roll.onSnapToggled = [&] { ++toggles; };
 
-    f.roll.mouseDown(leftClick(f.roll, centreOf(f.roll.getSnapButtonBounds())));
-    EXPECT_FALSE(f.state.snapEnabled) << "a plain click on the Snap chip flips the switch off";
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress('j')));
+    EXPECT_FALSE(f.state.snapEnabled) << "J flips the switch off";
     EXPECT_EQ(toggles, 1);
     EXPECT_DOUBLE_EQ(f.doc.getNote(idA)->startBeat, 1.1) << "toggling never moves notes";
     EXPECT_FALSE(f.undo.canUndo()) << "a view-state toggle is not a document edit";
@@ -428,7 +503,7 @@ TEST(PianoRollEditingTest, SnapChipTogglesSnapWithoutMovingNotes) {
     // …but the DRAWN grid is untouched, which is the whole point of the split (see drawnGridBeats).
     EXPECT_DOUBLE_EQ(f.roll.getDrawnGridDivisionForTest(), 1.0) << "snap governs magnetism, never visibility";
 
-    // …and the J key toggles it right back.
+    // …and a second J press toggles it right back.
     EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress('j')));
     EXPECT_TRUE(f.state.snapEnabled);
     EXPECT_EQ(toggles, 2);
@@ -473,9 +548,6 @@ TEST(PianoRollEditingTest, QuantiseButtonEnabledStateAndTooltip) {
     // hardcoded default: bare "q", lower-cased.
     const auto tooltip = f.roll.getTooltipFor(f.roll.getQuantiseButtonBounds().getCentre());
     EXPECT_TRUE(tooltip.startsWith("Quantize note starts to the grid (q)")) << tooltip;
-    // Snap is a SEPARATE chip now, with its own word and its own key.
-    const auto snapTip = f.roll.getTooltipFor(f.roll.getSnapButtonBounds().getCentre());
-    EXPECT_TRUE(snapTip.startsWith("Snap to grid on/off (j)")) << snapTip;
     EXPECT_TRUE(f.roll.getTooltipFor(f.roll.getBackButtonBounds().getCentre()).isEmpty());
 }
 

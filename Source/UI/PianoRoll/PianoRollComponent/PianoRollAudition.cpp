@@ -204,8 +204,6 @@ void PianoRollComponent::promptExtendClipToFitNotes(synth::ClipId clipId, double
 // ---- Tooltips ----
 
 juce::String PianoRollComponent::getTooltipFor(juce::Point<int> pos) const {
-    if (snapButtonBounds_.contains(pos))
-        return snapTooltipText();
     if (quantiseButtonBounds_.contains(pos))
         return quantiseTooltipText();
     if (quantisePitchButtonBounds_.contains(pos))
@@ -221,17 +219,6 @@ juce::String PianoRollComponent::getTooltip() { return getTooltipFor(getMouseXYR
 
 // Rebuilt fresh on every call (see the header comment) — reading shortcuts_ live is what makes a
 // rebind visible the very next time either tooltip is queried, with no cache and no listener.
-juce::String PianoRollComponent::snapTooltipText() const {
-    // "Snap" is the word everywhere in the roll now (Cubase parity): the chip, this tooltip, the docs.
-    // Still the SHARED "timelineSnapToggle" action (now J, not Q) — one binding for one switch.
-    const auto hint = shortcutHintFor(shortcuts_, "timelineSnapToggle", plainKey('j'));
-    juce::String text = "Snap to grid on/off";
-    if (hint.isNotEmpty())
-        text += " (" + hint + ")";
-    text += juce::String::fromUTF8(" \xE2\x80\x94 magnetism only: the chosen grid stays VISIBLE either way");
-    return text;
-}
-
 juce::String PianoRollComponent::quantiseTooltipText() const {
     const auto hint = shortcutHintFor(shortcuts_, "pianoRollQuantise", plainKey('q'));
     juce::String text = "Quantize note starts to the grid";
