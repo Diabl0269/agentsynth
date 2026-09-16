@@ -333,9 +333,12 @@ in §5.2) — has its own default preset.
 is a thin wrapper over `SnippetManager::extractSnippet`/`insertSnippet`, adding only what a track
 preset needs beyond a plain snippet: `extractTrackPreset` walks outside modulators
 (`collectOutsideModulatorsForTrackPreset`, the §5.7 "stops at another channel's strip" rule) and
-scrubs `"solo"` from the captured Channel Strip's extra state before the preset is ever written to
-disk — an imported `soloed_=true` would otherwise silence the whole mix render-wide (root
-`CLAUDE.md` tripwire); `insertTrackPreset` is `SnippetManager::insertSnippet` with
+scrubs `"solo"`, `"isBus"`, and `"sends"` from the captured Channel Strip's extra state before the
+preset is ever written to disk — an imported `soloed_=true` would otherwise silence the whole mix
+render-wide (root `CLAUDE.md` tripwire), an imported `isBus=true` would badge an ordinary track
+channel as BUS wherever the preset is inserted, and captured `"sends"` slot state would restore
+with no re-resolved cable target (a send's target is a graph edge and is never stored, §5.15),
+showing "No target" rows; `insertTrackPreset` is `SnippetManager::insertSnippet` with
 `trustedPayload=false`, so the untrusted `validatePatch` gate still runs on every disk-sourced
 preset. Entry points: the track header's right-click menu and the channel macro's own menu both
 offer **"Save Track as Preset..."**/**"Set as Default Track Preset"**, gated on
@@ -663,7 +666,8 @@ one type leaves the solo gate, the stem tap, the column model and `spliceMasterN
 when the strip carries `"isBus": true` in its trusted extra state (written by "Add bus" and by
 `buildMakeChannel`'s merge-point buses) **or**, as a structural fallback for patches built before
 that flag existed, when one of its signal predecessors is another strip. The flag is what a freshly
-added, still-unfed bus has to go on.
+added, still-unfed bus has to go on. A track preset (§5.7) scrubs `"isBus"` from every captured
+strip, so inserting one never badges an ordinary track channel as BUS.
 
 **D2 — a send is an output leg, not a `SendModule`.** `ChannelStripModule` declares `kMaxSends = 4`
 fixed slots, each a stereo pair of real output channels, and a send is a plain
@@ -691,7 +695,10 @@ are reassigned on every rebuild-from-JSON, so a stored id goes stale on undo; "w
 *k* feed?" is answered by walking forward from slot *k*'s own output channel to the first strip
 (`synth::findSendTarget`, which therefore also resolves through a module the user inserted on the
 send path). Which slots exist and each slot's pre/post are trusted extra state, `"sends": [{"slot",
-"pre"}]`, same path as `"shape"`/`"solo"`.
+"pre"}]`, same path as `"shape"`/`"solo"`. A track preset (§5.7) scrubs `"sends"` from every
+captured strip, since a captured slot's target is never stored and re-resolving it by name on
+insert is out of scope — an un-scrubbed slot would restore with no cable, showing a "No target"
+row.
 
 **Slots are sparse.** Removing a middle send clears its bit and its cable and leaves every higher
 slot on its own raw channels — no cable is re-wired and no parameter value is copied, so host
