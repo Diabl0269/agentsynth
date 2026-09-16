@@ -206,6 +206,8 @@ void PianoRollComponent::promptExtendClipToFitNotes(synth::ClipId clipId, double
 juce::String PianoRollComponent::getTooltipFor(juce::Point<int> pos) const {
     if (quantiseButtonBounds_.contains(pos))
         return quantiseTooltipText();
+    if (quantiseLengthButtonBounds_.contains(pos))
+        return quantiseLengthTooltipText();
     if (quantisePitchButtonBounds_.contains(pos))
         return quantisePitchTooltipText();
     if (scaleButtonBounds_.contains(pos))
@@ -222,6 +224,17 @@ juce::String PianoRollComponent::getTooltip() { return getTooltipFor(getMouseXYR
 juce::String PianoRollComponent::quantiseTooltipText() const {
     const auto hint = shortcutHintFor(shortcuts_, "pianoRollQuantise", plainKey('q'));
     juce::String text = "Quantize note starts to the grid";
+    if (hint.isNotEmpty())
+        text += " (" + hint + ")";
+    text += juce::String::fromUTF8(" \xE2\x80\x94 the selected notes, or all notes when nothing is selected. "
+                                   "Works even while snap is off");
+    return text;
+}
+
+juce::String PianoRollComponent::quantiseLengthTooltipText() const {
+    const auto hint =
+        shortcutHintFor(shortcuts_, "pianoRollQuantiseLength", modKey('q', juce::ModifierKeys::altModifier));
+    juce::String text = "Quantize note lengths to the grid";
     if (hint.isNotEmpty())
         text += " (" + hint + ")";
     text += juce::String::fromUTF8(" \xE2\x80\x94 the selected notes, or all notes when nothing is selected. "

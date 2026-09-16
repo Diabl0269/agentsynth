@@ -434,6 +434,18 @@ void PianoRollComponent::paintHeader(juce::Graphics& g) {
     drawQuantiseGlyph(g, quantiseButtonBounds_,
                       quantiseFill.contrasting(0.9f).withMultipliedAlpha(isQuantiseEnabled() ? 1.0f : 0.45f));
 
+    // QUANTISE LENGTH (note lengths -> grid): Alt+Q's visible twin, and the length twin of the chip
+    // above — same action-and-dimmed treatment, SAME isQuantiseEnabled() gate (performQuantiseLength()
+    // uses it too), and the same momentary press flash.
+    const auto lengthFill = paintChip(quantiseLengthButtonBounds_, /*active=*/false,
+                                      hoveredHeaderButton_ == HeaderButtonId::QuantiseLength);
+    if (quantiseLengthFlash_) {
+        g.setColour(juce::Colours::white.withAlpha(0.25f));
+        g.fillRoundedRectangle(quantiseLengthButtonBounds_.toFloat(), pillRadius);
+    }
+    drawQuantiseLengthGlyph(g, quantiseLengthButtonBounds_,
+                            lengthFill.contrasting(0.9f).withMultipliedAlpha(isQuantiseEnabled() ? 1.0f : 0.45f));
+
     // QUANTISE PITCHES (note pitches -> scale): the same action-and-dimmed treatment, and a glyph
     // that differs from the one above on the AXIS it snaps along — horizontal blocks onto vertical
     // gridlines up there, a note head onto horizontal rows here.
@@ -491,6 +503,42 @@ void PianoRollComponent::drawQuantiseGlyph(juce::Graphics& g, juce::Rectangle<in
     g.setColour(colour);
     g.fillRect(juce::Rectangle<float>(leftLine, area.getY() + area.getHeight() * 0.12f, blockW, blockH));
     g.fillRect(juce::Rectangle<float>(rightLine, area.getBottom() - area.getHeight() * 0.12f - blockH, blockW, blockH));
+}
+
+void PianoRollComponent::drawQuantiseLengthGlyph(juce::Graphics& g, juce::Rectangle<int> chip, juce::Colour colour) {
+    // ONE note block with its TRAILING edge snapping onto a single vertical gridline, plus a short
+    // arrow pushing that edge onto the line — the length twin of drawQuantiseGlyph's glyph, and
+    // deliberately NOT that same shape: one block instead of two, and the marked edge is the block's
+    // right (end) edge rather than its left (start) edge, since this verb resizes a note's END, never
+    // moves its start.
+    const auto area = chip.toFloat().reduced(3.0f, 3.5f);
+    if (area.getWidth() < 6.0f || area.getHeight() < 5.0f)
+        return;
+
+    const float gridX = area.getRight() - 1.0f;
+    g.setColour(colour.withMultipliedAlpha(0.45f));
+    g.fillRect(juce::Rectangle<float>(gridX, area.getY(), 1.0f, area.getHeight()));
+
+    // The block sits flush on the gridline at its right edge and reaches back toward the chip's left
+    // edge, vertically centred — a single wide bar, unlike the two staggered small blocks to its left.
+    const float blockH = juce::jmax(3.0f, area.getHeight() * 0.42f);
+    const float blockY = area.getCentreY() - blockH * 0.5f;
+    const float blockW = juce::jmax(4.0f, area.getWidth() * 0.62f);
+    g.setColour(colour);
+    g.fillRect(juce::Rectangle<float>(gridX - blockW, blockY, blockW, blockH));
+
+    // A short arrow above the block, pointing at the gridline it just snapped to — the "pushed into
+    // place" cue drawQuantisePitchGlyph's downward arrow gives the pitch verb, rotated to this verb's
+    // own axis (horizontal, toward the line rather than down onto a row).
+    const float arrowY = blockY - 3.0f;
+    const float arrowSpan = juce::jmax(3.0f, area.getWidth() * 0.22f);
+    if (arrowY > area.getY()) {
+        g.fillRect(juce::Rectangle<float>(gridX - arrowSpan, arrowY - 0.5f, arrowSpan, 1.0f));
+        juce::Path head;
+        const float halfSpan = juce::jmax(1.2f, arrowSpan * 0.4f);
+        head.addTriangle(gridX - halfSpan, arrowY - halfSpan, gridX - halfSpan, arrowY + halfSpan, gridX, arrowY);
+        g.fillPath(head);
+    }
 }
 
 void PianoRollComponent::drawQuantisePitchGlyph(juce::Graphics& g, juce::Rectangle<int> chip, juce::Colour colour) {
@@ -600,6 +648,8 @@ juce::Rectangle<int> PianoRollComponent::headerButtonBoundsFor(HeaderButtonId wh
         return backButtonBounds_;
     case HeaderButtonId::Quantise:
         return quantiseButtonBounds_;
+    case HeaderButtonId::QuantiseLength:
+        return quantiseLengthButtonBounds_;
     case HeaderButtonId::QuantisePitches:
         return quantisePitchButtonBounds_;
     case HeaderButtonId::ScaleFilter:
@@ -618,6 +668,8 @@ void PianoRollComponent::updateHeaderButtonHover(juce::Point<int> pos) {
         next = HeaderButtonId::Back;
     else if (quantiseButtonBounds_.contains(pos))
         next = HeaderButtonId::Quantise;
+    else if (quantiseLengthButtonBounds_.contains(pos))
+        next = HeaderButtonId::QuantiseLength;
     else if (quantisePitchButtonBounds_.contains(pos))
         next = HeaderButtonId::QuantisePitches;
     else if (scaleFilterButtonBounds_.contains(pos))
@@ -698,11 +750,13 @@ void PianoRollComponent::resized() {
     bounds.removeFromTop(rulerBandHeight_);
     backButtonBounds_ = header.removeFromLeft(60).reduced(3, 2);
     header.removeFromLeft(4);
-    // Five chips. The GAPS carry meaning: 4 px separates groups, 2 px separates members of one
-    // group, so "the two quantise verbs" read as one cluster and "scale + its row filter" as
-    // another. Every glyph chip is the same 24 px so the row reads as a toolbar rather than a
-    // ransom note.
+    // Six chips. The GAPS carry meaning: 4 px separates groups, 2 px separates members of one
+    // group, so "the three quantise verbs" (position, length, pitch — the order the feature was
+    // designed in) read as one cluster and "scale + its row filter" as another. Every glyph chip is
+    // the same 24 px so the row reads as a toolbar rather than a ransom note.
     quantiseButtonBounds_ = header.removeFromLeft(24).reduced(2, 2);
+    header.removeFromLeft(2);
+    quantiseLengthButtonBounds_ = header.removeFromLeft(24).reduced(2, 2);
     header.removeFromLeft(2);
     quantisePitchButtonBounds_ = header.removeFromLeft(24).reduced(2, 2);
     header.removeFromLeft(4);
@@ -731,6 +785,9 @@ bool PianoRollComponent::hasPlayheadPosition() const noexcept { return hasPlayhe
 
 juce::Rectangle<int> PianoRollComponent::getBackButtonBounds() const noexcept { return backButtonBounds_; }
 juce::Rectangle<int> PianoRollComponent::getQuantiseButtonBounds() const noexcept { return quantiseButtonBounds_; }
+juce::Rectangle<int> PianoRollComponent::getQuantiseLengthButtonBounds() const noexcept {
+    return quantiseLengthButtonBounds_;
+}
 juce::Rectangle<int> PianoRollComponent::getQuantisePitchButtonBounds() const noexcept {
     return quantisePitchButtonBounds_;
 }

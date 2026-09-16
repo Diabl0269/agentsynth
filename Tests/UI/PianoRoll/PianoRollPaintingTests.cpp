@@ -397,8 +397,8 @@ TEST(PianoRollLayoutTest, ChipsStayInTheToolbarRowAndTheCanvasStartsBelowTheRule
 
     // The chips did NOT move: they are the top row, above the band.
     for (const auto& rect :
-         {f.roll.getBackButtonBounds(), f.roll.getQuantiseButtonBounds(), f.roll.getQuantisePitchButtonBounds(),
-          f.roll.getScaleButtonBounds(), f.roll.getScaleFilterButtonBounds()}) {
+         {f.roll.getBackButtonBounds(), f.roll.getQuantiseButtonBounds(), f.roll.getQuantiseLengthButtonBounds(),
+          f.roll.getQuantisePitchButtonBounds(), f.roll.getScaleButtonBounds(), f.roll.getScaleFilterButtonBounds()}) {
         EXPECT_LE(rect.getBottom(), PianoRollComponent::kToolbarHeight);
     }
 

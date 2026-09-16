@@ -60,6 +60,11 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
         performQuantise();
         return;
     }
+    if (quantiseLengthButtonBounds_.contains(pos)) {
+        flashQuantiseLengthButton(); // mirrors the Quantise chip above: same isQuantiseEnabled() gate
+        performQuantiseLength();
+        return;
+    }
     if (quantisePitchButtonBounds_.contains(pos)) {
         quantisePitchesToActiveScale(); // silently a no-op with no scale chosen, like the chip's dim
         return;

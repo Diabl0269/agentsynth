@@ -429,12 +429,25 @@ void PianoRollComponent::flashQuantiseButton() {
     repaint(quantiseButtonBounds_);
 }
 
+// The length twin of flashQuantiseButton() above, for the QuantiseLength chip — same one-shot timer
+// (this component owns exactly one juce::Timer), same confined repaint, just a different flag and
+// rect so the two chips' flashes never bleed into each other's button.
+void PianoRollComponent::flashQuantiseLengthButton() {
+    quantiseLengthFlash_ = true;
+    startTimer(kQuantiseFlashMs);
+    repaint(quantiseLengthButtonBounds_);
+}
+
 void PianoRollComponent::timerCallback() {
     stopTimer();
-    if (!quantiseFlash_)
-        return;
-    quantiseFlash_ = false;
-    repaint(quantiseButtonBounds_);
+    if (quantiseFlash_) {
+        quantiseFlash_ = false;
+        repaint(quantiseButtonBounds_);
+    }
+    if (quantiseLengthFlash_) {
+        quantiseLengthFlash_ = false;
+        repaint(quantiseLengthButtonBounds_);
+    }
 }
 
 void PianoRollComponent::performQuantise() {

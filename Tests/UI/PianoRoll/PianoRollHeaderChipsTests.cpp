@@ -1,5 +1,5 @@
-// PianoRoll header-chip tests: the five header chips' hover wash + resting/active fill affordance,
-// and GENERATE — add-to-existing vs replace, plus the five chips' distinct/non-overlapping bounds.
+// PianoRoll header-chip tests: the six header chips' hover wash + resting/active fill affordance,
+// and GENERATE — add-to-existing vs replace, plus the six chips' distinct/non-overlapping bounds.
 // Shared PianoRollFixture, rgbDistance and chooseMajorScaleForOpenClip live in
 // PianoRollTestHelpers.h.
 
@@ -9,7 +9,7 @@
 #include "UI/Theme/Theme.h"
 
 // ============================================================================
-// 19. Header button chip affordance (five chips — hover wash + resting/active fill).
+// 19. Header button chip affordance (six chips — hover wash + resting/active fill).
 // ============================================================================
 
 TEST(PianoRollHeaderButtonTest, HoverEntersAndLeavesGateRepaintsConfinedToTheChipRect) {
@@ -167,17 +167,18 @@ TEST(PianoRollGenerateTest, PanelToggleDrivesTheAddPathThroughTheRollsOwnHandler
 }
 
 // ---------------------------------------------------------------------------
-// 23b. The five header chips: distinct, non-overlapping, independently hit-testable.
+// 23b. The six header chips: distinct, non-overlapping, independently hit-testable.
 // ---------------------------------------------------------------------------
 //
-// The glyphs themselves are pixels and not worth asserting on, but the GEOMETRY is: five drawn chips
+// The glyphs themselves are pixels and not worth asserting on, but the GEOMETRY is: six drawn chips
 // hit-tested by position means one chip creeping over another silently steals its clicks, and the
 // header only has ~220 px to lay them out in.
-TEST(PianoRollHeaderButtonTest, AllFiveChipsAreDistinctNonOverlappingAndInReadingOrder) {
+TEST(PianoRollHeaderButtonTest, AllSixChipsAreDistinctNonOverlappingAndInReadingOrder) {
     PianoRollFixture f;
     const std::vector<std::pair<const char*, juce::Rectangle<int>>> chips{
         {"Clips", f.roll.getBackButtonBounds()},
         {"Quantise", f.roll.getQuantiseButtonBounds()},
+        {"QuantiseLength", f.roll.getQuantiseLengthButtonBounds()},
         {"QuantisePitches", f.roll.getQuantisePitchButtonBounds()},
         {"Scale", f.roll.getScaleButtonBounds()},
         {"ScaleFilter", f.roll.getScaleFilterButtonBounds()},
@@ -199,6 +200,7 @@ TEST(PianoRollHeaderButtonTest, AllFiveChipsAreDistinctNonOverlappingAndInReadin
     const std::vector<std::pair<PianoRollComponent::HeaderButtonId, juce::Rectangle<int>>> ids{
         {PianoRollComponent::HeaderButtonId::Back, f.roll.getBackButtonBounds()},
         {PianoRollComponent::HeaderButtonId::Quantise, f.roll.getQuantiseButtonBounds()},
+        {PianoRollComponent::HeaderButtonId::QuantiseLength, f.roll.getQuantiseLengthButtonBounds()},
         {PianoRollComponent::HeaderButtonId::QuantisePitches, f.roll.getQuantisePitchButtonBounds()},
         {PianoRollComponent::HeaderButtonId::Scale, f.roll.getScaleButtonBounds()},
         {PianoRollComponent::HeaderButtonId::ScaleFilter, f.roll.getScaleFilterButtonBounds()},

@@ -401,8 +401,9 @@ TEST(PianoRollEditingTest, QuantiseNoOpWritesNoUndoStep) {
 }
 
 // ---- Alt+Q: quantise LENGTH, selected subset (per-note resizeNote) vs none-selected
-// (doc.quantiseNoteLengths) -- the length twin of the QuantiseSelectedAndAll test above. No header
-// chip (FRO107 is keyboard-only), so this is driven entirely through keyPressed.
+// (doc.quantiseNoteLengths) -- the length twin of the QuantiseSelectedAndAll test above. Driven
+// entirely through keyPressed here; the QuantiseLength header chip that calls the same
+// performQuantiseLength() is covered by QuantiseLengthButtonEnabledStateAndTooltip below.
 
 TEST(PianoRollEditingTest, AltQQuantiseLengthSelectedAndAll) {
     PianoRollFixture f;
@@ -549,6 +550,29 @@ TEST(PianoRollEditingTest, QuantiseButtonEnabledStateAndTooltip) {
     const auto tooltip = f.roll.getTooltipFor(f.roll.getQuantiseButtonBounds().getCentre());
     EXPECT_TRUE(tooltip.startsWith("Quantize note starts to the grid (q)")) << tooltip;
     EXPECT_TRUE(f.roll.getTooltipFor(f.roll.getBackButtonBounds().getCentre()).isEmpty());
+}
+
+// The QuantiseLength chip's twin of the test above: same isQuantiseEnabled() gate as the Quantise
+// (position) chip (performQuantiseLength() uses it too), and its own dynamic tooltip reflecting the
+// live "pianoRollQuantiseLength" binding.
+TEST(PianoRollEditingTest, QuantiseLengthButtonEnabledStateAndTooltip) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    f.open(clipId);
+    EXPECT_FALSE(f.roll.isQuantiseEnabled()) << "an empty clip has nothing to quantise";
+
+    ASSERT_TRUE(f.doc.addNote(clipId, makeNote(1.1, 60)).isValid());
+    EXPECT_TRUE(f.roll.isQuantiseEnabled());
+
+    f.state.snap = TimelineViewState::Snap::Off;
+    EXPECT_FALSE(f.roll.isQuantiseEnabled()) << "Snap::Off leaves no grid to quantise to — same gate "
+                                                "as the Quantise (position) chip";
+
+    // Dynamic (see synth::shortcutHintFor) — no ShortcutManager installed, so it falls back to the
+    // hardcoded default: Alt+Q.
+    const auto tooltip = f.roll.getTooltipFor(f.roll.getQuantiseLengthButtonBounds().getCentre());
+    EXPECT_TRUE(tooltip.startsWith("Quantize note lengths to the grid (Alt + Q)")) << tooltip;
 }
 
 // ---- Edits clamped to the clip window ----

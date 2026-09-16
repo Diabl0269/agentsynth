@@ -557,7 +557,7 @@ dispatched through `ApplicationCommandManager`:
 | Shift+↑ / Shift+↓ | Transpose Up / Down an Octave (12 semitones) — the same octave-jump convention every DAW uses, a separate action rather than a modifier read off the plain one so it can be rebound on its own |
 | Alt+← / Alt+→ | Select Previous / Next Note — navigates BETWEEN notes in the clip's canonical (start, pitch) order, collapsing a multi-selection onto the outer neighbour; scrolls an off-screen target into view. Selection-only, never a document edit. Alt+↑/↓ is reserved (unclaimed) |
 | **Q** | **Quantise Selected Notes** (`pianoRollQuantise`) — one-shot: snap the selected notes' STARTS (or all notes when nothing is selected) to the chosen grid, even while snap is toggled off. **Cubase parity:** on a note editor the bare, most reachable key belongs to the verb you use constantly, not to a switch you set once a session |
-| Alt+Q | **Quantise Selected Note Lengths** (`pianoRollQuantiseLength`) — the length twin of bare Q: snaps the selected notes' LENGTHS (or all notes when nothing is selected) to the nearest positive multiple of the chosen grid, floored at one grid unit so a note can never become zero-length. Exact-modifier matching keeps this clear of both bare Q and Option+Shift+Q, so no ordering is needed among the three. Keyboard-only — deliberately no header chip (FRO107) |
+| Alt+Q | **Quantise Selected Note Lengths** (`pianoRollQuantiseLength`) — the length twin of bare Q: snaps the selected notes' LENGTHS (or all notes when nothing is selected) to the nearest positive multiple of the chosen grid, floored at one grid unit so a note can never become zero-length. Exact-modifier matching keeps this clear of both bare Q and Option+Shift+Q, so no ordering is needed among the three. Has its own header chip (**Quantise Length**, between Quantise and Quantise Pitches) |
 | Option+Shift+Q | Quantise Note Pitches to Scale (`pianoRollQuantisePitches`) — snaps the selected notes' PITCHES (or all notes when nothing is selected) into the scale picked in Scale Assist, via `MusicalScale::snapPitch`. Falls THROUGH (returns `false`) when no scale is chosen: "No scale" has nothing to quantise into. Matched BEFORE bare Q, since it is the more specific chord |
 | J | Toggle Snap — grid magnetism on/off, the **shared** `timelineSnapToggle` the timeline panel also uses (one binding, one key, whichever surface has focus; deliberately NOT duplicated into a piano-roll action, since two "Toggle Snap" rows on the same key flipping the same flag is a Settings list nobody could reason about). **Magnetism only: the chosen grid stays VISIBLE either way**. The roll's own Snap header chip was removed (FRO108) as redundant with the timeline toolbar's own Snap button — both read/write this same shared flag by reference, and J remains the roll's own control for it |
 | Ctrl+S | Toggle the Scale Assist panel (`pianoRollToggleScalePanel`) — real Control, not Cmd (Cmd+S stays the app's save); inert while a text field inside the panel has focus |
@@ -585,14 +585,13 @@ as the Unicode glyph `œ`, not as `'q'` plus an Alt flag, so `pianoRollQuantiseP
 bindings already use, and the reason they survive the platform's own key translation.
 
 **Most of these keys have a header chip twin**, and each chip does exactly one thing on a plain
-click (no modifier variants anywhere in the header any more): **Quantise**, **Quantise Pitches**,
-**Scale** and **Show Only Scale Notes**. Two keys are deliberately keyboard-only with no chip: `J`
-(Toggle Snap — its chip was removed by FRO108 as redundant with the timeline toolbar's own Snap
-button, which shares the same underlying flag) and `Alt+Q` (Quantise Selected Note Lengths — FRO107
-never gave it a chip in the first place, to avoid reintroducing the ambiguity the Snap-chip removal
-was clearing up). Three of the remaining chips carry small drawn vector glyphs rather than letters —
-a second "Q" beside the Quantise chip for pitch-quantise would have told the user nothing about
-which was which. See [`timeline_panel_piano_roll.md §2`](timeline_panel_piano_roll.md).
+click (no modifier variants anywhere in the header any more): **Quantise**, **Quantise Length**,
+**Quantise Pitches**, **Scale** and **Show Only Scale Notes**. One key is deliberately keyboard-only
+with no chip: `J` (Toggle Snap — its chip was removed by FRO108 as redundant with the timeline
+toolbar's own Snap button, which shares the same underlying flag). Four of the remaining chips carry
+small drawn vector glyphs rather than letters — a second "Q" beside the Quantise chip for
+length-quantise or pitch-quantise would have told the user nothing about which was which. See
+[`timeline_panel_piano_roll.md §2`](timeline_panel_piano_roll.md).
 
 2 (Range Selection), 6 (Zoom) and 9 (Play/Scrub) are Cubase tools this app doesn't ship yet and stay
 **unassigned on purpose** — `editToolForKeyChar` (`Source/UI/Timeline/EditTool.h`) returns `nullopt` for
