@@ -40,6 +40,14 @@ void MainComponent::addCanvasAndPanels() {
         // exactly the cases that need it — a binding can only start or stop resolving when a node
         // appears or disappears, which is also the only way an orphan flag moves.
         reconcileTimelineBindingsOnly();
+        // FRO103: the other half of onBeforeDetachAllModuleComponents. A single-node removal
+        // (deleteSelection, requestDeleteModule, replaceModule) unbinds the WHOLE mixer before it
+        // frees anything, and has no rebuild of its own -- reconcileTimelineBindingsOnly() above
+        // deliberately never rebuilds the mixer. Left alone, every fader would sit on screen
+        // attached to nothing until an unrelated later change rebuilt the panel. This re-binds
+        // against the settled graph, and is a no-op unless the columns are actually detached, so
+        // it does NOT turn every structural change into a full mixer rebuild.
+        mixerDock.getMixerPanel().rebuildIfUnbound();
     };
     addAndMakeVisible(aiChatComponent);
     aiChatComponent.setVisible(isAiPanelVisible);

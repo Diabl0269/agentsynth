@@ -264,3 +264,42 @@ TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeReplaceModuleFreesTheStri
     mixerPanel.rebuild();
     EXPECT_EQ(countChannelStrips(graph), 0);
 }
+
+// The other half of FRO103. The pre-removal unbind above is what keeps these paths from
+// dereferencing freed parameters, but on its own it also leaves every column attached to nothing:
+// unbindAllColumns() unbinds the WHOLE mixer, including columns whose own nodes were never
+// touched, and nothing on these paths rebuilds the panel (updateComponents() only reaches
+// reconcileTimelineBindingsOnly(), which deliberately never does). Without the matching
+// onAfterGraphNodesRemoved hook, deleting any module from the canvas left every fader on screen
+// but inert until an unrelated later change happened to rebuild -- a visible dead mixer, traded
+// for a fixed crash. This test deletes a module the mixer never bound (an EQ insert) and holds the
+// surviving strip's fader to being live again afterwards, with no manual rebuild() anywhere.
+TEST(MixerPanelUndoUnbindTests, MixerColumnsAreReboundAfterAnUnrelatedModuleIsDeleted) {
+    MainComponent mc(std::make_unique<MockProviderMPUT>());
+    mc.setSize(1400, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+    mc.newPatchForTest();
+    mc.simulateAddAudioTrackClick();
+
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto& mixerPanel = mc.getMixerDock().getMixerPanel();
+    ASSERT_NE(mixerPanel.getStripColumnForTest(0), nullptr);
+    ASSERT_TRUE(mixerPanel.getStripColumnForTest(0)->isFaderBoundForTest());
+
+    juce::AudioProcessorGraph::Node* victim = nullptr;
+    for (auto* n : graph.getNodes())
+        if (n != nullptr && n->getProcessor() != nullptr && n->getProcessor()->getName().containsIgnoreCase("EQ"))
+            victim = n;
+    ASSERT_NE(victim, nullptr) << "the default audio channel has an EQ insert to delete";
+
+    mc.getGraphEditor().requestDeleteModule(victim->nodeID);
+
+    // The strip itself is untouched, so its column must still be there AND still drive its gain
+    // parameter -- no manual rebuild, exactly like production after a canvas delete.
+    ASSERT_EQ(countChannelStrips(graph), 1) << "only the EQ insert was deleted";
+    auto* column = mixerPanel.getStripColumnForTest(0);
+    ASSERT_NE(column, nullptr);
+    EXPECT_TRUE(column->isFaderBoundForTest())
+        << "the pre-removal unbind left every column detached; onAfterGraphNodesRemoved must have "
+           "rebuilt the panel so the surviving strip's fader drives its gain parameter again";
+}
