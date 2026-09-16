@@ -87,6 +87,18 @@ public:
      *  from the after-restore hook -- see docs/mixer_implementation.md's FRO11 crash-fix entry. */
     void unbindAllColumns();
 
+    /** FRO103: rebuild ONLY if unbindAllColumns() has left the columns detached since the last
+     *  rebuild. The graph-replacing paths (undo/redo restore, New Patch, Load, AI apply) already
+     *  rebuild the mixer from their own after-hook, but the single-node removal commands --
+     *  GraphEditor::deleteSelection(), requestDeleteModule(), replaceModule() -- do not: the only
+     *  post-apply hook they reach is reconcileTimelineBindingsOnly(), which deliberately never
+     *  rebuilds the mixer. Without this, deleting ANY module from the canvas left every column on
+     *  screen but bound to nothing until an unrelated later change happened to rebuild. Wired to
+     *  GraphEditor::onGraphStructureChanged (MainComponent's own setup), which fires at the end of
+     *  updateComponents() on all three of those paths; it is a no-op whenever the columns are
+     *  already live, so it does not turn every structural change into a full mixer rebuild. */
+    void rebuildIfUnbound();
+
     int getColumnCount() const noexcept { return (int)columnEntries_.size(); }
 
     /** The Nth strip column (in the same track order buildMixerSnapshot returns), or null out of
@@ -124,6 +136,10 @@ public:
 
 private:
     void selectOnCanvas(const juce::String& targetId);
+
+    /** True between an unbindAllColumns() and the rebuild() that re-binds -- see
+     *  rebuildIfUnbound(). */
+    bool columnsUnbound_ = false;
 
     /** FRO18: one entry per column rebuild() lays out, in the same left-to-right order -- the
      *  panel's own model of "what can be focused", kept separate from MixerColumnComponent so

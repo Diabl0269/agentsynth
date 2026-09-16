@@ -332,6 +332,15 @@ void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId) 
     auto doDelete = [this, nodeId, &graph] {
         modMatrix.clearRows();
         const auto portNeighbors = macroPortDeletionNeighbors({nodeId}); // T154: capture BEFORE removal
+        // graph.removeNode() frees this node's processor -- and its AudioProcessorParameters --
+        // synchronously, and a module card's own Delete is just as able to remove a
+        // ChannelStripModule/MasterModule as a canvas "Delete" is. Nothing on this path rebuilds
+        // the mixer either (updateComponents() only reaches reconcileTimelineBindingsOnly(),
+        // which deliberately never does), so a mixer column's fader/pan/send-row bindings into
+        // this node would dangle until an unrelated later graph edit finally dereferenced them.
+        // Same seam, same pre-removal ordering as GraphEditor::deleteSelection().
+        if (onBeforeDetachAllModuleComponents)
+            onBeforeDetachAllModuleComponents();
         graph.removeNode(nodeId);
         for (auto n : portNeighbors)
             autoDeleteOrphanedMacroPort(n);
@@ -464,6 +473,23 @@ void GraphEditor::replaceModule(ModuleComponent* moduleComp, const juce::String&
 
         // 6. Remove the old node (this removes all its connections)
         modMatrix.clearRows();
+        // removeNode() frees the old processor and its AudioProcessorParameters synchronously.
+        // "Replace with..." is offered for every module except the singleton Audio Input/Output,
+        // so the node being replaced can be the very ChannelStripModule/MasterModule a mixer
+        // column's fader, pan attachment or send rows are bound to -- and nothing on this path
+        // rebuilds the mixer afterwards (updateComponents() only reaches
+        // reconcileTimelineBindingsOnly(), which deliberately never does), so those bindings
+        // would dangle until an unrelated later graph edit dereferenced them. Same seam and same
+        // pre-removal ordering as GraphEditor::deleteSelection().
+        //
+        // This sits here rather than at the top of doReplace deliberately: every early return
+        // above (unknown module type, addNode failure) leaves the graph untouched, and unbinding
+        // the whole mixer for a replace that never happened would leave every fader inert until
+        // the next rebuild. Nothing between the checks above and this line touches a mixer
+        // column -- steps 1-5 read only the old node and the graph -- so unbinding here is no
+        // later, in ordering terms, than unbinding there.
+        if (onBeforeDetachAllModuleComponents)
+            onBeforeDetachAllModuleComponents();
         graph.removeNode(oldNodeId);
 
         // 7. Re-create compatible direct connections

@@ -76,6 +76,10 @@ void MixerPanelComponent::rebuild() {
     if (graph_ == nullptr || doc_ == nullptr || macros_ == nullptr)
         return;
 
+    // Every column below is built and bound fresh, so whatever unbindAllColumns() detached is
+    // live again once this returns (FRO103).
+    columnsUnbound_ = false;
+
     // FRO18: capture the currently focused column's IDENTITY before the columns it points at are
     // destroyed below -- resolveFocusAfterRebuild() re-finds it afterwards by identity (uuid, or
     // kind alone for Direct), never by the raw index, which an unrelated strip insert/removal
@@ -207,6 +211,12 @@ void MixerPanelComponent::unbindAllColumns() {
     // directColumn_ binds no parameters (no fader/pan/M-S -- MixerDirectColumn.h's own comment),
     // just a graph_ pointer to the (never freed here) AudioProcessorGraph object itself, so it has
     // nothing to unbind.
+    columnsUnbound_ = true;
+}
+
+void MixerPanelComponent::rebuildIfUnbound() {
+    if (columnsUnbound_)
+        rebuild();
 }
 
 bool MixerPanelComponent::revealColumn(juce::AudioProcessorGraph::NodeID stripId) {
