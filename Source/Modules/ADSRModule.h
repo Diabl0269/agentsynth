@@ -44,6 +44,7 @@ public:
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
+        juce::ignoreUnused(samplesPerBlock);
         for (int v = 0; v < MAX_VOICES; ++v) {
             envelopes[v].setSampleRate(sampleRate);
             envelopes[v].reset();
@@ -52,7 +53,6 @@ public:
         }
         heldNotes.reset();
         lastTriggeredVoice = 0;
-        sustainScratch.assign(static_cast<size_t>(std::max(samplesPerBlock, 1)), sustainParam->get());
         resetMeters();
         effectiveThreshold.store(thresholdParam->get(), std::memory_order_relaxed);
         playheadStage.store(synth::EnvelopeStage::Idle, std::memory_order_relaxed);
@@ -88,11 +88,12 @@ public:
         const int numChannels = buffer.getNumChannels();
         const int numSamples = buffer.getNumSamples();
 
+        // Sustain is read fresh every sample directly off `smoothedSustain` in each per-sample
+        // loop below (never pre-computed into a buffer sized off `numSamples`): a host is free
+        // to hand a block larger than the `samplesPerBlock` given to `prepareToPlay`, and the
+        // audio callback must never allocate (root CLAUDE.md), so there is deliberately no
+        // scratch vector here to resize.
         smoothedSustain.setTargetValue(*sustainParam);
-        if (static_cast<int>(sustainScratch.size()) < numSamples)
-            sustainScratch.resize(static_cast<size_t>(numSamples));
-        for (int smp = 0; smp < numSamples; ++smp)
-            sustainScratch[static_cast<size_t>(smp)] = smoothedSustain.getNextValue();
 
         const bool poly = *polyParam;
         const float baseThreshold = thresholdParam->get();
@@ -159,9 +160,9 @@ public:
                 }
                 previousActive[0] = active;
 
-                envOut[smp] = envelopes[0].getNextSample(
-                    makeParameters(attack, hold, decay, sustainScratch[static_cast<size_t>(smp)], release, attackCurve,
-                                   decayCurve, releaseCurve));
+                envOut[smp] =
+                    envelopes[0].getNextSample(makeParameters(attack, hold, decay, smoothedSustain.getNextValue(),
+                                                              release, attackCurve, decayCurve, releaseCurve));
             }
 
             for (const auto metadata : midiMessages) {
@@ -194,9 +195,8 @@ public:
                     threshold = juce::jlimit(0.0f, 1.0f, threshold + thresholdCV[smp]);
                 lastThreshold = threshold;
 
-                const synth::EnvelopeParameters ep =
-                    makeParameters(attack, hold, decay, sustainScratch[static_cast<size_t>(smp)], release, attackCurve,
-                                   decayCurve, releaseCurve);
+                const synth::EnvelopeParameters ep = makeParameters(attack, hold, decay, smoothedSustain.getNextValue(),
+                                                                    release, attackCurve, decayCurve, releaseCurve);
 
                 for (int v = 0; v < voices; ++v) {
                     const float gateSample = voiceData[v][smp];
@@ -342,7 +342,6 @@ private:
 
     synth::EnvelopeGenerator envelopes[MAX_VOICES];
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedSustain;
-    std::vector<float> sustainScratch;
     SchmittTrigger gateTriggers[MAX_VOICES];
     bool previousActive[MAX_VOICES] = {};
     std::bitset<128> heldNotes; // keyed by MIDI note number only, channel-agnostic

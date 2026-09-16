@@ -3,6 +3,7 @@
 // zero-sustain and sustain==1 edge cases and the FRO110 regression suite (formerly Repro*).
 
 #include "ADSRTestFixture.h"
+#include <cmath>
 
 TEST_F(ADSRTest, StartsIdle) {
     adsr.processBlock(buffer, midiMessages);
@@ -551,4 +552,65 @@ TEST_F(ADSRTest, SustainOneStillDecaysAndReleases) {
               << std::endl;
     EXPECT_NEAR(secondsToSilence, 0.5, 0.15)
         << "measured " << secondsToSilence << " seconds to fall below 0.01 with release=0.5s (expected within 30%)";
+}
+
+// ---------------------------------------------------------------------------
+// FRO110 audio-thread-allocation regression: a block bigger than the samplesPerBlock given to
+// prepareToPlay() used to grow a `sustainScratch` vector on the audio thread. There is no
+// scratch buffer left to grow, so this pins that an oversized block still renders correctly.
+// ---------------------------------------------------------------------------
+
+TEST_F(ADSRTest, OversizedBlockLargerThanPrepareToPlaySampleCountRendersWithoutCrashing) {
+    adsr.prepareToPlay(44100.0, 32); // deliberately tiny prepared block size
+    setFloat(adsr, "sustain", 0.6f);
+    setFloat(adsr, "attack", 0.001f);
+    setFloat(adsr, "decay", 0.001f);
+
+    constexpr int hugeBlock = 8192; // 256x the prepared block size
+    juce::AudioBuffer<float> hugeBuffer(2, hugeBlock);
+    hugeBuffer.clear();
+
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+
+    adsr.processBlock(hugeBuffer, midi);
+
+    // Attack/decay are ~1ms, long since settled by the end of an 8192-sample block at 44.1kHz.
+    const float lastSample = hugeBuffer.getSample(0, hugeBlock - 1);
+    EXPECT_TRUE(std::isfinite(lastSample));
+    EXPECT_NEAR(lastSample, 0.6f, 0.02f);
+
+    // A second oversized block must behave identically -- nothing size-dependent is left to
+    // have "already grown into" from the first call.
+    juce::MidiBuffer emptyMidi;
+    hugeBuffer.clear();
+    adsr.processBlock(hugeBuffer, emptyMidi);
+    const float secondBlockLast = hugeBuffer.getSample(0, hugeBlock - 1);
+    EXPECT_TRUE(std::isfinite(secondBlockLast));
+    EXPECT_NEAR(secondBlockLast, 0.6f, 0.02f);
+}
+
+TEST_F(ADSRTest, OversizedBlockInPolyModeRendersEveryVoiceWithoutCrashing) {
+    adsr.prepareToPlay(44100.0, 32);
+    setPoly(adsr, true);
+    setFloat(adsr, "sustain", 0.4f);
+
+    constexpr int hugeBlock = 8192;
+    juce::AudioBuffer<float> hugeBuffer(8, hugeBlock);
+    hugeBuffer.clear();
+    for (int i = 0; i < hugeBlock; ++i) {
+        hugeBuffer.setSample(0, i, 1.0f);
+        hugeBuffer.setSample(1, i, 1.0f);
+    }
+
+    juce::MidiBuffer emptyMidi;
+    adsr.processBlock(hugeBuffer, emptyMidi);
+
+    for (int v = 0; v < 2; ++v) {
+        const float lastSample = hugeBuffer.getSample(v, hugeBlock - 1);
+        EXPECT_TRUE(std::isfinite(lastSample));
+        EXPECT_GT(lastSample, 0.3f) << "voice " << v;
+    }
+    // An ungated voice stays silent throughout.
+    EXPECT_NEAR(hugeBuffer.getRMSLevel(2, 0, hugeBlock), 0.0f, 1e-4f);
 }
