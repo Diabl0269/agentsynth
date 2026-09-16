@@ -25,6 +25,7 @@
 #include <gtest/gtest.h>
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <optional>
 
 using synth::AssetManager;
 using synth::ClipId;
@@ -174,6 +175,59 @@ private:
 };
 } // namespace
 
+namespace {
+
+// The ONE on-disk settings file every MainComponent in this process opens (synth::
+// userSettingsOptions()) -- same shape as DetachRedockStateTests.cpp's userSettingsTestOptions().
+juce::PropertiesFile::Options userSettingsTestOptions() {
+    juce::PropertiesFile::Options opts;
+    opts.applicationName = "Agent Synth";
+    opts.folderName = "Agent Synth";
+    opts.filenameSuffix = "settings";
+    opts.osxLibrarySubFolder = "Application Support";
+    opts.storageFormat = juce::PropertiesFile::storeAsXML;
+    return opts;
+}
+
+// Saves the named settings keys on construction and restores them EXACTLY on destruction
+// (including "the key did not exist at all") -- same idiom as DetachRedockStateTests.cpp's
+// PersistedKeysGuard, duplicated locally here rather than shared, matching how that file and
+// FocusArbitrationTestFixture.h / E2EWorkflowTests.cpp / FocusRegionTests.cpp already do it.
+class PersistedKeysGuard {
+public:
+    explicit PersistedKeysGuard(juce::StringArray keys) {
+        juce::ApplicationProperties props;
+        props.setStorageParameters(userSettingsTestOptions());
+        auto* settings = props.getUserSettings();
+        for (const auto& key : keys) {
+            std::optional<juce::String> value;
+            if (settings != nullptr && settings->containsKey(key))
+                value = settings->getValue(key);
+            saved_.emplace_back(key, value);
+        }
+    }
+
+    ~PersistedKeysGuard() {
+        juce::ApplicationProperties props;
+        props.setStorageParameters(userSettingsTestOptions());
+        auto* settings = props.getUserSettings();
+        if (settings == nullptr)
+            return;
+        for (const auto& [key, value] : saved_) {
+            if (value.has_value())
+                settings->setValue(key, *value);
+            else
+                settings->removeValue(key);
+        }
+        settings->saveIfNeeded();
+    }
+
+private:
+    std::vector<std::pair<juce::String, std::optional<juce::String>>> saved_;
+};
+
+} // namespace
+
 class AssetManagerRelinkTest : public ::testing::Test {
 protected:
     // Same on-disk-settings hygiene every other MainComponent-instantiating test file uses
@@ -198,6 +252,11 @@ protected:
     }
 
     void SetUp() override {
+        // recentProjectsGuard_ wraps everything below: MainComponent::saveToFile persists a
+        // ".agsproj" save straight into the real "recentProjects" settings key (MainComponentFileIO
+        // .cpp), and this fixture's own bundleDir lives under a temp dir that TearDown() deletes --
+        // so without this guard the entry outlives the directory it points at.
+        recentProjectsGuard_.emplace(juce::StringArray{"recentProjects"});
         resetKeys();
         root = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth-assetmanager-relink");
         root.deleteRecursively();
@@ -206,9 +265,11 @@ protected:
     void TearDown() override {
         resetKeys();
         root.deleteRecursively();
+        recentProjectsGuard_.reset();
     }
 
     juce::File root;
+    std::optional<PersistedKeysGuard> recentProjectsGuard_;
 };
 
 TEST_F(AssetManagerRelinkTest, RelinkRewritesAllSharingClips) {
