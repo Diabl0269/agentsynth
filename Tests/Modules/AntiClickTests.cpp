@@ -1,5 +1,7 @@
 #include "Modules/ADSRModule.h"
 #include "Modules/OscillatorModule.h"
+#include <algorithm>
+#include <cmath>
 #include <gtest/gtest.h>
 #include <vector>
 
@@ -14,10 +16,14 @@ protected:
     juce::MidiBuffer midiMessages;
 };
 
-// FRO110 retired the old minimum-time clamps (2ms attack / 5ms release) on purpose: 0 ms is a
-// real, reachable value now, and click avoidance is the user's own choice. These two tests
-// assert the new contract instead of the retired clamp: the 1 ms default is still click-safe,
-// and an explicit 0 ms is honoured exactly, with no clamp silently overriding it.
+// FRO110 retired the PARAMETER's old minimum-time clamps (2ms attack / 5ms release): 0 ms is a
+// real, reachable, displayed value now, not silently raised. FRO116 found that honouring it
+// *literally* -- a one-sample full-scale level step on note-off/note-on -- is an audible click
+// in its own right, so `EnvelopeGenerator` floors the stage's internal effective time to a
+// fixed, much smaller click-free minimum (0.1 ms attack, 1 ms decay/release). These two tests
+// assert that contract: the 1 ms default is click-safe (unaffected by the floor, since it is
+// already above it), and an explicit 0 ms is honoured as "fastest click-free", not as a literal
+// single-sample cliff and not silently raised back to the old 2 ms / 5 ms clamp either.
 
 TEST_F(AntiClickTest, ADSRReleaseAntiClickContract) {
     // Channel 0 doubles as the Gate CV input, so it must stay LOW (cleared) throughout --
@@ -38,11 +44,12 @@ TEST_F(AntiClickTest, ADSRReleaseAntiClickContract) {
     adsr.processBlock(buffer, midiMessages);
     EXPECT_GT(buffer.getMagnitude(0, 0, 10), 0.01f) << "the 1 ms default release must not click";
 
-    // An explicit 0 ms release is a deliberate design choice, not a bug that needs a clamp:
-    // it must be honoured, reaching silence on the very next sample after note-off.
+    // An explicit 0 ms release is honoured as "as fast as is click-free" -- floored internally
+    // to a 1 ms ramp (kMinRampSeconds), not clamped back to the old 5 ms default and not cut to
+    // silence on the very next sample either.
     ADSRModule instant;
     instant.prepareToPlay(44100.0, 512);
-    auto* instantRelease = dynamic_cast<juce::AudioParameterFloat*>(instant.getParameters()[4]);
+    auto* instantRelease = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&instant, "release"));
     ASSERT_NE(instantRelease, nullptr);
     *instantRelease = 0.0f;
 
@@ -51,12 +58,36 @@ TEST_F(AntiClickTest, ADSRReleaseAntiClickContract) {
     juce::MidiBuffer noteOnMidi;
     noteOnMidi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
     instant.processBlock(instantBuffer, noteOnMidi);
+    const float levelBeforeRelease = instantBuffer.getSample(0, instantBuffer.getNumSamples() - 1);
+    ASSERT_GT(levelBeforeRelease, 0.9f) << "expected the note to be at (near) full level before release";
 
     instantBuffer.clear();
     juce::MidiBuffer noteOffMidi;
     noteOffMidi.addEvent(juce::MidiMessage::noteOff(1, 60), 0);
     instant.processBlock(instantBuffer, noteOffMidi);
-    EXPECT_NEAR(instantBuffer.getSample(0, 0), 0.0f, 1e-4f) << "an explicit 0 ms release must be honoured, not clamped";
+
+    // NOT an instant cut: the very first sample after note-off must still carry most of the
+    // level (release takes ~1 ms == ~44 samples at 44.1kHz, so one sample is a small fraction
+    // of the ramp).
+    EXPECT_GT(instantBuffer.getSample(0, 0), 0.5f * levelBeforeRelease)
+        << "an explicit 0 ms release must not cut to silence in a single sample";
+
+    // No single-sample step anywhere in the release exceeds a generous click-safety bound (worst
+    // case across all curve amounts is ~11% of the level being released from; 25% leaves margin
+    // without being vacuous).
+    float prev = levelBeforeRelease;
+    float maxStep = 0.0f;
+    for (int i = 0; i < instantBuffer.getNumSamples(); ++i) {
+        const float v = instantBuffer.getSample(0, i);
+        maxStep = std::max(maxStep, std::abs(prev - v));
+        prev = v;
+    }
+    EXPECT_LT(maxStep, 0.25f * levelBeforeRelease)
+        << "no single sample of an explicit 0 ms release should look like an instant cut";
+
+    // But it IS fast: fully silent well within ~2 ms (~88 samples) of note-off.
+    EXPECT_NEAR(instantBuffer.getSample(0, 87), 0.0f, 0.01f)
+        << "an explicit 0 ms release must still be fast -- silent within ~2 ms of note-off";
 }
 
 TEST_F(AntiClickTest, OscillatorNoPhaseReset) {
@@ -111,11 +142,12 @@ TEST_F(AntiClickTest, ADSRAttackAntiClickContract) {
     adsr.processBlock(buffer, midiMessages);
     EXPECT_LT(buffer.getSample(0, 1), 0.5f) << "the 1 ms default attack must not click";
 
-    // An explicit 0 ms attack is a deliberate design choice, not a bug that needs a clamp: it
-    // must be honoured, reaching full level on the very first sample.
+    // An explicit 0 ms attack is honoured as "as fast as is click-free" -- floored internally to
+    // a 0.1 ms ramp (kMinAttackSeconds), not a literal single-sample 0->1.0 step and not clamped
+    // back to the old 2 ms default either.
     ADSRModule instant;
     instant.prepareToPlay(44100.0, 512);
-    auto* instantAttack = dynamic_cast<juce::AudioParameterFloat*>(instant.getParameters()[1]);
+    auto* instantAttack = dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&instant, "attack"));
     ASSERT_NE(instantAttack, nullptr);
     *instantAttack = 0.0f;
 
@@ -124,5 +156,13 @@ TEST_F(AntiClickTest, ADSRAttackAntiClickContract) {
     juce::MidiBuffer noteOnMidi;
     noteOnMidi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
     instant.processBlock(instantBuffer, noteOnMidi);
-    EXPECT_NEAR(instantBuffer.getSample(0, 0), 1.0f, 1e-3f) << "an explicit 0 ms attack must be honoured, not clamped";
+
+    // NOT an instant 0->1.0 step: the very first sample must be well short of full level (0.1 ms
+    // == ~4.4 samples at 44.1kHz, so a single sample is a meaningful fraction of the ramp).
+    EXPECT_LT(instantBuffer.getSample(0, 0), 0.5f)
+        << "an explicit 0 ms attack must not jump to full level in a single sample";
+
+    // But it IS fast: full level well within ~1 ms (~44 samples) of note-on.
+    EXPECT_NEAR(instantBuffer.getSample(0, 43), 1.0f, 0.01f)
+        << "an explicit 0 ms attack must still be fast -- full level within ~1 ms of note-on";
 }

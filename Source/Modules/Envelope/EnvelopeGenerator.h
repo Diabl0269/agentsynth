@@ -32,8 +32,15 @@ struct EnvelopeParameters {
  *  [0, 1] that advances by `1 / (time * sampleRate)` per sample. The output level is always
  *  `stageStart + (stageTarget - stageStart) * shape(p, curve)`, so:
  *
- *   - A stage's duration and endpoints are exact regardless of curve, and a 0-second stage is
+ *   - A stage's duration and endpoints are exact regardless of curve, and a 0-second Hold is
  *     genuinely instant -- it costs no samples of its own (see the cascade in `getNextSample`).
+ *     Attack/Decay/Release are floored to a fixed sub-millisecond/millisecond minimum instead
+ *     (`kMinAttackSeconds` / `kMinRampSeconds`, applied inside `stageTime()`): a full-scale level
+ *     step within a single sample is an audible click regardless of how the user got there
+ *     (an explicit 0, or a parameter automated down to it), so 0 means "as fast as is
+ *     click-free", the same way an analog envelope circuit has its own sub-millisecond physical
+ *     minimum rather than a true instant. The parameter itself still ranges down to 0.0 and the
+ *     UI still displays "0 ms" -- only the generator's internal effective time is floored.
  *   - Changing a stage's time mid-ramp only changes the slope of the ongoing interpolation
  *     (the increment added to `p` each sample); it can never teleport the level, because `p`
  *     and `stageStart`/`stageTarget` don't change just because the time parameter did.
@@ -103,10 +110,12 @@ public:
                     stageStart_ = currentLevel_;
                     stage_ = nextStage(stage_);
                     progress_ = 0.0f;
-                    // A 0-second stage costs no samples of its own: if the stage we just
-                    // entered is itself instant (or is Sustain/Idle, which have no timing at
-                    // all), cascade straight into it within this same call rather than
-                    // returning a sample that "belongs" to a skipped stage.
+                    // A stage that costs no samples of its own cascades straight into the next
+                    // rather than returning a sample that "belongs" to a skipped stage. Only
+                    // Hold (genuinely 0 s when the user asks for that) and Sustain/Idle (not
+                    // timed stages at all -- `stageTime()`'s `default:` case) can be zero here;
+                    // Attack/Decay/Release are floored to a real minimum inside `stageTime()`,
+                    // so a cascade into one of those always stops and takes its own sample.
                     if (stageTime(params) <= 0.0f)
                         continue;
                 }
@@ -150,16 +159,24 @@ private:
         }
     }
 
+    // A one-sample full-scale level step is an audible click, so a level-changing stage's
+    // EFFECTIVE time is floored here -- the one place `stageTime()` is read -- to the fastest
+    // duration that is still click-free, regardless of what the (unclamped, still-0-capable)
+    // parameter itself says. Hold is exempt: it is pinned flat (start == target), so a 0-second
+    // Hold has no level to step across and cannot click.
+    static constexpr float kMinAttackSeconds = 0.0001f; // 0.1 ms
+    static constexpr float kMinRampSeconds = 0.001f;    // 1 ms (decay and release)
+
     float stageTime(const EnvelopeParameters& params) const noexcept {
         switch (stage_) {
         case EnvelopeStage::Attack:
-            return params.attack;
+            return std::max(params.attack, kMinAttackSeconds);
         case EnvelopeStage::Hold:
             return params.hold;
         case EnvelopeStage::Decay:
-            return params.decay;
+            return std::max(params.decay, kMinRampSeconds);
         case EnvelopeStage::Release:
-            return params.release;
+            return std::max(params.release, kMinRampSeconds);
         default:
             return 0.0f;
         }
