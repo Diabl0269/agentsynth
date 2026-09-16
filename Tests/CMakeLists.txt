@@ -262,6 +262,10 @@ add_executable(Tests
     UI/ModuleViews/FrequencyResponseTests.cpp
     UI/ModuleViews/EQCurveTests.cpp
     UI/ModuleViews/ScopeTests.cpp
+    UI/ModuleViews/CurveEditor/CurveModelTests.cpp
+    UI/ModuleViews/CurveEditor/CurveEditorGeometryTests.cpp
+    UI/ModuleViews/CurveEditor/CurveEditorInteractionTests.cpp
+    UI/ModuleViews/CurveEditor/CurveEditorPaintTests.cpp
     UI/Layout/UIAnimationTests.cpp
     UI/Graph/GraphEditorOnboardingTests.cpp
     UI/Library/ModuleLibraryComponentTests.cpp
@@ -510,6 +514,10 @@ add_executable(Tests
     ../Source/UI/Settings/ShortcutsSettingsTab.cpp
     ../Source/UI/Settings/FeedbackSettingsTab.cpp
     ../Source/UI/Chrome/WelcomeScreenComponent.cpp
+    ../Source/UI/ModuleViews/CurveEditor/CurveModel.cpp
+    ../Source/UI/ModuleViews/CurveEditor/CurveEditorGeometry.cpp
+    ../Source/UI/ModuleViews/CurveEditor/CurveEditorComponent.cpp
+    ../Source/UI/ModuleViews/CurveEditor/CurveEditorPaint.cpp
 )
 
 # MainComponent.h (included by the MainComponent/*.cpp units above) pulls in

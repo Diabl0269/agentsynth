@@ -174,6 +174,65 @@ The final size is pinned by `EstimatedModuleSizesMatchTheRealComponents`; `Wavet
 
 **Themed colours**: resolved via `dynamic_cast<AppLookAndFeel*>` — `bg1` for the panel, `border` for the frame and zero line, `accent` for the traces, `textMuted` for the caption. Falls back to hardcoded colours when the cast fails (headless).
 
+### CurveEditorComponent (`Source/UI/ModuleViews/CurveEditor/`)
+
+Generic breakpoint curve editor (FRO111): a curve drawn through nodes, each segment carrying a
+bend value; drag nodes and bend handles. Split by concern — `CurveModel.h/.cpp` (pure data +
+edits, no `juce::Component`), `CurveEditorGeometry.h/.cpp` (pure pixel mapping, testable without a
+component), `CurveEditorComponent.h` + `CurveEditorComponent.cpp` (interaction/mouse) +
+`CurveEditorPaint.cpp` (paint). Used next by an envelope card (`CurveMode::Fixed`: a fixed
+origin/attack-peak/hold-end/sustain/release-end topology) and later by an LFO custom-waveform
+editor (`CurveMode::Free`: add/remove/reorder points). **Not wired into any module card by this
+change** — a later change does that.
+
+**Bend = `EnvelopeGenerator::shape`.** A segment's value at `progress` is
+`start + (end - start) * shape(progress, bend)`, using `synth::EnvelopeGenerator::shape` by
+default (the model accepts an alternative shape function, e.g. for a future LFO-specific curve).
+This is deliberate: the curve the editor draws is exactly what the envelope's DSP plays, never a
+separately re-derived approximation.
+
+**Five decided display/interaction rules:**
+
+- **A zero-duration segment always occupies exactly `kZeroSegmentPx` (12px) on screen** — the
+  model value stays 0 (this is a display convention only). The remaining width is shared among
+  the real-duration segments in proportion to `duration / visibleRange`, where
+  `visibleRange = max(totalDuration * 1.1, minVisibleRange)` (or a caller-set explicit override)
+  leaves headroom to the right of the last node to drag it further out. This is what keeps a
+  fixed-topology envelope's hold-end node separately grabbable from its attack-peak even when
+  hold is 0 ms — the two are never pixel-coincident.
+- **Hit-testing picks the nearest node within `kHitRadiusPx` (10px); on an exact pixel tie the
+  EARLIER node index wins.** Nodes take priority over bend handles (checked first, unconditionally
+  — a handle is never returned while any node is in radius). A node with neither axis movable
+  (e.g. a Fixed-topology origin) is never hit.
+- **No bend handle on a zero-duration segment, a non-bendable segment, or one whose start and end
+  levels are equal (flat)** — none of the three can show a visible bend, so `bendHandlePosition`
+  returns `nullopt` (not drawn, not hittable) rather than a handle that does nothing when dragged.
+  The handle that IS shown sits at the point ON THE CURVE at progress 0.5, so it visibly tracks
+  the curve as bend changes rather than sitting at a fixed geometric midpoint.
+- **A node drag freezes the visible range for its duration** (captured at `mouseDown` on a Node
+  hit, cleared at `mouseUp`) — without this, `currentGeometry()` would recompute the range off the
+  model's just-edited total duration on every `mouseDrag`, rescaling the pixel-to-time mapping
+  under the cursor mid-gesture (a runaway feedback loop when dragging the last node near the
+  view's drag headroom). A bend-handle drag never freezes anything, since bend never moves x.
+- **`setModel()` preserves a live drag/hover/selection when the new model's topology matches** (same
+  node count and `CurveMode`) — only an actual topology change, or an active index now out of
+  range, resets that state (and pairs a still-open gesture's `onGestureEnd` right there). This is
+  what lets a host push a fresh model back mid-drag (e.g. the envelope card's own parameter
+  round trip) without cancelling the user's gesture after its first event.
+
+**No `juce::Timer`** — repaints only when the model, hover/selection, or playhead actually change.
+`setPlayhead(std::optional<Playhead>)` (`Playhead { int segment; float progress; }`) is a plain
+setter that draws a marker dot on the curve plus a faint vertical line; `nullopt` hides it. A
+later change adds the gated animation that drives it during playback (see §2-3 below) — this one
+does not start a per-tick loop.
+
+**Mouse handlers are thin wrappers** over public primitives (`dragNodeTo`, `dragBendBy`,
+`addPointAt`, `removeNode`), same pattern as `EQCurveComponent` above: `mouseDown` hit-tests and
+records the target with no gesture opened yet (a plain click that never becomes a drag would
+otherwise push an empty undo step); `mouseDrag` opens the gesture on its first call; `mouseUp`
+closes it. Double-click adds (Free mode, empty space) / removes (Free mode, a node) / resets a
+bend handle to 0 (either mode).
+
 ---
 
 ## 2. UI Rendering Performance
