@@ -14,42 +14,49 @@ protected:
     juce::MidiBuffer midiMessages;
 };
 
-TEST_F(AntiClickTest, ADSRMinimumRelease) {
+// FRO110 retired the old minimum-time clamps (2ms attack / 5ms release) on purpose: 0 ms is a
+// real, reachable value now, and click avoidance is the user's own choice. These two tests
+// assert the new contract instead of the retired clamp: the 1 ms default is still click-safe,
+// and an explicit 0 ms is honoured exactly, with no clamp silently overriding it.
+
+TEST_F(AntiClickTest, ADSRReleaseAntiClickContract) {
+    // Channel 0 doubles as the Gate CV input, so it must stay LOW (cleared) throughout --
+    // driving the envelope through MIDI note-on/off only. Leaving it high would OR the Gate
+    // CV Schmitt trigger into "active" forever and note-off would never actually release.
     ADSRModule adsr;
     adsr.prepareToPlay(44100.0, 512);
 
-    // Set parameters for quick test
-    auto* attackParam = dynamic_cast<juce::AudioParameterFloat*>(adsr.getParameters()[1]);
-    auto* releaseParam = dynamic_cast<juce::AudioParameterFloat*>(adsr.getParameters()[4]);
-    ASSERT_NE(attackParam, nullptr);
-    ASSERT_NE(releaseParam, nullptr);
-
-    *attackParam = 0.001f; // 1ms attack
-    *releaseParam = 0.0f;  // Should be clamped to 5ms by implementation
-
-    // Trigger note on
+    // Leave release at its 1 ms default -- the click-safe default -- and confirm release is
+    // NOT instant: some non-zero level must remain in the first few samples after note-off.
     midiMessages.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
-
-    // Process one block - should reach peak level
-    for (int i = 0; i < buffer.getNumSamples(); ++i)
-        buffer.setSample(0, i, 1.0f);
     adsr.processBlock(buffer, midiMessages);
     midiMessages.clear();
-
-    // Check if it's active and produce sound
     ASSERT_GT(buffer.getSample(0, buffer.getNumSamples() - 1), 0.1f);
 
-    // Now trigger note off
+    buffer.clear();
     midiMessages.addEvent(juce::MidiMessage::noteOff(1, 60), 0);
-
-    // Process next block
-    for (int i = 0; i < buffer.getNumSamples(); ++i)
-        buffer.setSample(0, i, 1.0f);
     adsr.processBlock(buffer, midiMessages);
+    EXPECT_GT(buffer.getMagnitude(0, 0, 10), 0.01f) << "the 1 ms default release must not click";
 
-    // With 5ms release, the envelope should NOT be 0 instantly.
-    // We expect some non-zero level at the beginning of the block.
-    EXPECT_GT(buffer.getMagnitude(0, 0, 10), 0.01f);
+    // An explicit 0 ms release is a deliberate design choice, not a bug that needs a clamp:
+    // it must be honoured, reaching silence on the very next sample after note-off.
+    ADSRModule instant;
+    instant.prepareToPlay(44100.0, 512);
+    auto* instantRelease = dynamic_cast<juce::AudioParameterFloat*>(instant.getParameters()[4]);
+    ASSERT_NE(instantRelease, nullptr);
+    *instantRelease = 0.0f;
+
+    juce::AudioBuffer<float> instantBuffer(1, 512);
+    instantBuffer.clear();
+    juce::MidiBuffer noteOnMidi;
+    noteOnMidi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+    instant.processBlock(instantBuffer, noteOnMidi);
+
+    instantBuffer.clear();
+    juce::MidiBuffer noteOffMidi;
+    noteOffMidi.addEvent(juce::MidiMessage::noteOff(1, 60), 0);
+    instant.processBlock(instantBuffer, noteOffMidi);
+    EXPECT_NEAR(instantBuffer.getSample(0, 0), 0.0f, 1e-4f) << "an explicit 0 ms release must be honoured, not clamped";
 }
 
 TEST_F(AntiClickTest, OscillatorNoPhaseReset) {
@@ -94,18 +101,28 @@ TEST_F(AntiClickTest, OscillatorFrequencySmoothing) {
     EXPECT_GT(buffer.getMagnitude(0, 0, buffer.getNumSamples()), 0.0f);
 }
 
-TEST_F(AntiClickTest, ADSRMinimumAttack) {
+TEST_F(AntiClickTest, ADSRAttackAntiClickContract) {
     ADSRModule adsr;
     adsr.prepareToPlay(44100.0, 512);
 
-    auto* attackParam = dynamic_cast<juce::AudioParameterFloat*>(adsr.getParameters()[1]);
-    ASSERT_NE(attackParam, nullptr);
-    *attackParam = 0.0f; // Request instant attack
-
+    // Leave attack at its 1 ms default and confirm it is NOT instant: sample 1 should still be
+    // well short of full level.
     midiMessages.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
     adsr.processBlock(buffer, midiMessages);
+    EXPECT_LT(buffer.getSample(0, 1), 0.5f) << "the 1 ms default attack must not click";
 
-    // With 2ms attack at 44.1kHz, sample 1 should be small.
-    // If attack was 0, it would be close to 1.0 instantly.
-    EXPECT_LT(buffer.getSample(0, 1), 0.5f);
+    // An explicit 0 ms attack is a deliberate design choice, not a bug that needs a clamp: it
+    // must be honoured, reaching full level on the very first sample.
+    ADSRModule instant;
+    instant.prepareToPlay(44100.0, 512);
+    auto* instantAttack = dynamic_cast<juce::AudioParameterFloat*>(instant.getParameters()[1]);
+    ASSERT_NE(instantAttack, nullptr);
+    *instantAttack = 0.0f;
+
+    juce::AudioBuffer<float> instantBuffer(1, 512);
+    instantBuffer.clear();
+    juce::MidiBuffer noteOnMidi;
+    noteOnMidi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+    instant.processBlock(instantBuffer, noteOnMidi);
+    EXPECT_NEAR(instantBuffer.getSample(0, 0), 1.0f, 1e-3f) << "an explicit 0 ms attack must be honoured, not clamped";
 }

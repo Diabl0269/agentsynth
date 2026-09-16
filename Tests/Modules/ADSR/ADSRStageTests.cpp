@@ -1,6 +1,6 @@
 // ADSRStageTests.cpp
 // Stage progression: attack/decay/sustain/release timing and levels in mono, including the
-// zero-sustain and sustain==1 edge cases and the FRO110 amputation repros.
+// zero-sustain and sustain==1 edge cases and the FRO110 regression suite (formerly Repro*).
 
 #include "ADSRTestFixture.h"
 
@@ -29,8 +29,12 @@ TEST_F(ADSRTest, AttackPhase) {
 }
 
 TEST_F(ADSRTest, SustainLevel) {
-    // Set sustain to 0.75
+    // Set sustain to 0.75. Attack/decay are pinned to their pre-FRO110 default values here
+    // (rather than the new fast 1 ms/1 s defaults) so a fixed block count is still enough to
+    // settle -- this test is about the sustain readout, not about default timing.
     setFloat(adsr, "sustain", 0.75f);
+    setFloat(adsr, "attack", 0.05f);
+    setFloat(adsr, "decay", 0.2f);
 
     // Trigger NoteOn
     auto noteOn = juce::MidiMessage::noteOn(1, 60, (juce::uint8)100);
@@ -45,7 +49,7 @@ TEST_F(ADSRTest, SustainLevel) {
 
     // Process many more blocks to reach sustain phase (attack + decay complete)
     // At 44100 Hz, 512 samples per block ≈ 11.6ms per block
-    // Default attack=0.05s, decay=0.2s, so need ~24 blocks to settle
+    // attack=0.05s, decay=0.2s, so need ~24 blocks to settle
     for (int block = 0; block < 30; ++block) {
         buffer.clear();
         for (int i = 0; i < buffer.getNumSamples(); ++i) {
@@ -198,8 +202,12 @@ TEST_F(ADSRTest, RetriggerDuringRelease) {
 }
 
 TEST_F(ADSRTest, ZeroSustain) {
-    // Set sustain to 0.0
+    // Set sustain to 0.0, and pin attack/decay to their pre-FRO110 default values (the new
+    // default decay is 1 s, deliberately much slower, which this fixed block count isn't
+    // meant to exercise -- this test is about the zero-sustain decay target, not timing).
     setFloat(adsr, "sustain", 0.0f);
+    setFloat(adsr, "attack", 0.05f);
+    setFloat(adsr, "decay", 0.2f);
 
     // Trigger NoteOn
     auto noteOn = juce::MidiMessage::noteOn(1, 60, (juce::uint8)100);
@@ -229,7 +237,8 @@ TEST_F(ADSRTest, ZeroSustain) {
 }
 
 TEST_F(ADSRTest, FastAttack) {
-    // Set attack to minimum (0.01f, clamped to 0.002f)
+    // Set attack to a fast, non-zero value (no clamp applies -- see the AntiClick contract
+    // tests for the 0 ms/1 ms-default behaviour specifically).
     setFloat(adsr, "attack", 0.01f);
 
     // Trigger NoteOn
@@ -262,7 +271,12 @@ TEST_F(ADSRTest, FastAttack) {
 }
 
 TEST_F(ADSRTest, ParameterChangesDuringPlayback) {
-    // Trigger NoteOn with default sustain (0.0)
+    // Sustain's default changed to 1.0 with FRO110 (a held note now sustains by default); set
+    // it to 0.0 explicitly here, along with the pre-FRO110 attack/decay defaults, so a fixed
+    // block count settles -- this test is about a live sustain change, not about defaults.
+    setFloat(adsr, "sustain", 0.0f);
+    setFloat(adsr, "attack", 0.05f);
+    setFloat(adsr, "decay", 0.2f);
     auto noteOn = juce::MidiMessage::noteOn(1, 60, (juce::uint8)100);
     midiMessages.addEvent(noteOn, 0);
 
@@ -273,7 +287,7 @@ TEST_F(ADSRTest, ParameterChangesDuringPlayback) {
     }
     adsr.processBlock(buffer, midiMessages);
 
-    // Process to reach sustain phase with default sustain (0.0)
+    // Process to reach sustain phase with sustain == 0.0
     for (int block = 0; block < 30; ++block) {
         buffer.clear();
         for (int i = 0; i < buffer.getNumSamples(); ++i) {
@@ -308,13 +322,11 @@ TEST_F(ADSRTest, ParameterChangesDuringPlayback) {
 }
 
 // ---------------------------------------------------------------------------
-// Repro* tests: TESTS-FIRST diagnostics for four suspected ADSR bugs (FRO110).
-// These are pure repro/measurement tests — no Source/ changes accompany them.
-// Each prints the actual measured number in its failure message so the real
-// behaviour is visible whether the assertion passes or fails.
+// FRO110 regression suite (formerly the Repro* diagnostics that motivated the rewrite).
+// Each still prints the measured number so a future regression is easy to read.
 // ---------------------------------------------------------------------------
 
-TEST_F(ADSRTest, ReproMonoZeroSustainStillProducesAttackAndDecay) {
+TEST_F(ADSRTest, MonoZeroSustainStillProducesAttackAndDecay) {
     setFloat(adsr, "sustain", 0.0f);
     setFloat(adsr, "attack", 0.05f);
     setFloat(adsr, "decay", 0.5f);
@@ -337,19 +349,18 @@ TEST_F(ADSRTest, ReproMonoZeroSustainStillProducesAttackAndDecay) {
     for (int b = 1; b < 26; ++b)
         processAndTrackPeak(emptyMidi);
 
-    std::cout << "[Repro] MonoZeroSustain: measured peak = " << peak << std::endl;
+    std::cout << "MonoZeroSustain: measured peak = " << peak << std::endl;
     EXPECT_GT(peak, 0.9f) << "measured peak " << peak;
 }
 
 // ---------------------------------------------------------------------------
-// FRO110 zero-sustain release-amputation hypothesis: with sustain == 0, releaseRate is 0 at
-// recalculateRates() time, so a setParameters() call while in the release stage snaps the
-// envelope to silence instantly. These tests probe note-off while still in attack/decay (level
-// well above 0) with sustain == 0, both mono and poly, plus the sustain == 1 decayRate-== 0
-// counterpart.
+// FRO110 zero-sustain release: with sustain == 0, EnvelopeGenerator's Decay stage targets 0
+// (not a rate that could compute to 0 and self-amputate the way juce::ADSR's release rate
+// used to). These tests probe note-off while still in attack/decay (level well above 0) with
+// sustain == 0, both mono and poly, plus the sustain == 1 counterpart.
 // ---------------------------------------------------------------------------
 
-TEST_F(ADSRTest, ReproMonoZeroSustainReleaseFromMidDecayIsNotAmputated) {
+TEST_F(ADSRTest, MonoZeroSustainReleaseFromMidDecayIsNotAmputated) {
     const double sampleRate = 44100.0;
     const int blockSize = buffer.getNumSamples();
 
@@ -373,11 +384,11 @@ TEST_F(ADSRTest, ReproMonoZeroSustainReleaseFromMidDecayIsNotAmputated) {
         levelBeforeNoteOff = buffer.getSample(0, blockSize - 1);
     }
 
-    std::cout << "[Repro] MonoZeroSustainReleaseFromMidDecay: level right before note-off (mid-decay) = "
-              << levelBeforeNoteOff << std::endl;
+    std::cout << "MonoZeroSustainReleaseFromMidDecay: level right before note-off (mid-decay) = " << levelBeforeNoteOff
+              << std::endl;
     ASSERT_GT(levelBeforeNoteOff, 0.3f) << "expected mid-decay level well above 0, got " << levelBeforeNoteOff;
 
-    // Note-off now, while still in decay -- releaseRate is computed fresh at this moment.
+    // Note-off now, while still in decay.
     juce::MidiBuffer noteOffMidi;
     noteOffMidi.addEvent(juce::MidiMessage::noteOff(1, 60), 0);
     buffer.clear();
@@ -413,7 +424,7 @@ TEST_F(ADSRTest, ReproMonoZeroSustainReleaseFromMidDecayIsNotAmputated) {
 
     ASSERT_GE(samplesToBelowThreshold, 0) << "envelope never fell below 0.01 within the cap";
     const double secondsToSilence = static_cast<double>(samplesToBelowThreshold) / sampleRate;
-    std::cout << "[Repro] MonoZeroSustainReleaseFromMidDecay: secondsToSilence = " << secondsToSilence
+    std::cout << "MonoZeroSustainReleaseFromMidDecay: secondsToSilence = " << secondsToSilence
               << "s (release=1.0s); levelAt0.2sIntoRelease = " << levelAt0p2sIntoRelease << std::endl;
 
     EXPECT_GT(levelAt0p2sIntoRelease, 0.1f)
@@ -422,7 +433,7 @@ TEST_F(ADSRTest, ReproMonoZeroSustainReleaseFromMidDecayIsNotAmputated) {
                                       << " seconds to fall below 0.01 with release=1.0s";
 }
 
-TEST_F(ADSRTest, ReproMonoZeroSustainReleaseAmputatedByAParameterChange) {
+TEST_F(ADSRTest, MonoZeroSustainReleaseSurvivesAParameterChange) {
     const double sampleRate = 44100.0;
     const int blockSize = buffer.getNumSamples();
 
@@ -457,25 +468,26 @@ TEST_F(ADSRTest, ReproMonoZeroSustainReleaseAmputatedByAParameterChange) {
     }
 
     const float levelBefore = buffer.getSample(0, blockSize - 1);
-    std::cout << "[Repro] MonoZeroSustainReleaseAmputatedByAParameterChange: levelBefore = " << levelBefore
-              << std::endl;
+    std::cout << "MonoZeroSustainReleaseSurvivesAParameterChange: levelBefore = " << levelBefore << std::endl;
     ASSERT_GT(levelBefore, 0.05f) << "release already silent before the parameter change, got " << levelBefore;
 
-    // Force setParameters() to run again while in the release stage -- this is where a
-    // freshly-recomputed releaseRate == 0 (from sustain == 0) would snap the envelope to 0.
+    // Change an unrelated parameter (attack) while in the release stage. EnvelopeGenerator
+    // reads parameters fresh every sample with no cached rate state to go stale -- this must
+    // not perturb the in-flight release at all (the old juce::ADSR-based implementation could
+    // snap to silence here, because its release *rate* was recomputed from sustain == 0).
     setFloat(adsr, "attack", 0.02f);
     buffer.clear();
     adsr.processBlock(buffer, emptyMidi);
     const float levelAfter = buffer.getSample(0, blockSize - 1);
 
-    std::cout << "[Repro] MonoZeroSustainReleaseAmputatedByAParameterChange: levelBefore = " << levelBefore
+    std::cout << "MonoZeroSustainReleaseSurvivesAParameterChange: levelBefore = " << levelBefore
               << ", levelAfter (post parameter-change block) = " << levelAfter << std::endl;
     EXPECT_GT(levelAfter, 0.5f * levelBefore)
         << "measured levelBefore=" << levelBefore << " levelAfter=" << levelAfter
         << " -- release should continue smoothly across a parameter change, not collapse";
 }
 
-TEST_F(ADSRTest, ReproSustainOneStillDecaysAndReleases) {
+TEST_F(ADSRTest, SustainOneStillDecaysAndReleases) {
     const double sampleRate = 44100.0;
     const int blockSize = buffer.getNumSamples();
 
@@ -491,7 +503,8 @@ TEST_F(ADSRTest, ReproSustainOneStillDecaysAndReleases) {
 
     juce::MidiBuffer emptyMidi;
     // Hold ~0.3s -- past attack (0.01s) + decay (0.5s is still in progress at 0.3s, but with
-    // sustain == 1.0 decayRate == 0 so the level should already sit at 1.0 the whole time.
+    // sustain == 1.0 the decay target equals its start (1.0), so the level should already sit
+    // at 1.0 the whole time.
     const int blocksFor0p3s = static_cast<int>(0.3 * sampleRate / blockSize);
     float heldLevel = buffer.getSample(0, blockSize - 1);
     for (int b = 1; b < blocksFor0p3s; ++b) {
@@ -500,7 +513,7 @@ TEST_F(ADSRTest, ReproSustainOneStillDecaysAndReleases) {
         heldLevel = buffer.getSample(0, blockSize - 1);
     }
 
-    std::cout << "[Repro] SustainOneStillDecaysAndReleases: held level at ~0.3s = " << heldLevel << std::endl;
+    std::cout << "SustainOneStillDecaysAndReleases: held level at ~0.3s = " << heldLevel << std::endl;
     EXPECT_NEAR(heldLevel, 1.0f, 0.05f) << "measured held level " << heldLevel << " (expected ~1.0 at sustain=1.0)";
 
     // Note-off: measure seconds until below 0.01.
@@ -534,8 +547,8 @@ TEST_F(ADSRTest, ReproSustainOneStillDecaysAndReleases) {
 
     ASSERT_GE(samplesToBelowThreshold, 0) << "envelope never fell below 0.01 within the cap";
     const double secondsToSilence = static_cast<double>(samplesToBelowThreshold) / sampleRate;
-    std::cout << "[Repro] SustainOneStillDecaysAndReleases: secondsToSilence = " << secondsToSilence
-              << "s (release=0.5s)" << std::endl;
+    std::cout << "SustainOneStillDecaysAndReleases: secondsToSilence = " << secondsToSilence << "s (release=0.5s)"
+              << std::endl;
     EXPECT_NEAR(secondsToSilence, 0.5, 0.15)
         << "measured " << secondsToSilence << " seconds to fall below 0.01 with release=0.5s (expected within 30%)";
 }

@@ -47,13 +47,11 @@ TEST_F(ADSRTest, PolyMode_GateEdgeDetection) {
 }
 
 // ---------------------------------------------------------------------------
-// Repro* tests: TESTS-FIRST diagnostics for four suspected ADSR bugs (FRO110).
-// These are pure repro/measurement tests — no Source/ changes accompany them.
-// Each prints the actual measured number in its failure message so the real
-// behaviour is visible whether the assertion passes or fails.
+// FRO110 regression suite (formerly the Repro* diagnostics that motivated the rewrite).
+// Each still prints the measured number so a future regression is easy to read.
 // ---------------------------------------------------------------------------
 
-TEST_F(ADSRTest, ReproPolyZeroSustainReleaseTakesFullReleaseTime) {
+TEST_F(ADSRTest, PolyZeroSustainReleaseTakesFullReleaseTime) {
     const double sampleRate = 44100.0;
     const int blockSize = 512;
 
@@ -84,6 +82,10 @@ TEST_F(ADSRTest, ReproPolyZeroSustainReleaseTakesFullReleaseTime) {
     }
 
     // Subject variant: sustain = 0.5 isolates the release-time / "amputation" behaviour.
+    // releaseCurve is pinned to 0 (linear) -- the default curve (0.65) is fast-first/slow-tail
+    // by design, which front-loads most of the level drop and reaches the "below 0.01" crossing
+    // well before the nominal release time elapses; a linear ramp is what makes "time to
+    // near-silence" a direct proxy for "full release time" here.
     ADSRModule adsrHalf;
     adsrHalf.prepareToPlay(sampleRate, blockSize);
     setPoly(adsrHalf, true);
@@ -91,6 +93,7 @@ TEST_F(ADSRTest, ReproPolyZeroSustainReleaseTakesFullReleaseTime) {
     setFloat(adsrHalf, "attack", 0.01f);
     setFloat(adsrHalf, "decay", 0.05f);
     setFloat(adsrHalf, "release", 1.0f);
+    setFloat(adsrHalf, "releaseCurve", 0.0f);
 
     juce::AudioBuffer<float> polyBuffer(8, blockSize);
     juce::MidiBuffer emptyMidi;
@@ -129,7 +132,7 @@ TEST_F(ADSRTest, ReproPolyZeroSustainReleaseTakesFullReleaseTime) {
 
     ASSERT_GE(samplesToBelowThreshold, 0) << "envelope never fell below 0.01 within the cap";
     const double measuredSeconds = static_cast<double>(samplesToBelowThreshold) / sampleRate;
-    std::cout << "[Repro] PolyZeroSustainRelease: measured " << measuredSeconds
+    std::cout << "PolyZeroSustainRelease: measured " << measuredSeconds
               << "s to fall below 0.01 (release=1.0s); level at 0.2s = " << levelAt0p2s << std::endl;
     EXPECT_NEAR(measuredSeconds, 1.0, 0.2)
         << "measured " << measuredSeconds << " seconds to fall below 0.01 with release=1.0s";
@@ -139,7 +142,7 @@ TEST_F(ADSRTest, ReproPolyZeroSustainReleaseTakesFullReleaseTime) {
                                  << " at 0.2s into a 1.0s release (amputation check)";
 }
 
-TEST_F(ADSRTest, ReproPolyZeroSustainReleaseFromMidDecayIsNotAmputated) {
+TEST_F(ADSRTest, PolyZeroSustainReleaseFromMidDecayIsNotAmputated) {
     const double sampleRate = 44100.0;
     const int blockSize = 512;
 
@@ -152,7 +155,7 @@ TEST_F(ADSRTest, ReproPolyZeroSustainReleaseFromMidDecayIsNotAmputated) {
     juce::AudioBuffer<float> polyBuffer(8, blockSize);
     juce::MidiBuffer emptyMidi;
 
-    // Gate voice 0 high for ~0.2s (mid-decay); the poly branch calls setParameters() every block.
+    // Gate voice 0 high for ~0.2s (mid-decay); the poly branch reads live parameters every sample.
     const int blocksFor0p2s = static_cast<int>(0.2 * sampleRate / blockSize);
     float levelBeforeGateOff = 0.0f;
     for (int b = 0; b < blocksFor0p2s; ++b) {
@@ -163,8 +166,8 @@ TEST_F(ADSRTest, ReproPolyZeroSustainReleaseFromMidDecayIsNotAmputated) {
         levelBeforeGateOff = polyBuffer.getSample(0, blockSize - 1);
     }
 
-    std::cout << "[Repro] PolyZeroSustainReleaseFromMidDecay: level right before gate-off (mid-decay) = "
-              << levelBeforeGateOff << std::endl;
+    std::cout << "PolyZeroSustainReleaseFromMidDecay: level right before gate-off (mid-decay) = " << levelBeforeGateOff
+              << std::endl;
     ASSERT_GT(levelBeforeGateOff, 0.3f) << "expected mid-decay level well above 0, got " << levelBeforeGateOff;
 
     // Gate low -> release, still under sustain == 0.
@@ -191,7 +194,7 @@ TEST_F(ADSRTest, ReproPolyZeroSustainReleaseFromMidDecayIsNotAmputated) {
 
     ASSERT_GE(samplesToBelowThreshold, 0) << "envelope never fell below 0.01 within the cap";
     const double secondsToSilence = static_cast<double>(samplesToBelowThreshold) / sampleRate;
-    std::cout << "[Repro] PolyZeroSustainReleaseFromMidDecay: secondsToSilence = " << secondsToSilence
+    std::cout << "PolyZeroSustainReleaseFromMidDecay: secondsToSilence = " << secondsToSilence
               << "s (release=1.0s); levelAt0.2sIntoRelease = " << levelAt0p2sIntoRelease << std::endl;
 
     EXPECT_GT(levelAt0p2sIntoRelease, 0.1f)

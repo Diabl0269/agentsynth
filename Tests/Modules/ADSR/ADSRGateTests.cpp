@@ -72,13 +72,12 @@ TEST_F(ADSRTest, MidiOffDoesNotReleaseWhileGateCvIsHigh) {
 }
 
 // ---------------------------------------------------------------------------
-// Repro* tests: TESTS-FIRST diagnostics for four suspected ADSR bugs (FRO110).
-// These are pure repro/measurement tests — no Source/ changes accompany them.
-// Each prints the actual measured number in its failure message so the real
-// behaviour is visible whether the assertion passes or fails.
+// FRO110 regression suite (formerly the Repro* diagnostics that motivated the rewrite): the
+// mono held-note bitset fix -- a MIDI note-on drives the retrigger directly instead of relying
+// on an edge in a held/not-held flag.
 // ---------------------------------------------------------------------------
 
-TEST_F(ADSRTest, ReproMonoBackToBackNotesReArticulate) {
+TEST_F(ADSRTest, MonoBackToBackNotesReArticulate) {
     setFloat(adsr, "sustain", 0.8f);
     setFloat(adsr, "attack", 0.05f);
     setFloat(adsr, "decay", 0.1f);
@@ -107,23 +106,30 @@ TEST_F(ADSRTest, ReproMonoBackToBackNotesReArticulate) {
     buffer.clear();
     adsr.processBlock(buffer, transitionMidi);
 
-    float minAfter = buffer.getSample(0, 0);
+    // EnvelopeGenerator's retrigger is deliberately continuous -- noteOn() re-enters Attack
+    // from the CURRENT level (0.8) toward its target (1.0), so this does not dip below 0.8 (a
+    // dip would be exactly the discontinuity/click the design promises never to produce). The
+    // unambiguous signature that a real new Attack cycle happened -- as opposed to the bug,
+    // where the envelope stayed frozen at exactly 0.8 forever -- is that it climbs back up to a
+    // fresh peak near 1.0 within one attack time (0.05s).
+    float maxAfter = buffer.getSample(0, 0);
     for (int i = 0; i < buffer.getNumSamples(); ++i)
-        minAfter = std::min(minAfter, buffer.getSample(0, i));
+        maxAfter = std::max(maxAfter, buffer.getSample(0, i));
 
-    // ~0.06s more (~5 blocks total including the transition block).
+    // ~0.06s more (~5 blocks total including the transition block; attack 0.05s completes
+    // within this window).
     for (int b = 0; b < 4; ++b) {
         buffer.clear();
         adsr.processBlock(buffer, emptyMidi);
         for (int i = 0; i < buffer.getNumSamples(); ++i)
-            minAfter = std::min(minAfter, buffer.getSample(0, i));
+            maxAfter = std::max(maxAfter, buffer.getSample(0, i));
     }
 
-    EXPECT_LT(minAfter, 0.5f) << "measured min envelope after transition " << minAfter
-                              << " (expected a re-attack dip well below sustain 0.8)";
+    EXPECT_GT(maxAfter, 0.95f) << "measured max envelope after transition " << maxAfter
+                               << " (expected a fresh re-attack peak near 1.0, not a level frozen at 0.8)";
 }
 
-TEST_F(ADSRTest, ReproMonoReleasingOneOfTwoHeldNotesKeepsEnvelopeUp) {
+TEST_F(ADSRTest, MonoReleasingOneOfTwoHeldNotesKeepsEnvelopeUp) {
     setFloat(adsr, "sustain", 0.8f);
 
     auto noteOn60 = juce::MidiMessage::noteOn(1, 60, (juce::uint8)100);
