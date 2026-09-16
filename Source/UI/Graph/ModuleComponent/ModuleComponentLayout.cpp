@@ -48,7 +48,8 @@ void ModuleComponent::updateLayout() {
         const int thresholdH = thresholdControl != nullptr ? thresholdControl->getPreferredHeight() : 0;
         if (getWidth() != 280)
             setSize(280, juce::jmax(getHeight(), 100));
-        int height = getContentTopY() + 20 + 120 + 10; // label + sliders + gap
+        // Slider rows (see adsrAfterSlidersY) + threshold control + a toggle row per checkbox.
+        int height = detail::adsrAfterSlidersY(getContentTopY(), sliders.size());
         if (thresholdH > 0)
             height += thresholdH + 8;
         height += toggles.size() * 30 + 10;

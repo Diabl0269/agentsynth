@@ -112,3 +112,50 @@ TEST_F(ModuleComponentTest, AdsrPolyToggleIsLaidOutInsideTheModule) {
     EXPECT_TRUE(moduleComponent.getLocalBounds().contains(polyToggle->getBounds()))
         << "Poly toggle must sit inside the module's bounds to be visible and clickable";
 }
+
+// FRO110 added hold/attackCurve/decayCurve/releaseCurve, taking ADSR from 4 float sliders to 8 —
+// the layout used to place every slider on one row (`x = margin + 10 + i * sliderWidth`), which
+// ran the last four off the right edge of the fixed 280px-wide card, making HOLD and the curve
+// controls clipped and unreachable. The fix wraps sliders into rows of at most 4.
+TEST_F(ModuleComponentTest, AdsrSlidersWrapIntoRowsThatFitTheModule) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ADSRModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    std::vector<juce::Slider*> adsrSliders;
+    for (auto* child : moduleComponent.getChildren())
+        if (auto* slider = dynamic_cast<juce::Slider*>(child))
+            adsrSliders.push_back(slider);
+
+    ASSERT_EQ(adsrSliders.size(), 8u) << "attack/decay/sustain/release/hold/attackCurve/decayCurve/releaseCurve";
+
+    const auto moduleBounds = moduleComponent.getLocalBounds();
+    int maxSliderBottom = 0;
+    for (auto* slider : adsrSliders) {
+        EXPECT_TRUE(moduleBounds.contains(slider->getBounds()))
+            << "slider '" << slider->getComponentID() << "' bounds " << slider->getBounds().toString()
+            << " must sit fully inside the module's own bounds " << moduleBounds.toString()
+            << " -- a slider running past the module's width is clipped and unreachable";
+        maxSliderBottom = juce::jmax(maxSliderBottom, slider->getBounds().getBottom());
+    }
+
+    // Every auto-generated toggle (e.g. "Poly") must be laid out below the last slider row, not
+    // overlapping it, and the module must be tall enough to contain both the last row and every
+    // toggle. Skip toggles with no component ID: those are generic chrome (e.g. "Show Scope",
+    // ModuleComponent.cpp's ScopeComponent toggle) positioned by the default body layout that the
+    // ADSR branch never calls, not one of ADSRModule's own bool parameters.
+    for (auto* child : moduleComponent.getChildren()) {
+        if (auto* toggle = dynamic_cast<juce::ToggleButton*>(child)) {
+            if (toggle->getComponentID().isEmpty())
+                continue;
+            EXPECT_GE(toggle->getBounds().getY(), maxSliderBottom)
+                << "toggle '" << toggle->getComponentID() << "' must sit below the slider rows";
+            EXPECT_TRUE(moduleBounds.contains(toggle->getBounds()))
+                << "toggle '" << toggle->getComponentID() << "' must sit inside the module's bounds";
+        }
+    }
+
+    EXPECT_GE(moduleComponent.getHeight(), maxSliderBottom)
+        << "module must be tall enough to contain the last slider row";
+}
