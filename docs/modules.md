@@ -353,6 +353,27 @@ Loads an audio file from disk and plays it back one of two ways.
   so an in-flight decay or a held note retargets smoothly instead of stepping. It is the one
   parameter that is a *level*, not a stage time; attack/hold/decay/release are deliberately left
   unsmoothed — `EnvelopeGenerator` turns a time change mid-ramp into a slope change on its own.
+- **Tempo sync (FRO113, BPM | MS toggle)**: `tempoSync` (bool, default false/MS mode) is REAL
+  sync, not a display-only snap — each timed stage keeps its own note-division choice parameter
+  (`attackDiv`/`holdDiv`/`decayDiv`/`releaseDiv`, sharing one six-entry division list, "1/1"
+  down to "1/32", the same entries and order as [LFO](#lfo-module)'s `rateSync`) and the
+  effective stage time is recomputed from that division and the current tempo **every block**,
+  so it follows a live tempo change rather than snapping once. The ms parameters
+  (`attack`/`hold`/`decay`/`release`) are untouched and stay in sole control whenever `tempoSync`
+  is off; both sets of parameters always exist and round-trip in every patch, so toggling the
+  mode never loses the other mode's values. Tempo comes from `getPlayHead()->getPosition()`
+  (falling back to 120 BPM with no playhead, mirroring LFOModule's own sync mode) — read at the
+  same per-block cadence as LFO's rate, not the Sequencer's per-sample beat-locked stepping,
+  since a stage's duration only needs "how long in seconds right now", not a beat-grid position.
+  Switching `tempoSync` mid-note is click-safe for the same reason a `attack`/`decay`/`release`
+  automation move already was: `EnvelopeGenerator` turns any stage-time change mid-ramp into a
+  slope change, never a level jump, regardless of which parameter set produced the new time.
+  Division-derived defaults are the closest available division to each ms default at 120 BPM —
+  `decayDiv`'s "1/2" default lands on exactly 1.0 s (the ms `decay` default) at 120 BPM;
+  `attackDiv`/`holdDiv`/`releaseDiv` default to the fastest division ("1/32", 62.5 ms at 120 BPM)
+  since nothing in the shared six-entry list gets closer to their sub-20-ms ms defaults — an
+  accepted resolution tradeoff of reusing LFO's division list rather than a reason to invent a
+  finer one. See `Source/Modules/Envelope/EnvelopeTempoSync.h` for the division table/conversion.
 - **UI playhead**: `getPlayheadStage()` / `getPlayheadProgress()` / `getPlayheadLevel()` expose
   the stage/progress/level of the most recently (re)triggered voice, written lock-free
   (`std::atomic`, relaxed) once per block. Consumed by the envelope graph's playhead marker (see

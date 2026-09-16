@@ -42,6 +42,7 @@ add_executable(Tests
     Modules/ADSR/ADSRThresholdTests.cpp
     Modules/ADSR/ADSRClickDiagnosticsTests.cpp
     Modules/ADSR/ADSRReadoutFormattingTests.cpp
+    Modules/ADSR/ADSRTempoSyncTests.cpp
     Modules/Envelope/EnvelopeGeneratorTests.cpp
     Modules/EnvelopeFollowerModuleTests.cpp
     Modules/ModuleBaseTests.cpp
