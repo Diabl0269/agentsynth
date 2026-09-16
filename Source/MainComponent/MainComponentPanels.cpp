@@ -50,6 +50,17 @@ void MainComponent::saveRecentProjects() {
     }
 }
 
+/** The status-bar message both scan triggers post per candidate — factored out (FRO105) so the
+ *  eager startup scan, which previously ran silently, reports progress exactly like the sidebar's
+ *  manual row always has. */
+synth::PluginScanService::ProgressFn MainComponent::makePluginScanProgressReporter() {
+    return [this](const juce::String& fileOrIdentifier, int scanned, int total) {
+        // Trailing segment, not File::getFileName(): an AudioUnit's identifier is not a path.
+        statusBar.showMessage("Scanning plugins " + juce::String(scanned) + "/" + juce::String(total) + ": " +
+                              fileOrIdentifier.fromLastOccurrenceOf("/", false, false));
+    };
+}
+
 /** Starts a background scan of every format this build can host, reporting through the status
  *  bar and refreshing the library's Plugins section (and the saved list) when it finishes.
  *  Ignored while a scan is already running, and refused outright when the engine is Hosted —
@@ -76,14 +87,7 @@ void MainComponent::startPluginScan() {
     // bar from here is safe. Completion is NOT wired here — pluginScanCompleted() (registered as a
     // Listener in the constructor) handles it uniformly for every trigger path, this button
     // included, so the eager startup scan gets exactly the same sidebar refresh and persisted save.
-    getPluginScanService().scanAsync(
-        synth::hostedPluginFormatNames(),
-        [this](const juce::String& fileOrIdentifier, int scanned, int total) {
-            // Trailing segment, not File::getFileName(): an AudioUnit's identifier is not a path.
-            statusBar.showMessage("Scanning plugins " + juce::String(scanned) + "/" + juce::String(total) + ": " +
-                                  fileOrIdentifier.fromLastOccurrenceOf("/", false, false));
-        },
-        nullptr);
+    getPluginScanService().scanAsync(synth::hostedPluginFormatNames(), makePluginScanProgressReporter(), nullptr);
 }
 
 /** FRO44: the eager-population entry point, called ONCE by `Main.cpp` right after the real
@@ -97,12 +101,19 @@ void MainComponent::startPluginScan() {
  *  there would launch a copy of the DAW per candidate plugin, and the host owns plugin discovery
  *  in that world regardless. A hosted session still RESOLVES identities — against whatever list
  *  the constructor already restored from settings — it just never scans one itself; see
- *  docs/architecture.md's "Plugin scanning" section. */
+ *  docs/architecture.md's "Plugin scanning" section.
+ *
+ *  FRO105: this used to call `ensureScanned()` with no progress callback at all, so the eager scan
+ *  ran silently — the founder complaint this fixes was seeing only whatever the persisted list
+ *  already had until the ONE completion message landed, with no sign a scan was even happening in
+ *  between. `ensureScanned()`'s return says whether THIS call actually started the scan (false for
+ *  a redundant later call), so the "Scanning for plugins..." banner only appears when it is true. */
 void MainComponent::maybeStartEagerPluginScan() {
     // See this method's header comment: hosted mode never scans, eagerly or otherwise.
     if (audioEngine.isHosted())
         return;
-    getPluginScanService().ensureScanned(synth::hostedPluginFormatNames());
+    if (getPluginScanService().ensureScanned(synth::hostedPluginFormatNames(), makePluginScanProgressReporter()))
+        statusBar.showMessage("Scanning for plugins...");
 }
 
 // synth::PluginScanService::Listener — fired once per real scan, no matter which caller
