@@ -153,6 +153,37 @@ TEST(PluginScanTest, EnsureScannedNeverRescansOnceItHasAlreadyCompleted) {
     EXPECT_EQ(service.getNumKnownPlugins(), 2);
 }
 
+TEST(PluginScanTest, EnsureScannedReportsProgressAndWhetherItActuallyStartedAScan) {
+    // FRO105: ensureScanned() used to take no progress callback at all, so the eager startup scan
+    // (its only production caller) ran silently with no way to tell the user a scan was in flight.
+    FakeLauncher launcher;
+    launcher.xmlByFile[kAlpha] = descriptionXml("Alpha", 0xA1FA, kAlpha);
+    launcher.xmlByFile[kBeta] = descriptionXml("Beta", 0xB37A, kBeta);
+    PluginScanService service;
+    service.setCandidateSource(candidates({kAlpha, kBeta}));
+    service.setChildLauncher(launcher.fn());
+
+    std::vector<juce::String> progressed;
+    const bool started =
+        service.ensureScanned(juce::StringArray("VST3"), [&](const juce::String& fileOrIdentifier, int, int) {
+            progressed.push_back(fileOrIdentifier);
+        });
+    EXPECT_TRUE(started) << "the first call must report that it actually started a scan";
+
+    ASSERT_TRUE(pumpUntil([&] { return service.getNumKnownPlugins() == 2; }));
+    EXPECT_EQ(progressed, (std::vector<juce::String>{kAlpha, kBeta}))
+        << "every candidate must reach the caller's progress callback, in scan order";
+
+    // A later call is the documented no-op: it reports it did NOT start a scan, and its own progress
+    // callback is never invoked for a scan it never started.
+    bool laterProgressInvoked = false;
+    const bool startedAgain = service.ensureScanned(
+        juce::StringArray("VST3"), [&](const juce::String&, int, int) { laterProgressInvoked = true; });
+    EXPECT_FALSE(startedAgain);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    EXPECT_FALSE(laterProgressInvoked);
+}
+
 TEST(PluginScanTest, ConsumersSeeThePluginListWithoutTheSidebarEverOpening) {
     // No ModuleLibraryComponent is constructed anywhere in this test — a future picker reading
     // straight off the shared service must see the scanned plugin without anyone ever opening the

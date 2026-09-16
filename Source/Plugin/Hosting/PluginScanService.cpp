@@ -188,17 +188,18 @@ void PluginScanService::postToMessageThread(std::function<void()> fn) {
     });
 }
 
-void PluginScanService::ensureScanned(const juce::StringArray& formatNames) {
+bool PluginScanService::ensureScanned(const juce::StringArray& formatNames, ProgressFn progress) {
     // First caller wins; every later one (concurrent with that scan, or long after it finished) is
     // absorbed here rather than starting a second scan — see the class comment.
     if (ensureScanRequested_.exchange(true))
-        return;
+        return false;
     // skipAlreadyKnown=true: this runs unprompted (at startup, or on whatever consumer happens to
     // ask first), so it must not pay a child-process launch for every plugin already in the
     // persisted-and-loaded list — only for whatever is newly installed since the list was saved.
     // The manual "Scan for plugins..." row calls scanAsync() directly and keeps the old
     // always-reprobe-everything default, which is the whole point of a user-requested rescan.
-    scanAsync(formatNames, nullptr, nullptr, /* skipAlreadyKnown */ true);
+    scanAsync(formatNames, std::move(progress), nullptr, /* skipAlreadyKnown */ true);
+    return true;
 }
 
 void PluginScanService::scanAsync(const juce::StringArray& formatNames, ProgressFn progress, CompletionFn completion,

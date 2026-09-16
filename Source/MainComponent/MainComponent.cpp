@@ -151,7 +151,20 @@ MainComponent::~MainComponent() {
     if (auto* backend = dynamic_cast<synth::DefaultHostedPluginBackend*>(&synth::HostedPluginBackend::getDefault()))
         if (backend->getScanService() == &pluginScanService)
             backend->setScanService(nullptr);
+    // FRO105: whatever the scan already found before this quit (or before a scan in flight was cut
+    // off by the cancelScan() below) is already sitting in pluginScanService's in-memory list
+    // regardless of whether it ever reached pluginScanCompleted() — which removeListener() above
+    // ensures it now never will. Without this, quitting during a long scan (a large or slow plugin
+    // folder) silently threw away every plugin found that session, so the NEXT launch re-probed them
+    // all over again; saving here makes an interrupted scan's progress durable, same as a completed
+    // one's. Guarded on "still ours" (the same condition the backend unhook just above uses), NOT
+    // isHosted(): on the adopted-service path activeScanService is the PROCESSOR's, which outlives
+    // this editor and is never scanned from here anyway (see wirePluginScanAndRecents()), so saving
+    // it here would write another component's in-flight list into settings out from under it.
+    const bool ownsActiveScanService = activeScanService == &pluginScanService;
     pluginScanService.cancelScan();
+    if (ownsActiveScanService)
+        savePluginScanList();
 
     // Unsubscribe before the manager (or our owned copy) is torn down.
     if (themeManager != nullptr)

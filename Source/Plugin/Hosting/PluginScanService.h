@@ -232,13 +232,19 @@ public:
     /** FRO44: "make sure a scan has been requested at least once" — the eager-population entry
      *  point every consumer (app startup, the sidebar, a future picker) can call without worrying
      *  about who else already asked. The FIRST call this service instance ever sees starts
-     *  `scanAsync(formatNames, nullptr, nullptr, skipAlreadyKnown: true)` — so a warm launch
-     *  (the persisted list already loaded via `loadFromXml`) only pays a child-process launch for
-     *  candidates that are NOT already known, not the whole install base every time the app opens;
-     *  every later `ensureScanned()` call — concurrent with that scan or after it has already
-     *  finished — is a no-op. Every registered `Listener` still hears `pluginScanCompleted` when the
-     *  one real scan finishes, whether or not it was this call that started it. Message thread only,
-     *  like `scanAsync()`.
+     *  `scanAsync(formatNames, progress, nullptr, skipAlreadyKnown: true)` and returns true — so a
+     *  warm launch (the persisted list already loaded via `loadFromXml`) only pays a child-process
+     *  launch for candidates that are NOT already known, not the whole install base every time the
+     *  app opens; every later `ensureScanned()` call — concurrent with that scan or after it has
+     *  already finished — is a no-op that returns false. Every registered `Listener` still hears
+     *  `pluginScanCompleted` when the one real scan finishes, whether or not it was this call that
+     *  started it. Message thread only, like `scanAsync()`.
+     *
+     *  `progress` (optional; FRO105) lets the one caller that actually starts the scan show it is
+     *  running — e.g. the eager startup scan posting to a status bar, exactly like the sidebar's
+     *  manual "Scan for plugins..." row already does via `scanAsync()` directly. It is silently
+     *  dropped on a no-op call (the return value says which happened), never invoked for a scan this
+     *  call did not itself start.
      *
      *  IMPORTANT for a caller that arrives AFTER the one real scan has already completed (the normal
      *  case once the app has been running a while — the eager startup scan is long done by the time
@@ -249,7 +255,7 @@ public:
      *  fills for a reason other than a *listened-for* completion) AND register a `Listener` for any
      *  scan that starts later. Reading the list only from inside `pluginScanCompleted` misses
      *  whatever was already there. */
-    void ensureScanned(const juce::StringArray& formatNames);
+    bool ensureScanned(const juce::StringArray& formatNames, ProgressFn progress = nullptr);
 
     bool isScanning() const noexcept { return scanning_.load(std::memory_order_acquire); }
 
