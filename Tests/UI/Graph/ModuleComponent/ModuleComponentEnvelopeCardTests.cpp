@@ -53,6 +53,41 @@ CurveEditorComponent* openEnvelopeGraph(ModuleComponent& comp) {
     return findEnvelopeCurveEditor(comp);
 }
 
+// FRO117: ADSRModule on this branch doesn't carry FRO113's tempoSync/*Div params yet (that ticket
+// lands them separately), so this subclass adds params matching their landed shape exactly --
+// bool tempoSync (default false) plus four AudioParameterChoice note-division params sharing
+// LFO's rateSync division list -- to prove the generic-UI exclusion and the MS|BPM wiring against
+// the real shape rather than against nothing. Once FRO113 merges, ADSRModule itself carries these
+// and this fixture becomes redundant but harmless.
+class ADSRModuleWithTempoSyncParams : public ADSRModule {
+public:
+    ADSRModuleWithTempoSyncParams() {
+        addParameter(tempoSyncParam = new juce::AudioParameterBool("tempoSync", "Tempo Sync", false));
+        const juce::StringArray divisions({"1/1", "1/2", "1/4", "1/8", "1/16", "1/32"});
+        addParameter(attackDivParam = new juce::AudioParameterChoice("attackDiv", "Attack Div", divisions, 5));
+        addParameter(holdDivParam = new juce::AudioParameterChoice("holdDiv", "Hold Div", divisions, 5));
+        addParameter(decayDivParam = new juce::AudioParameterChoice("decayDiv", "Decay Div", divisions, 1));
+        addParameter(releaseDivParam = new juce::AudioParameterChoice("releaseDiv", "Release Div", divisions, 5));
+    }
+
+    juce::AudioParameterBool* tempoSyncParam = nullptr;
+    juce::AudioParameterChoice* attackDivParam = nullptr;
+    juce::AudioParameterChoice* holdDivParam = nullptr;
+    juce::AudioParameterChoice* decayDivParam = nullptr;
+    juce::AudioParameterChoice* releaseDivParam = nullptr;
+};
+
+int countChildrenOfType(ModuleComponent& comp, bool wantToggle) {
+    int count = 0;
+    for (auto* child : comp.getChildren()) {
+        if (wantToggle && dynamic_cast<juce::ToggleButton*>(child) != nullptr)
+            ++count;
+        else if (!wantToggle && dynamic_cast<juce::ComboBox*>(child) != nullptr)
+            ++count;
+    }
+    return count;
+}
+
 } // namespace
 
 TEST_F(ModuleComponentTest, AdsrEnvelopeGraphIsCollapsedByDefaultAndGrowsTheCardWhenOpened) {
@@ -269,4 +304,57 @@ TEST_F(ModuleComponentTest, EnvelopePlayheadMapsStageToSegmentOnlyWhenGraphIsOpe
     moduleComponent.timerCallback();
     ASSERT_TRUE(curve->getPlayhead().has_value()) << "an in-flight note with the graph open must show a playhead";
     EXPECT_EQ(curve->getPlayhead()->segment, 0) << "a freshly triggered note is in the Attack stage (segment 0)";
+}
+
+// FRO117: tempoSync/attackDiv/holdDiv/decayDiv/releaseDiv (FRO113's params) must never leak into
+// the generic per-param UI -- that's what blew up ModuleComponentTest.
+// EstimatedModuleSizesMatchTheRealComponents once FRO113 rebased onto FRO112's merge.
+TEST_F(ModuleComponentTest, AdsrTempoSyncAndDivParamsAreExcludedFromTheGenericGrid) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ADSRModule vanilla;
+    ModuleComponent vanillaComponent(&vanilla, juce::AudioProcessorGraph::NodeID(1), editor);
+    const int vanillaToggles = countChildrenOfType(vanillaComponent, /*wantToggle*/ true);
+    const int vanillaCombos = countChildrenOfType(vanillaComponent, /*wantToggle*/ false);
+
+    ADSRModuleWithTempoSyncParams withDivs;
+    ModuleComponent withDivsComponent(&withDivs, juce::AudioProcessorGraph::NodeID(2), editor);
+
+    EXPECT_EQ(countChildrenOfType(withDivsComponent, /*wantToggle*/ true), vanillaToggles)
+        << "tempoSync must not add a generic ToggleButton -- the MS|BPM buttons already expose it";
+    EXPECT_EQ(countChildrenOfType(withDivsComponent, /*wantToggle*/ false), vanillaCombos)
+        << "attackDiv/holdDiv/decayDiv/releaseDiv must not add generic ComboBoxes";
+    EXPECT_EQ(vanillaCombos, 0);
+}
+
+TEST_F(ModuleComponentTest, AdsrBpmMsToggleWritesAndSyncsTheRealTempoSyncParam) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ADSRModuleWithTempoSyncParams processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    ASSERT_FALSE(processor.tempoSyncParam->get()) << "tempoSync defaults false, matching MS as the default UI state";
+
+    juce::TextButton *msButton = nullptr, *bpmButton = nullptr;
+    for (auto* child : moduleComponent.getChildren()) {
+        if (auto* btn = dynamic_cast<juce::TextButton*>(child)) {
+            if (btn->getButtonText() == "MS")
+                msButton = btn;
+            else if (btn->getButtonText() == "BPM")
+                bpmButton = btn;
+        }
+    }
+    ASSERT_NE(msButton, nullptr);
+    ASSERT_NE(bpmButton, nullptr);
+
+    bpmButton->setToggleState(true, juce::sendNotificationSync);
+    EXPECT_TRUE(processor.tempoSyncParam->get()) << "clicking BPM must write tempoSync=true";
+
+    msButton->setToggleState(true, juce::sendNotificationSync);
+    EXPECT_FALSE(processor.tempoSyncParam->get()) << "clicking MS must write tempoSync=false";
+
+    // Reverse sync: an external write (automation/undo/preset load) must move the toggle pair.
+    processor.tempoSyncParam->setValueNotifyingHost(1.0f);
+    EXPECT_TRUE(bpmButton->getToggleState());
+    EXPECT_FALSE(msButton->getToggleState());
 }

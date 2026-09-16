@@ -69,6 +69,23 @@ bool shouldSkipGenericFloatSlider(juce::AudioProcessor* module, const juce::Audi
             floatParam.paramID == "releaseCurve");
 }
 
+// True for a bool param createControls()'s generic auto-toggle loop must NOT build a toggle for,
+// beyond the fixed bypassed/muted/dualIO trio: ADSR's tempoSync (FRO113), which the envelope
+// card's own MS|BPM segmented buttons already expose and drive (FRO117).
+bool shouldSkipGenericBoolToggle(juce::AudioProcessor* module, const juce::AudioParameterBool& boolParam) {
+    return getType(module) == ModuleType::ADSR && boolParam.paramID == "tempoSync";
+}
+
+// True for a choice param createControls()'s generic auto-combo loop must NOT build a combo for:
+// ADSR's four note-division params (FRO113's attackDiv/holdDiv/decayDiv/releaseDiv). They have no
+// UI of their own yet (tracked separately, FRO118) but must not leak into the generic per-param
+// grid in the meantime -- each one otherwise renders an extra combo+label row nothing here uses.
+bool shouldSkipGenericChoiceCombo(juce::AudioProcessor* module, const juce::AudioParameterChoice& choiceParam) {
+    return getType(module) == ModuleType::ADSR &&
+           (choiceParam.paramID == "attackDiv" || choiceParam.paramID == "holdDiv" ||
+            choiceParam.paramID == "decayDiv" || choiceParam.paramID == "releaseDiv");
+}
+
 } // namespace
 
 juce::Point<int> ModuleComponent::getMidiPortCenter(bool isOutput) const {
@@ -505,6 +522,61 @@ void ModuleComponent::timerCallback() {
     }
 }
 
+// External MIDI's device + channel combos, extracted out of createControls (FRO117) to keep that
+// function under its own line-count ratchet. Neither combo is ComboBoxParameterAttachment-driven
+// (the device name and channel index are plain module state, not AudioParameters).
+void ModuleComponent::createExternalMidiControls(ExternalMidiModule* extMidi) {
+    auto* deviceCombo = comboBoxes.add(new juce::ComboBox("Device"));
+    deviceCombo->addItem("None", 1);
+    int i = 2;
+    auto devices = juce::MidiInput::getAvailableDevices();
+    for (auto& info : devices) {
+        deviceCombo->addItem(info.name, i++);
+    }
+    deviceCombo->setSelectedId(1, juce::dontSendNotification);
+    comboParams.add(nullptr); // not ComboBoxParameterAttachment-driven — see the header
+
+    deviceCombo->onChange = [extMidi, deviceCombo, devices, this]() {
+        int selectedId = deviceCombo->getSelectedId();
+        if (selectedId > 1) {
+            juce::String deviceName = devices[selectedId - 2].name;
+            owner.getAudioEngine().ensureMidiDeviceOpen(deviceName);
+            extMidi->setMidiDeviceName(deviceName);
+        } else {
+            extMidi->setMidiDeviceName("External MIDI");
+        }
+    };
+
+    addAndMakeVisible(deviceCombo);
+    comboLabels.add(new juce::Label("Device", "Device"));
+    addAndMakeVisible(comboLabels.getLast());
+
+    auto* channelCombo = comboBoxes.add(new juce::ComboBox("Channel"));
+    channelCombo->addItem("All", 1);
+    for (int c = 1; c <= 16; ++c) {
+        channelCombo->addItem("Channel " + juce::String(c), c + 1);
+    }
+    channelCombo->setSelectedId(1, juce::dontSendNotification);
+    comboParams.add(nullptr); // not ComboBoxParameterAttachment-driven — see the header
+
+    channelCombo->onChange = [extMidi, channelCombo]() {
+        int selectedId = channelCombo->getSelectedId();
+        // selectedId 1 -> param 0 (All)
+        // selectedId 2 -> param 1 (Channel 1)
+        // selectedId 17 -> param 16 (Channel 16)
+        auto* param = dynamic_cast<juce::AudioParameterInt*>(findParameterByID(extMidi, "channel"));
+        if (param != nullptr) {
+            // If ID is 1, we set 0 (All).
+            // If ID is 2, we set 1 (Ch1).
+            param->setValueNotifyingHost(param->convertTo0to1(selectedId - 1));
+        }
+    };
+
+    addAndMakeVisible(channelCombo);
+    comboLabels.add(new juce::Label("Channel", "Channel"));
+    addAndMakeVisible(comboLabels.getLast());
+}
+
 void ModuleComponent::createControls() {
     // Auto-UI
     if (auto* midiKeyboard = dynamic_cast<MidiKeyboardModule*>(module)) {
@@ -515,55 +587,7 @@ void ModuleComponent::createControls() {
         keyboardComponent->setWantsKeyboardFocus(true);
         addAndMakeVisible(keyboardComponent.get());
     } else if (auto* extMidi = dynamic_cast<ExternalMidiModule*>(module)) {
-        auto* deviceCombo = comboBoxes.add(new juce::ComboBox("Device"));
-        deviceCombo->addItem("None", 1);
-        int i = 2;
-        auto devices = juce::MidiInput::getAvailableDevices();
-        for (auto& info : devices) {
-            deviceCombo->addItem(info.name, i++);
-        }
-        deviceCombo->setSelectedId(1, juce::dontSendNotification);
-        comboParams.add(nullptr); // not ComboBoxParameterAttachment-driven — see the header
-
-        deviceCombo->onChange = [extMidi, deviceCombo, devices, this]() {
-            int selectedId = deviceCombo->getSelectedId();
-            if (selectedId > 1) {
-                juce::String deviceName = devices[selectedId - 2].name;
-                owner.getAudioEngine().ensureMidiDeviceOpen(deviceName);
-                extMidi->setMidiDeviceName(deviceName);
-            } else {
-                extMidi->setMidiDeviceName("External MIDI");
-            }
-        };
-
-        addAndMakeVisible(deviceCombo);
-        comboLabels.add(new juce::Label("Device", "Device"));
-        addAndMakeVisible(comboLabels.getLast());
-
-        auto* channelCombo = comboBoxes.add(new juce::ComboBox("Channel"));
-        channelCombo->addItem("All", 1);
-        for (int c = 1; c <= 16; ++c) {
-            channelCombo->addItem("Channel " + juce::String(c), c + 1);
-        }
-        channelCombo->setSelectedId(1, juce::dontSendNotification);
-        comboParams.add(nullptr); // not ComboBoxParameterAttachment-driven — see the header
-
-        channelCombo->onChange = [extMidi, channelCombo]() {
-            int selectedId = channelCombo->getSelectedId();
-            // selectedId 1 -> param 0 (All)
-            // selectedId 2 -> param 1 (Channel 1)
-            // selectedId 17 -> param 16 (Channel 16)
-            auto* param = dynamic_cast<juce::AudioParameterInt*>(findParameterByID(extMidi, "channel"));
-            if (param != nullptr) {
-                // If ID is 1, we set 0 (All).
-                // If ID is 2, we set 1 (Ch1).
-                param->setValueNotifyingHost(param->convertTo0to1(selectedId - 1));
-            }
-        };
-
-        addAndMakeVisible(channelCombo);
-        comboLabels.add(new juce::Label("Channel", "Channel"));
-        addAndMakeVisible(comboLabels.getLast());
+        createExternalMidiControls(extMidi);
     } else if (auto* hostedPlugin = dynamic_cast<synth::HostedPluginModule*>(module)) {
         // The only body content a Hosted Plugin card has (bypass/mute/delete already live in the
         // header, and the module exposes no parameters of its own — see the class comment).
@@ -581,6 +605,8 @@ void ModuleComponent::createControls() {
 
         for (auto* param : params) {
             if (auto* choiceParam = dynamic_cast<juce::AudioParameterChoice*>(param)) {
+                if (shouldSkipGenericChoiceCombo(module, *choiceParam))
+                    continue;
                 auto* combo = comboBoxes.add(new juce::ComboBox());
 
                 // Oscillator waveform selector: the exact choice set {"Sine", "Square", "Saw",
@@ -650,6 +676,8 @@ void ModuleComponent::createControls() {
                 addAndMakeVisible(label);
             } else if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param)) {
                 if (boolParam->paramID == "bypassed" || boolParam->paramID == "muted" || boolParam->paramID == "dualIO")
+                    continue;
+                if (shouldSkipGenericBoolToggle(module, *boolParam))
                     continue;
 
                 auto* toggle = toggles.add(new juce::ToggleButton(boolParam->getName(100)));

@@ -402,13 +402,17 @@ Loads an audio file from disk and plays it back one of two ways.
     no new `juce::Timer` — since `CurveEditorComponent::setPlayhead` already no-ops on an
     unchanged value, an idle or collapsed card costs nothing beyond that one guard check. See
     [`layout_visuals_animation.md`](layout_visuals_animation.md) §1.
-  - **BPM | MS toggle**: a segmented control beside the graph's disclosure toggle. MS is fully
-    functional (today's millisecond-based attack/hold/decay/release). BPM is a visual placeholder
-    only — FRO113 (tracked separately) owns a `tempoSync` bool plus one `AudioParameterChoice`
-    note-division param per stage time (`attackDiv`/`holdDiv`/`decayDiv`/`releaseDiv`) and the
-    tempo-following DSP behind them; wiring the BPM button to `tempoSync` is the one seam left
-    once those parameters land — FRO112 deliberately adds no tempo-sync parameter or logic of its
-    own.
+  - **BPM | MS toggle**: a segmented control beside the graph's disclosure toggle, wired to
+    FRO113's `tempoSync` bool param (FRO117) — clicking either button writes `tempoSync` via
+    `setValueNotifyingHost`, and an external write (automation/undo/preset load) syncs the pair
+    back via `parameterValueChanged`, the same reverse-sync shape as the envelope graph itself.
+    FRO113 also added one `AudioParameterChoice` note-division param per stage time
+    (`attackDiv`/`holdDiv`/`decayDiv`/`releaseDiv`, sharing LFO's rateSync division list) and the
+    tempo-following DSP behind them; both `tempoSync` and the four division params are excluded
+    from the generic per-param UI (`shouldSkipGenericBoolToggle`/`shouldSkipGenericChoiceCombo` in
+    `ModuleComponent.cpp`) so they don't leak extra rows onto the card, but the four division
+    params have no user-facing control of their own yet — tracked separately (FRO118) as a real
+    BPM-mode UI design (e.g. swapping each knob for a division picker), not a quick follow-up.
 - **Default instrument-track chain (P9-3i, FRO43)**: "+ Track -> Instrument -> {Oscillator/Wavetable}" auto-wires one ADSR (MIDI-gated, forced non-poly, `sustain` overridden to 0.7) driving a VCA ahead of the rest of the chain — see [mixer.md](mixer.md)'s P9-3i entry for the full wiring and why it's forced non-poly. When the instrument is poly (P9-3j, FRO46), the ADSR is genuinely poly instead — gated by a Poly MIDI node's per-voice Gate CV rather than raw MIDI — see mixer.md's P9-3j entry.
 
 ## Envelope Follower Module
