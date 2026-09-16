@@ -296,8 +296,11 @@ bool commandIsActive(MainComponent& mc, juce::CommandID cmdId) {
 class FocusRegionMainComponentTest : public ::testing::Test {
 protected:
     void SetUp() override {
+        // FRO101: DetachingAPanelDropsItFromMainComponentsRegistryUntilRedocked (below) detaches
+        // the real timeline host against a real MainComponent, which persists "timelineWindowBounds"
+        // into the same real on-disk settings file every other key here already guards.
         guard_.emplace(juce::StringArray{"showWelcomeScreenAtLaunch", "librarySidebarVisible", "timelinePanelVisible",
-                                         "aiPanelVisible"});
+                                         "aiPanelVisible", "timelineWindowBounds"});
         // A known baseline every test in this fixture starts from: welcome screen hidden (out of the
         // way for the Tab-cycle/registration tests), Library open, Toolbar/Canvas always open,
         // Timeline/AI Panel/Mod Matrix closed -- i.e. exactly "toolbar" + "library" + "canvas" open

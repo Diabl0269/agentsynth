@@ -49,6 +49,7 @@ public:
     void closeButtonPressed() override;
     void moved() override;
     void resized() override;
+    void lookAndFeelChanged() override;
     bool keyPressed(const juce::KeyPress& key) override;
 
     /** Fired on the close button -- this window never destroys itself (same contract as
