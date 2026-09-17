@@ -51,6 +51,7 @@ enum class PatchValidationError {
     RemoveModulationEntryInvalid,
     TimelineNotAllowed,
     MacrosNotAllowed,
+    MidiRemoteNotAllowed,
     InternalModuleNotAllowed,
 };
 

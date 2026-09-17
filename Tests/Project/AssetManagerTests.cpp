@@ -562,7 +562,8 @@ TEST_F(AssetManagerAdoptionTest, RecordingsAdoptionOnSave) {
     juce::AudioProcessorGraph graph;
     PatchDocument patchDocument;
     synth::MacroSet macros;
-    const auto saveResult = ProjectBundle::save(bundleDir, graph, doc, patchDocument, macros);
+    synth::MidiRemoteProjectDoc midiRemote;
+    const auto saveResult = ProjectBundle::save(bundleDir, graph, doc, patchDocument, macros, midiRemote);
     ASSERT_TRUE(saveResult.ok) << saveResult.message;
 
     const auto json = juce::JSON::parse(bundleDir.getChildFile(ProjectBundle::kProjectFileName));
@@ -587,7 +588,7 @@ TEST_F(AssetManagerAdoptionTest, RecordingsAdoptionOnSave) {
     EXPECT_EQ(bundleDir.getChildFile("Audio").findChildFiles(juce::File::findFiles, false).size(), 1)
         << "resaving must not create a second copy of the adopted take";
 
-    const auto resaveResult = ProjectBundle::save(bundleDir, graph, doc, patchDocument, macros);
+    const auto resaveResult = ProjectBundle::save(bundleDir, graph, doc, patchDocument, macros, midiRemote);
     ASSERT_TRUE(resaveResult.ok) << resaveResult.message;
     EXPECT_EQ(bundleDir.getChildFile("Audio").findChildFiles(juce::File::findFiles, false).size(), 1);
 }

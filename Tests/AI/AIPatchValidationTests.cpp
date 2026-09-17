@@ -213,6 +213,12 @@ std::vector<Case> makeCases() {
         {PatchValidationError::MacrosNotAllowed, "patch carries a root 'macros' key",
          [] { return juce::JSON::parse(R"({"nodes":[],"connections":[],"macros":[]})"); }},
 
+        {PatchValidationError::MidiRemoteNotAllowed, "patch carries a root 'midiRemote' key",
+         [] {
+             return juce::JSON::parse(
+                 R"({"nodes":[],"connections":[],"midiRemote":{"version":1,"assignments":[],"controllers":[]}})");
+         }},
+
         {PatchValidationError::InternalModuleNotAllowed, "patch names an internal-only module type",
          [] { return juce::JSON::parse(R"({"nodes":[{"id":1,"type":"Attenuverter"}],"connections":[]})"); }},
     };

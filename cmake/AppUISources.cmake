@@ -19,6 +19,8 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponentTrackCreation.cpp
     Source/MainComponent/MainComponentTrackPresets.cpp
     Source/UserSettings.h
+    Source/MidiRemote/ControllerProfileStore.h
+    Source/MidiRemote/ControllerProfileStore.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelStrips.cpp

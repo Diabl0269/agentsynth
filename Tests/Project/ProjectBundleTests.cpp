@@ -104,9 +104,10 @@ TEST_F(ProjectBundleTest, SaveCreatesBundleStructure) {
     buildSampleTimeline(timeline);
     PatchDocument patchDocument;
     synth::MacroSet macros;
+    synth::MidiRemoteProjectDoc midiRemote;
 
     auto dir = bundleDir("Save");
-    auto result = ProjectBundle::save(dir, graph, timeline, patchDocument, macros);
+    auto result = ProjectBundle::save(dir, graph, timeline, patchDocument, macros, midiRemote);
     ASSERT_TRUE(result.ok) << result.message;
 
     EXPECT_TRUE(dir.isDirectory());
@@ -131,9 +132,12 @@ TEST_F(ProjectBundleTest, RoundTripGraphAndTimeline) {
     buildSampleTimeline(originalTimeline);
     PatchDocument originalPatchDoc;
     synth::MacroSet originalMacros;
+    synth::MidiRemoteProjectDoc originalMidiRemote;
 
     auto dir = bundleDir("RoundTrip");
-    ASSERT_TRUE(ProjectBundle::save(dir, originalGraph, originalTimeline, originalPatchDoc, originalMacros).ok);
+    ASSERT_TRUE(
+        ProjectBundle::save(dir, originalGraph, originalTimeline, originalPatchDoc, originalMacros, originalMidiRemote)
+            .ok);
 
     // save() assigns/persists node uuids via graphToJSON as a side effect — capture AFTER save.
     auto originalJson = synth::AIStateMapper::graphToJSON(originalGraph);
@@ -145,7 +149,8 @@ TEST_F(ProjectBundleTest, RoundTripGraphAndTimeline) {
     TimelineDoc freshTimeline;
     PatchDocument freshPatchDoc;
     synth::MacroSet freshMacros;
-    auto result = ProjectBundle::load(dir, freshGraph, freshTimeline, freshPatchDoc, freshMacros);
+    synth::MidiRemoteProjectDoc freshMidiRemote;
+    auto result = ProjectBundle::load(dir, freshGraph, freshTimeline, freshPatchDoc, freshMacros, freshMidiRemote);
     ASSERT_TRUE(result.ok) << result.message;
 
     EXPECT_EQ(freshGraph.getNumNodes(), originalGraph.getNumNodes());
@@ -190,9 +195,10 @@ TEST_F(ProjectBundleTest, SaveAutosaveWritesSidecarWithoutTouchingProjectJson) {
     buildSampleTimeline(timeline);
     PatchDocument patchDocument;
     synth::MacroSet macros;
+    synth::MidiRemoteProjectDoc midiRemote;
 
     auto dir = bundleDir("Autosave");
-    ASSERT_TRUE(ProjectBundle::save(dir, graph, timeline, patchDocument, macros).ok);
+    ASSERT_TRUE(ProjectBundle::save(dir, graph, timeline, patchDocument, macros, midiRemote).ok);
     auto projectFile = dir.getChildFile(ProjectBundle::kProjectFileName);
     const auto projectJsonBefore = projectFile.loadFileAsString();
 
@@ -203,7 +209,8 @@ TEST_F(ProjectBundleTest, SaveAutosaveWritesSidecarWithoutTouchingProjectJson) {
     vca2->properties.set("y", 0);
 
     ASSERT_FALSE(ProjectBundle::hasAutosave(dir));
-    const auto result = ProjectBundle::saveAutosave(dir, graph, timeline, patchDocument, macros, /*maxBackups=*/0);
+    const auto result =
+        ProjectBundle::saveAutosave(dir, graph, timeline, patchDocument, macros, /*maxBackups=*/0, midiRemote);
     ASSERT_TRUE(result.ok) << result.message;
 
     EXPECT_TRUE(ProjectBundle::hasAutosave(dir));
@@ -226,11 +233,12 @@ TEST_F(ProjectBundleTest, LoadAutosaveRoundTripsGraphAndTimelineFromTheSidecarOn
     buildSampleTimeline(originalTimeline);
     PatchDocument originalPatchDoc;
     synth::MacroSet originalMacros;
+    synth::MidiRemoteProjectDoc originalMidiRemote;
 
     auto dir = bundleDir("LoadAutosave");
     dir.createDirectory(); // saveAutosave() requires the bundle directory to already exist.
     ASSERT_TRUE(ProjectBundle::saveAutosave(dir, originalGraph, originalTimeline, originalPatchDoc, originalMacros,
-                                            /*maxBackups=*/0)
+                                            /*maxBackups=*/0, originalMidiRemote)
                     .ok);
     ASSERT_FALSE(dir.getChildFile(ProjectBundle::kProjectFileName).existsAsFile())
         << "saveAutosave must never create project.json";
@@ -242,7 +250,9 @@ TEST_F(ProjectBundleTest, LoadAutosaveRoundTripsGraphAndTimelineFromTheSidecarOn
     TimelineDoc freshTimeline;
     PatchDocument freshPatchDoc;
     synth::MacroSet freshMacros;
-    const auto result = ProjectBundle::loadAutosave(dir, freshGraph, freshTimeline, freshPatchDoc, freshMacros);
+    synth::MidiRemoteProjectDoc freshMidiRemote;
+    const auto result =
+        ProjectBundle::loadAutosave(dir, freshGraph, freshTimeline, freshPatchDoc, freshMacros, freshMidiRemote);
     ASSERT_TRUE(result.ok) << result.message;
 
     EXPECT_EQ(freshGraph.getNumNodes(), originalGraph.getNumNodes());
@@ -256,10 +266,12 @@ TEST_F(ProjectBundleTest, DiscardAutosaveRemovesTheSidecarAndIsANoOpWhenAbsent) 
     TimelineDoc timeline;
     PatchDocument patchDocument;
     synth::MacroSet macros;
+    synth::MidiRemoteProjectDoc midiRemote;
 
     auto dir = bundleDir("Discard");
-    ASSERT_TRUE(ProjectBundle::save(dir, graph, timeline, patchDocument, macros).ok);
-    ASSERT_TRUE(ProjectBundle::saveAutosave(dir, graph, timeline, patchDocument, macros, /*maxBackups=*/0).ok);
+    ASSERT_TRUE(ProjectBundle::save(dir, graph, timeline, patchDocument, macros, midiRemote).ok);
+    ASSERT_TRUE(
+        ProjectBundle::saveAutosave(dir, graph, timeline, patchDocument, macros, /*maxBackups=*/0, midiRemote).ok);
     ASSERT_TRUE(ProjectBundle::hasAutosave(dir));
 
     ProjectBundle::discardAutosave(dir);
@@ -282,6 +294,7 @@ TEST_F(ProjectBundleTest, SaveAutosaveRotatesPreviousSidecarsIntoNumberedBackups
     TimelineDoc timeline;
     PatchDocument patchDocument;
     synth::MacroSet macros;
+    synth::MidiRemoteProjectDoc midiRemote;
     auto dir = bundleDir("Rotate");
     dir.createDirectory();
 
@@ -298,7 +311,8 @@ TEST_F(ProjectBundleTest, SaveAutosaveRotatesPreviousSidecarsIntoNumberedBackups
             extra->properties.set("x", 900 + i);
             extra->properties.set("y", 0);
         }
-        ASSERT_TRUE(ProjectBundle::saveAutosave(dir, graph, timeline, patchDocument, macros, /*maxBackups=*/3).ok);
+        ASSERT_TRUE(
+            ProjectBundle::saveAutosave(dir, graph, timeline, patchDocument, macros, /*maxBackups=*/3, midiRemote).ok);
     }
 
     // Final state: autosave.json = 7 nodes (the last write), autosave-1/2/3 hold the three most
@@ -317,6 +331,7 @@ TEST_F(ProjectBundleTest, MaxBackupsZeroKeepsNoBackupFilesEver) {
     TimelineDoc timeline;
     PatchDocument patchDocument;
     synth::MacroSet macros;
+    synth::MidiRemoteProjectDoc midiRemote;
     auto dir = bundleDir("NoBackups");
     dir.createDirectory();
 
@@ -324,7 +339,8 @@ TEST_F(ProjectBundleTest, MaxBackupsZeroKeepsNoBackupFilesEver) {
         auto extra = graph.addNode(std::make_unique<VCAModule>());
         extra->properties.set("x", 900 + i);
         extra->properties.set("y", 0);
-        ASSERT_TRUE(ProjectBundle::saveAutosave(dir, graph, timeline, patchDocument, macros, /*maxBackups=*/0).ok);
+        ASSERT_TRUE(
+            ProjectBundle::saveAutosave(dir, graph, timeline, patchDocument, macros, /*maxBackups=*/0, midiRemote).ok);
     }
 
     EXPECT_TRUE(dir.getChildFile("autosave.json").existsAsFile());
@@ -338,6 +354,7 @@ TEST_F(ProjectBundleTest, DiscardAutosaveLeavesTheNumberedBackupHistoryUntouched
     TimelineDoc timeline;
     PatchDocument patchDocument;
     synth::MacroSet macros;
+    synth::MidiRemoteProjectDoc midiRemote;
     auto dir = bundleDir("DiscardKeepsBackups");
     dir.createDirectory();
 
@@ -347,7 +364,8 @@ TEST_F(ProjectBundleTest, DiscardAutosaveLeavesTheNumberedBackupHistoryUntouched
             extra->properties.set("x", 900 + i);
             extra->properties.set("y", 0);
         }
-        ASSERT_TRUE(ProjectBundle::saveAutosave(dir, graph, timeline, patchDocument, macros, /*maxBackups=*/2).ok);
+        ASSERT_TRUE(
+            ProjectBundle::saveAutosave(dir, graph, timeline, patchDocument, macros, /*maxBackups=*/2, midiRemote).ok);
     }
     ASSERT_TRUE(dir.getChildFile("autosave-1.json").existsAsFile());
     ASSERT_TRUE(dir.getChildFile("autosave-2.json").existsAsFile());
@@ -403,7 +421,8 @@ TEST_F(ProjectBundleTest, LoadOrderIsAllOrNothing_BadPatch) {
     const auto originalStashJson = juce::JSON::toString(patchDocument.toVar(makeKnownOnlyPatch()));
 
     synth::MacroSet macros;
-    auto result = ProjectBundle::load(dir, graph, timeline, patchDocument, macros);
+    synth::MidiRemoteProjectDoc midiRemote;
+    auto result = ProjectBundle::load(dir, graph, timeline, patchDocument, macros, midiRemote);
 
     EXPECT_FALSE(result.ok);
     EXPECT_TRUE(result.message.contains("patch validation")) << result.message;
@@ -460,8 +479,9 @@ TEST_F(ProjectBundleTest, LoadOrderIsAllOrNothing_BadTimeline) {
 
     PatchDocument patchDocument;
     synth::MacroSet macros;
+    synth::MidiRemoteProjectDoc midiRemote;
 
-    auto result = ProjectBundle::load(dir, graph, timeline, patchDocument, macros);
+    auto result = ProjectBundle::load(dir, graph, timeline, patchDocument, macros, midiRemote);
 
     EXPECT_FALSE(result.ok);
     EXPECT_TRUE(result.message.contains("timeline validation")) << result.message;
@@ -487,12 +507,39 @@ TEST_F(ProjectBundleTest, MissingTimelineKeyLoadsEmptyDoc) {
     buildSampleTimeline(timeline); // non-empty beforehand, to prove load empties it
     PatchDocument patchDocument;
     synth::MacroSet macros;
+    synth::MidiRemoteProjectDoc midiRemote;
 
-    auto result = ProjectBundle::load(dir, graph, timeline, patchDocument, macros);
+    auto result = ProjectBundle::load(dir, graph, timeline, patchDocument, macros, midiRemote);
 
     ASSERT_TRUE(result.ok) << result.message;
     EXPECT_TRUE(timeline.isEmpty());
     EXPECT_EQ(graph.getNumNodes(), sourceGraph.getNumNodes());
+}
+
+TEST_F(ProjectBundleTest, MissingMidiRemoteKeyLoadsEmptyDoc) {
+    auto dir = bundleDir("NoMidiRemote");
+    dir.createDirectory();
+
+    juce::AudioProcessorGraph sourceGraph;
+    buildSampleGraph(sourceGraph);
+    auto patchJson = synth::AIStateMapper::graphToJSON(sourceGraph);
+    ASSERT_FALSE(patchJson.hasProperty("midiRemote"));
+    dir.getChildFile(ProjectBundle::kProjectFileName).replaceWithText(juce::JSON::toString(patchJson));
+
+    juce::AudioProcessorGraph graph;
+    TimelineDoc timeline;
+    PatchDocument patchDocument;
+    synth::MacroSet macros;
+    synth::MidiRemoteProjectDoc midiRemote;
+    midiRemote.assignments.push_back({}); // non-empty beforehand, to prove load empties it
+    ASSERT_FALSE(midiRemote.assignments.empty());
+
+    auto result = ProjectBundle::load(dir, graph, timeline, patchDocument, macros, midiRemote);
+
+    ASSERT_TRUE(result.ok) << result.message;
+    EXPECT_TRUE(midiRemote.assignments.empty());
+    EXPECT_TRUE(midiRemote.controllers.empty());
+    EXPECT_EQ(midiRemote.version, 1);
 }
 
 TEST_F(ProjectBundleTest, UnknownTopLevelKeysSurviveBundleRoundTrip) {
@@ -519,11 +566,12 @@ TEST_F(ProjectBundleTest, UnknownTopLevelKeysSurviveBundleRoundTrip) {
     TimelineDoc timeline;
     PatchDocument patchDocument;
     synth::MacroSet macros;
-    ASSERT_TRUE(ProjectBundle::load(dir, graph, timeline, patchDocument, macros).ok);
+    synth::MidiRemoteProjectDoc midiRemote;
+    ASSERT_TRUE(ProjectBundle::load(dir, graph, timeline, patchDocument, macros, midiRemote).ok);
     ASSERT_FALSE(patchDocument.empty());
 
     auto newDir = bundleDir("UnknownKeysResaved");
-    auto saveResult = ProjectBundle::save(newDir, graph, timeline, patchDocument, macros);
+    auto saveResult = ProjectBundle::save(newDir, graph, timeline, patchDocument, macros, midiRemote);
     ASSERT_TRUE(saveResult.ok) << saveResult.message;
 
     auto resaved = juce::JSON::parse(newDir.getChildFile(ProjectBundle::kProjectFileName));
@@ -534,6 +582,100 @@ TEST_F(ProjectBundleTest, UnknownTopLevelKeysSurviveBundleRoundTrip) {
     // "timeline" is present exactly once (a JSON object cannot carry a duplicate key) and equals
     // the live doc, not whatever the stash carried through.
     EXPECT_EQ(juce::JSON::toString(resaved.getProperty("timeline", {})), juce::JSON::toString(timeline.toVar()));
+}
+
+TEST_F(ProjectBundleTest, UnknownTopLevelKeysSurviveBundleRoundTripMidiRemoteVariant) {
+    // Sibling of UnknownTopLevelKeysSurviveBundleRoundTrip above, pinned on "midiRemote" instead
+    // of "timeline": a resave must carry the LIVE midiRemote doc, never a stashed value, exactly
+    // like "timeline"/"macros" already do.
+    auto dir = bundleDir("UnknownKeysMidiRemote");
+    dir.createDirectory();
+
+    juce::AudioProcessorGraph sourceGraph;
+    buildSampleGraph(sourceGraph);
+    auto patchJson = synth::AIStateMapper::graphToJSON(sourceGraph);
+    auto* rootObj = patchJson.getDynamicObject();
+    ASSERT_NE(rootObj, nullptr);
+
+    synth::MidiRemoteProjectDoc midiRemoteForJson;
+    midiRemoteForJson.controllers.push_back({"profile-1", "Launchkey Mini MK3"});
+    rootObj->setProperty("midiRemote", midiRemoteForJson.toVar());
+
+    dir.getChildFile(ProjectBundle::kProjectFileName).replaceWithText(juce::JSON::toString(patchJson));
+
+    juce::AudioProcessorGraph graph;
+    TimelineDoc timeline;
+    PatchDocument patchDocument;
+    synth::MacroSet macros;
+    synth::MidiRemoteProjectDoc midiRemote;
+    ASSERT_TRUE(ProjectBundle::load(dir, graph, timeline, patchDocument, macros, midiRemote).ok);
+    ASSERT_EQ(midiRemote.controllers.size(), 1u);
+
+    auto newDir = bundleDir("UnknownKeysMidiRemoteResaved");
+    auto saveResult = ProjectBundle::save(newDir, graph, timeline, patchDocument, macros, midiRemote);
+    ASSERT_TRUE(saveResult.ok) << saveResult.message;
+
+    auto resaved = juce::JSON::parse(newDir.getChildFile(ProjectBundle::kProjectFileName));
+    ASSERT_TRUE(resaved.isObject());
+    // "midiRemote" is present exactly once and equals the LIVE doc, not whatever the stash
+    // carried through.
+    EXPECT_EQ(juce::JSON::toString(resaved.getProperty("midiRemote", {})), juce::JSON::toString(midiRemote.toVar()));
+}
+
+TEST_F(ProjectBundleTest, StaleStashedMidiRemoteNeverLeaks) {
+    // Sibling of StaleStashedTimelineNeverLeaks below, pinned on "midiRemote": a PatchDocument
+    // that already stashed a bogus "midiRemote" from an earlier plain-.json load must never leak
+    // into a subsequent save — the live MidiRemoteProjectDoc is always authoritative.
+    PatchDocument patchDocument;
+    juce::DynamicObject::Ptr stashRoot = new juce::DynamicObject();
+    stashRoot->setProperty("nodes", juce::var(juce::Array<juce::var>()));
+    stashRoot->setProperty("connections", juce::var(juce::Array<juce::var>()));
+    juce::DynamicObject::Ptr bogusMidiRemote = new juce::DynamicObject();
+    bogusMidiRemote->setProperty("version", 999);
+    bogusMidiRemote->setProperty("thisIsNotTheRealDoc", true);
+    stashRoot->setProperty("midiRemote", juce::var(bogusMidiRemote.get()));
+    patchDocument.loadFromVar(juce::var(stashRoot.get()));
+    ASSERT_FALSE(patchDocument.empty());
+
+    juce::AudioProcessorGraph graph;
+    buildSampleGraph(graph);
+    TimelineDoc timeline;
+    synth::MacroSet macros;
+    synth::MidiRemoteProjectDoc realMidiRemote;
+    realMidiRemote.controllers.push_back({"profile-1", "Real Controller"});
+
+    auto dir = bundleDir("StaleStashMidiRemote");
+    auto result = ProjectBundle::save(dir, graph, timeline, patchDocument, macros, realMidiRemote);
+    ASSERT_TRUE(result.ok) << result.message;
+
+    auto saved = juce::JSON::parse(dir.getChildFile(ProjectBundle::kProjectFileName));
+    ASSERT_TRUE(saved.isObject());
+    EXPECT_EQ(juce::JSON::toString(saved.getProperty("midiRemote", {})), juce::JSON::toString(realMidiRemote.toVar()));
+    EXPECT_NE(juce::JSON::toString(saved.getProperty("midiRemote", {})),
+              juce::JSON::toString(juce::var(bogusMidiRemote.get())));
+}
+
+TEST_F(ProjectBundleTest, MidiRemoteIsWrittenAfterMacrosInTheSavedJson) {
+    // Key-order proof: "midiRemote" must be written textually AFTER "macros" in the serialised
+    // JSON string — juce::NamedValueSet/DynamicObject preserve insertion order, and this is what
+    // "midiRemote" written LAST OF ALL THREE actually means on disk. Uses a FRESH PatchDocument
+    // (no stashed "midiRemote"/"macros" from an earlier load) — setProperty on an existing key
+    // replaces its VALUE in place without moving its textual POSITION, so this proof only holds
+    // starting from a clean doc, same as it would for "timeline"/"macros" themselves.
+    juce::AudioProcessorGraph graph;
+    buildSampleGraph(graph);
+    TimelineDoc timeline;
+    PatchDocument patchDocument;
+    synth::MacroSet macros;
+    synth::MidiRemoteProjectDoc midiRemote;
+
+    auto dir = bundleDir("KeyOrder");
+    ASSERT_TRUE(ProjectBundle::save(dir, graph, timeline, patchDocument, macros, midiRemote).ok);
+
+    const auto json = dir.getChildFile(ProjectBundle::kProjectFileName).loadFileAsString();
+    ASSERT_TRUE(json.contains("\"macros\""));
+    ASSERT_TRUE(json.contains("\"midiRemote\""));
+    EXPECT_GT(json.indexOf("\"midiRemote\""), json.indexOf("\"macros\""));
 }
 
 TEST_F(ProjectBundleTest, StaleStashedTimelineNeverLeaks) {
@@ -556,7 +698,8 @@ TEST_F(ProjectBundleTest, StaleStashedTimelineNeverLeaks) {
 
     auto dir = bundleDir("StaleStash");
     synth::MacroSet macros;
-    auto result = ProjectBundle::save(dir, graph, realTimeline, patchDocument, macros);
+    synth::MidiRemoteProjectDoc midiRemote;
+    auto result = ProjectBundle::save(dir, graph, realTimeline, patchDocument, macros, midiRemote);
     ASSERT_TRUE(result.ok) << result.message;
 
     auto saved = juce::JSON::parse(dir.getChildFile(ProjectBundle::kProjectFileName));
@@ -596,7 +739,8 @@ TEST_F(ProjectBundleTest, UntrustedGateRejectsHandEditedGarbage) {
     TimelineDoc timeline;
     PatchDocument patchDocument;
     synth::MacroSet macros;
-    auto result = ProjectBundle::load(dir, graph, timeline, patchDocument, macros);
+    synth::MidiRemoteProjectDoc midiRemote;
+    auto result = ProjectBundle::load(dir, graph, timeline, patchDocument, macros, midiRemote);
 
     EXPECT_FALSE(result.ok);
     EXPECT_TRUE(result.message.contains("patch validation")) << result.message;
@@ -611,7 +755,8 @@ TEST_F(ProjectBundleTest, IsBundleDetection) {
     TimelineDoc timeline;
     PatchDocument patchDocument;
     synth::MacroSet macros;
-    ASSERT_TRUE(ProjectBundle::save(properBundle, graph, timeline, patchDocument, macros).ok);
+    synth::MidiRemoteProjectDoc midiRemote;
+    ASSERT_TRUE(ProjectBundle::save(properBundle, graph, timeline, patchDocument, macros, midiRemote).ok);
     EXPECT_TRUE(ProjectBundle::isBundle(properBundle));
 
     // Wrong extension, otherwise identical contents.

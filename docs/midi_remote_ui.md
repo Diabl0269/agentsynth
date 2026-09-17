@@ -256,7 +256,7 @@ when its PR has merged and the docs above describe what shipped.
 
 | # | Item | Depends on | Ticket |
 |---|---|---|---|
-| 1 | **Model + persistence**: `Source/MidiRemote/` types, JSON round-trip, profile file store, `"midiRemote"` project key (stash/carry, refused untrusted, `MidiRemoteNotAllowed`), undo `recordMidiRemoteChange` | — | FRO124 |
+| 1 | **Model + persistence**: `Source/MidiRemote/` types, JSON round-trip, profile file store, `"midiRemote"` project key (stash/carry, refused untrusted, `MidiRemoteNotAllowed`), undo `recordMidiRemoteChange` | — | FRO124 — shipped (PR #410) |
 | 2 | **Transport verbs → command-dispatched actions** (play, stop, play/stop toggle, record, loop, metronome, return to start) | — | FRO125 |
 | 3 | **RemoteEngine**: `RemoteMessageSink` seam in `AudioEngine`, snapshot table, decode, FIFO, drain with gestures + takeover, action invoke, reconcile, Hosted source | 1, 2 | FRO127 |
 | 4 | **MIDI Learn on the module card**: menu block, arm/settle/bind, auto-profile, badge, `registerMidiLearnable` registry covering sliders, toggles, combos, bespoke cards, header buttons | 3 | FRO130 |

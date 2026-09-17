@@ -5,8 +5,9 @@
 #include <juce_data_structures/juce_data_structures.h>
 
 namespace synth {
-class TimelineDoc; // Forward declaration (Source/Timeline/TimelineDoc/TimelineDoc.h)
-class MacroSet;    // Forward declaration (Source/MacroSet.h)
+class TimelineDoc;          // Forward declaration (Source/Timeline/TimelineDoc/TimelineDoc.h)
+class MacroSet;             // Forward declaration (Source/MacroSet.h)
+class MidiRemoteProjectDoc; // Forward declaration (Source/MidiRemote/RemoteModel.h)
 } // namespace synth
 
 /**
@@ -118,6 +119,35 @@ public:
      * @return true if the mutation changed the doc and an undo entry was pushed, false if it was a no-op.
      */
     bool recordTimelineChange(synth::TimelineDoc& doc, const std::function<void()>& mutation);
+
+    /**
+     * @brief Records a project-level MIDI Remote assignment change (create via Learn, edit,
+     *        delete, re-link) as an undoable snapshot, on the SAME shared undo stack as the
+     *        graph's own changes (docs/midi_remote.md §8).
+     *
+     * Unlike recordTimelineChange, this does NOT run a mutation lambda itself — the caller
+     * already has the before/after `juce::var` (typically doc.toVar() taken immediately before
+     * and after its own edit), the same shape MacroSnapshotAction's callers already construct
+     * directly. No-op check: if `beforeJson` and `afterJson` serialise identically, nothing is
+     * pushed and this returns false — a no-op edit must not create an undo step.
+     *
+     * Scope (§8): this is for the PROJECT document only (`synth::MidiRemoteProjectDoc`, i.e. the
+     * `"midiRemote"` assignments). Profile edits (rename, retype, rearrange, templates, delete
+     * controller) are GLOBAL settings and are never undoable, same as keyboard-shortcut rebinds —
+     * never call this for a ControllerProfileStore edit.
+     *
+     * Lifetime note: exactly like TimelineSnapshotAction, the pushed MidiRemoteSnapshotAction
+     * holds a reference to `doc` for as long as it sits on the undo stack — `doc` must outlive
+     * this AppUndoManager, or clearUndoHistory() must run before the doc is destroyed.
+     *
+     * @param doc Reference to the MIDI Remote project document.
+     * @param beforeJson doc.toVar() captured before the edit.
+     * @param afterJson doc.toVar() captured after the edit.
+     * @return true if the two snapshots differ and an undo entry was pushed, false if they were
+     *         identical (no-op).
+     */
+    bool recordMidiRemoteChange(synth::MidiRemoteProjectDoc& doc, const juce::var& beforeJson,
+                                const juce::var& afterJson);
 
     /**
      * @brief Records a mutation that may touch BOTH the graph and the timeline in a single gesture

@@ -6,7 +6,7 @@
 284 Source/AI/AIIntegrationService/AIIntegrationServiceSystemPrompt.cpp::AIIntegrationService::buildSystemPrompt
 409 Source/AI/AIStateMapper/AIStateMapper.cpp::AIStateMapper::applyJSONToGraph
 239 Source/AI/AIStateMapper/AIStateMapperSnapshots.cpp::AIStateMapper::applySnapshotPreservingNodes
-276 Source/AI/AIStateMapper/AIStateMapperValidation.cpp::AIStateMapper::validatePatch
+260 Source/AI/AIStateMapper/AIStateMapperValidation.cpp::AIStateMapper::validatePatch
 213 Source/AudioEngine/AudioEngineModRouting.cpp::AudioEngine::getModulationRoutings
 251 Source/Modules/OscillatorModule.h::processPolyMode
 380 Source/PresetManager.cpp::PresetManager::getPresetJSON

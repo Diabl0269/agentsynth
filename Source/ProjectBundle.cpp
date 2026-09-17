@@ -9,6 +9,7 @@ namespace synth {
 namespace {
 constexpr const char* kTimelineKey = "timeline";
 constexpr const char* kMacrosKey = "macros";
+constexpr const char* kMidiRemoteKey = "midiRemote";
 } // namespace
 
 bool ProjectBundle::isBundle(const juce::File& dir) {
@@ -20,7 +21,8 @@ bool ProjectBundle::isBundle(const juce::File& dir) {
 }
 
 juce::var ProjectBundle::buildProjectJson(juce::AudioProcessorGraph& graph, const TimelineDoc& timeline,
-                                          PatchDocument& patchDocument, const MacroSet& macros) {
+                                          PatchDocument& patchDocument, const MacroSet& macros,
+                                          const MidiRemoteProjectDoc& midiRemote) {
     auto json = AIStateMapper::graphToJSON(graph);
     // Re-merge whatever unknown top-level keys were stashed on this bundle's last load — mirrors
     // GraphEditor::savePreset. A stale "timeline" among them (e.g. this document started life as a
@@ -30,17 +32,20 @@ juce::var ProjectBundle::buildProjectJson(juce::AudioProcessorGraph& graph, cons
 
     auto* rootObj = json.getDynamicObject();
     if (rootObj != nullptr) {
-        // Set LAST so a fresh timeline/macros always wins over a stashed one.
+        // Set LAST so a fresh timeline/macros/midiRemote always wins over a stashed one.
+        // "midiRemote" is set LAST OF ALL THREE (write-last is load-bearing — see the class
+        // comment's key-order proof).
         rootObj->setProperty(kTimelineKey, timeline.toVar());
         rootObj->setProperty(kMacrosKey, macros.toVar());
+        rootObj->setProperty(kMidiRemoteKey, midiRemote.toVar());
     }
 
     return json;
 }
 
 ProjectLoadResult ProjectBundle::save(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
-                                      const TimelineDoc& timeline, PatchDocument& patchDocument,
-                                      const MacroSet& macros) {
+                                      const TimelineDoc& timeline, PatchDocument& patchDocument, const MacroSet& macros,
+                                      const MidiRemoteProjectDoc& midiRemote) {
     if (!bundleDir.exists() && !bundleDir.createDirectory())
         return {false, "io: could not create bundle directory \"" + bundleDir.getFullPathName() + "\"."};
 
@@ -52,7 +57,7 @@ ProjectLoadResult ProjectBundle::save(const juce::File& bundleDir, juce::AudioPr
     if (!peaksDir.exists() && !peaksDir.createDirectory())
         return {false, "io: could not create \"" + peaksDir.getFullPathName() + "\"."};
 
-    auto json = buildProjectJson(graph, timeline, patchDocument, macros);
+    auto json = buildProjectJson(graph, timeline, patchDocument, macros, midiRemote);
     if (json.getDynamicObject() == nullptr)
         return {false, "io: graphToJSON did not produce a JSON object."};
 
@@ -91,7 +96,8 @@ void ProjectBundle::rotateAutosaveBackups(const juce::File& bundleDir, int maxBa
 
 ProjectLoadResult ProjectBundle::saveAutosave(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
                                               const TimelineDoc& timeline, PatchDocument& patchDocument,
-                                              const MacroSet& macros, int maxBackups) {
+                                              const MacroSet& macros, int maxBackups,
+                                              const MidiRemoteProjectDoc& midiRemote) {
     // No Audio/Peaks directory creation, and no touching project.json — an autosave is a sidecar
     // only. bundleDir itself must already exist (a project with no bundle yet has nowhere to put
     // the sidecar; MainComponent's autosave gate requires ProjectBundle::isBundle(currentBundleDir_)
@@ -99,7 +105,7 @@ ProjectLoadResult ProjectBundle::saveAutosave(const juce::File& bundleDir, juce:
     if (!bundleDir.isDirectory())
         return {false, "io: \"" + bundleDir.getFullPathName() + "\" is not a bundle directory."};
 
-    auto json = buildProjectJson(graph, timeline, patchDocument, macros);
+    auto json = buildProjectJson(graph, timeline, patchDocument, macros, midiRemote);
     if (json.getDynamicObject() == nullptr)
         return {false, "io: graphToJSON did not produce a JSON object."};
 
@@ -118,8 +124,9 @@ bool ProjectBundle::hasAutosave(const juce::File& bundleDir) {
 }
 
 ProjectLoadResult ProjectBundle::loadAutosave(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
-                                              TimelineDoc& timeline, PatchDocument& patchDocument, MacroSet& macros) {
-    return loadFromFile(bundleDir.getChildFile(kAutosaveFileName), graph, timeline, patchDocument, macros);
+                                              TimelineDoc& timeline, PatchDocument& patchDocument, MacroSet& macros,
+                                              MidiRemoteProjectDoc& midiRemote) {
+    return loadFromFile(bundleDir.getChildFile(kAutosaveFileName), graph, timeline, patchDocument, macros, midiRemote);
 }
 
 void ProjectBundle::discardAutosave(const juce::File& bundleDir) {
@@ -129,12 +136,14 @@ void ProjectBundle::discardAutosave(const juce::File& bundleDir) {
 }
 
 ProjectLoadResult ProjectBundle::load(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
-                                      TimelineDoc& timeline, PatchDocument& patchDocument, MacroSet& macros) {
-    return loadFromFile(bundleDir.getChildFile(kProjectFileName), graph, timeline, patchDocument, macros);
+                                      TimelineDoc& timeline, PatchDocument& patchDocument, MacroSet& macros,
+                                      MidiRemoteProjectDoc& midiRemote) {
+    return loadFromFile(bundleDir.getChildFile(kProjectFileName), graph, timeline, patchDocument, macros, midiRemote);
 }
 
 ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juce::AudioProcessorGraph& graph,
-                                              TimelineDoc& timeline, PatchDocument& patchDocument, MacroSet& macros) {
+                                              TimelineDoc& timeline, PatchDocument& patchDocument, MacroSet& macros,
+                                              MidiRemoteProjectDoc& midiRemote) {
     if (!projectFile.existsAsFile())
         return {false, "io: \"" + projectFile.getFullPathName() + "\" does not exist."};
 
@@ -165,7 +174,17 @@ ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juc
         detachedMacrosVar = rootObj->getProperty(kMacrosKey);
         rootObj->removeProperty(kMacrosKey);
     }
-    // From here on `json`/`rootObj` is "the patch" — timeline- and macros-stripped.
+
+    // "midiRemote" (FRO124) gets the identical treatment, for the identical reason: validatePatch
+    // refuses any patch carrying it, and a .agsproj's "midiRemote" is this format's own dialect,
+    // not provider output (docs/midi_remote.md §7).
+    const bool hasMidiRemoteKey = rootObj->hasProperty(kMidiRemoteKey);
+    juce::var detachedMidiRemoteVar;
+    if (hasMidiRemoteKey) {
+        detachedMidiRemoteVar = rootObj->getProperty(kMidiRemoteKey);
+        rootObj->removeProperty(kMidiRemoteKey);
+    }
+    // From here on `json`/`rootObj` is "the patch" — timeline-, macros- and midiRemote-stripped.
 
     // Step 1: the untrusted gate. project.json is a file on disk, hand-editable exactly like a
     // preset or a snippet — a malformed patch is rejected whole, never partially applied.
@@ -190,11 +209,20 @@ ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juc
     if (hasMacrosKey && !localMacros.fromVar(detachedMacrosVar))
         return {false, "macros validation failed: malformed \"macros\" in \"" + projectFile.getFullPathName() + "\"."};
 
-    // Both validations passed — only now does anything mutate.
+    // Step 2c: validate "midiRemote" into a LOCAL MidiRemoteProjectDoc, same all-or-nothing rule.
+    // Deliberately NO reconcile-against-graph-nodes pass here — that is RemoteEngine's runtime
+    // job (a later ticket), not this load path's.
+    MidiRemoteProjectDoc localMidiRemote;
+    if (hasMidiRemoteKey && !localMidiRemote.fromVar(detachedMidiRemoteVar))
+        return {false,
+                "midiRemote validation failed: malformed \"midiRemote\" in \"" + projectFile.getFullPathName() + "\"."};
+
+    // All validations passed — only now does anything mutate.
     if (!AIStateMapper::applyJSONToGraph(json, graph, /*clearExisting=*/true, /*trusted=*/true))
         return {false, "io: applyJSONToGraph rejected a patch that had already passed validation."};
 
-    // The timeline- and macros-stripped root, so neither key is ever double-stored in the stash.
+    // The timeline-, macros- and midiRemote-stripped root, so none of the three keys is ever
+    // double-stored in the stash.
     patchDocument.loadFromVar(json);
 
     // Move the pre-validated timeline state into the live doc. fromVar is all-or-nothing and this
@@ -206,6 +234,10 @@ ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juc
 
     // Same move for macros — `localMacros` was already proven valid above, so this cannot fail.
     macros = hasMacrosKey ? std::move(localMacros) : MacroSet();
+
+    // Same move for midiRemote — `localMidiRemote` was already proven valid above, so this
+    // cannot fail. No reconcile pass follows (see the step-2c comment above).
+    midiRemote = hasMidiRemoteKey ? std::move(localMidiRemote) : MidiRemoteProjectDoc();
 
     // A track's bindingUuid or a lane's nodeUuid that no longer resolves to any live node's
     // "uuid" is retained and flagged `orphaned`, never deleted.
