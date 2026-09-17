@@ -353,6 +353,27 @@ Loads an audio file from disk and plays it back one of two ways.
   so an in-flight decay or a held note retargets smoothly instead of stepping. It is the one
   parameter that is a *level*, not a stage time; attack/hold/decay/release are deliberately left
   unsmoothed — `EnvelopeGenerator` turns a time change mid-ramp into a slope change on its own.
+- **Tempo sync (FRO113, BPM | MS toggle)**: `tempoSync` (bool, default false/MS mode) is REAL
+  sync, not a display-only snap — each timed stage keeps its own note-division choice parameter
+  (`attackDiv`/`holdDiv`/`decayDiv`/`releaseDiv`, sharing one six-entry division list, "1/1"
+  down to "1/32", the same entries and order as [LFO](#lfo-module)'s `rateSync`) and the
+  effective stage time is recomputed from that division and the current tempo **every block**,
+  so it follows a live tempo change rather than snapping once. The ms parameters
+  (`attack`/`hold`/`decay`/`release`) are untouched and stay in sole control whenever `tempoSync`
+  is off; both sets of parameters always exist and round-trip in every patch, so toggling the
+  mode never loses the other mode's values. Tempo comes from `getPlayHead()->getPosition()`
+  (falling back to 120 BPM with no playhead, mirroring LFOModule's own sync mode) — read at the
+  same per-block cadence as LFO's rate, not the Sequencer's per-sample beat-locked stepping,
+  since a stage's duration only needs "how long in seconds right now", not a beat-grid position.
+  Switching `tempoSync` mid-note is click-safe for the same reason a `attack`/`decay`/`release`
+  automation move already was: `EnvelopeGenerator` turns any stage-time change mid-ramp into a
+  slope change, never a level jump, regardless of which parameter set produced the new time.
+  Division-derived defaults are the closest available division to each ms default at 120 BPM —
+  `decayDiv`'s "1/2" default lands on exactly 1.0 s (the ms `decay` default) at 120 BPM;
+  `attackDiv`/`holdDiv`/`releaseDiv` default to the fastest division ("1/32", 62.5 ms at 120 BPM)
+  since nothing in the shared six-entry list gets closer to their sub-20-ms ms defaults — an
+  accepted resolution tradeoff of reusing LFO's division list rather than a reason to invent a
+  finer one. See `Source/Modules/Envelope/EnvelopeTempoSync.h` for the division table/conversion.
 - **UI playhead**: `getPlayheadStage()` / `getPlayheadProgress()` / `getPlayheadLevel()` expose
   the stage/progress/level of the most recently (re)triggered voice, written lock-free
   (`std::atomic`, relaxed) once per block. Consumed by the envelope graph's playhead marker (see
@@ -402,13 +423,17 @@ Loads an audio file from disk and plays it back one of two ways.
     no new `juce::Timer` — since `CurveEditorComponent::setPlayhead` already no-ops on an
     unchanged value, an idle or collapsed card costs nothing beyond that one guard check. See
     [`layout_visuals_animation.md`](layout_visuals_animation.md) §1.
-  - **BPM | MS toggle**: a segmented control beside the graph's disclosure toggle. MS is fully
-    functional (today's millisecond-based attack/hold/decay/release). BPM is a visual placeholder
-    only — FRO113 (tracked separately) owns a `tempoSync` bool plus one `AudioParameterChoice`
-    note-division param per stage time (`attackDiv`/`holdDiv`/`decayDiv`/`releaseDiv`) and the
-    tempo-following DSP behind them; wiring the BPM button to `tempoSync` is the one seam left
-    once those parameters land — FRO112 deliberately adds no tempo-sync parameter or logic of its
-    own.
+  - **BPM | MS toggle**: a segmented control beside the graph's disclosure toggle, wired to
+    FRO113's `tempoSync` bool param (FRO117) — clicking either button writes `tempoSync` via
+    `setValueNotifyingHost`, and an external write (automation/undo/preset load) syncs the pair
+    back via `parameterValueChanged`, the same reverse-sync shape as the envelope graph itself.
+    FRO113 also added one `AudioParameterChoice` note-division param per stage time
+    (`attackDiv`/`holdDiv`/`decayDiv`/`releaseDiv`, sharing LFO's rateSync division list) and the
+    tempo-following DSP behind them; both `tempoSync` and the four division params are excluded
+    from the generic per-param UI (`shouldSkipGenericBoolToggle`/`shouldSkipGenericChoiceCombo` in
+    `ModuleComponent.cpp`) so they don't leak extra rows onto the card, but the four division
+    params have no user-facing control of their own yet — tracked separately (FRO118) as a real
+    BPM-mode UI design (e.g. swapping each knob for a division picker), not a quick follow-up.
 - **Default instrument-track chain (P9-3i, FRO43)**: "+ Track -> Instrument -> {Oscillator/Wavetable}" auto-wires one ADSR (MIDI-gated, forced non-poly, `sustain` overridden to 0.7) driving a VCA ahead of the rest of the chain — see [mixer.md](mixer.md)'s P9-3i entry for the full wiring and why it's forced non-poly. When the instrument is poly (P9-3j, FRO46), the ADSR is genuinely poly instead — gated by a Poly MIDI node's per-voice Gate CV rather than raw MIDI — see mixer.md's P9-3j entry.
 
 ## Envelope Follower Module

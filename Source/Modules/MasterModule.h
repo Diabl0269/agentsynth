@@ -1,7 +1,9 @@
 #pragma once
 
 #include "../Transport/TransportService.h"
+#include "Mixer/PeakMeterLatch.h"
 #include "ModuleBase.h"
+#include <array>
 #include <atomic>
 #include <juce_audio_basics/juce_audio_basics.h>
 
@@ -61,8 +63,8 @@ public:
         juce::ignoreUnused(samplesPerBlock);
         smoothedGain_.reset(sampleRate, kSmoothingSeconds);
         smoothedGain_.setCurrentAndTargetValue(targetGain());
-        meterPeakL_.store(0.0f, std::memory_order_relaxed);
-        meterPeakR_.store(0.0f, std::memory_order_relaxed);
+        meterLatches_[0].reset();
+        meterLatches_[1].reset();
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
@@ -123,10 +125,10 @@ public:
     LogicalPort mapInputChannel(int rawChannel) const override { return audioJack(rawChannel, kNumInputs); }
     LogicalPort mapOutputChannel(int rawChannel) const override { return audioJack(rawChannel, kNumOutputs); }
 
-    /** The last processed block's absolute output peak for one leg (0 = Left, 1 = Right). Plain
-     *  per-block store; see ChannelStripModule::getMeterPeak. */
-    float getMeterPeak(int leg) const noexcept {
-        return (leg == 1 ? meterPeakR_ : meterPeakL_).load(std::memory_order_relaxed);
+    /** FRO146: the peak latched since `reader`'s own last call, for one leg (0 = Left, 1 = Right).
+     *  See ChannelStripModule::takeMeterPeak / Source/Mixer/PeakMeterLatch.h. */
+    float takeMeterPeak(synth::MeterReader reader, int leg) noexcept {
+        return meterLatches_[leg == 1 ? 1 : 0].takePeak(reader);
     }
 
 private:
@@ -158,14 +160,13 @@ private:
     }
 
     void storeMeter(const juce::AudioBuffer<float>& buffer, int numSamples) noexcept {
-        meterPeakL_.store(buffer.getMagnitude(kMixLeft, 0, numSamples), std::memory_order_relaxed);
-        meterPeakR_.store(buffer.getMagnitude(kMixRight, 0, numSamples), std::memory_order_relaxed);
+        meterLatches_[0].storeBlockPeak(buffer.getMagnitude(kMixLeft, 0, numSamples));
+        meterLatches_[1].storeBlockPeak(buffer.getMagnitude(kMixRight, 0, numSamples));
     }
 
     juce::AudioParameterFloat* gainParam_ = nullptr;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedGain_{1.0f};
-    std::atomic<float> meterPeakL_{0.0f};
-    std::atomic<float> meterPeakR_{0.0f};
+    std::array<synth::PeakMeterLatch, 2> meterLatches_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MasterModule)
 };

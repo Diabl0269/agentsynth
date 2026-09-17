@@ -6,6 +6,7 @@
 #include "MainComponent.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"
+#include "UI/Mixer/MeterColourStops.h"
 #include <cmath>
 
 namespace {
@@ -130,6 +131,24 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
         // the same "re-read on notify" treatment as the two calls above. No startup call needed:
         // TimelinePanelComponent::setApplicationProperties already does the initial load.
         timelinePanel.reloadPianoRollAppearancePrefs();
+
+        // FRO147: meter colours live in the same properties file, and AppearanceSettingsTab has no
+        // direct pointer to reach a meter painter (unlike cable colours, which push straight into
+        // GraphEditor) — SettingsWindow is its own juce::DialogWindow, so a getLookAndFeel() call
+        // from inside the tab is not guaranteed to resolve back to THIS AppLookAndFeel instance,
+        // especially in the plugin build. Re-reading here on every settings write, same idiom as
+        // the two calls above, reaches the one shared AppLookAndFeel unconditionally instead.
+        // Repainting mixerDock.getMixerPanel()/timelinePanel directly (not via the component tree)
+        // works whether each is currently docked or reparented into its own DetachedPanelWindow —
+        // both are stable MainComponent-owned objects; Component::repaint() resolves the correct
+        // top-level peer to invalidate wherever the object currently lives, not where it was
+        // constructed. A drag inside the editor writes (no forced disk flush) on every frame and
+        // only calls saveIfNeeded() at a gesture's commit point (see MeterColourStops.h), so this
+        // branch is expected to fire at drag-frame rate without hammering disk.
+        lookAndFeel->setMeterColourStopsOverride(
+            synth::ui::loadMeterColourStopsOverride(*appProperties.getUserSettings()));
+        mixerDock.getMixerPanel().repaint();
+        timelinePanel.repaint();
         return;
     }
 
@@ -291,10 +310,16 @@ void MainComponent::timerCallback() {
     }
 
     // FRO11 (P9-5): the mixer's meters, on the SAME existing 10 Hz tick -- no new timer, nothing
-    // at all while the Mixer tab isn't visible, exactly the Timeline panel's own precedent just
-    // above (docs/layout_visuals_animation.md §2: "rides MainComponent's existing 10 Hz tick, only
-    // while the panel is visible"; isVisible(), not isShowing() -- see that block's own comment).
-    if (mixerDock.isMixerTabActive() && mixerDock.isVisible())
+    // at all while the mixer isn't showing ANYWHERE, exactly the Timeline panel's own precedent
+    // just above (docs/layout_visuals_animation.md §2: "rides MainComponent's existing 10 Hz tick,
+    // only while the panel is visible"; isVisible(), not isShowing() -- see that block's own
+    // comment). FRO146 follow-up: "showing" now means docked-and-active (isMixerShowing()'s own
+    // check, unchanged) OR detached into its own window (also isMixerShowing() -- Window placement
+    // detaches the same host) OR the "Own panel" placement's own strip
+    // (mixerPlacement_.isOwnPanelShowing()) -- a detached/own-panel mixer previously never ticked
+    // at all, even fully on screen, because the OLD check only ever looked at this DOCKED
+    // component's own tab/visibility state.
+    if (mixerDock.isMixerShowing() || mixerPlacement_.isOwnPanelShowing())
         mixerDock.refreshMeters();
 
     // Status bar polls at 5 Hz (every 2nd tick of the 10 Hz timer). update() is gated — it

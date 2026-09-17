@@ -151,7 +151,8 @@ TEST(MixerSoloTest, NonSoloedStripIsSilentWhileTheGateIsActiveAndASoloedOnePasse
     auto otherBuffer = stripInput(0.5f, 0.5f);
     EXPECT_EQ(processOnce(other, otherBuffer, 0), 0.0f);
     EXPECT_EQ(otherBuffer.getSample(kRight, 0), 0.0f);
-    EXPECT_EQ(other.getMeterPeak(0), 0.0f) << "the meter shows what the strip actually outputs";
+    EXPECT_EQ(other.takeMeterPeak(synth::MeterReader::Mixer, 0), 0.0f)
+        << "the meter shows what the strip actually outputs";
 
     ChannelStripModule soloed;
     soloed.setSoloed(true);

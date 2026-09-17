@@ -1,19 +1,25 @@
 #pragma once
 
+#include "MixerMeterBallistics.h"
+#include <array>
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 
-// MixerMeter.h -- FRO11 (P9-5, docs/mixer.md §5.10): a column's peak meter. Reads
-// ChannelStripModule/MasterModule::getMeterPeak via `peakProvider`, painted with the reserved
-// Theme::Colors::meterFill token (its first consumer -- see docs/theming.md).
+// MixerMeter.h -- FRO146 (docs/mixer.md meters section): a column's stereo peak meter, Cubase-
+// MixConsole style -- two bars (L/R) on a -60..+3 dB scale (dB-linear position, see
+// MixerMeterScale.h), tick marks, a peak-hold line per bar, and a colour that steps through four
+// zones by level (MeterColourStops.h). Reads ChannelStripModule/MasterModule::takeMeterPeak via
+// `peakProvider` (the caller supplies its own MeterReader -- see PeakMeterLatch.h -- so this class
+// never needs to know which reader it is).
 //
 // Driven by MixerPanelComponent's refresh(), itself polled from MainComponent's existing 10 Hz
 // timer while the mixer tab is showing (docs/layout_visuals_animation.md §2's precedent for the
 // Timeline panel's own tick-riding transport poll) -- NOT a new AnimationDriver/timer of its own.
-// refresh() applies simple peak-hold-with-decay ballistics and repaints only past a coarse
-// quantization step, same gated-repaint shape ChannelChipComponent::setMeterLevel() already uses
-// for the track header's channel chip.
+// refresh(elapsedSeconds) advances each bar's ballistics by the caller-measured elapsed time (so
+// they stay rate-independent of the poll's actual, tab-visibility-gated cadence) and repaints only
+// once the drawn state has moved past a coarse threshold -- the same gated-repaint shape
+// ChannelChipComponent::setMeterLevel() already uses for the track header's channel chip.
 
 namespace synth::ui {
 
@@ -21,42 +27,31 @@ class MixerMeter : public juce::Component {
 public:
     MixerMeter() = default;
 
-    /** Displayed-level delta below which a tick is dropped without repainting -- the meter is a
-     *  handful of px tall, so anything finer is invisible. */
-    static constexpr float kRepaintThreshold = 0.01f;
+    /** Drawn-dB delta below which a tick's ballistics update is not worth a repaint -- the bars
+     *  are a handful of px tall, so anything finer is invisible. */
+    static constexpr float kRepaintThresholdDb = 0.2f;
 
-    /** Per-tick multiplicative decay applied to the held peak before the new one is taken (a
-     *  simple peak-hold, not a true VU ballistic curve -- adequate at the shared 10 Hz poll rate,
-     *  same class of approximation the codebase's other coarse-tick meters already use). */
-    static constexpr float kDecayPerTick = 0.85f;
-
-    /** `leg`: 0 = Left, 1 = Right, matching ChannelStripModule/MasterModule::getMeterPeak. Left
-     *  null (the default) for a meter with nothing to read yet (an orphan column mid-teardown). */
+    /** `leg`: 0 = Left, 1 = Right -- the caller has already resolved its own MeterReader (see
+     *  PeakMeterLatch.h) before this is called; MixerMeter itself never reads a module directly. */
     std::function<float(int leg)> peakProvider;
 
-    /** One tick: reads both legs, applies decay, and repaints only past kRepaintThreshold. */
-    void refresh() {
-        const float rawL = peakProvider ? juce::jlimit(0.0f, 1.0f, peakProvider(0)) : 0.0f;
-        const float rawR = peakProvider ? juce::jlimit(0.0f, 1.0f, peakProvider(1)) : 0.0f;
-        const float raw = juce::jmax(rawL, rawR);
-        const float held = juce::jmax(raw, displayedLevel_ * kDecayPerTick);
-        const bool crossedToSilence = held <= 0.0f && displayedLevel_ > 0.0f;
-        if (!crossedToSilence && std::abs(held - displayedLevel_) < kRepaintThreshold)
-            return;
-        displayedLevel_ = held;
-        repaint();
-    }
+    /** One tick: reads both legs, advances each bar's ballistics by `elapsedSeconds`, and repaints
+     *  only past kRepaintThresholdDb. */
+    void refresh(float elapsedSeconds);
 
-    float getDisplayedLevelForTest() const noexcept { return displayedLevel_; }
+    float getDisplayedDbForTest(int leg) const noexcept { return ballistics_[legIndex(leg)].displayedDb; }
+    float getPeakHoldDbForTest(int leg) const noexcept { return ballistics_[legIndex(leg)].peakHoldDb; }
 
     void paint(juce::Graphics& g) override;
 
-    /** FRO18: a read-only staticText handler reporting the current displayed level (0..1) as a
-     *  percentage -- the meter has nothing for VoiceOver to act on, only to read. */
+    /** FRO146: a read-only staticText handler reporting the current displayed level in dB (the
+     *  louder of the two bars), not a percentage -- percent meant nothing on a dB scale. */
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
 private:
-    float displayedLevel_ = 0.0f;
+    static int legIndex(int leg) noexcept { return leg == 1 ? 1 : 0; }
+
+    std::array<MeterBallisticsState, 2> ballistics_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerMeter)
 };

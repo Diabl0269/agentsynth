@@ -3,6 +3,8 @@
 #include "MixerColumnHeader.h"
 #include "MixerFader.h"
 #include "MixerMeter.h"
+#include "MixerMeterReadout.h"
+#include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -27,7 +29,15 @@ public:
     void unbindFromGraph();
 
     /** One 10 Hz tick, same driving chain as MixerColumnComponent::refreshMeter(). */
-    void refreshMeter();
+    void refreshMeter(float elapsedSeconds);
+
+    MixerMeter& getMeterForTest() noexcept { return meter_; }
+    MixerMeterReadout& getMeterReadoutForTest() noexcept { return meterReadout_; }
+    void resetMeterReadout() { meterReadout_.reset(); }
+
+    /** FRO146: sibling of MixerColumnComponent::onResetAllMetersRequested -- fires on an
+     *  Option/Alt-click of Master's own readout. */
+    std::function<void()> onResetAllMetersRequested;
 
     /** FRO18: toggles Master's mute through the same undo bracket the M button's onClick already
      *  used -- MixerPanelComponent's keyPressed calls this directly, same seam as
@@ -59,6 +69,7 @@ private:
     MixerColumnHeader header_;
     MixerFader fader_;
     MixerMeter meter_;
+    MixerMeterReadout meterReadout_;
     juce::TextButton muteButton_{"M"};
     bool keyboardFocused_ = false;
 

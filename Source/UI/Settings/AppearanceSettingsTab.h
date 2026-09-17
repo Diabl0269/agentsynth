@@ -1,11 +1,14 @@
 #pragma once
 
 #include "UI/Graph/CableColour.h"
+#include "UI/Mixer/MeterColourStops.h"
 #include "UI/PianoRoll/NoteColour.h"
+#include "UI/Settings/MeterColourStopsEditor.h"
 #include "UI/Theme/ThemeManager.h"
 #include <cmath>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <optional>
 #include <vector>
 class GraphEditor; // forward declaration for AppearanceSettingsTab
 
@@ -79,6 +82,17 @@ public:
     void setNoteSwatchColour(int pitchClass, juce::Colour colour);
     void resetNoteSwatch(int pitchClass);
     void resetAllNoteColours();
+
+    // ---- Meter colours (FRO147, "Preferences > Metering > Appearance" equivalent) ----
+    // The actual scale/handles/drag-drop/keyboard editor lives in its own component
+    // (MeterColourStopsEditor) so this file stays under the repo's 1,000-line cap -- this tab
+    // only owns persistence + the live-apply push (see MeterColourStopsEditor.h's own comment on
+    // why that push goes through MainComponent, not a direct pointer from here).
+    bool hasMeterColourStopsOverrideForTest() const noexcept { return meterColourStopsOverride.has_value(); }
+    synth::ui::MeterColourStopsEditor& getMeterColourStopsEditorForTest() { return *meterColourStopsEditor; }
+    juce::Rectangle<int> getMeterColoursTitleBoundsForTest() const { return meterColoursTitleLabel.getBounds(); }
+    juce::Rectangle<int> getResetMeterColoursButtonBoundsForTest() const { return resetMeterColoursButton.getBounds(); }
+    juce::Rectangle<int> getRemoveMeterStopButtonBoundsForTest() const { return removeMeterStopButton.getBounds(); }
 
     // ---- Testing hooks: real-layout regression coverage (bug: "Piano roll notes" invisible in
     // the actual Settings window) ----
@@ -226,6 +240,27 @@ private:
 
     /** Opens a ColourPickerPopup (with favourites) for pitch class `pitchClass`. */
     void openNoteColourPicker(int pitchClass, juce::Rectangle<int> screenArea);
+
+    // ---- Meter colours (FRO147) ----
+    juce::Label meterColoursTitleLabel;
+    std::unique_ptr<synth::ui::MeterColourStopsEditor> meterColourStopsEditor;
+    juce::TextButton removeMeterStopButton{"Remove"};
+    juce::TextButton resetMeterColoursButton{"Reset to Theme"};
+
+    // nullopt = no pinned override, meters follow the active theme -- the in-memory mirror of
+    // whether "meterColourStops" is present in appProperties (see MeterColourStops.h).
+    std::optional<synth::ui::MeterColourStops> meterColourStopsOverride;
+
+    /** MeterColourStopsEditor::onChanged -- pins an override (any edit means "no longer follow
+     *  the theme"), persists it, and returns (see the header's own comment for why the live push
+     *  to AppLookAndFeel/the mixer happens elsewhere). */
+    void applyMeterColourStopsChange(const synth::ui::MeterColourStops& stops, bool committed);
+    /** MeterColourStopsEditor::onColourPickerRequested -- opens a ColourPickerPopup and routes its
+     *  preview/commit back into the editor's setStopColour(). */
+    void openMeterColourStopPicker(int index, juce::Rectangle<int> screenArea, juce::Colour current);
+    /** "Reset to Theme": clears the override, removes the persisted key, and reloads the editor
+     *  from the active theme's own four stops. */
+    void resetMeterColoursToTheme();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AppearanceSettingsTab)
 };

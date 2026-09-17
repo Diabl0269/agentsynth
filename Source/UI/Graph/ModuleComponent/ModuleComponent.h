@@ -18,7 +18,8 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
 
-class GraphEditor; // Forward declaration
+class GraphEditor;        // Forward declaration
+class ExternalMidiModule; // Forward declaration — see Modules/ExternalMidiModule.h
 
 namespace synth::ui {
 class ZoomFrozenCachedImage; // Forward declaration — see ZoomFrozenCachedImage.h
@@ -313,10 +314,9 @@ private:
     // frequency-response toggles, not Macro Group's persisted collapse; see docs/modules.md).
     std::unique_ptr<synth::ui::CurveEditorComponent> envelopeCurveEditor;
     std::unique_ptr<juce::ToggleButton> envelopeGraphToggle;
-    // BPM|MS segmented control. MS is fully functional (today's ms-based params); BPM is a
-    // visual placeholder — FRO113 (a parallel ticket) owns the tempoSync/*Div parameters and
-    // DSP behind it and will wire this toggle once they land (see writeEnvelopeParamsFromCurve's
-    // comment for the seam).
+    // BPM|MS segmented control, wired to FRO113's `tempoSync` bool param (FRO117). The four
+    // *Div note-division params FRO113 also added have no UI yet (FRO118) — they're excluded
+    // from the generic per-param grid but not otherwise surfaced.
     std::unique_ptr<juce::TextButton> envelopeMsButton;
     std::unique_ptr<juce::TextButton> envelopeBpmButton;
     // True between the curve editor's onGestureStart/onGestureEnd (a live node/bend drag): the
@@ -396,6 +396,10 @@ private:
     juce::String outputDeviceInfoText;
 
     void createControls();
+    // External MIDI's device + channel combos, extracted out of createControls (FRO117) to keep
+    // that function under its own line-count ratchet. Neither combo is
+    // ComboBoxParameterAttachment-driven (plain module state, not AudioParameters).
+    void createExternalMidiControls(ExternalMidiModule* extMidi);
     void updateLayout();
 
     // Compact docked widget for the four macro-port types (P8-15 founder-review fix F2,
@@ -537,6 +541,14 @@ private:
     // hands it to envelopeCurveEditor->setModel(). No-op while envelopeCurveGestureActive (the
     // graph is already the source of truth mid-drag) or outside ADSR/without a curve editor.
     void syncEnvelopeCurveFromParams();
+    // MS|BPM click handler (FRO117): writes `tempoSync` (true for BPM, false for MS) via
+    // setValueNotifyingHost, no-op if already at that value or the param isn't present.
+    void writeEnvelopeTempoSync(bool bpmMode);
+    // Reverse sync for the MS|BPM toggle pair: reads `tempoSync` and sets the two buttons'
+    // toggle states (dontSendNotification, so this never re-triggers writeEnvelopeTempoSync).
+    // Called once at construction (to reflect a preset/undo-restored value) and from
+    // parameterValueChanged.
+    void syncEnvelopeSyncToggleFromParam();
     // Polls ADSRModule's lock-free playhead accessors and maps EnvelopeStage -> the curve's
     // segment/progress, called from the existing gated 15 Hz timerCallback (no new Timer).
     void updateEnvelopePlayhead();

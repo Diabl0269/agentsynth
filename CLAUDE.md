@@ -103,6 +103,7 @@ Everything else below is a tripwire index. The full rule lives in the named area
 - A second audio leg goes on a new `kRightBase` block, never ch1; pan is a balance law (unity centre); Dual I/O is **inherited** from channel shape (`hasStereoOutputPairShape`), never per-module registered, and "off" drops cables on the hidden right block. → [`docs/modules.md`](docs/modules.md)
 - A module's channel count is fixed for its lifetime; variable-port modules declare their maximum and vary only the visible count; an over-wide hosted plugin is refused, never truncated. → [`docs/modules.md`](docs/modules.md)
 - Every Wavetable warp mode must prove it doesn't alias (a documented defence + a parameterised-test entry). → [`docs/modules.md`](docs/modules.md)
+- Only gain controls may add gain: every module parameter is swept by `ModuleGainAudit`, and anything above +6 dB must be allow-listed with a reason. → [`docs/testing_gain_staging.md`](docs/testing_gain_staging.md)
 
 **Timeline** (`Source/Timeline/CLAUDE.md`):
 
@@ -143,6 +144,7 @@ Everything else below is a tripwire index. The full rule lives in the named area
 - [`docs/macros_ports.md`](docs/macros_ports.md) — Macro I/O port mechanics: node types, port set/ordering, poly/stereo shape, cable rendering across the boundary, bypass/mute, the macro menu
 - [`docs/macros_implementation.md`](docs/macros_implementation.md) — Macro I/O AI-authorability decision, the P8-15 implementation tracker, and out-of-scope items
 - [`docs/mixer.md`](docs/mixer.md) — Mixer channels (P9-1, decided 2026-09-10): the ChannelStrip node is the channel, macros are the container, solo as a render-time gate, Master/Direct, the track/channel link, track presets
+- [`docs/mixer_fader.md`](docs/mixer_fader.md) — The mixer fader's own Cubase-like taper (FRO150): UI-only position mapping vs. the linear-dB parameter, Shift fine-drag, Cmd-click/double-click reset
 - [`docs/mixer_implementation.md`](docs/mixer_implementation.md) — Mixer build log: dependency order and the test list for each P9 item (engine/solo gate, channel creation flows, track/channel link, mixer panel, detachable windows, track presets, stem export, and the remaining side tracks)
 - [`docs/timeline_panel_core.md`](docs/timeline_panel_core.md) — timeline panel overview, ruler/grid/zoom/snap + markers
 - [`docs/timeline_panel_tracks.md`](docs/timeline_panel_tracks.md) — track headers/binding chips, Add-Track

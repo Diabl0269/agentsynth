@@ -42,6 +42,7 @@ add_executable(Tests
     Modules/ADSR/ADSRThresholdTests.cpp
     Modules/ADSR/ADSRClickDiagnosticsTests.cpp
     Modules/ADSR/ADSRReadoutFormattingTests.cpp
+    Modules/ADSR/ADSRTempoSyncTests.cpp
     Modules/Envelope/EnvelopeGeneratorTests.cpp
     Modules/EnvelopeFollowerModuleTests.cpp
     Modules/ModuleBaseTests.cpp
@@ -94,7 +95,9 @@ add_executable(Tests
     Timeline/PeaksFileTests.cpp
     Timeline/RecordTapTests.cpp
     Mixer/ChannelStripTests.cpp
+    Mixer/PeakMeterLatchTests.cpp
     Mixer/MixerSoloTests.cpp
+    Mixer/ProjectLoadStripGainTests.cpp
     Mixer/ChannelFlow/ChannelFlowTests.cpp
     Mixer/ChannelFlow/ChannelFlowInstrumentTests.cpp
     Mixer/ChannelFlow/ChannelFlowPluginInstrumentTests.cpp
@@ -163,6 +166,7 @@ add_executable(Tests
     App/MainComponent/MainComponentUnsavedGuardTests.cpp
     App/MainComponent/MainComponentProviderMiscTests.cpp
     App/MainComponent/MainComponentCommandTableTests.cpp
+    App/MainComponent/MeterColourStopsSettingsIntegrationTests.cpp
     UI/Chrome/WelcomeScreenTests.cpp
     UI/Graph/GraphEditor/GraphEditorTests.cpp
     UI/Graph/GraphEditor/GraphEditorLayoutTests.cpp
@@ -218,6 +222,7 @@ add_executable(Tests
     Modules/VoiceMixerModuleTests.cpp
     FX/BitcrusherModuleTests.cpp
     FX/RingModulatorModuleTests.cpp
+    FX/RingModulatorGainTests.cpp
     Modules/NoiseModuleTests.cpp
     Modules/EdgeCaseTests.cpp
     Engine/IntegrationTests.cpp
@@ -252,6 +257,8 @@ add_executable(Tests
     Engine/AudioRendering/AudioRenderingModulationTests.cpp
     Engine/AudioRendering/AudioRenderingPresetTests.cpp
     Engine/AudioRendering/AudioRenderingSnapshotTests.cpp
+    Engine/GainStaging/ModuleGainAuditTests.cpp
+    Engine/GainStaging/MixAudibilityTests.cpp
     Engine/LogicalPortTests.cpp
     Engine/OutputLevelTests.cpp
     Modules/ModuleAdoptionTests.cpp
@@ -260,6 +267,7 @@ add_executable(Tests
     Engine/AudioEngineModRoutingTests.cpp
     Engine/PerformanceTests.cpp
     UI/Theme/ThemeTests.cpp
+    UI/Theme/ThemeMeterZoneTests.cpp
     UI/Theme/IconLibraryTests.cpp
     UI/Chrome/StatusBarTests.cpp
     UI/ModuleViews/FrequencyResponseTests.cpp
@@ -356,10 +364,22 @@ add_executable(Tests
     UI/Mixer/MixerPanelComponentTests.cpp
     UI/Mixer/MixerPanelUndoUnbindTests.cpp
     UI/Mixer/MixerFaderTests.cpp
+    UI/Mixer/MixerFaderTaperTests.cpp
+    UI/Mixer/MixerFaderDragTests.cpp
     UI/Mixer/MixerSendListTests.cpp
     UI/Mixer/MixerDockComponentTests.cpp
+    UI/Mixer/MixerDockMeterGatingTests.cpp
     UI/Mixer/MixerEqThumbnailTests.cpp
     UI/Mixer/MixerColumnComponentTests.cpp
+    UI/Mixer/MixerColumnComponentMeterTests.cpp
+    UI/Mixer/MixerMeterScaleTests.cpp
+    UI/Mixer/MeterColourStopsTests.cpp
+    UI/Mixer/MeterColourStopsPersistenceTests.cpp
+    UI/Mixer/MeterColourStopsLiveApplyTests.cpp
+    UI/Settings/MeterColourStopsEditorTests.cpp
+    UI/Mixer/MixerMeterPaintTests.cpp
+    UI/Mixer/MixerMeterBallisticsTests.cpp
+    UI/Mixer/MixerMeterReadoutTests.cpp
     UI/Mixer/MixerInsertListTests.cpp
     UI/Mixer/MixerPlacementControllerTests.cpp
     UI/Layout/DetachablePanelHost/DetachablePanelHostTests.cpp
@@ -423,7 +443,11 @@ add_executable(Tests
     ../Source/UI/Timeline/TrackChannelLinkController.cpp
     ../Source/UI/Timeline/TimelineTransportBar.cpp
     ../Source/UI/Mixer/MixerMeter.cpp
+    # MeterColourStops.cpp is now compiled into Core (root CMakeLists.txt, FRO147) -- Tests links
+    # Core directly, so it must NOT also be listed here (would double-compile/duplicate-symbol it).
+    ../Source/UI/Mixer/MixerMeterReadout.cpp
     ../Source/UI/Mixer/MixerFader.cpp
+    ../Source/UI/Mixer/MixerFaderSlider.cpp
     ../Source/UI/Mixer/MixerInsertList.cpp
     ../Source/UI/Mixer/MixerEqThumbnail.cpp
     ../Source/UI/Mixer/MixerSendList.cpp
@@ -510,6 +534,7 @@ add_executable(Tests
     ../Source/Plugin/Hosting/HostedPluginEditorWindow.cpp
     ../Source/UI/Settings/SettingsWindow.cpp
     ../Source/UI/Settings/AppearanceSettingsTab.cpp
+    ../Source/UI/Settings/MeterColourStopsEditor.cpp
     ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp
     ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGraphBehaviour.cpp
     ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviour.cpp

@@ -124,7 +124,7 @@ The timeline's clock and the headless render harness built on it. No audio devic
 
 ### Mixer channel tests (32 tests)
 
-`Tests/Mixer/ChannelStripTests.cpp` and `Tests/Mixer/MixerSoloTests.cpp` — the P9-2 `Channel Strip` / `Master` nodes and the solo gate ([`mixer.md`](mixer.md)). Headless. **Module-level** tests (`ChannelStripTest`, `MasterModuleTest`) drive the processors directly, with a bare `synth::TransportService` on the playhead when the gate matters. **Engine-level** `MixerSoloTest` cases build a hosted `AudioEngine` rig (two strips into Master's Mix, one constant source into Direct) and render through it, so the per-block gate is exercised exactly as the engine publishes it. The `MasterSplice*` cases give their bare graph `setPlayConfigDetails(2, 2, ...)` first — without it Audio Output has zero channels and every connection into it is silently refused. Channel macro bypass is covered by `MacroBypassMute.ChannelMacroBypassSkipsSourceAndStripButMuteIncludesTheStrip`.
+`Tests/Mixer/ChannelStripTests.cpp` and `Tests/Mixer/MixerSoloTests.cpp` — the P9-2 `Channel Strip` / `Master` nodes and the solo gate ([`mixer.md`](mixer.md)). Headless. **Module-level** tests (`ChannelStripTest`, `MasterModuleTest`) drive the processors directly, with a bare `synth::TransportService` on the playhead when the gate matters. **Engine-level** `MixerSoloTest` cases build a hosted `AudioEngine` rig (two strips into Master's Mix, one constant source into Direct) and render through it, so the per-block gate is exercised exactly as the engine publishes it. The `MasterSplice*` cases give their bare graph `setPlayConfigDetails(2, 2, ...)` first — without it Audio Output has zero channels and every connection into it is silently refused. Channel macro bypass is covered by `MacroBypassMute.ChannelMacroBypassSkipsSourceAndStripButMuteIncludesTheStrip`. `ChannelStripTest`/`MasterModuleTest` also cover FRO146's `takeMeterPeak`/`PeakMeterLatch` (per-reader consuming reads, the missed-overs regression) -- the meter UI/theme/ballistics suites this grew are in [`testing_mixer_meters.md`](testing_mixer_meters.md), kept out of this file to hold its own line cap.
 
 | What it covers | |
 |-------|-------|
@@ -168,7 +168,7 @@ The timeline's clock and the headless render harness built on it. No audio devic
 | File | Covers |
 |------|--------|
 | `MixerDockComponentTests.cpp` | tab strip switches without closing the dock; `toggleMixerPanel` (Cmd+Alt+M) opens on Mixer then closes on a second press; actionId round-trips to `AppCommands::toggleMixerPanel`; active tab persists across an `ApplicationProperties` reload |
-| `MixerPanelComponentTests.cpp` | one column per strip plus Direct plus Master; themed PNG render smoke test (Obsidian + Daylight, see the `createComponentSnapshot` pattern above); clicking a column selects its owning macro |
+| `MixerPanelComponentTests.cpp` | one column per strip plus Direct plus Master; themed PNG render smoke test (Obsidian + Daylight, see the `createComponentSnapshot` pattern above); clicking a column selects its owning macro (FRO146's own clip-readout PNG inspection test is in [`testing_mixer_meters.md`](testing_mixer_meters.md)) |
 | `MixerFaderTests.cpp` | the fader's `SliderParameterAttachment` binding and dB readout, plus a regression test for a `MixerFader::parameterValueChanged` use-after-free (a `callAsync` lambda captured raw `this`; fixed with `SafePointer`) |
 
 Tests calling `dock.setActiveTab(...)` use `MixerDockActiveTabResetGuardMDT` (see the reset-guard
@@ -371,7 +371,7 @@ Test persistence, serialization, and state restoration.
 
 ### Output Level Tests (18 tests)
 
-`Tests/Engine/OutputLevelTests.cpp` — the shared opt-in output-level stage (`ModuleBase::addOutputLevelParameter` / `prepareOutputLevel` / `applyOutputLevel`) and the modules that adopt it. Headless.
+`Tests/Engine/OutputLevelTests.cpp` — the shared opt-in output-level stage (`ModuleBase::addOutputLevelParameter` / `prepareOutputLevel` / `applyOutputLevel`) and the modules that adopt it. Headless. The related hidden-amplifier audit and mix-audibility suites (`Tests/Engine/GainStaging/`) are documented in [`testing_gain_staging.md`](testing_gain_staging.md).
 
 | Suite | Tests | What it covers |
 |-------|-------|----------------|

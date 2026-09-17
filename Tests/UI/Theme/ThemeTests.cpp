@@ -189,6 +189,10 @@ TEST(ThemeLoaderTest, JsonRoundTrip) {
     EXPECT_EQ(p.colors.knobBody.getARGB(), o.colors.knobBody.getARGB());
     EXPECT_EQ(p.colors.knobPointer.getARGB(), o.colors.knobPointer.getARGB());
     EXPECT_EQ(p.colors.meterFill.getARGB(), o.colors.meterFill.getARGB());
+    // FRO146: the meter's mid/high/clip zone tokens.
+    EXPECT_EQ(p.colors.meterMid.getARGB(), o.colors.meterMid.getARGB());
+    EXPECT_EQ(p.colors.meterHigh.getARGB(), o.colors.meterHigh.getARGB());
+    EXPECT_EQ(p.colors.meterClip.getARGB(), o.colors.meterClip.getARGB());
     EXPECT_EQ(p.colors.modRingPositive.getARGB(), o.colors.modRingPositive.getARGB());
     EXPECT_EQ(p.colors.modRingNegative.getARGB(), o.colors.modRingNegative.getARGB());
 
@@ -961,3 +965,6 @@ TEST(ThemeBuiltInsTest, AllFourBuiltInsPopulateNoteAndTrackButtonTokensDistinctl
     const auto& neon = *std::find_if(themes.begin(), themes.end(), [](const auto& t) { return t.id == "neon"; });
     EXPECT_NE(neon.colors.noteFill.getHue(), neon.colors.midiWire.getHue());
 }
+
+// Meter colour-zone token loader coverage (FRO146) is in ThemeMeterZoneTests.cpp -- split out to
+// keep this file under the repo's 1,000-line cap (scripts/check-file-sizes.sh).

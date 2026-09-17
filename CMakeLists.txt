@@ -271,6 +271,7 @@ add_library(Core STATIC
     Source/Mixer/TrackPresetManager.h
     Source/Mixer/SoloAudibleSet.h
     Source/Mixer/SoloAudibleSet.cpp
+    Source/Mixer/PeakMeterLatch.h
     Source/Mixer/MixerModel/MixerModel.h
     Source/Mixer/MixerModel/MixerModelInternal.h
     Source/Mixer/MixerModel/MixerModelColumns.cpp
@@ -461,6 +462,14 @@ add_library(Core STATIC
     Source/UI/Theme/BuiltInThemes.cpp
     Source/UI/Theme/IconLibrary.h
     Source/UI/Theme/IconLibrary.cpp
+    # FRO147: MeterColourStops is pure model code (no juce::Component) that used to live only in
+    # AppUI's source list, but AppLookAndFeel (Core, below) now caches an effective MeterColourStops
+    # itself (the ONE cache every meter painter reads) -- so Core needs the definition too. Moved
+    # here rather than compiled into BOTH Core and AppUI, which would duplicate-symbol any target
+    # linking both (AgentSynth, Tests). AppUI's own MixerMeter.cpp/ChannelChipComponent.cpp (still
+    # AppUI-only, still real juce::Components) reach it transitively via AppUI's PUBLIC link to Core.
+    Source/UI/Mixer/MeterColourStops.h
+    Source/UI/Mixer/MeterColourStops.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeel.h
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelLifecycle.cpp
     Source/UI/Theme/AppLookAndFeel/AppLookAndFeelFonts.cpp

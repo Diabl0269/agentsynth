@@ -70,10 +70,24 @@ public:
      *  if it is closed -- the hook's caller does that first (MainComponent owns that state). */
     bool revealColumnForStrip(juce::AudioProcessorGraph::NodeID stripId);
 
-    /** MainComponent::timerCallback's one new gated line -- the caller checks
-     *  isMixerTabActive() && isShowing() itself, matching the Timeline panel's own precedent
-     *  (docs/layout_visuals_animation.md §2). */
+    /** MainComponent::timerCallback's one new gated line -- the caller checks isMixerShowing()
+     *  itself (Tab placement: isMixerTabActive() && isVisible(); Window placement: the mixer's
+     *  DetachablePanelHost is detached -- its own window is a separate top-level Component, so
+     *  THIS dock's isVisible() says nothing about whether that window is on screen), matching the
+     *  Timeline panel's own precedent (docs/layout_visuals_animation.md §2). */
     void refreshMeters() { mixer_.refreshMeters(); }
+
+    /** FRO146 follow-up: "is the mixer panel showing anywhere a meter tick would be visible" --
+     *  docked on the Mixer tab (`isMixerTabActive() && isVisible()`, the pre-existing check) OR
+     *  detached into its own window (`getMixerHost().isDetached()` -- Window placement's
+     *  `MixerPlacementController::revealOrToggle()` detaches the SAME `mixerHost_`, so this one
+     *  check covers both the tab-strip's own detach button and that placement). Does NOT cover
+     *  "Own panel" placement -- that strip is owned by `MixerPlacementController`, outside this
+     *  dock entirely; its own `isOwnPanelShowing()` is the caller's second half of the OR (see
+     *  MainComponent::timerCallback). A detached window, once opened, is treated as "showing"
+     *  regardless of OS-level occlusion/minimize -- the same fidelity the pre-existing docked
+     *  check already had (isVisible() doesn't know the app itself is minimized either). */
+    bool isMixerShowing() const noexcept { return mixerHost_.isDetached() || (isMixerTabActive() && isVisible()); }
 
     // FRO12 (P9-6): whether the Mixer tab itself is offered at all -- false when the Mixer
     // placement preference is "Own panel" or "Window" (MixerPlacementController owns mixerHost_
@@ -110,9 +124,20 @@ public:
 
     /** FRO15 test seam: the "Add bus" button the tab strip shows on the Mixer tab. */
     juce::TextButton& getAddBusButtonForTest() noexcept { return addBusButton_; }
+    /** FRO146 test seam: the "Reset Meters" button the tab strip shows on the Mixer tab -- resets
+     *  every column's (and Master's) clip readout, same as an Option/Alt-click on any one of them. */
+    juce::TextButton& getResetMetersButtonForTest() noexcept { return resetMetersButton_; }
 
 private:
-    void applyTabVisibility();
+    // FRO146 follow-up: `allowMixerRebuild` is false ONLY from the detach/redock callback
+    // (onEitherHostDetachStateChanged) -- reparenting into/out of a DetachedPanelWindow doesn't
+    // change which graph nodes the mixer shows, so a rebuild there was pure collateral damage: it
+    // tore down and rebuilt every column, and with it every column's own latched clip-readout
+    // state (MixerMeterReadout's running max/clip colour), resetting a mid-session "-inf" -> real
+    // reading back to "-inf" on every single detach or redock. Every other caller (an actual tab
+    // switch, or the Mixer tab regaining `mixerTabEnabled_`) keeps the pre-existing "catch up on
+    // whatever changed while the Mixer tab was hidden" rebuild, unchanged (default true).
+    void applyTabVisibility(bool allowMixerRebuild = true);
     void persistActiveTab();
     // FRO12: the active tab's DetachablePanelHost -- whichever the tab-strip detach button acts
     // on (docs/mixer.md §5.9: "the tab-strip button detaches whichever tab is active").
@@ -135,6 +160,9 @@ private:
     // FRO15 (docs/mixer.md §5.15): "Add bus" sits on the tab strip and is visible only on the Mixer
     // tab -- it has no meaning while the Timeline tab is showing.
     juce::TextButton addBusButton_{"+ Bus"};
+    // FRO146: sits next to "+ Bus" (same Mixer-tab-only visibility) -- resets every column's clip
+    // readout (docs/mixer.md meters section's "Meter Peak Level" reset action).
+    juce::TextButton resetMetersButton_{"Reset Meters"};
     Tab activeTab_ = Tab::Timeline;
     bool mixerTabEnabled_ = true;
     juce::ApplicationProperties* appProperties_ = nullptr;

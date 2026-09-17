@@ -135,6 +135,21 @@ void AppLookAndFeel::applyTheme(const Theme& newTheme) {
     // Re-tint the SVG icon set from the new theme tokens. Part of the SAME re-skin pass — no
     // extra timer / repaint is scheduled here (the caller issues the single repaint).
     retintIcons();
+
+    // FRO147: a theme switch moves the meter colours too, UNLESS the user has pinned a custom
+    // stop set — recomputeMeterColourStops() itself decides which, from meterColourStopsOverride
+    // (untouched by applyTheme(), so a pinned override survives across theme switches).
+    recomputeMeterColourStops();
+}
+
+void AppLookAndFeel::setMeterColourStopsOverride(std::optional<synth::ui::MeterColourStops> override_) {
+    meterColourStopsOverride = std::move(override_);
+    recomputeMeterColourStops();
+}
+
+void AppLookAndFeel::recomputeMeterColourStops() {
+    meterColourStops = meterColourStopsOverride.has_value() ? *meterColourStopsOverride
+                                                            : synth::ui::MeterColourStops::fromTheme(theme.colors);
 }
 
 void AppLookAndFeel::retintIcons() {

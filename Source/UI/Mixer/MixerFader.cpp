@@ -1,9 +1,27 @@
-// Concern: FRO11 (P9-5) -- MixerFader's slider wiring, undo bracket and dB readout.
+// Concern: FRO11 (P9-5) -- MixerFader's slider wiring, undo bracket and dB readout. FRO150 added
+// the taper-based NormalisableRange and the onDragStart/onDragEnd gesture wiring in bind() below.
 #include "MixerFader.h"
 
 #include "AppUndoManager.h"
+#include "MixerFaderTaper.h"
+#include <cmath>
 
 namespace synth::ui {
+
+namespace {
+
+// FRO18: what VoiceOver reads for the slider's current value, e.g. "-3.0 dB" (spoken "minus 3
+// dB") -- same formatting as MixerFader's own readout_ label, so the visible text and the
+// accessible value never drift apart. Applied twice: once by the constructor (so an unbound
+// fader's slider already has it -- MixerAccessibilityTests.cpp checks exactly this), and again by
+// bind() AFTER constructing attachment_ (FRO150: juce::SliderParameterAttachment's own constructor
+// unconditionally overwrites textFromValueFunction with one built from the param's own getText(),
+// which has no " dB" suffix -- ChannelStripModule/MasterModule's gain param has no unit label).
+void applyDbAccessibilityText(juce::Slider& slider) {
+    slider.textFromValueFunction = [](double db) { return juce::String(db, 1) + " dB"; };
+}
+
+} // namespace
 
 int MixerFader::liveUnbindCallCountForTest_ = 0;
 
@@ -14,10 +32,7 @@ MixerFader::MixerFader() {
     // focused Slider would otherwise eat Up/Down before the panel ever saw them (the T160 trap
     // docs/shortcuts.md documents).
     slider_.setWantsKeyboardFocus(false);
-    // FRO18: what VoiceOver reads for the slider's current value, e.g. "-3.0 dB" (spoken "minus
-    // 3 dB") -- same formatting as readout_ below, so the visible label and the accessible value
-    // never drift apart.
-    slider_.textFromValueFunction = [](double db) { return juce::String(db, 1) + " dB"; };
+    applyDbAccessibilityText(slider_);
     addAndMakeVisible(slider_);
 
     readout_.setJustificationType(juce::Justification::centred);
@@ -33,14 +48,51 @@ void MixerFader::bind(juce::AudioProcessorGraph& graph, AppUndoManager& undoMana
     undoManager_ = &undoManager;
     param_ = &param;
 
-    // Slider position <-> dB is exactly the param's own mapping -- no second formula to drift out
-    // of sync with it (plan (c)). juce::Slider wants NormalisableRange<double>; the param's own is
-    // <float> -- converted field-for-field, not re-derived.
-    const auto floatRange = param.getNormalisableRange();
-    slider_.setNormalisableRange(juce::NormalisableRange<double>((double)floatRange.start, (double)floatRange.end,
-                                                                 (double)floatRange.interval, (double)floatRange.skew,
-                                                                 floatRange.symmetricSkew));
+    // FRO150: juce::SliderParameterAttachment's OWN constructor calls slider.setNormalisableRange()
+    // (built from the param's own linear mapping) and overwrites slider.textFromValueFunction --
+    // so attachment_ must be constructed FIRST, and our own taper range/accessibility text
+    // installed AFTER, or the attachment silently undoes both. setNormalisableRange() only ever
+    // changes how a value maps to a 0..1 proportion, never the slider's CURRENT value itself
+    // (juce::Slider::Pimpl::setNormalisableRange is exactly `normRange = newRange`), so swapping
+    // the range here is safe even though attachment_'s constructor already pushed the param's
+    // initial value into the slider under its own (temporary) range.
     attachment_ = std::make_unique<juce::SliderParameterAttachment>(param, slider_);
+
+    // The slider's VALUE stays the param's own dB range (start/end/interval copied field-for-field,
+    // same as before this ticket) -- only convertTo0to1/convertFrom0to1 change, to
+    // faderDbToFraction/faderFractionToDb (MixerFaderTaper.h), so the on-screen THUMB POSITION
+    // follows Cubase's taper while getValue()/setValue() (and therefore the bound parameter) never
+    // leave linear dB. snapToLegalValue keeps the pre-existing 0.1 dB granularity, just re-expressed
+    // as a lambda since the range's own `interval` field is ignored once a custom
+    // snapToLegalValueFunction is supplied (juce::NormalisableRange::snapToLegalValue).
+    const auto floatRange = param.getNormalisableRange();
+    const double rangeStartDb = (double)floatRange.start;
+    const double rangeEndDb = (double)floatRange.end;
+    const double intervalDb = (double)floatRange.interval;
+    slider_.setNormalisableRange(juce::NormalisableRange<double>(
+        rangeStartDb, rangeEndDb,
+        [](double, double, double proportion) { return (double)faderFractionToDb((float)proportion); },
+        [](double, double, double valueDb) { return (double)faderDbToFraction((float)valueDb); },
+        [intervalDb](double start, double end, double valueDb) {
+            double snapped = valueDb;
+            if (intervalDb > 0.0)
+                snapped = start + std::round((valueDb - start) / intervalDb) * intervalDb;
+            return juce::jlimit(start, end, snapped);
+        }));
+    applyDbAccessibilityText(slider_);
+
+    // FRO150: every gesture MixerFaderSlider starts (drag, Cmd-click/double-click reset, a wheel
+    // step) calls these directly -- see MixerFaderSlider.h's class comment for why it can't rely on
+    // juce::SliderParameterAttachment's own Slider::Listener gesture notifications the way a stock
+    // Slider drag would.
+    slider_.onDragStart = [this] {
+        if (param_ != nullptr)
+            param_->beginChangeGesture();
+    };
+    slider_.onDragEnd = [this] {
+        if (param_ != nullptr)
+            param_->endChangeGesture();
+    };
     param_->addListener(this);
     readout_.setText(juce::String(param_->get(), 1) + " dB", juce::dontSendNotification);
 }

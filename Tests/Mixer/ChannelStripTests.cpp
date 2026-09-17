@@ -12,6 +12,7 @@
 // Solo gating (the render-time gate both modules read off the playhead) lives in
 // MixerSoloTests.cpp.
 
+#include "Mixer/PeakMeterLatch.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/MasterModule.h"
 #include <gtest/gtest.h>
@@ -53,6 +54,21 @@ void settleAndProcess(juce::AudioProcessor& processor, juce::AudioBuffer<float>&
     for (int i = 0; i < 40; ++i) { // 40 * 64 samples > the 20 ms ramp at 48 kHz
         auto scratch = buffer;
         processor.processBlock(scratch, midi);
+    }
+    // FRO146: the meter latch keeps the MAX peak since a reader's last read, deliberately --
+    // that's the whole point (a real over during the ramp above must not be lost). Drain every
+    // reader here so a caller's own takeMeterPeak() after this function sees only the ONE real
+    // block below, not history from the warm-up ramp.
+    if (auto* strip = dynamic_cast<ChannelStripModule*>(&processor)) {
+        strip->takeMeterPeak(synth::MeterReader::Mixer, 0);
+        strip->takeMeterPeak(synth::MeterReader::Mixer, 1);
+        strip->takeMeterPeak(synth::MeterReader::TrackHeader, 0);
+        strip->takeMeterPeak(synth::MeterReader::TrackHeader, 1);
+    } else if (auto* master = dynamic_cast<MasterModule*>(&processor)) {
+        master->takeMeterPeak(synth::MeterReader::Mixer, 0);
+        master->takeMeterPeak(synth::MeterReader::Mixer, 1);
+        master->takeMeterPeak(synth::MeterReader::TrackHeader, 0);
+        master->takeMeterPeak(synth::MeterReader::TrackHeader, 1);
     }
     processor.processBlock(buffer, midi);
 }
@@ -180,19 +196,48 @@ TEST(ChannelStripTest, MuteClears) {
     settleAndProcess(strip, buffer);
     expectChannel(buffer, 0, 0.0f, "muted");
     expectChannel(buffer, kRight, 0.0f, "muted");
-    EXPECT_EQ(strip.getMeterPeak(0), 0.0f);
+    EXPECT_EQ(strip.takeMeterPeak(synth::MeterReader::Mixer, 0), 0.0f);
 }
 
-TEST(ChannelStripTest, MeterReportsTheLastBlocksPostFaderPeakWithoutConsumingIt) {
+TEST(ChannelStripTest, MeterReportsTheLastBlocksPostFaderPeakPerReader) {
     ChannelStripModule strip;
     strip.prepareToPlay(kSampleRate, kBlockSize);
     setParam(strip, "pan", 1.0f);
     auto buffer = stripInput(0.5f, -0.75f);
     settleAndProcess(strip, buffer);
-    EXPECT_NEAR(strip.getMeterPeak(0), 0.0f, 1.0e-6f) << "hard right silences the left leg";
-    EXPECT_NEAR(strip.getMeterPeak(1), 0.75f, 1.0e-6f);
-    // Two readers (mixer column, track-header chip) must see the same value.
-    EXPECT_NEAR(strip.getMeterPeak(1), 0.75f, 1.0e-6f) << "reading the meter must not reset it";
+    EXPECT_NEAR(strip.takeMeterPeak(synth::MeterReader::Mixer, 0), 0.0f, 1.0e-6f) << "hard right silences the left leg";
+    EXPECT_NEAR(strip.takeMeterPeak(synth::MeterReader::Mixer, 1), 0.75f, 1.0e-6f);
+    // FRO146: consuming (read-and-reset) but ONLY of the reader's own slot -- the Mixer reader's
+    // second read (with no new block in between) sees 0, silence, exactly as a real per-block
+    // store would once the peak is gone; the TrackHeader reader, which has never read yet, still
+    // sees the full peak the Mixer reader already consumed.
+    EXPECT_NEAR(strip.takeMeterPeak(synth::MeterReader::Mixer, 1), 0.0f, 1.0e-6f)
+        << "a reader's own second read, with no new block, sees the slot it just reset";
+    EXPECT_NEAR(strip.takeMeterPeak(synth::MeterReader::TrackHeader, 1), 0.75f, 1.0e-6f)
+        << "a DIFFERENT reader that hasn't read yet still sees the same latched peak";
+}
+
+TEST(ChannelStripTest, MeterMissedOversRegressionAHotBlockBetweenTwoQuietBlocksIsStillReported) {
+    // FRO146: the bug the latch replaces. The old scheme stored exactly one float per leg,
+    // overwritten every block -- a hot block sandwiched between two quiet ones was silently gone
+    // by the time a 10 Hz UI poll got around to reading it.
+    ChannelStripModule strip;
+    strip.prepareToPlay(kSampleRate, kBlockSize);
+    juce::MidiBuffer midi;
+
+    auto quiet1 = stripInput(0.01f, 0.01f);
+    settleAndProcess(strip, quiet1);
+    strip.takeMeterPeak(synth::MeterReader::Mixer, 0); // drain the settling blocks
+    strip.takeMeterPeak(synth::MeterReader::Mixer, 1);
+
+    auto hot = stripInput(0.9f, 0.9f);
+    strip.processBlock(hot, midi);
+    auto quiet2 = stripInput(0.01f, 0.01f);
+    strip.processBlock(quiet2, midi);
+
+    EXPECT_NEAR(strip.takeMeterPeak(synth::MeterReader::Mixer, 0), 0.9f, 1.0e-2f)
+        << "the hot block's peak must still be reported at the NEXT read, not overwritten by the "
+           "quiet block that followed it";
 }
 
 // ============================================================================
@@ -273,7 +318,7 @@ TEST(MasterModuleTest, DirectIsSummedIntoMixBeforeTheFader) {
     expectChannel(buffer, 1, (0.1f + 0.05f) * g, "right = (Mix + Direct) * gain");
     expectChannel(buffer, MasterModule::kDirectLeft, 0.0f, "Direct channels are cleared after the sum");
     expectChannel(buffer, MasterModule::kDirectRight, 0.0f, "Direct channels are cleared after the sum");
-    EXPECT_NEAR(master.getMeterPeak(0), (0.2f + 0.3f) * g, 1.0e-5f);
+    EXPECT_NEAR(master.takeMeterPeak(synth::MeterReader::Mixer, 0), (0.2f + 0.3f) * g, 1.0e-5f);
 }
 
 TEST(MasterModuleTest, BypassIsAUnitySumThatKeepsDirect) {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Envelope/EnvelopeGenerator.h"
+#include "Envelope/EnvelopeTempoSync.h"
 #include "ModuleBase.h"
 #include "SchmittTrigger.h"
 #include "ThresholdMeterSource.h"
@@ -59,6 +60,24 @@ public:
         addParameter(releaseCurveParam = new juce::AudioParameterFloat("releaseCurve", "Release Curve",
                                                                        juce::NormalisableRange<float>(-1.0f, 1.0f),
                                                                        0.65f, adsrCurveAttributes()));
+        // Tempo sync (FRO113): BPM mode is REAL sync, not a display-only snap -- each timed stage
+        // gets its own note-division choice, sharing `envelopeNoteDivisions()` (the same six
+        // entries/order as LFOModule's rateSync). `tempoSync` off (default) leaves the ms params
+        // above in sole control, unchanged; the four *Div params still exist and round-trip in
+        // every patch either way, so flipping the toggle later never loses a prior sync setting.
+        // Defaults are the closest available division to each ms default at 120 BPM -- decay's
+        // 1.0 s default lands on "1/2" exactly (2 beats @ 120 BPM); attack/hold/release all want
+        // something far shorter than the coarsest division below "1/32" gets them (62.5 ms vs.
+        // 1/0/15 ms), which is an accepted tradeoff of sync's coarser resolution, not a bug.
+        addParameter(tempoSyncParam = new juce::AudioParameterBool("tempoSync", "Tempo Sync", false));
+        addParameter(attackDivParam =
+                         new juce::AudioParameterChoice("attackDiv", "Attack Div", synth::envelopeNoteDivisions(), 5));
+        addParameter(holdDivParam =
+                         new juce::AudioParameterChoice("holdDiv", "Hold Div", synth::envelopeNoteDivisions(), 5));
+        addParameter(decayDivParam =
+                         new juce::AudioParameterChoice("decayDiv", "Decay Div", synth::envelopeNoteDivisions(), 1));
+        addParameter(releaseDivParam = new juce::AudioParameterChoice("releaseDiv", "Release Div",
+                                                                      synth::envelopeNoteDivisions(), 5));
         // `gateThreshold`, not `threshold` / `trigThreshold`: Compressor owns `threshold` as dB,
         // Sample & Hold / Comparator own `trigThreshold` as bipolar CV. ADSR gates are unipolar.
         addParameter(thresholdParam = new juce::AudioParameterFloat("gateThreshold", "Threshold", 0.0f, 1.0f, 0.5f));
@@ -123,10 +142,28 @@ public:
         const float baseThreshold = thresholdParam->get();
         const float* thresholdCV = numChannels > kThresholdChannel ? buffer.getReadPointer(kThresholdChannel) : nullptr;
 
-        const float attack = *attackParam;
-        const float hold = *holdParam;
-        const float decay = *decayParam;
-        const float release = *releaseParam;
+        // Tempo sync (FRO113): recomputed once per block, same cadence LFOModule uses for its
+        // own sync mode -- a live tempo change is picked up within one block, and because
+        // EnvelopeGenerator turns a stage-time change mid-ramp into a slope change (never a
+        // level jump), flipping tempoSync itself mid-note is exactly as click-free as automating
+        // one of the ms params already was.
+        float attack = *attackParam;
+        float hold = *holdParam;
+        float decay = *decayParam;
+        float release = *releaseParam;
+        if (*tempoSyncParam) {
+            double bpm = 120.0;
+            if (auto* ph = getPlayHead()) {
+                if (auto pos = ph->getPosition()) {
+                    if (pos->getBpm().hasValue())
+                        bpm = *pos->getBpm();
+                }
+            }
+            attack = synth::envelopeNoteDivisionSeconds(attackDivParam->getIndex(), bpm);
+            hold = synth::envelopeNoteDivisionSeconds(holdDivParam->getIndex(), bpm);
+            decay = synth::envelopeNoteDivisionSeconds(decayDivParam->getIndex(), bpm);
+            release = synth::envelopeNoteDivisionSeconds(releaseDivParam->getIndex(), bpm);
+        }
         const float attackCurve = *attackCurveParam;
         const float decayCurve = *decayCurveParam;
         const float releaseCurve = *releaseCurveParam;
@@ -432,6 +469,11 @@ private:
     juce::AudioParameterFloat* decayCurveParam = nullptr;
     juce::AudioParameterFloat* releaseCurveParam = nullptr;
     juce::AudioParameterFloat* thresholdParam = nullptr;
+    juce::AudioParameterBool* tempoSyncParam = nullptr;
+    juce::AudioParameterChoice* attackDivParam = nullptr;
+    juce::AudioParameterChoice* holdDivParam = nullptr;
+    juce::AudioParameterChoice* decayDivParam = nullptr;
+    juce::AudioParameterChoice* releaseDivParam = nullptr;
 
     std::atomic<float> meterLevel{0.0f};
     std::atomic<float> effectiveThreshold{0.5f};

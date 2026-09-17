@@ -1,7 +1,9 @@
 #pragma once
 
 #include "../Transport/TransportService.h"
+#include "Mixer/PeakMeterLatch.h"
 #include "ModuleBase.h"
+#include <array>
 #include <atomic>
 #include <juce_audio_basics/juce_audio_basics.h>
 
@@ -169,8 +171,8 @@ public:
             smoothedSend_[slot].reset(sampleRate, kSmoothingSeconds);
             smoothedSend_[slot].setCurrentAndTargetValue(sendTargetGain(slot));
         }
-        meterPeakL_.store(0.0f, std::memory_order_relaxed);
-        meterPeakR_.store(0.0f, std::memory_order_relaxed);
+        meterLatches_[0].reset();
+        meterLatches_[1].reset();
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
@@ -385,11 +387,12 @@ public:
 
     // ---- Meter (audio thread writes, any thread reads) ----
 
-    /** The last processed block's absolute peak for one output leg (0 = Left, 1 = Right), post
-     *  gain/pan/mute/solo. A plain per-block store, not a consume-on-read: the mixer column and a
-     *  track header's channel chip both read it, and each does its own ballistics. */
-    float getMeterPeak(int leg) const noexcept {
-        return (leg == 1 ? meterPeakR_ : meterPeakL_).load(std::memory_order_relaxed);
+    /** FRO146: the peak latched since `reader`'s own last call, for one output leg (0 = Left,
+     *  1 = Right), post gain/pan/mute/solo. Consuming (read-and-reset) but only of `reader`'s own
+     *  slot -- the mixer column and a track header's channel chip poll independently and must
+     *  never steal each other's peaks. See Source/Mixer/PeakMeterLatch.h. */
+    float takeMeterPeak(synth::MeterReader reader, int leg) noexcept {
+        return meterLatches_[legIndex(leg)].takePeak(reader);
     }
 
     // ---- Stem export tap (message thread arms/disarms; audio thread reads the pointer and writes
@@ -570,8 +573,8 @@ private:
     // strip hands to Master, in every branch (dry-bypassed, muted, solo-gated silent, or normal) —
     // see the class comment. Main legs only: a send leg is the bus's stem, never this strip's.
     void finishBlock(const juce::AudioBuffer<float>& buffer, int numSamples) noexcept {
-        meterPeakL_.store(buffer.getMagnitude(0, 0, numSamples), std::memory_order_relaxed);
-        meterPeakR_.store(buffer.getMagnitude(kRightBase, 0, numSamples), std::memory_order_relaxed);
+        meterLatches_[0].storeBlockPeak(buffer.getMagnitude(0, 0, numSamples));
+        meterLatches_[1].storeBlockPeak(buffer.getMagnitude(kRightBase, 0, numSamples));
 
         if (auto* tap = stemTap_.load(std::memory_order_acquire)) {
             // Defensive, not expected: a caller-sized-wrong tap must never be overrun. See the class
@@ -604,8 +607,9 @@ private:
     std::atomic<juce::uint32> preMask_{0};
     std::atomic<juce::uint32> soloAudibleMask_{0};
 
-    std::atomic<float> meterPeakL_{0.0f};
-    std::atomic<float> meterPeakR_{0.0f};
+    static int legIndex(int leg) noexcept { return leg == 1 ? 1 : 0; }
+
+    std::array<synth::PeakMeterLatch, 2> meterLatches_;
 
     // Non-owning; null outside a stem export. See setStemTapBuffer() and the class comment.
     std::atomic<juce::AudioBuffer<float>*> stemTap_{nullptr};

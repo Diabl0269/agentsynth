@@ -154,6 +154,45 @@ static juce::String parseStringOptional(const juce::var& obj, const juce::String
     return val.toString();
 }
 
+// The "optional, falls back to Theme.h's own default" colour tokens -- meterFill through
+// trackArmOn below used to be one inline `{ auto v = parseColourKey(...); ...}` block per token
+// directly in parseTheme; FRO146 adding three more (meterMid/meterHigh/meterClip) would have
+// pushed that function past its function-size ratchet ceiling (root CLAUDE.md), so this table +
+// loop replaces all of them with one named step -- also removing the duplication the repeated
+// block shape already had. A new optional colour token is a new table row, not a new inline block.
+struct OptionalColourKey {
+    const char* key;
+    juce::Colour Colors::* member;
+};
+static constexpr OptionalColourKey kOptionalColourKeys[] = {
+    {"meterFill", &Colors::meterFill},
+    {"meterMid", &Colors::meterMid},
+    {"meterHigh", &Colors::meterHigh},
+    {"meterClip", &Colors::meterClip},
+    {"modRingPositive", &Colors::modRingPositive},
+    {"modRingNegative", &Colors::modRingNegative},
+    {"toolActive", &Colors::toolActive},
+    {"noteFill", &Colors::noteFill},
+    {"noteBorder", &Colors::noteBorder},
+    {"noteSelected", &Colors::noteSelected},
+    {"noteOutOfScale", &Colors::noteOutOfScale},
+    {"pianoKeyWhite", &Colors::pianoKeyWhite},
+    {"pianoKeyBlack", &Colors::pianoKeyBlack},
+    {"trackMuteOn", &Colors::trackMuteOn},
+    {"trackSoloOn", &Colors::trackSoloOn},
+    {"trackArmOn", &Colors::trackArmOn},
+};
+
+static bool parseOptionalPaletteColours(const juce::var& colorsVar, const Colors& defaults, Colors& colors) {
+    for (const auto& entry : kOptionalColourKeys) {
+        auto v = parseColourKey(colorsVar, entry.key, false, defaults.*entry.member);
+        if (!v)
+            return false;
+        colors.*entry.member = *v;
+    }
+    return true;
+}
+
 std::optional<Theme> ThemeLoader::parseTheme(const juce::var& json, const juce::String& suggestedId) {
     clearLastError();
 
@@ -353,84 +392,9 @@ std::optional<Theme> ThemeLoader::parseTheme(const juce::var& json, const juce::
             return std::nullopt;
         colors.knobPointer = *v;
     }
-    {
-        auto v = parseColourKey(colorsVar, "meterFill", false, defaults.meterFill);
-        if (!v)
-            return std::nullopt;
-        colors.meterFill = *v;
-    }
-    {
-        auto v = parseColourKey(colorsVar, "modRingPositive", false, defaults.modRingPositive);
-        if (!v)
-            return std::nullopt;
-        colors.modRingPositive = *v;
-    }
-    {
-        auto v = parseColourKey(colorsVar, "modRingNegative", false, defaults.modRingNegative);
-        if (!v)
-            return std::nullopt;
-        colors.modRingNegative = *v;
-    }
-    {
-        auto v = parseColourKey(colorsVar, "toolActive", false, defaults.toolActive);
-        if (!v)
-            return std::nullopt;
-        colors.toolActive = *v;
-    }
-    {
-        auto v = parseColourKey(colorsVar, "noteFill", false, defaults.noteFill);
-        if (!v)
-            return std::nullopt;
-        colors.noteFill = *v;
-    }
-    {
-        auto v = parseColourKey(colorsVar, "noteBorder", false, defaults.noteBorder);
-        if (!v)
-            return std::nullopt;
-        colors.noteBorder = *v;
-    }
-    {
-        auto v = parseColourKey(colorsVar, "noteSelected", false, defaults.noteSelected);
-        if (!v)
-            return std::nullopt;
-        colors.noteSelected = *v;
-    }
-    {
-        auto v = parseColourKey(colorsVar, "noteOutOfScale", false, defaults.noteOutOfScale);
-        if (!v)
-            return std::nullopt;
-        colors.noteOutOfScale = *v;
-    }
-    {
-        auto v = parseColourKey(colorsVar, "pianoKeyWhite", false, defaults.pianoKeyWhite);
-        if (!v)
-            return std::nullopt;
-        colors.pianoKeyWhite = *v;
-    }
-    {
-        auto v = parseColourKey(colorsVar, "pianoKeyBlack", false, defaults.pianoKeyBlack);
-        if (!v)
-            return std::nullopt;
-        colors.pianoKeyBlack = *v;
-    }
-    {
-        auto v = parseColourKey(colorsVar, "trackMuteOn", false, defaults.trackMuteOn);
-        if (!v)
-            return std::nullopt;
-        colors.trackMuteOn = *v;
-    }
-    {
-        auto v = parseColourKey(colorsVar, "trackSoloOn", false, defaults.trackSoloOn);
-        if (!v)
-            return std::nullopt;
-        colors.trackSoloOn = *v;
-    }
-    {
-        auto v = parseColourKey(colorsVar, "trackArmOn", false, defaults.trackArmOn);
-        if (!v)
-            return std::nullopt;
-        colors.trackArmOn = *v;
-    }
+    // meterFill through trackArmOn: see kOptionalColourKeys' own comment above.
+    if (!parseOptionalPaletteColours(colorsVar, defaults, colors))
+        return std::nullopt;
 
     theme.colors = colors;
 
@@ -555,6 +519,9 @@ juce::var ThemeLoader::themeToJson(const Theme& theme) {
         colors->setProperty("knobBody", colourToHex(c.knobBody));
         colors->setProperty("knobPointer", colourToHex(c.knobPointer));
         colors->setProperty("meterFill", colourToHex(c.meterFill));
+        colors->setProperty("meterMid", colourToHex(c.meterMid));
+        colors->setProperty("meterHigh", colourToHex(c.meterHigh));
+        colors->setProperty("meterClip", colourToHex(c.meterClip));
         colors->setProperty("modRingPositive", colourToHex(c.modRingPositive));
         colors->setProperty("modRingNegative", colourToHex(c.modRingNegative));
         colors->setProperty("toolActive", colourToHex(c.toolActive));

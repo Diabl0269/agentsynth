@@ -338,6 +338,11 @@ public:
     void guardUnsavedChanges(const juce::String& actionLabel, std::function<void()> proceed);
     // Non-const access to ApplicationProperties for persistence tests (read-back within session).
     juce::ApplicationProperties& getAppPropertiesForTest() { return appProperties; }
+    // FRO147: the one AppLookAndFeel instance every meter painter reads through — lets a test
+    // assert the effective meter-colour stops it caches without going through a real paint/pixel
+    // sample. Non-null in every ctor (Main.cpp-injected, plugin-injected, or the delegating test
+    // ctor's ownedLookAndFeel).
+    synth::theme::AppLookAndFeel& getLookAndFeelForTest() { return *lookAndFeel; }
     // FRO26 (P9-3e, docs/mixer.md §5.13): hasTracksNeedingChannels() is a private TrackHeaderHost
     // override (MainComponent inherits that interface privately), so a test can't call it directly
     // the way it can drive the menu action itself via getTimelinePanel().applyAddTrackMenuChoice() —
