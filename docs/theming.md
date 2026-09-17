@@ -759,3 +759,40 @@ can also be the click that dismisses the `juce::CallOutBox`), a commit that only
 preview would apply a stale, one-edit-old colour while the header/fields already showed the new
 one. `commitOnce()` re-previews from the selector's live colour immediately before firing the
 commit callback, closing that gap for every consumer of this shared component.
+
+## 14. Meter colours
+
+FRO146 gave the mixer meter (both bars in `MixerMeter` and the track header's
+`ChannelChipComponent`) a level-to-colour zone model, `synth::ui::MeterColourStops`
+(`Source/UI/Mixer/MeterColourStops.h` — mechanism in [`mixer.md`](mixer.md)'s Meters subsection):
+below -18 dBFS = `meterFill` (low), -18..-6 = `meterMid`, -6..0 = `meterHigh`, above 0 = `meterClip`
+— four theme tokens, one per zone (§2's token reference). FRO147 is the "Cubase Preferences >
+Metering > Appearance" equivalent: Settings > Appearance's "Meter Colours" section
+(`Source/UI/Settings/MeterColourStopsEditor.h`), which lets the FOUR THEME TOKENS be replaced by an
+arbitrary (1..8) set of user-positioned stops.
+
+**Tokens vs. the user override — the same "unset means follow the theme" relationship §11/§12
+already use for cables and notes.** `MeterColourStops::fromTheme()` reads the active theme's four
+zone tokens; a user override (`meterColourStops` in `ApplicationProperties`, `{db, ARGB}` pairs,
+`Source/UI/Mixer/MeterColourStops.h`'s persistence section) replaces them wholesale, not per-zone —
+there is no partial pin the way a single cable signal/category can be pinned while the rest follow
+the theme. Absent key -> the active theme's four tokens (and a theme switch moves them, live);
+present key -> those exact stops, regardless of which theme is active, until "Reset to Theme"
+removes the key. Malformed stored data (one bad token, a bad count) is treated as absent, never a
+partial apply and never zero stops — the same "corrupted -> theme defaults" rule §12's
+`pianoRollNoteColourOverrides` follows.
+
+**The one cache every painter reads.** Unlike cable/note colours (each resolved fresh at paint time
+from a cheap pure function), a `MeterColourStops` isn't cheap to hand-roll per pixel — so the
+EFFECTIVE stops (override if pinned, else the current theme's own four) are cached once, on
+`synth::theme::AppLookAndFeel` itself (`getMeterColourStops()`/`setMeterColourStopsOverride()`,
+recomputed in `applyTheme()` and on every override change), the same single per-app/per-plugin-
+instance object every mixer column, Master, a detached mixer window, and the track header chip
+already reach via `getLookAndFeel()` for every other themed colour. Editing the section in Settings
+writes the override, then AppLookAndFeel's cache is refreshed and every visible meter repainted
+ONCE — never rebuilt per paint tick. See [`testing_mixer_meters.md`](testing_mixer_meters.md) for
+the full test list, including why the live-apply push goes through the settings file's own
+`ChangeBroadcaster` (`MainComponent::changeListenerCallback`) rather than a direct pointer from the
+tab: `SettingsWindow` is its own `juce::DialogWindow`, so `getLookAndFeel()` called from inside the
+tab is not guaranteed to resolve back to the app's real `AppLookAndFeel` — the plugin build never
+calls `Desktop::setDefaultLookAndFeel` at all.

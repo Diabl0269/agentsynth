@@ -31,6 +31,20 @@ for the same reason -- new coverage that would have pushed `testing.md` past its
 | `Tests/UI/Mixer/MixerFaderTests.cpp` (extended) | a bound fader's slider THUMB POSITION (`getNormalisableRange().convertTo0to1(value)`) matches the taper for -14.2/0/+12 dB while the bound parameter stays exactly linear dB (`BoundSliderPositionMatchesTaperWhileParameterStaysLinearDb`); a regression test pinning that `textFromValueFunction` still reports "-3.0 dB" after a real `bind()`, not `juce::SliderParameterAttachment`'s own param-`getText()`-based overwrite (`TextFromValueFunctionStillReportsDbAfterBind`) |
 | `Tests/UI/Mixer/MixerFaderDragTests.cpp` | real `mouseDown`/`mouseDrag`/`mouseUp`/`mouseDoubleClick`/`mouseWheelMove` calls on `MixerFaderSlider` (never `juce::Slider`'s own mouse handling -- see `mixer_fader.md`'s design note) with synthesized `MouseEvent`s: a plain drag moves the value along the taper from the press-time anchor; the same pixel drag moves more dB near the bottom of the taper than near 0 dB; a Shift-held drag moves ~1/8 as far as a plain one; toggling Shift mid-drag re-anchors instead of jumping the value, in both directions; a whole drag (several `mouseDrag` calls) collapses to exactly ONE undo step; Cmd-click and double-click both reset to 0 dB as one undo step; Shift+wheel moves a smaller step than a plain wheel notch |
 
+## Meter colour tests (FRO147)
+
+**FRO147 -- user-editable meter colours (docs/mixer.md's Meters subsection / docs/theming.md's
+meter-colours section): a Settings > Appearance "Meter Colours" section, one GLOBAL
+`meterColourStops` override cached on `synth::theme::AppLookAndFeel` and read by every meter
+painter.**
+
+| File | Covers |
+|------|--------|
+| `Tests/UI/Mixer/MeterColourStopsPersistenceTests.cpp` | `serializeMeterColourStops`/`parseMeterColourStops` round-trip at 1, a handful, and the maximum 8 stops; strict malformed-token rejection (empty string, a missing `:` separator, a garbage or out-of-range dB field, a short/non-hex colour field, ANY one bad token failing the WHOLE key rather than a partial apply -- `getFloatValue()`'s own "garbage parses as 0" trap is what this guards against); an out-of-order/duplicate-`dbFrom` but otherwise well-formed value still normalises through the vector constructor rather than failing; `load`/`write`/`save`/`clear` against a real `juce::PropertiesFile` (absent key -> `nullopt`, malformed stored value -> `nullopt`, `clear` removes the key rather than writing the theme's current stops in); `AppLookAndFeel`'s own cache -- no override follows the active theme, a set override becomes the effective stops regardless of theme, an override SURVIVES a later `applyTheme()` (a theme switch must not silently clear a pinned override), and clearing it falls back to the current theme |
+| `Tests/UI/Settings/MeterColourStopsEditorTests.cpp` | `Source/UI/Settings/MeterColourStopsEditor` driven with synthesized `juce::MouseEvent`s (the real-mouse-path convention above): clicking a handle selects it without writing anything; clicking a swatch fires `onColourPickerRequested` instead of arming a drag; dragging snaps to 0.5 dB and fires a live (uncommitted) change per frame plus one committed change on mouse-up; a drag clamps at each neighbour rather than crossing it; the FLOOR stop (index 0) never moves via drag or nudge, only recolours; clicking empty space adds a stop at the snapped dB and selects it, refused once 8 stops already exist or the click would collide with an existing stop's own `dbFrom`; `removeSelectedStop()`/Delete/Backspace remove the selected stop, never the floor, never the last remaining one; Up/Down nudge 0.5 dB (Shift = 3 dB), clamped the same way, consumed-but-a-no-op on the floor; `setStops()` from the owner (Reset to Theme, or a theme switch with no override pinned) replaces the working set and clears selection |
+| `Tests/UI/Mixer/MeterColourStopsLiveApplyTests.cpp` | pixel-sampled proof that `MixerMeter::paint` and `ChannelChipComponent::paintButton` both read the SAME `AppLookAndFeel::getMeterColourStops()` cache -- setting an override changes what each one paints, and clearing it (`std::nullopt`) reverts both to the active theme's own tokens |
+| `Tests/App/MainComponent/MeterColourStopsSettingsIntegrationTests.cpp` | the actual live-apply WIRE, on a real `MainComponent`: writing `meterColourStops` the same way `AppearanceSettingsTab::applyMeterColourStopsChange()` does, pumping the message loop for the settings file's own async `ChangeBroadcaster`, and asserting `MainComponent::changeListenerCallback`'s settings branch pushed it into `getLookAndFeelForTest()` -- the one `AppLookAndFeel` instance every meter painter reads; clearing the key reverts it to the active theme |
+
 **PNG render-to-file inspection.** `MixerColumnComponentMeterTests.cpp`'s
 `ClippedMeterRendersToPngForVisualInspection` follows the same convention as
 `ModuleComponentLayoutTests.cpp`'s `AdsrCardRendersToPngForVisualInspection` (`docs/testing.md`'s
@@ -38,7 +52,10 @@ for the same reason -- new coverage that would have pushed `testing.md` past its
 the clip colour and its bars sit in the clip zone, painted offscreen unconditionally (so the
 meaningful-content assertions always run), and written to disk only when
 `MIXER_METER_CLIP_PNG=<path>` is set in the environment -- `GTEST_SKIP()` otherwise, so CI never
-depends on writing a file.
+depends on writing a file. `MeterColourStopsEditorTests.cpp`'s
+`RendersToPngForVisualInspection` follows the identical convention for the Settings > Appearance
+"Meter Colours" section itself (`METER_COLOUR_EDITOR_PNG=<path>`).
 
 See also [`testing.md`](testing.md) and [`theming.md`](theming.md)'s token table for `meterFill`/
-`meterMid`/`meterHigh`/`meterClip`.
+`meterMid`/`meterHigh`/`meterClip`, and its meter-colours section for the `meterColourStops` user
+override.

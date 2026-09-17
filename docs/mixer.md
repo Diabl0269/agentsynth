@@ -618,6 +618,8 @@ stops, with no painter change — `setStops()` sorts by `dbFrom`, drops exact-`d
 and always leaves at least one stop (the model's floor: any db value below the lowest stop's own
 `dbFrom` still resolves to that stop's colour, i.e. its `dbFrom` is treated as -inf, never a hard
 edge a quieter value could fall through). `fromTheme()` builds the default four-stop model above.
+That follow-up ticket landed as FRO147 -- Settings > Appearance's "Meter Colours" section
+(`Source/UI/Settings/MeterColourStopsEditor.h`); see [`theming.md`](theming.md)'s meter-colours section.
 
 *Clip readout.* Cubase's "Meter Peak Level" field: `MixerMeterReadout`, one per metered column,
 sitting above its meter/fader. Shows the highest peak since the last reset ("-3.2", "+4.1", "-inf"),

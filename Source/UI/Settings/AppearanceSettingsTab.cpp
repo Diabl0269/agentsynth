@@ -383,6 +383,36 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
     contentHost.addAndMakeVisible(resetNoteColoursButton);
     resetNoteColoursButton.onClick = [this] { resetAllNoteColours(); };
 
+    // ---- Meter colours (FRO147) ----
+    meterColourStopsOverride = synth::ui::loadMeterColourStopsOverride(*appProperties.getUserSettings());
+
+    contentHost.addAndMakeVisible(meterColoursTitleLabel);
+    meterColoursTitleLabel.setText("Meter Colours", juce::dontSendNotification);
+    meterColoursTitleLabel.setFont(sectionHeaderFont);
+
+    meterColourStopsEditor = std::make_unique<synth::ui::MeterColourStopsEditor>();
+    contentHost.addAndMakeVisible(*meterColourStopsEditor);
+    meterColourStopsEditor->setTooltip("Drag a handle to move its level; click a swatch to recolour it; click "
+                                       "empty space to add a stop; Delete removes the selected one.");
+    meterColourStopsEditor->setStops(meterColourStopsOverride.value_or(
+        synth::ui::MeterColourStops::fromTheme(themeManager.getActiveTheme().colors)));
+    meterColourStopsEditor->onChanged = [this](const synth::ui::MeterColourStops& stops, bool committed) {
+        applyMeterColourStopsChange(stops, committed);
+    };
+    meterColourStopsEditor->onColourPickerRequested = [this](int index, juce::Rectangle<int> screenArea,
+                                                             juce::Colour current) {
+        openMeterColourStopPicker(index, screenArea, current);
+    };
+
+    contentHost.addAndMakeVisible(removeMeterStopButton);
+    removeMeterStopButton.onClick = [this] {
+        if (meterColourStopsEditor)
+            meterColourStopsEditor->removeSelectedStop();
+    };
+
+    contentHost.addAndMakeVisible(resetMeterColoursButton);
+    resetMeterColoursButton.onClick = [this] { resetMeterColoursToTheme(); };
+
     // Reflect the active theme selection in the list.
     const int activeRow = activeRowIndex(themeManager);
     if (activeRow >= 0)
@@ -497,6 +527,23 @@ void AppearanceSettingsTab::resized() {
     bounds.removeFromTop(6);
 
     resetNoteColoursButton.setBounds(bounds.removeFromTop(26).removeFromLeft(170));
+    addDivider();
+
+    // ---- 6. Meter colours ----
+    // Fixed height, same idea as the theme gallery above: room for the -60..+3 dB scale to read
+    // legibly regardless of how many stops are currently in play (the editor's own layout is
+    // driven by dB position, not stop count).
+    constexpr int kMeterEditorHeight = 220;
+    meterColoursTitleLabel.setBounds(bounds.removeFromTop(20));
+    bounds.removeFromTop(6);
+
+    meterColourStopsEditor->setBounds(bounds.removeFromTop(kMeterEditorHeight));
+    bounds.removeFromTop(6);
+
+    auto meterButtonRow = bounds.removeFromTop(26);
+    removeMeterStopButton.setBounds(meterButtonRow.removeFromLeft(90));
+    meterButtonRow.removeFromLeft(8);
+    resetMeterColoursButton.setBounds(meterButtonRow.removeFromLeft(120));
 
     // No explicit trailing margin needed: the initial .reduced(12) above already reserved 12px at
     // BOTH the top and the bottom of the scratch rect, so kScratchHeight - bounds.getHeight() below
@@ -570,6 +617,12 @@ void AppearanceSettingsTab::changeListenerCallback(juce::ChangeBroadcaster* sour
         cableSwatchRow->repaint();
     if (noteSwatchRow)
         noteSwatchRow->repaint();
+
+    // FRO147: an un-pinned meter-colour editor follows the theme too. A repaint alone would not
+    // be enough -- the editor owns its own working copy of a MeterColourStops (not a live theme
+    // reference), so it has to be handed the new theme's own four stops explicitly.
+    if (meterColourStopsEditor && !meterColourStopsOverride.has_value())
+        meterColourStopsEditor->setStops(synth::ui::MeterColourStops::fromTheme(themeManager.getActiveTheme().colors));
 }
 
 //==============================================================================
@@ -776,4 +829,49 @@ void AppearanceSettingsTab::openNoteColourPicker(int pitchClass, juce::Rectangle
             // final commit here would just repeat the last preview's write, so there is nothing
             // left to do once the popup closes.
         });
+}
+
+//==============================================================================
+// Meter colours (FRO147)
+//==============================================================================
+
+void AppearanceSettingsTab::applyMeterColourStopsChange(const synth::ui::MeterColourStops& stops, bool committed) {
+    // Any edit -- drag, recolour, add, remove, nudge -- pins an override, exactly like touching a
+    // cable/note swatch does: the point of editing is to stop following the theme.
+    meterColourStopsOverride = stops;
+    if (committed)
+        synth::ui::saveMeterColourStopsOverride(*appProperties.getUserSettings(), stops);
+    else
+        synth::ui::writeMeterColourStopsOverride(*appProperties.getUserSettings(), stops);
+
+    // No direct push to AppLookAndFeel or a mixer repaint here. Cable colours can push straight
+    // into GraphEditor because AppearanceSettingsTab is handed that pointer directly
+    // (setGraphEditor); there is no equivalent direct pointer to "the live meters" (mixer columns,
+    // Master, a possibly-detached mixer window, every track header chip), and SettingsWindow is
+    // its OWN juce::DialogWindow (SettingsWindow.cpp's LaunchOptions), so a getLookAndFeel() call
+    // from inside this tab is not guaranteed to resolve back to the app's real AppLookAndFeel
+    // instance — especially in the plugin build, which never calls Desktop::setDefaultLookAndFeel.
+    // MainComponent's settings-file ChangeListener branch (MainComponentCallbacks.cpp) re-reads
+    // this same key and pushes+repaints unconditionally instead, the identical "re-read on notify"
+    // path piano-roll note colours already use for the same reason.
+}
+
+void AppearanceSettingsTab::openMeterColourStopPicker(int index, juce::Rectangle<int> screenArea,
+                                                      juce::Colour current) {
+    synth::ui::ColourPickerPopup::show(
+        screenArea, current, appProperties.getUserSettings(),
+        [this, index](juce::Colour c) {
+            if (meterColourStopsEditor)
+                meterColourStopsEditor->setStopColour(index, c, /*committed*/ true);
+        },
+        [](juce::Colour) {
+            // Same reasoning as openNoteColourPicker's onCommit: every preview already persisted.
+        });
+}
+
+void AppearanceSettingsTab::resetMeterColoursToTheme() {
+    meterColourStopsOverride.reset();
+    synth::ui::clearMeterColourStopsOverride(*appProperties.getUserSettings());
+    if (meterColourStopsEditor)
+        meterColourStopsEditor->setStops(synth::ui::MeterColourStops::fromTheme(themeManager.getActiveTheme().colors));
 }

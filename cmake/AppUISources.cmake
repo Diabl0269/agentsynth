@@ -50,8 +50,9 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerColumnHeader.h
     Source/UI/Mixer/MixerMeterScale.h
     Source/UI/Mixer/MixerMeterBallistics.h
-    Source/UI/Mixer/MeterColourStops.h
-    Source/UI/Mixer/MeterColourStops.cpp
+    # MeterColourStops.h/.cpp moved to Core's own source list (root CMakeLists.txt, FRO147) --
+    # AppLookAndFeel (Core) caches an effective MeterColourStops itself now, and this file's
+    # PUBLIC link to Core is how MixerMeter.cpp below still reaches it.
     Source/UI/Mixer/MixerMeter.h
     Source/UI/Mixer/MixerMeter.cpp
     Source/UI/Mixer/MixerMeterReadout.h
@@ -194,6 +195,8 @@ set(APPUI_SOURCES
     Source/Plugin/Hosting/HostedPluginWindowManager.h
     Source/UI/Settings/AppearanceSettingsTab.cpp
     Source/UI/Settings/AppearanceSettingsTab.h
+    Source/UI/Settings/MeterColourStopsEditor.cpp
+    Source/UI/Settings/MeterColourStopsEditor.h
     Source/UI/Settings/FeedbackSettingsTab.cpp
     Source/UI/Settings/FeedbackSettingsTab.h
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp

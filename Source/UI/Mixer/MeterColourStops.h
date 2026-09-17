@@ -2,7 +2,9 @@
 
 #include "MixerMeterScale.h"
 #include <functional>
+#include <juce_data_structures/juce_data_structures.h>
 #include <juce_graphics/juce_graphics.h>
+#include <optional>
 #include <vector>
 
 namespace synth::theme {
@@ -36,6 +38,11 @@ public:
     static constexpr float kMidFromDb = -18.0f;
     static constexpr float kHighFromDb = -6.0f;
     static constexpr float kClipFromDb = 0.0f;
+
+    /** FRO147: the Settings > Appearance editor's own ceiling on stop count -- a UI-level limit,
+     *  not one setStops()/forEachBand() enforce themselves (they stay correct for any count, per
+     *  the class comment above). Kept here so the editor and its persistence agree on one number. */
+    static constexpr int kMaxStops = 8;
 
     /** Default-constructs to a single, safe fallback stop -- see setStops()'s own "never empty"
      *  guarantee. Real instances come from fromTheme() or the vector constructor below. */
@@ -73,5 +80,48 @@ public:
 private:
     std::vector<MeterColourStop> stops_{{kMeterMinDb, juce::Colour()}};
 };
+
+//==============================================================================
+// Persistence -- FRO147: a GLOBAL user override, mirroring CableColour.h's / NoteColour.h's own
+// "unset means follow the theme" idiom. Lives here (not in the settings tab) so the tab, the
+// AppLookAndFeel cache that painters read, and MainComponent's startup restore cannot disagree
+// about the storage format.
+//==============================================================================
+
+/** The ApplicationProperties key. Absent -> meters follow the active theme (MeterColourStops::
+ *  fromTheme()); present -> the custom stops are used regardless of theme, until Reset removes
+ *  the key. */
+inline const char* meterColourStopsKey() noexcept { return "meterColourStops"; }
+
+/** "db:ARGBHEX,db:ARGBHEX,..." ascending by dbFrom, db to one decimal place (matches the editor's
+ *  own 0.5 dB snap), ARGB as 8 uppercase hex digits. */
+juce::String serializeMeterColourStops(const MeterColourStops& stops);
+
+/** The strict inverse of serializeMeterColourStops(): nullopt on ANY malformed token (a bad float,
+ *  a non-8-hex-digit colour, a slot count of 0 or over kMaxStops) rather than partially applying
+ *  what parsed -- one corrupted stop must not leave a caller with a scale-breaking partial model.
+ *  A well-formed result still runs through the MeterColourStops(vector) constructor, so an
+ *  out-of-order or dbFrom-duplicate file still normalises rather than misbehaving. */
+std::optional<MeterColourStops> parseMeterColourStops(const juce::String& raw);
+
+/** nullopt when the key is absent OR malformed -- both mean "no override", i.e. follow the theme.
+ *  Callers never see the difference between "never set" and "corrupted"; both fall back the same
+ *  way (NoteColour.h's "malformed -> treat as absent" rule). */
+std::optional<MeterColourStops> loadMeterColourStopsOverride(juce::PropertiesFile& props);
+
+/** Writes the key WITHOUT forcing a disk flush -- safe to call on every frame of a live drag
+ *  (juce::PropertiesFile still fires its ChangeBroadcaster synchronously-enough for a live-apply
+ *  repaint, and debounces the actual disk write on its own timer). Pair with
+ *  saveMeterColourStopsOverride() at a gesture's commit point so the edit survives a crash before
+ *  that timer fires. */
+void writeMeterColourStopsOverride(juce::PropertiesFile& props, const MeterColourStops& stops);
+
+/** writeMeterColourStopsOverride() + an explicit saveIfNeeded() -- the commit-point call (mouse
+ *  up, a colour picked, a stop added/removed, a keyboard nudge). */
+void saveMeterColourStopsOverride(juce::PropertiesFile& props, const MeterColourStops& stops);
+
+/** Removes the key (never re-writes the theme's current stops as a new pin) so meters go back to
+ *  following the active theme -- "Reset to Theme". */
+void clearMeterColourStopsOverride(juce::PropertiesFile& props);
 
 } // namespace synth::ui
