@@ -97,6 +97,7 @@ add_executable(Tests
     Mixer/ChannelStripTests.cpp
     Mixer/PeakMeterLatchTests.cpp
     Mixer/MixerSoloTests.cpp
+    Mixer/ProjectLoadStripGainTests.cpp
     Mixer/ChannelFlow/ChannelFlowTests.cpp
     Mixer/ChannelFlow/ChannelFlowInstrumentTests.cpp
     Mixer/ChannelFlow/ChannelFlowPluginInstrumentTests.cpp
