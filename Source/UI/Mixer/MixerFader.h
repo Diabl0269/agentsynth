@@ -1,5 +1,6 @@
 #pragma once
 
+#include "MixerFaderSlider.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -9,11 +10,22 @@ class AppUndoManager;
 // ChannelStripModule/MasterModule's own `gain` AudioParameterFloat*, reused by both (their ranges
 // are identical -- ChannelStripModule::kMinGainDb/kMaxGainDb).
 //
+// FRO150 (docs/mixer_fader.md): the slider's on-screen THUMB POSITION follows Cubase's own
+// non-linear fader taper (MixerFaderTaper.h) while the bound PARAMETER stays exactly linear dB --
+// bind() installs a custom juce::NormalisableRange<double> whose convertTo0to1/convertFrom0to1
+// route through the taper. slider_ is a MixerFaderSlider (not a plain juce::Slider) for the
+// Shift-fine-drag/wheel and Cmd-click/double-click-reset conventions -- see its own header comment
+// for why those are reimplemented rather than layered on juce::Slider's own mouse handling.
+//
 // Undo: a juce::AudioProcessorParameter::Listener on the bound param brackets ONE
 // captureBeforeState()/pushSnapshotFromCapture() pair per drag gesture -- the exact mechanism
 // ModuleComponent::parameterGestureChanged already uses for every module's own knobs
 // (Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp), just triggered from the
-// mixer's own slider instead of a module card's.
+// mixer's own slider instead of a module card's. FRO150: MixerFaderSlider has no direct access to
+// the bound AudioParameterFloat, so bind() wires its onDragStart/onDragEnd (juce::Slider's own
+// public std::function members) to param.beginChangeGesture()/endChangeGesture() directly, the
+// same pattern nudge() below already uses for the keyboard path -- one bracket mechanism, however
+// the gesture started.
 
 namespace synth::ui {
 
@@ -73,7 +85,7 @@ private:
     void parameterValueChanged(int parameterIndex, float newValue) override;
     void parameterGestureChanged(int parameterIndex, bool gestureIsStarting) override;
 
-    juce::Slider slider_;
+    MixerFaderSlider slider_;
     juce::Label readout_;
     std::unique_ptr<juce::SliderParameterAttachment> attachment_;
 

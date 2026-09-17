@@ -575,8 +575,10 @@ inverse `meterFractionToDb` are a monotonic PIECEWISE-LINEAR interpolation throu
 Cubase's MixConsole meter (0 dB at 92% of the height, each 6 dB down to -24 about 12.5%, -50..-60 about
 7%), so a channel sitting near 0 dB (the common case) reads with real resolution. The ONE mapping every
 caller goes through -- ticks, the bar fill (`MeterColourStops::forEachBand`'s band edges), the
-peak-hold line, and `ChannelChipComponent`'s horizontal fill -- so a taper change is one-file. A
-later ticket gives the FADER its own separate taper; this file is never reused there.
+peak-hold line, and `ChannelChipComponent`'s horizontal fill -- so a taper change is one-file.
+FRO150 gave the FADER its own separate taper, Shift fine-drag and Cmd-click reset -- a different,
+unrelated mapping (`Source/UI/Mixer/MixerFaderTaper.h`, 0 dB at thumb position 0.71, the bound
+`gain` parameter unchanged/linear throughout) -- see [`docs/mixer_fader.md`](mixer_fader.md).
 
 *Ballistics, rate-independent.* Instant attack; release ~20 dB/s; a peak-hold line per bar holds
 1.5 s then falls at ~20 dB/s (`Source/UI/Mixer/MixerMeterBallistics.h`'s `advanceMeterBallistics`).
