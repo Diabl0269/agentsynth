@@ -217,7 +217,7 @@ Automated (`build-artifacts.yml`):
 round-trips against a real, live feed once a key exists for that platform; the 404-then-silent-no-op
 behavior described in earlier drafts of this doc no longer applies to that step.
 
-## Release asset upload reliability (FRO151, 2026-09-17)
+## Release asset upload reliability (FRO151/FRO160, 2026-09-17/18)
 
 Two of four `build-artifacts.yml` runs on 2026-09-17 built every platform successfully but still
 published a **half-populated** prerelease: `softprops/action-gh-release@v1`'s asset uploader is a
@@ -228,46 +228,69 @@ json response body ... Unexpected token '<', "<!DOCTYPE "` — for v0.239.0's
 uploaded and skipping `publish-appcast`/`publish-appcast-windows` below (both `needs: [release]`,
 and the `release` job itself came back `failure`).
 
-- **Fix 1 — retry the upload.** `Create Release` now uses `softprops/action-gh-release@v3`. Its
-  uploader goes through the action's own authenticated Octokit client (`this.github.request(...)`)
-  rather than a bare `fetch()`, and that client is built with `@octokit/plugin-retry` attached —
-  transparent retry-with-backoff on a 5xx/network/malformed response, before the error ever reaches
-  the action's own code. v3 needs the Node 24 Actions runtime; GitHub-hosted `ubuntu-latest` already
-  has it (the v1 failure logs above even show GitHub auto-upgrading the run to Node 24, since Node
-  20 is EOL there).
-- **Fix 2 — verify, don't trust the exit code.** A `Verify published release assets` step runs
-  right after `Create Release` (`if: always() && steps.tag_version.outcome == 'success'`, so it
-  still prints its diff even if the upload step itself failed outright). It computes the *expected*
-  asset set from `artifacts/` — the same directory `Download All Artifacts` + `Generate checksums`
-  just populated, so it tracks the build matrix automatically instead of a hardcoded platform list —
-  and compares it against `gh release view "$TAG" --json assets`, printing a missing/unexpected diff
-  and failing the job on any mismatch. `appcast.xml`/`appcast-windows.xml` are deliberately excluded
+- **Fix attempt 1 (#407, 2026-09-17) — bump to `action-gh-release@v3` for retries.** Based on the
+  theory that v3's Octokit client pulls in `@octokit/plugin-retry` and transparently retries
+  5xx/network failures. **This did not hold up** (found while diagnosing v0.242.0's failure below):
+  v3's `dist/index.js` contains no `@octokit/plugin-retry`; the only retry layer in the bundle is an
+  undici-level `RetryHandler` whose default retryable methods are `GET/HEAD/OPTIONS/PUT/DELETE/
+  TRACE` — POST, what an asset upload is, is excluded by default.
+- **Verify, don't trust the exit code.** A `Verify published release assets` step runs right after
+  the upload (`if: always() && steps.tag_version.outcome == 'success'`, so it still prints its diff
+  even if the upload step itself failed outright). It computes the *expected* asset set from
+  `artifacts/` — the same directory `Download All Artifacts` + `Generate checksums` just
+  populated, so it tracks the build matrix automatically instead of a hardcoded platform list — and
+  compares it against `gh release view "$TAG" --json assets`, printing a missing/unexpected diff and
+  failing the job on any mismatch. `appcast.xml`/`appcast-windows.xml` are deliberately excluded
   from the comparison: `publish-appcast`/`publish-appcast-windows` upload those *after* this job
-  finishes, so they're legitimately absent from the release at this point.
+  finishes, so they're legitimately absent from the release at this point. This step worked exactly
+  as designed on v0.242.0 (below) — it caught the loss that the upload step's own reporting missed.
 
-**The `Agent.Synth` asset is not a bug.** Every release carries a ~24 MB asset literally named
-`Agent.Synth` next to the ~9 MB `AgentSynth-macOS-arm64.zip`; it looks at a glance like a stray
-duplicate of the macOS app. It is not: `build-artifacts.yml`'s "Package Linux Artifact" step
-copies the raw Linux executable (named `Agent Synth`, with a space — JUCE's product name) straight
-into `artifact/`, unzipped, as the Linux platform's only standalone deliverable (there's no
-Linux installer). GitHub rewrites the space in an uploaded asset's filename to a period on upload
-— confirmed both empirically (`gh release view` shows `Agent.Synth`, `uploaded`, `24834784` bytes,
-consistent with an unstripped Release Linux binary) and against `action-gh-release`'s own v3
-source, which has a comment acknowledging exactly this ("GitHub can rewrite uploaded asset names,
-so compare against both..."). `synth-platform/apps/web/src/lib/releases.ts` already hardcodes
-`linuxStandalone: "Agent.Synth"`, and `apps/web/src/pages/download.astro` documents it to users as
-"the download is the raw standalone binary — there's no installer. Make it executable once (chmod
-+x Agent.Synth)". So the verification step above treats it as expected (via the same space->period
-normalization), and this task left it alone.
+**v0.242.0 (run 35272699011, 2026-09-17): 4 of 7 assets lost, root-caused.** `Create Release`
+(v3, `files: artifacts/*`) logged all 7 "Uploading ..." lines within 1ms of each other, then
+`##[error]Error creating asset temp dir` ~300ms later, then 3 more "Uploaded" lines over the next
+second; the other 4 assets (including the Linux standalone) never got an "Uploaded" line. Cause,
+confirmed by reading v3's compiled bundle (`dist/index.js` — the string doesn't appear in `src/`):
+v3's `files:` path fires every asset **concurrently** via `Promise.all` (sequential only if the
+action's own `preserve_order` input is set, which this workflow didn't set); `Promise.all` rejects
+on the *first* rejected promise without cancelling the rest, so uploads already in flight kept
+racing to finish (the 3 that landed) while the remainder were abandoned mid-request. The
+`"Error creating asset temp dir"` string itself is not in v3's bundle at all — no code path in it
+creates a temp directory for an asset — so it is GitHub's own upload-API error message, surfaced
+raw through Octokit's `RequestError` (not through v3's own `Failed to upload release asset X...`
+wrapping, which only wraps a *completed* non-201 response). Because `Promise.all` only surfaces the
+first rejection, **the log does not attribute the error to a specific asset** — it is plausible but
+not confirmed that it was the Linux standalone's upload (the only asset in this batch with a space
+in its filename, and the last one logged as "Uploading"); it could equally have been one of the
+other three that never got an "Uploaded" line.
 
-**Pre-existing wrinkle, not fixed by this task**: `SHA256SUMS.txt` is generated from the *local*
-`artifacts/` directory (`sha256sum *`), so its `Agent Synth` line still has the pre-rename,
-space-containing name — it doesn't match the `Agent.Synth` filename the asset is actually published
-under. Anyone trying `sha256sum -c SHA256SUMS.txt` against the downloaded file will need to rename
-it back (or diff the hash by hand). Fixing this would mean either renaming the local artifact
-before checksumming (touches the Linux packaging step and the site's hardcoded name together) or
-generating `SHA256SUMS.txt` from the published asset names post-upload; left as an open question
-rather than guessed at here.
+**Fix (this task, FRO151/FRO160).** Two independent changes:
+
+1. **Stop sending a filename with a space.** `build-artifacts.yml`'s "Package Linux Artifact" step
+   now copies the raw Linux executable straight to `artifact/Agent.Synth` (renamed at the copy
+   point only — the JUCE product name / build output stays `Agent Synth`, `SYNTH_PRODUCT_NAME` in
+   `CMakeLists.txt`, unchanged). `Agent.Synth` was already the name every past release published
+   under (GitHub silently rewrote the space to a period on upload), so this is a no-op for
+   `synth-platform/apps/web/src/lib/releases.ts`'s hardcoded `linuxStandalone: "Agent.Synth"` and
+   for `apps/web/src/pages/download.astro`'s existing user-facing instructions. This is not proven
+   to be *the* cause of the v0.242.0 error above, but it removes the one variable that was ever
+   anomalous about that asset, and it closes a real, separate bug (FRO160): `SHA256SUMS.txt` is
+   generated from the *local* `artifacts/` directory (`sha256sum *`), so before this change its
+   `Agent Synth` line never matched the `Agent.Synth` name the asset actually published under —
+   `sha256sum -c SHA256SUMS.txt` against the downloaded file always failed. Now that the local
+   artifact is already named `Agent.Synth`, the checksum line matches the published name.
+2. **Upload assets ourselves, sequentially, with our own retries — not via v3's `files:`.**
+   `Create Release` (v3) now only creates/updates the release object (tag, name, body,
+   draft/prerelease); a separate `Upload release assets` step loops over `artifacts/*` one file at
+   a time, calling `gh release upload "$TAG" "$f" --clobber` up to 5 times with linear backoff per
+   file, and fails the step (`exit 1`) if any file exhausts its retries. Sequential removes the
+   in-flight-abandonment failure mode above (nothing else is racing when one upload fails); reusing
+   `gh release upload` for the retry means each attempt reads the file itself rather than depending
+   on whether a previously-consumed request body/stream can be replayed; the exit code is entirely
+   ours, so there is no separate action-internal retry/swallow behavior left to audit.
+
+`Verify published release assets` no longer normalizes spaces to periods before comparing — no
+filename this workflow publishes contains a space any more, so a mismatch there is a real
+missing/renamed asset, not an expected GitHub rewrite.
 
 ## Promoting a build to stable
 

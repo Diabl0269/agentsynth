@@ -364,18 +364,24 @@ jobs:
       if: runner.os == 'Linux'
       run: |
         mkdir -p artifact
-        find build -name "Agent Synth" -type f -perm /111 -exec cp {} artifact/ \; || true
-        if [ ! -f "artifact/Agent Synth" ]; then
-            find build -name "Agent Synth" -type f -exec cp {} artifact/ \;
+        # Renamed at the copy point to "Agent.Synth" (no space) — NOT a rename of the JUCE
+        # product name / build output, which stays "Agent Synth" (SYNTH_PRODUCT_NAME,
+        # CMakeLists.txt) everywhere upstream of this line. "Agent.Synth" is already the name
+        # every published release has shown for this asset (GitHub silently rewrote the space to
+        # a period on upload), so this is a no-op for end users and for
+        # synth-platform/apps/web/src/lib/releases.ts's hardcoded `linuxStandalone: "Agent.Synth"`
+        # — see docs/distribution.md's "Release asset upload reliability" section (FRO151/FRO160).
+        find build -name "Agent Synth" -type f -perm /111 -exec cp {} artifact/Agent.Synth \; || true
+        if [ ! -f "artifact/Agent.Synth" ]; then
+            find build -name "Agent Synth" -type f -exec cp {} artifact/Agent.Synth \;
         fi
-        chmod +x "artifact/Agent Synth"
+        chmod +x "artifact/Agent.Synth"
 
-        # AgentSynthPlugin_VST3's .vst3 is a directory bundle on Linux, and
-        # softprops/action-gh-release (in the release job below) uploads `artifact/*` as release
-        # assets — GitHub release assets must be files, so the bundle is zipped rather than
-        # copied in raw. `zip -r` from inside the bundle's parent dir preserves its internal
-        # structure. find (not a hardcoded path) so a JUCE artefact-path change fails loudly here
-        # instead of silently shipping an artifact/ with no plugin in it.
+        # AgentSynthPlugin_VST3's .vst3 is a directory bundle on Linux, and the release job below
+        # uploads `artifacts/*` as release assets — GitHub release assets must be files, so the
+        # bundle is zipped rather than copied in raw. `zip -r` from inside the bundle's parent dir
+        # preserves its internal structure. find (not a hardcoded path) so a JUCE artefact-path
+        # change fails loudly here instead of silently shipping an artifact/ with no plugin in it.
         VST3_PATH=$(find build -name "Agent Synth.vst3" -type d | head -n 1)
         if [ -z "$VST3_PATH" ]; then
           echo "Agent Synth.vst3 not found!"
@@ -540,25 +546,42 @@ jobs:
           sha256sum * > SHA256SUMS.txt
           cd ..
 
-      # FRO151: v1 uploaded each asset via a bare, unwrapped `fetch()` (see its src/github.ts
-      # `upload()`) — any non-201 response or a body that fails `resp.json()` throws immediately
-      # with zero retry, killing the whole step and leaving every asset uploaded so far stranded on
-      # an otherwise-published prerelease. That is exactly what happened twice on 2026-09-17:
-      # v0.240.0 got "Failed to upload release asset SHA256SUMS.txt. received status code 502" and
-      # v0.239.0 got "invalid json response body at .../assets?name=AgentSynth-Windows-x64-Plugins.zip
-      # reason: Unexpected token '<', "<!DOCTYPE "..." (an HTML error page instead of JSON) — both
-      # transient GitHub-side hiccups, not real failures, but the release still published with
-      # assets silently missing (v0.240.0 lost the macOS zip + SHA256SUMS.txt; v0.239.0 lost both
-      # plugin zips; the appcast jobs below never ran either since the release job itself failed).
-      # v3's upload() instead calls `releaser.uploadReleaseAsset()` -> `this.github.request(...)`,
-      # i.e. the authenticated Octokit client `run.ts` builds via `getOctokit`, and pulls in
-      # `@octokit/plugin-retry` (declared in package.json, bumped 4.0.3 -> 7.1.1 across the v2 line
-      # per the CHANGELOG) — that plugin transparently retries a request on a 5xx/network/malformed
-      # response with backoff before it ever reaches action code. Bumping the major version is the
-      # smallest change that actually retries the failing call, vs. hand-rolling a `gh release
-      # upload --clobber` retry loop around a step that (per v3's own source) already does this.
-      # v3 needs the Node 24 Actions runtime; `runs-on: ubuntu-latest` here already supports it (the
-      # v1 logs above show every run being auto-upgraded to Node 24 anyway, since Node 20 is EOL).
+      # FRO151/FRO160 (superseding the FRO151 fix from #407): v1 uploaded each asset via a bare,
+      # unwrapped `fetch()` (see its src/github.ts `upload()`) — any non-201 response or a body
+      # that fails `resp.json()` throws immediately with zero retry, killing the whole step and
+      # leaving every asset uploaded so far stranded on an otherwise-published prerelease. That is
+      # exactly what happened twice on 2026-09-17: v0.240.0 got "Failed to upload release asset
+      # SHA256SUMS.txt. received status code 502" and v0.239.0 got "invalid json response body at
+      # .../assets?name=AgentSynth-Windows-x64-Plugins.zip reason: Unexpected token '<', "<!DOCTYPE
+      # "..." (an HTML error page instead of JSON) — both transient GitHub-side hiccups, not real
+      # failures, but the release still published with assets silently missing.
+      #
+      # #407 bumped to softprops/action-gh-release@v3 on the theory that its Octokit client pulls
+      # in `@octokit/plugin-retry` and transparently retries 5xx/network failures. That theory does
+      # NOT hold: v3's `dist/index.js` (checked directly — there is no `@octokit/plugin-retry` or
+      # `octokit-plugin-retry` string anywhere in the bundle) instead vendors an undici-level
+      # `RetryHandler` whose default retryable methods are `GET/HEAD/OPTIONS/PUT/DELETE/TRACE` —
+      # POST, which is what an asset upload is, is excluded by default. Worse, v3's `files:` upload
+      # path (`sb()` in the bundle) fires every asset concurrently via `Promise.all` unless the
+      # action's own `preserve_order` input is set (it isn't here): when one upload rejects,
+      # `Promise.all` rejects immediately without cancelling the others, so uploads that were
+      # already in flight raced to finish (3 of them did, logged AFTER the error line) while the
+      # rest were abandoned — this is why run 35272699011 (v0.242.0) lost 4 of 7 assets from a
+      # single rejection, not 4 independent failures. The rejection itself — logged as bare
+      # "Error creating asset temp dir" with none of v3's own "Failed to upload release asset X..."
+      # wrapping — does not appear anywhere in v3's bundle either, so it is GitHub's own upload-API
+      # error message surfacing through Octokit's RequestError, not anything the action's code
+      # does; which of the 7 concurrent uploads actually triggered it cannot be determined from the
+      # log (Promise.all reports only the first rejection, unattributed to a filename).
+      #
+      # Fix: keep v3 for create/update of the release object only (no `files:` — see the identical
+      # "not really retried" analysis above), and upload assets ourselves, one at a time, with our
+      # own bounded retry loop via `gh release upload --clobber`. Sequential removes the
+      # in-flight-abandonment failure mode; `gh release upload` reads the file itself per attempt
+      # (no dependency on whether a partially-consumed request body can even be replayed); the exit
+      # code is ours, so a step that fails always shows failed, with no separate action-retry logic
+      # to audit. v3 needs the Node 24 Actions runtime; `runs-on: ubuntu-latest` here already
+      # supports it.
       - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v3
@@ -566,27 +589,59 @@ jobs:
           tag_name: ${{ steps.tag_version.outputs.new_tag }}
           name: Release ${{ steps.tag_version.outputs.new_tag }}
           body: ${{ steps.tag_version.outputs.changelog }}
-          files: artifacts/*
           draft: false
           prerelease: true
 
-      # FRO151: even a retrying uploader can still lose to a sustained outage, so this is the
-      # backstop — verify what the release actually ended up with instead of trusting the action's
-      # exit code, and fail the job loudly rather than leaving a half-populated prerelease around
-      # (exactly what slipped through undetected on 2026-09-17, twice). "Expected" is derived from
-      # `artifacts/` itself — everything `Download All Artifacts` + `Generate checksums` produced
-      # above — never a hardcoded platform list, so adding/removing a matrix leg can't silently go
-      # unverified here. `appcast.xml`/`appcast-windows.xml` aren't part of this comparison: those
-      # are uploaded by the publish-appcast* jobs below, after this job finishes, so they're
-      # legitimately absent from the release at this point.
+      # Sequential, hand-rolled retry loop (see the FRO151/FRO160 comment above for why: v3's own
+      # `files:` upload is concurrent and its retry layer excludes POST). One asset at a time, 5
+      # attempts each with linear backoff, `--clobber` so a re-run (or a retried attempt that
+      # actually succeeded server-side before the client saw the error) overwrites rather than
+      # 422s. Fails the step (and therefore the job) loudly on any asset that exhausts its
+      # retries — never leaves a partial upload looking green.
+      - name: Upload release assets
+        id: upload_assets
+        if: steps.create_release.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag_version.outputs.new_tag }}
+        run: |
+          set -uo pipefail
+          overall=0
+          for f in artifacts/*; do
+            name="$(basename "$f")"
+            ok=0
+            for attempt in 1 2 3 4 5; do
+              if gh release upload "$TAG" "$f" --clobber --repo "${{ github.repository }}"; then
+                echo "Uploaded $name (attempt $attempt/5)"
+                ok=1
+                break
+              fi
+              echo "::warning::Upload of $name failed on attempt $attempt/5"
+              [ "$attempt" -lt 5 ] && sleep $((attempt * 5))
+            done
+            if [ "$ok" -ne 1 ]; then
+              echo "::error::Giving up on $name after 5 attempts"
+              overall=1
+            fi
+          done
+          exit $overall
+
+      # FRO151/FRO160: even a retrying uploader can still lose to a sustained outage, so this is the
+      # backstop — verify what the release actually ended up with instead of trusting the upload
+      # step's exit code, and fail the job loudly rather than leaving a half-populated prerelease
+      # around. "Expected" is derived from `artifacts/` itself — everything `Download All
+      # Artifacts` + `Generate checksums` above produced — never a hardcoded platform list, so
+      # adding/removing a matrix leg can't silently go unverified here. `appcast.xml`/
+      # `appcast-windows.xml` aren't part of this comparison: those are uploaded by the
+      # publish-appcast* jobs below, after this job finishes, so they're legitimately absent from
+      # the release at this point.
       #
-      # GitHub rewrites spaces in an uploaded asset's filename to periods (confirmed against this
-      # repo's own releases: the Linux job's raw "Agent Synth" executable four steps up publishes
-      # as "Agent.Synth" — softprops/action-gh-release's own v3 source has a comment acknowledging
-      # this: "GitHub can rewrite uploaded asset names, so compare against both..."), so the local
-      # name is normalized the same way before comparing. This is the only rewrite this repo's
-      # asset names ever trigger; a future asset with other special characters may need a broader
-      # normalization here.
+      # No filename published by this workflow contains a space any more (FRO160: the Linux
+      # standalone binary is renamed to "Agent.Synth" at the point it's copied into artifact/, in
+      # the Package Linux Artifact step — it used to ship raw as "Agent Synth" and rely on GitHub
+      # silently rewriting the space to a period on upload). So this comparison is now a plain
+      # sorted-list diff with no normalization step: a mismatch here is a real missing/renamed
+      # asset, not an expected rewrite to filter out.
       - name: Verify published release assets
         if: always() && steps.tag_version.outcome == 'success'
         env:
@@ -594,7 +649,7 @@ jobs:
           TAG: ${{ steps.tag_version.outputs.new_tag }}
         run: |
           set -uo pipefail
-          expected="$(cd artifacts && ls -1 | tr ' ' '.' | sort)"
+          expected="$(cd artifacts && ls -1 | sort)"
           actual="$(gh release view "$TAG" --repo "${{ github.repository }}" \
                       --json assets -q '.assets[].name' | sort)"
           if [ "$expected" = "$actual" ]; then
@@ -602,7 +657,7 @@ jobs:
             exit 0
           fi
           echo "::error::Release $TAG's published assets don't match what the build jobs produced (a prior step likely failed to upload one, e.g. a transient GitHub 5xx)"
-          echo "--- expected (from artifacts/, GitHub's space->period rename applied) ---"
+          echo "--- expected (from artifacts/) ---"
           echo "$expected"
           echo "--- actual (currently published on the release) ---"
           echo "$actual"
