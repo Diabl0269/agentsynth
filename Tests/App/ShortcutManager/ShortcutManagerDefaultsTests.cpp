@@ -53,6 +53,19 @@ const juce::StringArray& surfaceResolvedActionIds() {
     return ids;
 }
 
+// FRO125: the transport family is deliberately shipped with NO default keybinding (see
+// ShortcutManager::addGeneralDefaultBindings' absence of an entry for these ids, and their own
+// comment in getActionTable()) -- they exist first as command/MIDI-Remote targets, and a user may
+// still bind one from Settings. Every OTHER action-table row is required to carry a real default
+// (see EveryActionIdHasABindingACategoryAndADescription below), so this is the one exception list.
+const juce::StringArray& intentionallyUnboundActionIds() {
+    static const juce::StringArray ids{
+        "transportPlay",          "transportStop", "transportToggleLoop", "transportRecord", "transportToggleMetronome",
+        "transportReturnToStart",
+    };
+    return ids;
+}
+
 } // namespace
 
 TEST_F(ShortcutManagerTest, DefaultBindingsCorrect) {
@@ -111,7 +124,8 @@ TEST_F(ShortcutManagerTest, EveryDefaultBindingIsUnique) {
 // allowed to do that.
 TEST_F(ShortcutManagerTest, EveryActionIdHasABindingACategoryAndADescription) {
     for (const auto& actionId : manager.getActionIds()) {
-        EXPECT_NE(manager.getBinding(actionId).getKeyCode(), 0) << actionId << " has no default binding";
+        if (!intentionallyUnboundActionIds().contains(actionId))
+            EXPECT_NE(manager.getBinding(actionId).getKeyCode(), 0) << actionId << " has no default binding";
         EXPECT_NE(ShortcutManager::getActionDescription(actionId), actionId)
             << actionId << " has no human-readable description";
         // getCategory() answers General for an id it has never heard of, so "has a category" is only

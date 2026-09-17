@@ -807,6 +807,86 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandR
     };
 }
 
+// ---- Transport: promoted to command-dispatched actions (FRO125, docs/midi_remote.md §4.9's
+// prerequisite) so a MIDI Remote action target can invokeDirectly() them. Every row below reuses
+// the transport bar's OWN choke point -- triggerClick() on its buttons for play/stop TOGGLE, loop,
+// metronome and record, exactly the idiom togglePlayback already established above -- so a
+// command invocation and a mouse click on the bar can never disagree, and record still reaches
+// MainComponent::handleRecordToggle's armed-track gate rather than bypassing it. Play/Stop as
+// SEPARATE, direction-committing actions (rather than toggles) go straight to TransportService,
+// guarded on the current snapshot so invoking "Play" while already playing is a no-op.
+// Appended LAST in commandTable() (never interleaved -- see the snapSet id comment in
+// AppCommands.h for why that is always safe) so MainComponentCommandTableTests.cpp's
+// kExpectedOrder only gains a suffix.
+std::vector<MainComponent::CommandSpec> MainComponent::buildTransportCommandRows() {
+    return {
+        {AppCommands::transportPlay,
+         "Play",
+         "Start the timeline transport",
+         "Transport",
+         "transportPlay",
+         {},
+         [](MainComponent& m) {
+             auto& transport = m.audioEngine.getTransport();
+             if (!transport.getPositionSnapshot().playing)
+                 transport.play();
+             return true;
+         }},
+        {AppCommands::transportStop,
+         "Stop",
+         "Stop the timeline transport",
+         "Transport",
+         "transportStop",
+         {},
+         [](MainComponent& m) {
+             auto& transport = m.audioEngine.getTransport();
+             if (transport.getPositionSnapshot().playing)
+                 transport.stop();
+             return true;
+         }},
+        {AppCommands::transportToggleLoop,
+         "Toggle Looping",
+         "Toggle looping using the current loop locators",
+         "Transport",
+         "transportToggleLoop",
+         {},
+         [](MainComponent& m) {
+             m.timelinePanel.getTransportBar().getLoopButton().triggerClick();
+             return true;
+         }},
+        {AppCommands::transportRecord,
+         "Record",
+         "Toggle recording (armed-track gated, same as the transport bar's Record button)",
+         "Transport",
+         "transportRecord",
+         {},
+         [](MainComponent& m) {
+             m.timelinePanel.getTransportBar().getRecordButton().triggerClick();
+             return true;
+         }},
+        {AppCommands::transportToggleMetronome,
+         "Toggle Metronome",
+         "Toggle the metronome click",
+         "Transport",
+         "transportToggleMetronome",
+         {},
+         [](MainComponent& m) {
+             m.timelinePanel.getTransportBar().getMetronomeButton().triggerClick();
+             return true;
+         }},
+        {AppCommands::transportReturnToStart,
+         "Return to Start",
+         "Locate the transport to beat 0",
+         "Transport",
+         "transportReturnToStart",
+         {},
+         [](MainComponent& m) {
+             m.audioEngine.getTransport().locateBeat(0.0);
+             return true;
+         }},
+    };
+}
+
 const std::vector<MainComponent::CommandSpec>& MainComponent::commandTable() const {
     static const std::vector<CommandSpec> table = [] {
         std::vector<CommandSpec> t;
@@ -818,6 +898,7 @@ const std::vector<MainComponent::CommandSpec>& MainComponent::commandTable() con
         append(buildEditAndGraphCommandRows());
         append(buildTimelineAndPanelCommandRows());
         append(buildFocusAndHelpCommandRows());
+        append(buildTransportCommandRows());
         return t;
     }();
     return table;

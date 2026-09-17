@@ -211,5 +211,6 @@ set(APPUI_SOURCES
     Source/UI/Settings/ShortcutsSettingsTab.cpp
     Source/ShortcutManager/AppCommands.h
     Source/ShortcutManager/ShortcutManager.h
+    Source/ShortcutManager/ShortcutManagerActionNames.cpp
     Source/Update/UpdateManager.h
 )

@@ -307,6 +307,20 @@ public:
         // unmodified 'f' for timelineFollowPlayheadToggle, a different chord entirely). Cmd+F reads
         // as "find" the way it does in almost every app, which is exactly what this does.
         bindings["focusLibrarySearch"] = juce::KeyPress('f', juce::ModifierKeys::commandModifier, 0);
+
+        // FRO125: the transport family ships UNBOUND -- an explicit invalid juce::KeyPress(), not
+        // an absent map entry. saveToProperties() below indexes `bindings` with `.at()` for every
+        // id in `actionIds`, so a genuinely absent entry throws (std::map::at) the moment anyone
+        // ever persists; a present-but-invalid KeyPress is indistinguishable from "absent" to
+        // every reader (getBinding()'s own not-found fallback is this exact same default-
+        // constructed KeyPress) while keeping the map's invariant that every action id has an
+        // entry.
+        bindings["transportPlay"] = juce::KeyPress();
+        bindings["transportStop"] = juce::KeyPress();
+        bindings["transportToggleLoop"] = juce::KeyPress();
+        bindings["transportRecord"] = juce::KeyPress();
+        bindings["transportToggleMetronome"] = juce::KeyPress();
+        bindings["transportReturnToStart"] = juce::KeyPress();
     }
 
     void addGraphDefaultBindings() {
@@ -541,169 +555,11 @@ public:
         return result;
     }
 
-    static juce::String getActionDescription(const juce::String& actionId) {
-        if (actionId == "openSettings")
-            return "Open Settings";
-        if (actionId == "savePreset")
-            return "Save Preset";
-        if (actionId == "saveProjectAs")
-            return "Save Project As";
-        if (actionId == "exportAudio")
-            return "Export Audio";
-        if (actionId == "exportPatchOnly")
-            return "Export Patch Only";
-        if (actionId == "openProject")
-            return "Open Project";
-        if (actionId == "newPatch")
-            return "New Patch";
-        if (actionId == "undo")
-            return "Undo";
-        if (actionId == "redo")
-            return "Redo";
-        if (actionId == "toggleModMatrix")
-            return "Toggle Mod Matrix";
-        if (actionId == "toggleMinimap")
-            return "Toggle Minimap";
-        if (actionId == "toggleAiPanel")
-            return "Toggle AI Panel";
-        if (actionId == "autoArrange")
-            return "Auto Arrange";
-        if (actionId == "groupSelection")
-            return "Group / Toggle Macro";
-        if (actionId == "ungroupSelection")
-            return "Ungroup Macro";
-        if (actionId == "collapseMacro")
-            return "Collapse / Expand Macro";
-        if (actionId == "locateMaster")
-            return "Locate Master";
-        if (actionId == "toggleLibrary")
-            return "Toggle Module Library";
-        // Kept as "selectAllModules" (both the actionId string and the AppCommands name) so a
-        // binding a user already persisted under that key keeps working — the label is what
-        // widened when the command grew per-surface routing, not the identity.
-        if (actionId == "selectAllModules")
-            return "Select All in Focused Editor";
-        if (actionId == "saveSnippet")
-            return "Save Selection as Snippet";
-        if (actionId == "copySelection")
-            return "Copy Selected Modules";
-        if (actionId == "pasteSelection")
-            return "Paste Modules";
-        if (actionId == "duplicateSelection")
-            return "Duplicate Selected Modules";
-        if (actionId == "cutSelection")
-            return "Cut Selection";
-        if (actionId == "repeatSelection")
-            return "Repeat Selection";
-        if (actionId == "togglePlayback")
-            return "Toggle Playback";
-        if (actionId == "toggleTimelinePanel")
-            return "Toggle Timeline Panel";
-        if (actionId == "toggleMixerPanel")
-            return "Toggle Mixer Panel";
-        if (actionId == "zoomInHorizontal")
-            return "Zoom In";
-        if (actionId == "zoomOutHorizontal")
-            return "Zoom Out";
-        if (actionId == "zoomInVertical")
-            return "Zoom In Vertically";
-        if (actionId == "zoomOutVertical")
-            return "Zoom Out Vertically";
-        if (actionId == "focusNextRegion")
-            return "Focus Next Region";
-        if (actionId == "focusPrevRegion")
-            return "Focus Previous Region";
-        if (actionId == "focusTimeline")
-            return "Focus Timeline";
-        if (actionId == "focusLibrary")
-            return "Focus Library";
-        if (actionId == "focusLibrarySearch")
-            return "Focus Library Search";
-        if (actionId == "timelineSnapToggle")
-            return "Toggle Snap";
-        if (actionId == "timelineToggleLoop")
-            return "Toggle Looping";
-        if (actionId == "timelineLoopSelection")
-            return "Loop the Selection";
-        if (actionId == "timelineFollowPlayheadToggle")
-            return "Toggle Follow Playhead";
-        if (actionId == "timelineToolSelect")
-            return "Select Tool";
-        if (actionId == "timelineToolSplit")
-            return "Split Tool";
-        if (actionId == "timelineToolGlue")
-            return "Glue Tool";
-        if (actionId == "timelineToolErase")
-            return "Erase Tool";
-        if (actionId == "timelineToolMute")
-            return "Mute Tool";
-        if (actionId == "timelineToolDraw")
-            return "Draw Tool";
-        // "Locator 1"/"Locator 2" rather than "loop start"/"loop end": the two are the same pair of
-        // numbers, and every DAW that has this key calls them locators.
-        if (actionId == "timelineJumpToLocator1")
-            return "Jump to Locator 1";
-        if (actionId == "timelineJumpToLocator2")
-            return "Jump to Locator 2";
-        // T161: deliberately NOT "Mute"/"Solo"/"Arm" — the Settings tab's search matches this text,
-        // and "timelineToolMute" is already "Mute Tool" (a bare-7 edit-tool mode, unrelated). Spelling
-        // out "Focused Track" keeps the two from reading as the same feature in a filtered list.
-        if (actionId == "timelineMuteFocusedTrack")
-            return "Mute Focused Track";
-        if (actionId == "timelineSoloFocusedTrack")
-            return "Solo Focused Track";
-        if (actionId == "timelineArmFocusedTrack")
-            return "Arm Focused Track";
-        // Labelled with the same note values the snap combo shows ("1", "1/2", …) rather than
-        // "Whole"/"Half", so the shortcut list and the selector name the grid identically.
-        if (actionId == "snapSetWhole")
-            return "Set Grid to 1";
-        if (actionId == "snapSetHalf")
-            return "Set Grid to 1/2";
-        if (actionId == "snapSetQuarter")
-            return "Set Grid to 1/4";
-        if (actionId == "snapSetEighth")
-            return "Set Grid to 1/8";
-        if (actionId == "snapSetSixteenth")
-            return "Set Grid to 1/16";
-        if (actionId == "snapSetThirtySecond")
-            return "Set Grid to 1/32";
-        if (actionId == "snapSetSixtyFourth")
-            return "Set Grid to 1/64";
-        if (actionId == "snapSetHundredTwentyEighth")
-            return "Set Grid to 1/128";
-        if (actionId == "snapCyclePrev")
-            return "Grid Coarser";
-        if (actionId == "snapCycleNext")
-            return "Grid Finer";
-        if (actionId == "pianoRollNudgeLeft")
-            return "Nudge Notes Left";
-        if (actionId == "pianoRollNudgeRight")
-            return "Nudge Notes Right";
-        if (actionId == "pianoRollTransposeUp")
-            return "Transpose Up a Semitone";
-        if (actionId == "pianoRollTransposeDown")
-            return "Transpose Down a Semitone";
-        if (actionId == "pianoRollTransposeOctaveUp")
-            return "Transpose Up an Octave";
-        if (actionId == "pianoRollTransposeOctaveDown")
-            return "Transpose Down an Octave";
-        if (actionId == "pianoRollNavPrevNote")
-            return "Select Previous Note";
-        if (actionId == "pianoRollNavNextNote")
-            return "Select Next Note";
-        if (actionId == "pianoRollQuantise")
-            return "Quantise Selected Notes";
-        if (actionId == "pianoRollQuantiseLength")
-            return "Quantise Selected Note Lengths";
-        if (actionId == "pianoRollQuantisePitches")
-            return "Quantise Note Pitches to Scale";
-        if (actionId == "pianoRollToggleScaleFilter")
-            return "Show Only Scale Notes";
-        if (actionId == "pianoRollToggleScalePanel")
-            return "Toggle Scale Panel";
-        return actionId;
-    }
+    // Display text for `actionId`'s row in Settings -> Keyboard Shortcuts and the MIDI Remote
+    // action picker (docs/midi_remote.md §4.9). Out-of-line in ShortcutManagerActionNames.cpp,
+    // one `if` per action id, in getActionTable()'s own order -- kept off this header to leave
+    // the 1,000-line file-size cap (scripts/file-size-baseline.txt) headroom for new actions.
+    static juce::String getActionDescription(const juce::String& actionId);
 
     /** The category `actionId` belongs to. An id this build has never heard of answers General,
      *  which is the conservative choice: General is the widest conflict scope, so an unknown id can
@@ -810,6 +666,18 @@ private:
             {"focusTimeline", ShortcutCategory::General},
             {"focusLibrary", ShortcutCategory::General},
             {"focusLibrarySearch", ShortcutCategory::General},
+            // FRO125: transport verbs promoted to command-dispatched actions (docs/midi_remote.md
+            // §4.9's prerequisite) -- deliberately UNBOUND by default (see resetToDefaults()),
+            // unlike every other row above. They exist as command/MIDI-Remote targets first; a
+            // user may still rebind one in Settings. "transportTogglePlayStop" is not here: it is
+            // a pure alias id resolved by AppCommands::getCommandForAction straight to
+            // "togglePlayback" (which keeps its own row, and its Space binding, unchanged).
+            {"transportPlay", ShortcutCategory::General},
+            {"transportStop", ShortcutCategory::General},
+            {"transportToggleLoop", ShortcutCategory::General},
+            {"transportRecord", ShortcutCategory::General},
+            {"transportToggleMetronome", ShortcutCategory::General},
+            {"transportReturnToStart", ShortcutCategory::General},
             // Graph — the verbs that mean nothing on any other surface.
             {"autoArrange", ShortcutCategory::Graph},
             {"saveSnippet", ShortcutCategory::Graph},

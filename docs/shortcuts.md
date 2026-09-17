@@ -1,8 +1,8 @@
 # Keyboard Shortcuts
 
 Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/Settings/ShortcutsSettingsTab.h/.cpp`).
-`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **74 actions** across four categories —
-**General** (30, app-wide or routed per focused editor), **Graph** (6), **Timeline** (25) and
+`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **80 actions** across four categories —
+**General** (36, app-wide or routed per focused editor), **Graph** (6), **Timeline** (25) and
 **Piano Roll** (13) — every one of them rebindable, including keys that used to be hardcoded:
 nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the six tool
 digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
@@ -48,6 +48,7 @@ when reasoning about a key that "does nothing."
 | Cmd+X | Cut — Copy then delete, as ONE undo step (Selected Modules, or the timeline's selected clips/notes; see "Surface routing" below) |
 | Cmd+R | Repeat — prompts for a count (1–64) via an `AlertWindow` and creates that many back-to-back copies of the selection, tiled forward one selection-span at a time, as ONE undo step. Timeline-only: inactive on the Graph surface (see below) |
 | Space | Toggle Playback (play/stop the timeline transport) |
+| *(unbound)* | Play / Stop / Record / Toggle Looping / Toggle Metronome / Return to Start — see [**Transport family**](#transport-family) below |
 | Cmd+= | Zoom In (routed per focused surface — see [**Zoom**](#zoom) below) |
 | Cmd+- | Zoom Out |
 | Cmd+Shift+= | Zoom In Vertically |
@@ -290,6 +291,26 @@ verbs use, in/out factor `1.25` / `1 / 1.25` (`MainComponent::kZoomInFactor`/`kZ
 Each keypress reports its own status-bar message ("Canvas: zoom", "Timeline: zoom" / "Timeline:
 track height", "Piano roll: zoom" / "Piano roll: vertical zoom") so a held key's effect is visible
 even with no mouse involved.
+
+### Transport family
+
+FRO125 promoted every transport verb to a command-dispatched `AppCommands` action — the
+[`midi_remote.md §4.9`](midi_remote.md) prerequisite for a MIDI Remote hardware button to trigger
+one via `ApplicationCommandManager::invokeDirectly`. All six are **General**, and ship **unbound**
+by default (no default keypress) — they exist first as command/MIDI-Remote targets, and a user may
+still bind one from Settings like any other action:
+
+| Action id | Display name | Behaviour |
+|---|---|---|
+| `transportPlay` | Play | `TransportService::play()` if not already playing (a direction, not a toggle) |
+| `transportStop` | Stop | `TransportService::stop()` if currently playing |
+| `transportTogglePlayStop` | Toggle Playback | **Alias, not a new action** — `AppCommands::getCommandForAction` resolves it straight to the existing `togglePlayback` command id. It is not a registered/rebindable id of its own and has no row in Settings; `togglePlayback` keeps its own Space binding untouched (see "Why the locator jumps are on plain Option+digit" above for why a default never migrates a persisted key, and why this alias is a lookup rather than a rename) |
+| `transportToggleLoop` | Toggle Looping | Triggers the transport bar's own loop button — the exact `setLoop(start, end, !looping)` verb the surface-resolved `timelineToggleLoop` key already performs, which keeps working unchanged |
+| `transportRecord` | Record | Triggers the transport bar's own Record button, so it reaches `MainComponent::handleRecordToggle`'s armed-track gate exactly as a mouse click would — never bypassed |
+| `transportToggleMetronome` | Toggle Metronome | Triggers the transport bar's own metronome button, so its persisted `timelineMetronomeEnabled` state stays authoritative |
+| `transportReturnToStart` | Return to Start | `TransportService::locateBeat(0)` — relocates only, does not stop |
+
+See [`timeline_panel_transport.md §5`](timeline_panel_transport.md) for the transport bar itself.
 
 ## Graph
 
@@ -600,11 +621,12 @@ onto 1–6. Shipping one of the missing three later costs no rebind: the digit i
 
 ## Command vs surface actions
 
-The 74 actions split into two kinds, and telling them apart is the key to reasoning about "why
+The 80 actions split into two kinds, and telling them apart is the key to reasoning about "why
 doesn't this key do anything":
 
-- **Command-dispatched** (46 actions) — every General action, all six Graph actions, and the Timeline
-  category's eight grid-set + two grid-cycle commands. `AppCommands::getCommandForAction(actionId)`
+- **Command-dispatched** (52 actions) — every General action (including the FRO125 transport family
+  above), all six Graph actions, and the Timeline category's eight grid-set + two grid-cycle
+  commands. `AppCommands::getCommandForAction(actionId)`
   returns a real `juce::CommandID` for these; `MainComponent` implements
   `ApplicationCommandTarget`, so they appear in the native menu bar, drive toolbar tooltip text, and
   their enabled/disabled state is whatever `getCommandInfo` reports.

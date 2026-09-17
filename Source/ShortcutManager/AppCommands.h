@@ -126,7 +126,28 @@ enum CommandIDs {
     // leave either node anywhere (GraphEditor::locateMasterOrOutput). Appended here per the
     // snapSet comment above ("nothing persists a raw juce::CommandID"); filed under Graph in the
     // action table below, alongside autoArrange, since it means nothing off the canvas.
-    locateMaster
+    locateMaster,
+    // FRO125: transport verbs promoted to command-dispatched actions -- the prerequisite
+    // docs/midi_remote.md §4.9 asks for, since a MIDI Remote action target invokes a
+    // juce::CommandID. Filed under General (docs/shortcuts.md). Deliberately unbound by default
+    // (see resetToDefaults()) -- these exist to be command/MIDI-Remote targets, not new default
+    // keyboard shortcuts; togglePlayback's own Space binding is untouched. There is no
+    // transportTogglePlayStop enumerator: that action id is a pure alias resolved by
+    // getCommandForAction() below straight to togglePlayback, so the persisted "togglePlayback"
+    // keybinding and its command id never move.
+    transportPlay,
+    transportStop,
+    // Command-dispatches the SAME setLoop(...,!looping) verb "timelineToggleLoop" already performs
+    // as a surface-resolved action -- the surface key keeps working unchanged (see getCommandForAction
+    // below, which still answers kNoCommand for "timelineToggleLoop" itself).
+    transportToggleLoop,
+    // Routes through TimelineTransportBar's own record button, so it reaches the exact same
+    // MainComponent armed-track gate onRecordToggled does -- see MainComponentCommandTable.cpp.
+    transportRecord,
+    // Routes through the transport bar's own metronome button, so its persisted
+    // "timelineMetronomeEnabled" state stays authoritative.
+    transportToggleMetronome,
+    transportReturnToStart
 };
 
 /** What getCommandForAction() answers for a SURFACE action — an id that is rebindable and appears
@@ -231,6 +252,21 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return focusLibrarySearch;
     if (actionId == "locateMaster")
         return locateMaster;
+    if (actionId == "transportPlay")
+        return transportPlay;
+    if (actionId == "transportStop")
+        return transportStop;
+    // The alias -- see its enum-side comment above.
+    if (actionId == "transportTogglePlayStop")
+        return togglePlayback;
+    if (actionId == "transportToggleLoop")
+        return transportToggleLoop;
+    if (actionId == "transportRecord")
+        return transportRecord;
+    if (actionId == "transportToggleMetronome")
+        return transportToggleMetronome;
+    if (actionId == "transportReturnToStart")
+        return transportReturnToStart;
     // Every SURFACE action lands here — see kNoCommand.
     return kNoCommand;
 }
