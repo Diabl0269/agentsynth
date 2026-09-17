@@ -25,10 +25,10 @@ when reasoning about a key that "does nothing."
 |----------|--------|
 | Cmd+, | Open Settings |
 | Cmd+N | New Patch (clear canvas) |
-| Cmd+S | Save Preset — writes a project bundle (`.agsproj`, graph + timeline) and silently resaves to the remembered bundle on every subsequent press; prompts for a location only on the first save or when no bundle is open (see [`architecture.md`](architecture.md)) |
+| Cmd+S | Save Preset — writes a project bundle (`.agsproj`, graph + timeline) and silently resaves to the remembered bundle on every subsequent press; prompts for a location only on the first save or when no bundle is open (see [`architecture_project_bundle.md`](architecture.md)) |
 | Cmd+Opt+S | Save Project As — always prompts for a new location |
-| Cmd+Shift+E | Export Audio — opens the Export Audio dialog (bounce the arrangement or the current loop range to WAV/AIFF, see [`architecture.md`](architecture.md#bounceexport)). Greyed out while a bounce is already running |
-| (menu only) | Export Stems — opens the same dialog in its stems mode, rendering each mixer channel to its own file in a folder (P9-8, see [`architecture.md`](architecture.md#stem-export)). A menu-only `AppCommands::exportStems` (File menu, immediately after Export Audio), with no default shortcut, like `openPreset`. Also greyed out while a render is already running |
+| Cmd+Shift+E | Export Audio — opens the Export Audio dialog (bounce the arrangement or the current loop range to WAV/AIFF, see [`architecture.md`](architecture_audio_engine.md#bounceexport)). Greyed out while a bounce is already running |
+| (menu only) | Export Stems — opens the same dialog in its stems mode, rendering each mixer channel to its own file in a folder (P9-8, see [`architecture.md`](architecture_audio_engine.md#stem-export)). A menu-only `AppCommands::exportStems` (File menu, immediately after Export Audio), with no default shortcut, like `openPreset`. Also greyed out while a render is already running |
 | Cmd+Shift+P | Export Patch Only — saves just the patch (a legacy `.json` via `GraphEditor::savePreset`) without the timeline or bundle, never touching the window title. Rebindable since P8-20 |
 | Cmd+O | Open Project - a `.agsproj` bundle (patch + timeline). P8-31 split this from the former combined "Load from file..." chooser; it took Cmd+O from the old combined open, which is now the menu-only "Open Patch" |
 | (menu only) | Open Patch - a plain `.json` preset (graph only). A menu-only `AppCommands::openPreset` (the Load icon's **Patches** submenu and the top-bar **File** menu), with no default shortcut, like `checkForUpdates` |

@@ -88,7 +88,7 @@ The timeline's clock and the headless render harness built on it. No audio devic
 
 ### Audio Input module tests (11 tests)
 
-`Tests/Modules/AudioInputModuleTests.cpp` — the module that replaced the graph's raw `audioInputNode`. Two layers: **module-level** tests drive an `AudioInputModule` directly with a bare `synth::TransportService` on its playhead (exactly what the engine does per block, minus the engine — one of them, `NoTransportRendersSilence`, is the no-playhead caveat described in [`architecture.md § AudioEngine`](architecture.md#1-audioengine)), and **engine-level** tests drive the whole path through a real `AudioEngine`, exercising the playhead the engine itself installs.
+`Tests/Modules/AudioInputModuleTests.cpp` — the module that replaced the graph's raw `audioInputNode`. Two layers: **module-level** tests drive an `AudioInputModule` directly with a bare `synth::TransportService` on its playhead (exactly what the engine does per block, minus the engine — one of them, `NoTransportRendersSilence`, is the no-playhead caveat described in [`architecture.md § AudioEngine`](architecture_audio_engine.md#1-audioengine)), and **engine-level** tests drive the whole path through a real `AudioEngine`, exercising the playhead the engine itself installs.
 
 | What it covers | |
 |-------|-------|
@@ -726,7 +726,7 @@ cmake --build build
 
 ### Plugin target (`ENABLE_PLUGIN`)
 
-`ENABLE_PLUGIN` defaults `ON`, so the plain `cmake --build build` above also builds `AgentSynthPlugin` — VST3 on every platform, plus AU on macOS — from the same `AudioEngine`/`MainComponent` code the standalone app uses (see [`docs/architecture.md`](architecture.md#plugin-layer)). Disable it for a faster app-only local loop:
+`ENABLE_PLUGIN` defaults `ON`, so the plain `cmake --build build` above also builds `AgentSynthPlugin` — VST3 on every platform, plus AU on macOS — from the same `AudioEngine`/`MainComponent` code the standalone app uses (see [`docs/architecture.md`](architecture_plugin_layer.md#plugin-layer)). Disable it for a faster app-only local loop:
 
 ```bash
 cmake -S . -B build -DENABLE_PLUGIN=OFF

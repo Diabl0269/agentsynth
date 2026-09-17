@@ -300,7 +300,7 @@ or animation involved (`docs/layout_visuals_animation.md` §3).
 
 A **marker** is a named position in the arrangement — a cue point, not a track. It has no clips, no
 binding and no audible effect, so it lives on `TimelineDoc` itself (`std::vector<Marker>`, see
-[`architecture.md`](architecture.md)) rather than in the track list: a "marker track" would have to be
+[`architecture_timeline.md#3-timelinedoc-the-timeline-document-model`](architecture.md)) rather than in the track list: a "marker track" would have to be
 excluded from every place that iterates tracks to make sound.
 
 **Where they come from.** The `"+ Track"` button's menu gained an **Add Marker** entry below a

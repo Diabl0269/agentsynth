@@ -14,7 +14,7 @@ Main line, in dependency order:
 
 1. **P9-2 (T172) — `ChannelStrip` + `Master` + the solo gate.** Engine only. **DONE.** How it
    landed (module detail in [`docs/modules.md`](modules.md), engine detail in
-   [`docs/architecture.md`](architecture.md) § Mixer solo gate):
+   [`docs/architecture_audio_engine.md#mixer-solo-gate-p9-2`](architecture.md) § Mixer solo gate):
    - *Strip layout*: 5 raw channels a side, Left ch0 / Right `kRightBase` = 4, ch1–3 reserved;
      params `gain` (dB), `pan`, `muted`; shape + solo in extra state.
    - *Master layout*: Mix L/R on ch0/1, Direct L/R on ch2/3; Direct summed in before the fader;
