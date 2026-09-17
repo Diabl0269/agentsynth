@@ -3,6 +3,12 @@
 #include "../ModuleBase.h"
 #include <juce_dsp/juce_dsp.h>
 
+// Feedback (-1..1) drives juce::dsp::Phaser's internal allpass loop; either polarity can
+// resonate, and near the extremes a steady tone builds up well past unity before this module's
+// own wet/dry mix and Level stage. ModuleGainAudit (Tests/Engine/GainStaging/
+// ModuleGainAuditTests.cpp) measures a worst case of +13.56 dB at feedback's MINIMUM (-1), not
+// the maximum; allow-listed there as expected feedback/resonance behaviour. See
+// docs/fx_modules.md, Phaser Module section.
 class PhaserModule : public ModuleBase {
 public:
     PhaserModule()
