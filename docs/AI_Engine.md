@@ -142,7 +142,7 @@ instead of replaying it through `applyJSONToGraph` and re-creating everything. I
 whose identity is ambiguous — leaving the graph untouched — and the caller then falls back to
 `applyJSONToGraph(..., clearExisting=true, trusted=true)`. `applyJSONToGraph` itself is unchanged;
 presets, snippets and AI apply all keep their existing semantics. See
-[`docs/architecture.md`](architecture.md#appundomanager).
+[`docs/architecture.md`](architecture_module_base.md#appundomanager).
 
 None of `schemaVersion`, `uuid` or `"timeline"` appears in `getPatchSchema()` — every property there
 is an invitation to emit it, and all three are ours to write. Pinned by

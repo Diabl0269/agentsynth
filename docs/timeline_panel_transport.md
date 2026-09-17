@@ -145,7 +145,7 @@ value this bar remembers between polls:
   bounds ever set" and "preserve existing bounds" fall out of the same one-line handler — there is
   no separate "default bounds" case to maintain.
   The loop range gained a second consumer with the Export Audio dialog (see
-  [`docs/architecture.md`](architecture.md)'s bounce/export section): `MainComponent::promptExportAudio`
+  [`docs/architecture_audio_engine.md#bounceexport`](architecture.md)'s bounce/export section): `MainComponent::promptExportAudio`
   reads `loopStartPpq`/`loopEndPpq` off a fresh snapshot to decide whether
   "Current loop range" is offered as a bounce range whenever the region is non-degenerate, and seeded
    from it when it is selected. As of P8-17 the offer no longer depends on the loop being ARMED — a
