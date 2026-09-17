@@ -47,6 +47,7 @@ void MixerPanelComponent::configure(juce::AudioProcessorGraph& graph, synth::Tim
     };
     masterColumn_ = std::make_unique<MixerMasterColumn>();
     masterColumn_->configure(graph, undoManager);
+    masterColumn_->onResetAllMetersRequested = [this] { resetAllMeterReadouts(); };
 }
 
 void MixerPanelComponent::selectOnCanvas(const juce::String& targetId) {
@@ -119,6 +120,7 @@ void MixerPanelComponent::rebuild() {
             if (onGraphMutated)
                 onGraphMutated();
         };
+        widget->onResetAllMetersRequested = [this] { resetAllMeterReadouts(); };
         content_.addAndMakeVisible(*widget);
 
         ColumnEntry entry;
@@ -233,11 +235,32 @@ bool MixerPanelComponent::revealColumn(juce::AudioProcessorGraph::NodeID stripId
     return true;
 }
 
+namespace {
+// A tick after a gap this large (the mixer tab was hidden, or this is the very first tick) is
+// clamped to this instead -- otherwise the ballistics would see, say, a 30-second "elapsed time"
+// and every bar/peak-hold would decay straight to silence in one jump the instant the tab is shown
+// again, rather than resuming wherever they last stood.
+constexpr double kMaxPlausibleMeterGapSeconds = 0.5;
+} // namespace
+
 void MixerPanelComponent::refreshMeters() {
+    ++refreshMetersCallCount_;
+    const double nowMs = juce::Time::getMillisecondCounterHiRes();
+    double elapsedSeconds = lastMeterRefreshMs_ > 0.0 ? (nowMs - lastMeterRefreshMs_) / 1000.0 : 0.0;
+    elapsedSeconds = juce::jlimit(0.0, kMaxPlausibleMeterGapSeconds, elapsedSeconds);
+    lastMeterRefreshMs_ = nowMs;
+
     for (auto& column : stripColumns_)
-        column->refreshMeter();
+        column->refreshMeter((float)elapsedSeconds);
     if (masterColumn_ != nullptr && masterColumn_->isVisible())
-        masterColumn_->refreshMeter();
+        masterColumn_->refreshMeter((float)elapsedSeconds);
+}
+
+void MixerPanelComponent::resetAllMeterReadouts() {
+    for (auto& column : stripColumns_)
+        column->resetMeterReadout();
+    if (masterColumn_ != nullptr)
+        masterColumn_->resetMeterReadout();
 }
 
 void MixerPanelComponent::resized() {

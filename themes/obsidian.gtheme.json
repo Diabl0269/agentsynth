@@ -24,6 +24,9 @@
     "knobBody": "#FF13161B",
     "knobPointer": "#FFEAEEF3",
     "meterFill": "#FF00D1FF",
+    "meterMid": "#FFFFD43B",
+    "meterHigh": "#FFFF922B",
+    "meterClip": "#FFFF4D4F",
     "modRingPositive": "#FF00E5FF",
     "modRingNegative": "#FFFF6E00"
   },

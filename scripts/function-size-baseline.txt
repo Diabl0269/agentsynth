@@ -18,6 +18,6 @@
 550 Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngineApply.cpp::SmartConnectionEngine::refreshSmartSuggestions
 319 Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp::PreferencesSettingsTab::PreferencesSettingsTab
 234 Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp::PreferencesSettingsTab::layoutContent
-361 Source/UI/Theme/ThemeLoader.cpp::ThemeLoader::parseTheme
+286 Source/UI/Theme/ThemeLoader.cpp::ThemeLoader::parseTheme
 261 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.cpp::TimelinePanelComponent::TimelinePanelComponent
 222 Tools/AIPatchHarness/Main.cpp::main

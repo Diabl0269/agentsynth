@@ -4,16 +4,25 @@
 
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
+#include "Mixer/PeakMeterLatch.h"
 #include "Modules/ChannelStripModule.h"
 #include "Modules/FX/ParametricEQModule.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <algorithm>
 #include <cmath>
 
 namespace synth::ui {
 
 namespace {
+// FRO146: widened from the pre-meters-rework 10 px so two dB-scale bars + tick labels are legible
+// (docs/mixer.md meters section) -- see MixerMeterScale.h's kBarsAreaWidth/kLabelMinWidth for the
+// exact pixel budget this must cover. Kept as narrow as that budget allows so the column itself
+// doesn't grow wider than necessary.
+constexpr int kMeterWidth = 32;
+constexpr int kMeterReadoutHeight = 12;
+
 juce::AudioParameterFloat* findFloatParam(juce::AudioProcessor& processor, const juce::String& paramId) {
     for (auto* param : processor.getParameters())
         if (auto* floatParam = dynamic_cast<juce::AudioParameterFloat*>(param);
@@ -82,6 +91,11 @@ MixerColumnComponent::MixerColumnComponent() {
 
     addAndMakeVisible(fader_);
     addAndMakeVisible(meter_);
+    addAndMakeVisible(meterReadout_);
+    meterReadout_.onResetAllRequested = [this] {
+        if (onResetAllMetersRequested)
+            onResetAllMetersRequested();
+    };
 
     addAndMakeVisible(muteButton_);
     muteButton_.setClickingTogglesState(false);
@@ -248,17 +262,18 @@ void MixerColumnComponent::unbindFromGraph() {
     audioEngine_ = nullptr;
 }
 
-void MixerColumnComponent::refreshMeter() {
+void MixerColumnComponent::refreshMeter(float elapsedSeconds) {
     meter_.peakProvider = [this](int leg) -> float {
         if (graph_ == nullptr)
             return 0.0f;
         auto* node = graph_->getNodeForId(nodeId_);
         auto* processor = node != nullptr ? node->getProcessor() : nullptr;
         if (auto* strip = dynamic_cast<ChannelStripModule*>(processor))
-            return strip->getMeterPeak(leg);
+            return strip->takeMeterPeak(synth::MeterReader::Mixer, leg);
         return 0.0f;
     };
-    meter_.refresh();
+    meter_.refresh(elapsedSeconds);
+    meterReadout_.updatePeak(std::max(meter_.getDisplayedDbForTest(0), meter_.getDisplayedDbForTest(1)));
 }
 
 void MixerColumnComponent::setSelected(bool selected) {
@@ -325,7 +340,10 @@ void MixerColumnComponent::resized() {
     muteButton_.setBounds(msRow.removeFromLeft(msRow.getWidth() / 2).reduced(2));
     soloButton_.setBounds(msRow.reduced(2));
 
-    meter_.setBounds(controls.removeFromRight(10));
+    // FRO146: the clip readout sits directly above the meter+fader row it reports on (Cubase's own
+    // "Meter Peak Level" placement).
+    meterReadout_.setBounds(controls.removeFromTop(kMeterReadoutHeight));
+    meter_.setBounds(controls.removeFromRight(kMeterWidth));
     controls.removeFromRight(2);
     fader_.setBounds(controls);
 }

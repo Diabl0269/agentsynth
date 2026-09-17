@@ -108,7 +108,7 @@ TEST(MixerAccessibilityTest, MuteSoloButtonsMirrorToggleState) {
 TEST(MixerAccessibilityTest, MeterAccessibilityValueIsReadOnly) {
     synth::ui::MixerMeter meter;
     meter.peakProvider = [](int) { return 0.5f; };
-    meter.refresh();
+    meter.refresh(1.0f); // attack is instant regardless of elapsed time -- see MixerMeterBallistics.h
 
     auto handler = meter.createAccessibilityHandler();
     ASSERT_NE(handler, nullptr);
@@ -116,5 +116,6 @@ TEST(MixerAccessibilityTest, MeterAccessibilityValueIsReadOnly) {
     auto* value = handler->getValueInterface();
     ASSERT_NE(value, nullptr);
     EXPECT_TRUE(value->isReadOnly());
-    EXPECT_EQ(value->getCurrentValueAsString(), "50%");
+    // FRO146: dBFS text, not a percentage -- a linear 0.5 peak is ~-6.0 dBFS.
+    EXPECT_EQ(value->getCurrentValueAsString(), "-6.0 dBFS");
 }

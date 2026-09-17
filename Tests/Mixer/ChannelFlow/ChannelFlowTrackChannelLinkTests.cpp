@@ -18,10 +18,14 @@
 #include "ChannelFlowTestFixture.h"
 #include "MacroSet.h"
 #include "MainComponent/MainComponent.h"
+#include "Mixer/PeakMeterLatch.h"
 #include "Mixer/TrackChannelLink.h"
 #include "Modules/ChannelStripModule.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Mixer/MeterColourStops.h"
+#include "UI/Mixer/MixerMeterScale.h"
+#include "UI/Theme/Theme.h"
 #include "UI/Timeline/ChannelChipComponent.h"
 #include "UI/Timeline/TimelineTrackHeaderComponent.h"
 #include "UI/Timeline/TrackChannelLinkController.h"
@@ -357,8 +361,9 @@ TEST_F(ChannelFlowTest, MuteOnASharedChannelTrackKeepsNoteGatingAndNeverTouchesT
 TEST_F(ChannelFlowTest, SoloOnALinkedTrackSilencesASharedChannelEvenWhenItsOwnTrackIsSoloed) {
     LinkRigApp rig;
     rig.render(4);
-    ASSERT_GT(rig.strip(rig.leadStrip)->getMeterPeak(0), 0.0f) << "both channels must be audible to start with";
-    ASSERT_GT(rig.strip(rig.sharedStrip)->getMeterPeak(0), 0.0f);
+    ASSERT_GT(rig.strip(rig.leadStrip)->takeMeterPeak(synth::MeterReader::Mixer, 0), 0.0f)
+        << "both channels must be audible to start with";
+    ASSERT_GT(rig.strip(rig.sharedStrip)->takeMeterPeak(synth::MeterReader::Mixer, 0), 0.0f);
 
     rig.header(rig.lead).getSoloButton().onClick(); // a CHANNEL solo (linked)
     rig.header(rig.kick).getSoloButton().onClick(); // a NOTE-GATE solo (shared channel)
@@ -366,8 +371,9 @@ TEST_F(ChannelFlowTest, SoloOnALinkedTrackSilencesASharedChannelEvenWhenItsOwnTr
 
     // The strip meter is post gain, pan, mute AND solo (ChannelStripModule), so this is what the mix
     // actually carries, not merely what a flag says.
-    EXPECT_GT(rig.strip(rig.leadStrip)->getMeterPeak(0), 0.0f) << "the soloed channel is audible";
-    EXPECT_EQ(rig.strip(rig.sharedStrip)->getMeterPeak(0), 0.0f)
+    EXPECT_GT(rig.strip(rig.leadStrip)->takeMeterPeak(synth::MeterReader::Mixer, 0), 0.0f)
+        << "the soloed channel is audible";
+    EXPECT_EQ(rig.strip(rig.sharedStrip)->takeMeterPeak(synth::MeterReader::Mixer, 0), 0.0f)
         << "every non-soloed channel is silenced by the render-time gate, shared ones included";
 }
 
@@ -431,21 +437,57 @@ TEST_F(ChannelFlowTest, TheChipMeterRepaintsOnlyWhenTheDrawnLevelActuallyMoves) 
     EXPECT_TRUE(chip.setMeterLevel(0.0f)) << "and silence is always drawn, however small the step";
 }
 
+TEST_F(ChannelFlowTest, TheChipUsesTheSameDbScaleAndTurnsTheClipColourOnAnOver) {
+    synth::ui::ChannelChipComponent chip;
+    // A linear peak > 1.0 is a real over -- above 0 dBFS, the CLIP zone (docs/mixer.md meters
+    // section: same scale/zones as the mixer's own MixerMeter, FRO146).
+    chip.setMeterLevel(1.5f);
+    EXPECT_GT(chip.getMeterDbForTest(), 0.0f);
+    const synth::ui::MeterColourStops stops = synth::ui::MeterColourStops::fromTheme(synth::theme::Colors{});
+    EXPECT_EQ(stops.colourForDb(chip.getMeterDbForTest()), synth::theme::Colors{}.meterClip);
+
+    // A quiet, non-clipping level sits in the LOW zone instead.
+    synth::ui::ChannelChipComponent quietChip;
+    quietChip.setMeterLevel(0.05f); // roughly -26 dBFS
+    EXPECT_LT(quietChip.getMeterDbForTest(), synth::ui::MeterColourStops::kMidFromDb);
+    EXPECT_EQ(stops.colourForDb(quietChip.getMeterDbForTest()), synth::theme::Colors{}.meterFill);
+}
+
 TEST_F(ChannelFlowTest, TheMeterTickReportsTheChannelsRealLevelThroughTheCheapRead) {
     LinkRigApp rig;
     auto& header = rig.header(rig.lead);
     ASSERT_EQ(rig.link.getChannelMeterPeak(rig.lead), 0.0f) << "silent before anything has rendered";
 
     rig.render(4);
-    const float level = rig.strip(rig.leadStrip)->getMeterPeak(0);
+    // A DIFFERENT reader's slot (Mixer) than the tick path below reads (TrackHeader) -- FRO146's
+    // per-reader latch means this reference read must not steal the peak getChannelMeterPeak() is
+    // about to consume.
+    const float level = rig.strip(rig.leadStrip)->takeMeterPeak(synth::MeterReader::Mixer, 0);
     ASSERT_GT(level, 0.0f);
 
     // The tick path proper: the level reaches the chip through getChannelMeterPeak()'s cached strip
     // id -- two atomic reads -- NOT through a per-frame getChannelInfo() walk of the whole graph.
-    EXPECT_FLOAT_EQ(rig.link.getChannelMeterPeak(rig.lead), level);
+    // FRO146: getChannelMeterPeak() is now consuming (it reads the strip's OWN TrackHeader latch
+    // slot, PeakMeterLatch.h) -- tickChannelMeter() below is that slot's one real consumer, so this
+    // test must not also call getChannelMeterPeak() directly first (that would drain the very peak
+    // the tick is about to read, exactly the "two readers must not steal from each other" bug the
+    // latch exists to prevent -- here both "readers" would be the same call site, but the effect on
+    // the slot is identical). `level`, read from a DIFFERENT reader (Mixer) above, is what proves
+    // the tick reports the real magnitude without needing a separate pre-drain of TrackHeader's own.
     EXPECT_TRUE(header.tickChannelMeter()) << "a level that moved is drawn";
-    EXPECT_NEAR(header.getChannelChip().getMeterLevel(), juce::jlimit(0.0f, 1.0f, level), 1.0e-6f);
-    EXPECT_FALSE(header.tickChannelMeter()) << "...and the next tick at the same level repaints nothing";
+    // FRO146: the chip now displays a fraction of the -60..+3 dB scale, not the raw linear peak.
+    const float expectedFraction = synth::ui::meterDbToFraction(synth::ui::meterLinearToDb(level));
+    EXPECT_NEAR(header.getChannelChip().getMeterLevel(), expectedFraction, 1.0e-5f);
+
+    // FRO146: the latch is consume-on-read, so a tick with NO new block in between reads silence
+    // (nothing new arrived) rather than replaying the same stale value forever -- that decay-to-
+    // silence is itself always drawn (ChannelChipComponent::setMeterLevel's own "crossing to
+    // silence" exception), so THIS tick moves the display.
+    EXPECT_TRUE(header.tickChannelMeter()) << "no new block since the last tick reads silence, which is always drawn";
+    EXPECT_EQ(header.getChannelChip().getMeterLevel(), 0.0f);
+    // ...and the NEXT tick, still no new block, reads silence again -- unchanged from the one
+    // above, so (the original, pre-FRO146 gate) this one repaints nothing.
+    EXPECT_FALSE(header.tickChannelMeter()) << "back-to-back silent ticks repaint only the first crossing";
 
     EXPECT_EQ(rig.link.getChannelMeterPeak(synth::TrackId{}), 0.0f)
         << "a track with no resolved channel reads silent rather than walking the graph to find out";

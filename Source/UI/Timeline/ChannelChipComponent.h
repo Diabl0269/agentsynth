@@ -34,17 +34,26 @@ public:
     void setChannelName(const juce::String& name);
     juce::String getChannelName() const { return channelName_; }
 
-    /** Feeds one meter tick. Returns TRUE only when the displayed level moved far enough to be
-     *  worth a repaint (and one was issued) -- the gate itself, exposed so a test can prove a
-     *  below-threshold tick repaints nothing without driving a real juce::Timer. */
-    bool setMeterLevel(float peak);
-    float getMeterLevel() const noexcept { return meterLevel_; }
+    /** Feeds one meter tick with a LINEAR amplitude peak (0..1-ish; a real over can exceed 1) --
+     *  converted internally to dBFS and a 0..1 fraction of the -60..+3 dB scale (FRO146,
+     *  MixerMeterScale.h), same scale and colour zones (MeterColourStops.h) as the mixer's own
+     *  MixerMeter, so the chip turns the clip colour on the same overs the mixer column shows red.
+     *  Returns TRUE only when the displayed fraction moved far enough to be worth a repaint (and
+     *  one was issued) -- the gate itself, exposed so a test can prove a below-threshold tick
+     *  repaints nothing without driving a real juce::Timer. */
+    bool setMeterLevel(float peakLinear);
+    /** The displayed level as a 0..1 fraction of the dB scale (NOT the raw linear peak passed to
+     *  setMeterLevel() -- see that method's own comment). */
+    float getMeterLevel() const noexcept { return meterFraction_; }
+    /** The displayed level in dBFS -- what getMeterLevel()'s fraction is derived from. */
+    float getMeterDbForTest() const noexcept { return meterDb_; }
 
     void paintButton(juce::Graphics& g, bool highlighted, bool down) override;
 
 private:
     juce::String channelName_;
-    float meterLevel_ = 0.0f;
+    float meterFraction_ = 0.0f;
+    float meterDb_ = -60.0f; // kMeterMinDb -- kept in sync with MixerMeterScale.h's constant
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ChannelChipComponent)
 };

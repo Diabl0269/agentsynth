@@ -48,8 +48,14 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneEditTools.cpp
     Source/UI/Timeline/ClipSelectionModel.h
     Source/UI/Mixer/MixerColumnHeader.h
+    Source/UI/Mixer/MixerMeterScale.h
+    Source/UI/Mixer/MixerMeterBallistics.h
+    Source/UI/Mixer/MeterColourStops.h
+    Source/UI/Mixer/MeterColourStops.cpp
     Source/UI/Mixer/MixerMeter.h
     Source/UI/Mixer/MixerMeter.cpp
+    Source/UI/Mixer/MixerMeterReadout.h
+    Source/UI/Mixer/MixerMeterReadout.cpp
     Source/UI/Mixer/MixerFader.h
     Source/UI/Mixer/MixerFader.cpp
     Source/UI/Mixer/MixerInsertList.h

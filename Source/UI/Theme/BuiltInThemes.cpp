@@ -41,6 +41,9 @@ Theme makeObsidian() {
     t.colors.knobBody = juce::Colour(0xff13161B);
     t.colors.knobPointer = juce::Colour(0xffEAEEF3);
     t.colors.meterFill = juce::Colour(0xff00D1FF);
+    t.colors.meterMid = juce::Colour(0xffFFD43B);
+    t.colors.meterHigh = juce::Colour(0xffFF922B);
+    t.colors.meterClip = juce::Colour(0xffFF4D4F);
     t.colors.modRingPositive = juce::Colour(0xff00E5FF);
     t.colors.modRingNegative = juce::Colour(0xffFF6E00);
     t.colors.noteFill = juce::Colour(0xffB48EF5);       // same hue as midiWire
@@ -127,6 +130,9 @@ Theme makeNeon() {
     t.colors.knobBody = juce::Colour(0xff160D2A);
     t.colors.knobPointer = juce::Colour(0xffF4ECFF);
     t.colors.meterFill = juce::Colour(0xff22E0FF);
+    t.colors.meterMid = juce::Colour(0xffFFD166);
+    t.colors.meterHigh = juce::Colour(0xffFF9F1C);
+    t.colors.meterClip = juce::Colour(0xffFF3D5C);
     t.colors.modRingPositive = juce::Colour(0xff22E0FF);
     t.colors.modRingNegative = juce::Colour(0xffFF2BD6);
     // Neon's bg0/bg1/midiWire are all near-black purple / purple, so notes MUST NOT stay in that
@@ -219,6 +225,9 @@ Theme makeWarm() {
     t.colors.knobBody = juce::Colour(0xff1C140E);
     t.colors.knobPointer = juce::Colour(0xffF2E8D5);
     t.colors.meterFill = juce::Colour(0xffFF9E3D);
+    t.colors.meterMid = juce::Colour(0xffFFC65C);
+    t.colors.meterHigh = juce::Colour(0xffE07A5F);
+    t.colors.meterClip = juce::Colour(0xffD9636B);
     t.colors.modRingPositive = juce::Colour(0xffFFC65C);
     t.colors.modRingNegative = juce::Colour(0xffE07A5F);
     t.colors.noteFill = juce::Colour(0xffCE93B8); // same hue as midiWire
@@ -312,7 +321,10 @@ Theme makeDaylight() {
     t.colors.error = juce::Colour(0xffE03131);        // error
     t.colors.knobBody = juce::Colour(0xffDEE2E6);     // knob body
     t.colors.knobPointer = juce::Colour(0xff212529);  // knob pointer
-    t.colors.meterFill = juce::Colour(0xff4C6EF5);    // meter fill
+    t.colors.meterFill = juce::Colour(0xff4C6EF5);    // meter fill (low zone)
+    t.colors.meterMid = juce::Colour(0xffE8A33D);     // meter mid zone
+    t.colors.meterHigh = juce::Colour(0xffFD7E14);    // meter high zone
+    t.colors.meterClip = juce::Colour(0xffE03131);    // meter clip zone
     t.colors.modRingPositive = juce::Colour(0xff4C6EF5);
     t.colors.modRingNegative = juce::Colour(0xffFD7E14);
     t.colors.noteFill = juce::Colour(0xff9333EA); // same hue as midiWire
