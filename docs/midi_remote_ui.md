@@ -265,7 +265,7 @@ when its PR has merged and the docs above describe what shipped.
 | 7 | **Detect, Add controller, templates, import/export, encoder auto-detect** | 6 | FRO134 |
 | 8 | **Mapping assistant**: pick-target overlay, action picker, orphan controller Re-link/Recreate, orphan node display | 6, 4 | FRO135 |
 | 9 | **Preferences + Audio-tab suffix + plugin-build behaviour** | 6 | FRO136 |
-| 10 | **E2E test, docs pass, tripwires** (`Source/CLAUDE.md` threading line, `Source/UI/CLAUDE.md` registry line, Docs map, `midi_input.md` pointer) | 4–9 | FRO138 |
+| 10 | **E2E test, docs pass, tripwires** (`Source/CLAUDE.md` threading line, `Source/UI/CLAUDE.md` registry line, `docs/README.md` map line, `midi_input.md` pointer) | 4–9 | FRO138 |
 | v2 | Feedback to controller · 14-bit/NRPN · focus bank · mapping pages · template library | 10 | FRO139 · FRO140 · FRO141 · FRO142 · FRO143 |
 
 ---
