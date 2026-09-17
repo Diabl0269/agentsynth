@@ -166,6 +166,7 @@ add_executable(Tests
     App/MainComponent/MainComponentUnsavedGuardTests.cpp
     App/MainComponent/MainComponentProviderMiscTests.cpp
     App/MainComponent/MainComponentCommandTableTests.cpp
+    App/MainComponent/MeterColourStopsSettingsIntegrationTests.cpp
     UI/Chrome/WelcomeScreenTests.cpp
     UI/Graph/GraphEditor/GraphEditorTests.cpp
     UI/Graph/GraphEditor/GraphEditorLayoutTests.cpp
@@ -373,6 +374,9 @@ add_executable(Tests
     UI/Mixer/MixerColumnComponentMeterTests.cpp
     UI/Mixer/MixerMeterScaleTests.cpp
     UI/Mixer/MeterColourStopsTests.cpp
+    UI/Mixer/MeterColourStopsPersistenceTests.cpp
+    UI/Mixer/MeterColourStopsLiveApplyTests.cpp
+    UI/Settings/MeterColourStopsEditorTests.cpp
     UI/Mixer/MixerMeterPaintTests.cpp
     UI/Mixer/MixerMeterBallisticsTests.cpp
     UI/Mixer/MixerMeterReadoutTests.cpp
@@ -439,7 +443,8 @@ add_executable(Tests
     ../Source/UI/Timeline/TrackChannelLinkController.cpp
     ../Source/UI/Timeline/TimelineTransportBar.cpp
     ../Source/UI/Mixer/MixerMeter.cpp
-    ../Source/UI/Mixer/MeterColourStops.cpp
+    # MeterColourStops.cpp is now compiled into Core (root CMakeLists.txt, FRO147) -- Tests links
+    # Core directly, so it must NOT also be listed here (would double-compile/duplicate-symbol it).
     ../Source/UI/Mixer/MixerMeterReadout.cpp
     ../Source/UI/Mixer/MixerFader.cpp
     ../Source/UI/Mixer/MixerFaderSlider.cpp
@@ -529,6 +534,7 @@ add_executable(Tests
     ../Source/Plugin/Hosting/HostedPluginEditorWindow.cpp
     ../Source/UI/Settings/SettingsWindow.cpp
     ../Source/UI/Settings/AppearanceSettingsTab.cpp
+    ../Source/UI/Settings/MeterColourStopsEditor.cpp
     ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp
     ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGraphBehaviour.cpp
     ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviour.cpp

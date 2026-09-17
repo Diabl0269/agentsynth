@@ -70,7 +70,12 @@ void MixerMeter::paint(juce::Graphics& g) {
     const auto* laf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     const synth::theme::Colors fallback{};
     const auto& colors = laf != nullptr ? laf->getTheme().colors : fallback;
-    const auto stops = MeterColourStops::fromTheme(colors);
+    // FRO147: the cached EFFECTIVE stops (the user's pinned override, or the active theme's own
+    // four tokens when there is none) -- never rebuilt here, so a Settings > Appearance edit is a
+    // single AppLookAndFeel write followed by a repaint, not per-tick work. No AppLookAndFeel
+    // installed (a headless test) falls back to the theme literally, same as every other token
+    // this function reads through `colors` above.
+    const auto stops = laf != nullptr ? laf->getMeterColourStops() : MeterColourStops::fromTheme(fallback);
 
     auto bounds = getLocalBounds();
     // Tick numbers only where the column has room (docs/mixer.md meters section) -- below this

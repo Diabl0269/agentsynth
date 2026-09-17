@@ -1,8 +1,10 @@
 #pragma once
 
+#include "UI/Mixer/MeterColourStops.h"
 #include "UI/Theme/IconLibrary.h"
 #include "UI/Theme/Theme.h"
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <optional>
 
 namespace synth::theme {
 
@@ -25,6 +27,23 @@ public:
     // (MainComponent::changeListenerCallback) issues the single repaint pass (section 6.5).
     void applyTheme(const Theme& theme);
     const Theme& getTheme() const noexcept { return theme; }
+
+    // ---------- meter colour stops (FRO147) ----------
+    // The ONE cache every meter painter (MixerMeter -- mixer columns, Master, a detached mixer
+    // window, since they all resolve their LookAndFeel back to this same instance -- and
+    // ChannelChipComponent) reads instead of rebuilding a MeterColourStops from scratch on every
+    // paint. Recomputed here rather than in each painter so an edit in Settings > Appearance is a
+    // single write followed by a repaint, never a per-tick rebuild.
+    //
+    // Absent override -> effective stops follow the active theme (MeterColourStops::fromTheme(),
+    // recomputed on every applyTheme() so a theme switch moves them); a present override -> the
+    // custom stops are used regardless of theme, until setMeterColourStopsOverride(nullopt)
+    // ("Reset to Theme") clears it. Does NOT persist anything itself and does NOT repaint -- same
+    // contract as applyTheme() above; the caller (AppearanceSettingsTab's persistence, and
+    // MainComponent's startup/settings-reload paths) owns the properties file and the repaint.
+    void setMeterColourStopsOverride(std::optional<synth::ui::MeterColourStops> override_);
+    bool hasMeterColourStopsOverride() const noexcept { return meterColourStopsOverride.has_value(); }
+    const synth::ui::MeterColourStops& getMeterColourStops() const noexcept { return meterColourStops; }
 
     // ---------- icon registry ----------
     // Re-tint every Icon from the active theme tokens. Called at the end of applyTheme()
@@ -114,7 +133,8 @@ public:
     static constexpr float kRotaryEnd = juce::MathConstants<float>::pi * 0.75f;
 
 private:
-    void refreshTypefaces(); // (re)load cached typefaces for theme.type.uiFamily/monoFamily
+    void refreshTypefaces();          // (re)load cached typefaces for theme.type.uiFamily/monoFamily
+    void recomputeMeterColourStops(); // override if set, else MeterColourStops::fromTheme(theme.colors)
 
     // Themed-widget geometry constants (section 5).
     static constexpr int kScrollbarWidth = 6;      // slim scrollbar (was JUCE default 14)
@@ -122,6 +142,11 @@ private:
     static constexpr float kComboArrowSize = 5.0f; // combo chevron half-width
 
     Theme theme{}; // active theme copy
+
+    // FRO147: the user's pinned stop set (nullopt = follow the theme) and the effective, cached
+    // result recomputeMeterColourStops() derives from it -- see the public accessors above.
+    std::optional<synth::ui::MeterColourStops> meterColourStopsOverride;
+    synth::ui::MeterColourStops meterColourStops;
 
     // SVG icon registry, re-tinted from theme tokens by retintIcons() inside applyTheme().
     IconLibrary iconLibrary_;

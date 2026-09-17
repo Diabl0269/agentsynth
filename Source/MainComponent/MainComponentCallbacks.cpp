@@ -6,6 +6,7 @@
 #include "MainComponent.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"
+#include "UI/Mixer/MeterColourStops.h"
 #include <cmath>
 
 namespace {
@@ -130,6 +131,24 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
         // the same "re-read on notify" treatment as the two calls above. No startup call needed:
         // TimelinePanelComponent::setApplicationProperties already does the initial load.
         timelinePanel.reloadPianoRollAppearancePrefs();
+
+        // FRO147: meter colours live in the same properties file, and AppearanceSettingsTab has no
+        // direct pointer to reach a meter painter (unlike cable colours, which push straight into
+        // GraphEditor) — SettingsWindow is its own juce::DialogWindow, so a getLookAndFeel() call
+        // from inside the tab is not guaranteed to resolve back to THIS AppLookAndFeel instance,
+        // especially in the plugin build. Re-reading here on every settings write, same idiom as
+        // the two calls above, reaches the one shared AppLookAndFeel unconditionally instead.
+        // Repainting mixerDock.getMixerPanel()/timelinePanel directly (not via the component tree)
+        // works whether each is currently docked or reparented into its own DetachedPanelWindow —
+        // both are stable MainComponent-owned objects; Component::repaint() resolves the correct
+        // top-level peer to invalidate wherever the object currently lives, not where it was
+        // constructed. A drag inside the editor writes (no forced disk flush) on every frame and
+        // only calls saveIfNeeded() at a gesture's commit point (see MeterColourStops.h), so this
+        // branch is expected to fire at drag-frame rate without hammering disk.
+        lookAndFeel->setMeterColourStopsOverride(
+            synth::ui::loadMeterColourStopsOverride(*appProperties.getUserSettings()));
+        mixerDock.getMixerPanel().repaint();
+        timelinePanel.repaint();
         return;
     }
 

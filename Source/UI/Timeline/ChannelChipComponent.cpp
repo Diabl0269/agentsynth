@@ -34,7 +34,10 @@ ChipColours coloursFor(const juce::Component& component) {
         result.surface = c.surface;
         result.border = c.border;
         result.text = c.textPrimary;
-        result.meterStops = synth::ui::MeterColourStops::fromTheme(c);
+        // FRO147: the SAME cached effective stops MixerMeter reads (the user's pinned override, or
+        // the theme's own tokens) -- not a fresh fromTheme() rebuild, so this chip and the mixer's
+        // own meters can never show two different colour sets for the same channel.
+        result.meterStops = lf->getMeterColourStops();
     }
     return result;
 }

@@ -67,4 +67,105 @@ void MeterColourStops::forEachBand(
     }
 }
 
+//==============================================================================
+// Persistence (FRO147) -- see the header's own comment on each function.
+//==============================================================================
+
+namespace {
+
+// Strict float parse for a persisted dB token: containsOnly guards against anything that isn't a
+// digit/sign/dot, then a manual scan rejects the shapes containsOnly alone lets through (a sign
+// after position 0, more than one sign, more than one dot, or "-"/"." with no digits) --
+// juce::String::getFloatValue() itself returns 0 on total garbage, which would otherwise silently
+// manufacture a stop at 0 dB instead of failing the whole key.
+std::optional<float> strictParseMeterDb(const juce::String& s) {
+    if (s.isEmpty() || !s.containsOnly("-0123456789."))
+        return std::nullopt;
+    int dashes = 0, dots = 0;
+    for (int i = 0; i < s.length(); ++i) {
+        if (s[i] == '-') {
+            if (i != 0)
+                return std::nullopt;
+            ++dashes;
+        } else if (s[i] == '.') {
+            ++dots;
+        }
+    }
+    if (dashes > 1 || dots > 1 || s == "-" || s == ".")
+        return std::nullopt;
+
+    const float v = s.getFloatValue();
+    // A small tolerance past the scale's own ends -- the editor clamps to [kMeterMinDb,
+    // kMeterMaxDb] before it ever writes a value, so anything further out is corrupt, not a
+    // rounding artefact.
+    if (v < kMeterMinDb - 0.05f || v > kMeterMaxDb + 0.05f)
+        return std::nullopt;
+    return v;
+}
+
+// Exactly 8 hex digits -- same strictness as ColourPickerPopup.h's parseFavouriteColours, minus
+// the "0x" prefix allowance (serializeMeterColourStops() never emits one, so accepting it here
+// would only widen what "round-trips" without ever being produced).
+std::optional<juce::Colour> strictParseMeterArgb(const juce::String& s) {
+    if (s.length() != 8 || !s.containsOnly("0123456789abcdefABCDEF"))
+        return std::nullopt;
+    return juce::Colour((juce::uint32)s.getHexValue64());
+}
+
+} // namespace
+
+juce::String serializeMeterColourStops(const MeterColourStops& stops) {
+    juce::StringArray tokens;
+    for (const auto& stop : stops.getStops())
+        tokens.add(juce::String(stop.dbFrom, 1) + ":" +
+                   juce::String::toHexString((juce::int64)stop.colour.getARGB()).paddedLeft('0', 8).toUpperCase());
+    return tokens.joinIntoString(",");
+}
+
+std::optional<MeterColourStops> parseMeterColourStops(const juce::String& raw) {
+    if (raw.isEmpty())
+        return std::nullopt;
+
+    const auto tokens = juce::StringArray::fromTokens(raw, ",", "");
+    if (tokens.isEmpty() || tokens.size() > MeterColourStops::kMaxStops)
+        return std::nullopt; // 0 or >kMaxStops -- never half-apply a corrupt count
+
+    std::vector<MeterColourStop> parsed;
+    parsed.reserve((size_t)tokens.size());
+    for (const auto& token : tokens) {
+        const auto parts = juce::StringArray::fromTokens(token, ":", "");
+        if (parts.size() != 2)
+            return std::nullopt;
+        const auto db = strictParseMeterDb(parts[0]);
+        const auto colour = strictParseMeterArgb(parts[1]);
+        if (!db.has_value() || !colour.has_value())
+            return std::nullopt; // one bad token corrupts the whole key, never a partial apply
+        parsed.push_back({*db, *colour});
+    }
+    // The vector constructor sorts/dedups/never-empties -- a file we wrote ourselves is already
+    // sorted and unique, so this is a normalisation safety net for a hand-edited settings file,
+    // never a silent way to "fix" a count that already failed the check above.
+    return MeterColourStops(std::move(parsed));
+}
+
+std::optional<MeterColourStops> loadMeterColourStopsOverride(juce::PropertiesFile& props) {
+    if (!props.containsKey(meterColourStopsKey()))
+        return std::nullopt;
+    return parseMeterColourStops(props.getValue(meterColourStopsKey(), {}));
+}
+
+void writeMeterColourStopsOverride(juce::PropertiesFile& props, const MeterColourStops& stops) {
+    props.setValue(meterColourStopsKey(), serializeMeterColourStops(stops));
+}
+
+void saveMeterColourStopsOverride(juce::PropertiesFile& props, const MeterColourStops& stops) {
+    writeMeterColourStopsOverride(props, stops);
+    props.saveIfNeeded();
+}
+
+void clearMeterColourStopsOverride(juce::PropertiesFile& props) {
+    props.removeValue(meterColourStopsKey());
+    props.saveIfNeeded();
+}
+
 } // namespace synth::ui

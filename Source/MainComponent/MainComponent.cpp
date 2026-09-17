@@ -4,6 +4,7 @@
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"
 #include "Timeline/AssetManager.h"
+#include "UI/Mixer/MeterColourStops.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 #include "UI/Settings/SettingsWindow.h"
 // Generated at CMake CONFIGURE time from local git history — see the root CMakeLists.txt's
@@ -89,6 +90,11 @@ MainComponent::MainComponent(std::unique_ptr<synth::AIProvider> provider, synth:
 // ---- Shared post-construction body ----
 // Shared initialisation body called from both constructors after appProperties is set up.
 void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider, synth::AIProviderRegistry registry) {
+    // FRO147: overlay the meter-colours override (if any) onto the AppLookAndFeel's already-
+    // theme-derived cache — every ctor above already ran lookAndFeel->applyTheme() before calling
+    // this, so the theme-default stops are in place; this only pins a user override on top, before
+    // the first mixer column/channel chip ever paints.
+    lookAndFeel->setMeterColourStopsOverride(synth::ui::loadMeterColourStopsOverride(*appProperties.getUserSettings()));
     restorePanelPreferences();       // ORDER: flags read before any addAndMakeVisible/setVisible
     restoreGraphEditorPreferences(); // ORDER: settings change listener registered here
     configureAiProvider(std::move(provider), std::move(registry)); // ORDER: nothing earlier may write appProperties
