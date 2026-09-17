@@ -394,6 +394,7 @@ add_executable(Tests
     Engine/AudioInputTests.cpp
     Modules/AudioInputModuleTests.cpp
     Engine/FeedbackGuardTests.cpp
+    Engine/NonFiniteOutputGuardTests.cpp
     Engine/OfflineTransportDriverTests.cpp
     Engine/BounceExporter/BounceExporterCancellationTests.cpp
     Engine/BounceExporter/BounceExporterCorrectnessTests.cpp

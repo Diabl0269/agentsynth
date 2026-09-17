@@ -97,6 +97,7 @@ Everything else below is a tripwire index. The full rule lives in the named area
 - Every document-replacing action goes through `MainComponent::guardUnsavedChanges` (async — hand it the work, never do it then ask), and any path that replaces the document with something that is not a bundle drops `currentBundleDir_`. → [`docs/architecture.md`](docs/architecture.md)
 - Autosave writes a sidecar (`autosave.json`), never `project.json`, and rotates a configurable number of numbered backups; gates on edit-serial movement (not `isDirty_`) and never fires during a recording take or a bounce. → [`docs/architecture.md`](docs/architecture.md)
 - No non-ASCII bytes in a `Source/` string literal — `juce::String`'s `const char*` ctor decodes as Latin-1, so `"Rename…"` (or its hex-escape spelling) ships mojibake; use ASCII or `juce::CharPointer_UTF8`/`String::fromUTF8`. Guarded by `scripts/tests/check-nonascii-literals.test.sh`. → [`docs/testing.md`](docs/testing.md)
+- `AudioEngine::renderNextBlock` is the last write to the render buffer in both host modes — anything summed post-graph (the metronome click, a future stage) must run before it, never after, or it bypasses the non-finite (NaN/Inf) output scrub. → [`docs/architecture.md`](docs/architecture.md)
 
 **Modules & channels** (`Source/Modules/CLAUDE.md`):
 

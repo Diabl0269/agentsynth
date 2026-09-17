@@ -4,6 +4,8 @@
 #include "AudioEngine.h"
 #include "Timeline/MidiRecorder.h"
 #include <algorithm>
+#include <bit>
+#include <cstdint>
 
 namespace {
 
@@ -27,6 +29,29 @@ struct ScopedRenderPass {
 
     std::atomic<std::uint64_t>& finished_;
 };
+
+// FRO161: replaces a non-finite sample (NaN or +-Inf) with silence. A raw IEEE-754 bit test, not
+// std::isfinite -- an exponent field of all 1s (0x7f800000) means Inf (zero mantissa) or NaN (any
+// nonzero mantissa); every other bit pattern, including -0.0 and every denormal, is finite and
+// must come back untouched. This repo does not build with -ffast-math today (checked), but
+// std::isfinite is exactly the kind of call such a flag is permitted to fold to `true`, and the
+// bit test costs nothing extra -- it stays correct even if that ever changes. Branchless (a
+// select, not a compare-and-jump) so it is real-time safe at one sample per channel per block.
+inline float scrubNonFinite(float sample) noexcept {
+    const auto bits = std::bit_cast<std::uint32_t>(sample);
+    return ((bits & 0x7f800000u) == 0x7f800000u) ? 0.0f : sample;
+}
+
+// Scrubs every sample of `buffer`'s first `numChannels` channels in place. See the call site in
+// renderNextBlock for why that is the one place on the signal path this can live.
+void scrubNonFiniteOutput(juce::AudioBuffer<float>& buffer, int numChannels) noexcept {
+    const int numSamples = buffer.getNumSamples();
+    for (int channel = 0; channel < numChannels; ++channel) {
+        float* data = buffer.getWritePointer(channel);
+        for (int i = 0; i < numSamples; ++i)
+            data[i] = scrubNonFinite(data[i]);
+    }
+}
 
 } // namespace
 
@@ -174,6 +199,17 @@ void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBu
     // LFOs / envelopes keep advancing.
     if (masterMuted_.load(std::memory_order_relaxed))
         buffer.clear();
+
+    // FRO161: the LAST write to `buffer` before either caller hands it to hardware or the host --
+    // audioDeviceIOCallbackWithContext's `buffer` aliases the device's own output pointers, and
+    // processHostBlock's `buffer` IS the host's buffer, so nothing runs on this data after this
+    // returns. Both host modes funnel through renderNextBlock (this function), so this is the one
+    // place a guard here cannot be bypassed by graph topology -- unlike a per-module check, it
+    // still catches a NaN/Inf sample when MasterModule is bypassed, muted, or absent from the graph
+    // entirely (createDefaultPatch's patch has no Master node until a channel splices one in).
+    // Scoped to the graph's declared OUTPUT channels only, same reasoning as runFeedbackGuard just
+    // above: channels past that count are scratch, not something that reaches a listener.
+    scrubNonFiniteOutput(buffer, std::min(buffer.getNumChannels(), mainProcessorGraph.getTotalNumOutputChannels()));
 }
 
 void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages, int inputSampleOffset) {
