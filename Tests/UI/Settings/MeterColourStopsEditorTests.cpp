@@ -101,25 +101,96 @@ TEST_F(MeterColourStopsEditorTest, ClickingAHandleBodySelectsItWithoutFiringOnCh
     EXPECT_EQ(recorder.callCount, 0) << "selecting alone must not write/persist anything";
 }
 
-TEST_F(MeterColourStopsEditorTest, ClickingASwatchFiresOnColourPickerRequestedInsteadOfDragging) {
+// A swatch press is undecided between "click" (open the picker) and "drag" (move the handle) --
+// see MeterColourStopsEditor.h's class comment. Below: a genuine click (press, release, no
+// meaningful movement) opens the picker; a press-and-drag from the SAME swatch moves the stop
+// like the rest of the row and opens no picker at all.
+
+TEST_F(MeterColourStopsEditorTest, ClickingASwatchWithNoMovementOpensThePickerOnMouseUp) {
     int requestedIndex = -1;
     juce::Colour requestedColour;
     editor.onColourPickerRequested = [&](int index, juce::Rectangle<int>, juce::Colour colour) {
         requestedIndex = index;
         requestedColour = colour;
     };
+    ChangeRecorder recorder;
+    editor.onChanged = recorder.callback();
 
     const auto swatch = editor.getSwatchBoundsForTest(1);
     const auto pos = swatch.getCentre();
     editor.mouseDown(realMouseEvent(editor, pos, pos));
 
+    EXPECT_EQ(requestedIndex, -1) << "the picker must not open on mouseDown -- a click isn't known "
+                                     "to be a click until mouseUp";
+
+    editor.mouseUp(realMouseEvent(editor, pos, pos));
+
     EXPECT_EQ(requestedIndex, 1);
     EXPECT_EQ(requestedColour, editor.getStops().getStops()[1].colour);
+    EXPECT_FLOAT_EQ(editor.getStops().getStops()[1].dbFrom, -18.0f) << "a plain click must not move the stop";
+    EXPECT_EQ(recorder.callCount, 0) << "opening the picker alone must not fire onChanged";
+}
 
-    // No drag armed by a swatch click.
-    const auto dragTo = pos + juce::Point<int>(0, 40);
-    editor.mouseDrag(realMouseEvent(editor, dragTo, pos, true));
-    EXPECT_FLOAT_EQ(editor.getStops().getStops()[1].dbFrom, -18.0f) << "swatch click must not start a drag";
+TEST_F(MeterColourStopsEditorTest, ClickingASwatchThatMovesOnlyAFewPxStillCountsAsAClick) {
+    // Real presses never land pixel-perfect still -- anything short of kSwatchDragThresholdPx must
+    // still read as a click, not a drag.
+    int requestedIndex = -1;
+    editor.onColourPickerRequested = [&](int index, juce::Rectangle<int>, juce::Colour) { requestedIndex = index; };
+
+    const auto swatch = editor.getSwatchBoundsForTest(1);
+    const auto pos = swatch.getCentre();
+    const auto jitterPos = pos + juce::Point<int>(0, MeterColourStopsEditor::kSwatchDragThresholdPx - 1);
+    editor.mouseDown(realMouseEvent(editor, pos, pos));
+    editor.mouseDrag(realMouseEvent(editor, jitterPos, pos, true));
+    editor.mouseUp(realMouseEvent(editor, jitterPos, pos, true));
+
+    EXPECT_EQ(requestedIndex, 1);
+    EXPECT_FLOAT_EQ(editor.getStops().getStops()[1].dbFrom, -18.0f) << "a sub-threshold jitter must not move the stop";
+}
+
+TEST_F(MeterColourStopsEditorTest, DraggingFromASwatchMovesTheHandleAndOpensNoPicker) {
+    int requestedIndex = -1;
+    editor.onColourPickerRequested = [&](int index, juce::Rectangle<int>, juce::Colour) { requestedIndex = index; };
+    ChangeRecorder recorder;
+    editor.onChanged = recorder.callback();
+
+    const auto swatch = editor.getSwatchBoundsForTest(2); // -6 dB
+    const auto startPos = swatch.getCentre();
+    const int targetY = editor.yForDbForTest(-3.0f);
+    const auto dragPos = juce::Point<int>(startPos.x, targetY);
+
+    editor.mouseDown(realMouseEvent(editor, startPos, startPos));
+    editor.mouseDrag(realMouseEvent(editor, dragPos, startPos, true));
+
+    EXPECT_EQ(requestedIndex, -1) << "a press that has already moved past the threshold must not open the picker";
+    EXPECT_FLOAT_EQ(editor.getStops().getStops()[2].dbFrom, -3.0f);
+    EXPECT_GE(recorder.callCount, 1);
+    EXPECT_FALSE(recorder.lastCommitted);
+
+    editor.mouseUp(realMouseEvent(editor, dragPos, startPos, true));
+
+    EXPECT_EQ(requestedIndex, -1) << "mouseUp after a real drag must still not open the picker";
+    EXPECT_TRUE(recorder.lastCommitted);
+    EXPECT_FLOAT_EQ(editor.getStops().getStops()[2].dbFrom, -3.0f);
+}
+
+TEST_F(MeterColourStopsEditorTest, DraggingFromTheFloorsSwatchOpensNoPickerAndNeverMovesIt) {
+    // The floor never drags positionally -- dragging its swatch past the threshold must still
+    // suppress the click-to-open behaviour (the gesture committed to "drag", it just had nothing
+    // to move), not silently fall back to opening the picker.
+    int requestedIndex = -1;
+    editor.onColourPickerRequested = [&](int index, juce::Rectangle<int>, juce::Colour) { requestedIndex = index; };
+
+    const auto swatch = editor.getSwatchBoundsForTest(0);
+    const auto startPos = swatch.getCentre();
+    const auto dragPos = startPos + juce::Point<int>(0, 50);
+
+    editor.mouseDown(realMouseEvent(editor, startPos, startPos));
+    editor.mouseDrag(realMouseEvent(editor, dragPos, startPos, true));
+    editor.mouseUp(realMouseEvent(editor, dragPos, startPos, true));
+
+    EXPECT_EQ(requestedIndex, -1);
+    EXPECT_FLOAT_EQ(editor.getStops().getStops()[0].dbFrom, kMeterMinDb);
 }
 
 //==============================================================================

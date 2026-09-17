@@ -199,11 +199,20 @@ void MeterColourStopsEditor::mouseDown(const juce::MouseEvent& e) {
     if (hit.index >= 0) {
         selectIndex(hit.index);
         if (hit.zone == HitZone::Swatch) {
-            if (onColourPickerRequested)
-                onColourPickerRequested(hit.index, localAreaToGlobal(swatchBounds(hit.index)),
-                                        stops_.getStops()[(size_t)hit.index].colour);
+            // Deferred: a press on the swatch stays undecided between "click" (open the picker)
+            // and "drag" (move the handle) until mouseDrag/mouseUp settle it below -- the swatch is
+            // the row's most natural grab point, so it must be able to start a drag too, not just
+            // recolour. Still arm the drag itself now (same as a body hit) so mouseDrag has
+            // something to move the instant the pointer crosses the threshold.
+            pendingSwatchClickIndex_ = hit.index;
+            swatchPressPos_ = e.getPosition();
+            if (hit.index > 0) { // the floor's swatch still opens on click, but never drags
+                dragIndex_ = hit.index;
+                dragStartDb_ = stops_.getStops()[(size_t)hit.index].dbFrom;
+            }
             return;
         }
+        pendingSwatchClickIndex_ = -1;
         if (hit.index > 0) { // the floor never drags
             dragIndex_ = hit.index;
             dragStartDb_ = stops_.getStops()[(size_t)hit.index].dbFrom;
@@ -212,10 +221,18 @@ void MeterColourStopsEditor::mouseDown(const juce::MouseEvent& e) {
     }
 
     // Empty area -- add a stop where the click landed.
+    pendingSwatchClickIndex_ = -1;
     addStopAt(yToDb(e.y));
 }
 
 void MeterColourStopsEditor::mouseDrag(const juce::MouseEvent& e) {
+    if (pendingSwatchClickIndex_ >= 0) {
+        // Still within the "might just be a click" window -- do nothing (not even repaint) until
+        // the pointer actually moves enough to commit to a drag.
+        if (e.getPosition().getDistanceFrom(swatchPressPos_) < kSwatchDragThresholdPx)
+            return;
+        pendingSwatchClickIndex_ = -1; // committed to a drag now -- mouseUp must not open the picker
+    }
     if (dragIndex_ < 0)
         return;
     const float requested = snapDb(yToDb(e.y));
@@ -223,6 +240,17 @@ void MeterColourStopsEditor::mouseDrag(const juce::MouseEvent& e) {
 }
 
 void MeterColourStopsEditor::mouseUp(const juce::MouseEvent&) {
+    if (pendingSwatchClickIndex_ >= 0) {
+        // The pointer never crossed the drag threshold -- a genuine click on the swatch.
+        const int index = pendingSwatchClickIndex_;
+        pendingSwatchClickIndex_ = -1;
+        dragIndex_ = -1;
+        if (index < (int)stops_.getStops().size() && onColourPickerRequested)
+            onColourPickerRequested(index, localAreaToGlobal(swatchBounds(index)),
+                                    stops_.getStops()[(size_t)index].colour);
+        return;
+    }
+
     // Only a REAL move fires a change -- a plain press-and-release on a handle body (no drag in
     // between) must select it and nothing more, matching a swatch/empty-area click's own "no
     // notify on selection alone" contract.

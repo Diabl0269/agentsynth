@@ -23,7 +23,10 @@
 //    FLOOR stop -- index 0, the lowest dbFrom, "the colour from -inf" -- never drags.
 //  - Click a handle's swatch: fires onColourPickerRequested rather than opening a picker itself
 //    (mirrors AppearanceSettingsTab::openCableColourPicker/openNoteColourPicker already routing
-//    through the owner).
+//    through the owner). The swatch is also the row's most natural grab point, so a PRESS there
+//    only commits to "click" (and opens the picker) if the pointer never moves more than
+//    kSwatchDragThresholdPx before mouseUp -- move past that, and it drags the handle exactly like
+//    a press anywhere else on the row (see mouseDown/mouseDrag/mouseUp).
 //  - Click anywhere else in the editor that isn't a handle: adds a stop at that dB, coloured from
 //    the band already showing there (brightened so a same-colour add is still visible), up to
 //    MeterColourStops::kMaxStops. Refused (no-op) if a stop already sits at that snapped dB.
@@ -77,6 +80,10 @@ public:
     static constexpr float kDbSnap = 0.5f;
     static constexpr float kNudgeDb = 0.5f;
     static constexpr float kShiftNudgeDb = 3.0f;
+    /** A press on a handle's swatch stays a "click" (opens the colour picker on mouseUp) until the
+     *  pointer moves at least this many px from the press point -- past that it commits to a drag,
+     *  same as a press anywhere else on the row. */
+    static constexpr int kSwatchDragThresholdPx = 4;
 
     void paint(juce::Graphics&) override;
     void mouseDown(const juce::MouseEvent&) override;
@@ -127,6 +134,11 @@ private:
     // "pressed and released without moving" -- a plain click on a handle body selects it and must
     // not fire a committed (or any) onChanged.
     float dragStartDb_ = 0.0f;
+    // >= 0 while a press that started ON A SWATCH is still undecided between "click" (open the
+    // picker) and "drag" (move the handle) -- see mouseDown/mouseDrag/mouseUp and the class
+    // comment above. Holds the pressed stop's index; -1 once the gesture resolves either way.
+    int pendingSwatchClickIndex_ = -1;
+    juce::Point<int> swatchPressPos_;
 
     static constexpr int kScaleWidth = 40;
     static constexpr int kPreviewBarWidth = 8;
