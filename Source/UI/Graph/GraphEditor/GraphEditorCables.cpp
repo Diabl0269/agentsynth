@@ -23,6 +23,8 @@ using namespace detail;
 // first time either was tweaked, and clicks would silently miss the wire.
 // ============================================================================
 
+// The cubic bezier a cable is drawn along. Must stay identical to
+// AppLookAndFeel::drawConnectionWire's default curve or hit-testing drifts off the wire.
 juce::Path GraphEditor::buildCablePath(juce::Point<float> p1, juce::Point<float> p2) {
     juce::Path wp;
     const float dx = p2.x - p1.x;
@@ -31,6 +33,7 @@ juce::Path GraphEditor::buildCablePath(juce::Point<float> p1, juce::Point<float>
     return wp;
 }
 
+// Perpendicular distance from a canvas point to a cable's curve, in pixels.
 float GraphEditor::distanceToCable(const VisibleCable& cable, juce::Point<float> canvasPos) {
     auto path = buildCablePath(cable.p1, cable.p2);
     juce::Point<float> nearest;
@@ -40,6 +43,8 @@ float GraphEditor::distanceToCable(const VisibleCable& cable, juce::Point<float>
     return canvasPos.getDistanceFrom(nearest);
 }
 
+// Topmost cable within `tolerance` px of a canvas point, or nullopt.
+// Later cables win, matching paint order (mod wires draw over audio wires).
 std::optional<GraphEditor::VisibleCable> GraphEditor::getCableAt(juce::Point<float> canvasPos, float tolerance) {
     std::optional<VisibleCable> best;
     float bestDist = tolerance;
@@ -75,6 +80,11 @@ juce::Point<float> projectToRectEdge(juce::Rectangle<int> rect, juce::Point<floa
 }
 } // namespace
 
+// Enumerates every cable currently drawn on the canvas, in paint order.
+// Memoized: the list is rebuilt when the canvas is asked to repaint (repaintCanvas()) and on
+// every 30 Hz tick, never per-paint. Cable geometry is CANVAS-space, so zoom and pan cannot
+// move a cable — a zoom gesture reuses the same list. Do not store the returned reference
+// across a repaintCanvas(), a timerCallback() or any graph edit.
 const std::vector<GraphEditor::VisibleCable>& GraphEditor::buildVisibleCables() {
     if (!cablesCacheValid) {
         cablesCache = rebuildVisibleCables();
@@ -84,11 +94,14 @@ const std::vector<GraphEditor::VisibleCable>& GraphEditor::buildVisibleCables() 
     return cablesCache;
 }
 
+// The single "the canvas changed" seam: drops the cable memo, then repaints. Every former
+// `content.repaint()` in this file goes through here. Also GraphCanvasHost::repaintCanvas().
 void GraphEditor::repaintCanvas() {
     cablesCacheValid = false;
     content.repaint();
 }
 
+// The actual enumeration; buildVisibleCables() is the memoized public entry point above.
 std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
     std::vector<VisibleCable> cables;
     auto& graph = audioEngine.getGraph();
@@ -329,12 +342,12 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
             if (!macro.collapsed)
                 continue;
             for (const auto& uuid : macro.members) {
-                auto nodeId = resolveMemberNodeId(uuid);
+                auto nodeId = macroController_.resolveMemberNodeId(uuid);
                 if (nodeId.uid != 0)
                     collapsedMacroForNode[nodeId.uid] = &macro;
             }
             for (const auto& port : macroCardPortLayout(macro.id)) {
-                auto nodeId = resolveMemberNodeId(port.nodeUuid);
+                auto nodeId = macroController_.resolveMemberNodeId(port.nodeUuid);
                 if (nodeId.uid != 0)
                     portJackLocalForNode[nodeId.uid] = port.jackPos;
             }
@@ -367,7 +380,7 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
                 const auto originalP1 = cable.p1;
                 const auto originalP2 = cable.p2;
                 if (srcHidden) {
-                    const auto cardBounds = macroCableAnchorBounds(*srcIt->second);
+                    const auto cardBounds = macroController_.macroCableAnchorBounds(*srcIt->second);
                     auto jackIt = portJackLocalForNode.find(cable.id.srcUid);
                     // Macro is the SOURCE -> signal LEAVES it -> anchor on the RIGHT edge.
                     cable.p1 =
@@ -376,7 +389,7 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
                             : directionalEdgeAnchor(cardBounds, projectToRectEdge(cardBounds, originalP2), false);
                 }
                 if (dstHidden) {
-                    const auto cardBounds = macroCableAnchorBounds(*dstIt->second);
+                    const auto cardBounds = macroController_.macroCableAnchorBounds(*dstIt->second);
                     auto jackIt = portJackLocalForNode.find(cable.id.dstUid);
                     // Macro is the DESTINATION -> signal ENTERS it -> anchor on the LEFT edge.
                     cable.p2 = jackIt != portJackLocalForNode.end()
@@ -393,6 +406,7 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
     return cables;
 }
 
+// Resolved colour for a cable under the current mode + overrides + active theme.
 juce::Colour GraphEditor::colourForCable(const VisibleCable& cable) const {
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     // Headless tests install the stock JUCE LnF; fall back to the token defaults so colour
@@ -403,6 +417,10 @@ juce::Colour GraphEditor::colourForCable(const VisibleCable& cable) const {
                                          cableColourOverrides, cable.isBypassed);
 }
 
+// Last folder a Wavetable card browsed to. Held here so a newly dropped Wavetable seeds
+// its browser from wherever the user was last working; MainComponent owns the round trip
+// to ApplicationProperties via onWavetableFolderChanged, keeping GraphEditor
+// settings-free (same split as the cable-colour config above).
 void GraphEditor::rememberWavetableFolder(const juce::File& folder) {
     if (folder == lastWavetableFolder)
         return;
@@ -423,6 +441,7 @@ void GraphEditor::setCableColourOverrides(const synth::ui::CableColourOverrides&
     repaintCanvas();
 }
 
+// Removes every graph edge behind a user-visible cable, as one undoable action.
 void GraphEditor::disconnectCable(const VisibleCable& cable) {
     auto& graph = audioEngine.getGraph();
 
@@ -436,8 +455,8 @@ void GraphEditor::disconnectCable(const VisibleCable& cable) {
     // original graph-only recordStructuralChange path, unchanged.
     const juce::AudioProcessorGraph::NodeID srcId{cable.id.srcUid};
     const juce::AudioProcessorGraph::NodeID dstId{cable.id.dstUid};
-    const bool touchesMacroPort =
-        autoDeleteMacroPortsOnLastCableEnabled && (nodeIsMacroPort(srcId) || nodeIsMacroPort(dstId));
+    const bool touchesMacroPort = autoDeleteMacroPortsOnLastCableEnabled &&
+                                  (macroController_.nodeIsMacroPort(srcId) || macroController_.nodeIsMacroPort(dstId));
 
     // An attenuverter chain is a hidden node plus its two edges — removing the routing takes all
     // of it, which is also what double-clicking the knob does.
@@ -447,8 +466,8 @@ void GraphEditor::disconnectCable(const VisibleCable& cable) {
         if (touchesMacroPort) {
             auto doMutation = [this, removeChain, srcId, dstId] {
                 removeChain();
-                autoDeleteOrphanedMacroPort(srcId);
-                autoDeleteOrphanedMacroPort(dstId);
+                macroController_.autoDeleteOrphanedMacroPort(srcId);
+                macroController_.autoDeleteOrphanedMacroPort(dstId);
                 updateComponents();
             };
             if (undoManager)
@@ -502,8 +521,8 @@ void GraphEditor::disconnectCable(const VisibleCable& cable) {
     if (touchesMacroPort) {
         auto doMutation = [this, removeEdges, srcId, dstId] {
             removeEdges();
-            autoDeleteOrphanedMacroPort(srcId);
-            autoDeleteOrphanedMacroPort(dstId);
+            macroController_.autoDeleteOrphanedMacroPort(srcId);
+            macroController_.autoDeleteOrphanedMacroPort(dstId);
             updateComponents();
         };
         if (undoManager)

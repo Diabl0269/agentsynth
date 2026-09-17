@@ -12,6 +12,12 @@
 #include "UI/Macros/MacroCardComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 
+// Syncs macro card components with `macros` and the visibility of their (possibly hidden)
+// member ModuleComponents. Called at the end of updateComponents(), the same seam that
+// syncs ModuleComponents themselves. Stays on GraphEditor (FRO77 PR2) — it constructs
+// `new MacroCardComponent(*this, ...)`, which needs a genuine GraphEditor&; see
+// MacroGroupController.h's class comment. Also GraphCanvasHost::syncMacroCards() —
+// MacroGroupController::renameMacro()/setMacroColour() call it through the host afterward.
 void GraphEditor::syncMacroCards() {
     auto& cards = content.getMacroCards();
 
@@ -53,12 +59,17 @@ void GraphEditor::syncMacroCards() {
     for (auto* comp : content.getModules()) {
         if (comp == nullptr)
             continue;
-        const juce::String uuid = nodeUuidFor(comp->getNodeId());
+        const juce::String uuid = macroController_.nodeUuidFor(comp->getNodeId());
         const auto* macro = uuid.isEmpty() ? nullptr : macros.findByMember(uuid);
         comp->setVisible(macro == nullptr || !macro->collapsed);
     }
 }
 
+// Theme colour for a module category, matching how the canvas colours cables/cards by
+// category (synth::ui::themeColourForCategory) — used by the collapsed card's content
+// preview so its boxes read as the same colours expanding the macro would show. Falls back
+// to token defaults under the stock LookAndFeel headless tests install, same as
+// colourForCable.
 juce::Colour GraphEditor::categoryPreviewColour(synth::ui::ModuleCategory category) const {
     // Force the BySourceCategory branch of resolveCableBaseColour regardless of the user's actual
     // cableColourMode: the task asks for the preview to echo the module's CATEGORY specifically,

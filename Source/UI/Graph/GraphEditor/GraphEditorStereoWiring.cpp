@@ -16,6 +16,9 @@
 
 using namespace detail;
 
+// MESSAGE THREAD. The audio device changed: re-point every Audio Input module at the
+// engine's new input channel count, drop cables left on jacks that just disappeared, and
+// re-measure the affected cards. Called from the owner's device-state-changed callback.
 void GraphEditor::refreshIoModulesAfterDeviceChange() {
     // MESSAGE THREAD: the audio device changed under us, so every Audio Input card's jack count
     // may have changed with it. Pushing the engine's prepared channel count into the module here
@@ -48,6 +51,11 @@ void GraphEditor::refreshIoModulesAfterDeviceChange() {
         repaintCanvas();
 }
 
+// MESSAGE THREAD. Calls the provider above (a no-op if none is installed) and pushes the
+// result into the Audio Output card's ModuleComponent, which repaints only if the text
+// actually changed. Call once right after installing the provider (so the card is populated
+// at startup) and again every time AudioEngine::onDeviceStateChanged fires — there is no
+// timer polling this.
 void GraphEditor::refreshOutputDeviceInfo() {
     // MESSAGE THREAD. The provider (installed by MainComponent) is the only thing that knows
     // Standalone-vs-Hosted framing; this just finds the card and pushes whatever it returns.
@@ -64,6 +72,10 @@ void GraphEditor::refreshOutputDeviceInfo() {
     }
 }
 
+// Re-lays every stereo-capable module already on the canvas to `dual`. Card heights do not
+// move — the gutter reserves room for the dual layout in both states. See
+// GraphEditorStereoWiring.cpp for why this stays separate from setDefaultDualIOForNewModules.
+//
 // Deliberately separate from setDefaultDualIOForNewModules: that one is also called at startup
 // and whenever the Settings window opens, and retro-applying there would rewrite the user's
 // patch (collapsing the factory preset's voice modules on every launch). Only a deliberate
@@ -129,6 +141,9 @@ void GraphEditor::applyDefaultDualIOForNewModule(juce::AudioProcessor& processor
         param->setValueNotifyingHost(dual ? 1.0f : 0.0f);
 }
 
+// Dual I/O only remaps visible jacks onto raw ch0/ch1. A collapsed Audio cable that only
+// landed on the left leg (typical when the far end is Audio Output, which is not ModuleBase)
+// is completed to L→L / R→R so toggling Dual I/O on shows both jacks wired.
 void GraphEditor::completeStereoPairConnections(ModuleComponent* moduleComp) {
     if (moduleComp == nullptr || moduleComp->getModule() == nullptr)
         return;
@@ -338,6 +353,11 @@ void GraphEditor::completeStereoPairConnections(ModuleComponent* moduleComp) {
     dropHiddenRightLegConnections(nodeId);
 }
 
+// The raw channel carrying `proc`'s right audio leg for wiring purposes, or -1 when it has none
+// the user can reach. Asks the module (FX use ch1, split-block modules their own kRightBase),
+// then requires the channel to be reachable from a VISIBLE jack — a collapsed split-block
+// module still reports PortRole::Audio on its hidden block, and wiring that would create a
+// cable nobody can unplug. Static so tests can pin it directly.
 int GraphEditor::rightAudioLegOf(juce::AudioProcessor* proc, bool asInput) {
     // Which raw channel is this end's right leg? FX put it on ch1; the voice modules put it on their
     // own kRightBase block, so asking the module beats assuming ch1 — assuming would have wired an
@@ -369,6 +389,9 @@ int GraphEditor::rightAudioLegOf(juce::AudioProcessor* proc, bool asInput) {
     return audioChannelReachableFromJack(*peerMb, leg, asInput) ? leg : -1;
 }
 
+// True when `rawChannel` is covered by one of the module's currently VISIBLE jacks (a jack's
+// JackTarget spans `voiceSpan` consecutive raw channels, which is how a collapsed FX jack owns
+// both of its legs). The wiring-side counterpart of handleModuleResized's exposure check.
 bool GraphEditor::audioChannelReachableFromJack(const ModuleBase& mb, int rawChannel, bool isInput) {
     const int visible = isInput ? mb.getVisibleInputPortCount() : mb.getVisibleOutputPortCount();
     for (int jack = 0; jack < visible; ++jack)
@@ -379,6 +402,12 @@ bool GraphEditor::audioChannelReachableFromJack(const ModuleBase& mb, int rawCha
     return false;
 }
 
+// Unhooks a collapsed split-block module's hidden right leg, RE-POINTING each cable onto the
+// matching channel of the surviving left block wherever the far end still exposes it (and
+// simply dropping it where it does not). Graph-level, so it works before the cards exist.
+// No-op for FX pairs, whose collapsed jack legitimately still owns both raw legs. See
+// GraphEditorStereoWiring.cpp for the collapse-level rationale.
+//
 // The re-point is what keeps a collapse level across the stereo field: without it, collapsing
 // the default patch's VCA starved the whole FX tail's right channel and the mix jumped left.
 void GraphEditor::dropHiddenRightLegConnections(juce::AudioProcessorGraph::NodeID nodeId) {
@@ -474,6 +503,9 @@ void GraphEditor::dropHiddenRightLegConnections(juce::AudioProcessorGraph::NodeI
     }
 }
 
+// A module changed footprint in place (the Macro bank, when its "Knobs" count changes).
+// Drops any routing left on an output jack that is no longer visible, then pushes overlapping
+// neighbours clear. The resized module itself never moves.
 void GraphEditor::handleModuleResized(ModuleComponent* moduleComp) {
     if (moduleComp == nullptr || moduleComp->getModule() == nullptr)
         return;

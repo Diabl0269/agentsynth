@@ -2,4 +2,3 @@
 # A file may never grow past its entry; when it shrinks, run `bash scripts/check-file-sizes.sh --update`
 # so the entry tightens; once under the cap the entry must be removed (--update does that).
 # Never add a NEW file here -- split it instead.
-1489 Source/UI/Graph/GraphEditor/GraphEditor.h

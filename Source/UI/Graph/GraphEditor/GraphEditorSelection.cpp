@@ -22,6 +22,7 @@
 //   Escape / click empty canvas         -> clear
 //   Delete / Backspace                  -> delete the selection
 
+// Bounding boxes of every rendered module, for marquee hit-testing and group collision.
 std::vector<synth::LayoutUtil::Box> GraphEditor::collectModuleBoxes(bool selectedOnly, bool excludeSelected) const {
     std::vector<synth::LayoutUtil::Box> boxes;
     for (auto* comp : const_cast<GraphContentComponent&>(content).getModules()) {
@@ -40,6 +41,8 @@ std::vector<synth::LayoutUtil::Box> GraphEditor::collectModuleBoxes(bool selecte
     return boxes;
 }
 
+// Repaints only the module components whose selected state actually changed. Selection
+// changes must never trigger a full-canvas repaint storm during a marquee drag.
 void GraphEditor::applySelectionChange(const std::vector<juce::AudioProcessorGraph::NodeID>& newSelection) {
     std::set<juce::AudioProcessorGraph::NodeID> before;
     for (auto id : selection.getSelected())
@@ -65,6 +68,7 @@ void GraphEditor::applySelectionChange(const std::vector<juce::AudioProcessorGra
     }
 }
 
+// Selects a single module. When additive, toggles it instead and leaves the rest alone.
 void GraphEditor::selectModule(juce::AudioProcessorGraph::NodeID nodeId, bool additive) {
     if (nodeId.uid == 0)
         return;
@@ -96,6 +100,9 @@ void GraphEditor::selectAllModules() {
     applySelectionChange(all);
 }
 
+// Drops selected ids whose nodes no longer exist. Called after any graph mutation that can
+// remove nodes (delete, undo/redo, preset load) — a stale id would otherwise be handed to
+// snippet extraction or a group drag.
 void GraphEditor::pruneSelection() {
     if (selection.isEmpty())
         return;
@@ -108,6 +115,9 @@ void GraphEditor::pruneSelection() {
         repaintCanvas();
 }
 
+// Removes every selected module as ONE undoable change, so Cmd+Z restores the whole group.
+// Also GraphCanvasHost::deleteSelection() — MacroGroupController's deleteMacroAndMembers/
+// removeMacroPort (FRO77 PR2) select the nodes to remove, then call this through the host.
 void GraphEditor::deleteSelection() {
     auto ids = selection.getSelected();
     if (ids.empty())
@@ -125,7 +135,7 @@ void GraphEditor::deleteSelection() {
     // captures the candidates before removal, then autoDeleteOrphanedMacroPort sweeps them after.
     auto doDelete = [this, ids, &graph] {
         modMatrix.clearRows();
-        const auto portNeighbors = macroPortDeletionNeighbors(ids); // T154: capture BEFORE removal
+        const auto portNeighbors = macroController_.macroPortDeletionNeighbors(ids); // T154: capture BEFORE removal
         // FRO16 review follow-up: graph.removeNode() below frees each node's processor
         // synchronously, same as a full graph-replacing restore -- but nothing here reaches
         // MixerPanelComponent::rebuild() until the NEXT unrelated graph edit (this path's own
@@ -141,7 +151,7 @@ void GraphEditor::deleteSelection() {
         for (auto id : ids)
             graph.removeNode(id);
         for (auto n : portNeighbors)
-            autoDeleteOrphanedMacroPort(n);
+            macroController_.autoDeleteOrphanedMacroPort(n);
         selection.clear();
         updateComponents();
     };
@@ -261,18 +271,24 @@ void GraphEditor::finalizeSelectionDrag() {
     // not) may not have moved by that same delta, desyncing the port from its dock. Re-deriving
     // here (idempotent — a no-op for the whole-macro case, which already agrees) is the P8-15 fix
     // F2 guard for that gap.
-    dockMacroPortWidgets();
+    macroController_.dockMacroPortWidgets();
 
     selectionDragActive = false;
     selectionDragStartPositions.clear();
     repaintCanvas();
 }
 
+// Discards the recorded drag origins without re-resolving any position — for a press that
+// never moved (positions loaded from a preset are not necessarily grid-aligned, so a
+// finalize on a zero-delta drag would visibly nudge the group).
 void GraphEditor::cancelSelectionDrag() {
     selectionDragActive = false;
     selectionDragStartPositions.clear();
 }
 
+// FRO19: cancels a live drag when the component that armed it (ModuleComponent or
+// MacroCardComponent) is destroyed/detached mid-gesture (see docs/layout_selection_canvas.md §1.4).
+//
 // ---- Live-drag cancellation on component destruction/detach (FRO19) --------------------------
 //
 // ModuleComponent::mouseDown arms selectionDragActive/dragPreviewActive itself and clears them only
@@ -320,6 +336,7 @@ void GraphEditor::dragMacroCardBy(const juce::String&, juce::Point<int> delta) {
     repaintCanvas();
 }
 
+// Resolves the members' rigid-body snap AND the card's own position as one undo step.
 void GraphEditor::finalizeMacroCardDrag(const juce::String& macroId, juce::Point<int> newCardTopLeft) {
     auto& graph = audioEngine.getGraph();
     auto doFinalize = [this, macroId, newCardTopLeft] {
@@ -336,5 +353,5 @@ void GraphEditor::finalizeMacroCardDrag(const juce::String& macroId, juce::Point
     repaintCanvas();
 }
 
-/** A press that never moved — mirrors cancelSelectionDrag, no re-resolve. */
+// A press that never moved — mirrors cancelSelectionDrag, no re-resolve.
 void GraphEditor::cancelMacroCardDrag(const juce::String&) { cancelSelectionDrag(); }

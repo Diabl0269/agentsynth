@@ -10,6 +10,8 @@
 #include "AI/AIStateMapper/AIStateMapper.h" // kMaxModuleDisplayNameChars
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
 
+// The user's custom title for a node, or an empty string when it has none.
+//
 // Message-thread ONLY and display-only, which is why — unlike "uuid" — it is deliberately NOT
 // mirrored into the processor: nothing on the audio thread reads a card title, so there is no
 // lock-free read to make sound, and adding a mirror would only create a second copy to keep in
@@ -25,6 +27,7 @@ juce::String GraphEditor::getModuleDisplayName(juce::AudioProcessorGraph::NodeID
     return {};
 }
 
+// Sets (or, given blank/whitespace, clears) a node's custom title. Undoable.
 void GraphEditor::setModuleDisplayName(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& name) {
     auto& graph = audioEngine.getGraph();
     auto* node = graph.getNodeForId(nodeId);
@@ -56,6 +59,9 @@ void GraphEditor::setModuleDisplayName(juce::AudioProcessorGraph::NodeID nodeId,
         apply();
 }
 
+// Title a card should paint: the custom one when set, else the auto-numbered module name.
+// Also GraphCanvasHost::getModuleTitle() — MacroGroupController::macroMemberNames() (FRO77
+// PR2) needs it and title resolution otherwise requires a live GraphEditor.
 juce::String GraphEditor::getModuleTitle(juce::AudioProcessorGraph::NodeID nodeId,
                                          juce::AudioProcessor* processor) const {
     const auto custom = getModuleDisplayName(nodeId);
@@ -64,6 +70,13 @@ juce::String GraphEditor::getModuleTitle(juce::AudioProcessorGraph::NodeID nodeI
     return processor != nullptr ? processor->getName() : juce::String();
 }
 
+// Commits and closes any open inline title editor, on any card.
+//
+// Called from every canvas press path (GraphEditor::mouseDown for empty canvas and cables,
+// ModuleComponent::mouseDown for any card) because the editor's own onFocusLost is NOT enough:
+// almost nothing on this canvas wants keyboard focus, so clicking a module body or the
+// background never takes focus away from the editor and the callback never fires. Clicking
+// away has to commit from the presser's side instead. Escape still cancels.
 void GraphEditor::commitAnyOpenTitleRename() {
     // Copy the card list first: committing mutates the graph (and pushes an undo snapshot), and
     // nothing may be iterating content.getModules() across that.

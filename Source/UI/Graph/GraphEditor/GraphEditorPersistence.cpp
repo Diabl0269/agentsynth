@@ -51,6 +51,8 @@ void GraphEditor::savePreset(juce::File file) {
     file.replaceWithText(juce::JSON::toString(json));
 }
 
+// Loads a factory preset by index. Detaches existing module components (stopping their scope timers)
+// BEFORE the graph is cleared, so no ScopeComponent reads a freed VisualBuffer. Returns true if loaded.
 bool GraphEditor::loadFactoryPreset(int index) {
     // Tear down existing module components (which stops their ScopeComponent timers) BEFORE
     // PresetManager clears the graph and frees the old VisualBuffers — otherwise a scope timer can
@@ -61,6 +63,9 @@ bool GraphEditor::loadFactoryPreset(int index) {
     return loaded;
 }
 
+// Clears the canvas to the empty state (New Patch). Detaches module components (stopping scope timers)
+// BEFORE clearing the graph — same safe ordering as loadFactoryPreset. The clear is recorded as an
+// undoable structural change when undoManager is present (Cmd+Z restores the prior patch).
 void GraphEditor::newPatch() {
     auto& graph = audioEngine.getGraph();
 
