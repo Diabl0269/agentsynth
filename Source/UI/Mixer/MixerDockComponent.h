@@ -110,6 +110,9 @@ public:
 
     /** FRO15 test seam: the "Add bus" button the tab strip shows on the Mixer tab. */
     juce::TextButton& getAddBusButtonForTest() noexcept { return addBusButton_; }
+    /** FRO146 test seam: the "Reset Meters" button the tab strip shows on the Mixer tab -- resets
+     *  every column's (and Master's) clip readout, same as an Option/Alt-click on any one of them. */
+    juce::TextButton& getResetMetersButtonForTest() noexcept { return resetMetersButton_; }
 
 private:
     void applyTabVisibility();
@@ -135,6 +138,9 @@ private:
     // FRO15 (docs/mixer.md §5.15): "Add bus" sits on the tab strip and is visible only on the Mixer
     // tab -- it has no meaning while the Timeline tab is showing.
     juce::TextButton addBusButton_{"+ Bus"};
+    // FRO146: sits next to "+ Bus" (same Mixer-tab-only visibility) -- resets every column's clip
+    // readout (docs/mixer.md meters section's "Meter Peak Level" reset action).
+    juce::TextButton resetMetersButton_{"Reset Meters"};
     Tab activeTab_ = Tab::Timeline;
     bool mixerTabEnabled_ = true;
     juce::ApplicationProperties* appProperties_ = nullptr;

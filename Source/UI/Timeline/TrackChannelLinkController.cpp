@@ -3,6 +3,7 @@
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MacroSet.h"
+#include "Mixer/PeakMeterLatch.h"
 #include "Modules/ChannelStripModule.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
@@ -82,7 +83,13 @@ TrackChannelLinkSurface::ChannelInfo TrackChannelLinkController::getChannelInfo(
     if (auto* strip = stripFor(info)) {
         out.channelMuted = strip->hasMuteParameter() && strip->isMuted();
         out.channelSoloed = strip->isSoloed();
-        out.meterPeak = std::max(strip->getMeterPeak(0), strip->getMeterPeak(1));
+        // FRO146: deliberately NOT populated from strip->takeMeterPeak() here. The strip's
+        // TrackHeader latch slot is consume-on-read (PeakMeterLatch.h), and the shared 15 Hz tick
+        // (getChannelMeterPeak() below) is that slot's ONE reader -- this call runs on a completely
+        // different cadence (a doc/graph change, not a per-frame poll), so reading it here would
+        // silently steal a peak the tick path was about to report. `meterPeak` stays at its default
+        // (0.0f); nothing reads it (see the struct's own comment history) -- the chip's real value
+        // always comes from getChannelMeterPeak().
     }
     return out;
 }
@@ -98,7 +105,10 @@ float TrackChannelLinkController::getChannelMeterPeak(synth::TrackId track) cons
     auto* strip = node != nullptr ? dynamic_cast<ChannelStripModule*>(node->getProcessor()) : nullptr;
     if (strip == nullptr)
         return 0.0f;
-    return std::max(strip->getMeterPeak(0), strip->getMeterPeak(1));
+    // FRO146: the TrackHeader reader slot -- the ONE consumer of it (see getChannelInfo()'s own
+    // comment above on why that method must never also read it).
+    return std::max(strip->takeMeterPeak(synth::MeterReader::TrackHeader, 0),
+                    strip->takeMeterPeak(synth::MeterReader::TrackHeader, 1));
 }
 
 // ---- (a) Names sync both ways -------------------------------------------------------------

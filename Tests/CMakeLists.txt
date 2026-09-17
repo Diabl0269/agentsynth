@@ -95,6 +95,7 @@ add_executable(Tests
     Timeline/PeaksFileTests.cpp
     Timeline/RecordTapTests.cpp
     Mixer/ChannelStripTests.cpp
+    Mixer/PeakMeterLatchTests.cpp
     Mixer/MixerSoloTests.cpp
     Mixer/ChannelFlow/ChannelFlowTests.cpp
     Mixer/ChannelFlow/ChannelFlowInstrumentTests.cpp
@@ -264,6 +265,7 @@ add_executable(Tests
     Engine/AudioEngineModRoutingTests.cpp
     Engine/PerformanceTests.cpp
     UI/Theme/ThemeTests.cpp
+    UI/Theme/ThemeMeterZoneTests.cpp
     UI/Theme/IconLibraryTests.cpp
     UI/Chrome/StatusBarTests.cpp
     UI/ModuleViews/FrequencyResponseTests.cpp
@@ -364,6 +366,12 @@ add_executable(Tests
     UI/Mixer/MixerDockComponentTests.cpp
     UI/Mixer/MixerEqThumbnailTests.cpp
     UI/Mixer/MixerColumnComponentTests.cpp
+    UI/Mixer/MixerColumnComponentMeterTests.cpp
+    UI/Mixer/MixerMeterScaleTests.cpp
+    UI/Mixer/MeterColourStopsTests.cpp
+    UI/Mixer/MixerMeterPaintTests.cpp
+    UI/Mixer/MixerMeterBallisticsTests.cpp
+    UI/Mixer/MixerMeterReadoutTests.cpp
     UI/Mixer/MixerInsertListTests.cpp
     UI/Mixer/MixerPlacementControllerTests.cpp
     UI/Layout/DetachablePanelHost/DetachablePanelHostTests.cpp
@@ -427,6 +435,8 @@ add_executable(Tests
     ../Source/UI/Timeline/TrackChannelLinkController.cpp
     ../Source/UI/Timeline/TimelineTransportBar.cpp
     ../Source/UI/Mixer/MixerMeter.cpp
+    ../Source/UI/Mixer/MeterColourStops.cpp
+    ../Source/UI/Mixer/MixerMeterReadout.cpp
     ../Source/UI/Mixer/MixerFader.cpp
     ../Source/UI/Mixer/MixerInsertList.cpp
     ../Source/UI/Mixer/MixerEqThumbnail.cpp

@@ -1,6 +1,9 @@
 #include "ChannelChipComponent.h"
 
+#include "UI/Mixer/MeterColourStops.h"
+#include "UI/Mixer/MixerMeterScale.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include "UI/Theme/Theme.h"
 #include <algorithm>
 #include <cmath>
 
@@ -18,7 +21,10 @@ struct ChipColours {
     juce::Colour surface{juce::Colour(0xff1B1F26)};
     juce::Colour border{juce::Colour(0xff2A2F38)};
     juce::Colour text{juce::Colour(0xffEAEEF3)};
-    juce::Colour meter{juce::Colour(0xff00D1FF)};
+    // FRO146: the meter's colour now steps through MeterColourStops' four zones (same scale/zones
+    // as MixerMeter) instead of a single fixed accent -- default-constructed from
+    // synth::theme::Colors{}'s own field defaults, which already equal Obsidian's values.
+    synth::ui::MeterColourStops meterStops = synth::ui::MeterColourStops::fromTheme(synth::theme::Colors{});
 };
 
 ChipColours coloursFor(const juce::Component& component) {
@@ -28,7 +34,7 @@ ChipColours coloursFor(const juce::Component& component) {
         result.surface = c.surface;
         result.border = c.border;
         result.text = c.textPrimary;
-        result.meter = c.accent;
+        result.meterStops = synth::ui::MeterColourStops::fromTheme(c);
     }
     return result;
 }
@@ -51,15 +57,19 @@ void ChannelChipComponent::setChannelName(const juce::String& name) {
     repaint();
 }
 
-bool ChannelChipComponent::setMeterLevel(float peak) {
-    const float clamped = juce::jlimit(0.0f, 1.0f, peak);
+bool ChannelChipComponent::setMeterLevel(float peakLinear) {
+    // FRO146: linear amplitude -> dBFS -> a 0..1 fraction of the -60..+3 dB scale (same scale and
+    // colour zones as the mixer's own MixerMeter -- MixerMeterScale.h/MeterColourStops.h).
+    const float db = synth::ui::meterLinearToDb(peakLinear);
+    const float fraction = synth::ui::meterDbToFraction(db);
     // The gate. A tick whose level did not move a visible amount repaints nothing at all -- except
     // when it lands exactly on silence, which must always be drawn (a decaying tail that stops
     // short of the threshold would otherwise leave the bar stuck showing a signal that is gone).
-    const bool crossedToSilence = clamped <= 0.0f && meterLevel_ > 0.0f;
-    if (!crossedToSilence && std::abs(clamped - meterLevel_) < kMeterRepaintThreshold)
+    const bool crossedToSilence = fraction <= 0.0f && meterFraction_ > 0.0f;
+    if (!crossedToSilence && std::abs(fraction - meterFraction_) < kMeterRepaintThreshold)
         return false;
-    meterLevel_ = clamped;
+    meterFraction_ = fraction;
+    meterDb_ = db;
     repaint();
     return true;
 }
@@ -81,16 +91,28 @@ void ChannelChipComponent::paintButton(juce::Graphics& g, bool highlighted, bool
     g.setFont(juce::Font(juce::FontOptions((float)std::min(11, std::max(8, content.getHeight() - 2)))));
     g.drawText(channelName_, content, juce::Justification::centredLeft, true);
 
-    // The meter: a track plus the filled portion. Drawn from the gated meterLevel_, never from a
-    // live atomic read -- see the header's timer note.
+    // The meter: a track plus the filled portion. Drawn from the gated meterFraction_/meterDb_,
+    // never from a live atomic read -- see the header's timer note.
     const auto meterBounds = meterArea.toFloat().reduced(0.0f, (float)meterArea.getHeight() * 0.3f);
     g.setColour(colours.border);
     g.fillRoundedRectangle(meterBounds, 1.0f);
-    if (meterLevel_ > 0.0f) {
-        auto filled = meterBounds;
-        filled.setWidth(meterBounds.getWidth() * meterLevel_);
-        g.setColour(colours.meter);
-        g.fillRoundedRectangle(filled, 1.0f);
+    if (meterFraction_ > 0.0f) {
+        // Positional bands, left to right (this chip is horizontal, MixerMeter's bars are
+        // vertical -- same banding idea either way, see MeterColourStops::forEachBand's own
+        // comment). Clipped to the track's own rounded shape so the banded rects still read as one
+        // rounded bar rather than square-cornered slices.
+        juce::Graphics::ScopedSaveState clipState(g);
+        juce::Path clipPath;
+        clipPath.addRoundedRectangle(meterBounds, 1.0f);
+        g.reduceClipRegion(clipPath);
+        colours.meterStops.forEachBand(
+            synth::ui::kMeterMinDb, meterDb_, [&](float bandFromDb, float bandToDb, juce::Colour colour) {
+                const float xFrom =
+                    meterBounds.getX() + meterBounds.getWidth() * synth::ui::meterDbToFraction(bandFromDb);
+                const float xTo = meterBounds.getX() + meterBounds.getWidth() * synth::ui::meterDbToFraction(bandToDb);
+                g.setColour(colour);
+                g.fillRect(juce::Rectangle<float>(xFrom, meterBounds.getY(), xTo - xFrom, meterBounds.getHeight()));
+            });
     }
 }
 

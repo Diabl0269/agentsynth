@@ -127,8 +127,17 @@ public:
      *  False when no column matches (nothing to reveal -- the caller falls back to the canvas). */
     bool revealColumn(juce::AudioProcessorGraph::NodeID stripId);
 
-    /** One 10 Hz tick while the mixer tab is showing -- ticks every column's meter. */
+    /** One 10 Hz tick while the mixer tab is showing -- measures the elapsed time since the last
+     *  call (juce::Time::getMillisecondCounterHiRes(), FRO146) and ticks every column's meter with
+     *  it, so the ballistics stay rate-independent of this poll's actual cadence (gated on tab
+     *  visibility, so ticks are not always exactly 100 ms apart). The first call after a period of
+     *  not ticking (tab just became visible) measures a implausibly large gap and clamps it, so the
+     *  very first tick back doesn't snap every bar's release/peak-hold decay instantly to silence. */
     void refreshMeters();
+
+    /** FRO146: the mixer panel header's "Reset Meters" action, and an Option/Alt-click on ANY
+     *  column's own clip readout -- resets every strip/Master readout to "-inf", not clipped. */
+    void resetAllMeterReadouts();
 
     bool keyPressed(const juce::KeyPress& key) override;
     void paintOverChildren(juce::Graphics& g) override;
@@ -197,6 +206,11 @@ private:
 
     std::vector<ColumnEntry> columnEntries_;
     int focusedColumnIndex_ = -1;
+
+    /** FRO146: juce::Time::getMillisecondCounterHiRes() as of the last refreshMeters() call, or 0.0
+     *  before the first one -- lets refreshMeters() measure real elapsed time for the ballistics
+     *  rather than assuming a fixed 100 ms step. */
+    double lastMeterRefreshMs_ = 0.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerPanelComponent)
 };

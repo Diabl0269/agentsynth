@@ -6,6 +6,7 @@
 #include "MixerFader.h"
 #include "MixerInsertList.h"
 #include "MixerMeter.h"
+#include "MixerMeterReadout.h"
 #include "MixerSendList.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -121,8 +122,24 @@ public:
     /** FRO15 test seam: the send rows this column is showing. */
     MixerSendList& getSendListForTest() noexcept { return sendList_; }
 
-    /** One 10 Hz tick -- see MixerMeter's own header comment for the driving chain. */
-    void refreshMeter();
+    /** One 10 Hz tick -- see MixerMeter's own header comment for the driving chain.
+     *  `elapsedSeconds`: measured once by MixerPanelComponent::refreshMeters() and threaded down
+     *  so every column's ballistics (and this one's clip readout) advance by the same real time,
+     *  independent of the poll's actual (tab-visibility-gated) cadence. */
+    void refreshMeter(float elapsedSeconds);
+
+    /** FRO146: the meter itself -- a test seam for reading displayed/peak-hold dB directly. */
+    MixerMeter& getMeterForTest() noexcept { return meter_; }
+    /** FRO146: the clip readout -- Cubase's "Meter Peak Level" field. A test seam for reading its
+     *  text/clip state and driving its real mouse-click reset path. */
+    MixerMeterReadout& getMeterReadoutForTest() noexcept { return meterReadout_; }
+    /** FRO146: resets this column's clip readout -- called by the header's "Reset Meters" action
+     *  and by an Option/Alt-click on ANY column's readout (see onResetAllMetersRequested below). */
+    void resetMeterReadout() { meterReadout_.reset(); }
+
+    /** FRO146: fires when this column's readout is Option/Alt-clicked -- MixerPanelComponent wires
+     *  every column's instance of this to its own resetAllMeterReadouts(). */
+    std::function<void()> onResetAllMetersRequested;
 
     /** FRO11's revealColumnForStrip highlight -- an accent border while true, so the channel
      *  chip's click has a visible "found it" result the same way Locate Master's canvas select
@@ -161,6 +178,7 @@ private:
     std::unique_ptr<juce::SliderParameterAttachment> panAttachment_;
     MixerFader fader_;
     MixerMeter meter_;
+    MixerMeterReadout meterReadout_;
     juce::TextButton muteButton_{"M"};
     juce::TextButton soloButton_{"S"};
     bool selected_ = false;

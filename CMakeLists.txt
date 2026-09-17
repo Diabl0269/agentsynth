@@ -271,6 +271,7 @@ add_library(Core STATIC
     Source/Mixer/TrackPresetManager.h
     Source/Mixer/SoloAudibleSet.h
     Source/Mixer/SoloAudibleSet.cpp
+    Source/Mixer/PeakMeterLatch.h
     Source/Mixer/MixerModel/MixerModel.h
     Source/Mixer/MixerModel/MixerModelInternal.h
     Source/Mixer/MixerModel/MixerModelColumns.cpp

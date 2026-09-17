@@ -10,6 +10,7 @@ namespace synth::ui {
 
 namespace {
 constexpr int kAddBusButtonWidth = 54;
+constexpr int kResetMetersButtonWidth = 84;
 } // namespace
 
 MixerDockComponent::MixerDockComponent(TimelinePanelComponent& timelinePanel, AudioEngine& audioEngine,
@@ -57,6 +58,12 @@ MixerDockComponent::MixerDockComponent(TimelinePanelComponent& timelinePanel, Au
         mixer_.createBus();
         mixer_.rebuild(); // the new bus's own column, without waiting for the owner's reconcile
     };
+
+    // FRO146: sits beside "+ Bus", same Mixer-tab-only visibility -- resets every column's clip
+    // readout to "-inf", not clipped.
+    addAndMakeVisible(resetMetersButton_);
+    resetMetersButton_.setClickingTogglesState(false);
+    resetMetersButton_.onClick = [this] { mixer_.resetAllMeterReadouts(); };
 
     mixer_.configure(audioEngine.getGraph(), doc, graphEditor.getMacros(), undoManager, graphEditor, audioEngine);
 
@@ -142,6 +149,7 @@ void MixerDockComponent::applyTabVisibility() {
     timelineTabButton_.setToggleState(!mixerActive, juce::dontSendNotification);
     mixerTabButton_.setToggleState(mixerActive, juce::dontSendNotification);
     addBusButton_.setVisible(mixerActive);
+    resetMetersButton_.setVisible(mixerActive);
     if (mixerActive)
         mixer_.rebuild();
     refreshDetachButton();
@@ -170,6 +178,8 @@ void MixerDockComponent::resized() {
     detachButton_.setBounds(tabStrip.removeFromRight(kTabStripHeight));
     if (addBusButton_.isVisible())
         addBusButton_.setBounds(tabStrip.removeFromRight(kAddBusButtonWidth));
+    if (resetMetersButton_.isVisible())
+        resetMetersButton_.setBounds(tabStrip.removeFromRight(kResetMetersButtonWidth));
     if (mixerTabEnabled_) {
         timelineTabButton_.setBounds(tabStrip.removeFromLeft(tabStrip.getWidth() / 2));
         mixerTabButton_.setBounds(tabStrip);

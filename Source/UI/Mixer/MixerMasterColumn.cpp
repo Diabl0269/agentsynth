@@ -2,9 +2,11 @@
 #include "MixerMasterColumn.h"
 
 #include "AppUndoManager.h"
+#include "Mixer/PeakMeterLatch.h"
 #include "Modules/MasterModule.h"
 #include "Modules/ModuleBase.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <algorithm>
 
 namespace synth::ui {
 
@@ -25,6 +27,11 @@ MixerMasterColumn::MixerMasterColumn() {
     fader_.setChannelName("Master");
     addAndMakeVisible(meter_);
     meter_.setTitle("Master meter");
+    addAndMakeVisible(meterReadout_);
+    meterReadout_.onResetAllRequested = [this] {
+        if (onResetAllMetersRequested)
+            onResetAllMetersRequested();
+    };
     addAndMakeVisible(muteButton_);
     muteButton_.setClickingTogglesState(false);
     // FRO18: MixerPanelComponent is the single focusable leaf -- see
@@ -88,16 +95,17 @@ void MixerMasterColumn::unbindFromGraph() {
     meter_.peakProvider = nullptr;
 }
 
-void MixerMasterColumn::refreshMeter() {
+void MixerMasterColumn::refreshMeter(float elapsedSeconds) {
     meter_.peakProvider = [this](int leg) -> float {
         if (graph_ == nullptr)
             return 0.0f;
         auto* node = graph_->getNodeForId(nodeId_);
         if (auto* master = dynamic_cast<MasterModule*>(node != nullptr ? node->getProcessor() : nullptr))
-            return master->getMeterPeak(leg);
+            return master->takeMeterPeak(synth::MeterReader::Mixer, leg);
         return 0.0f;
     };
-    meter_.refresh();
+    meter_.refresh(elapsedSeconds);
+    meterReadout_.updatePeak(std::max(meter_.getDisplayedDbForTest(0), meter_.getDisplayedDbForTest(1)));
 }
 
 void MixerMasterColumn::paint(juce::Graphics& g) {
@@ -120,10 +128,16 @@ void MixerMasterColumn::paintOverChildren(juce::Graphics& g) {
 }
 
 void MixerMasterColumn::resized() {
+    // FRO146: same meter width/readout-row budget as MixerColumnComponent -- the Master column
+    // stays visually consistent with every strip column's meter (docs/mixer.md meters section).
+    constexpr int kMeterWidth = 32;
+    constexpr int kMeterReadoutHeight = 12;
+
     auto bounds = getLocalBounds().reduced(2);
     header_.setBounds(bounds.removeFromTop(24));
     muteButton_.setBounds(bounds.removeFromBottom(20).reduced(2));
-    meter_.setBounds(bounds.removeFromRight(10));
+    meterReadout_.setBounds(bounds.removeFromTop(kMeterReadoutHeight));
+    meter_.setBounds(bounds.removeFromRight(kMeterWidth));
     bounds.removeFromRight(2);
     fader_.setBounds(bounds);
 }
