@@ -3,6 +3,11 @@
 #include "../ModuleBase.h"
 #include <juce_dsp/juce_dsp.h>
 
+// Feedback (-1..1) drives juce::dsp::Chorus's internal comb-filter loop; near its extremes a
+// steady tone can build up well past unity before this module's own wet/dry mix and Level stage.
+// ModuleGainAudit (Tests/Engine/GainStaging/ModuleGainAuditTests.cpp) measures a worst case of
+// +18.90 dB (feedback at max); allow-listed there as expected feedback/resonance behaviour, not
+// a gain-control bug. See docs/fx_modules.md, Chorus Module section.
 class ChorusModule : public ModuleBase {
 public:
     ChorusModule()

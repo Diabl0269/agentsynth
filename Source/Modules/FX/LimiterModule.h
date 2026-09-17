@@ -3,6 +3,13 @@
 #include "../ModuleBase.h"
 #include <juce_dsp/juce_dsp.h>
 
+// Threshold bakes in automatic makeup gain: juce::dsp::Limiter's own update() (JUCE's code, not
+// this module's) computes outputVolume = 10^(10*(1 - 1/ratio)/40) * dB2gain(-threshold) with a
+// fixed internal ratio of 4, so a LOWER threshold (more limiting) also raises JUCE's own
+// automatic makeup gain - a loudness-maximizing limiter, not a passive ceiling. ModuleGainAudit
+// (Tests/Engine/GainStaging/ModuleGainAuditTests.cpp) measures a net worst case of +7.61 dB
+// output/input RMS at threshold's minimum (-20 dB); allow-listed there, not a LimiterModule bug.
+// See docs/fx_modules.md, Limiter Module section.
 class LimiterModule : public ModuleBase {
 public:
     LimiterModule()

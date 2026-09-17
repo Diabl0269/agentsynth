@@ -23,6 +23,13 @@
     Feedback routes the shifted output back into the input, so each pass is shifted
     again — cascading octaves in Pitch mode, barber-pole / Shepard-tone illusions in
     Frequency mode. It is soft-clipped so the loop stays bounded at high settings.
+
+    Feedback can still exceed unity gain: the tanh soft-clip bounds the loop's amplitude,
+    not its RMS energy relative to the dry input. ModuleGainAudit
+    (Tests/Engine/GainStaging/ModuleGainAuditTests.cpp) measures a worst-case output/input
+    RMS gain of +9.73 dB at Feedback's maximum (0.95) against a continuous test tone -
+    allow-listed there as expected feedback/resonance behaviour, not a bug to tighten
+    further. See docs/fx_modules.md, Pitch Shifter Module section.
 */
 class PitchShifterModule : public ModuleBase {
 public:
