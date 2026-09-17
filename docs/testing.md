@@ -371,7 +371,7 @@ Test persistence, serialization, and state restoration.
 
 ### Output Level Tests (18 tests)
 
-`Tests/Engine/OutputLevelTests.cpp` — the shared opt-in output-level stage (`ModuleBase::addOutputLevelParameter` / `prepareOutputLevel` / `applyOutputLevel`) and the modules that adopt it. Headless.
+`Tests/Engine/OutputLevelTests.cpp` — the shared opt-in output-level stage (`ModuleBase::addOutputLevelParameter` / `prepareOutputLevel` / `applyOutputLevel`) and the modules that adopt it. Headless. The related hidden-amplifier audit and mix-audibility suites (`Tests/Engine/GainStaging/`) are documented in [`testing_gain_staging.md`](testing_gain_staging.md).
 
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
