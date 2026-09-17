@@ -13,6 +13,7 @@ add_executable(AIPatchHarness
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngineApply.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorCanvas.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorSelection.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorMacroApi.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorMacroCards.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/MacroGroupController/MacroGroupController.h

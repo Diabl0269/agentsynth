@@ -133,7 +133,7 @@ void GraphEditor::updateComponents() {
         macros.retainOnly(aliveUuids);
     }
     syncMacroCards();
-    dockMacroPortWidgets();
+    macroController_.dockMacroPortWidgets();
 
     // Refresh mod matrix to pick up any new/removed attenuverter routings
     // Use callAsync to avoid re-entrancy during graph modification
@@ -162,6 +162,8 @@ void GraphEditor::paint(juce::Graphics& g) {
     // But content handles it now.
 }
 
+// Draws the empty-canvas onboarding hint centred in the visible, untransformed viewport,
+// after children paint -- so it draws over the canvas unaffected by the content transform.
 void GraphEditor::paintOverChildren(juce::Graphics& g) {
     // T159: the canvas's focus-region outline, drawn OVER children (unlike the other four focus
     // regions' paint()) so a module's own image-cached body can never occlude it. Ahead of the
@@ -310,6 +312,9 @@ void GraphEditor::updateTransform() {
         minimap.setViewport(getVisibleCanvasRect());
 }
 
+// Shared zoom math for mouseWheelMove and zoomAroundCentre — keeps the formula (and the
+// [0.1, 2.0] clamp) in exactly one place. `screenAnchor` is the point (in GraphEditor local/
+// screen coordinates) whose underlying canvas point must stay put under the cursor/centre.
 void GraphEditor::applyZoomAt(float wheelDelta, juce::Point<float> screenAnchor) {
     float oldZoom = zoomLevel;
     zoomLevel += wheelDelta * 0.1f * zoomLevel;
@@ -373,6 +378,8 @@ void GraphEditor::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWhe
     applyZoomAt(wheel.deltaY, e.position);
 }
 
+// The canvas rect currently visible in the editor — the inverse of the content transform
+// applied to getLocalBounds().
 juce::Rectangle<float> GraphEditor::getVisibleCanvasRect() const {
     // Rebuilt from zoomLevel/panOffset rather than reading content.getTransform(), so this stays
     // independent of child state and can be const.
@@ -380,11 +387,14 @@ juce::Rectangle<float> GraphEditor::getVisibleCanvasRect() const {
     return getLocalBounds().toFloat().transformedBy(t.inverted());
 }
 
+// Pans so `canvasPoint` sits at the centre of the visible area. Zoom is unchanged.
 void GraphEditor::centreViewOn(juce::Point<float> canvasPoint) {
     panOffset = getLocalBounds().getCentre().toFloat() - canvasPoint * zoomLevel;
     updateTransform();
 }
 
+// Multiplies zoom around the centre of the visible area, clamped to the same [0.1, 2.0]
+// range as wheel zoom, so the point under the centre stays put.
 void GraphEditor::zoomAroundCentre(float wheelDelta) {
     applyZoomAt(wheelDelta, getLocalBounds().getCentre().toFloat());
 }
@@ -401,6 +411,7 @@ void GraphEditor::setMinimapVisible(bool shouldBeVisible) {
 
 void GraphEditor::toggleMinimapVisibility() { setMinimapVisible(!minimapVisible); }
 
+// Test accessor. Non-const because it calls buildVisibleCables(), which is non-const.
 synth::ui::MinimapModel GraphEditor::buildMinimapModel() {
     synth::ui::MinimapModel model;
 
@@ -438,6 +449,10 @@ synth::ui::MinimapModel GraphEditor::buildMinimapModel() {
     return model;
 }
 
+// P8-31: scroll + zoom the viewport so every module component is on-screen, clamped to the
+// same [0.1, 2.0] range as wheel zoom. Called after a patch is loaded so the just-loaded
+// modules are not left off-screen at their saved coordinates; a no-op when there are no
+// modules or the editor has no area yet.
 void GraphEditor::fitViewToModules() {
     // P8-31: after loading a patch, bring every module on-screen. A loaded patch keeps its saved
     // coordinates, which often fall outside the current viewport; fitting the view shows the result
@@ -491,6 +506,8 @@ void GraphEditor::fitViewToModules() {
     updateTransform();
 }
 
+// True when locateMasterOrOutput() has a node to find — drives the canvas context menu item's
+// (and the equivalent command's) enabled state, so the two surfaces can never disagree.
 bool GraphEditor::hasLocatableMasterOrOutput() const {
     auto& graph = audioEngine.getGraph();
     if (synth::findMasterNode(graph) != nullptr)
@@ -501,6 +518,10 @@ bool GraphEditor::hasLocatableMasterOrOutput() const {
     return false;
 }
 
+// Selects Master, falling back to Audio Output when there is no Master yet, and pans it into
+// the centre of the view. Graceful no-op (LocateMasterResult::NoTarget) when the patch has
+// neither node. See the note below for the select/pan/minimap-highlight reuse.
+//
 // Reuses the exact select-by-NodeID path MainComponent::selectNodeInGraph already uses for the
 // timeline binding chip (GraphEditor::selectModule) rather than duplicating it, plus the same pan
 // primitive the minimap's own click-to-navigate uses (centreViewOn). The minimap highlight comes

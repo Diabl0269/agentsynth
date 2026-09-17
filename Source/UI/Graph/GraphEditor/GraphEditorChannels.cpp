@@ -4,13 +4,12 @@
 // GraphEditor is declared in GraphEditor.h; sibling GraphEditor*.cpp files in this directory
 // hold the rest of the class.
 //
-// MacroPortCrossingEdge/MacroPortCrossingGroup (GraphEditor.h's "Auto-create-ports-on-group"
-// section) are aliased from MacroGroupController, which now owns the crossing-plan math
-// (buildMacroPortCrossingPlan and its add/remove-member variants, spliceMacroPorts/
-// spliceOutMacroPort) outright. Five of them keep a private one-line forwarder on GraphEditor
-// because this file's duplicate-channel-strip path (buildChannelStripMacroBox /
-// duplicateChannelStrip) calls them by their original name — autoMacroPortName/
-// mintMacroPortForAutoCreate have no such caller and moved with none.
+// MacroGroupController::MacroPortCrossingGroup (formerly aliased here as MacroPortCrossingEdge/
+// MacroPortCrossingGroup) now owns the crossing-plan math (buildMacroPortCrossingPlan and its
+// add/remove-member variants, spliceMacroPorts/spliceOutMacroPort) outright. FRO91 dropped the
+// GraphEditor.h aliases and the private one-line forwarders this file's duplicate-channel-strip
+// path (buildChannelStripMacroBox / duplicateChannelStrip) used to call by their original name —
+// every call below goes through macroController_ directly.
 
 #include "GraphEditor.h"
 #include "GraphEditorInternal.h"
@@ -27,6 +26,8 @@ using namespace detail;
 
 // ---- Auto-create-channel-on-connect (T184, P9-3c, docs/mixer.md §5.2 "main workflow") ----------
 
+// True when `nodeId` resolves to a live TimelineMidiSource ("Track In") node — the one
+// trigger condition endConnectionDrag checks before opening the T184 auto-channel path.
 bool GraphEditor::nodeIsTimelineMidiSource(juce::AudioProcessorGraph::NodeID nodeId) const {
     auto* node = audioEngine.getGraph().getNodeForId(nodeId);
     if (node == nullptr)
@@ -43,6 +44,12 @@ namespace {
 constexpr int kAutoChannelCardGapX = 40;
 } // namespace
 
+// Searches from `searchFrom` for output feeds that don't yet reach a channel and, if it finds
+// any, builds one (EQ/Compressor/Strip, and Master if newly spliced). NO UNDO OF ITS OWN and
+// no updateComponents() call — the caller (already inside its own recordGraphAndMacroChange
+// transaction) does both. See the note below for the BFS/layout/macro-membership
+// rationale.
+//
 // Runs synth::findUnchanneledOutputFeeds() from `searchFrom` (the real destination instrument for
 // a direct module-jack drop, or the MacroMidiInlet port node itself for the collapsed-macro-card
 // existing-jack drop — a port is a plain pass-through, so the BFS reaches the interior instrument
@@ -116,7 +123,7 @@ void GraphEditor::maybeAutoCreateChannelAfterConnect(juce::AudioProcessorGraph::
     juce::String commonMacroId;
     bool boxable = true;
     for (const auto& sourceId : sourceNodeIds) {
-        const juce::String uuid = nodeUuidFor(sourceId);
+        const juce::String uuid = macroController_.nodeUuidFor(sourceId);
         auto* macro = uuid.isNotEmpty() ? macros.findByMember(uuid) : nullptr;
         if (macro == nullptr || macro->memberIsPort(uuid)) {
             boxable = false;
@@ -136,6 +143,10 @@ void GraphEditor::maybeAutoCreateChannelAfterConnect(juce::AudioProcessorGraph::
     }
 }
 
+// FRO26 (P9-3e, docs/mixer.md §5.13): "Create channels" for existing projects, one call per
+// entry in `trackSourceNodeIds`. See the note below for the full
+// trackSourceNodeIds/skip-condition/transaction rationale.
+//
 // FRO26 (P9-3e, docs/mixer.md §5.13): "Create channels" for existing projects — runs the exact
 // same per-node channel-creation maybeAutoCreateChannelAfterConnect() already does for T184's
 // connect-triggered case, once per entry in `trackSourceNodeIds` (each track's own bound node — a
@@ -181,6 +192,17 @@ bool isAttenuverterNode(juce::AudioProcessorGraph& graph, juce::AudioProcessorGr
 
 } // namespace
 
+// "Make channel" for the chain starting at `source` (a track's own source node, or a trackless
+// chain's root): runs synth::planMakeChannel/buildMakeChannel, then boxes the track's exclusive
+// chain + new EQ/Compressor/Strip into ONE collapsed macro named `channelName`, and each merge
+// point's bus channel into its own "<module> Bus" macro.
+//
+// NO UNDO OF ITS OWN and no updateComponents() call — the caller wraps it in one transaction
+// (MainComponent::makeChannelForNode, or requestMakeChannel's standalone fallback). Returns
+// false with nothing touched when the chain already has a channel; reports a refusal (a node
+// already in a macro, an inconsistent send topology) through onStatusMessage. See
+// GraphEditorChannels.cpp for the port-creation/Master rationale.
+//
 // Ports come from the same group-time crossing plan groupSelectionIntoMacro(true) uses
 // (buildMacroPortCrossingPlan + spliceMacroPorts) — always created, regardless of the auto-port
 // preference, since a shared LFO reaching into the channel is exactly what the port is for —
@@ -225,16 +247,17 @@ bool GraphEditor::makeChannelFromNode(juce::AudioProcessorGraph::NodeID source, 
                       const juce::String& stripUuid) {
         std::vector<juce::AudioProcessorGraph::NodeID> ids;
         for (const auto& uuid : memberUuids) {
-            const auto id = resolveMemberNodeId(uuid);
+            const auto id = macroController_.resolveMemberNodeId(uuid);
             if (id.uid != 0)
                 ids.push_back(id);
         }
-        auto portPlan = buildMacroPortCrossingPlan(ids);
-        const auto stripId = resolveMemberNodeId(stripUuid);
-        portPlan.erase(
-            std::remove_if(portPlan.begin(), portPlan.end(),
-                           [&](const MacroPortCrossingGroup& g) { return g.internalNodeId == stripId && !g.isInput; }),
-            portPlan.end());
+        auto portPlan = macroController_.buildMacroPortCrossingPlan(ids);
+        const auto stripId = macroController_.resolveMemberNodeId(stripUuid);
+        portPlan.erase(std::remove_if(portPlan.begin(), portPlan.end(),
+                                      [&](const MacroGroupController::MacroPortCrossingGroup& g) {
+                                          return g.internalNodeId == stripId && !g.isInput;
+                                      }),
+                       portPlan.end());
 
         juce::Point<int> origin;
         if (auto* first = ids.empty() ? nullptr : audioEngine.getGraph().getNodeForId(ids.front()))
@@ -247,13 +270,13 @@ bool GraphEditor::makeChannelFromNode(juce::AudioProcessorGraph::NodeID source, 
         macro.bounds = juce::Rectangle<int>(origin.x, origin.y, synth::LayoutUtil::kSingleWidth, kMacroCardHeight);
         const auto macroId = macros.add(macro);
         if (!portPlan.empty())
-            spliceMacroPorts(macroId, portPlan);
+            macroController_.spliceMacroPorts(macroId, portPlan);
     };
 
     if (!made.memberUuids.empty())
         box(made.memberUuids, channelName, made.channel.stripUuid);
     for (const auto& bus : made.buses) {
-        const auto headId = resolveMemberNodeId(bus.headUuid);
+        const auto headId = macroController_.resolveMemberNodeId(bus.headUuid);
         auto* head = audioEngine.getGraph().getNodeForId(headId);
         const juce::String headName = head != nullptr && head->getProcessor() != nullptr
                                           ? head->getProcessor()->getName()
@@ -263,14 +286,21 @@ bool GraphEditor::makeChannelFromNode(juce::AudioProcessorGraph::NodeID source, 
     return true;
 }
 
+// True when "Make channel" on `source` would build something — the menu items' enabled state.
+// Pure read (synth::planMakeChannel).
 bool GraphEditor::nodeNeedsChannel(juce::AudioProcessorGraph::NodeID source) const {
     return synth::planMakeChannel(audioEngine.getGraph(), source, macros).needsChannel;
 }
 
+// The chain source the canvas/module "Make Channel" item acts on for the current selection
+// (synth::resolveChannelSource), or an invalid NodeID when none/ambiguous.
 juce::AudioProcessorGraph::NodeID GraphEditor::channelSourceForSelection() const {
     return synth::resolveChannelSource(audioEngine.getGraph(), selection.getSelected());
 }
 
+// The canvas/module menu item's action. MainComponent installs onMakeChannelRequested so the
+// ONE undo step also covers the timeline and runs the reconcile pass; without it (a standalone
+// GraphEditor) records its own graph+macro undo step around makeChannelFromNode.
 void GraphEditor::requestMakeChannel(juce::AudioProcessorGraph::NodeID source) {
     if (onMakeChannelRequested) {
         onMakeChannelRequested(source);
@@ -301,6 +331,8 @@ void GraphEditor::requestMakeChannel(juce::AudioProcessorGraph::NodeID source) {
     repaint();
 }
 
+// Appends "Make Channel" (enabled iff nodeNeedsChannel) when the selection resolves to a chain
+// source; nothing otherwise. Shared by the canvas menu and ModuleComponent's module menu.
 void GraphEditor::addMakeChannelMenuItem(juce::PopupMenu& menu) {
     const auto source = channelSourceForSelection();
     if (source.uid == 0)
@@ -316,6 +348,10 @@ void GraphEditor::addMakeChannelMenuItem(juce::PopupMenu& menu) {
     menu.addItem(item);
 }
 
+// Channel macros (a macro with a Channel Strip member) that module `nodeId` — itself in no
+// macro — feeds from outside, directly, through a macro port, or through a modulation
+// attenuverter, while ALSO feeding at least one other consumer: the "Duplicate into this
+// channel" targets. Empty when `nodeId` isn't shared. Pure read.
 std::vector<juce::String> GraphEditor::duplicateIntoChannelTargets(juce::AudioProcessorGraph::NodeID nodeId) const {
     auto& graph = audioEngine.getGraph();
     auto* node = graph.getNodeForId(nodeId);
@@ -324,13 +360,13 @@ std::vector<juce::String> GraphEditor::duplicateIntoChannelTargets(juce::AudioPr
         dynamic_cast<ChannelStripModule*>(processor) != nullptr || dynamic_cast<MasterModule*>(processor) != nullptr ||
         synth::isTrackSourceNode(processor) || isSingletonIOModule(processor->getName()))
         return {};
-    const juce::String uuid = nodeUuidFor(nodeId);
+    const juce::String uuid = macroController_.nodeUuidFor(nodeId);
     if (uuid.isNotEmpty() && macros.findByMember(uuid) != nullptr)
         return {}; // already inside a macro — not "shared from outside"
 
     auto isChannelMacro = [&](const synth::Macro& macro) {
         for (const auto& member : macro.members)
-            if (auto* memberNode = graph.getNodeForId(resolveMemberNodeId(member)))
+            if (auto* memberNode = graph.getNodeForId(macroController_.resolveMemberNodeId(member)))
                 if (dynamic_cast<ChannelStripModule*>(memberNode->getProcessor()) != nullptr)
                     return true;
         return false;
@@ -358,7 +394,7 @@ std::vector<juce::String> GraphEditor::duplicateIntoChannelTargets(juce::AudioPr
     std::vector<juce::String> targets;
     bool feedsElsewhere = false;
     for (const auto id : consumers) {
-        const juce::String consumerUuid = nodeUuidFor(id);
+        const juce::String consumerUuid = macroController_.nodeUuidFor(id);
         const auto* macro = consumerUuid.isNotEmpty() ? macros.findByMember(consumerUuid) : nullptr;
         if (macro != nullptr && isChannelMacro(*macro)) {
             if (std::find(targets.begin(), targets.end(), macro->id) == targets.end())
@@ -372,6 +408,14 @@ std::vector<juce::String> GraphEditor::duplicateIntoChannelTargets(juce::AudioPr
     return targets;
 }
 
+// "Duplicate into this channel": a copy of `nodeId` (parameters and extra state carried over,
+// the duplicateSelection path) takes over every cable `nodeId` sends into macro `macroId`,
+// receives the same inputs `nodeId` does (a modulation routing into it is re-created with the
+// same amount), and joins the macro. Every other consumer stays on the original. NO UNDO OF
+// ITS OWN and no updateComponents() call, same contract as makeChannelFromNode. Returns false
+// with nothing touched when `macroId` isn't one of duplicateIntoChannelTargets(nodeId). See
+// GraphEditorChannels.cpp for the boundary-port splice detail.
+//
 // ...and joins the macro — a port only that cable used is spliced back out, and the copy's
 // remaining boundary crossings get ports (addSelectionToMacro's T138 passes).
 bool GraphEditor::duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& macroId) {
@@ -398,7 +442,7 @@ bool GraphEditor::duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeId,
     const auto copyId = added.front();
 
     auto inThisChannel = [this, &macroId](juce::AudioProcessorGraph::NodeID id) {
-        const juce::String uuid = nodeUuidFor(id);
+        const juce::String uuid = macroController_.nodeUuidFor(id);
         const auto* macro = uuid.isNotEmpty() ? macros.findByMember(uuid) : nullptr;
         return macro != nullptr && macro->id == macroId;
     };
@@ -464,7 +508,7 @@ bool GraphEditor::duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeId,
         for (const auto& port : macro->ports) {
             if (!port.isInput)
                 continue;
-            const auto portId = resolveMemberNodeId(port.nodeUuid);
+            const auto portId = macroController_.resolveMemberNodeId(port.nodeUuid);
             bool anyIn = false, onlyCopy = true;
             for (const auto& c : after) {
                 if (c.destination.nodeID != portId)
@@ -487,23 +531,25 @@ bool GraphEditor::duplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeId,
         }
         for (const auto& portUuid : interiorPorts)
             if (auto* live = macros.find(macroId))
-                spliceOutMacroPort(*live, portUuid);
+                macroController_.spliceOutMacroPort(*live, portUuid);
     }
 
     // 4. Join the macro with addSelectionToMacro's T138 passes: a port for each of the copy's
     //    remaining boundary crossings (the inputs it inherited), and any port the join makes interior.
     const juce::String copyUuid = synth::AIStateMapper::ensureNodeUuid(graph.getNodeForId(copyId));
-    const auto addPlan = buildMacroPortCrossingPlanForNewMembers(macroId, {copyUuid});
-    const auto portsToSpliceOut = macroPortsThatBecomeInteriorOnAdd(macroId, {copyUuid});
+    const auto addPlan = macroController_.buildMacroPortCrossingPlanForNewMembers(macroId, {copyUuid});
+    const auto portsToSpliceOut = macroController_.macroPortsThatBecomeInteriorOnAdd(macroId, {copyUuid});
     macros.addMember(macroId, copyUuid);
     if (!addPlan.empty())
-        spliceMacroPorts(macroId, addPlan);
+        macroController_.spliceMacroPorts(macroId, addPlan);
     for (const auto& portUuid : portsToSpliceOut)
         if (auto* live = macros.find(macroId))
-            spliceOutMacroPort(*live, portUuid);
+            macroController_.spliceOutMacroPort(*live, portUuid);
     return true;
 }
 
+// The module menu item's action — same MainComponent-or-standalone undo split as
+// requestMakeChannel.
 void GraphEditor::requestDuplicateIntoChannel(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& macroId) {
     if (onDuplicateIntoChannelRequested) {
         onDuplicateIntoChannelRequested(nodeId, macroId);
@@ -523,6 +569,8 @@ void GraphEditor::requestDuplicateIntoChannel(juce::AudioProcessorGraph::NodeID 
     repaint();
 }
 
+// Appends the "Duplicate into '<channel>'" item (one target) or a "Duplicate into Channel"
+// submenu (several) for `nodeId`; nothing when it has no targets.
 void GraphEditor::addDuplicateIntoChannelMenuItems(juce::PopupMenu& menu, juce::AudioProcessorGraph::NodeID nodeId) {
     const auto targets = duplicateIntoChannelTargets(nodeId);
     if (targets.empty())

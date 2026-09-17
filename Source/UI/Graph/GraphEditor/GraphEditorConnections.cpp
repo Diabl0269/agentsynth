@@ -13,6 +13,11 @@
 
 using namespace detail;
 
+// Works out which raw-channel fan a cable dropped between two *visible* jacks should wire.
+// Port hit-testing yields visible jack indices, which are not raw channel numbers once a
+// module goes poly (a poly VCA's CV jack is jack 1 but raw channel 8). Pure — no graph access,
+// headless-testable. See the note below for the fan-width/mod-CV-broadcast rules.
+//
 // When both ends front equally wide fans the cable covers all N voices; otherwise it degrades to
 // one head-to-head wire. The one exception is a mono source landing on a per-voice *mod-CV* fan:
 // that is broadcast to every voice (one LFO shakes all eight), which is what sourceStride == 0
@@ -141,11 +146,15 @@ void GraphEditor::dragConnection(juce::Point<int> screenPos) {
     repaintCanvas();
 }
 
+// Drops the pending modulation drop-target highlight on every card.
 void GraphEditor::clearModDropTargets() {
     for (auto* comp : content.getModules())
         comp->setModDropTargetChannel(-1);
 }
 
+// Wires two visible jacks the same way a completed cable-drag does (poly fan, MIDI,
+// attenuverter for mono mod CV). When recordUndo is false the caller owns the transaction
+// (e.g. inside an existing recordStructuralChange). Also GraphCanvasHost::connectPorts().
 void GraphEditor::connectPorts(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
                                juce::AudioProcessorGraph::NodeID dstId, int dstJack, bool isMidi, bool recordUndo) {
     auto& graph = audioEngine.getGraph();
@@ -256,8 +265,8 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                     const auto realDstId = realDst->nodeID;
                     auto doMutation = [this, realSrcId, srcJack, realDstId, dstJack] {
                         if (!autoCreateMacroPortsOnDragEnabled ||
-                            !maybeAutoCreateMacroPortsForDrag(realSrcId, srcJack, realDstId, dstJack,
-                                                              /*isMidi=*/true, /*recordUndo=*/false))
+                            !macroController_.maybeAutoCreateMacroPortsForDrag(realSrcId, srcJack, realDstId, dstJack,
+                                                                               /*isMidi=*/true, /*recordUndo=*/false))
                             connectPorts(realSrcId, srcJack, realDstId, dstJack, /*isMidi=*/true,
                                          /*recordUndo=*/false);
                         // realDstId is always the real destination node, whether or not either
@@ -272,8 +281,8 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                     else
                         doMutation();
                 } else if (!autoCreateMacroPortsOnDragEnabled ||
-                           !maybeAutoCreateMacroPortsForDrag(realSrc->nodeID, srcJack, realDst->nodeID, dstJack,
-                                                             dragSourceIsMidi)) {
+                           !macroController_.maybeAutoCreateMacroPortsForDrag(realSrc->nodeID, srcJack, realDst->nodeID,
+                                                                              dstJack, dragSourceIsMidi)) {
                     // T148 (docs/macros_implementation.md §7 item 9): if this completed drag crosses a macro
                     // boundary (an EXPANDED macro's member on one side, something outside that same
                     // macro on the other — the collapsed-card drop above is a different code path),
@@ -328,7 +337,7 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
             if (auto hitPort = macroCardPortForPoint(card->getMacroId(), cardLocal)) {
                 if (hitPort->isInput == newPortIsInput &&
                     (hitPort->kind == synth::MacroPortKind::Midi) == dragSourceIsMidi) {
-                    const auto portNodeId = resolveMemberNodeId(hitPort->nodeUuid);
+                    const auto portNodeId = macroController_.resolveMemberNodeId(hitPort->nodeUuid);
                     if (graph.getNodeForId(portNodeId) != nullptr) {
                         const auto connSrcId = newPortIsInput ? srcNode->nodeID : portNodeId;
                         const auto connDstId = newPortIsInput ? portNodeId : srcNode->nodeID;
@@ -367,8 +376,8 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
             // created to receive the cable. T184 does NOT apply here: createMacroPortFromDroppedCable
             // wires no interior leg (the freshly-minted port has nothing behind it yet), so there is
             // nothing for findUnchanneledOutputFeeds to find.
-            createMacroPortFromDroppedCable(card->getMacroId(), newPortIsInput, dragSourceIsMidi, srcNode->nodeID,
-                                            dragSourceChannel);
+            macroController_.createMacroPortFromDroppedCable(card->getMacroId(), newPortIsInput, dragSourceIsMidi,
+                                                             srcNode->nodeID, dragSourceChannel);
             break;
         }
     }

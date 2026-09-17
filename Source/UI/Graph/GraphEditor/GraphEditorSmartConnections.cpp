@@ -33,6 +33,8 @@ void GraphEditor::applySmartSuggestions(juce::AudioProcessorGraph::NodeID ghostN
 
 void GraphEditor::clearSmartSuggestions() { smartConnections_.clearSmartSuggestions(); }
 
+// Re-evaluates the suggestions when the insert modifier changed since the last drag tick.
+// A modifier press/release is not a mouse move, so nothing else would notice it.
 void GraphEditor::refreshSuggestionsIfInsertModifierChanged() {
     smartConnections_.refreshSuggestionsIfInsertModifierChanged(buildDragPreviewState());
 }
@@ -50,6 +52,37 @@ bool GraphEditor::nodeHasCables(juce::AudioProcessorGraph::NodeID nodeId) const 
     return false;
 }
 
+void GraphEditor::setSmartConnectionMode(SmartConnectionMode mode) { smartConnections_.setSmartConnectionMode(mode); }
+
+GraphEditor::SmartConnectionMode GraphEditor::getSmartConnectionMode() const noexcept {
+    return smartConnections_.getSmartConnectionMode();
+}
+
+// Tests set the override; production leaves it empty and reads the real keyboard. See
+// SmartConnectionEngine::isInsertModifierDown for the CTRL/insert-in-series rationale.
+void GraphEditor::setInsertModifierOverrideForTests(std::optional<bool> down) {
+    smartConnections_.setInsertModifierOverrideForTests(down);
+}
+
+bool GraphEditor::isInsertModifierDown() const { return smartConnections_.isInsertModifierDown(); }
+
+int GraphEditor::getSmartSuggestionCount() const noexcept { return smartConnections_.getSmartSuggestionCount(); }
+
+const std::vector<GraphEditor::SmartSuggestion>& GraphEditor::getSmartSuggestions() const noexcept {
+    return smartConnections_.getSmartSuggestions();
+}
+
+bool GraphEditor::isInputJackFreeForTests(juce::AudioProcessorGraph::NodeID nodeId, int jack) const {
+    return smartConnections_.isInputJackFree(nodeId, jack, false);
+}
+
+bool GraphEditor::isOutputJackFreeForTests(juce::AudioProcessorGraph::NodeID nodeId, int jack) const {
+    return smartConnections_.isOutputJackFree(nodeId, jack, false);
+}
+
+void GraphEditor::seedInsertModifierSample() { smartConnections_.seedInsertModifierSample(); }
+
+// Port centre inside a bounds rect — must agree with ModuleComponent::getPortCenter.
 juce::Point<int> GraphEditor::estimatePortCenter(juce::AudioProcessor* proc, juce::Rectangle<int> bounds, int jack,
                                                  bool isInput, bool isMidi) {
     if (proc == nullptr)

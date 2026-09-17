@@ -173,10 +173,9 @@ public:
                                                        juce::Point<int> cardLocalPos) const;
     MacroPortOwner macroPortOwnerFor(juce::AudioProcessorGraph::NodeID nodeId) const;
 
-    /** Positions every EXPANDED macro's port widgets against macroHullBounds(). See
-     *  GraphEditor::dockMacroPortWidgets (P8-15 fix F2, docs/macros_ports.md §5.4) for the full
-     *  layout contract. Has a private GraphEditor.h forwarder — GraphEditorCanvas.cpp/
-     *  GraphEditorDragDrop.cpp/GraphEditorSelection.cpp call it by its original name. */
+    /** Positions every EXPANDED macro's port widgets against macroHullBounds() (P8-15 fix F2,
+     *  docs/macros_ports.md §5.4 has the full layout contract). GraphEditorCanvas.cpp/
+     *  GraphEditorDragDrop.cpp/GraphEditorSelection.cpp call this directly. */
     void dockMacroPortWidgets();
 
     // ---- Macro I/O CRUD (P8-15b, T140, docs/macros_ports.md §5) --------------------------------
@@ -194,53 +193,62 @@ public:
                                std::optional<juce::Colour> newColour);
 
     /** Reused by GraphEditor::promptConfigureMacroIO (stays on GraphEditor — SafePointer-based
-     *  async dialog). Has a private GraphEditor.h forwarder for that one call site. */
+     *  async dialog), which calls this directly. */
     std::vector<synth::ui::MacroPortConfigDialog::PortRow> macroPortRowsForDialog(const juce::String& macroId) const;
 
-    /** The "shape from a dropped cable" convenience (§5.3). See
-     *  GraphEditor::createMacroPortFromDroppedCable. Has a private GraphEditor.h forwarder —
-     *  GraphEditorConnections.cpp's endConnectionDrag calls it by its original name. */
+    /** The "shape from a dropped cable" convenience (§5.3). GraphEditorConnections.cpp's
+     *  endConnectionDrag calls this directly. */
     void createMacroPortFromDroppedCable(const juce::String& macroId, bool newPortIsInput, bool isMidi,
                                          juce::AudioProcessorGraph::NodeID otherNodeId, int otherVisibleJack);
 
     // ---- Auto-create-ports-on-group (founder-review fix F5, docs/macros_implementation.md §7.6.1) ----
 
+    /** The crossing plan a would-be macro's members (by NodeID) would need on creation. */
     std::vector<MacroPortCrossingGroup>
     buildMacroPortCrossingPlan(const std::vector<juce::AudioProcessorGraph::NodeID>& memberNodeIds) const;
     std::vector<MacroPortCrossingGroup> buildMacroPortCrossingPlan(const std::vector<juce::String>& memberUuids) const;
+    /** Realises a crossing plan as actual macro ports. */
     void spliceMacroPorts(const juce::String& macroId, const std::vector<MacroPortCrossingGroup>& plan);
+    /** T138: the crossing plan for members newly ADDED to `macroId` (the mirror image of
+     *  buildMacroPortCrossingPlanForRemovedMembers). */
     std::vector<MacroPortCrossingGroup>
     buildMacroPortCrossingPlanForNewMembers(const juce::String& macroId,
                                             const std::vector<juce::String>& addedUuids) const;
+    /** Which of `macroId`'s existing ports become interior (no longer cross the boundary) once
+     *  `addedUuids` join. */
     std::vector<juce::String> macroPortsThatBecomeInteriorOnAdd(const juce::String& macroId,
                                                                 const std::vector<juce::String>& addedUuids) const;
+    /** T138: the crossing plan for `removedUuids` leaving the macro `macroId` —
+     *  removeSelectionFromMacro()'s auto-port counterpart. Computed off the REMAINING ordinary
+     *  members (existing members minus `removedUuids`, minus this macro's own ports) as the
+     *  "inside" set, so an edge to a departing member now reads as a genuine crossing; then filtered
+     *  to keep only edges whose external endpoint is actually one of `removedUuids`. Empty if
+     *  `macroId` doesn't resolve. */
     std::vector<MacroPortCrossingGroup>
     buildMacroPortCrossingPlanForRemovedMembers(const juce::String& macroId,
                                                 const std::vector<juce::String>& removedUuids) const;
+    /** Splices ONE port node back out of its macro, reconnecting the cable it proxied. */
     void spliceOutMacroPort(synth::Macro& macro, const juce::String& portNodeUuid);
 
     // ---- Auto-create-port-on-drag / auto-delete-on-last-cable (T148, docs/macros_implementation.md §7.9) ----
 
     /** True if `nodeId` resolves to a live macro member that itself fronts one of that macro's
-     *  ports. Has a private GraphEditor.h forwarder — GraphEditorCables.cpp/Commands.cpp call it
-     *  by its original name. */
+     *  ports. GraphEditorCables.cpp/Commands.cpp call this directly. */
     bool nodeIsMacroPort(juce::AudioProcessorGraph::NodeID nodeId) const;
 
-    /** The endpoint-needs-a-port rule applied to a completed cable-drag. See
-     *  GraphEditor::maybeAutoCreateMacroPortsForDrag. Has a private GraphEditor.h forwarder —
-     *  GraphEditorConnections.cpp calls it by its original name. */
+    /** The endpoint-needs-a-port rule applied to a completed cable-drag.
+     *  GraphEditorConnections.cpp calls this directly. */
     bool maybeAutoCreateMacroPortsForDrag(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
                                           juce::AudioProcessorGraph::NodeID dstId, int dstJack, bool isMidi,
                                           bool recordUndo = true);
 
     /** The auto-delete half of T148: after a mutation removes a connection that may have touched a
-     *  macro port, call this on every node the mutation touched. Has a private GraphEditor.h
-     *  forwarder — GraphEditorCables.cpp/Commands.cpp/Selection.cpp call it by its original name. */
+     *  macro port, call this on every node the mutation touched.
+     *  GraphEditorCables.cpp/Commands.cpp/Selection.cpp call this directly. */
     void autoDeleteOrphanedMacroPort(juce::AudioProcessorGraph::NodeID nodeId);
 
-    /** T154: the auto-delete-orphaned-port scan's candidate list for a BATCH node deletion. Has a
-     *  private GraphEditor.h forwarder — GraphEditorCommands.cpp/Selection.cpp call it by its
-     *  original name. */
+    /** T154: the auto-delete-orphaned-port scan's candidate list for a BATCH node deletion.
+     *  GraphEditorCommands.cpp/Selection.cpp call this directly. */
     std::vector<juce::AudioProcessorGraph::NodeID>
     macroPortDeletionNeighbors(const std::vector<juce::AudioProcessorGraph::NodeID>& deletedIds) const;
 
@@ -248,26 +256,23 @@ public:
     //
     // These two are general graph-uuid lookups, not macro-specific state — they happen to have
     // lived in the macro geometry file since before this split and are kept here rather than
-    // invented a new home for. Both have private GraphEditor.h forwarders — GraphEditorCables.cpp/
-    // Channels.cpp/Connections.cpp call them by their original names.
+    // invented a new home for. GraphEditorCables.cpp/Channels.cpp/Connections.cpp call both
+    // directly.
 
     /** The persistent "uuid" node property for `nodeId`, or empty if none. */
     juce::String nodeUuidFor(juce::AudioProcessorGraph::NodeID nodeId) const;
     /** The NodeID currently backing `memberUuid`, or an invalid NodeID if none does. */
     juce::AudioProcessorGraph::NodeID resolveMemberNodeId(const juce::String& memberUuid) const;
 
-    /** The rectangle to anchor a collapsed macro's boundary cables against — see
-     *  GraphEditor::macroCableAnchorBounds. Has a private GraphEditor.h forwarder —
-     *  GraphEditorCables.cpp's rebuildVisibleCables() calls it by its original name. */
+    /** The rectangle to anchor a collapsed macro's boundary cables against.
+     *  GraphEditorCables.cpp's rebuildVisibleCables() calls this directly. */
     juce::Rectangle<int> macroCableAnchorBounds(const synth::Macro& macro) const;
 
     /** True if at least one of `macroId`'s members has a "muted" parameter. PUBLIC (not
      *  internal-only, despite matching GraphEditor's original private visibility): C++ access
-     *  control is per-class, so GraphEditor.h's own private forwarder — kept because
-     *  GraphEditorMacroPrompts.cpp's buildMacroMenu() (stays on GraphEditor) calls it by its
-     *  original name — calls into this class from GraphEditor, a different class, and a private
-     *  member here would refuse that call regardless of GraphEditor's own forwarder being
-     *  private. */
+     *  control is per-class, so GraphEditorMacroPrompts.cpp's buildMacroMenu() — a GraphEditor
+     *  member, i.e. a different class — reaches this from outside, and a private member here
+     *  would refuse that call. */
     bool macroHasMuteEligibleMember(const juce::String& macroId) const;
 
 private:

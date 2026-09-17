@@ -23,6 +23,9 @@
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "UI/Macros/MacroCardComponent.h"
 
+// FRO13 (P9-7): true when memberUuid's macro is a mixer channel (synth::isChannelMacro) — a
+// const-callable query since getMacros() itself is non-const.
+//
 // FRO13 (P9-7): canSaveTrackPresetForTrack's const-callable query — getMacros() itself is
 // non-const, so MainComponent (a const TrackHeaderHost override) can't call findByMember() on it
 // directly.
@@ -31,6 +34,13 @@ bool GraphEditor::isChannelMacroForTrack(const juce::String& memberUuid) const {
     return macro != nullptr && synth::isChannelMacro(*macro, audioEngine.getGraph());
 }
 
+// Cmd+G / right-click "Create Macro" / drag-group-into-macro's real entry point. Stays on
+// GraphEditor (FRO77 PR2) — it shows a juce::Component::SafePointer<GraphEditor>-based async
+// modal, which needs a genuine GraphEditor&; see MacroGroupController.h's class comment. Also
+// GraphCanvasHost::requestGroupSelectionIntoMacro() — MacroGroupController::
+// groupOrToggleSelectionMacros() calls back into this through the host for a selection that
+// touches no macro yet.
+//
 // MacroAutoPortPreference (GraphEditor.h) rationale:
 // Tri-state, not a bool: "ask, then remember" needs a third value beyond on/off. Unset (the
 // default) means "ask on the next group that has a crossing
@@ -75,6 +85,10 @@ void GraphEditor::requestGroupSelectionIntoMacro() {
     groupSelectionIntoMacro(macroAutoPortPreference_ == MacroAutoPortPreference::AutoCreatePorts);
 }
 
+// Launches the real "Create ports for the crossing cables?" modal
+// (synth::ui::MacroAutoPortPromptDialog) and calls `respond(createPorts, remember)` once the
+// user picks. Only reached from requestGroupSelectionIntoMacro() when
+// macroAutoPortModalForTest is unset — see that member's comment.
 void GraphEditor::showMacroAutoPortModal(std::function<void(bool createPorts, bool remember)> respond) {
     // buildMacroPortCrossingPlan moved into MacroGroupController with no private forwarder (this
     // is its only caller outside the macro files) — the one genuine host-access rewrite in this
@@ -104,6 +118,12 @@ void GraphEditor::showMacroAutoPortModal(std::function<void(bool createPorts, bo
     };
 }
 
+// Async rename affordance that does NOT depend on a MacroCardComponent existing — used by the
+// expanded-macro hull's right-click menu (buildMacroMenu's default "Rename..." handler),
+// where there is no card to host an inline `TextEditor`. Prefilled with the macro's current
+// name; empty/whitespace-only input cancels without renaming. See the note below
+// for the AlertWindow-idiom rationale.
+//
 // Mirrors MainComponent::promptSaveSnippet's `juce::AlertWindow` idiom exactly (SafePointer +
 // ModalCallbackFunction + a unique_ptr taken inside the callback). The collapsed card keeps its
 // own nicer inline rename (MacroCardComponent::beginRename) — this is only for the case that has
@@ -145,6 +165,9 @@ void GraphEditor::promptRenameMacro(const juce::String& macroId) {
                             false);
 }
 
+// Shared by promptRecolourMacro and createMacroColourPickerForTest. Stays on GraphEditor
+// (FRO77 PR2) — see MacroGroupController.h's class comment (SafePointer<GraphEditor>).
+//
 // The same picker the timeline ruler's marker menu and the track header swatch use
 // (TimelineRulerComponent::buildMarkerColourPicker is the exact pattern this mirrors). Live
 // preview while the user drags (writes straight to the macro, no undo step, so dragging never
@@ -197,6 +220,9 @@ std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::buildMacroColourPicke
         });
 }
 
+// Opens the shared synth::ui::ColourPickerPopup over `screenArea` (screen coordinates) for
+// `macroId`. A no-op if `macroId` doesn't resolve. See buildMacroColourPicker in this
+// file for the live-preview/undo contract this launches.
 void GraphEditor::promptRecolourMacro(const juce::String& macroId, juce::Rectangle<int> screenArea) {
     auto popup = buildMacroColourPicker(macroId);
     if (popup == nullptr)
@@ -204,6 +230,12 @@ void GraphEditor::promptRecolourMacro(const juce::String& macroId, juce::Rectang
     juce::CallOutBox::launchAsynchronously(std::move(popup), screenArea, nullptr);
 }
 
+// Builds the recolour popup with the EXACT onPreview/onCommit callbacks promptRecolourMacro
+// uses, without launching a juce::CallOutBox — mirrors
+// TimelineRulerComponent::createMarkerColourPickerForTest(). Null when `macroId` doesn't
+// resolve. Test seam: a headless test drives the returned popup's preview/commit directly
+// rather than duplicating the recolour logic. Stays on GraphEditor (FRO77 PR2) — see
+// MacroGroupController.h's class comment.
 std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::createMacroColourPickerForTest(const juce::String& macroId) {
     return buildMacroColourPicker(macroId);
 }
@@ -225,6 +257,11 @@ std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::createMacroColourPick
 // Macro" always reads the CURRENT live selection regardless — after either reselect it correctly
 // equals the macro's own members, which is exactly what removal should see.
 juce::PopupMenu
+// The shared macro actions menu — right-click a collapsed card or right-click inside an
+// expanded macro's hull both build this SAME menu (Fix 4/P8-12 follow-up), so the two paths
+// cannot drift apart. Returns an empty menu if `macroId` doesn't resolve. See
+// GraphEditorMacroPrompts.cpp's definition for the `renameAction`/`addCandidateSelection`
+// parameter rationale.
 GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> renameAction,
                             const std::vector<juce::AudioProcessorGraph::NodeID>* addCandidateSelection) {
     const auto* macro = macros.find(macroId);
@@ -249,7 +286,7 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
     std::vector<juce::String> addableUuids;
     const auto& addCandidates = addCandidateSelection != nullptr ? *addCandidateSelection : selection.getSelected();
     for (auto id : addCandidates) {
-        const juce::String uuid = nodeUuidFor(id);
+        const juce::String uuid = macroController_.nodeUuidFor(id);
         if (uuid.isNotEmpty() && !macro->hasMember(uuid))
             addableUuids.push_back(uuid);
     }
@@ -259,7 +296,7 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
     // unaffected by the add-candidate capture, since removing never needs to see PAST selection.
     std::vector<juce::String> removableUuids;
     for (auto id : selection.getSelected()) {
-        const juce::String uuid = nodeUuidFor(id);
+        const juce::String uuid = macroController_.nodeUuidFor(id);
         if (uuid.isEmpty())
             continue;
         if (macro->hasMember(uuid)) {
@@ -330,7 +367,7 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
                   if (safeThis != nullptr)
                       safeThis->toggleMacroBypassed(macroId);
               });
-    if (macroHasMuteEligibleMember(macroId)) {
+    if (macroController_.macroHasMuteEligibleMember(macroId)) {
         m.addItem(macroMuteState(macroId) == MacroToggleState::AllOn ? "Unmute Macro" : "Mute Macro",
                   [safeThis, macroId] {
                       if (safeThis != nullptr)
@@ -403,12 +440,16 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
     return m;
 }
 
+// Opens the "Configure I/O" modal (MacroPortConfigDialog) for `macroId` — the single entry
+// point every port add/remove/rename/reorder/shape-change above is reached through when the
+// user drives it from the UI; every method above is independently callable (and tested) with
+// no dialog involved. No-op if `macroId` doesn't resolve.
 void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
     const auto* macro = macros.find(macroId);
     if (macro == nullptr)
         return;
 
-    auto* dialog = new synth::ui::MacroPortConfigDialog(macro->name, macroPortRowsForDialog(macroId));
+    auto* dialog = new synth::ui::MacroPortConfigDialog(macro->name, macroController_.macroPortRowsForDialog(macroId));
     dialog->setColourPickerPropertiesFile(propertiesFile_); // T152; nullptr is fine (in-memory favs)
 
     juce::DialogWindow::LaunchOptions options;
@@ -445,7 +486,7 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
                 return;
             self->addMacroPort(macroId, isInput, kind, shape, voiceCount, name);
             if (auto* d = safeDialog.getComponent())
-                d->refreshPorts(self->macroPortRowsForDialog(macroId));
+                d->refreshPorts(self->macroController_.macroPortRowsForDialog(macroId));
         });
     };
     dialog->onRenamePort = [safeThis, safeDialog, macroId](const juce::String& nodeUuid, const juce::String& name) {
@@ -455,7 +496,7 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
                 return;
             self->renameMacroPort(macroId, nodeUuid, name);
             if (auto* d = safeDialog.getComponent())
-                d->refreshPorts(self->macroPortRowsForDialog(macroId));
+                d->refreshPorts(self->macroController_.macroPortRowsForDialog(macroId));
         });
     };
     dialog->onDeletePort = [safeThis, safeDialog, macroId](const juce::String& nodeUuid) {
@@ -465,7 +506,7 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
                 return;
             self->removeMacroPort(macroId, nodeUuid);
             if (auto* d = safeDialog.getComponent())
-                d->refreshPorts(self->macroPortRowsForDialog(macroId));
+                d->refreshPorts(self->macroController_.macroPortRowsForDialog(macroId));
         });
     };
     dialog->onReorderPort = [safeThis, safeDialog, macroId](const juce::String& nodeUuid, bool moveUp) {
@@ -475,7 +516,7 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
                 return;
             self->moveMacroPortOrder(macroId, nodeUuid, moveUp);
             if (auto* d = safeDialog.getComponent())
-                d->refreshPorts(self->macroPortRowsForDialog(macroId));
+                d->refreshPorts(self->macroController_.macroPortRowsForDialog(macroId));
         });
     };
     dialog->onReorderPortTo = [safeThis, safeDialog, macroId](const juce::String& nodeUuid, int newIndexInGroup) {
@@ -485,7 +526,7 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
                 return;
             self->reorderMacroPortToIndex(macroId, nodeUuid, newIndexInGroup);
             if (auto* d = safeDialog.getComponent())
-                d->refreshPorts(self->macroPortRowsForDialog(macroId));
+                d->refreshPorts(self->macroController_.macroPortRowsForDialog(macroId));
         });
     };
     dialog->onChangePortShape = [safeThis, safeDialog, macroId](const juce::String& nodeUuid, MacroPortShape newShape,
@@ -496,7 +537,7 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
                 return;
             self->changeMacroPortShape(macroId, nodeUuid, newShape, newVoiceCount);
             if (auto* d = safeDialog.getComponent())
-                d->refreshPorts(self->macroPortRowsForDialog(macroId));
+                d->refreshPorts(self->macroController_.macroPortRowsForDialog(macroId));
         });
     };
     dialog->onChangePortColour = [safeThis, safeDialog, macroId](const juce::String& nodeUuid,
@@ -507,13 +548,19 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
                 return;
             self->changeMacroPortColour(macroId, nodeUuid, newColour);
             if (auto* d = safeDialog.getComponent())
-                d->refreshPorts(self->macroPortRowsForDialog(macroId));
+                d->refreshPorts(self->macroController_.macroPortRowsForDialog(macroId));
         });
     };
 
     window->enterModalState(true, nullptr, true);
 }
 
+// Opens a small "Rename Port" AlertWindow for the single port fronted by `nodeUuid` — the
+// port node's own context menu's quicker alternative to opening the whole Configure I/O
+// modal just to retype one name (founder-review fix G7). Empty/whitespace-only input cancels
+// without renaming, same as promptRenameMacro's own convention; the actual mutation is
+// renameMacroPort() (already independently tested with no dialog involved). No-op if
+// `macroId` doesn't resolve.
 void GraphEditor::promptRenameMacroPort(const juce::String& macroId, const juce::String& nodeUuid) {
     const auto* macro = macros.find(macroId);
     if (macro == nullptr)

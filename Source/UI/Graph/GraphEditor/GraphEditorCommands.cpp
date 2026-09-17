@@ -17,6 +17,8 @@ using namespace detail;
 
 // ---- Snippets ----
 
+// Footprint of the group a snippet drag payload would drop, for the landing ghost. Falls back
+// to a single-module estimate when the payload can't be resolved.
 juce::Point<int> GraphEditor::estimateSnippetSize(const juce::String& payload) const {
     // Fallback footprint when the snippet can't be resolved or carries no placeable nodes.
     const juce::Point<int> fallback{synth::LayoutUtil::kSingleWidth, 200};
@@ -52,11 +54,14 @@ juce::Point<int> GraphEditor::estimateSnippetSize(const juce::String& payload) c
     return bounds.isEmpty() ? fallback : juce::Point<int>(bounds.getWidth(), bounds.getHeight());
 }
 
+// Snippet JSON for the current selection, ready to hand to SnippetManager::saveSnippet.
 juce::var GraphEditor::extractSelectionSnippet(const juce::String& name) {
     return synth::SnippetManager::extractSnippet(audioEngine.getGraph(), selection.getSelected(), name,
                                                  /*includeExtraState=*/false, macros);
 }
 
+// Inserts a snippet at a canvas position as one undoable change, then selects what landed.
+// @return true when at least one module was added.
 bool GraphEditor::insertSnippetAt(const juce::var& snippet, juce::Point<int> canvasPos) {
     auto& graph = audioEngine.getGraph();
 
@@ -90,6 +95,9 @@ bool GraphEditor::insertSnippetAt(const juce::var& snippet, juce::Point<int> can
 
 // ---- Copy / paste / duplicate ----
 
+// Inserts a clipboard-dialect payload at a canvas position, carrying non-parameter module
+// state through. Shared by paste and duplicate; `insertSnippetAt` is the disk-snippet path and
+// deliberately does not.
 bool GraphEditor::insertClipboardPayload(const juce::var& payload, juce::Point<int> canvasPos) {
     auto& graph = audioEngine.getGraph();
     auto dropPos = synth::LayoutUtil::snap(canvasPos);
@@ -121,6 +129,9 @@ bool GraphEditor::insertClipboardPayload(const juce::var& payload, juce::Point<i
     return true;
 }
 
+// Copies the current selection into the in-app clipboard.
+// @return false when the selection holds nothing copyable (empty, or only graph I/O nodes),
+// in which case the previous clipboard contents are left alone.
 bool GraphEditor::copySelection() {
     auto ids = selection.getSelected();
     if (ids.empty())
@@ -135,6 +146,8 @@ bool GraphEditor::copySelection() {
     return true;
 }
 
+// Pastes at the next cascade position — one step down-right of wherever the last paste (or the
+// copy itself) sat, so repeated pastes fan out instead of stacking on one pixel.
 bool GraphEditor::pasteClipboard() {
     if (clipboard.isEmpty())
         return false;
@@ -145,6 +158,8 @@ bool GraphEditor::pasteClipboard() {
     return insertClipboardPayload(payload, clipboard.nextPastePosition());
 }
 
+// Pastes at an explicit canvas position (the canvas context menu's "Paste Here") and re-anchors
+// the cascade there, so a following keyboard paste continues from the same place.
 bool GraphEditor::pasteClipboardAt(juce::Point<int> canvasPos) {
     if (clipboard.isEmpty())
         return false;
@@ -154,6 +169,8 @@ bool GraphEditor::pasteClipboardAt(juce::Point<int> canvasPos) {
     return insertClipboardPayload(payload, canvasPos);
 }
 
+// Copies the selection and immediately drops it back one step down-right, WITHOUT touching the
+// clipboard — Cmd+D must not cost the user whatever they had copied.
 bool GraphEditor::duplicateSelection() {
     auto ids = selection.getSelected();
     if (ids.empty())
@@ -169,6 +186,8 @@ bool GraphEditor::duplicateSelection() {
     return insertClipboardPayload(payload, origin + juce::Point<int>(step, step));
 }
 
+// Right-click on empty canvas: paste / select-all. Built here rather than inline in mouseDown
+// so the menu stays out of the hit-testing path.
 void GraphEditor::showCanvasContextMenu(juce::Point<int> canvasPos) {
     juce::Component::SafePointer<GraphEditor> safeThis(this);
 
@@ -223,6 +242,9 @@ void GraphEditor::showCanvasContextMenu(juce::Point<int> canvasPos) {
     m.showMenuAsync(juce::PopupMenu::Options());
 }
 
+// Canvas-scoped keys: Delete/Backspace removes the selection, Escape clears it. Deliberately
+// NOT routed through ShortcutManager — an unmodified Delete binding registered app-wide would
+// fire from any panel that doesn't consume the key first.
 bool GraphEditor::keyPressed(const juce::KeyPress& key) {
     if (key == juce::KeyPress::escapeKey) {
         if (selection.isEmpty())
@@ -317,6 +339,8 @@ void GraphEditor::deleteModule(ModuleComponent* module) {
     requestDeleteModule(nodeId);
 }
 
+// Request deletion by NodeID (called from ModuleComponent's delete button).
+// Resolves the module component and delegates to the single removal path.
 void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId) {
     if (nodeId.uid == 0)
         return;
@@ -331,7 +355,8 @@ void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId) 
     // and delegates here, so it's covered too.
     auto doDelete = [this, nodeId, &graph] {
         modMatrix.clearRows();
-        const auto portNeighbors = macroPortDeletionNeighbors({nodeId}); // T154: capture BEFORE removal
+        // T154: capture BEFORE removal
+        const auto portNeighbors = macroController_.macroPortDeletionNeighbors({nodeId});
         // graph.removeNode() frees this node's processor -- and its AudioProcessorParameters --
         // synchronously, and a module card's own Delete is just as able to remove a
         // ChannelStripModule/MasterModule as a canvas "Delete" is. Nothing on this path rebuilds
@@ -343,7 +368,7 @@ void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId) 
             onBeforeDetachAllModuleComponents();
         graph.removeNode(nodeId);
         for (auto n : portNeighbors)
-            autoDeleteOrphanedMacroPort(n);
+            macroController_.autoDeleteOrphanedMacroPort(n);
         updateComponents();
     };
 
@@ -575,7 +600,7 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
     // recordGraphAndMacroChange; an ordinary disconnect keeps the existing graph-only
     // recordStructuralChange path exactly as before. Gated on
     // autoDeleteMacroPortsOnLastCableEnabled (Preferences) — off, this is always false.
-    bool touchesMacroPort = autoDeleteMacroPortsOnLastCableEnabled && nodeIsMacroPort(nodeId);
+    bool touchesMacroPort = autoDeleteMacroPortsOnLastCableEnabled && macroController_.nodeIsMacroPort(nodeId);
     if (autoDeleteMacroPortsOnLastCableEnabled && !touchesMacroPort) {
         auto isTargetChannelPrescan = [&targetChannels](int channel) {
             return std::find(targetChannels.begin(), targetChannels.end(), channel) != targetChannels.end();
@@ -588,7 +613,7 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
                 farNode = c.destination.nodeID;
             else
                 continue;
-            if (nodeIsMacroPort(farNode)) {
+            if (macroController_.nodeIsMacroPort(farNode)) {
                 touchesMacroPort = true;
                 break;
             }
@@ -638,7 +663,7 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
             doDisconnect();
             touchedNodes.push_back(nodeId);
             for (auto touched : touchedNodes)
-                autoDeleteOrphanedMacroPort(touched);
+                macroController_.autoDeleteOrphanedMacroPort(touched);
             updateComponents();
         };
         if (undoManager)
@@ -653,6 +678,7 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
     repaint();
 }
 
+// True when the visible jack already has at least one graph edge or mod routing.
 bool GraphEditor::isPortConnected(ModuleComponent* module, int portIndex, bool isInput, bool isMidi) const {
     if (module == nullptr)
         return false;
@@ -671,6 +697,14 @@ bool GraphEditor::isPortConnected(ModuleComponent* module, int portIndex, bool i
                    : !smartConnections_.isOutputJackFree(nodeId, portIndex, isMidi);
 }
 
+// Re-evaluates every connection touching `module` after its "poly" parameter changed, so the
+// graph matches the module's new channel layout: mono wires fan out to N voices when both ends
+// are poly, fans collapse back to one wire when poly is switched off, and wires move to the raw
+// channels the new layout puts them on.  MIDI connections are left alone. `previousInputMap`/
+// `previousOutputMap` are the module's raw->LogicalPort maps captured before the change — see
+// the note below for why they're needed. Does not record undo state; the caller owns
+// the surrounding transaction.
+//
 // `previousInputMap`/`previousOutputMap` are the only way to tell which visible jack each existing
 // raw connection was anchored to, since the live mapping already reflects the new state.
 void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector<LogicalPort>& previousInputMap,

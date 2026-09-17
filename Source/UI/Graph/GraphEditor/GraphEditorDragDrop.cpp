@@ -25,6 +25,48 @@
 // Heights are measured from the real components, not guessed — see
 // ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents, which constructs every type and
 // fails if this table drifts from what layoutDefaultContent() actually produces.
+void GraphEditor::beginDragPreview(int w, int h, juce::AudioProcessorGraph::NodeID selfId) {
+    dragDropController_.beginDragPreview(w, h, selfId);
+}
+
+void GraphEditor::updateDragPreview(juce::Point<int> desiredTopLeftCanvas) {
+    dragDropController_.updateDragPreview(desiredTopLeftCanvas);
+}
+
+void GraphEditor::endDragPreview() { dragDropController_.endDragPreview(); }
+
+bool GraphEditor::isDragPreviewActive() const { return dragDropController_.isDragPreviewActive(); }
+
+juce::Rectangle<int> GraphEditor::getDragPreviewGhost() const { return dragDropController_.getDragPreviewGhost(); }
+
+// Every alignment guide computed by the current drag preview — see
+// GraphDragDropController::AlignmentGuide. Only GraphEditorCables.cpp's paint path reads
+// this; the enable/disable preference (alignmentGuidesEnabled below) stays on GraphEditor.
+const std::vector<GraphDragDropController::AlignmentGuide>& GraphEditor::getAlignmentGuides() const {
+    return dragDropController_.getAlignmentGuides();
+}
+
+// The NodeID the live drag preview is tracking, or an invalid NodeID before one starts —
+// GraphDragDropController's own field, forwarded because GraphEditorCanvas.cpp's
+// updateComponents() (a same-class caller, not a GraphCanvasHost one) still needs it by this
+// name now that the field itself lives off GraphEditor (FRO77 PR3).
+juce::AudioProcessorGraph::NodeID GraphEditor::getDragPreviewSelfId() const {
+    return dragDropController_.getDragPreviewSelfId();
+}
+
+// The current drag-preview fields, packaged for SmartConnectionEngine (see
+// SmartConnectionEngine::DragPreviewState). The fields themselves moved onto
+// GraphDragDropController in FRO77 PR3; this stays a private GraphEditor method (rather than
+// callers reaching the controller directly) because GraphEditorSmartConnections.cpp's own
+// refreshSmartSuggestions()/refreshSuggestionsIfInsertModifierChanged() call it unqualified,
+// same as every other same-class forwarder on this page.
+SmartConnectionEngine::DragPreviewState GraphEditor::buildDragPreviewState() const {
+    return dragDropController_.buildDragPreviewState();
+}
+
+// Estimated (w, h) footprint for a module type name, used for the library drag ghost before a
+// real component exists. Public so a test can hold it to the real component sizes — see
+// ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents.
 juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "Oscillator")
         return {280, 533}; // +96 in #219: an Audio R output jack row and the Pan knob row
@@ -212,10 +254,14 @@ void GraphEditor::itemDropped(const SourceDetails& dragSourceDetails) {
     dragDropController_.itemDropped(dragSourceDetails);
 }
 
+// True for the module-library entries that must exist at most once per patch (Audio Input /
+// Audio Output). A second one would sum into the same device buffer rather than address a
+// different physical output, and the app's node lookups all take the first match.
 bool GraphEditor::isSingletonIOModule(const juce::String& typeName) {
     return typeName == "Audio Input" || typeName == "Audio Output";
 }
 
+// True when the graph already contains a node whose processor reports this name.
 bool GraphEditor::graphHasModuleNamed(juce::AudioProcessorGraph& graph, const juce::String& typeName) {
     for (auto* node : graph.getNodes())
         if (node->getProcessor() != nullptr && node->getProcessor()->getName() == typeName)
@@ -237,6 +283,11 @@ void GraphEditor::filesDropped(const juce::StringArray& files, int x, int y) {
     dragDropController_.filesDropped(files, x, y);
 }
 
+// Creates a Hosted Plugin node already pointed at `identity`. The actual load is asynchronous
+// and resolves through the default backend's scan service, so a canvas with no service
+// installed adds a placeholder rather than failing the add. See the note below for
+// why this is a thin wrapper over addModuleAtCanvasPosition rather than a second add path.
+//
 // Deliberately a thin wrapper over addModuleAtCanvasPosition rather than a second add path: the
 // identity is set through the same `configure` hook the Sampler's dropped file uses, so it is in
 // place before the node joins the graph and is therefore inside the undo snapshot — undo/redo of
@@ -255,10 +306,15 @@ void GraphEditor::addHostedPluginAtCanvasPosition(const synth::PluginIdentity& i
     });
 }
 
+// Canvas coordinates of the middle of the current view — where a clicked (rather than dragged)
+// library row lands.
 juce::Point<int> GraphEditor::getViewportCentreInCanvasSpace() const {
     return getVisibleCanvasRect().getCentre().roundToInt();
 }
 
+// Creates `name` at a canvas position, snapped and anti-overlapped, with undo recorded.
+// `configure` runs on the processor BEFORE it joins the graph, so any non-parameter state it
+// sets is captured by the undo snapshot.
 void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Point<int> dropPos,
                                             const std::function<void(juce::AudioProcessor&)>& configure) {
     // Audio Input/Output are singletons. JUCE ties every audioOutputNode's channel count to the whole
@@ -340,6 +396,9 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
     }
 }
 
+// Removes every connection leaving an output jack this node no longer shows. The other half of
+// the max-channel/visible-port pattern (docs/modules.md): the module silences its hidden
+// channels, and the owner unplugs them — a jack you cannot see is a jack you cannot unplug.
 void GraphEditor::dropRoutingsOnHiddenJacks(juce::AudioProcessorGraph::NodeID nodeId) {
     // Jacks that just disappeared take their cables with them. Leaving them connected would mean a
     // routing that still shows in the mod matrix, still costs a node, and no longer carries
@@ -388,6 +447,9 @@ juce::Point<int> GraphEditor::resolvePlacement(juce::Point<int> desired, int w, 
     return synth::LayoutUtil::findFreeSlot(snapped, w, h, boxes, selfId);
 }
 
+// A free canvas slot at the LEFT edge, below every module currently on the canvas — where the
+// timeline's add-track flow drops the "Track In" node it creates. Falls back to the canvas
+// origin on an empty canvas. Anti-overlapped through resolvePlacement like any drop.
 juce::Point<int> GraphEditor::findLeftEdgeSlotBelowModules(int w, int h) {
     // Left edge, below everything: a Track In node is the head of a chain the user reads
     // left-to-right, and stacking new ones downwards keeps successive tracks in track order rather
@@ -410,6 +472,13 @@ juce::Point<int> GraphEditor::findLeftEdgeSlotBelowModules(int w, int h) {
     return resolvePlacement(desired, w, h, juce::AudioProcessorGraph::NodeID{});
 }
 
+// Compute the final snapped + anti-overlapped position for a newly dropped module.
+// Equivalent to snap(dropPoint) + findFreeSlot.  Pure helper — does not touch GUI state.
+// @param dropPoint   Desired top-left in canvas coordinates (will be snapped internally).
+// @param w, h        Module footprint in pixels.
+// @param existingBoxes  All already-placed module bounding boxes (selfId excluded from collision).
+// @param selfId      NodeID of the module being placed (excluded from self-collision).
+//
 // static
 juce::Point<int> GraphEditor::computeDropFinalPosition(juce::Point<int> dropPoint, int w, int h,
                                                        const std::vector<synth::LayoutUtil::Box>& existingBoxes,
@@ -431,7 +500,7 @@ void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
     // can move the hull this module contributes to without going through updateComponents(), so
     // its macro's port widgets would otherwise lag one drag behind. Re-derive now, the same as
     // every other layout pass (P8-15 fix F2).
-    dockMacroPortWidgets();
+    macroController_.dockMacroPortWidgets();
 
     // Apply proximity suggestions before the drag-preview teardown clears them. Group drags never
     // reach here with multi-select (finalizeSelectionDrag handles those). Connections join the
@@ -445,6 +514,7 @@ void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
     repaintCanvas();
 }
 
+// Internal: start the drop-landing animation for a newly placed module component.
 void GraphEditor::animateDropLanding(ModuleComponent* module, juce::Point<int> fromPos, juce::Point<int> toPos) {
     if (module == nullptr)
         return;
