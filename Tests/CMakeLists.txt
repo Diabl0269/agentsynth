@@ -364,6 +364,7 @@ add_executable(Tests
     UI/Mixer/MixerFaderTests.cpp
     UI/Mixer/MixerSendListTests.cpp
     UI/Mixer/MixerDockComponentTests.cpp
+    UI/Mixer/MixerDockMeterGatingTests.cpp
     UI/Mixer/MixerEqThumbnailTests.cpp
     UI/Mixer/MixerColumnComponentTests.cpp
     UI/Mixer/MixerColumnComponentMeterTests.cpp

@@ -135,6 +135,12 @@ public:
      *  very first tick back doesn't snap every bar's release/peak-hold decay instantly to silence. */
     void refreshMeters();
 
+    /** FRO146 follow-up: how many times refreshMeters() has actually run -- the one deterministic
+     *  way to prove MainComponent::timerCallback()'s gate (isMixerShowing() ||
+     *  mixerPlacement_.isOwnPanelShowing()) did or didn't call it on a given tick, without needing
+     *  to render real audio through the graph just to observe a meter move. */
+    int getRefreshMetersCallCountForTest() const noexcept { return refreshMetersCallCount_; }
+
     /** FRO146: the mixer panel header's "Reset Meters" action, and an Option/Alt-click on ANY
      *  column's own clip readout -- resets every strip/Master readout to "-inf", not clipped. */
     void resetAllMeterReadouts();
@@ -211,6 +217,9 @@ private:
      *  before the first one -- lets refreshMeters() measure real elapsed time for the ballistics
      *  rather than assuming a fixed 100 ms step. */
     double lastMeterRefreshMs_ = 0.0;
+    // FRO146 follow-up: backs getRefreshMetersCallCountForTest() -- test-only, never read in
+    // production.
+    int refreshMetersCallCount_ = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerPanelComponent)
 };

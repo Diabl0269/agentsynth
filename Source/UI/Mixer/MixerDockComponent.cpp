@@ -41,7 +41,10 @@ MixerDockComponent::MixerDockComponent(TimelinePanelComponent& timelinePanel, Au
     timelineHost_.setEmbeddedHeader(true);
     mixerHost_.setEmbeddedHeader(true);
     auto onEitherHostDetachStateChanged = [this] {
-        applyTabVisibility();
+        // FRO146 follow-up: false -- see applyTabVisibility()'s own doc comment on why a pure
+        // detach/redock must never rebuild the mixer's columns (it would silently wipe every
+        // column's latched clip-readout state).
+        applyTabVisibility(false);
         if (onPanelDetachStateChanged)
             onPanelDetachStateChanged();
     };
@@ -131,7 +134,7 @@ void MixerDockComponent::refreshDetachButton() {
     detachButton_.setImages(base.get(), hoverIcon.get(), hoverIcon.get());
 }
 
-void MixerDockComponent::applyTabVisibility() {
+void MixerDockComponent::applyTabVisibility(bool allowMixerRebuild) {
     const bool mixerActive = activeTab_ == Tab::Mixer && mixerTabEnabled_;
     timelineHost_.setVisible(!mixerActive);
     mixerHost_.setVisible(mixerActive);
@@ -150,7 +153,7 @@ void MixerDockComponent::applyTabVisibility() {
     mixerTabButton_.setToggleState(mixerActive, juce::dontSendNotification);
     addBusButton_.setVisible(mixerActive);
     resetMetersButton_.setVisible(mixerActive);
-    if (mixerActive)
+    if (mixerActive && allowMixerRebuild)
         mixer_.rebuild();
     refreshDetachButton();
     resized();

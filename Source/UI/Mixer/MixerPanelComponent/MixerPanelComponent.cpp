@@ -244,6 +244,7 @@ constexpr double kMaxPlausibleMeterGapSeconds = 0.5;
 } // namespace
 
 void MixerPanelComponent::refreshMeters() {
+    ++refreshMetersCallCount_;
     const double nowMs = juce::Time::getMillisecondCounterHiRes();
     double elapsedSeconds = lastMeterRefreshMs_ > 0.0 ? (nowMs - lastMeterRefreshMs_) / 1000.0 : 0.0;
     elapsedSeconds = juce::jlimit(0.0, kMaxPlausibleMeterGapSeconds, elapsedSeconds);

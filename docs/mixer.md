@@ -562,11 +562,21 @@ deliberately does NOT read the TrackHeader slot (that would race the 15 Hz tick,
 `getChannelMeterPeak()`, which is that slot's one consumer) -- its `ChannelInfo::meterPeak` field
 stays at its default.
 
-*Scale.* Two bars (L/R) per column (strips, buses, Direct if metered, Master), -60..+3 dBFS,
-dB-LINEAR position (Cubase's own default "+3 dB Digital" channel scale) -- `Source/UI/Mixer/
-MixerMeterScale.h`. Tick marks at +3, 0, -6, -12, -18, -24, -36, -48, -60 dBFS, the 0 dB tick drawn
-visibly stronger; tick NUMBERS only where the column has room (`MixerMeter::paint`'s own width
-check), the dashes themselves always draw.
+*Scale.* Two bars (L/R) per column (strips, buses, Direct if metered, Master), -60..+3 dBFS --
+`Source/UI/Mixer/MixerMeterScale.h`. Tick marks at +3, 0, -6, -12, -18, -24, -30, -40, -50, -60 dBFS
+(Cubase's own channel-meter marks, plus our own +3 dB headroom cap), the 0 dB tick drawn visibly
+stronger; tick NUMBERS only where the column has room (`MixerMeter::paint`'s own width check), the
+dashes themselves always draw.
+
+*Scale mapping -- Cubase's own taper, NOT linear in dB (FRO146 follow-up).* `meterDbToFraction`/its
+inverse `meterFractionToDb` are a monotonic PIECEWISE-LINEAR interpolation through ten breakpoints
+(`detail::kMeterTaperBreakpoints`, the same ten dB values as the tick table, each paired with its own
+0..1 position) rather than a straight `(db - min) / (max - min)`: positions are measured off
+Cubase's MixConsole meter (0 dB at 92% of the height, each 6 dB down to -24 about 12.5%, -50..-60 about
+7%), so a channel sitting near 0 dB (the common case) reads with real resolution. The ONE mapping every
+caller goes through -- ticks, the bar fill (`MeterColourStops::forEachBand`'s band edges), the
+peak-hold line, and `ChannelChipComponent`'s horizontal fill -- so a taper change is one-file. A
+later ticket gives the FADER its own separate taper; this file is never reused there.
 
 *Ballistics, rate-independent.* Instant attack; release ~20 dB/s; a peak-hold line per bar holds
 1.5 s then falls at ~20 dB/s (`Source/UI/Mixer/MixerMeterBallistics.h`'s `advanceMeterBallistics`).
@@ -576,6 +586,17 @@ Driven by the SAME 10 Hz poll as everything else in this section (no new timer) 
 right after the tab was hidden) and threads it down, so the ballistics are exercised by tests with
 explicit elapsed times rather than a wall clock. Repaint stays gated on the drawn state actually
 moving (the pre-FRO146 `MixerMeter`/`ChannelChipComponent` convention).
+
+*"Visible" means showing ANYWHERE, not just docked.* `MainComponent::timerCallback()`'s gate
+(docs/layout_visuals_animation.md §2) is `mixerDock.isMixerShowing() || mixerPlacement_.isOwnPanelShowing()`:
+`isMixerShowing()` covers both docked-on-the-Mixer-tab-with-the-dock-open AND detached into its own
+`DetachedPanelWindow` (the tab strip's own detach button, or FRO12's "Window" placement -- a
+detached window is a separate top-level `Component`, so this dock's own `isVisible()` says nothing
+about it); `isOwnPanelShowing()` covers FRO12's third placement. A detach/redock toggle reparents the
+SAME `MixerPanelComponent` (never rebuilt) and deliberately skips `rebuild()`
+(`MixerDockComponent::applyTabVisibility(false)` from that one caller) -- unlike a real tab switch,
+nothing about which graph nodes the mixer shows changed, and rebuilding would silently reset every
+column's latched clip-readout state to "-inf" on every detach/redock.
 
 *Colour zones -- POSITIONAL bands, not one whole-bar colour.* Hard band edges,
 `Source/UI/Mixer/MeterColourStops.h`: below -18 dBFS = low (the `meterFill` token, kept for theme

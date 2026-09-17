@@ -18,8 +18,9 @@ namespace {
 // kBarsAreaWidth + kLabelMinWidth), so the ENTIRE component width is the bars area -- no need to
 // know that branch's exact private pixel budget to find leg 0's bar column.
 constexpr int kWidth = 16;
-// 63 dB of scale at 4 px/dB -- coarse enough to build fast, fine enough that every sampled
-// midpoint sits comfortably inside its own band, away from any edge.
+// 252 px tall -- coarse enough to build fast, fine enough that every sampled midpoint (computed via
+// the SAME meterDbToFraction() the painter itself uses, so this works regardless of the exact
+// taper) sits comfortably inside its own band, away from any edge.
 constexpr int kHeight = 252;
 
 int yForDb(float db) { return kHeight - juce::roundToInt(meterDbToFraction(db) * (float)kHeight); }

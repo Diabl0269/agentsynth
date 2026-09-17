@@ -291,10 +291,16 @@ void MainComponent::timerCallback() {
     }
 
     // FRO11 (P9-5): the mixer's meters, on the SAME existing 10 Hz tick -- no new timer, nothing
-    // at all while the Mixer tab isn't visible, exactly the Timeline panel's own precedent just
-    // above (docs/layout_visuals_animation.md §2: "rides MainComponent's existing 10 Hz tick, only
-    // while the panel is visible"; isVisible(), not isShowing() -- see that block's own comment).
-    if (mixerDock.isMixerTabActive() && mixerDock.isVisible())
+    // at all while the mixer isn't showing ANYWHERE, exactly the Timeline panel's own precedent
+    // just above (docs/layout_visuals_animation.md §2: "rides MainComponent's existing 10 Hz tick,
+    // only while the panel is visible"; isVisible(), not isShowing() -- see that block's own
+    // comment). FRO146 follow-up: "showing" now means docked-and-active (isMixerShowing()'s own
+    // check, unchanged) OR detached into its own window (also isMixerShowing() -- Window placement
+    // detaches the same host) OR the "Own panel" placement's own strip
+    // (mixerPlacement_.isOwnPanelShowing()) -- a detached/own-panel mixer previously never ticked
+    // at all, even fully on screen, because the OLD check only ever looked at this DOCKED
+    // component's own tab/visibility state.
+    if (mixerDock.isMixerShowing() || mixerPlacement_.isOwnPanelShowing())
         mixerDock.refreshMeters();
 
     // Status bar polls at 5 Hz (every 2nd tick of the 10 Hz timer). update() is gated — it
