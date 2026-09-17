@@ -228,6 +228,8 @@ This is what makes goal 2 true.
 *Cancel:* Esc, clicking anywhere, or 10 s without an eligible message. Only one learn can be
 armed at a time; arming another replaces it.
 
+The armed state's visual is defined in `midi_remote_ui.md` §2 (breathing outline, no glow).
+
 ### 4.6 Takeover
 
 Applies only to **absolute continuous** encodings (a 7-bit CC knob/fader; not relative
@@ -445,7 +447,10 @@ without an assignment.
    classifier. Rare on the controllers this app's users own; deferred past v1 like most DAWs.
 3. **Focus bank** — a set of controls marked "follows the selected module", mapped to that
    module's card layout order (`plugin_card_layout.md` §8 is why the card layout is the right
-   list to follow). Cubase Focus Quick Controls / Bitwig device pages.
+   list to follow). Cubase Focus Quick Controls / Bitwig device pages. Founder interest
+   confirmed 2026-09-17 (Cubase "Quick Controls": 8 knobs that follow the selected module,
+   learned in one gesture); a candidate for promotion right after v1. It follows the plugin
+   card's slot order.
 4. **Mapping pages** — several assignment sets per profile switched by a button.
 5. **Continuous action targets** — BPM, playhead scrub, master volume as actions.
 6. **MPE** — zone detection and per-note ownership; an explicit, separate model, never a

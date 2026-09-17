@@ -55,18 +55,23 @@ MIDI: Knob 1 on Launchkey Mini       ← mapped: disabled title row, tells you w
 
 **States while learning (target-first learn):**
 
-1. **Armed.** The control pulses (an `AnimationDriver` glow on the control's bounds, time-bounded
-   to the 10 s timeout, restarted by activity — never an unconditional repaint). The status bar
-   shows *"MIDI Learn: move a control on your controller for 'Cutoff' — Esc to cancel"*. If no
-   controller profile exists yet and no MIDI input is open, the status line adds *"No MIDI
-   device is enabled — open Settings → Audio"* and offers the settings link.
+1. **Armed.** The control's outline breathes: a thin 1px outline in the theme's accent colour on
+   the control's bounds, its alpha easing between ~0.4 and 1.0, time-bounded to the 10 s
+   timeout, restarted by activity — never an unconditional repaint. This is explicitly not a
+   glow: Obsidian has glow 0, and this state must read the same in every theme. The status bar
+   (the existing `StatusBarComponent`, `Source/UI/Chrome/`) shows *"MIDI Learn: move a control on
+   your controller for 'Cutoff' — Esc to cancel"*. If no controller profile exists yet and no
+   MIDI input is open, the status line adds *"No MIDI device is enabled — open Settings →
+   Audio"* and offers the settings link.
 2. **Settling.** The first eligible message opens the 300 ms window (`midi_remote.md` §4.5); the
    pulse turns solid.
 3. **Bound.** The assignment is created (project scope for a parameter, global for an action),
    the pulse ends with one short confirm flash, the status bar says *"'Cutoff' ← Knob 1 on
    Launchkey Mini"*, and the control gains the **MIDI badge**: a 6 px dot at the control's
-   top-right in the theme's MIDI colour (a new theme token, `midiMapped`, with a default in every
-   built-in theme; `theming.md`). Hovering the badge tooltips the assignment.
+   top-right in the theme's MIDI colour (a new theme token, `midiMapped`, with a default in
+   every built-in theme, chosen so it reads as "mapped" and stays visually distinct from the
+   accent colour's "selected" meaning; `theming.md`). Hovering the badge tooltips the assignment,
+   e.g. *"MIDI: Knob 1 on Launchkey Mini MK3"*.
 4. **Cancelled** (Esc, click elsewhere, timeout): pulse ends, status bar clears, nothing changes.
 
 Only one learn is armed at a time; arming another replaces it. A learn never blocks anything —
@@ -84,6 +89,9 @@ Mixer (`Source/UI/Mixer/MixerDockComponent.h`) — it reuses the dock's slide, p
 Toolbar toggle + `ShortcutManager` action `toggleMidiRemotePanel` (category General, default
 unbound). Files: `Source/UI/MidiRemote/MidiRemotePanel/` (`MidiRemotePanelComponent` + one unit
 per region below), `Source/UI/MidiRemote/ControllerSurface/`, `Source/UI/MidiRemote/Inspector/`.
+The panel opens attached in the dock by default; detach-to-window is available but is not the
+default (founder review). A known dock bug — opening the Mixer tab can leave the dock blank — is
+tracked separately and must be fixed before this third tab lands.
 
 ```text
 ┌ Controllers ──────┬ Surface: Launchkey Mini MK3 ───────────────────────┬ Inspector ─────────────┐
@@ -130,7 +138,10 @@ which observes the two value patterns and picks the encoding), button mode. Belo
 its assignment(s): what it drives (click jumps to the module on the canvas via the existing
 locate path), scope tag, takeover, range with an invert toggle, **Learn target** (§3.4),
 **Forget**. A control may carry one project assignment and one global assignment at most in
-v1; both are listed when both exist (the project one wins at runtime while the project is open).
+v1; both are listed when both exist, each as its own block headed by its own scope tag
+(**Project** / **Global**), and the block being edited names its scope in its own header, so the
+user always knows whether the change they are making is unique to this project or applies
+everywhere (the project one wins at runtime while the project is open).
 
 ### 3.4 Assign from the panel (control-first learn)
 
@@ -140,9 +151,9 @@ two choices:
 - **Pick a module control** — the canvas enters a *pick-target* overlay: every learnable control
   on every card, mixer column and the transport bar gets a subtle outline; the status bar says
   *"Click the knob, slider or button that Knob 1 should drive — Esc to cancel"*; the next click
-  on a learnable control makes the assignment and ends the overlay. Clicking anything else
-  cancels. This is the only overlay-style mode in the feature, and it is entered from the panel,
-  never as a global key.
+  on a learnable control makes the assignment and ends the overlay. Kept in v1 (founder review
+  2026-09-17). Clicking anything else cancels. This is the only overlay-style mode in the
+  feature, and it is entered from the panel, never as a global key.
 - **Choose an action** — a searchable list grouped by `ShortcutCategory` using the Shortcuts
   tab's display names (`ShortcutManager::getDisplayName`), command-dispatched actions only.
 

@@ -79,9 +79,16 @@ resolved by precedence, first hit wins:
    exactly "Bypass". Never persisted: it is recomputed, so a plugin update that reorders
    parameters just yields a different automatic set rather than a stale file.
 
-Slots whose `paramId` no longer resolves on the live instance render as an **orphan knob**
-(greyed, tooltip "parameter not found in this plugin version") and are dropped when the user next
-saves the layout — the same "degrade visibly, repair explicitly" rule as automation lanes.
+The automatic default (rule 3) is **shown** on the card as knobs before the user chooses
+anything — there is no separate "unconfigured" state distinct from "showing the automatic set"
+(founder review 2026-09-17). The "empty layout" case (Open Editor + **Choose knobs…** as the
+whole card body) therefore only occurs when the plugin has no automatable parameters at all.
+
+A slot whose `paramId` no longer resolves on the live instance is **hidden from the card
+entirely**; the picker instead shows a line, *"N parameters missing in this plugin version"*,
+listing them, and they are dropped from the layout the next time the user saves it — the same
+"degrade visibly, repair explicitly" rule as automation lanes, except the "visibility" half of
+that phrase now lives in the picker's missing-params line, not in a greyed knob on the card.
 
 A layout's slot count is uncapped in the model; the card shows them in the ordinary knob grid
 (`layoutKnobGrid`, width buckets from `layout.md`), growing the card's height like any module
@@ -150,12 +157,11 @@ card's right-click menu (`buildModuleContextMenu`). It opens `PluginKnobPicker`
   preset copies it into whichever scope *Apply to* selects; *Reset to automatic* removes the
   chosen scope's layout so precedence falls through.
 - **Touch in the plugin editor to add**: while ticked, a parameter that reports a **gesture
-  start** on the instance (`parameterGestureChanged(index, true)`) is appended to the layout.
-  Many plugins never emit gestures, so the fallback is explicit: any **value change** on a
-  parameter not already in the layout while the picker is open counts as a touch, debounced so
-  an automation-driven or preset-load burst (more than 3 distinct parameters within 200 ms) is
-  ignored rather than adding all of them. The picker opens the plugin's editor window when this
-  is ticked and it is not already open.
+  start** on the instance (`parameterGestureChanged(index, true)`) is appended to the layout. v1
+  listens to gestures only. Many plugins never emit gestures; a **value-change fallback**
+  (debounced so an automation-driven or preset-load burst — more than 3 distinct parameters
+  within 200 ms — is ignored rather than adding all of them) is deferred to a v2 ticket. The
+  picker opens the plugin's editor window when this is ticked and it is not already open.
 - Changes apply live to the card as they are made (no OK button); closing the popover keeps
   them.
 
@@ -216,10 +222,12 @@ grid, so "edit layout" there means at most hide/reorder of the knobs they *do* e
   version refusal, "All instances" clears overrides.
 - `Tests/UI/Graph/ModuleComponent/HostedPluginCardTests.cpp` (uses the existing headless
   `HostedPluginTests` fake instance): slots render as the right widget, empty layout shows the
-  two buttons, orphan knob paints grey, `HostedParameterAttachment` round-trips value and text,
-  a plugin-side change reaches the slider on the message thread, unbind on detach.
+  two buttons, an orphan slot renders no knob and the picker lists it as missing,
+  `HostedParameterAttachment` round-trips value and text, a plugin-side change reaches the
+  slider on the message thread, unbind on detach.
 - `Tests/UI/Graph/PluginKnobPickerTests.cpp`: search, tick/untick, reorder, label, scope
-  switch, presets, touch-to-add via gesture and via value-change fallback, burst ignored.
+  switch, presets, touch-to-add via gesture (the value-change fallback and its burst-ignored
+  debounce are deferred to v2, §5).
 - `Tests/Plugin/HostedPluginLaneTests.cpp` gains: MIDI Learn and Automate from a plugin-card
   knob produce the same target triple as the lane picker.
 - E2E: add plugin → Choose knobs → tick two → save project → reload → knobs present → set as
@@ -235,7 +243,7 @@ Epic FRO122; the parked module-layout epic is FRO123 (its first ticket, FRO129, 
 |---|---|---|---|
 | 1 | **`CardLayout` type, precedence resolver, automatic default, per-type store + presets, per-instance extra-state key, undo** | — | FRO126 |
 | 2 | **`HostedParameterAttachment` + `ModuleComponentHostedPluginCard` unit** (knobs/toggles/choices, empty state, orphan knob, unbind seam) | 1 | FRO128 |
-| 3 | **`PluginKnobPicker`**: list, search, reorder, label, scope, presets, touch-to-add | 2 | FRO132 |
+| 3 | **`PluginKnobPicker`**: list, search, reorder, label, scope, presets, touch-to-add (gesture-based touch-to-add; value-change fallback is v2) | 2 | FRO132 |
 | 4 | **Integration + docs**: MIDI Learn registry, Automate, snippets carry the key, E2E, docs pass | 3, MIDI Remote item 4 | FRO137 |
 
 ---
