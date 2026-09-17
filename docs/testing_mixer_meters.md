@@ -1,4 +1,4 @@
-# Mixer Meter Tests (FRO146)
+# Mixer Meter & Fader Tests (FRO146/FRO150)
 
 The meters rework ([`mixer.md`](mixer.md) §5.10's Meters subsection): a per-reader peak latch, a
 -60..+3 dBFS two-bar scale with colour zones and ballistics, a per-column clip readout, and the
@@ -6,6 +6,9 @@ track header chip's own dB mapping. Split out of [`testing.md`](testing.md) to h
 line cap; see `Tests/Mixer/ChannelStripTests.cpp`'s entry there for the module-level latch tests
 (the missed-overs regression) that stayed alongside the existing `ChannelStripTest`/`MasterModuleTest`
 suites. All headless; no `juce::Timer`, no wall-clock read anywhere in the ballistics themselves.
+
+FRO150 (the fader's own taper, [`mixer_fader.md`](mixer_fader.md)) added the two fader tables below
+for the same reason -- new coverage that would have pushed `testing.md` past its own cap.
 
 | File | Covers |
 |------|--------|
@@ -19,6 +22,14 @@ suites. All headless; no `juce::Timer`, no wall-clock read anywhere in the balli
 | `Tests/UI/Theme/ThemeMeterZoneTests.cpp` | `meterMid`/`meterHigh`/`meterClip` parse from JSON, fall back to `Theme.h`'s defaults when the keys are absent, a malformed value rejects the whole theme, and all four built-ins populate the three tokens distinctly (round-trip through `serialiseTheme`/`parseTheme` is `ThemeTests.cpp`'s existing `JsonRoundTrip` case, extended) |
 | `Tests/Mixer/ChannelFlow/ChannelFlowTrackChannelLinkTests.cpp` (updated) | the channel chip's meter now displays a fraction of the dB scale, not the raw linear peak (`TheMeterTickReportsTheChannelsRealLevelThroughTheCheapRead`); the per-reader latch's two independent slots (`Mixer` vs `TrackHeader`) are exercised across the render/solo cases |
 | `Tests/UI/Mixer/MixerDockMeterGatingTests.cpp` | `MixerDockComponent::isMixerShowing()` at its three states (docked+active+open = true, neither docked-active nor detached = false, detached while the docked tab is on Timeline AND the dock is closed = still true); `MainComponent::timerCallback()` actually calls `refreshMeters()` (a `getRefreshMetersCallCountForTest()` counter) when the mixer is detached with the dock hidden, and does NOT when the mixer is showing nowhere at all; detaching then redocking the SAME column (never rebuilt) leaves its clip readout's latched "STAYS red until reset" state exactly as it was, not reset to "-inf" |
+
+## Fader tests (FRO150)
+
+| File | Covers |
+|------|--------|
+| `Tests/UI/Mixer/MixerFaderTaperTests.cpp` | `faderDbToFraction`/its inverse `faderFractionToDb` (`MixerFaderTaper.h`) hit every one of the 11 taper breakpoints exactly (0 dB at exactly 0.71), are each monotonic across the whole -60..+12 dB scale, clamp beyond 0/1 and beyond -60/+12, round-trip both directions, and the bottom decade (-60..-50) occupies less fraction-per-dB than the -5..0 dB segment (more dB per pixel near the bottom -- the taper's whole point) |
+| `Tests/UI/Mixer/MixerFaderTests.cpp` (extended) | a bound fader's slider THUMB POSITION (`getNormalisableRange().convertTo0to1(value)`) matches the taper for -14.2/0/+12 dB while the bound parameter stays exactly linear dB (`BoundSliderPositionMatchesTaperWhileParameterStaysLinearDb`); a regression test pinning that `textFromValueFunction` still reports "-3.0 dB" after a real `bind()`, not `juce::SliderParameterAttachment`'s own param-`getText()`-based overwrite (`TextFromValueFunctionStillReportsDbAfterBind`) |
+| `Tests/UI/Mixer/MixerFaderDragTests.cpp` | real `mouseDown`/`mouseDrag`/`mouseUp`/`mouseDoubleClick`/`mouseWheelMove` calls on `MixerFaderSlider` (never `juce::Slider`'s own mouse handling -- see `mixer_fader.md`'s design note) with synthesized `MouseEvent`s: a plain drag moves the value along the taper from the press-time anchor; the same pixel drag moves more dB near the bottom of the taper than near 0 dB; a Shift-held drag moves ~1/8 as far as a plain one; toggling Shift mid-drag re-anchors instead of jumping the value, in both directions; a whole drag (several `mouseDrag` calls) collapses to exactly ONE undo step; Cmd-click and double-click both reset to 0 dB as one undo step; Shift+wheel moves a smaller step than a plain wheel notch |
 
 **PNG render-to-file inspection.** `MixerColumnComponentMeterTests.cpp`'s
 `ClippedMeterRendersToPngForVisualInspection` follows the same convention as

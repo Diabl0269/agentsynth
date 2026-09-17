@@ -56,6 +56,9 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerMeter.cpp
     Source/UI/Mixer/MixerMeterReadout.h
     Source/UI/Mixer/MixerMeterReadout.cpp
+    Source/UI/Mixer/MixerFaderTaper.h
+    Source/UI/Mixer/MixerFaderSlider.h
+    Source/UI/Mixer/MixerFaderSlider.cpp
     Source/UI/Mixer/MixerFader.h
     Source/UI/Mixer/MixerFader.cpp
     Source/UI/Mixer/MixerInsertList.h

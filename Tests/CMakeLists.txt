@@ -363,6 +363,8 @@ add_executable(Tests
     UI/Mixer/MixerPanelComponentTests.cpp
     UI/Mixer/MixerPanelUndoUnbindTests.cpp
     UI/Mixer/MixerFaderTests.cpp
+    UI/Mixer/MixerFaderTaperTests.cpp
+    UI/Mixer/MixerFaderDragTests.cpp
     UI/Mixer/MixerSendListTests.cpp
     UI/Mixer/MixerDockComponentTests.cpp
     UI/Mixer/MixerDockMeterGatingTests.cpp
@@ -440,6 +442,7 @@ add_executable(Tests
     ../Source/UI/Mixer/MeterColourStops.cpp
     ../Source/UI/Mixer/MixerMeterReadout.cpp
     ../Source/UI/Mixer/MixerFader.cpp
+    ../Source/UI/Mixer/MixerFaderSlider.cpp
     ../Source/UI/Mixer/MixerInsertList.cpp
     ../Source/UI/Mixer/MixerEqThumbnail.cpp
     ../Source/UI/Mixer/MixerSendList.cpp
