@@ -96,6 +96,7 @@ add_executable(Tests
     Timeline/RecordTapTests.cpp
     Mixer/ChannelStripTests.cpp
     Mixer/MixerSoloTests.cpp
+    Mixer/ProjectLoadStripGainTests.cpp
     Mixer/ChannelFlow/ChannelFlowTests.cpp
     Mixer/ChannelFlow/ChannelFlowInstrumentTests.cpp
     Mixer/ChannelFlow/ChannelFlowPluginInstrumentTests.cpp
