@@ -451,3 +451,35 @@ TEST_F(ShortcutManagerTest, GetCommandForAction_TimelineFocusedTrackActionsHaveN
     EXPECT_EQ(AppCommands::getCommandForAction("timelineSoloFocusedTrack"), AppCommands::kNoCommand);
     EXPECT_EQ(AppCommands::getCommandForAction("timelineArmFocusedTrack"), AppCommands::kNoCommand);
 }
+
+// ---------------------------------------------------------------------------
+// FRO125: transportTogglePlayStop — the togglePlayback alias the MIDI Remote transport family
+// (docs/midi_remote.md §4.9) uses for the play/stop toggle. See
+// Tests/App/ShortcutManager/ShortcutManagerTransportActionsTests.cpp for the rest of the family
+// (transportPlay/Stop/ToggleLoop/Record/ToggleMetronome/ReturnToStart) and their invokeDirectly
+// reachability tests. This one lives here because it is purely a regression against the EXISTING
+// togglePlayback action, not a new one: the whole point of the alias is that adding it must never
+// move togglePlayback's own persisted Space binding (docs/shortcuts.md's "moving a default does
+// not move a persisted key" note is exactly the failure mode this guards).
+// ---------------------------------------------------------------------------
+
+TEST_F(ShortcutManagerTest, TransportTogglePlayStopResolvesToTheSameCommandAsTogglePlayback) {
+    EXPECT_EQ(AppCommands::getCommandForAction("transportTogglePlayStop"), AppCommands::togglePlayback);
+    EXPECT_EQ(AppCommands::getCommandForAction("transportTogglePlayStop"),
+              AppCommands::getCommandForAction("togglePlayback"));
+}
+
+TEST_F(ShortcutManagerTest, TransportTogglePlayStopDoesNotShadowTogglePlaybackAsARegisteredAction) {
+    // The alias is resolved only by getCommandForAction() above -- it must never become its own
+    // rebindable row (a second "Toggle Playback"-shaped row in Settings would let a user rebind
+    // the alias away from Space while togglePlayback itself stayed on it, which is exactly the
+    // "two ids fight over one command" shape docs/shortcuts.md's alias note warns about).
+    EXPECT_FALSE(manager.getActionIds().contains("transportTogglePlayStop"));
+    EXPECT_TRUE(manager.getActionIds().contains("togglePlayback"));
+}
+
+TEST_F(ShortcutManagerTest, TogglePlaybackKeepsItsSpaceBindingAfterTheAliasWasAdded) {
+    const auto space = manager.getBinding("togglePlayback");
+    EXPECT_EQ(space.getKeyCode(), juce::KeyPress::spaceKey);
+    EXPECT_TRUE(space.getModifiers() == juce::ModifierKeys());
+}

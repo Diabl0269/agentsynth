@@ -248,6 +248,7 @@ add_executable(Tests
     App/ShortcutManager/ShortcutManagerConflictTests.cpp
     App/ShortcutManager/ShortcutManagerDefaultsTests.cpp
     App/ShortcutManager/ShortcutManagerKeyMatchingTests.cpp
+    App/ShortcutManager/ShortcutManagerTransportActionsTests.cpp
     UI/Settings/ShortcutsSettingsTabTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGraphBehaviourTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviourTests.cpp
@@ -421,6 +422,7 @@ add_executable(Tests
     Project/RecentProjectsTests.cpp
     Project/AssetManagerTests.cpp
     App/BrandingTests.cpp
+    ../Source/ShortcutManager/ShortcutManagerActionNames.cpp
     ../Source/MidiRemote/ControllerProfileStore.cpp
     ../Source/MainComponent/MainComponent.cpp
     ../Source/MainComponent/MainComponentSetup.cpp

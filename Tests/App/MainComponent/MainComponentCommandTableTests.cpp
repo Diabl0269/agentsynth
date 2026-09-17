@@ -70,6 +70,14 @@ const std::vector<juce::CommandID> kExpectedOrder = {
 #if JUCE_MAC || JUCE_WINDOWS
     AppCommands::checkForUpdates,
 #endif
+    // FRO125: buildTransportCommandRows(), appended last in commandTable() -- see that function's
+    // own comment for why appending (never interleaving) is always safe here.
+    AppCommands::transportPlay,
+    AppCommands::transportStop,
+    AppCommands::transportToggleLoop,
+    AppCommands::transportRecord,
+    AppCommands::transportToggleMetronome,
+    AppCommands::transportReturnToStart,
 };
 
 } // namespace

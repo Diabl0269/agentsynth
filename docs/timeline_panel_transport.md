@@ -244,6 +244,18 @@ reflects record-ON, not "a take is capturing". `MainComponent`'s implementation 
 see `Tests/Timeline/MidiRecorderTests.cpp` for the model-level coverage and
 `Tests/UI/Timeline/TimelineTransportBarTests.cpp` for the button-to-commit path.
 
+**Record now has two entry points into the same gate (FRO125).** `AppCommands::transportRecord`
+(`MainComponentCommandTable.cpp`) is a command-dispatched action a MIDI Remote hardware button (or
+a Settings-rebound key) can invoke via `ApplicationCommandManager::invokeDirectly` — it reaches
+`handleRecordToggle` by calling `getRecordButton().triggerClick()`, the SAME button the mouse
+clicks, so both entry points hit the identical armed-track gate above; there is no second, looser
+path. `transportPlay`/`transportStop`/`transportReturnToStart` call `TransportService` directly
+(play/stop guarded on the current snapshot so each is idempotent; return-to-start is
+`locateBeat(0)`, no implicit stop), and `transportToggleLoop`/`transportToggleMetronome` reuse the
+loop and metronome buttons' own `triggerClick()` the same way `transportRecord` reuses Record's —
+see [`shortcuts.md`'s Transport family](shortcuts.md#transport-family) for the full action-id
+table. All six ship unbound by default; only `togglePlayback` keeps a default key (Space).
+
 ## 6. Metronome + Count-In
 
 Two more controls join the transport-bar strip, right after the loop button and before the BPM

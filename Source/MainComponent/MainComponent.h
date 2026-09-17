@@ -428,6 +428,9 @@ private:
     static std::vector<CommandSpec> buildEditAndGraphCommandRows();
     static std::vector<CommandSpec> buildTimelineAndPanelCommandRows();
     static std::vector<CommandSpec> buildFocusAndHelpCommandRows();
+    // FRO125: play/stop/record/loop/metronome/return-to-start, appended last in commandTable() --
+    // see MainComponentCommandTable.cpp.
+    static std::vector<CommandSpec> buildTransportCommandRows();
 
     // Named perform() bodies, too long for an inline table lambda.
     bool performLocateMaster();
