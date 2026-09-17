@@ -1,6 +1,7 @@
 #include "AppUndoManager.h"
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "MacroSet.h"
+#include "MidiRemote/RemoteModel.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 
@@ -157,6 +158,66 @@ private:
     bool firstPerform = true;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TimelineSnapshotAction)
+};
+
+/**
+ * @class MidiRemoteSnapshotAction
+ * @brief Undoable action that restores synth::MidiRemoteProjectDoc state from before/after
+ *        juce::var snapshots (docs/midi_remote.md §8). Same shape as TimelineSnapshotAction, for
+ *        the same reason: a MIDI Remote assignment edit never touches the graph, so folding it
+ *        into every graph SnapshotAction would inflate every other undo step for no benefit.
+ *        Pushed onto the SAME juce::UndoManager as everything else (see
+ *        AppUndoManager::recordMidiRemoteChange), so Cmd+Z stays one chronological stack.
+ *
+ * Unlike SnapshotAction, there is no diffing restore here: MidiRemoteProjectDoc::fromVar is
+ * already the doc's single all-or-nothing load path, so perform()/undo() just call it directly.
+ * Every var this class is constructed with came from this doc's own toVar() (captured by
+ * recordMidiRemoteChange's caller immediately before/after its own edit), so fromVar() of it must
+ * always succeed; a failure here means the doc's round-trip contract itself broke, not a user
+ * error — jassert catches that in debug builds, but the bool is still returned so a release build
+ * fails the undo/redo cleanly rather than crashing.
+ */
+class MidiRemoteSnapshotAction : public juce::UndoableAction {
+public:
+    MidiRemoteSnapshotAction(synth::MidiRemoteProjectDoc& doc, const juce::var& beforeState,
+                             const juce::var& afterState, std::function<void()> postRestore = {})
+        : doc(doc)
+        , beforeState(beforeState)
+        , afterState(afterState)
+        , postRestore(std::move(postRestore)) {}
+
+    bool perform() override {
+        if (firstPerform) {
+            firstPerform = false;
+            return true;
+        }
+
+        return restore(afterState);
+    }
+
+    bool undo() override { return restore(beforeState); }
+
+    int getSizeInUnits() override {
+        return static_cast<int>(
+            (juce::JSON::toString(beforeState).length() + juce::JSON::toString(afterState).length()));
+    }
+
+private:
+    bool restore(const juce::var& state) {
+        const bool ok = doc.fromVar(state);
+        jassert(ok); // a var this class produced must always be accepted by fromVar
+        if (postRestore)
+            postRestore();
+        return ok;
+    }
+
+    synth::MidiRemoteProjectDoc& doc;
+    juce::var beforeState;
+    juce::var afterState;
+    std::function<void()> postRestore;
+    bool firstPerform = true;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MidiRemoteSnapshotAction)
 };
 
 /**
@@ -555,6 +616,16 @@ bool AppUndoManager::recordTimelineChange(synth::TimelineDoc& doc, const std::fu
     undoManager.beginNewTransaction();
     performAction(new TimelineSnapshotAction(
         doc, beforeState, afterState, [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); }));
+    return true;
+}
+
+bool AppUndoManager::recordMidiRemoteChange(synth::MidiRemoteProjectDoc& doc, const juce::var& beforeJson,
+                                            const juce::var& afterJson) {
+    if (juce::JSON::toString(beforeJson) == juce::JSON::toString(afterJson))
+        return false; // no-op edit: don't create an undo step
+
+    undoManager.beginNewTransaction();
+    performAction(new MidiRemoteSnapshotAction(doc, beforeJson, afterJson));
     return true;
 }
 

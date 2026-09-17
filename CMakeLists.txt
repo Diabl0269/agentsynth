@@ -249,6 +249,8 @@ add_library(Core STATIC
     Source/PatchDocument.h
     Source/ProjectBundle.cpp
     Source/ProjectBundle.h
+    Source/MidiRemote/RemoteModel.h
+    Source/MidiRemote/RemoteModelJson.cpp
     Source/RecentProjects.cpp
     Source/RecentProjects.h
     Source/SnippetManager.cpp

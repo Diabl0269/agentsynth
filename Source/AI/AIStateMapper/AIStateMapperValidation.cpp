@@ -49,6 +49,34 @@ juce::String describeKnownIds(const std::set<juce::uint32>& knownIds) {
     return "Valid node ids here are: " + ids.joinIntoString(", ") + ".";
 }
 
+// Named step, extracted out of validatePatch to keep that function under the function-size
+// ratchet (scripts/check-function-sizes.sh): the untrusted-only reserved top-level keys — each is
+// app-authored project data a provider could never legitimately produce, and each is refused
+// outright rather than ignored so a later build that starts honouring one of these can't silently
+// begin executing provider-authored data. See the per-key comment at each call site's origin
+// (docs/AI_Engine.md, docs/midi_remote.md §7) for why each one specifically is reserved.
+PatchValidationResult checkReservedKeysNotAllowed(const juce::DynamicObject* rootObj) {
+    if (rootObj->hasProperty("timeline"))
+        return {false, PatchValidationError::TimelineNotAllowed,
+                "Patch suggestions must not contain a \"timeline\" property - timeline and automation "
+                "data is not accepted from a patch suggestion. Remove it and resend only nodes, "
+                "connections and modulations."};
+
+    if (rootObj->hasProperty("macros"))
+        return {false, PatchValidationError::MacrosNotAllowed,
+                "Patch suggestions must not contain a \"macros\" property - macro grouping is app-authored "
+                "canvas data, not accepted from a patch suggestion. Remove it and resend only nodes, "
+                "connections and modulations."};
+
+    if (rootObj->hasProperty("midiRemote"))
+        return {false, PatchValidationError::MidiRemoteNotAllowed,
+                "Patch suggestions must not contain a \"midiRemote\" property - MIDI controller assignments "
+                "are app-authored project data, not accepted from a patch suggestion. Remove it and resend "
+                "only nodes, connections and modulations."};
+
+    return {};
+}
+
 } // namespace
 
 juce::String patchValidationErrorName(PatchValidationError error) {
@@ -121,6 +149,8 @@ juce::String patchValidationErrorName(PatchValidationError error) {
         return "TimelineNotAllowed";
     case PatchValidationError::MacrosNotAllowed:
         return "MacrosNotAllowed";
+    case PatchValidationError::MidiRemoteNotAllowed:
+        return "MidiRemoteNotAllowed";
     case PatchValidationError::InternalModuleNotAllowed:
         return "InternalModuleNotAllowed";
     }
@@ -248,27 +278,11 @@ PatchValidationResult AIStateMapper::validatePatch(const juce::var& json, const 
     if (trusted)
         return {};
 
-    // "timeline" is reserved for app-authored project data and is refused here rather than
-    // ignored. The validator lets unknown keys through, so a later build that starts honouring
-    // timeline data would silently begin executing provider-authored automation against patches
-    // accepted today; refusing now means that door can only be opened by a commit that deletes
-    // this check. Same class of rule as the node "state" blob (see applyExtraStateToProcessor).
-    if (rootObj->hasProperty("timeline"))
-        return {false, PatchValidationError::TimelineNotAllowed,
-                "Patch suggestions must not contain a \"timeline\" property - timeline and automation "
-                "data is not accepted from a patch suggestion. Remove it and resend only nodes, "
-                "connections and modulations."};
-
-    // "macros" is reserved the same way: it is app-authored canvas presentation data (P8-12),
-    // never provider output, and its membership is keyed by node uuid — which is itself
-    // trusted-only (adoptUuidIfTrusted below ignores a provider-supplied uuid), so a
-    // provider-authored "macros" key could never resolve to anything real even if it were let
-    // through. Refusing it outright keeps that true regardless of future changes here.
-    if (rootObj->hasProperty("macros"))
-        return {false, PatchValidationError::MacrosNotAllowed,
-                "Patch suggestions must not contain a \"macros\" property - macro grouping is app-authored "
-                "canvas data, not accepted from a patch suggestion. Remove it and resend only nodes, "
-                "connections and modulations."};
+    // "timeline"/"macros"/"midiRemote" are reserved for app-authored project data and are refused
+    // here rather than ignored — see checkReservedKeysNotAllowed's own comment. Same class of rule
+    // as the node "state" blob (see applyExtraStateToProcessor).
+    if (const auto reserved = checkReservedKeysNotAllowed(rootObj); !reserved.ok)
+        return reserved;
 
     if (nodesList && nodesList->size() > kMaxNodes)
         return {false, PatchValidationError::TooManyNodes,

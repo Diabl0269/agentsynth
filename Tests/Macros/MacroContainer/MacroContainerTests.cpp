@@ -168,14 +168,18 @@ TEST(MacroPersistence, MembershipAndPresentationSurviveProjectBundleSaveAndLoad)
 
     synth::TimelineDoc timeline;
     synth::PatchDocument patchDocument;
-    auto saveResult = synth::ProjectBundle::save(dir, engine.getGraph(), timeline, patchDocument, editor.getMacros());
+    synth::MidiRemoteProjectDoc midiRemote;
+    auto saveResult =
+        synth::ProjectBundle::save(dir, engine.getGraph(), timeline, patchDocument, editor.getMacros(), midiRemote);
     ASSERT_TRUE(saveResult.ok) << saveResult.message;
 
     juce::AudioProcessorGraph freshGraph;
     synth::TimelineDoc freshTimeline;
     synth::PatchDocument freshPatchDocument;
     synth::MacroSet freshMacros;
-    auto loadResult = synth::ProjectBundle::load(dir, freshGraph, freshTimeline, freshPatchDocument, freshMacros);
+    synth::MidiRemoteProjectDoc freshMidiRemote;
+    auto loadResult =
+        synth::ProjectBundle::load(dir, freshGraph, freshTimeline, freshPatchDocument, freshMacros, freshMidiRemote);
     ASSERT_TRUE(loadResult.ok) << loadResult.message;
 
     ASSERT_EQ(freshMacros.size(), 1);

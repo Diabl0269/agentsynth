@@ -169,8 +169,9 @@ TEST_F(ProjectLoadStripGainTest, CheckpointA_BareProjectBundleLoadPreservesEachS
     synth::TimelineDoc timeline;
     synth::PatchDocument patchDocument;
     synth::MacroSet macros;
+    synth::MidiRemoteProjectDoc midiRemote;
 
-    auto result = synth::ProjectBundle::load(dir, graph, timeline, patchDocument, macros);
+    auto result = synth::ProjectBundle::load(dir, graph, timeline, patchDocument, macros, midiRemote);
     ASSERT_TRUE(result.ok) << result.message;
 
     auto* stripA = findProcessorByUuid(graph, "strip-a");
@@ -250,16 +251,19 @@ TEST_F(ProjectLoadStripGainTest, LoadSaveReloadRoundTripsEachStripsGain) {
     synth::TimelineDoc timeline;
     synth::PatchDocument patchDocument;
     synth::MacroSet macros;
-    ASSERT_TRUE(synth::ProjectBundle::load(dir, graph, timeline, patchDocument, macros).ok);
+    synth::MidiRemoteProjectDoc midiRemote;
+    ASSERT_TRUE(synth::ProjectBundle::load(dir, graph, timeline, patchDocument, macros, midiRemote).ok);
 
-    auto saveResult = synth::ProjectBundle::save(dir, graph, timeline, patchDocument, macros);
+    auto saveResult = synth::ProjectBundle::save(dir, graph, timeline, patchDocument, macros, midiRemote);
     ASSERT_TRUE(saveResult.ok) << saveResult.message;
 
     juce::AudioProcessorGraph freshGraph;
     synth::TimelineDoc freshTimeline;
     synth::PatchDocument freshPatchDocument;
     synth::MacroSet freshMacros;
-    auto reloadResult = synth::ProjectBundle::load(dir, freshGraph, freshTimeline, freshPatchDocument, freshMacros);
+    synth::MidiRemoteProjectDoc freshMidiRemote;
+    auto reloadResult =
+        synth::ProjectBundle::load(dir, freshGraph, freshTimeline, freshPatchDocument, freshMacros, freshMidiRemote);
     ASSERT_TRUE(reloadResult.ok) << reloadResult.message;
 
     auto* stripA = findProcessorByUuid(freshGraph, "strip-a");

@@ -468,18 +468,18 @@ TEST(AIStateMapperTest, SchemaOmitsReservedFields) {
     const juce::var schema = synth::AIStateMapper::getPatchSchema();
     const juce::String schemaText = juce::JSON::toString(schema);
 
-    for (const char* reserved : {"schemaVersion", "uuid", "timeline"})
+    for (const char* reserved : {"schemaVersion", "uuid", "timeline", "midiRemote"})
         EXPECT_FALSE(schemaText.contains(reserved))
             << "\"" << reserved << "\" must not appear anywhere in the model-facing patch schema";
 
     auto* nodeProperties = schemaNodeProperties(schema);
     ASSERT_NE(nodeProperties, nullptr);
-    for (const char* reserved : {"schemaVersion", "uuid", "timeline"})
+    for (const char* reserved : {"schemaVersion", "uuid", "timeline", "midiRemote"})
         EXPECT_FALSE(nodeProperties->hasProperty(reserved)) << "node schema must not offer \"" << reserved << "\"";
 
     auto* rootProperties = schema.getDynamicObject()->getProperty("properties").getDynamicObject();
     ASSERT_NE(rootProperties, nullptr);
-    for (const char* reserved : {"schemaVersion", "uuid", "timeline"})
+    for (const char* reserved : {"schemaVersion", "uuid", "timeline", "midiRemote"})
         EXPECT_FALSE(rootProperties->hasProperty(reserved)) << "root schema must not offer \"" << reserved << "\"";
 }
 
@@ -496,6 +496,30 @@ TEST(AIStateMapperTest, TimelineIsRefusedFromUntrustedPatchesOnly) {
     EXPECT_EQ(untrusted.error, synth::PatchValidationError::TimelineNotAllowed);
     EXPECT_TRUE(untrusted.message.containsIgnoreCase("timeline")) << "the model must be told what to remove";
     EXPECT_EQ(synth::patchValidationErrorName(synth::PatchValidationError::TimelineNotAllowed), "TimelineNotAllowed");
+
+    EXPECT_FALSE(synth::AIStateMapper::applyJSONToGraph(json, graph, /*clearExisting=*/true, /*trusted=*/false));
+    EXPECT_EQ(graph.getNumNodes(), 0) << "a refused patch must not be partially applied";
+
+    // The SAME JSON is accepted on the trusted path — future project files ride this key.
+    auto trusted = synth::AIStateMapper::validatePatch(json, graph, /*clearExisting=*/true, /*trusted=*/true);
+    EXPECT_TRUE(trusted.ok) << trusted.message;
+    EXPECT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, graph, /*clearExisting=*/true, /*trusted=*/true));
+    EXPECT_EQ(graph.getNumNodes(), 1);
+}
+
+// "midiRemote" (FRO124) is refused the same way "timeline" is: it is app-authored MIDI controller
+// assignment data, and a provider-authored mapping could never resolve to real hardware anyway.
+TEST(AIStateMapperTest, MidiRemoteKeyIsRefusedUntrusted) {
+    juce::AudioProcessorGraph graph;
+    juce::var json = juce::JSON::parse(
+        R"({"nodes":[{"id":1,"type":"Filter"}],"connections":[],"midiRemote":{"version":1,"assignments":[],"controllers":[]}})");
+
+    auto untrusted = synth::AIStateMapper::validatePatch(json, graph, /*clearExisting=*/true, /*trusted=*/false);
+    EXPECT_FALSE(untrusted.ok);
+    EXPECT_EQ(untrusted.error, synth::PatchValidationError::MidiRemoteNotAllowed);
+    EXPECT_TRUE(untrusted.message.containsIgnoreCase("midiRemote")) << "the model must be told what to remove";
+    EXPECT_EQ(synth::patchValidationErrorName(synth::PatchValidationError::MidiRemoteNotAllowed),
+              "MidiRemoteNotAllowed");
 
     EXPECT_FALSE(synth::AIStateMapper::applyJSONToGraph(json, graph, /*clearExisting=*/true, /*trusted=*/false));
     EXPECT_EQ(graph.getNumNodes(), 0) << "a refused patch must not be partially applied";

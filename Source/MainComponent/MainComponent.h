@@ -6,6 +6,7 @@
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Branding.h"
+#include "MidiRemote/RemoteModel.h"
 #include "Mixer/TrackPresetManager.h"
 #include "Modules/RecordTapModule.h"
 #include "Plugin/Hosting/HostedPluginWindowManager.h"
@@ -720,6 +721,12 @@ private:
     // TimelineSnapshotAction on the undo stack holds a reference to this doc, and to the recorder.
     synth::TimelineDoc timelineDoc;
     synth::AutomationRecorder automationRecorder;
+    // The app's ONE live MIDI Remote project document (the reserved "midiRemote" project.json
+    // key) — plain project state, sitting beside timelineDoc rather than owned by GraphEditor the
+    // way macros are, since there is no engine/panel consumer of it yet (FRO127/FRO131). Same
+    // load-bearing declaration-order rule as timelineDoc: it must precede `undoManager` so it
+    // outlives any MidiRemoteSnapshotAction on the undo stack that holds a reference to it.
+    synth::MidiRemoteProjectDoc midiRemoteDoc;
     // The app's one live MidiRecorder — no lifetime constraint against undoManager the way
     // timelineDoc/automationRecorder have (it holds no reference to the doc or the undo manager
     // between calls; stopAndCommit() takes both as parameters), so ordering here is not load-bearing.

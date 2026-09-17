@@ -305,13 +305,15 @@ TEST(TimelineReconciliationBundleTest, BundleLoadSetsOrphanFlags) {
 
     PatchDocument patchDocument;
     synth::MacroSet macros;
-    ASSERT_TRUE(ProjectBundle::save(dir, graph, timeline, patchDocument, macros).ok);
+    synth::MidiRemoteProjectDoc midiRemote;
+    ASSERT_TRUE(ProjectBundle::save(dir, graph, timeline, patchDocument, macros, midiRemote).ok);
 
     juce::AudioProcessorGraph freshGraph;
     TimelineDoc freshTimeline;
     PatchDocument freshPatchDocument;
     synth::MacroSet freshMacros;
-    auto result = ProjectBundle::load(dir, freshGraph, freshTimeline, freshPatchDocument, freshMacros);
+    synth::MidiRemoteProjectDoc freshMidiRemote;
+    auto result = ProjectBundle::load(dir, freshGraph, freshTimeline, freshPatchDocument, freshMacros, freshMidiRemote);
     ASSERT_TRUE(result.ok) << result.message;
 
     auto* loadedReal = freshTimeline.getLane(realLane);

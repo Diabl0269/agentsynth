@@ -50,8 +50,9 @@ bool MainComponent::saveToFile(const juce::File& file) {
 
         // The bundle carries the graph, timeline AND macros; PatchDocument comes from the graph
         // editor so the unknown-top-level-key stash a plain preset load filled is re-merged here too.
-        const auto result = synth::ProjectBundle::save(file, audioEngine.getGraph(), timelineDoc,
-                                                       graphEditor.getPatchDocument(), graphEditor.getMacros());
+        const auto result =
+            synth::ProjectBundle::save(file, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument(),
+                                       graphEditor.getMacros(), midiRemoteDoc);
         if (!result.ok) {
             statusBar.showMessage("Save failed: " + result.message);
             return false;
@@ -150,8 +151,9 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
     currentBundleDir_ = bundleDir;
     refreshAssetRoots();
 
-    const auto result = synth::ProjectBundle::load(bundleDir, audioEngine.getGraph(), timelineDoc,
-                                                   graphEditor.getPatchDocument(), graphEditor.getMacros());
+    const auto result =
+        synth::ProjectBundle::load(bundleDir, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument(),
+                                   graphEditor.getMacros(), midiRemoteDoc);
     // Reconcile the view whatever happened: on failure the load left the graph exactly as it
     // was, and the components still have to come back after the detach above.
     graphEditor.updateComponents();
@@ -193,8 +195,9 @@ bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
     currentBundleDir_ = bundleDir;
     refreshAssetRoots();
 
-    const auto result = synth::ProjectBundle::loadAutosave(bundleDir, audioEngine.getGraph(), timelineDoc,
-                                                           graphEditor.getPatchDocument(), graphEditor.getMacros());
+    const auto result =
+        synth::ProjectBundle::loadAutosave(bundleDir, audioEngine.getGraph(), timelineDoc,
+                                           graphEditor.getPatchDocument(), graphEditor.getMacros(), midiRemoteDoc);
     graphEditor.updateComponents();
     if (!result.ok) {
         currentBundleDir_ = previousBundleDir;
@@ -401,9 +404,9 @@ void MainComponent::performAutosave() {
         settings == nullptr
             ? kDefaultAutosaveBackupCount
             : juce::jlimit(0, 50, settings->getIntValue(kAutosaveBackupCountKey, kDefaultAutosaveBackupCount));
-    const auto result =
-        synth::ProjectBundle::saveAutosave(currentBundleDir_, audioEngine.getGraph(), timelineDoc,
-                                           graphEditor.getPatchDocument(), graphEditor.getMacros(), backupCount);
+    const auto result = synth::ProjectBundle::saveAutosave(currentBundleDir_, audioEngine.getGraph(), timelineDoc,
+                                                           graphEditor.getPatchDocument(), graphEditor.getMacros(),
+                                                           backupCount, midiRemoteDoc);
     if (result.ok)
         lastAutosavedEditSerial_ = undoManager.getEditSerial();
     else

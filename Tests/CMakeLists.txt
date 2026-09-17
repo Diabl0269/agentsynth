@@ -230,6 +230,9 @@ add_executable(Tests
     Project/UndoRedo/UndoRedoBasicOpsTests.cpp
     Project/UndoRedo/UndoRedoScenarioTests.cpp
     Project/UndoRedo/UndoRedoEditSerialTests.cpp
+    Project/UndoRedo/UndoRedoMidiRemoteTests.cpp
+    MidiRemote/RemoteModelTests.cpp
+    MidiRemote/ControllerProfileStoreTests.cpp
     App/E2EWorkflowTests.cpp
     Modules/ExternalMidiModuleTests.cpp
     Project/PresetManagerTests.cpp
@@ -417,6 +420,7 @@ add_executable(Tests
     Project/RecentProjectsTests.cpp
     Project/AssetManagerTests.cpp
     App/BrandingTests.cpp
+    ../Source/MidiRemote/ControllerProfileStore.cpp
     ../Source/MainComponent/MainComponent.cpp
     ../Source/MainComponent/MainComponentSetup.cpp
     ../Source/MainComponent/MainComponentSetupToolbar.cpp
