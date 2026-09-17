@@ -102,28 +102,4 @@ Everything else below is a tripwire index. The full rule lives in the named area
 
 ## Docs map
 
-- [`docs/architecture.md`](docs/architecture.md) — layers, core classes (ModuleBase, AudioEngine, TransportService, TimelineDoc, GraphEditor, UndoManager, LookAndFeel), bypass/mute contract, signal flow, plugin layer (VST3/AU host modes, ownership, state format)
-- [`docs/modules.md`](docs/modules.md) — per-module specs + poly channel layouts (Oscillator, Filter, VCA, ADSR, LFO, Sequencer, Poly MIDI, Voice Mixer, Math …)
-- [`docs/fx_modules.md`](docs/fx_modules.md) — FX specs (Distortion, Delay, Reverb, Chorus, Phaser, Compressor, Flanger, Limiter, Pitch Shifter, Parametric EQ, Ring Modulator)
-- [`docs/modulation.md`](docs/modulation.md) — routing model, logical-port API, poly-bus wires, attenuverters, visual signal flow
-- [`docs/layout.md`](docs/layout.md) — grid/snap/auto-arrange, toolbar & status-bar chrome, width buckets, LayoutUtil API, drag affordance + smart connections
-- [`docs/layout_visuals_animation.md`](docs/layout_visuals_animation.md) — visualizer components, UI rendering performance, animation system (UIAnimation.h, AnimationDriver, PanelSlide, micro-interactions), alignment guides
-- [`docs/layout_selection_canvas.md`](docs/layout_selection_canvas.md) — multi-select + group drag + snippets/clipboard (§1.5), collapsible library sections, cable interaction, minimap overlay
-- [`docs/macros.md`](docs/macros.md) — Macros: the P8-12 presentation-only container and the DECIDED Macro I/O model (P8-14) overview, and why a container node with an inner graph was rejected
-- [`docs/macros_ports.md`](docs/macros_ports.md) — Macro I/O port mechanics: node types, port set/ordering, poly/stereo shape, cable rendering across the boundary, bypass/mute, the macro menu
-- [`docs/macros_implementation.md`](docs/macros_implementation.md) — Macro I/O AI-authorability decision, the P8-15 implementation tracker, and out-of-scope items
-- [`docs/timeline_panel_core.md`](docs/timeline_panel_core.md) — timeline panel overview, ruler/grid/zoom/snap + markers
-- [`docs/timeline_panel_tracks.md`](docs/timeline_panel_tracks.md) — track headers/binding chips, Add-Track
-- [`docs/timeline_panel_transport.md`](docs/timeline_panel_transport.md) — playhead, transport bar, metronome, edit-tool strip
-- [`docs/timeline_panel_clips_automation.md`](docs/timeline_panel_clips_automation.md) — clip lanes, automation strip, keyboard & focus arbitration
-- [`docs/timeline_panel_piano_roll.md`](docs/timeline_panel_piano_roll.md) — the piano roll note editor
-- [`docs/theming.md`](docs/theming.md) — theme tokens, SVG icons, JSON user themes, LookAndFeel, font limitation
-- [`docs/testing.md`](docs/testing.md) — test layers, build/test commands, CI pipeline, git hooks, coverage
-- [`docs/Module_Development_Guide.md`](docs/Module_Development_Guide.md) — step-by-step guide to adding a module
-- [`docs/AI_Engine.md`](docs/AI_Engine.md) · [`docs/AI_Usage_Guide.md`](docs/AI_Usage_Guide.md) — AI patching subsystem: architecture, communication pattern, patch-diff/feedback UI
-- [`docs/AI_Engine_patch_safety.md`](docs/AI_Engine_patch_safety.md) — patch validity/few-shot/untrusted-timeline data/arrangement context/timeline operations/agentic security model
-- [`docs/AI_Engine_chat_component.md`](docs/AI_Engine_chat_component.md) — AIChatComponent and its logging rules
-- [`docs/AI_Engine_providers_accounts.md`](docs/AI_Engine_providers_accounts.md) — conversation history, provider registry (OllamaProvider/RemoteProvider), account sign-in, device id/trial, quota UI
-- [`docs/midi_input.md`](docs/midi_input.md) · [`docs/shortcuts.md`](docs/shortcuts.md) — external MIDI routing, keyboard shortcuts
-- [`docs/distribution.md`](docs/distribution.md) — version identity, Sparkle auto-update (macOS), EdDSA key generation, CI appcast publishing, WinSparkle status
-- Feature planning artifacts (timeline concept & task tracker) live in a private repo, kept out of this public repo on purpose.
+The map of every doc under `docs/` (one line each, grouped by area) lives in [`docs/README.md`](docs/README.md). Read a doc before touching its area; a new doc gets a line there, not here.
