@@ -1,4 +1,4 @@
-# Mixer Meter & Fader Tests (FRO146/FRO150)
+# Mixer Meter & Fader Tests (FRO146/FRO150/FRO147)
 
 The meters rework ([`mixer.md`](mixer.md) §5.10's Meters subsection): a per-reader peak latch, a
 -60..+3 dBFS two-bar scale with colour zones and ballistics, a per-column clip readout, and the
