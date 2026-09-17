@@ -540,8 +540,28 @@ jobs:
           sha256sum * > SHA256SUMS.txt
           cd ..
 
+      # FRO151: v1 uploaded each asset via a bare, unwrapped `fetch()` (see its src/github.ts
+      # `upload()`) — any non-201 response or a body that fails `resp.json()` throws immediately
+      # with zero retry, killing the whole step and leaving every asset uploaded so far stranded on
+      # an otherwise-published prerelease. That is exactly what happened twice on 2026-09-17:
+      # v0.240.0 got "Failed to upload release asset SHA256SUMS.txt. received status code 502" and
+      # v0.239.0 got "invalid json response body at .../assets?name=AgentSynth-Windows-x64-Plugins.zip
+      # reason: Unexpected token '<', "<!DOCTYPE "..." (an HTML error page instead of JSON) — both
+      # transient GitHub-side hiccups, not real failures, but the release still published with
+      # assets silently missing (v0.240.0 lost the macOS zip + SHA256SUMS.txt; v0.239.0 lost both
+      # plugin zips; the appcast jobs below never ran either since the release job itself failed).
+      # v3's upload() instead calls `releaser.uploadReleaseAsset()` -> `this.github.request(...)`,
+      # i.e. the authenticated Octokit client `run.ts` builds via `getOctokit`, and pulls in
+      # `@octokit/plugin-retry` (declared in package.json, bumped 4.0.3 -> 7.1.1 across the v2 line
+      # per the CHANGELOG) — that plugin transparently retries a request on a 5xx/network/malformed
+      # response with backoff before it ever reaches action code. Bumping the major version is the
+      # smallest change that actually retries the failing call, vs. hand-rolling a `gh release
+      # upload --clobber` retry loop around a step that (per v3's own source) already does this.
+      # v3 needs the Node 24 Actions runtime; `runs-on: ubuntu-latest` here already supports it (the
+      # v1 logs above show every run being auto-upgraded to Node 24 anyway, since Node 20 is EOL).
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        id: create_release
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.tag_version.outputs.new_tag }}
           name: Release ${{ steps.tag_version.outputs.new_tag }}
@@ -549,6 +569,48 @@ jobs:
           files: artifacts/*
           draft: false
           prerelease: true
+
+      # FRO151: even a retrying uploader can still lose to a sustained outage, so this is the
+      # backstop — verify what the release actually ended up with instead of trusting the action's
+      # exit code, and fail the job loudly rather than leaving a half-populated prerelease around
+      # (exactly what slipped through undetected on 2026-09-17, twice). "Expected" is derived from
+      # `artifacts/` itself — everything `Download All Artifacts` + `Generate checksums` produced
+      # above — never a hardcoded platform list, so adding/removing a matrix leg can't silently go
+      # unverified here. `appcast.xml`/`appcast-windows.xml` aren't part of this comparison: those
+      # are uploaded by the publish-appcast* jobs below, after this job finishes, so they're
+      # legitimately absent from the release at this point.
+      #
+      # GitHub rewrites spaces in an uploaded asset's filename to periods (confirmed against this
+      # repo's own releases: the Linux job's raw "Agent Synth" executable four steps up publishes
+      # as "Agent.Synth" — softprops/action-gh-release's own v3 source has a comment acknowledging
+      # this: "GitHub can rewrite uploaded asset names, so compare against both..."), so the local
+      # name is normalized the same way before comparing. This is the only rewrite this repo's
+      # asset names ever trigger; a future asset with other special characters may need a broader
+      # normalization here.
+      - name: Verify published release assets
+        if: always() && steps.tag_version.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag_version.outputs.new_tag }}
+        run: |
+          set -uo pipefail
+          expected="$(cd artifacts && ls -1 | tr ' ' '.' | sort)"
+          actual="$(gh release view "$TAG" --repo "${{ github.repository }}" \
+                      --json assets -q '.assets[].name' | sort)"
+          if [ "$expected" = "$actual" ]; then
+            echo "Release $TAG: published assets match what the build jobs produced. OK"
+            exit 0
+          fi
+          echo "::error::Release $TAG's published assets don't match what the build jobs produced (a prior step likely failed to upload one, e.g. a transient GitHub 5xx)"
+          echo "--- expected (from artifacts/, GitHub's space->period rename applied) ---"
+          echo "$expected"
+          echo "--- actual (currently published on the release) ---"
+          echo "$actual"
+          echo "--- missing (expected but not published) ---"
+          comm -23 <(echo "$expected") <(echo "$actual")
+          echo "--- unexpected (published but not expected) ---"
+          comm -13 <(echo "$expected") <(echo "$actual")
+          exit 1
 
   publish-appcast:
     name: Publish Sparkle appcast

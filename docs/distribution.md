@@ -217,6 +217,58 @@ Automated (`build-artifacts.yml`):
 round-trips against a real, live feed once a key exists for that platform; the 404-then-silent-no-op
 behavior described in earlier drafts of this doc no longer applies to that step.
 
+## Release asset upload reliability (FRO151, 2026-09-17)
+
+Two of four `build-artifacts.yml` runs on 2026-09-17 built every platform successfully but still
+published a **half-populated** prerelease: `softprops/action-gh-release@v1`'s asset uploader is a
+single, unwrapped `fetch()` per file with no retry, so a single transient GitHub error (`received
+status code 502` for v0.240.0's `SHA256SUMS.txt`; an HTML error page instead of JSON — `invalid
+json response body ... Unexpected token '<', "<!DOCTYPE "` — for v0.239.0's
+`AgentSynth-Windows-x64-Plugins.zip`) aborted the step immediately, stranding whatever had already
+uploaded and skipping `publish-appcast`/`publish-appcast-windows` below (both `needs: [release]`,
+and the `release` job itself came back `failure`).
+
+- **Fix 1 — retry the upload.** `Create Release` now uses `softprops/action-gh-release@v3`. Its
+  uploader goes through the action's own authenticated Octokit client (`this.github.request(...)`)
+  rather than a bare `fetch()`, and that client is built with `@octokit/plugin-retry` attached —
+  transparent retry-with-backoff on a 5xx/network/malformed response, before the error ever reaches
+  the action's own code. v3 needs the Node 24 Actions runtime; GitHub-hosted `ubuntu-latest` already
+  has it (the v1 failure logs above even show GitHub auto-upgrading the run to Node 24, since Node
+  20 is EOL there).
+- **Fix 2 — verify, don't trust the exit code.** A `Verify published release assets` step runs
+  right after `Create Release` (`if: always() && steps.tag_version.outcome == 'success'`, so it
+  still prints its diff even if the upload step itself failed outright). It computes the *expected*
+  asset set from `artifacts/` — the same directory `Download All Artifacts` + `Generate checksums`
+  just populated, so it tracks the build matrix automatically instead of a hardcoded platform list —
+  and compares it against `gh release view "$TAG" --json assets`, printing a missing/unexpected diff
+  and failing the job on any mismatch. `appcast.xml`/`appcast-windows.xml` are deliberately excluded
+  from the comparison: `publish-appcast`/`publish-appcast-windows` upload those *after* this job
+  finishes, so they're legitimately absent from the release at this point.
+
+**The `Agent.Synth` asset is not a bug.** Every release carries a ~24 MB asset literally named
+`Agent.Synth` next to the ~9 MB `AgentSynth-macOS-arm64.zip`; it looks at a glance like a stray
+duplicate of the macOS app. It is not: `build-artifacts.yml`'s "Package Linux Artifact" step
+copies the raw Linux executable (named `Agent Synth`, with a space — JUCE's product name) straight
+into `artifact/`, unzipped, as the Linux platform's only standalone deliverable (there's no
+Linux installer). GitHub rewrites the space in an uploaded asset's filename to a period on upload
+— confirmed both empirically (`gh release view` shows `Agent.Synth`, `uploaded`, `24834784` bytes,
+consistent with an unstripped Release Linux binary) and against `action-gh-release`'s own v3
+source, which has a comment acknowledging exactly this ("GitHub can rewrite uploaded asset names,
+so compare against both..."). `synth-platform/apps/web/src/lib/releases.ts` already hardcodes
+`linuxStandalone: "Agent.Synth"`, and `apps/web/src/pages/download.astro` documents it to users as
+"the download is the raw standalone binary — there's no installer. Make it executable once (chmod
++x Agent.Synth)". So the verification step above treats it as expected (via the same space->period
+normalization), and this task left it alone.
+
+**Pre-existing wrinkle, not fixed by this task**: `SHA256SUMS.txt` is generated from the *local*
+`artifacts/` directory (`sha256sum *`), so its `Agent Synth` line still has the pre-rename,
+space-containing name — it doesn't match the `Agent.Synth` filename the asset is actually published
+under. Anyone trying `sha256sum -c SHA256SUMS.txt` against the downloaded file will need to rename
+it back (or diff the hash by hand). Fixing this would mean either renaming the local artifact
+before checksumming (touches the Linux packaging step and the site's hardcoded name together) or
+generating `SHA256SUMS.txt` from the published asset names post-upload; left as an open question
+rather than guessed at here.
+
 ## Promoting a build to stable
 
 Every push to `main` ships a GitHub **prerelease** (`build-artifacts.yml`) — that's continuous
