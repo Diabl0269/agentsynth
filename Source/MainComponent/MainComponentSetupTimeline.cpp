@@ -264,6 +264,21 @@ void MainComponent::handleRecordToggle(bool wantRecording) {
     // isn't already running.
     auto& transport = audioEngine.getTransport();
     const auto snap = transport.getPositionSnapshot();
+
+    // Re-anchor the 10 Hz commit-on-stop poll's edge-detector (timerCallback's
+    // wasTransportPlaying_) to what we just read, before starting anything below. When starting
+    // from a stop, transport.play() below only POSTS a command -- the published snapshot doesn't
+    // reflect it until the next processHostBlock -- while MidiRecorder::startRecording()/AudioTake
+    // capture start synchronously, right here. A poll tick landing in that gap would otherwise see
+    // a stale wasTransportPlaying_==true left over from an earlier roll, the snapshot still
+    // reporting not-playing, and the take that just started as "isRecording()==true", and mistake
+    // it for an unrelated take stopping -- cancelling a take it never even saw start (FRO210).
+    // Anchoring to snap.playing (false here) closes that gap; anchoring to snap.playing rather than
+    // an unconditional false also preserves the mid-roll case just below (Record pressed while
+    // already playing, no transport.play() posted) -- there wasTransportPlaying_ must stay true so
+    // a stop shortly after Record still auto-commits on the very next tick.
+    wasTransportPlaying_ = snap.playing;
+
     const int countInBars = timelinePanel.getTransportBar().getCountInBars();
 
     // Count-in pre-roll, only from a full stop — a record engaged while already playing
