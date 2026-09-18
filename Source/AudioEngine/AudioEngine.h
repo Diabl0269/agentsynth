@@ -313,6 +313,11 @@ public:
     // Never call it from the audio thread — it would wait on itself.
     void drainAudioCallbacks() noexcept;
 
+    // MESSAGE THREAD. setRemoteMessageSink()'s other half for the two ScopedRemoteSinkCall sites
+    // outside any render pass — see the .cpp definition for the full ordering argument. Bounded
+    // exactly like drainAudioCallbacks(), for the same reason.
+    void drainRemoteSinkCalls() noexcept;
+
     // Registers the sink that records external MIDI into timeline clips. Null by default —
     // capture is then a no-op. The recorder is called from exactly one site, renderPass's
     // MIDI-capture step, against the SAME buffer the graph itself renders — the collector-
@@ -343,10 +348,12 @@ public:
 
     // Borrowed, never owned; null by default. Message thread. The owner MUST clear this to nullptr
     // before destroying the sink — this call's drain is what makes that safe for the audio thread
-    // (docs/midi_remote.md §4.3, docs/architecture_audio_engine.md).
+    // (docs/midi_remote.md §4.3, docs/architecture_audio_engine.md). Unlike the two setters above,
+    // drainAudioCallbacks() alone isn't enough — see ScopedRemoteSinkCall and drainRemoteSinkCalls().
     void setRemoteMessageSink(synth::midi::RemoteMessageSink* sink) noexcept {
         remoteMessageSink_.store(sink, std::memory_order_seq_cst);
         drainAudioCallbacks();
+        drainRemoteSinkCalls();
     }
 
     // Total latency the graph reports for itself, in samples. This is report-only latency
@@ -584,8 +591,26 @@ private:
     // Borrowed, never owned. Set by setAutomationRecorder(); read once per render pass and
     // handed straight to the applier. Null default means "no recorder", not "no automation".
     std::atomic<const synth::AutomationRecordState*> automationRecordState_{nullptr};
+    // RAII: marks one remoteMessageSink_ call in flight from construction (before the pointer load)
+    // through destruction (after handleMessage returns) — see the ordering argument at its use site
+    // in AudioEngineMidi.cpp. Used there and in AudioEngineHostMode.cpp.
+    struct ScopedRemoteSinkCall {
+        explicit ScopedRemoteSinkCall(std::atomic<int>& inFlight) noexcept
+            : inFlight_(inFlight) {
+            inFlight_.fetch_add(1, std::memory_order_seq_cst);
+        }
+        ~ScopedRemoteSinkCall() { inFlight_.fetch_sub(1, std::memory_order_seq_cst); }
+        ScopedRemoteSinkCall(const ScopedRemoteSinkCall&) = delete;
+        ScopedRemoteSinkCall& operator=(const ScopedRemoteSinkCall&) = delete;
+
+        std::atomic<int>& inFlight_;
+    };
+
     // Borrowed, never owned. Read on the MIDI driver thread or the audio thread; null = idle.
     std::atomic<synth::midi::RemoteMessageSink*> remoteMessageSink_{nullptr};
+    // ScopedRemoteSinkCall's in-flight count; drainRemoteSinkCalls() waits for this to reach 0
+    // after setRemoteMessageSink() clears the pointer (FRO197).
+    std::atomic<int> remoteSinkCallsInFlight_{0};
     // Render passes entered / left, bumped on the way into and out of renderNextBlock so the gap
     // between them is exactly the window in which the two borrowed pointers above are read and
     // used. Monotonic rather than an in-flight count because an engine inside a host renders

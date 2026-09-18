@@ -175,6 +175,29 @@ void AudioEngine::drainAudioCallbacks() noexcept {
     }
 }
 
+void AudioEngine::drainRemoteSinkCalls() noexcept {
+    // MESSAGE THREAD. setRemoteMessageSink()'s other half for the two call sites outside any render
+    // pass (AudioEngineMidi.cpp's MIDI driver thread, AudioEngineHostMode.cpp's hosted pre-render
+    // loop) — see ScopedRemoteSinkCall's doc comment in AudioEngine.h for the ordering argument. A
+    // plain in-flight count, unlike drainAudioCallbacks()'s started/finished pair: a device thread
+    // delivers discrete messages, never a back-to-back stream, so it really does reach 0 between
+    // messages rather than needing a "passes already running" snapshot.
+    static constexpr int kDrainTimeoutMs = 2000;
+    const auto deadline = juce::Time::getMillisecondCounter() + (juce::uint32)kDrainTimeoutMs;
+
+    int spins = 0;
+    while (remoteSinkCallsInFlight_.load(std::memory_order_seq_cst) != 0) {
+        if (juce::Time::getMillisecondCounter() > deadline) {
+            jassertfalse; // a remote sink call outlasted the drain: something is holding a MIDI/audio thread
+            return;
+        }
+        if (++spins < 1000)
+            juce::Thread::yield();
+        else
+            juce::Thread::sleep(1);
+    }
+}
+
 void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
     // The one place a render pass is declared in flight. Both entry points (the standalone device
     // callback and the hosted processBlock) funnel through here, so this single guard covers every

@@ -15,9 +15,12 @@
 //   message thread        setProfiles / setAssignments / setSources / reconcile: rebuild the
 //                         snapshot and publish it by atomic pointer swap.
 //
-// LIFETIME: the app layer must clear AudioEngine's RemoteMessageSink and let the audio callbacks
-// drain before destroying the engine — after that no reader can run, which is what makes
-// SnapshotPublisher's destructor safe.
+// LIFETIME: the app layer must clear AudioEngine's RemoteMessageSink and let
+// AudioEngine::setRemoteMessageSink(nullptr) return before destroying the engine. That call drains
+// BOTH halves of the handshake -- drainAudioCallbacks() for renderNextBlock's render passes, and
+// drainRemoteSinkCalls() for the two sink reads that happen OUTSIDE a render pass (the standalone
+// MIDI driver thread and the hosted pre-render sink loop, FRO197) -- so once it returns, no reader
+// can run again, which is what makes SnapshotPublisher's destructor safe.
 //
 // NOT YET REACHABLE BY A USER: nothing in the shipped UI can create an assignment until the
 // right-click MIDI Learn ticket lands. The engine is wired end to end and covered by tests that
