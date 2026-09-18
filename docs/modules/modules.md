@@ -77,7 +77,7 @@ Detailed specifications for Agent Synth's primary synthesis modules.
 ## Wavetable Module
 Serum / Vital-style wavetable oscillator (`Source/Modules/WavetableOscillatorModule/`). Type-name string: `"Wavetable"`.
 
-**Source layout** (FRO73 — the module outgrew one file):
+**Source layout** (split by concern since the module outgrew one file):
 - `WavetableOscillatorModule.h`/`.cpp` — the module class: parameters, channel map, render path.
 - `WavetableTableBuilder.h`/`.cpp` — table geometry (mip constants, `Wavetable`) and `TableBuilder`,
   the FFT-based mip-pyramid synthesiser (see [Table synthesis](#table-synthesis) below), in a
@@ -156,8 +156,6 @@ The `Sync` jack takes an audio-rate signal from another oscillator. `Sync In` se
 - `Hard Sync` — resets every sub-oscillator on the master's rising zero crossing. Crossings are computed **once per block** into a shared array, because each voice renders in its own pass and a running per-sample state would be consumed by voice 0 and wrong for voice 1. Note that at an exact integer frequency ratio the reset is a no-op — the slave already completes a whole number of cycles per master period.
 - `Ring Mod` — multiplies the finished voice by the input.
 - `AM` — multiplies by `0.5 + 0.5·input`.
-
-### Anti-aliasing: mip pyramid
 
 ### Anti-aliasing: mip pyramid
 Every frame is stored as an **11-level mip pyramid** instead of being filtered at render time.
