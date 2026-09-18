@@ -5,8 +5,9 @@ name: PR Title
 # main's commit history. Read-only (only inspects github.event.pull_request.title -- no checkout,
 # no secrets), so this is safe on `pull_request` for fork PRs too; no need for `pull_request_target`.
 #
-# NOT a required check yet (deliberately not added to branch protection) -- see
-# docs/pr-title-convention.md "Rollout" for why and when that changes (FRO182/FRO170).
+# Required check as of FRO170 -- see docs/pr-title-convention.md "Rollout" for the history of why
+# it landed non-required first (FRO182) and what had to happen (open PRs retitled by hand) before
+# it could become one.
 on:
   pull_request:
     types: [opened, edited, reopened, synchronize]

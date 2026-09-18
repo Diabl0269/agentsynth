@@ -14,7 +14,10 @@ on:
     branches: [ "main" ]
     types: [opened, synchronize, reopened, labeled]
     # NOTE: GitHub Actions does not support YAML anchors, so this list is duplicated verbatim
-    # under `push:` below. Keep the two in sync.
+    # under `push:` below, AND (inverted, as `paths-ignore:`) in ci-passthrough.yml, which posts
+    # a synthetic success under each of this workflow's four required job names when a PR's
+    # changes don't match this filter (FRO170 — see that file's header for why). Keep all three
+    # in sync.
     paths:
       - 'Source/**'
       - 'Tests/**'

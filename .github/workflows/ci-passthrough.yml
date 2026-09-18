@@ -1,0 +1,77 @@
+name: CI Passthrough
+
+# WHY THIS EXISTS: `main`'s branch protection requires four ci.yml contexts (`Lint`,
+# `Build, Test, and Coverage`, `Build and Test (macOS)`, `Build and Test (Windows)` — see
+# docs/testing.md "Build caching rule" and .github/CLAUDE.md). ci.yml's own `pull_request`
+# trigger is `paths:`-filtered to Source/**, Tests/**, Tools/**, the CMake files, scripts/**,
+# .clang-format*, and its own two workflow files — deliberately, so a docs-only PR doesn't pay
+# for a full build matrix. But GitHub's required-status-check gate doesn't know "not
+# applicable" from "still running": a required context that never posts any status stays
+# "Expected — waiting for status to be reported" forever, so a docs-only PR shows BLOCKED even
+# though every check that actually ran (Docs, PR Title) is green. Before this file existed the
+# routine workaround was `gh pr merge --admin`, which bypasses ALL required checks, including a
+# red Docs job — see docs/docs-guard.md and FRO170. This workflow closes that hole: whenever
+# ci.yml's own trigger paths don't match, this one does, and posts an immediate success under
+# each of the four job names ci.yml would have used, so the PR becomes normally mergeable.
+#
+# `paths-ignore:` below is a byte-for-byte copy of ci.yml's `pull_request.paths:` list — the
+# complement of a `paths:` filter's "any changed file matches" is exactly a `paths-ignore:`
+# filter's "not every changed file matches", so together the two workflows are mutually
+# exclusive on a single-concern PR (either ci.yml runs and this doesn't, or vice versa). ci.yml
+# names this file in its own "keep the lists in sync" NOTE — this is now the THIRD copy of that
+# path list (pull_request, push, and this file); if you touch one, touch all three, and add the
+# new path to ci.yml's `paths:` too if it should trigger a real build.
+#
+# KNOWN HAZARD: a mixed PR (e.g. one commit touching both Source/** and docs/**) matches
+# ci.yml's `paths:` filter (so ci.yml runs) but does NOT match every entry in this file's
+# `paths-ignore:` list either (docs/** isn't ignored here), so both workflows fire and both post
+# a status under the same job name (e.g. two "Lint" check runs on the same commit). GitHub shows
+# whichever run completes last; this workflow's job is instantaneous, so in practice the real
+# ci.yml run posts after and wins. If that ordering ever inverts (a passthrough success masking
+# a real failure), this pattern is unsafe and needs a job-level `if:` refactor of ci.yml instead
+# (dropping the workflow-level `paths:` filter for a `changes`-job gate) — see FRO170's ticket
+# for why that wasn't the first choice (bigger blast radius on a load-bearing file, and a fails
+# more dangerously: a skipped dependent job still satisfies branch protection).
+
+on:
+  pull_request:
+    branches: [ "main" ]
+    types: [opened, synchronize, reopened, labeled]
+    # NOTE: keep verbatim in sync with ci.yml's `pull_request.paths:` list (see header above).
+    paths-ignore:
+      - 'Source/**'
+      - 'Tests/**'
+      - 'Tools/**'
+      - 'CMakeLists.txt'
+      - 'Tests/CMakeLists.txt'
+      - 'cmake/**'
+      - 'scripts/**'
+      - '.clang-format'
+      - '.clang-format-version'
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/build-artifacts.yml'
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Docs-only change — ci.yml's Lint job doesn't apply; docs.yml's Docs job covers this PR instead."
+
+  build-and-test:
+    name: "Build, Test, and Coverage"
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Docs-only change — no build/test/coverage applies."
+
+  build-and-test-macos:
+    name: "Build and Test (macOS)"
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Docs-only change — no build/test/coverage applies."
+
+  build-and-test-windows:
+    name: "Build and Test (Windows)"
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Docs-only change — no build/test/coverage applies."

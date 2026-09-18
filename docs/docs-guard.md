@@ -137,6 +137,21 @@ docs cleanup pass, since it doesn't stop at the first failure the way the plain 
 Between the three, every commit and every PR gets checked at least once before merge, and a commit
 that would fail is caught locally before it's ever pushed.
 
+## Enforcement (FRO170)
+
+Running the check isn't the same as it gating a merge. Before FRO170, the Docs job ran on every
+PR but wasn't in `main`'s required-status-checks list, so a red Docs job didn't block anything —
+and a docs-only PR was BLOCKED anyway (ci.yml's four required jobs never post a status, since its
+`paths:` filter excludes `docs/**`/`*.md`), so the routine workaround, `gh pr merge --admin`,
+bypassed every check including a red Docs job. Two changes closed that:
+
+1. "Docs" (and "PR Title") were added to `main`'s required-status-checks list —
+   `.github/CLAUDE.md` names the six required contexts.
+2. `.github/workflows/ci-passthrough.yml` posts a synthetic success under ci.yml's four required
+   job names whenever ci.yml's own `paths:` filter doesn't match, so a docs-only PR's required
+   checks all post a real status and the PR merges normally once green — no more routine
+   `--admin` override, and a red Docs job now actually blocks the merge it should.
+
 ## Zero tolerance for stale references
 
 Checks B, C, D, and E exist specifically because [check A's grandfathering](#naming-ratchet)
