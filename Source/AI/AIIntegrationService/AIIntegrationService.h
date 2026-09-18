@@ -22,79 +22,50 @@ namespace synth {
  */
 class AIIntegrationService {
 public:
-    /**
-     * @param graph The graph AI patches are applied to.
-     * @param undoManager Optional — when supplied, applyPatch() becomes undoable. Defaults to null so
-     *                    callers that don't own an undo manager (e.g. tests) keep working unchanged.
-     */
+    /** @param undoManager Optional — when supplied, applyPatch() becomes undoable. Defaults to null
+     *  so callers that don't own an undo manager (e.g. tests) keep working unchanged. */
     AIIntegrationService(juce::AudioProcessorGraph& graph, AppUndoManager* undoManager = nullptr);
     ~AIIntegrationService();
 
-    /**
-     * @brief Installs (or clears) the undo manager used to make applyPatch() undoable.
-     */
+    /** Installs (or clears) the undo manager used to make applyPatch() undoable. */
     void setUndoManager(AppUndoManager* um) { undoManager = um; }
 
-    /**
-     * @brief Sets (or clears) the bearer token forwarded to the active provider's
-     *        AIProvider::setAuthToken().
-     *
-     * Stored regardless of whether a provider is currently installed — setProvider() re-pushes
-     * it to whatever provider it installs next, mirroring the model-discovery re-push contract
-     * documented for this class (see docs/AI_Engine_chat_component.md "Model Discovery Ordering Contract"):
-     * AIChatComponent/AccountService can be wired up before MainComponent::initialiseCommon()
-     * installs the real provider, so a value set first must not be lost.
-     */
+    /** Sets (or clears) the bearer token forwarded to the active provider. Safe to call before a
+     *  provider is installed — the value is re-pushed once one is (see setProvider()). */
     void setAuthToken(const juce::String& token);
 
-    /**
-     * @brief Sets the request timeout, in milliseconds, forwarded to the active provider's
-     *        AIProvider::setRequestTimeoutMs().
-     *
-     * Same re-push contract as setAuthToken()/setConversationId(): stored regardless of whether
-     * a provider is currently installed, and setProvider() re-pushes it (unconditionally, since
-     * unlike a token or conversation id there's always a meaningful value) to whatever provider
-     * it installs next — otherwise a provider swap would silently fall back to that provider's
-     * own hardcoded default, re-introducing the exact drift this value exists to prevent (see
-     * docs/AI_Engine_chat_component.md, request timeout section).
-     */
+    /** Sets the request timeout, in milliseconds, forwarded to the active provider. Same re-push
+     *  contract as setAuthToken()/setConversationId() — safe to call before a provider exists. */
     void setRequestTimeoutMs(int timeoutMs);
 
-    /**
-     * @brief The currently configured request timeout, in milliseconds. Defaults to 240000 (4
-     *        minutes) until changed via setRequestTimeoutMs().
-     */
+    /** The currently configured request timeout, in milliseconds. Defaults to 240000 (4 minutes)
+     *  until changed via setRequestTimeoutMs(). */
     int getRequestTimeoutMs() const { return currentRequestTimeoutMs; }
 
-    /**
-     * @brief Installs (or clears) the timeline/transport this service reads for arrangement
-     *        context. Non-owning — MainComponent owns both for the app's lifetime.
+    /** Installs (or clears) the timeline/transport this service reads for arrangement context.
+     *  Non-owning — MainComponent owns both for the app's lifetime.
      *
-     * Mirrors setProvider()/setUndoManager(): a plain pointer setter, safe to call with either
-     * argument null (arrangement context is then simply omitted from the outgoing request, same
-     * as an empty TimelineDoc would produce).
-     */
+     *  Mirrors setProvider()/setUndoManager(): a plain pointer setter, safe to call with either
+     *  argument null (arrangement context is then simply omitted from the outgoing request, same
+     *  as an empty TimelineDoc would produce). */
     void setTimelineContext(const TimelineDoc* doc, const TransportService* transport) {
         timelineDoc = doc;
         transportService = transport;
         refreshSystemPrompt(); // the timeline tool section is gated on context being present
     }
 
-    /**
-     * @brief Switches the LOCAL model's timeline/automation authoring on or off. `MainComponent`
-     *        sets this unconditionally on at startup now that the timeline is GA (there is no more
-     *        Preferences toggle to drive it). Kept as its own switch, separate from
-     *        setTimelineContext(), so tests can flip authoring on/off without standing up or
-     *        tearing down a timeline context.
+    /** Switches the LOCAL model's timeline/automation authoring on or off. `MainComponent` sets
+     *  this unconditionally on at startup now that the timeline is GA (there is no more
+     *  Preferences toggle to drive it). Kept as its own switch, separate from setTimelineContext(),
+     *  so tests can flip authoring on/off without standing up or tearing down a timeline context.
      *
-     * On (and with a timeline context installed): the system prompt teaches the `timelineOps`
-     * grammar, the structured-output schema handed to the provider grows an optional
-     * `timelineOps` property (AIStateMapper::getPatchSchemaWithTimelineOps), and the outgoing
-     * request's context gains an "Automation targets" section (the (nodeUuid, paramId) pairs
-     * writeLane needs — see buildAutomationTargetsSection). Off: prompt, schema and context are
-     * byte-identical to the pre-timeline behaviour. Extraction/preview/apply stay wired either
-     * way — they act on what a response actually carries, and the Apply gate is the user's.
-     */
+     *  On (and with a timeline context installed): the system prompt teaches the `timelineOps`
+     *  grammar, the structured-output schema handed to the provider grows an optional
+     *  `timelineOps` property (AIStateMapper::getPatchSchemaWithTimelineOps), and the outgoing
+     *  request's context gains an "Automation targets" section (the (nodeUuid, paramId) pairs
+     *  writeLane needs — see buildAutomationTargetsSection). Off: prompt, schema and context are
+     *  byte-identical to the pre-timeline behaviour. Extraction/preview/apply stay wired either
+     *  way — they act on what a response actually carries, and the Apply gate is the user's. */
     void setTimelineToolsEnabled(bool enabled) {
         if (timelineToolsEnabled == enabled)
             return;
@@ -104,133 +75,67 @@ public:
     bool areTimelineToolsEnabled() const { return timelineToolsEnabled; }
 
     // -- Timeline operations -----------------------------------------------------------------
-    // The write half of the timeline seam, and a deliberate mirror of the patch card's flow:
-    // extract -> validate (untrusted) -> preview to the user -> the user clicks Apply -> apply.
-    // A timelineOps envelope is a SIBLING of a patch suggestion, never nested inside one — a
-    // "timeline" key inside patch JSON stays refused by validatePatch forever. A single response
-    // may legitimately carry both, and each half gets its own gate and its own button.
+    // The write half of the timeline seam. A timelineOps envelope is a SIBLING of a patch
+    // suggestion, never nested inside one — a "timeline" key inside patch JSON stays refused by
+    // validatePatch forever. See AIIntegrationServiceTimelineOps.cpp for the full flow (also
+    // documented in docs/AI_Engine_patch_safety.md §9 "Sibling, never nested").
 
-    /**
-     * @brief The timelineOps envelope carried by a model response, or a void var if it has none.
-     *
-     * Runs exactly the same extraction applyPatch() does (extractJsonFromResponse: fenced block,
-     * bare braces, or the whole body), then hands back the parsed ROOT — envelope and patch share
-     * one JSON object when the model sends both, so this is the same var the patch path parses.
-     * Static and public for the same reason extractJsonFromResponse is: a harness or a test can
-     * reproduce the real extraction rather than approximate it.
-     */
+    /** The timelineOps envelope carried by a model response, or a void var if it has none. Static
+     *  and public so a harness/test can reproduce the real extraction. */
     static juce::var extractTimelineOps(const juce::String& response);
 
     /** True once MainComponent has wired the live timeline in (setTimelineContext). Without it
      *  there is nothing to validate against, and timeline suggestions are not offered at all. */
     bool hasTimelineContext() const { return timelineDoc != nullptr; }
 
-    /**
-     * @brief Validates an envelope against the live timeline + graph WITHOUT applying it.
-     *
-     * The preview step: on success the result's previewText is what the chat card shows the user
-     * before they agree to anything. Fails (applying nothing, as always) when no timeline context
-     * is installed.
-     */
+    /** Validates an envelope against the live timeline + graph WITHOUT applying it. Fails (applying
+     *  nothing, as always) when no timeline context is installed. */
     TimelineOpsResult previewTimelineOps(const juce::var& envelope) const;
 
-    /**
-     * @brief Installed by the app-level owner (MainComponent) to route an Apply back to
-     *        `TimelineOps::apply` with the real doc, graph and undo manager.
+    /** Installed by the app-level owner (MainComponent) to route an Apply back to
+     *  `TimelineOps::apply` with the real doc, graph and undo manager.
      *
-     * The service holds the timeline only as a CONST pointer (it is a context reader), and
-     * it owns no undo manager for the timeline — so the host supplies the write path, exactly as
-     * AIChatComponent supplies its own urlOpener. With no callback installed, applyTimelineOps()
-     * reports that it cannot apply rather than silently doing nothing.
-     */
+     *  The service holds the timeline only as a CONST pointer (it is a context reader), and it
+     *  owns no undo manager for the timeline — so the host supplies the write path, exactly as
+     *  AIChatComponent supplies its own urlOpener. With no callback installed, applyTimelineOps()
+     *  reports that it cannot apply rather than silently doing nothing. */
     using TimelineOpsApplyCallback = std::function<TimelineOpsResult(const juce::var& envelope)>;
     void setTimelineOpsApplyCallback(TimelineOpsApplyCallback callback) { timelineOpsApply = std::move(callback); }
 
-    /** @brief Applies a previously previewed envelope through the host callback. One undo step. */
+    /** Applies a previously previewed envelope through the host callback. One undo step. */
     TimelineOpsResult applyTimelineOps(const juce::var& envelope);
 
-    /**
-     * @brief Hard cap on how many paramTargets one arrange request offers — mirrors the server's
-     *        MAX_PARAM_TARGETS (synth-platform automation-generate/capability.ts): a longer list
-     *        would be rejected with a 400 before any model ever saw it. Targets past the cap are
-     *        dropped from the tail, in graph order — the same "bound the request, never fail it"
-     *        posture as buildAutomationTargetsSection()'s character cap.
-     */
+    /** Hard cap on how many paramTargets one arrange request offers — mirrors the server's
+     *  MAX_PARAM_TARGETS (synth-platform automation-generate/capability.ts): a longer list would be
+     *  rejected with a 400 before any model ever saw it. Targets past the cap are dropped from the
+     *  tail, in graph order — the same "bound the request, never fail it" posture as
+     *  buildAutomationTargetsSection()'s character cap. */
     static constexpr int kMaxRemoteParamTargets = 64;
 
-    /**
-     * @brief Sends an arrange-mode request — ONE intent served by whichever transport the active
-     *        provider has (the local/remote parity rule: the transport difference is absorbed
-     *        here, never surfaced as a behaviour difference).
-     *
-     * Hosted provider: the `timeline.generate` capability, with the structured request body from
-     * buildArrangeRequestBody(). Local provider: sendPrompt() with the SAME fields composed into
-     * the outgoing message (buildArrangeAugmentedContent, mirroring the server's own section
-     * layout) and AIStateMapper::getTimelineOpsEnvelopeSchema() as the response contract. Either
-     * way the answer is a `{"timelineOps": [...]}` envelope, which the existing
-     * extraction/preview/apply flow (extractTimelineOps → previewTimelineOps → the chat card's
-     * user-gated Apply) consumes unchanged — this method adds ways to ASK, never a second way to
-     * APPLY.
-     *
-     * Same history contract as sendMessage(): the user's raw text is recorded as the user turn
-     * (the composed arrange context exists only on the wire), a successful response's content as
-     * the assistant turn, and a Pro-plan conversation id is captured/re-pushed identically.
-     *
-     * No client-side retry on a validation rejection: the server runs its own bounded
-     * repair-retry inside the capability, and for the local model the envelope-only grammar plays
-     * the same role — an envelope that still fails TimelineOps::validate is surfaced to the user
-     * as the card's rejection message.
-     *
-     * With no provider installed, fails synchronously with the same typed error as sendMessage().
-     * On a hosted provider without a capability endpoint (a test double), the
-     * AIProvider::sendCapabilityRequest default delivers a typed Schema error.
-     */
+    /** Sends an arrange-mode request; the answer is a `{"timelineOps": [...]}` envelope consumed by
+     *  the same extractTimelineOps() -> previewTimelineOps() -> user-gated Apply flow as any other
+     *  timelineOps response — this method adds a way to ASK, never a second way to APPLY. Same
+     *  history contract as sendMessage(): the user's raw text is recorded as the user turn (the
+     *  composed arrange context exists only on the wire). Fails synchronously, like sendMessage(),
+     *  with no provider installed. */
     AIProvider::RequestId sendArrangeMessage(const juce::String& text, AIProvider::CompletionCallback callback);
 
-    /**
-     * @brief Builds the `timeline.generate` request body for `text` — everything the input schema
-     *        wants except productName, which the provider adds (it owns branding).
-     *
-     * Fields (see TimelineGenerateInputSchema, synth-platform timeline-generate/capability.ts):
-     *  - `userPrompt`: the RAW user text. Deliberately NOT pre-wrapped with patch/arrangement
-     *    context the way buildPatchAugmentedContent() does — timeline.generate composes its
-     *    context sections server-side from the structured fields below, unconditionally, so
-     *    pre-wrapping would duplicate every section in the model input.
-     *  - `arrangementContext`: ArrangementContext::summarize() of the live doc; "" when the doc
-     *    is empty or no timeline context is installed (the schema requires the key but allows
-     *    empty — "a caller with nothing to say should say so explicitly").
-     *  - `paramTargets`: the SAME (uuid-bearing node, float param, real range) enumeration
-     *    buildAutomationTargetsSection() renders as text, as structured objects
-     *    {nodeUuid, nodeName, paramId, min, max, default}, capped at kMaxRemoteParamTargets.
-     *  - `availableTracks`: one {name, kind, index} per live TimelineDoc track, in doc order.
-     *
-     * Public for the same reason extractTimelineOps() is: tests and harnesses reproduce the real
-     * request rather than approximating it.
-     */
+    /** Builds the `timeline.generate` request body for `text`. Public for the same reason
+     *  extractTimelineOps() is: tests and harnesses reproduce the real request rather than
+     *  approximating it. See its definition for the field-by-field breakdown. */
     juce::var buildArrangeRequestBody(const juce::String& text) const;
 
-    /**
-     * @brief Sets (or clears) the conversation id forwarded to the active provider's
-     *        AIProvider::setConversationId().
-     *
-     * Same re-push contract as setAuthToken(): stored regardless of whether a provider is
-     * currently installed, and setProvider() re-pushes it to whatever provider it installs next.
-     * Normally callers don't need to call this directly — sendMessage() captures a non-empty
-     * AIResponse::conversationId from a successful response and stores/re-pushes it itself, so
-     * the next call in the session continues the same server-side thread. AIChatComponent calls
-     * this directly only to CLEAR it (empty string) when the active plan isn't Pro, so a stale id
-     * from an earlier Pro session isn't sent to a since-downgraded account.
-     */
+    /** Sets (or clears) the conversation id forwarded to the active provider. Same re-push contract
+     *  as setAuthToken(). Callers normally never call this directly — sendMessage() manages it —
+     *  except AIChatComponent, which clears it (empty string) on a plan downgrade. */
     void setConversationId(const juce::String& id);
 
-    /**
-     * @brief The current server-side conversation id (P6-9), i.e. what setConversationId()/the
-     *        conversationId re-push contract above most recently stored — NOT the client's own
-     *        local-history id (AIChatComponent::currentLocalConversationId is a different, unrelated
-     *        identifier). Empty when nothing has been persisted server-side yet (free plan, or no
-     *        successful hosted response so far this session). Used by AIChatComponent's P6-9 rating
-     *        sync to key the feedback POST against the right server conversation.
-     */
+    /** The current server-side conversation id (P6-9), i.e. what setConversationId()/the
+     *  conversationId re-push contract above most recently stored — NOT the client's own
+     *  local-history id (AIChatComponent::currentLocalConversationId is a different, unrelated
+     *  identifier). Empty when nothing has been persisted server-side yet (free plan, or no
+     *  successful hosted response so far this session). Used by AIChatComponent's P6-9 rating sync
+     *  to key the feedback POST against the right server conversation. */
     juce::String getConversationId() const { return currentConversationId; }
 
     /**
@@ -252,71 +157,44 @@ public:
 
     void setProvider(std::unique_ptr<AIProvider> newProvider);
 
-    /**
-     * @brief Maximum number of retained user/assistant turn pairs, beyond the system prompt.
-     *        Oldest pairs are trimmed first once this cap is exceeded.
-     */
+    /** Maximum number of retained user/assistant turn pairs, beyond the system prompt. Oldest
+     *  pairs are trimmed first once this cap is exceeded. */
     static constexpr int kMaxHistoryTurns = 8;
 
-    /**
-     * @brief Sends a user message and gets a response.
-     */
+    /** Sends a user message and gets a response. */
     AIProvider::RequestId sendMessage(const juce::String& text, AIProvider::CompletionCallback callback,
                                       bool useStructuredOutput = false);
 
-    /**
-     * @brief Abandons an in-flight request obtained from sendMessage().
-     *
-     * The caller's callback still fires exactly once, with AIErrorKind::Cancelled, and no
-     * assistant turn is added to the history. A stale or unknown handle is a safe no-op.
-     */
+    /** Abandons an in-flight request obtained from sendMessage(). The caller's callback still
+     *  fires exactly once, with AIErrorKind::Cancelled, and no assistant turn is added to the
+     *  history. A stale or unknown handle is a safe no-op. */
     void cancelRequest(AIProvider::RequestId requestId);
 
-    /**
-     * @brief Applies a JSON patch to the graph.
-     */
+    /** Applies a JSON patch to the graph. */
     bool applyPatch(const juce::String& jsonString, bool mergeMode = false);
 
-    /**
-     * @brief Computes the before/after graph snapshots a proposed patch would produce, WITHOUT
-     *        applying anything to the live graph — the basis for the chat UI's diff preview.
+    /** Computes the before/after graph snapshots a proposed patch would produce, WITHOUT applying
+     *  anything to the live graph — the basis for the chat UI's diff preview.
      *
-     * `before` is always the live graph's current AIStateMapper::graphToJSON(). `after` is
-     * graphToJSON() of a scratch graph the patch was actually applied to (merge mode first
-     * trusted-replays the live graph into that scratch, exactly like applyPatch()'s own
-     * PatchEval regression check, so pre-existing nodes keep their live id/uuid). Diffing these
-     * two snapshots — never the raw patch JSON — is what makes the preview correct: it is the
-     * only way to see merge mode's auto-wiring of new nodes, replace mode's implicit deletion of
-     * everything the patch doesn't restate, and the untrusted-apply [0,1] rescale heuristic. See
-     * PatchDiff.h.
-     *
-     * Mirrors applyPatch()'s mode-less-patch repair (a replace that only validates as a merge is
-     * applied as a merge) so the previewed diff matches what Apply/Merge will actually do.
-     *
-     * @return true if the patch applied cleanly to the scratch graph (matching what applyPatch()
-     *         would report on a fresh live graph); false if it failed validation or application —
-     *         `before`/`after` are still populated (after reflects the unapplied, pre-patch
-     *         state) so a caller can still show "preview unavailable" using the same values.
-     *         Does NOT touch getLastPatchError()/getLastPatchErrorCode()/didLastPatchRepairMode()
-     *         — this never mutates the graph the user is looking at, so it must not clobber the
-     *         error state from a previous real Apply attempt.
-     */
+     *  @return true if the patch applied cleanly to the scratch graph (matching what applyPatch()
+     *          would report on a fresh live graph); false if it failed validation or application —
+     *          `before`/`after` are still populated either way (after reflects the unapplied,
+     *          pre-patch state on failure), so a caller can still show "preview unavailable" using
+     *          the same values. Never touches getLastPatchError()/getLastPatchErrorCode()/
+     *          didLastPatchRepairMode() — this never mutates the graph the user is looking at, so
+     *          it must not clobber the error state from a previous real Apply attempt. */
     bool computePatchPreview(const juce::String& jsonString, bool mergeMode, juce::var& before, juce::var& after);
 
-    /**
-     * @brief How many correction round-trips applyPatchWithRetry() may make after the first
-     *        rejected patch. Total attempts are kMaxPatchRetries + 1.
+    /** How many correction round-trips applyPatchWithRetry() may make after the first rejected
+     *  patch. Total attempts are kMaxPatchRetries + 1.
      *
-     * Deliberately small. Each retry is a full model round-trip the user is waiting on, and a
-     * model that has failed twice on the same stated reason is not usually one more nudge away
-     * from success — surfacing the error beats spinning.
-     */
+     *  Deliberately small. Each retry is a full model round-trip the user is waiting on, and a
+     *  model that has failed twice on the same stated reason is not usually one more nudge away
+     *  from success — surfacing the error beats spinning. */
     static constexpr int kMaxPatchRetries = 2;
 
-    /**
-     * @brief Reported before each correction round-trip, so the UI can show that a retry is
-     *        happening and why, instead of appearing to hang.
-     */
+    /** Reported before each correction round-trip, so the UI can show that a retry is happening
+     *  and why, instead of appearing to hang. */
     struct PatchRetryInfo {
         int failedAttempt = 0; // 1-based index of the attempt that was just rejected
         int totalAttempts = 0; // kMaxPatchRetries + 1
@@ -326,80 +204,52 @@ public:
     using PatchApplyCallback = std::function<void(bool success, const juce::String& error)>;
     using PatchRetryCallback = std::function<void(const PatchRetryInfo&)>;
 
-    /**
-     * @brief Applies a patch; on a validation failure, asks the model to correct it and retries.
-     *
-     * The specific validation message is fed back to the model ("that patch was rejected
-     * because X"), which is the whole point — a bare "try again" tends to reproduce the same
-     * mistake. Retries are bounded by kMaxPatchRetries and each one is announced through
-     * `onRetry`; when they run out, `onComplete` reports the last error rather than looping.
-     *
-     * `onComplete` is invoked exactly once. With no provider installed, or when the very first
-     * attempt succeeds, it is invoked synchronously.
-     */
+    /** Applies a patch; on a validation failure, asks the model to correct it and retries, bounded
+     *  by kMaxPatchRetries (each retry announced via `onRetry`). `onComplete` is invoked exactly
+     *  once — synchronously when no provider is installed or the first attempt succeeds. */
     void applyPatchWithRetry(const juce::String& jsonString, bool mergeMode, PatchApplyCallback onComplete,
                              PatchRetryCallback onRetry = {});
 
-    /**
-     * @brief Why the most recent applyPatch() returned false, in human-readable form.
+    /** Why the most recent applyPatch() returned false, in human-readable form.
      *
-     * Empty when the last apply succeeded. Callers MUST surface this — a rejected patch that is
-     * swallowed silently looks to the user like a dead Apply/Merge button.
-     */
+     *  Empty when the last apply succeeded. Callers MUST surface this — a rejected patch that is
+     *  swallowed silently looks to the user like a dead Apply/Merge button. */
     const juce::String& getLastPatchError() const { return lastPatchError; }
 
-    /**
-     * @brief The typed reason the most recent applyPatch() returned false.
+    /** The typed reason the most recent applyPatch() returned false.
      *
-     * PatchValidationError::None when the last apply succeeded, or when it failed inside
-     * applyJSONToGraph rather than validation. Callers that need to react by category
-     * (retry, repair, give up) should switch on this rather than parse getLastPatchError().
-     */
+     *  PatchValidationError::None when the last apply succeeded, or when it failed inside
+     *  applyJSONToGraph rather than validation. Callers that need to react by category (retry,
+     *  repair, give up) should switch on this rather than parse getLastPatchError(). */
     PatchValidationError getLastPatchErrorCode() const { return lastPatchErrorCode; }
 
-    /**
-     * @brief Whether the most recent applyPatch() reinterpreted a mode-less patch as a merge.
+    /** Whether the most recent applyPatch() reinterpreted a mode-less patch as a merge.
      *
-     * See applyPatch(): the repair only ever turns a rejected *replace* into a *merge* (never the
-     * destructive direction), only when the model stated no "mode", and only when validation
-     * accepts the patch that way.
-     */
+     *  See applyPatch(): the repair only ever turns a rejected *replace* into a *merge* (never the
+     *  destructive direction), only when the model stated no "mode", and only when validation
+     *  accepts the patch that way. */
     bool didLastPatchRepairMode() const { return lastPatchModeRepaired; }
 
-    /**
-     * @brief Extracts the JSON payload from a model response that may wrap it in prose or fences.
-     *
-     * Public and static so the offline measurement harness can reproduce exactly the extraction
-     * applyPatch() performs, rather than approximating it.
-     */
+    /** Extracts the JSON payload from a model response that may wrap it in prose or fences. Public
+     *  and static so the offline measurement harness can reproduce exactly the extraction
+     *  applyPatch() performs, rather than approximating it. */
     static juce::String extractJsonFromResponse(const juce::String& response);
 
-    /**
-     * @brief Returns the current graph state as a JSON string for context.
-     */
+    /** Returns the current graph state as a JSON string for context. */
     juce::String getPatchContext();
 
-    /**
-     * @brief Returns the chat history.
-     */
+    /** Returns the chat history. */
     const std::vector<AIProvider::Message>& getHistory() const { return chatHistory; }
 
-    /**
-     * @brief Clears the chat history (except system prompt).
-     */
+    /** Clears the chat history (except the system prompt). */
     void clearHistory();
 
-    /**
-     * @brief Model management methods.
-     */
     void setModel(const juce::String& name);
     juce::String getCurrentModel() const;
     void fetchAvailableModels(std::function<void(const juce::StringArray& models, bool success)> callback);
 
-    /**
-     * @brief True when the active provider sends the prompt/patch to a remote/hosted server
-     *        (RemoteProvider). False for a local provider (Ollama) or when none is installed yet.
-     */
+    /** True when the active provider sends the prompt/patch to a remote/hosted server
+     *  (RemoteProvider). False for a local provider (Ollama) or when none is installed yet. */
     bool isCurrentProviderHosted() const { return provider != nullptr && provider->isHosted(); }
 
 private:
@@ -428,13 +278,9 @@ private:
     // section, schema extension and targets context only exist once the app explicitly opts in.
     bool timelineToolsEnabled = false;
 
-    // The (nodeUuid, paramId, range) inventory a `writeLane` op needs — the model cannot name a
-    // node it was never told about. Uuids appear here ON PURPOSE, despite ArrangementContext's
-    // no-uuid rule: that rule keeps identifiers out of the human-readable SUMMARY (where a display
-    // name serves better and a leak buys nothing); this section is the ADDRESSING channel without
-    // which the writeLane grammar is unusable. A node uuid is random per-node identity — never a
-    // file path, plugin identifier or factory key — and validate() only accepts pairs that resolve
-    // against the live graph anyway.
+    // The (nodeUuid, paramId, range) inventory a `writeLane` op needs. See
+    // AIIntegrationServiceRequestSending.cpp for why uuids are included here despite
+    // ArrangementContext's no-uuid rule (also documented in docs/AI_Engine_patch_safety.md §9).
     juce::String buildAutomationTargetsSection() const;
 
     // One automatable parameter on one addressable node — the shared enumeration behind BOTH
@@ -452,14 +298,11 @@ private:
         float defaultValue = 0.0f;
     };
 
-    // Uuid-bearing nodes only (a node without one is not addressable by writeLane), float
-    // parameters only (that is what an automation lane drives), real ranges from the parameter's
-    // own NormalisableRange. Graph order, unbounded — each caller applies its own cap.
+    // Graph order, unbounded — each caller applies its own cap. See
+    // AIIntegrationServiceRequestSending.cpp's definition for what's included/excluded.
     std::vector<AutomationTargetInfo> enumerateAutomationTargets() const;
 
-    // The LOCAL transport's rendering of an arrange request: buildArrangeRequestBody()'s fields
-    // composed into one message, section-for-section the way the server's
-    // buildTimelineUserMessage composes them for the hosted transport. See sendArrangeMessage().
+    // See its definition in AIIntegrationServiceRequestSending.cpp for what this composes.
     juce::String buildArrangeAugmentedContent(const juce::String& text) const;
 
     // True while the timeline tool surface should be offered to the model: the switch is on AND
@@ -468,73 +311,42 @@ private:
 
     void initSystemPrompt();
 
-    /** The full system-message text — initSystemPrompt() pushes it, refreshSystemPrompt() swaps it
-     *  into an existing history in place (mid-conversation toggles must not clear the chat). */
+    /** The full system-message text sent as the system turn. initSystemPrompt() pushes it;
+     *  refreshSystemPrompt() swaps it in place (see its own comment). */
     juce::String buildSystemPrompt() const;
     void refreshSystemPrompt();
 
-    /**
-     * @brief Builds the patch-augmented request content for a user message, without mutating chatHistory.
-     */
+    /** Builds the patch-augmented request content for a user message, without mutating chatHistory. */
     juce::String buildPatchAugmentedContent(const juce::String& text);
 
-    /**
-     * @brief Wraps a caller's completion callback with the shared success bookkeeping every
-     *        outgoing request needs: append the assistant turn to chatHistory (never for a
-     *        cancelled request — see the comment inside) and capture/re-push a Pro-plan
-     *        conversation id. Shared by sendMessage() and sendArrangeMessage() so the two paths
-     *        cannot drift on history or conversation-id behaviour.
-     */
+    // Wraps a caller's completion callback with shared success bookkeeping (assistant-turn
+    // history, conversation-id re-push). Shared by sendMessage() and sendArrangeMessage().
     AIProvider::CompletionCallback wrapCompletionForHistory(AIProvider::CompletionCallback callback);
 
-    /**
-     * @brief Trims chatHistory to the system prompt plus the most recent kMaxHistoryTurns pairs,
-     *        removing oldest whole user+assistant pairs so history never starts on an assistant turn.
-     */
+    // Keeps chatHistory bounded to kMaxHistoryTurns pairs; see its definition for the invariant it
+    // preserves.
     void trimHistory();
 
-    /**
-     * @brief One correction round-trip of applyPatchWithRetry(), recursing until the patch
-     *        applies or `failedAttempt` reaches kMaxPatchRetries + 1.
-     */
+    /** One correction round-trip of applyPatchWithRetry(), recursing until the patch applies or
+     *  `failedAttempt` reaches kMaxPatchRetries + 1. */
     void requestPatchCorrection(int failedAttempt, bool mergeMode, const juce::String& originalRequest,
                                 PatchApplyCallback onComplete, PatchRetryCallback onRetry);
 
-    /**
-     * @brief The message sent back to the model naming the specific validation failure.
-     *
-     * Restates `originalRequest` explicitly rather than relying on conversation history to carry
-     * it: RemoteProvider (Source/AI/RemoteProvider.h) sends only the last message, so a correction
-     * turn with no restated intent reaches the model as a bare "fix this JSON" with no idea what
-     * the patch was even supposed to be — confirmed live: the model invents an unrelated patch
-     * referencing node ids that don't exist anywhere. OllamaProvider already sends full history, so
-     * this is redundant-but-harmless there.
-     */
+    /** The message sent back to the model naming the specific validation failure and restating
+     *  `originalRequest`. See its definition for why restating the request matters. */
     static juce::String buildCorrectionPrompt(const juce::String& originalRequest, const juce::String& error);
 
-    /**
-     * @brief The most recent user-authored chat turn, so a correction round-trip can restate what
-     *        the patch being corrected was actually for. Captured once at the start of
-     *        applyPatchWithRetry() — before any correction turns are appended to chatHistory — and
-     *        threaded through requestPatchCorrection()'s recursion rather than re-derived on each
-     *        retry, so a second retry doesn't mistake the first retry's own correction text for the
-     *        original request.
-     */
+    /** The most recent user-authored chat turn, for restating what a correction round-trip's patch
+     *  was actually for. */
     juce::String mostRecentUserRequest() const;
 
-    /**
-     * @brief Whether the patch states a non-empty "mode", i.e. the model expressed an intent
-     *        that the mode repair in applyPatch() must not override.
-     */
+    /** Whether the patch states a non-empty "mode" — an intent the mode repair in applyPatch()
+     *  must not override. */
     static bool hasExplicitMode(const juce::var& json);
 
-    /**
-     * @brief Trusted-replays the live graph's current AIStateMapper::graphToJSON() into `scratch`
-     *        (clearExisting=true, trusted=true) — the shared first step for building a scratch
-     *        graph that starts as an exact copy of the live one, used by both applyPatch()'s
-     *        PatchEval regression check and computePatchPreview(). Only meaningful for merge mode:
-     *        a replace-mode candidate patch has no "before" to build on top of.
-     */
+    /** Trusted-replays the live graph's current AIStateMapper::graphToJSON() into `scratch`
+     *  (clearExisting=true, trusted=true). See its definition for why that's safe here and where
+     *  it's shared. */
     void replayLiveGraphTrusted(juce::AudioProcessorGraph& scratch) const;
 
     JUCE_DECLARE_WEAK_REFERENCEABLE(AIIntegrationService)

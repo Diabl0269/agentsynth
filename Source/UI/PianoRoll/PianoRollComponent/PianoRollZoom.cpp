@@ -87,6 +87,11 @@ void PianoRollComponent::mouseMagnify(const juce::MouseEvent& e, float scaleFact
 }
 
 //==============================================================================
+// setShortcutManager's manager is installed STRICTLY ONCE per surface's lifetime in production (the
+// Settings window rebinds through it, this component never swaps it out mid-session) — matchesAction
+// below is the one seam every rebindable key on this surface routes through, EXCEPT Escape/Delete/
+// Backspace and the edit-tool digit shortcuts (handled by setActiveTool's owner), which are fixed
+// platform/app conventions rather than user-rebindable actions.
 bool PianoRollComponent::matchesAction(const juce::KeyPress& key, const juce::String& actionId,
                                        const juce::KeyPress& fallback) const {
     if (shortcuts_ == nullptr)

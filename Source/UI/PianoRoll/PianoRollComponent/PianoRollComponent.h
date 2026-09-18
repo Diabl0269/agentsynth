@@ -36,60 +36,13 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 // the doc exactly once on mouse-up via AppUndoManager::recordTimelineChange, so a multi-note
 // move/resize/velocity-scrub/delete is ONE undo step however many notes it touches.
 //
-// Coordinate system: the roll owns its OWN horizontal mapping (beatToX/xToBeat below) — its own
-// zoom and its own scroll origin, independent of the panel-wide TimelineViewState. x ==
-// leftGutterWidth() is the first visible beat, so the keys column (and, while it is open, the
-// scale-assist panel to its LEFT) is a real GUTTER and the first bar of a clip is reachable rather
-// than hidden under an opaque strip. leftGutterWidth() is kKeysColumnWidth alone with the panel
-// closed, kScalePanelWidth + kKeysColumnWidth while it is open — every place that used to hardcode
-// kKeysColumnWidth as "the grid's left offset" now goes through it (see the Scale Assist section
-// below), so opening the panel shifts the grid, the hit-testing and the clip-framing maths
-// together rather than drifting apart. The shared TimelineViewState is still consulted for ONE
-// thing: the snap division (snapBeat/divisionBeats), so the roll's grid, its snapped edits and the
-// panel's snap selector never disagree.
-//
-// Because that mapping differs from the panel's, the panel-wide TimelinePlayheadOverlay would draw
-// the playhead at the wrong x inside this rect. The roll therefore implements
-// TimelinePlayheadOverlay::LocalPlayheadClient: while it is open the overlay stops drawing and
-// repainting inside the roll's region and pushes the DRAWN beat here instead (setPlayheadBeat),
-// and the roll draws the line at its own x under the same strip-confined repaint discipline
-// (requestRepaintStrip — zero repaints while the position is unchanged, one strip while playing).
-// No timer is added here: the overlay's single playing-only timer still drives everything.
-//
-// Notes are clip-relative in the doc (MidiNote::startBeat); every doc read/write here converts to
-// absolute beats via clip->startBeat and back.
-//
-// Vertical row mapping: yForPitch/pitchForY do NOT map pitch directly to y. They map through
-// visiblePitches_ — a sorted, ascending list of every pitch that currently gets a ROW (all 128 when
-// no scale filtering is active). Row distance between two pitches is the distance between their
-// INDICES in that list, not the semitone distance between them, which is what lets pitch-visibility
-// mode collapse the out-of-scale gaps into zero-height rows instead of just recolouring them.
-// yForPitch of a pitch that is not itself visible (an edge case — a note landing between visible
-// rows) falls back to the nearest visible row's y. visiblePitches_ is rebuilt (see
-// rebuildVisiblePitches) whenever the scale context changes, the roll opens a clip, or a doc
-// mutation could have added/removed the note that was the only thing keeping an out-of-scale pitch
-// visible.
-//
-// The scroll POSITION itself is `topRowPosition_` — a CONTINUOUS (fractional) index into
-// visiblePitches_: the row whose top edge sits at y == canvasTop(). `firstVisiblePitch_` is
-// DERIVED from it (visiblePitches_[floor(topRowPosition_)], reclamped to stay a member of
-// visiblePitches_), kept in sync at the one seam every writer goes through (setTopRowPosition), so
-// it is always a member of visiblePitches_. This split is what makes vertical scrolling sub-pixel
-// smooth like the horizontal axis (rollView_.firstVisibleBeat) instead of snapping to whole rows:
-// yForPitch/pitchForY read the fractional anchor directly, while `firstVisiblePitch_` still only
-// ever reports a whole row — a pitch is a MIDI integer, so anything that hit-tests or paints
-// against a specific PITCH (rather than calling yForPitch for an arbitrary one) necessarily still
-// sees whole-row values. Vertical wheel-scroll, edge auto-scroll and vertical zoom all move
-// topRowPosition_ fractionally, but still walk visiblePitches_ by INDEX rather than semitone — a
-// scroll gesture over collapsed rows must move a consistent number of ROWS, not skip past them at
-// whatever their semitone spacing happens to be.
-//
-// The panel's edit-tool strip pushes the active tool in (setActiveTool). Select is the whole
-// gesture table above; Split / Glue / Erase / Mute / Draw replace it with single-click actions and
-// disable move, resize, velocity scrub and marquee entirely — see setActiveTool for why. The note
-// CLIPBOARD (copy/cut/paste/duplicate/repeat) lives here too rather than in the panel, because a
-// copied block is anchored on its own earliest note and is therefore paste-able into any clip: the
-// roll keeps it across openClip so "copy in one clip, paste in another" works.
+// The roll owns its OWN horizontal (beatToX/xToBeat) and vertical (yForPitch/pitchForY) mapping,
+// independent of the panel-wide TimelineViewState (consulted only for the shared snap division) and
+// of the panel-wide TimelinePlayheadOverlay (this class implements
+// TimelinePlayheadOverlay::LocalPlayheadClient to draw its own playhead instead) — see
+// PianoRollComponent.cpp for the full coordinate-system contract every unit in this directory
+// shares. Notes are clip-relative in the doc (MidiNote::startBeat); every doc read/write here
+// converts to absolute beats via clip->startBeat and back.
 //
 // See docs/timeline_panel_piano_roll.md §2 (TL5-8) for the gesture table.
 namespace synth::ui {
@@ -103,7 +56,7 @@ public:
     // Piano-roll-only constants; not shared with Theme::Metrics.
     static constexpr int kKeysColumnWidth = 44;
     // The scale-assist panel's fixed width when open, carved from the LEFT of the keys column —
-    // see leftGutterWidth() and the class comment.
+    // see leftGutterWidth() and PianoRollComponent.cpp's coordinate-system contract.
     static constexpr int kScalePanelWidth = 170;
     // The CHIP TOOLBAR row's height — the roll's own chrome strip, at the very top of its rect and
     // ABOVE the ruler band (see setRulerBandHeight and the layout note in resized()). Named as its own
@@ -139,16 +92,7 @@ public:
     // actually sounds under the notes the user is writing. ~0.8 of full scale.
     static constexpr int kKeysColumnVelocity = 102;
 
-    // getTooltipFor() builds the Q / Q♪ / Scale header buttons' tooltip text dynamically — see
-    // quantiseTooltipText()/quantiseLengthTooltipText()/quantisePitchTooltipText()/scaleTooltipText()
-    // below — rather than a static string with a hardcoded key name that would go stale the moment
-    // the user rebinds "pianoRollQuantise"/"pianoRollQuantiseLength"/"pianoRollQuantisePitches"/
-    // "pianoRollToggleScalePanel" (see synth::shortcutHintFor).
-
     explicit PianoRollComponent(TimelineViewState& viewState);
-    // Not '= default': the scale-panel slide's AnimationDriver callbacks capture 'this', so any
-    // in-flight animation must be stopped before the object goes away (mirrors
-    // ModuleLibraryComponent's own destructor for the same reason).
     ~PianoRollComponent() override;
 
     void paint(juce::Graphics& g) override;
@@ -163,37 +107,21 @@ public:
     // Shift+wheel / trackpad deltaX -> horizontal scroll
     // plain wheel      -> vertical (pitch) scroll
     // Nothing bubbles to the panel: the roll's zoom/scroll are its own, so the shared
-    // TimelineViewState must not move when the wheel lands here.
-    //
-    // EVERY branch reads its amount through synth::ui::ScrollPolicy (ScrollPolicy.h) rather than a
-    // raw delta member, for the two reasons spelled out there: macOS folds Shift+wheel into
-    // `deltaX`, so the modifier-decided branches (both zooms) must take the DOMINANT axis or go
-    // silently dead under Shift; and the plain-scroll branches route their sign through
-    // scrollAmount() so "natural" here means exactly what it means in a juce::Viewport.
-    //
-    // The two zoom branches are a DIFFERENT preference from the scroll branches: direction there
-    // comes from synth::ui::wheelGestureIsUpward (the PHYSICAL gesture, recovered from isReversed
-    // XOR the delta's sign — see ScrollPolicy.h), not from the delta's raw sign, so "wheel up zooms
-    // in" is the same finger motion regardless of the OS's natural-scrolling setting.
-    // zoomScrollInverted_ (setZoomScrollInverted) flips that outcome; it is independent of
-    // scrollInverted_, which only ever governs the plain-scroll branches below.
+    // TimelineViewState must not move when the wheel lands here. See PianoRollMouse.cpp for the
+    // full per-branch contract.
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
     // Trackpad pinch: plain = horizontal zoom around the pinch point, Shift = vertical zoom —
     // the same pair TimelinePanelComponent::mouseMagnify binds for the lanes.
     void mouseMagnify(const juce::MouseEvent& e, float scaleFactor) override;
     // Hover-only work: the Split tool's cut-position preview and the Select tool's resize-zone
-    // cursor. BOTH are gated on a state change (the snapped cut beat / the hovered note, and the
-    // "is the pointer in a resize zone" boolean), so a mouse moving inside one note at one snap
-    // division costs zero repaints and zero cursor churn — see the repaint invariant in CLAUDE.md.
+    // cursor — see PianoRollMouse.cpp for the state-change gating that keeps this free while idle.
     void mouseMove(const juce::MouseEvent& e) override;
     void mouseEnter(const juce::MouseEvent& e) override;
     void mouseExit(const juce::MouseEvent& e) override;
-    // Theme switch: the tool cursors are rendered FROM the themed icons, so the cache is dropped
-    // and the active tool's cursor re-applied here rather than rebuilt per mouse move.
+    // Theme switch: drops the tool-cursor cache and re-applies the active tool's cursor — see
+    // PianoRollEditTools.cpp.
     void lookAndFeelChanged() override;
-    // Being hidden (the panel swapping the clip lanes back in, the timeline panel collapsing, the
-    // window closing) ends any note audition in flight — see onAuditionNote. A component that goes
-    // away mid-gesture never gets a mouseUp, and that is exactly the path a stuck note comes from.
+    // Ends any note audition in flight when hidden — see onAuditionNote and PianoRollAudition.cpp.
     void visibilityChanged() override;
 
     // Panel-scoped Delete/Escape. Returns false (key falls through) when there is nothing to act
@@ -215,12 +143,12 @@ public:
     // TimelineClipLaneArea::setTransport.
     void setTransport(synth::TransportService* transport) noexcept;
 
-    // The user's keyboard bindings for this surface's OWN keys — see PianoRollComponent.cpp for
-    // the full resolution contract (strict-once-installed, Escape/Delete/tool-digits excluded).
+    // The user's keyboard bindings for this surface's OWN keys — see PianoRollZoom.cpp for the full
+    // resolution contract.
     void setShortcutManager(const ShortcutManager* manager) noexcept;
     const ShortcutManager* getShortcutManager() const noexcept;
 
-    // The app-level scroll/zoom-wheel-invert preferences — see PianoRollComponent.cpp.
+    // The app-level scroll/zoom-wheel-invert preferences — see PianoRollZoom.cpp.
     void setScrollInverted(bool inverted) noexcept;
     bool isScrollInverted() const noexcept;
     void setZoomScrollInverted(bool inverted) noexcept;
@@ -352,7 +280,8 @@ public:
     // ---- Follow playhead ----
 
     // When on, setPlayheadBeat page-flips the roll's own horizontal view rather than letting it
-    // scroll off the edge — see PianoRollPainting.cpp (autoScrollTick gating) for the full contract.
+    // scroll off the edge — see PianoRollPainting.cpp (setPlayheadBeat) and PianoRollMouse.cpp
+    // (autoScrollTick, which this gates against) for the full contract.
     void setFollowPlayhead(bool follow) noexcept;
     bool isFollowPlayhead() const noexcept;
 
@@ -444,33 +373,24 @@ public:
     synth::ClipId getLastExtendPromptClipForTest() const noexcept;
 
     // Six header chips, left to right: Back ("Clips"), Quantise, QuantiseLength, QuantisePitches,
-    // Scale, ScaleFilter. ScaleFilter is a TOGGLE (it paints lit); the other four are actions. (The
-    // Snap chip was removed — it duplicated the timeline toolbar's own Snap button, which
-    // reads/writes the SAME shared TimelineViewState::snapEnabled by reference; the J key still
-    // toggles it.)
+    // Scale, ScaleFilter. ScaleFilter is a TOGGLE (it paints lit); the other four are actions.
     enum class HeaderButtonId { None, Back, Quantise, QuantiseLength, QuantisePitches, Scale, ScaleFilter };
     HeaderButtonId getHoveredHeaderButtonForTest() const noexcept;
     bool isHeaderButtonHoveredForTest(HeaderButtonId which) const noexcept;
 
 protected:
-    // requestRepaintStrip/requestRepaintPreviewStrip/requestRepaintHeaderButtonStrip — the
-    // paint-count seams for the local playhead line, the Split-tool hover preview, and the header
-    // buttons' hover wash respectively, each counted independently by tests. See
-    // PianoRollPainting.cpp for the full contract of each.
+    // Paint-count seams for tests (the local playhead line, the Split-tool hover preview, and the
+    // header buttons' hover wash respectively) — see PianoRollPainting.cpp for the full contract.
     virtual void requestRepaintStrip(juce::Rectangle<int> strip);
     virtual void requestRepaintPreviewStrip(juce::Rectangle<int> strip);
     virtual void requestRepaintHeaderButtonStrip(juce::Rectangle<int> strip);
 
-    /** Raised on mouse-up when a just-committed resize left at least one note ending past the edited
-     *  clip's end: asks whether to grow `clipId` to `requiredLengthBeats` so the notes fit, or leave
-     *  them overrunning. `clipId` is CAPTURED here and carried through the answer — see extendClipTo.
-     *  The default implementation is an ASYNC juce::AlertWindow; a headless test overrides this
-     *  protected virtual instead. See PianoRollAudition.cpp for the full contract. */
+    /** Raised on mouse-up when a resize leaves a note past the clip's end — asks whether to grow the
+     *  clip to fit or leave it overrunning. Protected virtual so a headless test can override it
+     *  instead of the real async juce::AlertWindow; see PianoRollAudition.cpp for the full contract. */
     virtual void promptExtendClipToFitNotes(synth::ClipId clipId, double requiredLengthBeats);
 
-    // THE edge-auto-scroll timer's seam, mirroring TimelineClipLaneArea::autoScrollTick() exactly —
-    // see PianoRollMouse.cpp for the full contract (what one tick does, how it re-derives the
-    // in-flight gesture from the last-known pointer).
+    // THE edge-auto-scroll timer's seam — see PianoRollMouse.cpp for the full contract.
     virtual void autoScrollTick();
 
 private:
@@ -500,8 +420,9 @@ private:
     size_t nearestVisibleRowIndex(int pitch) const noexcept;
     int rowShiftedPitch(int originPitch, long long rowDelta) const noexcept;
 
-    // ---- topRowPosition_ (the continuous vertical scroll anchor — see the class comment) ----
-    // setTopRowPosition/minTopRowPosition/maxTopRowPosition — see PianoRollComponent.cpp.
+    // ---- topRowPosition_ (the continuous vertical scroll anchor) ----
+    // setTopRowPosition/minTopRowPosition/maxTopRowPosition — see PianoRollComponent.cpp for the
+    // full contract, including why the anchor is kept fractional rather than a whole row.
     bool setTopRowPosition(double raw) noexcept;
     double minTopRowPosition() const noexcept;
     double maxTopRowPosition() const noexcept;
@@ -675,8 +596,8 @@ private:
     NoteSelectionModel selection_;
 
     // The continuous vertical scroll anchor: the FRACTIONAL index into visiblePitches_ of the row
-    // whose top edge sits at y == canvasTop() — see the class comment's "Vertical row mapping"
-    // section and setTopRowPosition (the one seam every writer goes through). Replaces the old
+    // whose top edge sits at y == canvasTop() — see PianoRollComponent.cpp's coordinate-system
+    // contract and setTopRowPosition (the one seam every writer goes through). Replaces the old
     // "truncate to a whole row, carry the remainder" scheme (a separate pitchScrollRemainder_
     // accumulator) with the position itself simply staying fractional — the accumulator is
     // redundant once there is nothing left to round away. Default 60.0 matches
@@ -689,7 +610,7 @@ private:
     // one is the TOP of the range rather than conceptually its start, because pitch increases
     // upward while beats increase rightward. DERIVED from topRowPosition_ (never written
     // directly outside setTopRowPosition) — visiblePitches_[floor(clamp(topRowPosition_))] — so it
-    // is always a member of visiblePitches_, exactly like before; see the class comment.
+    // is always a member of visiblePitches_, exactly like before; see PianoRollComponent.cpp.
     int firstVisiblePitch_ = 60;
 
     // ---- Row mapping / scale context ----

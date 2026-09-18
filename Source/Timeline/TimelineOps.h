@@ -26,43 +26,15 @@ struct TimelineOpsResult {
  * @brief The app-side timeline tools: discrete, validated, previewable operations a model
  *        may ask for (addTrack, placeClips, writeLane, placeMidiClip), applied as ONE undo step.
  *
- * `placeMidiClip`'s `.mid` blob is the intentionally narrow AI note surface:
- * `MidiClipFile::importFromStream` can only ever produce notes — no file paths, no plugin
- * identifiers, no code — which is why it is the one place this envelope accepts an opaque binary
- * payload at all. `midBase64` is bounded by `kMaxMidBlobBytes`, checked against the
- * STILL-ENCODED string BEFORE decoding. The decoded bytes go through the exact same strict
- * importer a user's own "Import MIDI…" menu item uses, and every note it contains counts toward
- * `kMaxTotalNotesUntrusted` exactly like a `placeClips` note does.
+ * A **sibling** of a patch suggestion, never nested inside one — `"timelineOps"` is a distinct
+ * envelope key from `"timeline"`, so a response may legitimately carry both side by side. Trust
+ * posture is identical to a patch card: validate (untrusted) -> preview -> the user explicitly
+ * clicks Apply -> apply. Nothing here is ever applied because a model asked for it.
  *
- * This is a **sibling** of a patch suggestion, never nested inside one.
- * `AIStateMapper::validatePatch(trusted=false)` still refuses a `"timeline"` key inside patch
- * JSON and always will (see docs/AI_Engine_patch_safety.md §5c "the two-door model") — timeline data reaches
- * the app through this door or not at all. Because `"timelineOps"` is a different key from
- * `"timeline"`, a response may legitimately carry a patch and an ops envelope side by side; each is
- * validated and applied by its own gate, with its own Apply affordance.
- *
- * ### Trust posture — identical to a patch card
- *
- * validate (untrusted) -> preview to the user -> the user explicitly clicks Apply -> apply. Nothing
- * here is ever applied because a model asked for it; a person has to agree to it first, having read
- * `previewText`.
- *
- * ### The per-op checks are `validateTimeline`'s, reused rather than restated
- *
- * Same caps, same bounds, and the same rule that untrusted input is **REJECTED where a trusted
- * path would clamp or repair**. Lane values are checked against the LIVE parameter's range, never
- * against a range snapshot the sender supplied.
- *
- * Deliberately absent from the grammar, which is how assets and record arming stay unreachable:
- * an op has no `assetRef`, no `recordMode`, no `bindingUuid`, and no track kind beyond
- * `midi`/`automation`. **Unknown fields inside an op are REJECTED**; unknown keys at the ENVELOPE
- * root are ignored, because that is where the sibling patch's own keys live.
- *
- * ### All-or-nothing
- *
- * Any invalid op rejects the whole envelope and the doc is left untouched — validate() proves the
- * batch against a throwaway copy of the document before apply() runs a line of it against the real
- * one, and both go through the same code, so a preview cannot describe an apply that then fails.
+ * See TimelineOps.cpp's protocol notes (top of the file, inside `namespace synth`) for the full
+ * writeup: the two-door trust boundary shared with patch suggestions, why the grammar deliberately
+ * omits certain fields, and why the per-op checks reuse `TimelineValidator`'s rather than restate
+ * them. Any invalid op rejects the whole envelope untouched — see `apply()`'s `@return` below.
  */
 struct TimelineOps {
     /** Ops in one envelope. Bounds the batch itself, the way `kMaxTotalNotesUntrusted` bounds the
@@ -83,9 +55,7 @@ struct TimelineOps {
     /**
      * @brief True if `payload` carries a `"timelineOps"` key at all.
      *
-     * Deliberately keyed on PRESENCE, not on well-formedness: a malformed `"timelineOps"` is
-     * surfaced as a rejection the user can see rather than silently dropped, which is the same
-     * reason applyPatch() never swallows a validation failure.
+     * See TimelineOps.cpp for why this is keyed on presence rather than well-formedness.
      */
     static bool carriesOps(const juce::var& payload);
 
@@ -96,10 +66,8 @@ struct TimelineOps {
      * what an apply would do ("Adds midi track \"Bass\"; places 1 clip (8 notes) at 0-4 on
      * \"Bass\"; writes 12 points to Filter cutoff over beats 0-16").
      *
-     * @param doc   the live document. Read for cap headroom and for resolving `placeClips`
-     *              targets; ops later in the batch see the effect of earlier ones (a track added by
-     *              op 0 is targetable by op 1).
-     * @param graph the LIVE graph. A `writeLane` op's `(nodeUuid, paramId)` must resolve against
+     * @param doc   the live document; read for cap headroom and for resolving `placeClips` targets.
+     * @param graph the LIVE graph — a `writeLane` op's `(nodeUuid, paramId)` must resolve against
      *              it, and the resolved parameter's real range is what bounds the values.
      */
     static TimelineOpsResult validate(const juce::var& envelope, const TimelineDoc& doc,
@@ -110,26 +78,10 @@ struct TimelineOps {
      *
      * Wrapped in a single `AppUndoManager::recordTimelineChange`, so however many tracks, clips,
      * notes and breakpoints the batch touches, one Cmd+Z reverts all of it (the same contract
-     * MidiRecorder::stopAndCommit gets for a take's clip plus its every note).
+     * `MidiRecorder::stopAndCommit` gets for a take's clip plus its every note).
      *
-     * Per-op behaviour worth knowing before calling:
-     *  - **addTrack** creates the DOC track only — no graph node, no Track In wiring. Binding a
-     *    track to a module is a user (or host) gesture, so the new track is unbound and says so in
-     *    `previewText`. `kind` is `"midi"` or `"automation"`; `"audio"` is not offered, because an
-     *    audio track without an asset-bearing clip is an empty row and assets are trusted-only.
-     *  - **placeClips** targets a MIDI track by exact name or by `{"index": N}`. A name matching no
-     *    track, or more than one, rejects the whole batch rather than guessing.
-     *  - **writeLane** find-or-creates the lane for `(nodeUuid, paramId)` on the document's
-     *    Automation track, creating that track too if the document has none (the same
-     *    find-or-create rule `MainComponent::automateParameter` uses for the user's own gesture),
-     *    then REPLACES
-     *    every existing point inside the written span — min..max beat of the payload, inclusive —
-     *    in one `editBreakpoints` mutation.
-     *  - **placeMidiClip** decodes `midBase64`, parses it via `MidiClipFile::importFromStream`, and
-     *    places one clip per non-empty imported track on the target MIDI track at `startBeat` — the
-     *    same `MidiClipFile::importIntoTrack` behaviour a user's own MIDI-file import uses. Any
-     *    import failure (bad base64, not a readable SMF, SMPTE time format, a track over
-     *    `TimelineDoc::kMaxNotesPerClip`) or an empty result rejects the whole batch.
+     * See TimelineOps.cpp for per-op behaviour (addTrack/placeClips/writeLane/placeMidiClip),
+     * documented beside each op's own implementation there.
      *
      * @return `ok == false` with the doc completely untouched if anything about the envelope is
      *         invalid. `ok == true` when the batch applied; `message` says whether an undo step was

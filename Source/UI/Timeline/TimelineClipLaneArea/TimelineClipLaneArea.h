@@ -149,26 +149,16 @@ public:
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
     void mouseMove(const juce::MouseEvent& e) override;
-    // Both exist only for the tool layer: mouseEnter re-applies the active tool's cursor (it is
-    // NOT set per mouse-move — see setActiveTool), and mouseExit drops the Split tool's hover
-    // preview so a line never survives the pointer leaving the lanes.
+    // mouseEnter re-applies the active tool's cursor; mouseExit clears the Split tool's hover
+    // preview. See TimelineClipLaneMouse.cpp for why each needs its own hook.
     void mouseEnter(const juce::MouseEvent& e) override;
     void mouseExit(const juce::MouseEvent& e) override;
-    // Rebuilds the six cached tool cursors from the (re-tinted) icons of the new LookAndFeel and
-    // re-applies the active one — a theme switch is the only thing that changes what a tool
-    // cursor looks like, so it is the only thing that pays for rebuilding them.
+    // Rebuilds the cached tool cursors for the new theme and re-applies the active one.
     void lookAndFeelChanged() override;
-    // Double-clicking a clip opens the piano roll for it (onClipDoubleClicked with the hit clip's
-    // id). Double-clicking EMPTY lane space authors content on the row under the pointer instead:
-    // a Midi track gets a clip at the floor-snapped beat, selected, and fires onClipDoubleClicked
-    // for it too (so "double-click empty space" lands straight in the note editor); an Audio track
-    // asks for a file through audioFileChooser_ and reports the choice as onAudioFileDropped, the
-    // same seam a file drop uses. An Automation row, and a double-click below the last row, do
-    // nothing.
-    //
-    // The MIDI clip's span is one bar, EXCEPT when the click lands inside a real loop-locator span
-    // and the "double-click spans locators" preference is on (default) — it then spans the locators
-    // exactly. See locatorSpanForDoubleClick for the full set of conditions.
+    // Double-clicking a clip opens the piano roll for it (onClipDoubleClicked). Double-clicking
+    // empty lane space authors content on the row under the pointer instead (a MIDI clip, an audio
+    // file prompt, or nothing on Automation) — see TimelineClipLaneMouse.cpp for the per-kind
+    // contract and the loop-locator exception to the one-bar default.
     void mouseDoubleClick(const juce::MouseEvent& e) override;
 
     // Non-owning callback; may be unset. TimelinePanelComponent wires this to
@@ -200,34 +190,19 @@ public:
     // ---- Edit tools (synth::ui::EditTool — the Cubase-style tool row) ----
 
     // THE tool every pointer gesture in the lanes is interpreted through. TimelinePanelComponent
-    // owns the one active tool for the whole timeline and pushes it in here (and into the piano
-    // roll, which shares this rect); nothing in this class ever changes it by itself.
-    //
-    // EditTool::Select is the tool this component grew up with and keeps ALL of its behaviour:
-    // click/shift-click select, drag-move (now cross-track and Alt-copy capable), edge trims with
-    // their resize cursors, marquee, and both double-click authoring gestures. The other five are
-    // deliberately click-only — a drag with Split/Glue/Erase/Mute held would be a second,
-    // undiscoverable gesture on a tool whose whole point is that one click does one thing — with
-    // Draw the single exception (its drag IS the clip's length).
-    //
-    // Switching tools cancels whatever gesture and preview are in flight rather than trying to
-    // reinterpret them: a half-finished drag has no meaning under a different tool.
+    // owns the one active tool for the whole timeline and pushes it in here; nothing in this class
+    // ever changes it by itself. Switching tools cancels whatever gesture/preview is in flight. See
+    // TimelineClipLaneEditTools.cpp for which tools are click-only vs. drag-capable and why.
     void setActiveTool(EditTool tool);
     EditTool getActiveTool() const noexcept { return activeTool_; }
 
-    // The clip the Glue tool (and the "Glue with next" menu item) would join `id` into: the clip
-    // on the SAME track with the smallest startBeat at or after `id`'s end. TimelineDoc::joinClips
-    // treats a gap as legal (it becomes silence) and rejects an overlap, so "the next clip that
-    // does not overlap" is exactly the set of legal targets — picking the abutting clip only would
-    // make the tool silently inert on the very arrangement (clips with gaps) where gluing is most
-    // useful. Returns an invalid ClipId when there is no doc, no such clip, or nothing after it.
+    // The clip the Glue tool (and the "Glue with next" menu item) would join `id` into. Returns an
+    // invalid ClipId when there is no doc, no such clip, or nothing after it.
     synth::ClipId findGlueTarget(synth::ClipId id) const;
 
-    // The commit half of the inline rename editor, and the headless seam for it (a live
-    // juce::TextEditor is no more testable than a juce::PopupMenu). One recordTimelineChange;
-    // TimelineDoc::setClipName trims and REJECTS a blank name, so a cleared field keeps the old
-    // one instead of erasing it — that rejection is the whole reason this is a doc call rather
-    // than a local string assignment.
+    // The commit half of the inline rename editor, and the headless seam for it. One
+    // recordTimelineChange; TimelineDoc::setClipName REJECTS a blank name, so a cleared field
+    // keeps the old one instead of erasing it.
     void renameClip(synth::ClipId id, const juce::String& newName);
 
     // Opens the inline editor over `id`'s name area, pre-filled and selected. Return commits
@@ -281,20 +256,14 @@ public:
     // when that row has clips (or does not exist).
     juce::String getEmptyRowHintForTest(int trackIndex) const;
 
-    // Fired when the user picks "Relink audio…" from an audio clip's context menu (visible
-    // whenever assetRef is non-empty, whether the current asset is missing or present). Non-owning;
-    // may be unset, in which case the menu item is simply never offered (see showClipContextMenu) —
-    // relinking needs a host FileChooser and AssetManager import, neither of which this class has,
-    // so unlike Split/Duplicate/Delete this is a callback rather than a ClipContextChoice: the
-    // production path is MainComponent opening an async FileChooser and then calling its own
-    // relinkClipAsset(); the headless path is MainComponent::relinkClipAssetForTest(), which never
-    // goes through this callback (or a menu) at all.
+    // Fired when the user picks "Relink audio…" from an audio clip's context menu. Non-owning; may
+    // be unset, in which case the menu item is simply never offered (see showClipContextMenu). See
+    // TimelineClipLaneEditTools.cpp for why this is a callback rather than a ClipContextChoice.
     std::function<void(synth::ClipId)> onRelinkAudioRequested;
 
-    // Panel-scoped Delete/Escape/P (see GraphEditor's identical idiom). Grabs focus on mouseDown, so
-    // pressing Delete right after a click lands here rather than on whichever panel had focus
-    // before. Returns false when there is nothing to act on so the key falls through — this is
-    // only the local half of cross-panel key arbitration.
+    // Panel-scoped Delete/Escape/P. Grabs focus on mouseDown, so pressing Delete right after a
+    // click lands here rather than on whichever panel had focus before. Returns false when there
+    // is nothing to act on so the key falls through.
     bool keyPressed(const juce::KeyPress& key) override;
 
     /** The user's binding for the one rebindable key this component owns: P, loop the selection
@@ -312,7 +281,7 @@ public:
     // nothing selected resolves to a clip. What P hands to onLoopRangeRequested.
     std::optional<std::pair<double, double>> getSelectedClipSpan() const;
 
-    // Non-owning; may be null. Runs one refresh (see class comment) — the same thing
+    // Non-owning; may be null. Runs one refresh (see the class comment above) — the same thing
     // TimelinePanelComponent::timelineChanged() calls on every subsequent doc notification.
     void setTimelineDoc(synth::TimelineDoc* doc);
     synth::TimelineDoc* getTimelineDoc() const noexcept { return doc_; }
@@ -337,45 +306,34 @@ public:
     void setApplicationProperties(juce::ApplicationProperties* props) noexcept { appProperties_ = props; }
 
     /** The clip span a double-click at `clickedBeat` should author on a MIDI row: the loop-locator
-     *  span when the preference is on, the transport has one (`loopEnd > loopStart`) and
-     *  `clickedBeat` lands inside `[loopStart, loopEnd)`; otherwise nullopt, meaning "the one-bar
-     *  default". `clickedBeat` is the RAW (unsnapped) beat under the pointer: snapping first could
-     *  push a click that landed outside the span into it (or the reverse), and the question being
-     *  asked is where the user actually clicked. Public and pure so a test can ask it directly
-     *  instead of synthesising a double-click. */
+     *  span when the preference is on, the transport has a valid loop range, and `clickedBeat`
+     *  lands inside it; otherwise nullopt, meaning "the one-bar default". `clickedBeat` is the RAW
+     *  (unsnapped) beat — see TimelineClipLaneMouse.cpp for why. Public and pure so a test can ask
+     *  it directly instead of synthesising a double-click. */
     std::optional<std::pair<double, double>> locatorSpanForDoubleClick(double clickedBeat) const;
 
-    // Re-derives the doc-backed truth: prunes the selection of any clip id that no longer exists
-    // (synth::ui::ClipSelectionModel::retainOnly) and repaints. THE refresh seam — called once by
-    // setTimelineDoc() and, thereafter, by TimelinePanelComponent::timelineChanged() on every
-    // effective doc mutation. No timer anywhere in this class.
+    // Prunes the selection of any clip id the doc no longer has and repaints. THE refresh seam —
+    // called once by setTimelineDoc() and, thereafter, by TimelinePanelComponent::timelineChanged()
+    // on every effective doc mutation.
     void refreshFromDoc();
 
     // ---- Waveform peaks (committed clips) ----
 
-    // Non-owning; may be unset (paint() then simply never draws a waveform — same degrade-
-    // gracefully contract every other host seam here has). MainComponent supplies this from the
-    // SAME resolution `AudioClipStreamer::resolveAssetRef` uses, re-pointed at the Peaks/ sidecar
-    // — see that method's comment and the class comment above. Installing a new resolver
-    // invalidates the cache (a different resolver may resolve the same ref differently).
+    // Non-owning; may be unset (paint() then simply never draws a waveform). Installing a new
+    // resolver invalidates the cache (a different resolver may resolve the same ref differently).
+    // See TimelineClipLaneArea.cpp for what MainComponent wires this to.
     void setPeaksResolver(std::function<juce::File(const juce::String& assetRef)> resolver);
 
     // Drops every cached synth::PeaksFile::Data and repaints. Called automatically by
-    // refreshFromDoc() (the simplest-correct policy — see the class comment); public so a caller
-    // that knows only a peaks FILE changed underneath an unchanged assetRef (the resolver's target
-    // moved, not the doc) can still force a re-read without waiting for a doc mutation.
+    // refreshFromDoc(); public so a caller that knows only a peaks FILE changed underneath an
+    // unchanged assetRef can still force a re-read without waiting for a doc mutation.
     void invalidatePeaksCache();
 
     // ---- Missing-asset placeholder ----
 
-    // Non-owning; may be unset (paint() then assumes every non-empty assetRef resolves — no
-    // placeholder is ever drawn without a resolver installed, the same degrade-gracefully contract
-    // every other host seam here has). MainComponent wires this to
-    // `AudioClipStreamer::resolveAssetRef(assetRef) != juce::File()` — the SAME resolution
-    // playback and the peaks resolver (above) use, just answering "does it exist" instead of
-    // handing back a File. The answer is cached per assetRef right alongside peaksCache_ so a
-    // repeated paint of the same (still missing) clip never re-stats the filesystem; installing a
-    // new resolver invalidates both caches, same as setPeaksResolver.
+    // Non-owning; may be unset (paint() then assumes every non-empty assetRef resolves). Installing
+    // a new resolver invalidates both this cache and the peaks one, same as setPeaksResolver. See
+    // TimelineClipLaneArea.cpp for what MainComponent wires this to.
     void setAssetExistsResolver(std::function<bool(const juce::String& assetRef)> resolver);
 
     // ---- The live-recording strip ----
@@ -392,14 +350,9 @@ public:
         const RecordTapModule* tap = nullptr;
     };
 
-    // THE 10 Hz update for an in-flight take (see LiveRecordingInfo) — MainComponent calls this
-    // every tick alongside the panel's other polled updates, whether or not anything is actually
-    // recording. Cheap when it isn't: `info.active == false` just clears any previous strip (one
-    // repaint, once, on the falling edge) and returns. When it is, copies the tap's live peaks
-    // (copyLivePeaks() — a lock held only for that copy, never on the audio thread) and repaints
-    // ONLY the strip's dirty rect, and ONLY when the bucket count actually grew since the last
-    // call — the repaint-on-data-arrival rule. The strip's rect itself is still updated every call
-    // (so a later arrival's dirty-rect union is correct), just not necessarily repainted.
+    // THE 10 Hz update for an in-flight take (see LiveRecordingInfo) — call every tick regardless
+    // of whether anything is actually recording; cheap when it isn't. See
+    // TimelineClipLanePainting.cpp for the repaint-on-data-arrival policy.
     void updateLiveRecording(const LiveRecordingInfo& info);
 
     // Test hook: how many times updateLiveRecording() has actually issued a repaint (as opposed to
@@ -407,18 +360,13 @@ public:
     int getLiveStripRepaintCountForTest() const noexcept { return liveStripRepaintCount_; }
 
     // ---- Context-menu hook ("showMenuAsync doesn't run headless" idiom) ----
-    // Every tool action is ALSO a menu item, so a user who never touches the tool row can still
-    // split, glue, mute and rename — the tools are an accelerator for the menu, not a second set
-    // of capabilities. Rename is the one entry with no headless meaning (it opens a text editor
-    // rather than mutating), so applyClipContextChoice treats it as a no-op and the commit path is
-    // renameClip() — see that method.
+    // Every tool action is ALSO a menu item; see TimelineClipLaneEditTools.cpp for why Rename is
+    // the one entry applyClipContextChoice treats as a no-op (its commit path is renameClip()).
     enum class ClipContextChoice { SplitAtPointer, Duplicate, Delete, ToggleMute, GlueWithNext, Rename };
 
     // Applies one context-menu choice. `pointerBeat` is in absolute (doc) beats, UNSNAPPED — the
-    // split case snaps it internally against the current view-state snap + beatsPerBar, exactly
-    // like showClipContextMenu()'s own enablement check, so a test driving this directly observes
-    // the same snapping the real right-click menu would. One recordTimelineChange mutation, same
-    // as every other doc-mutating gesture here.
+    // split case snaps it internally. One recordTimelineChange mutation, same as every other
+    // doc-mutating gesture here.
     void applyClipContextChoice(synth::ClipId id, ClipContextChoice choice, double pointerBeat);
 
     // ---- Pure geometry (no doc, no component state) — what GeometryMapsBeatsAndRows tests ----
@@ -437,20 +385,14 @@ public:
     };
 
     // Which buckets of `peaks` cover this clip's visible span, given where inside the asset it
-    // starts reading (`sourceStartSeconds`, seconds — see synth::Clip::sourceStartSeconds) and the
-    // beats<->seconds conversion (`bpm`). `sampleRate` is the ASSUMED source sample rate — the
-    // peaks file itself does not carry one (see PeaksFile.h), so this is the same "engine rate,
-    // no resampling" honesty AudioClipStreamer already states for playback; a caller with a live
-    // transport passes its current sampleRate/bpm, exactly like currentBeatsPerBar() does for the
-    // snap grid. Clamped to `[0, totalBuckets]` — a clip whose span starts past the end of the
-    // peaks data (or `peaks` has no buckets at all) returns a zero-length range rather than an
-    // out-of-bounds one.
+    // starts reading (`sourceStartSeconds`, seconds) and the beats<->seconds conversion (`bpm`).
+    // `sampleRate` is the ASSUMED source sample rate (see TimelineClipLaneArea.cpp). Clamped to
+    // `[0, totalBuckets]` — a clip past the end of the peaks data (or no buckets at all) returns a
+    // zero-length range rather than an out-of-bounds one.
     static BucketRange bucketRangeForClip(const synth::PeaksFile::Data& peaks, double lengthBeats,
                                           double sourceStartSeconds, double bpm, double sampleRate);
 
-    // The row height this instance currently lays out at: themed Metrics::timelineTrackRowHeight
-    // with TimelineTrackHeaderComponent::kRowHeight as the headless fallback (see that constant's
-    // comment) — the same dynamic_cast<AppLookAndFeel*> pattern every other timeline component uses.
+    // The row height this instance currently lays out at (themed, with a headless fallback).
     int getRowHeight() const;
 
     // The live rect for a clip id, using its CURRENT doc geometry (never a mid-drag preview) —
@@ -476,13 +418,11 @@ public:
     // move) rather than a plain move.
     bool isCopyDragForTest() const noexcept { return dragMode_ == DragMode::Move && copyDrag_; }
     // The destination rects the copy-drag ghosts occupy right now, in dragClips_ order — empty
-    // unless a copy-drag is in flight. Computed by the SAME helper paintDragGhosts() draws from,
-    // so an assertion about a ghost cannot pass while the drawn ghost sits somewhere else.
+    // unless a copy-drag is in flight. See TimelineClipLanePainting.cpp for why this shares its
+    // geometry with the actual paint call.
     std::vector<juce::Rectangle<int>> getDragGhostRectsForTest() const;
     // The (startBeat, lengthBeats) a clip PAINTS at this instant — its doc geometry except while
-    // its own move/trim drag is previewing (see effectiveGeometryFor). The pair a copy-drag test
-    // asserts is UNCHANGED mid-drag, while getDragGhostRectsForTest() shows the delta. nullopt
-    // when the id does not resolve.
+    // its own move/trim drag is previewing. nullopt when the id does not resolve.
     std::optional<std::pair<double, double>> getEffectiveGeometryForTest(synth::ClipId id) const;
     // The track-row offset the in-flight move/copy drag would apply to the whole selection — 0
     // whenever the drop would be illegal for any clip in it (see mouseDrag's kind check).
@@ -490,34 +430,20 @@ public:
 
 protected:
     // THE paint-count seam for the tool previews (the Split tool's hover line and the Draw tool's
-    // ghost), mirroring PianoRollComponent::requestRepaintStrip / TimelinePlayheadOverlay::
-    // requestRepaintStrip exactly — a test subclasses this and counts. Every repaint a preview
-    // costs goes through it and nowhere else, and it is only ever reached when the previewed STATE
-    // changed (a new snapped beat, a new hovered clip, a new ghost rect): pointer movement inside
-    // one snap cell repaints nothing at all.
+    // ghost) — a test subclasses this and counts. Every repaint a preview costs goes through it and
+    // nowhere else. See TimelineClipLaneEditTools.cpp for the state-change gate that keeps pointer
+    // movement inside one snap cell from repainting anything.
     virtual void requestToolPreviewRepaint(juce::Rectangle<int> region);
 
-    /** Opens a clip's right-click menu. The default implementation shows a real
-     *  `juce::PopupMenu` via `showMenuAsync`.
-     *
-     *  Protected virtual for the display-less-runner reason spelled out on
-     *  `TimelineRulerComponent::openMarkerContextMenu`: a real menu window has no display to be
-     *  positioned against on the Linux CI job, and JUCE dereferences the null it gets back. No test
-     *  reaches this today — the one right-click in the suite lands on empty lane space, which
-     *  returns before any menu is built, and every menu OUTCOME is driven through
-     *  `applyClipContextChoice` instead — but a test that right-clicked an actual clip would
-     *  SIGSEGV there while passing locally. */
+    // Opens a clip's right-click menu. The default implementation shows a real juce::PopupMenu via
+    // showMenuAsync. Protected virtual so a headless test can override it — see
+    // TimelineClipLaneEditTools.cpp for why a real menu must never be reached from a test.
     virtual void showClipContextMenu(synth::ClipId id, juce::Point<int> localPos);
 
     // ---- Edge auto-scroll (see EdgeAutoScroll.h) ----
-    //
-    // A gated juce::Timer (kEdgeScrollHz): started only when a Move/Resize drag is active AND the
-    // last-known pointer x sits inside an edge zone of this component's width, stopped the moment
-    // either condition stops holding (mouseUp, a tool switch cancelling the drag, or the pointer
-    // dragging back into the dead middle band). One tick scrolls viewState_ by
-    // edgeScrollVelocity(...)/pixelsPerBeat beats, re-derives the drag preview from the LAST known
-    // pointer position (mouseDrag never re-fires on its own), and repaints — through THIS one
-    // virtual seam, mirroring TimelinePlayheadOverlay::timerCallback's protected-for-tests pattern.
+    // A gated juce::Timer (kEdgeScrollHz), armed only while a Move/Resize drag's pointer sits
+    // inside an edge zone — see TimelineClipLaneMouse.cpp for the arming/tick mechanics. Protected
+    // virtual so a test can drive one tick without a real juce::Timer (see tickAutoScrollForTest).
     virtual void autoScrollTick();
     void timerCallback() override { autoScrollTick(); }
 
@@ -560,24 +486,18 @@ private:
     std::optional<ClipHit> hitTestClip(juce::Point<int> pos) const;
     std::vector<std::pair<synth::ClipId, juce::Rectangle<int>>> collectClipRects() const;
     Geometry effectiveGeometryFor(const synth::Clip& clip) const;
-    // The row a clip PAINTS in right now: its own, except while a plain (non-copy) move drag is
-    // previewing a cross-track drop, in which case the whole dragged set previews one row delta
-    // down/up. A copy-drag deliberately does NOT move the original — its destination is drawn as a
-    // separate ghost (see paintDragGhosts).
+    // The row a clip PAINTS in right now: its own, except while a plain (non-copy) move drag
+    // previews a cross-track drop (see TimelineClipLaneArea.cpp for the copy-drag exception).
     int effectiveRowFor(synth::ClipId id, int trackIndex) const;
     double currentBeatsPerBar() const;
     double snappedBeatAt(double rawBeat) const;
-    // The snap grid line at or AFTER `rawBeat` — floorSnappedBeatAt's mirror, and what the Draw
-    // tool's drag end uses so a drag that has crossed into a cell always includes that whole cell.
+    // The snap grid line at or AFTER `rawBeat` — floorSnappedBeatAt's mirror.
     double ceilSnappedBeatAt(double rawBeat) const;
     // The smallest length the Draw tool will create: one snap division, or kMinClipLengthBeats
-    // when the grid is off (there is no cell to fill, so this falls back to the same floor every
-    // trim already uses).
+    // when the grid is off.
     double minDrawLengthBeats() const;
-    // The snap grid line at or BEFORE `rawBeat` (never after it), clamped to >= 0 — what a
-    // created clip starts on, so a double-click always lands inside the bar/beat cell it was
-    // aimed at rather than the next one. Same grid every drag uses (TimelineViewState::
-    // divisionBeats); Snap::Off passes the raw beat through.
+    // The snap grid line at or BEFORE `rawBeat` (never after it), clamped to >= 0. Snap::Off
+    // passes the raw beat through.
     double floorSnappedBeatAt(double rawBeat) const;
 
     // The track row `pos.y` falls on, or nullopt when there is no doc or it is below the last row.
@@ -587,10 +507,8 @@ private:
 
     // ---- Authoring (double-click on empty lane space) ----
     // A clip on `track` at `startBeat`, as ONE recordTimelineChange, selected, then
-    // onClipDoubleClicked so the caller opens the piano roll on it. `lengthOverride` is the
-    // locator-span length the double-click path may ask for (see locatorSpanForDoubleClick);
-    // unset — which is what the Draw tool and every other caller pass — means the historical
-    // ONE BAR at the transport's current time signature.
+    // onClipDoubleClicked. `lengthOverride` unset (the Draw tool and every other caller) means the
+    // one-bar default; see locatorSpanForDoubleClick for who passes something else.
     void createMidiClipAt(synth::TrackId track, double startBeat, std::optional<double> lengthOverride = std::nullopt);
     // Asks audioFileChooser_ for a file and reports it through onAudioFileDropped.
     void requestAudioFileFor(synth::TrackId track, double startBeat);
@@ -605,35 +523,27 @@ private:
     void setFileDropRow(int row);
 
     // ---- Tool gestures (everything below is inert while EditTool::Select is active) ----
-    // One press with a non-Select tool. Split/Glue/Erase/Mute act immediately on press (a DAW's
-    // tool click is expected to land under the finger, not on release); Draw anchors a drag.
-    // Split/Glue/Erase/Mute all route straight into applyClipContextChoice — the tool and the
-    // menu item are literally the same code path, which is what keeps "the tools are an
-    // accelerator for the menu" true rather than aspirational (and gives each one the same single
-    // recordTimelineChange, wrapped unconditionally: a refused mutation makes the lambda a no-op
-    // and AppUndoManager pushes nothing for one).
+    // One press with a non-Select tool. Split/Glue/Erase/Mute act immediately on press; Draw
+    // anchors a drag. See TimelineClipLaneEditTools.cpp for why the click tools route straight
+    // into applyClipContextChoice.
     void handleToolMouseDown(const juce::MouseEvent& e);
     // Draw: press anchors on the floor-snapped beat of a Midi row (other kinds are inert), drag
-    // grows the ghost, release creates the clip. A press that never dragged falls back to
-    // createMidiClipAt — the same one-bar clip the empty-lane double-click authors.
+    // grows the ghost, release creates the clip.
     void beginDrawGesture(const juce::MouseEvent& e);
     void updateDrawGesture(const juce::MouseEvent& e);
     void commitDrawGesture();
-    // Both preview writers: they compute the new state, compare it with the old, and only then
-    // ask for a repaint (of the union of the two regions, so one change costs exactly one
-    // repaint) — see requestToolPreviewRepaint.
+    // Both preview writers repaint only the union of the old and new preview regions — see
+    // requestToolPreviewRepaint.
     void updateSplitPreview(juce::Point<int> pos);
     void clearToolPreviews();
-    // The rect a split line at (clip, beat) occupies — a few pixels wide so the repaint region
-    // covers the stroke rather than a zero-width column.
+    // The rect a split line at (clip, beat) occupies.
     juce::Rectangle<int> splitPreviewBounds(synth::ClipId clip, double beat) const;
     void paintSplitPreview(juce::Graphics& g);
     // The ghosted destinations of a copy-drag (the originals keep painting in place, unmoved on
     // both axes — see effectiveGeometryFor/effectiveRowFor).
     void paintDragGhosts(juce::Graphics& g);
-    // ONE dragged clip's ghost rect. The single geometry source shared by paintDragGhosts() and
-    // getDragGhostRectsForTest() — computing them separately is how a drawn affordance drifts
-    // from the one a test pins (the same reasoning GraphEditor::buildVisibleCables() states).
+    // ONE dragged clip's ghost rect — the single geometry source shared with
+    // getDragGhostRectsForTest().
     juce::Rectangle<int> dragGhostRectFor(const DragOrigin& origin, int rowHeight) const;
     void paintDrawGhost(juce::Graphics& g);
 
@@ -642,9 +552,7 @@ private:
     void applyToolCursor();
 
     // ---- Inline rename ----
-    // Tears the editor down and, when `commit`, pushes its text through renameClip(). Detaches
-    // the editor BEFORE doing either, so the focus-loss callback that deleting it fires re-enters
-    // to a null editor and stops.
+    // Tears the editor down and, when `commit`, pushes its text through renameClip().
     void finishRename(bool commit);
 
     void beginMarquee(juce::Point<int> anchor, bool additive);
@@ -656,42 +564,32 @@ private:
     void paintMarquee(juce::Graphics& g);
 
     // ---- Waveform + live-recording-strip painting ----
-    // Resolves (lazily loading + caching via peaksResolver_/peaksCache_) and paints a committed
-    // audio clip's waveform inside `rect`. A no-op below kMinWidthForWaveform or when nothing
-    // resolves (no resolver set, unresolvable ref, or an unreadable/absent peaks file).
+    // Resolves (lazily loading + caching) and paints a committed audio clip's waveform inside
+    // `rect`. A no-op below kMinWidthForWaveform or when nothing resolves.
     void paintWaveform(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect);
-    // The cheap per-column line-pair loop shared by paintWaveform() (a committed clip's peaks) and
-    // paintLiveRecordingStrip() (the live accumulator's peaks) — one juce::Graphics::drawLine per
-    // x column, sampling `buckets[firstBucket + column's fraction of bucketCount]` across every
-    // channel (min of mins, max of maxes — a simple downmix; see the class comment's "keep it
-    // lean" note). Assumes the caller already set the colour.
+    // The cheap per-column line-pair loop shared by paintWaveform() and paintLiveRecordingStrip().
+    // Assumes the caller already set the colour.
     static void paintWaveformColumns(juce::Graphics& g, juce::Rectangle<int> rect,
                                      const std::vector<std::pair<float, float>>& buckets, int numChannels,
                                      int firstBucket, int bucketCount);
     // Cache lookup/lazy-load for one assetRef. Returns nullptr for an empty ref, no resolver, an
-    // unresolvable file, or a file that fails synth::PeaksFile::read() — a miss is cached too (as
-    // a default-constructed, structurally-invalid Data) so a repeated paint of a still-missing
-    // asset never re-touches disk; only invalidatePeaksCache()/refreshFromDoc() forget that.
+    // unresolvable file, or a file that fails synth::PeaksFile::read(); a miss is cached too — only
+    // invalidatePeaksCache()/refreshFromDoc() forget that.
     const synth::PeaksFile::Data* findPeaksData(const juce::String& assetRef);
-    // Cache lookup/lazy-resolve for one assetRef's existence, mirroring findPeaksData's
-    // cache shape exactly (a miss is cached too, so a still-missing clip never re-triggers the
-    // resolver on the next paint). No resolver installed -> true (see setAssetExistsResolver).
+    // Cache lookup/lazy-resolve for one assetRef's existence. No resolver installed -> true (see
+    // setAssetExistsResolver).
     bool assetExists(const juce::String& assetRef);
-    // The diagonal-hatch / dimmed-fill treatment for a clip whose assetRef does not
-    // resolve, plus a "missing: <name>" label when the clip is wide enough (same threshold
-    // paintClip's own name label uses). Theme-token colours via the same
-    // dynamic_cast<AppLookAndFeel*> pattern getRowHeight() uses, with a hardcoded fallback when
-    // headless.
+    // The diagonal-hatch / dimmed-fill treatment for a clip whose assetRef does not resolve, plus a
+    // "missing: <name>" label when the clip is wide enough.
     void paintMissingAssetPlaceholder(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect);
     void paintLiveRecordingStrip(juce::Graphics& g);
     // The dim "how do I put something here" line for a row with no clips (see emptyRowHintFor).
-    // Static paint straight from doc state — no timer, no animation. Skipped when the row is too
-    // short or too narrow to render the line legibly.
+    // Skipped when the row is too short or too narrow to render the line legibly.
     void paintEmptyRowHint(juce::Graphics& g, const synth::Track& track, juce::Rectangle<int> bounds);
     // The accent wash marking the audio row an OS file drop would land on.
     void paintFileDropHighlight(juce::Graphics& g, juce::Rectangle<int> bounds);
     // Shared by updateLiveRecording()'s "nothing recording (any more)" branch and its
-    // track-vanished branch: one repaint over wherever the strip used to be, then a clean reset.
+    // track-vanished branch.
     void clearLiveRecording();
 
     TimelineViewState& viewState_;
@@ -707,26 +605,21 @@ private:
     DragMode dragMode_ = DragMode::None;
     synth::ClipId activeClip_;
     juce::Point<int> mouseDownPos_;
-    // The BEAT under the pointer at mouseDown (viewState_.xToBeat(mouseDownPos_.x)), captured
-    // alongside the pixel position. Every Move/Resize drag computes its delta as
-    // xToBeat(currentX) - mouseDownBeat_ rather than a pixel-delta/pixelsPerBeat conversion: the
-    // pixel form is only correct while the view is static (a mid-drag edge-scroll changes
-    // firstVisibleBeat, which is exactly this member's whole reason to exist), and it drifts under
-    // a zoom change too, which this fixes as a side effect.
+    // The beat under the pointer at mouseDown (viewState_.xToBeat(mouseDownPos_.x)), captured
+    // alongside the pixel position — see TimelineClipLaneMouse.cpp's
+    // updateDragPreviewFromLastPointer() for why every drag delta is computed from this rather
+    // than from a pixel offset.
     double mouseDownBeat_ = 0.0;
-    // The last pointer position mouseDrag() saw, in this component's local coordinates. An
-    // auto-scroll tick has no MouseEvent of its own — the pointer isn't moving, the view is — so it
-    // re-derives the drag preview from this rather than from a synthesized one.
+    // The last pointer position mouseDrag() saw, in this component's local coordinates — what an
+    // auto-scroll tick (which has no MouseEvent of its own) re-derives the drag preview from,
+    // rather than from a synthesized one.
     juce::Point<int> lastDragPointer_;
 
-    // Re-runs the Move/Resize preview maths mouseDrag() runs, from `lastDragPointer_` against the
-    // (possibly just-scrolled) view state — the one thing an auto-scroll tick and a real pointer
-    // move share, factored out so they can't drift apart.
+    // Re-runs the Move/Resize preview maths mouseDrag() runs, from `lastDragPointer_` — the one
+    // thing an auto-scroll tick and a real pointer move share.
     void updateDragPreviewFromLastPointer();
-    // Arms/disarms the edge-scroll timer for the CURRENT lastDragPointer_/dragMode_, starting it
-    // only while a Move/Resize drag is live and the pointer sits inside an edge zone of this
-    // component's width, stopping it the instant either stops being true. Called after every
-    // mouseDrag update and once from mouseUp (which always disarms, mouseUp having ended the drag).
+    // Arms/disarms the edge-scroll timer for the CURRENT lastDragPointer_/dragMode_. Called after
+    // every mouseDrag update and once from mouseUp.
     void updateAutoScrollArming();
 
     // Deferred-deselect (see class comment): a plain press on empty lane space that never becomes
@@ -737,12 +630,10 @@ private:
     std::vector<DragOrigin> dragClips_;
     double previewDeltaBeats_ = 0.0;
     // The whole selection's shared row offset, 0 unless EVERY dragged clip's destination row
-    // exists and accepts its payload (TimelineDoc::moveClipToTrack's kind rule). Clamping the
-    // group rather than dropping the clips that would fit is deliberate: a partial drop silently
-    // tears a selection apart.
+    // accepts its payload — see updateDragPreviewFromLastPointer (TimelineClipLaneMouse.cpp) for
+    // why the group clamps together rather than dropping only the clips that would fit.
     int previewRowDelta_ = 0;
-    // Alt held at mouseDown: the drag previews COPIES (originals paint in place, ghosts move) and
-    // commits duplicateClip + moveClipToTrack per clip instead of moving anything.
+    // Alt held at mouseDown — see mouseDown (TimelineClipLaneMouse.cpp) for the copy-drag contract.
     bool copyDrag_ = false;
 
     // ---- Edit tool ----

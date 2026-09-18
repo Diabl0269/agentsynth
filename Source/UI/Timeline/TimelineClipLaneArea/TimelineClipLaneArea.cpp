@@ -72,6 +72,8 @@ void TimelineClipLaneArea::setTimelineDoc(synth::TimelineDoc* doc) {
     refreshFromDoc();
 }
 
+// Re-derives the doc-backed truth via synth::ui::ClipSelectionModel::retainOnly. No timer anywhere
+// in this class drives it — every call site above is an explicit doc-mutation notification.
 void TimelineClipLaneArea::refreshFromDoc() {
     std::vector<synth::ClipId> alive;
     if (doc_ != nullptr) {
@@ -97,6 +99,8 @@ void TimelineClipLaneArea::refreshFromDoc() {
     repaint();
 }
 
+// MainComponent supplies this from the SAME resolution AudioClipStreamer::resolveAssetRef uses,
+// re-pointed at the Peaks/ sidecar — see that method's comment and the class comment above.
 void TimelineClipLaneArea::setPeaksResolver(std::function<juce::File(const juce::String&)> resolver) {
     peaksResolver_ = std::move(resolver);
     invalidatePeaksCache(); // a different resolver may resolve an already-cached ref differently
@@ -110,11 +114,18 @@ void TimelineClipLaneArea::invalidatePeaksCache() {
     repaint();
 }
 
+// MainComponent wires this to `AudioClipStreamer::resolveAssetRef(assetRef) != juce::File()` — the
+// SAME resolution playback and the peaks resolver (setPeaksResolver) use, just answering "does it
+// exist" instead of handing back a File. The answer is cached per assetRef right alongside
+// peaksCache_ so a repeated paint of the same (still missing) clip never re-stats the filesystem.
 void TimelineClipLaneArea::setAssetExistsResolver(std::function<bool(const juce::String&)> resolver) {
     assetExistsResolver_ = std::move(resolver);
     invalidatePeaksCache(); // a different resolver may answer an already-cached ref differently
 }
 
+// Themed Metrics::timelineTrackRowHeight with TimelineTrackHeaderComponent::kRowHeight as the
+// headless fallback (see that constant's comment) — the same dynamic_cast<AppLookAndFeel*> pattern
+// every other timeline component uses.
 int TimelineClipLaneArea::getRowHeight() const {
     int base = TimelineTrackHeaderComponent::kRowHeight;
     if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
@@ -139,6 +150,8 @@ double TimelineClipLaneArea::snappedBeatAt(double rawBeat) const {
     return viewState_.snapBeat(rawBeat, currentBeatsPerBar());
 }
 
+// What a created clip starts on, so a double-click always lands inside the bar/beat cell it was
+// aimed at rather than the next one. Same grid every drag uses (TimelineViewState::divisionBeats).
 double TimelineClipLaneArea::floorSnappedBeatAt(double rawBeat) const {
     const double division = viewState_.divisionBeats(currentBeatsPerBar());
     if (division <= 0.0)
@@ -146,6 +159,8 @@ double TimelineClipLaneArea::floorSnappedBeatAt(double rawBeat) const {
     return std::max(0.0, std::floor(rawBeat / division) * division);
 }
 
+// What the Draw tool's drag end uses so a drag that has crossed into a cell always includes that
+// whole cell.
 double TimelineClipLaneArea::ceilSnappedBeatAt(double rawBeat) const {
     const double division = viewState_.divisionBeats(currentBeatsPerBar());
     if (division <= 0.0)
@@ -153,6 +168,8 @@ double TimelineClipLaneArea::ceilSnappedBeatAt(double rawBeat) const {
     return std::max(0.0, std::ceil(rawBeat / division) * division);
 }
 
+// When the grid is off there is no cell to fill, so this falls back to the same floor
+// (kMinClipLengthBeats) every trim already uses.
 double TimelineClipLaneArea::minDrawLengthBeats() const {
     const double division = viewState_.divisionBeats(currentBeatsPerBar());
     return division > 0.0 ? division : kMinClipLengthBeats;
@@ -190,6 +207,10 @@ juce::Rectangle<int> TimelineClipLaneArea::computeClipRect(const TimelineViewSta
             rowHeight};
 }
 
+// `sampleRate` is the ASSUMED source sample rate — the peaks file itself does not carry one (see
+// PeaksFile.h), so this is the same "engine rate, no resampling" honesty AudioClipStreamer already
+// states for playback; a caller with a live transport passes its current sampleRate/bpm, exactly
+// like currentBeatsPerBar() does for the snap grid.
 TimelineClipLaneArea::BucketRange TimelineClipLaneArea::bucketRangeForClip(const synth::PeaksFile::Data& peaks,
                                                                            double lengthBeats,
                                                                            double sourceStartSeconds, double bpm,
@@ -286,6 +307,9 @@ TimelineClipLaneArea::Geometry TimelineClipLaneArea::effectiveGeometryFor(const 
     return {clip.startBeat, clip.lengthBeats};
 }
 
+// Except while a plain (non-copy) move drag is previewing a cross-track drop, in which case the
+// whole dragged set previews one row delta down/up. A copy-drag deliberately does NOT move the
+// original — its destination is drawn as a separate ghost (see paintDragGhosts).
 int TimelineClipLaneArea::effectiveRowFor(synth::ClipId id, int trackIndex) const {
     // Same copyDrag_ guard as effectiveGeometryFor above, and it must stay the same — see there.
     if (dragMode_ != DragMode::Move || copyDrag_ || previewRowDelta_ == 0)
@@ -410,6 +434,7 @@ juce::String TimelineClipLaneArea::getEmptyRowHintForTest(int trackIndex) const 
     return track.clips.empty() ? emptyRowHintFor(track.kind) : juce::String();
 }
 
+// Static paint straight from doc state — no timer, no animation.
 void TimelineClipLaneArea::paintEmptyRowHint(juce::Graphics& g, const synth::Track& track,
                                              juce::Rectangle<int> bounds) {
     const auto text = emptyRowHintFor(track.kind);

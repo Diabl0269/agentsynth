@@ -412,7 +412,7 @@ void PianoRollComponent::performMuteToggle(synth::NoteId id) {
 }
 
 //==============================================================================
-// ---- Split-tool hover preview (state-change gated; see the class comment) ----
+// ---- Split-tool hover preview (state-change gated; see mouseMove's comment in PianoRollMouse.cpp) ----
 
 juce::Rectangle<int> PianoRollComponent::splitPreviewStrip() const {
     const auto* clip = doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
@@ -514,7 +514,8 @@ void PianoRollComponent::updateHoverCursor(juce::Point<int> pos) {
 }
 
 void PianoRollComponent::lookAndFeelChanged() {
-    // The cursors are rasterised from the THEMED icons, so a theme switch invalidates all six.
+    // The cursors are rasterised from the THEMED icons, so a theme switch invalidates all six —
+    // rebuilt here and re-applied rather than lazily rebuilt per mouse move.
     toolCursorsBuilt_ = false;
     applyToolCursor();
 }

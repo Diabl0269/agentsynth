@@ -160,8 +160,9 @@ std::vector<NodeID> realConsumers(juce::AudioProcessorGraph& graph, const std::v
     return consumers;
 }
 
-// Side-input absorption (ChannelFlows.h), to a fixpoint: a node no track reaches whose every
-// consumer is already in `members` joins it. `excluded` is a set already claimed by another channel.
+// Side-input absorption (see planMakeChannel's own comment below), to a fixpoint: a node no track
+// reaches whose every consumer is already in `members` joins it. `excluded` is a set already
+// claimed by another channel.
 void absorbSideInputs(juce::AudioProcessorGraph& graph, const std::vector<Connection>& connections,
                       std::vector<NodeID>& members, const std::vector<NodeID>& reachedByTracks,
                       const std::vector<NodeID>& excluded) {
@@ -337,6 +338,8 @@ std::vector<juce::String> ensureUuids(juce::AudioProcessorGraph& graph, const st
 
 } // namespace
 
+// "Which modules does this track use" is answered against every OTHER such node in the graph,
+// never against TimelineDoc (Core has no reference to it).
 bool isTrackSourceNode(const juce::AudioProcessor* processor) {
     auto* module = dynamic_cast<const ModuleBase*>(processor);
     if (module == nullptr)
@@ -345,6 +348,30 @@ bool isTrackSourceNode(const juce::AudioProcessor* processor) {
     return type == ModuleType::TimelineMidiSource || type == ModuleType::TimelineAudioSource;
 }
 
+// Signal reach: a forward walk from a node along every MIDI edge and every audio edge whose
+// destination pin is not a modulation input (PortRole::ModCV) — so a plain CV cable into another
+// track's cutoff, like an AudioEngine::addModRouting leg (an AttenuverterModule, never entered),
+// never makes two chains "the same chain". The walk passes THROUGH Channel Strips and macro port
+// nodes and stops at the terminals (Audio Output, Record Tap, Master).
+//
+//   - own region: nodes `source` reaches that no OTHER track source reaches (macro port nodes are
+//     walked through but never own anything). These are the modules "used only by this track".
+//   - shared region: nodes `source` reaches that another track also reaches — never moved into this
+//     track's channel. Where this track's own region feeds into it is a MERGE: each such merge head
+//     that still reaches the output without a strip becomes its OWN bus channel (`buses`), holding
+//     the shared nodes downstream of it.
+//   - side inputs: a node no track source reaches (an LFO, a free oscillator) whose every consumer
+//     (looking through modulation attenuverters) is already a member is absorbed into the member
+//     set, to a fixpoint (see absorbSideInputs above). A side input with a consumer anywhere else —
+//     the shared-LFO case — stays outside, and the caller's auto-port pass fronts its cable with a
+//     macro port.
+//
+// The new strip takes over `exits` (edges from the own region onto the output) and `stripCrossings`
+// (audio edges from the own region into shared modules carrying the same signal the exits carry,
+// or — with no exits at all — every audio edge into the shared region, provided each side feeds one
+// consistent signal; otherwise `refusal`). An audio edge into the shared region that carries a
+// DIFFERENT signal from the exits stays a pre-strip send. Channel Strip, bypassed EQ/Compressor
+// and Master are unity at their defaults, so the rebuilt graph renders identically.
 MakeChannelPlan planMakeChannel(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID source,
                                 const MacroSet& macros) {
     MakeChannelPlan plan;
@@ -400,8 +427,8 @@ MakeChannelPlan planMakeChannel(juce::AudioProcessorGraph& graph, juce::AudioPro
             audioCrossings.push_back(c);
     }
 
-    // Which audio crossings the new strip takes over — see ChannelFlows.h. Grouped by destination
-    // pin, each pin's feed set compared against the signal the strip will carry on that side.
+    // Which audio crossings the new strip takes over — see above. Grouped by destination pin, each
+    // pin's feed set compared against the signal the strip will carry on that side.
     struct Pin {
         NodeAndChannel pin;
         bool isRight = false;
@@ -523,6 +550,18 @@ MakeChannelPlan planMakeChannel(juce::AudioProcessorGraph& graph, juce::AudioPro
     return plan;
 }
 
+// Rebuilds the own exits/crossings through EQ (bypassed) -> Compressor (bypassed) -> Channel Strip,
+// whose output goes to Master's Mix for the exits (Master spliced exactly as buildChannelForFeeds
+// does) and to the original shared input pins for the crossings — plain edges, never macro ports,
+// see ChannelFlowsDefaultChannel.cpp's buildDefaultAudioChannel comment for why. Then builds each
+// bus with buildChannelForFeeds' chain.
+//
+// A feed from a poly module's poly jack (isProcessorPoly, span > 1 — so a poly VCA, which self-sums
+// to one channel, never qualifies) gets addVoiceMixerForPolyInstrument ahead of the strip instead
+// (docs/mixer.md §5.4/§5.8). The one intended sound change: the channel then carries every voice,
+// where a bare poly jack wired to a mono input carried voice 0 only.
+//
+// Assigns every member a uuid via AIStateMapper::ensureNodeUuid.
 MadeChannel buildMakeChannel(juce::AudioProcessorGraph& graph, const MakeChannelPlan& plan,
                              const ChannelLayoutFn& layoutRightOf) {
     MadeChannel made;

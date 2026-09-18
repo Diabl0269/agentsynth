@@ -636,6 +636,10 @@ juce::Rectangle<int> PianoRollComponent::playheadStripFor(int x) const noexcept 
     return {x - kPlayheadStripHalfWidth, 0, 2 * kPlayheadStripHalfWidth + 1, getHeight()};
 }
 
+// requestRepaintStrip/requestRepaintPreviewStrip/requestRepaintHeaderButtonStrip are the paint-count
+// seams for the local playhead line, the Split-tool hover preview, and the header buttons' hover
+// wash respectively, each counted independently by tests (a protected virtual so a test subclass can
+// intercept and count calls instead of triggering a real repaint).
 void PianoRollComponent::requestRepaintStrip(juce::Rectangle<int> strip) { repaint(strip); }
 
 void PianoRollComponent::requestRepaintPreviewStrip(juce::Rectangle<int> strip) { repaint(strip); }

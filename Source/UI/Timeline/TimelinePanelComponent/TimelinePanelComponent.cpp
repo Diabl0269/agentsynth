@@ -288,18 +288,39 @@ TimelinePanelComponent::TimelinePanelComponent() {
     refreshShortcutTooltips();
 }
 
+// LIFETIME CONTRACT: the installed ShortcutManager is expected to outlive this component --
+// MainComponent.cpp's explicit `timelinePanel.setShortcutManager(nullptr);` ahead of its own
+// member cascade is what makes that true for the real app (`shortcutManager` is declared AFTER
+// `timelinePanel`, so it would otherwise destruct first). Every read of `shortcuts_` during normal
+// operation (tooltips, keyPressed) still trusts that contract.
+//
+// This DESTRUCTOR is different: it runs unconditionally, including in tests that forgot the
+// explicit detach (FRO97 found this pattern in five test files — a locally-scoped ShortcutManager
+// declared AFTER a locally-scoped component, so the manager destructs FIRST at scope exit).
+// `shortcuts_` alone can't tell a live manager from a dangling one, so the destructor resolves
+// through `shortcutsWeak_` instead — a genuine guard against exactly the bug class this ticket
+// fixed, rather than one more call site relying on every future test remembering the idiom.
+// `shortcutsWeak_` goes null automatically the moment the referenced manager destructs, making
+// removeChangeListener safe to skip instead of a use-after-free.
 TimelinePanelComponent::~TimelinePanelComponent() {
     if (doc_ != nullptr)
         doc_->removeListener(this);
-    // Resolved through the weak reference, not `shortcuts_` itself — see its declaration comment.
-    // `shortcuts_` cannot distinguish a live manager from one that already destructed (a locally-
-    // scoped ShortcutManager going out of scope before this component, in a test that skipped the
-    // explicit setShortcutManager(nullptr) detach); `shortcutsWeak_` goes null automatically the
-    // moment that happens, making removeChangeListener safe to skip instead of a use-after-free.
     if (shortcutsWeak_ != nullptr)
         shortcutsWeak_->removeChangeListener(this);
 }
 
+// Resolution is strict once a manager IS installed, exactly as on PianoRollComponent: an action
+// whose binding is unset or invalid (including an id this ShortcutManager has never heard of) has
+// NO key rather than falling back to its default. Mixing the two would mean a binding the user
+// deliberately cleared still fired on its factory key.
+//
+// Non-const (unlike PianoRollComponent's own copy of this pointer): the tool-strip/snap/follow
+// buttons' tooltips are real juce::Button tooltips, which CACHE their text (unlike the roll's
+// hand-drawn header, whose tooltip is resolved live on every hover query) -- so this panel
+// subscribes as a juce::ChangeListener on the installed manager to rebuild them whenever a binding
+// changes, and that requires a non-const ShortcutManager* to add/removeChangeListener on.
+// Unsubscribes from whichever manager was previously installed first, so re-installing (or
+// clearing, with nullptr) never leaves a stale listener registered.
 void TimelinePanelComponent::setShortcutManager(ShortcutManager* manager) {
     if (shortcuts_ != nullptr)
         shortcuts_->removeChangeListener(this);
@@ -317,6 +338,10 @@ void TimelinePanelComponent::setShortcutManager(ShortcutManager* manager) {
 
 void TimelinePanelComponent::changeListenerCallback(juce::ChangeBroadcaster*) { refreshShortcutTooltips(); }
 
+// Rebuilds every dynamic shortcut-hint tooltip this panel owns (see synth::shortcutHintFor): the
+// six tool-strip buttons, the snap toggle, and the follow-playhead toggle. Called from the
+// constructor (after those buttons exist), setShortcutManager (both install and clear), and
+// changeListenerCallback.
 void TimelinePanelComponent::refreshShortcutTooltips() {
     // The tool-strip action ids, index-aligned with EditTool — see ShortcutManager::resetToDefaults.
     auto actionIdForTool = [](EditTool tool) -> juce::String {
@@ -356,6 +381,9 @@ void TimelinePanelComponent::refreshShortcutTooltips() {
 }
 
 //==============================================================================
+// Forwarded to the ruler and the playhead overlay -- the two sub-components that talk to the
+// transport directly -- and to the clip-lane area (it only reads the time signature, for
+// Snap::Bar).
 void TimelinePanelComponent::setTransport(synth::TransportService* transport) {
     transport_ = transport; // this panel's own copy — see the member's comment
     ruler_.setTransport(transport);
@@ -366,8 +394,15 @@ void TimelinePanelComponent::setTransport(synth::TransportService* transport) {
     automationEditor_.setTransport(transport);
 }
 
+// Forwarded straight to the transport bar's own metronome toggle -- see
+// TimelineTransportBar::setMetronome.
 void TimelinePanelComponent::setMetronome(synth::Metronome* metronome) { transportBar_.setMetronome(metronome); }
 
+// Two jobs: hand the snapshot to the playhead overlay, which owns its 30 Hz playing-only timer
+// from the play/stop transitions it sees here (see TimelinePlayheadOverlay.h); and diff the small
+// slice of transport state the RULER paints (time signature + loop trio), repainting it only on a
+// change. The position is deliberately NOT part of that diff: the playhead is the only thing that
+// moves with it, and it repaints its own strip. Same gated idiom as the status bar's 5 Hz poll.
 void TimelinePanelComponent::updateFromTransport(const synth::TransportService::PositionSnapshot& snapshot,
                                                  double outputLatencySeconds) {
     ++transportUpdateCount_;
@@ -417,6 +452,9 @@ void TimelinePanelComponent::updateFromTransport(const synth::TransportService::
         repaint();
 }
 
+// The panel listens to the doc and rebuilds/refreshes the track headers on every notification --
+// that is the ONLY thing that updates them: no timer, no polling. Also forwarded to the clip-lane
+// area, which runs the same "set doc, refresh once" seam (TimelineClipLaneArea::setTimelineDoc).
 void TimelinePanelComponent::setTimelineDoc(synth::TimelineDoc* doc) {
     if (doc_ == doc)
         return;
@@ -440,6 +478,9 @@ void TimelinePanelComponent::setTimelineDoc(synth::TimelineDoc* doc) {
     automationEditor_.setActiveLane({});
 }
 
+// It is MainComponent's existing AppUndoManager that gets forwarded here -- see the header for the
+// undo-granularity contract this produces. Same degrade-gracefully contract every other
+// non-owning setter here has.
 void TimelinePanelComponent::setUndoManager(AppUndoManager* undoManager) {
     undoManager_ = undoManager;
     clipLaneArea_.setUndoManager(undoManager);

@@ -26,6 +26,9 @@ juce::String toolActionIdFor(synth::ui::EditTool tool) { return "timelineTool" +
 constexpr const char* kTimelineLoopSelectionArmsPropertyKey = "timelineLoopSelectionArms";
 } // namespace
 
+// The same three lines PianoRollComponent::matchesAction runs -- deliberately duplicated rather
+// than shared, because factoring it out would mean a header both surfaces include just to hold a
+// two-branch comparison, and the contract (not the code) is the thing that has to stay identical.
 bool TimelinePanelComponent::matchesAction(const juce::KeyPress& key, const juce::String& actionId,
                                            const juce::KeyPress& fallback) const {
     if (shortcuts_ == nullptr)
@@ -41,6 +44,9 @@ bool TimelinePanelComponent::matchesAction(const juce::KeyPress& key, const juce
 }
 
 bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
+    // Escape closes the strip when it's open and idle (the editor's own keyPressed already
+    // consumed it if there was tool-drag state to cancel -- see AutomationLaneEditor's class
+    // comment). Same panel-scoped idiom as every other timeline sub-component's Delete/Escape.
     if (key == juce::KeyPress::escapeKey && automationStripVisible_) {
         closeAutomationStrip();
         return true;

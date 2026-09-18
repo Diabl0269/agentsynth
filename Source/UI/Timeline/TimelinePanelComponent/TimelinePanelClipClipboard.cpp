@@ -12,6 +12,10 @@ namespace synth::ui {
 
 //==============================================================================
 // ---- Clip clipboard ----
+//
+// This panel owns the clipboard because it already owns the selection it copies from -- see
+// MainComponent::resolveEditSurface()/perform(), which delegate here exactly the way GraphEditor
+// owns its own module clipboard.
 
 synth::TrackId TimelinePanelComponent::firstTrackOfKind(synth::TrackKind kind) const {
     if (doc_ == nullptr)
@@ -33,6 +37,9 @@ double TimelinePanelComponent::currentBeatsPerBarForPaste() const {
     return beatsPerBar;
 }
 
+// Copies WHOLE clips: notes (each with its own muted flag), name, length, muted flag and every
+// audio field (assetRef, gainDb, the two fades, sourceStartSeconds) -- see the header for the
+// return-value contract.
 bool TimelinePanelComponent::copySelectedClips() {
     if (doc_ == nullptr)
         return false;
@@ -87,6 +94,16 @@ bool TimelinePanelComponent::copySelectedClips() {
     return true;
 }
 
+// The target track for each entry is KIND-AWARE: the original track is used only if it still
+// exists AND still plays the clip's payload (an audio clip needs a TrackKind::Audio row, a MIDI
+// clip a Midi one -- TimelineDoc::moveClipToTrack's rule); otherwise the doc's first track of the
+// required kind; otherwise that clip is skipped. Pasting an audio clip onto a MIDI row would park
+// an asset somewhere nothing will ever play it.
+//
+// Audio fields go back through setClipAsset/setClipGainDb/setClipFades rather than being written
+// into the struct, so the clipboard's assetRef passes the SAME bundle-relative validation a loaded
+// file's does -- a clipboard is only as trustworthy as whatever filled it. The position is snapped
+// via the shared view-state snap and the transport's live time signature.
 bool TimelinePanelComponent::pasteClipsAtPlayhead() {
     if (doc_ == nullptr || clipClipboard_.empty())
         return false;
@@ -215,6 +232,10 @@ bool TimelinePanelComponent::selectAllClips() {
     return true;
 }
 
+// The first copy starts one block-length after the selection's own start, so the copies tile
+// forward without overlapping the source. The block length is the selection's span (max end - min
+// start), not each clip's own length -- that is what keeps a multi-clip rhythm intact instead of
+// collapsing it. duplicateClip + moveClipToTrack per copy -- see the header for the undo contract.
 bool TimelinePanelComponent::repeatSelectedClips(int count) {
     if (doc_ == nullptr || count < 1)
         return false;

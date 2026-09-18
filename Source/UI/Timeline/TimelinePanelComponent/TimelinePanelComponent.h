@@ -62,88 +62,58 @@ class TimelinePanelComponent
     : public juce::Component
     , private synth::TimelineDoc::Listener
     , private juce::ChangeListener
-    // FRO14: ONE 15 Hz timer for the whole header column's channel-chip meters -- never one per
-    // row (up to TimelineDoc::kMaxTracks of them). Each chip gates its own repaint on the drawn
-    // level actually moving, so this is not an unconditional per-tick repaint (Source/UI/CLAUDE.md).
+    // FRO14: ONE shared timer for the header column's channel-chip meters -- see timerCallback()
+    // below.
     , private juce::Timer {
 public:
     TimelinePanelComponent();
     ~TimelinePanelComponent() override;
 
     void paint(juce::Graphics& g) override;
-    // T159: focus-region outline (Source/UI/Layout/FocusRegion.h), drawn OVER children -- the ruler, track
-    // header viewport, transport bar and clip lane area all tile wall-to-wall against this panel's
-    // own edge, so an outline painted at the end of paint() would sit UNDER them and never show.
+    // T159: focus-region outline, drawn OVER children -- see paintOverChildren()'s definition in
+    // TimelinePanelLayout.cpp for why.
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
 
-    // Wheel = horizontal scroll; Cmd+wheel (Ctrl on platforms without a Cmd key — mods.isCommandDown()
-    // already abstracts this) = zoom around the cursor. Implemented once here (rather than
-    // separately on the ruler) so the ruler and the lanes grid share identical behaviour — JUCE
-    // bubbles an unhandled wheel event from the ruler child up to this override.
-    //
-    // Every branch reads the wheel through synth::ui::ScrollPolicy: the modifier-decided branches
-    // (both zooms) take dominantWheelDelta() for MAGNITUDE and wheelGestureIsUpward() for
-    // DIRECTION, so they survive macOS folding Shift+wheel into deltaX and stay "up zooms in"
-    // regardless of the OS's natural-scrolling setting (XORed against zoomScrollInverted_ — see its
-    // setter); the plain-scroll branches take scrollAmount(delta, scrollInverted_), which is the
-    // juce::Viewport sign convention plus this panel's own (separate) inversion preference.
+    // Wheel = horizontal scroll; Cmd+wheel (Ctrl on platforms without a Cmd key) = zoom around the
+    // cursor. See mouseWheelMove()'s definition in TimelinePanelLayout.cpp for the full modifier
+    // table and the ScrollPolicy rationale.
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
 
-    // Non-owning; may be null (tests, or before MainComponent finishes wiring). Forwarded to the
-    // ruler and the playhead overlay — the two sub-components that talk to the transport directly
-    // — and to the clip-lane area (it only reads the time signature, for Snap::Bar).
+    // Non-owning; may be null (tests, or before MainComponent finishes wiring).
     void setTransport(synth::TransportService* transport);
 
-    // Forwarded straight to the transport bar's own metronome toggle — see
-    // TimelineTransportBar::setMetronome. Non-owning; may be null.
+    // Non-owning; may be null.
     void setMetronome(synth::Metronome* metronome);
 
-    // THE low-rate transport poll, called from MainComponent's EXISTING 10 Hz timer (only while
-    // this panel is visible). It adds no timer of its own.
-    // Two jobs:
-    //   - hand the snapshot to the playhead overlay, which owns its 30 Hz playing-only timer from
-    //     the play/stop transitions it sees here (see TimelinePlayheadOverlay.h);
-    //   - diff the small slice of transport state the RULER paints (time signature + loop trio) and
-    //     repaint it only on a change. The position is deliberately NOT part of that diff: the
-    //     playhead is the only thing that moves with it, and it repaints its own strip. Same gated
-    //     idiom as the status bar's 5 Hz poll.
+    // Called from MainComponent's existing 10 Hz timer (only while this panel is visible); adds no
+    // timer of its own. See its definition in TimelinePanelComponent.cpp for what it does with the
+    // snapshot.
     void updateFromTransport(const synth::TransportService::PositionSnapshot& snapshot, double outputLatencySeconds);
 
-    // Non-owning. Restores/persists the snap-selector choice under the "timelineSnap" key, same
-    // pattern as AIChatComponent::setAccountService()'s non-owning setter. Also forwarded to the
-    // transport bar, which restores/persists ITS OWN two keys ("timelineMetronomeEnabled",
-    // "timelineCountInBars") — this panel has no other reason to know either setting exists, so it
-    // is a pure forward, not a third copy of the restore/persist idiom. Also hands the roll its
-    // PropertiesFile (pianoRoll_.setPropertiesFile — scale-panel visibility + user scales) and
-    // runs reloadPianoRollAppearancePrefs() once, below.
+    // Non-owning. Restores/persists the snap-selector choice, forwards to the transport bar and the
+    // piano roll for their own prefs, and runs reloadPianoRollAppearancePrefs() once -- see its
+    // definition in TimelinePanelLayout.cpp.
     void setApplicationProperties(juce::ApplicationProperties* props);
 
-    // Reads "pianoRollKeyLabels" ("all"/"c", default "all") and NoteColour.h's own
-    // loadNoteColourOverrides, and pushes both into the roll. Called once from
-    // setApplicationProperties, and left PUBLIC so a live settings change (the Preferences tab's
-    // key-labels toggle, a note-colour edit) can re-push without a restart — MainComponent wires
-    // that in a parallel task; this method itself does no listening of its own. A no-op with no
-    // ApplicationProperties installed (or none passed to setApplicationProperties yet).
+    // Reads the roll's appearance prefs (key-label density, note-colour overrides) and pushes them
+    // into the roll. A no-op with no ApplicationProperties installed. Public so a live settings
+    // change can re-push without a restart -- see its definition in TimelinePanelLayout.cpp.
     void reloadPianoRollAppearancePrefs();
 
-    // Non-owning; may be null (before setTimelineDoc is called, the panel is an inert shell with
-    // an empty header column). The panel listens to the doc and
-    // rebuilds/refreshes the track headers on every notification — that is the ONLY thing that
-    // updates them: no timer, no polling. Also forwarded to the clip-lane area, which runs
-    // the same "set doc, refresh once" seam (TimelineClipLaneArea::setTimelineDoc).
+    // Non-owning; may be null (before this is called, the panel is an inert shell with an empty
+    // header column). See its definition in TimelinePanelComponent.cpp for the listen/rebuild
+    // contract.
     void setTimelineDoc(synth::TimelineDoc* doc);
     synth::TimelineDoc* getTimelineDoc() const noexcept { return doc_; }
 
-    // Non-owning. Handed to every track header (and driven by the "+ MIDI Track" button), so the
-    // header column's whole conversation with the app goes through one seam. Must be set before
-    // (or at the same time as) setTimelineDoc for the first build to be fully wired.
+    // Non-owning. Must be set before (or at the same time as) setTimelineDoc for the first build to
+    // be fully wired -- see its definition in TimelinePanelTrackHeaders.cpp.
     void setTrackHeaderHost(TrackHeaderHost* host);
 
-    // Forwarded to the clip-lane area — MainComponent's existing AppUndoManager is what
-    // makes every clip drag/trim/split/duplicate/delete ONE undo step. Non-owning; may be null
-    // (mutations then apply directly, off the undo stack — same degrade-gracefully contract every
-    // other non-owning setter here has).
+    // Non-owning; may be null (mutations then apply directly, off the undo stack). Forwarded to the
+    // clip-lane area, making every clip drag/trim/split/duplicate/delete ONE undo step -- see its
+    // definition in TimelinePanelComponent.cpp for why.
     void setUndoManager(AppUndoManager* undoManager);
 
     // The clip lane area and the selection model behind it. The panel owns the selection
@@ -155,50 +125,29 @@ public:
     const synth::ui::TimelineClipLaneArea& getClipLaneArea() const noexcept { return clipLaneArea_; }
 
     // ---- Edit tools (the Cubase-style tool row — see EditTool.h) ----
-    //
-    // ONE active tool for the whole timeline, owned here because the clip lanes and the piano roll
-    // share a rect (only one is ever visible) and a tool row that changed meaning depending on
-    // which editor happened to be showing would be a trap. Setting it pushes the tool into BOTH
-    // editors and lights the matching strip button; the number keys (1/3/4/5/7/8) and the buttons
-    // are the two ways a user reaches it.
+    // ONE active tool for the whole timeline, shared by the clip lanes and the piano roll -- see
+    // setActiveTool()'s definition in TimelinePanelStrips.cpp for why.
     void setActiveTool(EditTool tool);
     EditTool getActiveTool() const noexcept { return activeTool_; }
-    /** The strip button for a tool. Never null once the panel is constructed — the six buttons are
-     *  built in the constructor, unconditionally (a headless build simply has no icon to draw in
-     *  them). Exposed so a test can click one rather than synthesise a key press. */
+    /** The strip button for a tool. Never null once the panel is constructed. */
     juce::DrawableButton* getToolButton(EditTool tool) const noexcept;
 
     // ---- Clip clipboard (Cmd+C/V/D on the TimelineClips surface) ----
-    // This panel owns the clipboard because it already owns the selection it copies from — see
-    // MainComponent::resolveEditSurface()/perform(), which delegate here exactly the way
-    // GraphEditor owns its own module clipboard.
-    //
-    // Copies the CURRENTLY SELECTED clips — WHOLE clips: notes (each with its own muted flag),
-    // name, length, muted flag and every audio field (assetRef, gainDb, the two fades,
-    // sourceStartSeconds), with starts expressed RELATIVE to the earliest selected clip's start —
-    // into an internal clipboard, replacing whatever was there. Returns false (clipboard left
-    // untouched) when nothing is selected or there's no doc.
+    // See TimelinePanelClipClipboard.cpp for why this panel owns the clipboard.
+
+    // Copies the CURRENTLY SELECTED clips (notes, name, length, muted flag, audio fields), with
+    // starts RELATIVE to the earliest selected clip's start, into an internal clipboard, replacing
+    // whatever was there. Returns false (clipboard untouched) when nothing is selected or there's
+    // no doc.
     bool copySelectedClips();
     // True once copySelectedClips() has captured at least one clip and nothing has cleared it
     // since — getCommandInfo's Paste-active gate for the TimelineClips surface.
     bool canPasteClips() const noexcept { return !clipClipboard_.empty(); }
-    // Inserts every clipboard clip back onto ITS ORIGINAL TRACK, re-based so the EARLIEST clip
-    // lands at the transport's CURRENT position (snapped via the shared view-state snap and the
-    // transport's live time signature) and every other clip keeps its relative offset, with its
-    // notes, name, mute state and audio fields restored.
-    //
-    // The track fallback is KIND-AWARE: the original track is used only if it still exists AND
-    // still plays the clip's payload (an audio clip needs a TrackKind::Audio row, a MIDI clip a
-    // Midi one — TimelineDoc::moveClipToTrack's rule); otherwise the doc's first track of the
-    // required kind; otherwise that clip is skipped. Pasting an audio clip onto a MIDI row would
-    // park an asset somewhere nothing will ever play it.
-    //
-    // Audio fields go back through setClipAsset/setClipGainDb/setClipFades rather than being
-    // written into the struct, so the clipboard's assetRef passes the SAME bundle-relative
-    // validation a loaded file's does — a clipboard is only as trustworthy as whatever filled it.
-    // One recordTimelineChange for the whole paste; the pasted clips end up selected. Returns
-    // false (no-op, clipboard untouched) when the clipboard is empty, there's no doc, or every
-    // clip was skipped.
+    // Inserts every clipboard clip back onto its original track (or the doc's first track of a
+    // matching kind — see the definition), re-based so the EARLIEST clip lands at the transport's
+    // CURRENT position and every other clip keeps its relative offset. One recordTimelineChange for
+    // the whole paste; the pasted clips end up selected. Returns false (no-op) when the clipboard is
+    // empty, there's no doc, or every clip was skipped.
     bool pasteClipsAtPlayhead();
     // doc_->duplicateClip() per selected clip, batched into one recordTimelineChange however many
     // clips are selected; the new clips end up selected. Returns false when nothing is selected or
@@ -218,13 +167,9 @@ public:
     // Selects every clip on every track (Cmd+A on the clip-lane surface). Returns false when
     // there's no doc or the arrangement has no clips at all.
     bool selectAllClips();
-    // Cubase's "Repeat": `count` back-to-back copies of the selection BLOCK, the first starting
-    // one block-length after the selection's own start, so the copies tile forward without
-    // overlapping the source. The block length is the selection's span (max end - min start), not
-    // each clip's own length — that is what keeps a multi-clip rhythm intact instead of
-    // collapsing it. duplicateClip + moveClipToTrack per copy, ONE recordTimelineChange for the
-    // whole repeat, and the final selection is every clip it created. Returns false when `count`
-    // is < 1, there's no doc/selection, or nothing could be created.
+    // Cubase's "Repeat": `count` back-to-back copies of the selection BLOCK, as ONE
+    // recordTimelineChange for the whole repeat -- see its definition for the tiling rule. Returns
+    // false when `count` is < 1, there's no doc/selection, or nothing could be created.
     bool repeatSelectedClips(int count);
 
     // ---- Piano roll ----
@@ -265,11 +210,11 @@ public:
 
     /** One entry in the lane picker: either an EXISTING doc lane labelled "NodeName \xC2\xB7 paramId"
      *  (resolved via TrackHeaderHost::getNodeDisplayName; falls back to the uuid's first 8
-     *  characters when the node doesn't resolve), or an "Add lane..." entry for a hosted
-     *  plugin instance parameter that has none yet — `isAddEntry` distinguishes the two, `id` is
-     *  only meaningful when it's false. In track order then lane order, existing lanes first, then
-     *  add-lane entries — index i is menu id i + 1, the same convention
-     *  TimelineTrackHeaderComponent::collectBindingOptions() uses. */
+     *  characters when the node doesn't resolve), or an "Add lane..." entry for a hosted plugin
+     *  instance parameter that has none yet -- `isAddEntry` distinguishes the two, `id` is only
+     *  meaningful when it's false. In track order then lane order, existing lanes first, then
+     *  add-lane entries -- index i is menu id i + 1; see collectAutomationLaneOptions()'s
+     *  definition in TimelinePanelStrips.cpp for why. */
     struct AutomationLaneOption {
         synth::LaneId id;
         juce::String label;
@@ -283,13 +228,11 @@ public:
     void applyAutomationLaneMenuChoice(int selectedId);
     void applyAutomationRecordModeChoice(int selectedId);
 
-    // Escape closes the strip when it's open and idle (the editor's own keyPressed already
-    // consumed it if there was tool-drag state to cancel — see AutomationLaneEditor's class
-    // comment). Same panel-scoped idiom as every other timeline sub-component's Delete/Escape.
+    // Escape closes the strip when it's open and idle -- see its definition in
+    // TimelinePanelShortcuts.cpp for how it interacts with AutomationLaneEditor's own Escape.
     bool keyPressed(const juce::KeyPress& key) override;
 
-    // Trackpad pinch: plain = horizontal zoom, Shift = vertical (row height) zoom. The wheel
-    // bindings live in mouseWheelMove; see its comment for the full Cubase-style table.
+    // Trackpad pinch: plain = horizontal zoom, Shift = vertical (row height) zoom.
     void mouseMagnify(const juce::MouseEvent& e, float scaleFactor) override;
 
     // Pure geometry getters — later tasks and tests build on the same rects rather than
@@ -301,96 +244,48 @@ public:
     juce::Rectangle<int> getLanesBounds() const noexcept { return lanesBounds_; }
 
     // ---- Snap / zoom / scroll: the view-state verbs the shortcut layer drives ----
-    //
     // Everything in this block is VIEW state: no TimelineDoc mutation, nothing on the undo stack.
-    // Undoing a zoom is not a thing any DAW does, and putting one on the stack would bury the
-    // user's last real edit under a pile of scrolls.
+    // See TimelinePanelLayout.cpp for the design rationale behind each member below.
 
-    /** Sets the grid division. Means the same thing as picking it from the snap combo — which is
-     *  exactly what it IS now: the combo's onChange delegates here, so the combo, the shortcut
-     *  layer and cycleSnapValue() below share one path to the view state, one persist and one set
-     *  of repaints. Like the combo, it re-arms the master snap switch (see setSnapEnabled): asking
-     *  for a division means "snap to THIS", and choosing Snap::Off is how you ask for no grid from
-     *  here. Also feeds TimelineViewState::lastMusicalSnap, which is what cycleSnapValue's from-Off
-     *  rule reads.
+    /** Sets the grid division; the same thing as picking it from the snap combo.
      *  @return true when the division actually changed (a re-pick of the current one still
      *          re-arms and re-persists, it just reports no change). */
     bool setSnapValue(TimelineViewState::Snap value);
 
     /** Steps the grid one division through the MUSICAL values only — Bar, 1, 1/2, 1/4, 1/8, 1/16,
      *  1/32, 1/64, 1/128 — with `direction` > 0 going FINER (toward 1/128) and < 0 going COARSER
-     *  (toward Bar). Zero is a no-op.
-     *
-     *  Two rules, both chosen for how they feel under a held-down key rather than for symmetry:
-     *
-     *  - CLAMPED at both ends, never wrapping. Leaning on "finer" and parking at 1/128 is what the
-     *    hand expects; wrapping silently back to Bar mid-flow moves every subsequent edit onto a
-     *    64x coarser grid, and the user finds out from the result, not from the keypress.
-     *  - Snap::Off is never a stop on the cycle — turning magnetism off stays the Q key's job. So
-     *    cycling FROM Off (in either direction, one simple rule) enters at
-     *    TimelineViewState::lastMusicalSnap, the last division the user actually chose, falling
-     *    back to Snap::Bar if there somehow isn't one. "Either direction" is deliberate: from Off
-     *    there is no current position for "one finer" to be relative to, so the only honest answer
-     *    is "back where you were".
-     *
+     *  (toward Bar). Zero is a no-op; CLAMPED at both ends, never wrapping.
      *  @return true when the division changed. */
     bool cycleSnapValue(int direction);
 
-    /** Horizontal zoom by `factor` (> 1 in, < 1 out) around the CENTRE of the visible lanes, so a
-     *  keyboard zoom keeps the music in front of you put. Runs through the same
-     *  TimelineViewState::zoomAroundX + repaint path as Cmd+wheel and the trackpad pinch — one
-     *  path, so a shortcut zoom and a wheel zoom can never drift apart in clamping or in what they
-     *  repaint. A non-finite or non-positive factor is ignored. */
+    /** Horizontal zoom by `factor` (> 1 in, < 1 out) around the CENTRE of the visible lanes. A
+     *  non-finite or non-positive factor is ignored. */
     void zoomTimelineHorizontal(double factor);
 
     /** Vertical (track row height) zoom by `factor`, anchored on the middle row of the visible
-     *  lanes. Same zoomTrackRows path — including the header-column relayout and the scroll
-     *  re-clamp — that Cmd+Shift+wheel and Shift+pinch use. */
+     *  lanes. */
     void zoomTimelineVertical(double factor);
 
     /** App-level scroll-direction preference, stacked on top of whatever the OS already did to the
-     *  wheel deltas (see ScrollPolicy.h — JUCE hands us pre-flipped deltas, so this is a second,
-     *  deliberate flip and not a re-application of the OS setting). Default false = "natural" =
-     *  the juce::Viewport convention every other scrolling surface in the app already follows.
-     *  Not persisted here: the owner (Preferences) decides whether a preference exists, the same
-     *  way it owns the timeline's other opt-in behaviours. Forwarded to the piano roll (see
-     *  setTransport/setUndoManager above for the same "one preference, every surface that scrolls"
-     *  idiom) so a clip-lane scroll and a roll scroll never disagree about which way is "natural". */
+     *  wheel deltas. Default false = "natural" = the juce::Viewport convention every other
+     *  scrolling surface in the app already follows. Not persisted here (see the owner's own
+     *  persist path). Forwarded to the piano roll so a clip-lane scroll and a roll scroll never
+     *  disagree about which way is "natural". */
     void setScrollInverted(bool inverted) noexcept;
     bool isScrollInverted() const noexcept { return scrollInverted_; }
 
     /** App-level ZOOM-direction preference for the Cmd/Cmd+Shift wheel-zoom gestures (horizontal
      *  and vertical) — independent of setScrollInverted above, which governs the PLAIN-scroll
-     *  branches only. Default false = "up zooms in": mouseWheelMove derives the physical gesture
-     *  direction via synth::ui::wheelGestureIsUpward (isReversed-aware, unlike a raw delta sign —
-     *  see ScrollPolicy.h) and XORs it with this flag, so flipping the preference flips the sense
-     *  of BOTH axes at once rather than requiring two separate settings. Forwarded to the piano
-     *  roll for the same reason setScrollInverted is. Not persisted here — see setScrollInverted's
-     *  comment. */
+     *  branches only. Default false = "up zooms in". Forwarded to the piano roll for the same
+     *  reason setScrollInverted is. */
     void setZoomScrollInverted(bool inverted) noexcept;
     bool isZoomScrollInverted() const noexcept { return zoomScrollInverted_; }
 
     /** The user's bindings for this panel's OWN keys: the six tool digits, the snap toggle, the loop
-     *  toggle and loop-the-selection. Non-owning and may stay null — with no manager installed
-     *  keyPressed() falls back to the hardcoded Cubase defaults, which is what every headless test
-     *  and every embedding without a settings store gets.
-     *
-     *  Resolution is strict once a manager IS installed, exactly as on PianoRollComponent: an action
-     *  whose binding is unset or invalid (including an id this ShortcutManager has never heard of)
-     *  has NO key rather than falling back to its default. Mixing the two would mean a binding the
-     *  user deliberately cleared still fired on its factory key.
-     *
-     *  Escape is not resolved through here (it is a platform convention, not an app shortcut), and
-     *  neither is anything the app dispatches as a command — Cmd+C/V/X/D, Space, and the grid
-     *  commands all reach MainComponent, which owns that half.
-     *
-     *  Non-const (unlike PianoRollComponent's own copy of this pointer): the tool-strip/snap/
-     *  follow buttons' tooltips are real juce::Button tooltips, which CACHE their text (unlike the
-     *  roll's hand-drawn header, whose tooltip is resolved live on every hover query) — so this
-     *  panel subscribes as a juce::ChangeListener on the installed manager to rebuild them whenever
-     *  a binding changes, and that requires a non-const ShortcutManager* to add/removeChangeListener
-     *  on. Unsubscribes from whichever manager was previously installed first, so re-installing (or
-     *  clearing, with nullptr) never leaves a stale listener registered. */
+     *  toggle and loop-the-selection. Non-owning and may stay null -- with no manager installed
+     *  keyPressed() falls back to the hardcoded Cubase defaults. Escape and anything the app
+     *  dispatches as a command (Cmd+C/V/X/D, Space, the grid commands) are not resolved through
+     *  here -- see its definition in TimelinePanelComponent.cpp for the rest of the contract. */
     void setShortcutManager(ShortcutManager* manager);
     const ShortcutManager* getShortcutManager() const noexcept { return shortcuts_; }
 
@@ -403,14 +298,8 @@ public:
     TimelineTransportBar& getTransportBar() noexcept { return transportBar_; }
 
     // ---- Follow playhead ----
-    //
-    // "Keep the playhead on screen while it plays" — a toggle next to snapToggleButton_ (same
-    // external-state pattern: setClickingTogglesState(false), the shared bool is the truth, the
-    // button only mirrors it). Persisted under "timelineFollowPlayhead", default OFF — an editor
-    // that silently starts scrolling under a user who never asked for it is worse than one that
-    // doesn't. Also forwards straight into pianoRoll_.setFollowPlayhead(enabled) — one flag, one
-    // switch, for both the arrangement view and the roll — including from the
-    // setApplicationProperties restore path.
+    // "Keep the playhead on screen while it plays", persisted under "timelineFollowPlayhead",
+    // default OFF -- see its definition in TimelinePanelLayout.cpp.
     void setFollowPlayheadEnabled(bool enabled);
     bool isFollowPlayheadEnabled() const noexcept { return followPlayhead_; }
     /** Test seam: no OS mouse source exists headlessly, so a test drives the click via
@@ -485,10 +374,9 @@ public:
     juce::TextButton& getAddTrackButton() noexcept { return addTrackButton_; }
 
     // ---- Resizable height (top-edge grab strip) ----
-    //
     // The panel does NOT own its height: it reports the height the user is dragging for and the
-    // OWNER (MainComponent) clamps it, lays the panel out and persists it. Everything here is the
-    // grab strip plus the two callbacks it reports through.
+    // OWNER (MainComponent) clamps it, lays the panel out and persists it. See the ResizeHandle
+    // class below and its definition in TimelinePanelLayout.cpp.
 
     /** Height of the grab strip along the panel's top edge. It OVERLAPS the transport-bar strip
      *  instead of owning layout height of its own — the transport controls are laid out below it —
@@ -512,8 +400,7 @@ public:
     bool isResizeHandleHovered() const noexcept { return resizeHandle_.isHovered(); }
 
     /** Applies an "+ Track" menu choice. Exposed as the headless test seam for a menu that never
-     *  runs in a test process — the same split TimelineTrackHeaderComponent's binding and context
-     *  menus use (applyBindingMenuChoice / applyContextMenuChoice). Anything else is ignored. */
+     *  runs in a test process. Anything else is ignored. */
     void applyAddTrackMenuChoice(int menuId);
     juce::Viewport& getTrackHeaderViewport() noexcept { return trackHeaderViewport_; }
     // T166: the Viewport's content component — a pixel-level test seam for the track-reorder drop
@@ -530,42 +417,27 @@ public:
     }
 
     // ---- T161: focused track (ephemeral UI state — NOT on TimelineDoc, never touches undo/reconcile) ----
-    //
     // Which track header row currently holds keyboard focus, as an index into the doc's track order
-    // (-1 = none). The row itself is the real focus target (TimelineTrackHeaderComponent::
-    // setWantsKeyboardFocus); this index exists so Up/Down and the auto-scroll below have somewhere
-    // to read "where am I" without walking the component tree asking each row whether it
-    // hasKeyboardFocus(true) (which is also unreliable headlessly with no native peer).
+    // (-1 = none) -- see TimelinePanelTrackHeaders.cpp for the full focus-movement contract.
     int getFocusedTrackIndexForTest() const noexcept { return focusedTrackIndex_; }
 
     /** Builds the "+ Track" menu WITHOUT showing it — openAddTrackMenu() calls this then shows the
      *  result async. The headless test seam for inspecting menu CONTENTS (item text, enabled state,
-     *  submenus), the same `juce::PopupMenu::MenuItemIterator` pattern
-     *  MacroPortWidgetTests.cpp/MacroContainerTests.cpp use elsewhere — unlike those, no context-menu
-     *  hook is needed here because this menu was already a pure builder call away from
-     *  showMenuAsync(), nothing to intercept. Triggers ensureInstrumentPluginsScanned() on the host
-     *  first (openAddTrackMenu()'s own contract — see that method), so the Plugin submenu this builds
-     *  reflects a scan that has at least been started. */
+     *  submenus). Triggers ensureInstrumentPluginsScanned() on the host first (openAddTrackMenu()'s
+     *  own contract), so the Plugin submenu this builds reflects a scan that has at least started. */
     juce::PopupMenu buildAddTrackMenu();
 
-    /** The Instrument submenu's "Plugin" sub-submenu options, re-collected fresh on every call —
-     *  used to POPULATE the menu (buildAddTrackMenu(), which also snapshots the result into
-     *  instrumentPluginMenuSnapshot_) and by tests inspecting what the menu would currently show.
-     *  NOT used to resolve a click — see kAddInstrumentPluginNoneMenuId's comment for why
-     *  applyAddTrackMenuChoice reads the snapshot instead of calling this again. Empty when the
+    /** The Instrument submenu's "Plugin" sub-submenu options, re-collected fresh on every call --
+     *  see kAddInstrumentPluginNoneMenuId's comment for why applyAddTrackMenuChoice resolves a
+     *  click against buildAddTrackMenu()'s snapshot instead of calling this again. Empty when the
      *  host is null or offers nothing yet. */
     std::vector<synth::PluginIdentity> collectInstrumentPluginMenuOptions() const;
 
 protected:
     /** Opens the "+ Track" button's menu (MIDI Track / Audio Track / Add Marker). The default
-     *  implementation shows a real `juce::PopupMenu` via `showMenuAsync`.
-     *
-     *  Protected virtual for the same display-less-runner reason as
-     *  `TimelineRulerComponent::openMarkerContextMenu`: a real menu window needs a display to be
-     *  positioned on, and JUCE dereferences a null one on a headless CI runner. No test reaches this
-     *  today (they all drive `applyAddTrackMenuChoice` directly, which is the documented headless
-     *  seam), but a test that clicked the button would crash exactly the way the marker menu did —
-     *  so the override point exists before someone writes that test. */
+     *  implementation shows a real `juce::PopupMenu` via `showMenuAsync`. Protected virtual so a
+     *  headless test can override it rather than crash on the display-less menu window -- see its
+     *  definition in TimelinePanelTrackHeaders.cpp. */
     virtual void openAddTrackMenu();
 
 private:
@@ -587,20 +459,12 @@ private:
     // resolved from a TrackId rather than trusting a captured loop index, so it stays correct even
     // if track order/set changed between the header being built and the click landing.
     void setFocusedTrack(synth::TrackId id);
-    // onFocusMoveRequested's destination: `direction` is -1 (Up) or +1 (Down). Nothing focused yet
-    // starts at row 0 either direction (there is no "current position" for a relative step to be
-    // relative TO); otherwise CLAMPS at the ends rather than wrapping, matching cycleSnapValue's own
-    // "a held key parks at the end" rule. Grabs real focus on the destination row (best-effort — a
-    // no-op without a native peer, same as every other grabKeyboardFocus() call in this app) and
-    // scrolls it into view.
+    // onFocusMoveRequested's destination: `direction` is -1 (Up) or +1 (Down) -- see its definition
+    // in TimelinePanelTrackHeaders.cpp for the clamping rule.
     void moveFocusedTrack(int direction);
-    // Scrolls the shared trackScrollY (via scrollTrackRows, which already clamps and syncs both
-    // columns) just enough to bring row `index` fully inside the header viewport's visible window.
-    // Computed against viewState_.trackScrollY + trackHeaderViewport_.getMaximumVisibleHeight()
-    // rather than trackHeaderViewport_.getViewArea() — the latter is a cached snapshot
-    // (lastVisibleArea) that is only correct after a layout round trip and reads zero-height before
-    // the panel has ever been sized, where trackScrollY is the one value every other scroll/zoom
-    // writer in this class already treats as ground truth (see syncTrackScroll()).
+    // Brings row `index` fully inside the header viewport's visible window -- see its definition in
+    // TimelinePanelTrackHeaders.cpp for why it reads trackScrollY rather than the viewport's own
+    // cached visible area.
     void ensureTrackVisible(int index);
     int focusedTrackIndex_ = -1;
 
@@ -616,10 +480,9 @@ private:
     std::vector<synth::TrackPresetInfo> audioTrackPresetMenuSnapshot_;
     std::vector<synth::TrackPresetInfo> instrumentTrackPresetMenuSnapshot_;
 
-    // ---- T166: track-reorder drag (whole-row drag — see TimelineTrackHeaderComponent::
-    // onRowDragStarted's own comment for why the row hands us raw screen Y instead of computing an
-    // insertion index itself: it doesn't know where its siblings are, trackHeaderList_.headers is
-    // the ordered list and this panel is the one place that owns it). ----
+    // ---- T166: track-reorder drag (whole-row drag) ----
+    // See syncTrackHeaders()'s definition in TimelinePanelTrackHeaders.cpp for the division of
+    // labour between the row and this panel.
     synth::TrackId draggingTrackId_; // invalid (default) when no drag is in progress
     int dragInsertionIndex_ = -1;    // boundary (0..headerCount) the drag would drop at; -1 = none
     void beginTrackDrag(synth::TrackId trackId, int screenY);
@@ -684,37 +547,16 @@ private:
     // has no default constructor (it needs a name and a style up front).
     std::array<std::unique_ptr<juce::DrawableButton>, kAllEditTools.size()> toolButtons_;
     // Re-applies the icons and the active-tool highlight colour from the current LookAndFeel.
-    // Called from the constructor and from lookAndFeelChanged() — a theme switch re-tints every
-    // icon and can move the `toolActive` token, and both live in the LnF rather than in a
-    // per-button copy.
+    // Called from the constructor, lookAndFeelChanged() and parentHierarchyChanged() below.
     void applyToolStripTheme();
-    // The one thing this panel needs to redo on a theme switch (every other colour it uses is read
-    // at paint time through the same dynamic_cast).
     void lookAndFeelChanged() override;
-    // The complement to lookAndFeelChanged() above: re-applies the tool-strip icons whenever this
-    // component's ANCESTOR CHAIN changes, not just when its resolved LookAndFeel does. A themed
-    // LookAndFeel change (setLookAndFeel/sendLookAndFeelChange) only reaches components that are
-    // ALREADY attached as children at the moment it fires; the plugin editor calls
-    // setLookAndFeel(&processor.getLookAndFeel()) on itself BEFORE it adds its MainComponent (and
-    // this panel, several levels further down) as a child — see AgentSynthPluginEditor's
-    // constructor — so that notification never reaches an unattached TimelinePanelComponent, and
-    // its constructor-time applyToolStripTheme() call found no themed LookAndFeel on the ancestor
-    // chain yet either. When the panel IS attached moments later (addAndMakeVisible), JUCE fires
-    // parentHierarchyChanged() down the newly-added subtree — not lookAndFeelChanged() — so this is
-    // the one hook guaranteed to run at that point. Idempotent and cheap either way.
+    // See TimelinePanelStrips.cpp for why this ALSO needs its own hook, separate from
+    // lookAndFeelChanged() above.
     void parentHierarchyChanged() override;
 
-    // The Viewport's content: a plain container whose height is (track count * row height).
-    //
-    // T166: also draws the track-reorder drop indicator, in paintOverChildren() rather than
-    // paint() — the header rows are children painted AFTER this component, and each fills its
-    // own bounds (TimelineTrackHeaderComponent::paint()'s g.fillAll(colours.surface)), so a line
-    // drawn in paint() would be painted over at every interior row boundary. Same trap this file
-    // already documents twice (TimelineTrackHeaderComponent::paintOverChildren,
-    // TimelinePanelComponent::paintOverChildren). Needs the owner's drag state
-    // (dragInsertionIndex_) and row height, so this holds a reference to the owning panel — same
-    // pattern as ResizeHandle above (nested classes have access to the enclosing class's private
-    // members since C++11, so this compiles without exposing that state publicly).
+    // The Viewport's content: a plain container whose height is (track count * row height). Also
+    // draws the T166 track-reorder drop indicator -- see its paintOverChildren() definition in
+    // TimelinePanelTrackHeaders.cpp for why.
     struct TrackHeaderList : juce::Component {
         explicit TrackHeaderList(TimelinePanelComponent& owner)
             : owner_(owner) {}
@@ -726,12 +568,8 @@ private:
     };
 
     // The top-edge grab strip (see kResizeHandleHeight). Added LAST in the constructor so it wins
-    // the hit test over the transport bar it overlaps, and carries the UpDownResizeCursor.
-    //
-    // The drag is measured in SCREEN coordinates against the panel's bottom edge, not as a delta:
-    // the owner moves the panel's top edge under the cursor on every callback, so a
-    // component-relative delta would chase itself. Both callbacks report the panel's DESIRED
-    // height; clamping belongs to the owner.
+    // the hit test over the transport bar it overlaps, and carries the UpDownResizeCursor. See its
+    // definition in TimelinePanelLayout.cpp for the screen-coordinate drag rationale.
     class ResizeHandle : public juce::Component {
     public:
         explicit ResizeHandle(TimelinePanelComponent& owner);
@@ -832,14 +670,9 @@ private:
     // paste time (see pasteClipsAtPlayhead()).
     synth::TransportService* transport_ = nullptr;
 
-    // NOTE AUDITION — the track the currently-sounding preview note was sent TO, latched when the
-    // note-ON was forwarded and cleared when its note-OFF is. Invalid means nothing is sounding.
-    //
-    // Why a latch rather than re-resolving at note-off time: an audition note is exempt from every
-    // positional flush in TimelineMidiSourceModule, so a dropped or misrouted note-off hangs the note
-    // until the node is bypassed. Between the on and the off the edited clip can be deleted, the roll
-    // can close, or a different clip can open — re-resolving would drop the off in the first two cases
-    // and send it to the WRONG track in the third. See the onAuditionNote wiring in the constructor.
+    // NOTE AUDITION — the track the currently-sounding preview note was sent TO. Invalid means
+    // nothing is sounding. See the onAuditionNote wiring in the constructor (TimelinePanelComponent.cpp)
+    // for the latch rationale.
     synth::TrackId auditionTrackLatch_;
 
     // The button opens a MIDI/Audio menu rather than adding a MIDI track outright.
@@ -850,16 +683,14 @@ private:
     juce::uint32 defaultMarkerColourArgb() const;
 
     // ---- Vertical track scroll/zoom (shared TimelineViewState::trackScrollY/rowHeightScale) ----
-    // The themed row height with the shared vertical-zoom factor applied — the SAME value
-    // TimelineClipLaneArea::getRowHeight computes, duplicated only because the two components
-    // resolve their LookAndFeel independently.
+    // The themed row height with the shared vertical-zoom factor applied -- see its definition in
+    // TimelinePanelLayout.cpp for why it duplicates TimelineClipLaneArea::getRowHeight.
     int currentRowHeight() const;
     double maxTrackScrollPx() const;
     void scrollTrackRows(double deltaPx);
     void zoomTrackRows(double factor, double anchorLaneY);
-    // The ONE horizontal-zoom writer: Cmd+wheel, trackpad pinch and zoomTimelineHorizontal() all
-    // land here, so the clamp behaviour and the repaint set are shared rather than copied three
-    // times. anchorX is in the ruler's coordinate space (== TimelineViewState's x origin).
+    // anchorX is in the ruler's coordinate space (== TimelineViewState's x origin) -- see its
+    // definition in TimelinePanelLayout.cpp for why this is the ONE horizontal-zoom writer.
     void zoomHorizontalAroundX(double factor, double anchorX);
     // The lanes-region anchors a keyboard zoom uses: the centre of what is on screen, in the same
     // coordinate spaces the wheel/pinch handlers feed their anchors from.
@@ -873,41 +704,23 @@ private:
     // branches in mouseWheelMove XOR this against synth::ui::wheelGestureIsUpward(wheel).
     bool zoomScrollInverted_ = false;
 
-    // Non-owning, may stay null (see setShortcutManager). Non-const so this panel can
-    // add/removeChangeListener on it (rebinding itself still belongs to Settings — this pointer is
-    // never used to mutate a binding, only to subscribe to changes and read the current one).
-    //
-    // LIFETIME CONTRACT: the installed ShortcutManager is expected to outlive this component —
-    // MainComponent.cpp's explicit `timelinePanel.setShortcutManager(nullptr);` ahead of its own
-    // member cascade is what makes that true for the real app (`shortcutManager` is declared AFTER
-    // `timelinePanel`, so it would otherwise destruct first). Every read of `shortcuts_` during
-    // normal operation (tooltips, keyPressed) still trusts that contract.
-    //
-    // The DESTRUCTOR is different: it runs unconditionally, including in tests that forgot the
-    // explicit detach (FRO97 found this pattern in five test files — a locally-scoped
-    // ShortcutManager declared AFTER a locally-scoped component, so the manager destructs FIRST at
-    // scope exit). `shortcuts_` alone can't tell a live manager from a dangling one, so the
-    // destructor resolves through `shortcutsWeak_` instead — a genuine guard against exactly the
-    // bug class this ticket fixed, rather than one more call site relying on every future test
-    // remembering the idiom.
+    // Non-owning, may stay null (see setShortcutManager). Expected to outlive this component --
+    // see the destructor's definition in TimelinePanelComponent.cpp for the lifetime contract and
+    // why the destructor itself does not trust this pointer directly.
     ShortcutManager* shortcuts_ = nullptr;
-    // Mirrors `shortcuts_` (set together in setShortcutManager), used ONLY by the destructor to
-    // decide whether removeChangeListener is safe to call — see the LIFETIME CONTRACT comment
-    // above. Automatically null once the referenced ShortcutManager is destroyed, unlike
-    // `shortcuts_` itself, which cannot know.
+    // Mirrors `shortcuts_` (set together in setShortcutManager), used ONLY by the destructor.
+    // Automatically null once the referenced ShortcutManager is destroyed, unlike `shortcuts_`
+    // itself, which cannot know.
     juce::WeakReference<ShortcutManager> shortcutsWeak_;
     // juce::ChangeListener — rebuilds the tool-strip/snap/follow tooltips on every bindings change.
     void changeListenerCallback(juce::ChangeBroadcaster*) override;
-    // Rebuilds every dynamic shortcut-hint tooltip this panel owns (see synth::shortcutHintFor):
-    // the six tool-strip buttons, the snap toggle, and the follow-playhead toggle. Called from the
-    // constructor (after those buttons exist), setShortcutManager (both install and clear), and
-    // changeListenerCallback.
+    // Rebuilds every dynamic shortcut-hint tooltip this panel owns -- see its definition in
+    // TimelinePanelComponent.cpp for the full call-site list.
     void refreshShortcutTooltips();
     // True when `key` is what the user has bound to `actionId`. With no manager installed this is
-    // `key == fallback`; with one installed the fallback is not consulted at all. The same three
-    // lines PianoRollComponent::matchesAction runs — deliberately duplicated rather than shared,
-    // because factoring it out would mean a header both surfaces include just to hold a two-branch
-    // comparison, and the contract (not the code) is the thing that has to stay identical.
+    // `key == fallback`; with one installed the fallback is not consulted at all. See its
+    // definition in TimelinePanelShortcuts.cpp for why this duplicates PianoRollComponent's own
+    // copy rather than sharing it.
     bool matchesAction(const juce::KeyPress& key, const juce::String& actionId, const juce::KeyPress& fallback) const;
     // Pushes trackScrollY into the header viewport and repaints the lanes — the ONE place the two
     // columns are brought back in step after any scroll/zoom writer.

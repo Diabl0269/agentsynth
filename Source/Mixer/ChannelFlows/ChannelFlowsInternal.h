@@ -60,7 +60,7 @@ juce::AudioProcessorGraph::Node* addChainNode(juce::AudioProcessorGraph& graph, 
 // destinations) is every pre-FRO25 caller's behaviour. "Make channel" on a track that merges into a
 // shared module sends the strip's L/R to that module's original input pins as well (or instead,
 // toMaster=false, when the track has no output of its own) — plain edges, same reason as
-// Strip->Master (see ChannelFlows.h).
+// Strip->Master (see ChannelFlowsDefaultChannel.cpp's buildDefaultAudioChannel comment).
 struct ChannelSink {
     bool toMaster = true;
     std::vector<juce::AudioProcessorGraph::NodeAndChannel> leftDests, rightDests;
@@ -114,8 +114,9 @@ DefaultChannel buildChannelChain(juce::AudioProcessorGraph& graph,
     strip->properties.set("y", layout.strip.y);
 
     // feeds -> EQ. Stereo on raw ch0/ch1 throughout, except the strip's right leg, which is
-    // ChannelStripModule::kRightBase — NEVER ch1 (Source/Modules/CLAUDE.md), see ChannelFlows.h's
-    // own comment for why that's the one place the number jumps.
+    // ChannelStripModule::kRightBase — NEVER ch1 (Source/Modules/CLAUDE.md), see
+    // ChannelFlowsDefaultChannel.cpp's buildDefaultAudioChannel comment for why that's the one place
+    // the number jumps.
     for (const auto& feed : leftFeeds)
         graph.addConnection({feed, {eq->nodeID, 0}});
     for (const auto& feed : rightFeeds)
@@ -127,10 +128,12 @@ DefaultChannel buildChannelChain(juce::AudioProcessorGraph& graph,
 
     // Master AFTER the chain above is wired, BEFORE the Strip->Master edges below: spliceMasterNode
     // re-routes whatever already feeds the audio output, and nothing of this channel's own should be
-    // among that yet (see ChannelFlows.h's own comment on the ordering).
+    // among that yet (see ChannelFlowsDefaultChannel.cpp's buildDefaultAudioChannel comment on the
+    // ordering).
     auto* master = sink.toMaster ? spliceMasterNode(graph, layout.master) : findMasterNode(graph);
     if (master != nullptr && sink.toMaster) {
-        // A PLAIN graph edge, never a macro port — see ChannelFlows.h's own comment for why.
+        // A PLAIN graph edge, never a macro port — see ChannelFlowsDefaultChannel.cpp's
+        // buildDefaultAudioChannel comment for why.
         graph.addConnection({{strip->nodeID, 0}, {master->nodeID, MasterModule::kMixLeft}});
         graph.addConnection(
             {{strip->nodeID, ChannelStripModule::kRightBase}, {master->nodeID, MasterModule::kMixRight}});

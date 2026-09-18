@@ -20,9 +20,11 @@ keyed on `synth::NoteId` with the identical add/remove/toggle/setSelection/retai
 plus a `noteHitTestMarquee` free function mirroring `clipHitTestMarquee`.
 
 **Source layout** (`Source/UI/PianoRoll/PianoRollComponent/`, split by concern — FRO64, FRO75):
-- `PianoRollComponent.h` — the class declaration, shared by every unit below. Each member's
-  detailed contract lives as a doc comment next to its out-of-line definition in the matching
-  `PianoRoll<Concern>.cpp` unit below, not in the header itself (kept under the file-size cap).
+- `PianoRollComponent.h` — the class declaration, shared by every unit below. The header carries
+  only what a caller can get wrong from outside (nullability, thread affinity, call ordering, units,
+  ownership); each member's maintainer-facing rationale lives as a doc comment next to its
+  out-of-line definition in the matching `PianoRoll<Concern>.cpp` unit below (see root `CLAUDE.md`,
+  "Code structure").
 - `PianoRollComponent.cpp` — construction/teardown, clip open/close entry points, horizontal geometry.
 - `PianoRollScaleAssist.cpp` — the scale-assist panel and its Generate action.
 - `PianoRollPainting.cpp` — `paint()`, header chip glyphs, the local playhead line.
