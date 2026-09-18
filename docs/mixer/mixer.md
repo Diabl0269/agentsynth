@@ -1,1000 +1,595 @@
 # Mixer
 
-**Status: DECIDED 2026-09-10 (founder sign-off on D1-D4). P9-2 implemented, P9-3's audio-track,
-instrument-track, MIDI-track-auto-channel and existing-project "Create channels" flows implemented
-(T173a, T183, T184, T173e/FRO26), the Oscillator/Wavetable instrument track now gets an envelope +
-VCA ahead of the chain (P9-3i, FRO43), and a poly Oscillator/Wavetable instrument track gets a TRUE
-per-voice envelope instead of a shared mono one (P9-3j, FRO46)** — the
-`ChannelStrip` and `Master` nodes, the engine-owned solo gate and the Master splice exist (engine
-only; §8 item 1 records how), "+ Track -> Audio Track" builds the factory default channel end to
-end (§8 item 2), "+ Track -> Instrument" does the same ahead of a chosen instrument (§8 item 2,
-T183) — see §5.2's table note for why that one stays a `TrackKind::Midi` track rather than the "(new
-track kind)" this doc originally called for — connecting a MIDI track's cable to an unchanneled
-instrument auto-creates a channel at the point the audio reaches the output (§8 item 2, T184; §5.2's
-"main workflow" paragraph), and the "+ Track" menu's "Create Channels" entry sweeps every
-channel-less track in the open project into its own channel in one shot (§5.13, §8 item 2, FRO26),
-and "Make channel" — the last P9-3 flow — turns one track (header menu) or a selected chain (canvas /
-module menu) into a channel on demand, keeping shared modules shared, turning a merge point into its
-own bus channel and offering "Duplicate into Channel" for an independent copy (§5.8, §8 item 2,
-P9-3d/FRO25). There is no mixer panel yet (P9-5) — until it exists, "Locate Master" (Cmd+Shift+M / canvas right-click, P9-3g/FRO45,
-[`control/shortcuts.md`](control/shortcuts.md#locate-master)) is the lightweight, canvas-only stopgap for
-finding Master (or Audio Output) after auto-arrange or a drag leaves it off-screen. This document
-records the decided design;
-§8 is the implementation order that turns it into code. The visual
-proposal that led to this decision (canvas diagram, mixer panel mock, the four decision cards)
-lived in a separate page shown to the founder, not in this repo.
+What a mixer channel is, how one comes into existence, and the rules every channel obeys. This doc
+is the area hub; the topics with a surface of their own live beside it:
+
+- [`docs/mixer/panel.md`](panel.md) — the mixer panel, its columns, placement, detachable windows,
+  the EQ thumbnail and keyboard navigation.
+- [`docs/mixer/track-presets.md`](track-presets.md) — what a track preset is, how it is saved,
+  loaded and defaulted.
+- [`docs/mixer/sends-and-buses.md`](sends-and-buses.md) — sends as strip-owned output legs, group
+  buses, and the per-leg solo mask.
+- [`docs/mixer/stem-export.md`](stem-export.md) — one render pass, one file per strip.
+- [`docs/mixer/meters.md`](meters.md) — the peak latch, the dB scale, ballistics and colour zones.
+- [`docs/mixer/fader.md`](fader.md) — the fader's taper and drag conventions.
 
 ---
 
-## 1. What exists today
-
-Timeline tracks already own **internal-only** source nodes: `TimelineMidiSource` ("Track In") and
-`TimelineAudioSource` ("Track Audio") — `ModuleType` entries in `Source/Modules/ModuleBase.h`,
-created by the timeline-track flow rather than the module library, with the same three exclusions
-every internal-only node gets (no library row, no replace-menu entry, never model-authorable).
-
-Track mute/solo is **source gating**, not mixer gating. Both source modules compute the identical
-condition — `track->muted || (snapshot->anySoloed && !track->soloed)` — and suppress themselves
-when it's true: `Source/Modules/TimelineMidiSourceModule.h` line 235, `Source/Modules/
-TimelineAudioSourceModule.h` line 108. `TimelineSnapshot::anySoloed`
-(`Source/Timeline/TimelineSnapshot.h`) is computed once per snapshot and published to the audio
-thread via `EpochExchange`, alongside every other timeline field.
-
-**Consequence:** solo stops notes/clips at the source. Anything downstream of the source that is
-*shared* with other tracks, or that has a tail (reverb, delay), is not isolated by today's solo —
-the signal it already emitted keeps ringing, and a shared downstream processor still hears
-whatever other unsoloed tracks fed it before playback stopped. This is the same limitation stem
-export (P9-8) already has to design around: there is no point in the graph, today, where "just
-this track's contribution" is actually isolated.
-
-The graph has exactly one **Audio Output** node, a `juce::AudioGraphIOProcessor` that cannot host
-DSP of its own. `MainComponent::ensureMasterRecordTap()` (`Source/MainComponent/MainComponentTimeline.cpp`) already
-splices a singleton `Rec Tap` node in front of it on demand, re-routing every audio connection
-that fed the output through the tap, as one compound undo step (`docs/architecture/architecture.md`). This is
-the closest existing precedent for what a `Master` node splice would look like (§5.1).
-
-Macros (`docs/macros.md`) are a **presentation-only layer over a flat graph**: a macro adds no
-processing of its own, and its ports are proxy nodes (`MacroInlet`/`MacroOutlet`/
-`MacroMidiInlet`/`MacroMidiOutlet`) — themselves internal-only, non-authorable, excluded the same
-three ways.
-
-Relevant existing modules: `VoiceMixerModule` (sums a poly chain to one signal),
-`ParametricEQModule`, `CompressorModule`, `LimiterModule`, `GateModule` (all under
-`Source/Modules/FX/`) — see §8 (P9-11).
-
----
-
-## 2. The problem
-
-The graph is free-form: any node can wire to any other, and nothing about a node's position or
-type says "this is a channel." Unlike a DAW with one fixed channel per track, AgentSynth's mixer
-has to answer, from an arbitrary tangle of nodes, where a channel *begins and ends*. The mapping
-between timeline tracks and instruments is also many-to-many — several MIDI tracks can drive one
-sampler, one track can layer two synths — so "one channel per track" does not hold either.
-
----
-
-## 3. Candidates
-
-### Candidate A — the macro is the channel
-
-Treat an existing macro as the channel unit directly: no new node type, reuse the box that P8-12
-already ships.
-
-**Where it breaks:** a macro and a channel would then have two-part identity that can disagree.
-Ungrouping (per `docs/macros_implementation.md` §7 item 8, fix G7) removes a macro's *ports* but never its ordinary members
-— so ungrouping a channel macro would leave the fader/pan/solo controls with no box around them,
-still alive, still processing, just no longer presented as a channel. A box with no strip is just
-a macro; a strip with no box is still a channel. Tying channel identity to a single node avoids
-the split.
-
-### Candidate B — a hidden per-track sub-graph
-
-Give every track its own nested `juce::AudioProcessorGraph`, DAW-style.
-
-**Where it breaks:** this is exactly Candidate A from the macro I/O design (`docs/macros.md` §3),
-already rejected there, for the same two reasons: it moves member nodes out of uuid-addressable
-space (orphaning timeline bindings and automation lanes that point at them), and it opens a second,
-nested latency-compensation domain on top of the one hosted plugins already strain.
-
-### Candidate C — anything wired to Audio Output
-
-Define a channel implicitly as any node with a cable reaching the output.
-
-**Where it breaks:** there's no fixed location to put a fader, mute or solo control — a signal
-"wired to the output" is just a cable, not a node with state. Worse, once two such signals have
-summed together upstream of the output, solo can no longer separate them; there's nothing left to
-silence independently.
-
-### Candidate D (chosen) — the `ChannelStrip` node is the channel
-
-A new node type sits at the end of a signal chain and *is* the channel. A macro remains the
-optional box drawn around the chain that feeds it — useful for organization, but not what defines
-channel identity.
-
----
-
-## 4. Decision
+## What a channel is
 
 > **The `ChannelStrip` node is the channel; a macro is the box you keep it in.**
 
-The mixer panel enumerates `ChannelStrip` nodes in the live graph, plus a synthetic **Direct**
-column (§5.1) and **Master**. Nothing else is a channel.
+The mixer panel enumerates `ChannelStrip` nodes in the live graph, plus a synthetic **Direct** column
+and **Master**. Nothing else is a channel.
 
----
+**Why a node and not the macro around it.** The graph is free-form: any node can wire to any other,
+and nothing about a node's position or type says "this is a channel". Tying channel identity to a
+single node is what makes the question answerable at all. Three alternatives were weighed and each
+breaks somewhere specific:
 
-## 5. The design
+- **The macro is the channel.** A macro and a channel would then have a two-part identity that can
+  disagree. Ungrouping removes a macro's *ports* but never its ordinary members, so ungrouping a
+  channel macro would leave the fader, pan and solo controls with no box around them, still alive,
+  still processing, just no longer presented as a channel. A box with no strip is just a macro; a
+  strip with no box is still a channel.
+- **A hidden per-track sub-graph.** This is the container-node option the macro I/O design already
+  rejected ([`docs/macros/macros.md`](../macros/macros.md#macro-ports-are-proxy-nodes-on-a-flat-graph)),
+  for the same two reasons: it moves member nodes out of uuid-addressable space, orphaning timeline
+  bindings and automation lanes that point at them, and it opens a second, nested
+  latency-compensation domain on top of the one hosted plugins already strain.
+- **Anything wired to Audio Output.** There is no fixed location to put a fader, mute or solo
+  control — a signal "wired to the output" is a cable, not a node with state. And once two such
+  signals have summed upstream of the output, solo can no longer separate them; there is nothing left
+  to silence independently.
 
-### 5.1 Node types
+**The mapping between timeline tracks and instruments is many-to-many** — several MIDI tracks can
+drive one sampler, one track can layer two synths — so "one channel per track" does not hold either.
+See [Channels follow audio, not tracks](#channels-follow-audio-not-tracks).
 
-Two additions to `ModuleType`: **`ChannelStrip`** and **`Master`**. Both are internal-only, with
-the same three exclusions as `TimelineMidiSource` / `Rec Tap` / the macro port types: no library
-row, no replace-menu entry, never model-authorable (`kNonAuthorableModuleTypes`,
-`Source/AI/AIStateMapper/AIStateMapperInternal.h`). Adding them to the factory without adding them to that set will
-fail `AIStateMapperTest.AuthorableModuleTypesGolden` — that failure is intended and is how the
-golden test is meant to catch this exact addition (see `docs/macros_implementation.md` §6 for the identical
-pattern with the macro port types).
+## Node types
 
-`Master` is spliced in front of Audio Output **when the first channel is created** — a user
-action, following `ensureMasterRecordTap()`'s existing pattern: singleton by construction, one
-compound undo step, every audio connection that fed the output re-routed through it. Ordering
-becomes:
+Two `ModuleType` entries: **`ChannelStrip`** and **`Master`**. Both are internal-only, with the same
+three exclusions as `TimelineMidiSource`, `Rec Tap` and the macro port types: no library row, no
+replace-menu entry, never model-authorable (`kNonAuthorableModuleTypes`,
+`Source/AI/AIStateMapper/AIStateMapperInternal.h`). **Adding them to the factory without adding them
+to that set fails `AIStateMapperTest.AuthorableModuleTypesGolden`** — that failure is intended and is
+how the golden test catches this exact addition.
+
+`Master` is spliced in front of Audio Output **when the first channel is created**, following
+`ensureMasterRecordTap()`'s existing pattern: singleton by construction, one compound undo step,
+every audio connection that fed the output re-routed through it. The ordering becomes:
 
 ```
 ... channel strips ... -> Master -> Rec Tap -> Audio Output
 ```
 
-`Master` exposes a **Direct** input block that receives whatever cables previously went straight
-to the output — the same re-routing `ensureMasterRecordTap()` already does for the record tap,
-one level upstream of it.
+`Master` exposes a **Direct** input block that receives whatever cables previously went straight to
+the output — the same re-routing `ensureMasterRecordTap()` already does for the record tap, one level
+upstream of it.
 
-### 5.2 Channels follow audio, not tracks
+**Layouts.** A strip carries 5 raw channels a side: Left ch0, Right `kRightBase` = 4, ch1 to ch3
+reserved, with `gain` (dB), `pan` and `muted` as parameters and its shape plus solo flag in trusted
+extra state. It declares `kMaxSends` send slots on top of that — see
+[`docs/mixer/sends-and-buses.md`](sends-and-buses.md#channel-layout). `Master` carries Mix L and R on
+ch0 and ch1 and Direct L and R on ch2 and ch3, sums Direct in before the fader, and under bypass is a
+unity sum that still keeps Direct.
+
+The splice itself is `synth::ensureMasterNode` (Core, `Source/Mixer/MasterSplice.h`) wrapped in one
+`recordCombinedChange`; the non-undoing `synth::spliceMasterNode(graph, position)` is the mechanism it
+and every larger transaction call directly.
+
+## Channels follow audio, not tracks
 
 | Track kind | Own channel? | What gets created |
 | --- | --- | --- |
-| Audio track | Yes, automatic | Track Audio -> default modules -> strip, boxed as one channel when the track is added. |
-| Instrument track | Yes, automatic | Track In -> the chosen instrument -> default modules -> strip, in one step. |
+| Audio track | Yes, automatic | Track Audio, default modules, strip, boxed as one channel when the track is added. |
+| Instrument track | Yes, automatic | Track In, the chosen instrument, default modules, strip, in one step. |
 | MIDI track into an existing instrument | No | Nothing new is created. Its notes play into that instrument's channel; the strip's UI lists the track under its "tracks" line. |
 
 Audio and instrument tracks each automatically get a channel; a MIDI track routed to an instrument
-another track already drives does not get a second one — it feeds the existing channel. Splitting
-a shared sampler three ways (or triple-counting its CPU/sound) if every track insisted on its own
-channel is the failure this avoids; Cubase draws the same line (MIDI tracks carry no audio channel
-of their own, instrument tracks do).
+another track already drives does not get a second one — it feeds the existing channel. **Why:**
+insisting on a channel per track would split a shared sampler three ways and triple-count its CPU and
+its sound. Cubase draws the same line — MIDI tracks carry no audio channel of their own, instrument
+tracks do.
 
-**T183 implemented "Instrument track" as `TrackKind::Midi`, not a new kind.** This table originally
-called it "(new track kind)" — a `TrackKind::Instrument` enum value plus format/serialization and
-kind-badge UI changes. T183's own scope never asked for that, and an instrument track today is
-exactly what this row above ("MIDI track into an existing instrument") already describes once the
-user draws the cable by hand: a Track In feeding exactly one instrument. "+ Track -> Instrument"
-just draws that cable and builds the channel automatically instead of making the user do both steps
-— see `MainComponent::addInstrumentTrack`'s own comment. A future `TrackKind::Instrument` would
-need to migrate every track this flow has already created.
+**An instrument track is a `TrackKind::Midi` track, not a new track kind.** A `TrackKind::Instrument`
+enum value would mean format, serialisation and kind-badge changes, and an instrument track is exactly
+what the "MIDI track into an existing instrument" row above already describes once the user draws the
+cable by hand: a Track In feeding exactly one instrument. "+ Track -> Instrument" just draws that
+cable and builds the channel automatically instead of making the user do both steps. A future
+`TrackKind::Instrument` would have to migrate every track this flow has already created.
 
-**The main workflow: connecting a MIDI track to an unchanneled instrument — DONE (T184).** A
-track's own mute/solo controls only mean anything once a channel exists for them to drive, so the
-common path — add a MIDI track, wire it to a macro or a bare instrument whose audio has never
-reached a channel — has to *create* the channel, not just wait for the user to run "Make channel"
-separately. When a connection like that makes some audio newly reach a `ChannelStrip`-less path to
-Audio Output, a channel is **auto-created at the point that audio reaches the output**: one undo
-step, gated by a Preferences toggle (`mixerAutoCreateChannelOnConnect`) that defaults to **ON**.
-Turning the toggle off restores today's behaviour (wire freely, no channel appears until asked
-for). §8 item 2's own T184 bullet has the implementation detail.
+### Auto-creating a channel on connect
+
+A track's own mute and solo controls only mean anything once a channel exists for them to drive, so
+the common path — add a MIDI track, wire it to a macro or a bare instrument whose audio has never
+reached a channel — has to *create* the channel rather than wait for the user to run "Make channel"
+separately.
+
+When a connection makes some audio newly reach a `ChannelStrip`-less path to Audio Output, a channel
+is **auto-created at the point that audio reaches the output**: one undo step, gated by a Preferences
+toggle (`mixerAutoCreateChannelOnConnect`) that defaults to **ON**. Turning the toggle off restores
+wire-freely behaviour, with no channel appearing until asked for. An instrument that already has a
+channel on its path gets nothing new — connecting a second MIDI track just wires straight in.
 
 **The link rule.** A track and a channel are **linked** exactly when the track is the channel's
 **only** source — an audio track, an instrument track, or a MIDI track that alone drives an
 instrument. Linked means:
 
-- **(a) Names sync both ways.** Renaming the track renames the channel (strip + macro), and vice
-  versa.
-- **(b) Colour syncs live.** The track colour, the channel's macro colour and the mixer column
-  colour always match, and they update **while the colour picker is still being dragged**, not
-  only on commit. `synth::ui::ColourPickerPopup` (`Source/UI/Chrome/ColourPickerPopup.h`,
-  `docs/layout/colour-overrides.md`) already separates a live-preview callback (fires on every drag/favourite
-  click, writes straight into its target with **no undo step**) from a commit-once callback (fires
-  once, on close, as the real edit). A linked track/channel fans the SAME preview write out to all
-  three destinations — track header swatch, macro colour, mixer column — on every drag frame; a
-  cancel restores all three to their original colour, exactly like today's single-target case;
-  a commit is **one** undo step covering all three, not three separate edits, matching the existing
-  "one `Cmd+Z` undoes a dozen preview colours" semantics `docs/layout/colour-overrides.md` documents,
-  now fanned out over TWO stored targets, not three: a channel's colour IS its macro's colour, so
-  the mixer column reads the macro rather than a third copy on the strip (§8 item 3).
-- **(c) The track header's M/S drive the strip.** Not note gating — the linked channel's mute/solo.
-  A redirect, not a mirror: the track's own `muted`/`soloed` stay false, so there is only one copy.
+- **Names sync both ways.** Renaming the track renames the channel (strip and macro), and the
+  reverse.
+- **Colour syncs live.** The track colour, the channel's macro colour and the mixer column colour
+  always match, and they update **while the colour picker is still being dragged**, not only on
+  commit. `synth::ui::ColourPickerPopup` (`Source/UI/Chrome/ColourPickerPopup.h`,
+  [`docs/layout/colour-overrides.md`](../layout/colour-overrides.md#colour-picker-popup)) separates a
+  live-preview callback — fires on every drag or favourite click, writes straight into its target
+  with **no undo step** — from a commit-once callback that fires once, on close, as the real edit. A
+  linked track and channel fan the SAME preview write out on every drag frame; a cancel restores
+  every destination to its original colour, exactly like the single-target case; a commit is **one**
+  undo step covering all of them, not several separate edits, matching the existing "one `Cmd+Z`
+  undoes a dozen preview colours" semantics. It fans out over TWO stored targets, not three: **a
+  channel's colour IS its macro's colour**, so the mixer column reads the macro rather than a third
+  copy on the strip.
+- **The track header's M and S drive the strip.** Not note gating — the linked channel's mute and
+  solo. A redirect, not a mirror: the track's own `muted`/`soloed` stay false, so there is only one
+  copy.
 
-A channel fed by **more than one** track (Kick/Snare/Hats into one sampler) is **not** linked: it
-keeps its own independently-chosen name and colour, lists every track that feeds it, and each of
-those tracks' M/S controls keep today's note-gating behaviour (§1) rather than touching the strip.
-The link **breaks** the moment a second track starts feeding a previously-linked channel, and
-**re-forms** if the channel goes back down to exactly one source track.
+A channel fed by **more than one** track (Kick, Snare and Hats into one sampler) is **not** linked: it
+keeps its own independently chosen name and colour, lists every track that feeds it, and each of
+those tracks' M and S controls keep plain note-gating behaviour rather than touching the strip. The
+link **breaks** the moment a second track starts feeding a previously linked channel, and **re-forms**
+if the channel goes back down to exactly one source track.
 
-**The channel chip.** Every track header whose notes/audio play into a channel — linked or not —
-shows a small **channel chip**: the channel's name plus a compact meter. Clicking it reveals that
-channel's column in the mixer. No extra audio track is ever created by having a chip; the chip is
-a pointer, not a new signal path. As the design brief for this puts it: **the timeline holds what
-you play; the mixer holds what you hear.**
+**The rule is a pure query, never a cached flag.** `synth::resolveTrackChannelLink`
+(`Source/Mixer/TrackChannelLink.h`) walks a track's bound node forward to the first
+`ChannelStripModule` it reaches, then walks that strip's feeders back out: exactly one feeder, and it
+is this track, **is** the link — so break and re-form need no bookkeeping. The backward walk is the
+same `upstreamTrackSources` query stem naming asks
+([`docs/mixer/stem-export.md`](stem-export.md#stem-naming)), so `channelDisplayName` answers "which
+track names this" once for both.
 
-### 5.3 Solo: a render-time gate, not a parameter
+**One interface, one collaborator.** `synth::ui::TrackChannelLinkSurface` is all a track header sees;
+`TrackChannelLinkController` implements it, owned by `MainComponent`, which gains only the member and
+a one-line `TrackHeaderHost::getChannelLinkSurface()` override (the `GraphCanvasHost` seam pattern).
+Every "not linked" answer is false or null, so the header falls through to its existing behaviour
+unchanged. Renaming the channel joins `renameMacro`'s own transaction through
+`MacroGroupController::recordMacroRenameHook` rather than becoming a second `Cmd+Z`; a linked M or S
+is one graph-snapshot step, and solo always goes through the engine entry below.
 
-Solo is a **switch applied during playback**, never something you automate, and it must not be
-implemented by fanning `setMuted()` across other strips — `setMuted()` is a
-`setValueNotifyingHost` parameter write: undoable, host-visible, and would silently clobber
-whatever mute state the user had already set on those strips.
+**Two consequences worth stating.** A channel's colour is its macro's colour and there is no colour
+field on the strip, so an **unboxed** linked channel syncs neither name nor colour while its M and S
+still drive the strip. And soloing a linked channel silences every other channel, a shared one
+included, even when that shared channel's own track is note-gate soloed: that is a DAW mixer solo,
+not a bug.
+
+### The channel chip
+
+Every track header whose notes or audio play into a channel — linked or not — shows a small **channel
+chip**: the channel's name plus a compact meter. Clicking it reveals that channel's column in the
+mixer (`revealChannelForTrack`). **No extra audio track is ever created by having a chip; the chip is
+a pointer, not a new signal path.** The timeline holds what you play; the mixer holds what you hear.
+
+ONE 15 Hz `juce::Timer` on `TimelinePanelComponent` ticks every header, never one per row; it idles
+while hidden, reads only `getChannelMeterPeak` (a cached strip id, not a graph walk), and each chip
+repaints only past a coarse threshold ([`docs/layout/rendering.md`](../layout/rendering.md)).
+
+## Solo is a render-time gate
+
+Solo is a **switch applied during playback**, never something you automate, and it **must not be
+implemented by fanning `setMuted()` across other strips** — `setMuted()` is a `setValueNotifyingHost`
+parameter write: undoable, host-visible, and it would silently clobber whatever mute state the user
+had already set on those strips.
 
 Each `ChannelStrip` carries its own solo flag: **not** an `AudioParameter`, **not** host-visible,
-**not** automatable, persisted only in the strip's trusted extra state
-(`ModuleBase::setExtraState`, applied on the trusted path only, per the root `CLAUDE.md`
-invariant). A shared "is anything soloed?" count, owned by the engine, is readable from the audio
-thread with no locks and no allocation. While the count is nonzero, Master's Direct input outputs
-silence, and every strip silences the output legs that do not contribute to the soloed path.
+**not** automatable, persisted only in the strip's trusted extra state (`ModuleBase::setExtraState`,
+applied on the trusted path only, per the root `CLAUDE.md` invariant). A shared "is anything soloed?"
+count, owned by the engine, is readable from the audio thread with no locks and no allocation. While
+the count is nonzero, Master's Direct input outputs silence, and every strip silences the output legs
+that do not contribute to the soloed path.
 
-**Per-leg, not per-strip (FRO15).** Sends (§5.15) make "is this strip soloed?" the wrong question,
-so the count answers only "is anything soloed?" and a second, per-strip **audible-leg mask** answers
-"which of this strip's legs may be written". `synth::computeSoloAudibleLegs`
+**Per-leg, not per-strip.** Sends make "is this strip soloed?" the wrong question, so the count
+answers only "is anything soloed?" and a second, per-strip **audible-leg mask** answers "which of
+this strip's legs may be written". `synth::computeSoloAudibleLegs`
 (`Source/Mixer/SoloAudibleSet.{h,cpp}`) recomputes the whole map on the message thread inside
-`AudioEngine::refreshSoloGate`, and each strip reads its own mask once per block. With nothing
-soloed every mask is all-ones and the behaviour is byte-for-byte what it was before.
+`AudioEngine::refreshSoloGate`, and each strip reads its own mask once per block. With nothing soloed
+every mask is all-ones and the behaviour is byte-for-byte what it was before the mask existed. The
+full rule and its fixed-point closure are in
+[`docs/mixer/sends-and-buses.md`](sends-and-buses.md#solo-is-a-per-leg-audible-mask).
 
-Solo acts **after** each strip's own inserts, so a shared reverb or a decaying tail on a
-non-soloed channel is genuinely silenced rather than continuing to ring into a mix that other
-channels can still hear — the thing today's source-level solo gating (§1) cannot do.
+**Solo acts after each strip's own inserts**, so a shared reverb or a decaying tail on a non-soloed
+channel is genuinely silenced rather than continuing to ring into a mix other channels can still
+hear.
 
-**Open implementation detail, not a design fork:** whether the shared count is an engine-owned
-atomic the audio thread reads directly, or something published through the existing
-`EpochExchange` snapshot pattern timeline data already uses, is left to implementation. Either way
-is allocation-free and lock-free on the audio thread; the choice doesn't change anything in this
-document.
+**Why this is better than the source-level gating the timeline already has.** Track mute and solo are
+**source gating**: both `TimelineMidiSourceModule` and `TimelineAudioSourceModule` compute the
+identical condition — `track->muted || (snapshot->anySoloed && !track->soloed)` — and suppress
+themselves when it is true, with `TimelineSnapshot::anySoloed` computed once per snapshot and
+published to the audio thread via `EpochExchange` alongside every other timeline field. That stops
+notes and clips *at the source*, so anything downstream that is *shared* with other tracks, or that
+has a tail, is not isolated: the signal it already emitted keeps ringing, and a shared downstream
+processor still hears whatever other unsoloed tracks fed it. There is no point in the graph, without a
+strip, where "just this track's contribution" is actually isolated.
 
-### 5.4 Mono/stereo
+**The shared count is an engine-owned atomic, recounted on the message thread** by scanning the graph
+inside `publishTimeline` — so a deleted or undone soloed strip cannot leave the mix stuck — and
+carried per render pass on `TransportService`, like the input-monitoring flag. A graph-replacing path
+that skips `publishTimeline` calls `AudioEngine::refreshSoloGate()` itself. **Solo applies to a
+bypassed strip too:** bypass is the strip's own gain and pan going dry and the gate is layered on top,
+or the strip's card bypass would leak into a soloed mix.
+
+## Mono and stereo
 
 A strip's channel shape is fixed **at creation**, derived from the chain it terminates — never
 inferred later from what gets plugged into it. This is the same rule macro ports follow
-(`docs/macros_ports.md` §5.3: "a port's shape is chosen at creation and then fixed"), applied to strips.
+([`docs/macros/ports.md`](../macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed)),
+applied to strips.
 
-Strip output is always stereo. Pan is a balance law with unity gain at centre; a mono strip feeds
-both output legs from a single input jack. The right leg follows the `kRightBase` convention
-(`Source/Modules/CLAUDE.md`) — never ch1, which stays reserved for CV on the split-block voice
+Strip output is always stereo. Pan is a balance law with unity gain at centre; a mono strip feeds both
+output legs from a single input jack. The right leg follows the `kRightBase` convention
+(`Source/Modules/CLAUDE.md`) — **never ch1**, which stays reserved for CV on the split-block voice
 modules.
 
-Changing a strip's shape means **replacing the strip**, one undo step, not widening a live node —
-the same invariant that governs every fixed-channel-count module in this codebase. When "Make
-channel" (§5.8) wraps a chain that ends poly, it inserts a `VoiceMixerModule` ahead of the strip
-so the strip itself only ever receives a summed signal.
+**Changing a strip's shape means replacing the strip**, one undo step, not widening a live node — the
+same invariant that governs every fixed-channel-count module in this codebase. When a flow wraps a
+chain that ends poly, it inserts a `VoiceMixerModule` ahead of the strip so the strip itself only ever
+receives a summed signal.
 
-### 5.5 Bypass vs mute
+## Bypass and mute
 
-The strip follows the root `CLAUDE.md` two-branch bypass/mute contract like every other
-signal-processing module. The mixer exposes **no bypass control on the strip itself** — bypass is
-not a mixer-level idea.
+The strip follows the root `CLAUDE.md` two-branch bypass and mute contract like every other
+signal-processing module. **The mixer exposes no bypass control on the strip itself** — bypass is not
+a mixer-level idea.
 
-A channel macro's existing **Bypass** fan-out (`docs/macros_ports.md` §5.6: `setBypassed(true)` across
-every member) skips the source node and the strip when it fans out over a channel macro's
-members — this is what "bypass inserts" means on the mixer: the chain's own effects go dry, but
-the source keeps producing and the strip keeps passing signal through. The macro's **Mute**
-fan-out, by contrast, includes the strip — muting the macro mutes the whole channel, strip
-included.
+A channel macro's **Bypass** fan-out skips the source node or nodes and the strip: "bypass" on a
+channel means "bypass the inserts", so the chain's own effects go dry while the source keeps producing
+and the strip keeps passing signal through. The macro's **Mute** fan-out, by contrast, includes the
+strip — muting the macro mutes the whole channel. See
+[`docs/macros/ports.md`](../macros/ports.md#bypass-and-mute).
 
-### 5.6 Inserts in a free-form graph
+## Inserts in a free-form graph
 
-A mixer column lists its channel's modules **in signal order**, read off the chain between the
-source and the strip. When that chain is a straight line, the column supports adding, reordering
-and removing modules directly in the mixer. When it branches — more than one path between source
-and strip, or a shared node feeding more than one channel — the column instead shows the module
-list read-only with an "Edit on canvas" link, rather than presenting a branching chain as if it
-were a reorderable list.
+A mixer column lists its channel's modules **in signal order**, read off the chain between the source
+and the strip. When that chain is a straight line, the column supports adding, reordering and removing
+modules directly in the mixer. When it branches — more than one path between source and strip, or a
+shared node feeding more than one channel — the column instead shows the module list read-only with
+an "Edit on canvas" link, rather than presenting a branching chain as if it were a reorderable list.
 
-**A bus has no source to walk from (FRO15).** A bus column carries no feeding track, so
-`buildInsertsForColumn` walks its chain the other way: BACKWARD from the strip along signal
-predecessors, collecting the EQ/Compressor "Add bus" builds (or whatever the user has since
-rearranged) until it reaches a node with no predecessor of its own. A send into the bus (§5.15 D2)
-lands on the same strip input channels an insert's own output would and is excluded from this walk
-— a feeding strip is a source, never an insert, the same rule `findStripsFeedingStrip` applies
-walking the opposite direction — so an active send never marks a bus's own chain "branching" and is
-never mistaken for one of its inserts. `MixerColumn::sourceNodeId` therefore stays invalid for a
-bus, which is also why `MixerInsertList::moveRow` refuses to move a row to the very front of a
-bus's chain (there is no external predecessor to splice against).
+**A bus has no source to walk from.** A bus column carries no feeding track, so
+`buildBusInsertsForColumn` walks its chain the other way: BACKWARD from the strip along signal
+predecessors, collecting the EQ and Compressor "Add bus" builds — or whatever the user has since
+rearranged — until it reaches a node with no predecessor of its own. A send into the bus lands on the
+same strip input channels an insert's own output would and **is excluded from this walk**: a feeding
+strip is a source, never an insert, the same rule `findStripsFeedingStrip` applies walking the
+opposite direction. So an active send never marks a bus's own chain "branching" and is never mistaken
+for one of its inserts. `MixerColumn::sourceNodeId` therefore stays invalid for a bus, which is also
+why **`MixerInsertList::moveRow` refuses to move a row to the very front of a bus's chain** — there is
+no external predecessor to splice against, and `reorderInsert`'s second step has no rollback of its
+own.
 
-### 5.7 Track presets
+**An empty insert list and the "Edit on canvas" link must not paint on the same row.** The link
+anchors at `jmax(1, entries_.size()) * kRowHeight` in both `paint()` and `mouseDown()`, matching
+`getPreferredHeight()`'s own maths; anchoring at `entries_.size() * kRowHeight` puts it at row 0 when
+the list is empty, which is exactly where the "(no inserts)" placeholder draws.
 
-**Naming.** The product says **track** everywhere, in the UI and in this doc. "Lane" stays reserved
-for what it already means in this codebase: the clip and automation lanes *inside* a track
-([`docs/timeline/clips.md`](timeline/clips.md) and [`docs/timeline/automation.md`](timeline/automation.md)).
+## Make channel and shared modules
 
-**"Channel template" and "track preset" are one concept: the track preset.** A track preset is
-`{ track kind, channel chain, strip settings, optional clips }`. Every track kind — **Audio**;
-**Instrument** (which also covers a MIDI track that alone drives an instrument, per the link rule
-in §5.2) — has its own default preset.
-
-- **Saving.** "Save track as preset..." and "Set as default for `<type>`" are reachable from the
-  track header and from the channel's own menu. Preferences -> Mixer lists each type's current
-  default in a dropdown.
-- **Creating a track.** The `+ Track` control lists available presets grouped by type, so a new
-  track can start from any saved preset, not only the type's default.
-- **Reusing a saved preset.** Defaults only decide what a plain `+ Track -> Audio` /
-  `+ Track -> Instrument` creates. Any saved preset can be inserted at any time regardless of the
-  defaults: `+ Track` lists every saved preset grouped by type, and "Insert track preset from
-  file..." loads one saved anywhere on disk. Saving a preset never changes a default unless the
-  user also picks "Set as default".
-- **What a saved preset carries beyond the box.** Saving or exporting a track's channel must also
-  capture every module **outside** the channel's macro that feeds it through a port — a shared LFO
-  is the running example (§5.8). The save walks upstream transitively through modulation/CV/MIDI
-  inputs from the macro's ports and stops the moment it reaches another channel's strip (a shared
-  module that itself terminates in a different channel is that channel's business, not this
-  preset's). On import/load, everything gathered this way arrives as **fresh copies** placed beside
-  the track's box, wired to the same ports the original was — so the imported track sounds
-  identical, with no dangling port left unfed and no cross-project aliasing of an original module.
-- **Loading.** The same trusted/untrusted pairing every disk-sourced patch data uses:
-  `validatePatch(..., trusted=false)` as a separate gate before a trusted `applyJSONToGraph`, the
-  `SnippetManager::insertSnippet` / `ProjectBundle::load` reference pairing the root `CLAUDE.md`
-  names. `"timeline"` stays a reserved field, refused on the untrusted path, exactly as it is
-  today.
-
-**As implemented (P9-7, FRO13).** `synth::TrackPresetManager` (`Source/Mixer/TrackPresetManager.h`)
-is a thin wrapper over `SnippetManager::extractSnippet`/`insertSnippet`, adding only what a track
-preset needs beyond a plain snippet: `extractTrackPreset` walks outside modulators
-(`collectOutsideModulatorsForTrackPreset`, the §5.7 "stops at another channel's strip" rule) and
-scrubs `"solo"`, `"isBus"`, and `"sends"` from the captured Channel Strip's extra state before the
-preset is ever written to disk — an imported `soloed_=true` would otherwise silence the whole mix
-render-wide (root `CLAUDE.md` tripwire), an imported `isBus=true` would badge an ordinary track
-channel as BUS wherever the preset is inserted, and captured `"sends"` slot state would restore
-with no re-resolved cable target (a send's target is a graph edge and is never stored, §5.15),
-showing "No target" rows; `insertTrackPreset` is `SnippetManager::insertSnippet` with
-`trustedPayload=false`, so the untrusted `validatePatch` gate still runs on every disk-sourced
-preset. Entry points: the track header's right-click menu and the channel macro's own menu both
-offer **"Save Track as Preset..."**/**"Set as Default Track Preset"**, gated on
-`synth::isChannelMacro` (omitted entirely — not merely disabled — for an ordinary, non-channel
-macro, same as the header's own disabled-not-hidden gate when the track has no channel yet); the
-two per-type defaults are read from Preferences -> Mixer's `mixerDefaultTrackPresetAudio`/
-`mixerDefaultTrackPresetInstrument` settings keys and consulted by `+ Track -> Audio Track` /
-`Instrument Track` before the factory EQ -> Compressor -> Strip chain is built; `+ Track` also
-lists every OTHER saved preset by type as its own submenu entries, and "Insert Track Preset from
-File..." loads one saved anywhere on disk (`TimelinePanelTrackHeaders.cpp`), both resolved against
-a menu-open-time snapshot (`audioTrackPresetMenuSnapshot_`/`instrumentTrackPresetMenuSnapshot_`,
-same "resolve against the snapshot, not a live re-query" reason the plugin list submenu already
-uses) since a preset can be saved or deleted between the menu opening and the click landing. Tests:
-`Tests/Mixer/TrackPreset/TrackPresetTests.cpp` (round-trip render identity, two inserts never
-collide, a smuggled `"timeline"` key has no effect because `prepareForInsert` only ever copies
-`"nodes"`/`"connections"`/`"macros"`, a malformed preset is refused whole),
-`TrackPresetCaptureTests.cpp` (the outside-modulator walk, the other-channel-strip stop rule, the
-solo scrub, and the macro-menu gate), `TrackPresetDefaultsTests.cpp` (the per-type default actually
-consulted by `+ Track -> Audio Track`), and four cases in
-`Tests/UI/Timeline/TimelineTrackHeaderContextMenuTests.cpp` for the header menu's own wiring.
-
-### 5.8 Make channel / shared modules
-
-"Make channel" gathers the chain from a track's source to the output into a channel macro plus
-strip. Some of the modules in that chain may also feed other tracks (a shared LFO, a shared
-reverb) — **these stay shared**:
+"Make channel" gathers the chain from a track's source to the output into a channel macro plus strip.
+Some modules in that chain may also feed other tracks (a shared LFO, a shared reverb) — **these stay
+shared**:
 
 - Modules used **only** by this track move into the new channel's box.
-- A module still feeding another track too (an exclusively-shared modulator, for example) **stays
-  outside** and reaches in through an auto-created macro port — the same auto-porting mechanism
-  `docs/macros_implementation.md` §7 item 7 already built for a cable crossing a macro's boundary at group time.
-  The sound does not change at the moment of conversion. (The same outside-module accounting
-  applies when *saving* a channel, not just when creating one — see §5.7's "what a saved preset
-  carries beyond the box.")
+- A module still feeding another track too **stays outside** and reaches in through an auto-created
+  macro port — the same auto-porting mechanism a cable crossing a macro's boundary at group time uses
+  ([`docs/macros/auto-ports.md`](../macros/auto-ports.md#auto-creating-ports-when-grouping)). **The
+  sound does not change at the moment of conversion.**
 - Where two tracks **merge** into one shared effect before that effect continues downstream, the
-  effect becomes its **own bus channel** rather than being duplicated or arbitrarily assigned to
-  one track.
-- A **"Duplicate into this channel"** right-click action exists for the case where the user does
-  want their own independent copy of a shared module.
+  effect becomes its **own bus channel** rather than being duplicated or arbitrarily assigned to one
+  track.
+- A **"Duplicate into this channel"** right-click action exists for the case where the user does want
+  their own independent copy of a shared module.
 
-**As implemented (P9-3d, FRO25).** Entry points: the track header's right-click **Make Channel**
-(the track's bound node), and **Make Channel** in the canvas right-click menu (with a selection)
-and in every module card's right-click menu — `synth::resolveChannelSource` picks the chain the
-selection belongs to (a selected track source, else the one track source upstream of it, else the
-one root upstream of it; no item when ambiguous). The item is disabled, not hidden, once the chain
-has a channel. "Which modules does this track use" is `synth::planMakeChannel`'s reach walk: every
-MIDI edge and every audio edge not landing on a modulation (`PortRole::ModCV`) pin, never through a
-modulation attenuverter, through strips and macro ports, stopping at Audio Output / Record Tap /
-Master. A node the track reaches that no other track source reaches is **own** and moves in; one
-another track also reaches is **shared** and never moves; a node no track reaches (an LFO) moves in
-only when every consumer of it (looking through attenuverters) already does — otherwise it stays
-outside and the group-time auto-port pass fronts its cable ([`macros_implementation.md`](macros_implementation.md) §7 item 7).
-The new strip takes over the own region's exits to the output, plus every audio edge into the
-shared region carrying that same signal (with no exit at all, every such edge, provided each side
-carries one consistent signal — otherwise the action is refused with a status message; a
-different signal into a shared module stays a pre-strip send). Each shared merge head that still
-reaches the output without a strip gets its own **bus channel** ("<module> Bus"), holding the shared
-nodes downstream of it; the track's own strip feeds the bus's original input pins, never Master
-directly, so nothing is summed twice. Strip, bypassed EQ/Compressor, Master and macro ports are all
-unity pass-throughs at their defaults, so the converted patch renders sample-identically
-(`Tests/ChannelFlowTests.cpp` proves it offline for the shared-LFO and merge cases) — the one
+**Entry points.** The track header's right-click **Make Channel** (acting on the track's bound node),
+and **Make Channel** in the canvas right-click menu with a selection and in every module card's
+right-click menu. `synth::resolveChannelSource` picks the chain the selection belongs to — a selected
+track source, else the one track source upstream of it, else the one root upstream of it; no item
+when ambiguous. The item is **disabled, not hidden**, once the chain has a channel.
+
+**"Which modules does this track use" is `synth::planMakeChannel`'s reach walk**: every MIDI edge and
+every audio edge not landing on a modulation (`PortRole::ModCV`) pin, never through a modulation
+attenuverter, through strips and macro ports, stopping at Audio Output, Record Tap and Master. A node
+this track reaches that no other track source reaches is **own** and moves in; one another track also
+reaches is **shared** and never moves; a node no track reaches (an LFO) moves in only when every
+consumer of it, looking through attenuverters, already does — otherwise it stays outside and the
+group-time auto-port pass fronts its cable.
+
+The new strip takes over the own region's exits to the output, plus every audio edge into the shared
+region carrying that same signal — with no exit at all, every such edge, provided each side carries
+one consistent signal; **otherwise the action is refused with a status message**, and a different
+signal into a shared module stays a pre-strip send. Each shared merge head that still reaches the
+output without a strip gets its own **bus channel** ("`<module>` Bus") holding the shared nodes
+downstream of it; the track's own strip feeds the bus's original input pins, **never Master directly,
+so nothing is summed twice**. **A node that would move but is already in a macro refuses the whole
+action** (the flat model).
+
+**The conversion is sample-identical.** Strip, bypassed EQ and Compressor, Master and macro ports are
+all unity pass-throughs at their defaults, proven offline for the shared-LFO and merge cases. The one
 intended exception is a chain ending on a poly jack, which gets a Voice Mixer ahead of the strip
-(§5.4, `addVoiceMixerForPolyInstrument`) and so carries every voice where a bare poly jack wired to
-a mono input carried voice 0 only. A node that would move but is already in a macro refuses the
-whole action (flat model). **Duplicate into Channel** is offered on a module outside every macro
-that feeds a channel macro (directly, through its port, or through a modulation attenuverter) and
-something else too — one item naming the channel, or a submenu when it feeds several: the copy
-(parameters and extra state carried, the Duplicate path) takes over every cable into that channel,
-inherits the original's inputs (a modulation into it is re-created with the same amount), and
-joins the macro; the other consumers stay on the original. Each action is ONE graph + timeline +
-macro undo step followed by the reconcile pass.
-
-### 5.9 Mixer panel & windows
-
-Panel placement is a **Preferences setting** with three options: **Tab beside the Timeline**
-(default), **Own panel**, or **Window**. Whichever is chosen, detaching a panel into its own
-window uses **one mechanism shared by Timeline and Mixer**, not two — the reference
-implementation is the existing hosted-plugin pattern,
-`Source/Plugin/Hosting/HostedPluginEditorWindow.{h,cpp}`, including its `addToDesktop=false`
-construction path, which is the headless-testable seam that lets a window be built and inspected
-in a test with no real desktop window ever created.
-
-The detach control itself is **icon-only**, with a tooltip that reads "Open in window" when docked
-and "Dock back" when detached. The Timeline gets the identical control through the identical
-mechanism — detaching the Timeline and detaching the Mixer are the same code path applied to
-different panels, not two separate features.
-
-In the plugin build, a detached window sets its **own** `LookAndFeel` instance; it never calls
-`Desktop::setDefaultLookAndFeel`, which is process-global inside the host and would repaint
-everything else the host owns (root `CLAUDE.md` / `Source/UI/CLAUDE.md` invariant). Keyboard focus
-is scoped per window, consistent with what T158 already expects for app-wide keyboard focus
-arbitration.
-
-**As implemented (FRO12, P9-6):** the mechanism is `Source/UI/Layout/DetachablePanelHost/`
-(`DetachablePanelHost` + `DetachedPanelWindow`) — a slot that moves a panel BY REFERENCE (never
-copied or rebuilt) between its dock and a `DetachedPanelWindow`. `MixerDockComponent` owns two
-hosts, `timelineHost_`/`mixerHost_`, both wrapping the SAME `TimelinePanelComponent`/
-`MixerPanelComponent` instances it already held. In Tab placement neither host draws its own
-header (`setEmbeddedHeader(true)`) — the dock's existing 22 px tab strip carries a single icon-only
-detach button instead, acting on whichever tab is active; the header (and the real button, now
-reading "Dock back") only appears on the DETACHED window itself.
-
-Placement lives in `synth::ui::MixerPlacementController` (the one collaborator `MainComponent.h`
-adds for this ticket), which moves `mixerHost_` between its three homes:
-
-| Placement      | Mixer lives                                    | Timeline dock | Detach state                |
-|----------------|-------------------------------------------------|---------------|------------------------------|
-| Tab (default)  | `MixerDockComponent`'s own tab strip             | unaffected    | tab-strip button             |
-| Own panel      | `MixerPlacementController` itself (a second, independent bottom strip MainComponent adds below the Timeline dock) | unaffected | its own header (embedded=false) |
-| Window         | a `DetachedPanelWindow`, opened on first reveal — never eagerly at launch | unaffected | `mixerHost_` stays parented (and hidden) inside the dock until revealed |
-
-"Own panel" ships without the Timeline dock's animated open/close slide or a persisted height —
-a plain visible/hidden strip at `MixerPlacementController::kOwnPanelHeight` (220 px), the same
-kind of explicit scope cut item 4's "no resize handle" already made for this row. The
-`MixerDockComponent`/`isTimelineVisible` rename stays deferred, as before.
-
-Preference changes apply live: `MixerPlacementController::applyPlacementPreference()` runs once at
-launch (`MainComponent::wireTimelinePanel`) and again on every settings-file write
-(`MainComponent::changeListenerCallback`'s existing ChangeListener path — the same one
-`applyNaturalScrollingPreference` uses), idempotent against its own current state so a
-`DetachedPanelWindow`'s bounds-persist-on-drag (which fires that same broadcast) never does
-real work.
-
-**Per-window focus (T159):** `MainComponent::keyPressed` is the sole Tab dispatch point and is
-unreachable from a separate top-level window, so `DetachedPanelWindow` resolves Tab/Shift+Tab
-itself against its OWN one-region `FocusRegionRegistry`, via the shared
-`synth::ui::resolveFocusCycleKeyPress()` (`Source/UI/Layout/FocusRegion.h`) — the same
-action-id-to-direction translation `MainComponent`'s own command table uses. `MainComponent`'s own
-registry drops a region while its panel is detached: `registerFocusRegions()` was split into a
-one-time `addFocusChangeListener` call plus `rebuildFocusRegions()` (clear + re-add, wrapping the
-existing `"timeline"` `addRegion` call in `!mixerDock.getTimelineHost().isDetached()`), re-run via
-`MixerDockComponent::onPanelDetachStateChanged` after every detach/redock. FRO18's own `{"mixer",
-...}` registration lands inside that same guarded pass later; this ticket only wraps what already
-exists.
-
-**FRO12 follow-up — detaching created no window:** the original implementation above never
-promoted `DetachedPanelWindow` off its `addToDesktop=false` construction — `setDetached(true)`
-called only `window_->setVisible(true)` + `toFront(true)`, and JUCE creates a native peer from a
-`TopLevelWindow` **only** via its own constructor's `addToDesktop=true`, `recreateDesktopWindow()`/
-`lookAndFeelChanged()` when a peer already exists, or an explicit `addToDesktop()` call — never
-from `setVisible()` alone. So clicking the tab-strip detach button removed the panel from the dock
-and no window ever appeared on screen; clicking again redocked correctly (the redock path never
-touched the desktop at all), which is what made the bug easy to miss. Fixed by
-`DetachablePanelHost::setCreatesNativeWindows(bool)`: false (the default, and every headless test's
-value) leaves `setDetached(true)` exactly as before; true — set once, right after construction, by
-`Main.cpp`'s `MainWindow` and `PluginEditor.cpp`'s `AgentSynthPluginEditor`, the app's and plugin's
-only real `MainComponent` construction sites — makes `setDetached(true)` call
-`window_->addToDesktop()` (gated additionally on a primary display existing, for a genuinely
-headless runner) before `setVisible(true)`. `DetachedPanelWindow`'s already-restored/centred-default
-bounds survive that promotion unchanged (`Component::addToDesktop()` positions the peer from the
-component's current bounds, never a native default).
-
-**FRO100 follow-up — hosted-plugin "Open Editor" had the identical bug:**
-`Source/Plugin/Hosting/HostedPluginEditorWindow.cpp` used the identical `addToDesktop=false` +
-`setVisible(true)`-only pattern (`HostedPluginWindowManager::openEditorFor`, wired from a hosted
-plugin module's "Open Editor" action), left unfixed by the FRO12 work above as out of scope.
-Fixed the same way: `HostedPluginWindowManager::setCreatesNativeWindows(bool)` — false (the
-default, and every headless test's value) leaves `openEditorFor()` exactly as before; true — set
-once, right after construction, by `Main.cpp`'s `MainWindow` and `PluginEditor.cpp`'s
-`AgentSynthPluginEditor`, the same two real construction sites FRO12 uses — makes `openEditorFor()`
-call `window->addToDesktop()` (gated additionally on a primary display existing) before
-`setVisible(true)`.
-
-**FRO101 — a detached window trusted its persisted bounds unconditionally:** a headless test that
-detached a panel against a REAL `MainComponent` (no `ApplicationProperties` override) wrote
-`persistBounds()`'s bounds straight into the real, on-disk `Agent Synth.settings` file every shipped
-build reads. That let a 128x128 rect (JUCE's own `ComponentBoundsConstrainer` default minimum, never
-a size a real drag produces) leak into `mixerWindowBounds`/`timelineWindowBounds`, and the next real
-launch restored it verbatim: a Mixer or Timeline window pinned to the screen edge at 128x128 instead
-of the documented centred default. Fixed two ways. First, `DetachedPanelWindow::restoreBoundsOrDefault()`
-now runs the parsed rect through `isPlausibleRestoredBounds()` before trusting it — reject (and fall
-back to the existing centred-default path) when the rect is smaller than a plausible real window
-(under 320x240) or doesn't intersect any currently-connected display (skipped on a genuinely
-headless runner with zero displays, where there's nothing to validate placement against). Second,
-every test that builds a real `MainComponent` and detaches a real panel now wraps itself in a
-`PersistedKeysGuard` for the affected key(s) (`Tests/UI/Layout/DetachablePanelHost/DetachRedockStateTests.cpp`,
-`Tests/UI/Layout/FocusRegionTests.cpp`) — the same snapshot-and-restore idiom `E2EWorkflowTests.cpp`/
-`FocusArbitrationTestFixture.h` already use for other real-settings-file keys, so a test run can no
-longer change a developer's (or CI's) actual persisted window geometry.
-
-**FRO102 — a detached window's own background never followed the theme:** the constructor passed
-`juce::Colours::darkgrey` to `juce::DocumentWindow`'s background-colour argument unconditionally, so
-any area the hosted panel itself doesn't paint (an empty Mixer, the space around columns) showed
-flat stock-JUCE grey instead of the app's themed surface. Fixed by a new
-`DetachedPanelWindow::lookAndFeelChanged()` override: whenever `getLookAndFeel()` resolves to a real
-`synth::theme::AppLookAndFeel` (the same `dynamic_cast` idiom `DetachablePanelHost::applyIcon()`
-already uses), it calls `setBackgroundColour(lf->getTheme().colors.surface)` — the same `surface`
-token the mixer's own column/insert-list `paint()` overrides read. `setLookAndFeel()` fires this
-synchronously, so it applies at construction (right after the existing null-guarded `setLookAndFeel`
-call), on any later theme swap, and once more (harmlessly) as the destructor clears it. No change was
-needed to `Content` (the window's borrowed-header + panel wrapper): `ResizableWindow::setBackgroundColour`
-fills the whole window itself, behind `Content`, so a hosted panel's own unpainted area already falls
-through to the corrected colour without `Content` needing a `paint()` override of its own.
-
-### 5.10 What the mixer shows
-
-Strips, buses, Direct, and Master. Nothing else — never an arbitrary module's output. To put
-something in the mixer, make it a channel. (A bus IS a strip — §5.15 D1 — so "buses" here names a
-badge and a source line, not a fourth column widget.)
-
-**EQ curve thumbnail (P9-10, T179).** When a strip's insert chain contains a Parametric EQ, its
-column shows a small frequency-response curve (Cubase's top-mixer-row idiom) — computed from the
-EQ's own parameters, never audio, and cached so a busy graph never pays for an unconditional
-per-tick repaint (root `CLAUDE.md`). Clicking it selects that EQ on the canvas through the same
-`onEditOnCanvas` seam the insert list's own "Edit on canvas" link and a column header click use. A
-bypassed EQ draws dimmed; a strip with no EQ insert shows no thumbnail; a strip with two shows the
-thumbnail for only the first one in signal order. See
-[`docs/mixer_implementation.md`](mixer_implementation.md) for how it landed.
-
-**Meters (FRO146): meters only, like Cubase's MixConsole -- no limiter.**
-
-*Per-reader latch, not a single shared float.* `ChannelStripModule`/`MasterModule` used to store
-exactly one peak float per leg, overwritten every block -- a hot block landing between two 10 Hz UI
-polls was silently gone by the next poll. `Source/Mixer/PeakMeterLatch.h` fixes this with one latch
-per leg, keyed by `MeterReader` (`Mixer`, `TrackHeader`): the audio thread's `storeBlockPeak()` is a
-lock-free CAS-max loop into EVERY reader's own slot, and each reader's `takePeak()` is
-read-and-reset of only its own slot -- so the mixer column and a track header's channel chip poll
-independently and never steal each other's peaks. `getMeterPeak(leg)` is gone; call
-`takeMeterPeak(MeterReader, leg)` instead. `TrackChannelLinkController::getChannelInfo()`
-deliberately does NOT read the TrackHeader slot (that would race the 15 Hz tick,
-`getChannelMeterPeak()`, which is that slot's one consumer) -- its `ChannelInfo::meterPeak` field
-stays at its default.
-
-*Scale.* Two bars (L/R) per column (strips, buses, Direct if metered, Master), -60..+3 dBFS --
-`Source/UI/Mixer/MixerMeterScale.h`. Tick marks at +3, 0, -6, -12, -18, -24, -30, -40, -50, -60 dBFS
-(Cubase's own channel-meter marks, plus our own +3 dB headroom cap), the 0 dB tick drawn visibly
-stronger; tick NUMBERS only where the column has room (`MixerMeter::paint`'s own width check), the
-dashes themselves always draw.
-
-*Scale mapping -- Cubase's own taper, NOT linear in dB (FRO146 follow-up).* `meterDbToFraction`/its
-inverse `meterFractionToDb` are a monotonic PIECEWISE-LINEAR interpolation through ten breakpoints
-(`detail::kMeterTaperBreakpoints`, the same ten dB values as the tick table, each paired with its own
-0..1 position) rather than a straight `(db - min) / (max - min)`: positions are measured off
-Cubase's MixConsole meter (0 dB at 92% of the height, each 6 dB down to -24 about 12.5%, -50..-60 about
-7%), so a channel sitting near 0 dB (the common case) reads with real resolution. The ONE mapping every
-caller goes through -- ticks, the bar fill (`MeterColourStops::forEachBand`'s band edges), the
-peak-hold line, and `ChannelChipComponent`'s horizontal fill -- so a taper change is one-file.
-FRO150 gave the FADER its own separate taper, Shift fine-drag and Cmd-click reset -- a different,
-unrelated mapping (`Source/UI/Mixer/MixerFaderTaper.h`, 0 dB at thumb position 0.71, the bound
-`gain` parameter unchanged/linear throughout) -- see [`docs/mixer_fader.md`](mixer_fader.md).
-
-*Ballistics, rate-independent.* Instant attack; release ~20 dB/s; a peak-hold line per bar holds
-1.5 s then falls at ~20 dB/s (`Source/UI/Mixer/MixerMeterBallistics.h`'s `advanceMeterBallistics`).
-Driven by the SAME 10 Hz poll as everything else in this section (no new timer) --
-`MixerPanelComponent::refreshMeters()` measures real elapsed time itself
-(`juce::Time::getMillisecondCounterHiRes()`, clamped to avoid a multi-second "elapsed time" jump
-right after the tab was hidden) and threads it down, so the ballistics are exercised by tests with
-explicit elapsed times rather than a wall clock. Repaint stays gated on the drawn state actually
-moving (the pre-FRO146 `MixerMeter`/`ChannelChipComponent` convention).
-
-*"Visible" means showing ANYWHERE, not just docked.* `MainComponent::timerCallback()`'s gate
-(docs/layout/rendering.md) is `mixerDock.isMixerShowing() || mixerPlacement_.isOwnPanelShowing()`:
-`isMixerShowing()` covers both docked-on-the-Mixer-tab-with-the-dock-open AND detached into its own
-`DetachedPanelWindow` (the tab strip's own detach button, or FRO12's "Window" placement -- a
-detached window is a separate top-level `Component`, so this dock's own `isVisible()` says nothing
-about it); `isOwnPanelShowing()` covers FRO12's third placement. A detach/redock toggle reparents the
-SAME `MixerPanelComponent` (never rebuilt) and deliberately skips `rebuild()`
-(`MixerDockComponent::applyTabVisibility(false)` from that one caller) -- unlike a real tab switch,
-nothing about which graph nodes the mixer shows changed, and rebuilding would silently reset every
-column's latched clip-readout state to "-inf" on every detach/redock.
-
-*Colour zones -- POSITIONAL bands, not one whole-bar colour.* Hard band edges,
-`Source/UI/Mixer/MeterColourStops.h`: below -18 dBFS = low (the `meterFill` token, kept for theme
-back-compat), -18..-6 = mid (`meterMid`), -6..0 = high (`meterHigh`), above 0 = clip (`meterClip`)
--- see [`docs/layout/theming.md`](layout/theming.md#colours)'s token table. Cubase/most DAWs' own convention, and what
-`MeterColourStops::forEachBand(fromDb, toDb, callback)` exists to drive: a bar reaching +4 dB paints
-low/mid/high/clip STACKED bottom to top (each band only as tall as its own dB span), and a bar
-reaching only -10 dB paints low plus part of mid and stops there -- never a single colour for the
-whole filled bar. Both `MixerMeter` (vertical bars) and `ChannelChipComponent` (horizontal, same
-banding left to right) call it with `fromDb = kMeterMinDb` and `toDb` = the bar's own displayed dB.
-The peak-hold line stays a single colour, for its OWN zone (unaffected by this — it is a 1 px cap,
-not a filled span).
-
-`MeterColourStops` holds its stops as a SORTED, arbitrary-length `std::vector<MeterColourStop>`
-(not a fixed four) precisely so a follow-up ticket can let Settings > Appearance add/drag/remove
-stops, with no painter change — `setStops()` sorts by `dbFrom`, drops exact-`dbFrom` duplicates,
-and always leaves at least one stop (the model's floor: any db value below the lowest stop's own
-`dbFrom` still resolves to that stop's colour, i.e. its `dbFrom` is treated as -inf, never a hard
-edge a quieter value could fall through). `fromTheme()` builds the default four-stop model above.
-Landed as FRO147 -- Settings > Appearance's "Meter Colours" section (`Source/UI/Settings/MeterColourStopsEditor.h`); see [`layout/colour-overrides.md`](layout/colour-overrides.md#meter-colours).
-
-*Clip readout.* Cubase's "Meter Peak Level" field: `MixerMeterReadout`, one per metered column,
-sitting above its meter/fader. Shows the highest peak since the last reset ("-3.2", "+4.1", "-inf"),
-turns the clip colour once any peak exceeds 0 dBFS and STAYS that colour until reset. Click resets
-that column; Option/Alt-click resets every column (`onResetAllRequested`, fanned out by
-`MixerPanelComponent::resetAllMeterReadouts()`); the mixer panel header's "Reset Meters" button
-(next to "+ Bus") calls the same fan-out.
-
-*Track header chip.* `ChannelChipComponent` reads its own `TrackHeader` latch slot and applies the
-same dB mapping + colour zones (so it turns the clip colour on an over) -- no numeric readout there,
-just the coloured bar.
-
-### 5.11 Hosted plugin
-
-Nothing channel-specific. The graph stays flat in both host modes, so a `Master` splice sits in
-front of the output in the app and the plugin alike, and the mixer panel renders inside the plugin
-editor the same way `GraphEditor` already does. The existing rule that an over-wide hosted plugin
-is **refused, never truncated** (`Source/Modules/CLAUDE.md`) is unaffected — a channel strip does
-not change how a hosted plugin's channel count is checked.
-
-### 5.12 Stem export
-
-**DONE (P9-8, T123).** Every strip is a natural tap point: "single render, parallel writers," the
-shape stem export already needs. One render pass writes one file per strip. Test: the resulting
-stems sum back to the pre-Master mix.
-
-`ChannelStripModule` carries an opt-in, non-owning stem tap (`setStemTapBuffer`): a
-message-thread-armed pointer to a preallocated stereo buffer, null outside an export. When armed,
-the strip copies its FINAL output — post gain, pan, mute AND solo, exactly what it hands to
-Master — into the tap at the end of every `processBlock` exit path. No allocation, no locks: an
-atomic pointer swap and, when armed, one `copyFrom` per leg.
-
-`synth::StemExporter::exportStems` (`Source/Transport/StemExporter.{h,cpp}`) drives ONE render
-pass through the exact same offline path `BounceExporter::bounce` uses — same `BounceOptions`
-(range, tail, sample rate, bit depth, format), same suspend/reprepare/restore choreography, same
-progress/cancel semantics — via a sibling session class, `synth::StemSession`
-(`Source/Transport/StemSession.{h,cpp}`), and a sibling chunked runner, `synth::StemRunner`
-(`Source/Transport/StemRunner.{h,cpp}`), mirroring `BounceSession`/`BounceRunner` so the message
-thread stays responsive exactly like Export Audio. The two shared pieces both paths actually
-duplicate no logic for (`synth::validateBounceOptions`, and the metronome/external-MIDI RAII
-guards) are factored into `Source/Transport/BounceGuards.h`, so `BounceExporter`'s own behaviour
-and tests are unchanged. Strips are enumerated from the graph in ascending node-id order (the
-"else node id" fallback — that ORDER has no dependency on the timeline/track model) and named
-`"NN - <name>.<ext>"`.
-
-**Stem naming (FRO55).** `<name>` is the ONE track — `TimelineMidiSource`/`TimelineAudioSource`
-("Track In"/"Track Audio") — whose signal feeds that strip, not the strip's own graph-node
-instance name (pre-FRO55 this was `"Channel Strip"`, identical across every strip in a patch and
-therefore useless as a stem name once "Create channels" makes more than one). `StemSession`
-walks the graph upstream from the strip, along signal edges only (mirroring
-`synth::ChannelFlows`'s `isSignalEdge` rule: never through an `AttenuverterModule`, never through
-a `PortRole::ModCV` input — a modulation cable from an unrelated track must not make that track
-"feed" the strip), transitively through the instrument/macro chain, stopping at another
-`ChannelStripModule` (that strip already terminates its own track's chain). Exactly one track
-found this way contributes its `TimelineDoc` name (e.g. `"Bass"`, `"Audio 1"`); zero or several
-tracks — or no `TimelineDoc` at all, e.g. a headless caller — fall back to `"Channel N"` (`N`
-matching the strip's own `NN` position, so it agrees with the file's own number and is unique on
-its own even when a `TimelineDoc` isn't available). `ChannelStripModule` has no user-given name
-field of its own yet; when the mixer-UI work adds one, stem naming is expected to prefer it ahead
-of the track walk. `StemSession`'s constructor takes an optional `const TimelineDoc*` for this —
-null is exactly the pre-FRO55 "no timeline" behaviour (every strip falls back to `"Channel N"`).
-
-**Buses are stems too (FRO15).** A group/send bus is an ordinary `ChannelStripModule`, so
-`collectStemStrips` picks it up with no code change at all. A source's stem stays **pre-send** —
-the tap copies the main legs only and never a send leg — so nothing is double-counted for a
-post-fader send, and a pre-fader send is not lost either: it appears in the bus's stem and nowhere
-else. The §5.12 identity survives exactly: `sum(stems) = source main outs + bus outs = everything
-Master receives on Mix`. A bus has no feeding track, so its stem name falls back to `"Bus N"`
-(`synth::busFallbackName`) rather than the misleading `"Channel N"`.
-
-**Two decisions, both load-bearing for "the stems sum back to the mix":**
-
-- **Every strip ALWAYS gets a file — muted or soloed-out included.** The tap sits AFTER the
-  strip's own bypass/mute/solo logic, so a muted or non-soloed strip's stem is simply silent for
-  exactly the blocks it was silent, never absent. A soloed strip during export therefore never
-  changes *which* strips get written, only what most of them contain — silence sums to zero, so
-  the mix identity holds in every solo/mute combination.
-- **Master's Direct input (cables that bypass every strip) is NOT a stem.** Direct is not a
-  channel (§5.10 "what the mixer shows"): summing the stems reproduces the pre-Master MIX bus, not
-  the whole signal Master receives. A patch that also uses Direct will not find it isolated in any
-  stem — by design, the same way it isn't a mixer column either.
-
-Both decisions assume every enumerated strip is actually routed into Master's Mix bus. Strips are
-enumerated by scanning the graph for `ChannelStripModule` nodes regardless of routing (see
-`collectStemStrips`), so an orphaned strip (wired to nothing) or one wired somewhere other than
-Master's Mix inputs still gets a stem file — the same caveat as Direct above, just the mirror
-image: that stem is not part of what sums back to the pre-Master mix, exactly because it never
-fed Master's Mix bus in the first place.
-
-No strips in the patch: `StemExporter::hasChannelStrips` lets the UI show a clear message ("No
-mixer channels yet - use Create channels in the mixer first") before even opening the dialog,
-and `StemSession`'s own setup fails with the identical message as a defense-in-depth backstop.
-"Export Stems..." sits immediately after "Export Audio..." everywhere that action is offered
-(today: the File menu only), opening `ExportAudioDialog` in a stems mode — destination is a
-FOLDER (default `"<project name> Stems"` inside the same `Exports/` base Export Audio uses), same
-range/tail/format/rate/bit-depth controls and progress page, no destination-exists collision
-prompt (a stems folder is a re-exportable container, not a one-shot file).
-
-### 5.13 Existing projects
-
-Open unchanged — no automatic migration on load. **DONE (FRO26, T173e).** Since there is no mixer
-panel yet (P9-5), the action lives on the "+ Track" menu (`TimelinePanelComponent::
-kCreateChannelsMenuId`) alongside every other channel-creating entry (Audio Track, Instrument
-Track) rather than a per-track context menu or a not-yet-built mixer column — it acts on every
-track in the project at once, so it belongs beside the project-wide actions, not off a single
-track header. "Create Channels" wraps every channel-less track's chain into a strip, as one undo
-step covering all of them at once: `MainComponent::createChannelsForExistingTracks()` walks
-`TimelineDoc::getTracks()`, resolves each track's own bound node (`bindingUuid` — a "Track Audio"
-or "Track In"), and hands every one of them to `GraphEditor::createChannelsForUnchanneledTracks()`,
-which runs T184's own per-node builder (`maybeAutoCreateChannelAfterConnect` — same
-`synth::findUnchanneledOutputFeeds`/`buildChannelForFeeds` pair T184 uses) once per track inside
-ONE `AppUndoManager::recordGraphTimelineAndMacroChange` transaction. A track that already reaches
-a `ChannelStripModule` is silently skipped (same "exits.empty()" early return as T184's
-connect-triggered case) — untouched, not re-channeled. The menu entry is disabled, and the action
-is a no-op pushing nothing to the undo stack, when no track needs a channel
-(`hasTracksNeedingChannels()`). Two channel-less tracks that share one unchanneled instrument (D1,
-§7) still come out of the sweep as exactly one channel: the first track's
-`maybeAutoCreateChannelAfterConnect` call builds it and removes the exit edges, so the second
-track's call sees `findUnchanneledOutputFeeds` already empty for that instrument and does nothing —
-free of any extra bookkeeping, since it's the same per-node builder T184 already runs on live
-connects.
-
-Reusing `maybeAutoCreateChannelAfterConnect` unchanged also carries over its macro-boxing rule:
-the new EQ/Compressor/Strip only join the source's existing macro when every exit source is an
-ordinary (non-port) member of the SAME macro (§5.2's boxing paragraph). A genuinely pre-P9-3
-track's own node was never a macro member at all, so this condition fails and the sweep's new
-channel ships as loose cards on the canvas rather than boxed like T173a/T183/T184's own channels
-— an accepted consequence of reusing the connect-triggered builder as-is rather than teaching it
-a second, legacy-specific boxing path; also gated independently of `autoCreateChannelOnConnectEnabled`
-(the T184 Preferences toggle), since this is an explicit user action, not a live connect — a
-legacy project with that preference OFF still gets working channels from this menu entry.
-
-### 5.14 New Patch always has an Audio Output (T187)
-
-`GraphEditor::newPatch()` seeds a fresh Audio Output immediately after `graph.clear()`, as part of
-the same `recordStructuralChange` undo step — a brand-new empty project is never left with nothing
-for `spliceMasterNode` (§5.1) to target. Before this, a bare Track Audio added to a fresh New Patch
-was silently unheard until the user manually added an Audio Output; a second track added after that
-manual fix then auto-spliced Master and re-routed the first track's manual wire into it, which read
-as a surprise. Scoped to `newPatch()` only — `AIStateMapper::applyJSONToGraph`'s own `graph.clear()`
-(preset/project load) is unaffected: it always replays a full node set from JSON right after
-clearing, so it is self-correcting as long as the source JSON has an Audio Output (every factory
-preset does).
-
-On the very first channel, `MainComponent::addAudioTrack()` also relocates that Audio Output (or
-any bare Audio Output the user dropped manually before adding a track) to sit immediately right of
-the newly-spliced Master, once it knows this call is the one that splices Master (checked via
-`synth::findMasterNode` before building the chain). Master already lands right of the chain by
-design (T173a, §5.2) so the row reads `Track Audio -> EQ -> Compressor -> Strip -> Master ->
-Audio Output` left to right; without the move, Audio Output stayed wherever it started (the newPatch
-seed's canvas origin) while Master jumped to the far side of the chain, and the output cable had to
-run back across the whole canvas — caught live via computer-use testing while verifying T187. Only
-fires the first time Master is created; once it exists, later tracks don't reshuffle the canvas.
-
-### 5.15 Sends and group buses (FRO15 / P9-9)
-
-**DONE.** A send is a **strip-owned output leg**, and a bus is an **ordinary Channel Strip** whose
-inputs are other strips' outputs. Neither is a new node type.
-
-**D1 — a bus is a `ChannelStrip`.** Three mechanisms already treat it as one: `MakeChannelPlan`'s
-merge-point `buses` build the same EQ -> Comp -> Strip -> Master chain, `collectStemStrips` scans
-for `ChannelStripModule`, and the mixer's orphan-strip pass already renders one as a column. Keeping
-one type leaves the solo gate, the stem tap, the column model and `spliceMasterNode`'s
-`Strip -> Master(Mix)` classification all unchanged. `MixerColumn::Kind::Bus` is display only, set
-when the strip carries `"isBus": true` in its trusted extra state (written by "Add bus" and by
-`buildMakeChannel`'s merge-point buses) **or**, as a structural fallback for patches built before
-that flag existed, when one of its signal predecessors is another strip. The flag is what a freshly
-added, still-unfed bus has to go on. A track preset (§5.7) scrubs `"isBus"` from every captured
-strip, so inserting one never badges an ordinary track channel as BUS.
-
-**D2 — a send is an output leg, not a `SendModule`.** `ChannelStripModule` declares `kMaxSends = 4`
-fixed slots, each a stereo pair of real output channels, and a send is a plain
-`AudioProcessorGraph` connection from those channels into the target strip's `ch0`/`kRightBase`.
-Only a real graph edge is visible to the three things that must see it: JUCE's parallel-path delay
-compensation (D4), stem export, and the canvas cable renderer.
-
-| | channels |
-|---|---|
-| inputs (unchanged) | `0` = In/Left, `1..3` reserved, `kRightBase = 4` = Right -> `kNumInputs = 5` |
-| main out | `0` = Left, `1..3` reserved, `4` = Right, `5..7` reserved |
-| send L block | `kSendBase = 8`, slot *k* at `8 + k` |
-| send R block | slot *k* at `kSendBase + kMaxSends + k` |
-| | `kNumOutputs = 16` |
-
-Each send's right leg is on its own block, so the "right leg never on ch1" invariant
-(`Source/Modules/CLAUDE.md`) holds per send. `hasStereoOutputPairShape(5, 16)` is false, so no Dual
-I/O toggle is inherited — unchanged from before.
-
-**What is a parameter, what is state.** Level is four `juce::AudioParameterFloat`s,
-`send1Level`..`send4Level` (-60..+12 dB, default **0 dB** so a new send is audible rather than
-looking broken), added in the constructor **unconditionally** — adding one later renumbers the
-host-visible layout and detaches saved host automation. The **target is never stored**: node ids
-are reassigned on every rebuild-from-JSON, so a stored id goes stale on undo; "which bus does slot
-*k* feed?" is answered by walking forward from slot *k*'s own output channel to the first strip
-(`synth::findSendTarget`, which therefore also resolves through a module the user inserted on the
-send path). Which slots exist and each slot's pre/post are trusted extra state, `"sends": [{"slot",
-"pre"}]`, same path as `"shape"`/`"solo"`. A track preset (§5.7) scrubs `"sends"` from every
-captured strip, since a captured slot's target is never stored and re-resolving it by name on
-insert is out of scope — an un-scrubbed slot would restore with no cable, showing a "No target"
-row.
-
-**Slots are sparse.** Removing a middle send clears its bit and its cable and leaves every higher
-slot on its own raw channels — no cable is re-wired and no parameter value is copied, so host
-automation stays attached to the right send. Only the VISIBLE jack indices renumber; the jack LABEL
-keeps naming the slot, so a jack, its mixer row and its `sendNLevel` parameter always agree.
-
-**D3 — pre vs post, mute, bypass.** Pre-fader is tapped after the hygiene/mono duplication and
-before gain and pan; post-fader after them, i.e. exactly what the strip hands Master, and before the
-solo gate. **Mute silences all sends, pre and post** — the mute branch stays `buffer.clear()` per
-the root `CLAUDE.md` two-branch contract; keeping a pre-fader cue alive under mute would mean making
-that branch selective, which is the erosion the invariant exists to prevent. A deliberate departure
-from DAWs that do keep pre-fader cue sends alive. Under bypass the strip's own gain and pan are off,
-so pre and post coincide. Every branch writes every send channel (the reserved `5..7` and all of
-`8..15` are cleared unconditionally up front), or a stale block from the previous callback leaks
-into a bus.
-
-**D4 — latency across the parallel path.** Nothing new is written: `juce::AudioProcessorGraph`'s
-built-in delay compensation already aligns `strip -> Master` against `strip -> bus -> Master`.
-`Tests/Mixer/Sends/MixerSendLatencyTests.cpp` pins it with the same impulse/one-hit shape as
-`Tests/Plugin/HostedPluginLatencyTests.cpp`, plus a negative control. Measured, not assumed: adding
-a send is a **topology** change, so the graph schedules its own rebuild and alignment is restored as
-soon as the message loop runs — no send flow calls `MainComponent::rebuildGraphForLatencyChange()`,
-and `MixerSendLatencyTest.AddingASendSchedulesItsOwnRebuild` is what keeps that true.
-
-**D5 — solo is a per-leg audible mask.** A strip's output leg is audible iff (a) the strip is itself
-soloed, (b) it is downstream of a soloed strip, or (c) that leg lies on a signal path reaching such
-a strip. Everything else is silenced. A single whole-strip flag is not enough: soloing a reverb bus
-would give you the source dry **plus** the source through the bus, and a group bus only works
-because its sources' MAIN legs stay open. `synth::computeSoloAudibleLegs` computes the map on the
-message thread (every graph change already reaches `refreshSoloGate` via `publishTimeline`), reusing
-`synth::isSignalEdge` for every walk and stopping at the first strip and at the terminals, exactly
-as `findStripFedByTrackSource` does.
-
-**One walk is not enough — the set of contributing strips is closed to a fixed point.** A single
-first-strip-stopping walk answers only "does this leg reach the soloed set in ONE hop?", which is
-narrower than rule (c) above ("lies on a signal path reaching"). With nested buses — source ->
-inner bus -> soloed outer bus — it closes the source's main leg, so the audible inner bus is fed
-silence and soloing the outer bus produces nothing at all. So the soloed set is first grown by the
-same leg walk, repeatedly, until no further strip joins: a strip with any open leg feeds the soloed
-path, and so does a strip whose leg reaches it. Feeding the path is not the same as being downstream
-of a solo — a contributing strip still gets a **per-leg** mask, not all-ones, so a source that
-reaches a soloed bus only through its send keeps its dry main leg closed no matter how many buses
-sit in between. (This is a deliberate correction to the decided design's step 4, which as written
-contradicted its own rule (c); pinned by `MixerBusSoloTest`'s
-`SoloingABusFedByAnotherBusKeepsTheWholeChainAudible` and `ASendThroughABusChainStaysOpenToo`.)
-
-`refreshSoloGate` publishes in two passes — pass 1 ORs the new
-mask in, pass 2 assigns — so a render pass landing between them sees a strip momentarily *more*
-audible, never wrongly silent. The strip's default mask is **0**, i.e. a strip the engine never
-published for behaves exactly as the pre-FRO15 whole-buffer clear did; a strip that is itself soloed
-short-circuits the mask entirely.
-
-**Documented limitation.** The gate is per-*leg*, not per-*edge*: a main leg that feeds both Master
-and a soloed bus stays open, so that strip's dry signal is still heard. Splitting it would need a
-delay-compensated per-edge mute node — out of scope.
-
-**D6 — UI.** A bus column is an ordinary strip column with three differences: a "BUS" badge instead
-of the `+R` linked badge, a source line listing the feeding strips' names instead of tracks, and no
-track chip or colour link. Its own insert list works exactly like any other column's — including
-the bypassed EQ/Compressor "Add bus" builds — via the backward-walk §5.6 describes for a column
-with no feeding track. Buses sit after the track-driven strips and before Direct — the existing
-orphan-strip append already produces exactly that position. On a source column, a compact
-`MixerSendList` sits under the insert list: one row per active slot (target-bus button, a rotary
-level knob attached straight onto `sendNLevel`, a `PRE`/`POST` toggle, an `x`), plus a `+ Send` row
-while a slot is free. Each mutation is ONE `recordGraphAndMacroChange` around
-`Source/Mixer/MixerSends`' Core flows. Cyclic targets are excluded from the menu by a forward walk
-from the candidate back to this strip, and `synth::addSend` applies the same check, so the walk is
-the **only** cycle defence — `juce::AudioProcessorGraph::addConnection` is not a backstop here, as
-measured: it checks node existence, channel bounds and "not already connected" and accepts a cycle
-without complaint (`FeedbackGuardTests`' render-time guard is what catches an audible runaway if one
-is ever wired by hand on the canvas). A refusal changes nothing at all, so no empty undo step is
-recorded. "Add bus" (`+ Bus` on the dock's tab
-strip, and "New bus..." in every send menu) builds a bypassed-EQ -> bypassed-Compressor -> Stereo
-Strip -> Master(Mix) chain via the shared chain builder, boxed in a macro named "Bus N". On the
-canvas a send is an ordinary cable on the strip's new visible jacks — no new cable concept.
-
-**D7 — stem export.** See §5.12: buses get stems for free, sources' stems stay pre-send.
-
-**Out of scope for v1.** A send lane in the automation strip (the parameter is host-visible and
-lane-resolvable, which is the whole v1 promise); sidechain sends; mono-send / send-pan; per-send
-mute; a per-edge solo gate (above); reordering send slots; AI authorability (`ChannelStrip` stays in
-`kNonAuthorableModuleTypes`, and `"sends"` is trusted-path extra state); and bus-specific track
-presets.
-
-### 5.16 Keyboard navigation and accessibility (FRO18)
-
-The mixer panel is its own T159 keyboard focus region (Left/Right walk columns, Up/Down nudge the
-focused fader, Enter selects the focused column's macro on canvas, and the rebindable Mute/Solo/
-Arm Focused Track actions act on it — the same action ids the Timeline track-header row already
-binds), and every fader/pan/meter/M/S control carries a JUCE `AccessibilityHandler` name and value
-so VoiceOver can read the mix (e.g. "Lead 1 fader, -3.0 dB"). Full key table, the region's open
-predicate, and the accessibility handler details live in
-[`docs/control/shortcuts.md`](control/shortcuts.md#mixer-column-navigation) (Focus regions / Mixer column
-navigation) — this section only cross-links it, per this doc's own "one topic per doc" rule.
-
----
-
-## 6. AI authorability
-
-`ChannelStrip` and `Master` are internal-only and join `kNonAuthorableModuleTypes`
-(`Source/AI/AIStateMapper/AIStateMapperInternal.h`) — a model cannot author either directly, the same rule that
-already governs `TimelineMidiSource`, `Rec Tap` and the macro port types. `validatePatch` does not
-change; per the root `CLAUDE.md` invariant, it is never relaxed to raise an AI pass rate.
-
-If a future goal is "the AI can build a channel," the correct shape is an app-side **tool/action**
-— "create channel" — that the model invokes and the app executes against a validated node set,
-never a patch key the model writes directly. This mirrors the same resolution `docs/macros_implementation.md` §6
-already reached for "the AI can build a macro."
-
----
-
-## 7. Founder decisions (2026-09-10)
-
-All four decisions from the P9-1 proposal are settled. Each is recorded here with the option
-chosen and its refinement; the design in §5 already reflects these in full. The rejected
-alternatives are kept as one line each for the record.
-
-**D1 — Should every track be a channel? Chosen: channels follow audio (§5.2).** Audio and
-instrument tracks get a channel automatically; a MIDI track playing a shared instrument uses that
-instrument's channel instead of getting its own. Refined with the auto-create-on-connect workflow,
-the track/channel link rule (name sync, live colour sync, M/S drive), and the channel chip.
-*Rejected: every track owns a channel (duplicates shared instruments); every track gets a column
-(two kinds of column to learn).*
-
-**D2 — What happens to modules a track shares with others when it becomes a channel? Chosen: keep
-them shared (§5.8).** Exclusive modules move into the box; a shared module stays outside via an
-auto-created port; a merge point becomes its own bus channel. Refined so that saving or exporting a
-channel also captures every outside module that feeds it, walked upstream transitively and stopped
-at another channel's strip, arriving as fresh copies on import (§5.7). *Rejected: duplicate
-everything shared (breaks phase/CPU/shared-reverb sanity the instant you click); ask each time (a
-dialog on every conversion).*
-
-**D3 — What goes in a new channel by default? Chosen: EQ -> Compressor, added bypassed.** Refined
-by merging "channel template" and "track preset" into one **track preset** concept — per-track-kind
-default, saved and set from the track header or the channel menu, listed in Preferences -> Mixer
-and in the `+ Track` control (§5.7). *Rejected: EQ -> Compressor live at neutral settings (CPU cost
-on every channel regardless of use); empty (no baseline at all).*
-
-**D4 — Where does the mixer live? Chosen: a tab beside the Timeline, as the default.** Refined into
-a three-way Preferences placement setting (Tab beside Timeline / Own panel / Window) sharing one
-detach mechanism with an icon-only control, and the Timeline gains the identical detach control
-through that same mechanism (§5.9). *Rejected (as the default; still available as alternate
-settings): its own dock; window-only.*
-
-**Accessibility.** Mixer keyboard navigation and screen-reader support move into their own
-Accessibility epic (P9 side track T181, §8/§9) rather than shipping inside P9.
-
----
-
-## 8. Implementation order and Tests
-
-Moved to [`docs/mixer_implementation.md`](mixer_implementation.md) (one topic per doc) — dependency
-order, what shipped and how, and the test list for each P9 item: P9-2 engine/solo gate, P9-3
-channel creation flows, P9-4 track/channel link, P9-5 mixer panel, P9-6 detachable windows, P9-7
-track presets; side tracks P9-8 stem export, P9-9 sends/group buses, P9-10 EQ curve thumbnail,
-P9-11 Gate module, T181 mixer accessibility. Item numbers there match every existing
-"mixer.md §8 item N" citation elsewhere in the repo.
-
----
-
-## 9. Out of scope
-
-- **Mixer accessibility** (keyboard navigation, screen-reader labels) — T181, in the Accessibility
-  epic rather than P9, alongside T158's app-wide keyboard focus work.
-
----
+(`addVoiceMixerForPolyInstrument`) and so carries every voice where a bare poly jack wired to a mono
+input carried voice 0 only.
+
+**Duplicate into Channel** is offered on a module outside every macro that feeds a channel macro —
+directly, through its port, or through a modulation attenuverter — and something else too: one item
+naming the channel, or a submenu when it feeds several. The copy carries parameters and extra state
+(the Duplicate path), takes over every cable into that channel, inherits the original's inputs (a
+modulation into it is re-created with the same amount), and joins the macro; the other consumers stay
+on the original. It joins through the incremental membership passes
+([`docs/macros/menu-and-membership.md`](../macros/menu-and-membership.md#incremental-port-splicing-on-a-membership-change)).
+
+**Each action is ONE graph plus timeline plus macro undo step, followed by the reconcile pass.** Core
+lives in `synth::planMakeChannel` (a pure query: own, shared and side-input regions, exits, strip
+crossings, bus heads, `needsChannel`, `refusal`), `synth::buildMakeChannel` (the graph rebuild — the
+shared `buildChannelChain` gained a sink so a strip can feed a merge point's input pins instead of, or
+besides, Master's Mix) and `synth::resolveChannelSource`, all in `Source/Mixer/ChannelFlows/`.
+`MainComponent::makeChannelForNode`/`duplicateIntoChannel` wrap each action and check the refusal or
+no-op first, so neither pushes an empty undo step, then run
+`reconcileTimelineAfterGraphChange()`.
+
+## Building a channel
+
+Every flow that creates a channel shares one chain builder rather than a parallel implementation.
+The factory default chain is **Parametric EQ (bypassed) -> Compressor (bypassed) -> Channel Strip
+(Stereo) -> Master (Mix)**, added bypassed so a new channel costs no CPU until the user engages it.
+
+**Why EQ and Compressor rather than nothing, or live at neutral settings.** Live-at-neutral means
+paying CPU on every channel regardless of use; empty means no baseline at all. Bypassed gives the
+baseline with neither cost.
+
+### The factory default chain
+
+`synth::buildDefaultAudioChannel` (`Source/Mixer/ChannelFlows/ChannelFlows.h`) splices Master
+(`synth::spliceMasterNode`, reusing the existing singleton after the first channel) and wires the
+strip into it. "+ Track -> Audio Track" builds the whole channel — Track Audio, EQ, Compressor, Strip,
+Master — in ONE undo step (`AppUndoManager::recordGraphTimelineAndMacroChange`), and
+`{Track Audio, EQ, Compressor, Strip}` are boxed into ONE collapsed macro named after the track
+(`GraphEditor::addMacroForMembers`).
+
+**Master stays OUTSIDE the macro, and the Strip to Master cable is left a plain graph edge,
+deliberately never a macro port.** `spliceMasterNode`/`ensureMasterNode` classify a re-routed feed as
+Mix or Direct by checking whether the connection's SOURCE NODE is itself a `ChannelStripModule`; a
+`MacroOutlet` sitting between the strip and Master would make the source node a `MacroOutlet` and
+defeat that check, which the whole-project sweep below depends on.
+
+`buildDefaultAudioChannel` takes a trailing `sourceRightChannel` parameter (default 1, Track Audio's
+contiguous pair unchanged) so a split-block source passes its own
+`ModuleBase::rightAudioLegChannel()` instead of assuming ch1 — Oscillator and Wavetable's right leg
+is never ch1 (`Source/Modules/CLAUDE.md`).
+
+### An instrument track
+
+"+ Track -> Instrument" opens a submenu of audio-producing MIDI instruments — Oscillator, Wavetable,
+Sampler, **deliberately not every `isMidiInstrumentType()` member**, since Poly MIDI, Sequencer and
+Poly Sequencer generate CV or MIDI rather than audio — and builds Track In, the chosen instrument, and
+the same default chain, in ONE undo step (`MainComponent::addInstrumentTrack`).
+`{Track In, instrument, [Voice Mixer if poly], EQ, Compressor, Strip}` are boxed into one collapsed
+macro; Master stays outside it for the same classification reason.
+
+`synth::addVoiceMixerForPolyInstrument` sums a poly instrument's ch0 to ch7 into a Voice Mixer first,
+gated on the instrument's own live `poly` parameter and **never forced on**: a factory-created
+instrument defaults to poly off, so this branch is a no-op on the default path and exists for when it
+is not. A poly instrument's raw ch0 to ch7 cannot feed `buildDefaultAudioChannel` directly, which
+wants one stereo pair, which is why the Voice Mixer comes first. The full menu, its ids and its
+headless seam are in [`docs/timeline/add-track.md`](../timeline/add-track.md).
+
+### Envelope and VCA for a raw instrument
+
+Oscillator and Wavetable have no envelope of their own, so a held — or even released — note drones
+forever. `synth::addEnvelopeAndVCAForRawInstrument` (`Source/Mixer/ChannelFlows/ChannelFlows.h`)
+inserts an ADSR and a VCA ahead of the rest of the chain:
+`Track In --MIDI--> ADSR --Env--> VCA's Gain CV`, then `chainSource -> VCA Audio -> EQ`.
+
+**Inserted AFTER any Voice Mixer stage, never before it**, and both nodes are forced non-poly
+regardless of the instrument's own `poly` parameter: `ADSRModule`'s poly branch is CV-gate-only — it
+never reads the MIDI note-on and note-off fallback that drives its non-poly branch — so a poly ADSR
+fed only Track In's MIDI would output a permanent zero envelope. ADSR's `sustain` is explicitly set to
+0.7, independently of its own stock default, so this auto-wired chain settles at a musical level;
+VCA's `gain` is overridden to 1.0 so the envelope alone governs level. **Sampler is untouched** — it
+already has its own one-shot playback envelope.
+`{Track In, instrument, [Voice Mixer if poly], ADSR, VCA, EQ, Compressor, Strip}` join the same one
+collapsed macro.
+
+### A poly instrument gets a per-voice envelope
+
+When the instrument's `poly` parameter is on at instrument-track creation time — set
+programmatically, or via the menu's "(Poly)" entries — a **Poly MIDI** node (the existing per-voice
+MIDI-to-CV converter, [`docs/modules/modules.md#poly-midi-module`](../modules/modules.md#poly-midi-module))
+goes between Track In and the instrument instead of raw MIDI, and both ADSR and VCA are genuinely poly
+(`synth::addPolyEnvelopeAndVCAForInstrument`):
+
+```
+Track In --MIDI--> Poly MIDI --Pitch(ch0-7)--> instrument's poly Pitch CV in (ch0-7)
+                    Poly MIDI --Gate(ch8-15)--> ADSR's poly Gate CV in (ch0-7)
+ADSR poly Env (ch0-7) --> VCA's poly Gain CV in (ch8-15, VCAModule::kPolyCVBase)
+instrument's poly Audio L (ch0-7) --> VCA's poly Audio L in (ch0-7)
+```
+
+That gives each voice its own independent envelope instead of one shared mono envelope gating the
+whole poly-voice sum — releasing one voice's note leaves another held voice's envelope untouched,
+which a single shared envelope could never do.
+
+**No separate Voice Mixer is inserted for this case**: the poly VCA already sums all 8 gated voices to
+a stereo-shaped pair itself (ch0 the left sum, ch1 its own legacy duplicate), so
+`addVoiceMixerForPolyInstrument` is skipped entirely when this branch fires. It still fires for a poly
+instrument this does not apply to, such as a poly Sampler. **The instrument's R-octet is deliberately
+NOT wired into the VCA's own Audio R poly block (ch16 to ch23)** — the same known stereo limitation
+`addVoiceMixerForPolyInstrument` documents for the non-envelope poly path.
+`{Track In, instrument, Poly MIDI, ADSR, VCA, EQ, Compressor, Strip}` join the same one collapsed
+macro. The menu's "Oscillator (Poly)" and "Wavetable (Poly)" entries set the new instrument's `poly`
+`AudioParameterBool` via `synth::setProcessorPoly()` before this branch check runs; Sampler has no
+poly parameter and therefore no poly entry.
+
+### A hosted plugin as the instrument
+
+"+ Track -> Instrument -> Plugin" lists the scanned INSTRUMENT plugins
+(`juce::PluginDescription::isInstrument`; effects are filtered out and never offered here). Choosing
+one builds the exact same Track In, instrument, default chain, Master flow, boxed into one collapsed
+macro, as ONE undo step — except the instrument is a hosted `HostedPluginModule` rather than a factory
+module, and **the load is ASYNCHRONOUS**.
+
+`MainComponent::addInstrumentPluginTrack` stages a bare Hosted Plugin module OFF the graph, starts its
+load, and **only opens the undo transaction once `HostedPluginModule::onLoadCompleted` reports
+success** — a completion hook that fires once per load attempt, covering all three exits (publish, an
+outright backend failure, and the over-max refusal inside `publishInstance()`), none of which
+`onInstancePublished`/`onInstanceChanged` alone would catch. **A failed or refused load touches
+neither the graph nor the undo stack.** The staged module is owned by
+`MainComponent::pendingInstrumentPluginLoads_` — **never by a `shared_ptr` looped back through its own
+`onLoadCompleted`, which would keep the object alive forever** — and is torn down on the next
+message-loop turn.
+
+**No ADSR and VCA is added** — a hosted synth has its own envelope — and the shared tail gets that for
+free: it keys the Oscillator, Wavetable and poly branches off the instrument NODE's own `getName()`
+and `poly` parameter, and a `HostedPluginModule` is named "Hosted Plugin" and declares no `poly`
+parameter, so every one of those branches falls through to the plain path automatically.
+
+**`ModuleBase::rightAudioLegChannel()` is read only AFTER the load completes**, since the module's
+real channel count is not known before then. `HostedPluginModule` overrides it from the published
+instance's real output count: ch1 once there are two or more outputs, ch0 duplicated onto both legs
+for a genuinely mono instance. The base class's `hasDualIOParameter()`-gated default would read -1
+forever, since this module never registers a Dual I/O parameter.
+
+**Four rules the picker itself follows.** A click resolves against a SNAPSHOT of the options list
+captured when the menu was built (`TimelinePanelComponent::instrumentPluginMenuSnapshot_`), never by
+re-running the collector at click time, because a background `PluginScanService::runScan` finishing
+between open and click could otherwise resolve the click against a different plugin than the menu
+showed. Every entry's label always carries its format — "Massive (VST3)", "Massive (AU)" — so a VST3
+and an AU build of the same product never show as two identical rows. The picker excludes this app's
+own VST3 and AU build (matched against `synth::branding::kProductName`/`kCompanyName`) so it never
+offers to host itself; the library sidebar is a separate collector and stays unfiltered. And **a load
+still in flight when the document is replaced is dropped rather than landing in the FRESH document**:
+`MainComponent::documentGeneration_` is bumped once per replacement that actually proceeds — never on
+Cancel or a failed Save — `addInstrumentPluginTrack` captures it when the load starts, and
+`onLoadCompleted` compares it before building a track.
+
+### Creating channels in an existing project
+
+**Existing projects open unchanged — no automatic migration on load.** "Create Channels" on the
+"+ Track" menu (`TimelinePanelComponent::kCreateChannelsMenuId`) wraps every channel-less track's
+chain into a strip, as one undo step covering all of them at once.
+
+**Why it lives on the "+ Track" menu.** It acts on every track in the project at once, so it belongs
+beside the project-wide channel-creating actions (Audio Track, Instrument Track) rather than off a
+single track header or a per-column control.
+
+`MainComponent::createChannelsForExistingTracks()` walks `TimelineDoc::getTracks()`, resolves each
+track's own bound node (`bindingUuid`, a "Track Audio" or a "Track In"), and hands every one to
+`GraphEditor::createChannelsForUnchanneledTracks()`, which runs the SAME private
+`maybeAutoCreateChannelAfterConnect` the connect hook uses — the same
+`synth::findUnchanneledOutputFeeds`/`buildChannelForFeeds` pair — once per track inside ONE
+`AppUndoManager::recordGraphTimelineAndMacroChange` transaction. **A track that already reaches a
+`ChannelStripModule` is silently skipped**, untouched rather than re-channeled. The menu entry is
+disabled, and the action is a no-op pushing nothing to the undo stack, when no track needs a channel
+(`hasTracksNeedingChannels()`, the same per-track query short-circuiting on the first hit).
+
+**Two channel-less tracks sharing one unchanneled instrument come out as exactly one channel:** the
+first track's call builds it and removes the exit edges, so the second track's call finds
+`findUnchanneledOutputFeeds` already empty for that instrument and does nothing — no extra
+bookkeeping, since it is the same per-node builder live connects already run.
+
+**Reusing that builder unchanged carries over its macro-boxing rule**, and that has a visible
+consequence: the new EQ, Compressor and Strip only join the source's existing macro when every exit
+source is an ordinary, non-port member of the SAME macro. A genuinely legacy track's node was never a
+macro member at all, so that condition fails and the sweep's new channel ships as loose cards on the
+canvas rather than boxed. That is an accepted consequence of reusing the connect-triggered builder as
+is rather than teaching it a second, legacy-specific boxing path. **The action is also gated
+independently of `autoCreateChannelOnConnectEnabled`** — this is an explicit user action, not a live
+connect, so a legacy project with that preference off still gets working channels from this entry.
+
+**The auto-channel core, for both callers.**
+`synth::findUnchanneledOutputFeeds(graph, start)` (Core, no AppUI, `GraphEditor` or `AppUndoManager`
+dependency) does a forward BFS from the just-connected node over audio AND MIDI edges, **never
+expanding past** a `ChannelStripModule` (already channeled: stop, no exit), a `RecordTapModule`, a
+`MasterModule` or the `AudioGraphIOProcessor` named "Audio Output", and **never traversing INTO a
+hidden `AttenuverterModule`** — a mod or CV leg is not an audio-reaching-the-output path. An "exit" is
+an edge landing on Audio Output ch0 or ch1, Rec Tap ch0 or ch1, or Master's
+`kDirectLeft`/`kDirectRight`; **`kMixLeft`/`kMixRight` are deliberately NOT exits**, since only a
+`ChannelStripModule`'s own output legitimately lands there.
+`synth::buildChannelForFeeds(graph, exits, layout)` **removes every exit edge FIRST**, so
+`spliceMasterNode`'s own "sweep everything already feeding Audio Output or Rec Tap into Master"
+behaviour — run as part of building the chain when no Master exists yet — never re-captures an edge
+this call is about to own, then builds the default chain via the same internal `buildChannelChain`,
+generalised to accept arbitrary left and right feed lists instead of one fixed stereo pair (multiple
+feeds landing on the same side is fine, `AudioProcessorGraph` sums them).
+
+The `GraphEditor` hook gates on the drag being MIDI and the real source node being
+`ModuleType::TimelineMidiSource` (`nodeIsTimelineMidiSource`), covering both the direct-jack path and
+the collapsed-macro-card "existing port jack" path — **not** the
+`createMacroPortFromDroppedCable` fallback, since dropping a cable on a macro's body with no jack
+under it mints a port with no interior leg yet, so there is nothing to search from. **One undo
+transaction wraps macro-port auto-creation, the connection itself and the auto-channel build**, which
+is what `maybeAutoCreateMacroPortsForDrag`'s `recordUndo` parameter exists for
+([`docs/macros/auto-ports.md`](../macros/auto-ports.md#auto-creating-a-port-on-a-drag)).
+
+## New Patch always has an Audio Output
+
+`GraphEditor::newPatch()` seeds a fresh Audio Output immediately after `graph.clear()`, as part of the
+same `recordStructuralChange` undo step — a brand-new empty project is never left with nothing for
+`spliceMasterNode` to target. Without it, a bare Track Audio added to a fresh New Patch was silently
+unheard until the user manually added an Audio Output, and a second track added after that manual fix
+then auto-spliced Master and re-routed the first track's manual wire into it, which read as a
+surprise.
+
+**Scoped to `newPatch()` only.** `AIStateMapper::applyJSONToGraph`'s own `graph.clear()` (preset or
+project load) is unaffected: it always replays a full node set from JSON right after clearing, so it
+is self-correcting as long as the source JSON has an Audio Output, which every factory preset does.
+
+On the very first channel, `MainComponent::addAudioTrack()` also relocates that Audio Output — or any
+bare one the user dropped manually before adding a track — to sit immediately right of the
+newly-spliced Master, once it knows this call is the one that splices Master (checked via
+`synth::findMasterNode` before building the chain). Master already lands right of the chain by design,
+so the row reads `Track Audio -> EQ -> Compressor -> Strip -> Master -> Audio Output` left to right;
+without the move, Audio Output stayed at the newPatch seed's canvas origin while Master jumped to the
+far side of the chain, and the output cable had to run back across the whole canvas. **Only fires the
+first time Master is created** — once it exists, later tracks do not reshuffle the canvas.
+
+## Hosted plugin
+
+Nothing channel-specific. The graph stays flat in both host modes, so a `Master` splice sits in front
+of the output in the app and the plugin alike, and the mixer panel renders inside the plugin editor the
+same way `GraphEditor` already does. The existing rule that an over-wide hosted plugin is **refused,
+never truncated** (`Source/Modules/CLAUDE.md`) is unaffected — a channel strip does not change how a
+hosted plugin's channel count is checked.
+
+## AI authorability
+
+`ChannelStrip` and `Master` are internal-only and are in `kNonAuthorableModuleTypes`
+(`Source/AI/AIStateMapper/AIStateMapperInternal.h`) — a model cannot author either directly, the same
+rule that already governs `TimelineMidiSource`, `Rec Tap` and the macro port types. `validatePatch`
+does not change; per the root `CLAUDE.md` invariant, it is never relaxed to raise an AI pass rate.
+
+**Why a strip in particular cannot be model-authored.** A strip's meaning is the channel the app built
+around it — its shape, its place at the end of a chain, the track it may be linked to — and its solo
+flag rides in trusted extra state, where a model-supplied `soloed=true` would silence the whole mix
+render-wide. A model-authored second `Master` would split the mix and defeat the solo gate on Direct.
+
+If the goal becomes "the AI can build a channel", the correct shape is an app-side **tool or action**
+— "create channel" — that the model invokes and the app executes against a validated node set, never a
+patch key the model writes directly. This mirrors the same resolution
+[`docs/macros/macros.md`](../macros/macros.md#ai-authorability) reached for "the AI can build a
+macro".
 
 ## Related
 
-- [`docs/macros.md`](macros.md) — the macro container a channel is optionally boxed in; the
-  proxy-port and internal-only-node precedents this design follows.
-- [`docs/timeline/tracks.md`](timeline/tracks.md) — track headers, M/S controls, the
-  timeline side of the track/channel relationship.
-- [`docs/architecture/architecture.md`](architecture/architecture.md) — `ensureMasterRecordTap()`, `EpochExchange`, the
-  bypass/mute contract, plugin host modes.
-- [`docs/modules/modules.md#channel-strip-module-mixer-channel-hidden`](modules/modules.md#channel-strip-module-mixer-channel-hidden) — `kRightBase`, the stereo-pair conventions a `ChannelStrip`'s
-  output follows, `VoiceMixerModule` (see also [`docs/modules/modules.md#voice-mixer-module`](modules/modules.md#voice-mixer-module)).
-- [`docs/layout/colour-overrides.md`](layout/colour-overrides.md#colour-picker-popup) — `ColourPickerPopup`'s preview/commit split, the mechanism
-  the track/channel colour link (§5.2) fans out over three targets.
+- [`docs/macros/macros.md`](../macros/macros.md) — the macro container a channel is optionally boxed
+  in, and the proxy-port and internal-only-node precedents this design follows.
+- [`docs/timeline/tracks.md`](../timeline/tracks.md) — track headers, M and S controls, the timeline
+  side of the track and channel relationship.
+- [`docs/timeline/add-track.md`](../timeline/add-track.md) — the "+ Track" menu and every flow it
+  starts.
+- [`docs/architecture.md`](../architecture.md) — `ensureMasterRecordTap()`, `EpochExchange`, the
+  bypass and mute contract, plugin host modes.
+- [`docs/modules/modules.md#channel-strip-module-mixer-channel-hidden`](../modules/modules.md#channel-strip-module-mixer-channel-hidden)
+  — `kRightBase`, the stereo-pair conventions a strip's output follows, and
+  [`docs/modules/modules.md#voice-mixer-module`](../modules/modules.md#voice-mixer-module).
+- [`docs/layout/colour-overrides.md#colour-picker-popup`](../layout/colour-overrides.md#colour-picker-popup)
+  — `ColourPickerPopup`'s preview and commit split, the mechanism the track and channel colour link
+  fans out.
+- [`docs/shortcuts.md`](../shortcuts.md) — "Locate Master" and the mixer's own key bindings.
