@@ -38,10 +38,17 @@ synth::theme::Icon iconForEditTool(synth::ui::EditTool tool) noexcept {
 //==============================================================================
 // ---- Edit-tool strip ----
 
+// The six buttons are built in the constructor, unconditionally (a headless build simply has no
+// icon to draw in them). Exposed so a test can click one rather than synthesise a key press.
 juce::DrawableButton* TimelinePanelComponent::getToolButton(EditTool tool) const noexcept {
     return toolButtons_[(std::size_t)tool].get();
 }
 
+// Owned here (rather than by the clip-lane area or the roll individually) because the two share a
+// rect -- only one is ever visible -- and a tool row that changed meaning depending on which
+// editor happened to be showing would be a trap. Setting it pushes the tool into BOTH editors and
+// lights the matching strip button; the number keys (1/3/4/5/7/8) and the buttons are the two ways
+// a user reaches it.
 void TimelinePanelComponent::setActiveTool(EditTool tool) {
     activeTool_ = tool;
     // Both editors, always — they share the lanes rect and swap at will, so a tool that only
@@ -85,8 +92,22 @@ void TimelinePanelComponent::applyToolStripTheme() {
     }
 }
 
+// The one thing this panel needs to redo on a theme switch (every other colour it uses is read at
+// paint time through the same dynamic_cast) -- a theme switch re-tints every icon and can move the
+// `toolActive` token, and both live in the LnF rather than in a per-button copy.
 void TimelinePanelComponent::lookAndFeelChanged() { applyToolStripTheme(); }
 
+// The complement to lookAndFeelChanged() above: re-applies the tool-strip icons whenever this
+// component's ANCESTOR CHAIN changes, not just when its resolved LookAndFeel does. A themed
+// LookAndFeel change (setLookAndFeel/sendLookAndFeelChange) only reaches components that are
+// ALREADY attached as children at the moment it fires; the plugin editor calls
+// setLookAndFeel(&processor.getLookAndFeel()) on itself BEFORE it adds its MainComponent (and this
+// panel, several levels further down) as a child -- see AgentSynthPluginEditor's constructor -- so
+// that notification never reaches an unattached TimelinePanelComponent, and its constructor-time
+// applyToolStripTheme() call found no themed LookAndFeel on the ancestor chain yet either. When the
+// panel IS attached moments later (addAndMakeVisible), JUCE fires parentHierarchyChanged() down the
+// newly-added subtree -- not lookAndFeelChanged() -- so this is the one hook guaranteed to run at
+// that point. Idempotent and cheap either way.
 void TimelinePanelComponent::parentHierarchyChanged() { applyToolStripTheme(); }
 
 //==============================================================================
@@ -147,6 +168,8 @@ void TimelinePanelComponent::closeAutomationStrip() {
     repaint();
 }
 
+// Existing lanes first (in track order then lane order), then "Add lane..." entries -- index i is
+// menu id i + 1, the same convention TimelineTrackHeaderComponent::collectBindingOptions() uses.
 std::vector<TimelinePanelComponent::AutomationLaneOption> TimelinePanelComponent::collectAutomationLaneOptions() const {
     std::vector<AutomationLaneOption> options;
     if (doc_ == nullptr)

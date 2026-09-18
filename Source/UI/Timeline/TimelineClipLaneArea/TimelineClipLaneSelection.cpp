@@ -37,6 +37,9 @@ std::optional<std::pair<double, double>> TimelineClipLaneArea::getSelectedClipSp
     return std::make_pair(start, end);
 }
 
+// Same panel-scoped Delete/Escape/P idiom as GraphEditor. This is only the local half of
+// cross-panel key arbitration — MainComponent::resolveEditSurface decides which panel's
+// keyPressed even gets called.
 bool TimelineClipLaneArea::keyPressed(const juce::KeyPress& key) {
     // P = loop the selection (Cubase's locators-to-selection). Rebindable through
     // "timelineLoopSelection" but NOT a command: it is resolved right here, on the surface that

@@ -11,6 +11,32 @@
 
 namespace synth {
 
+// T184 (P9-3c, docs/mixer.md §5.2 "main workflow"): BFS forward from `start`, following every
+// outgoing graph edge (audio AND MIDI — an `AudioProcessorGraph::Connection` is always one or the
+// other), to find every point where `start`'s own signal path reaches the output WITHOUT already
+// passing through a `ChannelStripModule`. Each such point is returned as the exact `Connection`
+// that crosses it — the caller (buildChannelForFeeds below) removes those edges and rebuilds a
+// channel from their sources.
+//
+// Traversal rules:
+//   - Never enter an `AttenuverterModule` node — `AudioEngine::addModRouting` always wraps a
+//     hidden modulation leg in one of these; its own outgoing edge is a mod-CV destination
+//     parameter, not part of `start`'s audio/MIDI signal path, and is neither traversed nor
+//     itself an exit.
+//   - Never expand PAST a `ChannelStripModule` — that branch already terminates in a channel, so
+//     nothing downstream of it is `start`'s to claim. Not an exit either (it is not one of the
+//     three terminal types below).
+//   - Never expand past a terminal: Audio Output (`juce::AudioGraphIOProcessor` named "Audio
+//     Output"), `RecordTapModule`, or `MasterModule`. An edge landing on one of these IS an exit
+//     when it lands on the right channel — Audio Output/Rec Tap ch0/ch1, or Master's
+//     `kDirectLeft`/`kDirectRight` (its ALREADY-channeled `kMixLeft`/`kMixRight` inputs are never
+//     an exit — they can only be fed by an existing strip's own output, which this BFS never
+//     reaches, having stopped at the strip).
+//   - Every other node (an instrument, an FX module, a macro port pass-through, ...) is just
+//     traversed through, exactly like any other hop in the chain.
+//
+// Cycle-safe (a visited-node set). Core cannot depend on AppUndoManager/GraphEditor, which is why
+// this stays a pure query with no graph mutation (see ChannelFlows.h's declaration comment).
 std::vector<juce::AudioProcessorGraph::Connection> findUnchanneledOutputFeeds(juce::AudioProcessorGraph& graph,
                                                                               juce::AudioProcessorGraph::NodeID start) {
     std::vector<juce::AudioProcessorGraph::Connection> exits;
@@ -30,7 +56,7 @@ std::vector<juce::AudioProcessorGraph::Connection> findUnchanneledOutputFeeds(ju
             continue;
 
         // Never expand PAST a terminal, an already-channeled branch, or a hidden modulation hop —
-        // see the header comment for why each of these stops traversal here.
+        // see above for why each of these stops traversal here.
         if (dynamic_cast<RecordTapModule*>(processor) != nullptr || dynamic_cast<MasterModule*>(processor) != nullptr ||
             dynamic_cast<ChannelStripModule*>(processor) != nullptr ||
             dynamic_cast<AttenuverterModule*>(processor) != nullptr || processor->getName() == "Audio Output")
@@ -47,7 +73,7 @@ std::vector<juce::AudioProcessorGraph::Connection> findUnchanneledOutputFeeds(ju
             if (destProcessor == nullptr)
                 continue;
 
-            // A hidden modulation hop: never traversed, never an exit (see header comment).
+            // A hidden modulation hop: never traversed, never an exit (see above).
             if (dynamic_cast<AttenuverterModule*>(destProcessor) != nullptr)
                 continue;
 
@@ -83,6 +109,7 @@ std::vector<juce::AudioProcessorGraph::Connection> findUnchanneledOutputFeeds(ju
     return exits;
 }
 
+// (GraphEditor::endConnectionDrag's T184 hook is today's only caller of this function.)
 DefaultChannel buildChannelForFeeds(juce::AudioProcessorGraph& graph,
                                     const std::vector<juce::AudioProcessorGraph::Connection>& exits,
                                     const DefaultChannelLayout& layout) {
@@ -104,6 +131,10 @@ DefaultChannel buildChannelForFeeds(juce::AudioProcessorGraph& graph,
     for (const auto& exit : exits)
         graph.removeConnection(exit);
 
+    // Each exit's original source now feeds the new channel's EQ input instead; AudioProcessorGraph
+    // sums multiple sources landing on the same input channel, so more than one exit landing on the
+    // same side (e.g. two separate Direct feeds) still sums exactly as it did before, just one hop
+    // later — the sound does not change.
     return buildChannelChain(graph, leftFeeds, rightFeeds, layout);
 }
 

@@ -34,18 +34,36 @@ void AIIntegrationService::setProvider(std::unique_ptr<AIProvider> newProvider) 
         provider->setRequestTimeoutMs(currentRequestTimeoutMs);
 }
 
+// Stored regardless of whether a provider is currently installed — setProvider() re-pushes it to
+// whatever provider it installs next, mirroring the model-discovery re-push contract documented
+// for this class (see docs/AI_Engine_chat_component.md "Model Discovery Ordering Contract"):
+// AIChatComponent/AccountService can be wired up before MainComponent::initialiseCommon() installs
+// the real provider, so a value set first must not be lost.
 void AIIntegrationService::setAuthToken(const juce::String& token) {
     currentAuthToken = token;
     if (provider)
         provider->setAuthToken(currentAuthToken);
 }
 
+// Same re-push contract as setAuthToken(): stored regardless of whether a provider is currently
+// installed, and setProvider() re-pushes it to whatever provider it installs next. Normally
+// callers don't need to call this directly — sendMessage() captures a non-empty
+// AIResponse::conversationId from a successful response and stores/re-pushes it itself, so the
+// next call in the session continues the same server-side thread. AIChatComponent calls this
+// directly only to CLEAR it (empty string) when the active plan isn't Pro, so a stale id from an
+// earlier Pro session isn't sent to a since-downgraded account.
 void AIIntegrationService::setConversationId(const juce::String& id) {
     currentConversationId = id;
     if (provider)
         provider->setConversationId(currentConversationId);
 }
 
+// Same re-push contract as setAuthToken()/setConversationId(): stored regardless of whether a
+// provider is currently installed, and setProvider() re-pushes it (unconditionally, since unlike a
+// token or conversation id there's always a meaningful value) to whatever provider it installs
+// next — otherwise a provider swap would silently fall back to that provider's own hardcoded
+// default, re-introducing the exact drift this value exists to prevent (see
+// docs/AI_Engine_chat_component.md, request timeout section).
 void AIIntegrationService::setRequestTimeoutMs(int timeoutMs) {
     currentRequestTimeoutMs = timeoutMs;
     if (provider)

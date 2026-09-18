@@ -65,6 +65,10 @@ constexpr float kMarkerLaneStemAlpha = 0.40f;
 constexpr int kFollowPlayheadButtonWidth = 30;
 } // namespace
 
+// Restores/persists the snap-selector choice under the "timelineSnap" key, same pattern as
+// AIChatComponent::setAccountService()'s non-owning setter. Also hands the roll its
+// PropertiesFile (pianoRoll_.setPropertiesFile -- scale-panel visibility + user scales) and runs
+// reloadPianoRollAppearancePrefs() once, below.
 void TimelinePanelComponent::setApplicationProperties(juce::ApplicationProperties* props) {
     appProperties_ = props;
     // Forwarded even when there is no user-settings file: both of these degrade to "in-memory
@@ -96,8 +100,9 @@ void TimelinePanelComponent::setApplicationProperties(juce::ApplicationPropertie
     followPlayheadButton_.setToggleState(followPlayhead_, juce::dontSendNotification);
     pianoRoll_.setFollowPlayhead(followPlayhead_);
 
-    // A pure forward — the transport bar owns and persists its own two keys. See this
-    // method's header comment.
+    // A pure forward -- the transport bar restores/persists ITS OWN two keys
+    // ("timelineMetronomeEnabled", "timelineCountInBars") -- this panel has no other reason to know
+    // either setting exists, so it is a pure forward, not a third copy of the restore/persist idiom.
     transportBar_.setApplicationProperties(props);
 
     // Scale-panel visibility + user scales are the ROLL's own PropertiesFile-backed state (see
@@ -106,6 +111,9 @@ void TimelinePanelComponent::setApplicationProperties(juce::ApplicationPropertie
     reloadPianoRollAppearancePrefs();
 }
 
+// Called once from setApplicationProperties, and left public so a live settings change (the
+// Preferences tab's key-labels toggle, a note-colour edit) can re-push without a restart --
+// MainComponent wires that in a parallel task; this method itself does no listening of its own.
 void TimelinePanelComponent::reloadPianoRollAppearancePrefs() {
     if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
         return;
@@ -118,6 +126,12 @@ void TimelinePanelComponent::reloadPianoRollAppearancePrefs() {
     pianoRoll_.setNoteColourOverrides(synth::ui::loadNoteColourOverrides(settings));
 }
 
+// Exactly what picking a division from the snap combo does now: the combo's onChange delegates
+// here, so the combo, the shortcut layer and cycleSnapValue() share one path to the view state,
+// one persist and one set of repaints. Like the combo, it re-arms the master snap switch (see
+// setSnapEnabled): asking for a division means "snap to THIS", and choosing Snap::Off is how you
+// ask for no grid from here. Also feeds TimelineViewState::lastMusicalSnap, which is what
+// cycleSnapValue's from-Off rule reads.
 bool TimelinePanelComponent::setSnapValue(TimelineViewState::Snap value) {
     const bool changed = viewState_.snap != value;
     viewState_.setSnap(value);
@@ -134,6 +148,17 @@ bool TimelinePanelComponent::setSnapValue(TimelineViewState::Snap value) {
     return changed;
 }
 
+// Two rules, both chosen for how they feel under a held-down key rather than for symmetry:
+//
+// - CLAMPED at both ends, never wrapping. Leaning on "finer" and parking at 1/128 is what the hand
+//   expects; wrapping silently back to Bar mid-flow moves every subsequent edit onto a 64x coarser
+//   grid, and the user finds out from the result, not from the keypress.
+// - Snap::Off is never a stop on the cycle -- turning magnetism off stays the Q key's job. So
+//   cycling FROM Off (in either direction, one simple rule) enters at
+//   TimelineViewState::lastMusicalSnap, the last division the user actually chose, falling back
+//   to Snap::Bar if there somehow isn't one. "Either direction" is deliberate: from Off there is
+//   no current position for "one finer" to be relative to, so the only honest answer is "back
+//   where you were".
 bool TimelinePanelComponent::cycleSnapValue(int direction) {
     using Snap = TimelineViewState::Snap;
     if (direction == 0)
@@ -171,6 +196,12 @@ void TimelinePanelComponent::persistSnapChoice() {
     appProperties_->saveIfNeeded();
 }
 
+// A toggle next to snapToggleButton_ (same external-state pattern: setClickingTogglesState(false),
+// the shared bool is the truth, the button only mirrors it). Default OFF -- an editor that
+// silently starts scrolling under a user who never asked for it is worse than one that doesn't.
+// Also forwards straight into pianoRoll_.setFollowPlayhead(enabled) -- one flag, one switch, for
+// both the arrangement view and the roll -- including from the setApplicationProperties restore
+// path.
 void TimelinePanelComponent::setFollowPlayheadEnabled(bool enabled) {
     followPlayhead_ = enabled;
     followPlayheadButton_.setToggleState(enabled, juce::dontSendNotification);
@@ -185,20 +216,32 @@ void TimelinePanelComponent::persistFollowPlayheadChoice() {
     appProperties_->saveIfNeeded();
 }
 
+// JUCE hands us pre-flipped wheel deltas (see ScrollPolicy.h), so this is a second, deliberate
+// flip and not a re-application of the OS setting. Not persisted here: the owner (Preferences)
+// decides whether a preference exists, the same way it owns the timeline's other opt-in
+// behaviours.
 void TimelinePanelComponent::setScrollInverted(bool inverted) noexcept {
     scrollInverted_ = inverted;
-    // Keep the roll in step — see this setter's header comment. It runs its OWN plain-scroll
-    // branches (PianoRollComponent::mouseWheelMove), so a preference set on the panel chrome must
-    // reach it directly rather than through anything shared like TimelineViewState.
+    // Keep the roll in step. It runs its OWN plain-scroll branches (PianoRollComponent::
+    // mouseWheelMove), so a preference set on the panel chrome must reach it directly rather than
+    // through anything shared like TimelineViewState.
     pianoRoll_.setScrollInverted(inverted);
 }
 
+// mouseWheelMove derives the physical gesture direction via synth::ui::wheelGestureIsUpward
+// (isReversed-aware, unlike a raw delta sign -- see ScrollPolicy.h) and XORs it with this flag, so
+// flipping the preference flips the sense of BOTH axes at once rather than requiring two separate
+// settings. Not persisted here -- see setScrollInverted's comment above.
 void TimelinePanelComponent::setZoomScrollInverted(bool inverted) noexcept {
     zoomScrollInverted_ = inverted;
     pianoRoll_.setZoomScrollInverted(inverted); // same forwarding reason as setScrollInverted above
 }
 
 //==============================================================================
+// Implemented once here (rather than separately on the ruler) so the ruler and the lanes grid
+// share identical behaviour -- JUCE bubbles an unhandled wheel event from the ruler child up to
+// this override. No platform branch is needed for the zoom modifier: mods.isCommandDown() already
+// resolves to Cmd on macOS and Ctrl everywhere else, so never add an #ifdef here.
 void TimelinePanelComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) {
     // Reproject into the ruler's coordinate space regardless of whether the event originated on
     // this component or bubbled up from the ruler child — both share the same x == 0 origin as
@@ -268,6 +311,8 @@ void TimelinePanelComponent::mouseMagnify(const juce::MouseEvent& e, float scale
 }
 
 //==============================================================================
+// Cmd+wheel, trackpad pinch and zoomTimelineHorizontal() all land here, so the clamp behaviour and
+// the repaint set are shared rather than copied three times.
 void TimelinePanelComponent::zoomHorizontalAroundX(double factor, double anchorX) {
     if (!std::isfinite(factor) || factor <= 0.0)
         return;
@@ -289,16 +334,24 @@ double TimelinePanelComponent::visibleCentreYInLanes() const noexcept {
     return (double)gridLanesBounds_.getHeight() * 0.5;
 }
 
+// Runs through the same TimelineViewState::zoomAroundX + repaint path as Cmd+wheel and the
+// trackpad pinch -- one path, so a shortcut zoom and a wheel zoom can never drift apart in
+// clamping or in what they repaint. Keeps the music in front of you put, since it zooms around the
+// centre of what's visible rather than an arbitrary point.
 void TimelinePanelComponent::zoomTimelineHorizontal(double factor) {
     zoomHorizontalAroundX(factor, visibleCentreXInRuler());
 }
 
+// Same zoomTrackRows path -- including the header-column relayout and the scroll re-clamp -- that
+// Cmd+Shift+wheel and Shift+pinch use.
 void TimelinePanelComponent::zoomTimelineVertical(double factor) {
     if (!std::isfinite(factor) || factor <= 0.0)
         return;
     zoomTrackRows(factor, visibleCentreYInLanes());
 }
 
+// The SAME value TimelineClipLaneArea::getRowHeight computes, duplicated only because the two
+// components resolve their LookAndFeel independently.
 int TimelinePanelComponent::currentRowHeight() const {
     int base = TimelineTrackHeaderComponent::kRowHeight;
     if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
@@ -646,13 +699,19 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
     }
 }
 
-// T159: focus-region outline (Source/UI/Layout/FocusRegion.h) -- see the paintOverChildren declaration's
-// comment in the header for why this can't just be tacked onto the end of paint() above.
+// T159: focus-region outline (Source/UI/Layout/FocusRegion.h), drawn OVER children -- the ruler,
+// track header viewport, transport bar and clip lane area all tile wall-to-wall against this
+// panel's own edge, so an outline painted at the end of paint() above would sit UNDER them and
+// never show.
 void TimelinePanelComponent::paintOverChildren(juce::Graphics& g) { synth::ui::paintFocusRegionOutline(*this, g); }
 
 //==============================================================================
 // ---- Top-edge resize handle ----
 
+// The drag is measured in SCREEN coordinates against the panel's bottom edge, not as a delta: the
+// owner moves the panel's top edge under the cursor on every callback, so a component-relative
+// delta would chase itself. Both callbacks report the panel's DESIRED height; clamping belongs to
+// the owner.
 TimelinePanelComponent::ResizeHandle::ResizeHandle(TimelinePanelComponent& owner)
     : owner_(owner) {
     setMouseCursor(juce::MouseCursor::UpDownResizeCursor);

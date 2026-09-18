@@ -1,0 +1,54 @@
+# Headers over the comment-placement threshold. STRICT ratchet: an entry is the exact
+# current EXCESS (comment lines minus code lines). A header may never grow its excess past
+# its entry; when it shrinks, run `bash scripts/check-header-comments.sh --update` so the
+# entry tightens; once it reads as compliant the entry must be removed (--update does that).
+# Never add a NEW header here -- relocate its comments beside their out-of-line definitions
+# instead. Adding a member with its own short one-line caller-facing contract in the header
+# (+1 comment, +1 code) never moves excess, so it never trips this ratchet.
+44 Source/AI/AIIntegrationService/AIIntegrationService.h
+24 Source/AI/AIProvider.h
+110 Source/AI/AIStateMapper/AIStateMapper.h
+2 Source/AI/AccountService.h
+30 Source/AI/PatchDiff.h
+25 Source/AI/RemoteProvider.h
+137 Source/AppUndoManager.h
+140 Source/AudioEngine/AudioEngine.h
+50 Source/MacroSet.h
+103 Source/Mixer/ChannelFlows/ChannelFlows.h
+26 Source/Mixer/MixerModel/MixerModel.h
+49 Source/Mixer/TrackPresetManager.h
+45 Source/Modules/RecordTapModule.h
+38 Source/Plugin/Hosting/HostedPluginBackend.h
+81 Source/Plugin/Hosting/HostedPluginModule.h
+147 Source/Plugin/Hosting/PluginScanService.h
+60 Source/ProjectBundle.h
+56 Source/SnippetManager.h
+53 Source/Timeline/AssetManager.h
+118 Source/Timeline/AudioClipStreamer.h
+52 Source/Timeline/AutomationApplier.h
+44 Source/Timeline/AutomationBinding.h
+12 Source/Timeline/AutomationRecorder.h
+34 Source/Timeline/MidiClipFile.h
+33 Source/Timeline/MidiRecorder.h
+33 Source/Timeline/PeaksFile.h
+126 Source/Timeline/TimelineDoc/TimelineDoc.h
+40 Source/Timeline/TimelineOps.h
+49 Source/Timeline/TimelineValidator.h
+36 Source/Transport/BounceExporter.h
+27 Source/Transport/OfflineTransportDriver.h
+1 Source/Transport/TransportService.h
+62 Source/UI/Assistant/AIChatComponent/AIChatComponent.h
+41 Source/UI/Chrome/StatusBarComponent.h
+66 Source/UI/Graph/ModuleComponent/ModuleComponent.h
+1 Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.h
+125 Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h
+70 Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h
+24 Source/UI/Mixer/MeterColourStops.h
+30 Source/UI/Mixer/MixerDockComponent.h
+15 Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.h
+22 Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h
+84 Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h
+96 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h
+24 Source/UI/Timeline/TimelinePlayheadOverlay.h
+43 Source/UI/Timeline/TimelineRulerComponent.h
+138 Source/UI/Timeline/TimelineTrackHeaderComponent.h

@@ -47,6 +47,17 @@ bool isChannelMacro(const Macro& macro, juce::AudioProcessorGraph& graph) {
     return false;
 }
 
+// Seeds from every connection landing on a member of `channelMacroId` whose SOURCE is not itself a
+// member (this scans every member's incoming edges rather than only the macro's own ports, which
+// subsumes the ported case for free and also catches a boundary crossing with T148 auto-porting
+// off). From each seed, walks further upstream along every incoming edge to a fixpoint
+// (visited-set, cycle-safe): an Attenuverter on the path IS entered (unlike planMakeChannel's
+// FORWARD walk, which never enters one — here the modulator behind it is invisible otherwise) but
+// never itself added to the result, since it is rebuilt from "modulations" on import, same as
+// every other snippet/macro-port case. The walk stops at, and never adds, another channel's own
+// Channel Strip, or any member of a DIFFERENT macro that is itself a channel (isChannelMacro) — a
+// node reached only through such a boundary is that other channel's business, not this preset's; a
+// node in some third, non-channel macro (a plain FX group) is captured normally.
 std::vector<NodeID> collectOutsideModulatorsForTrackPreset(juce::AudioProcessorGraph& graph, const MacroSet& macros,
                                                            const juce::String& channelMacroId) {
     std::vector<NodeID> result;
@@ -61,7 +72,7 @@ std::vector<NodeID> collectOutsideModulatorsForTrackPreset(juce::AudioProcessorG
     const auto connections = graph.getConnections();
 
     // Step 1 (seed set): every connection landing on a member whose SOURCE is not itself a
-    // member — see the class comment for why this scans every member's incoming edges rather
+    // member — see above for why this scans every member's incoming edges rather
     // than only the macro's own ports.
     std::vector<NodeID> frontier;
     for (const auto& c : connections)

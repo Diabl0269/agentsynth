@@ -27,6 +27,8 @@ juce::String shortPluginFormatLabel(const juce::String& format) {
 }
 } // namespace
 
+// Handed to every track header (and driven by the "+ MIDI Track" button), so the header column's
+// whole conversation with the app goes through one seam.
 void TimelinePanelComponent::setTrackHeaderHost(TrackHeaderHost* host) {
     trackHeaderHost_ = host;
     // Headers are constructed with the host, so any that already exist have to be rebuilt against
@@ -41,11 +43,12 @@ void TimelinePanelComponent::setTrackHeaderHost(TrackHeaderHost* host) {
         stopTimer();
 }
 
-// FRO14: one tick for every header's channel chip. Unconditional iteration, deliberately GATED
-// repaints: TimelineTrackHeaderComponent::tickChannelMeter() only repaints when the drawn level
-// actually moved (ChannelChipComponent::kMeterRepaintThreshold), which is the same shape
-// ModuleComponent's own 15 Hz meter poll uses. A header whose track reaches no channel has no chip
-// visible and costs a bool read.
+// FRO14: ONE shared 15 Hz timer for every header row's channel chip -- never one per row (up to
+// TimelineDoc::kMaxTracks of them). Unconditional iteration, deliberately GATED repaints:
+// TimelineTrackHeaderComponent::tickChannelMeter() only repaints when the drawn level actually
+// moved (ChannelChipComponent::kMeterRepaintThreshold), which is the same shape ModuleComponent's
+// own 15 Hz meter poll uses -- so this is not an unconditional per-tick repaint (Source/UI/
+// CLAUDE.md). A header whose track reaches no channel has no chip visible and costs a bool read.
 void TimelinePanelComponent::timerCallback() {
     // The panel is hidden by setVisible(false) when the user closes it (MainComponentPanels), and
     // the timer runs from setTrackHeaderHost onwards regardless -- so the cheapest gate of all is
@@ -57,6 +60,9 @@ void TimelinePanelComponent::timerCallback() {
             header->tickChannelMeter();
 }
 
+// The headless test seam for a menu that never runs in a test process -- the same split
+// TimelineTrackHeaderComponent's binding and context menus use (applyBindingMenuChoice /
+// applyContextMenuChoice).
 void TimelinePanelComponent::applyAddTrackMenuChoice(int menuId) {
     // Marker first: it is the one entry that needs no TrackHeaderHost (a marker is document data
     // with no graph node behind it), so it must not be gated on the host check below.
@@ -146,12 +152,19 @@ juce::uint32 TimelinePanelComponent::defaultMarkerColourArgb() const {
     return synth::Marker{}.colourArgb; // headless: the model's own amber default
 }
 
+// Used to POPULATE the menu (buildAddTrackMenu(), which also snapshots the result into
+// instrumentPluginMenuSnapshot_) and by tests inspecting what the menu would currently show. NOT
+// used to resolve a click -- applyAddTrackMenuChoice reads the snapshot instead.
 std::vector<synth::PluginIdentity> TimelinePanelComponent::collectInstrumentPluginMenuOptions() const {
     if (trackHeaderHost_ == nullptr)
         return {};
     return trackHeaderHost_->getInstrumentPluginOptions();
 }
 
+// Same `juce::PopupMenu::MenuItemIterator` pattern MacroPortWidgetTests.cpp/
+// MacroContainerTests.cpp use elsewhere -- unlike those, no context-menu hook is needed here
+// because this menu was already a pure builder call away from showMenuAsync(), nothing to
+// intercept.
 juce::PopupMenu TimelinePanelComponent::buildAddTrackMenu() {
     if (trackHeaderHost_ != nullptr)
         trackHeaderHost_->ensureInstrumentPluginsScanned();
@@ -231,6 +244,12 @@ juce::PopupMenu TimelinePanelComponent::buildAddTrackMenu() {
     return menu;
 }
 
+// Protected virtual for the same display-less-runner reason as
+// `TimelineRulerComponent::openMarkerContextMenu`: a real menu window needs a display to be
+// positioned on, and JUCE dereferences a null one on a headless CI runner. No test reaches this
+// today (they all drive `applyAddTrackMenuChoice` directly, which is the documented headless
+// seam), but a test that clicked the button would crash exactly the way the marker menu did -- so
+// the override point exists before someone writes that test.
 void TimelinePanelComponent::openAddTrackMenu() {
     juce::PopupMenu menu = buildAddTrackMenu();
 
@@ -342,7 +361,9 @@ void TimelinePanelComponent::syncTrackHeaders() {
         header->onFocusMoveRequested = [this](int direction) { moveFocusedTrack(direction); };
         // T166: whole-row drag-to-reorder — see TimelineTrackHeaderComponent::onRowDragStarted's
         // own comment for the division of labour (the row detects the gesture, this panel resolves
-        // screen Y against the ordered header list).
+        // screen Y against the ordered header list). The row hands us raw screen Y rather than
+        // computing an insertion index itself because it doesn't know where its siblings are;
+        // trackHeaderList_.headers is the ordered list and this panel is the one place that owns it.
         header->onRowDragStarted = [this, trackId](int screenY) { beginTrackDrag(trackId, screenY); };
         header->onRowDragged = [this](int screenY) { updateTrackDrag(screenY); };
         header->onRowDragEnded = [this](int screenY) { endTrackDrag(screenY); };
@@ -383,6 +404,10 @@ void TimelinePanelComponent::layoutTrackHeaders() {
         trackHeaderList_.headers.getUnchecked(i)->setBounds(0, i * rowHeight, width, rowHeight);
 }
 
+// The row itself is the real focus target (TimelineTrackHeaderComponent::setWantsKeyboardFocus);
+// focusedTrackIndex_ exists so Up/Down and ensureTrackVisible() below have somewhere to read
+// "where am I" without walking the component tree asking each row whether it
+// hasKeyboardFocus(true) (which is also unreliable headlessly with no native peer).
 void TimelinePanelComponent::setFocusedTrack(synth::TrackId id) {
     for (int i = 0; i < trackHeaderList_.headers.size(); ++i) {
         if (trackHeaderList_.headers.getUnchecked(i)->getTrackId() == id) {
@@ -393,6 +418,9 @@ void TimelinePanelComponent::setFocusedTrack(synth::TrackId id) {
     focusedTrackIndex_ = -1; // id no longer resolves (deleted between the click and this call)
 }
 
+// Nothing focused yet starts at row 0 either direction (there is no "current position" for a
+// relative step to be relative TO); otherwise CLAMPS at the ends rather than wrapping, matching
+// cycleSnapValue's own "a held key parks at the end" rule.
 void TimelinePanelComponent::moveFocusedTrack(int direction) {
     const int count = trackHeaderList_.headers.size();
     if (count == 0)
@@ -404,6 +432,11 @@ void TimelinePanelComponent::moveFocusedTrack(int direction) {
     ensureTrackVisible(focusedTrackIndex_);
 }
 
+// Computed against viewState_.trackScrollY + trackHeaderViewport_.getMaximumVisibleHeight() rather
+// than trackHeaderViewport_.getViewArea() -- the latter is a cached snapshot (lastVisibleArea) that
+// is only correct after a layout round trip and reads zero-height before the panel has ever been
+// sized, where trackScrollY is the one value every other scroll/zoom writer in this class already
+// treats as ground truth (see syncTrackScroll()).
 void TimelinePanelComponent::ensureTrackVisible(int index) {
     if (!juce::isPositiveAndBelow(index, trackHeaderList_.headers.size()))
         return;
@@ -498,6 +531,13 @@ void TimelinePanelComponent::endTrackDrag(int screenY) {
         mutate();
 }
 
+// T166: also draws the track-reorder drop indicator, in paintOverChildren() rather than paint() --
+// the header rows are children painted AFTER this component, and each fills its own bounds
+// (TimelineTrackHeaderComponent::paint()'s g.fillAll(colours.surface)), so a line drawn in paint()
+// would be painted over at every interior row boundary. Same trap this file already documents
+// twice (TimelineTrackHeaderComponent::paintOverChildren, TimelinePanelComponent::
+// paintOverChildren). Needs the owner's drag state (dragInsertionIndex_) and row height, so this
+// holds a reference to the owning panel.
 void TimelinePanelComponent::TrackHeaderList::paintOverChildren(juce::Graphics& g) {
     if (owner_.dragInsertionIndex_ < 0)
         return;

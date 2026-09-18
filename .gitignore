@@ -37,6 +37,7 @@ coverage/
 !scripts/file-size-baseline.txt
 !scripts/function-size-baseline.txt
 !scripts/docs-baseline.txt
+!scripts/header-comment-baseline.txt
 .claudignore
 .gemini/
 .claude/settings.local.json

@@ -15,6 +15,23 @@
 
 namespace synth {
 
+// TimelineOps protocol notes (TimelineOps.h carries the caller-facing summary and per-member
+// contracts; this is the detail).
+//
+// Trust posture is identical to a patch card: validate() runs untrusted, previewText is shown to
+// the user, and only an explicit Apply click leads to apply() — nothing here is ever applied
+// because a model asked for it. AIStateMapper::validatePatch(trusted=false) still refuses a
+// "timeline" key inside patch JSON and always will (see docs/AI_Engine_patch_safety.md §5c "the
+// two-door model") — timeline data reaches the app through this door or not at all. Because
+// "timelineOps" is a different key from "timeline", a response may legitimately carry a patch and
+// an ops envelope side by side; each is validated and applied by its own gate, with its own Apply
+// affordance.
+//
+// The per-op checks throughout this file are validateTimeline's, reused rather than restated:
+// same caps, same bounds, and the same rule that untrusted input is REJECTED where a trusted path
+// would clamp or repair (see the checks inline below for the specific instances — e.g. readNote's
+// pitch/velocity/channel bounds, runWriteLane's value-range check against the live parameter).
+
 namespace {
 
 TimelineOpsResult fail(const juce::String& message) { return {false, message, {}}; }
@@ -76,9 +93,10 @@ juce::String beatRangeText() { return "0 and " + juce::String(kMaxPpqUntrusted);
  *  Every op — and every clip, note and point inside one — is a CLOSED object: an unrecognised key
  *  is refused, not ignored. That is what keeps audio assets, lane record arming and track bindings
  *  unreachable by GRAMMAR rather than by a list of field-by-field refusals that a later build could
- *  quietly stop applying. Same reasoning as validateTimeline's unknown-top-level-key rule; the
- *  envelope ROOT is the one place unknown keys are fine, because that is where the sibling patch's
- *  own "nodes"/"connections"/"mode" live. */
+ *  quietly stop applying — no op has an `assetRef`, a `recordMode`, or a `bindingUuid`. Same
+ *  reasoning as validateTimeline's unknown-top-level-key rule; the envelope ROOT is the one place
+ *  unknown keys are fine, because that is where the sibling patch's own "nodes"/"connections"/"mode"
+ *  live. */
 juce::String unknownKey(juce::DynamicObject& o, std::initializer_list<const char*> allowed) {
     for (int i = 0; i < o.getProperties().size(); ++i) {
         const juce::String key = o.getProperties().getName(i).toString();
@@ -206,6 +224,7 @@ TimelineOpsResult runAddTrack(const juce::String& where, juce::DynamicObject& op
 }
 
 // -- placeClips -------------------------------------------------------------------------------
+// A target track may be addressed by its exact name or by { "index": N } — see resolveTrack.
 
 TimelineOpsResult resolveTrack(const juce::String& where, const juce::var& selector, const TimelineDoc& doc,
                                TrackId& idOut, juce::String& nameOut) {
@@ -416,7 +435,11 @@ TimelineOpsResult runPlaceClips(const juce::String& where, juce::DynamicObject& 
 // The .mid blob surface: a base64-encoded Standard MIDI File is the one binary payload
 // this grammar accepts, because MidiClipFile::importFromStream can only ever decode it to notes —
 // no path, no plugin id, no code. Bounds-checking-strict end to end, matching that class's own
-// stated design (see MidiClipFile.h's class comment).
+// stated design (see MidiClipFile.h's class comment). The decoded bytes go through the exact same
+// strict importer a user's own "Import MIDI…" menu item uses, and every note it contains counts
+// toward kMaxTotalNotesUntrusted exactly like a placeClips note does. Any import failure (bad
+// base64, not a readable SMF, SMPTE time format, a track over TimelineDoc::kMaxNotesPerClip) or an
+// empty result rejects the whole batch.
 
 TimelineOpsResult runPlaceMidiClip(const juce::String& where, juce::DynamicObject& op, TimelineDoc& doc,
                                    juce::StringArray& parts, std::int64_t& totalNotes) {
@@ -450,9 +473,10 @@ TimelineOpsResult runPlaceMidiClip(const juce::String& where, juce::DynamicObjec
     if (midBase64.isEmpty())
         return fail(where + "has an empty \"midBase64\" - there is nothing to import.");
 
-    // Checked against the STILL-ENCODED string before a single byte is decoded, so an oversized
-    // blob is rejected as cheaply as any other length check - never by allocating a buffer for it
-    // first and discovering it afterwards.
+    // `midBase64` is bounded by kMaxMidBlobBytes, checked against the STILL-ENCODED string BEFORE
+    // a single byte is decoded — a decompression-bomb defence: reject an oversized blob as cheaply
+    // as any other length check, never by allocating a buffer for it first and discovering it
+    // afterwards.
     if (midBase64.length() > TimelineOps::kMaxMidBlobBytes)
         return fail(where + "carries a \"midBase64\" of " + juce::String(midBase64.length()) +
                     " characters, exceeding the limit of " + juce::String(TimelineOps::kMaxMidBlobBytes) +
@@ -755,6 +779,9 @@ TimelineOpsResult runBatch(const juce::var& envelope, TimelineDoc& doc, const ju
 
 } // namespace
 
+// Deliberately keyed on PRESENCE, not on well-formedness: a malformed "timelineOps" is surfaced
+// as a rejection the user can see rather than silently dropped, which is the same reason
+// applyPatch() never swallows a validation failure.
 bool TimelineOps::carriesOps(const juce::var& payload) {
     auto* rootObj = payload.getDynamicObject();
     return rootObj != nullptr && rootObj->hasProperty("timelineOps");
@@ -775,6 +802,14 @@ TimelineOpsResult TimelineOps::validate(const juce::var& envelope, const Timelin
     return runBatch(envelope, scratch, graph);
 }
 
+// Per-op behaviour, each documented in full beside its implementation above:
+//  - addTrack (runAddTrack) creates the DOC track only, unbound.
+//  - placeClips (resolveTrack / runPlaceClips) resolves its target by exact track name or
+//    { "index": N }; an ambiguous name rejects the batch rather than guessing.
+//  - writeLane (runWriteLane) find-or-creates the lane and REPLACES every existing point across
+//    the written span in one editBreakpoints call.
+//  - placeMidiClip (runPlaceMidiClip) imports through the same strict path a user's own
+//    "Import MIDI…" menu item uses.
 TimelineOpsResult TimelineOps::apply(const juce::var& envelope, TimelineDoc& doc,
                                      const juce::AudioProcessorGraph& graph, AppUndoManager& undo) {
     // Validate first, on a copy. A rejection here means the live doc was never touched at all —

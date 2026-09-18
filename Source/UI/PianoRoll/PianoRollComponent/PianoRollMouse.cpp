@@ -364,6 +364,7 @@ void PianoRollComponent::updateAutoScrollArming() {
         autoScrollTimer_.stopTimer();
 }
 
+// THE edge-auto-scroll timer's seam, mirroring TimelineClipLaneArea::autoScrollTick() exactly.
 void PianoRollComponent::autoScrollTick() {
     // The drag can have ended (mouseUp) or moved out of the zone since the last arming check
     // without another tick having run updateAutoScrollArming() itself — re-check both here rather
@@ -586,6 +587,10 @@ void PianoRollComponent::mouseDoubleClick(const juce::MouseEvent& e) {
     createNoteAt(pos);
 }
 
+// BOTH the Split-tool cut preview and the Select-tool resize-zone cursor are gated on a state change
+// (the snapped cut beat / the hovered note, and the "is the pointer in a resize zone" boolean), so a
+// mouse moving inside one note at one snap division costs zero repaints and zero cursor churn — see
+// the repaint invariant in CLAUDE.md.
 void PianoRollComponent::mouseMove(const juce::MouseEvent& e) {
     const auto pos = e.getPosition();
     updateSplitPreview(pos);
@@ -607,6 +612,18 @@ void PianoRollComponent::mouseExit(const juce::MouseEvent&) {
     updateHeaderButtonHover({-1, -1}); // off the component entirely -- clears whichever chip was lit
 }
 
+// EVERY branch below reads its amount through synth::ui::ScrollPolicy (ScrollPolicy.h) rather than a
+// raw delta member, for the two reasons spelled out there: macOS folds Shift+wheel into `deltaX`, so
+// the modifier-decided branches (both zooms) must take the DOMINANT axis or go silently dead under
+// Shift; and the plain-scroll branches route their sign through scrollAmount() so "natural" here
+// means exactly what it means in a juce::Viewport.
+//
+// The two zoom branches are a DIFFERENT preference from the scroll branches: direction there comes
+// from synth::ui::wheelGestureIsUpward (the PHYSICAL gesture, recovered from isReversed XOR the
+// delta's sign — see ScrollPolicy.h), not from the delta's raw sign, so "wheel up zooms in" is the
+// same finger motion regardless of the OS's natural-scrolling setting. zoomScrollInverted_
+// (setZoomScrollInverted) flips that outcome; it is independent of scrollInverted_, which only ever
+// governs the plain-scroll branches below.
 void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) {
     const bool command = e.mods.isCommandDown();
     const bool shift = e.mods.isShiftDown();
@@ -673,9 +690,10 @@ void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::M
         // them summed to a whole row, which is what read as chunky next to the horizontal axis.
         // Now the position itself stays fractional, so yForPitch moves a proportionally small
         // number of PIXELS on every event, exactly like rollView_.scrollBeats above (no rounding at
-        // all): still walked in ROW units, not raw semitone, for the same reason the class comment
-        // gives — "scroll one wheel-unit's worth of rows" must mean the same number of ROWS whatever
-        // pitch-visibility's collapsed semitone spacing happens to be.
+        // all): still walked in ROW units, not raw semitone, for the same reason
+        // PianoRollComponent.cpp's coordinate-system contract gives — "scroll one wheel-unit's worth
+        // of rows" must mean the same number of ROWS whatever pitch-visibility's collapsed semitone
+        // spacing happens to be.
         const double deltaRows = -amountY * kPitchScrollSemitonesPerWheelUnit;
         // Gated on whether the CLAMPED result actually moved, not on the delta being non-zero: a
         // wheel that keeps pushing past the top/bottom row must cost zero repaints.

@@ -171,6 +171,21 @@ jobs:
       # scripts/check-function-sizes.sh's own doc comment and docs/testing.md "Function-size cap"
       # for the full mechanism.
       run: bash scripts/check-function-sizes.sh
+    - name: Test header-comment-placement guard
+      # A hole in the scanner that measures comment PLACEMENT (a wrong floor/ratio, a sibling-.cpp
+      # check that always/never matches, a ratchet that doesn't actually ratchet) makes the
+      # placement rule decorative. ~1s, no compiler, no network.
+      run: bash scripts/tests/check-header-comments.test.sh
+    - name: Check header comment placement
+      # FRO183: a shared header carries declarations + short caller-facing constraints; the
+      # maintainer-facing rationale for a member lives beside its out-of-line definition in the
+      # owning .cpp unit, not the header. Hard threshold (positive excess = comments minus code,
+      # floor 60, has a sibling .cpp) + strict ratchet baseline (scripts/header-comment-baseline.txt)
+      # for headers already over it -- tracking excess (not a raw comment count) so adding a member
+      # with its own one-line caller contract never trips the ratchet. See
+      # scripts/check-header-comments.sh's own doc comment and docs/testing.md "Header comment
+      # placement" for the full mechanism.
+      run: bash scripts/check-header-comments.sh
     - name: Test docs checker
       # A hole in the docs-integrity scanner (a mis-scanned exclusion, a regex that matches the
       # wrong `]`, a ratchet that doesn't actually ratchet) makes the link/section/naming/map

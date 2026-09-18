@@ -6,11 +6,24 @@
 
 namespace synth {
 
+// The shared first step for building a scratch graph that starts as an exact copy of the live
+// one, used by both applyPatch()'s PatchEval regression check and computePatchPreview(). Only
+// meaningful for merge mode: a replace-mode candidate patch has no "before" to build on top of.
 void AIIntegrationService::replayLiveGraphTrusted(juce::AudioProcessorGraph& scratch) const {
     juce::var currentState = AIStateMapper::graphToJSON(audioGraph);
     AIStateMapper::applyJSONToGraph(currentState, scratch, /*clearExisting=*/true, /*trusted=*/true);
 }
 
+// `before` is always the live graph's current AIStateMapper::graphToJSON(). `after` is
+// graphToJSON() of a scratch graph the patch was actually applied to (merge mode first
+// trusted-replays the live graph into that scratch, exactly like applyPatch()'s own PatchEval
+// regression check, so pre-existing nodes keep their live id/uuid). Diffing these two snapshots —
+// never the raw patch JSON — is what makes the preview correct: it is the only way to see merge
+// mode's auto-wiring of new nodes, replace mode's implicit deletion of everything the patch
+// doesn't restate, and the untrusted-apply [0,1] rescale heuristic. See PatchDiff.h.
+//
+// Mirrors applyPatch()'s mode-less-patch repair (a replace that only validates as a merge is
+// applied as a merge) so the previewed diff matches what Apply/Merge will actually do.
 bool AIIntegrationService::computePatchPreview(const juce::String& jsonString, bool mergeMode, juce::var& before,
                                                juce::var& after) {
     juce::String extractedJson = extractJsonFromResponse(jsonString);
@@ -187,6 +200,9 @@ bool AIIntegrationService::applyPatch(const juce::String& jsonString, bool merge
     return applyNow();
 }
 
+// The specific validation message is fed back to the model ("that patch was rejected because X"),
+// which is the whole point — a bare "try again" tends to reproduce the same mistake. When retries
+// run out, onComplete reports the last error rather than looping forever.
 void AIIntegrationService::applyPatchWithRetry(const juce::String& jsonString, bool mergeMode,
                                                PatchApplyCallback onComplete, PatchRetryCallback onRetry) {
     // Attempt 1 is the patch the caller already has in hand; retries are what follow.
@@ -258,6 +274,12 @@ void AIIntegrationService::requestPatchCorrection(int failedAttempt, bool mergeM
         /*useStructuredOutput=*/true);
 }
 
+// Restates `originalRequest` explicitly rather than relying on conversation history to carry it:
+// RemoteProvider (Source/AI/RemoteProvider.h) sends only the last message, so a correction turn
+// with no restated intent reaches the model as a bare "fix this JSON" with no idea what the patch
+// was even supposed to be — confirmed live: the model invents an unrelated patch referencing node
+// ids that don't exist anywhere. OllamaProvider already sends full history, so this is
+// redundant-but-harmless there.
 juce::String AIIntegrationService::buildCorrectionPrompt(const juce::String& originalRequest,
                                                          const juce::String& error) {
     // Naming the specific failure is the point of the retry. A bare "that didn't work, try again"
@@ -276,6 +298,10 @@ juce::String AIIntegrationService::buildCorrectionPrompt(const juce::String& ori
            "that this patch itself creates.";
 }
 
+// Captured once at the start of applyPatchWithRetry() — before any correction turns are appended
+// to chatHistory — and threaded through requestPatchCorrection()'s recursion rather than
+// re-derived on each retry, so a second retry doesn't mistake the first retry's own correction
+// text for the original request.
 juce::String AIIntegrationService::mostRecentUserRequest() const {
     for (auto it = chatHistory.rbegin(); it != chatHistory.rend(); ++it)
         if (it->role == "user")

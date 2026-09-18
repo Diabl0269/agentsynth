@@ -1,8 +1,61 @@
 // PianoRollComponent — construction/teardown, clip open/close entry points, and the roll's OWN
 // horizontal (beat<->x) geometry mapping. The class itself is declared in PianoRollComponent.h;
 // painting, editing, mouse handling, audition, clipboard, scale assist and zoom each live in a
-// sibling PianoRoll<Concern>.cpp unit in this directory (see PianoRollComponent.h's class comment
-// for the coordinate-system contract every unit shares).
+// sibling PianoRoll<Concern>.cpp unit in this directory.
+//
+// ---- Coordinate-system contract (referenced from the class comment in PianoRollComponent.h) ----
+//
+// Horizontal: x == leftGutterWidth() is the first visible beat, so the keys column (and, while it
+// is open, the scale-assist panel to its LEFT) is a real GUTTER and the first bar of a clip is
+// reachable rather than hidden under an opaque strip. leftGutterWidth() is kKeysColumnWidth alone
+// with the panel closed, kScalePanelWidth + kKeysColumnWidth while it is open — every place that
+// used to hardcode kKeysColumnWidth as "the grid's left offset" now goes through it (see the Scale
+// Assist unit), so opening the panel shifts the grid, the hit-testing and the clip-framing maths
+// together rather than drifting apart. The shared TimelineViewState is still consulted for ONE
+// thing: the snap division (snapBeat/divisionBeats), so the roll's grid, its snapped edits and the
+// panel's snap selector never disagree.
+//
+// Local playhead: because the roll's horizontal mapping differs from the panel's, the panel-wide
+// TimelinePlayheadOverlay would draw the playhead at the wrong x inside this rect. The roll
+// therefore implements TimelinePlayheadOverlay::LocalPlayheadClient: while it is open the overlay
+// stops drawing and repainting inside the roll's region and pushes the DRAWN beat here instead
+// (setPlayheadBeat), and the roll draws the line at its own x under the same strip-confined repaint
+// discipline (requestRepaintStrip — zero repaints while the position is unchanged, one strip while
+// playing; see PianoRollPainting.cpp). No timer is added here: the overlay's single playing-only
+// timer still drives everything.
+//
+// Vertical row mapping: yForPitch/pitchForY do NOT map pitch directly to y. They map through
+// visiblePitches_ — a sorted, ascending list of every pitch that currently gets a ROW (all 128 when
+// no scale filtering is active). Row distance between two pitches is the distance between their
+// INDICES in that list, not the semitone distance between them, which is what lets pitch-visibility
+// mode collapse the out-of-scale gaps into zero-height rows instead of just recolouring them.
+// yForPitch of a pitch that is not itself visible (an edge case — a note landing between visible
+// rows) falls back to the nearest visible row's y. visiblePitches_ is rebuilt (see
+// rebuildVisiblePitches) whenever the scale context changes, the roll opens a clip, or a doc
+// mutation could have added/removed the note that was the only thing keeping an out-of-scale pitch
+// visible.
+//
+// The scroll POSITION itself is `topRowPosition_` — a CONTINUOUS (fractional) index into
+// visiblePitches_: the row whose top edge sits at y == canvasTop(). `firstVisiblePitch_` is
+// DERIVED from it (visiblePitches_[floor(topRowPosition_)], reclamped to stay a member of
+// visiblePitches_), kept in sync at the one seam every writer goes through (setTopRowPosition), so
+// it is always a member of visiblePitches_. This split is what makes vertical scrolling sub-pixel
+// smooth like the horizontal axis (rollView_.firstVisibleBeat) instead of snapping to whole rows:
+// yForPitch/pitchForY read the fractional anchor directly, while `firstVisiblePitch_` still only
+// ever reports a whole row — a pitch is a MIDI integer, so anything that hit-tests or paints
+// against a specific PITCH (rather than calling yForPitch for an arbitrary one) necessarily still
+// sees whole-row values. Vertical wheel-scroll, edge auto-scroll and vertical zoom all move
+// topRowPosition_ fractionally, but still walk visiblePitches_ by INDEX rather than semitone — a
+// scroll gesture over collapsed rows must move a consistent number of ROWS, not skip past them at
+// whatever their semitone spacing happens to be.
+//
+// The panel's edit-tool strip pushes the active tool in (setActiveTool). Select is the whole
+// gesture table PianoRollMouse.cpp's mouseDown implements; Split / Glue / Erase / Mute / Draw
+// replace it with single-click actions and disable move, resize, velocity scrub and marquee
+// entirely — see setActiveTool for why. The note CLIPBOARD (copy/cut/paste/duplicate/repeat) lives
+// in PianoRollClipboardAndKeys.cpp rather than in the panel, because a copied block is anchored on
+// its own earliest note and is therefore paste-able into any clip: the roll keeps it across
+// openClip so "copy in one clip, paste in another" works.
 
 #include "PianoRollComponent.h"
 #include "PianoRollInternal.h"
@@ -259,7 +312,7 @@ int PianoRollComponent::yForPitch(int pitch) const noexcept {
     if (visiblePitches_.empty())
         return canvasTop();
     // topRowPosition_ IS the (fractional) row index whose top edge sits at y == canvasTop() (see
-    // the class comment) — the exact same formula the old int-only firstRow used, with firstRow
+    // the coordinate-system contract above) — the exact same formula the old int-only firstRow used, with firstRow
     // simply replaced by the continuous anchor. An integral topRowPosition_ reproduces today's
     // pixel-for-pixel result (llround(N * ps) == llround((double)N * ps) for integer N).
     const double pitchRow = (double)nearestVisibleRowIndex(pitch);

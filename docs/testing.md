@@ -974,7 +974,7 @@ Comments, string/char literals and preprocessor lines never contribute real code
 
 **Strict ratchet baseline** (`scripts/function-size-baseline.txt`, `<lines> <path>::<name>` per entry) works exactly like the file-size baseline: grandfathers functions already over the cap at their EXACT current size, only ever tightens (grow past the entry and the check fails naming the function, its `path:line`, and its size; shrink it and `--update` must tighten the entry; get it under the cap and `--update` removes the entry; no function may join the baseline as new — `--update` refuses growth/additions without `--allow-growth`, which prints a `::warning::` per exception). A same-name, same-size function whose FILE git confirms was renamed is accepted by `--update` without `--allow-growth`, the same as a file-size baseline entry surviving a `git mv`.
 
-`bash scripts/check-function-sizes.sh --list [N]` prints the N largest scanned functions (default 25), largest first, regardless of cap or baseline.
+`bash scripts/check-function-sizes.sh --list [N]` prints the N largest scanned functions (default 25), largest first, regardless of cap or baseline. A sibling guard, `scripts/check-header-comments.sh` (Lint job's "Check header comment placement" step), enforces comment PLACEMENT rather than a line cap on `Source/**/*.h`(`pp`) headers with the same strict-ratchet shape -- see [`docs/testing-header-comments.md`](testing-header-comments.md) for the full mechanism (this file is already at its own 1000-line cap, hence the cross-reference instead of an inline section).
 
 Largest legacy functions at the time of writing (see `scripts/function-size-baseline.txt` for the full, current 22-entry list):
 

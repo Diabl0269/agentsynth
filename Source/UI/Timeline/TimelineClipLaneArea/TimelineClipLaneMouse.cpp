@@ -168,6 +168,8 @@ void TimelineClipLaneArea::mouseDrag(const juce::MouseEvent& e) {
     repaint();
 }
 
+// Runs against the (possibly just-scrolled) view state, factored out of mouseDrag() so a real
+// pointer move and an auto-scroll tick (which has no MouseEvent of its own) can't drift apart.
 void TimelineClipLaneArea::updateDragPreviewFromLastPointer() {
     if (dragMode_ == DragMode::None || doc_ == nullptr)
         return;
@@ -207,6 +209,8 @@ void TimelineClipLaneArea::updateDragPreviewFromLastPointer() {
         // clip onto an Audio row, a MIDI clip onto a Midi one, neither onto Automation). An
         // illegal drop clamps back to 0 — a same-lane move, i.e. exactly what this drag did before
         // it could cross tracks — rather than dropping the clips that would have fitted.
+        // Clamping the whole group rather than dropping just the clips that would fit is
+        // deliberate: a partial drop would silently tear a selection apart.
         const int rowHeight = getRowHeight();
         int rowDelta =
             rowHeight > 0 ? (int)std::llround((double)(lastDragPointer_.y - mouseDownPos_.y) / (double)rowHeight) : 0;
@@ -241,6 +245,10 @@ void TimelineClipLaneArea::updateDragPreviewFromLastPointer() {
     }
 }
 
+// Starts the timer only while a Move/Resize drag is live AND the pointer sits inside an edge zone
+// of this component's width; stopped the moment either condition stops holding — mouseUp (see
+// mouseUp), a tool switch cancelling the drag (see setActiveTool), or the pointer dragging back
+// into the dead middle band (see autoScrollTick).
 void TimelineClipLaneArea::updateAutoScrollArming() {
     const bool dragging =
         dragMode_ == DragMode::Move || dragMode_ == DragMode::ResizeLeft || dragMode_ == DragMode::ResizeRight;
@@ -254,6 +262,9 @@ void TimelineClipLaneArea::updateAutoScrollArming() {
         stopTimer();
 }
 
+// One tick scrolls viewState_ by edgeScrollVelocity(...)/pixelsPerBeat beats, re-derives the drag
+// preview from the LAST known pointer position (mouseDrag never re-fires on its own), and repaints
+// — mirroring TimelinePlayheadOverlay::timerCallback's protected-for-tests pattern.
 void TimelineClipLaneArea::autoScrollTick() {
     // The drag can have ended (mouseUp) or moved out of the zone since the last arming check
     // without another tick having run updateAutoScrollArming() itself — re-check both here rather
@@ -397,6 +408,16 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
     repaint();
 }
 
+// Double-clicking a clip opens the piano roll for it (onClipDoubleClicked with the hit clip's id).
+// Double-clicking EMPTY lane space authors content on the row under the pointer instead: a Midi
+// track gets a clip at the floor-snapped beat, selected, and fires onClipDoubleClicked for it too
+// (so "double-click empty space" lands straight in the note editor); an Audio track asks for a
+// file through audioFileChooser_ and reports the choice as onAudioFileDropped, the same seam a
+// file drop uses. An Automation row, and a double-click below the last row, do nothing.
+//
+// The MIDI clip's span is one bar, EXCEPT when the click lands inside a real loop-locator span and
+// the "double-click spans locators" preference is on (default) — it then spans the locators
+// exactly. See locatorSpanForDoubleClick for the full set of conditions.
 void TimelineClipLaneArea::mouseDoubleClick(const juce::MouseEvent& e) {
     // Authoring double-clicks belong to the pointer. With a tool active the first click already
     // did the tool's job (and Draw already created a clip), so a second one must not also open a
@@ -410,8 +431,8 @@ void TimelineClipLaneArea::mouseDoubleClick(const juce::MouseEvent& e) {
         return;
     }
 
-    // Empty lane space: author content on the row under the pointer (see mouseDoubleClick's
-    // declaration for the per-kind contract).
+    // Empty lane space: author content on the row under the pointer (see the per-kind contract
+    // above).
     if (doc_ == nullptr)
         return;
     const auto row = trackIndexAt(e.getPosition());
@@ -440,6 +461,9 @@ void TimelineClipLaneArea::mouseDoubleClick(const juce::MouseEvent& e) {
     }
 }
 
+// `clickedBeat` is the RAW (unsnapped) beat under the pointer: snapping first could push a click
+// that landed outside the locator span into it (or the reverse), and the question being asked is
+// where the user actually clicked.
 std::optional<std::pair<double, double>> TimelineClipLaneArea::locatorSpanForDoubleClick(double clickedBeat) const {
     if (transport_ == nullptr)
         return std::nullopt;
@@ -467,6 +491,9 @@ std::optional<std::pair<double, double>> TimelineClipLaneArea::locatorSpanForDou
     return std::make_pair(snap.loopStartPpq, snap.loopEndPpq);
 }
 
+// `lengthOverride` unset means the historical ONE BAR at the transport's current time signature (4
+// beats with no transport) — the same beatsPerBar the Snap::Bar grid uses, so a bar-snapped clip
+// fills exactly one grid cell.
 void TimelineClipLaneArea::createMidiClipAt(synth::TrackId track, double startBeat,
                                             std::optional<double> lengthOverride) {
     if (doc_ == nullptr)
@@ -475,10 +502,8 @@ void TimelineClipLaneArea::createMidiClipAt(synth::TrackId track, double startBe
     if (trackPtr == nullptr)
         return;
 
-    // One bar at the transport's current time signature (4 beats with no transport) — the same
-    // beatsPerBar the Snap::Bar grid uses, so a bar-snapped clip fills exactly one grid cell —
-    // unless the caller asked for a specific length (the locator span). A non-positive override is
-    // ignored rather than passed to addClip, which would reject it and author nothing.
+    // A non-positive override is ignored rather than passed to addClip, which would reject it and
+    // author nothing.
     const double lengthBeats =
         lengthOverride.has_value() && *lengthOverride > 0.0 ? *lengthOverride : currentBeatsPerBar();
     const juce::String name = "Clip " + juce::String((int)trackPtr->clips.size() + 1);
@@ -610,10 +635,15 @@ void TimelineClipLaneArea::mouseMove(const juce::MouseEvent& e) {
         setMouseCursor(juce::MouseCursor::NormalCursor);
 }
 
+// mouseEnter re-applies the tool cursor because it is NOT set per mouse-move (see setActiveTool).
 void TimelineClipLaneArea::mouseEnter(const juce::MouseEvent&) { applyToolCursor(); }
 
+// mouseExit drops the Split tool's hover preview so a line never survives the pointer leaving the
+// lanes.
 void TimelineClipLaneArea::mouseExit(const juce::MouseEvent&) { clearToolPreviews(); }
 
+// A theme switch is the only thing that changes what a tool cursor looks like, so it is the only
+// thing that pays for rebuilding them.
 void TimelineClipLaneArea::lookAndFeelChanged() {
     toolCursorsBuilt_ = false; // re-tinted icons -> different cursor images
     applyToolCursor();

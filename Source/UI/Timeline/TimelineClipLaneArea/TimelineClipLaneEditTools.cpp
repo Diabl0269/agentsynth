@@ -47,6 +47,12 @@ synth::theme::Icon iconForTool(synth::ui::EditTool tool) noexcept {
 // Edit tools: the active tool, its cursor, its gestures and its previews.
 //==============================================================================
 
+// EditTool::Select is the tool this component grew up with and keeps ALL of its behaviour:
+// click/shift-click select, drag-move (cross-track and Alt-copy capable), edge trims with their
+// resize cursors, marquee, and both double-click authoring gestures. The other five are
+// deliberately click-only — a drag with Split/Glue/Erase/Mute held would be a second,
+// undiscoverable gesture on a tool whose whole point is that one click does one thing — with Draw
+// the single exception (its drag IS the clip's length).
 void TimelineClipLaneArea::setActiveTool(EditTool tool) {
     if (activeTool_ == tool)
         return;
@@ -92,6 +98,12 @@ void TimelineClipLaneArea::applyToolCursor() {
     setMouseCursor(toolCursors_[(std::size_t)activeTool_]);
 }
 
+// Split/Glue/Erase/Mute act immediately on press (a DAW's tool click is expected to land under
+// the finger, not on release). They all route straight into applyClipContextChoice — the tool and
+// the menu item are literally the same code path, which is what keeps "the tools are an
+// accelerator for the menu, not a second set of capabilities" true rather than aspirational (and
+// gives each one the same single recordTimelineChange, wrapped unconditionally: a refused
+// mutation makes the lambda a no-op and AppUndoManager pushes nothing for one).
 void TimelineClipLaneArea::handleToolMouseDown(const juce::MouseEvent& e) {
     if (activeTool_ == EditTool::Draw) {
         beginDrawGesture(e);
@@ -125,6 +137,11 @@ void TimelineClipLaneArea::handleToolMouseDown(const juce::MouseEvent& e) {
     }
 }
 
+// The clip on the SAME track with the smallest startBeat at or after `id`'s end.
+// TimelineDoc::joinClips treats a gap as legal (it becomes silence) and rejects an overlap, so
+// "the next clip that does not overlap" is exactly the set of legal targets — picking the abutting
+// clip only would make the tool silently inert on the very arrangement (clips with gaps) where
+// gluing is most useful.
 synth::ClipId TimelineClipLaneArea::findGlueTarget(synth::ClipId id) const {
     if (doc_ == nullptr)
         return {};
@@ -227,8 +244,14 @@ void TimelineClipLaneArea::commitDrawGesture() {
 
 //---- Previews -----------------------------------------------------------------
 
+// Mirrors PianoRollComponent::requestRepaintStrip / TimelinePlayheadOverlay::requestRepaintStrip
+// exactly — a test subclasses this and counts. Every repaint a preview costs goes through it and
+// nowhere else, and it is only ever reached when the previewed STATE changed (a new snapped beat,
+// a new hovered clip, a new ghost rect): pointer movement inside one snap cell repaints nothing.
 void TimelineClipLaneArea::requestToolPreviewRepaint(juce::Rectangle<int> region) { repaint(region); }
 
+// A few pixels wide (kSplitPreviewMarginPx either side) so the repaint region covers the stroke
+// rather than a zero-width column.
 juce::Rectangle<int> TimelineClipLaneArea::splitPreviewBounds(synth::ClipId clip, double beat) const {
     const auto rect = getClipRect(clip);
     if (rect.isEmpty())
@@ -291,6 +314,9 @@ juce::Rectangle<int> TimelineClipLaneArea::getDrawGhostRectForTest() const {
 
 //---- Inline rename ------------------------------------------------------------
 
+// The headless seam for the inline rename editor's commit (a live juce::TextEditor is no more
+// testable than a juce::PopupMenu). setClipName TRIMS as well as rejecting a blank name — that
+// rejection is the whole reason this is a doc call rather than a local string assignment.
 void TimelineClipLaneArea::renameClip(synth::ClipId id, const juce::String& newName) {
     if (doc_ == nullptr)
         return;
@@ -350,6 +376,13 @@ void TimelineClipLaneArea::finishRename(bool commit) {
 }
 
 //==============================================================================
+// Protected virtual for the display-less-runner reason spelled out on
+// TimelineRulerComponent::openMarkerContextMenu: a real menu window has no display to be
+// positioned against on the Linux CI job, and JUCE dereferences the null it gets back. No test
+// reaches this today — the one right-click in the suite lands on empty lane space, which returns
+// before any menu is built, and every menu OUTCOME is driven through applyClipContextChoice
+// instead — but a test that right-clicked an actual clip would SIGSEGV there while passing
+// locally.
 void TimelineClipLaneArea::showClipContextMenu(synth::ClipId id, juce::Point<int> localPos) {
     if (doc_ == nullptr)
         return;
@@ -391,8 +424,11 @@ void TimelineClipLaneArea::showClipContextMenu(synth::ClipId id, juce::Point<int
     // Offered for any audio clip (non-empty assetRef) regardless of whether the asset
     // currently resolves — relinking a PRESENT asset (pointing it at a different file) is just as
     // legitimate as fixing a missing one. A callback rather than a ClipContextChoice: relinking
-    // needs a host FileChooser + AssetManager import this class doesn't have (see
-    // onRelinkAudioRequested's own comment).
+    // needs a host FileChooser + AssetManager import, neither of which this class has, so unlike
+    // Split/Duplicate/Delete this is a callback: the production path is MainComponent opening an
+    // async FileChooser and then calling its own relinkClipAsset(); the headless path is
+    // MainComponent::relinkClipAssetForTest(), which never goes through this callback (or a menu)
+    // at all.
     if (clip->assetRef.isNotEmpty() && onRelinkAudioRequested) {
         menu.addSeparator();
         menu.addItem("Relink audio...", [this, id] { onRelinkAudioRequested(id); });
@@ -406,6 +442,9 @@ void TimelineClipLaneArea::applyClipContextChoice(synth::ClipId id, ClipContextC
         return;
 
     switch (choice) {
+    // The split case snaps `pointerBeat` internally against the current view-state snap +
+    // beatsPerBar, exactly like showClipContextMenu()'s own enablement check, so a test driving
+    // this directly observes the same snapping the real right-click menu would.
     case ClipContextChoice::SplitAtPointer: {
         const auto* clip = doc_->getClip(id);
         if (clip == nullptr)

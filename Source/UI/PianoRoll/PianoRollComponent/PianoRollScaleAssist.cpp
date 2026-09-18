@@ -27,7 +27,7 @@ void PianoRollComponent::setPropertiesFile(juce::PropertiesFile* props) {
     propertiesFile_ = props;
     scalePanel_.setPropertiesFile(props);
     const bool visible = props != nullptr && props->getBoolValue(kScalePanelVisiblePropertyKey, false);
-    // A restore must never itself look like the panel sliding open — see the class comment.
+    // A restore must never itself look like the panel sliding open.
     setScalePanelVisible(visible, /*animate=*/false);
 }
 

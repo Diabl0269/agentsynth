@@ -37,6 +37,10 @@ AIProvider::RequestId AIIntegrationService::sendMessage(const juce::String& text
     return provider->sendPrompt(request, wrapCompletionForHistory(std::move(callback)), schema);
 }
 
+// Every outgoing request needs the same success bookkeeping: append the assistant turn to
+// chatHistory (never for a cancelled request — see the comment inside) and capture/re-push a
+// Pro-plan conversation id. Shared by sendMessage() and sendArrangeMessage() so the two paths
+// cannot drift on history or conversation-id behaviour.
 AIProvider::CompletionCallback AIIntegrationService::wrapCompletionForHistory(AIProvider::CompletionCallback callback) {
     auto weakThis = juce::WeakReference<AIIntegrationService>(this);
     return [weakThis, callback](const AIProvider::AIResponse& response) {
@@ -130,10 +134,11 @@ juce::String AIIntegrationService::buildPatchAugmentedContent(const juce::String
 }
 
 std::vector<AIIntegrationService::AutomationTargetInfo> AIIntegrationService::enumerateAutomationTargets() const {
-    // Float parameters only — that is what an automation lane drives — and only nodes that carry
-    // a uuid (a node without one is not addressable by writeLane at all). See the header doc
-    // comment: this ONE enumeration feeds both the local model's text section and the remote
-    // timeline.generate body, so the criteria live here and nowhere else.
+    // Uuid-bearing nodes only (a node without one is not addressable by writeLane), float
+    // parameters only (that is what an automation lane drives), real ranges from the parameter's
+    // own NormalisableRange. See the AutomationTargetInfo doc comment in the header: this ONE
+    // enumeration feeds both the local model's text section and the remote timeline.generate body,
+    // so the criteria live here and nowhere else.
     std::vector<AutomationTargetInfo> targets;
     for (auto* node : audioGraph.getNodes()) {
         if (node == nullptr || node->getProcessor() == nullptr)
@@ -157,6 +162,13 @@ std::vector<AIIntegrationService::AutomationTargetInfo> AIIntegrationService::en
     return targets;
 }
 
+// The (nodeUuid, paramId, range) inventory a `writeLane` op needs — the model cannot name a node
+// it was never told about. Uuids appear here ON PURPOSE, despite ArrangementContext's no-uuid
+// rule: that rule keeps identifiers out of the human-readable SUMMARY (where a display name serves
+// better and a leak buys nothing); this section is the ADDRESSING channel without which the
+// writeLane grammar is unusable. A node uuid is random per-node identity — never a file path,
+// plugin identifier or factory key — and validate() only accepts pairs that resolve against the
+// live graph anyway. (Also documented in docs/AI_Engine_patch_safety.md §9.)
 juce::String AIIntegrationService::buildAutomationTargetsSection() const {
     // One line per addressable node: `- "<uuid>" <Display Name>: <paramId> [min..max], ...`.
     // Bounded like the arrangement summary: whole LINES are dropped from the tail past the cap,
@@ -196,11 +208,24 @@ juce::String AIIntegrationService::buildAutomationTargetsSection() const {
     return section;
 }
 
+// Builds the `timeline.generate` request body for `text` — everything the input schema wants
+// except productName, which the provider adds (it owns branding). Fields (see
+// TimelineGenerateInputSchema, synth-platform timeline-generate/capability.ts):
+//  - `userPrompt`: the RAW user text, deliberately NOT pre-wrapped with patch/arrangement context
+//    the way buildPatchAugmentedContent() does — timeline.generate composes its context sections
+//    server-side from the structured fields below, unconditionally, so pre-wrapping would
+//    duplicate every section in the model input.
+//  - `arrangementContext`: ArrangementContext::summarize() of the live doc; "" when the doc is
+//    empty or no timeline context is installed (the schema requires the key but allows empty — "a
+//    caller with nothing to say should say so explicitly").
+//  - `paramTargets`: the SAME (uuid-bearing node, float param, real range) enumeration
+//    buildAutomationTargetsSection() renders as text, as structured objects {nodeUuid, nodeName,
+//    paramId, min, max, default}, capped at kMaxRemoteParamTargets.
+//  - `availableTracks`: one {name, kind, index} per live TimelineDoc track, in doc order.
 juce::var AIIntegrationService::buildArrangeRequestBody(const juce::String& text) const {
     juce::DynamicObject::Ptr body = new juce::DynamicObject();
 
-    // The RAW user text — see the header doc comment for why this is never pre-wrapped the way
-    // buildPatchAugmentedContent() wraps the patch path's last message.
+    // The RAW user text (see the comment above).
     body->setProperty("userPrompt", text);
 
     // Required key, allowed empty (the schema's own words: "a caller with nothing to say should
@@ -247,6 +272,19 @@ juce::var AIIntegrationService::buildArrangeRequestBody(const juce::String& text
     return juce::var(body.get());
 }
 
+// ONE intent, two transports — the local/remote parity rule: the transport difference is absorbed
+// HERE, never surfaced as a behaviour difference. Hosted provider: the `timeline.generate`
+// capability, with the structured request body from buildArrangeRequestBody(). Local provider:
+// sendPrompt() with the SAME fields composed into the outgoing message (buildArrangeAugmentedContent,
+// mirroring the server's own section layout) and AIStateMapper::getTimelineOpsEnvelopeSchema() as
+// the response contract. Both providers answer with the identical timelineOps envelope, so the
+// downstream extract -> validate -> card flow cannot tell them apart.
+//
+// No client-side retry on a validation rejection: the server runs its own bounded repair-retry
+// inside the capability, and for the local model the envelope-only grammar plays the same role —
+// an envelope that still fails TimelineOps::validate is surfaced to the user as the card's
+// rejection message. On a hosted provider without a capability endpoint (a test double), the
+// AIProvider::sendCapabilityRequest default delivers a typed Schema error.
 AIProvider::RequestId AIIntegrationService::sendArrangeMessage(const juce::String& text,
                                                                AIProvider::CompletionCallback callback) {
     // Same history contract as sendMessage(): the stored history keeps the user's original text;
@@ -265,13 +303,6 @@ AIProvider::RequestId AIIntegrationService::sendArrangeMessage(const juce::Strin
         return {};
     }
 
-    // One intent, two transports (the local/remote parity rule): a hosted provider has a
-    // dedicated capability whose input is the structured fields; a local provider gets the SAME
-    // fields composed into the outgoing message (buildArrangeAugmentedContent mirrors the
-    // server's own section layout) with an envelope-only response schema. Both providers answer
-    // with the identical timelineOps envelope, so the downstream extract → validate → card flow
-    // cannot tell them apart — the transport difference is absorbed HERE, never surfaced as a
-    // behaviour difference.
     if (provider->isHosted())
         return provider->sendCapabilityRequest("timeline.generate", buildArrangeRequestBody(text),
                                                wrapCompletionForHistory(std::move(callback)));
@@ -308,6 +339,8 @@ juce::String AIIntegrationService::buildArrangeAugmentedContent(const juce::Stri
     return content;
 }
 
+// Trims chatHistory to the system prompt plus the most recent kMaxHistoryTurns pairs, removing
+// oldest whole user+assistant pairs so history never starts on an assistant turn.
 void AIIntegrationService::trimHistory() {
     if (chatHistory.empty())
         return;

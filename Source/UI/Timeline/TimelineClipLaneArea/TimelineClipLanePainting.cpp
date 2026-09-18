@@ -45,6 +45,9 @@ using namespace detail;
 // user can see WHICH clip each one came from mid-drag.
 //==============================================================================
 
+// The single geometry source shared by paintDragGhosts() and getDragGhostRectsForTest() —
+// computing them separately is how a drawn affordance drifts from the one a test pins (the same
+// reasoning GraphEditor::buildVisibleCables() states).
 juce::Rectangle<int> TimelineClipLaneArea::dragGhostRectFor(const DragOrigin& origin, int rowHeight) const {
     return computeClipRect(viewState_, origin.trackIndex + previewRowDelta_, origin.originalStart + previewDeltaBeats_,
                            origin.lengthBeats, rowHeight);
@@ -61,6 +64,8 @@ std::vector<juce::Rectangle<int>> TimelineClipLaneArea::getDragGhostRectsForTest
     return rects;
 }
 
+// The pair a copy-drag test asserts is UNCHANGED mid-drag, while getDragGhostRectsForTest() shows
+// the delta.
 std::optional<std::pair<double, double>> TimelineClipLaneArea::getEffectiveGeometryForTest(synth::ClipId id) const {
     if (doc_ == nullptr)
         return std::nullopt;
@@ -148,14 +153,17 @@ void TimelineClipLaneArea::paintSplitPreview(juce::Graphics& g) {
 // Waveform painting (committed clips) and the live-recording strip.
 //==============================================================================
 
+// Returns nullptr for an empty ref, no resolver, an unresolvable file, or a file that fails
+// synth::PeaksFile::read().
 const synth::PeaksFile::Data* TimelineClipLaneArea::findPeaksData(const juce::String& assetRef) {
     if (assetRef.isEmpty() || !peaksResolver_)
         return nullptr;
 
     auto it = peaksCache_.find(assetRef);
     if (it == peaksCache_.end()) {
-        // A default-constructed Data (bucketSize == 0) is what a miss caches — see this method's
-        // header comment for why that's deliberate rather than an oversight.
+        // A default-constructed, structurally-invalid Data (bucketSize == 0) is what a miss caches
+        // too, deliberately rather than by oversight, so a repeated paint of a still-missing asset
+        // never re-touches disk; only invalidatePeaksCache()/refreshFromDoc() forget that.
         synth::PeaksFile::Data data;
         const juce::File file = peaksResolver_(assetRef);
         if (file != juce::File())
@@ -168,6 +176,8 @@ const synth::PeaksFile::Data* TimelineClipLaneArea::findPeaksData(const juce::St
     return &it->second;
 }
 
+// "Nothing resolves" covers no resolver set, an unresolvable ref, or an unreadable/absent peaks
+// file.
 void TimelineClipLaneArea::paintWaveform(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect) {
     if (rect.getWidth() <= kMinWidthForWaveform)
         return;
@@ -192,6 +202,8 @@ void TimelineClipLaneArea::paintWaveform(juce::Graphics& g, const synth::Clip& c
     paintWaveformColumns(g, rect, data->buckets, data->numChannels, range.firstBucket, range.bucketCount);
 }
 
+// Mirrors findPeaksData's cache shape exactly: a miss is cached too, so a still-missing clip never
+// re-triggers the resolver on the next paint.
 bool TimelineClipLaneArea::assetExists(const juce::String& assetRef) {
     if (!assetExistsResolver_)
         return true; // no resolver installed: assume it exists — no placeholder without one
@@ -233,6 +245,7 @@ void TimelineClipLaneArea::paintMissingAssetPlaceholder(juce::Graphics& g, const
         }
     }
 
+    // Same width threshold paintClip's own name label uses.
     if (rect.getWidth() > kMinWidthForName) {
         const juce::String fileName = clip.assetRef.fromLastOccurrenceOf("/", false, false);
         // Fixed white, not a theme token: it sits on the black-dimmed + hatched overlay painted
@@ -244,6 +257,10 @@ void TimelineClipLaneArea::paintMissingAssetPlaceholder(juce::Graphics& g, const
     }
 }
 
+// Shared by paintWaveform() (a committed clip's peaks) and paintLiveRecordingStrip() (the live
+// accumulator's peaks) — one juce::Graphics::drawLine per x column, sampling
+// buckets[firstBucket + column's fraction of bucketCount] across every channel (min of mins, max
+// of maxes — a simple downmix, deliberately kept cheap enough to run every paint).
 void TimelineClipLaneArea::paintWaveformColumns(juce::Graphics& g, juce::Rectangle<int> rect,
                                                 const std::vector<std::pair<float, float>>& buckets, int numChannels,
                                                 int firstBucket, int bucketCount) {
@@ -282,6 +299,7 @@ void TimelineClipLaneArea::paintWaveformColumns(juce::Graphics& g, juce::Rectang
     }
 }
 
+// One repaint over wherever the strip used to be, then a clean reset.
 void TimelineClipLaneArea::clearLiveRecording() {
     if (!liveRecording_.active)
         return;
@@ -292,6 +310,10 @@ void TimelineClipLaneArea::clearLiveRecording() {
     liveStripRect_ = {};
 }
 
+// MainComponent calls this every tick alongside the panel's other polled updates, whether or not
+// anything is actually recording — cheap when it isn't: `info.active == false` just clears any
+// previous strip (one repaint, once, on the falling edge) and returns. When it is, this copies the
+// tap's live peaks via copyLivePeaks(), a lock held only for that copy, never on the audio thread.
 void TimelineClipLaneArea::updateLiveRecording(const LiveRecordingInfo& info) {
     if (!info.active || info.tap == nullptr || doc_ == nullptr) {
         clearLiveRecording();

@@ -219,8 +219,13 @@ juce::String PianoRollComponent::getTooltipFor(juce::Point<int> pos) const {
 
 juce::String PianoRollComponent::getTooltip() { return getTooltipFor(getMouseXYRelative()); }
 
-// Rebuilt fresh on every call (see the header comment) — reading shortcuts_ live is what makes a
-// rebind visible the very next time either tooltip is queried, with no cache and no listener.
+// getTooltipFor() builds the Q / Q(quantise-pitch) / Scale header buttons' tooltip text dynamically
+// (quantiseTooltipText()/quantiseLengthTooltipText()/quantisePitchTooltipText()/scaleTooltipText()/
+// scaleFilterTooltipText() below) rather than a static string with a hardcoded key name that would
+// go stale the moment the user rebinds "pianoRollQuantise"/"pianoRollQuantiseLength"/
+// "pianoRollQuantisePitches"/"pianoRollToggleScalePanel" (see synth::shortcutHintFor). Each is
+// rebuilt fresh on every call — reading shortcuts_ live is what makes a rebind visible the very next
+// time either tooltip is queried, with no cache and no listener.
 juce::String PianoRollComponent::quantiseTooltipText() const {
     const auto hint = shortcutHintFor(shortcuts_, "pianoRollQuantise", plainKey('q'));
     juce::String text = "Quantize note starts to the grid";
