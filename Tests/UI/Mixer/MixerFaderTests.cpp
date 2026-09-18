@@ -1,7 +1,7 @@
 // MixerFaderTests.cpp -- FRO11 (P9-5): a fader gesture changes gain as exactly one undo step.
 //
 // Deviation from the plan's "drive it through real synthesised mouse events on the juce::Slider"
-// (docs/testing.md's own convention, MacroPortRealMouseDragTests.cpp's template): a raw
+// (docs/development/test-patterns.md, MacroPortRealMouseDragTests.cpp's template): a raw
 // mouseDown/mouseDrag/mouseUp sequence built by hand and fed straight to a stock juce::Slider (as
 // opposed to this codebase's own Component subclasses, which is what that template actually
 // drives) hung this suite in CI -- juce::Slider's own internal mouse handling reaches into

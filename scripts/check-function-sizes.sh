@@ -61,7 +61,7 @@ Usage: bash scripts/check-function-sizes.sh [--update] [--list [N]] [--root <dir
 Enforces a hard per-function line-count cap (FUNCTION_SIZE_CAP, default 200) over every git-tracked
 *.cpp/*.h/*.mm file under Source/, Tests/, Tools/, with a strict ratchet baseline
 (scripts/function-size-baseline.txt) grandfathering functions already over the cap. See
-docs/testing.md "Function-size cap (Lint job)" for the full mechanism and how to split a function.
+docs/development/function-size-guard.md for the full mechanism and how to split a function.
 
   (no flags)     Check the tree against the cap + baseline. Exit 1 on any violation.
   --update       Rewrite the baseline from the current tree (functions over cap only, sorted) and
@@ -236,7 +236,7 @@ run_check() {
                 if (count[k] > cap) {
                     legacy++
                     if (!(k in entry_count)) {
-                        printf "::error::%s (%s:%d) is %d lines (cap %d) and not in the baseline -- extract a named step / collaborator (see docs/testing.md, section \"Function-size cap\")\n", name_of(k), path_of(k), line[k], count[k], cap
+                        printf "::error::%s (%s:%d) is %d lines (cap %d) and not in the baseline -- extract a named step / collaborator (see docs/development/function-size-guard.md)\n", name_of(k), path_of(k), line[k], count[k], cap
                         errors++
                     } else if (count[k] > entry_count[k]) {
                         printf "::error::%s (%s:%d) grew from %d to %d lines; the ratchet only tightens -- extract a named step / collaborator instead\n", name_of(k), path_of(k), line[k], entry_count[k], count[k]

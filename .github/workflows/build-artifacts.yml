@@ -153,7 +153,7 @@ jobs:
     # index (a point-release rotates out from under it) the fetch 404s and the whole release build
     # fails outright, as happened on 2026-08-25. scripts/ci-install-linux-deps.sh is the same
     # mirror-failover script ci.yml's build-and-test job already uses for exactly this reason — see
-    # docs/testing.md "Dependency install: the apt mirror is not reliable". timeout-minutes matches
+    # docs/development/ci-pipeline.md "Dependency install: the apt mirror is not reliable". timeout-minutes matches
     # ci.yml's backstop: without a ceiling a sick mirror stalls for hours instead of failing over.
     - name: Install Linux Dependencies
       if: runner.os == 'Linux'
@@ -179,7 +179,7 @@ jobs:
     # Cache FetchContent Dependencies
     # restore + save are split (rather than the combined actions/cache) so the health check below
     # can read `cache-matched-key`, which the combined action does not expose — see
-    # docs/testing.md "Build caching", rule 4.
+    # docs/development/ci-caching.md, rule 4.
     - name: Restore FetchContent Dependencies
       id: deps-cache
       uses: actions/cache/restore@v5
@@ -260,7 +260,7 @@ jobs:
     # before this step runs and increases every run, so it stays correct regardless of what tag
     # the release job mints afterwards. SYNTH_SPARKLE_PUBLIC_KEY / SYNTH_WINSPARKLE_PUBLIC_KEY
     # read from repo VARIABLES (not secrets — both are the public half of their key pair) that
-    # don't exist yet; see docs/distribution.md. Both are harmless no-ops on the OSes where they're
+    # don't exist yet; see docs/development/auto-update.md. Both are harmless no-ops on the OSes where they're
     # unused.
     - name: Configure CMake
       shell: bash
@@ -379,7 +379,7 @@ jobs:
         # every published release has shown for this asset (GitHub silently rewrote the space to
         # a period on upload), so this is a no-op for end users and for
         # synth-platform/apps/web/src/lib/releases.ts's hardcoded `linuxStandalone: "Agent.Synth"`
-        # — see docs/distribution.md's "Release asset upload reliability" section (FRO151/FRO160).
+        # — see docs/development/releases.md's "Release asset upload reliability" section.
         find build -name "Agent Synth" -type f -perm /111 -exec cp {} artifact/Agent.Synth \; || true
         if [ ! -f "artifact/Agent.Synth" ]; then
             find build -name "Agent Synth" -type f -exec cp {} artifact/Agent.Synth \;
@@ -690,7 +690,7 @@ jobs:
     needs: [release]
     # Skips cleanly (not a failure) until both halves of the EdDSA signing key exist: the public
     # key as a repo VARIABLE (embedded into the app's Info.plist by the build job above) and the
-    # private key as this job's SPARKLE_PRIVATE_KEY secret. See docs/distribution.md for how to
+    # private key as this job's SPARKLE_PRIVATE_KEY secret. See docs/development/auto-update.md for how to
     # generate both with Sparkle's own `generate_keys` tool. Until then, "Check for Updates" in the
     # app itself also stays inert (UpdateManager checks for a non-empty SUPublicEDKey at startup).
     if: needs.release.result == 'success' && vars.SPARKLE_PUBLIC_KEY != ''
@@ -726,7 +726,7 @@ jobs:
 
       # Attaches appcast.xml to the release as a downloadable/inspectable asset. Deploying it to
       # https://agentsynth.app/updates/appcast.xml (the app's SUFeedURL) is a separate step, done
-      # in synth-platform (P5-7, done) — see docs/distribution.md's "Promoting a build to stable".
+      # in synth-platform — see docs/development/releases.md's "Promoting a build to stable".
       - name: Attach appcast to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -737,7 +737,7 @@ jobs:
     needs: [release]
     # Same skip-cleanly-until-configured pattern as publish-appcast above, gated on WinSparkle's
     # OWN key pair (WINSPARKLE_PUBLIC_KEY/WINSPARKLE_PRIVATE_KEY) — separate and independent from
-    # Sparkle's, even though both use EdDSA. See docs/distribution.md for key generation.
+    # Sparkle's, even though both use EdDSA. See docs/development/auto-update.md for key generation.
     if: needs.release.result == 'success' && vars.WINSPARKLE_PUBLIC_KEY != ''
     runs-on: windows-latest
     steps:
@@ -765,7 +765,7 @@ jobs:
           Expand-Archive -Path winsparkle.zip -DestinationPath winsparkle-tools
 
       # winsparkle-tool's `sign --private-key-file KEYFILE FILENAME` flags are confirmed against
-      # the real .exe's own --help (see docs/distribution.md); the project's README additionally
+      # the real .exe's own --help (see docs/development/auto-update.md); the project's README additionally
       # documents `-f`/`--private-key-file` as printing `sparkle:edSignature="..." length="..."` to
       # stdout — that exact stdout SHAPE is still not independently re-verified (no real key +
       # installer have been signed yet in any environment). The private key is written to a temp

@@ -89,7 +89,7 @@ not by field position, so an old fixture stays valid after a future field is add
 ## Recording the fixture corpus
 
 `Tests/fixtures/ai-patches/*.json` are `--json` outputs from this harness, committed verbatim and
-replayed offline by `Tests/AI/AIPatchFixtureReplayTests.cpp` — see `docs/testing.md` for what that
+replayed offline by `Tests/AI/AIPatchFixtureReplayTests.cpp` — see `docs/development/test-layers.md` for what that
 test asserts. To re-record (e.g. after a `Scenarios.h` prompt change, a schema change, or to widen
 model coverage):
 

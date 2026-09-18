@@ -1,7 +1,7 @@
 // Tests for VST3/AU plugin support: AudioEngine's Hosted mode, AgentSynthAudioProcessor, and the
 // MainComponent engine-ownership split introduced alongside it.
 //
-// Headless/deterministic constraints (see docs/testing.md and house style in
+// Headless/deterministic constraints (see docs/development/test-patterns.md and house style in
 // MainComponentTests.cpp / StateRoundTripTests.cpp): no real audio device, no network, no sleeps.
 // HostMode::Hosted engines never touch the device manager, so they are used wherever a real,
 // initialised AudioEngine is required. HostMode::Standalone engines are only ever default- or

@@ -1,5 +1,5 @@
 ; AgentSynth Windows installer (P5-6). Per-user install (no admin/UAC), built so WinSparkle's
-; default "run the downloaded file" auto-update flow (see docs/distribution.md) has a real
+; default "run the downloaded file" auto-update flow (see docs/development/auto-update.md) has a real
 ; installer to run instead of a bare portable exe.
 ;
 ; Invoked from CI as:
@@ -31,7 +31,7 @@ Unicode True
 ; Per-user install, HKCU only — no admin elevation required. This keeps WinSparkle's silent-ish
 ; update flow (it already shows its own "update available" dialog before running this installer,
 ; so a UAC prompt wouldn't break anything, but per-user avoids it entirely) friction-free, and
-; matches "no code-signing cert yet, no admin story" positioning (see docs/distribution.md).
+; matches "no code-signing cert yet, no admin story" positioning (see docs/development/distribution.md).
 InstallDir "$LOCALAPPDATA\AgentSynth"
 RequestExecutionLevel user
 

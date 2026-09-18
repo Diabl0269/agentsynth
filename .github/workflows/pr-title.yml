@@ -5,7 +5,7 @@ name: PR Title
 # main's commit history. Read-only (only inspects github.event.pull_request.title -- no checkout,
 # no secrets), so this is safe on `pull_request` for fork PRs too; no need for `pull_request_target`.
 #
-# Required check as of FRO170 -- see docs/pr-title-convention.md "Rollout" for the history of why
+# A required status check -- see docs/development/pr-title-convention.md for the rule and why
 # it landed non-required first (FRO182) and what had to happen (open PRs retitled by hand) before
 # it could become one.
 on:
@@ -23,7 +23,7 @@ jobs:
         run: |
           set -uo pipefail
           # type(scope)!: subject -- scope optional, "!" marks a breaking change. Full rule and
-          # the allowed type list: docs/pr-title-convention.md.
+          # the allowed type list: docs/development/pr-title-convention.md.
           pattern='^(feat|fix|docs|ci|chore|refactor|test|perf|build)(\([A-Za-z0-9/_-]+\))?!?: .+$'
           if [[ "$TITLE" =~ $pattern ]]; then
             echo "OK: $TITLE"
@@ -33,5 +33,5 @@ jobs:
           echo "Expected: type(scope)?: subject   e.g. feat(FRO112): knob-and-graph envelope module card"
           echo "Allowed types: feat fix docs ci chore refactor test perf build"
           echo "Breaking change: put '!' right before the colon, e.g. feat(FRO112)!: ..."
-          echo "Full rule: docs/pr-title-convention.md"
+          echo "Full rule: docs/development/pr-title-convention.md"
           exit 1

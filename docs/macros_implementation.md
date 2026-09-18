@@ -253,7 +253,7 @@ In order, each independently shippable:
       `LookAndFeel_V4`'s default drew none. Every repaint is the free one JUCE's own
       `Button::focusGained`/`focusLost` already trigger; no new timer (Source/UI/CLAUDE.md).
    3. **The "Add a port" panel's Add button/name field were invisible.** Diagnosed with a headless
-      `createComponentSnapshot` PNG (docs/testing.md's smoke-test pattern) before any fix was
+      `createComponentSnapshot` PNG (docs/development/test-patterns.md's smoke-test pattern) before any fix was
       attempted: the panel's second content row (name field + Add button) was entirely absent from
       the render, while the first row (direction/kind/shape combos) painted fine. Root cause:
       `resized()`'s `addBlockArea` budgeted height for only 2 of the panel's 3 rows (label +

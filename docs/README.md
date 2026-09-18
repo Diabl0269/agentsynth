@@ -90,14 +90,26 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/ai/history.md`](ai/history.md) — server-side and local conversation history, retention, the history panel
 - [`docs/ai/feedback.md`](ai/feedback.md) — patch thumbs and their sync, general feedback, opt-in prompt collection
 
-## Testing, CI & distribution
+## Development: testing, CI & distribution
 
-- [`docs/testing.md`](testing.md) — test layers, build/test commands, CI pipeline, git hooks, coverage
-- [`docs/testing-header-comments.md`](testing-header-comments.md) — the header-comment-placement guard (FRO183): why it tracks excess (comments minus code) rather than a raw comment count, the exact threshold, and the ratchet baseline
-- [`docs/pr-title-convention.md`](pr-title-convention.md) — PR title format (`type(scope)!: subject`), why it's checked on the title not a commit message, and the not-yet-required rollout plan (FRO182)
-- [`docs/docs-guard.md`](docs-guard.md) — `scripts/check-docs.sh`'s six checks (naming, links, `docs/...` mentions, `§`-section refs, README map completeness, bare `#anchor` mentions), the naming ratchet, and where it runs
-- [`docs/testing_gain_staging.md`](testing_gain_staging.md) — the `ModuleGainAudit` sweep: only gain controls may add gain; anything above +6 dB is allow-listed with a reason
-- [`docs/distribution.md`](distribution.md) — version identity, Sparkle auto-update (macOS), EdDSA key generation, CI appcast publishing, WinSparkle status
+- [`docs/development/testing.md`](development/testing.md) — running the suite, the build flags, adding tests for a new module, snapshot references
+- [`docs/development/test-layers.md`](development/test-layers.md) — what each suite in the test binary covers, grouped by layer
+- [`docs/development/test-patterns.md`](development/test-patterns.md) — the conventions every test follows: the real mouse path, headless seams, settings isolation, sanitizers
+- [`docs/development/gain-staging.md`](development/gain-staging.md) — the `ModuleGainAudit` sweep: only gain controls may add gain; anything above +6 dB is allow-listed with a reason
+- [`docs/development/ai-harnesses.md`](development/ai-harnesses.md) — `AIPatchHarness` and `AIEvalHarness`: measurement, not tests, and the corpus the offline replay suite is built from
+- [`docs/development/local-cloud-dev.md`](development/local-cloud-dev.md) — exercising Pro-gated flows against a locally-run backend
+- [`docs/development/local-ci.md`](development/local-ci.md) — `scripts/ci-local.sh`, the git hooks, the clang-format pin, worktree dependency reuse, running suites in parallel, dev-signing
+- [`docs/development/ci-pipeline.md`](development/ci-pipeline.md) — `ci.yml`'s triggers and jobs, the six required status checks, docs-only PR coverage, the apt-mirror failover
+- [`docs/development/ci-caching.md`](development/ci-caching.md) — the ccache and FetchContent caches, the six rules that keep them working, and the health check that gates them
+- [`docs/development/ascii-literal-guard.md`](development/ascii-literal-guard.md) — no non-ASCII bytes in a `Source/` string literal, and the JUCE decoding contract behind it
+- [`docs/development/file-size-guard.md`](development/file-size-guard.md) — the 1000-line cap, its strict ratchet baseline, and how to split an over-cap file
+- [`docs/development/function-size-guard.md`](development/function-size-guard.md) — the 200-line-per-function cap, how a function's size is measured, and its ratchet baseline
+- [`docs/development/header-comment-guard.md`](development/header-comment-guard.md) — comment *placement* in headers: why it tracks excess (comments minus code) rather than a raw count, the exact threshold, and the ratchet baseline
+- [`docs/development/docs-guard.md`](development/docs-guard.md) — `scripts/check-docs.sh`'s seven checks (naming, links, `docs/...` mentions, `§`-section refs, README map completeness, bare `#anchor` mentions, bare basenames), the naming ratchet, and where it runs
+- [`docs/development/pr-title-convention.md`](development/pr-title-convention.md) — PR title format (`type(scope)!: subject`) and why it is checked on the title, not a commit message
+- [`docs/development/distribution.md`](development/distribution.md) — version identity, the build-time "What's New" data, and the signing state of a shipped build
+- [`docs/development/auto-update.md`](development/auto-update.md) — Sparkle (macOS) and WinSparkle (Windows), EdDSA key generation, and the manual verification recipes
+- [`docs/development/releases.md`](development/releases.md) — the post-merge artifact build, appcast publishing, release asset upload reliability, and promoting a build to stable
 
 ## Other
 

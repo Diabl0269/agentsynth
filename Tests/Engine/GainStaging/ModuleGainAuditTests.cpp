@@ -12,7 +12,7 @@
 //
 // Oscillator-type SOURCES (Oscillator, Wavetable, Noise) have no audio input, so "gain relative
 // to input" is undefined for them — SourceModulePeakTest below gives them a lighter peak-only
-// check instead (docs/testing.md's existing OscillatorTest/WavetableOscillatorModule*Tests cover
+// check instead (docs/development/test-layers.md's OscillatorTest/WavetableOscillatorModule*Tests cover
 // their waveform correctness; this is only about staying within [-1, 1] at default/max Level).
 
 #include "Modules/ChannelStripModule.h"
@@ -323,7 +323,7 @@ const std::vector<AllowEntry>& allowList() {
         // Parametric EQ's four bandNGain params are NOT allow-listed: this audit never turns a
         // band's own "on" toggle on (AudioParameterBool sweep is skipped entirely, see
         // buildSweepCases), so sweeping bandNGain alone with the band left OFF (the module's
-        // documented default — docs/testing.md) measures no effect and never crosses +6 dB here.
+        // documented default — docs/development/test-layers.md) measures no effect and never crosses +6 dB here.
         // If a future change makes gain apply while a band is off, or the bands default on, this
         // audit will start flagging it, and it needs a real entry with a real measured number.
         //

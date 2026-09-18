@@ -58,9 +58,9 @@ public:
      *  hook really ran and did real work, rather than that the process merely didn't crash. */
     static int getLiveUnbindCallCountForTest() noexcept { return liveUnbindCalls_; }
 
-    // ---- Headless test seams. juce::PopupMenu never runs in a test process (docs/testing.md), so
-    // the menu callbacks below call these same real methods. Row indices address the VISIBLE rows,
-    // i.e. positions in `entries_`, not slot numbers.
+    // ---- Headless test seams. juce::PopupMenu never runs in a test process (see
+    // docs/development/test-patterns.md), so the menu callbacks below call these same real methods.
+    // Row indices address the VISIBLE rows, i.e. positions in `entries_`, not slot numbers.
     void addSendTo(juce::AudioProcessorGraph::NodeID target);
     void removeRow(int rowIndex);
     void togglePreFaderForRow(int rowIndex);

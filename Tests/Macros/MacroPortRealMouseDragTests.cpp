@@ -8,7 +8,7 @@
 // moves both together makes that gate miss the source jack and silently no-ops the whole gesture.
 // This file drives mouseDown -> mouseDrag -> mouseUp on the real ModuleComponent callbacks, with
 // a correctly-held-fixed mouseDownPosition, closing that gap (see
-// docs/testing.md's "test the real mouse path" guidance).
+// docs/development/test-patterns.md's real-mouse-path guidance).
 
 #include "Modules/FilterModule.h"
 #include "Modules/OscillatorModule.h"

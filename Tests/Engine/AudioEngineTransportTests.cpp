@@ -1,7 +1,7 @@
 // Tests for the transport wiring inside AudioEngine: the once-per-block tick in renderNextBlock,
 // the TransportService installed as the graph's juce::AudioPlayHead, and report-only latency.
 //
-// Headless/deterministic constraints (see docs/testing.md and house style in
+// Headless/deterministic constraints (see docs/development/test-patterns.md and house style in
 // PluginProcessorTests.cpp / MainComponentTests.cpp): no real audio device, no network, no sleeps.
 // Every engine here is HostMode::Hosted — hosted engines never touch the device manager or open
 // MIDI inputs, so initialise() is safe. A HostMode::Standalone engine must never have initialise()

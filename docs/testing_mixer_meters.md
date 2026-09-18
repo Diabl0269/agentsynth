@@ -2,13 +2,13 @@
 
 The meters rework ([`mixer.md`](mixer.md) §5.10's Meters subsection): a per-reader peak latch, a
 -60..+3 dBFS two-bar scale with colour zones and ballistics, a per-column clip readout, and the
-track header chip's own dB mapping. Split out of [`testing.md`](testing.md) to hold that file's own
+track header chip's own dB mapping. Split out of [`development/test-layers.md`](development/test-layers.md) to hold that file's own
 line cap; see `Tests/Mixer/ChannelStripTests.cpp`'s entry there for the module-level latch tests
 (the missed-overs regression) that stayed alongside the existing `ChannelStripTest`/`MasterModuleTest`
 suites. All headless; no `juce::Timer`, no wall-clock read anywhere in the ballistics themselves.
 
 FRO150 (the fader's own taper, [`mixer_fader.md`](mixer_fader.md)) added the two fader tables below
-for the same reason -- new coverage that would have pushed `testing.md` past its own cap.
+for the same reason -- new coverage that would have pushed the shared catalogue past its own cap.
 
 | File | Covers |
 |------|--------|
@@ -47,7 +47,7 @@ painter.**
 
 **PNG render-to-file inspection.** `MixerColumnComponentMeterTests.cpp`'s
 `ClippedMeterRendersToPngForVisualInspection` follows the same convention as
-`ModuleComponentLayoutTests.cpp`'s `AdsrCardRendersToPngForVisualInspection` (`docs/testing.md`'s
+`ModuleComponentLayoutTests.cpp`'s `AdsrCardRendersToPngForVisualInspection` (`docs/development/test-patterns.md`'s
 "Test the real mouse path" neighbourhood): a strip driven hot enough that its clip readout shows
 the clip colour and its bars sit in the clip zone, painted offscreen unconditionally (so the
 meaningful-content assertions always run), and written to disk only when
@@ -56,7 +56,7 @@ depends on writing a file. `MeterColourStopsEditorTests.cpp`'s
 `RendersToPngForVisualInspection` follows the identical convention for the Settings > Appearance
 "Meter Colours" section itself (`METER_COLOUR_EDITOR_PNG=<path>`).
 
-See also [`testing.md`](testing.md) and [`layout/theming.md`](layout/theming.md)'s token table for
+See also [`development/test-layers.md`](development/test-layers.md) and [`layout/theming.md`](layout/theming.md)'s token table for
 `meterFill`/`meterMid`/`meterHigh`/`meterClip`, and
 [`layout/colour-overrides.md`](layout/colour-overrides.md#meter-colours) for the `meterColourStops`
 user override.

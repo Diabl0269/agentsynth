@@ -601,7 +601,7 @@ bool imagesHaveIdenticalPixels(const juce::Image& a, const juce::Image& b) {
 }
 } // namespace
 
-// Diagnosed via Component::createComponentSnapshot rendered to a PNG (docs/testing.md's
+// Diagnosed via Component::createComponentSnapshot rendered to a PNG (docs/development/
 // `createComponentSnapshot` smoke-test pattern): the "Add a port" panel's addBlockArea budgeted
 // height for only 2 of its 3 rows (section label + newRow1), so newRow2 — the name field AND the
 // Add button — was squeezed to zero height and effectively vanished, matching the founder's report

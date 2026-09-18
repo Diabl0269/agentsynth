@@ -103,7 +103,7 @@ relocate the detail into, must have its maintainer-facing rationale moved beside
 definition it describes. Tracking excess rather than a raw comment count means the mandated fix --
 adding a member with its own short one-line caller-facing contract in the header -- never trips the
 ratchet (comment and code both grow by one; excess is unchanged). Strict ratchet baseline
-(scripts/header-comment-baseline.txt) grandfathers legacy headers. See docs/testing.md "Header
+(scripts/header-comment-baseline.txt) grandfathers legacy headers. See docs/development/header-comment-guard.md "Header
 comment placement" for the full mechanism.
 
   (no flags)     Check the tree against the threshold + baseline. Exit 1 on any violation.
@@ -350,7 +350,7 @@ run_check() {
                 if (!flagged_ok[p]) continue
                 over++
                 if (!(p in entry_excess)) {
-                    printf "::error::%s has %d comment lines vs %d code lines (+%d excess, over the placement threshold) and is not in the baseline -- move each member'\''s detailed contract beside its out-of-line definition in the owning .cpp unit -- see docs/testing.md\n", p, comment_count[p], code_count[p], excess_of[p]
+                    printf "::error::%s has %d comment lines vs %d code lines (+%d excess, over the placement threshold) and is not in the baseline -- move each member'\''s detailed contract beside its out-of-line definition in the owning .cpp unit -- see docs/development/header-comment-guard.md\n", p, comment_count[p], code_count[p], excess_of[p]
                     errors++
                 } else if (excess_of[p] > entry_excess[p]) {
                     printf "::error::%s grew from +%d to +%d excess comment lines (comments minus code); the ratchet only tightens -- move the addition beside its out-of-line definition instead\n", p, entry_excess[p], excess_of[p]

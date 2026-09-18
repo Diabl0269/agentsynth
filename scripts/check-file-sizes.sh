@@ -95,7 +95,7 @@ Usage: bash scripts/check-file-sizes.sh [--update] [--list [N]] [--root <dir>] [
 
 Enforces a hard line-count cap (FILE_SIZE_CAP, default 1000) on every git-tracked source/test/
 docs/config file, with a strict ratchet baseline (scripts/file-size-baseline.txt) grandfathering
-legacy files already over the cap. See docs/testing.md "File-size cap (Lint job)" for the full
+legacy files already over the cap. See docs/development/file-size-guard.md for the full
 mechanism and how to split an over-cap file.
 
   (no flags)     Check the tree against the cap + baseline. Exit 1 on any violation.
@@ -283,7 +283,7 @@ run_check() {
                 if (count[p] > cap) {
                     legacy++
                     if (!(p in entry_count)) {
-                        printf "::error::%s is %d lines (cap %d) and not in the baseline -- split it by concern (see docs/testing.md, section \"File-size cap\")\n", p, count[p], cap
+                        printf "::error::%s is %d lines (cap %d) and not in the baseline -- split it by concern (see docs/development/file-size-guard.md)\n", p, count[p], cap
                         errors++
                     } else if (count[p] > entry_count[p]) {
                         printf "::error::%s grew from %d to %d lines; the ratchet only tightens -- move new code into a new <Class><Concern>.cpp unit instead\n", p, entry_count[p], count[p]

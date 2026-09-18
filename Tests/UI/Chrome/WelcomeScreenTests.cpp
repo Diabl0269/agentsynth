@@ -1,6 +1,6 @@
 // T114/P8-10: the app-only welcome screen overlay (Feature 1) and the build-time "What's New"
 // dialog (Feature 2). See docs/architecture.md's "Welcome screen" subsection (§5) and
-// docs/distribution.md's "What's New" section.
+// docs/development/distribution.md's "What's New" section.
 //
 // SAFETY RULE, same as MainComponentTests.cpp's unsaved-changes section: never let a real dialog
 // open. Every action reachable from the welcome screen ultimately funnels through

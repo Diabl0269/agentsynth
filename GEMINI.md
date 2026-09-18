@@ -56,7 +56,7 @@ The project uses CMake with:
 
 Every implementation plan **must** include:
 1. A **Tests** section — list new test cases, test file, and what each test verifies
-2. A **Docs Updates** section — list which docs files need updating (testing.md, CLAUDE.md, etc.)
+2. A **Docs Updates** section — list which docs files need updating (`docs/development/testing.md`, `CLAUDE.md`, etc.)
 
 ## Development Commands
 
@@ -123,7 +123,7 @@ Post-merge, `.github/workflows/build-artifacts.yml` runs on push to main (4 jobs
 
 ## Testing Strategy
 
-~460 tests across ~64 suites, all headless (no audio device, no GUI window). Eight test layers: audio rendering (DSP verification), integration (signal chains, mod routing), component workflow (UI interactions), state management (presets, undo/redo, serialization), theme system (token round-trips, ColourId mapping, WCAG contrast, icon tinting), layout (grid snap, anti-overlap, auto-arrange, width buckets), icon library (SVG loading, tint stability, null fallback), status bar (CPU/voice polling, master-mute, format helpers), and E2E workflow (full application paths). Code coverage threshold: 85%. See [`docs/testing.md`](docs/testing.md) for the full breakdown, patterns, and how to add tests for new modules.
+~460 tests across ~64 suites, all headless (no audio device, no GUI window). Eight test layers: audio rendering (DSP verification), integration (signal chains, mod routing), component workflow (UI interactions), state management (presets, undo/redo, serialization), theme system (token round-trips, ColourId mapping, WCAG contrast, icon tinting), layout (grid snap, anti-overlap, auto-arrange, width buckets), icon library (SVG loading, tint stability, null fallback), status bar (CPU/voice polling, master-mute, format helpers), and E2E workflow (full application paths). Code coverage threshold: 85%. See [`docs/development/testing.md`](docs/development/testing.md) for the full breakdown, patterns, and how to add tests for new modules.
 
 ## Keyboard Shortcuts
 

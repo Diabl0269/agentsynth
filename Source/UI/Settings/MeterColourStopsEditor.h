@@ -92,7 +92,7 @@ public:
     bool keyPressed(const juce::KeyPress&) override;
     std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
-    // ---- Testing hooks: real-mouse-path (docs/testing.md's "Test the real mouse path") ----
+    // ---- Testing hooks: the real mouse path (docs/development/test-patterns.md) ----
     int getSelectedIndexForTest() const noexcept { return selected_; }
     void selectForTest(int index) { selectIndex(index); }
     juce::Rectangle<int> getHandleBoundsForTest(int index) const { return handleBounds(index); }

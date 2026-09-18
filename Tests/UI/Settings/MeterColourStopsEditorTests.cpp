@@ -1,7 +1,7 @@
 // MeterColourStopsEditorTests.cpp -- FRO147: Source/UI/Settings/MeterColourStopsEditor.{h,cpp},
 // the Settings > Appearance "Meter Colours" section's scale/handle editor. Headless, driven with
-// synthesized juce::MouseEvents for the drag gestures (docs/testing.md's "real mouse path"
-// convention, same idiom as Tests/UI/Graph/DragStateResetTests.cpp's realMouseEvent()).
+// synthesized juce::MouseEvents for the drag gestures (docs/development/test-patterns.md's real
+// mouse path, same idiom as Tests/UI/Graph/DragStateResetTests.cpp's realMouseEvent()).
 
 #include "UI/Settings/MeterColourStopsEditor.h"
 #include "UI/Theme/BuiltInThemes.h"
@@ -431,7 +431,7 @@ TEST_F(MeterColourStopsEditorTest, SetStopsFromTheOwnerReplacesTheWorkingSetAndC
 
 //==============================================================================
 // PNG render-to-file inspection -- same convention as MixerColumnComponentMeterTests.cpp's
-// ClippedMeterRendersToPngForVisualInspection (docs/testing.md's "Test the real mouse path"
+// ClippedMeterRendersToPngForVisualInspection (docs/development/test-patterns.md's real mouse path
 // neighbourhood): always painted offscreen so the content assertions run unconditionally in CI,
 // written to disk only when METER_COLOUR_EDITOR_PNG is set.
 //==============================================================================

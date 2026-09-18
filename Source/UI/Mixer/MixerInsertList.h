@@ -56,10 +56,10 @@ public:
     int getEntryCountForTest() const noexcept { return (int)entries_.size(); }
     bool isLinearForTest() const noexcept { return linear_; }
 
-    // ---- Headless test seams -- juce::PopupMenu never runs in a test process
-    // (docs/testing.md), so these are the same real methods the async menu callbacks below call,
-    // exposed directly (the ChannelFlow suite's own `applyAddTrackMenuChoice` precedent). Only
-    // valid on a linear chain (linear_) with configure() already called.
+    // ---- Headless test seams -- juce::PopupMenu never runs in a test process (see
+    // docs/development/test-patterns.md), so these are the same real methods the async menu
+    // callbacks below call, exposed directly (the ChannelFlow suite's own `applyAddTrackMenuChoice`
+    // precedent). Only valid on a linear chain (linear_) with configure() already called.
     void moveRow(int rowIndex, int delta);
     void removeRow(int rowIndex);
     void addModule(const juce::String& moduleTypeName);

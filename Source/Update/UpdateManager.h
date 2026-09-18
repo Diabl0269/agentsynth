@@ -14,7 +14,7 @@ namespace synth::update {
 // Windows: SYNTH_UPDATE_FEED_URL_STR/SYNTH_WINSPARKLE_PUBLIC_KEY_STR compile definitions, since
 // there's no Info.plist) and only starts the platform updater if both are non-empty. A build with
 // no signing key configured yet (the default until someone runs the platform's key-generation
-// tool — see docs/distribution.md) therefore never starts and never shows a "misconfigured" alert.
+// tool — see docs/development/auto-update.md) therefore never starts and never shows a "misconfigured" alert.
 class UpdateManager {
 public:
     UpdateManager();

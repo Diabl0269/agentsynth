@@ -48,13 +48,13 @@ jobs:
           # appcast.xml and SHA256SUMS.txt are what auto-update and the download page
           # actually consume once this tag becomes /releases/latest — a tag missing
           # either would promote cleanly and then 404 for real users. Fail loudly
-          # instead: see docs/distribution.md for what to do (re-run the build).
+          # instead: see docs/development/releases.md for what to do (re-run the build).
           #
           # appcast-windows.xml (P5-6) is required ONLY once WinSparkle's key pair actually exists
           # — build-artifacts.yml's publish-appcast-windows job skips cleanly (doesn't attach the
           # asset at all) until then, same as publish-appcast does for Sparkle before its own key
           # existed. Requiring it unconditionally would block every promotion, mac-only releases
-          # included, for as long as no one has generated a WinSparkle key — see docs/distribution.md.
+          # included, for as long as no one has generated a WinSparkle key — see docs/development/auto-update.md.
           required_assets="appcast.xml SHA256SUMS.txt"
           if [ -n "${{ vars.WINSPARKLE_PUBLIC_KEY }}" ]; then
             required_assets="$required_assets appcast-windows.xml"

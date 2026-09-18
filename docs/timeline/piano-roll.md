@@ -35,7 +35,7 @@ get wrong from outside — nullability, thread affinity, call ordering, units, o
 member's maintainer-facing rationale lives as a doc comment next to its out-of-line definition in
 the matching `PianoRoll<Concern>.cpp` unit, where the edit that invalidates it lands in the same
 diff hunk. See the root `CLAUDE.md`'s "Code structure" section and
-[`testing-header-comments.md`](../testing-header-comments.md) for the guard that enforces it.
+[`development/header-comment-guard.md`](../development/header-comment-guard.md) for the guard that enforces it.
 
 `PianoRollTypes.h` is a self-contained header (own `#pragma once` plus includes) defining those
 types at namespace scope inside a nested `synth::ui::pianoroll` namespace, so generic names like

@@ -2,7 +2,8 @@
 // AudioEngine's graph at a fixed sample rate / block size with no audio device, which is how every
 // timeline engine test renders, and is the loop the user-facing bounce/export is built on.
 //
-// Headless/deterministic constraints (see docs/testing.md and AudioEngineTransportTests.cpp): no
+// Headless/deterministic constraints (see docs/development/test-patterns.md and
+// AudioEngineTransportTests.cpp): no
 // real audio device, no network, no sleeps. Every engine here is HostMode::Hosted — the driver
 // requires it, and a HostMode::Standalone engine must never have initialise() called on it in
 // tests, since that opens real hardware.

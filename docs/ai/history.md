@@ -163,4 +163,4 @@ a conversation replaying its messages; every successful exchange saved locally r
 round trip and out-of-range fallback). `Tests/App/BrandingTests.cpp` (`resolveApiBaseUrl()`'s
 Debug-only `AGENTSYNTH_LOCAL_API_URL` override, which points a local build's auth, entitlement and
 cloud-history traffic at a locally run backend instance — see
-[testing cloud-gated features locally](../testing.md#testing-cloud-gated-features-locally-not-a-test)).
+[testing cloud-gated features locally](../development/local-cloud-dev.md)).

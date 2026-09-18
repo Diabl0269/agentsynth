@@ -56,23 +56,24 @@ bash scripts/install-hooks.sh   # pre-commit: clang-format lint;  pre-push: scri
 pip install "clang-format==$(cat .clang-format-version)"
 ```
 
-See [`docs/testing.md`](docs/testing.md) for the full build/test/CI/hooks reference.
+See [`docs/development/testing.md`](docs/development/testing.md) for the full build/test reference,
+and [`docs/README.md`](docs/README.md) for the map of everything else under `docs/`.
 
 ## Planning Rules
 
 Every implementation plan **must** include:
 
 1. A **Tests** section — list new test cases, the test file, and what each verifies.
-2. A **Docs Updates** section — list which docs (`docs/testing.md`, `CLAUDE.md`, etc.) need updating.
+2. A **Docs Updates** section — list which docs (`docs/development/testing.md`, `CLAUDE.md`, etc.) need updating.
 3. A **Structure** check — no file over 1,000 lines after the change; a change that would grow a file listed in `scripts/file-size-baseline.txt` moves the new code into a new per-concern unit instead.
 
 ## Code structure
 
-- Every file is capped at 1,000 lines, enforced by `scripts/check-file-sizes.sh` (ratchet baseline `scripts/file-size-baseline.txt`) — mechanism in [`docs/testing.md`](docs/testing.md). `--update` never raises an entry; `--allow-growth` is a reviewed exception.
-- A class that outgrows one file gets its own directory named after the class, never flat siblings dropped next to dozens of others: `<Class>/<Class>.h` + `<Class><Concern>.cpp` units (never `_Part1`) + shared private helpers in `<Class>Internal.h` — e.g. `Source/UI/Graph/GraphEditor/`, `Source/MainComponent/`. Tests mirror it: `Tests/<Area>/<Class>/<Class><Topic>Tests.cpp` with shared fixtures in `<Class>TestFixture.h`/`<Class>TestHelpers.h`. Each unit opens with a comment naming its concern. A comment goes where the person who could get it wrong will be looking. The shared header carries the declarations, the class-level comment, the section banners, and — per member — only the constraints a **caller** can violate from outside, one line each: nullability, thread affinity ("message thread only"), call-ordering preconditions, units, ownership. The **maintainer**-facing rationale — why it is implemented this way, the threading or ordering argument, the edge case that forced the design, the invariants the body must preserve — lives as a doc comment beside the out-of-line definition in the owning unit, because only a comment sitting inside the diff hunk of the edit that invalidates it reliably stays true, and a header comment recompiles every including translation unit. A one-line forwarder into a collaborator is defined out-of-line too rather than inline in the header (`PianoRollComponent.h`, `GraphEditor.h`). Enforced by `scripts/check-header-comments.sh` (ratchet baseline `scripts/header-comment-baseline.txt`) — mechanism in [`docs/testing.md`](docs/testing.md).
+- Every file is capped at 1,000 lines, enforced by `scripts/check-file-sizes.sh` (ratchet baseline `scripts/file-size-baseline.txt`) — mechanism in [`docs/development/file-size-guard.md`](docs/development/file-size-guard.md). `--update` never raises an entry; `--allow-growth` is a reviewed exception.
+- A class that outgrows one file gets its own directory named after the class, never flat siblings dropped next to dozens of others: `<Class>/<Class>.h` + `<Class><Concern>.cpp` units (never `_Part1`) + shared private helpers in `<Class>Internal.h` — e.g. `Source/UI/Graph/GraphEditor/`, `Source/MainComponent/`. Tests mirror it: `Tests/<Area>/<Class>/<Class><Topic>Tests.cpp` with shared fixtures in `<Class>TestFixture.h`/`<Class>TestHelpers.h`. Each unit opens with a comment naming its concern. A comment goes where the person who could get it wrong will be looking. The shared header carries the declarations, the class-level comment, the section banners, and — per member — only the constraints a **caller** can violate from outside, one line each: nullability, thread affinity ("message thread only"), call-ordering preconditions, units, ownership. The **maintainer**-facing rationale — why it is implemented this way, the threading or ordering argument, the edge case that forced the design, the invariants the body must preserve — lives as a doc comment beside the out-of-line definition in the owning unit, because only a comment sitting inside the diff hunk of the edit that invalidates it reliably stays true, and a header comment recompiles every including translation unit. A one-line forwarder into a collaborator is defined out-of-line too rather than inline in the header (`PianoRollComponent.h`, `GraphEditor.h`). Enforced by `scripts/check-header-comments.sh` (ratchet baseline `scripts/header-comment-baseline.txt`) — mechanism in [`docs/development/header-comment-guard.md`](docs/development/header-comment-guard.md).
 - A directory past roughly 30 files gets split by area too. `Source/UI/` holds only area directories (`Graph/`, `Timeline/`, `PianoRoll/`, `Library/`, `Macros/`, `ModuleViews/`, `Settings/`, `Assistant/`, `Chrome/`, `Layout/`, `Theme/`) with class directories nested inside them — a new UI file goes into its area, never back into `Source/UI/` itself. Include moved-or-shared headers Source-rooted (`"UI/Layout/LayoutUtil.h"`), so a file's depth never matters.
 - Docs: one topic per doc, split at section boundaries; keep the Docs map (`docs/README.md`) current.
-- Functions do one thing — extract when a function needs section comments or exceeds roughly a screen (~60–80 lines); a new function must never be 200+ lines, enforced by `scripts/check-function-sizes.sh` (ratchet baseline `scripts/function-size-baseline.txt`) — mechanism in [`docs/testing.md`](docs/testing.md). Prefer extracting a real collaborator class over a per-concern unit when the concern has its own state.
+- Functions do one thing — extract when a function needs section comments or exceeds roughly a screen (~60–80 lines); a new function must never be 200+ lines, enforced by `scripts/check-function-sizes.sh` (ratchet baseline `scripts/function-size-baseline.txt`) — mechanism in [`docs/development/function-size-guard.md`](docs/development/function-size-guard.md). Prefer extracting a real collaborator class over a per-concern unit when the concern has its own state.
 
 ## Critical invariants (break these and you ship bugs)
 
@@ -98,7 +99,7 @@ Everything else below is a tripwire index. The full rule lives in the named area
 - Scrub `ChannelStripModule`'s `"solo"`, `"isBus"`, and `"sends"` extra-state keys before writing a trusted-apply-carrying format to disk — an imported `soloed_=true` would silence the whole mix render-wide, an imported `isBus=true` badges an ordinary track channel as BUS, and captured `"sends"` slot state has no re-resolved cable target, all the moment the file loads. → [`docs/mixer.md §5.7`](docs/mixer.md)
 - Every document-replacing action goes through `MainComponent::guardUnsavedChanges` (async — hand it the work, never do it then ask), and any path that replaces the document with something that is not a bundle drops `currentBundleDir_`. → [`docs/architecture.md`](docs/architecture.md)
 - Autosave writes a sidecar (`autosave.json`), never `project.json`, and rotates a configurable number of numbered backups; gates on edit-serial movement (not `isDirty_`) and never fires during a recording take or a bounce. → [`docs/architecture.md`](docs/architecture.md)
-- No non-ASCII bytes in a `Source/` string literal — `juce::String`'s `const char*` ctor decodes as Latin-1, so `"Rename…"` (or its hex-escape spelling) ships mojibake; use ASCII or `juce::CharPointer_UTF8`/`String::fromUTF8`. Guarded by `scripts/tests/check-nonascii-literals.test.sh`. → [`docs/testing.md`](docs/testing.md)
+- No non-ASCII bytes in a `Source/` string literal — `juce::String`'s `const char*` ctor decodes as Latin-1, so `"Rename…"` (or its hex-escape spelling) ships mojibake; use ASCII or `juce::CharPointer_UTF8`/`String::fromUTF8`. Guarded by `scripts/tests/check-nonascii-literals.test.sh`. → [`docs/development/ascii-literal-guard.md`](docs/development/ascii-literal-guard.md)
 - `AudioEngine::renderNextBlock` is the last write to the render buffer in both host modes — anything summed post-graph (the metronome click, a future stage) must run before it, never after, or it bypasses the non-finite (NaN/Inf) output scrub. → [`docs/architecture.md`](docs/architecture.md)
 
 **Modules & channels** (`Source/Modules/CLAUDE.md`):
@@ -106,7 +107,7 @@ Everything else below is a tripwire index. The full rule lives in the named area
 - A second audio leg goes on a new `kRightBase` block, never ch1; pan is a balance law (unity centre); Dual I/O is **inherited** from channel shape (`hasStereoOutputPairShape`), never per-module registered, and "off" drops cables on the hidden right block. → [`docs/modules.md`](docs/modules.md)
 - A module's channel count is fixed for its lifetime; variable-port modules declare their maximum and vary only the visible count; an over-wide hosted plugin is refused, never truncated. → [`docs/modules.md`](docs/modules.md)
 - Every Wavetable warp mode must prove it doesn't alias (a documented defence + a parameterised-test entry). → [`docs/modules.md`](docs/modules.md)
-- Only gain controls may add gain: every module parameter is swept by `ModuleGainAudit`, and anything above +6 dB must be allow-listed with a reason. → [`docs/testing_gain_staging.md`](docs/testing_gain_staging.md)
+- Only gain controls may add gain: every module parameter is swept by `ModuleGainAudit`, and anything above +6 dB must be allow-listed with a reason. → [`docs/development/gain-staging.md`](docs/development/gain-staging.md)
 
 **Timeline** (`Source/Timeline/CLAUDE.md`):
 
@@ -132,8 +133,8 @@ Everything else below is a tripwire index. The full rule lives in the named area
 
 **CI** (`.github/CLAUDE.md`):
 
-- The CI cache is load-bearing and fails silently: per-language compiler launchers, keep the `push: main` trigger, key `build/_deps` on `cmake/DependencyVersions.cmake` only (pin new dependencies there), explicit `CCACHE_DIR` per job. → [`docs/testing.md`](docs/testing.md)
-- PR titles are conventional-commit subjects (`type(scope)!: subject`, scope = ticket id, breaking change marked `!`) — a required check as of FRO170 (landed non-required in FRO182). → [`docs/pr-title-convention.md`](docs/pr-title-convention.md)
+- The CI cache is load-bearing and fails silently: per-language compiler launchers, keep the `push: main` trigger, key `build/_deps` on `cmake/DependencyVersions.cmake` only (pin new dependencies there), explicit `CCACHE_DIR` per job. → [`docs/development/ci-caching.md`](docs/development/ci-caching.md)
+- PR titles are conventional-commit subjects (`type(scope)!: subject`, scope = ticket id, breaking change marked `!`) — a required check as of FRO170 (landed non-required in FRO182). → [`docs/development/pr-title-convention.md`](docs/development/pr-title-convention.md)
 
 ## Docs map
 
