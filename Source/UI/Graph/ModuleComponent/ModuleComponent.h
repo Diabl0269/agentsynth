@@ -382,18 +382,14 @@ private:
     bool ctrlTogglePending = false;
     std::vector<juce::AudioProcessorGraph::NodeID> ctrlPressSelection;
 
-    // FRO40: Cmd+press mirrors ctrlTogglePending/ctrlPressSelection exactly — a deferred additive-
-    // select TOGGLE and a macro-membership DRAG armed at once. See mouseDown/mouseUp for the full
-    // gesture and the Windows/Linux Ctrl-vs-Cmd arbitration.
+    // FRO40: Cmd+press arms a deferred additive-select TOGGLE and a macro-membership DRAG at
+    // once, resolved at mouseUp by whether the press moved. See mouseDown/mouseUp.
     bool cmdReparentPending = false;
     std::vector<juce::AudioProcessorGraph::NodeID> cmdPressSelection;
 
-    // FRO40: whether THIS drag can reparent right now, independent of which of the two flags above
-    // armed the press — deliberately NOT `ctrlTogglePending || cmdReparentPending` (see mouseDown's
-    // own comment for why). Re-derived live on every mouseDrag tick for a single-module drag (Gap
-    // 3) so Cmd pressed/released mid-drag arms/disarms it; a group drag keeps mouseDown's latch.
-    // Full platform matrix and rationale: mouseDown/mouseDrag/mouseUp in
-    // ModuleComponentInteraction.cpp.
+    // FRO40: whether THIS drag can reparent right now — NOT `ctrlTogglePending ||
+    // cmdReparentPending`, which is also true for a plain macOS Ctrl+drag. Re-derived every
+    // mouseDrag tick for a single-module drag, so Cmd pressed/released mid-drag arms/disarms it.
     bool reparentArmed = false;
 
     // Inline rename editor, alive only between beginTitleRename and finishTitleRename. A child
