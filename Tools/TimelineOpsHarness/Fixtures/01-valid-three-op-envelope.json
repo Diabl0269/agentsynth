@@ -1,6 +1,6 @@
 {
   "name": "valid-three-op-envelope",
-  "description": "A well-formed addTrack + placeClips + writeLane batch — the shape docs/AI_Engine.md §5e's example envelope uses.",
+  "description": "A well-formed addTrack + placeClips + writeLane batch — the shape docs/ai/timeline-ops.md#the-envelope's example envelope uses.",
   "kind": "timelineOps",
   "expectedValid": true,
   "expectedMessageContains": "",

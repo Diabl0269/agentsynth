@@ -85,8 +85,14 @@ export LC_ALL=C
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
 
 # Text file extensions this guard scans -- source comments, scripts and CI config can all carry a
-# `docs/...` reference or a `§`-section pointer, not just the docs themselves.
-EXTENSIONS=(md cpp h sh yml)
+# `docs/...` reference or a `§`-section pointer, not just the docs themselves. FRO208 widened this
+# from (md cpp h sh yml) to also cover txt/json/cmake/py: CMakeLists.txt alone carries five doc
+# references (a section reference to docs/mixer.md, plus refs to docs/distribution.md,
+# docs/architecture.md and docs/shortcuts.md) that no check could ever see, and a hand-authored
+# Tools/**/Fixtures/*.json description field can cite a doc too (see the
+# Tools/TimelineOpsHarness/Fixtures/ note below) -- verified to add ZERO new violations on the
+# tree as of FRO208 landing, so it starts clean.
+EXTENSIONS=(md cpp h sh yml txt json cmake py)
 
 # Path prefixes that never count, regardless of extension -- generated/vendored/scratch trees, or
 # (worktrees/, .claude/) Claude Code's own workspace scratch, whose contents have nothing to do
@@ -98,16 +104,27 @@ EXCLUDED_PREFIXES=(
     "assets/"                              # binary/media assets, tracked but not docs
     "worktrees/"                           # a loose worktree dropped outside .claude/ (shouldn't
                                             # exist per root CLAUDE.md, but never scan one if it does)
-    "Tests/fixtures/"                      # recorded AI-patch JSON corpora, not authored docs
-    "Tools/TimelineOpsHarness/Fixtures/"   # recorded TimelineOps JSON fixtures, not authored docs
+    "Tests/fixtures/"                      # recorded AI-patch JSON corpora -- these are RECORDED
+                                            # MODEL OUTPUT (what a provider actually returned during
+                                            # a captured session), not hand-authored docs, so a
+                                            # docs-looking string that happens to appear inside one
+                                            # is not ours to fix -- keep this excluded even though
+                                            # FRO208 added .json to EXTENSIONS.
 )
+# NOTE: Tools/TimelineOpsHarness/Fixtures/ used to be excluded here too, on the same
+# recorded-output reasoning as Tests/fixtures/ above -- but unlike Tests/fixtures/, those fixtures
+# carry a hand-authored "description" field (not model output), so a stale doc reference inside one
+# is exactly the kind of drift this guard exists to catch. FRO208 removed it from this list after
+# it hid a real dead reference (Tools/TimelineOpsHarness/Fixtures/01-valid-three-op-envelope.json
+# citing a section of a doc deleted by FRO172) behind BOTH the old extension list and this
+# exclusion at once -- do not re-add it.
 
 usage() {
     cat <<'USAGE'
 Usage: bash scripts/check-docs.sh [--update] [--list] [--root <dir>] [-h|--help]
 
-Six checks against docs/ and every in-scope *.cpp/*.h/*.sh/*.yml file in the repo (Source/,
-Tests/, Tools/, scripts/, .github/ -- see EXTENSIONS/EXCLUDED_PREFIXES below):
+Six checks against docs/ and every in-scope *.cpp/*.h/*.sh/*.yml/*.txt/*.json/*.cmake/*.py file in
+the repo (Source/, Tests/, Tools/, scripts/, .github/ -- see EXTENSIONS/EXCLUDED_PREFIXES below):
 doc filename convention (A), markdown link targets (B), `docs/...` path mentions (C), `§`-section
 references (D), docs/README.md map completeness (E), `docs/...#anchor` mentions outside markdown
 link syntax (F). Only A is ratcheted, against scripts/docs-baseline.txt; B, C, D, E, F are always a

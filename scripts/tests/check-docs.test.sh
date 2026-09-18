@@ -224,6 +224,25 @@ write_file "Source/Some.cpp" <<EOF
 EOF
 assert_pass "a qualified sibling-repo docs/ path (preceded by '/') is not flagged, even though the bare filename doesn't exist here"
 
+# FRO208: EXTENSIONS widened from (md cpp h sh yml) to also cover txt/json/cmake/py -- a stale
+# docs/... mention hidden in a plain .txt note or a hand-authored .json fixture's description field
+# was invisible to every check before this (exactly how a dead reference to a doc deleted by FRO172
+# survived inside Tools/TimelineOpsHarness/Fixtures/01-valid-three-op-envelope.json). These two
+# cases pin that a .txt and a .json file are now actually in scope.
+reset_repo
+seed_clean_tree
+write_file "notes/release-notes.txt" <<EOF
+See ${DOCPFX}does-not-exist.md for background.
+EOF
+assert_fail "a docs/... mention in a plain .txt file that doesn't resolve fails" "${D}${S}does-not-exist.md' does not exist"
+
+reset_repo
+seed_clean_tree
+write_file "fixtures/example.json" <<EOF
+{ "description": "the shape ${DOCPFX}does-not-exist.md describes" }
+EOF
+assert_fail "a docs/... mention in a hand-authored .json fixture that doesn't resolve fails" "${D}${S}does-not-exist.md' does not exist"
+
 # --- check D: section references (zero tolerance, never baselined) ----------------------------
 
 reset_repo
