@@ -600,6 +600,18 @@ void AppUndoManager::pushSnapshotFromCapture(juce::AudioProcessorGraph& graph) {
     capturedBeforeState = juce::var();
 }
 
+// Consumes a captureBeforeState() capture for a DIFFERENT recording mechanism (FRO40).
+//
+// For a gesture that captures "before" state expecting the plain snapshot path above, then
+// discovers mid-gesture it needs recordGraphAndMacroChange's combined transaction instead — a
+// Cmd/Ctrl-drag that turns out to cross a macro hull boundary. A fresh graphToJSON() taken at
+// FINALIZE time is too late to stand in for the true pre-drag state: every intervening mouseDrag
+// tick already wrote the live (unsnapped) drag position into the moved node's graph properties via
+// ModuleComponent::moved(), so recordGraphAndMacroChange's own default capture would only ever see
+// that already-contaminated position. Pass the return value as recordGraphAndMacroChange's
+// `graphBeforeOverride` instead. Clears the capture as a side effect (same as discarding it) —
+// never left live for the NEXT unrelated captureBeforeState/pushSnapshotFromCapture pair to
+// wrongly diff against. Void if nothing was captured.
 juce::var AppUndoManager::takeCapturedGraphBeforeState() {
     juce::var result = capturedBeforeState;
     capturedBeforeState = juce::var();
@@ -708,9 +720,11 @@ bool AppUndoManager::recordGraphAndMacroChange(juce::AudioProcessorGraph& graph,
 
     undoManager.beginNewTransaction();
 
-    // FRO40: graphBeforeOverride wins when supplied — see takeCapturedGraphBeforeState's own doc
-    // comment (AppUndoManager.h) for why a fresh capture here can be too late for a caller whose
-    // live gesture already wrote intermediate state into the graph before this ever runs.
+    // FRO40: graphBeforeOverride wins when supplied, INSTEAD of a fresh graphToJSON(graph)
+    // capture — for a caller whose live gesture already wrote intermediate state into the graph
+    // before this ever runs (typically ModuleComponent's own captureBeforeState(), handed back via
+    // takeCapturedGraphBeforeState() just above — see its own comment for why a fresh capture here
+    // would be too late). Every other caller passes the default and keeps today's behaviour exactly.
     const juce::var graphBefore =
         graphBeforeOverride.isVoid() ? synth::AIStateMapper::graphToJSON(graph) : graphBeforeOverride;
     const juce::var macrosBefore = macros.toVar();

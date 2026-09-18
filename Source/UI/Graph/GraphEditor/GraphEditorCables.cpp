@@ -95,10 +95,14 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
         if (macro.collapsed)
             continue;
 
-        // macroHullBounds is the ONE definition of this rectangle — hit-testing
+        // macroHullBounds is the ONE definition of this rectangle for hit-testing
         // (GraphEditor::macroHullAt, used by mouseDown/mouseUp for hull click-to-select and the
-        // hull's right-click macro menu) must see exactly what gets painted here.
-        const auto hull = editor.macroHullBounds(macro.id);
+        // hull's right-click macro menu). What gets PAINTED goes through paintedMacroHullBounds
+        // instead, which is macroHullBounds itself except while a reparent drag is dragging one of
+        // THIS macro's own members — see its doc comment (GraphEditor.h) for why the two diverge
+        // only in that one case (a member being pulled out must visibly shrink the hull away from
+        // it, which the live union alone can never do).
+        const auto hull = editor.paintedMacroHullBounds(macro.id);
         if (hull.isEmpty())
             continue;
 

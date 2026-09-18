@@ -60,6 +60,8 @@ void expectNoStuckDragState(GraphEditor& editor, const char* context) {
     // FRO40: cancelLiveDragGestures() must clear the macro drag-candidate highlight too, or an
     // async rebuild mid-Cmd/Ctrl-drag leaves a hull highlighted with no gesture left to end it.
     EXPECT_TRUE(editor.getMacroDragCandidateId().isEmpty()) << context << ": macro drag candidate hull left stuck";
+    EXPECT_EQ(editor.getMacroDragDraggedNodeId(), juce::AudioProcessorGraph::NodeID{})
+        << context << ": macro drag dragged-node id left stuck";
 }
 
 } // namespace

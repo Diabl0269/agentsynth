@@ -665,7 +665,14 @@ in canvas coordinates, and answers with a macro id or empty ("neither"):
   contribution first it could never test as "outside" and could never leave. One consequence worth
   knowing: for a two-member macro, `macroHullBoundsExcluding` reduces to just the OTHER member's
   own footprint, so almost any Cmd-drag of either member reads as "outside" it — by design, not a
-  bug; the wider the macro, the more room a member has to move before crossing out.
+  bug; the wider the macro, the more room a member has to move before crossing out. This still
+  holds with THREE OR MORE members: excluding the dragged member's own contribution only unions
+  the OTHER members' bounds, so the exit distance is direction-dependent, never unbounded — three
+  members in a horizontal row is the case that looks worst for this (the two outer members keep
+  the excluding hull's bounding box wide along the row), and it is still reachable, just further,
+  along the row, and short in the perpendicular direction (bounded by roughly half the row's own
+  height plus the hull margin, regardless of how far apart the outer members are). See
+  `MacroDragMembership.ThreeMemberMacroLeaveIsReachablePerpendicularToTheRow`.
 
 **The gesture mirrors `ModuleComponent`'s existing Ctrl deferred-classification exactly**
 (`ctrlTogglePending`/`ctrlPressSelection`): Cmd+press arms a NEW `cmdReparentPending` flag and
@@ -698,6 +705,34 @@ falls out:
 drag, and a macOS Ctrl-drag, out of the feature entirely) via `GraphEditor::
 updateMacroDragCandidate`, which stores it in the ONE new private field `macroDragCandidateId_`
 (`getMacroDragCandidateId()` is the public accessor).
+
+**`reparentArmed` is re-derived on every `mouseDrag` tick for a SINGLE-module drag, not only
+latched once at `mouseDown`.** The first cut only sampled `e.mods.isCommandDown()` at press time,
+so the user had to already be holding Cmd (or Ctrl on Windows/Linux) before grabbing the module —
+pressing it partway through an otherwise-plain drag never armed reparent, with no way to discover
+the gesture from the candidate highlight since it never lit up. `mouseDrag` now re-reads the live
+modifier each tick, gated on `!isSelectionDragActive()`: a multi-selection group drag keeps
+whatever `mouseDown` latched for its whole gesture (reparenting one member out of a group drag is
+ambiguous — which macro, which of several dragged modules — and stays out of scope), but an
+ordinary single-module drag can have Cmd/Ctrl pressed OR released mid-gesture and see the
+candidate highlight arm or clear immediately, right along with it.
+
+**The painted hull for the macro a drag is pulling a member OUT of shrinks away from that member
+immediately, not only once LEAVE actually arms.** `macroHullBounds()` is a LIVE union, so painting
+it directly for the module's OWN (about-to-be-left) macro made the outline visually chase the
+module as it was dragged out — pulling a member toward the edge of a 2-member macro looked like it
+was growing the hull to stay around it, making "remove from macro" look impossible. `GraphEditor`
+now tracks a second field, `macroDragDraggedNodeId_`, set/cleared by the exact same
+`updateMacroDragCandidate`/`clearMacroDragCandidate` calls as `macroDragCandidateId_` (one
+lifetime, not two), and set FIRST, unconditionally, before the candidate itself is computed — so
+the shrink starts on the very first tick of the gesture, before any LEAVE candidate has actually
+armed. `GraphEditor::paintedMacroHullBounds(macroId)` is what `paintExpandedMacroHulls`
+(`GraphEditorCables.cpp`) calls instead of `macroHullBounds` directly: it returns
+`macroHullBoundsExcluding` for the macro the dragged module currently belongs to, and the ordinary
+live `macroHullBounds` for every other macro — including one the drag might JOIN, which by
+definition isn't the dragged module's current macro and has nothing to exclude it from. Hit-
+testing (`macroHullAt`, used by click-to-select and the hull's right-click menu) is unaffected and
+keeps using `macroHullBounds` — this substitution is paint-only.
 
 **The Windows/Linux arbitration is still at mouseUp, but only decides WHICH of the two gestures a
 reparent-armed drag ends up as, never WHETHER one can fire at all** (that is `reparentArmed`'s job,

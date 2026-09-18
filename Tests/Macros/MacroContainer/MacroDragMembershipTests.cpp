@@ -143,6 +143,131 @@ TEST(MacroDragMembership, CmdDragMemberOutPastHullLeavesTheMacro) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// 2b. Bug fix (in-app report): the PAINTED hull for the macro a member is being dragged OUT OF
+//    must shrink away from it immediately, using macroHullBoundsExcluding — not the live union
+//    macroHullBounds(), which keeps inflating around the dragged member and visually chases it,
+//    making "remove from macro" look impossible. Only the macro being LEFT is affected; a macro
+//    the drag might JOIN instead keeps its ordinary live hull (nothing to exclude — the dragged
+//    module isn't yet a member of it).
+// ---------------------------------------------------------------------------------------------
+
+TEST(MacroDragMembership, PaintedHullOfOwnMacroExcludesDraggedMemberFromTheFirstTick) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    NodeID a, b;
+    const auto macroId = makeExpandedTwoMemberMacro(editor, engine, a, b);
+    ASSERT_FALSE(macroId.isEmpty());
+
+    auto* compA = findComponent(editor, a);
+    ASSERT_NE(compA, nullptr);
+
+    // B is the macro's only OTHER member, so excluding A leaves exactly B's own padded hull — a
+    // fixed rectangle that does not move as A is dragged, which is what makes this assertable
+    // without duplicating the union math here.
+    const auto expectedExcludingA = editor.getMacroController().macroHullBoundsExcluding(macroId, uuidOf(engine, a));
+    ASSERT_FALSE(expectedExcludingA.isEmpty());
+
+    // A small drag, nowhere near leaving the excluding hull — proves the shrink happens on the
+    // FIRST tick of the gesture, not only once a LEAVE candidate actually arms (the bug the user
+    // hit: the live union kept including A for the whole first stretch of the pull-out).
+    dragBodyBy(*compA, {20, 15}, kCmdClick, [&] {
+        EXPECT_TRUE(editor.getMacroDragCandidateId().isEmpty())
+            << "sanity: this small a drag must not arm any LEAVE/JOIN candidate yet";
+        EXPECT_EQ(editor.paintedMacroHullBounds(macroId), expectedExcludingA)
+            << "the macro A is being dragged OUT of must already paint as the excluding hull, "
+               "before any candidate is armed";
+    });
+}
+
+TEST(MacroDragMembership, PaintedHullOfAJoinTargetStaysTheOrdinaryLiveHull) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    NodeID a, b;
+    const auto macroId = makeExpandedTwoMemberMacro(editor, engine, a, b);
+    ASSERT_FALSE(macroId.isEmpty());
+
+    auto c = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 100);
+    auto* compC = findComponent(editor, c);
+    ASSERT_NE(compC, nullptr);
+
+    const auto liveHull = editor.macroHullBounds(macroId);
+    ASSERT_FALSE(liveHull.isEmpty());
+    const auto delta = liveHull.getCentre() - compC->getBounds().getCentre();
+
+    dragBodyBy(*compC, delta, kCmdClick, [&] {
+        EXPECT_FALSE(editor.getMacroDragCandidateId().isEmpty()) << "sanity: this must arm the JOIN candidate";
+        EXPECT_EQ(editor.paintedMacroHullBounds(macroId), liveHull)
+            << "a macro C might JOIN (C isn't a member of anything yet) must keep painting its "
+               "ordinary live hull — nothing to exclude C from";
+    });
+}
+
+// ---------------------------------------------------------------------------------------------
+// 2c. Bug 2 (in-app report): "LEAVE doesn't work" raised the question of whether the LEAVE
+//    predicate itself (canvasCentre outside macroHullBoundsExcluding(self)) is wrong once a macro
+//    has MORE than two members, since the union of the REMAINING members can stay large. It is
+//    not -- excluding the dragged member's own contribution still only unions the OTHER members'
+//    bounds, so the escape distance is direction-dependent, not unbounded, and never unreachable:
+//    three members in a horizontal row is the worst case for exactly this concern (the two outer
+//    members keep the excluding hull's bounding box wide), and it still proves reachable in the
+//    direction perpendicular to the row, at a short, predictable distance.
+// ---------------------------------------------------------------------------------------------
+
+TEST(MacroDragMembership, ThreeMemberMacroLeaveIsReachablePerpendicularToTheRow) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(2000, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
+    auto c = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 100);
+    editor.setSelectedNodes({a, b, c});
+    const auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    auto* compB = findComponent(editor, b);
+    ASSERT_NE(compB, nullptr);
+
+    // The excluding hull is a real, computed rectangle from the two OUTER members (A and C) -- not
+    // hand-derived here, so this test can never silently drift from what the predicate actually
+    // computes.
+    const auto hullExcludingB = editor.getMacroController().macroHullBoundsExcluding(macroId, uuidOf(engine, b));
+    ASSERT_FALSE(hullExcludingB.isEmpty());
+    ASSERT_TRUE(hullExcludingB.contains(compB->getBounds().getCentre()))
+        << "sanity: B starts inside the hull excluding its own contribution";
+
+    // ALONG the row: B's centre stays inside the wide A/C bounding box for a long horizontal move
+    // -- the concern this test exists to check is real (this direction genuinely needs a much
+    // bigger move than a 2-member macro would), but it is not unreachable, just directional; the
+    // next drag below proves the short direction.
+    dragBodyBy(*compB, {150, 0}, kCmdClick, [&] {
+        EXPECT_TRUE(editor.getMacroDragCandidateId().isEmpty())
+            << "moving the middle member ALONG the row must stay inside the wide A/C bounding box";
+    });
+    ASSERT_NE(editor.macroForNode(b), nullptr) << "sanity: B is still a member after the along-row move";
+
+    // PERPENDICULAR to the row: exits just past the hull's own bottom edge -- bounded by half the
+    // row's height plus the hull margin, regardless of how far apart A and C are horizontally.
+    const int perpendicularDrop = hullExcludingB.getBottom() - compB->getBounds().getCentreY() + 5;
+    dragBodyBy(*compB, {0, perpendicularDrop}, kCmdClick, [&] {
+        EXPECT_FALSE(editor.getMacroDragCandidateId().isEmpty())
+            << "moving the middle member PAST the hull's bottom edge must arm the LEAVE candidate";
+    });
+
+    EXPECT_EQ(editor.macroForNode(b), nullptr) << "dragging B past the row's hull must remove it";
+    const auto* macro = editor.getMacros().find(macroId);
+    ASSERT_NE(macro, nullptr) << "the macro survives with A and C still members";
+    EXPECT_TRUE(macro->hasMember(uuidOf(engine, a)));
+    EXPECT_TRUE(macro->hasMember(uuidOf(engine, c)));
+    EXPECT_FALSE(macro->hasMember(uuidOf(engine, b)));
+}
+
+// ---------------------------------------------------------------------------------------------
 // 3. A crossing drag auto-creates macro ports for newly-crossing cables, and splices out ports
 //    that became interior — in the SAME gesture.
 // ---------------------------------------------------------------------------------------------
@@ -334,6 +459,119 @@ TEST(MacroDragMembership, CmdDragStayingOutsideEveryHullIsAPlainMoveMembershipUn
 }
 
 // ---------------------------------------------------------------------------------------------
+// 6b. Gap 3 (in-app report): reparentArmed was sampled ONLY at mouseDown, so the user had to
+//    already be holding Cmd before the press -- grabbing a module plain and pressing Cmd partway
+//    through the drag never armed reparent, with no way to discover the gesture from the
+//    highlight following the cursor. mouseDrag now re-derives it live for a single-module drag.
+// ---------------------------------------------------------------------------------------------
+
+TEST(MacroDragMembership, CmdPressedAfterDragBeganStillReparentsInOneUndoStep) {
+    AudioEngine engine;
+    AppUndoManager undo;
+    GraphEditor editor(engine, &undo);
+    undo.setGraphEditor(&editor);
+    editor.setSize(1600, 1200);
+
+    NodeID a, b;
+    const auto macroId = makeExpandedTwoMemberMacro(editor, engine, a, b);
+    ASSERT_FALSE(macroId.isEmpty());
+
+    const juce::String uuidA = uuidOf(engine, a);
+    auto* compA = findComponent(editor, a);
+    ASSERT_NE(compA, nullptr);
+    const int originalX = engine.getGraph().getNodeForId(a)->properties["x"];
+    const int originalY = engine.getGraph().getNodeForId(a)->properties["y"];
+
+    const juce::ModifierKeys plain(juce::ModifierKeys::leftButtonModifier);
+    const juce::Point<int> pressPos(compA->getWidth() / 2, ModuleComponent::kHeaderHeight + 10);
+    // Same delta as CmdDragMemberOutPastHullLeavesTheMacro -- comfortably outside the (B-only)
+    // hull-excluding-self.
+    const juce::Point<int> dragPos = pressPos + juce::Point<int>(2400, 0);
+
+    // makeExpandedTwoMemberMacro leaves {A, B} multi-selected (how it grouped them); a plain click
+    // on an ALREADY-selected module keeps the whole selection intact for dragging (see mouseDown's
+    // own comment), which would make this a group drag and correctly exempt it from Gap 3's live
+    // re-arming. Collapse onto A alone first, same as a real single-module grab would.
+    editor.setSelectedNodes({a});
+
+    // Press with NO modifier at all -- an ordinary grab, exactly what the user does before deciding
+    // mid-drag that they actually want to reparent.
+    compA->mouseDown(realMouseEvent(*compA, pressPos, pressPos, plain));
+
+    // First tick, still plain: nothing may arm yet.
+    compA->mouseDrag(realMouseEvent(*compA, dragPos, pressPos, plain, /*wasDragged=*/true));
+    EXPECT_TRUE(editor.getMacroDragCandidateId().isEmpty())
+        << "sanity: no modifier held yet -- this tick must be an ordinary plain-drag tick";
+
+    // Cmd goes down MID-drag, cursor otherwise held at the SAME screen point -- this must arm the
+    // LEAVE candidate live. ComponentDragger::dragComponent (juce_ComponentDragger.cpp) ADDS
+    // (e.getPosition() - mouseDownWithinTarget) onto the component's CURRENT bounds each call, so
+    // a truly stationary cursor after the first tick is expressed as `pressPos` again here (a
+    // zero further delta), NOT the same `dragPos` as tick one -- reusing `dragPos` would double
+    // the move instead of holding it still.
+    compA->mouseDrag(realMouseEvent(*compA, pressPos, pressPos, kCmdClick, /*wasDragged=*/true));
+    EXPECT_EQ(editor.getMacroDragCandidateId(), macroId)
+        << "pressing Cmd mid-drag, after the press already happened, must still arm the candidate";
+
+    const int serialBeforeUp = undo.getEditSerial();
+    compA->mouseUp(realMouseEvent(*compA, pressPos, pressPos, kCmdClick, /*wasDragged=*/true));
+
+    EXPECT_EQ(editor.macroForNode(nodeIdForUuid(engine, uuidA)), nullptr)
+        << "Cmd armed only mid-drag must still finalize as a real reparent";
+    EXPECT_EQ(undo.getEditSerial(), serialBeforeUp + 1) << "and land as exactly ONE undo step, same as any other";
+
+    ASSERT_TRUE(undo.canUndo());
+    undo.undo();
+
+    // Full graph/macro snapshot roundtrip -- re-resolve by uuid, same idiom as
+    // OneUndoStepRestoresBothPositionAndMembership above.
+    const auto aAfterUndo = nodeIdForUuid(engine, uuidA);
+    ASSERT_NE(aAfterUndo.uid, 0u);
+    auto* nodeAfterUndo = engine.getGraph().getNodeForId(aAfterUndo);
+    ASSERT_NE(nodeAfterUndo, nullptr);
+    EXPECT_EQ((int)nodeAfterUndo->properties["x"], originalX) << "the single undo must restore the pre-drag position";
+    EXPECT_EQ((int)nodeAfterUndo->properties["y"], originalY);
+    EXPECT_NE(editor.getMacros().findByMember(uuidA), nullptr)
+        << "the SAME undo must also restore membership -- one gesture armed mid-drag, one undo step";
+}
+
+TEST(MacroDragMembership, CmdReleasedMidDragRevertsToAPlainMove) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    NodeID a, b;
+    const auto macroId = makeExpandedTwoMemberMacro(editor, engine, a, b);
+    ASSERT_FALSE(macroId.isEmpty());
+
+    auto* compA = findComponent(editor, a);
+    ASSERT_NE(compA, nullptr);
+    const auto positionBeforeDrag = compA->getPosition();
+
+    const juce::ModifierKeys plain(juce::ModifierKeys::leftButtonModifier);
+    const juce::Point<int> pressPos(compA->getWidth() / 2, ModuleComponent::kHeaderHeight + 10);
+    const juce::Point<int> dragPos = pressPos + juce::Point<int>(2400, 0);
+
+    compA->mouseDown(realMouseEvent(*compA, pressPos, pressPos, kCmdClick));
+
+    compA->mouseDrag(realMouseEvent(*compA, dragPos, pressPos, kCmdClick, /*wasDragged=*/true));
+    EXPECT_EQ(editor.getMacroDragCandidateId(), macroId) << "sanity: LEAVE must arm first, same as test 2";
+
+    // Cmd goes UP mid-drag, cursor otherwise held at the SAME screen point (see the sibling test
+    // above for why that means `pressPos` again here, not `dragPos`) -- this must disarm the
+    // candidate immediately, not wait for mouseUp to notice.
+    compA->mouseDrag(realMouseEvent(*compA, pressPos, pressPos, plain, /*wasDragged=*/true));
+    EXPECT_TRUE(editor.getMacroDragCandidateId().isEmpty())
+        << "releasing Cmd mid-drag must disarm the candidate immediately";
+
+    compA->mouseUp(realMouseEvent(*compA, pressPos, pressPos, plain, /*wasDragged=*/true));
+
+    EXPECT_NE(editor.macroForNode(a), nullptr)
+        << "Cmd released before mouseUp must finalize as an ordinary plain move -- A stays a member";
+    EXPECT_NE(compA->getPosition(), positionBeforeDrag) << "sanity: it actually moved";
+}
+
+// ---------------------------------------------------------------------------------------------
 // 7. The platform matrix (docs/macros_ports.md §5.10): reparenting is gated on `reparentArmed`
 //    (== e.mods.isCommandDown() at press), NOT on which of ctrlTogglePending/cmdReparentPending
 //    armed the press. On macOS Ctrl and Cmd are distinct keys, so a PLAIN Ctrl-drag must NEVER
@@ -399,7 +637,25 @@ TEST(MacroDragMembership, WindowsLinuxCtrlDragNotCrossingAHullKeepsThePlainInser
 // the arbitration gated reparent on `ctrlTogglePending || cmdReparentPending`, which is true for
 // this exact gesture too, and would have silently joined the macro as well. reparentArmed
 // (== isCommandDown() alone) is the fix; this pins it.
+//
+// Only expressible where Ctrl and Cmd are genuinely distinct bits (macOS) — JUCE defines
+// commandModifier == ctrlModifier on Windows/Linux (see kCtrlOrWindowsLinuxCmdClick above), so a
+// "Ctrl down, Cmd up" ModifierKeys value cannot exist there: constructing it with ctrlModifier
+// alone ALSO sets isCommandDown() on those platforms, reparentArmed is then correctly true, the
+// module correctly reparents, and this test's "membership unchanged" assertion would fail — not
+// because the production code is wrong (WindowsLinuxCtrlDragCrossingHullReparents below covers
+// exactly that platform's real behaviour), but because the test's own premise doesn't exist there.
+// Confirmed on CI (PR #415, run 35293581829): both Ubuntu jobs ("Build, Test, and Coverage" and
+// "Build and Test (ASAN)") failed on this one test, while macOS and Windows passed. Skips on the
+// modifier semantics themselves (checked as a compile-time constant), not on a platform macro, so
+// this stays correct if a platform ever changes which bits alias.
 TEST(MacroDragMembership, MacOsPlainCtrlDragCrossingHullDoesNotReparent) {
+    if constexpr (juce::ModifierKeys::commandModifier == juce::ModifierKeys::ctrlModifier) {
+        GTEST_SKIP() << "Ctrl and Cmd are the same modifier on this platform, so a "
+                        "Ctrl-without-Cmd press cannot be expressed; the reparent-on-crossing "
+                        "behaviour here is covered by WindowsLinuxCtrlDragCrossingHullReparents.";
+    }
+
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);

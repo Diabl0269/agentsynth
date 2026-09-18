@@ -95,20 +95,9 @@ public:
     void captureBeforeState(juce::AudioProcessorGraph& graph);
     void pushSnapshotFromCapture(juce::AudioProcessorGraph& graph);
 
-    /**
-     * @brief Consumes a captureBeforeState() capture for a DIFFERENT recording mechanism (FRO40).
-     *
-     * For a gesture that captures "before" state expecting the plain snapshot path above, then
-     * discovers mid-gesture it needs recordGraphAndMacroChange's combined transaction instead — a
-     * Cmd/Ctrl-drag that turns out to cross a macro hull boundary. A fresh graphToJSON() taken at
-     * FINALIZE time is too late to stand in for the true pre-drag state: every intervening
-     * mouseDrag tick already wrote the live (unsnapped) drag position into the moved node's graph
-     * properties via ModuleComponent::moved(), so recordGraphAndMacroChange's own default capture
-     * would only ever see that already-contaminated position. Pass the return value as
-     * recordGraphAndMacroChange's `graphBeforeOverride` instead. Clears the capture as a side
-     * effect (same as discarding it) — never left live for the NEXT unrelated captureBeforeState/
-     * pushSnapshotFromCapture pair to wrongly diff against. Void if nothing was captured.
-     */
+    /** @brief Consumes a captureBeforeState() capture for recordGraphAndMacroChange's
+     *  `graphBeforeOverride` instead of the plain snapshot path (FRO40) — see the .cpp definition
+     *  for why. Clears the capture as a side effect; void if nothing was captured. */
     juce::var takeCapturedGraphBeforeState();
 
     /**
@@ -201,11 +190,8 @@ public:
      * @param graph Reference to the audio processor graph.
      * @param macros Reference to the macro set.
      * @param mutation Lambda that performs the combined mutation.
-     * @param graphBeforeOverride FRO40: when non-void, used as the graph "before" state INSTEAD of
-     *        a fresh `graphToJSON(graph)` capture — for a caller whose live gesture already wrote
-     *        intermediate state into the graph before this ever runs (see
-     *        takeCapturedGraphBeforeState's doc comment for why that fresh capture would be too
-     *        late). Every other caller passes the default and keeps today's behaviour exactly.
+     * @param graphBeforeOverride FRO40: optional graph "before" override for a caller whose live
+     *        gesture already wrote intermediate state into the graph — see the .cpp definition.
      * @return true if either domain changed and a transaction was pushed, false if neither did.
      */
     bool recordGraphAndMacroChange(juce::AudioProcessorGraph& graph, synth::MacroSet& macros,

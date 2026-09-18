@@ -390,7 +390,7 @@ private:
     bool cmdReparentPending = false;
     std::vector<juce::AudioProcessorGraph::NodeID> cmdPressSelection;
 
-    // FRO40: whether THIS press can reparent at all, independent of which of the two flags above
+    // FRO40: whether THIS drag can reparent right now, independent of which of the two flags above
     // it armed. Set in mouseDown to e.mods.isCommandDown() in BOTH the Ctrl and the Cmd branch —
     // deliberately NOT `ctrlTogglePending || cmdReparentPending`, which is true for a PLAIN
     // macOS Ctrl+drag too (Ctrl and Cmd are genuinely distinct keys there) and would silently
@@ -398,6 +398,13 @@ private:
     // do. On Windows/Linux isCommandDown() is true whenever Ctrl is down (commandModifier IS
     // ctrlModifier there), which is the only platform where the two gestures cannot be told apart
     // at press time at all — see mouseUp's own comment for how that case is arbitrated instead.
+    //
+    // Gap 3 (coordinator review round 4): re-derived on every mouseDrag tick too — NOT just latched
+    // at mouseDown — so pressing/releasing Cmd (Ctrl on Windows/Linux) mid-drag arms/disarms
+    // reparent live, discoverable via the candidate highlight following the cursor. Only for a
+    // SINGLE-module drag (mouseDrag checks !isSelectionDragActive() before overwriting it) —
+    // reparenting one member of a multi-selection group drag is ambiguous and stays out of scope,
+    // so a group drag keeps whatever mouseDown latched for its whole gesture, same as before this.
     bool reparentArmed = false;
 
     // Inline rename editor, alive only between beginTitleRename and finishTitleRename. A child

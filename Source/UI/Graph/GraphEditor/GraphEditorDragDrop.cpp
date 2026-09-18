@@ -525,18 +525,44 @@ void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
 
 void GraphEditor::updateMacroDragCandidate(juce::AudioProcessorGraph::NodeID draggedNodeId,
                                            juce::Point<int> canvasCentre) {
+    // Set unconditionally, BEFORE the candidate-string early-return below, so paintedMacroHullBounds
+    // already excludes the dragged module from its own macro's hull from the very first tick of the
+    // drag — not only once the drag actually crosses into LEAVE-candidate territory. That first
+    // stretch (still inside the excluding hull, no candidate yet) is exactly the phase where a live
+    // union would otherwise keep inflating around the module being pulled out.
+    const bool nodeChanged = draggedNodeId != macroDragDraggedNodeId_;
+    macroDragDraggedNodeId_ = draggedNodeId;
+
     const juce::String candidate = macroController_.macroDragJoinOrLeaveTarget(draggedNodeId, canvasCentre);
-    if (candidate == macroDragCandidateId_)
+    if (candidate == macroDragCandidateId_ && !nodeChanged)
         return;
     macroDragCandidateId_ = candidate;
     repaintCanvas();
 }
 
 void GraphEditor::clearMacroDragCandidate() {
-    if (macroDragCandidateId_.isEmpty())
+    const bool nodeWasSet = macroDragDraggedNodeId_ != juce::AudioProcessorGraph::NodeID{};
+    if (macroDragCandidateId_.isEmpty() && !nodeWasSet)
         return;
     macroDragCandidateId_.clear();
+    macroDragDraggedNodeId_ = {};
     repaintCanvas();
+}
+
+// See GraphEditor.h's doc comment. Only the macro the dragged module is CURRENTLY a member of
+// (the one a LEAVE would remove it from) gets the excluding hull; a macro it might JOIN is never
+// its current macro (the flat membership model means a member of one macro is never re-tested as
+// a JOIN candidate for another, per macroDragJoinOrLeaveTarget's own comment), so this can never
+// accidentally shrink a JOIN target's hull.
+juce::Rectangle<int> GraphEditor::paintedMacroHullBounds(const juce::String& macroId) const {
+    if (macroDragDraggedNodeId_ != juce::AudioProcessorGraph::NodeID{}) {
+        const auto* ownMacro = macroForNode(macroDragDraggedNodeId_);
+        if (ownMacro != nullptr && ownMacro->id == macroId) {
+            const juce::String uuid = macroController_.nodeUuidFor(macroDragDraggedNodeId_);
+            return macroController_.macroHullBoundsExcluding(macroId, uuid);
+        }
+    }
+    return macroHullBounds(macroId);
 }
 
 // The single-undo-step finalize (docs/macros_ports.md): modeled on finalizeMacroCardDrag

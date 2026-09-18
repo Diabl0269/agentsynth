@@ -204,8 +204,18 @@ public:
     // ModuleComponentInteraction.cpp's mouseDrag/mouseUp for the gesture and
     // MacroGroupController::macroDragJoinOrLeaveTarget for the geometry query this is fed from.
     juce::String getMacroDragCandidateId() const noexcept { return macroDragCandidateId_; }
+    /** The module a reparent drag is currently moving, or an invalid NodeID between gestures —
+     *  same lifetime as the candidate above (see GraphEditorDragDrop.cpp). Lets paint tell WHICH
+     *  macro a live drag is dragging a member out of, distinct from which macro it might join. */
+    juce::AudioProcessorGraph::NodeID getMacroDragDraggedNodeId() const noexcept { return macroDragDraggedNodeId_; }
     void updateMacroDragCandidate(juce::AudioProcessorGraph::NodeID draggedNodeId, juce::Point<int> canvasCentre);
     void clearMacroDragCandidate();
+    /** macroHullBounds(macroId), except while a reparent drag is dragging one of macroId's OWN
+     *  members: then it's macroHullBoundsExcluding that member, so the hull visibly shrinks away
+     *  from a module being pulled out instead of the live union chasing it. A macro the drag might
+     *  JOIN (not the dragged module's current macro) always gets the ordinary live hull. Paint-only
+     *  — macroHullAt hit-testing keeps using macroHullBounds. See GraphEditorDragDrop.cpp. */
+    juce::Rectangle<int> paintedMacroHullBounds(const juce::String& macroId) const;
     /** The single-undo-step finalize: normal position finalize (finalizeModuleDrag) AND the
      *  membership mutation, as ONE recordGraphAndMacroChange transaction. `module` must not be
      *  touched again afterwards — see GraphEditorDragDrop.cpp's definition for why. */
@@ -834,6 +844,10 @@ private:
     // FRO40: the macro a live Cmd/Ctrl-drag would JOIN or LEAVE if released now, empty for
     // neither — see the public accessor/mutators above.
     juce::String macroDragCandidateId_;
+    // FRO40: which module that same drag is moving, invalid between gestures — paired lifetime
+    // with macroDragCandidateId_ above (both set/cleared only by updateMacroDragCandidate/
+    // clearMacroDragCandidate), so there is exactly one lifetime to reason about.
+    juce::AudioProcessorGraph::NodeID macroDragDraggedNodeId_;
 
     // True while a click on empty canvas has not yet turned into a pan or marquee drag; a mouseUp
     // in that state is a plain click and clears the selection.

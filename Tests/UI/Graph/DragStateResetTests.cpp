@@ -64,6 +64,8 @@ void expectNoStuckDragState(GraphEditor& editor, const char* context) {
     EXPECT_FALSE(editor.isSelectionDragActive()) << context << ": selection-drag bookkeeping left stuck";
     EXPECT_FALSE(editor.isMacroChipDragActive()) << context << ": macro chip drag id left stuck";
     EXPECT_TRUE(editor.getMacroDragCandidateId().isEmpty()) << context << ": macro drag candidate hull left stuck";
+    EXPECT_EQ(editor.getMacroDragDraggedNodeId(), juce::AudioProcessorGraph::NodeID{})
+        << context << ": macro drag dragged-node id left stuck";
 }
 
 } // namespace

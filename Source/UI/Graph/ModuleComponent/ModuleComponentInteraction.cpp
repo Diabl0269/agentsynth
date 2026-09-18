@@ -714,11 +714,17 @@ void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
         // Update the landing ghost to follow the live drag position.
         owner.updateDragPreview(getPosition());
 
-        // FRO40: gated on reparentArmed (isCommandDown() at press), NOT on ctrlTogglePending ||
-        // cmdReparentPending — the latter is also true for a plain macOS Ctrl+drag, which must
-        // never highlight or act on a hull crossing (see reparentArmed's own comment on
-        // ModuleComponent.h). The CENTRE, not the top-left, is what macroDragJoinOrLeaveTarget
-        // tests against (docs/macros_ports.md).
+        // Gap 3: re-derive reparentArmed live for a SINGLE-module drag, so Cmd pressed or released
+        // mid-drag arms/disarms reparent on the spot instead of only whatever mouseDown latched —
+        // see reparentArmed's own comment on ModuleComponent.h. A multi-selection group drag never
+        // touches the flag here; it keeps mouseDown's latch for its whole gesture, unchanged.
+        if (!owner.isSelectionDragActive())
+            reparentArmed = e.mods.isCommandDown();
+
+        // FRO40: gated on reparentArmed, NOT on ctrlTogglePending || cmdReparentPending — the
+        // latter is also true for a plain macOS Ctrl+drag, which must never highlight or act on a
+        // hull crossing (see reparentArmed's own comment on ModuleComponent.h). The CENTRE, not
+        // the top-left, is what macroDragJoinOrLeaveTarget tests against (docs/macros_ports.md).
         if (reparentArmed)
             owner.updateMacroDragCandidate(nodeId, getBounds().getCentre());
         else
