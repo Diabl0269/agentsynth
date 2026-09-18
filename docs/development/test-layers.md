@@ -257,7 +257,7 @@ bounded-poll idiom from `AccountServiceTests`.
 | Case | What it covers |
 |-------|-------|
 | `PassThroughUntilReady` / `BareModuleShowsOneJackASide` | with no instance the output **is** the input, on all 16 channels; bypass takes the same dry branch (it must not clear) and mute does clear; a bare module shows one jack a side over 16 real channels |
-| `AsyncLoadPublishesAndProcesses` | the callback does not fire re-entrantly; after pumping, the ×0.5 marker is on channels 0–1, the visible ports are the instance's **real** 2/2 while `getTotalNumOutputChannels()` stays 16, the instance was prepared to **our** rate/block, and every hidden channel is silent |
+| `AsyncLoadPublishesAndProcesses` | the callback does not fire re-entrantly; after pumping, the ×0.5 marker is on channels 0–1, the visible ports are the instance's **real** 2/2 while `getTotalNumOutputChannels()` stays 16, the instance was prepared to the host's rate/block, and every hidden channel is silent |
 | `InstrumentWithNoInputsGetsItsOutputChannelsCleared` | a 0-in/2-out instrument reports 0 input jacks, and its output-only channels arrive cleared so upstream audio cannot leak through as if bypassed |
 | `OverMaxRefusedWithMessage` | a 32-channel instance is **refused, not truncated**: no instance, a status message naming both 32 and 16, and the dry path still intact |
 | `UnresolvedIdentityStaysAPlaceholderThatRemembersItsPlugin` | "not installed on this machine": the identity survives, the message names the plugin, and `getExtraState` still serializes it so re-saving does not destroy it (the placeholder's foundation) |

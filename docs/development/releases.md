@@ -110,7 +110,8 @@ the first rejection, the log does not attribute it to a specific asset.
 Sequential uploads remove the in-flight-abandonment failure mode (nothing else is racing when one
 upload fails); reusing `gh release upload` for the retry means each attempt reads the file itself
 rather than depending on whether a previously-consumed request body can be replayed; and the exit
-code is entirely ours, so there is no action-internal retry or swallow behaviour left to audit.
+code belongs to this workflow, so there is no action-internal retry or swallow behaviour left to
+audit.
 
 **Verify, do not trust the exit code.** A `Verify published release assets` step runs right after
 the upload (`if: always() && steps.tag_version.outcome == 'success'`, so it still prints its diff

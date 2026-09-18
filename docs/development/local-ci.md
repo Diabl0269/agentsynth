@@ -25,11 +25,14 @@ Fast checks first, so a lint failure does not wait on a full build.
    [`file-size-guard.md`](file-size-guard.md).
 4. `bash scripts/check-function-sizes.sh` against the real tree — see
    [`function-size-guard.md`](function-size-guard.md).
-5. Every `scripts/tests/*.test.sh`, globbed, so a newly added one is picked up automatically without
+5. `bash scripts/check-header-comments.sh` against the real tree — see
+   [`header-comment-guard.md`](header-comment-guard.md).
+6. `bash scripts/check-docs.sh` against the real tree — see [`docs-guard.md`](docs-guard.md).
+7. Every `scripts/tests/*.test.sh`, globbed, so a newly added one is picked up automatically without
    editing this script. `check-nonascii-literals.test.sh`'s last case scans the real `Source/` tree
    itself, so this also covers the Lint job's
    [ASCII-literal gate](ascii-literal-guard.md) on live code, not just the checker's fixtures.
-6. Configure `build-ci-local/` with `-DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=ON
+8. Configure `build-ci-local/` with `-DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=ON
    -DENABLE_AI_HARNESS=ON` (matching the macOS/Windows build-and-test jobs) and build with a plain
    `cmake --build` — every target those jobs build (`Core`, `AppUI`, `AgentSynth`,
    `AgentSynthPlugin`, `Tests`), the same way a missing `CMakeLists.txt` entry shows up in CI.
@@ -38,10 +41,10 @@ Fast checks first, so a lint failure does not wait on a full build.
    cold one. On the **first** configure only, and only when this checkout is a git worktree, it also
    reuses the main checkout's already-fetched dependency sources — see
    [Worktree dependency-source reuse](#worktree-dependency-source-reuse) below.
-7. Dev-sign the built app bundle (macOS only): `bash scripts/dev-sign-app.sh "$APP_PATH"`. Not a CI
+9. Dev-sign the built app bundle (macOS only): `bash scripts/dev-sign-app.sh "$APP_PATH"`. Not a CI
    check — it runs only locally, after the build and before the test suite, so a signing failure
    surfaces early rather than after a multi-minute test run.
-8. Run the full suite: `build-ci-local/Tests/Tests`. Skippable with `--skip-tests` (default off —
+10. Run the full suite: `build-ci-local/Tests/Tests`. Skippable with `--skip-tests` (default off —
    the pre-push hook and CI both expect the full suite) for a faster local loop; every earlier step,
    including dev-signing, still runs, so a `--skip-tests` rebuild keeps the same TCC identity for a
    live or manual app run.
@@ -74,9 +77,12 @@ Two hooks are registered:
 
 - **pre-commit** (`scripts/pre-commit-lint.sh`): runs `clang-format --dry-run --Werror` on staged
   `Source/` and `Tests/` C/C++ files (skipped entirely when no C++ is staged), then the
-  [file-size guard](file-size-guard.md) and the [docs guard](docs-guard.md) against the whole tree,
-  unconditionally, for any commit with staged changes. Fast; mirrors the CI Lint job. It also warns
-  if the local `clang-format` version differs from the pin in `.clang-format-version`.
+  [file-size](file-size-guard.md), [function-size](function-size-guard.md),
+  [header-comment](header-comment-guard.md) and [docs](docs-guard.md) guards against the whole tree,
+  unconditionally, for any commit with staged changes. Those four scan the whole tree in about a
+  second each, so there is no benefit to staged-file scoping them the way there is for
+  clang-format. Fast; mirrors the CI Lint job. It also warns if the local `clang-format` version
+  differs from the pin in `.clang-format-version`.
 - **pre-push** (`scripts/ci-local.sh`): the full local CI reproduction above. The first push
   configures the `build-ci-local/` directory; subsequent pushes are fast incremental rebuilds
   (ccache and Ninja are picked up automatically when installed).
