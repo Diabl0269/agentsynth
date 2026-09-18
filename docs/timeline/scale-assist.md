@@ -55,7 +55,7 @@ name, mask }`) round-trip through `parseUserScales` / `serializeUserScales` — 
 malformed entry is skipped individually, and a whole-string parse failure yields an empty list —
 under the single properties key `"pianoRollUserScales"`, read and written by
 `ScaleAssistPanel::setPropertiesFile()`, the same one-key idiom `NoteColour.h`'s own persistence
-follows (`theming.md` §12).
+follows ([`layout/colour-overrides.md`](../layout/colour-overrides.md#note-colours)).
 
 `setPropertiesFile(nullptr)` is a legal, permanent state: Save still works for the session, it just
 never reaches disk — the same null-degrades-gracefully contract every other timeline

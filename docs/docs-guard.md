@@ -10,14 +10,14 @@ the guard's own naming rule (see check A below) — it has no `scripts/docs-base
 because `docs-guard.md` is already lowercase kebab-case.
 
 ```bash
-bash scripts/check-docs.sh                          # check the tree (A against baseline; B-E hard)
+bash scripts/check-docs.sh                          # check the tree (A against baseline; B-G hard)
 bash scripts/check-docs.sh --update                  # rewrite the naming baseline from the current tree
 bash scripts/check-docs.sh --update --allow-growth   # ...and let a new naming entry through
 bash scripts/check-docs.sh --list                    # summarize current violations in every check
 bash scripts/check-docs.sh --root <dir>              # scan a different repo root (for tests)
 ```
 
-## The six checks
+## The seven checks
 
 Every check scans the same file set: every git-tracked-**or-untracked** `*.md`, `*.cpp`, `*.h`,
 `*.sh`, `*.yml`, `*.txt`, `*.json`, `*.cmake` and `*.py` anywhere under the repo root — so
@@ -36,6 +36,11 @@ deliberately not `git ls-files`, which would silently skip a doc mid-rename that
 `git add`ed yet. An earlier verify script in this repo was bitten by exactly that gap (a
 git-index-based scan missing a genuinely new, untracked file); this guard scans the working tree
 directly to avoid repeating it.
+
+`scripts/check-docs.sh` itself holds only the CLI, the file-tree scan, the naming ratchet (check A)
+and its baseline I/O, and the three run modes (check/update/list) — checks B through G, and the awk
+helpers they share, live in `scripts/lib/check-docs-checks.sh` (sourced, never executed directly),
+split out once check G (FRO217) pushed the single file past this repo's own 1,000-line cap.
 
 ### A. Filename convention (ratcheted)
 
@@ -111,6 +116,45 @@ Check F does not reimplement anything check B or check C already got right:
   all is check C's failure to report, not check F's; check F skips it rather than raising a second,
   redundant error for the same underlying mistake.
 
+### G. Bare basename references resolve
+
+Checks C, D, and F all require a literal `docs/` prefix before the filename they validate. A
+reference written as a bare, backtick-wrapped basename in prose — `` `<name>.md` §<N> ``, with no
+`docs/` prefix and no markdown link target at all — matches none of them and was invisible to every
+check before FRO217. FRO176's post-merge verification found two live examples surviving a clean
+run: `docs/timeline/scale-assist.md` pointed at a `§12` in `theming.md` that had been renumbered
+away entirely, and `docs/plugin_card_layout.md` named a `layout.md` that no longer exists (the
+material it wanted had moved into `docs/layout/module-card.md`) — both fixed in the same PR that
+added this check, converting each into a real markdown link so check B now guards it going forward.
+
+For every in-scope file, a backtick-wrapped `` `<name>.md` `` token — outside markdown link syntax
+(the whole `[text](target)` span is masked out of the line first, the same construct check B
+parses) and with no `docs/` or other directory prefix at all — must resolve to **exactly one** real
+`docs/**/*.md` file by basename: this is checked every time the name appears, marker or none,
+because a basename matching *more than one* doc is unresolvable for a reader regardless of whether
+this particular occurrence happens to carry a marker. Separately, whatever immediately follows the
+name — whitespace only, up to three characters — is checked as an *optional* trailing
+`§N`/`§N.M`/`§N.M.K` marker or `#anchor`: present, and the marker must name a section or anchor
+that actually exists in the doc the basename resolved to (or, if the basename resolved to *zero*
+docs, that is itself the failure — a doc named that no longer exists anywhere); absent, there is
+nothing further to check — a bare name with no marker is casual prose, not a structured
+cross-reference, and measured against the real tree, every genuine cross-reference this check is
+meant to gate follows the "basename plus marker" shape. Either way, the fix is the same: write the
+full `docs/` path (turning it into something checks B/C/D/F already cover). **Not baselined — zero
+tolerance**, same as B/C/D/E/F.
+
+Check G does not reimplement anything check B, C, or D already got right:
+
+- **Slug table** — a trailing `#anchor` is checked against the exact same slug table check B/F
+  build, never a second implementation.
+- **Section table** — a trailing `§N` is checked against `build_headings_file`'s table, the same
+  one check D itself now reads (FRO217 pulled check D's own heading-number table out into this
+  shared builder specifically so check G could reuse it instead of adding a third section-resolution
+  implementation).
+- **No double-reporting** — a bare name that *is* written as proper markdown link syntax (as
+  `` [`name.md`](target) ``, link text and target both) is check B's business, not check G's; the
+  whole link span is masked out of the line before check G ever looks at it.
+
 ## Naming ratchet
 
 Check A works exactly like the [file-size](testing.md#file-size-cap-lint-job) and
@@ -129,10 +173,11 @@ Check A works exactly like the [file-size](testing.md#file-size-cap-lint-job) an
 - A first-ever `--update` (no baseline file present yet) bootstraps without needing
   `--allow-growth` — there's nothing to compare against yet, so nothing can be a growth.
 
-Checks B, C, D, E, and F have no baseline at all — they're always a hard failure. A broken link, a
-stale `docs/...` mention, a stale `§`-section reference, a `docs/README.md` map gap, or a stale
-`#anchor` mention is never something to grandfather; each is wrong the moment it exists; the
-ratchet exists only to migrate the legacy filename convention without a disruptive mass rename.
+Checks B, C, D, E, F, and G have no baseline at all — they're always a hard failure. A broken link,
+a stale `docs/...` mention, a stale `§`-section reference, a `docs/README.md` map gap, a stale
+`#anchor` mention, or an unresolvable bare basename reference is never something to grandfather;
+each is wrong the moment it exists; the ratchet exists only to migrate the legacy filename
+convention without a disruptive mass rename.
 
 ### Ordering: `git mv`, then `--update` — never a plain check in between
 
@@ -218,10 +263,10 @@ tooling that reads it the same naive way) can look momentarily misleading during
 
 ## Zero tolerance for stale references
 
-Checks B, C, D, E, and F exist specifically because [check A's grandfathering](#naming-ratchet)
-doesn't generalize: a stale link, section reference, or anchor mention is never "legacy debt to
-migrate later" the way an old filename is — it actively misdirects the next reader the moment it
-goes stale. That's why only the naming convention gets a ratchet at all, and why fixing a
-check-B/C/D/E/F violation means finding the CORRECT destination (via git history for a
-moved/renumbered/renamed section, never a guess) and pointing at that, not adding an exception
-anywhere.
+Checks B, C, D, E, F, and G exist specifically because [check A's grandfathering](#naming-ratchet)
+doesn't generalize: a stale link, section reference, anchor mention, or unresolvable bare basename
+is never "legacy debt to migrate later" the way an old filename is — it actively misdirects the
+next reader the moment it goes stale. That's why only the naming convention gets a ratchet at all,
+and why fixing a check-B/C/D/E/F/G violation means finding the CORRECT destination (via git history
+for a moved/renumbered/renamed section, never a guess) and pointing at that, not adding an
+exception anywhere.

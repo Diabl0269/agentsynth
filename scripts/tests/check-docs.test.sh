@@ -36,6 +36,13 @@ D="docs"
 S="/"
 DOCPFX="$D$S" # only for use INSIDE heredoc bodies -- see each site below
 
+# Check G scans for a backtick-wrapped bare basename (`` `name.md` ``) plus a trailing section/
+# anchor marker -- same self-matching trap as $D/$S above, so built the same way: a literal
+# backtick character in an UNQUOTED heredoc would also trigger command substitution, which is a
+# second, independent reason never to write one out directly here.
+BT='`'
+MDEXT=".md"
+
 TMPROOT="$(mktemp -d)"
 trap 'rm -rf "$TMPROOT"' EXIT
 REPO="$TMPROOT/repo"
@@ -376,6 +383,103 @@ write_file "Source/Some.cpp" <<EOF
 // docs/ tree, which must never be misread as naming OUR docs/ tree, even with an anchor attached
 EOF
 assert_pass "a qualified sibling-repo docs/ path with an anchor (preceded by '/') is not flagged, even though the bare filename doesn't exist here"
+
+# --- check G: bare basename references ---------------------------------------------------------
+
+reset_repo
+seed_clean_tree
+write_file "Source/Some.h" <<EOF
+// per ${BT}architecture${MDEXT}${BT} §1 for context (a bare backticked basename, no docs/ prefix,
+// no markdown link target -- check C/D/F all require a literal docs/ prefix and so never see this)
+EOF
+assert_pass "a bare backticked basename with a valid trailing section passes"
+
+reset_repo
+seed_clean_tree
+write_file "Source/Some.h" <<EOF
+// per ${BT}architecture${MDEXT}${BT} §9 for context (no such section anywhere in architecture.md)
+EOF
+assert_fail "a bare backticked basename with a dead trailing section fails" "-- no such section in"
+
+reset_repo
+seed_clean_tree
+write_file "Source/Some.h" <<EOF
+// per ${BT}gone-forever${MDEXT}${BT} §1 (this doc was deleted outright; nothing under docs/
+// shares its basename any more)
+EOF
+assert_fail "a bare backticked basename naming a doc that no longer exists anywhere fails" "bare reference 'gone-forever.md' names a doc that does not exist anywhere under docs/"
+
+reset_repo
+seed_clean_tree
+write_file "$D$S""alpha/shared${MDEXT}" <<EOF
+# Shared Alpha
+
+## 1 Alpha section
+EOF
+write_file "$D$S""beta/shared${MDEXT}" <<EOF
+# Shared Beta
+
+## 1 Beta section
+EOF
+link_from_readme "alpha/shared.md"
+link_from_readme "beta/shared.md"
+write_file "Source/Some.h" <<EOF
+// per ${BT}shared${MDEXT}${BT} §1 -- two different docs/ folders both have a shared.md, so this
+// bare basename is unresolvable: a script can't pick one, and neither can a reader
+EOF
+assert_fail "a bare backticked basename matching docs in two different folders is ambiguous and fails" "bare reference 'shared.md' is ambiguous -- matches 2 docs"
+
+reset_repo
+seed_clean_tree
+write_file "$D$S""alpha/dup${MDEXT}" <<EOF
+# Dup Alpha
+EOF
+write_file "$D$S""beta/dup${MDEXT}" <<EOF
+# Dup Beta
+EOF
+link_from_readme "alpha/dup.md"
+link_from_readme "beta/dup.md"
+write_file "Source/Some.h" <<EOF
+// per ${BT}dup${MDEXT}${BT} for details -- no trailing marker at all, but still ambiguous: a
+// script cannot pick one of two docs any more than a reader could, marker or not
+EOF
+assert_fail "an ambiguous bare backticked basename fails even with no trailing marker at all" "bare reference 'dup.md' is ambiguous -- matches 2 docs"
+
+reset_repo
+seed_clean_tree
+write_file "Source/Some.h" <<EOF
+// root ${BT}CLAUDE${MDEXT}${BT}, §8 of ${DOCPFX}architecture${MDEXT} for context -- reversed
+// order: the section marker belongs to the docs/-prefixed mention that actually FOLLOWS it, not
+// to the bare CLAUDE.md name before the comma (which is not even a docs/ file)
+EOF
+assert_pass "a bare name followed by a comma before a section marker meant for a later, different mention is not flagged"
+
+reset_repo
+seed_clean_tree
+write_file "$D$S""mentions${MDEXT}" <<EOF
+# Mentions
+
+See [${BT}architecture${MDEXT}${BT}](architecture${MDEXT}) for the real link -- a bare basename
+used as markdown link TEXT (not prose): check B validates the link target itself, and check G must
+not double-report the very same bare name a second time.
+EOF
+link_from_readme "mentions.md"
+assert_pass "a bare basename written as markdown link text, not prose, is check B's business -- check G does not double-report it"
+
+reset_repo
+seed_clean_tree
+write_file "Source/Some.h" <<EOF
+// per ${BT}architecture${MDEXT}${BT}#1-overview for context (a bare backticked basename with a
+// trailing anchor instead of a section marker, no docs/ prefix)
+EOF
+assert_pass "a bare backticked basename with a valid trailing anchor passes"
+
+reset_repo
+seed_clean_tree
+write_file "Source/Some.h" <<EOF
+// per ${BT}architecture${MDEXT}${BT}#9-nope for context (no such heading)
+EOF
+assert_fail "a bare backticked basename with a dead trailing anchor fails" "has no heading matching anchor '#9-nope'"
 
 # --- --update semantics -----------------------------------------------------------------------
 
