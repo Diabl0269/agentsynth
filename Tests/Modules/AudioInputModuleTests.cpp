@@ -168,9 +168,9 @@ TEST(AudioInputModuleTest, BypassClears) {
     rig.renderWithDeviceChannels(2);
 
     for (int channel = 0; channel < AudioInputModule::kMaxChannels; ++channel)
-        EXPECT_TRUE(channelIsSilent(rig.buffer, channel))
-            << "channel " << channel
-            << ": a pure source has no dry path, so bypass clears (docs/architecture.md's bypass/mute contract)";
+        EXPECT_TRUE(channelIsSilent(rig.buffer, channel)) << "channel " << channel
+                                                          << ": a pure source has no dry path, so bypass clears "
+                                                             "(docs/architecture/module-base.md#bypassmute-contract)";
 
     EXPECT_EQ(findParameterByID(&rig.module, "muted"), nullptr)
         << "no mute parameter by design — bypass already silences everything there is to silence";

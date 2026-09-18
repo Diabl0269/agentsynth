@@ -82,7 +82,7 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Focus Library";
     if (actionId == "focusLibrarySearch")
         return "Focus Library Search";
-    // FRO125: the transport family (docs/midi_remote.md §4.9). "Play"/"Stop" name the direction
+    // FRO125: the transport family (docs/control/midi-remote.md#action-targets). "Play"/"Stop" name the direction
     // outright; the alias reuses "Toggle Playback" verbatim since it IS togglePlayback's command
     // (see AppCommands::getCommandForAction) and must read as the same action, not a rival one.
     if (actionId == "transportPlay")

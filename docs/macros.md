@@ -134,13 +134,13 @@ inner endpoints. Conceptually the clean answer: a macro genuinely becomes a modu
 - **uuid addressing (invariant c).** Member nodes leave the main graph. `AudioEngine`'s lane
   resolution walks the main graph's nodes; every timeline binding and automation lane pointing at
   a member would orphan on group and un-orphan on ungroup. `MainComponent`'s reconcile pass
-  (`docs/architecture_app_wiring.md` §8) would need a notion of "resolve a uuid through a container", which
+  (`docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step`) would need a notion of "resolve a uuid through a container", which
   is a change to the addressing model itself, not to macros.
 - **Undo.** `recordGraphAndMacroChange` snapshots the graph and the `MacroSet`. Grouping would
   become a *graph topology change* (nodes leaving one graph for another) rather than a metadata
   change, so every group/ungroup is a full structural rewrite.
 - **Hosted plugin.** The plugin build's `AudioEngine` graph is our own inner graph already
-  (`docs/architecture.md`). Nesting again is not fatal but compounds the latency point above.
+  (`docs/architecture/plugin-layer.md#latency-compensation`). Nesting again is not fatal but compounds the latency point above.
 
 ### Candidate B — proxy inlet/outlet nodes, flat graph
 

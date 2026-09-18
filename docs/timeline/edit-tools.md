@@ -54,7 +54,7 @@ immediately with no risk of colliding with the Ctrl+Shift+digit grid-set command
 equality is exact, so a bare digit can never match a Ctrl+Shift one. Only a build with NO manager
 installed — headless tests, an embedding with no settings store — falls back to the hardcoded
 digits above via `editToolForKeyChar`. See
-[`shortcuts.md`](../shortcuts.md#command-vs-surface-actions) for the full command-vs-surface split
+[`shortcuts.md`](../control/shortcuts.md#command-vs-surface-actions) for the full command-vs-surface split
 and the tripwire test that guards it.
 
 The piano roll deliberately does not handle the digits at all: that binding belongs to the panel,

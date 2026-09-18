@@ -163,7 +163,7 @@ private:
 /**
  * @class MidiRemoteSnapshotAction
  * @brief Undoable action that restores synth::MidiRemoteProjectDoc state from before/after
- *        juce::var snapshots (docs/midi_remote.md §8). Same shape as TimelineSnapshotAction, for
+ *        juce::var snapshots (docs/control/midi-remote.md#undo). Same shape as TimelineSnapshotAction, for
  *        the same reason: a MIDI Remote assignment edit never touches the graph, so folding it
  *        into every graph SnapshotAction would inflate every other undo step for no benefit.
  *        Pushed onto the SAME juce::UndoManager as everything else (see

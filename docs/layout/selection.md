@@ -22,7 +22,7 @@ the marquee is gated behind **Shift** instead and pan is untouched.
 | Drag any selected module | Move the entire selection together |
 | Click empty canvas (no drag) | Clear the selection |
 | Right-click a module | Select it if it was not, then open the menu |
-| Right-click empty canvas | Open the canvas menu (Paste Here / Select All / Locate Master — [shortcuts](../shortcuts.md)) — the selection is **kept**, so the menu can still act on it |
+| Right-click empty canvas | Open the canvas menu (Paste Here / Select All / Locate Master — [shortcuts](../control/shortcuts.md)) — the selection is **kept**, so the menu can still act on it |
 
 Two details that are easy to get wrong:
 

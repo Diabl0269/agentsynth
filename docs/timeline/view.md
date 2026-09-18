@@ -174,7 +174,7 @@ roll.
 `zoomTimelineHorizontal` / `zoomTimelineVertical` (panel) or `zoomHorizontal` / `zoomVertical`
 (roll) entry points the wheel and pinch gestures do, anchored at the visible centre rather than a
 cursor position, and is routed per focused surface by `MainComponent::resolveEditSurface()` — see
-[`shortcuts.md`](../shortcuts.md#zoom) for the full per-surface table and the
+[`shortcuts.md`](../control/shortcuts.md#zoom) for the full per-surface table and the
 Graph-is-horizontal-only exception.
 
 **The grid division** is likewise reachable from the keyboard, alongside the snap combo:
@@ -182,7 +182,7 @@ Ctrl+Shift+1..8 set it outright (`TimelinePanelComponent::setSnapValue`, `1` thr
 Ctrl+Shift+Left/Right step it by one (`cycleSnapValue`), clamped coarsest↔finest and never wrapped
 — holding the key parks on `Bar` or `1/128` rather than surprising the user by wrapping around.
 From `Off`, both directions re-enter at the last musical division the user actually chose. Real
-Ctrl, not Cmd, even on macOS — see [`shortcuts.md`](../shortcuts.md#timeline) for why that is
+Ctrl, not Cmd, even on macOS — see [`shortcuts.md`](../control/shortcuts.md#timeline) for why that is
 deliberate.
 
 Every set and cycle call is a view-state-only change (nothing on the undo stack) that goes through

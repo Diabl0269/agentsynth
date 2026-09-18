@@ -30,7 +30,7 @@ MixerFader::MixerFader() {
     slider_.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
     // FRO18: the panel is the single focusable leaf (MixerPanelComponent::keyPressed) -- a
     // focused Slider would otherwise eat Up/Down before the panel ever saw them (the T160 trap
-    // docs/shortcuts.md documents).
+    // docs/control/shortcuts.md documents).
     slider_.setWantsKeyboardFocus(false);
     applyDbAccessibilityText(slider_);
     addAndMakeVisible(slider_);

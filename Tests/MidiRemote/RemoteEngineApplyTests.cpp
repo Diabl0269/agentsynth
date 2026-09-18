@@ -1,6 +1,8 @@
 // Message thread: RemoteEngine::drain()'s apply path (RemoteEngineApply.cpp) -- gestures,
 // takeover, range mapping, claims, orphaned targets, the generation guard, and action targets
-// (docs/midi_remote.md §4.2, §4.6, §4.9). Every test drives a real juce::AudioProcessorGraph node
+// (docs/control/midi-remote.md#how-does-a-hardware-value-reach-a-parameter,
+// docs/control/midi-remote.md#takeover, docs/control/midi-remote.md#action-targets). Every test
+// drives a real juce::AudioProcessorGraph node
 // (FilterModule -- a "cutoff" float parameter for the continuous-value tests, and the "bypassed"
 // bool parameter every ModuleBase module carries for the button tests) so applying really moves a
 // real juce::AudioProcessorParameter through beginChangeGesture/setValueNotifyingHost/
@@ -95,7 +97,9 @@ struct ApplyHarness {
 
     // setProfiles/setSources/setAssignments (in the order RemoteEngineThreadingTests.cpp uses),
     // then an explicit reconcile(graph) -- a setter alone leaves a BRAND NEW assignment id
-    // unresolved (docs/architecture_app_wiring.md §8: "a setter is not a graph change").
+    // unresolved
+    // (docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step: "a
+    // setter is not a graph change").
     void publish(std::vector<ControllerProfile> profiles, std::vector<Assignment> assignments) {
         engine.setProfiles(std::move(profiles));
         engine.setSources({juce::String(kSource)});
@@ -129,8 +133,8 @@ public:
 } // namespace
 
 // ============================================================================
-// Exactly one gesture pair per sweep (docs/midi_remote.md §4.2's "one undo step, one automation
-// touch")
+// Exactly one gesture pair per sweep (docs/control/midi-remote.md#how-does-a-hardware-value-reach-a-parameter's "one
+// undo step, one automation touch")
 // ============================================================================
 
 TEST(MidiRemoteEngineApplyTest, ExactlyOneGesturePairPerSweep) {
@@ -363,7 +367,8 @@ TEST(MidiRemoteEngineApplyTest, OrphanedTargetMovesNothingAndOpensNoGesture) {
 
     EXPECT_TRUE(h.send(juce::MidiMessage::controllerEvent(1, 10, 127)))
         << "the message is still consumed -- the LOOKUP entry exists regardless of whether the "
-           "target resolved (docs/midi_remote.md's orphan-controller contract)";
+           "target resolved (docs/control/midi-remote.md#where-does-a-mapping-live--global-or-in-the-project's "
+           "orphan-controller contract)";
     h.engine.drain();
     EXPECT_NEAR(h.cutoff()->getValue(), cur, 1e-6f) << "an orphaned target must never move ANY parameter";
     EXPECT_EQ(h.engine.activeGestureCount(), 0);

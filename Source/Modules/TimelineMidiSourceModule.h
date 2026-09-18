@@ -146,7 +146,7 @@ public:
         const int numSamples = buffer.getNumSamples();
 
         // Bypass: a pure MIDI source with no dry audio path, so the audio buffer is cleared on
-        // both branches (see the bypass/mute contract in docs/architecture.md). The FIRST bypassed
+        // both branches (see docs/architecture/module-base.md#bypassmute-contract). The FIRST bypassed
         // block still emits the note-offs for whatever was sounding — dropping them silently would
         // leave every downstream envelope open.
         if (isBypassed()) {

@@ -1,6 +1,6 @@
 #pragma once
 
-// The one seam AudioEngine gains for MIDI Remote (docs/midi_remote.md §6). Deliberately a
+// The one seam AudioEngine gains for MIDI Remote (docs/control/midi-remote.md#the-engine). Deliberately a
 // two-method interface in its own header so Source/AudioEngine/ depends on *this* and never on
 // RemoteEngine.h — the engine, its snapshot machinery and the whole MidiRemote model stay out of
 // the audio engine's translation units.
@@ -22,15 +22,16 @@ public:
     virtual ~RemoteMessageSink() = default;
 
     /** MIDI/AUDIO THREAD. Returns true if the message was consumed by the remote engine, in which
-     *  case the caller must not forward it anywhere else (docs/midi_remote.md §4.3). A profile with
+     *  case the caller must not forward it anywhere else
+     * (docs/control/midi-remote.md#are-mapped-messages-consumed-or-also-forwarded-to-the-graph). A profile with
      *  passMapped == true applies the message and still returns false. `sourceKey` is the
      *  juce::MidiInput device *identifier* (standalone) or kHostSourceKey (hosted). */
     virtual bool handleMessage(const juce::String& sourceKey, const juce::MidiMessage& message) noexcept = 0;
 };
 
-/** The single pseudo-controller source key in HostMode::Hosted (docs/midi_remote.md §4.8). A
- *  function-local static, never a temporary: constructing a juce::String on the MIDI path would
- *  allocate. */
+/** The single pseudo-controller source key in HostMode::Hosted
+ * (docs/control/midi-remote.md#the-plugin-build-vst3au-inside-a-host). A function-local static, never a temporary:
+ * constructing a juce::String on the MIDI path would allocate. */
 const juce::String& hostSourceKey() noexcept;
 
 } // namespace synth::midi

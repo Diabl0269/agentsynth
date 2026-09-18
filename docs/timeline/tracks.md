@@ -63,7 +63,7 @@ A row is a real focus target — `setWantsKeyboardFocus(true)` in the constructo
 `TimelineClipLaneArea` / `PianoRollComponent` use for the surfaces they own — with a `keyPressed()`
 override that resolves bare **M**/**S**/**R** (`timelineMuteFocusedTrack` /
 `timelineSoloFocusedTrack` / `timelineArmFocusedTrack`, rebindable, Timeline category — see
-[`shortcuts.md`](../shortcuts.md#timeline)) into exactly the same `toggleMuted()` / `toggleSoloed()`
+[`shortcuts.md`](../control/shortcuts.md#timeline)) into exactly the same `toggleMuted()` / `toggleSoloed()`
 / `toggleArmed()` → `performEdit()` path the M/S/R **buttons**' own `onClick` calls, so a keystroke
 and a click can never disagree about what "toggle" means or about the undo step it produces.
 

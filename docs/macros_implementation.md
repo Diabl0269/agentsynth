@@ -241,7 +241,7 @@ In order, each independently shippable:
       `onReorderPort` (the same callback the buttons used), falling through to the pre-existing
       bare-arrow row-navigation check only when it isn't held. This matches the app's existing
       convention of the command modifier for editing-type actions (Cmd+D duplicate, Cmd+R repeat —
-      docs/shortcuts.md) and is dialog-local key handling, not a `ShortcutManager` action.
+      docs/control/shortcuts.md) and is dialog-local key handling, not a `ShortcutManager` action.
    2. **Keyboard focus is now visible.** Diagnosed by reading `juce::Button::paint()`
       (`juce_Button.cpp`): it hands `paintButton()` only `isOver()`/`isDown()`, never keyboard-focus
       state, so `GlyphButton`/`PortColourSwatch` — both custom `paintButton` overrides — never drew
@@ -515,7 +515,7 @@ In order, each independently shippable:
    already does; that in turn fires `onGraphStructureChanged` ->
    `MainComponent::reconcileTimelineBindingsOnly()`, the seam that keeps a timeline binding from
    surviving stale, keyed to a now-deleted node's uuid, into the next audio-thread render pass
-   (root `CLAUDE.md`, §8 of `docs/architecture.md`). `MacroAutoPortTests.cpp`'s
+   (root `CLAUDE.md`, `docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step`). `MacroAutoPortTests.cpp`'s
    `ReachesTheGraphStructureChangedNotificationHook` pins this directly.
 
    **A port node is now directly deletable, right-click.** Before this fix,
@@ -684,7 +684,7 @@ In order, each independently shippable:
 
 - `docs/layout/selection.md` · `docs/layout/cables.md` · `docs/layout/macro-cards.md` — selection,
   group drag, cable interaction, and the macro container's canvas behaviour
-- `docs/architecture.md` — the flat graph, latency compensation, plugin state format
+- `docs/architecture/architecture.md` — the flat graph, latency compensation, plugin state format
 - [`docs/modules/modules.md`](modules/modules.md) / `Source/Modules/CLAUDE.md` — channel-count rules; [`docs/modules/fx-modules.md#stereo-io-dual-io-toggle`](modules/fx-modules.md#stereo-io-dual-io-toggle) — Dual I/O rules
 - [`docs/modules/modulation.md`](modules/modulation.md) — logical-port API, poly-bus wires
 - `docs/ai/patch-safety.md` — `validatePatch`, the untrusted path

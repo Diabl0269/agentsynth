@@ -2,7 +2,8 @@
 // publishes it. reconcile(graph) is MainComponent's post-graph-change funnel; the setters
 // (setSources/setProfiles/setAssignments/setDefaultTakeover) also land here with graph == nullptr,
 // which must NOT re-resolve parameters -- it keeps whatever the last real reconcile resolved
-// (docs/architecture_app_wiring.md §8: "a setter is not a graph change").
+// (docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step: "a setter is
+// not a graph change").
 
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
 #include "Timeline/AutomationBinding.h"
@@ -59,7 +60,8 @@ const Control* findControl(const std::vector<ControllerProfile>& profiles, const
 
 // The index of `profileId`'s input device among the sources this rebuild just resolved, or -1 if
 // the profile doesn't exist or its device isn't currently open -- the slot is still kept, it just
-// gets no lookup entry (docs/midi_remote.md's "orphan controller" case).
+// gets no lookup entry (docs/control/midi-remote.md#where-does-a-mapping-live--global-or-in-the-project's "orphan
+// controller" case).
 int findSourceIndexForProfile(const std::vector<ControllerProfile>& profiles,
                               const std::vector<RemoteMappingSnapshot::SourceEntry>& sources,
                               const juce::String& profileId) {

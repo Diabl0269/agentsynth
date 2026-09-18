@@ -82,7 +82,7 @@ namespace synth::ui {
  * falling through to the bare-arrow row-navigation check above, so a bare arrow still only moves
  * focus (it already means that) and Cmd+arrow is the new reorder trigger, matching the app's
  * existing convention of the command modifier for editing-type actions (Cmd+D duplicate, Cmd+R
- * repeat — docs/shortcuts.md). This is dialog-local key handling, not a ShortcutManager action.
+ * repeat — docs/control/shortcuts.md). This is dialog-local key handling, not a ShortcutManager action.
  * (2) Keyboard focus was invisible everywhere in this dialog: `juce::Button::paint()` passes
  * `paintButton` only `isOver()`/`isDown()` (juce_Button.cpp), never keyboard-focus state, so the
  * custom `GlyphButton`/`PortColourSwatch` classes never drew anything different when focused.

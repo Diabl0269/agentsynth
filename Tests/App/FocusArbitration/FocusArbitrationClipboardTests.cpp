@@ -1,6 +1,6 @@
 // Concern: the one focus-ownership rule (MainComponent::resolveEditSurface) for Cmd+C/V/D
 // across the Graph, TimelineClips and PianoRoll surfaces -- see MainComponent.h's
-// EditSurface/resolveEditSurface comment and docs/shortcuts.md for the production rule this pins.
+// EditSurface/resolveEditSurface comment and docs/control/shortcuts.md for the production rule this pins.
 #include "FocusArbitrationTestFixture.h"
 
 // ============================================================================

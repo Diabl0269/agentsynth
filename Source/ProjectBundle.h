@@ -73,7 +73,7 @@ struct ProjectLoadResult {
  * `autosave.json` sidecar — `project.json` is never overwritten in place by autosave.
  * `loadAutosave()` mirrors `load()`'s validation exactly, reading the sidecar instead. See
  * `MainComponent::performAutosave` / `MainComponent::openFromFile` for the gate that writes it and
- * the recovery prompt that reads it, and docs/architecture.md for the full autosave design.
+ * the recovery prompt that reads it -- see docs/architecture/project-bundle.md#autosave-and-crash-recovery.
  *
  * ### Autosave backup history
  * Before each autosave overwrites `autosave.json`, the PREVIOUS sidecar is rotated into a numbered
@@ -123,9 +123,9 @@ public:
      *  `project.json` (same "timeline set last" ordering), to a SEPARATE sidecar file.
      *  `project.json` and `Audio/`/`Peaks/` are never touched. `bundleDir` must already exist (an
      *  unsaved project has no bundle yet, so MainComponent never calls this before the first
-     *  explicit save — see docs/architecture.md). Before writing, the PREVIOUS `autosave.json` (if
-     *  any) is rotated into the numbered backup history — see the class comment's "Autosave backup
-     *  history" section. `maxBackups <= 0` disables rotation (plain overwrite). */
+     *  explicit save — see docs/architecture/project-bundle.md#autosave-and-crash-recovery). Before writing, the
+     *  PREVIOUS `autosave.json` (if any) is rotated into the numbered backup history — see the class comment's
+     *  "Autosave backup history" section. `maxBackups <= 0` disables rotation (plain overwrite). */
     static ProjectLoadResult saveAutosave(const juce::File& bundleDir, juce::AudioProcessorGraph& graph,
                                           const TimelineDoc& timeline, PatchDocument& patchDocument,
                                           const MacroSet& macros, int maxBackups,

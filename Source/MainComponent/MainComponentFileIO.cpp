@@ -358,8 +358,8 @@ void MainComponent::markDocumentClean() {
 }
 
 // True while an audio or MIDI take is actively capturing — checked by the autosave gate so it
-// never fires mid-take (see docs/architecture.md). No public accessor for the underlying
-// AudioTake/MidiRecorder state on purpose; go through isRecordingActiveForTest() in tests.
+// never fires mid-take (see docs/architecture/project-bundle.md#autosave-and-crash-recovery). No public accessor for
+// the underlying AudioTake/MidiRecorder state on purpose; go through isRecordingActiveForTest() in tests.
 bool MainComponent::isRecordingActive() const { return audioTake_.capturing || midiRecorder.isRecording(); }
 
 // The autosave gate, run once per timerCallback() tick (no second juce::Timer). Fires

@@ -262,7 +262,7 @@ public:
         // Bare spacebar, no modifiers — the platform DAW convention for play/stop. Safe to
         // claim app-wide for the same reason Cmd+C/V is: a focused juce::TextEditor consumes the
         // spacebar itself (types a space character) before it ever reaches MainComponent::
-        // keyPressed, the sole dispatch point — see docs/shortcuts.md.
+        // keyPressed, the sole dispatch point — see docs/control/shortcuts.md.
         bindings["togglePlayback"] = juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys::noModifiers, 0);
         // Cmd+= / Cmd+- : the platform zoom pair (every browser, every editor). Free on both counts
         // — '=' and '-' appear nowhere else in this table, and no component keyPressed() override
@@ -556,7 +556,7 @@ public:
     }
 
     // Display text for `actionId`'s row in Settings -> Keyboard Shortcuts and the MIDI Remote
-    // action picker (docs/midi_remote.md §4.9). Out-of-line in ShortcutManagerActionNames.cpp,
+    // action picker (docs/control/midi-remote.md#action-targets). Out-of-line in ShortcutManagerActionNames.cpp,
     // one `if` per action id, in getActionTable()'s own order -- kept off this header to leave
     // the 1,000-line file-size cap (scripts/file-size-baseline.txt) headroom for new actions.
     static juce::String getActionDescription(const juce::String& actionId);
@@ -666,7 +666,7 @@ private:
             {"focusTimeline", ShortcutCategory::General},
             {"focusLibrary", ShortcutCategory::General},
             {"focusLibrarySearch", ShortcutCategory::General},
-            // FRO125: transport verbs promoted to command-dispatched actions (docs/midi_remote.md
+            // FRO125: transport verbs promoted to command-dispatched actions (docs/control/midi-remote.md
             // §4.9's prerequisite) -- deliberately UNBOUND by default (see resetToDefaults()),
             // unlike every other row above. They exist as command/MIDI-Remote targets first; a
             // user may still rebind one in Settings. "transportTogglePlayStop" is not here: it is

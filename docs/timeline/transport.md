@@ -54,7 +54,7 @@ moment of the action**, rather than from a value this bar remembers between poll
   handler — there is no separate "default bounds" case to maintain.
 
   The loop range has a second consumer in the Export Audio dialog (see
-  [`architecture_audio_engine.md`](../architecture_audio_engine.md#bounceexport)):
+  [`architecture/audio-engine.md`](../architecture/audio-engine.md#bounceexport)):
   `MainComponent::promptExportAudio` reads `loopStartPpq` / `loopEndPpq` off a fresh snapshot to
   decide whether "Current loop range" is offered as a bounce range whenever the region is
   non-degenerate, and seeds from it when it is selected. The offer does not depend on the loop
@@ -157,7 +157,7 @@ reflects record-ON, not "a take is capturing".
   undo)`, then `midiRecorder.hadOverrun()` → `statusBar.showMessage("Dropped MIDI events during
   recording")`, then `setRecordingState(false)`. One choke point means the explicit and the
   auto-commit paths can never diverge — see
-  [`architecture_app_wiring.md`](../architecture_app_wiring.md)'s `MidiRecorder` wiring entry
+  [`architecture/app-wiring.md`](../architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step)'s `MidiRecorder` wiring entry
   (hook 5) for the full ordering. With nothing armed there was never a take to commit, so OFF just
   turns the indicator back off.
 
@@ -179,7 +179,7 @@ path.
 play and stop are guarded on the current snapshot so each is idempotent, and return-to-start is
 `locateBeat(0)` with no implicit stop. `transportToggleLoop` and `transportToggleMetronome` reuse
 the loop and metronome buttons' own `triggerClick()` the same way `transportRecord` reuses
-Record's — see [`shortcuts.md`](../shortcuts.md#transport-family) for the full action-id table. All
+Record's — see [`shortcuts.md`](../control/shortcuts.md#transport-family) for the full action-id table. All
 six ship unbound by default; only `togglePlayback` keeps a default key (Space).
 
 ## Metronome and count-in
@@ -205,7 +205,7 @@ last-known value to the metronome pointer if the other has already been supplied
 **Count-in selector** — a `juce::ComboBox` ("Off" / "1 bar" / "2 bars", `getCountInBars()`
 returning 0/1/2), read by `MainComponent`'s record flow at the moment Record is clicked, never
 cached elsewhere. See
-[`architecture_audio_engine.md`](../architecture_audio_engine.md#metronome--count-in) for the full
+[`architecture/audio-engine.md`](../architecture/audio-engine.md#metronome--count-in) for the full
 count-in choreography — locate-back, forced-on click, the punch-in filter — this selector feeds.
 
 Layout: `metronomeButton_` (a square button, like its siblings) + `kGap` + `countInCombo_` (64 px)

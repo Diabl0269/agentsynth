@@ -53,8 +53,9 @@ bool readBool(const juce::var& v, bool& out) {
 }
 
 // -- Enum <-> doc-exact camelCase string ------------------------------------------------------
-// docs/midi_remote.md §5 names every enumerator exactly this way; a string this build doesn't
-// recognise is a hard failure, never a silent default (§7 "never partially applies").
+// docs/control/midi-remote.md#data-model names every enumerator exactly this way; a string this build doesn't
+// recognise is a hard failure, never a silent default (docs/control/midi-remote.md#persistence-and-the-trust-boundary
+// "never partially applies").
 
 const char* toString(MessageType t) {
     switch (t) {
@@ -384,7 +385,7 @@ bool Target::fromVar(const juce::var& v, Target& out) {
 
     const bool hasParameter = obj->hasProperty("parameter");
     const bool hasAction = obj->hasProperty("action");
-    // Reject BOTH present or NEITHER present — exactly one is a Target (docs/midi_remote.md §5).
+    // Reject BOTH present or NEITHER present — exactly one is a Target (docs/control/midi-remote.md#data-model).
     if (hasParameter == hasAction)
         return false;
 
@@ -548,9 +549,9 @@ bool ControllerProfile::fromVar(const juce::var& state) {
     if (obj == nullptr)
         return false;
 
-    // §7: version must equal exactly 1; a higher (or otherwise wrong/missing) version is refused
-    // visibly rather than coerced — same strict, present-and-exact convention TimelineDoc::fromVar
-    // uses (there is no pre-versioning midiRemote data to be forward-compatible with).
+    // docs/control/midi-remote.md#persistence-and-the-trust-boundary: version must equal exactly 1; a higher (or
+    // otherwise wrong/missing) version is refused visibly rather than coerced — same strict, present-and-exact
+    // convention TimelineDoc::fromVar uses (there is no pre-versioning midiRemote data to be forward-compatible with).
     int parsedVersion = 0;
     if (!readInt(obj->getProperty("version"), parsedVersion) || parsedVersion != 1)
         return false;
@@ -589,7 +590,7 @@ bool ControllerProfile::fromVar(const juce::var& state) {
     if (!readControlList(obj->getProperty("controls"), parsed.controls))
         return false;
 
-    // "Reject a profile whose controls share a MessageSpec key" (docs/midi_remote.md §5's rule,
+    // "Reject a profile whose controls share a MessageSpec key" (docs/control/midi-remote.md#data-model's rule,
     // ticket FRO124): an O(n^2) scan is fine at controller-surface scale (tens of controls).
     for (size_t i = 0; i < parsed.controls.size(); ++i)
         for (size_t j = i + 1; j < parsed.controls.size(); ++j)

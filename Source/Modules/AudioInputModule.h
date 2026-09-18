@@ -48,7 +48,7 @@ public:
             return;
 
         // Pure source: no audio input, so bypass clears rather than passing a dry signal through
-        // (see the class comment and docs/architecture.md's bypass/mute contract).
+        // (see the class comment and docs/architecture/module-base.md#bypassmute-contract).
         if (isBypassed()) {
             buffer.clear();
             return;

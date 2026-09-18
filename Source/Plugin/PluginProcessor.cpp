@@ -162,7 +162,7 @@ void AgentSynthAudioProcessor::setStateInformation(const void* data, int sizeInB
 
     // Tear down module components BEFORE the graph is cleared, so no ScopeComponent timer can
     // fire against a freed VisualBuffer. Same ordering contract as GraphEditor::loadPreset and
-    // MainComponent::aiPatchAboutToApply — see docs/architecture.md.
+    // MainComponent::aiPatchAboutToApply — see docs/architecture/plugin-layer.md#plugin-state-format.
     auto* editor = dynamic_cast<AgentSynthPluginEditor*>(getActiveEditor());
     if (editor != nullptr)
         editor->prepareForGraphReplacement();

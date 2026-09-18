@@ -5,19 +5,8 @@
 # --allow-growth is the deliberate, reviewed exception. See check-docs.sh's own header comment
 # for the full mechanism, and docs/development/docs-guard.md for why only naming is grandfathered -- every
 # other check (B/C/D/E) is zero-tolerance and never baselined.
-naming docs/architecture_app_wiring.md
-naming docs/architecture_audio_engine.md
-naming docs/architecture_graph_editor.md
-naming docs/architecture_module_base.md
-naming docs/architecture_plugin_layer.md
-naming docs/architecture_project_bundle.md
-naming docs/architecture_timeline.md
 naming docs/macros_implementation.md
 naming docs/macros_ports.md
-naming docs/midi_input.md
-naming docs/midi_remote.md
-naming docs/midi_remote_ui.md
 naming docs/mixer_fader.md
 naming docs/mixer_implementation.md
-naming docs/plugin_card_layout.md
 naming docs/testing_mixer_meters.md

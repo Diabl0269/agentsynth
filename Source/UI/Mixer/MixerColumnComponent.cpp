@@ -78,7 +78,7 @@ MixerColumnComponent::MixerColumnComponent() {
     panSlider_.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
     // FRO18: MixerPanelComponent is the single focusable leaf -- every child control gives up
     // keyboard focus so Up/Down/Enter/M/S/R always reach the panel's own keyPressed() (the T160
-    // trap docs/shortcuts.md documents: a focused Slider eats Up/Down, a focused TextButton eats
+    // trap docs/control/shortcuts.md documents: a focused Slider eats Up/Down, a focused TextButton eats
     // Return/Space).
     panSlider_.setWantsKeyboardFocus(false);
     panSlider_.textFromValueFunction = [](double pan) {

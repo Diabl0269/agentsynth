@@ -17,7 +17,7 @@ and "Make channel" — the last P9-3 flow — turns one track (header menu) or a
 module menu) into a channel on demand, keeping shared modules shared, turning a merge point into its
 own bus channel and offering "Duplicate into Channel" for an independent copy (§5.8, §8 item 2,
 P9-3d/FRO25). There is no mixer panel yet (P9-5) — until it exists, "Locate Master" (Cmd+Shift+M / canvas right-click, P9-3g/FRO45,
-[`shortcuts.md`](shortcuts.md#locate-master-fro45)) is the lightweight, canvas-only stopgap for
+[`control/shortcuts.md`](control/shortcuts.md#locate-master)) is the lightweight, canvas-only stopgap for
 finding Master (or Audio Output) after auto-arrange or a drag leaves it off-screen. This document
 records the decided design;
 §8 is the implementation order that turns it into code. The visual
@@ -50,7 +50,7 @@ this track's contribution" is actually isolated.
 The graph has exactly one **Audio Output** node, a `juce::AudioGraphIOProcessor` that cannot host
 DSP of its own. `MainComponent::ensureMasterRecordTap()` (`Source/MainComponent/MainComponentTimeline.cpp`) already
 splices a singleton `Rec Tap` node in front of it on demand, re-routing every audio connection
-that fed the output through the tap, as one compound undo step (`docs/architecture.md`). This is
+that fed the output through the tap, as one compound undo step (`docs/architecture/architecture.md`). This is
 the closest existing precedent for what a `Master` node splice would look like (§5.1).
 
 Macros (`docs/macros.md`) are a **presentation-only layer over a flat graph**: a macro adds no
@@ -911,7 +911,7 @@ Arm Focused Track actions act on it — the same action ids the Timeline track-h
 binds), and every fader/pan/meter/M/S control carries a JUCE `AccessibilityHandler` name and value
 so VoiceOver can read the mix (e.g. "Lead 1 fader, -3.0 dB"). Full key table, the region's open
 predicate, and the accessibility handler details live in
-[`docs/shortcuts.md`](shortcuts.md#mixer-column-navigation) (§ Focus regions / § Mixer column
+[`docs/control/shortcuts.md`](control/shortcuts.md#mixer-column-navigation) (Focus regions / Mixer column
 navigation) — this section only cross-links it, per this doc's own "one topic per doc" rule.
 
 ---
@@ -992,7 +992,7 @@ P9-11 Gate module, T181 mixer accessibility. Item numbers there match every exis
   proxy-port and internal-only-node precedents this design follows.
 - [`docs/timeline/tracks.md`](timeline/tracks.md) — track headers, M/S controls, the
   timeline side of the track/channel relationship.
-- [`docs/architecture.md`](architecture.md) — `ensureMasterRecordTap()`, `EpochExchange`, the
+- [`docs/architecture/architecture.md`](architecture/architecture.md) — `ensureMasterRecordTap()`, `EpochExchange`, the
   bypass/mute contract, plugin host modes.
 - [`docs/modules/modules.md#channel-strip-module-mixer-channel-hidden`](modules/modules.md#channel-strip-module-mixer-channel-hidden) — `kRightBase`, the stereo-pair conventions a `ChannelStrip`'s
   output follows, `VoiceMixerModule` (see also [`docs/modules/modules.md#voice-mixer-module`](modules/modules.md#voice-mixer-module)).

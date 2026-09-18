@@ -141,7 +141,7 @@ public:
     void suspendExternalMidi() noexcept { externalMidiSuspended_.store(true, std::memory_order_release); }
     void resumeExternalMidi() noexcept { externalMidiSuspended_.store(false, std::memory_order_release); }
 
-    // Voice count / mute API (§4.2)
+    // Voice count / mute API (docs/architecture/audio-engine.md#audioengine)
     struct VoiceInfo {
         int activeVoices = 0;
         int maxVoices = 0;
@@ -157,7 +157,7 @@ public:
     // on a guard trip). Published to the transport carrier once per render pass — see
     // TransportService::setInputMonitoringEnabledForBlock — which is what AudioInputModule actually
     // reads; nothing downstream of the graph ever reads this atomic directly. See
-    // docs/architecture.md's "Input monitoring & feedback guard".
+    // docs/architecture/audio-engine.md#input-monitoring--feedback-guard.
     void setInputMonitoringEnabled(bool enabled) noexcept;
     bool isInputMonitoringEnabled() const noexcept;
 
@@ -204,7 +204,7 @@ public:
     // total of kFeedbackSustainSeconds — measured in elapsed SAMPLES, not block count, so the timing
     // is block-size-agnostic — disables monitoring, latches the tripped flag above, and zeroes that
     // block's output immediately. Never evaluated while monitoring is disabled. See renderPass /
-    // runFeedbackGuard and docs/architecture.md.
+    // runFeedbackGuard and docs/architecture/audio-engine.md#input-monitoring--feedback-guard.
     static constexpr float kFeedbackPeakThreshold = 0.97f;
     static constexpr double kFeedbackSustainSeconds = 0.25;
 
@@ -236,7 +236,7 @@ public:
     const synth::TransportService& getTransport() const noexcept { return transport; }
 
     // The click generator, summed POST-graph in renderPass (see the class comment there and
-    // docs/architecture.md's Metronome subsection). Message-thread callers use setEnabled/
+    // docs/architecture/audio-engine.md#metronome--count-in. Message-thread callers use setEnabled/
     // setForcedOn/isEnabled/isForcedOn; the audio thread only ever calls renderClicks(), from inside
     // renderPass.
     synth::Metronome& getMetronome() noexcept { return metronome_; }
@@ -322,7 +322,7 @@ public:
     // capture is then a no-op. The recorder is called from exactly one site, renderPass's
     // MIDI-capture step, against the SAME buffer the graph itself renders — the collector-
     // drained (standalone) or host-delivered (hosted) stream, never the ExternalMidiModule push-path
-    // copies handleIncomingMidiMessage also makes. See docs/architecture.md's "MIDI recording" note.
+    // copies handleIncomingMidiMessage also makes. See docs/architecture/audio-engine.md#audioengine.
     //
     // Publishes the new pointer FIRST and then drains, so this returns with the audio thread
     // provably done with the old one — see drainAudioCallbacks(). seq_cst rather than relaxed
@@ -348,8 +348,8 @@ public:
 
     // Borrowed, never owned; null by default. Message thread. The owner MUST clear this to nullptr
     // before destroying the sink — this call's drain is what makes that safe for the audio thread
-    // (docs/midi_remote.md §4.3, docs/architecture_audio_engine.md). Unlike the two setters above,
-    // drainAudioCallbacks() alone isn't enough — see ScopedRemoteSinkCall and drainRemoteSinkCalls().
+    // (docs/control/midi-remote.md#are-mapped-messages-consumed-or-also-forwarded-to-the-graph). Unlike the two setters
+    // above, drainAudioCallbacks() alone isn't enough — see ScopedRemoteSinkCall and drainRemoteSinkCalls().
     void setRemoteMessageSink(synth::midi::RemoteMessageSink* sink) noexcept {
         remoteMessageSink_.store(sink, std::memory_order_seq_cst);
         drainAudioCallbacks();
@@ -411,7 +411,7 @@ public:
     // one consumer is the take-commit math (synth::computeTakePlacement), plus the status bar's
     // "RT" readout. Note that this is deliberately NOT what the drawn playhead uses — that one
     // offsets by the OUTPUT latency alone, because it answers a different question ("where is the
-    // audio the user is hearing right now?"). See docs/architecture.md.
+    // audio the user is hearing right now?"). See docs/architecture/audio-engine.md#transportservice-the-one-clock.
     int getRecordingLatencySamples() const noexcept {
         return getInputLatencySamples() + getGraphLatencySamples() + getOutputLatencySamples();
     }
@@ -622,7 +622,7 @@ private:
 
     // The one consolidated prepare-path hook, called from BOTH audioDeviceAboutToStart and
     // prepareForHost whenever the engine's sample rate or block size changes. See
-    // docs/architecture.md's "Device & sample-rate changes" for the full order argument;
+    // docs/architecture/app-wiring.md#device--sample-rate-changes for the full order argument;
     // summary: transport FIRST (every other consumer, and every module's next processBlock, must
     // see the new rate consistently), then the metronome's voice pool, then the clip streamer's
     // ring invalidation, then the in-flight-take check that sets formatChangedDuringCapture_. Does

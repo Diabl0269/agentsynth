@@ -35,7 +35,7 @@ cmake --build build
 - **`ENABLE_PLUGIN`** defaults `ON`, so the plain `cmake --build build` above also builds
   `AgentSynthPlugin` — VST3 on every platform, plus AU on macOS — from the same
   `AudioEngine`/`MainComponent` code the standalone app uses (see
-  [`../architecture_plugin_layer.md`](../architecture_plugin_layer.md#plugin-layer)). Disable it for
+  [`../architecture/plugin-layer.md`](../architecture/plugin-layer.md#plugin-layer)). Disable it for
   a faster app-only local loop:
 
   ```bash

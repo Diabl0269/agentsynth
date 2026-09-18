@@ -1,5 +1,5 @@
-// The tripwire tests for docs/midi_remote.md §4.4: the mapping table crosses threads and the
-// engine may never take a lock, allocate or free something a reader still holds. Suite name
+// The tripwire tests for docs/control/midi-remote.md#threading-the-mapping-table-crosses-threads: the mapping table
+// crosses threads and the engine may never take a lock, allocate or free something a reader still holds. Suite name
 // contains "MidiRemote" so it matches the ship-task verification filter.
 //
 // These are the tests that are meant to be run under ThreadSanitizer as well as normally —

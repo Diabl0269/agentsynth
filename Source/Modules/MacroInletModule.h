@@ -87,10 +87,10 @@ public:
                 buffer.clear(ch, 0, numSamples);
 
         // Bypass: this module HAS a dry audio path — it IS nothing but a pass-through — so the
-        // standard two-branch contract (docs/architecture.md) leaves the visible channels
-        // untouched either way. isBypassed() changes nothing observable about the signal; the
-        // parameter exists (inherited from ModuleBase) so this module honours the same contract
-        // every processBlock does, not because there is a dry/processed distinction to make here.
+        // standard two-branch contract (docs/architecture/module-base.md#bypassmute-contract) leaves the visible
+        // channels untouched either way. isBypassed() changes nothing observable about the signal; the parameter exists
+        // (inherited from ModuleBase) so this module honours the same contract every processBlock does, not because
+        // there is a dry/processed distinction to make here.
         if (isBypassed())
             return;
 

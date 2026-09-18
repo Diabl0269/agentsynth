@@ -236,7 +236,7 @@ void AudioEngine::prepareSliceScratch(int numChannels, int blockSize) {
 }
 
 void AudioEngine::handleStreamFormatChange(double newRate, int newBlockSize) {
-    // Order matters — see docs/architecture.md's "Device & sample-rate changes".
+    // Order matters — see docs/architecture/app-wiring.md#device--sample-rate-changes.
     //
     // 1. TRANSPORT FIRST: every other consumer below, and every module's NEXT processBlock, must see
     //    the new rate consistently once this call returns. TransportService::prepare() keeps the

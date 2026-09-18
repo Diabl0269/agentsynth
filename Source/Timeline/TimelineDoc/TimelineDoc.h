@@ -564,7 +564,7 @@ public:
     //
     // NOT a user edit: reconciliation derives runtime state from the current graph, it doesn't
     // record an intent a user should be able to undo. Callers must never wrap this in
-    // AppUndoManager::recordTimelineChange (or recordCombinedChange) — see docs/architecture.md.
+    // AppUndoManager::recordTimelineChange/recordCombinedChange — see docs/architecture/module-base.md#timeline-undo.
     //
     // `laneResolves` is an OPTIONAL richer predicate for lane orphaning specifically: a lane
     // whose node resolves may still need to orphan when that node is a HostedPluginModule and its

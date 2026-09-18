@@ -5,7 +5,7 @@
 Part of the architecture docs — start at [`architecture.md`](architecture.md) for the
 layer map, signal flow and the index of the other topic docs.
 
-## 6. ModuleBase
+## ModuleBase
 
 `Source/Modules/ModuleBase.h`
 
@@ -25,7 +25,7 @@ AudioInput, TimelineMidiSource, RecordTap, TimelineAudioSource, HostedPlugin,
 MacroInlet, MacroOutlet, MacroMidiInlet, MacroMidiOutlet, ChannelStrip, Master
 ```
 
-Everything from `AudioInput` on is an internal-only or singleton node: `AudioInput` (a patch singleton), and `TimelineMidiSource` / `RecordTap` / `TimelineAudioSource` / `HostedPlugin` / the four Macro port types / `ChannelStrip` / `Master` (P9-2, [`docs/mixer.md`](mixer.md)), which the module library never offers and a model may never author.
+Everything from `AudioInput` on is an internal-only or singleton node: `AudioInput` (a patch singleton), and `TimelineMidiSource` / `RecordTap` / `TimelineAudioSource` / `HostedPlugin` / the four Macro port types / `ChannelStrip` / `Master` (see [`docs/mixer.md`](../mixer.md)), which the module library never offers and a model may never author.
 
 `ModuleType` is consumed by `LayoutUtil::getModuleWidthBucket` to classify modules into width buckets (Narrow / Single / Double) and by `ModuleComponent` for type-safe UI layout switching.
 
@@ -58,7 +58,7 @@ Maps raw audio-buffer channel indices to the visible jack slots shown in the UI.
 | `getVisibleInputPortCount()` / `getVisibleOutputPortCount()` | How many jacks the UI renders |
 | `JackTarget` / `getJackTargets(jack, isInput)` | Inverse of `mapInput/OutputChannel` — every poly-group head anchored to a visible jack; drives connection creation in `GraphEditor` |
 
-`GraphEditor` uses this API to anchor wire endpoints to the correct visible jack regardless of how many raw channels are fanned out underneath, and to resolve which raw channels a dragged cable or poly toggle should wire (`GraphEditor::resolvePolyLink`, `rewireForPolyChange`). See [docs/modules/modulation.md](modules/modulation.md#creating-poly-connections).
+`GraphEditor` uses this API to anchor wire endpoints to the correct visible jack regardless of how many raw channels are fanned out underneath, and to resolve which raw channels a dragged cable or poly toggle should wire (`GraphEditor::resolvePolyLink`, `rewireForPolyChange`). See [docs/modules/modulation.md](../modules/modulation.md#creating-poly-connections).
 
 ### isAutoPromotableModTarget
 
@@ -70,7 +70,7 @@ Guards poly-mode CV inputs from being auto-wrapped in an `AttenuverterModule` by
 
 `virtual juce::var getExtraState() const` / `virtual void setExtraState(const juce::var&)`
 
-For state that has to survive a graph rebuild but is not expressible as a `juce::AudioProcessorParameter` — today only `SamplerModule`'s loaded file path. `AIStateMapper::graphToJSON` writes whatever `getExtraState()` returns as the node's `"state"` property, and `applyJSONToGraph` feeds it back through `setExtraState()`. Return a **void** `var` when there is nothing to persist, so modules that do not use the hook add no JSON.
+For state that has to survive a graph rebuild but is not expressible as a `juce::AudioProcessorParameter` — a Sampler's loaded file path, a Wavetable's loaded table, or a Channel Strip's solo/bus/sends bookkeeping, among others. `AIStateMapper::graphToJSON` writes whatever `getExtraState()` returns as the node's `"state"` property, and `applyJSONToGraph` feeds it back through `setExtraState()`. Return a **void** `var` when there is nothing to persist, so modules that do not use the hook add no JSON.
 
 This matters because preset load — and any undo that has to fall back to a full rebuild — goes through `graphToJSON` → `applyJSONToGraph`, which rebuilds processors from scratch: anything not in that JSON is silently lost. (An ordinary undo restores by diffing and keeps the processor, so it re-applies `"state"` only when it actually changed — see [AppUndoManager](#appundomanager).)
 
@@ -110,9 +110,9 @@ Both still use two separate branches, never a fused `if (isBypassed() || isMuted
 
 `ModuleBase` offers an opt-in output-level parameter for modules whose output is audio — `addOutputLevelParameter()` in the ctor, `prepareOutputLevel(sampleRate)` in `prepareToPlay`, `applyOutputLevel(buffer, numAudioChannels)` at the end of the **normal** `processBlock` path. It is a no-op on modules that never opt in.
 
-Two constraints follow from the contract above: `applyOutputLevel` must sit **after** both early returns (a bypassed module passes dry audio through at full level; a muted one is already cleared), and `numAudioChannels` must exclude CV channels. Full rules, including why this is opt-in rather than universal and why it must be the last parameter added, live in [`modules/fx-modules.md § Output Level`](modules/fx-modules.md#output-level-shared-stage).
+Two constraints follow from the contract above: `applyOutputLevel` must sit **after** both early returns (a bypassed module passes dry audio through at full level; a muted one is already cleared), and `numAudioChannels` must exclude CV channels. Full rules, including why this is opt-in rather than universal and why it must be the last parameter added, live in [Output Level](../modules/fx-modules.md#output-level-shared-stage).
 
-Related: look parameters up with `findParameterByID(processor, "paramID")` rather than `getParameters()[n]`. Parameter order is not part of a module's contract, and positional lookups silently repoint when a parameter is added. `ModuleBase`'s constructor now adds two parameters of its own — `bypassed` at index 0 and, for a stereo-shaped module, `dualIO` at index 1 ([`modules/fx-modules.md § The toggle is inherited, not registered`](modules/fx-modules.md#the-toggle-is-inherited-not-registered)) — so every module's own parameters start at an index the base owns. Saved state is unaffected either way: both `ModuleBase::getStateInformation` and `AIStateMapper` key parameters by `paramID`.
+Related: look parameters up with `findParameterByID(processor, "paramID")` rather than `getParameters()[n]`. Parameter order is not part of a module's contract, and positional lookups silently repoint when a parameter is added. `ModuleBase`'s constructor now adds two parameters of its own — `bypassed` at index 0 and, for a stereo-shaped module, `dualIO` at index 1 ([the toggle-is-inherited rule](../modules/fx-modules.md#the-toggle-is-inherited-not-registered)) — so every module's own parameters start at an index the base owns. Saved state is unaffected either way: both `ModuleBase::getStateInformation` and `AIStateMapper` key parameters by `paramID`.
 
 ## Supporting Components
 
@@ -120,12 +120,12 @@ Related: look parameters up with `findParameterByID(processor, "paramID")` rathe
 
 `Source/UI/Layout/LayoutUtil.h/.cpp`
 
-Stateless grid-layout helpers (`snap`, `intersectsAny`, `findFreeSlot`, `computeAutoArrange`). No JUCE GUI dependencies — fully headless-testable. See [`docs/layout/layout.md`](layout/layout.md#layoututil-api) for the full API reference.
+Stateless grid-layout helpers (`snap`, `intersectsAny`, `findFreeSlot`, `computeAutoArrange`). No JUCE GUI dependencies — fully headless-testable. See [`docs/layout/layout.md`](../layout/layout.md#layoututil-api) for the full API reference.
 
 ## ModuleComponent
 
 `Source/UI/Graph/ModuleComponent/` — one class (declared in `ModuleComponent.h`) split across per-concern
-translation units (FRO65), none over 1,000 lines, plus a private `ModuleComponentInternal.h` for
+translation units, none over 1,000 lines, plus a private `ModuleComponentInternal.h` for
 constants/helpers shared by two or more of them. Source layout:
 
 - `ModuleComponent.cpp` — construction/teardown, header/theme helpers, the auto-UI control builder (`createControls`)
@@ -142,7 +142,7 @@ Auto-generates parameter UI from `ModuleBase` metadata using type-safe `ModuleTy
 
 `Source/Modules/AttenuverterModule.h`
 
-Intermediary inserted between a modulation source and its destination to scale CV signals. Exposes `lastOutputPeak` / `lastModValue` atomics for UI metering. Constructor default `Amount = 0.0`; set to `1.0` by `addModRouting`, left at `0.0` by `addEmptyModRouting`. See [`docs/modules/modulation.md`](modules/modulation.md) for the full modulation routing model.
+Intermediary inserted between a modulation source and its destination to scale CV signals. Exposes `lastOutputPeak` / `lastModValue` atomics for UI metering. Constructor default `Amount = 0.0`; set to `1.0` by `addModRouting`, left at `0.0` by `addEmptyModRouting`. See [`docs/modules/modulation.md`](../modules/modulation.md) for the full modulation routing model.
 
 ## AppUndoManager
 
@@ -166,9 +166,9 @@ Snapshot-based undo/redo wrapping `juce::UndoManager`. Structural graph changes 
 
 - `recordTimelineChange(doc, mutation)` snapshots `toVar()` before and after the mutation; if the two serialisations are identical (the doc rejected the edit, or it was a genuine no-op) nothing is pushed and it returns `false` — a no-op must not create an undo step.
 - `recordCombinedChange(graph, doc, mutation)` is for edits that touch both domains in one gesture — the canonical case is deleting a module a timeline lane is bound to. It opens ONE transaction, captures graph + timeline "before", runs the single mutation, then pushes a graph `SnapshotAction` and/or a `TimelineSnapshotAction` — only for whichever domain(s) actually changed — inside that same transaction, so one `undo()`/`redo()` reverts or re-applies both together, never half the edit. It reuses the exact same pre/post-restore lambda plumbing (`detachAllModuleComponents` / `updateComponents`) `recordStructuralChange` gives the graph half, factored into a private `createGraphSnapshotAction` helper rather than duplicated.
-- `recordGraphAndMacroChange(graph, macros, mutation)` is `recordCombinedChange`'s twin for the graph + `synth::MacroSet` pair instead of graph + timeline (see [`docs/macros.md`](macros.md) for its callers). A graph+macro push (`GraphAndMacroSnapshotAction` when both changed, else the lone graph or macro action) is factored into a private `pushGraphAndMacroActions` helper.
-- `recordGraphTimelineAndMacroChange(graph, doc, macros, mutation)` (T173a) covers all THREE domains in one gesture — today's one caller is `MainComponent::addAudioTrack`, which creates a graph channel, a timeline track and a macro grouping it in a single "+ Track -> Audio Track" click. Same shape as the other two: one transaction, all three "before" states captured up front, the mutation runs once, all three "after" states captured, then the graph+macro half is pushed through the SAME `pushGraphAndMacroActions` helper `recordGraphAndMacroChange` uses (so a graph+macro combination that needs `GraphAndMacroSnapshotAction` gets it here too), followed by a `TimelineSnapshotAction` if the timeline changed — no `beginNewTransaction` between the two pushes, so one `undo()`/`redo()` covers whichever of the three domains actually changed.
-- **Lifetime rule, extended:** exactly like `SnapshotAction` holding the graph, a pushed `TimelineSnapshotAction` holds a reference to the `TimelineDoc` — the doc must outlive the `AppUndoManager`, or `clearUndoHistory()` must run before the doc is destroyed. `MainComponent` satisfies this by declaration order (see §8 above).
+- `recordGraphAndMacroChange(graph, macros, mutation)` is `recordCombinedChange`'s twin for the graph + `synth::MacroSet` pair instead of graph + timeline (see [`docs/macros.md`](../macros.md) for its callers). A graph+macro push (`GraphAndMacroSnapshotAction` when both changed, else the lone graph or macro action) is factored into a private `pushGraphAndMacroActions` helper.
+- `recordGraphTimelineAndMacroChange(graph, doc, macros, mutation)` covers all THREE domains in one gesture — today's one caller is `MainComponent::addAudioTrack`, which creates a graph channel, a timeline track and a macro grouping it in a single "+ Track -> Audio Track" click. Same shape as the other two: one transaction, all three "before" states captured up front, the mutation runs once, all three "after" states captured, then the graph+macro half is pushed through the SAME `pushGraphAndMacroActions` helper `recordGraphAndMacroChange` uses (so a graph+macro combination that needs `GraphAndMacroSnapshotAction` gets it here too), followed by a `TimelineSnapshotAction` if the timeline changed — no `beginNewTransaction` between the two pushes, so one `undo()`/`redo()` covers whichever of the three domains actually changed.
+- **Lifetime rule, extended:** exactly like `SnapshotAction` holding the graph, a pushed `TimelineSnapshotAction` holds a reference to the `TimelineDoc` — the doc must outlive the `AppUndoManager`, or `clearUndoHistory()` must run before the doc is destroyed. `MainComponent` satisfies this by declaration order (see [App wiring](app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step) above).
 
 ### Restore hooks
 
@@ -181,6 +181,6 @@ Actions capture the manager, not the callbacks, so hooks installed after an acti
 
 ## AppLookAndFeel + ThemeManager
 
-Central `LookAndFeel_V4` subclass and theme registry. Owns all stock-widget re-skins, treatment draw helpers, and the SVG `IconLibrary`. See [`docs/layout/theming.md`](layout/theming.md) for the full token reference, and [`docs/layout/theme-authoring.md`](layout/theme-authoring.md) for the JSON schema.
+Central `LookAndFeel_V4` subclass and theme registry. Owns all stock-widget re-skins, treatment draw helpers, and the SVG `IconLibrary`. See [`docs/layout/theming.md`](../layout/theming.md) for the full token reference, and [`docs/layout/theme-authoring.md`](../layout/theme-authoring.md) for the JSON schema.
 
 ---

@@ -62,7 +62,7 @@ an airgapped build.
   `whatsNewButton` both read `kReleaseTag` and that dialog as their one source of truth for "what
   version is this".
 
-See [`../architecture_project_bundle.md`](../architecture_project_bundle.md) for the generated
+See [`../architecture/project-bundle.md`](../architecture/project-bundle.md) for the generated
 header's place in the app's wiring.
 
 ## Signing state

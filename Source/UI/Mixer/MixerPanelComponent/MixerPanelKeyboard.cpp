@@ -2,7 +2,7 @@
 // fader nudge, Enter select-on-canvas, the rebindable M/S/R actions) and the focus-outline
 // painting/visual sync that goes with it. MixerPanelComponent.h's own class comment explains why
 // the panel, not a per-column leaf, is the single focusable region root (the T160 trap
-// docs/shortcuts.md documents: a focused Slider/TextButton eats the very keys this file resolves).
+// docs/control/shortcuts.md documents: a focused Slider/TextButton eats the very keys this file resolves).
 #include "MixerPanelComponent.h"
 
 #include "ShortcutManager/ShortcutManager.h"

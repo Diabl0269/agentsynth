@@ -62,8 +62,9 @@ void MainComponent::applyStoredDualIOPreferenceToPatch() {
  *  treats as "no line" rather than a blank one. */
 juce::String MainComponent::computeOutputDeviceInfoText() const {
     // Hosted mode (plugin): AudioEngine never opens a device or touches deviceManager — the host
-    // owns the clock and the hardware (see HostMode::Hosted in docs/architecture.md) — so there is
-    // no device to describe, only which world this editor is running in.
+    // owns the clock and the hardware (see HostMode::Hosted in
+    // docs/architecture/plugin-layer.md#host-modes-audioenginehostmode) — so there is no device to describe, only which
+    // world this editor is running in.
     if (audioEngine.isHosted())
         return "Host audio";
 
@@ -252,7 +253,7 @@ void MainComponent::timerCallback() {
     // consumed exactly once here) latches monitoring off for as long as the SAME arm state
     // persists — disarming every Audio track and re-arming one is the explicit reset gesture, and
     // that is exactly the false->true edge of "is any Audio track armed" below. See
-    // docs/architecture.md's "Input monitoring & feedback guard".
+    // docs/architecture/audio-engine.md#input-monitoring--feedback-guard.
     bool anyAudioTrackArmed = false;
     for (const auto& track : timelineDoc.getTracks()) {
         if (track.kind == synth::TrackKind::Audio && track.armed) {
@@ -627,8 +628,8 @@ void MainComponent::promptExportPatchOnly() {
 
 // The offline bounce/export flow (P8-5): show the options dialog, then drive a BounceRunner from
 // what it reports. See Source/Transport/BounceRunner.h and Source/UI/Chrome/ExportAudioDialog.h for why
-// the render is chunked rather than blocking, and docs/architecture.md for the full design.
-// The "Export Audio..." menu item's handler: shows synth::ui::ExportAudioDialog, then drives a
+// the render is chunked rather than blocking, and docs/architecture/project-bundle.md#autosave-and-crash-recovery for
+// the full design. The "Export Audio..." menu item's handler: shows synth::ui::ExportAudioDialog, then drives a
 // BounceRunner from its options. See Source/UI/ExportAudioDialog.h.
 void MainComponent::promptExportAudio() {
     if (isBounceInProgress_)

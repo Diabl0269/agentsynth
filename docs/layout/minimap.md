@@ -92,6 +92,6 @@ are. Rebuilding the full model on every drag frame would re-walk every graph edg
 ## Toolbar, shortcut and persistence
 
 A toolbar toggle (`ToggleMinimap`, in the right-hand group before `ToggleModMatrix`) and the
-**Cmd+K** shortcut (action id `toggleMinimap`, see [shortcuts](../shortcuts.md)) both call
+**Cmd+K** shortcut (action id `toggleMinimap`, see [shortcuts](../control/shortcuts.md)) both call
 `GraphEditor::toggleMinimapVisibility()`. Visibility persists under the `minimapVisible` key in
 `juce::ApplicationProperties`, defaulting to `true`.

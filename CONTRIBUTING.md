@@ -36,4 +36,4 @@
 
 ## Architecture
 
-See [docs/architecture.md](docs/architecture.md) for project structure.
+See [docs/architecture/architecture.md](docs/architecture/architecture.md) for project structure.

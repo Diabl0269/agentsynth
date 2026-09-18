@@ -4,14 +4,14 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 
 ## Architecture & engine
 
-- [`docs/architecture.md`](architecture.md) — hub: project structure, signal flow, quality standards, and the index into the topic docs below (split under FRO163, one doc had sat at the 1000-line cap)
-- [`docs/architecture_audio_engine.md`](architecture_audio_engine.md) — AudioEngine, TransportService (bounce/export, stem export, metronome, input monitoring, mixer solo gate)
-- [`docs/architecture_timeline.md`](architecture_timeline.md) — TimelineDoc, TimelineSnapshot, AutomationKernel/Applier/Recorder, UI reflection
-- [`docs/architecture_project_bundle.md`](architecture_project_bundle.md) — ProjectBundle (.agsproj): open/save, recent projects, dirty state, autosave, welcome screen
-- [`docs/architecture_module_base.md`](architecture_module_base.md) — ModuleBase (logical-port API, bypass/mute contract, output level stage) + supporting components (LayoutUtil, ModuleComponent, AppUndoManager, LookAndFeel)
-- [`docs/architecture_graph_editor.md`](architecture_graph_editor.md) — GraphEditor: per-concern translation units and the three collaborator classes
-- [`docs/architecture_app_wiring.md`](architecture_app_wiring.md) — who owns the live TimelineDoc and every hook that keeps it in step; audio recording, latency alignment, AudioClipStreamer, asset management
-- [`docs/architecture_plugin_layer.md`](architecture_plugin_layer.md) — VST3/AU host modes, ownership, state format; hosting third-party plugins inside our own graph
+- [`docs/architecture/architecture.md`](architecture/architecture.md) — hub: project structure, signal flow, quality standards, and the index into the topic docs below
+- [`docs/architecture/audio-engine.md`](architecture/audio-engine.md) — AudioEngine, TransportService (bounce/export, stem export, metronome, input monitoring, mixer solo gate)
+- [`docs/architecture/timeline.md`](architecture/timeline.md) — TimelineDoc, TimelineSnapshot, AutomationKernel/Applier/Recorder, UI reflection
+- [`docs/architecture/project-bundle.md`](architecture/project-bundle.md) — ProjectBundle (.agsproj): open/save, recent projects, dirty state, autosave, welcome screen
+- [`docs/architecture/module-base.md`](architecture/module-base.md) — ModuleBase (logical-port API, bypass/mute contract, output level stage) + supporting components (LayoutUtil, ModuleComponent, AppUndoManager, LookAndFeel)
+- [`docs/architecture/graph-editor.md`](architecture/graph-editor.md) — GraphEditor: per-concern translation units and the three collaborator classes
+- [`docs/architecture/app-wiring.md`](architecture/app-wiring.md) — who owns the live TimelineDoc and every hook that keeps it in step; audio recording, latency alignment, AudioClipStreamer, asset management
+- [`docs/architecture/plugin-layer.md`](architecture/plugin-layer.md) — VST3/AU host modes, ownership, state format; hosting third-party plugins inside our own graph
 ## Modules
 
 - [`docs/modules/modules.md`](modules/modules.md) — hub: per-module specs (Oscillator, Filter, VCA, ADSR, LFO, Sequencer, Poly MIDI, Voice Mixer, Math, Hosted Plugin …)
@@ -70,9 +70,9 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 
 ## MIDI, shortcuts & remote control
 
-- [`docs/midi_input.md`](midi_input.md) · [`docs/shortcuts.md`](shortcuts.md) — external MIDI routing, keyboard shortcuts
-- [`docs/midi_remote.md`](midi_remote.md) · [`docs/midi_remote_ui.md`](midi_remote_ui.md) — MIDI Remote (decided 2026-09-17, FRO121): external controller profiles, drawn surfaces, right-click MIDI Learn on every control, message-thread apply with gestures, scope-by-target-type persistence; the panel, coverage table and tracker
-- [`docs/plugin_card_layout.md`](plugin_card_layout.md) — hosted plugin cards showing a chosen set of parameters as knobs (decided 2026-09-17, FRO122): `CardLayout`, instance/type/automatic precedence, `HostedParameterAttachment`, the knob picker with presets; and what carries over to editing any module's layout (FRO123)
+- [`docs/control/midi-input.md`](control/midi-input.md) · [`docs/control/shortcuts.md`](control/shortcuts.md) — external MIDI routing, keyboard shortcuts
+- [`docs/control/midi-remote.md`](control/midi-remote.md) · [`docs/control/midi-remote-ui.md`](control/midi-remote-ui.md) — MIDI Remote: external controller profiles, drawn surfaces, right-click MIDI Learn on every control, message-thread apply with gestures, scope-by-target-type persistence; the panel and coverage table
+- [`docs/control/plugin-card-layout.md`](control/plugin-card-layout.md) — hosted plugin cards showing a chosen set of parameters as knobs: `CardLayout`, instance/type/automatic precedence, `HostedParameterAttachment`, the knob picker with presets; and what carries over to editing any module's layout
 
 ## AI
 

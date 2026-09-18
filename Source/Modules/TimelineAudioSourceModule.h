@@ -73,7 +73,7 @@ public:
         const int numSamples = buffer.getNumSamples();
 
         // Bypass: a pure source with NO dry audio path, so both branches clear (the documented
-        // exception in the bypass/mute contract — see docs/architecture.md). The buffer the graph
+        // exception in docs/architecture/module-base.md#bypassmute-contract). The buffer the graph
         // hands a source node is scratch whose contents are undefined, so clearing is not optional
         // on any path out of here.
         buffer.clear();

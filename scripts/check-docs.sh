@@ -73,7 +73,7 @@
 #      this check's -- the whole `[text](target)` span is masked out of the line before this check
 #      ever looks at it, so it is never double-reported here. FRO176's post-merge verification found
 #      two live dead references of exactly this shape surviving a clean run (docs/timeline/scale-
-#      assist.md and docs/plugin_card_layout.md, both fixed in the same PR that added this check) --
+#      assist.md and docs/control/plugin-card-layout.md, both fixed in the same PR that added this check) --
 #      proof the gap was real, not theoretical.
 #
 # Usage:
@@ -115,7 +115,7 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
 # `docs/...` reference or a `§`-section pointer, not just the docs themselves. FRO208 widened this
 # from (md cpp h sh yml) to also cover txt/json/cmake/py: CMakeLists.txt alone carries five doc
 # references (a section reference to docs/mixer.md, plus refs to docs/development/distribution.md,
-# docs/architecture.md and docs/shortcuts.md) that no check could ever see, and a hand-authored
+# docs/architecture/architecture.md and docs/control/shortcuts.md) that no check could ever see, and a hand-authored
 # Tools/**/Fixtures/*.json description field can cite a doc too (see the
 # Tools/TimelineOpsHarness/Fixtures/ note below) -- verified to add ZERO new violations on the
 # tree as of FRO208 landing, so it starts clean.

@@ -49,9 +49,9 @@ void RecordTapModule::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
 
     // Bypass: this module HAS a dry audio path (it is a pass-through), so the bypassed branch
     // returns without touching the audio channels — see the bypass/mute contract in
-    // docs/architecture.md. There are no CV channels to clear. Capture stops for the duration:
-    // a bypassed tap is not part of the signal chain, so recording what flows past it would put
-    // audio in the take that the user could not hear.
+    // docs/architecture/module-base.md#bypassmute-contract. There are no CV channels to clear. Capture stops for the
+    // duration: a bypassed tap is not part of the signal chain, so recording what flows past it would put audio in the
+    // take that the user could not hear.
     if (isBypassed())
         return;
 

@@ -38,7 +38,7 @@ public:
     // (a collapsed region) disables Selection rather than passing an empty range through to fail
     // BounceOptions validation. If both are disabled the Export button stays disabled too (there is
     // deliberately no third "type a duration" fallback - see
-    // docs/architecture.md's export section). bpm: the transport's current tempo, used only to
+    // docs/architecture/audio-engine.md#bounceexport). bpm: the transport's current tempo, used only to
     // convert the tail control between seconds and bars (4/4 - this app has no time-signature
     // concept anywhere else either, see TimelineDoc). projectIsSaved: true when the caller has a
     // real bundle open - false shows a one-line tip recommending a save first (not enforced, see

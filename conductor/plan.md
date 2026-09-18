@@ -21,4 +21,4 @@ Current implementation in `Source/UI/GraphEditor.cpp` (lines 430-450) zooms arou
 
 ## Docs Updates
 1. Update `CLAUDE.md` if the behavior change warrants it.
-2. Document the new zooming behavior in `docs/architecture.md` if necessary.
+2. Document the new zooming behavior in `docs/architecture/architecture.md` if necessary.

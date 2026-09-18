@@ -1,10 +1,10 @@
 // Message thread: RemoteEngine::reconcile()/rebuildAndPublish (RemoteEngineReconcile.cpp) --
 // re-resolving targets against a changing graph, the "a setter is not a graph change" rule
-// (docs/architecture_app_wiring.md §8), and the lookup table's duplicate-key tie-break. Every test
-// inspects the published RemoteMappingSnapshot directly through RemoteEngine::publisher() (exposed
-// for tests in the "Diagnostics" section of RemoteEngine.h) rather than inferring resolution status
-// only from side effects, since that is the most direct way to pin exactly what reconcile()
-// resolved. Suite names contain "MidiRemote" per the ship-task --gtest_filter convention.
+// (docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step), and the
+// lookup table's duplicate-key tie-break. Every test inspects the published RemoteMappingSnapshot directly through
+// RemoteEngine::publisher() (exposed for tests in the "Diagnostics" section of RemoteEngine.h) rather than inferring
+// resolution status only from side effects, since that is the most direct way to pin exactly what reconcile() resolved.
+// Suite names contain "MidiRemote" per the ship-task --gtest_filter convention.
 
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
 #include "Modules/FilterModule.h"

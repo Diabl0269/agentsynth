@@ -257,7 +257,7 @@ lookalike, mirroring `PreferencesSettingsTab::createDualIOPerModuleDefaultsPopup
 ## The Keyboard Shortcuts settings tab mirrors this pattern
 
 `Source/UI/Settings/ShortcutsSettingsTab.h/.cpp` — the Settings "Keyboard Shortcuts" tab — grew the
-same collapsible-section idiom once its row count passed 49 (see [shortcuts](../shortcuts.md)): one
+same collapsible-section idiom once its row count passed 49 (see [shortcuts](../control/shortcuts.md)): one
 collapsible section per `ShortcutCategory`, a search field above them, and a top strip whose label
 flips between "COLLAPSE ALL" and "EXPAND ALL", lifted from `ModuleLibraryComponent` so the app's two
 collapsible lists behave identically — clickable header rows with a chevron, a collapsed set keyed

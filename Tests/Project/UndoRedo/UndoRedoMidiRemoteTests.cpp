@@ -1,4 +1,4 @@
-// AppUndoManager::recordMidiRemoteChange (docs/midi_remote.md §8): a project-level MIDI Remote
+// AppUndoManager::recordMidiRemoteChange (docs/control/midi-remote.md#undo): a project-level MIDI Remote
 // assignment change (the "midiRemote" MidiRemoteProjectDoc) is undoable through a
 // MidiRemoteSnapshotAction on the SAME shared juce::UndoManager as the graph's own changes — same
 // shape as Tests/Timeline/TimelineUndoTests.cpp, kept headless (no GraphEditor). Unlike

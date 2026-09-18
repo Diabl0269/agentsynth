@@ -1,6 +1,6 @@
 // Round-trip and rejection coverage for every type in Source/MidiRemote/RemoteModel.h
-// (docs/midi_remote.md §5, §7). Suite name deliberately contains "MidiRemote" so it matches the
-// ship-task verification filter (--gtest_filter="*MidiRemote*").
+// (docs/control/midi-remote.md#data-model, docs/control/midi-remote.md#persistence-and-the-trust-boundary). Suite name
+// deliberately contains "MidiRemote" so it matches the ship-task verification filter (--gtest_filter="*MidiRemote*").
 #include "MidiRemote/RemoteModel.h"
 #include <gtest/gtest.h>
 

@@ -23,7 +23,7 @@ class MixerColumnComponent;
 // graph/timeline/macro change notification. Pure layout + rebuild-on-change; owns nothing
 // audio-specific itself.
 //
-// FRO18: also the mixer's own keyboard-focus region ROOT (docs/shortcuts.md's "Mixer column
+// FRO18: also the mixer's own keyboard-focus region ROOT (docs/control/shortcuts.md's "Mixer column
 // navigation") -- a region ROOT, not per-column leaves: MixerColumnComponent/MixerMasterColumn/
 // MixerDirectColumn's own controls all give up keyboard focus (setWantsKeyboardFocus(false)), so
 // this panel is the single focusable leaf and keyPressed() (MixerPanelKeyboard.cpp) owns Left/

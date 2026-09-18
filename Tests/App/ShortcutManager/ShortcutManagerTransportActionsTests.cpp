@@ -1,5 +1,5 @@
 // Concern: FRO125's transport family (play, stop, the togglePlayback alias, toggle loop, record,
-// toggle metronome, return to start) -- the docs/midi_remote.md §4.9 prerequisite that promotes
+// toggle metronome, return to start) -- the docs/control/midi-remote.md#action-targets prerequisite that promotes
 // every transport verb to a command-dispatched AppCommands id, so a MIDI Remote action target can
 // invokeDirectly() it. Two halves: table-shape assertions against a bare ShortcutManager
 // (ShortcutManagerTestFixture.h, mirroring the Export Patch Only block in

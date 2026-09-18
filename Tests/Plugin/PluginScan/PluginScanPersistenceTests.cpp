@@ -182,7 +182,8 @@ TEST_F(PluginScanPersistenceTest, HostedBuildNeverStartsTheEagerScanEither) {
 
     main.maybeStartEagerPluginScan();
     EXPECT_FALSE(main.getPluginScanService().isScanning())
-        << "hosted mode must stay lazy-on-resolve-only — see docs/architecture.md's Plugin scanning section";
+        << "hosted mode must stay lazy-on-resolve-only — see "
+           "docs/architecture/plugin-layer.md#plugin-scanning--a-crash-must-kill-a-child-not-the-app";
     EXPECT_EQ(candidateSourceCalls, 0) << "a hosted build must never even enumerate candidates";
     EXPECT_EQ(main.getModuleLibrary().getPluginCount(), 0);
 }

@@ -92,8 +92,9 @@ void MainComponent::reconcileTimelineAfterGraphChange() {
 
     // FRO127: every assignment's live target is re-resolved against the graph as it now stands —
     // same "graph changed under us" trigger as the timeline reconcile just above, orphaning
-    // whatever no longer resolves rather than silently rebinding (docs/architecture_app_wiring.md
-    // §8, hook 2).
+    // whatever no longer resolves rather than silently rebinding
+    // (docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step §8, hook
+    // 2).
     remoteEngine.reconcile(audioEngine.getGraph());
 
     // FRO14: a LINKED track's M/S live on its channel strip, not in the doc, so a graph change (an
@@ -117,9 +118,10 @@ void MainComponent::reconcileTimelineAfterGraphChange() {
 // there would be waste.
 void MainComponent::reconcileTimelineBindingsOnly() {
     synth::TimelineReconciler::reconcile(timelineDoc, audioEngine.getGraph());
-    // FRO127: the 2b/2c catch-all (docs/architecture_app_wiring.md §8) — MIDI Remote's own
-    // assignments need the same re-resolve the timeline bindings just got, for the same reasons
-    // (a canvas delete with no explicit reconcile site, a hosted plugin's async load completing).
+    // FRO127: the 2b/2c catch-all
+    // (docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step) — MIDI
+    // Remote's own assignments need the same re-resolve the timeline bindings just got, for the same reasons (a canvas
+    // delete with no explicit reconcile site, a hosted plugin's async load completing).
     remoteEngine.reconcile(audioEngine.getGraph());
 }
 

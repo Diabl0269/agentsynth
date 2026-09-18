@@ -128,7 +128,7 @@ public:
     /**
      * @brief Records a project-level MIDI Remote assignment change (create via Learn, edit,
      *        delete, re-link) as an undoable snapshot, on the SAME shared undo stack as the
-     *        graph's own changes (docs/midi_remote.md §8).
+     *        graph's own changes (docs/control/midi-remote.md#undo).
      *
      * Unlike recordTimelineChange, this does NOT run a mutation lambda itself — the caller
      * already has the before/after `juce::var` (typically doc.toVar() taken immediately before
@@ -136,7 +136,7 @@ public:
      * directly. No-op check: if `beforeJson` and `afterJson` serialise identically, nothing is
      * pushed and this returns false — a no-op edit must not create an undo step.
      *
-     * Scope (§8): this is for the PROJECT document only (`synth::MidiRemoteProjectDoc`, i.e. the
+     * Scope (docs/control/midi-remote.md#undo): the PROJECT document only (`synth::MidiRemoteProjectDoc`, i.e. the
      * `"midiRemote"` assignments). Profile edits (rename, retype, rearrange, templates, delete
      * controller) are GLOBAL settings and are never undoable, same as keyboard-shortcut rebinds —
      * never call this for a ControllerProfileStore edit.

@@ -233,7 +233,7 @@ BounceOptions ExportAudioDialog::getOptionsForTest() const {
     // BounceOptions only ever speaks seconds - Bars is purely a display convenience for the slider.
     options.tailSeconds = wasBarsUnit_ ? tailSlider_.getValue() * (60.0 / bpm_) * kBeatsPerBar : tailSlider_.getValue();
     // Fixed, not a control: with AudioEngine::setAutomationSlicingEnabled() off (the shipped
-    // default, in both live playback and a bounce - see docs/architecture.md's Control-rate
+    // default, in both live playback and a bounce - see docs/architecture/audio-engine.md#bounceexport. Control-rate
     // slicing subsection), a render's block size doubles as its automation resolution. Exposing
     // this as a dial the user can raise for performance would silently coarsen automation with no
     // UI cue that it had; fix the granularity (make it independent of block size) before ever

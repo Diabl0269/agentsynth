@@ -3,7 +3,7 @@
 #include <gtest/gtest.h>
 #include <juce_data_structures/juce_data_structures.h>
 
-// P8-3: the Load menu's "Recent Projects" list. See docs/architecture.md's "Recent projects"
+// P8-3: the Load menu's "Recent Projects" list. See docs/architecture/project-bundle.md#recent-projects
 // subsection for the owner-drives-persistence shape this mirrors from PluginScanService.
 
 using synth::RecentProjects;

@@ -807,7 +807,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandR
     };
 }
 
-// ---- Transport: promoted to command-dispatched actions (FRO125, docs/midi_remote.md §4.9's
+// ---- Transport: promoted to command-dispatched actions (FRO125, docs/control/midi-remote.md#action-targets's
 // prerequisite) so a MIDI Remote action target can invokeDirectly() them. Every row below reuses
 // the transport bar's OWN choke point -- triggerClick() on its buttons for play/stop TOGGLE, loop,
 // metronome and record, exactly the idiom togglePlayback already established above -- so a

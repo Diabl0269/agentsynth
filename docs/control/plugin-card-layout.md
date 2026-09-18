@@ -1,17 +1,16 @@
 # Plugin card layout — which hosted-plugin parameters show as knobs
 
-Design decided 2026-09-17, same founder session as [`midi_remote.md`](midi_remote.md). A hosted
-VST3/AU plugin's module card today shows **no parameters** — only "Open Editor". This doc
+A hosted VST3/AU plugin's module card today shows **no parameters** — only "Open Editor". This doc
 decides how a user picks the parameters a plugin card shows as knobs, how that choice is scoped
 (this instance vs. every instance of that plugin), how it is saved as presets, and why the
 data type it introduces — `CardLayout` — is the seed of the future "edit any module's layout"
-feature (§8), which is otherwise **out of scope** here.
+feature (see [Future: editing any module's layout](#future-editing-any-modules-layout-out-of-scope-here)), which is otherwise **out of scope** here.
 
-**Status:** designed, not built. §10 is the record of what exists.
+**Status:** designed, not built.
 
 ---
 
-## 1. Today
+## Today
 
 - `HostedPluginModule` (`Source/Plugin/Hosting/`) owns a `juce::AudioPluginInstance`. The
   instance's parameters are `juce::HostedAudioProcessorParameter`s (a sibling hierarchy to
@@ -35,7 +34,7 @@ feature (§8), which is otherwise **out of scope** here.
 
 ---
 
-## 2. Goals
+## Goals
 
 1. A plugin card shows a **small, chosen set of its parameters as ordinary knobs** (and toggles /
    choice combos where the parameter is discrete), bound live in both directions.
@@ -49,7 +48,7 @@ feature (§8), which is otherwise **out of scope** here.
 
 ---
 
-## 3. The `CardLayout` type and where a layout comes from
+## The `CardLayout` type and where a layout comes from
 
 ```text
 CardLayout
@@ -63,7 +62,7 @@ Slot
 ```
 
 `CardLayout` is a plain value type in `Source/Modules/CardLayout.h` (Core), deliberately
-**not** plugin-specific — §8 reuses it for built-in modules. A hosted card's live layout is
+**not** plugin-specific — [Future: editing any module's layout](#future-editing-any-modules-layout-out-of-scope-here) reuses it for built-in modules. A hosted card's live layout is
 resolved by precedence, first hit wins:
 
 1. **Per-instance override** — the node's extra state, key `"cardLayout"` (next to the plugin
@@ -81,7 +80,7 @@ resolved by precedence, first hit wins:
 
 The automatic default (rule 3) is **shown** on the card as knobs before the user chooses
 anything — there is no separate "unconfigured" state distinct from "showing the automatic set"
-(founder review 2026-09-17). The "empty layout" case (Open Editor + **Choose knobs…** as the
+(the automatic default is always shown, never a separate blank state). The "empty layout" case (Open Editor + **Choose knobs…** as the
 whole card body) therefore only occurs when the plugin has no automatable parameters at all.
 
 A slot whose `paramId` no longer resolves on the live instance is **hidden from the card
@@ -91,13 +90,13 @@ listing them, and they are dropped from the layout the next time the user saves 
 that phrase now lives in the picker's missing-params line, not in a greyed knob on the card.
 
 A layout's slot count is uncapped in the model; the card shows them in the ordinary knob grid
-(`layoutKnobGrid`, width buckets from [`layout/module-card.md`](layout/module-card.md#width-buckets)),
+(`layoutKnobGrid`, width buckets from [`layout/module-card.md`](../layout/module-card.md#width-buckets)),
 growing the card's height like any module with many parameters. An empty layout shows the "Open Editor" button and a **Choose knobs…**
 button as the whole body.
 
 ---
 
-## 4. Rendering: `ModuleComponentHostedPluginCard.cpp`
+## Rendering: `ModuleComponentHostedPluginCard.cpp`
 
 A new per-type card unit (the EQ/Envelope precedent), taking the `HostedPluginModule` branch
 **out** of `createControls()` rather than growing it (that function is at the function-size
@@ -118,7 +117,7 @@ would for that kind (rotary `juce::Slider`, `ToggleButton`, `ComboBox` from the 
 The card's own `parameterGestureChanged`-based undo capture works unchanged because the
 attachment emits gestures on the hosted parameter and the card listens on the parameters it
 registered. The unit registers every slot with the MIDI Learn registry
-(`midi_remote_ui.md` §1) using the `(nodeUuid, paramId, indexHint)` triple.
+([`midi-remote-ui.md`](midi-remote-ui.md#right-click-midi-learn--coverage)) using the `(nodeUuid, paramId, indexHint)` triple.
 
 Unbind discipline: the attachment holds raw pointers into the instance, so the card unbinds
 in `GraphEditor::onBeforeDetachAllModuleComponents` and before a "Replace with…" / delete —
@@ -126,7 +125,7 @@ the same seam the mixer's bound controls use (`Source/UI/CLAUDE.md`).
 
 ---
 
-## 5. Choosing knobs
+## Choosing knobs
 
 Entry points: **Choose knobs…** on the card body (next to Open Editor) and the same item in the
 card's right-click menu (`buildModuleContextMenu`). It opens `PluginKnobPicker`
@@ -167,7 +166,7 @@ card's right-click menu (`buildModuleContextMenu`). It opens `PluginKnobPicker`
 
 ---
 
-## 6. Persistence
+## Persistence
 
 - **Per-instance:** extra-state key `"cardLayout"` on the `HostedPlugin` node, saved with the
   project and with snippets; restored trusted-only with the rest of extra state.
@@ -180,7 +179,7 @@ card's right-click menu (`buildModuleContextMenu`). It opens `PluginKnobPicker`
 
 ---
 
-## 7. Interaction with MIDI Remote and automation
+## Interaction with MIDI Remote and automation
 
 Nothing special — that is the point of binding real hosted parameters rather than proxies:
 
@@ -193,9 +192,9 @@ Nothing special — that is the point of binding real hosted parameters rather t
 
 ---
 
-## 8. Future: editing any module's layout (out of scope here)
+## Future: editing any module's layout (out of scope here)
 
-The founder also asked for right-click → **Edit layout…** on *any* module. It is parked as its
+Right-click → **Edit layout…** on *any* module is parked as its
 own epic because a built-in card's controls are created by type-specific code, not from data,
 and turning that into a data-driven layout is a larger refactor of `ModuleComponent` than this
 feature needs. What carries over when that epic starts:
@@ -206,14 +205,14 @@ feature needs. What carries over when that epic starts:
 - **The same precedence** (instance override in node extra state → per-module-type user default
   under `<settings>/ModuleCardLayouts/<ModuleType>/` → the type's code-defined layout).
 - **The same picker** with "Apply to: this instance / all <Module> modules" and presets.
-- A future **focus bank** in MIDI Remote (`midi_remote.md` §9) follows a card's slot order.
+- A future **focus bank** in MIDI Remote ([`midi-remote.md`](midi-remote.md)) follows a card's slot order.
 
 Bespoke cards (EQ, Envelope, Wavetable, Sampler) are the hard part: their bodies are not a knob
 grid, so "edit layout" there means at most hide/reorder of the knobs they *do* expose.
 
 ---
 
-## 9. Tests
+## Tests
 
 - `Tests/Modules/CardLayoutTests.cpp`: round-trip, `kind: auto` derivation, orphan slot
   behaviour, precedence resolution with all three sources, automatic default rule
@@ -227,7 +226,7 @@ grid, so "edit layout" there means at most hide/reorder of the knobs they *do* e
   slider on the message thread, unbind on detach.
 - `Tests/UI/Graph/PluginKnobPickerTests.cpp`: search, tick/untick, reorder, label, scope
   switch, presets, touch-to-add via gesture (the value-change fallback and its burst-ignored
-  debounce are deferred to v2, §5).
+  debounce are deferred to a follow-up, see [Choosing knobs](#choosing-knobs)).
 - `Tests/Plugin/HostedPluginLaneTests.cpp` gains: MIDI Learn and Automate from a plugin-card
   knob produce the same target triple as the lane picker.
 - E2E: add plugin → Choose knobs → tick two → save project → reload → knobs present → set as
@@ -235,22 +234,9 @@ grid, so "edit layout" there means at most hide/reorder of the knobs they *do* e
 
 ---
 
-## 10. Implementation tracker
-
-Epic FRO122; the parked module-layout epic is FRO123 (its first ticket, FRO129, is the design pass §8 describes).
-
-| # | Item | Depends on | Ticket |
-|---|---|---|---|
-| 1 | **`CardLayout` type, precedence resolver, automatic default, per-type store + presets, per-instance extra-state key, undo** | — | FRO126 |
-| 2 | **`HostedParameterAttachment` + `ModuleComponentHostedPluginCard` unit** (knobs/toggles/choices, empty state, orphan knob, unbind seam) | 1 | FRO128 |
-| 3 | **`PluginKnobPicker`**: list, search, reorder, label, scope, presets, touch-to-add (gesture-based touch-to-add; value-change fallback is v2) | 2 | FRO132 |
-| 4 | **Integration + docs**: MIDI Learn registry, Automate, snippets carry the key, E2E, docs pass | 3, MIDI Remote item 4 | FRO137 |
-
----
-
 ## Related
 
-- [`midi_remote.md`](midi_remote.md) · [`midi_remote_ui.md`](midi_remote_ui.md)
-- [`modules.md`](modules/modules.md#hosted-plugin-module-third-party-vst3--au-hidden) — hosted plugin channel rules · [`modulation.md`](modules/modulation.md)
+- [`midi-remote.md`](midi-remote.md) · [`midi-remote-ui.md`](midi-remote-ui.md)
+- [`modules.md`](../modules/modules.md#hosted-plugin-module-third-party-vst3--au-hidden) — hosted plugin channel rules · [`modulation.md`](../modules/modulation.md)
   — `resolveLaneParameter`'s hosted rules
-- [`layout/module-card.md`](layout/module-card.md) — knob grid and width buckets
+- [`layout/module-card.md`](../layout/module-card.md) — knob grid and width buckets

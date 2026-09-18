@@ -9,9 +9,10 @@
 #include <map>
 
 void AudioEngine::publishTimeline(const synth::TimelineDoc& doc) {
-    // Every graph change already has to reach this call (docs/architecture_app_wiring.md §8), which makes it
-    // the one place the mixer's soloed-strip count can be kept honest: a deleted, replaced or
-    // undone soloed strip must never leave the whole mix gated silent.
+    // Every graph change already has to reach this call
+    // (docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step), which
+    // makes it the one place the mixer's soloed-strip count can be kept honest: a deleted, replaced or undone soloed
+    // strip must never leave the whole mix gated silent.
     refreshSoloGate();
 
     auto snapshot = synth::TimelineSnapshot::buildFrom(doc);
