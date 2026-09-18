@@ -667,7 +667,7 @@ TEST(ThemeMetricsTest, MetricsCodeOnlyFieldsHaveExpectedDefaults) {
     EXPECT_EQ(m.timelineTrackHeaderWidth, 190);
     EXPECT_EQ(m.timelineTransportBarHeight, 34);
     // 30, up from 24: the ruler strip tiles a bar/beat numbers row and a marker band, and 24 left
-    // the marker flag too small to read (see docs/timeline_panel_core.md §2).
+    // the marker flag too small to read (see docs/timeline/ruler.md#the-marker-band).
     EXPECT_EQ(m.timelineRulerHeight, 30);
     EXPECT_EQ(m.timelineTrackRowHeight, 56);
 }

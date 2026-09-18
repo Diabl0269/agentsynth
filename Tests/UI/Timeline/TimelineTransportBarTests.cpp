@@ -291,7 +291,7 @@ protected:
 
 // ---- 6. RecordRollsWithoutAnArmedTrack ----
 
-// Record no longer requires an armed track (docs/timeline_panel_core.md's transport section):
+// Record does not require an armed track (docs/timeline/transport.md#recording):
 // pressing Record always rolls the transport with the indicator lit, exactly like Play plus a lit
 // record indicator when nothing is armed to capture into.
 TEST_F(TimelineTransportBarAppWiringTest, RecordRollsWithoutAnArmedTrack) {

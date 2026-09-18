@@ -550,7 +550,7 @@ void TimelineTrackHeaderComponent::paint(juce::Graphics& g) {
 void TimelineTrackHeaderComponent::paintOverChildren(juce::Graphics& g) {
     // T161: reuses T159's region-root outline verbatim (same colour/alpha/thickness) rather than a
     // bespoke treatment — a track header row is now a real focusable leaf exactly the way a region
-    // root is, just nested one level deeper (see docs/timeline_panel_tracks.md §3).
+    // root is, just nested one level deeper (see docs/timeline/tracks.md#focus-outline).
     synth::ui::paintFocusRegionOutline(*this, g);
 }
 

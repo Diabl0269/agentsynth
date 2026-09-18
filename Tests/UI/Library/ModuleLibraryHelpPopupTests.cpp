@@ -3,8 +3,8 @@
 // Headless coverage for the module library sidebar's "?" help button (ModuleLibraryComponent) and
 // its popover content (synth::ui::ModuleLibraryHelpPopup) — a real juce::CallOutBox is NEVER
 // constructed anywhere in this file. That is a top-level window and crashes a display-less test
-// runner exactly the way docs/timeline_panel_core.md's marker-context-menu seam note describes for
-// juce::PopupMenu, so every test here drives either the pure content helpers, the mouse-
+// runner exactly the way docs/timeline/ruler.md#opening-a-menu-is-a-protected-virtual describes
+// for juce::PopupMenu, so every test here drives either the pure content helpers, the mouse-
 // hover/geometry seam, or one of the two protected-virtual leaves ModuleLibraryComponent exposes
 // for exactly this reason:
 //   - showHelpPopover()      — the whole pin-aware dispatch; RecordingModuleLibraryComponent stubs

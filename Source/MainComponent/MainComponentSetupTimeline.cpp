@@ -215,8 +215,8 @@ void MainComponent::handleRecordToggle(bool wantRecording) {
         return;
     }
 
-    // Record does NOT require an armed track (see docs/timeline_panel_core.md's transport
-    // section) — pressing Record always rolls the transport with the record indicator lit,
+    // Record does NOT require an armed track (see docs/timeline/transport.md#recording) —
+    // pressing Record always rolls the transport with the record indicator lit,
     // capturing on whichever track (if any) happens to be armed. With nothing armed this is
     // identical to Play plus a lit record indicator, plus a transient status-bar notice so the
     // silence isn't mistaken for a bug.

@@ -228,7 +228,7 @@ This combination — PolyBus for per-voice gate control, DirectCV for a shared t
 
 **Which knob a ring belongs on is `getModRingSliderIndex()`'s call, and it returns -1 for a knob that is not visible.** A card can page its controls (the Wavetable tab strip, `layout_visuals_animation.md` §1), and a knob on a hidden page keeps the bounds it had when its page was last laid out — so a ring drawn straight from `sliders[i]->getBounds()` paints an orange arc over empty card. The rule lives in that one accessor so it can be tested without a themed LookAndFeel and a live routing.
 
-**Right-click any knob → "Automate '\<Param\>'"** opens that parameter's automation lane in the timeline panel's automation strip (creating its lane/track on first use) — see `timeline_panel_clips_automation.md` §3 for the full path (`ModuleComponent` → `GraphEditor::onAutomateParameterRequested` → `MainComponent::automateParameter`).
+**Right-click any knob → "Automate '\<Param\>'"** opens that parameter's automation lane in the timeline panel's automation strip (creating its lane/track on first use) — see [`timeline/automation.md`](timeline/automation.md#the-knob-entry-point) for the full path (`ModuleComponent` → `GraphEditor::onAutomateParameterRequested` → `MainComponent::automateParameter`).
 
 ---
 

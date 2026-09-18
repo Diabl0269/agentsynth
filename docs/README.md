@@ -36,11 +36,19 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 
 ## Timeline
 
-- [`docs/timeline_panel_core.md`](timeline_panel_core.md) — timeline panel overview, ruler/grid/zoom/snap + markers
-- [`docs/timeline_panel_tracks.md`](timeline_panel_tracks.md) — track headers/binding chips, Add-Track
-- [`docs/timeline_panel_transport.md`](timeline_panel_transport.md) — playhead, transport bar, metronome, edit-tool strip
-- [`docs/timeline_panel_clips_automation.md`](timeline_panel_clips_automation.md) — clip lanes, automation strip, keyboard & focus arbitration
-- [`docs/timeline_panel_piano_roll.md`](timeline_panel_piano_roll.md) — the piano roll note editor
+- [`docs/timeline/timeline.md`](timeline/timeline.md) — hub: the panel shell, its regions, the bottom dock, panel height and the show/hide slide
+- [`docs/timeline/view.md`](timeline/view.md) — `TimelineViewState`: beat↔pixel mapping, snap divisions, the lanes grid, wheel/pinch/keyboard zoom and scroll
+- [`docs/timeline/ruler.md`](timeline/ruler.md) — the ruler strip: tick density, the two gesture zones, the loop brace, markers
+- [`docs/timeline/tracks.md`](timeline/tracks.md) — track header rows: binding and channel chips, M/S/R, focus, drag-to-reorder, the row context menu
+- [`docs/timeline/add-track.md`](timeline/add-track.md) — the `"+ Track"` menu and every flow it starts (MIDI, Audio, Instrument, plugins, presets, markers)
+- [`docs/timeline/playhead.md`](timeline/playhead.md) — the playhead overlay, its two timers, latency compensation, follow-playhead
+- [`docs/timeline/transport.md`](timeline/transport.md) — the transport bar, the recording gate, transport actions, metronome and count-in
+- [`docs/timeline/edit-tools.md`](timeline/edit-tools.md) — the Cubase-style tool strip shared by the clip lanes and the piano roll
+- [`docs/timeline/clips.md`](timeline/clips.md) — clip lanes: selection, drag/trim, edge auto-scroll, authoring and audio import
+- [`docs/timeline/automation.md`](timeline/automation.md) — the automation strip and its curve canvas
+- [`docs/timeline/piano-roll.md`](timeline/piano-roll.md) — the per-clip MIDI note editor
+- [`docs/timeline/scale-assist.md`](timeline/scale-assist.md) — the Scale Assist panel, the scale engine, pitch-row collapse, random generation
+- [`docs/timeline/focus.md`](timeline/focus.md) — which surface Cmd+C/V/D/X/R and Cmd+Shift+A act on
 
 ## MIDI, shortcuts & remote control
 
@@ -73,7 +81,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/testing.md`](testing.md) — test layers, build/test commands, CI pipeline, git hooks, coverage
 - [`docs/testing-header-comments.md`](testing-header-comments.md) — the header-comment-placement guard (FRO183): why it tracks excess (comments minus code) rather than a raw comment count, the exact threshold, and the ratchet baseline
 - [`docs/pr-title-convention.md`](pr-title-convention.md) — PR title format (`type(scope)!: subject`), why it's checked on the title not a commit message, and the not-yet-required rollout plan (FRO182)
-- [`docs/docs-guard.md`](docs-guard.md) — `scripts/check-docs.sh`'s five checks (naming, links, `docs/...` mentions, `§`-section refs, README map completeness), the naming ratchet, and where it runs
+- [`docs/docs-guard.md`](docs-guard.md) — `scripts/check-docs.sh`'s six checks (naming, links, `docs/...` mentions, `§`-section refs, README map completeness, bare `#anchor` mentions), the naming ratchet, and where it runs
 - [`docs/testing_gain_staging.md`](testing_gain_staging.md) — the `ModuleGainAudit` sweep: only gain controls may add gain; anything above +6 dB is allow-listed with a reason
 - [`docs/distribution.md`](distribution.md) — version identity, Sparkle auto-update (macOS), EdDSA key generation, CI appcast publishing, WinSparkle status
 

@@ -164,7 +164,8 @@ Main line, in dependency order:
      (`TimelinePanelComponent::instrumentPluginMenuSnapshot_`), never by re-running the collector at
      click time — a background `PluginScanService::runScan` finishing between open and click could
      otherwise resolve the click against a different plugin than the one the menu showed (see
-     `docs/timeline_panel_tracks.md` §3 for the full mechanism and the live repro this fixed). (2)
+     [`docs/timeline/add-track.md`](timeline/add-track.md#menu-options-resolve-against-a-build-time-snapshot)
+     for the full mechanism). (2)
      Every entry's label always carries its format — "Massive (VST3)" / "Massive (AU)" — so a VST3
      and an AU build of the same product never show as two identical rows. (3) The picker excludes
      this app's own VST3/AU build (matched against `synth::branding::kProductName`/`kCompanyName`),
@@ -342,7 +343,7 @@ Main line, in dependency order:
    dock child; `MainComponent::isTimelineVisible`/the persisted `timelinePanelVisible` key now open
    and close the whole dock (either tab), and `MixerDockComponent`'s own `bottomDockActiveTab` key
    persists which tab is showing (default `"timeline"`) — see
-   [`timeline_panel_core.md`](timeline_panel_core.md)'s "Docking, toggle, shortcut" FRO11 note for
+   [`timeline/timeline.md`](timeline/timeline.md#docking-toggle-and-the-bottom-dock)'s dock note for
    the full key-semantics change. `MixerPanelComponent` renders one `MixerColumnComponent` per
    strip in track order, then strips with no track (by node id), then Direct, then Master (§5.10);
    each column holds a `MixerFader` (linear-vertical slider bound 1:1 to the strip's gain param via

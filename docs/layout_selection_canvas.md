@@ -683,7 +683,7 @@ opened it.
 Opening the popover is split across TWO `protected virtual` leaves, both the same seam idiom
 [§3's cable doc](#3-cable-interaction) and `TimelineRulerComponent::openMarkerContextMenu` use for
 any real popup/menu window (a `juce::CallOutBox` launched in a display-less test runner is the
-exact SIGSEGV trap documented in [`timeline_panel_core.md`](timeline_panel_core.md)):
+exact SIGSEGV trap documented in [`timeline/ruler.md`](timeline/ruler.md#opening-a-menu-is-a-protected-virtual)):
 `showHelpPopover()` is the pin-aware dispatcher (ensure the popup exists, refresh its shortcuts,
 decide float-vs-callout), and `launchHelpCallOutBox()` is JUST the real `CallOutBox` construction —
 split apart so a test can override only the second (never creating a real window) while the first

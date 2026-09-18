@@ -53,7 +53,7 @@ struct TrackHeaderHost {
     /** One-click re-bind. NEVER called automatically: a binding is only ever changed by an explicit
      *  user choice from the chip menu. Matching an orphaned track back onto a node BY NAME is
      *  forbidden — two nodes can share a display name and a silent re-bind would point a track at
-     *  someone else's instrument (see docs/timeline_panel_tracks.md §3). */
+     *  someone else's instrument (see docs/timeline/tracks.md#a-binding-is-never-re-established-automatically). */
     virtual void bindTrackTo(synth::TrackId track, const juce::String& uuid) = 0;
 
     /** The chip menu's "New Track In node" entry: creates a node and binds this track to it, as one
@@ -319,7 +319,7 @@ public:
     // one big component (contrast ModuleLibraryComponent's T160 row nav) — TimelineTrackHeaderComponent
     // already IS one-component-per-track. Up/Down and M/S/R only ever reach keyPressed() below while
     // THIS row genuinely holds real OS keyboard focus, by JUCE's own key-dispatch rule — no extra
-    // "am I the focused one" guard is needed or wanted (see docs/timeline_panel_tracks.md §3).
+    // "am I the focused one" guard is needed or wanted (see docs/timeline/tracks.md#keyboard-focus-and-msr).
     bool keyPressed(const juce::KeyPress& key) override;
     // The four toggle buttons opt OUT of taking focus for themselves (juce::Button opts in by
     // default) — otherwise clicking M/S/R/A would silently move real focus off the row and onto the
@@ -495,7 +495,7 @@ private:
     // straight to the SAME showContextMenu() a right-click on the background uses; anything else is
     // untouched juce::Label behaviour. The binding chip and the colour swatch are deliberately left
     // as plain buttons — they already open a menu/picker of their own on click, and that stays (see
-    // docs/timeline_panel_tracks.md's Delete track / Make Channel section).
+    // docs/timeline/tracks.md#row-context-menu).
     class ContextMenuForwardingLabel : public juce::Label {
     public:
         explicit ContextMenuForwardingLabel(TimelineTrackHeaderComponent& owner)
