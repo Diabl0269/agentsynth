@@ -85,7 +85,7 @@ than running to `getNumChannels()`, or it erases the right leg.
 | **VCA (poly)** | ch1 | Out | Vestigial duplicate of the left sum (the old mono→stereo affordance) |
 | **VCA (poly)** | ch16 | Out | `Audio R` — sum of the right voice block |
 | **VCA (mono)** | ch0 | In/Out | `Audio L` in / gated out |
-| **VCA (mono)** | ch1 | In | Gain CV (also overwritten on the way out — see [`modules.md`](modules.md#vca)) |
+| **VCA (mono)** | ch1 | In | Gain CV (also overwritten on the way out — see [`modules.md`](modules.md#vca-amplifier-module)) |
 | **VCA (mono)** | ch16 | In/Out | `Audio R` (`kRightBase`) in / gated out |
 | **ADSR (poly)** | ch0-7 | In | Per-voice gate CV |
 | **ADSR** | ch8 | In | Threshold CV (shared) |

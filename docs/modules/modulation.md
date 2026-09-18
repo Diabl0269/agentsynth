@@ -61,7 +61,7 @@ transport stops. Full mode table and the commit/thinning rules:
 
 ### Hosted plugin parameters as automation lanes
 
-A [hosted plugin](hosted-plugin.md)'s own parameters live on the *inner*
+A [hosted plugin](modules.md#load-ux)'s own parameters live on the *inner*
 `juce::AudioPluginInstance`, discovered at load — never on `HostedPluginModule`'s own
 `getParameters()` (that carries only `muted`). Two things follow from "discovered at load": the
 parameter set is not `juce::RangedAudioParameter` the way our own modules' parameters are, and it
@@ -77,7 +77,7 @@ rule:
    `paramIndexHint` (captured once, at creation, from the parameter's index at that moment). If the
    exact id match fails, the hint is consulted **only** to check whether the plugin format has no
    stable ids at all (the parameter at that index itself has no id — see
-   [`hosted-plugin.md`](hosted-plugin.md#instance-parameters-as-automation-lanes)'s table). If the
+   [`modules.md`](modules.md#load-ux)'s table). If the
    hinted index instead names a *different*, still-identified parameter — a plugin update having
    moved the parameter set under us — that is exactly the case this rule exists to catch, and the
    lane **orphans** instead of silently binding to whatever is there now.
@@ -278,7 +278,7 @@ rather than raw channel numbers.
      Position/Waveform/Cutoff CV. Each leg is therefore its own jack and its own poly-bus head
      (`isPolyGroupHead` at `kRightBase`, `polyVoiceSpan == 8` in poly), so there is no span-2 group to
      broadcast into — a mono cable reaches `Audio L` only, and a stereo path means two cables. See
-     [`modules.md`](modules.md#oscillator).
+     [`modules.md`](modules.md#oscillator-module).
    - A poly source into a mono jack never broadcasts either; summing N envelopes onto one CV channel
      is not what the user asked for.
 4. `GraphEditor::endConnectionDrag` resolves the visible jacks the user dropped a cable between
