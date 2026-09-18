@@ -132,6 +132,7 @@ Everything else below is a tripwire index. The full rule lives in the named area
 **CI** (`.github/CLAUDE.md`):
 
 - The CI cache is load-bearing and fails silently: per-language compiler launchers, keep the `push: main` trigger, key `build/_deps` on `cmake/DependencyVersions.cmake` only (pin new dependencies there), explicit `CCACHE_DIR` per job. → [`docs/testing.md`](docs/testing.md)
+- PR titles are conventional-commit subjects (`type(scope)!: subject`, scope = ticket id, breaking change marked `!`) — not yet a required check (FRO182). → [`docs/pr-title-convention.md`](docs/pr-title-convention.md)
 
 ## Docs map
 

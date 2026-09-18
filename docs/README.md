@@ -59,6 +59,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 ## Testing, CI & distribution
 
 - [`docs/testing.md`](testing.md) — test layers, build/test commands, CI pipeline, git hooks, coverage
+- [`docs/pr-title-convention.md`](pr-title-convention.md) — PR title format (`type(scope)!: subject`), why it's checked on the title not a commit message, and the not-yet-required rollout plan (FRO182)
 - [`docs/docs-guard.md`](docs-guard.md) — `scripts/check-docs.sh`'s five checks (naming, links, `docs/...` mentions, `§`-section refs, README map completeness), the naming ratchet, and where it runs
 - [`docs/testing_gain_staging.md`](testing_gain_staging.md) — the `ModuleGainAudit` sweep: only gain controls may add gain; anything above +6 dB is allow-listed with a reason
 - [`docs/distribution.md`](distribution.md) — version identity, Sparkle auto-update (macOS), EdDSA key generation, CI appcast publishing, WinSparkle status
