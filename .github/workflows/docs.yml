@@ -16,6 +16,11 @@ name: Docs
 # scripts/check-file-sizes.sh runs here too, even though its own cap applies to every extension
 # (see that script's own header) -- redundant with ci.yml's Lint job on every PR post-FRO169, but
 # cheap enough that keeping it here as a second line of defense costs nothing.
+#
+# FRO170: the "Docs" job below is a required status check in main's branch protection. It can
+# never be perpetually pending (no `paths:` filter of its own, so it always posts a status), so
+# there is no BLOCKED-forever failure mode the way ci.yml's path-filtered jobs have -- see
+# ci-passthrough.yml for how those are covered on a docs-only PR.
 
 on:
   pull_request:

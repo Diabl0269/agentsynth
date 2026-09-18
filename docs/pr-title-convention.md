@@ -54,8 +54,8 @@ Examples that fail: `FRO163: split docs/architecture.md` (no type), `Feat(FRO112
 ## Rollout
 
 The check landed **not required** (FRO182) -- the moment it becomes a required status check it
-fails every PR open at the time, including ones mid-review with titles predating this rule. Any
-open PR gets retitled by hand when this becomes required, and the check is added to `main`'s
-branch protection in the same pass as FRO170's Docs check (`.github/CLAUDE.md` names the four
-strings currently required; renaming or reordering them there is what actually gates a merge).
-Until then, a red "PR Title" check is a signal to retitle the PR, not a merge blocker.
+fails every PR open at the time, including ones mid-review with titles predating this rule. FRO170
+made it required, in the same branch-protection pass as the "Docs" check (`.github/CLAUDE.md`
+names the six strings now required; renaming or reordering them there is what actually gates a
+merge) -- the two open PRs that predated the rule were retitled by hand first. A red "PR Title"
+check now blocks a normal merge same as any other required check.
