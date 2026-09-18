@@ -640,3 +640,120 @@ collapsing the macro and arming neither a selection drag nor a selection change,
 outside its bounds not collapsing, the button and chip never overlapping (including a tight
 two-module macro — the degenerate case a real macro's hull ever gets that narrow), and collapsing
 via the button being one undo step that a single undo re-expands.
+
+### 5.10 Cmd/Ctrl-drag membership (FRO40): crossing a hull border joins/leaves it
+
+Before this, the ONLY ways to change a macro's membership were the menu items §5.8 documents
+("Add Selection to Macro" / "Remove from Macro", T138) and ungroup+regroup — both explicit, both
+several clicks away from the drag the user is already doing. FRO40 adds a direct-manipulation
+route: **Cmd+drag a module across an EXPANDED macro's hull border** (`macroHullBounds()`, §5.4)
+**to add it to, or remove it from, that macro** — the drag itself decides membership, with no
+separate confirmation step.
+
+**The query, `MacroGroupController::macroDragJoinOrLeaveTarget`** (declared beside
+`macroHullBounds`/`macroHullAt`), is given the dragged node's id and its CENTRE (not its top-left)
+in canvas coordinates, and answers with a macro id or empty ("neither"):
+
+- **JOIN** — the dragged node is not a member of any macro: test its centre against the plain
+  `macroHullAt()`, which already only considers EXPANDED macros (a collapsed one is never a
+  candidate — its members are hidden `ModuleComponent`s that cannot be dragged in the first place)
+  and picks the smallest hull when more than one overlaps.
+- **LEAVE** — the dragged node IS a member of macro X: test its centre against
+  `macroHullBoundsExcluding(X, ownUuid)`, a hull-excluding-self variant added alongside
+  `macroHullBounds`. This exists because `macroHullBounds()` is a LIVE union of member bounds — a
+  member being dragged OUTWARD keeps inflating its own hull's union, so without excluding its own
+  contribution first it could never test as "outside" and could never leave. One consequence worth
+  knowing: for a two-member macro, `macroHullBoundsExcluding` reduces to just the OTHER member's
+  own footprint, so almost any Cmd-drag of either member reads as "outside" it — by design, not a
+  bug; the wider the macro, the more room a member has to move before crossing out.
+
+**The gesture mirrors `ModuleComponent`'s existing Ctrl deferred-classification exactly**
+(`ctrlTogglePending`/`ctrlPressSelection`): Cmd+press arms a NEW `cmdReparentPending` flag and
+`cmdPressSelection`, collapses the selection onto the pressed module, and falls through to arm the
+drag like a plain click would; Cmd+CLICK (no movement) completes as the deferred additive-select
+toggle, exactly like Ctrl's. `GraphContentComponent::paint()`'s existing dashed hull outline (§ the
+expanded-macro grouping hull, above) reads `GraphEditor::getMacroDragCandidateId()` and draws the
+SAME stroke heavier and fully opaque for whichever macro is the live candidate, rather than
+inventing a second visual language for "about to change".
+
+**Whether a drag can reparent at all is a THIRD, separate flag — `reparentArmed` — not derived
+from `ctrlTogglePending || cmdReparentPending`.** The first cut of this feature gated `mouseDrag`'s
+candidate query and `mouseUp`'s reparent-vs-plain-finalize choice on that OR, which seemed safe
+(one of the two is always true exactly when a drag might cross a hull) but was wrong: on macOS,
+Ctrl and Cmd are genuinely distinct keys, so a PLAIN Ctrl-drag — the SHIPPED insert-between
+gesture, unrelated to this feature — also sets `ctrlTogglePending`, and the OR silently let it
+reparent too whenever it happened to cross a hull, compounding two gestures nobody asked to
+combine. `reparentArmed` is set to `e.mods.isCommandDown()` alone, unconditionally, at the top of
+`mouseDown`'s modifier chain (before the `isCtrlDown()`/`isCommandDown()` branches, so a plain
+click/drag with neither modifier reaches them with it already false) — the platform matrix that
+falls out:
+
+| Platform | Gesture | `reparentArmed` | Result |
+|---|---|---|---|
+| macOS | Cmd+drag | true | reparent (join/leave) only |
+| macOS | Ctrl+drag | false (`isCommandDown()` is false — distinct keys) | insert-between only, unchanged from before FRO40 |
+| Windows/Linux | Ctrl+drag (= Cmd+drag: `commandModifier` IS `ctrlModifier`) | true | **both**: insert-between AND reparent, if the drag happens to cross a hull — see below |
+
+`mouseDrag` recomputes the candidate on every tick, but ONLY while `reparentArmed` (gating a plain
+drag, and a macOS Ctrl-drag, out of the feature entirely) via `GraphEditor::
+updateMacroDragCandidate`, which stores it in the ONE new private field `macroDragCandidateId_`
+(`getMacroDragCandidateId()` is the public accessor).
+
+**The Windows/Linux arbitration is still at mouseUp, but only decides WHICH of the two gestures a
+reparent-armed drag ends up as, never WHETHER one can fire at all** (that is `reparentArmed`'s job,
+decided at press). If the last candidate `mouseDrag` computed is non-empty, `mouseUp` reparents;
+otherwise it falls through to the plain finalize path, which is what already carries Ctrl's own
+insert-between behaviour (`SmartConnectionEngine` samples `isInsertModifierDown()` live, from
+inside `finalizeModuleDrag`). Because Windows/Linux cannot express "Ctrl but not Cmd" at all, a
+Ctrl-drag there that happens to cross a cable AND a hull in the same gesture performs BOTH:
+inserting the dragged module into that cable's chain AND joining/leaving the macro whose hull it
+crossed. This is a genuine platform limitation, not a bug — there is no way to offer the two
+gestures as separately addressable there without a second, unrelated modifier.
+
+**One more single-step subtlety worth stating explicitly:** a member dragged out of macro A
+directly into macro B's hull, in ONE continuous drag, LEAVES A and does not also join B —
+`macroDragJoinOrLeaveTarget` checks membership FIRST (§ the query, above) and returns the LEAVE
+target as soon as it finds one, never falling through to also test JOIN against B in that same
+call. Joining B is a second, separate drag, started from outside any macro.
+
+**One undo step.** `GraphEditor::finalizeMacroMembershipDrag` (`GraphEditorDragDrop.cpp`) is
+modelled on `finalizeMacroCardDrag` (`GraphEditorSelection.cpp`, § the macro card drag above): one
+lambda runs the ordinary `finalizeModuleDrag` THEN the membership mutation, and the whole lambda is
+handed to ONE `recordGraphAndMacroChange` call. `addSelectionToMacro`/`removeSelectionFromMacro`
+(§ T138, above) both gained a trailing `recordUndo = true` parameter for this: `recordUndo=false`
+skips their own `recordGraphAndMacroChange` and runs the mutation directly, so the outer finalize
+owns the one transaction instead — every one of their ~10 other existing callers keeps the default
+and stays byte-identical.
+
+The graph "before" half of that ONE transaction is deliberately NOT `recordGraphAndMacroChange`'s
+own default fresh `graphToJSON()` capture — it is whatever `ModuleComponent::mouseDown`'s
+`captureBeforeState()` stashed, handed back via the new `AppUndoManager::
+takeCapturedGraphBeforeState()` and passed as `recordGraphAndMacroChange`'s new
+`graphBeforeOverride` parameter. This is load-bearing, not a style choice, and it is the one place
+this feature's original design (position writes happen only inside finalize) turned out wrong
+against the real code: `ModuleComponent::moved()` fires on EVERY position change, including every
+live `mouseDrag` tick, and unconditionally writes the module's CURRENT (mid-drag, unsnapped)
+position into its graph node's properties right then — not only once, at finalize. By the time
+`finalizeMacroMembershipDrag` runs, a fresh capture would already see that contaminated mid-drag
+position as "before", and the combined undo would land the module back at wherever the live drag
+last released it, never at its true pre-drag position — exactly the failure
+`MacroDragMembership.OneUndoStepRestoresBothPositionAndMembership` caught. Consuming the mousedown-
+time capture instead is what every ordinary (non-reparenting) body-drag already relies on too, via
+the plain `captureBeforeState()`/`pushSnapshotFromCapture()` pair — this reuses the SAME captured
+value rather than a second, independent capture. `ModuleComponent::mouseUp` must NOT also call
+`pushSnapshotFromCapture()` on the reparent path (that would push a SECOND, position-only undo
+step from the same capture) — it doesn't need to explicitly discard it either, since
+`finalizeMacroMembershipDrag` already consumes it via `takeCapturedGraphBeforeState()`, which
+clears it as a side effect.
+
+Reuses the T138 membership path wholesale (`buildMacroPortCrossingPlanForNewMembers` +
+`macroPortsThatBecomeInteriorOnAdd` + `spliceMacroPorts` + `spliceOutMacroPort` on join;
+`buildMacroPortCrossingPlanForRemovedMembers` + `spliceMacroPorts` on leave) — a crossing drag gets
+exactly the same auto-port-creation and splice-out-when-interior behaviour §5's crossing-plan
+machinery already gives the menu-driven add/remove, with no new port logic of its own.
+`Tests/Macros/MacroContainer/MacroDragMembershipTests.cpp` drives the real
+mouseDown/mouseDrag/mouseUp gesture (never a direct `addSelectionToMacro` call — see the T138 note
+above on why a direct-call test can hide an unreachable feature) and covers join, leave, a join
+that simultaneously creates a new crossing port and splices out one that became interior, the
+single combined undo step, the Cmd-click-with-no-movement toggle, a drag that never crosses a
+hull, and the Windows/Linux Ctrl/Cmd arbitration.

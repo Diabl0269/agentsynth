@@ -369,8 +369,9 @@ private:
     juce::Point<int> dragStartPosition;
 
     // True only between a body mouseDown that armed the ComponentDragger and its mouseUp. A
-    // Shift/Cmd-click toggles selection WITHOUT arming the dragger, and this flag stops the
-    // subsequent mouseDrag from moving a component the dragger was never started on.
+    // Shift-click toggles selection WITHOUT arming the dragger, and this flag stops the
+    // subsequent mouseDrag from moving a component the dragger was never started on. Cmd no
+    // longer toggles-without-dragging (FRO40) — see cmdReparentPending below.
     bool bodyDragActive = false;
 
     // Ctrl+press arms an insert-between DRAG and an additive-select TOGGLE at once, because at
@@ -380,6 +381,24 @@ private:
     // but only if nothing moved.
     bool ctrlTogglePending = false;
     std::vector<juce::AudioProcessorGraph::NodeID> ctrlPressSelection;
+
+    // FRO40: Cmd+press mirrors ctrlTogglePending/ctrlPressSelection exactly — a deferred additive-
+    // select TOGGLE and a macro-membership DRAG armed at once, resolved at mouseUp by whether the
+    // press moved. See ModuleComponentInteraction.cpp's mouseDown/mouseUp for the full gesture and
+    // the Windows/Linux Ctrl-vs-Cmd arbitration (isCtrlDown() there wins the press on those
+    // platforms, so this flag is macOS-only in practice).
+    bool cmdReparentPending = false;
+    std::vector<juce::AudioProcessorGraph::NodeID> cmdPressSelection;
+
+    // FRO40: whether THIS press can reparent at all, independent of which of the two flags above
+    // it armed. Set in mouseDown to e.mods.isCommandDown() in BOTH the Ctrl and the Cmd branch —
+    // deliberately NOT `ctrlTogglePending || cmdReparentPending`, which is true for a PLAIN
+    // macOS Ctrl+drag too (Ctrl and Cmd are genuinely distinct keys there) and would silently
+    // compound the shipped insert-between gesture with a join/leave it was never designed to also
+    // do. On Windows/Linux isCommandDown() is true whenever Ctrl is down (commandModifier IS
+    // ctrlModifier there), which is the only platform where the two gestures cannot be told apart
+    // at press time at all — see mouseUp's own comment for how that case is arbitrated instead.
+    bool reparentArmed = false;
 
     // Inline rename editor, alive only between beginTitleRename and finishTitleRename. A child
     // component, so there is no window seam to stub out for a display-less test run.

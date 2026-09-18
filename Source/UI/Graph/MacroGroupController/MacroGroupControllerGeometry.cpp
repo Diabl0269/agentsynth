@@ -53,29 +53,42 @@ constexpr int kMacroChipHeight = 18;
 constexpr int kMacroChipTopMargin = kMacroChipHeight + 6;
 } // namespace
 
-juce::Rectangle<int> MacroGroupController::macroHullBounds(const juce::String& macroId) const {
-    const auto* macro = host_.getMacros().find(macroId);
-    if (macro == nullptr || macro->collapsed)
-        return {};
+namespace {
+// Free-function twin of MacroGroupController::resolveMemberNodeId, for computeMacroHullBounds
+// below (a free function itself, taking GraphCanvasHost& rather than a live `this`).
+juce::AudioProcessorGraph::NodeID resolveMemberNodeIdIn(GraphCanvasHost& host, const juce::String& memberUuid) {
+    for (auto* node : host.graph().getNodes())
+        if (node->properties["uuid"].toString() == memberUuid)
+            return node->nodeID;
+    return {};
+}
 
+// Shared by macroHullBounds and macroHullBoundsExcluding (FRO40) — the latter is the former with
+// one extra uuid left out of the union, needed because the plain hull is a LIVE union of member
+// bounds: the member being dragged OUT of it keeps inflating its own hull, so it could never test
+// as "outside" without excluding itself first (see macroDragJoinOrLeaveTarget's own comment).
+juce::Rectangle<int> computeMacroHullBounds(GraphCanvasHost& host, const synth::Macro& macro,
+                                            const juce::String& extraExcludedUuid) {
     // Port members are EXCLUDED from the union: they dock to this hull's own edge
     // (dockMacroPortWidgets, P8-15 fix F2), and if they also counted toward the bounds that
     // DEFINE the hull, docking one would grow the hull, which would push it out again, forever —
     // the exact feedback loop the fix's own review called out.
-    std::set<juce::String> portNodeUuids;
-    for (const auto& p : macro->ports)
-        portNodeUuids.insert(p.nodeUuid);
+    std::set<juce::String> excludedUuids;
+    for (const auto& p : macro.ports)
+        excludedUuids.insert(p.nodeUuid);
+    if (extraExcludedUuid.isNotEmpty())
+        excludedUuids.insert(extraExcludedUuid);
 
     std::unordered_map<uint32_t, ModuleComponent*> compByNodeUid;
-    for (auto* comp : host_.modules())
+    for (auto* comp : host.modules())
         if (comp != nullptr)
             compByNodeUid[comp->getNodeId().uid] = comp;
 
     juce::Rectangle<int> hull;
-    for (const auto& uuid : macro->members) {
-        if (portNodeUuids.count(uuid) > 0)
-            continue; // a port's own fronting node — presentation-docked OUTSIDE the hull
-        auto nodeId = resolveMemberNodeId(uuid);
+    for (const auto& uuid : macro.members) {
+        if (excludedUuids.count(uuid) > 0)
+            continue; // a port's own fronting node, or the LEAVE test's own dragged member
+        auto nodeId = resolveMemberNodeIdIn(host, uuid);
         auto it = compByNodeUid.find(nodeId.uid);
         if (it == compByNodeUid.end())
             continue;
@@ -86,9 +99,9 @@ juce::Rectangle<int> MacroGroupController::macroHullBounds(const juce::String& m
         // back to the macro's own persisted `bounds` — the same footprint its collapsed card uses
         // — so its ports still have an edge to dock against rather than piling up at the canvas
         // origin.
-        if (macro->bounds.isEmpty())
+        if (macro.bounds.isEmpty())
             return {};
-        hull = macro->bounds;
+        hull = macro.bounds;
     }
 
     // The top margin is DEEPER than the other three: the name chip is drawn at the hull's
@@ -98,6 +111,42 @@ juce::Rectangle<int> MacroGroupController::macroHullBounds(const juce::String& m
     auto expanded = hull.expanded(kMacroHullMargin);
     expanded.setTop(hull.getY() - kMacroChipTopMargin);
     return expanded;
+}
+} // namespace
+
+juce::Rectangle<int> MacroGroupController::macroHullBounds(const juce::String& macroId) const {
+    const auto* macro = host_.getMacros().find(macroId);
+    if (macro == nullptr || macro->collapsed)
+        return {};
+    return computeMacroHullBounds(host_, *macro, {});
+}
+
+juce::Rectangle<int> MacroGroupController::macroHullBoundsExcluding(const juce::String& macroId,
+                                                                    const juce::String& excludedMemberUuid) const {
+    const auto* macro = host_.getMacros().find(macroId);
+    if (macro == nullptr || macro->collapsed)
+        return {};
+    return computeMacroHullBounds(host_, *macro, excludedMemberUuid);
+}
+
+juce::String MacroGroupController::macroDragJoinOrLeaveTarget(juce::AudioProcessorGraph::NodeID draggedNodeId,
+                                                              juce::Point<int> canvasCentre) const {
+    const juce::String uuid = nodeUuidFor(draggedNodeId);
+    if (uuid.isEmpty())
+        return {};
+
+    if (const auto* currentMacro = host_.getMacros().findByMember(uuid)) {
+        // LEAVE test: outside the hull it would have EXCLUDING its own contribution -> leaving.
+        const auto hullExcludingSelf = macroHullBoundsExcluding(currentMacro->id, uuid);
+        if (!hullExcludingSelf.isEmpty() && !hullExcludingSelf.contains(canvasCentre))
+            return currentMacro->id;
+        return {};
+    }
+
+    // JOIN test: not a member of anything, so any EXPANDED macro whose hull contains the centre
+    // is a candidate — macroHullAt already skips collapsed macros and picks the smallest hull
+    // when more than one overlaps.
+    return macroHullAt(canvasCentre);
 }
 
 juce::String MacroGroupController::macroHullAt(juce::Point<int> canvasPos) const {

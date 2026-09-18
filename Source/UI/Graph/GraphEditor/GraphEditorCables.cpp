@@ -78,6 +78,97 @@ juce::Point<float> projectToRectEdge(juce::Rectangle<int> rect, juce::Point<floa
     const float t = std::min(tx, ty);
     return centre + juce::Point<float>(dx * t, dy * t);
 }
+
+// ---- Expanded-macro grouping hull (P8-12 follow-up) ----
+// A collapsed macro reads as a card; an expanded one left no on-canvas trace that its members
+// were still grouped — Cmd+G on them again just refused with "already in a macro", with nothing
+// visible to explain why. Draws a light dashed outline + name chip around the live union of
+// member bounds so the grouping stays visible while expanded. Extracted out of
+// GraphContentComponent::paint (rather than inlined there) to keep that function under the
+// check-function-sizes.sh ratchet — this is its own named step, not a collaborator with state of
+// its own, so a free function beside paint() rather than a new class earns its keep here.
+void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
+    if (editor.getMacros().empty())
+        return;
+
+    for (const auto& macro : editor.getMacros().getAll()) {
+        if (macro.collapsed)
+            continue;
+
+        // macroHullBounds is the ONE definition of this rectangle — hit-testing
+        // (GraphEditor::macroHullAt, used by mouseDown/mouseUp for hull click-to-select and the
+        // hull's right-click macro menu) must see exactly what gets painted here.
+        const auto hull = editor.macroHullBounds(macro.id);
+        if (hull.isEmpty())
+            continue;
+
+        // FRO40: a live Cmd/Ctrl-drag whose candidate (GraphEditor::getMacroDragCandidateId) is
+        // THIS macro gets the SAME dashed hull, just emphasized — heavier, fully opaque, and
+        // topped with a solid stroke — rather than a second visual language for "about to change"
+        // (docs/macros_ports.md).
+        const bool isDragCandidate = macro.id == editor.getMacroDragCandidateId();
+
+        juce::Path outline;
+        outline.addRoundedRectangle(hull.toFloat(), 10.0f);
+        juce::Path dashedOutline;
+        const float dashLengths[] = {6.0f, 4.0f};
+        juce::PathStrokeType(isDragCandidate ? 2.5f : 1.5f).createDashedStroke(dashedOutline, outline, dashLengths, 2);
+        g.setColour(macro.colour.withAlpha(isDragCandidate ? 0.9f : 0.6f));
+        g.fillPath(dashedOutline);
+        if (isDragCandidate) {
+            g.setColour(macro.colour);
+            g.strokePath(outline, juce::PathStrokeType(2.5f));
+        }
+
+        // A tab overlapping the hull's own top edge, not floating above it — a macro whose
+        // members sit near the top of the canvas would otherwise clip the label off-canvas with
+        // nothing to scroll up to. macroChipBounds is the ONE definition of this rect - hit-
+        // testing (GraphEditor::macroChipAt, the chip's drag/rename affordance) must see exactly
+        // what gets painted here, so paint uses the same font macroChipBounds measures with
+        // rather than computing its own width.
+        const juce::String label = macro.name.isNotEmpty() ? macro.name : juce::String("Macro");
+        g.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
+        const auto chipBounds = editor.macroChipBounds(macro.id);
+        juce::Rectangle<float> chip = chipBounds.toFloat();
+        g.setColour(macro.colour.withAlpha(0.85f));
+        g.fillRoundedRectangle(chip, 6.0f);
+
+        // Grip affordance: three short vertical lines at the chip's left edge, so it reads as a
+        // drag handle rather than a plain label. Restrained and inside the 18px chip height.
+        g.setColour(juce::Colours::white.withAlpha(0.35f));
+        const float gripX = chip.getX() + 6.0f;
+        const float gripTop = chip.getY() + 5.0f;
+        const float gripBottom = chip.getBottom() - 5.0f;
+        for (int i = 0; i < 3; ++i) {
+            const float x = gripX + (float)i * 3.0f;
+            g.drawLine(x, gripTop, x, gripBottom, 1.0f);
+        }
+
+        g.setColour(juce::Colours::white);
+        g.drawText(label, chip.withLeft(chip.getX() + 12.0f), juce::Justification::centred, false);
+
+        // Collapse button (founder-review fix G5): the chip's own drag/rename affordance never
+        // looked like "collapse me" — the only routes back to a collapsed card were the right-
+        // click menu and an undocumented double-click. A small button at the OTHER end of the
+        // same row, pointing the opposite way from MacroCardComponent's expand chevron, reads as
+        // the same control in its two states. macroCollapseButtonBounds is the ONE definition of
+        // this rect — hit-testing (GraphEditor::macroCollapseButtonAt, used by mouseDown) must see
+        // exactly what gets painted here.
+        const auto collapseBounds = editor.macroCollapseButtonBounds(macro.id).toFloat();
+        g.setColour(macro.colour.withAlpha(0.85f));
+        g.fillRoundedRectangle(collapseBounds, 4.0f);
+
+        // A filled triangle, not a text glyph, for the same reason the card's expand chevron is a
+        // Path (check-nonascii-literals.test.sh rejects a chevron character outright). Points UP
+        // — the expand chevron points down — so the pair reads as opposite ends of one toggle.
+        juce::Path collapseChevron;
+        collapseChevron.addTriangle(collapseBounds.getX() + 2.5f, collapseBounds.getBottom() - 3.5f,
+                                    collapseBounds.getRight() - 2.5f, collapseBounds.getBottom() - 3.5f,
+                                    collapseBounds.getCentreX(), collapseBounds.getY() + 2.5f);
+        g.setColour(juce::Colours::white.withAlpha(0.85f));
+        g.fillPath(collapseChevron);
+    }
+}
 } // namespace
 
 // Enumerates every cable currently drawn on the canvas, in paint order.
@@ -660,82 +751,9 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     }
     // ---- End cables ----
 
-    // ---- Expanded-macro grouping hull (P8-12 follow-up) ----
-    // A collapsed macro reads as a card; an expanded one left no on-canvas trace that its
-    // members were still grouped — Cmd+G on them again just refused with "already in a macro",
-    // with nothing visible to explain why. Draw a light dashed outline + name chip around the
-    // live union of member bounds so the grouping stays visible while expanded.
-    if (!editor.getMacros().empty()) {
-        for (const auto& macro : editor.getMacros().getAll()) {
-            if (macro.collapsed)
-                continue;
-
-            // macroHullBounds is the ONE definition of this rectangle — hit-testing
-            // (GraphEditor::macroHullAt, used by mouseDown/mouseUp for hull click-to-select and
-            // the hull's right-click macro menu) must see exactly what gets painted here.
-            const auto hull = editor.macroHullBounds(macro.id);
-            if (hull.isEmpty())
-                continue;
-
-            juce::Path outline;
-            outline.addRoundedRectangle(hull.toFloat(), 10.0f);
-            juce::Path dashedOutline;
-            const float dashLengths[] = {6.0f, 4.0f};
-            juce::PathStrokeType(1.5f).createDashedStroke(dashedOutline, outline, dashLengths, 2);
-            g.setColour(macro.colour.withAlpha(0.6f));
-            g.fillPath(dashedOutline);
-
-            // A tab overlapping the hull's own top edge, not floating above it — a macro whose
-            // members sit near the top of the canvas would otherwise clip the label off-canvas
-            // with nothing to scroll up to. macroChipBounds is the ONE definition of this rect -
-            // hit-testing (GraphEditor::macroChipAt, the chip's drag/rename affordance) must see
-            // exactly what gets painted here, so paint uses the same font macroChipBounds measures
-            // with rather than computing its own width.
-            const juce::String label = macro.name.isNotEmpty() ? macro.name : juce::String("Macro");
-            g.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
-            const auto chipBounds = editor.macroChipBounds(macro.id);
-            juce::Rectangle<float> chip = chipBounds.toFloat();
-            g.setColour(macro.colour.withAlpha(0.85f));
-            g.fillRoundedRectangle(chip, 6.0f);
-
-            // Grip affordance: three short vertical lines at the chip's left edge, so it reads as
-            // a drag handle rather than a plain label. Restrained and inside the 18px chip height.
-            g.setColour(juce::Colours::white.withAlpha(0.35f));
-            const float gripX = chip.getX() + 6.0f;
-            const float gripTop = chip.getY() + 5.0f;
-            const float gripBottom = chip.getBottom() - 5.0f;
-            for (int i = 0; i < 3; ++i) {
-                const float x = gripX + (float)i * 3.0f;
-                g.drawLine(x, gripTop, x, gripBottom, 1.0f);
-            }
-
-            g.setColour(juce::Colours::white);
-            g.drawText(label, chip.withLeft(chip.getX() + 12.0f), juce::Justification::centred, false);
-
-            // Collapse button (founder-review fix G5): the chip's own drag/rename affordance
-            // never looked like "collapse me" — the only routes back to a collapsed card were the
-            // right-click menu and an undocumented double-click. A small button at the OTHER end
-            // of the same row, pointing the opposite way from MacroCardComponent's expand
-            // chevron, reads as the same control in its two states. macroCollapseButtonBounds is
-            // the ONE definition of this rect — hit-testing (GraphEditor::macroCollapseButtonAt,
-            // used by mouseDown) must see exactly what gets painted here.
-            const auto collapseBounds = editor.macroCollapseButtonBounds(macro.id).toFloat();
-            g.setColour(macro.colour.withAlpha(0.85f));
-            g.fillRoundedRectangle(collapseBounds, 4.0f);
-
-            // A filled triangle, not a text glyph, for the same reason the card's expand chevron
-            // is a Path (check-nonascii-literals.test.sh rejects a chevron character outright).
-            // Points UP — the expand chevron points down — so the pair reads as opposite ends of
-            // one toggle.
-            juce::Path collapseChevron;
-            collapseChevron.addTriangle(collapseBounds.getX() + 2.5f, collapseBounds.getBottom() - 3.5f,
-                                        collapseBounds.getRight() - 2.5f, collapseBounds.getBottom() - 3.5f,
-                                        collapseBounds.getCentreX(), collapseBounds.getY() + 2.5f);
-            g.setColour(juce::Colours::white.withAlpha(0.85f));
-            g.fillPath(collapseChevron);
-        }
-    }
-    // ---- End expanded-macro grouping hull ----
+    // ---- Expanded-macro grouping hull (P8-12 follow-up; extracted, see paintExpandedMacroHulls
+    // above, for what it draws and why it's a free function rather than inlined here) ----
+    paintExpandedMacroHulls(g, editor);
 
     // Draw Line being dragged
     if (editor.isDraggingConnection) {

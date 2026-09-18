@@ -113,7 +113,7 @@ juce::String MacroGroupController::addMacroForMembers(const std::vector<juce::St
 }
 
 void MacroGroupController::addSelectionToMacro(const juce::String& macroId,
-                                               const std::vector<juce::String>& memberUuids) {
+                                               const std::vector<juce::String>& memberUuids, bool recordUndo) {
     const auto* macro = host_.getMacros().find(macroId);
     if (macro == nullptr || memberUuids.empty())
         return;
@@ -153,7 +153,12 @@ void MacroGroupController::addSelectionToMacro(const juce::String& macroId,
         host_.updateComponents();
     };
 
-    if (host_.undo())
+    // FRO40: recordUndo=false runs doAdd() directly — an outer caller (GraphEditor's Cmd/Ctrl-drag
+    // reparent finalize) already opened its own recordGraphAndMacroChange around a bigger gesture
+    // and needs this membership change inside THAT one undo step, not a second one of its own.
+    if (!recordUndo)
+        doAdd();
+    else if (host_.undo())
         host_.undo()->recordGraphAndMacroChange(graph, host_.getMacros(), doAdd);
     else
         doAdd();
@@ -162,7 +167,7 @@ void MacroGroupController::addSelectionToMacro(const juce::String& macroId,
 }
 
 void MacroGroupController::removeSelectionFromMacro(const juce::String& macroId,
-                                                    const std::vector<juce::String>& memberUuids) {
+                                                    const std::vector<juce::String>& memberUuids, bool recordUndo) {
     const auto* macro = host_.getMacros().find(macroId);
     if (macro == nullptr || memberUuids.empty())
         return;
@@ -192,7 +197,10 @@ void MacroGroupController::removeSelectionFromMacro(const juce::String& macroId,
         host_.updateComponents();
     };
 
-    if (host_.undo())
+    // FRO40: see addSelectionToMacro's matching comment above.
+    if (!recordUndo)
+        doRemove();
+    else if (host_.undo())
         host_.undo()->recordGraphAndMacroChange(graph, host_.getMacros(), doRemove);
     else
         doRemove();

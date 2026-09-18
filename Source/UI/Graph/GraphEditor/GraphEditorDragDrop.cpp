@@ -514,6 +514,88 @@ void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
     repaintCanvas();
 }
 
+// ---- Cmd/Ctrl-drag macro reparent (FRO40, docs/macros_ports.md) ------------------------------
+//
+// A Cmd- or Ctrl-armed drag joins/leaves an expanded macro by crossing its hull border.
+// ModuleComponentInteraction.cpp's mouseDrag calls updateMacroDragCandidate on every tick (only
+// while one of those modifiers armed the drag — see its own comment); mouseUp reads the last
+// value updateMacroDragCandidate left rather than re-querying geometry of its own, so what gets
+// finalized is exactly what was highlighted. GraphEditorCables.cpp's paint() reads
+// getMacroDragCandidateId() (declared inline in GraphEditor.h) to draw the emphasis.
+
+void GraphEditor::updateMacroDragCandidate(juce::AudioProcessorGraph::NodeID draggedNodeId,
+                                           juce::Point<int> canvasCentre) {
+    const juce::String candidate = macroController_.macroDragJoinOrLeaveTarget(draggedNodeId, canvasCentre);
+    if (candidate == macroDragCandidateId_)
+        return;
+    macroDragCandidateId_ = candidate;
+    repaintCanvas();
+}
+
+void GraphEditor::clearMacroDragCandidate() {
+    if (macroDragCandidateId_.isEmpty())
+        return;
+    macroDragCandidateId_.clear();
+    repaintCanvas();
+}
+
+// The single-undo-step finalize (docs/macros_ports.md): modeled on finalizeMacroCardDrag
+// (GraphEditorSelection.cpp) — ONE lambda runs the ordinary position finalize AND the membership
+// mutation, handed to ONE recordGraphAndMacroChange call, so Cmd+Z undoes the whole gesture
+// (position + membership + any macro-port splicing addSelectionToMacro/removeSelectionFromMacro
+// do along the way) together.
+//
+// The graph "before" state is NOT recordGraphAndMacroChange's own default fresh capture — it is
+// whatever ModuleComponent::mouseDown's captureBeforeState() stashed, taken back via
+// takeCapturedGraphBeforeState(). This is load-bearing, not a style choice: ModuleComponent::
+// moved() (fired on EVERY position change, including every live mouseDrag tick, not only at
+// finalize) already wrote the dragged module's mid-drag position into its graph node's properties
+// well before this method ever runs, so a fresh graphToJSON() taken now would only see that
+// already-contaminated position as "before" and the combined undo would land the module back at
+// wherever the live drag last released it, never at its true PRE-drag position. Consuming the
+// mousedown-time capture instead is what makes "one undo restores both position and membership"
+// actually mean the position from BEFORE the whole gesture started, matching the plain
+// captureBeforeState()/pushSnapshotFromCapture() pair every ordinary body-drag already relies on
+// for exactly the same reason (see ModuleComponent::mouseUp's plain-finalize branch).
+//
+// Ordering inside the lambda still matters, independent of the point above: `finalizeModuleDrag`
+// runs BEFORE the membership mutation because addSelectionToMacro/removeSelectionFromMacro's
+// updateComponents() call can add or remove macro PORT nodes for cables that just started/stopped
+// crossing the boundary — never the dragged node itself (its own graph node persists through a
+// membership-only + port-splicing change) — but finalizeModuleDrag still wants to resolve `module`
+// while the canvas is in the most predictable state. This is also why ModuleComponent::mouseUp
+// calls this method LAST and touches nothing on `this` afterwards: defensive practice for the day
+// a future macroController_ change does end up tearing down the dragged component, even though
+// today's addSelectionToMacro/removeSelectionFromMacro never do.
+void GraphEditor::finalizeMacroMembershipDrag(ModuleComponent* module, const juce::String& macroId, bool isJoin) {
+    if (module == nullptr)
+        return;
+
+    const juce::String uuid = macroController_.nodeUuidFor(module->getNodeId());
+    auto& graph = audioEngine.getGraph();
+    const juce::var graphBeforeOverride = undoManager ? undoManager->takeCapturedGraphBeforeState() : juce::var();
+
+    auto doFinalize = [this, module, macroId, uuid, isJoin] {
+        finalizeModuleDrag(module);
+        if (isJoin)
+            macroController_.addSelectionToMacro(macroId, {uuid}, /*recordUndo=*/false);
+        else
+            macroController_.removeSelectionFromMacro(macroId, {uuid}, /*recordUndo=*/false);
+    };
+
+    if (undoManager)
+        undoManager->recordGraphAndMacroChange(graph, macros, doFinalize, graphBeforeOverride);
+    else
+        doFinalize();
+
+    clearMacroDragCandidate();
+    // Torn down HERE, not by the mouseUp call site, because doFinalize (still running above) calls
+    // finalizeModuleDrag, which reads buildDragPreviewState() for smart-connection suggestions — the
+    // preview has to stay live for that and only end once this method is otherwise done with it.
+    endDragPreview();
+    repaintCanvas();
+}
+
 // Internal: start the drop-landing animation for a newly placed module component.
 void GraphEditor::animateDropLanding(ModuleComponent* module, juce::Point<int> fromPos, juce::Point<int> toPos) {
     if (module == nullptr)

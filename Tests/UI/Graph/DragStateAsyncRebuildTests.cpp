@@ -57,6 +57,9 @@ juce::MouseEvent realMouseEvent(juce::Component& eventComp, juce::Point<int> loc
 void expectNoStuckDragState(GraphEditor& editor, const char* context) {
     EXPECT_FALSE(editor.isDragPreviewActive()) << context << ": drag-preview ghost left stuck";
     EXPECT_FALSE(editor.isSelectionDragActive()) << context << ": selection-drag bookkeeping left stuck";
+    // FRO40: cancelLiveDragGestures() must clear the macro drag-candidate highlight too, or an
+    // async rebuild mid-Cmd/Ctrl-drag leaves a hull highlighted with no gesture left to end it.
+    EXPECT_TRUE(editor.getMacroDragCandidateId().isEmpty()) << context << ": macro drag candidate hull left stuck";
 }
 
 } // namespace
@@ -92,6 +95,46 @@ TEST(DragStateAsyncRebuild, DetachAllModuleComponentsCancelsLiveBodyDragMidGestu
 
     editor.updateComponents(); // the async reconcile — must not crash, must not re-arm anything
     expectNoStuckDragState(editor, "after the post-detach updateComponents reconcile");
+}
+
+// FRO40: the macro drag-candidate highlight specifically — armed by actually crossing a real
+// expanded macro's hull mid-drag, then cancelled by the same detachAllModuleComponents() path the
+// plain drag-preview case above exercises, with no mouseUp for the dragged component ever coming.
+TEST(DragStateAsyncRebuild, DetachAllModuleComponentsCancelsLiveMacroDragCandidateMidGesture) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 400);
+    editor.setSelectedNodes({a, b});
+    const auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    auto c = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 100);
+    auto* comp = compFor(editor, c);
+    ASSERT_NE(comp, nullptr);
+
+    const auto hull = editor.macroHullBounds(macroId);
+    ASSERT_FALSE(hull.isEmpty());
+    const auto delta = hull.getCentre() - comp->getBounds().getCentre();
+
+    const juce::ModifierKeys cmdClick(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::commandModifier);
+    const juce::Point<int> pressPos(comp->getWidth() / 2, ModuleComponent::kHeaderHeight + 10);
+    const juce::Point<int> dragPos = pressPos + delta;
+
+    comp->mouseDown(realMouseEvent(*comp, pressPos, pressPos, cmdClick));
+    comp->mouseDrag(realMouseEvent(*comp, dragPos, pressPos, cmdClick, /*wasDragged=*/true));
+    ASSERT_FALSE(editor.getMacroDragCandidateId().isEmpty())
+        << "sanity: dragging C's centre into the hull must arm the candidate before any mouseUp";
+
+    // No mouseUp follows — an AI patch apply (or any other async rebuild) lands mid-drag instead.
+    editor.detachAllModuleComponents();
+    expectNoStuckDragState(editor, "macro drag candidate, immediately after detachAllModuleComponents");
+
+    editor.updateComponents();
+    expectNoStuckDragState(editor, "macro drag candidate, after the post-detach updateComponents reconcile");
 }
 
 TEST(DragStateAsyncRebuild, DetachAllModuleComponentsCancelsLiveMultiSelectDrag) {

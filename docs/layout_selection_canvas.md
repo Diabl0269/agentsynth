@@ -24,7 +24,9 @@ the marquee is gated behind **Shift** instead and pan is untouched.
 | **Shift** + drag on empty canvas | Marquee-select, *replacing* the selection |
 | **Cmd/Ctrl + Shift** + drag | Marquee-select, *adding* to the selection |
 | Click a module body | Select just that module |
-| **Shift**/**Cmd** + click a module | Toggle that module's membership (does **not** start a drag) |
+| **Shift** + click a module | Toggle that module's membership (does **not** start a drag) |
+| **Cmd** + click a module (no movement) | Toggle that module's membership, same as Shift |
+| **Cmd** + drag a module across an expanded macro's hull (FRO40) | Joins/leaves that macro — [`macros_ports.md` §5.10](macros_ports.md#510-cmdctrl-drag-membership-fro40-crossing-a-hull-border-joinsleaves-it) has the full gesture/undo contract |
 | Drag any selected module | Move the entire selection together |
 | Click empty canvas (no drag) | Clear the selection |
 | Right-click a module | Select it if it wasn't, then open the menu |
@@ -35,9 +37,11 @@ Two details that are easy to get wrong:
 - **Deselect-on-click is deferred to mouse-up.** `GraphEditor::mouseDown` only *arms*
   `pendingEmptyCanvasClick`; the first `mouseDrag` clears it. If the clear happened on mouse-down,
   every pan would wipe the selection.
-- **A modifier-click never arms the dragger.** `ModuleComponent::bodyDragActive` gates
-  `mouseDrag`/`mouseUp`, because `juce::ComponentDragger::dragComponent` must not run when
-  `startDraggingComponent` was never called.
+- **A Shift-modifier-click never arms the dragger; Cmd/Ctrl do.** `ModuleComponent::
+  bodyDragActive` still gates `mouseDrag`/`mouseUp` for Shift, because
+  `juce::ComponentDragger::dragComponent` must not run when `startDraggingComponent` was never
+  called — but Ctrl (insert-between) and, since FRO40, Cmd (macro reparent) each arm a DEFERRED
+  click-vs-drag classification instead, resolved at `mouseUp` by whether the press moved.
 
 ### 1.2 SelectionModel — `Source/UI/Graph/SelectionModel.h`
 

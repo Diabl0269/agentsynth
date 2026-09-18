@@ -600,6 +600,12 @@ void AppUndoManager::pushSnapshotFromCapture(juce::AudioProcessorGraph& graph) {
     capturedBeforeState = juce::var();
 }
 
+juce::var AppUndoManager::takeCapturedGraphBeforeState() {
+    juce::var result = capturedBeforeState;
+    capturedBeforeState = juce::var();
+    return result;
+}
+
 bool AppUndoManager::recordTimelineChange(synth::TimelineDoc& doc, const std::function<void()>& mutation) {
     if (!mutation)
         return false;
@@ -695,13 +701,18 @@ void AppUndoManager::pushGraphAndMacroActions(juce::AudioProcessorGraph& graph, 
 }
 
 bool AppUndoManager::recordGraphAndMacroChange(juce::AudioProcessorGraph& graph, synth::MacroSet& macros,
-                                               const std::function<void()>& mutation) {
+                                               const std::function<void()>& mutation,
+                                               const juce::var& graphBeforeOverride) {
     if (!mutation)
         return false;
 
     undoManager.beginNewTransaction();
 
-    const juce::var graphBefore = synth::AIStateMapper::graphToJSON(graph);
+    // FRO40: graphBeforeOverride wins when supplied — see takeCapturedGraphBeforeState's own doc
+    // comment (AppUndoManager.h) for why a fresh capture here can be too late for a caller whose
+    // live gesture already wrote intermediate state into the graph before this ever runs.
+    const juce::var graphBefore =
+        graphBeforeOverride.isVoid() ? synth::AIStateMapper::graphToJSON(graph) : graphBeforeOverride;
     const juce::var macrosBefore = macros.toVar();
 
     mutation();
