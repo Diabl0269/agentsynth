@@ -106,7 +106,7 @@ TEST_F(IntegrationTest, SaveLoadRoundTripPreservesState) {
     // trusted=true because this IS our own graphToJSON output — the untrusted apply path is for
     // model-authored patches and would both rescale exact values and refuse the preset's internal
     // Attenuverter nodes. Every real caller replaying a save (PresetManager, undo, session state)
-    // applies trusted; see docs/layout.md §12.5.
+    // applies trusted; see docs/layout_selection_canvas.md §1.5.
     ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, graph, /*clearExisting=*/true, /*trusted=*/true));
 
     // Verify node and connection counts match

@@ -877,8 +877,8 @@ of the flat error bubble every other kind gets:
 - The assistant bubble carries the server's message verbatim (no `"Error: "` prefix, same as
   `TrialExhausted`/`ServiceCapacityExceeded`) plus an **"Upgrade to Pro"** button, opening
   `synth::branding::kUpgradeUrl` (`Source/Branding.h` — a static Polar checkout link; this feature does not
-  create checkout sessions dynamically, per `docs/billing.md`'s "what this deliberately does not
-  do") via the injected `urlOpener` (`AIChatComponent::setUrlOpenerForTesting()` swaps this for a
+  create checkout sessions dynamically, per the backend repo's billing doc's "what this
+  deliberately does not do") via the injected `urlOpener` (`AIChatComponent::setUrlOpenerForTesting()` swaps this for a
   non-browser-launching fake in tests).
 - This button is carried on `MessageData::showUpgradeAction`, which is deliberately **not**
   reconstructed by the history-replay loop in `AIChatComponent`'s constructor — a `New Chat` or app
@@ -897,7 +897,7 @@ nothing to layout until an `AccountService` is attached *and* has a known entitl
 (`AccountSnapshot::entitlementKnown`), which `AccountService::completeSignIn()` populates alongside
 `fetchMe()` (same non-fatal contract: an entitlement-fetch failure never blocks sign-in) and
 `refreshEntitlement()` updates on demand. `usage.requests_used` is a recent addition to the
-`GET /v1/entitlement` response (`docs/billing.md`) — `AuthClient::fetchEntitlement()` degrades to
+`GET /v1/entitlement` response (see the backend repo's billing doc) — `AuthClient::fetchEntitlement()` degrades to
 `requestsUsed = 0` rather than failing the whole parse if an older server doesn't send it.
 
 **Reachable client-side, still blocked at the infra layer.** `RemoteProvider` is no

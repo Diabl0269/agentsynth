@@ -201,7 +201,7 @@ public:
     void createMacroPortFromDroppedCable(const juce::String& macroId, bool newPortIsInput, bool isMidi,
                                          juce::AudioProcessorGraph::NodeID otherNodeId, int otherVisibleJack);
 
-    // ---- Auto-create-ports-on-group (founder-review fix F5, docs/macros_implementation.md §7.6.1) ----
+    // ---- Auto-create-ports-on-group (founder-review fix F5, docs/macros_implementation.md §7 item 7) ----
 
     /** The crossing plan a would-be macro's members (by NodeID) would need on creation. */
     std::vector<MacroPortCrossingGroup>
@@ -230,7 +230,7 @@ public:
     /** Splices ONE port node back out of its macro, reconnecting the cable it proxied. */
     void spliceOutMacroPort(synth::Macro& macro, const juce::String& portNodeUuid);
 
-    // ---- Auto-create-port-on-drag / auto-delete-on-last-cable (T148, docs/macros_implementation.md §7.9) ----
+    // ---- Auto-create-port-on-drag / auto-delete-on-last-cable (T148, docs/macros_implementation.md §7 item 9) ----
 
     /** True if `nodeId` resolves to a live macro member that itself fronts one of that macro's
      *  ports. GraphEditorCables.cpp/Commands.cpp call this directly. */

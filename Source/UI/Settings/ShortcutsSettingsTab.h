@@ -19,7 +19,7 @@
 // STRUCTURE (the reason this is not a flat list any more): the table grew past forty actions when
 // the timeline and piano-roll surfaces became rebindable, and a flat list that long is unusable —
 // so rows are grouped into one collapsible section per ShortcutCategory, with a search field above
-// them. The idioms are lifted from ModuleLibraryComponent (docs/layout.md §13) on purpose, so the
+// them. The idioms are lifted from ModuleLibraryComponent (docs/layout_selection_canvas.md §2) on purpose, so the
 // two collapsible lists in the app behave identically: clickable header rows with a chevron, a
 // collapsed-set keyed by the header's name, and a top strip whose label flips between
 // "COLLAPSE ALL" and "EXPAND ALL".

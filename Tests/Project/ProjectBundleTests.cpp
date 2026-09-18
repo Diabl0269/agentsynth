@@ -12,7 +12,7 @@
 #include <set>
 
 // ProjectBundle (.agsproj): project.json = patch dialect + "timeline" key, Audio/ and
-// Peaks/ asset subdirectories. See docs/architecture.md §5 for the fixed load order this pins.
+// Peaks/ asset subdirectories. See docs/architecture_project_bundle.md §5 for the fixed load order this pins.
 
 using synth::AutomationLane;
 using synth::BreakpointCurve;

@@ -274,7 +274,7 @@ void MainComponent::timerCallback() {
     // The timeline panel's low-rate transport poll, on the same existing timer — no new
     // timer, and nothing at all when the panel is hidden (a collapsed timeline must cost exactly
     // what it did before). This is what starts/stops the playhead's playing-only 30 Hz strip
-    // repaint; see docs/layout.md §11.
+    // repaint; see docs/layout_visuals_animation.md §3.
     //
     // FRO11 (P9-5): timelinePanel is now nested inside mixerDock (the Timeline/Mixer tab
     // strip), so its own isVisible() flag only reflects "the Timeline tab is selected", not "the

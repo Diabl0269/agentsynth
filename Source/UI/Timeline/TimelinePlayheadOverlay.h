@@ -8,7 +8,7 @@
 // ruler + lanes region.
 //
 // This is the SECOND (and, with the AI thinking spinner, the only other) documented exception to
-// the app's no-unconditional-per-tick-repaint rule — see docs/layout.md §11 and the CLAUDE.md
+// the app's no-unconditional-per-tick-repaint rule — see docs/layout_visuals_animation.md §3 and the CLAUDE.md
 // invariant. The exception is granted under a confinement contract, and every clause of it is
 // enforced here:
 //

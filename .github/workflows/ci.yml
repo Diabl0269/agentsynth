@@ -150,6 +150,13 @@ jobs:
       # legacy files already over it. See scripts/check-file-sizes.sh's own doc comment and
       # docs/testing.md "File-size cap" for the full mechanism.
       run: bash scripts/check-file-sizes.sh
+    - name: Check docs integrity
+      # FRO169: runs scripts/check-docs.sh against the REAL tree, not just its unit test -- a PR
+      # that only edits a Source/*.h comment (in scope for check C/D, but never under docs/**)
+      # needs docs-integrity signal too, and this job's own `paths:` filter would let such a PR
+      # through untouched otherwise. See scripts/check-docs.sh's own doc comment and
+      # docs/docs-guard.md for the full mechanism.
+      run: bash scripts/check-docs.sh
     - name: Test function-size guard
       # Same story as the file-size guard's own test above, one level down: a hole in the scanner
       # that measures individual FUNCTIONS (a mis-scanned comment/string, a brace-depth bug) makes
@@ -161,6 +168,12 @@ jobs:
       # scripts/check-function-sizes.sh's own doc comment and docs/testing.md "Function-size cap"
       # for the full mechanism.
       run: bash scripts/check-function-sizes.sh
+    - name: Test docs checker
+      # A hole in the docs-integrity scanner (a mis-scanned exclusion, a regex that matches the
+      # wrong `]`, a ratchet that doesn't actually ratchet) makes the link/section/naming/map
+      # checks decorative. ~1s, no compiler, no network. See scripts/check-docs.sh's own doc
+      # comment; "Check docs integrity" above runs the checker itself against the real tree.
+      run: bash scripts/tests/check-docs.test.sh
 
   build-and-test:
     name: Build, Test, and Coverage

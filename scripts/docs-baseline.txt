@@ -1,0 +1,38 @@
+# Docs-integrity ratchet baseline (scripts/check-docs.sh). ONE entry kind, STRICT ratchet:
+#   naming <path>  -- a legacy docs/**/*.md file whose basename isn't lowercase kebab-case.
+#                     Presence-only: fixed (renamed) means the entry is simply gone from a
+#                     future --update. Never add a NEW entry -- rename the file instead.
+# --allow-growth is the deliberate, reviewed exception. See check-docs.sh's own header comment
+# for the full mechanism, and docs/docs-guard.md for why only naming is grandfathered -- every
+# other check (B/C/D/E) is zero-tolerance and never baselined.
+naming docs/AI_Engine.md
+naming docs/AI_Engine_chat_component.md
+naming docs/AI_Engine_patch_safety.md
+naming docs/AI_Engine_providers_accounts.md
+naming docs/AI_Usage_Guide.md
+naming docs/Module_Development_Guide.md
+naming docs/architecture_app_wiring.md
+naming docs/architecture_audio_engine.md
+naming docs/architecture_graph_editor.md
+naming docs/architecture_module_base.md
+naming docs/architecture_plugin_layer.md
+naming docs/architecture_project_bundle.md
+naming docs/architecture_timeline.md
+naming docs/fx_modules.md
+naming docs/layout_selection_canvas.md
+naming docs/layout_visuals_animation.md
+naming docs/macros_implementation.md
+naming docs/macros_ports.md
+naming docs/midi_input.md
+naming docs/midi_remote.md
+naming docs/midi_remote_ui.md
+naming docs/mixer_fader.md
+naming docs/mixer_implementation.md
+naming docs/plugin_card_layout.md
+naming docs/testing_gain_staging.md
+naming docs/testing_mixer_meters.md
+naming docs/timeline_panel_clips_automation.md
+naming docs/timeline_panel_core.md
+naming docs/timeline_panel_piano_roll.md
+naming docs/timeline_panel_tracks.md
+naming docs/timeline_panel_transport.md

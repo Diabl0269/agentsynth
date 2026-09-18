@@ -203,7 +203,7 @@ public:
      *              model. But two different callers pass trusted=false: a MODEL-facing one, which
      *              wants exactly that restriction, and an APP-DATA one gating something this app
      *              wrote and is about to re-apply trusted (session state, an .agsproj, a snippet
-     *              file — see docs/layout.md §12.5). Our own saves legitimately contain internal
+     *              file — see docs/layout_selection_canvas.md §1.5). Our own saves legitimately contain internal
      *              nodes, so the second kind passes true: it is still gating structure, ids,
      *              ranges and tampering, just not authorship. Defaults to false so a new
      *              model-facing caller is protected without having to know this exists.

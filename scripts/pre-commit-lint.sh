@@ -1,17 +1,18 @@
 #!/bin/bash
-# Pre-commit hook: clang-format lint on staged C/C++ sources, plus the file-size and
-# function-size guards.
+# Pre-commit hook: clang-format lint on staged C/C++ sources, plus the file-size, function-size
+# and docs-integrity guards.
 #
 # Mirrors the CI "Lint" job's clang-format --dry-run --Werror over Source/ and Tests/, but scoped
 # to the files staged for THIS commit, so it runs fast and catches formatting before it ever
-# reaches CI. The file-size guard (scripts/check-file-sizes.sh, FRO61) and the function-size guard
-# (scripts/check-function-sizes.sh, FRO78) both run unscoped -- they scan the whole git-tracked
-# tree either way, and each is fast enough on its own that there's no benefit to staged-file
-# scoping there the way there is for clang-format. They run for ANY commit with staged changes,
-# not only ones touching C++: a doc or script edit can push a file over its cap just as easily as
-# a source change can (the function-size guard only ever scans C++ itself, but a change anywhere
-# can still shrink a function below the cap and leave the baseline stale). Installed by
-# scripts/install-hooks.sh. Bypass a single commit with:
+# reaches CI. The file-size guard (scripts/check-file-sizes.sh, FRO61), the function-size guard
+# (scripts/check-function-sizes.sh, FRO78) and the docs guard (scripts/check-docs.sh, FRO169) all
+# run unscoped -- they scan the whole working tree either way, and each is fast enough on its own
+# that there's no benefit to staged-file scoping there the way there is for clang-format. They run
+# for ANY commit with staged changes, not only ones touching C++: a doc or script edit can push a
+# file over its cap just as easily as a source change can (the function-size guard only ever scans
+# C++ itself, but a change anywhere can still shrink a function below the cap and leave the
+# baseline stale), and a Source/**/*.h comment can go stale (check C/D) without touching docs/ at
+# all. Installed by scripts/install-hooks.sh. Bypass a single commit with:
 # git commit --no-verify
 #
 # NOTE: clang-format is PINNED — CI and this hook must run the SAME version.
@@ -73,6 +74,17 @@ if ! bash "$repo_root/scripts/check-function-sizes.sh"; then
     echo "" >&2
     echo "pre-commit: function-size guard failed (see above)." >&2
     echo "  Extract a named step / collaborator, or run --update if it legitimately shrank." >&2
+    echo "  Bypass:   git commit --no-verify" >&2
+    exit 1
+fi
+
+# --- Docs guard: whole tree, same deal as the file-size guard above (FRO169). Only the docs/
+# filename convention is baselined -- a broken link, a stale docs/... mention, a stale §-section
+# reference or a docs/README.md map gap are all zero-tolerance and fail here unconditionally.
+if ! bash "$repo_root/scripts/check-docs.sh"; then
+    echo "" >&2
+    echo "pre-commit: docs integrity guard failed (see above)." >&2
+    echo "  Fix the broken link / stale reference / map gap, or run --update for a naming rename." >&2
     echo "  Bypass:   git commit --no-verify" >&2
     exit 1
 fi
