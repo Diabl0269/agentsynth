@@ -188,7 +188,7 @@ inline ModuleCategory categoryFor(ModuleType t) noexcept {
     case ModuleType::HostedPlugin:
     // A Macro's inlet/outlet jack (audio/CV or MIDI): plumbing in the same sense Rec Tap is — a
     // pass-through that exists only to front a boundary, with no DSP role of its own. Card jacks
-    // (P8-15 §7 item 4) are the actual place a Macro port's cable gets coloured; this bucket only
+    // (P8-15 docs/macros/ports.md#cable-rendering-across-the-boundary) are the actual place a Macro port's cable gets coloured; this bucket only
     // matters for a cable that runs from one of these nodes to somewhere ByModuleCategory-coloured
     // outside a collapsed card.
     case ModuleType::MacroInlet:

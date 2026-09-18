@@ -20,7 +20,7 @@ class ChannelStripModule;
 // MixerColumnComponent.h -- FRO11 (P9-5, docs/mixer/panel.md#what-the-mixer-shows): one ChannelStrip's column --
 // header, source line, insert list, pan, fader + meter, dB readout (inside MixerFader), M/S, and
 // the tracks-feeding row. A background click (not on a control) selects the strip's macro on the
-// canvas (§5.10's "clicking a column selects its macro").
+// canvas (docs/mixer/panel.md#what-the-mixer-shows's "clicking a column selects its macro").
 namespace synth::ui {
 
 class MixerColumnComponent : public juce::Component {

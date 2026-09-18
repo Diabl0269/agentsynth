@@ -254,7 +254,7 @@ void MacroGroupController::spliceMacroPorts(const juce::String& macroId,
         }
 
         // 2. Construct the port node with the derived shape/kind, named from the internal module +
-        //    jack it fronts, BEFORE it is wired into the live graph (§5.3's construction-time rule).
+        //    jack it fronts, BEFORE it is wired into the live graph (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed's construction-time rule).
         const auto kind = group.isMidi ? synth::MacroPortKind::Midi : synth::MacroPortKind::AudioCV;
         const juce::String typeName = macroPortNodeTypeName(group.isInput, kind);
         auto newProcessor = synth::AIStateMapper::createModule(typeName);
@@ -521,7 +521,7 @@ MacroGroupController::mintMacroPortForAutoCreate(const juce::String& macroId, bo
     if (!newProcessor)
         return {};
     if (!isMidi) {
-        // Always Mono — the same scope cut createMacroPortFromDroppedCable already applies (§5.3).
+        // Always Mono — the same scope cut createMacroPortFromDroppedCable already applies (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed).
         if (auto* inlet = dynamic_cast<MacroInletModule*>(newProcessor.get()))
             inlet->setPortShape(MacroPortShape::Mono, 1);
         else if (auto* outlet = dynamic_cast<MacroOutletModule*>(newProcessor.get()))

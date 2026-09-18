@@ -87,7 +87,7 @@
  * The solo gate is applied in BOTH the dry and the normal branch. That is not the forbidden
  * `isBypassed() || isMuted()` collapse: bypass is about this module's own processing, while the
  * solo gate is an engine-level mixer decision layered on top of whatever the strip outputs —
- * a bypassed non-soloed strip leaking into a soloed mix would break §5.3's "every non-soloed strip
+ * a bypassed non-soloed strip leaking into a soloed mix would break docs/mixer/mixer.md#solo-is-a-render-time-gate's "every non-soloed strip
  * outputs silence".
  *
  * STEM TAP (P9-8, docs/mixer/stem-export.md). An opt-in, non-owning tap for offline stem export: a
@@ -97,7 +97,7 @@
  * path (bypass, mute, solo-gated silence, and the normal path alike), so a muted or soloed-out strip
  * during a stem export still taps whatever it actually output (silence). The tap copies the MAIN
  * legs only and never a send leg, which is what keeps a source's stem pre-send and a bus's stem the
- * only place a pre-fader send appears (§5.12). No allocation, no locks: an atomic pointer swap and,
+ * only place a pre-fader send appears (docs/mixer/stem-export.md). No allocation, no locks: an atomic pointer swap and,
  * when armed, one copyFrom per leg. The destination buffer must already hold at least `numSamples`
  * samples in 2 channels — synth::StemSession preallocates one per strip at the render's block size
  * before arming any tap — and a block wider than that is dropped rather than overrun, since the

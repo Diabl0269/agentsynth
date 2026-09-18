@@ -7,7 +7,7 @@
 //   • bypass         — the two-branch contract: visible channels stay dry either way (there is
 //                       no processing to skip), hidden channels are always cleared
 //   • extra state    — the audio/CV variants' visible-channel-count round-trips through
-//                       getExtraState/setExtraState (the mechanism §7 item 3 will drive)
+//                       getExtraState/setExtraState (the mechanism docs/macros/configure-io.md#adding-a-port will drive)
 //   • registration   — internal-only exclusion from the AI factory checklist lives in
 //                       Tests/AI/AIStateMapperTests.cpp (AuthorableModuleTypesGolden,
 //                       UntrustedPatchRejectsInternalOnlyModuleTypes); not duplicated here.

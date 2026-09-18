@@ -96,7 +96,7 @@ private:
     juce::Rectangle<float> getExpandButtonBounds() const;
 
     /** One bypass/mute indeterminate-indicator badge's bounds (P8-15d, T142, docs/macros/ports.md
-     *  §5.6), just left of the expand chevron — `mute=false` is the outer (bypass) slot, `true`
+     *  docs/macros/ports.md#bypass-and-mute), just left of the expand chevron — `mute=false` is the outer (bypass) slot, `true`
      *  the inner (mute) slot nearer the chevron. Purely a function of `getExpandButtonBounds()`,
      *  so paint() and getTitleRowBounds() (which reserves room for both slots so a long macro
      *  name can never paint under them) read the SAME rectangles a test can assert against —

@@ -63,8 +63,8 @@ juce::String MacroGroupController::addMacroPort(const juce::String& macroId, boo
     if (!newProcessor)
         return {};
 
-    // Shape is set BEFORE the node is wired into the live graph, honouring §5.3's "decided at
-    // construction, then fixed" rule — meaningless (and skipped) for a MIDI port (§5.1).
+    // Shape is set BEFORE the node is wired into the live graph, honouring docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed's "decided at
+    // construction, then fixed" rule — meaningless (and skipped) for a MIDI port (docs/macros/ports.md#node-types).
     if (kind == synth::MacroPortKind::AudioCV) {
         if (auto* inlet = dynamic_cast<MacroInletModule*>(newProcessor.get()))
             inlet->setPortShape(shape, voiceCount);
@@ -308,7 +308,7 @@ juce::String MacroGroupController::changeMacroPortShape(const juce::String& macr
             break;
         }
     if (port == nullptr || port->kind != synth::MacroPortKind::AudioCV)
-        return {}; // MIDI ports have no shape to change (§5.1)
+        return {}; // MIDI ports have no shape to change (docs/macros/ports.md#node-types)
 
     auto& graph = host_.graph();
     const auto oldNodeId = resolveMemberNodeId(nodeUuid);

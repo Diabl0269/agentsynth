@@ -18,7 +18,7 @@ namespace synth::ui {
  * Unifies docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port items 3 ("Add Input"/"Add Output") and 5 (rename/reorder) into ONE
  * small modal, per an explicit founder request rather than piecemeal menu actions: add/remove/
  * rename/reorder every input and output on the macro from one place, picking Mono/Stereo/Poly-N/
- * MIDI at creation time (§5.3 — a port's shape/kind is fixed once created; changing shape means
+ * MIDI at creation time (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed — a port's shape/kind is fixed once created; changing shape means
  * deleting the port and adding a new one, which `onChangePortShape` below asks the OWNER to do as
  * ONE undo step, not a delete followed by a separately-undoable add).
  *

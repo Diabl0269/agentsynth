@@ -82,7 +82,7 @@ public:
         std::optional<juce::Colour> colour; // T152; unset -> kind tint fallback
     };
 
-    /** Tri-state read of a macro's members' bypass (or mute) state (§5.6). See
+    /** Tri-state read of a macro's members' bypass (or mute) state (docs/macros/ports.md#bypass-and-mute). See
      *  GraphEditor::MacroToggleState. */
     enum class MacroToggleState { AllOff, AllOn, Mixed };
 
@@ -222,7 +222,7 @@ public:
      *  async dialog), which calls this directly. */
     std::vector<synth::ui::MacroPortConfigDialog::PortRow> macroPortRowsForDialog(const juce::String& macroId) const;
 
-    /** The "shape from a dropped cable" convenience (§5.3). GraphEditorConnections.cpp's
+    /** The "shape from a dropped cable" convenience (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed). GraphEditorConnections.cpp's
      *  endConnectionDrag calls this directly. */
     void createMacroPortFromDroppedCable(const juce::String& macroId, bool newPortIsInput, bool isMidi,
                                          juce::AudioProcessorGraph::NodeID otherNodeId, int otherVisibleJack);

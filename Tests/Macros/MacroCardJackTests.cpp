@@ -238,7 +238,7 @@ TEST(MacroCardJack, DroppingOnAJackWithTheWrongDirectionIsRefusedAndCreatesNoCon
 
     // ...but the drag starts at an external module's INPUT jack, looking for a SOURCE - the macro
     // would need to offer an OUTPUT, and this card has none. The one jack under the cursor is the
-    // wrong direction and must be refused outright (§5.3: a mismatched connection is refused, not
+    // wrong direction and must be refused outright (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed: a mismatched connection is refused, not
     // silently adapted), not fall through to minting a fresh port either.
     auto extFilterId = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 900, 900);
     auto* extComp = findComponent(editor, extFilterId);
@@ -263,7 +263,7 @@ TEST(MacroCardJack, DroppingOnAJackWithTheWrongDirectionIsRefusedAndCreatesNoCon
 }
 
 // ============================================================================
-// buildVisibleCables() anchoring (§5.4): a cable through a PORT anchors at that port's own jack;
+// buildVisibleCables() anchoring (docs/macros/ports.md#cable-rendering-across-the-boundary): a cable through a PORT anchors at that port's own jack;
 // a cable straight to an ordinary interior member (no port involved) keeps the pre-P8-15
 // projectToRectEdge treatment, unchanged.
 // ============================================================================
@@ -276,7 +276,7 @@ TEST(MacroCardJack, BoundaryCableThroughAPortAnchorsAtItsJackWhileAnInteriorMemb
     ASSERT_TRUE(editor.getMacros().find(m.macroId)->collapsed);
 
     // Cable 1: wired straight to the interior Filter's audio input (member 'b'), bypassing any
-    // port entirely - the case §5.4 says must keep working exactly as it did before P8-15.
+    // port entirely - the case docs/macros/ports.md#cable-rendering-across-the-boundary says must keep working exactly as it did before P8-15.
     auto extOscId = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 900);
     editor.connectPorts(extOscId, 0, m.b, 0, /*isMidi=*/false, /*recordUndo=*/false);
 

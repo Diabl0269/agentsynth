@@ -67,7 +67,7 @@ juce::String makeTwoMemberMacro(GraphEditor& editor, AudioEngine& engine, NodeID
 }
 
 /** Groups two mute-ineligible Macro In/Out nodes (no "muted" parameter -- see
- *  ModuleBase::hasMuteParameter, §7 item 1) into a macro. Every member IS still bypassable
+ *  ModuleBase::hasMuteParameter, docs/macros/ports.md#node-types) into a macro. Every member IS still bypassable
  *  (ModuleBase's constructor adds "bypassed" unconditionally), so this is the fixture for
  *  "no mute-eligible member" without also being "no bypassable member". */
 juce::String makeMuteIneligibleMacro(GraphEditor& editor, AudioEngine& engine, NodeID& a, NodeID& b) {
@@ -203,7 +203,7 @@ TEST(MacroBypassMute, MuteSkipsAMemberWithNoMuteParameterWithoutCrashing) {
     auto macroId = makeTwoMemberMacro(editor, engine, a, b);
     ASSERT_FALSE(macroId.isEmpty());
 
-    // A Macro In port added to the macro is a member with NO "muted" parameter (§7 item 1).
+    // A Macro In port added to the macro is a member with NO "muted" parameter (docs/macros/ports.md#node-types).
     const auto portUuid =
         editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
     ASSERT_FALSE(portUuid.isEmpty());

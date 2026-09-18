@@ -54,7 +54,7 @@ TEST(MixerModelInsertTests, ASharedEqFeedingTwoStripsMakesTheChainBranching) {
         m->setShape(ChannelStripModule::Shape::Stereo);
 
     connectStereoMMT(graph, *trackAudio, *eq);
-    // eq fans out to TWO independent chains -- a shared insert, per §5.6.
+    // eq fans out to TWO independent chains -- a shared insert, per docs/mixer/mixer.md#inserts-in-a-free-form-graph.
     connectStereoMMT(graph, *eq, *compressor1);
     connectStereoMMT(graph, *compressor1, *strip1);
     connectStereoMMT(graph, *eq, *compressor2);
@@ -63,8 +63,8 @@ TEST(MixerModelInsertTests, ASharedEqFeedingTwoStripsMakesTheChainBranching) {
 
     const auto snapshot = synth::buildMixerSnapshot(graph, doc, macros);
     // strip1 is reached by the one bound track; strip2 is never reached by ANY track's own walk
-    // (only strip1 is), so it appears too, as its own orphan column (§8 item 4's own ordering
-    // rule) -- this test only cares about strip1's insert list.
+    // (only strip1 is), so it appears too, as its own orphan column
+    // (docs/mixer/panel.md#what-the-mixer-shows's own ordering rule) -- this test only cares about strip1's insert list.
     ASSERT_EQ(snapshot.columns.size(), 2u);
     const auto it = std::find_if(snapshot.columns.begin(), snapshot.columns.end(),
                                  [&](const auto& c) { return c.nodeId == strip1->nodeID; });

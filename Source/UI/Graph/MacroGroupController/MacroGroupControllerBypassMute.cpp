@@ -114,7 +114,7 @@ MacroGroupController::MacroToggleState MacroGroupController::macroMuteState(cons
         auto* node = graph.getNodeForId(nodeId);
         auto* mb = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
         // Skip members with no "muted" parameter (Macro In/Out and their MIDI variants among
-        // them, §7 item 1's note) — they have nothing to report either way.
+        // them, docs/macros/ports.md#node-types) — they have nothing to report either way.
         if (mb == nullptr || !mb->hasMuteParameter())
             continue;
         (mb->isMuted() ? anyOn : anyOff) = true;

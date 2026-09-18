@@ -30,7 +30,7 @@
  *   - Poly  — raw ch0..voiceCount_-1 are ONE visible jack (a poly-bus fan), ch0 the group head.
  *
  * setPortShape() is called exactly ONCE, by the port-creation flow, immediately after
- * construction and before the node is wired into a live graph — never again (§5.3's immutability
+ * construction and before the node is wired into a live graph — never again (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed's immutability
  * rule). This is what lets a Stereo/Poly-N port exist with no new factory type and no migration
  * for a Macro In already on disk: the bus was sized for it from P8-15a onward.
  *
@@ -234,7 +234,7 @@ private:
 
     // Written once — by setExtraState() on a trusted load, or by setPortShape() from the
     // port-creation flow immediately after construction, before the node is added to a running
-    // graph — and never again: §5.3's "immutable for that node's lifetime" rule. Atomic because it
+    // graph — and never again: docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed's "immutable for that node's lifetime" rule. Atomic because it
     // is written on the message thread and read every block on the audio thread; relaxed is
     // enough since nothing else depends on ordering against it.
     std::atomic<MacroPortShape> shape_{MacroPortShape::Mono}; // Mono default — matches every save

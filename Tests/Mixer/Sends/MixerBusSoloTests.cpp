@@ -134,7 +134,7 @@ TEST(MixerBusSoloTest, SoloingAGroupBusOpensItsSourcesMainLegs) {
 
 TEST(MixerBusSoloTest, SoloingABusFedByAnotherBusKeepsTheWholeChainAudible) {
     // Nested group buses -- source -> inner bus -> outer bus -> Master -- with the OUTER one soloed.
-    // §5.15 D5's rule (c) is "that leg lies on a signal path reaching a soloed strip", and the
+    // docs/mixer/sends-and-buses.md D5's rule (c) is "that leg lies on a signal path reaching a soloed strip", and the
     // source's path does reach it, two strips away. A walk that answered only "is the FIRST strip I
     // meet soloed?" would close the source's main leg, and the soloed bus would then be fed silence
     // by a bus that is itself audible -- soloing a nested bus would produce nothing at all.

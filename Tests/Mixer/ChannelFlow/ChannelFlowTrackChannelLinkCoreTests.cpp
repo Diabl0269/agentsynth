@@ -156,7 +156,7 @@ TEST(ChannelFlowTrackChannelLinkCore, FindTrackSourcesFeedingStripFindsBothOfASh
 }
 
 // -------------------------------------------------------------------------------------------
-// resolveTrackChannelLink — the rule, over the five rows of §5.2
+// resolveTrackChannelLink — the rule, over the five rows of docs/mixer/mixer.md#channels-follow-audio-not-tracks
 // -------------------------------------------------------------------------------------------
 
 TEST(ChannelFlowTrackChannelLinkCore, ResolveTrackChannelLinkLinksAnAudioTrack) {

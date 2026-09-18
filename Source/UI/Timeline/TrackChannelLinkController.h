@@ -61,7 +61,7 @@ public:
     /** Runs from MainComponent::reconcileTimelineAfterGraphChange -- the funnel every
      *  graph-structural change and every undo/redo restore already reaches.
      *
-     *  §5.2: a linked track stores its mute/solo on the CHANNEL, not on the track, so there is
+     *  docs/mixer/mixer.md#channels-follow-audio-not-tracks: a linked track stores its mute/solo on the CHANNEL, not on the track, so there is
      *  exactly one of each. When a link forms around a track that was muted/soloed while it still
      *  had note gating, this transfers that state onto the strip and clears the doc flag. Not
      *  undoable, exactly like the orphan-flag reconciliation next to it: it derives runtime state

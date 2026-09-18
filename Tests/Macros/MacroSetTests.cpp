@@ -269,7 +269,7 @@ TEST(MacroSetPortPersistence, FromVarRejectsWholeMacroWhenAPortIsMalformed) {
 
 // A port's nodeUuid must be one of the SAME macro's own members (Macro::ports' invariant,
 // mirroring "it is a member of that macro's members list like any other node", docs/macros/ports.md
-// §5.1) — a port naming a uuid outside `members` is rejected, not silently accepted.
+// docs/macros/ports.md#node-types) — a port naming a uuid outside `members` is rejected, not silently accepted.
 TEST(MacroSetPortPersistence, FromVarRejectsPortWhoseNodeUuidIsNotAMember) {
     auto* macroObj = new juce::DynamicObject();
     macroObj->setProperty("id", "m1");

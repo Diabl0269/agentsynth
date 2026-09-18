@@ -105,8 +105,8 @@ juce::var TrackPresetManager::extractTrackPreset(juce::AudioProcessorGraph& grap
     // carries. "isBus" and "sends" (FRO15) get the same treatment: a preset captured from a bus
     // strip must not badge an ordinary track channel as BUS wherever it's inserted, and a preset
     // captured from a strip with configured sends must not restore slots whose cable target was
-    // never captured (a saved send target is a graph edge, never stored, per docs/mixer/mixer.md
-    // §5.15) -- carrying the slot state alone would show "No target" rows on every insert.
+    // never captured (a saved send target is a graph edge, never stored, per
+    // docs/mixer/sends-and-buses.md) -- carrying the slot state alone would show "No target" rows on every insert.
     if (auto* nodesArr = root->getProperty("nodes").getArray()) {
         for (auto& nVar : *nodesArr) {
             auto* nObj = nVar.getDynamicObject();

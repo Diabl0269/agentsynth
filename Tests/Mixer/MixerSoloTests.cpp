@@ -1,4 +1,4 @@
-// The mixer's solo gate and Master splice (P9-2, docs/mixer/mixer.md#node-types, §5.3).
+// The mixer's solo gate and Master splice (P9-2, docs/mixer/mixer.md#node-types, docs/mixer/mixer.md#solo-is-a-render-time-gate).
 //
 //   • module gate    -- with the playhead's mixer-solo flag set, a non-soloed strip (bypassed or not)
 //                        and Master's Direct input output silence; a soloed strip and Master's Mix
