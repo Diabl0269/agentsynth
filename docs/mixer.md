@@ -298,7 +298,7 @@ bus's chain (there is no external predecessor to splice against).
 
 **Naming.** The product says **track** everywhere, in the UI and in this doc. "Lane" stays reserved
 for what it already means in this codebase: the clip and automation lanes *inside* a track
-(`docs/timeline_panel_clips_automation.md`).
+([`docs/timeline/clips.md`](timeline/clips.md) and [`docs/timeline/automation.md`](timeline/automation.md)).
 
 **"Channel template" and "track preset" are one concept: the track preset.** A track preset is
 `{ track kind, channel chain, strip settings, optional clips }`. Every track kind — **Audio**;
@@ -990,7 +990,7 @@ P9-11 Gate module, T181 mixer accessibility. Item numbers there match every exis
 
 - [`docs/macros.md`](macros.md) — the macro container a channel is optionally boxed in; the
   proxy-port and internal-only-node precedents this design follows.
-- [`docs/timeline_panel_core.md`](timeline_panel_core.md) — track headers, M/S controls, the
+- [`docs/timeline/tracks.md`](timeline/tracks.md) — track headers, M/S controls, the
   timeline side of the track/channel relationship.
 - [`docs/architecture.md`](architecture.md) — `ensureMasterRecordTap()`, `EpochExchange`, the
   bypass/mute contract, plugin host modes.

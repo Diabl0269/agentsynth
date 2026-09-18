@@ -461,7 +461,7 @@ struct CountingPlayhead : synth::ui::TimelinePlayheadOverlay {
 
 **Reuse this pattern for any future timed repaint.** A repaint budget that cannot be asserted is a repaint budget that will regress.
 
-`PianoRollComponent` is the first reuse, and it is a *delegation*, not a fourth exception: the roll maps beats through its own zoom/scroll, so while it is open the overlay confines itself to `getSharedRegion()` (empty while the roll is open — the ruler rows follow the roll's mapping override too, see `docs/timeline_panel_piano_roll.md` §2) and hands the roll the drawn beat through `TimelinePlayheadOverlay::LocalPlayheadClient`. The roll draws the line at its own x under an identical `requestRepaintStrip` seam and the identical no-move-no-repaint gate — still one timer for the whole panel, still zero repaints while stopped. See `docs/timeline_panel_piano_roll.md` §2 (the piano roll section).
+`PianoRollComponent` is the first reuse, and it is a *delegation*, not a fourth exception: the roll maps beats through its own zoom/scroll, so while it is open the overlay confines itself to `getSharedRegion()` (empty while the roll is open — the ruler rows follow the roll's mapping override too, see [`docs/timeline/piano-roll.md`](timeline/piano-roll.md#the-ruler-above-the-roll)) and hands the roll the drawn beat through `TimelinePlayheadOverlay::LocalPlayheadClient`. The roll draws the line at its own x under an identical `requestRepaintStrip` seam and the identical no-move-no-repaint gate — still one timer for the whole panel, still zero repaints while stopped. See [`docs/timeline/piano-roll.md`](timeline/piano-roll.md#playhead-delegation).
 
 ---
 

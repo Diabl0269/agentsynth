@@ -523,8 +523,8 @@ protected:
      *  routes the help button's click through; it never constructs a juce::CallOutBox directly
      *  (see launchHelpCallOutBox() below), so overriding just that leaf lets a test exercise this
      *  method's real pin-aware dispatch without ever creating a real top-level window — the same
-     *  "protected virtual leaf" seam idiom docs/timeline_panel_core.md documents for
-     *  TimelineRulerComponent::openMarkerContextMenu. */
+     *  "protected virtual leaf" seam idiom docs/timeline/ruler.md#opening-a-menu-is-a-protected-virtual
+     *  documents for TimelineRulerComponent::openMarkerContextMenu. */
     virtual void showHelpPopover();
 
     /** Constructs the actual juce::CallOutBox around the persistent popup — the one real

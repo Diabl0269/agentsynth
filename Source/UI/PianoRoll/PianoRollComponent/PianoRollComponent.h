@@ -44,7 +44,7 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 // shares. Notes are clip-relative in the doc (MidiNote::startBeat); every doc read/write here
 // converts to absolute beats via clip->startBeat and back.
 //
-// See docs/timeline_panel_piano_roll.md §2 (TL5-8) for the gesture table.
+// See docs/timeline/piano-roll.md#select-tool-gestures for the gesture table.
 namespace synth::ui {
 
 class PianoRollComponent

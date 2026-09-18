@@ -145,7 +145,7 @@ controller** ("Launchkey Mini — not on this machine") and offers **Re-link** (
 profile; controls match by message spec) or **Recreate** (mint a profile from the carried
 specs). Mappings never silently die because a settings folder is elsewhere. This is the same
 shape as the timeline's rule that a binding is never re-established automatically
-(`timeline_panel_tracks.md` §3): degrade visibly, repair explicitly.
+([`timeline/tracks.md`](timeline/tracks.md#a-binding-is-never-re-established-automatically)): degrade visibly, repair explicitly.
 
 ### 4.2 How does a hardware value reach a parameter?
 

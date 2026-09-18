@@ -320,7 +320,7 @@ TEST(TimelineTrackHeaderTest, MidiDestinationsPickerPassesThroughWhateverTheHost
 }
 
 // A binding NEVER changes by itself — not on a reconcile, not by matching a name. Only an explicit
-// menu choice moves it (see docs/timeline_panel_tracks.md §3).
+// menu choice moves it (see docs/timeline/tracks.md#a-binding-is-never-re-established-automatically).
 TEST(TimelineTrackHeaderTest, OrphanedTrackIsNeverAutoRebound) {
     HeaderFixture f;
     f.bindTo("uuid-gone", "Track In #7");

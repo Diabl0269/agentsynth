@@ -38,7 +38,7 @@ when reasoning about a key that "does nothing."
 | Cmd+K | Toggle Minimap |
 | Ctrl+A (macOS) / Cmd+Shift+A (elsewhere) | Toggle AI Panel — moved off Cmd+A so Select All could take the platform-standard chord. One of the very few per-platform defaults: on macOS Ctrl is a real separate modifier, on Windows/Linux JUCE's Cmd IS Ctrl so Ctrl+A would collide with Select All |
 | Cmd+B | Toggle Module Library |
-| Cmd+T | Toggle Timeline Panel (see [`timeline_panel_core.md §1`](timeline_panel_core.md)) |
+| Cmd+T | Toggle Timeline Panel (see [`timeline/timeline.md`](timeline/timeline.md#docking-toggle-and-the-bottom-dock)) |
 | Cmd+Alt+M | Toggle Mixer Panel (`toggleMixerPanel`) — opens the bottom dock on the Mixer tab if closed, or on Timeline; closes it on a second press only when the dock is already open on Mixer, mirroring Cmd+T's own open/close symmetry. See [`mixer_implementation.md §8`](mixer_implementation.md) |
 | Cmd+A | Select All in Focused Editor (actionId/`AppCommands` name still `selectAllModules` — see "Surface routing" below) |
 | Cmd+Shift+S | Save Selection as Snippet |
@@ -58,7 +58,7 @@ when reasoning about a key that "does nothing."
 | Cmd+Shift+L | Focus Library — opens the Module Library sidebar first if it's closed, then focuses it (lands on the sidebar container, not the search field — see Cmd+F below) |
 | Cmd+F | Focus Library Search — opens the Module Library first if it's closed, then focuses its search field specifically. See [**Library keyboard navigation (T160)**](#library-keyboard-navigation-t160) below |
 
-Cmd+T and Space are always active — the timeline is GA (see [`timeline_panel_core.md §1`](timeline_panel_core.md)). The grid
+Cmd+T and Space are always active (see [`timeline/timeline.md`](timeline/timeline.md#always-compiled-never-gated)). The grid
 and zoom commands below are inactive whenever the panel itself isn't open (`isTimelineVisible`),
 the same as any other timeline-only command.
 
@@ -277,7 +277,7 @@ and every module (`GraphEditor::selectAllModules()`) on Graph. Unlike the clipbo
 
 Cmd+=/Cmd+- is the platform's own zoom accelerator (every browser, every editor); Cmd+Shift+=/-
 is the vertical axis, mirroring the modifier the mouse wheel already uses (Cmd+wheel = horizontal,
-Cmd+Shift+wheel = vertical — see [`timeline_panel_core.md §2`](timeline_panel_core.md)), so the keyboard and the wheel teach
+Cmd+Shift+wheel = vertical — see [`timeline/view.md`](timeline/view.md#wheel-and-trackpad-bindings)), so the keyboard and the wheel teach
 the same shape. All four are `AppCommands`/`ApplicationCommandManager` commands (unlike the
 Timeline/PianoRoll surface keys below) and route by the SAME `resolveEditSurface()` the clipboard
 verbs use, in/out factor `1.25` / `1 / 1.25` (`MainComponent::kZoomInFactor`/`kZoomOutFactor`):
@@ -286,7 +286,7 @@ verbs use, in/out factor `1.25` / `1 / 1.25` (`MainComponent::kZoomInFactor`/`kZ
 |---|---|---|
 | Graph | `GraphEditor::zoomAroundCentre` — the canvas' one zoom level | **Inactive** — the canvas zooms uniformly (one `zoomLevel`, no separate axes), so a second key that did the same thing under a different modifier would be a trap, not a feature |
 | TimelineClips | `TimelinePanelComponent::zoomTimelineHorizontal` — `TimelineViewState::pixelsPerBeat`, anchored at the visible centre | `zoomTimelineVertical` — `TimelineViewState::rowHeightScale` (track row height), anchored at the visible centre |
-| PianoRoll | `PianoRollComponent::zoomHorizontal` — the roll's OWN `pixelsPerBeat` (never the shared `TimelineViewState` — see [`timeline_panel_piano_roll.md §2`](timeline_panel_piano_roll.md)) | `zoomVertical` — `pixelsPerSemitone_` |
+| PianoRoll | `PianoRollComponent::zoomHorizontal` — the roll's OWN `pixelsPerBeat` (never the shared `TimelineViewState` — see [`timeline/piano-roll.md`](timeline/piano-roll.md#horizontal-mapping)) | `zoomVertical` — `pixelsPerSemitone_` |
 
 Each keypress reports its own status-bar message ("Canvas: zoom", "Timeline: zoom" / "Timeline:
 track height", "Piano roll: zoom" / "Piano roll: vertical zoom") so a held key's effect is visible
@@ -310,7 +310,7 @@ still bind one from Settings like any other action:
 | `transportToggleMetronome` | Toggle Metronome | Triggers the transport bar's own metronome button, so its persisted `timelineMetronomeEnabled` state stays authoritative |
 | `transportReturnToStart` | Return to Start | `TransportService::locateBeat(0)` — relocates only, does not stop |
 
-See [`timeline_panel_transport.md §5`](timeline_panel_transport.md) for the transport bar itself.
+See [`timeline/transport.md`](timeline/transport.md) for the transport bar itself.
 
 ## Graph
 
@@ -386,7 +386,7 @@ and, for the loop-selection key, `TimelineClipLaneArea::keyPressed()` too):
 | L | Toggle Looping, keeping the existing bounds — the transport bar's loop button |
 | F | Toggle Follow Playhead (`timelineFollowPlayheadToggle`) — mirrors the transport strip's follow button; panel-scoped like J/L/P, so it works whichever timeline surface (lanes or roll) has focus |
 | P | Loop the Selection — sets the transport loop to the selected clips' (or, with the roll open, the edited clip's) span. Whether it also arms looping is `Settings → Preferences → "Timeline: P (loop selection) also switches looping on"` (default on; off = locators only) |
-| 1 / 3 / 4 / 5 / 7 / 8 | Switch the active edit tool: 1 Select, 3 Split, 4 Glue, 5 Erase, 7 Mute, 8 Draw (Cubase's own numbering — see [`timeline_panel_transport.md §7`](timeline_panel_transport.md)) |
+| 1 / 3 / 4 / 5 / 7 / 8 | Switch the active edit tool: 1 Select, 3 Split, 4 Glue, 5 Erase, 7 Mute, 8 Draw (Cubase's own numbering — see [`timeline/edit-tools.md`](timeline/edit-tools.md#numbering)) |
 | Option+1 | Jump to Locator 1 — parks the cursor on the LEFT loop locator (`timelineJumpToLocator1`) |
 | Option+2 | Jump to Locator 2 — the RIGHT loop locator (`timelineJumpToLocator2`) |
 
@@ -612,7 +612,7 @@ with no chip: `J` (Toggle Snap — its chip was removed by FRO108 as redundant w
 toolbar's own Snap button, which shares the same underlying flag). Four of the remaining chips carry
 small drawn vector glyphs rather than letters — a second "Q" beside the Quantise chip for
 length-quantise or pitch-quantise would have told the user nothing about which was which. See
-[`timeline_panel_piano_roll.md §2`](timeline_panel_piano_roll.md).
+[`timeline/piano-roll.md`](timeline/piano-roll.md#header-chips).
 
 2 (Range Selection), 6 (Zoom) and 9 (Play/Scrub) are Cubase tools this app doesn't ship yet and stay
 **unassigned on purpose** — `editToolForKeyChar` (`Source/UI/Timeline/EditTool.h`) returns `nullopt` for
@@ -701,7 +701,7 @@ deliberately does **not** consume the tool digits at all — tool switching belo
 the roll and the panel can never disagree about which tool is active. The whole selection nudges/
 transposes by ONE shared delta (never per-note), clamped so the group stays inside the clip window
 (`[0, clipLength)`) or the pitch range (`[0, 127]`) as a unit — the same "clamp the group together"
-rule `TimelineClipLaneArea`'s cross-track move drag uses (see [`timeline_panel_clips_automation.md §1`](timeline_panel_clips_automation.md)).
+rule `TimelineClipLaneArea`'s cross-track move drag uses (see [`timeline/clips.md`](timeline/clips.md#cross-track-drag)).
 
 ## Canvas mouse gestures
 

@@ -26,8 +26,3 @@ naming docs/mixer_implementation.md
 naming docs/plugin_card_layout.md
 naming docs/testing_gain_staging.md
 naming docs/testing_mixer_meters.md
-naming docs/timeline_panel_clips_automation.md
-naming docs/timeline_panel_core.md
-naming docs/timeline_panel_piano_roll.md
-naming docs/timeline_panel_tracks.md
-naming docs/timeline_panel_transport.md
