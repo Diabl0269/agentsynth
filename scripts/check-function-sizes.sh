@@ -45,8 +45,21 @@
 #      stale-baseline-entry violation
 #
 # Portable bash 3.2 (macOS default) + awk/sort/wc -- no python, no GNU-only flags.
+#
+# LC_ALL=C below (same as check-docs.sh, see that script's own header for the fuller rationale):
+# locale-dependent character classes and multibyte handling differ between GNU awk (ubuntu-latest
+# CI) and BSD awk (macOS). Concretely, the awk scanner below calls `towc` while walking every byte
+# of a scanned file, and under any UTF-8 locale (C.UTF-8, en_US.UTF-8, ...) it ABORTS with "towc:
+# multibyte conversion failure" on the first non-ASCII byte it meets -- an em dash or ellipsis in
+# an ordinary comment is enough. Once awk dies mid-file, every path after it in the scan order
+# goes unscanned, and the script still exits 0 as long as nothing it DID see was over cap: FRO220
+# measured this scanning under half the tree (5620 of 12451 functions) while reporting success,
+# which makes the cap decorative for every file past the abort point. Forcing the C locale makes
+# `towc` a no-op passthrough on any byte value, so the scan runs to completion regardless of what
+# non-ASCII bytes appear in comments/strings.
 
 set -uo pipefail
+export LC_ALL=C
 
 # Same reasoning as check-file-sizes.sh: a git hook (or a nested harness run) inherits GIT_DIR
 # (and sometimes GIT_WORK_TREE/GIT_INDEX_FILE), which can point `git rev-parse --show-toplevel`
