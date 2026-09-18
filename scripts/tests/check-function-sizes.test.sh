@@ -609,6 +609,59 @@ else
     fail=$((fail + 1))
 fi
 
+# --- FRO220 regression: the scan must not silently truncate under a UTF-8 locale ----------------
+# FRO220: without LC_ALL=C, the awk scanner's `towc` call aborts with "multibyte conversion
+# failure" on the first non-ASCII byte it meets (an em dash in an ordinary comment is enough), and
+# every path after that file in scan order goes unscanned -- while the script still exits 0. On
+# clean main (8f64094) this scanned 12451 functions under LC_ALL=C but only 5620 under
+# LC_ALL=C.UTF-8/en_US.UTF-8, i.e. the guard was checking less than half the tree and failing open.
+# extract_scanned_count <output> -- pulls the N out of "check-function-sizes: N functions scanned,
+# ...", or empty if that line isn't present (e.g. the run errored before printing it).
+extract_scanned_count() {
+    echo "$1" | grep -oE '^check-function-sizes: [0-9]+ functions scanned' | grep -oE '[0-9]+'
+}
+
+# Synthetic fixture reproducing the exact shape: a file that sorts BEFORE another (git ls-files
+# order feeds awk's argv, and the scanner processes files in that order) whose only content is a
+# comment containing a real multibyte (UTF-8 em dash) byte sequence, followed by a file with an
+# ordinary function. Under the bug, the em-dash file aborts the scan and the later file's function
+# never gets counted; under the fix, both locales count it.
+reset_repo
+mkdir -p "$REPO/Source"
+printf '// a comment with an em dash \xe2\x80\x94 right here\nvoid aaaFunc() {}\n' >"$REPO/Source/AAA_NonAscii.cpp"
+make_function "ZZZ_After.cpp" afterFunc 3
+commit_all
+locale_c_output="$(LC_ALL=C run_check 2>&1)"
+locale_utf8_output="$(LC_ALL=C.UTF-8 run_check 2>&1)"
+locale_c_count="$(extract_scanned_count "$locale_c_output")"
+locale_utf8_count="$(extract_scanned_count "$locale_utf8_output")"
+if [ -n "$locale_c_count" ] && [ "$locale_c_count" = "$locale_utf8_count" ] && [ "$locale_c_count" -ge 2 ]; then
+    echo "PASS: a non-ASCII comment byte scans identically under LC_ALL=C and LC_ALL=C.UTF-8 ($locale_c_count functions)"
+    pass=$((pass + 1))
+else
+    echo "FAIL: a non-ASCII comment byte scans identically under LC_ALL=C and LC_ALL=C.UTF-8"
+    echo "  LC_ALL=C:       $locale_c_count functions -- $locale_c_output"
+    echo "  LC_ALL=C.UTF-8: $locale_utf8_count functions -- $locale_utf8_output"
+    fail=$((fail + 1))
+fi
+
+# Same assertion against the REAL repo tree + its real baseline, the exact case FRO220 measured:
+# the em dash that triggered this lives in a real Tests/ comment, not just the synthetic fixture
+# above, so this is the guard that would have caught the original bug directly.
+real_c_output="$( (unset FUNCTION_SIZE_CAP FUNCTION_SIZE_BASELINE && LC_ALL=C bash "$CHECK" --root "$SCRIPT_DIR") 2>&1)"
+real_utf8_output="$( (unset FUNCTION_SIZE_CAP FUNCTION_SIZE_BASELINE && LC_ALL=C.UTF-8 bash "$CHECK" --root "$SCRIPT_DIR") 2>&1)"
+real_c_count="$(extract_scanned_count "$real_c_output")"
+real_utf8_count="$(extract_scanned_count "$real_utf8_output")"
+if [ -n "$real_c_count" ] && [ "$real_c_count" = "$real_utf8_count" ]; then
+    echo "PASS: the real repo tree scans the same function count under LC_ALL=C and LC_ALL=C.UTF-8 ($real_c_count functions)"
+    pass=$((pass + 1))
+else
+    echo "FAIL: the real repo tree scans the same function count under LC_ALL=C and LC_ALL=C.UTF-8"
+    echo "  LC_ALL=C:       $real_c_count functions -- $real_c_output"
+    echo "  LC_ALL=C.UTF-8: $real_utf8_count functions -- $real_utf8_output"
+    fail=$((fail + 1))
+fi
+
 echo
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]
