@@ -397,7 +397,7 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
 }
 
 // Removes every connection leaving an output jack this node no longer shows. The other half of
-// the max-channel/visible-port pattern (docs/modules.md): the module silences its hidden
+// the max-channel/visible-port pattern (docs/modules/modules.md#audio-input): the module silences its hidden
 // channels, and the owner unplugs them — a jack you cannot see is a jack you cannot unplug.
 void GraphEditor::dropRoutingsOnHiddenJacks(juce::AudioProcessorGraph::NodeID nodeId) {
     // Jacks that just disappeared take their cables with them. Leaving them connected would mean a

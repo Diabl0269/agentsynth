@@ -29,4 +29,4 @@ Introduce an `ExternalMidiModule` that acts as a bridge for external hardware MI
   - `Tests/Modules/ExternalMidiModuleTests.cpp`: Verify MIDI message filtering by channel and device association.
 
 ## Docs Updates
-- `docs/modules.md`: Add External MIDI Module section.
+- [`docs/modules/modules.md`](../docs/modules/modules.md): Add External MIDI Module section.

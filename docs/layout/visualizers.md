@@ -212,7 +212,7 @@ pixel mapping, testable without a component), `CurveEditorComponent.h` plus
 `CurveEditorComponent.cpp` (interaction and mouse), and `CurveEditorPaint.cpp` (paint).
 
 It is wired into the ADSR envelope card (`ModuleComponentEnvelopeCard.cpp` — see
-[modules.md](../modules.md)'s ADSR "Card UI" entry for the two-way sync, undo and playhead details)
+[modules.md](../modules/modules.md#adsr-envelope-module)'s ADSR "Card UI" entry for the two-way sync, undo and playhead details)
 using `CurveMode::Fixed`, the fixed origin / attack-peak / hold-end / sustain / release-end topology
 this component was built for. `CurveMode::Free` (add, remove and reorder points) is the second
 supported topology.

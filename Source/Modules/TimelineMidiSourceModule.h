@@ -63,7 +63,7 @@
  *
  * Ordering: where a note-off and note-on land on the same sample offset, the off is always
  * inserted first (juce::MidiBuffer preserves insertion order at equal positions) — required by
- * Poly MIDI's same-pitch retrigger contract (docs/modules.md).
+ * Poly MIDI's same-pitch retrigger contract (docs/modules/modules.md#poly-note-contract-machine-midi).
  */
 class TimelineMidiSourceModule : public ModuleBase {
 public:

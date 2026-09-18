@@ -34,5 +34,5 @@ Implement a "Mute" option for audio modules to allow complete silencing of their
 - `TestMuteUndoRedo`: Ensure Mute state is correctly captured by `GravisynthUndoManager`.
 
 ## Docs Updates
-- Update `docs/modules.md` to describe the new Mute feature.
+- Update [`docs/modules/modules.md`](../docs/modules/modules.md) to describe the new Mute feature.
 - Update `CLAUDE.md` to note the new parameter.

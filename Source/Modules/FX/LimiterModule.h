@@ -9,7 +9,7 @@
 // automatic makeup gain - a loudness-maximizing limiter, not a passive ceiling. ModuleGainAudit
 // (Tests/Engine/GainStaging/ModuleGainAuditTests.cpp) measures a net worst case of +7.61 dB
 // output/input RMS at threshold's minimum (-20 dB); allow-listed there, not a LimiterModule bug.
-// See docs/fx_modules.md, Limiter Module section.
+// See docs/modules/fx-modules.md#limiter-module.
 class LimiterModule : public ModuleBase {
 public:
     LimiterModule()

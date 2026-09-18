@@ -37,7 +37,7 @@ juce::String macroAutoPortPreferenceToString(GraphEditor::MacroAutoPortPreferenc
 namespace {
 // Every module type that carries the Dual I/O parameter — which ModuleBase's constructor grants from
 // the module's channel shape (ModuleBase::StereoAudio): the FX modules plus the split-block voice
-// modules (docs/fx_modules.md § Stereo I/O).
+// modules (docs/modules/fx-modules.md#stereo-io-dual-io-toggle).
 //
 // DERIVED, never hand-listed: synth::AIStateMapper::dualIOCapableModuleTypes() probes the module
 // factory and asks each module hasDualIOParameter(), so the popup below cannot go stale. It used to

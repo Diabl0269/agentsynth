@@ -311,7 +311,7 @@ private:
 
     // --- Envelope (ADSR) card: knob-and-graph panel (FRO112) ---
     // The breakpoint curve editor, collapsed by default (not persisted — matches the scope/
-    // frequency-response toggles, not Macro Group's persisted collapse; see docs/modules.md).
+    // frequency-response toggles, not Macro Group's collapse; docs/modules/modules.md#adsr-envelope-module).
     std::unique_ptr<synth::ui::CurveEditorComponent> envelopeCurveEditor;
     std::unique_ptr<juce::ToggleButton> envelopeGraphToggle;
     // BPM|MS segmented control, wired to FRO113's `tempoSync` bool param (FRO117). The four

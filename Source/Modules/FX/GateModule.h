@@ -6,15 +6,15 @@
 #include <juce_dsp/juce_dsp.h>
 
 // Standard noise gate — Threshold/Attack/Hold/Release/Range, stereo-linked. See
-// docs/fx_modules.md § Gate Module for the full spec (hysteresis rationale, why the detector is
-// linked, v1 scope). No sidechain input in v1 (see docs/fx_modules.md § Gate Module).
+// docs/modules/fx-modules.md#gate-module for the full spec (hysteresis rationale, why the detector is
+// linked, v1 scope). No sidechain input in v1 (see docs/modules/fx-modules.md#gate-module).
 class GateModule : public ModuleBase {
 public:
     // The gate opens once the linked envelope reaches Threshold and closes only once it falls
     // this many dB BELOW Threshold — a Schmitt trigger, so a signal hovering right at Threshold
     // does not chatter the gate open/closed every few samples. A few dB is standard practice for
     // hardware/software noise gates; kept as a named constant rather than a user parameter (v1
-    // scope, documented in docs/fx_modules.md).
+    // scope, documented in docs/modules/fx-modules.md#gate-module).
     static constexpr float kGateHysteresisDb = 3.0f;
 
     GateModule()
@@ -29,7 +29,7 @@ public:
         // leak through underneath it. -20 dB, for example, leaves 0.1 linear amplitude through —
         // deliberately not silence; see GateModuleTest.RangeFloorIsNotSilence.
         addParameter(rangeParam = new juce::AudioParameterFloat("range", "Range (dB)", -80.0f, 0.0f, -80.0f));
-        // Every audio-output module needs a level control (docs/fx_modules.md § Output Level);
+        // Every audio-output module needs a level control (docs/modules/fx-modules.md#output-level-shared-stage);
         // Range is the closed-state floor, not a general trim, so it cannot double as this the
         // way Compressor's makeupGain / Limiter's inputGain do — adopt the shared stage instead.
         addOutputLevelParameter();
@@ -100,7 +100,7 @@ public:
 
         for (int i = 0; i < numSamples; ++i) {
             // Stereo-linked detector: ONE gain computer driven by max(|L|,|R|), so the stereo
-            // image never shifts (docs/fx_modules.md § Gate Module).
+            // image never shifts (docs/modules/fx-modules.md#gate-module).
             const float envelope = std::max(std::abs(left[i]), std::abs(right[i]));
 
             if (!detectorOpen) {
@@ -144,7 +144,7 @@ public:
     LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 0); }
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
-    // No sidechain input in v1 — out of scope; see docs/fx_modules.md § Gate Module.
+    // No sidechain input in v1 — out of scope; see docs/modules/fx-modules.md#gate-module.
     std::vector<ModulationTarget> getModulationTargets() const override { return {}; }
     // Pure audio FX — processBlock never touches the MIDI buffer.
     bool acceptsMidi() const override { return false; }

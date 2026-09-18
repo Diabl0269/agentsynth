@@ -13,7 +13,7 @@ item N" — those citations now point here instead, same numbers.
 Main line, in dependency order:
 
 1. **P9-2 (T172) — `ChannelStrip` + `Master` + the solo gate.** Engine only. **DONE.** How it
-   landed (module detail in [`docs/modules.md`](modules.md), engine detail in
+   landed (module detail in [`docs/modules/modules.md#channel-strip-module-mixer-channel-hidden`](modules/modules.md#channel-strip-module-mixer-channel-hidden), engine detail in
    [`docs/architecture_audio_engine.md#mixer-solo-gate-p9-2`](architecture.md) § Mixer solo gate):
    - *Strip layout*: 5 raw channels a side, Left ch0 / Right `kRightBase` = 4, ch1–3 reserved;
      params `gain` (dB), `pan`, `muted`; shape + solo in extra state.
@@ -93,8 +93,8 @@ Main line, in dependency order:
      non-poly even when the instrument's own `poly` parameter was on: `ADSRModule`'s poly branch is
      CV-gate-only, it never reads the MIDI note-on/off fallback that drives its non-poly branch, so
      a poly ADSR fed only raw MIDI would output a permanent zero envelope. Fixed by inserting a
-     **Poly MIDI** node (the codebase's existing per-voice MIDI-to-CV converter, §"Poly MIDI Module"
-     in `docs/modules.md`) between Track In and the instrument instead of raw MIDI, when the
+     **Poly MIDI** node (the codebase's existing per-voice MIDI-to-CV converter, see
+     [`docs/modules/modules.md#poly-midi-module`](modules/modules.md#poly-midi-module)) between Track In and the instrument instead of raw MIDI, when the
      instrument's `poly` parameter is on at instrument-track creation time — whether set
      programmatically or, since FRO48/P9-3k below, via the "(Poly)" menu entry (same "poly handled
      correctly wherever it arises" precedent T183's `addVoiceMixerForPolyInstrument` established):
@@ -604,7 +604,7 @@ Side tracks (each independent of the main line beyond its own listed dependency)
     belt-and-braces liveness check directly — a node removed from the graph with NO unbind call at
     all (the canvas-delete shape) must still not touch the freed module.
 - **P9-11 (T180) — Gate module.** Done — `GateModule` (`Source/Modules/FX/GateModule.h`,
-  [`fx_modules.md` § Gate Module](fx_modules.md#gate-module)). No dependency on the rest of P9;
+  [`docs/modules/fx-modules.md § Gate Module`](modules/fx-modules.md#gate-module)). No dependency on the rest of P9;
   wiring it into a default track preset (§5.7/§7 D3) is still open.
 - **T181 (FRO18) — Mixer accessibility. DONE.** After P9-5. `MixerPanelComponent` joins T159's
   focus-region registry as a 7th region (sharing the dock with "timeline" — see

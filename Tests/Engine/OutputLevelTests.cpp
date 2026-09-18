@@ -1,7 +1,7 @@
 // Tests for the opt-in output-level stage (ModuleBase::addOutputLevelParameter /
 // prepareOutputLevel / applyOutputLevel) and for the modules that adopt it.
 //
-// See docs/fx_modules.md § Output Level and GitHub issue #122.
+// See docs/modules/fx-modules.md#output-level-shared-stage and GitHub issue #122.
 
 #include "Modules/AttenuverterModule.h"
 #include "Modules/FX/BitcrusherModule.h"

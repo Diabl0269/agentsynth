@@ -29,7 +29,7 @@
     (Tests/Engine/GainStaging/ModuleGainAuditTests.cpp) measures a worst-case output/input
     RMS gain of +9.73 dB at Feedback's maximum (0.95) against a continuous test tone -
     allow-listed there as expected feedback/resonance behaviour, not a bug to tighten
-    further. See docs/fx_modules.md, Pitch Shifter Module section.
+    further. See docs/modules/fx-modules.md#pitch-shifter-module.
 */
 class PitchShifterModule : public ModuleBase {
 public:

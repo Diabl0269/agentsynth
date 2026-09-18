@@ -121,7 +121,7 @@ void ModuleComponent::createEnvelopeCardControls() {
 
     // Same pattern as the scope/frequency-response toggles: hidden by default, NOT persisted --
     // resets to collapsed on every construction (matches those two, not Macro Group's persisted
-    // collapse; see docs/modules.md for the decision).
+    // collapse; see docs/modules/modules.md#adsr-envelope-module for the decision).
     envelopeGraphToggle = std::make_unique<juce::ToggleButton>("Show Envelope Graph");
     envelopeGraphToggle->setToggleState(false, juce::dontSendNotification);
     envelopeGraphToggle->onClick = [this] {

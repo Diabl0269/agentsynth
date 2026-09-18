@@ -20,4 +20,4 @@ Implement additional distortion algorithms (e.g., Hard Clip, Foldback) in `Disto
 *   Verify distortion sounds different for different types (via `DistortionSweepTests`).
 
 ## Docs Updates
-*   Update `docs/fx_modules.md` to reflect the new distortion types.
+*   Update [`docs/modules/fx-modules.md`](../docs/modules/fx-modules.md) to reflect the new distortion types.

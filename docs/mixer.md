@@ -994,7 +994,7 @@ P9-11 Gate module, T181 mixer accessibility. Item numbers there match every exis
   timeline side of the track/channel relationship.
 - [`docs/architecture.md`](architecture.md) — `ensureMasterRecordTap()`, `EpochExchange`, the
   bypass/mute contract, plugin host modes.
-- [`docs/modules.md`](modules.md) — `kRightBase`, the stereo-pair conventions a `ChannelStrip`'s
-  output follows, `VoiceMixerModule`.
+- [`docs/modules/modules.md#channel-strip-module-mixer-channel-hidden`](modules/modules.md#channel-strip-module-mixer-channel-hidden) — `kRightBase`, the stereo-pair conventions a `ChannelStrip`'s
+  output follows, `VoiceMixerModule` (see also [`docs/modules/modules.md#voice-mixer-module`](modules/modules.md#voice-mixer-module)).
 - [`docs/layout/colour-overrides.md`](layout/colour-overrides.md#colour-picker-popup) — `ColourPickerPopup`'s preview/commit split, the mechanism
   the track/channel colour link (§5.2) fans out over three targets.

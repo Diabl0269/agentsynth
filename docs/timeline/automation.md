@@ -113,7 +113,7 @@ resolves the node's uuid (ensure-uuid, mirrored into the processor, the same idi
 is a no-op that returns the existing lane), opens the timeline panel via the SAME toggle-button
 click path `simulateToggleTimelineClick()` uses if it is hidden, and opens the strip on that lane.
 
-See [`modulation.md`](../modulation.md) for the user-facing description of the right-click route.
+See [`modulation.md`](../modules/modulation.md) for the user-facing description of the right-click route.
 
 ## Tests
 

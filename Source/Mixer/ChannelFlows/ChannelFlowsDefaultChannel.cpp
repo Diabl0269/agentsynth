@@ -210,7 +210,7 @@ EnvelopeAndVCA addEnvelopeAndVCAForRawInstrument(juce::AudioProcessorGraph& grap
 // drives its mono branch (ADSRModule.h's `heldNotes` bitset), so a poly ADSR fed only Track In's
 // raw MIDI would output a permanent zero envelope. This is the poly counterpart: instead of MIDI
 // driving a mono ADSR, a Poly MIDI node (the codebase's existing per-voice MIDI-to-CV converter —
-// docs/modules.md "Poly MIDI Module") turns Track In's MIDI into per-voice pitch/gate CV, which
+// docs/modules/modules.md#poly-midi-module) turns Track In's MIDI into per-voice pitch/gate CV, which
 // drives a genuinely poly ADSR and VCA:
 //
 //     Track In --MIDI--> Poly MIDI --Pitch(ch0-7)--> instrument's poly Pitch CV in (ch0-7)

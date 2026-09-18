@@ -175,7 +175,7 @@ free), `AppUndoManager` gets one snapshot per gesture through the same
 `MixerFader`), the VST3/AU host sees a proper gesture, and every `SliderParameterAttachment`
 follows without a reflection path. Latency is one frame (≤ 16 ms), which is invisible on a knob
 and irrelevant to audio: **sample-accurate control of a parameter is what CV cables and the
-modulation matrix are for** (`modulation.md`), and this feature never competes with them.
+modulation matrix are for** ([`docs/modules/modulation.md`](modules/modulation.md)), and this feature never competes with them.
 
 *Gesture end:* `endChangeGesture` fires **250 ms** after the last message for that assignment
 (a constant, `kGestureIdleMs`), so a slow sweep is one undo step and one automation touch, not
@@ -513,5 +513,5 @@ without an assignment.
 - [`plugin_card_layout.md`](plugin_card_layout.md) — which hosted-plugin parameters show as
   knobs (and the future "edit any module's layout").
 - [`midi_input.md`](midi_input.md) — the existing note path this feature sits in front of.
-- [`modulation.md`](modulation.md) — sample-accurate control is CV, not MIDI Remote.
+- [`modules/modulation.md`](modules/modulation.md) — sample-accurate control is CV, not MIDI Remote.
 - [`shortcuts.md`](shortcuts.md) — the action registry action targets invoke.

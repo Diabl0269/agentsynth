@@ -56,7 +56,7 @@ care — parameters are keyed by `paramID` on both the `ModuleBase::getStateInfo
 (`StereoDeclaration.APatchSavedBeforeTheMoveLoadsWithTheSameLayout` loads a patch authored before the
 move and checks every layout, including the Ring Modulator falling to its default because the patch
 predates its toggle). Positional `getParameters()[n]` lookups did care, which is exactly why
-[the guide](Module_Development_Guide.md) forbids them: a shifted index resolves to the wrong
+[the guide](development-guide.md) forbids them: a shifted index resolves to the wrong
 parameter *silently*.
 
 Toggling Dual I/O **does not rewire existing cables away**. Raw ch0/ch1 stay connected; only jack
@@ -273,7 +273,7 @@ Rules that make this safe:
 - **Added last in the parameter list among value params.** Appending keeps every existing index pointing at the same parameter, so Level stays the last continuous control (only `muted` follows it). The Dual I/O toggle is *not* in this list any more — `ModuleBase`'s constructor adds it at index 1 (see § Stereo I/O), which is what made the repo-wide rule "look parameters up by ID, never `getParameters()[n]`" concrete. Pinned by `OutputLevelTests.LevelParameterIsAddedLast` and `…AttenuverterKeepsAmountAtParameterIndexOne`.
 - **Modules that already have a level/gain parameter do not get a second one** — Oscillator, LFO, Noise and Voice Mixer have `level`; VCA has `gain`; Limiter has `inputGain`; Compressor has `makeupGain`.
 - **`numAudioChannels` excludes CV.** Only the leading audio channels are scaled; CV input channels are left for the module's own clearing logic. Filter passes `8` in poly mode and `1` in mono.
-- **Bypass/mute contract is unchanged.** `applyOutputLevel` is never reached on the bypass branch (dry pass-through stays untouched, so Level cannot silence a bypassed module) nor on mute (already cleared). See [`architecture_module_base.md#bypassmute-contract`](architecture.md).
+- **Bypass/mute contract is unchanged.** `applyOutputLevel` is never reached on the bypass branch (dry pass-through stays untouched, so Level cannot silence a bypassed module) nor on mute (already cleared). See [`architecture_module_base.md#bypassmute-contract`](../architecture_module_base.md#bypassmute-contract).
 - **It is an output stage, not an insert.** Delay applies it after the feedback write, so lowering Level does not starve the repeats; Reverb applies it after the wet/dry mix, so Wet/Dry still sets balance and Level sets absolute loudness.
 
 CV control of Level is deliberately **not** implemented — it would need a new input channel on every module, and CV channel indices are positional and hard-coded across `getModulationTargets`, `mapInputChannel`, the AI patch schema and the tests. Mono CV connections already route through an Attenuverter, which provides per-connection gain.
@@ -291,7 +291,7 @@ CV control of Level is deliberately **not** implemented — it would need a new 
 ## Ring Modulator Module
 - **Algorithm**: Parker diode-ring (DAFx-11). Four parallel piecewise-quadratic diode approximations
   `out = d(m + c/2) + d(-m + c/2) - d(m - c/2) - d(-m - c/2)`. This is **not** a clean multiply — Math's `Mult` output already covers that. The diode dead-zone is what gives the metallic, gated, bell-like character.
-- **Drive is level-neutral**: both inputs are scaled by Drive before hitting the diode curve, then the result is divided back down by the same Drive (`diodeRing(c*drive, m*drive, vb, vl) / drive`) — Drive pushes the diodes harder into their nonlinearity (more saturation/character) without changing output loudness. Before this normalisation, `diodeRing` is linear above the breakpoint `vl`, so an unnormalised Drive was an uncompensated gain of up to 8x (+18 dB) for a same-signal carrier/modulator patch (FRO120); `drive = 1` is bit-identical to the pre-fix behaviour either way. Pinned by `Tests/FX/RingModulatorGainTests.cpp`.
+- **Drive is level-neutral**: both inputs are scaled by Drive before hitting the diode curve, then the result is divided back down by the same Drive (`diodeRing(c*drive, m*drive, vb, vl) / drive`) — Drive pushes the diodes harder into their nonlinearity (more saturation/character) without changing output loudness. Before this normalisation, `diodeRing` is linear above the breakpoint `vl`, so an unnormalised Drive was an uncompensated gain of up to 8x (+18 dB) for a same-signal carrier/modulator patch; `drive = 1` is bit-identical to the pre-fix behaviour either way. Pinned by `Tests/FX/RingModulatorGainTests.cpp`.
 - **Oversampling**: Same real-time-safe scheme as Distortion. `Off` / `2x` / `4x` (default `2x`); both oversamplers are pre-allocated in `prepareToPlay` and swapped via an `AudioProcessorParameter::Listener`. A latency-compensation delay line keeps the dry carrier aligned for wet/dry mixing. Oversampling is excluded from `getModulationTargets()`.
 - **I/O**: Carrier (ch0), Modulator (ch1), Mix CV (ch2), Drive CV (ch3), Character CV (ch4). Stereo out is the mono ring-mod result duplicated to Left/Right. Dry is the unprocessed carrier. No internal carrier oscillator — patch an Oscillator into Carrier.
 - **Bypass emits the CARRIER on both legs**, not "both raw channels untouched". This module's dry path is defined by its own `mix = 0` (ch0 duplicated onto both output legs), and ch1 is the Modulator *input* — so a plain early return left a bypassed Ring Modulator emitting whatever was patched to Modulator, hard right, with silence on the left. That reached a user as "I only hear the right side, out of a module I disabled". Bypass therefore copies ch0 onto ch1 and clears the CV block; with nothing on Carrier a bypassed Ring Modulator is silent. Pinned by `RingModulatorModuleTest.BypassEmitsTheCarrierOnBothLegsNotTheModulator` and, at graph level, `AudioRenderingTest.BypassedRingModulatorDoesNotLeakItsModulatorInputToTheRight`. The dry pass-through itself is still by design — what was wrong was *which* signal this module calls dry.
@@ -348,7 +348,7 @@ CV control of Level is deliberately **not** implemented — it would need a new 
 
 ## Gate Module
 
-`Source/Modules/FX/GateModule.h` (P9-11). A standard noise gate: attenuates the signal below
+`Source/Modules/FX/GateModule.h`. A standard noise gate: attenuates the signal below
 Threshold, with Attack/Hold/Release shaping how it opens and closes and Range setting the floor.
 
 - **Implementation**: Hand-rolled (not `juce::dsp`) — a hysteresis comparator driving a linear
@@ -382,7 +382,7 @@ Threshold, with Attack/Hold/Release shaping how it opens and closes and Range se
   the currently-applied gain). Hold is consulted only at the discrete "signal just dropped below
   the close level" event, the same category as a sequencer's gate length, so it is not smoothed
   either.
-- **CV Modulation**: None — no CV input channels, no sidechain input. **Out of scope for v1.**
+- **CV Modulation**: None — no CV input channels, no sidechain input.
 - **Dual I/O**: inherited `StereoAudio::Auto`, same as Compressor/Limiter — plain ch0/ch1 stereo,
   no CV inputs to share the block with.
 
@@ -408,7 +408,7 @@ Modelled on a traditional DAW channel EQ (Cubase's, specifically): four fixed ba
 - **CV mapping**: Freq CV is exponential over the full 20 Hz – 20 kHz range — `+1` sweeps to 20 kHz, `-1` to 20 Hz, matching FilterModule's cutoff-CV feel. Gain CV maps linearly onto the full ±24 dB range and adds to the knob value. Both are sampled once per block and RMS-gated, so an unpatched jack reads as exactly 0.
 - **Parameters** (per band N = 1–4): `bandNOn` (bool, default off), `bandNFreq` (20–20 000 Hz; slot defaults 100 / 500 / 3000 / 8000), `bandNGain` (±24 dB, default 0), `bandNQ` (0.1–10, default 0.707). Plus `outputGain` (±24 dB). Frequency and Q ranges are skewed (`setSkewForCentre`) so the knobs feel logarithmic, and all three carry `stringFromValue` formatters because the raw skewed values read as `2999.9` / `0.7071` — see the UI note below for the exact strings.
 - **Slot selection**: `findBandForNewPoint(freqHz)` returns the disabled slot whose home frequency is nearest on a log axis, so a click down low lands on the low shelf and one up top on the high shelf; `-1` once all four are in use.
-- **UI**: double-width card (560 × 592) — response curve set between the port-label gutters, then a row of [Show Spectrum] [Open EQ Window] with the Output trim at its right, then one column per band (type-labelled on/off checkbox above Freq / Gain / Q). Knob geometry is deliberately identical to the generic auto-UI (70 × 60 slider, 20 px label, 50 px text box) so EQ knobs are the same size as every other module's; the columns are wider than a knob, so each is centred in its column. Value formatters are correspondingly compact ("3.2k", "-9.0", "0.71") to fit that shared 50 px box. See [`docs/layout/visualizers.md`](layout/visualizers.md) for `EQCurveComponent` (interactive curve) and `EQWindow` (pop-out editor).
+- **UI**: double-width card (560 × 592) — response curve set between the port-label gutters, then a row of [Show Spectrum] [Open EQ Window] with the Output trim at its right, then one column per band (type-labelled on/off checkbox above Freq / Gain / Q). Knob geometry is deliberately identical to the generic auto-UI (70 × 60 slider, 20 px label, 50 px text box) so EQ knobs are the same size as every other module's; the columns are wider than a knob, so each is centred in its column. Value formatters are correspondingly compact ("3.2k", "-9.0", "0.71") to fit that shared 50 px box. See [`docs/layout/visualizers.md`](../layout/visualizers.md) for `EQCurveComponent` (interactive curve) and `EQWindow` (pop-out editor).
 ## Pitch Shifter Module
 Two engines behind one Mode switch, because they answer the same question with opposite characters: Pitch mode multiplies frequencies (harmonic), Frequency mode adds to them (inharmonic).
 

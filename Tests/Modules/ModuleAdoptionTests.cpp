@@ -7,7 +7,8 @@
 // here fails EveryFactoryModuleIsClassified, which is the point. The failure message tells you
 // which of the three buckets to put it in.
 //
-// See docs/fx_modules.md § Output Level and docs/Module_Development_Guide.md § 2.
+// See docs/modules/fx-modules.md#output-level-shared-stage and
+// docs/modules/development-guide.md#modulebase-inheritance-and-core-methods.
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/ModuleBase.h"
@@ -151,7 +152,7 @@ TEST(ModuleAdoptionTests, EveryFactoryModuleIsClassified) {
                "If its output carries audio it MUST have a level control — add it to the SharedStage bucket "
                "(and call addOutputLevelParameter/prepareOutputLevel/applyOutputLevel in the module). If it "
                "outputs CV/gate/MIDI, add it to NoLevelByDesign with a one-line rationale. See issue #122 and "
-               "docs/fx_modules.md.";
+               "docs/modules/fx-modules.md#output-level-shared-stage.";
 }
 
 TEST(ModuleAdoptionTests, ClassificationTableHasNoStaleEntries) {
