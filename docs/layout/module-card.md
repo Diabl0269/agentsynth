@@ -246,7 +246,7 @@ the right edge was tried and reverted: it reads as an output, and inputs and out
 identically, so the side is the only cue there is. The real objection to an interior column — the
 module covers the lower half of a cable being dragged towards it — is answered by not aiming at the
 gutter at all; release the cable **on the destination knob** instead, see
-[modulation.md](../modulation.md).
+[modulation.md](../modules/modulation.md#drag-to-knob-modulation).
 
 Everything that touches jack geometry — wire drawing, hit-testing (`getPortForPoint`), painting —
 reads `getPortCenter`, so this is the only place that changes. One consequence:

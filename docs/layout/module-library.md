@@ -174,7 +174,7 @@ read-only, the sidebar never rebinds anything; unset (every headless test) falls
 curated shortcut's shipped default via `shortcutHintFor`'s own null-manager contract. The "Your
 first patch" steps are the minimal audible patch, verified against `Source/PresetManager.cpp`'s
 Default preset and `VCAModule`'s own CV handling (see
-[modules.md](../modules.md#vca-amplifier-module)): Poly MIDI to Oscillator to VCA to Audio Output,
+[modules.md](../modules/modules.md#vca-amplifier-module)): Poly MIDI to Oscillator to VCA to Audio Output,
 with an ADSR into the VCA's CV input — not optional shaping, since an unpatched VCA CV input reads
 as silence rather than an implicit fully-open value.
 

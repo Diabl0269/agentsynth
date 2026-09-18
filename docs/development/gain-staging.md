@@ -15,4 +15,4 @@ A new allow-list entry needs a real justification, not a raised ceiling. A new m
 `ModuleGainAudit`'s spec list.
 
 See also [`test-layers.md`](test-layers.md#output-level) for the shared opt-in output-level stage,
-and the Ring Modulator section of [`../fx_modules.md`](../fx_modules.md).
+and the Ring Modulator section of [`../modules/fx-modules.md#ring-modulator-module`](../modules/fx-modules.md#ring-modulator-module).

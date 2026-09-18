@@ -513,5 +513,5 @@ without an assignment.
 - [`plugin_card_layout.md`](plugin_card_layout.md) — which hosted-plugin parameters show as
   knobs (and the future "edit any module's layout").
 - [`midi_input.md`](midi_input.md) — the existing note path this feature sits in front of.
-- [`modulation.md`](modulation.md) — sample-accurate control is CV, not MIDI Remote.
+- [`modules/modulation.md`](modules/modulation.md) — sample-accurate control is CV, not MIDI Remote.
 - [`shortcuts.md`](shortcuts.md) — the action registry action targets invoke.

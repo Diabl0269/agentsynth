@@ -685,7 +685,7 @@ In order, each independently shippable:
 - `docs/layout/selection.md` · `docs/layout/cables.md` · `docs/layout/macro-cards.md` — selection,
   group drag, cable interaction, and the macro container's canvas behaviour
 - `docs/architecture.md` — the flat graph, latency compensation, plugin state format
-- `docs/modules.md` / `Source/Modules/CLAUDE.md` — channel-count and Dual I/O rules
-- `docs/modulation.md` — logical-port API, poly-bus wires
+- [`docs/modules/modules.md`](modules/modules.md) / `Source/Modules/CLAUDE.md` — channel-count rules; [`docs/modules/fx-modules.md#stereo-io-dual-io-toggle`](modules/fx-modules.md#stereo-io-dual-io-toggle) — Dual I/O rules
+- [`docs/modules/modulation.md`](modules/modulation.md) — logical-port API, poly-bus wires
 - `docs/ai/patch-safety.md` — `validatePatch`, the untrusted path
 - `docs/ai/patch-format.md` — reserved patch-format keys

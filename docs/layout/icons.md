@@ -46,7 +46,7 @@ Notes on individual entries:
 - **`ModuleDualIO`** (30) is the module-header toggle that splits a collapsed `"Audio"` jack into
   separate Left and Right jacks. There is no universal stereo-split glyph; this one is a Y-fork into
   two jacks. The button's tooltip carries the Dual I/O on/off copy. See
-  [fx_modules.md](../fx_modules.md#stereo-io-dual-io-toggle).
+  [fx-modules.md](../modules/fx-modules.md#stereo-io-dual-io-toggle).
 - **`ToolSelect` through `ToolDraw`** (31-36) are the six glyphs for the timeline edit-tool strip
   (`synth::ui::EditTool` — Select, Split, Glue, Erase, Mute, Draw): a pointer arrow, scissors, a
   glue bottle, an angled eraser block, a crossed-out speaker, and a pencil at about 45 degrees. The

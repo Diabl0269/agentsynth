@@ -87,7 +87,7 @@ This is the definitive hook inventory. There are seven kinds, and nothing else i
 
 Hook 5 above gained a second kind of take. The armed-track lookup now considers `TrackKind::Audio` as well, and **first-armed wins**: with one armed track of each kind, whichever comes first in the document decides which kind of take this is. There is deliberately no "record both at once" — that would be two takes, two commits and two undo steps for one gesture.
 
-**The pipeline.** `RecordTapModule` (`Source/Modules/RecordTapModule.h/.cpp`, see [`docs/modules.md`](modules.md) for the module itself) is a transparent stereo pass-through with three threads behind it:
+**The pipeline.** `RecordTapModule` (`Source/Modules/RecordTapModule.h/.cpp`, see [`docs/modules/modules.md#rec-tap-module-audio-take-recorder-hidden`](modules/modules.md#rec-tap-module-audio-take-recorder-hidden) for the module itself) is a transparent stereo pass-through with three threads behind it:
 
 ```
 audio thread                writer thread (juce::TimeSliceThread)      message thread
@@ -173,7 +173,7 @@ The WAV itself needs no correction — it was recorded at its own (pre-change) r
 
 ## AudioClipStreamer (disk-streaming clip playback)
 
-`Source/Timeline/AudioClipStreamer.h/.cpp`. The engine-owned service behind [`Track Audio`](modules.md) clip playback: one shared prefetch thread keeps a per-clip ring filled ahead of the playhead, and the audio thread only ever copies out of those rings. **Nothing ever holds a whole file** — a ten-minute take costs one ring, ~1 MiB. That is the point, and it is the deliberate opposite of `SamplerModule`'s whole-file-in-RAM model.
+`Source/Timeline/AudioClipStreamer.h/.cpp`. The engine-owned service behind [`Track Audio`](modules/modules.md#track-audio-module-timeline-audio-source-hidden) clip playback: one shared prefetch thread keeps a per-clip ring filled ahead of the playhead, and the audio thread only ever copies out of those rings. **Nothing ever holds a whole file** — a ten-minute take costs one ring, ~1 MiB. That is the point, and it is the deliberate opposite of `SamplerModule`'s whole-file-in-RAM model.
 
 ```
 message thread            prefetch thread (one TimeSliceThread)        audio thread

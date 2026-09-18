@@ -58,7 +58,7 @@ Maps raw audio-buffer channel indices to the visible jack slots shown in the UI.
 | `getVisibleInputPortCount()` / `getVisibleOutputPortCount()` | How many jacks the UI renders |
 | `JackTarget` / `getJackTargets(jack, isInput)` | Inverse of `mapInput/OutputChannel` — every poly-group head anchored to a visible jack; drives connection creation in `GraphEditor` |
 
-`GraphEditor` uses this API to anchor wire endpoints to the correct visible jack regardless of how many raw channels are fanned out underneath, and to resolve which raw channels a dragged cable or poly toggle should wire (`GraphEditor::resolvePolyLink`, `rewireForPolyChange`). See [docs/modulation.md](modulation.md#creating-poly-connections).
+`GraphEditor` uses this API to anchor wire endpoints to the correct visible jack regardless of how many raw channels are fanned out underneath, and to resolve which raw channels a dragged cable or poly toggle should wire (`GraphEditor::resolvePolyLink`, `rewireForPolyChange`). See [docs/modules/modulation.md](modules/modulation.md#creating-poly-connections).
 
 ### isAutoPromotableModTarget
 
@@ -110,9 +110,9 @@ Both still use two separate branches, never a fused `if (isBypassed() || isMuted
 
 `ModuleBase` offers an opt-in output-level parameter for modules whose output is audio — `addOutputLevelParameter()` in the ctor, `prepareOutputLevel(sampleRate)` in `prepareToPlay`, `applyOutputLevel(buffer, numAudioChannels)` at the end of the **normal** `processBlock` path. It is a no-op on modules that never opt in.
 
-Two constraints follow from the contract above: `applyOutputLevel` must sit **after** both early returns (a bypassed module passes dry audio through at full level; a muted one is already cleared), and `numAudioChannels` must exclude CV channels. Full rules, including why this is opt-in rather than universal and why it must be the last parameter added, live in [`fx_modules.md § Output Level`](fx_modules.md#output-level-shared-stage).
+Two constraints follow from the contract above: `applyOutputLevel` must sit **after** both early returns (a bypassed module passes dry audio through at full level; a muted one is already cleared), and `numAudioChannels` must exclude CV channels. Full rules, including why this is opt-in rather than universal and why it must be the last parameter added, live in [`modules/fx-modules.md § Output Level`](modules/fx-modules.md#output-level-shared-stage).
 
-Related: look parameters up with `findParameterByID(processor, "paramID")` rather than `getParameters()[n]`. Parameter order is not part of a module's contract, and positional lookups silently repoint when a parameter is added. `ModuleBase`'s constructor now adds two parameters of its own — `bypassed` at index 0 and, for a stereo-shaped module, `dualIO` at index 1 ([`fx_modules.md § The toggle is inherited, not registered`](fx_modules.md#the-toggle-is-inherited-not-registered)) — so every module's own parameters start at an index the base owns. Saved state is unaffected either way: both `ModuleBase::getStateInformation` and `AIStateMapper` key parameters by `paramID`.
+Related: look parameters up with `findParameterByID(processor, "paramID")` rather than `getParameters()[n]`. Parameter order is not part of a module's contract, and positional lookups silently repoint when a parameter is added. `ModuleBase`'s constructor now adds two parameters of its own — `bypassed` at index 0 and, for a stereo-shaped module, `dualIO` at index 1 ([`modules/fx-modules.md § The toggle is inherited, not registered`](modules/fx-modules.md#the-toggle-is-inherited-not-registered)) — so every module's own parameters start at an index the base owns. Saved state is unaffected either way: both `ModuleBase::getStateInformation` and `AIStateMapper` key parameters by `paramID`.
 
 ## Supporting Components
 
@@ -142,7 +142,7 @@ Auto-generates parameter UI from `ModuleBase` metadata using type-safe `ModuleTy
 
 `Source/Modules/AttenuverterModule.h`
 
-Intermediary inserted between a modulation source and its destination to scale CV signals. Exposes `lastOutputPeak` / `lastModValue` atomics for UI metering. Constructor default `Amount = 0.0`; set to `1.0` by `addModRouting`, left at `0.0` by `addEmptyModRouting`. See [`docs/modulation.md`](modulation.md) for the full modulation routing model.
+Intermediary inserted between a modulation source and its destination to scale CV signals. Exposes `lastOutputPeak` / `lastModValue` atomics for UI metering. Constructor default `Amount = 0.0`; set to `1.0` by `addModRouting`, left at `0.0` by `addEmptyModRouting`. See [`docs/modules/modulation.md`](modules/modulation.md) for the full modulation routing model.
 
 ## AppUndoManager
 

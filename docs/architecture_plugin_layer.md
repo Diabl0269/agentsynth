@@ -49,7 +49,7 @@ The format set itself is declared **once**, in `synth::addHostedPluginFormats()`
 
 ### The async publish pattern
 
-The [Sampler](modules.md#sampler-module)'s retained-instance discipline, applied to a whole `AudioProcessor`:
+The [Sampler](modules/modules.md#sampler-module)'s retained-instance discipline, applied to a whole `AudioProcessor`:
 
 1. Message thread starts an async load, bumping a generation counter so a callback from a superseded load cannot clobber a newer one. The module holds a `juce::WeakReference` to itself, so a callback arriving after the module dies is a no-op.
 2. On callback (message thread): refuse anything wider than 16 in or out; otherwise `setPlayConfigDetails` + `prepareToPlay` to **our** rate and block, then apply any pending state blob — both **before** publication, so the audio thread never sees an unprepared instance or one block of the plugin's factory default.
@@ -62,7 +62,7 @@ The [Sampler](modules.md#sampler-module)'s retained-instance discipline, applied
 
 ### Plugin scanning — a crash must kill a child, not the app
 
-`Source/Plugin/Hosting/PluginScanService.h`. Owns the `juce::KnownPluginList` + blacklist that answers "which binary is this identity?" — and is therefore the only place a plugin path is stored (see [`modules.md § Hosted Plugin`](modules.md#hosted-plugin-module-third-party-vst3--au-hidden) for the resolution precedence and the load UX).
+`Source/Plugin/Hosting/PluginScanService.h`. Owns the `juce::KnownPluginList` + blacklist that answers "which binary is this identity?" — and is therefore the only place a plugin path is stored (see [`modules/modules.md § Hosted Plugin`](modules/modules.md#hosted-plugin-module-third-party-vst3--au-hidden) for the resolution precedence and the load UX).
 
 **The child-process design.** Scanning means loading a stranger's binary and calling into it, and plugins that crash, hang, or pop a modal window on probe are common enough that in-process scanning turns one bad plugin into an unrecoverable crash-on-launch. So:
 
