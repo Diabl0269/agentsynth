@@ -74,7 +74,7 @@ void MacroCardComponent::paint(juce::Graphics& g) {
     }
     // ---- End content preview ----
 
-    // ---- Port jacks (P8-15c, T141: docs/macros_implementation.md §7 item 4) ----
+    // ---- Port jacks (P8-15c, T141: docs/macros/ports.md#cable-rendering-across-the-boundary) ----
     // One jack per configured port — inputs down the left edge, outputs down the right, from the
     // SAME owner.macroCardPortLayout() that this card's own hit-testing (endConnectionDrag's jack
     // check) and buildVisibleCables()'s boundary-cable anchoring both read, so the drawn dot is
@@ -97,7 +97,7 @@ void MacroCardComponent::paint(juce::Graphics& g) {
             g.setColour(port.colour.value_or(kindTint));
             g.fillEllipse((float)port.jackPos.x - 5.0f, (float)port.jackPos.y - 5.0f, 10.0f, 10.0f);
 
-            // Port name (founder-review fix F2, item 3/docs/macros_implementation.md §7 item 4: "it's not shown
+            // Port name (founder-review fix F2, item 3/docs/macros/ports.md#cable-rendering-across-the-boundary: "it's not shown
             // on the module UI... it should be presented"): left-aligned inside the left edge for
             // an input, right-aligned inside the right edge for an output — mirroring the docked
             // widget's own left/right convention (§5.3/§5.4) so an expanded and collapsed macro
@@ -119,7 +119,7 @@ void MacroCardComponent::paint(juce::Graphics& g) {
 
     const auto chevronBounds = getExpandButtonBounds();
 
-    // Bypass/mute indeterminate indicator (P8-15d, T142, docs/macros_ports.md §5.6): "mixed-state
+    // Bypass/mute indeterminate indicator (P8-15d, T142, docs/macros/ports.md#bypass-and-mute): "mixed-state
     // members show an indeterminate indicator." Two fixed badge slots sit just left of the expand
     // chevron -- mute nearer the chevron, bypass further out -- so their positions never shift
     // depending on which is actually drawn (a jumping badge would be worse than a missing one).

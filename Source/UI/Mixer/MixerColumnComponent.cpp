@@ -17,7 +17,7 @@ namespace synth::ui {
 
 namespace {
 // FRO146: widened from the pre-meters-rework 10 px so two dB-scale bars + tick labels are legible
-// (docs/mixer.md meters section) -- see MixerMeterScale.h's kBarsAreaWidth/kLabelMinWidth for the
+// (docs/mixer/mixer.md meters section) -- see MixerMeterScale.h's kBarsAreaWidth/kLabelMinWidth for the
 // exact pixel budget this must cover. Kept as narrow as that budget allows so the column itself
 // doesn't grow wider than necessary.
 constexpr int kMeterWidth = 32;

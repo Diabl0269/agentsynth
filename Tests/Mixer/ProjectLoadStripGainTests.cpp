@@ -36,7 +36,7 @@ constexpr float kStripAGainDb = -1.430511474609375e-6f;
 constexpr float kStripBGainDb = -14.199997901916504f;
 constexpr float kMasterGainDb = -1.430511474609375e-6f;
 
-// A trimmed copy of the real project's shape (docs/mixer.md §5: two Oscillator macros, each
+// A trimmed copy of the real project's shape (docs/mixer/mixer.md#node-types: two Oscillator macros, each
 // terminating in a Channel Strip, both feeding Master). Node ids mirror the real file's
 // numbering for easier cross-reference; everything not needed to reproduce the strip/gain/macro
 // shape (ADSR, VCA, EQ, Compressor, sends, Delay, etc.) is left out.
@@ -189,7 +189,7 @@ TEST_F(ProjectLoadStripGainTest, CheckpointA_BareProjectBundleLoadPreservesEachS
 // openFromFile -> loadBundleFromFile flow the app's "Open Project" menu item drives), which
 // additionally runs graphEditor.updateComponents() (canvas ModuleComponent cards, including the
 // strips' own "Gain" knob, since Channel Strip is an ordinary card-visible node -- only excluded
-// from the library and the AI, per docs/mixer.md §5.1) and reconcileTimelineAfterGraphChange().
+// from the library and the AI, per docs/mixer/mixer.md#node-types) and reconcileTimelineAfterGraphChange().
 // Then reveals the mixer panel and rebuilds it, exercising MixerColumnComponent::rebindControls
 // -> MixerFader::bind. Checks the underlying parameter AND the fader's own slider value, so a
 // regression that corrupts only the display (not the parameter) or only the parameter (not the
@@ -274,5 +274,5 @@ TEST_F(ProjectLoadStripGainTest, LoadSaveReloadRoundTripsEachStripsGain) {
     EXPECT_NEAR(getDenormalizedParam(*stripA, "gain"), kStripAGainDb, 0.01f)
         << "load -> save -> reload must keep strip-a's gain";
     EXPECT_NEAR(getDenormalizedParam(*stripB, "gain"), kStripBGainDb, 0.01f)
-        << "load -> save -> reload must keep strip-b's gain (docs/mixer.md's own round-trip contract)";
+        << "load -> save -> reload must keep strip-b's gain (docs/mixer/mixer.md's own round-trip contract)";
 }

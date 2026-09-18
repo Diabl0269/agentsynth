@@ -164,7 +164,7 @@ void MixerInsertList::moveRow(int rowIndex, int delta) {
     const auto successorId = insertAt >= (int)without.size() ? stripNodeId_ : without[(size_t)insertAt].nodeId;
 
     // FRO15: a bus's own chain has no external source (sourceNodeId_ stays invalid -- nothing feeds
-    // its EQ from outside, docs/mixer.md §5.15 D6), so moving a row to the very front would ask
+    // its EQ from outside, docs/mixer/sends-and-buses.md D6), so moving a row to the very front would ask
     // spliceInInsert to splice against a predecessor that doesn't exist. reorderInsert's second step
     // (spliceInInsert) has no rollback of its own on failure, so refuse up front -- same "nothing
     // changed" guard addModule already applies for its own empty-chain edge case -- rather than leave

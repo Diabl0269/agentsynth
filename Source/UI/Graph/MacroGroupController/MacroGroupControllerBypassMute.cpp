@@ -1,7 +1,7 @@
 // MacroGroupControllerBypassMute.cpp
 //
 // Deleting a macro and its members, and the macro bypass/mute fan-out (P8-15d, T142,
-// docs/macros_ports.md §5.6). MacroGroupController is declared in MacroGroupController.h;
+// docs/macros/ports.md#bypass-and-mute). MacroGroupController is declared in MacroGroupController.h;
 // sibling MacroGroupController*.cpp files in this directory hold the rest of the class.
 
 #include "MacroGroupController.h"
@@ -62,7 +62,7 @@ bool MacroGroupController::macroHasMuteEligibleMember(const juce::String& macroI
 namespace {
 // The members a macro's Bypass fan-out touches. For an ordinary macro that is every member. For a
 // CHANNEL macro — one containing a Channel Strip — the source node(s) and the strip itself are
-// skipped (docs/mixer.md §5.5): "bypass" on a channel means "bypass the inserts", so the chain's
+// skipped (docs/mixer/mixer.md#bypass-and-mute): "bypass" on a channel means "bypass the inserts", so the chain's
 // effects go dry while the source keeps producing and the strip keeps passing signal. Mute has no
 // such carve-out — muting a channel macro mutes the strip too.
 std::vector<juce::AudioProcessorGraph::NodeID>

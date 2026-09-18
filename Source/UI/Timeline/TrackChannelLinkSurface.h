@@ -4,7 +4,7 @@
 #include "UI/Chrome/ColourPickerPopup.h"
 #include <memory>
 
-// TrackChannelLinkSurface.h -- FRO14 (P9-4, docs/mixer.md §5.2): everything a track header needs
+// TrackChannelLinkSurface.h -- FRO14 (P9-4, docs/mixer/mixer.md#channels-follow-audio-not-tracks): everything a track header needs
 // from the app about the CHANNEL its track plays into.
 //
 // A narrow seam, deliberately separate from TrackHeaderHost: that interface is about a track's own

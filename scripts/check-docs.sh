@@ -114,7 +114,7 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
 # Text file extensions this guard scans -- source comments, scripts and CI config can all carry a
 # `docs/...` reference or a `§`-section pointer, not just the docs themselves. FRO208 widened this
 # from (md cpp h sh yml) to also cover txt/json/cmake/py: CMakeLists.txt alone carries five doc
-# references (a section reference to docs/mixer.md, plus refs to docs/development/distribution.md,
+# references (a section reference to docs/mixer/mixer.md, plus refs to docs/development/distribution.md,
 # docs/architecture/architecture.md and docs/control/shortcuts.md) that no check could ever see, and a hand-authored
 # Tools/**/Fixtures/*.json description field can cite a doc too (see the
 # Tools/TimelineOpsHarness/Fixtures/ note below) -- verified to add ZERO new violations on the

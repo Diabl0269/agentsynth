@@ -109,7 +109,7 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
         // FRO40: a live Cmd/Ctrl-drag whose candidate (GraphEditor::getMacroDragCandidateId) is
         // THIS macro gets the SAME dashed hull, just emphasized — heavier, fully opaque, and
         // topped with a solid stroke — rather than a second visual language for "about to change"
-        // (docs/macros_ports.md).
+        // (docs/macros/ports.md).
         const bool isDragCandidate = macro.id == editor.getMacroDragCandidateId();
 
         juce::Path outline;
@@ -540,7 +540,7 @@ void GraphEditor::setCableColourOverrides(const synth::ui::CableColourOverrides&
 void GraphEditor::disconnectCable(const VisibleCable& cable) {
     auto& graph = audioEngine.getGraph();
 
-    // T148 (docs/macros_implementation.md §7 item 9): both cable kinds populate id.srcUid/dstUid with the REAL
+    // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): both cable kinds populate id.srcUid/dstUid with the REAL
     // logical endpoints — for an AttenuverterChain that's the true mod source/destination the
     // chain proxies, never the hidden attenuverter itself (buildVisibleCables() constructs it
     // that way, and G3's own splice logic already treats them as such). Decide BEFORE mutating

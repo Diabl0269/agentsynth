@@ -44,13 +44,13 @@ void MainComponent::restorePanelPreferences() {
         appProperties.getUserSettings()->getValue("smartConnectionMode", "NewAndUnwired")));
     graphEditor.setDoubleClickPortDisconnectEnabled(
         appProperties.getUserSettings()->getBoolValue("doubleClickPortDisconnect", true));
-    // T148 (docs/macros_implementation.md §7 item 9): both default ON — see PreferencesSettingsTab's own toggle
+    // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): both default ON — see PreferencesSettingsTab's own toggle
     // comments for why these are plain on/off rather than the tri-state macroAutoPortPreference.
     graphEditor.setAutoCreateMacroPortsOnDragEnabled(
         appProperties.getUserSettings()->getBoolValue("macroAutoCreatePortsOnDrag", true));
     graphEditor.setAutoDeleteMacroPortsOnLastCableEnabled(
         appProperties.getUserSettings()->getBoolValue("macroAutoDeletePortsOnLastCable", true));
-    // T184 (P9-3c, docs/mixer.md §5.2 "main workflow"): default ON — see PreferencesSettingsTab's
+    // T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow"): default ON — see PreferencesSettingsTab's
     // own toggle comment for why this is a plain on/off rather than a tri-state preference.
     graphEditor.setAutoCreateChannelOnConnectEnabled(
         appProperties.getUserSettings()->getBoolValue("mixerAutoCreateChannelOnConnect", true));

@@ -1,4 +1,4 @@
-// MixerSendLatencyTests.cpp -- FRO15 (P9-9, docs/mixer.md §5.15 D4): a send is a real parallel
+// MixerSendLatencyTests.cpp -- FRO15 (P9-9, docs/mixer/sends-and-buses.md D4): a send is a real parallel
 // path, so it is subject to juce::AudioProcessorGraph's own delay compensation and nothing new is
 // written for it. Same shape and the same StubPluginInstance as the reference test this is modelled
 // on (Tests/Plugin/HostedPluginLatencyTests.cpp's ParallelPathsStayAlignedAcrossALatencyChange):

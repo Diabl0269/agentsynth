@@ -1,4 +1,4 @@
-// MixerModelColumnTests.cpp -- FRO11 (P9-5, docs/mixer.md §5.10): buildMixerSnapshot's column
+// MixerModelColumnTests.cpp -- FRO11 (P9-5, docs/mixer/panel.md#what-the-mixer-shows): buildMixerSnapshot's column
 // enumeration. Headless: a bare AudioEngine/TimelineDoc/MacroSet, no MainComponent/GraphEditor.
 #include "Mixer/MasterSplice.h"
 #include "Mixer/MixerModel/MixerModel.h"

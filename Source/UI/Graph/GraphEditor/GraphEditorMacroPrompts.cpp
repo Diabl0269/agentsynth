@@ -300,7 +300,7 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
         if (uuid.isEmpty())
             continue;
         if (macro->hasMember(uuid)) {
-            // A port is a boundary jack, not a module the user put in the box (docs/macros_ports.md
+            // A port is a boundary jack, not a module the user put in the box (docs/macros/ports.md
             // §5.1) — it has its own "Delete Port" affordance and must never be pulled out of
             // `members` by this generic path.
             if (!macro->memberIsPort(uuid))
@@ -348,7 +348,7 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
 
         self->promptRecolourMacro(macroId, anchor);
     });
-    // Unifies docs/macros_implementation.md §7 items 3 (add) and 5 (rename/reorder) into ONE modal per an
+    // Unifies docs/macros/configure-io.md into ONE modal per an
     // explicit founder request, rather than separate "Add Input"/"Add Output"/"Rename..."/
     // "Reorder" menu items.
     m.addItem("Configure I/O...", [safeThis, macroId] {
@@ -389,7 +389,7 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
         if (safeThis->onSaveSnippetRequested)
             safeThis->onSaveSnippetRequested();
     });
-    // FRO13 (P9-7, docs/mixer.md §5.7): only a mixer channel (a macro boxing a Channel Strip) can
+    // FRO13 (P9-7, docs/mixer/track-presets.md): only a mixer channel (a macro boxing a Channel Strip) can
     // be saved as a track preset — omitted entirely on an ordinary group, same "Mute Macro"
     // omit-when-meaningless precedent above.
     if (synth::isChannelMacro(*macro, audioEngine.getGraph())) {

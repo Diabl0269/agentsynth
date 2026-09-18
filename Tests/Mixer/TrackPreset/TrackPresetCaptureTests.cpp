@@ -1,4 +1,4 @@
-// Concern: FRO13 (P9-7, docs/mixer.md §5.7/§5.8) -- what TrackPresetManager::extractTrackPreset
+// Concern: FRO13 (P9-7, docs/mixer/track-presets.md#what-a-saved-preset-carries-beyond-the-box) -- what TrackPresetManager::extractTrackPreset
 // captures beyond a channel macro's own members: an outside module modulating it through a port
 // (collectOutsideModulatorsForTrackPreset's forward-seeded, backward/upstream walk) travels with
 // the preset and is re-wired to the SAME modulation target on import; another channel's own strip

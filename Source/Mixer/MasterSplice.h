@@ -8,12 +8,12 @@ namespace synth {
 
 class TimelineDoc;
 
-/** The graph's Master node (docs/mixer.md §5.1), or nullptr. Master is a singleton by
+/** The graph's Master node (docs/mixer/mixer.md#node-types), or nullptr. Master is a singleton by
  *  construction — ensureMasterNode() is the only thing that creates one — so the first found is it. */
 juce::AudioProcessorGraph::Node* findMasterNode(juce::AudioProcessorGraph& graph);
 
 /**
- * Splices Master into the graph (docs/mixer.md §5.1), doing everything ensureMasterNode() does
+ * Splices Master into the graph (docs/mixer/mixer.md#node-types), doing everything ensureMasterNode() does
  * EXCEPT the undo transaction:
  *   - singleton: an existing Master is returned untouched;
  *   - it goes in front of the Rec Tap when there is one, else in front of Audio Output, so the
@@ -35,12 +35,12 @@ juce::AudioProcessorGraph::Node* findMasterNode(juce::AudioProcessorGraph& graph
 juce::AudioProcessorGraph::Node* spliceMasterNode(juce::AudioProcessorGraph& graph, juce::Point<int> position);
 
 /**
- * Returns the graph's Master node, splicing one in first if there is none (docs/mixer.md §5.1) via
+ * Returns the graph's Master node, splicing one in first if there is none (docs/mixer/mixer.md#node-types) via
  * spliceMasterNode() above — node, uuid, position and the whole re-splice as ONE compound undo step
  * (AppUndoManager::recordCombinedChange).
  *
  * Only a USER ACTION calls this (the first channel's creation, P9-3) — never a project load, which
- * opens existing projects unchanged (docs/mixer.md §5.13).
+ * opens existing projects unchanged (docs/mixer/mixer.md#creating-channels-in-an-existing-project).
  *
  * CALLER OBLIGATION: this changes the graph, so the caller must then run the app's reconcile /
  * publish seam (MainComponent::timelineChanged -> AudioEngine::publishTimeline, which also

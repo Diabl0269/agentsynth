@@ -74,7 +74,7 @@ juce::var TrackPresetManager::extractTrackPreset(juce::AudioProcessorGraph& grap
     if (selection.empty())
         return {};
 
-    // Step 2 (founder requirement, docs/mixer.md §5.7/§5.8): every outside module feeding this
+    // Step 2 (founder requirement, docs/mixer/track-presets.md#what-a-saved-preset-carries-beyond-the-box): every outside module feeding this
     // channel through a port (or a raw un-ported jack), transitively.
     for (const auto id : collectOutsideModulatorsForTrackPreset(graph, macros, channelMacroId))
         if (std::find(selection.begin(), selection.end(), id) == selection.end())
@@ -105,7 +105,7 @@ juce::var TrackPresetManager::extractTrackPreset(juce::AudioProcessorGraph& grap
     // carries. "isBus" and "sends" (FRO15) get the same treatment: a preset captured from a bus
     // strip must not badge an ordinary track channel as BUS wherever it's inserted, and a preset
     // captured from a strip with configured sends must not restore slots whose cable target was
-    // never captured (a saved send target is a graph edge, never stored, per docs/mixer.md
+    // never captured (a saved send target is a graph edge, never stored, per docs/mixer/mixer.md
     // §5.15) -- carrying the slot state alone would show "No target" rows on every insert.
     if (auto* nodesArr = root->getProperty("nodes").getArray()) {
         for (auto& nVar : *nodesArr) {
@@ -142,7 +142,7 @@ std::vector<TrackPresetManager::NodeID> TrackPresetManager::insertTrackPreset(co
     // difference from every other insertSnippet caller besides the in-memory clipboard.
     // trustedPayload=false: a track preset is a file on disk like a snippet, so it goes through
     // the SAME untrusted validatePatch gate before the trusted, exact-subgraph apply — the
-    // SnippetManager::insertSnippet / ProjectBundle::load pairing docs/mixer.md §5.7 and the root
+    // SnippetManager::insertSnippet / ProjectBundle::load pairing docs/mixer/track-presets.md and the root
     // CLAUDE.md both name. validatePatch's untrusted path does not itself inspect a node's
     // "state" key (only applyExtraStateToProcessor does, gated on trusted=true, which
     // insertSnippet's apply call always is) — so this really is the thin wrapper it looks like,

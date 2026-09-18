@@ -18,7 +18,7 @@ namespace synth::ui {
 class MixerColumnComponent;
 }
 
-// MixerPanelComponent.h -- FRO11 (P9-5, docs/mixer.md §5.10): the columns container -- a
+// MixerPanelComponent.h -- FRO11 (P9-5, docs/mixer/panel.md#what-the-mixer-shows): the columns container -- a
 // horizontally scrolling row of columns built from synth::buildMixerSnapshot(), rebuilt on every
 // graph/timeline/macro change notification. Pure layout + rebuild-on-change; owns nothing
 // audio-specific itself.
@@ -47,7 +47,7 @@ public:
      *  MixerDockComponent wires this to MainComponent::reconcileTimelineAfterGraphChange. */
     std::function<void()> onGraphMutated;
 
-    /** FRO15 (docs/mixer.md §5.15): creates a group/send bus channel -- bypassed EQ -> bypassed
+    /** FRO15 (docs/mixer/sends-and-buses.md): creates a group/send bus channel -- bypassed EQ -> bypassed
      *  Compressor -> Stereo Strip -> Master(Mix), boxed in a macro named "Bus N" -- as ONE
      *  recordGraphAndMacroChange step, and returns its strip's node id (invalid on failure). Wired
      *  to the dock's "Add bus" button and to every send row's "New bus..." item. */
@@ -84,7 +84,7 @@ public:
      *  apply) frees the nodes those bindings point at. rebuild()'s own stripColumns_.clear() (which
      *  destroys the strip columns' MixerFaders, calling their now-safe idempotent unbind() again)
      *  and buildMixerSnapshot()'s eventual re-bind against the NEW graph both then run afterwards,
-     *  from the after-restore hook -- see docs/mixer_implementation.md's FRO11 crash-fix entry. */
+     *  from the after-restore hook -- see docs/mixer/panel.md#unbinding-before-a-graph-change FRO11 crash-fix entry. */
     void unbindAllColumns();
 
     /** FRO103: rebuild ONLY if unbindAllColumns() has left the columns detached since the last

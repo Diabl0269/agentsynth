@@ -121,7 +121,7 @@ public:
     virtual void requestRepaint() = 0;
 
     /** Cmd+G's real entry point — GraphEditor's own method, not moved into MacroGroupController
-     *  (it shows a SafePointer-based async modal, docs/macros_implementation.md §7 item 6.2).
+     *  (it shows a SafePointer-based async modal, docs/macros/auto-ports.md#auto-creating-ports-when-grouping).
      *  MacroGroupController::groupOrToggleSelectionMacros() calls this for a selection that
      *  touches no macro yet. */
     virtual void requestGroupSelectionIntoMacro() = 0;

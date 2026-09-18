@@ -10,7 +10,7 @@
 
 class AppUndoManager;
 
-// MixerMasterColumn.h -- FRO11 (P9-5, docs/mixer.md §5.1/§5.10): Master's column -- fader/mute/
+// MixerMasterColumn.h -- FRO11 (P9-5, docs/mixer/panel.md#what-the-mixer-shows): Master's column -- fader/mute/
 // meter/dB readout on MasterModule's own gain/mute params, no pan, no solo, no insert list.
 namespace synth::ui {
 

@@ -251,7 +251,7 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                 const int srcJack = dragSourceIsInput ? port->index : dragSourceChannel;
                 const int dstJack = dragSourceIsInput ? dragSourceChannel : port->index;
 
-                // T184 (docs/mixer.md §5.2 "main workflow"): a MIDI cable from a Track In node
+                // T184 (docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow"): a MIDI cable from a Track In node
                 // landing here may newly make some audio reach the output with no channel — build
                 // one, in the SAME undo step as the connection itself (and as any T148 macro port
                 // the connection below also mints, so a Track In dragged across a macro boundary
@@ -283,7 +283,7 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                 } else if (!autoCreateMacroPortsOnDragEnabled ||
                            !macroController_.maybeAutoCreateMacroPortsForDrag(realSrc->nodeID, srcJack, realDst->nodeID,
                                                                               dstJack, dragSourceIsMidi)) {
-                    // T148 (docs/macros_implementation.md §7 item 9): if this completed drag crosses a macro
+                    // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): if this completed drag crosses a macro
                     // boundary (an EXPANDED macro's member on one side, something outside that same
                     // macro on the other — the collapsed-card drop above is a different code path),
                     // mint and wire a matching port instead of the plain direct connection. Gated by
@@ -296,7 +296,7 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
         }
     }
 
-    // Macro card drop (docs/macros_ports.md §5.3/§5.4): nothing above matched (no module jack under the
+    // Macro card drop (docs/macros/ports.md#how-a-port-is-drawn): nothing above matched (no module jack under the
     // cursor), so check whether the release point is over a COLLAPSED macro's card.
     if (!connectedToAModule && dragSourceModule != nullptr) {
         for (auto* card : content.getMacroCards()) {

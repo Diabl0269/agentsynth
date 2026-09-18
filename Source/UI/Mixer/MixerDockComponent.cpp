@@ -1,5 +1,5 @@
 // Concern: FRO11 (P9-5) -- MixerDockComponent's tab strip, persistence and layout. FRO12 (P9-6,
-// docs/mixer.md §5.9) extends this with both panels' detach-to-window hosts and the tab strip's
+// docs/mixer/panel.md) extends this with both panels' detach-to-window hosts and the tab strip's
 // own icon-only detach button.
 #include "MixerDockComponent.h"
 
@@ -53,7 +53,7 @@ MixerDockComponent::MixerDockComponent(TimelinePanelComponent& timelinePanel, Au
     addAndMakeVisible(timelineHost_);
     addAndMakeVisible(mixerHost_);
 
-    // FRO15 (docs/mixer.md §5.15): "Add bus" sits on the tab strip and is visible only on the
+    // FRO15 (docs/mixer/sends-and-buses.md): "Add bus" sits on the tab strip and is visible only on the
     // Mixer tab -- it has no meaning while the Timeline tab is showing.
     addAndMakeVisible(addBusButton_);
     addBusButton_.setClickingTogglesState(false);

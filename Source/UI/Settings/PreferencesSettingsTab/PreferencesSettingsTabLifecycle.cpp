@@ -210,7 +210,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         persistMacroAutoPortPreference(macroAutoPortPreferenceFromComboId(macroAutoPortCombo_.getSelectedId()));
     };
 
-    // T148 (docs/macros_implementation.md §7 item 9): auto-create/auto-delete are plain on/off, unlike the
+    // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): auto-create/auto-delete are plain on/off, unlike the
     // tri-state preference above — that one defaults to "ask" because it replaced pre-existing
     // silent behaviour; these two are brand-new automations the founder asked to ship ON by
     // default, with a plain escape hatch. Same idiom as doubleClickDisconnectToggle above.
@@ -237,7 +237,7 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         persistMacroAutoDeletePortsOnLastCable(macroAutoDeletePortsOnLastCableToggle.getToggleState());
     };
 
-    // T184 (P9-3c, docs/mixer.md §5.2 "main workflow"): auto-create a mixer channel when a MIDI
+    // T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow"): auto-create a mixer channel when a MIDI
     // cable from a Track In node connects to an instrument/macro whose audio reaches the output
     // with no channel yet. Same "plain on/off, ON by default" shape as the two T148 toggles above.
     contentHost.addAndMakeVisible(mixerAutoCreateChannelOnConnectToggle);

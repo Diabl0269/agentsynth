@@ -1,7 +1,7 @@
 // DetachablePanelHostTests.cpp
 //
 // synth::ui::DetachablePanelHost -- the ONE mechanism that moves a panel between its dock slot and
-// its own top-level window (FRO12, P9-6, docs/mixer.md §5.9). Every window this test creates is
+// its own top-level window (FRO12, P9-6, docs/mixer/panel.md). Every window this test creates is
 // addToDesktop=false (see DetachedPanelWindow's own header comment), so nothing here ever creates
 // a native peer -- see DetachedPanelWindowTests.cpp for that side of the mechanism.
 //

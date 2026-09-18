@@ -129,7 +129,7 @@ void MixerMasterColumn::paintOverChildren(juce::Graphics& g) {
 
 void MixerMasterColumn::resized() {
     // FRO146: same meter width/readout-row budget as MixerColumnComponent -- the Master column
-    // stays visually consistent with every strip column's meter (docs/mixer.md meters section).
+    // stays visually consistent with every strip column's meter (docs/mixer/mixer.md meters section).
     constexpr int kMeterWidth = 32;
     constexpr int kMeterReadoutHeight = 12;
 

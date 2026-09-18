@@ -291,10 +291,10 @@ const std::vector<AllowEntry>& allowList() {
     static const std::vector<AllowEntry> table = {
         // Faders: the whole point of a fader is +12 dB of headroom (kMaxGainDb on both modules).
         {"Master", "gain", 13.0,
-         "Master fader is -60..+12 dB by design (docs/mixer.md); MasterModule "
+         "Master fader is -60..+12 dB by design (docs/mixer/mixer.md); MasterModule "
          "has no limiter on purpose — that is exactly what this audit exists to "
          "surface for the NEXT stage, not to fail this one on."},
-        {"Channel Strip", "gain", 13.0, "Channel fader is -60..+12 dB by design (docs/mixer.md)."},
+        {"Channel Strip", "gain", 13.0, "Channel fader is -60..+12 dB by design (docs/mixer/mixer.md)."},
         {"Channel Strip", "send1Level", 13.0, "Send level fader, same -60..+12 dB range as the main fader."},
         {"Channel Strip", "send2Level", 13.0, "Send level fader, same -60..+12 dB range as the main fader."},
         {"Channel Strip", "send3Level", 13.0, "Send level fader, same -60..+12 dB range as the main fader."},

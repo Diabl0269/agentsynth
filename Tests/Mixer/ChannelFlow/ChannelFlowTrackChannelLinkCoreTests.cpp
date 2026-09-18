@@ -1,5 +1,5 @@
 // =================================================================================================
-// FRO14 (P9-4, docs/mixer.md §5.2) — the LINK RULE itself, at the Core layer: the two signal-reach
+// FRO14 (P9-4, docs/mixer/mixer.md#channels-follow-audio-not-tracks) — the LINK RULE itself, at the Core layer: the two signal-reach
 // queries (Source/Mixer/ChannelFlows/ChannelFlowsTrackChannelLink.cpp) and the combining query plus
 // channel naming (Source/Mixer/TrackChannelLink.cpp). No MainComponent, no GraphEditor, no undo —
 // bare graphs wired by hand, exactly like the Core half of the "Make channel" tests next door.

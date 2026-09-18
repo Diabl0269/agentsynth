@@ -33,7 +33,7 @@ int MacroGroupController::nextMacroPortOrder(const synth::Macro& macro, bool isI
     return next;
 }
 
-// ---- Auto-create-ports-on-group (founder-review fix F5, docs/macros_implementation.md §7 item 6.1) -------------
+// ---- Auto-create-ports-on-group (founder-review fix F5, docs/macros/auto-ports.md#the-auto-port-preference) -------------
 
 std::vector<MacroGroupController::MacroPortCrossingGroup> MacroGroupController::buildMacroPortCrossingPlan(
     const std::vector<juce::AudioProcessorGraph::NodeID>& memberNodeIds) const {
@@ -232,7 +232,7 @@ void MacroGroupController::spliceMacroPorts(const juce::String& macroId,
         return;
     auto& graph = host_.graph();
 
-    // The right leg of a Stereo macro port node's own raw layout (docs/macros_ports.md §5.3's
+    // The right leg of a Stereo macro port node's own raw layout (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed's
     // implementation note) — identical on MacroInletModule and MacroOutletModule.
     constexpr int kMacroPortRightBase = MacroInletModule::kRightBase;
     static_assert(MacroOutletModule::kRightBase == kMacroPortRightBase,
@@ -497,7 +497,7 @@ juce::String MacroGroupController::autoMacroPortName(ModuleBase* internalMb, boo
     return jackLabel.isNotEmpty() ? base + " " + jackLabel : base;
 }
 
-// ---- Auto-create-port-on-drag / auto-delete-on-last-cable (T148, docs/macros_implementation.md §7 item 9) -----
+// ---- Auto-create-port-on-drag / auto-delete-on-last-cable (T148, docs/macros/auto-ports.md#ports-on-a-cable-drag) -----
 
 bool MacroGroupController::nodeIsMacroPort(juce::AudioProcessorGraph::NodeID nodeId) const {
     const juce::String uuid = nodeUuidFor(nodeId);

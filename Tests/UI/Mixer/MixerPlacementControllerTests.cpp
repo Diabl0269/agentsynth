@@ -1,4 +1,4 @@
-// MixerPlacementControllerTests.cpp -- FRO12 (P9-6, docs/mixer.md §5.9): the Mixer placement
+// MixerPlacementControllerTests.cpp -- FRO12 (P9-6, docs/mixer/panel.md): the Mixer placement
 // preference (Tab beside the Timeline / Own panel / Window), read once at launch and re-applied
 // live on every settings-file change. Drives a real, off-screen MainComponent, writing
 // "mixerPlacement" into its ApplicationProperties BEFORE construction -- the same "persist first,

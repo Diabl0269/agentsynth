@@ -1,4 +1,4 @@
-// Module-level tests for a Channel Strip's send legs (FRO15 / P9-9, docs/mixer.md §5.15).
+// Module-level tests for a Channel Strip's send legs (FRO15 / P9-9, docs/mixer/sends-and-buses.md).
 //
 //   * pre vs post    -- a post-fader send carries exactly what the strip hands Master; a pre-fader
 //                        one carries the signal before gain and pan

@@ -1,4 +1,4 @@
-// synth::StemExporter / synth::StemSession — offline stem export (P9-8, docs/mixer.md §5.12): one
+// synth::StemExporter / synth::StemSession — offline stem export (P9-8, docs/mixer/stem-export.md): one
 // render pass through the same offline path BounceExporter uses, writing one audio file per mixer
 // channel strip instead of one file for the whole mix.
 //
@@ -261,7 +261,7 @@ TEST(StemExportTest, NStripsProduceNFilesWithExpectedNamesAndEqualLength) {
     ASSERT_EQ(result.stemFiles.size(), 2);
     // Neither strip is fed by a TimelineMidiSource/TimelineAudioSource (this rig's sources are a
     // bare ConstantSource, and no TimelineDoc is passed at all) - the FRO55 fallback, "Channel N"
-    // matching the strip's own NN position (docs/mixer.md §5.12). See
+    // matching the strip's own NN position (docs/mixer/stem-export.md). See
     // Tests/Engine/StemExportNamingTests.cpp for the actual track-name resolution.
     EXPECT_EQ(result.stemFiles[0].getFileName(), "01 - Channel 1.wav");
     EXPECT_EQ(result.stemFiles[1].getFileName(), "02 - Channel 2.wav");
@@ -676,7 +676,7 @@ TEST(StemExportTest, TapCapturesSilenceWhenMutedAndWhenSoloGated) {
 }
 
 // ============================================================================
-// 8. FRO15 (docs/mixer.md §5.15/§5.12): a group/send bus is a ChannelStrip, so it gets a stem for
+// 8. FRO15 (docs/mixer/sends-and-buses.md/§5.12): a group/send bus is a ChannelStrip, so it gets a stem for
 //    free -- and the §5.12 identity has to survive the extra path. A source's stem stays PRE-send
 //    (the tap copies the main legs only), so nothing is double-counted for a post-fader send and
 //    nothing is lost for a pre-fader one: it appears only in the bus's own stem.

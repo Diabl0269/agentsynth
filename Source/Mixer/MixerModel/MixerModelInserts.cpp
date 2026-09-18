@@ -1,4 +1,4 @@
-// Concern: FRO11 (P9-5, docs/mixer.md §5.6) -- a column's insert list: the chain between its
+// Concern: FRO11 (P9-5, docs/mixer/mixer.md#inserts-in-a-free-form-graph) -- a column's insert list: the chain between its
 // feeding track's source and the strip, in signal order, plus linear-vs-branching classification,
 // plus the three insert-list mutation primitives (splice out / splice in / reorder). Also FRO15
 // (§5.15 D6): a bus has no feeding track, so its own EQ/Compressor chain is discovered by walking

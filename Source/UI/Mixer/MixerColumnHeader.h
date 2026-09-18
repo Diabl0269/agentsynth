@@ -3,7 +3,7 @@
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
-// MixerColumnHeader.h -- FRO11 (P9-5, docs/mixer.md §5.10): the colour swatch + name label +
+// MixerColumnHeader.h -- FRO11 (P9-5, docs/mixer/panel.md#what-the-mixer-shows): the colour swatch + name label +
 // click-to-select-macro row shared by MixerColumnComponent, MixerDirectColumn and
 // MixerMasterColumn, so the three column kinds don't triplicate the same paint code (root
 // CLAUDE.md's "extract a real collaborator class" preference over copy-pasted paint()). Small

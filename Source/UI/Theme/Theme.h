@@ -50,7 +50,7 @@ struct Colors {
     juce::Colour knobBody{0xff13161B};     // knob body gradient inner stop (outer = surfaceHi)
     juce::Colour knobPointer{0xffEAEEF3};  // knob pointer line
     juce::Colour meterFill{0xff00D1FF};    // output meter LOW zone fill (below -18 dBFS)
-    // FRO146 (docs/mixer.md meters section): the meter's remaining three level zones, mid/high/clip
+    // FRO146 (docs/mixer/mixer.md meters section): the meter's remaining three level zones, mid/high/clip
     // ascending -- meterFill above stays the LOW zone for theme back-compat (it predates the
     // zone model). See MeterColourStops.h for the exact band edges (-18/-6/0 dBFS).
     juce::Colour meterMid{0xffFFD43B};        // -18..-6 dBFS

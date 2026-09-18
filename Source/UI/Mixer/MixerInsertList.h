@@ -8,7 +8,7 @@
 class AppUndoManager;
 class GraphEditor;
 
-// MixerInsertList.h -- FRO11 (P9-5, docs/mixer.md §5.6): a column's module list.
+// MixerInsertList.h -- FRO11 (P9-5, docs/mixer/mixer.md#inserts-in-a-free-form-graph): a column's module list.
 //
 // Linear chain: a plain list, right-click for "Add...", "Move Up"/"Move Down"/"Remove" on one
 // entry -- a menu-driven reorder rather than the plan's own drag-to-reorder idiom (scope trim: no

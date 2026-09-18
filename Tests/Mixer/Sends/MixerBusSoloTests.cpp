@@ -1,4 +1,4 @@
-// The per-leg mixer solo rule (FRO15 / P9-9, docs/mixer.md §5.15/§5.3).
+// The per-leg mixer solo rule (FRO15 / P9-9, docs/mixer/sends-and-buses.md#solo-is-a-per-leg-audible-mask).
 //
 //   * the rule       -- synth::computeSoloAudibleLegs against hand-built graphs: soloing a send bus
 //                        opens only its sources' SEND legs; soloing a group bus opens its sources'

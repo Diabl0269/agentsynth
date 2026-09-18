@@ -4,7 +4,7 @@
 #include "UI/ModuleViews/FrequencyGrid.h"
 #include <vector>
 
-// EqResponseCurve.h -- FRO16 (P9-10, docs/mixer.md §5.10): the mixer column thumbnail's own
+// EqResponseCurve.h -- FRO16 (P9-10, docs/mixer/panel.md#what-the-mixer-shows): the mixer column thumbnail's own
 // curve sampler. Same shape as EQCurveComponent's own recomputeMagnitudes(), reused rather than
 // reimplemented (ParametricEQModule::responseDb is the one analytic source of truth for what the
 // biquads actually realise -- EQCurveComponent.h's own header comment forbids a second

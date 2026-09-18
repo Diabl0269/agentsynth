@@ -10,12 +10,12 @@ namespace {
 // MacroInletModule deliberately declares NO getModulationTargets() — GraphEditor::connectPorts()
 // relies on that empty list to keep a plain cable drop onto a Macro In's jack a plain connection,
 // never auto-wrapped in a fresh attenuverter (Tests/Macros/MacroPortFlowTests.cpp's drop-a-cable tests
-// pin that). Founder-review fix G3 (docs/macros_implementation.md §7 item 7) can still splice a MacroInletModule
+// pin that). Founder-review fix G3 (docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port item 7) can still splice a MacroInletModule
 // in as the DESTINATION of an EXISTING AttenuverterChain crossing a macro boundary, so this row's
 // destination combo needs something to show and match against — without changing what the module
 // declares globally (which would resurrect the auto-wrap problem for ordinary drops). Display-only:
 // this never becomes a real ModulationTarget the module advertises anywhere else. A spliced port is
-// always Mono with its one active raw channel at 0 (docs/macros_ports.md §5.3 / docs/macros_implementation.md §7 item 7
+// always Mono with its one active raw channel at 0 (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed / docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port item 7
 // — the internal jack an AttenuverterChain lands on is never poly-fanned), so channel 0 is the only candidate.
 std::vector<ModulationTarget> destinationCandidatesForCombo(ModuleBase* module) {
     auto targets = module->getModulationTargets();

@@ -53,7 +53,7 @@ juce::String MacroGroupController::groupSelectionIntoMacro(bool autoCreatePorts)
         return {};
     }
 
-    // Founder-review fix F5 (docs/macros_implementation.md §7 item 6.1): the crossing plan is read off the LIVE
+    // Founder-review fix F5 (docs/macros/auto-ports.md#the-auto-port-preference): the crossing plan is read off the LIVE
     // graph now, before the macro exists — resolveMemberNodeId (which buildMacroPortCrossingPlan
     // uses internally) only knows about macros already in the macro set, so this has to work off
     // the uuid list directly.

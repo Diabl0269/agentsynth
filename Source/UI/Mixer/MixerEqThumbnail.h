@@ -6,7 +6,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <vector>
 
-// MixerEqThumbnail.h -- FRO16 (P9-10, docs/mixer.md §5.10): a small frequency-response curve on a
+// MixerEqThumbnail.h -- FRO16 (P9-10, docs/mixer/panel.md#what-the-mixer-shows): a small frequency-response curve on a
 // mixer column, Cubase's top-mixer-row idiom. Shown only when the column's first (signal-order)
 // insert is a Parametric EQ (MixerColumnComponent::rebindControls() decides that); hidden
 // otherwise.

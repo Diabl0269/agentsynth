@@ -340,13 +340,13 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
         // ("Create Macro") and must keep doing exactly what it says, even for a selection
         // that already touches a macro (where it still refuses, same as always).
         // requestGroupSelectionIntoMacro() gates the auto-port-preference modal (founder-review
-        // fix F5, docs/macros_implementation.md §7 item 6.2) the same way Cmd+G does.
+        // fix F5, docs/macros/auto-ports.md#auto-creating-ports-when-grouping) the same way Cmd+G does.
         m.addItem("Create Macro from " + juce::String(selectionCount) + " Modules",
                   [this] { owner.requestGroupSelectionIntoMacro(); });
         m.addItem("Delete " + juce::String(selectionCount) + " Selected Modules", [this] { owner.deleteSelection(); });
     }
 
-    // FRO25 (P9-3d, docs/mixer.md §5.8): "Make Channel" for the chain this selection belongs to
+    // FRO25 (P9-3d, docs/mixer/mixer.md#make-channel-and-shared-modules): "Make Channel" for the chain this selection belongs to
     // (shown only when one resolves, disabled once it already has a channel), and "Duplicate into
     // Channel" when this module is shared into a channel macro from outside it.
     owner.addMakeChannelMenuItem(m);
@@ -459,7 +459,7 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
 
     m.addItem("Delete Module", [this] { owner.deleteModule(this); });
 
-    // Founder-review item 4 (docs/macros_ports.md §5.8): this module's own menu also offers the macro it
+    // Founder-review item 4 (docs/macros/menu-and-membership.md#the-macro-menus-entry-points): this module's own menu also offers the macro it
     // belongs to, as an appended submenu — never folded into the items above, and never built
     // when this module is in no macro (a module in no macro sees no change at all). buildMacroMenu
     // itself now selects THIS macro before running its "Ungroup"/"Save as Snippet..." items (see
@@ -522,7 +522,7 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
 
         // Docked macro-port widget (P8-15 fix F2): not individually selectable or draggable via a
         // LEFT click — its position is fully derived by GraphEditor::dockMacroPortWidgets()
-        // against its macro's hull (docs/macros_ports.md §5.4), and a body drag/select here would fight
+        // against its macro's hull (docs/macros/ports.md.4), and a body drag/select here would fight
         // that on every layout pass. A WHOLE-macro drag (via the collapsed card, or selecting the
         // macro through selectMacro()) still carries it along: that path adds every member —
         // ports included — to the selection directly, never through this component's own
@@ -724,7 +724,7 @@ void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
         // FRO40: gated on reparentArmed, NOT on ctrlTogglePending || cmdReparentPending — the
         // latter is also true for a plain macOS Ctrl+drag, which must never highlight or act on a
         // hull crossing (see reparentArmed's own comment on ModuleComponent.h). The CENTRE, not
-        // the top-left, is what macroDragJoinOrLeaveTarget tests against (docs/macros_ports.md).
+        // the top-left, is what macroDragJoinOrLeaveTarget tests against (docs/macros/ports.md).
         if (reparentArmed)
             owner.updateMacroDragCandidate(nodeId, getBounds().getCentre());
         else
@@ -794,7 +794,7 @@ void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
     // insert-between behaviour (SmartConnectionEngine samples isInsertModifierDown() live, from
     // inside finalizeModuleDrag) — on Windows/Linux that means a Ctrl-drag over a cable INSIDE a
     // hull performs BOTH insert-between and join/leave from the one gesture, because the platform
-    // has no way to ask for one without the other (docs/macros_ports.md §5.10).
+    // has no way to ask for one without the other (docs/macros/menu-and-membership.md#cmd-drag-across-a-hull-border).
     const juce::String macroCandidate = wasReparentArmed ? owner.getMacroDragCandidateId() : juce::String();
     if (macroCandidate.isNotEmpty()) {
         const bool isJoin = owner.macroForNode(nodeId) == nullptr;

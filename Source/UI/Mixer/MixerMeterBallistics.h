@@ -3,7 +3,7 @@
 #include "MixerMeterScale.h"
 #include <algorithm>
 
-// MixerMeterBallistics.h -- FRO146 (docs/mixer.md meters section): one bar's ballistics state
+// MixerMeterBallistics.h -- FRO146 (docs/mixer/mixer.md meters section): one bar's ballistics state
 // (instant attack, ~20 dB/s release) plus its peak-hold line (holds 1.5 s once nothing louder
 // arrives, then falls at the same ~20 dB/s). Pure data + one advance() function, driven by an
 // explicit elapsed time so it is rate-independent of the 10 Hz poll's actual cadence (which is

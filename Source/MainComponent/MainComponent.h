@@ -345,7 +345,7 @@ public:
     // sample. Non-null in every ctor (Main.cpp-injected, plugin-injected, or the delegating test
     // ctor's ownedLookAndFeel).
     synth::theme::AppLookAndFeel& getLookAndFeelForTest() { return *lookAndFeel; }
-    // FRO26 (P9-3e, docs/mixer.md §5.13): hasTracksNeedingChannels() is a private TrackHeaderHost
+    // FRO26 (P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project): hasTracksNeedingChannels() is a private TrackHeaderHost
     // override (MainComponent inherits that interface privately), so a test can't call it directly
     // the way it can drive the menu action itself via getTimelinePanel().applyAddTrackMenuChoice() —
     // this thin public wrapper is the same idiom as newPatchForTest() above, just for a query
@@ -571,7 +571,7 @@ private:
     void createChannelsForExistingTracks() override;
     bool canMakeChannelForTrack(synth::TrackId track) const override;
     void makeChannelForTrack(synth::TrackId track) override;
-    // FRO13 (P9-7, docs/mixer.md §5.7): track presets.
+    // FRO13 (P9-7, docs/mixer/track-presets.md): track presets.
     bool canSaveTrackPresetForTrack(synth::TrackId track) const override;
     void saveTrackAsPreset(synth::TrackId track) override;
     void setTrackPresetAsDefault(synth::TrackId track) override;
@@ -806,14 +806,14 @@ private:
     bool isLibraryVisible{true};
     bool isAlignmentGuidesEnabled{true}; // NEW: default TRUE for backward compatibility
 
-    // FRO14 (docs/mixer.md 5.2): the track <-> channel link, its own collaborator rather than more
+    // FRO14 (docs/mixer/mixer.md 5.2): the track <-> channel link, its own collaborator rather than more
     // methods here. Declared after the members it references. Contract: TrackChannelLinkController.h.
     synth::ui::TrackChannelLinkController trackChannelLink_{audioEngine, timelineDoc, undoManager, graphEditor};
 
     // Bottom-docked timeline panel shell.
     synth::ui::TimelinePanelComponent timelinePanel;
     // FRO11 (P9-5): the ONE member this ticket adds here (MainComponent.h's tight line budget --
-    // see docs/mixer_implementation.md item 4). Takes timelinePanel by reference, constructed
+    // see docs/mixer/panel.md#what-the-mixer-shows). Takes timelinePanel by reference, constructed
     // after it in this same member list so the reference is valid; owns the tab strip and the
     // mixer panel itself, and becomes the dock's direct child in place of timelinePanel (which
     // becomes MixerDockComponent's own child instead -- see MainComponentSetupToolbar.cpp).
@@ -823,7 +823,7 @@ private:
     // DetachablePanelHost.h's "held by reference" contract; only the ADDRESS is taken now.
     synth::ui::MixerDockComponent mixerDock{timelinePanel, audioEngine,   timelineDoc, undoManager,
                                             graphEditor,   appProperties, lookAndFeel, &shortcutManager};
-    // FRO12 (P9-6, docs/mixer.md §5.9): Mixer placement (Tab/Own panel/Window) + both panels'
+    // FRO12 (P9-6, docs/mixer/panel.md): Mixer placement (Tab/Own panel/Window) + both panels'
     // detach-to-window support -- ONE collaborator so this header doesn't grow a field per panel
     // (see the plan's own MainComponent.h budget note). Declared after mixerDock so its Mixer-
     // panel reference stays valid.

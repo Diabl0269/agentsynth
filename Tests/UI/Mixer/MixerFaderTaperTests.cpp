@@ -1,4 +1,4 @@
-// MixerFaderTaperTests.cpp -- FRO150 (docs/mixer_fader.md): the FADER's own Cubase-like taper
+// MixerFaderTaperTests.cpp -- FRO150 (docs/mixer/fader.md): the FADER's own Cubase-like taper
 // (Source/UI/Mixer/MixerFaderTaper.h), tested directly against its breakpoints the same way
 // MixerMeterScaleTests.cpp already tests the METER's taper -- exact breakpoints, monotonicity both
 // directions, the forward/inverse round-trip, and clamping beyond -60/+12 dB and beyond 0/1.

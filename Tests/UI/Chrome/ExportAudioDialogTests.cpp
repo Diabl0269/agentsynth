@@ -302,7 +302,7 @@ TEST(ExportAudioDialogTest, SaveAsCopyChoiceUniquifiesTheFileName) {
     file.deleteFile();
 }
 
-// ---- P9-8: stems mode (docs/mixer.md §5.12) ----
+// ---- P9-8: stems mode (docs/mixer/stem-export.md) ----
 
 TEST(ExportAudioDialogTest, DefaultModeReportsExportAudioTitleAndIsNotStemsMode) {
     auto dialog = makeDialog();

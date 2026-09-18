@@ -1,4 +1,4 @@
-// MixerSendFlowTests.cpp -- FRO15 (P9-9, docs/mixer.md §5.15): the Core send/bus flows
+// MixerSendFlowTests.cpp -- FRO15 (P9-9, docs/mixer/sends-and-buses.md): the Core send/bus flows
 // (synth::addSend / removeSend / retargetSend / findSendTarget / enumerateSendTargets) and
 // synth::buildBusChannel. Headless: a bare graph, no engine rendering and no UI.
 

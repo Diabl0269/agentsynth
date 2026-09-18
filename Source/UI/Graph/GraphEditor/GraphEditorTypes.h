@@ -17,7 +17,7 @@ namespace graph_editor_types {
 // Founder feedback on T183's live check: once Master and Audio Output exist (T187 seeds an Audio
 // Output on New Patch), auto-arrange or a drag can leave them anywhere on the canvas. This is the
 // lightweight canvas-only stopgap — the durable answer is the future mixer panel (P9-5,
-// docs/mixer.md), not built here.
+// docs/mixer/mixer.md), not built here.
 enum class LocateMasterResult {
     NoTarget,   // neither node exists yet — graceful no-op
     Master,     // Master was selected and brought into view

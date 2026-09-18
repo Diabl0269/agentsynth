@@ -70,7 +70,7 @@ enum class Icon : int {
     // Appended here rather than grouped next to the other CatXxx entries so every existing
     // enum ordinal (and the IconLibraryTests.cpp spot-checks against them) stays unchanged.
     CatIO,
-    // FRO12 (P9-6, docs/mixer.md §5.9): the icon-only "open in window" / "dock back" control
+    // FRO12 (P9-6, docs/mixer/panel.md): the icon-only "open in window" / "dock back" control
     // DetachablePanelHost uses for both the Timeline and Mixer panels. Appended immediately
     // before kCount, same append-only convention as CatIO above.
     ActionDetachWindow,

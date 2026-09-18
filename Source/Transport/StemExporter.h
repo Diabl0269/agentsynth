@@ -10,7 +10,7 @@ namespace synth {
 class TimelineDoc; // Forward declaration (Source/Timeline/TimelineDoc.h) - see exportStems'
                    // `timelineDoc` parameter comment.
 
-// Offline stem export (P9-8, docs/mixer.md §5.12): ONE render pass through the exact same offline
+// Offline stem export (P9-8, docs/mixer/stem-export.md): ONE render pass through the exact same offline
 // path BounceExporter uses, writing one audio file per mixer channel strip instead of one file for
 // the whole mix. "Single render, parallel writers" — every ChannelStripModule in the graph gets an
 // opt-in tap (ChannelStripModule::setStemTapBuffer) armed for the render's duration; at the end of
@@ -20,11 +20,11 @@ class TimelineDoc; // Forward declaration (Source/Timeline/TimelineDoc.h) - see 
 // Every strip ALWAYS gets a file, muted or soloed-out included — the tap sits AFTER the strip's own
 // bypass/mute/solo logic, so a muted or non-soloed strip's stem is simply silent for exactly the
 // blocks it was silent. This is what keeps "the stems sum back to the pre-Master mix" true in every
-// case, solo included (docs/mixer_implementation.md P9-8): a soloed strip during export never changes which
+// case, solo included (docs/mixer/mixer.md P9-8): a soloed strip during export never changes which
 // strips get written, only what most of them contain.
 //
 // Master's Direct input (cables that bypass every strip) is NOT a stem — Direct is not a channel
-// (docs/mixer.md §5.10 "what the mixer shows"), so it contributes to a normal bounce of the same
+// (docs/mixer/panel.md#what-the-mixer-shows "what the mixer shows"), so it contributes to a normal bounce of the same
 // range but is absent from the stem set by design; summing the stems reproduces the pre-Master MIX
 // bus, not the whole signal Master receives.
 struct StemResult {
@@ -64,7 +64,7 @@ public:
     // Fails immediately (before creating `destinationFolder` or opening any file) when the graph has
     // no ChannelStrip nodes - there is nothing to export, and rendering N=0 files is not success.
     //
-    // `timelineDoc` (FRO55, docs/mixer.md §5.12): the live document each stem's file name is
+    // `timelineDoc` (FRO55, docs/mixer/stem-export.md): the live document each stem's file name is
     // resolved against - null is fine (every stem then falls back to "Channel N"; see
     // StemSession's constructor comment for the full naming rule).
     static StemResult exportStems(AudioEngine& engine, const juce::File& destinationFolder,

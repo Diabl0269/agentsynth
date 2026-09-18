@@ -1,4 +1,4 @@
-// MixerModelInsertTests.cpp -- FRO11 (P9-5, docs/mixer.md §5.6): a column's insert list (linear
+// MixerModelInsertTests.cpp -- FRO11 (P9-5, docs/mixer/mixer.md#inserts-in-a-free-form-graph): a column's insert list (linear
 // vs. branching, in signal order) and the three insert-list mutation primitives. Headless: a bare
 // AudioEngine/TimelineDoc/MacroSet, no MainComponent/GraphEditor.
 #include "Mixer/MixerModel/MixerModel.h"

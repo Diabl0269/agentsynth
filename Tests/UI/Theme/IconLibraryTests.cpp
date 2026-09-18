@@ -298,7 +298,7 @@ TEST(IconLibraryTest, CatIOBinaryDataSymbol) {
 }
 
 // ---------------------------------------------------------------------------
-// 14. ActionDetachWindowIconEnumCountAndOrdinal (FRO12, P9-6, docs/mixer.md §5.9)
+// 14. ActionDetachWindowIconEnumCountAndOrdinal (FRO12, P9-6, docs/mixer/panel.md)
 // ---------------------------------------------------------------------------
 TEST(IconLibraryTest, ActionDetachWindowIconEnumCountAndOrdinal) {
     // Appended immediately before kCount, same append-only convention CatIO used -- kCount grows

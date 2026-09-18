@@ -1,4 +1,4 @@
-// GraphEditor-level tests for the Macro bypass/mute fan-out (P8-15d, T142, docs/macros_ports.md §5.6):
+// GraphEditor-level tests for the Macro bypass/mute fan-out (P8-15d, T142, docs/macros/ports.md#bypass-and-mute):
 // "Bypass macro" / "Mute macro" fan ModuleBase::setBypassed/setMuted out over every member as ONE
 // undo step. Both setters are already parameter writes via setValueNotifyingHost, so this is an
 // ordinary parameter change -- no new mutation mechanism, and no macro-level reinterpretation of
@@ -97,7 +97,7 @@ TEST(MacroBypassMute, SetMacroBypassedSetsEveryMember) {
     EXPECT_TRUE(moduleAt(engine, b)->isBypassed());
 }
 
-// A channel macro (one containing a Channel Strip, docs/mixer.md §5.5): Bypass means "bypass the
+// A channel macro (one containing a Channel Strip, docs/mixer/mixer.md#bypass-and-mute): Bypass means "bypass the
 // inserts" -- the source and the strip are skipped -- while Mute still includes the strip.
 TEST(MacroBypassMute, ChannelMacroBypassSkipsSourceAndStripButMuteIncludesTheStrip) {
     AudioEngine engine;

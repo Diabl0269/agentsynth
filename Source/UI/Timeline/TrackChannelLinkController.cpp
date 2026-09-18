@@ -13,7 +13,7 @@ namespace synth::ui {
 
 namespace {
 // The chip's last-resort label, when the strip is neither boxed in a macro nor fed by exactly one
-// named track (docs/mixer.md §5.2: a shared channel keeps its own independently-chosen name).
+// named track (docs/mixer/mixer.md#channels-follow-audio-not-tracks: a shared channel keeps its own independently-chosen name).
 constexpr const char* kUnnamedChannel = "Channel";
 } // namespace
 

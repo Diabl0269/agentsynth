@@ -288,7 +288,7 @@ public:
         nameEditor.setFont(juce::Font(juce::FontOptions(12.5f)));
         nameEditor.onFocusLost = [this] { maybeCommitName(); };
         nameEditor.onReturnKey = nameEditor.onFocusLost;
-        // T153: Escape closes the WHOLE modal (docs/macros_implementation.md's decision on this — see the class
+        // T153: Escape closes the WHOLE modal (docs/macros/configure-io.md#keyboard-handling decision on this — see the class
         // comment) rather than just reverting this field's edit, matching Close's own behaviour
         // exactly (a focus-loss side effect during teardown commits whatever text is here, the
         // same as clicking Close already does — Escape does not discard anything Close wouldn't).
@@ -313,7 +313,7 @@ public:
         // own comment) — load-bearing here because GraphEditor::changeMacroPortShape does not
         // early-out on an unchanged (shape, voiceCount) pair itself: it always deletes and
         // re-creates the node, minting a FRESH nodeUuid, in the one subsystem
-        // (docs/macros_ports.md §5.2) that is built entirely on uuid identity.
+        // (docs/macros/ports.md#port-set-and-ordering) that is built entirely on uuid identity.
         shapeBox.onChange = [this] {
             updateVoicesVisibility();
             maybeCommitShape();

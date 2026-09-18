@@ -128,7 +128,7 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Audio Output", ""},
         {"Bitcrusher", "bypassed, depth, dither, dualIO, mix, muted, outputLevel, rate"},
         // The mixer's strip (P9-2). Solo is deliberately NOT here: it is a render-time gate kept
-        // in trusted extra state, never a parameter (docs/mixer.md §5.3).
+        // in trusted extra state, never a parameter (docs/mixer/mixer.md#solo-is-a-render-time-gate).
         {"Channel Strip", "bypassed, gain, muted, pan, send1Level, send2Level, send3Level, send4Level"},
         {"Chorus", "bypassed, centreDelay, depth, dualIO, feedback, mix, muted, outputLevel, rate"},
         {"Comparator", "bypassed, muted, trigThreshold"},
@@ -301,7 +301,7 @@ TEST(AIStateMapperTest, AuthorableModuleTypesGolden) {
     // signal type.
     EXPECT_FALSE(actual.contains("Macro MIDI In"));
     EXPECT_FALSE(actual.contains("Macro MIDI Out"));
-    // The mixer's strip and bus (P9-2, docs/mixer.md §6). "The AI can build a channel" is an
+    // The mixer's strip and bus (P9-2, docs/mixer/mixer.md#ai-authorability). "The AI can build a channel" is an
     // app-side action the model invokes, never a node it writes.
     EXPECT_FALSE(actual.contains("Channel Strip"));
     EXPECT_FALSE(actual.contains("Master"));

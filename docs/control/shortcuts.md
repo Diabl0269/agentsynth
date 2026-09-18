@@ -135,7 +135,7 @@ below for the Mixer region's own keyboard behaviour.
   so the two focus regions nest rather than sit side by side. `FocusRegionRegistry::regionContaining`
   resolves this to the most specific match (Mod Matrix, not Canvas) whenever real focus sits inside
   it, so Tab-cycling and the outline both track the right one.
-- **A detached window (`docs/mixer.md §5.9`) cycles only its OWN regions** — the
+- **A detached window (`[`docs/mixer/panel.md`](../mixer/panel.md)`) cycles only its OWN regions** — the
   Timeline or Mixer panel, popped out into its own `DetachedPanelWindow`, owns a SEPARATE
   `FocusRegionRegistry` with exactly one region (its hosted panel); Tab/Shift+Tab there resolves via
   the same shared `synth::ui::resolveFocusCycleKeyPress()` translation this app's command table
@@ -352,7 +352,7 @@ genuinely different verb from either grouping or toggling.
 ### Locate Master
 
 Founder feedback on a live check: once Master and Audio Output exist (an Audio Output is seeded
-on New Patch, docs/mixer.md), auto-arrange or an ordinary drag can leave either node
+on New Patch, [`docs/mixer/mixer.md`](../mixer/mixer.md)), auto-arrange or an ordinary drag can leave either node
 anywhere on the canvas, and there was no way to find it short of scrolling around. Cmd+Shift+M
 (and the canvas right-click menu's "Locate Master" row) selects Master, falling back to Audio
 Output when the patch has no Master yet, and pans the view so it sits centred on screen — a
@@ -362,7 +362,7 @@ node's highlighted state from the current selection, so selecting Master by this
 it there too, with no separate flash/pulse mechanism.
 
 This is the lightweight, canvas-only stopgap the founder asked for — the durable answer is the
-future mixer panel (docs/mixer.md), which does not exist yet. Cmd+Shift+M was reserved for a
+future mixer panel ([`docs/mixer/mixer.md`](../mixer/mixer.md)), which does not exist yet. Cmd+Shift+M was reserved for a
 future "Mixer-focus" shortcut before this (see the Focus regions section above); locating Master is
 that same "find the mix bus" need in its interim, pre-panel form, so it claims the chord now rather
 than leaving it idle. Reuses the same select-by-NodeID path `MainComponent::selectNodeInGraph`

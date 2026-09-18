@@ -45,7 +45,7 @@ public:
     // MainComponent::promptExportAudio). initialDestinationDirectory/initialFileNameBase: the
     // folder and base file name (no extension) Export starts pre-filled with; the caller resolves
     // both (bundle-relative Exports/ folder + the project's name) so this class stays free of
-    // ProjectBundle/currentPatchName_ knowledge. stemsMode (P9-8, docs/mixer.md §5.12): false is the
+    // ProjectBundle/currentPatchName_ knowledge. stemsMode (P9-8, docs/mixer/stem-export.md): false is the
     // original "Export Audio" shape (a FILE destination); true switches the destination to a FOLDER
     // (defaulted to "<initialFileNameBase> Stems" inside initialDestinationDirectory, no extension
     // tracking, no destination-exists collision prompt — a stems folder is a container, meant to be

@@ -62,7 +62,7 @@ DetachedPanelWindow::DetachedPanelWindow(juce::Component& panel, juce::DrawableB
     setUsingNativeTitleBar(true);
     setResizable(true, false);
 
-    // Plugin-mode seam (docs/mixer.md §5.9): our OWN scope, never Desktop::setDefaultLookAndFeel.
+    // Plugin-mode seam (docs/mixer/panel.md): our OWN scope, never Desktop::setDefaultLookAndFeel.
     // A null `lookAndFeel` (a headless test that doesn't care) leaves this on JUCE's stock LnF --
     // harmless, since nothing here asserts a themed colour.
     if (lookAndFeel != nullptr)

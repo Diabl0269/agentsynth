@@ -1,4 +1,4 @@
-// Real-mouse-gesture regression coverage for T148's auto-create-on-drag (docs/macros_implementation.md §7
+// Real-mouse-gesture regression coverage for T148's auto-create-on-drag (docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port
 // item 9). Every T148 test in MacroPortFlowTests.cpp drives the feature through
 // GraphEditor::beginConnectionDrag/endConnectionDrag called directly -- a convenient shortcut,
 // but one that never touches ModuleComponent::mouseDown/mouseDrag/mouseUp at all. Those real

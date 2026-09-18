@@ -8,13 +8,13 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 
 /**
- * @brief "Channel Strip" — the end of one mixer channel (P9-2, docs/mixer.md §5).
+ * @brief "Channel Strip" — the end of one mixer channel (P9-2, docs/mixer/mixer.md#node-types).
  *
  * The node the mixer enumerates: a channel's chain terminates here, and the strip's gain, pan,
  * mute and solo are what a mixer column drives. Output is always stereo (Left on ch0, Right on
  * kRightBase); the INPUT is Mono or Stereo, decided once when the strip is created.
  *
- * CHANNEL SHAPE (docs/mixer.md §5.4). JUCE settles the bus layout in the ModuleBase constructor,
+ * CHANNEL SHAPE (docs/mixer/mixer.md#mono-and-stereo). JUCE settles the bus layout in the ModuleBase constructor,
  * so the node always carries kNumInputs raw input channels and kNumOutputs raw output channels,
  * and `shape_` says which input jacks are visible:
  *
@@ -31,7 +31,7 @@
  * once the node is live in a graph). A later write with a different shape is refused: changing a
  * strip's width means replacing the strip, one undo step, never widening a live node.
  *
- * SENDS (FRO15/P9-9, docs/mixer.md §5.15). A send is not a node: it is a strip-owned OUTPUT leg,
+ * SENDS (FRO15/P9-9, docs/mixer/sends-and-buses.md). A send is not a node: it is a strip-owned OUTPUT leg,
  * a real stereo pair of raw output channels an ordinary graph edge carries into a bus strip's
  * input. kMaxSends fixed slots are declared at construction (a variable-port module declares its
  * maximum and varies only the VISIBLE count — Source/Modules/CLAUDE.md), each with its own L and R
@@ -64,7 +64,7 @@
  * The (5, 16) channel shape does not match hasStereoOutputPairShape, so no Dual I/O toggle is
  * inherited and none is wanted — the strip owns its own fixed jack map below.
  *
- * SOLO (docs/mixer.md §5.3). `soloed_` is NOT an AudioParameter: not host-visible, not
+ * SOLO (docs/mixer/mixer.md#solo-is-a-render-time-gate). `soloed_` is NOT an AudioParameter: not host-visible, not
  * automatable, persisted only in the trusted extra state. Whether ANY strip is soloed is an
  * engine-owned count (AudioEngine::refreshSoloGate) carried to the audio thread on the playhead —
  * TransportService::isMixerSoloActiveForBlock(). While it is set, the gate is applied PER LEG
@@ -90,7 +90,7 @@
  * a bypassed non-soloed strip leaking into a soloed mix would break §5.3's "every non-soloed strip
  * outputs silence".
  *
- * STEM TAP (P9-8, docs/mixer.md §5.12). An opt-in, non-owning tap for offline stem export: a
+ * STEM TAP (P9-8, docs/mixer/stem-export.md). An opt-in, non-owning tap for offline stem export: a
  * message-thread-armed pointer to a caller-owned stereo destination buffer, null during normal/live
  * playback. When non-null, the strip copies its FINAL stereo output — post gain, pan, mute AND solo
  * gate, i.e. exactly what it hands to Master — into the tap at the end of every processBlock exit
@@ -104,7 +104,7 @@
  * audio thread must never touch memory it wasn't handed room for.
  *
  * INTERNAL-ONLY, the same three exclusions as Rec Tap and the macro port types: no library row, no
- * replace-menu entry, never authorable by a model (kNonAuthorableModuleTypes, docs/mixer.md §6).
+ * replace-menu entry, never authorable by a model (kNonAuthorableModuleTypes, docs/mixer/mixer.md#ai-authorability).
  */
 class ChannelStripModule : public ModuleBase {
 public:
@@ -322,7 +322,7 @@ public:
     }
     juce::uint32 getActiveSendMask() const noexcept { return activeMask_.load(std::memory_order_relaxed); }
 
-    /** DISPLAY ONLY (docs/mixer.md §5.15): this strip was created as a group/send bus rather than as
+    /** DISPLAY ONLY (docs/mixer/sends-and-buses.md): this strip was created as a group/send bus rather than as
      *  a track's channel, so the mixer gives its column the BUS badge and a feeding-strips source
      *  line instead of a track chip. Written by the "Add bus" flow and by buildMakeChannel's
      *  merge-point buses; persisted in the trusted extra state. Nothing about routing or audio

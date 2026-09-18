@@ -52,12 +52,12 @@ void setProcessorPoly(juce::AudioProcessor* processor, bool poly) {
         setBoolParam(*processor, "poly", poly);
 }
 
-// Builds the factory default mixer channel (docs/mixer.md §5.7/D3, T173a) that "+ Track -> Audio
+// Builds the factory default mixer channel (docs/mixer/mixer.md#the-factory-default-chain, T173a) that "+ Track -> Audio
 // Track" wires after a freshly-created Track Audio node's stereo output:
 //
 //     source 0/1 -> Parametric EQ 0/1 -> Compressor 0/1 -> Channel Strip (Stereo) -> Master (Mix)
 //
-// Both inserts are created BYPASSED (docs/mixer.md's factory-default chain: present but inert until
+// Both inserts are created BYPASSED (docs/mixer/mixer.md's factory-default chain: present but inert until
 // the user opts in). The Channel Strip is Stereo, shape set BEFORE the node is added to the live
 // graph (ChannelStripModule::setShape()'s own contract — adding to a live graph can prepareToPlay
 // and lock the shape).
@@ -99,7 +99,7 @@ DefaultChannel buildDefaultAudioChannel(juce::AudioProcessorGraph& graph, juce::
 // T183 (P9-3b): when `instrument` is currently in poly mode (it has a "poly" AudioParameterBool and
 // it's on), its L-octet (raw ch0-7) can carry up to 8 simultaneous voices, which
 // buildDefaultAudioChannel() cannot accept directly — it wants one stereo pair. Creates a Voice
-// Mixer (docs/mixer.md §5.4/§5.8: any chain ending poly gets one ahead of the strip), wires
+// Mixer (docs/mixer/mixer.md#an-instrument-track: any chain ending poly gets one ahead of the strip), wires
 // `instrument`'s raw ch0-7 into it, and returns it so the caller can pass ITS ch0/ch1 as `source` to
 // buildDefaultAudioChannel() instead of `instrument` directly.
 //
@@ -124,7 +124,7 @@ juce::AudioProcessorGraph::Node* addVoiceMixerForPolyInstrument(juce::AudioProce
         return nullptr;
 
     // The instrument's L-octet (raw ch0-7, poly ON) is up to 8 simultaneous voices; Voice Mixer sums
-    // them to a mono value duplicated onto its own ch0(L)/ch1(R) (docs/mixer.md §5.4/§5.8). The
+    // them to a mono value duplicated onto its own ch0(L)/ch1(R) (docs/mixer/mixer.md#an-instrument-track). The
     // instrument's R-octet is deliberately NOT summed in — same precedent, same known limitation.
     for (int voice = 0; voice < 8; ++voice)
         graph.addConnection({{instrument.nodeID, voice}, {voiceMixer->nodeID, voice}});
@@ -295,7 +295,7 @@ PolyEnvelopeAndVCA addPolyEnvelopeAndVCAForInstrument(juce::AudioProcessorGraph&
     return result;
 }
 
-// FRO15 (P9-9, docs/mixer.md §5.15): an EMPTY group/send bus — the same bypassed EQ -> bypassed
+// FRO15 (P9-9, docs/mixer/sends-and-buses.md): an EMPTY group/send bus — the same bypassed EQ -> bypassed
 // Compressor -> Channel Strip (Stereo) -> Master (Mix) chain every other channel gets, with nothing
 // feeding the EQ yet, and the strip marked isBus() so the mixer gives its column the BUS badge. This
 // lives here rather than in MixerSends because it IS that shared chain builder with an empty feed

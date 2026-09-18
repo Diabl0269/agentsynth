@@ -4,7 +4,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <vector>
 
-// TrackChannelLink.h -- FRO14 (P9-4, docs/mixer.md §5.2): the LINK RULE itself, resolved from the
+// TrackChannelLink.h -- FRO14 (P9-4, docs/mixer/mixer.md#channels-follow-audio-not-tracks): the LINK RULE itself, resolved from the
 // live graph plus the TimelineDoc and nothing else.
 //
 // Core, exactly like Source/Mixer/ChannelFlows: no AppUndoManager, no GraphEditor, no UI. The
@@ -46,7 +46,7 @@ TrackChannelLinkInfo resolveTrackChannelLink(juce::AudioProcessorGraph& graph, c
  *  unresolvable source all fall back to `fallback`.
  *
  *  This is FRO55's stem-naming rule (StemSession passes "Channel N") shared with the channel chip.
- *  The chip prefers the channel MACRO's name when the strip is boxed (docs/mixer.md §5.2: a
+ *  The chip prefers the channel MACRO's name when the strip is boxed (docs/mixer/mixer.md#channels-follow-audio-not-tracks: a
  *  channel's name IS its macro's name) and only falls through to here -- macros are a UI concept
  *  Core has no access to, so that preference is applied by the caller, not here. */
 juce::String channelDisplayName(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID stripId,

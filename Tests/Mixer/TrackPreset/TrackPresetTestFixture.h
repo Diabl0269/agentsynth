@@ -69,7 +69,7 @@ wireInsertedStripToOutputCFT(juce::AudioProcessorGraph& graph,
 // modulating the filter's cutoff. The LFO also feeds a second, otherwise-unused Filter ("sideTap")
 // so it has a consumer outside the macro and is NOT absorbed as a side input (planMakeChannel's
 // "every consumer already a member" absorption rule) — the same "outside module reached through a
-// port" shape docs/mixer.md §5.7 describes for a shared LFO, without needing a second full track.
+// port" shape docs/mixer/track-presets.md describes for a shared LFO, without needing a second full track.
 //
 // `otherChannelStrip` is a bare (unboxed) Channel Strip modulating the same filter's Resonance —
 // AudioEngine::addModRouting always wraps a hidden AttenuverterModule around EVERY mod leg

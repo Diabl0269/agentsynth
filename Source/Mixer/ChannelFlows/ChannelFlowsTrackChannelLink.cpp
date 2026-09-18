@@ -1,6 +1,6 @@
 // ChannelFlowsTrackChannelLink.cpp
 //
-// The two signal-reach queries the track <-> channel link rule (docs/mixer.md §5.2) is decided
+// The two signal-reach queries the track <-> channel link rule (docs/mixer/mixer.md#channels-follow-audio-not-tracks) is decided
 // from: forward from a track's own source node to the Channel Strip it plays into, and backward
 // from a Channel Strip to every track source that feeds it. Both are pure graph reads -- no
 // mutation, no undo, no TimelineDoc -- so they live in Core next to the rest of ChannelFlows.

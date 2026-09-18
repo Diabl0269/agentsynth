@@ -44,12 +44,12 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 
 ## Macros & mixer
 
-- [`docs/macros.md`](macros.md) — Macros: the P8-12 presentation-only container and the DECIDED Macro I/O model (P8-14) overview, and why a container node with an inner graph was rejected
-- [`docs/macros_ports.md`](macros_ports.md) — Macro I/O port mechanics: node types, port set/ordering, poly/stereo shape, cable rendering across the boundary, bypass/mute, the macro menu
+- [`docs/macros/macros.md`](macros/macros.md) — Macros: the P8-12 presentation-only container and the DECIDED Macro I/O model (P8-14) overview, and why a container node with an inner graph was rejected
+- [`docs/macros/ports.md`](macros/ports.md) — Macro I/O port mechanics: node types, port set/ordering, poly/stereo shape, cable rendering across the boundary, bypass/mute, the macro menu
 - [`docs/macros_implementation.md`](macros_implementation.md) — Macro I/O AI-authorability decision, the P8-15 implementation tracker, and out-of-scope items
-- [`docs/mixer.md`](mixer.md) — Mixer channels (P9-1, decided 2026-09-10): the ChannelStrip node is the channel, macros are the container, solo as a render-time gate, Master/Direct, the track/channel link, track presets
-- [`docs/mixer_fader.md`](mixer_fader.md) — The mixer fader's own Cubase-like taper (FRO150): UI-only position mapping vs. the linear-dB parameter, Shift fine-drag, Cmd-click/double-click reset
-- [`docs/mixer_implementation.md`](mixer_implementation.md) — Mixer build log: dependency order and the test list for each P9 item (engine/solo gate, channel creation flows, track/channel link, mixer panel, detachable windows, track presets, stem export, and the remaining side tracks)
+- [`docs/mixer/mixer.md`](mixer/mixer.md) — Mixer channels (P9-1, decided 2026-09-10): the ChannelStrip node is the channel, macros are the container, solo as a render-time gate, Master/Direct, the track/channel link, track presets
+- [`docs/mixer/fader.md`](mixer/fader.md) — The mixer fader's own Cubase-like taper (FRO150): UI-only position mapping vs. the linear-dB parameter, Shift fine-drag, Cmd-click/double-click reset
+- [`docs/mixer/mixer.md`](mixer/mixer.md) — Mixer build log: dependency order and the test list for each P9 item (engine/solo gate, channel creation flows, track/channel link, mixer panel, detachable windows, track presets, stem export, and the remaining side tracks)
 - [`docs/testing_mixer_meters.md`](testing_mixer_meters.md) — mixer meter & fader test list (FRO146/FRO150/FRO147): peak latch, dB scale zones, clip readout, taper
 
 ## Timeline

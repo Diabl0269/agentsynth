@@ -1,6 +1,6 @@
 // MacroSetTests.cpp
 // Pure struct-level unit tests for synth::MacroPort and its interaction with synth::MacroSet
-// (P8-15 Macro I/O, docs/macros_ports.md §5.2, docs/macros_implementation.md §7 item 2) — no GraphEditor, no
+// (P8-15 Macro I/O, docs/macros/ports.md#port-set-and-ordering, docs/macros/ports.md#port-set-and-ordering) — no GraphEditor, no
 // AudioEngine. The GraphEditor-level Macro behaviour (wrap/unwrap, persistence, cables, ...) lives in
 // Tests/MacroContainerTests.cpp; this file covers only:
 //
@@ -268,7 +268,7 @@ TEST(MacroSetPortPersistence, FromVarRejectsWholeMacroWhenAPortIsMalformed) {
 }
 
 // A port's nodeUuid must be one of the SAME macro's own members (Macro::ports' invariant,
-// mirroring "it is a member of that macro's members list like any other node", docs/macros_ports.md
+// mirroring "it is a member of that macro's members list like any other node", docs/macros/ports.md
 // §5.1) — a port naming a uuid outside `members` is rejected, not silently accepted.
 TEST(MacroSetPortPersistence, FromVarRejectsPortWhoseNodeUuidIsNotAMember) {
     auto* macroObj = new juce::DynamicObject();
@@ -372,7 +372,7 @@ TEST(MacroSetPortReconciliation, RemoveMemberEverywhereDropsThePortItFronted) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Macro::memberIsPort / Macro::moduleMemberCount (founder-review fix G6, docs/macros_implementation.md §7 item
+// Macro::memberIsPort / Macro::moduleMemberCount (founder-review fix G6, docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port item
 // 4 note): "the number of modules indicator seems to show more than there are - 4 when i
 // grouped the delay and reverb in the default patch - should have shown 2." members.size()
 // counts port nodes as members (correctly - see the class comment on synth::Macro); the

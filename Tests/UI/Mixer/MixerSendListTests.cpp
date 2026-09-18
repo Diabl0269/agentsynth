@@ -1,4 +1,4 @@
-// MixerSendListTests.cpp -- FRO15 (P9-9, docs/mixer.md §5.15): the mixer column's send rows,
+// MixerSendListTests.cpp -- FRO15 (P9-9, docs/mixer/sends-and-buses.md): the mixer column's send rows,
 // driven through a real off-screen MainComponent (newPatchForTest() + simulateAddAudioTrackClick(),
 // the same rig style as MixerPanelComponentTests.cpp) so the whole chain is exercised -- the Core
 // flow, the undo transaction around it, the snapshot rebuild, and the row's own parameter
@@ -75,7 +75,7 @@ struct SendRig {
     juce::AudioProcessorGraph& graph() { return mc->getAudioEngine().getGraph(); }
 
     /** The track's own strip column -- always the first, since buses are appended after every
-     *  track-driven strip (docs/mixer.md §5.15 D6). */
+     *  track-driven strip (docs/mixer/sends-and-buses.md D6). */
     synth::ui::MixerColumnComponent* sourceColumn() { return panel().getStripColumnForTest(0); }
 };
 

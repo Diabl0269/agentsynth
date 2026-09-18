@@ -96,7 +96,7 @@ bool MixerPanelComponent::toggleFocusedSoloed() {
         return false;
     auto& entry = columnEntries_[(size_t)focusedColumnIndex_];
     if (entry.kind != ColumnEntry::Kind::Strip)
-        return false; // Master/Direct have no solo button (docs/mixer.md §5.10).
+        return false; // Master/Direct have no solo button (docs/mixer/panel.md#what-the-mixer-shows).
     static_cast<MixerColumnComponent*>(entry.component)->toggleSoloed();
     return true;
 }

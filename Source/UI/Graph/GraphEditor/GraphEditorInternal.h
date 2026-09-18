@@ -38,7 +38,7 @@ inline synth::ui::ModuleCategory categoryForNode(juce::AudioProcessorGraph::Node
     return synth::ui::ModuleCategory::Utility;
 }
 
-// ---- Card jacks (P8-15c, T141, docs/macros_implementation.md §7 item 4) ----
+// ---- Card jacks (P8-15c, T141, docs/macros/ports.md#cable-rendering-across-the-boundary) ----
 // The collapsed card's fixed footprint — deliberately independent of however large or scattered
 // the group it stands in for is; that is the whole point of collapsing. Matches a standard
 // module card's width so it sits comfortably on the same grid. Hoisted up here (rather than left

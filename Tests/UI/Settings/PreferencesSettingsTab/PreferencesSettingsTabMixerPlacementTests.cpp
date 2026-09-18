@@ -1,4 +1,4 @@
-// PreferencesSettingsTabMixerPlacementTests.cpp -- FRO12 (P9-6, docs/mixer.md §5.9): the Mixer
+// PreferencesSettingsTabMixerPlacementTests.cpp -- FRO12 (P9-6, docs/mixer/panel.md): the Mixer
 // placement combo (Tab beside the Timeline / Own panel / Window) -- default value, getter/setter
 // round trip, and persistence across a fresh PreferencesSettingsTab reading the same
 // ApplicationProperties file (same shape as the per-type default track preset combos it sits next

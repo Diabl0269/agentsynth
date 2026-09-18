@@ -1,4 +1,4 @@
-// DetachRedockStateTests.cpp -- FRO12 (P9-6, docs/mixer.md §5.9): proves detach/redock preserves
+// DetachRedockStateTests.cpp -- FRO12 (P9-6, docs/mixer/panel.md): proves detach/redock preserves
 // REAL, production panel state end to end through MixerDockComponent/MainComponent, not just the
 // generic identity/mutation invariant DetachablePanelHostTests.cpp pins against a stub panel.
 // Drives a real, off-screen MainComponent (newPatchForTest() + simulateAddAudioTrackClick(), the

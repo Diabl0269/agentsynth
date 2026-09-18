@@ -1,5 +1,5 @@
 // =================================================================================================
-// FRO14 (P9-4, docs/mixer.md §5.2) — what a LINK actually does, driven through the real track-header
+// FRO14 (P9-4, docs/mixer/mixer.md#channels-follow-audio-not-tracks) — what a LINK actually does, driven through the real track-header
 // buttons: names sync both ways, colour previews live and commits as one undo step, a linked track's
 // M/S drive its CHANNEL (not note gating) while a shared channel's tracks keep today's note gating,
 // and the channel chip names/reveals the channel with a repaint-gated meter.
@@ -439,7 +439,7 @@ TEST_F(ChannelFlowTest, TheChipMeterRepaintsOnlyWhenTheDrawnLevelActuallyMoves) 
 
 TEST_F(ChannelFlowTest, TheChipUsesTheSameDbScaleAndTurnsTheClipColourOnAnOver) {
     synth::ui::ChannelChipComponent chip;
-    // A linear peak > 1.0 is a real over -- above 0 dBFS, the CLIP zone (docs/mixer.md meters
+    // A linear peak > 1.0 is a real over -- above 0 dBFS, the CLIP zone (docs/mixer/mixer.md meters
     // section: same scale/zones as the mixer's own MixerMeter, FRO146).
     chip.setMeterLevel(1.5f);
     EXPECT_GT(chip.getMeterDbForTest(), 0.0f);

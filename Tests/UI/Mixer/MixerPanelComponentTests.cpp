@@ -1,4 +1,4 @@
-// MixerPanelComponentTests.cpp -- FRO11 (P9-5, docs/mixer.md §5.10): the mixer panel's column
+// MixerPanelComponentTests.cpp -- FRO11 (P9-5, docs/mixer/panel.md#what-the-mixer-shows): the mixer panel's column
 // set, PNG render smoke test (dark + light built-in theme, per the ticket's own test list), and
 // the column-click-selects-macro gesture. Drives a real, off-screen MainComponent
 // (newPatchForTest() + simulateAddAudioTrackClick(), the ChannelFlow suite's own rig style).
@@ -52,7 +52,7 @@ TEST(MixerPanelComponentTests, MixerPanelRendersOneColumnPerStripPlusDirectPlusM
     auto& mixerPanel = mc.getMixerDock().getMixerPanel();
     mixerPanel.rebuild();
 
-    EXPECT_EQ(mixerPanel.getColumnCount(), 4) << "2 strips + Direct + Master (docs/mixer.md §5.10)";
+    EXPECT_EQ(mixerPanel.getColumnCount(), 4) << "2 strips + Direct + Master (docs/mixer/panel.md#what-the-mixer-shows)";
 }
 
 TEST(MixerPanelComponentTests, MixerPanelPngRenderSmokeTestDarkTheme) {

@@ -7,7 +7,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <map>
 
-// TrackChannelLinkController.h -- FRO14 (P9-4, docs/mixer.md §5.2): the app-side half of the track
+// TrackChannelLinkController.h -- FRO14 (P9-4, docs/mixer/mixer.md#channels-follow-audio-not-tracks): the app-side half of the track
 // <-> channel link. The rule itself is Core (Source/Mixer/TrackChannelLink.h, a pure query); this
 // class is what ACTS on it -- renaming both sides, fanning a live colour preview out over track and
 // macro, driving a linked channel's mute/solo, and revealing a channel in the graph.
@@ -75,7 +75,7 @@ public:
      *  timelinePanel.setShortcutManager already uses). Takes the resolved strip's NodeID and opens/
      *  focuses its mixer column, returning true on success; revealChannelForTrack() falls back to
      *  its existing canvas-reveal behaviour when this is unset or returns false (mixer hidden by
-     *  preference -- no such preference exists yet, see docs/mixer.md §5.9, so today that only
+     *  preference -- no such preference exists yet, see docs/mixer/panel.md, so today that only
      *  happens before this hook is installed or if the strip has no column for some reason). */
     void setMixerRevealHook(std::function<bool(juce::AudioProcessorGraph::NodeID)> hook) {
         mixerRevealHook_ = std::move(hook);

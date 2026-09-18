@@ -1,6 +1,6 @@
 #pragma once
 
-// MixerSends.h -- FRO15 (P9-9, docs/mixer.md §5.15): the Core flows behind a strip's send slots.
+// MixerSends.h -- FRO15 (P9-9, docs/mixer/sends-and-buses.md): the Core flows behind a strip's send slots.
 //
 // Headless, no UI dependency (Source/Mixer/CLAUDE.md), and -- like ChannelFlows and MixerModel's
 // insert splices -- NO UNDO OF THEIR OWN: each is a plain graph mutation for a caller already

@@ -5,7 +5,7 @@
 // attenuverter-wrapping case and the auto-create-on-drag preference toggle.
 
 // ============================================================================
-// T148 (docs/macros_implementation.md §7 item 9): auto-create a macro port when a dragged cable crosses an
+// T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): auto-create a macro port when a dragged cable crosses an
 // EXPANDED macro's boundary — the counterpart to the collapsed-card drop convenience above, which
 // only fires when there is no jack under the cursor. All jack-to-jack, so both endpoints are real,
 // visible ModuleComponents this time (no MacroCardComponent involved).
@@ -270,7 +270,7 @@ TEST(MacroPortFlow,
         << "no leftover direct port->destination connection";
 
     // Neither the attenuverter nor the port's own uuid appears anywhere but the one macro entry —
-    // the attenuverter can never itself be a macro member (docs/macros.md §2, docs/macros_implementation.md §7 item 7).
+    // the attenuverter can never itself be a macro member (docs/macros/macros.md#macro-ports-are-proxy-nodes-on-a-flat-graph, docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port item 7).
     EXPECT_FALSE(macro->hasMember(uuidOf(engine, attenId)));
 }
 

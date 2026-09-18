@@ -329,7 +329,7 @@ public:
     // parameter, so it has no poly entry.
     static constexpr int kAddInstrumentOscillatorPolyMenuId = 7;
     static constexpr int kAddInstrumentWavetablePolyMenuId = 8;
-    // FRO26 (P9-3e, docs/mixer.md §5.13): "Create channels" for existing projects. Lives on this
+    // FRO26 (P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project): "Create channels" for existing projects. Lives on this
     // same menu rather than a per-track context menu or a mixer panel — there is no mixer panel yet
     // (P9-5), and "+ Track" is already where every other channel-creating action in this doc lives
     // (Audio Track, Instrument Track); a project-wide sweep belongs beside them, not off a single
@@ -354,7 +354,7 @@ public:
     // kAddInstrumentPluginMenuIdBase (100) with no collisions between them.
     static constexpr int kAddInstrumentPluginNoneMenuId = 10;
     static constexpr int kAddInstrumentPluginMenuIdBase = 100;
-    // FRO13 (P9-7, docs/mixer.md §5.7): "Insert Track Preset from File..." (next free fixed id
+    // FRO13 (P9-7, docs/mixer/track-presets.md): "Insert Track Preset from File..." (next free fixed id
     // after 10), and the two grouped preset submenus (Audio/Instrument), each `base + index` into
     // its own snapshot vector below — same click-time-collector hazard as the plugin list
     // (a preset can be saved/deleted between menu-open and click), same snapshot-resolution fix.

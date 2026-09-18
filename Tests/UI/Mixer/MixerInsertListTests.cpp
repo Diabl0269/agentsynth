@@ -7,7 +7,7 @@
 //                 fired onEditOnCanvas too. Proven behaviourally (mouseDown's hit test), not by
 //                 pixel-diffing paint() -- see this file's own comment on the fix for why the two
 //                 methods share one anchor formula.
-//   * moveRow  -- a bus's sourceNodeId_ is invalid (no external predecessor -- docs/mixer.md
+//   * moveRow  -- a bus's sourceNodeId_ is invalid (no external predecessor -- docs/mixer/mixer.md
 //                 §5.15 D6), so moving a row to the very front of its chain must refuse rather than
 //                 splice against an invalid id and orphan the node (reorderInsert's second step has
 //                 no rollback of its own).

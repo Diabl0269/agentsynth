@@ -137,7 +137,7 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     nameLabel_.setEditable(false, true, false);
     nameLabel_.onTextChange = [this] {
         const juce::String newName = nameLabel_.getText();
-        // FRO14 (docs/mixer.md 5.2 (a)): a LINKED track renames its channel too, as one undo step.
+        // FRO14 (docs/mixer/mixer.md 5.2 (a)): a LINKED track renames its channel too, as one undo step.
         // Unlinked (or no host) falls through to the plain track-only edit, unchanged.
         if (auto* link = linkSurface(); link != nullptr && link->renameLinkedTrackAndChannel(trackId_, newName))
             return;
@@ -236,7 +236,7 @@ void TimelineTrackHeaderComponent::toggleMuted() {
     const auto* t = track();
     if (t == nullptr)
         return;
-    // FRO14 (docs/mixer.md 5.2 (c)): a LINKED track's M IS the channel's mute -- one mute, not two.
+    // FRO14 (docs/mixer/mixer.md 5.2 (c)): a LINKED track's M IS the channel's mute -- one mute, not two.
     // The surface returns false for a shared channel (or no channel at all), and note gating below
     // is then exactly what it has always been. The refresh is explicit because a strip write is not
     // a doc change: nothing notifies the header otherwise.
@@ -277,7 +277,7 @@ std::unique_ptr<synth::ui::ColourPickerPopup> TimelineTrackHeaderComponent::buil
     const juce::uint32 originalColour = t->colourArgb;
 
     juce::ApplicationProperties* props = host_ != nullptr ? host_->getAppProperties() : nullptr;
-    // FRO14 (docs/mixer.md 5.2 (b)): a LINKED track's picker fans every preview write out to the
+    // FRO14 (docs/mixer/mixer.md 5.2 (b)): a LINKED track's picker fans every preview write out to the
     // channel macro as well, and commits both as ONE undo step. Null for anything else -- the
     // single-target body below is then reached byte-for-byte as before.
     if (auto* link = linkSurface(); link != nullptr) {

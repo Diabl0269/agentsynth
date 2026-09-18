@@ -4,7 +4,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
-// MixerDirectColumn.h -- FRO11 (P9-5, docs/mixer.md §5.10): Direct's column. Not a channel --
+// MixerDirectColumn.h -- FRO11 (P9-5, docs/mixer/panel.md#what-the-mixer-shows): Direct's column. Not a channel --
 // name fixed to "Direct", no colour/fader/pan/insert list/M-S (§5.10) -- just a "Make channel"
 // button for whatever feeds Master's Direct bus today, reusing the P9-3d "Make channel" flow
 // verbatim (MainComponent::makeChannelForNode).

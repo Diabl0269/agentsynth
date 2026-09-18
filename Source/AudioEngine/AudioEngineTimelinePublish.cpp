@@ -100,7 +100,7 @@ int countSoloedStrips(juce::AudioProcessorGraph& graph, juce::AudioProcessorGrap
     return count;
 }
 
-// FRO15 (docs/mixer.md §5.15): hand each strip the per-leg mask synth::computeSoloAudibleLegs
+// FRO15 (docs/mixer/sends-and-buses.md): hand each strip the per-leg mask synth::computeSoloAudibleLegs
 // worked out, OPEN BEFORE CLOSE. Pass 1 only ever ORs bits in, pass 2 assigns: a render pass
 // landing between the two sees a strip momentarily MORE audible, never one wrongly silent. (A
 // single pass would let strip A close its send leg a block before strip B's bus opens, which is

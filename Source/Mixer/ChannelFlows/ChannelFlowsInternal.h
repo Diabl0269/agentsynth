@@ -76,7 +76,7 @@ DefaultChannel buildChannelChain(juce::AudioProcessorGraph& graph,
     auto* eq = addChainNode(graph, "Parametric EQ", layout.eq, eqUuid);
     if (eq == nullptr)
         return result;
-    // Factory default: present but bypassed until the user opts in (docs/mixer.md §5.7/D3).
+    // Factory default: present but bypassed until the user opts in (docs/mixer/mixer.md#the-factory-default-chain).
     if (auto* module = dynamic_cast<ModuleBase*>(eq->getProcessor()))
         module->setBypassed(true);
 

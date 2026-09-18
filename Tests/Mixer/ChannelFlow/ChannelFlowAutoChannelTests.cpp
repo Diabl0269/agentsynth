@@ -1,6 +1,6 @@
 // ChannelFlowAutoChannelTests.cpp
 //
-// T184 (P9-3c, docs/mixer.md §5.2): a MIDI track auto-creates the destination's mixer channel
+// T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks): a MIDI track auto-creates the destination's mixer channel
 // on connect. Core-level tests for synth::findUnchanneledOutputFeeds/buildChannelForFeeds
 // first, then real-mouse-gesture coverage through GraphEditor::endConnectionDrag.
 // dragRealMidiCableBetweenCFT below is local to this file.
@@ -36,7 +36,7 @@
 #include <thread>
 
 // =================================================================================================
-// T184 (P9-3c, docs/mixer.md §5.2 "main workflow"): a MIDI track auto-creates the destination's
+// T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow"): a MIDI track auto-creates the destination's
 // mixer channel on connect. Core-level tests for synth::findUnchanneledOutputFeeds /
 // synth::buildChannelForFeeds first, then real-mouse-gesture coverage through GraphEditor's
 // endConnectionDrag (docs/development/test-patterns.md's real-mouse-path guidance — the same reason
@@ -513,7 +513,7 @@ TEST_F(ChannelFlowTest, AutoChannelOnConnect_NewChainNodesJoinTheInstrumentsExis
     ASSERT_NE(strip, nullptr);
     EXPECT_TRUE(macro->hasMember(nodeUuid(strip)));
 
-    // docs/mixer_implementation.md item 2: Master stays OUTSIDE the macro, and Strip -> Master is a PLAIN
+    // docs/mixer/mixer.md item 2: Master stays OUTSIDE the macro, and Strip -> Master is a PLAIN
     // graph edge, never a macro port — spliceMasterNode/ensureMasterNode classify Mix vs Direct by
     // checking whether the connection's SOURCE NODE is itself a ChannelStripModule, which a
     // MacroOutlet sitting in between would defeat.

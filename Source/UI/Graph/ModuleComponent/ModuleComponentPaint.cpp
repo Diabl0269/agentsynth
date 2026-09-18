@@ -287,7 +287,7 @@ void ModuleComponent::paint(juce::Graphics& g) {
     }
 }
 
-// Compact docked port widget (P8-15 founder-review fix F2, docs/macros_ports.md §5.3/§5.4): a small
+// Compact docked port widget (P8-15 founder-review fix F2, docs/macros/ports.md#how-a-port-is-drawn): a small
 // row tinted with the owning macro's colour, showing the port's own NAME (resolved live through
 // GraphEditor — the name lives on synth::MacroPort, not this node, so a rename in the Configure
 // I/O dialog is reflected the next time this repaints, with nothing to cache or invalidate) and

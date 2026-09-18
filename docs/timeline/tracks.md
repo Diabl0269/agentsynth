@@ -314,7 +314,7 @@ target node no longer resolves — rather than crashing.
 
 ## The channel chip
 
-The CHANNEL chip (`docs/mixer.md` §5.2) shares the bottom half-row, right of the binding chip,
+The CHANNEL chip (`[`docs/mixer/mixer.md`](../mixer/mixer.md)` §5.2) shares the bottom half-row, right of the binding chip,
 whenever the track's notes or audio actually reach a `ChannelStripModule` — **linked or shared
 alike**.
 
@@ -342,7 +342,7 @@ to `TimelineDoc::kMaxTracks` rows, a timer per chip would be 256 timers, and an 
 would breach the per-tick repaint rule (`docs/layout/rendering.md`) — this is the same
 gated 15 Hz shape `ModuleComponent`'s own meter poll uses.
 
-**A linked track's M/S show and drive its CHANNEL, not note gating** (`docs/mixer.md` §5.2 (c)):
+**A linked track's M/S show and drive its CHANNEL, not note gating** (`[`docs/mixer/mixer.md`](../mixer/mixer.md)` §5.2 (c)):
 `refreshFromDoc()` reads the strip's mute and solo for a linked track and the doc's own flags for
 every other one, and the toggles write through the link surface first, falling back to the
 unchanged `doc.setTrackMuted` / `setTrackSoloed` path when the track is not linked. Because a strip

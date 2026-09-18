@@ -179,7 +179,7 @@ inline void paintFocusRegionOutline(juce::Component& comp, juce::Graphics& g) {
     g.drawRect(comp.getLocalBounds().toFloat().reduced(thickness * 0.5f), thickness);
 }
 
-// FRO12 (P9-6, docs/mixer.md §5.9): resolves a keypress to a Tab-cycle direction the same way
+// FRO12 (P9-6, docs/mixer/panel.md): resolves a keypress to a Tab-cycle direction the same way
 // MainComponent::keyPressed's command-table dispatch does (focusNextRegion/focusPrevRegion), but as
 // a free function so a top-level window with no ApplicationCommandTarget of its own -- a
 // DetachedPanelWindow -- can reach the same verdict without one. Returns true for forward

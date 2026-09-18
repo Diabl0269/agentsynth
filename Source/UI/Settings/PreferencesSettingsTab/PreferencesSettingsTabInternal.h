@@ -9,7 +9,7 @@
 
 namespace {
 
-// Founder-review fix F5 (docs/macros_implementation.md §7 item 6.1/6.2). Duplicated from the constexpr
+// Founder-review fix F5 (docs/macros/auto-ports.md). Duplicated from the constexpr
 // GraphEditor::requestGroupSelectionIntoMacro() writes through propertiesFile_ directly for the
 // "remember my choice" case (that modal can fire before this tab, or any Settings window, has
 // ever been constructed) — the same "one-line string not worth a header dependency" reasoning
@@ -55,7 +55,7 @@ constexpr int kDefaultAutosaveIntervalMinutes = 2;
 constexpr const char* kAutosaveBackupCountKey = "autosaveBackupCount";
 constexpr int kDefaultAutosaveBackupCount = 5;
 
-// FRO13 (P9-7, docs/mixer.md §5.7/§7 D3): the per-type default track preset. Value is the preset's
+// FRO13 (P9-7, docs/mixer/track-presets.md#saving-and-setting-a-default): the per-type default track preset. Value is the preset's
 // sanitised file NAME (no extension), or absent/empty = "use the factory chain". Read at use time
 // by MainComponent::addAudioTrack/addInstrumentTrack, duplicated here for the same "one-line
 // string not worth a header dependency" reason as kAutosaveEnabledKey above.
@@ -66,7 +66,7 @@ constexpr const char* kMixerDefaultTrackPresetInstrumentKey = "mixerDefaultTrack
 constexpr int kMixerDefaultPresetFactoryComboId = 1;
 constexpr int kMixerDefaultPresetComboIdBase = 2;
 
-// FRO12 (P9-6, docs/mixer.md §5.9): where the Mixer panel lives. Value is "tab"/"ownPanel"/
+// FRO12 (P9-6, docs/mixer/panel.md): where the Mixer panel lives. Value is "tab"/"ownPanel"/
 // "window", default "tab" (D4 = A, made configurable) -- read at use time by
 // MixerPlacementController, duplicated here for the same "one-line string not worth a header
 // dependency" reason as kAutosaveEnabledKey above.

@@ -123,7 +123,7 @@ public:
      *  by MainComponent/ProjectBundle) needs to reach it, and GraphEditor owns no file dialogs. */
     synth::MacroSet& getMacros() noexcept override { return macros; }
 
-    // ---- Macros (P8-12, docs/macros.md) — owned by MacroGroupController since FRO77 PR2 --------
+    // ---- Macros (P8-12, docs/macros/macros.md) — owned by MacroGroupController since FRO77 PR2 --------
     // GraphEditor forwards its own (unchanged) public macro API to macroController_; the nested
     // types below are aliased so `GraphEditor::X` keeps compiling for every existing caller
     // (PreferencesSettingsTab, ModuleComponent, tests) unchanged. Full contracts live on
@@ -199,7 +199,7 @@ public:
     bool isMacroChipDragActive() const { return macroChipDragId.isNotEmpty(); } // FRO19 test accessor
     void cancelLiveDragGestures();
 
-    // ---- Cmd/Ctrl-drag macro reparent (FRO40, docs/macros_ports.md) ----------------------------
+    // ---- Cmd/Ctrl-drag macro reparent (FRO40, docs/macros/ports.md) ----------------------------
     // A live drag JOINS/LEAVES an expanded macro by crossing its hull border; see
     // ModuleComponentInteraction.cpp's mouseDrag/mouseUp for the gesture and
     // MacroGroupController::macroDragJoinOrLeaveTarget for the geometry query this is fed from.
@@ -231,7 +231,7 @@ public:
     juce::String addMacroForMembers(const std::vector<juce::String>& memberUuids, const juce::String& name,
                                     juce::Point<int> origin);
 
-    // ---- Macro auto-port preference (founder-review fix F5, docs/macros_implementation.md §7 item 6.1/6.2) ----
+    // ---- Macro auto-port preference (founder-review fix F5, docs/macros/auto-ports.md) ----
     // See GraphEditorMacroPrompts.cpp's requestGroupSelectionIntoMacro() for the tri-state/
     // persistence rationale.
 
@@ -294,7 +294,7 @@ public:
 
     void deleteMacroAndMembers(const juce::String& macroId);
 
-    // ---- Macro bypass/mute (P8-15d, T142, docs/macros_ports.md §5.6) -------------------------------
+    // ---- Macro bypass/mute (P8-15d, T142, docs/macros/ports.md#bypass-and-mute) -------------------------------
     //
     // "Bypass macro" / "Mute macro" are FAN-OUT COMMANDS over a macro's members, not a
     // macro-level reinterpretation of the contract — a macro has no processBlock and no
@@ -387,7 +387,7 @@ public:
     /** Quick "Rename Port" prompt -- the one-name alternative to Configure I/O. */
     void promptRenameMacroPort(const juce::String& macroId, const juce::String& nodeUuid);
 
-    // ---- Macro card jacks (P8-15c, T141, docs/macros_implementation.md §7 item 4) -----------------------------
+    // ---- Macro card jacks (P8-15c, T141, docs/macros/ports.md#cable-rendering-across-the-boundary) -----------------------------
     // See MacroGroupController::MacroCardPort for the full on-card-jack layout contract.
     using MacroCardPort = MacroGroupController::MacroCardPort;
 
@@ -461,21 +461,21 @@ public:
     void setDoubleClickPortDisconnectEnabled(bool enabled) { doubleClickPortDisconnectEnabled = enabled; }
     bool getDoubleClickPortDisconnectEnabled() const noexcept { return doubleClickPortDisconnectEnabled; }
 
-    // T148 (docs/macros_implementation.md §7 item 9): auto-create a macro port when a dragged cable crosses a
+    // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): auto-create a macro port when a dragged cable crosses a
     // macro boundary. On by default; a Preferences toggle (PreferencesSettingsTab,
     // "macroAutoCreatePortsOnDrag") lets a user turn this specific automation off, leaving
     // endConnectionDrag's plain connectPorts() behaviour exactly as it was before T148.
     void setAutoCreateMacroPortsOnDragEnabled(bool enabled) { autoCreateMacroPortsOnDragEnabled = enabled; }
     bool getAutoCreateMacroPortsOnDragEnabled() const noexcept { return autoCreateMacroPortsOnDragEnabled; }
 
-    // T184 (P9-3c, docs/mixer.md §5.2): auto-creates a mixer channel on a qualifying MIDI connect;
+    // T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks): auto-creates a mixer channel on a qualifying MIDI connect;
     // Preferences ("mixerAutoCreateChannelOnConnect") can turn this off.
     void setAutoCreateChannelOnConnectEnabled(bool enabled) { autoCreateChannelOnConnectEnabled = enabled; }
     bool getAutoCreateChannelOnConnectEnabled() const noexcept { return autoCreateChannelOnConnectEnabled; }
 
     void createChannelsForUnchanneledTracks(const std::vector<juce::AudioProcessorGraph::NodeID>& trackSourceNodeIds);
 
-    // ---- FRO25 (P9-3d, docs/mixer.md §5.8): "Make channel" / "Duplicate into this channel" ------
+    // ---- FRO25 (P9-3d, docs/mixer/mixer.md#make-channel-and-shared-modules): "Make channel" / "Duplicate into this channel" ------
 
     /** "Make channel" for the chain starting at `source`; boxes it into a new collapsed macro. */
     bool makeChannelFromNode(juce::AudioProcessorGraph::NodeID source, const juce::String& channelName);
@@ -507,7 +507,7 @@ public:
         showCanvasContextMenuHook_ = std::move(hook);
     }
 
-    // T148 (docs/macros_implementation.md §7 item 9): auto-delete a macro port once its last cable is removed.
+    // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): auto-delete a macro port once its last cable is removed.
     // On by default; a Preferences toggle (PreferencesSettingsTab,
     // "macroAutoDeletePortsOnLastCable") lets a user turn this off, leaving a cable-less port in
     // place until it is removed by hand (Configure I/O or the port's own right-click Delete Port).
@@ -895,7 +895,7 @@ private:
 
     std::unique_ptr<synth::ui::ColourPickerPopup> buildMacroColourPicker(const juce::String& macroId);
 
-    // ---- Auto-create-channel-on-connect (T184, P9-3c, docs/mixer.md §5.2 "main workflow") ------
+    // ---- Auto-create-channel-on-connect (T184, P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow") ------
 
     bool nodeIsTimelineMidiSource(juce::AudioProcessorGraph::NodeID nodeId) const;
 

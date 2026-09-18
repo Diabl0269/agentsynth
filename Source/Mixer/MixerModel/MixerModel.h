@@ -1,6 +1,6 @@
 #pragma once
 
-// MixerModel.h -- FRO11 (P9-5, docs/mixer.md §5.6/§5.9-5.11): the mixer panel's own Core query
+// MixerModel.h -- FRO11 (P9-5, docs/mixer/panel.md): the mixer panel's own Core query
 // layer. Headless, no juce_gui_basics/AppUI dependency (Source/Mixer/CLAUDE.md's own "Core,
 // no-UI-dep" discipline, same as Source/Mixer/ChannelFlows): everything the mixer panel PAINTS is
 // a pure read off the live graph/TimelineDoc/MacroSet, recomputed on demand -- exactly the same

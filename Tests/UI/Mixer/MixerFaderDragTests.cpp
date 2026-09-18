@@ -1,4 +1,4 @@
-// MixerFaderDragTests.cpp -- FRO150 (docs/mixer_fader.md): MixerFaderSlider's own mouse/wheel
+// MixerFaderDragTests.cpp -- FRO150 (docs/mixer/fader.md): MixerFaderSlider's own mouse/wheel
 // conventions, driven through its REAL mouseDown/mouseDrag/mouseUp/mouseDoubleClick/mouseWheelMove
 // overrides with synthesized juce::MouseEvents (docs/development/test-patterns.md's real mouse path
 // convention, MacroPortRealMouseDragTests.cpp's template) -- never juce::Slider's own internal

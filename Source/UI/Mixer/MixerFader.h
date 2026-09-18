@@ -6,11 +6,11 @@
 
 class AppUndoManager;
 
-// MixerFader.h -- FRO11 (P9-5, docs/mixer.md §5.10): a dB-scale vertical fader bound to a
+// MixerFader.h -- FRO11 (P9-5, docs/mixer/panel.md#what-the-mixer-shows): a dB-scale vertical fader bound to a
 // ChannelStripModule/MasterModule's own `gain` AudioParameterFloat*, reused by both (their ranges
 // are identical -- ChannelStripModule::kMinGainDb/kMaxGainDb).
 //
-// FRO150 (docs/mixer_fader.md): the slider's on-screen THUMB POSITION follows Cubase's own
+// FRO150 (docs/mixer/fader.md): the slider's on-screen THUMB POSITION follows Cubase's own
 // non-linear fader taper (MixerFaderTaper.h) while the bound PARAMETER stays exactly linear dB --
 // bind() installs a custom juce::NormalisableRange<double> whose convertTo0to1/convertFrom0to1
 // route through the taper. slider_ is a MixerFaderSlider (not a plain juce::Slider) for the

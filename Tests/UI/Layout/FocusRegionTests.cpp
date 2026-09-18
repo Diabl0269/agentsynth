@@ -66,7 +66,7 @@ TEST(FocusRegionRegistryTest, RegionContainingPrefersTheMostSpecificNestedRegion
         << "focus on the outer root itself (not inside the nested region) still resolves to the outer one";
 }
 
-// FRO12 (P9-6, docs/mixer.md §5.9): a DetachedPanelWindow owns its OWN FocusRegionRegistry,
+// FRO12 (P9-6, docs/mixer/panel.md): a DetachedPanelWindow owns its OWN FocusRegionRegistry,
 // separate from MainComponent's -- Tab inside it must cycle only its own region(s). Modeled here
 // as two plain registries (no need for a real DetachedPanelWindow to prove the pure logic never
 // crosses); DetachedPanelWindowTests.cpp's TabCyclesOnlyItsOwnOneRegionRegistry is the real-class

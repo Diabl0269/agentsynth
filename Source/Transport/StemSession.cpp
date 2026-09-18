@@ -19,7 +19,7 @@ std::vector<StemStripEntry> collectStemStrips(juce::AudioProcessorGraph& graph) 
         if (auto* strip = dynamic_cast<ChannelStripModule*>(node->getProcessor()))
             result.push_back({node->nodeID, strip});
     }
-    // "else node id" (docs/mixer.md §5.12) - this ENUMERATION ORDER still has no dependency on the
+    // "else node id" (docs/mixer/stem-export.md) - this ENUMERATION ORDER still has no dependency on the
     // timeline/track model, so node id ascending is the stable order available at this layer. That
     // stability is only WITHIN one export: node ids are reassigned whenever the graph is rebuilt from
     // JSON (e.g. an undo/redo that crosses a rebuild - MixerSoloTests.UndoRedoAcrossAGraphRebuildSettlesTheGate
@@ -45,15 +45,15 @@ StemResult failure(juce::String message) {
     return result;
 }
 
-// ---- FRO55 (docs/mixer.md §5.12): stem file names, off the TRACK that feeds each strip ----------
+// ---- FRO55 (docs/mixer/stem-export.md): stem file names, off the TRACK that feeds each strip ----------
 
 // The stem NAME for the strip at `stripId` (the part between "NN - " and the extension) - FRO55,
-// docs/mixer.md §5.12. `number` is the strip's own 1-based export position, reused verbatim for the
+// docs/mixer/stem-export.md. `number` is the strip's own 1-based export position, reused verbatim for the
 // "Channel N" fallback so it always agrees with the file's own "NN" prefix. Exactly one upstream
 // track source resolving to a non-empty TimelineDoc track name wins; zero, several, or an
 // unresolvable/untracked source all fall back, which is also what keeps every name legal and
 // unique on its own (the "NN - " prefix already makes the full FILE name unique regardless - see
-// docs/mixer.md §5.12 - so no separate de-duplication pass is needed here even when two different
+// docs/mixer/stem-export.md - so no separate de-duplication pass is needed here even when two different
 // tracks share a user-given name).
 //
 // The walk itself (which tracks feed this strip) and the one-feeder-wins naming rule are
@@ -62,13 +62,13 @@ StemResult failure(juce::String message) {
 // directly by a test), there is no name to find and every strip keeps its "Channel N" fallback.
 //
 // ChannelStripModule has no user-given name field of its own yet (re-checked at FRO15 time - its
-// getExtraState() carries "shape"/"solo"/"isBus"/"sends" and no name, and docs/mixer.md §5.4-5.15
+// getExtraState() carries "shape"/"solo"/"isBus"/"sends" and no name, and docs/mixer/mixer.md#mono-and-stereo-5.15
 // never added one either; a bus takes its name from its MACRO, not from the strip) - the
 // mixer-UI ticket that might add one is expected to make THIS function prefer it, ahead of the
 // shared track walk, whenever it lands.
 juce::String stemStripName(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID stripId, int number,
                            const TimelineDoc* timelineDoc) {
-    // FRO15 (docs/mixer.md §5.15): a group/send bus is a ChannelStrip too, so collectStemStrips
+    // FRO15 (docs/mixer/sends-and-buses.md): a group/send bus is a ChannelStrip too, so collectStemStrips
     // picks it up with no change at all - but it has no feeding track, so "Channel N" would be a
     // lie about what the file holds. Its fallback is "Bus N" instead (MixerSends.h). A bus that IS
     // also fed by a track directly still takes the track name below, same as any other strip.
@@ -155,7 +155,7 @@ StemSession::StemSession(AudioEngine& engine, const juce::File& destinationFolde
                                                                            : static_cast<juce::AudioFormat&>(wavFormat);
     const juce::String extension = options_.format == BounceFormat::Aiff ? "aiff" : "wav";
     // Wide enough that "07" doesn't need to become "007" once an 8th strip exists, but never
-    // narrower than 2 digits even for a 1-strip export - see docs/mixer.md §5.12.
+    // narrower than 2 digits even for a 1-strip export - see docs/mixer/stem-export.md.
     const int nameWidth = juce::jmax(2, juce::String((int)entries.size()).length());
 
     stems_.reserve(entries.size()); // pointers into stems_[i].tapBuffer are armed below and must

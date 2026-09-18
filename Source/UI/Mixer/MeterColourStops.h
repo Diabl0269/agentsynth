@@ -17,7 +17,7 @@ struct Colors;
 // MeterColourStops -- no painter would need to change. Backed by a sorted, arbitrary-length
 // vector rather than a fixed count for exactly that reason.
 //
-// Hard band edges (docs/mixer.md meters section): below -18 dB = low (the pre-existing
+// Hard band edges (docs/mixer/mixer.md meters section): below -18 dB = low (the pre-existing
 // `meterFill` token, kept as the low zone's colour for theme back-compat), -18..-6 dB = mid,
 // -6..0 dB = high, above 0 dB = clip -- that is what fromTheme()'s default four stops encode.
 //

@@ -1,5 +1,5 @@
 // MacroAutoPortCreationTests.cpp
-// Auto-creating macro ports on grouping (founder-review fix F5, docs/macros_implementation.md §7 item 6.1/6.2):
+// Auto-creating macro ports on grouping (founder-review fix F5, docs/macros/auto-ports.md):
 // mono crossing, jack dedup, collapsed-stereo, dual-I/O stereo merge, poly-N, MIDI-as-a-separate
 // node, the mod-routing-knob splice (incl. the T144 crossing-knob geometry/drag tests) and
 // grouping-is-one-undo-step. Shared test modules/helpers live in MacroAutoPortTestHelpers.h.
@@ -173,7 +173,7 @@ TEST(MacroAutoPort, CollapsedStereoOutputCrossingCreatesAOneJackStereoCollapsedO
     ASSERT_NE(outlet, nullptr);
     EXPECT_EQ(outlet->getPortShape(), MacroPortShape::StereoCollapsed);
     // The bug this fix closes: the port must present exactly as many VISIBLE jacks as the
-    // internal jack it fronts (docs/macros_ports.md §5.3). Reverb's own jack is ONE jack; so must this be.
+    // internal jack it fronts (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed). Reverb's own jack is ONE jack; so must this be.
     EXPECT_EQ(outlet->getVisibleInputPortCount(), 1);
     EXPECT_EQ(outlet->getVisibleOutputPortCount(), 1);
 
@@ -447,7 +447,7 @@ TEST(MacroAutoPort, AttenuverterAdjacentCrossingIsSplicedForAGenuineExternalCros
 // a ModuleComponent), so it is nominally "outside" no matter what -- but splicing here would spawn
 // two spurious ports for a routing the user is grouping wholly inside the macro. This is the one
 // sub-case G3 deliberately leaves un-ported; this test pins that as the CURRENT, intended
-// behaviour (docs/macros_implementation.md §7 item 7).
+// behaviour (docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port item 7).
 TEST(MacroAutoPort, ModRoutingWithBothRealEndpointsInsideStaysWhollyInternal) {
     AudioEngine engine;
     GraphEditor editor(engine);
@@ -617,7 +617,7 @@ TEST(MacroAutoPort, UndoRestoresAModRoutingCrossingSpliceExactly) {
 // silently drifted ~300px off the real knob position the moment either endpoint became a macro
 // port node, in EVERY collapse state including both macros fully expanded. It now reuses
 // buildVisibleCables()'s own AttenuverterChain cable, so hit-testing can never disagree with what
-// is painted (docs/macros_implementation.md §7 item 7's fix note).
+// is painted (docs/macros/auto-ports.md#a-modulation-cable-through-an-attenuverter).
 TEST(MacroAutoPort, TwoMacroCrossingKnobHitTestMatchesPaintedGeometryInEveryCollapseState) {
     AudioEngine engine;
     GraphEditor editor(engine);

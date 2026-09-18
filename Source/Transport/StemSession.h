@@ -32,7 +32,7 @@ struct StemStripEntry {
 };
 
 // Every ChannelStripModule node in `graph`, ordered by node id (ascending) — the "else node id"
-// fallback docs/mixer.md §5.12 allows when no mixer/track order is exposed to this layer (this
+// fallback docs/mixer/stem-export.md allows when no mixer/track order is exposed to this layer (this
 // enumeration itself still has no dependency on the timeline/track model — only STEM NAMING, in
 // StemSession's constructor below, optionally looks at a TimelineDoc). Node ids are assigned in
 // creation order and never reused within a session, so this order is stable across repeated calls
@@ -58,7 +58,7 @@ public:
     // is touched and no tap stays armed: the engine is restored immediately and failedDuringSetup()
     // is true.
     //
-    // `timelineDoc` (FRO55, docs/mixer.md §5.12): the live document a stem file's name is resolved
+    // `timelineDoc` (FRO55, docs/mixer/stem-export.md): the live document a stem file's name is resolved
     // against — each strip is named after the ONE track (Track In / Track Audio, walked upstream
     // through the instrument/macro chain) that feeds it, falling back to "Channel N" when zero or
     // several tracks do, or when this is null (a caller with no timeline at all — every test rig
