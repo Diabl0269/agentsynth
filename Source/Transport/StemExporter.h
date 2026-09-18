@@ -20,7 +20,7 @@ class TimelineDoc; // Forward declaration (Source/Timeline/TimelineDoc.h) - see 
 // Every strip ALWAYS gets a file, muted or soloed-out included — the tap sits AFTER the strip's own
 // bypass/mute/solo logic, so a muted or non-soloed strip's stem is simply silent for exactly the
 // blocks it was silent. This is what keeps "the stems sum back to the pre-Master mix" true in every
-// case, solo included (docs/mixer/mixer.md P9-8): a soloed strip during export never changes which
+// case, solo included (docs/mixer/stem-export.md): a soloed strip during export never changes which
 // strips get written, only what most of them contain.
 //
 // Master's Direct input (cables that bypass every strip) is NOT a stem — Direct is not a channel

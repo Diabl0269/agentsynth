@@ -2,8 +2,8 @@
 
 `Source/MacroSet.h`, `Source/UI/MacroCardComponent.{h,cpp}`. How a macro looks and behaves on the
 patch canvas. The Macro I/O port model — node types, port ordering, poly/stereo shape, cable
-rendering across the boundary — is [macros_ports.md](../macros_ports.md); the container concept is
-[macros.md](../macros.md).
+rendering across the boundary — is [`docs/macros/ports.md#cable-rendering-across-the-boundary`](../macros/ports.md#cable-rendering-across-the-boundary); the container concept is
+[`docs/macros/macros.md`](../macros/macros.md).
 
 ## A macro is a persisted selection plus presentation
 
@@ -23,7 +23,7 @@ nodes, or any selected node already belonging to a macro.
 The right-click "Create Macro from N Modules" item — on `ModuleComponent`'s menu and
 `GraphEditor::showCanvasContextMenu` — calls `GraphEditor::requestGroupSelectionIntoMacro()`, which
 always means exactly that verb: it wraps `groupSelectionIntoMacro()` with the auto-port-preference
-gate (see [macros_implementation.md](../macros_implementation.md)) before delegating.
+gate (see [`docs/macros/auto-ports.md#the-auto-port-preference`](../macros/auto-ports.md#the-auto-port-preference)) before delegating.
 `ungroupSelection()` (Cmd+Shift+G) dissolves every macro touched by the current selection, leaving
 the member modules exactly where they are and expanding them back to individual cards; it is a no-op
 (also surfaced via `onStatusMessage`) when the selection touches no macro. Deleting a macro is the

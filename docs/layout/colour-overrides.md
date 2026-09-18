@@ -55,7 +55,7 @@ marks a pinned pitch class, the same affordance as the cable-colour swatches.
 
 The mixer meter — both bars in `MixerMeter` and the track header's `ChannelChipComponent` — has a
 level-to-colour zone model, `synth::ui::MeterColourStops`
-(`Source/UI/Mixer/MeterColourStops.h`; the mechanism is in [mixer](../mixer.md)'s Meters
+(`Source/UI/Mixer/MeterColourStops.h`; the mechanism is in [`docs/mixer/meters.md`](../mixer/meters.md)'s
 subsection): below -18 dBFS is `meterFill` (low), -18 to -6 is `meterMid`, -6 to 0 is `meterHigh`,
 and above 0 is `meterClip`. Four theme tokens, one per zone.
 
@@ -89,7 +89,7 @@ ONCE — never rebuilt per paint tick.
 own `juce::DialogWindow`, so `getLookAndFeel()` called from inside the tab is not guaranteed to
 resolve back to the app's real `AppLookAndFeel`, and the plugin build never calls
 `Desktop::setDefaultLookAndFeel` at all. See
-[testing_mixer_meters.md](../testing_mixer_meters.md) for the full test list.
+[`docs/mixer/meters.md#test-coverage`](../mixer/meters.md#test-coverage) for the full test list.
 
 ## Colour picker popup
 

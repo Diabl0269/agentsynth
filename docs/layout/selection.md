@@ -18,7 +18,7 @@ the marquee is gated behind **Shift** instead and pan is untouched.
 | Click a module body | Select just that module |
 | **Shift** + click a module | Toggle that module's membership (does **not** start a drag) |
 | **Cmd** + click a module (no movement) | Toggle that module's membership, same as Shift |
-| **Cmd** + drag a module across an expanded macro's hull | Joins or leaves that macro — [`macros_ports.md`](../macros_ports.md) has the full gesture and undo contract |
+| **Cmd** + drag a module across an expanded macro's hull | Joins or leaves that macro — [`docs/macros/menu-and-membership.md#cmd-drag-across-a-hull-border`](../macros/menu-and-membership.md#cmd-drag-across-a-hull-border) has the full gesture and undo contract |
 | Drag any selected module | Move the entire selection together |
 | Click empty canvas (no drag) | Clear the selection |
 | Right-click a module | Select it if it was not, then open the menu |

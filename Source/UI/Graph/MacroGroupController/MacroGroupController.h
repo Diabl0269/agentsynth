@@ -72,7 +72,7 @@ public:
      *  MacroCardComponent::paint(), buildVisibleCables()'s boundary-cable anchoring, and
      *  endConnectionDrag()'s jack hit-test all read this rather than recomputing it, so the drawn
      *  dot, the anchored cable and the drop target can never drift apart. (P8-15c, T141,
-     *  docs/macros/ports.md.4). Aliased as GraphEditor::MacroCardPort. */
+     *  docs/macros/ports.md#cable-rendering-across-the-boundary). Aliased as GraphEditor::MacroCardPort. */
     struct MacroCardPort {
         juce::String nodeUuid;
         bool isInput = false;
@@ -167,7 +167,7 @@ public:
     void toggleMacroBypassed(const juce::String& macroId);
     void toggleMacroMuted(const juce::String& macroId);
 
-    // ---- Geometry / hit-testing / card jacks (docs/macros/ports.md.4) -----------------------
+    // ---- Geometry / hit-testing / card jacks (docs/macros/ports.md#cable-rendering-across-the-boundary) -----------------------
 
     juce::Rectangle<int> macroHullBounds(const juce::String& macroId) const;
     /** FRO40: `macroHullBounds` above, but with `excludedMemberUuid` left out of the union too —
@@ -200,7 +200,7 @@ public:
     MacroPortOwner macroPortOwnerFor(juce::AudioProcessorGraph::NodeID nodeId) const;
 
     /** Positions every EXPANDED macro's port widgets against macroHullBounds() (P8-15 fix F2,
-     *  docs/macros/ports.md.4 has the full layout contract). GraphEditorCanvas.cpp/
+     *  docs/macros/ports.md#how-a-port-is-drawn has the full layout contract). GraphEditorCanvas.cpp/
      *  GraphEditorDragDrop.cpp/GraphEditorSelection.cpp call this directly. */
     void dockMacroPortWidgets();
 
@@ -227,7 +227,7 @@ public:
     void createMacroPortFromDroppedCable(const juce::String& macroId, bool newPortIsInput, bool isMidi,
                                          juce::AudioProcessorGraph::NodeID otherNodeId, int otherVisibleJack);
 
-    // ---- Auto-create-ports-on-group (founder-review fix F5, docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port item 7) ----
+    // ---- Auto-create-ports-on-group (founder-review fix F5, docs/macros/auto-ports.md#auto-creating-ports-when-grouping) ----
 
     /** The crossing plan a would-be macro's members (by NodeID) would need on creation. */
     std::vector<MacroPortCrossingGroup>

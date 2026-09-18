@@ -447,7 +447,7 @@ TEST(MacroAutoPort, AttenuverterAdjacentCrossingIsSplicedForAGenuineExternalCros
 // a ModuleComponent), so it is nominally "outside" no matter what -- but splicing here would spawn
 // two spurious ports for a routing the user is grouping wholly inside the macro. This is the one
 // sub-case G3 deliberately leaves un-ported; this test pins that as the CURRENT, intended
-// behaviour (docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port item 7).
+// behaviour (docs/macros/auto-ports.md#a-modulation-cable-through-an-attenuverter).
 TEST(MacroAutoPort, ModRoutingWithBothRealEndpointsInsideStaysWhollyInternal) {
     AudioEngine engine;
     GraphEditor editor(engine);

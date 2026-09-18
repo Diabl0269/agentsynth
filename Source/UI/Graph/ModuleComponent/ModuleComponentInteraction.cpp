@@ -522,7 +522,7 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
 
         // Docked macro-port widget (P8-15 fix F2): not individually selectable or draggable via a
         // LEFT click — its position is fully derived by GraphEditor::dockMacroPortWidgets()
-        // against its macro's hull (docs/macros/ports.md.4), and a body drag/select here would fight
+        // against its macro's hull (docs/macros/ports.md#how-a-port-is-drawn), and a body drag/select here would fight
         // that on every layout pass. A WHOLE-macro drag (via the collapsed card, or selecting the
         // macro through selectMacro()) still carries it along: that path adds every member —
         // ports included — to the selection directly, never through this component's own

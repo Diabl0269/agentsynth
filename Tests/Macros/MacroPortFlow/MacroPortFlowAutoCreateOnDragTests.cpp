@@ -270,7 +270,7 @@ TEST(MacroPortFlow,
         << "no leftover direct port->destination connection";
 
     // Neither the attenuverter nor the port's own uuid appears anywhere but the one macro entry —
-    // the attenuverter can never itself be a macro member (docs/macros/macros.md#macro-ports-are-proxy-nodes-on-a-flat-graph, docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port item 7).
+    // the attenuverter can never itself be a macro member (docs/macros/macros.md#macro-ports-are-proxy-nodes-on-a-flat-graph, docs/macros/auto-ports.md#a-modulation-cable-through-an-attenuverter).
     EXPECT_FALSE(macro->hasMember(uuidOf(engine, attenId)));
 }
 

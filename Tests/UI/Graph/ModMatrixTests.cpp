@@ -672,7 +672,7 @@ TEST_F(ModMatrixTest, GroupedDestinationLabelIncludesModuleName) {
     EXPECT_TRUE(label.contains("Cutoff")) << "label was: " << label;
 }
 
-// founder-review fix G3 (docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port item 7): grouping a module that is the destination of a
+// founder-review fix G3 (docs/macros/auto-ports.md#a-modulation-cable-through-an-attenuverter): grouping a module that is the destination of a
 // mod routing now splices a MacroInletModule in as that routing's dest. MacroInletModule declares
 // no getModulationTargets() (a plain cable drop onto its jack must never auto-wrap into a new
 // attenuverter -- Tests/Macros/MacroPortFlowTests.cpp), so the destination combo needs a way to still

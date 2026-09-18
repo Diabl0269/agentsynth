@@ -39,7 +39,7 @@ when reasoning about a key that "does nothing."
 | Ctrl+A (macOS) / Cmd+Shift+A (elsewhere) | Toggle AI Panel — moved off Cmd+A so Select All could take the platform-standard chord. One of the very few per-platform defaults: on macOS Ctrl is a real separate modifier, on Windows/Linux JUCE's Cmd IS Ctrl so Ctrl+A would collide with Select All |
 | Cmd+B | Toggle Module Library |
 | Cmd+T | Toggle Timeline Panel (see [`timeline/timeline.md`](../timeline/timeline.md#docking-toggle-and-the-bottom-dock)) |
-| Cmd+Alt+M | Toggle Mixer Panel (`toggleMixerPanel`) — opens the bottom dock on the Mixer tab if closed, or on Timeline; closes it on a second press only when the dock is already open on Mixer, mirroring Cmd+T's own open/close symmetry. See [`mixer_implementation.md`](../mixer_implementation.md) |
+| Cmd+Alt+M | Toggle Mixer Panel (`toggleMixerPanel`) — opens the bottom dock on the Mixer tab if closed, or on Timeline; closes it on a second press only when the dock is already open on Mixer, mirroring Cmd+T's own open/close symmetry. See [`docs/mixer/panel.md#placement-and-detachable-windows`](../mixer/panel.md#placement-and-detachable-windows) |
 | Cmd+A | Select All in Focused Editor (actionId/`AppCommands` name still `selectAllModules` — see "Surface routing" below) |
 | Cmd+Shift+S | Save Selection as Snippet |
 | Cmd+C | Copy (Selected Modules, or — see "Surface routing" below — the timeline's selected clips/notes) |
@@ -135,7 +135,7 @@ below for the Mixer region's own keyboard behaviour.
   so the two focus regions nest rather than sit side by side. `FocusRegionRegistry::regionContaining`
   resolves this to the most specific match (Mod Matrix, not Canvas) whenever real focus sits inside
   it, so Tab-cycling and the outline both track the right one.
-- **A detached window (`[`docs/mixer/panel.md`](../mixer/panel.md)`) cycles only its OWN regions** — the
+- **A detached window ([`docs/mixer/panel.md`](../mixer/panel.md)) cycles only its OWN regions** — the
   Timeline or Mixer panel, popped out into its own `DetachedPanelWindow`, owns a SEPARATE
   `FocusRegionRegistry` with exactly one region (its hosted panel); Tab/Shift+Tab there resolves via
   the same shared `synth::ui::resolveFocusCycleKeyPress()` translation this app's command table

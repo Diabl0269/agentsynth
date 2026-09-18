@@ -357,7 +357,7 @@ public:
 
     // ---- Macro I/O (P8-15b, T140): the "Configure I/O" modal + the cable-drop convenience -----
     //
-    // §7 items 3 and 5 of docs/macros_implementation.md, unified into ONE modal per an explicit founder request
+    // docs/macros/configure-io.md, unified into ONE modal per an explicit founder request
     // rather than piecemeal "Add Input"/"Add Output"/"Rename"/"Reorder" menu actions. Every entry
     // point below is a single recordGraphAndMacroChange transaction, so add/remove/rename/reorder
     // and (the one that matters most) a shape change are each exactly one undo step — a shape

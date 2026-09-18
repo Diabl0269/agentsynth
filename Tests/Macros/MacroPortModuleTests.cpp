@@ -167,7 +167,7 @@ TEST(MacroInletModuleTest, SetPortShapeStereoExposesChannelZeroAndKRightBaseAsTw
     EXPECT_NE(inlet.mapOutputChannel(1).role, PortRole::Audio);
 }
 
-// StereoCollapsed (founder-review fix G2, docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed / docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port item 7):
+// StereoCollapsed (founder-review fix G2, docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed / docs/macros/auto-ports.md#auto-creating-ports-when-grouping):
 // auto-derived only, produced when a crossing cable lands on an ordinary module's own COLLAPSED stereo jack (e.g. an FX
 // module's single "Audio" jack). The port must present the SAME one visible jack that internal jack does, while still
 // carrying both raw channels — never the two-jack MacroPortShape::Stereo a hand-picked Configure I/O choice means.

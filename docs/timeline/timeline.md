@@ -86,12 +86,12 @@ under the `timelinePanelVisible` key in `juce::ApplicationProperties`, default `
 
 **The key and the flag gate the whole bottom dock, not just this panel.**
 `TimelinePanelComponent` is nested inside `MixerDockComponent` (the Timeline/Mixer tab strip; see
-[`mixer_implementation.md`](../mixer_implementation.md) §8), and
+[`docs/mixer/panel.md#what-the-mixer-shows`](../mixer/panel.md#what-the-mixer-shows)), and
 `mixerDock.setVisible(isTimelineVisible)` is what the toggle, the shortcut and the persisted key
 actually drive. `isTimelineVisible` / `timelinePanelVisible` mean "the dock is open", regardless of
 which tab is active; which of the two panels is *showing* inside an open dock is the separate,
 independently persisted `bottomDockActiveTab` key (`MixerDockComponent::kActiveTabKey`, default
-`"timeline"` — see `mixer_implementation.md` §8).
+`"timeline"` — see [`docs/mixer/panel.md#what-the-mixer-shows`](../mixer/panel.md#what-the-mixer-shows)).
 
 **Why the names stayed.** They match settings files already on disk. The cost is that a
 component-local `TimelinePanelComponent::isVisible()` check does not tell you whether the dock is

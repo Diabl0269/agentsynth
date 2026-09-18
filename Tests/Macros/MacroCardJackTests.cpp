@@ -324,7 +324,7 @@ TEST(MacroCardJack, BoundaryCableThroughAPortAnchorsAtItsJackWhileAnInteriorMemb
 
 // ============================================================================
 // Directional edge anchoring for a no-port-involved boundary cable (founder-review fix F3,
-// docs/macros/ports.md.4): the card side is chosen by which end of the cable the macro is, not by
+// docs/macros/ports.md#cable-rendering-across-the-boundary): the card side is chosen by which end of the cable the macro is, not by
 // which edge happens to face the other endpoint. A cable ENTERING the macro (the macro is the
 // cable's destination) anchors on the LEFT edge; a cable LEAVING it (the macro is the source)
 // anchors on the RIGHT edge - regardless of where the external module actually sits.
@@ -478,7 +478,7 @@ TEST(MacroCardJack, EdgeAnchoredCableDoesNotLandOnAPortJackOnTheSameSide) {
 }
 
 // ============================================================================
-// Ungrouping a macro whose port has cables landing on it (docs/macros/ports.md.4, docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port):
+// Ungrouping a macro whose port has cables landing on it (docs/macros/ports.md#cable-rendering-across-the-boundary, docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port):
 // the founder's second-pass review decided this ("ungroup leaves the macro input/output in place (They should be
 // removed)"). REWRITTEN from the OLD (now rejected) behaviour this test used to pin — a port node surviving ungroup,
 // with its cable untouched, on the theory that ungroup is purely presentation-only. That is still true for a macro's

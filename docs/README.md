@@ -44,13 +44,18 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 
 ## Macros & mixer
 
-- [`docs/macros/macros.md`](macros/macros.md) — Macros: the P8-12 presentation-only container and the DECIDED Macro I/O model (P8-14) overview, and why a container node with an inner graph was rejected
-- [`docs/macros/ports.md`](macros/ports.md) — Macro I/O port mechanics: node types, port set/ordering, poly/stereo shape, cable rendering across the boundary, bypass/mute, the macro menu
-- [`docs/macros_implementation.md`](macros_implementation.md) — Macro I/O AI-authorability decision, the P8-15 implementation tracker, and out-of-scope items
-- [`docs/mixer/mixer.md`](mixer/mixer.md) — Mixer channels (P9-1, decided 2026-09-10): the ChannelStrip node is the channel, macros are the container, solo as a render-time gate, Master/Direct, the track/channel link, track presets
-- [`docs/mixer/fader.md`](mixer/fader.md) — The mixer fader's own Cubase-like taper (FRO150): UI-only position mapping vs. the linear-dB parameter, Shift fine-drag, Cmd-click/double-click reset
-- [`docs/mixer/mixer.md`](mixer/mixer.md) — Mixer build log: dependency order and the test list for each P9 item (engine/solo gate, channel creation flows, track/channel link, mixer panel, detachable windows, track presets, stem export, and the remaining side tracks)
-- [`docs/testing_mixer_meters.md`](testing_mixer_meters.md) — mixer meter & fader test list (FRO146/FRO150/FRO147): peak latch, dB scale zones, clip readout, taper
+- [`docs/macros/macros.md`](macros/macros.md) — hub: what a macro is, the macro model, ports as proxy nodes on a flat graph, AI authorability, deliberate limits
+- [`docs/macros/ports.md`](macros/ports.md) — Macro I/O port mechanics: node types, port set/ordering, poly/stereo shape, how a port is drawn, cable rendering across the boundary, bypass/mute
+- [`docs/macros/auto-ports.md`](macros/auto-ports.md) — the auto-port preference, auto-creating ports when grouping, a modulation cable through an attenuverter, ungroup and direct deletion of a port, ports on a cable drag
+- [`docs/macros/configure-io.md`](macros/configure-io.md) — the Configure I/O dialog: adding/renaming/reordering/deleting a port, changing its shape, per-port colour, keyboard handling
+- [`docs/macros/menu-and-membership.md`](macros/menu-and-membership.md) — the macro menu's entry points, adding to/removing from a macro, incremental port splicing, Cmd-drag across a hull border, the collapse button
+- [`docs/mixer/mixer.md`](mixer/mixer.md) — hub: what a channel is, node types, channels follow audio not tracks, solo as a render-time gate, mono/stereo, bypass/mute, inserts, building a channel, AI authorability
+- [`docs/mixer/fader.md`](mixer/fader.md) — the mixer fader's own Cubase-like taper (FRO150): UI-only position mapping vs. the linear-dB parameter, Shift fine-drag, Cmd-click/double-click reset
+- [`docs/mixer/meters.md`](mixer/meters.md) — the per-reader peak latch, dB scale and taper, ballistics, colour zones, user-editable meter colours, the clip readout, the track header chip
+- [`docs/mixer/panel.md`](mixer/panel.md) — what the mixer panel shows, placement and detachable windows, unbinding before a graph change, the EQ curve thumbnail, keyboard navigation and accessibility
+- [`docs/mixer/sends-and-buses.md`](mixer/sends-and-buses.md) — a bus is a Channel Strip, a send is an output leg, channel layout, parameter vs. state, pre/post and mute/bypass, the per-leg audible-solo mask, the send/bus UI, stems
+- [`docs/mixer/stem-export.md`](mixer/stem-export.md) — one render pass per strip, stem naming, buses are stems too, what sums back to the mix
+- [`docs/mixer/track-presets.md`](mixer/track-presets.md) — what a track preset is, saving and setting a default, creating a track from a preset, what a saved preset carries, loading a preset
 
 ## Timeline
 

@@ -301,7 +301,7 @@ MacroCardComponent* MacroGroupController::getMacroCardForTest(const juce::String
 }
 
 namespace {
-// Docked macro-port widget layout (P8-15 founder-review fix F2, docs/macros/ports.md.4). Small
+// Docked macro-port widget layout (P8-15 founder-review fix F2, docs/macros/ports.md#how-a-port-is-drawn). Small
 // and fixed regardless of anything else on the canvas — the widget's own getWidth()/getHeight()
 // (set by ModuleComponent::layoutMacroPortWidget, called before this ever runs) decide how big;
 // this only decides WHERE.

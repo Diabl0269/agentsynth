@@ -12,8 +12,8 @@
  * that, as one undo step, never a live renegotiation of MacroInletModule/MacroOutletModule's
  * fixed kMaxChannels bus.
  *
- * `Stereo` vs `StereoCollapsed` (founder-review fix G2, docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed / docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port
- * item 7): these are deliberately TWO values, not one overloaded meaning, because they answer a genuinely different
+ * `Stereo` vs `StereoCollapsed` (founder-review fix G2, docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed / docs/macros/auto-ports.md#auto-creating-ports-when-grouping):
+ * these are deliberately TWO values, not one overloaded meaning, because they answer a genuinely different
  * question — "how many visible jacks does this port show" — for two different sources of a stereo pair:
  *
  *   - `Stereo` is the HAND-PICKED shape, reachable only from the Configure I/O modal

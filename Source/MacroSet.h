@@ -52,7 +52,7 @@ struct MacroPort {
  *  (P8-15 Macro I/O, docs/macros/ports.md). A Macro still adds no graph edges and no processing of
  *  its own: `ports` is a description of which of its OWN inlet/outlet member nodes are exposed as
  *  named jacks, not a mechanism the macro itself implements — the boundary stays a rendering
- *  concept (docs/macros/ports.md.4).
+ *  concept (docs/macros/ports.md#cable-rendering-across-the-boundary).
  *
  *  Membership is by node UUID (the same persistent "uuid" ModuleBase::setNodeUuid mirrors into
  *  the processor), never by juce::AudioProcessorGraph::NodeID — a NodeID is only valid for the
