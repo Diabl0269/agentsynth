@@ -57,12 +57,15 @@ juce::MouseEvent realMouseEvent(juce::Component& eventComp, juce::Point<int> loc
 }
 
 /** Asserts every GraphEditor-owned drag/marquee flag is at rest — the five flags FRO19's ticket
- *  says "live in GraphEditor and have few reset sites". */
+ *  says "live in GraphEditor and have few reset sites", plus FRO40's macro drag-candidate id. */
 void expectNoStuckDragState(GraphEditor& editor, const char* context) {
     EXPECT_FALSE(editor.isDragPreviewActive()) << context << ": drag-preview ghost left stuck";
     EXPECT_FALSE(editor.isMarqueeActive()) << context << ": marquee rectangle left stuck";
     EXPECT_FALSE(editor.isSelectionDragActive()) << context << ": selection-drag bookkeeping left stuck";
     EXPECT_FALSE(editor.isMacroChipDragActive()) << context << ": macro chip drag id left stuck";
+    EXPECT_TRUE(editor.getMacroDragCandidateId().isEmpty()) << context << ": macro drag candidate hull left stuck";
+    EXPECT_EQ(editor.getMacroDragDraggedNodeId(), juce::AudioProcessorGraph::NodeID{})
+        << context << ": macro drag dragged-node id left stuck";
 }
 
 } // namespace
@@ -145,6 +148,86 @@ TEST(DragStateReset, CtrlInsertDragClearsAllStateOnMouseUp) {
     comp->mouseUp(realMouseEvent(*comp, dragPos, pressPos, ctrlClick, /*wasDragged=*/true));
 
     expectNoStuckDragState(editor, "ctrl insert-drag");
+}
+
+// FRO40 regression: the reparent branch (GraphEditor::finalizeMacroMembershipDrag) initially never
+// called endDragPreview() — only clearMacroDragCandidate()/repaintCanvas() — so a SUCCESSFUL
+// Cmd-drag reparent left the landing ghost and grid overlay on screen until some unrelated later
+// gesture happened to clear them. A drag with no macro to join (as this test originally set up)
+// never takes the reparent branch at all — getMacroDragCandidateId() stays empty, so mouseUp falls
+// through to the PLAIN finalize path, which already called endDragPreview() — so the test passed
+// while testing the wrong branch. Both cases below actually cross a real hull and assert the
+// candidate is armed mid-drag, so a future regression back to "plain path only" fails loudly here
+// instead of silently passing.
+TEST(DragStateReset, CmdReparentDragJoinClearsAllStateOnMouseUp) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 400);
+    editor.setSelectedNodes({a, b});
+    const auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false); // expand: the hull becomes live
+
+    auto c = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 100);
+    auto* comp = compFor(editor, c);
+    ASSERT_NE(comp, nullptr);
+
+    const auto hull = editor.macroHullBounds(macroId);
+    ASSERT_FALSE(hull.isEmpty());
+    const auto delta = hull.getCentre() - comp->getBounds().getCentre();
+
+    const juce::ModifierKeys cmdClick(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::commandModifier);
+    const juce::Point<int> pressPos(comp->getWidth() / 2, ModuleComponent::kHeaderHeight + 10);
+    const juce::Point<int> dragPos = pressPos + delta;
+
+    comp->mouseDown(realMouseEvent(*comp, pressPos, pressPos, cmdClick));
+    ASSERT_TRUE(editor.isDragPreviewActive()) << "sanity: Cmd+drag arms the ghost preview too";
+
+    comp->mouseDrag(realMouseEvent(*comp, dragPos, pressPos, cmdClick, /*wasDragged=*/true));
+    ASSERT_FALSE(editor.getMacroDragCandidateId().isEmpty())
+        << "sanity: dragging C's centre into the hull must arm the reparent candidate -- without "
+           "this the test below could silently degrade into exercising the plain finalize path";
+
+    comp->mouseUp(realMouseEvent(*comp, dragPos, pressPos, cmdClick, /*wasDragged=*/true));
+
+    ASSERT_NE(editor.macroForNode(c), nullptr) << "sanity: the drag must actually have reparented";
+    expectNoStuckDragState(editor, "cmd reparent-drag (join)");
+}
+
+TEST(DragStateReset, CmdReparentDragLeaveClearsAllStateOnMouseUp) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+
+    auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
+    auto b = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 400);
+    editor.setSelectedNodes({a, b});
+    const auto macroId = editor.groupSelectionIntoMacro();
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+
+    auto* comp = compFor(editor, a);
+    ASSERT_NE(comp, nullptr);
+
+    const juce::ModifierKeys cmdClick(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::commandModifier);
+    const juce::Point<int> pressPos(comp->getWidth() / 2, ModuleComponent::kHeaderHeight + 10);
+    // Comfortably outside the (B-only) hull-excluding-self this drag is tested against.
+    const juce::Point<int> dragPos = pressPos + juce::Point<int>(2400, 0);
+
+    comp->mouseDown(realMouseEvent(*comp, pressPos, pressPos, cmdClick));
+    ASSERT_TRUE(editor.isDragPreviewActive());
+
+    comp->mouseDrag(realMouseEvent(*comp, dragPos, pressPos, cmdClick, /*wasDragged=*/true));
+    ASSERT_FALSE(editor.getMacroDragCandidateId().isEmpty())
+        << "sanity: dragging A well outside the hull must arm the LEAVE candidate";
+
+    comp->mouseUp(realMouseEvent(*comp, dragPos, pressPos, cmdClick, /*wasDragged=*/true));
+
+    ASSERT_EQ(editor.macroForNode(a), nullptr) << "sanity: the drag must actually have left the macro";
+    expectNoStuckDragState(editor, "cmd reparent-drag (leave)");
 }
 
 TEST(DragStateReset, MarqueeDragClearsAllStateOnMouseUp) {

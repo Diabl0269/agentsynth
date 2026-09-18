@@ -369,8 +369,9 @@ private:
     juce::Point<int> dragStartPosition;
 
     // True only between a body mouseDown that armed the ComponentDragger and its mouseUp. A
-    // Shift/Cmd-click toggles selection WITHOUT arming the dragger, and this flag stops the
-    // subsequent mouseDrag from moving a component the dragger was never started on.
+    // Shift-click toggles selection WITHOUT arming the dragger, and this flag stops the
+    // subsequent mouseDrag from moving a component the dragger was never started on. Cmd no
+    // longer toggles-without-dragging (FRO40) — see cmdReparentPending below.
     bool bodyDragActive = false;
 
     // Ctrl+press arms an insert-between DRAG and an additive-select TOGGLE at once, because at
@@ -380,6 +381,16 @@ private:
     // but only if nothing moved.
     bool ctrlTogglePending = false;
     std::vector<juce::AudioProcessorGraph::NodeID> ctrlPressSelection;
+
+    // FRO40: Cmd+press arms a deferred additive-select TOGGLE and a macro-membership DRAG at
+    // once, resolved at mouseUp by whether the press moved. See mouseDown/mouseUp.
+    bool cmdReparentPending = false;
+    std::vector<juce::AudioProcessorGraph::NodeID> cmdPressSelection;
+
+    // FRO40: whether THIS drag can reparent right now — NOT `ctrlTogglePending ||
+    // cmdReparentPending`, which is also true for a plain macOS Ctrl+drag. Re-derived every
+    // mouseDrag tick for a single-module drag, so Cmd pressed/released mid-drag arms/disarms it.
+    bool reparentArmed = false;
 
     // Inline rename editor, alive only between beginTitleRename and finishTitleRename. A child
     // component, so there is no window seam to stub out for a display-less test run.

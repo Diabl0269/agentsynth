@@ -309,6 +309,9 @@ void GraphEditor::cancelLiveDragGestures() {
         cancelSelectionDrag();
     if (isDragPreviewActive())
         endDragPreview();
+    // FRO40: a component destroyed mid-Cmd/Ctrl-drag would otherwise leave the candidate hull
+    // highlighted forever — no-op when nothing was armed, same as the two clears above.
+    clearMacroDragCandidate();
 }
 
 // ---- Macro card drag (MacroCardComponent's own ComponentDragger calls these; FRO77 PR2) --------

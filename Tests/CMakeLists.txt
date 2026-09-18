@@ -305,6 +305,7 @@ add_executable(Tests
     Macros/MacroContainer/MacroContainerTests.cpp
     Macros/MacroContainer/MacroContainerGeometryTests.cpp
     Macros/MacroContainer/MacroContainerInteractionTests.cpp
+    Macros/MacroContainer/MacroDragMembershipTests.cpp
     Macros/MacroSetTests.cpp
     Macros/MacroPortModuleTests.cpp
     Macros/MacroPortConfigDialogTests.cpp

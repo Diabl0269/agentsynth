@@ -95,6 +95,11 @@ public:
     void captureBeforeState(juce::AudioProcessorGraph& graph);
     void pushSnapshotFromCapture(juce::AudioProcessorGraph& graph);
 
+    /** @brief Consumes a captureBeforeState() capture for recordGraphAndMacroChange's
+     *  `graphBeforeOverride` instead of the plain snapshot path (FRO40) — see the .cpp definition
+     *  for why. Clears the capture as a side effect; void if nothing was captured. */
+    juce::var takeCapturedGraphBeforeState();
+
     /**
      * @brief Records a timeline-only mutation (add/remove track, clip, note, lane, breakpoint, ...)
      *        as an undoable snapshot, on the SAME shared undo stack as the graph's own changes.
@@ -185,10 +190,12 @@ public:
      * @param graph Reference to the audio processor graph.
      * @param macros Reference to the macro set.
      * @param mutation Lambda that performs the combined mutation.
+     * @param graphBeforeOverride FRO40: optional graph "before" override for a caller whose live
+     *        gesture already wrote intermediate state into the graph — see the .cpp definition.
      * @return true if either domain changed and a transaction was pushed, false if neither did.
      */
     bool recordGraphAndMacroChange(juce::AudioProcessorGraph& graph, synth::MacroSet& macros,
-                                   const std::function<void()>& mutation);
+                                   const std::function<void()>& mutation, const juce::var& graphBeforeOverride = {});
 
     /**
      * @brief Records a mutation that may touch the graph, the TimelineDoc, AND a synth::MacroSet all

@@ -595,13 +595,37 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
             // Windows/Linux JUCE defines commandModifier AS ctrlModifier, so isCommandDown() is true
             // whenever Ctrl is down. Testing additive first would early-return there and a Ctrl+drag
             // could never arm the dragger — insert would be macOS-only. Taking this branch keeps
-            // Ctrl+click toggling on those platforms anyway, via the deferred completion below.
+            // Ctrl+click toggling on those platforms anyway, via the deferred completion below. The
+            // SAME reasoning is why the Cmd branch just below can never fire on Windows/Linux either
+            // — this Ctrl branch already claimed the press there.
+            //
+            // reparentArmed is set from e.mods.isCommandDown() ALONE, unconditionally, before this
+            // whole chain — deliberately NOT from "which branch fired" (ctrlTogglePending ||
+            // cmdReparentPending), which is also true for a PLAIN macOS Ctrl+drag (Ctrl and Cmd are
+            // genuinely distinct keys there). Gating on that instead would silently compound the
+            // shipped insert-between gesture with a join/leave it was never designed to also do —
+            // exactly the FRO40 regression this member exists to prevent. A plain click/drag with
+            // neither modifier reaches the branches below with reparentArmed already correctly
+            // false, same as it always was before this feature. On Windows/Linux the two keys
+            // cannot be told apart at press time at all (isCommandDown() is true whenever Ctrl is),
+            // so reparentArmed is true there and mouseUp arbitrates by whether the drag actually
+            // crossed a hull (see mouseUp's own comment).
+            reparentArmed = e.mods.isCommandDown();
+
             if (e.mods.isCtrlDown()) {
                 ctrlTogglePending = true;
                 ctrlPressSelection = owner.getSelectedNodes();
                 owner.selectModule(nodeId, false);
-            } else if (e.mods.isShiftDown() || e.mods.isCommandDown()) {
-                // Shift/Cmd-click toggles membership and does NOT begin a drag: a modifier-click is
+            } else if (e.mods.isCommandDown()) {
+                // FRO40: Cmd+drag across an expanded macro's hull JOINS/LEAVES that macro; Cmd+CLICK
+                // (no movement) is still an additive-select toggle. Mirrors ctrlTogglePending exactly
+                // — arm BOTH the deferred toggle and the drag, collapse the selection onto this
+                // module, and fall through to the shared arming code below (never `return` here).
+                cmdReparentPending = true;
+                cmdPressSelection = owner.getSelectedNodes();
+                owner.selectModule(nodeId, false);
+            } else if (e.mods.isShiftDown()) {
+                // Shift-click toggles membership and does NOT begin a drag: a modifier-click is
                 // an edit to the selection, not a move.
                 owner.selectModule(nodeId, true);
                 return;
@@ -689,6 +713,23 @@ void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
         owner.dragSelectionBy(getPosition() - dragStartPosition, this);
         // Update the landing ghost to follow the live drag position.
         owner.updateDragPreview(getPosition());
+
+        // Gap 3: re-derive reparentArmed live for a SINGLE-module drag, so Cmd pressed or released
+        // mid-drag arms/disarms reparent on the spot instead of only whatever mouseDown latched —
+        // see reparentArmed's own comment on ModuleComponent.h. A multi-selection group drag never
+        // touches the flag here; it keeps mouseDown's latch for its whole gesture, unchanged.
+        if (!owner.isSelectionDragActive())
+            reparentArmed = e.mods.isCommandDown();
+
+        // FRO40: gated on reparentArmed, NOT on ctrlTogglePending || cmdReparentPending — the
+        // latter is also true for a plain macOS Ctrl+drag, which must never highlight or act on a
+        // hull crossing (see reparentArmed's own comment on ModuleComponent.h). The CENTRE, not
+        // the top-left, is what macroDragJoinOrLeaveTarget tests against (docs/macros_ports.md).
+        if (reparentArmed)
+            owner.updateMacroDragCandidate(nodeId, getBounds().getCentre());
+        else
+            owner.clearMacroDragCandidate();
+
         if (auto* p = getParentComponent())
             p->repaint();
     }
@@ -697,44 +738,87 @@ void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
 void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
     if (getPortForPoint(e.getMouseDownPosition())) {
         owner.endConnectionDrag(e.getScreenPosition());
-    } else {
-        if (!bodyDragActive)
-            return;
-        bodyDragActive = false;
-
-        // Ctrl+press armed a drag AND a pending selection toggle; the press turning out to be a
-        // click is what decides it was really the toggle. Restore the selection the press collapsed
-        // and flip this module's membership. A Ctrl+DRAG leaves the collapsed single selection
-        // alone, exactly like a plain drag does.
-        const bool moved = getPosition() != dragStartPosition;
-        if (ctrlTogglePending) {
-            if (!moved) {
-                owner.setSelectedNodes(ctrlPressSelection);
-                owner.selectModule(nodeId, true); // additive: toggles membership
-            }
-            ctrlTogglePending = false;
-            ctrlPressSelection.clear();
-        }
-
-        // Finalize first so smart-connection suggestions (still held on the editor) can apply;
-        // then clear the ghost overlay.
-        if (moved) {
-            // Snap to grid and resolve overlap BEFORE the undo snapshot so the
-            // snapped/cleared final position is what gets captured in the diff.
-            //
-            // A group drag resolves as one rigid body (finalizeSelectionDrag); resolving each
-            // member independently would spiral them apart and destroy the arrangement.
-            if (owner.isSelectionDragActive())
-                owner.finalizeSelectionDrag();
-            else
-                owner.finalizeModuleDrag(this);
-
-            if (undoManager)
-                undoManager->pushSnapshotFromCapture(owner.getAudioEngine().getGraph());
-        } else {
-            // Click without movement: drop the recorded origins without re-resolving positions.
-            owner.cancelSelectionDrag();
-        }
-        owner.endDragPreview();
+        return;
     }
+
+    if (!bodyDragActive)
+        return;
+    bodyDragActive = false;
+
+    const bool moved = getPosition() != dragStartPosition;
+
+    // Captured into a local BEFORE clearing the member below — mouseUp's own reparent-vs-plain-
+    // finalize choice further down still needs it, and this is the ONE gate for that choice (see
+    // reparentArmed's own comment on ModuleComponent.h for why it is NOT `ctrlTogglePending ||
+    // cmdReparentPending`).
+    const bool wasReparentArmed = reparentArmed;
+    reparentArmed = false;
+
+    // Ctrl/Cmd-press armed a drag AND a pending selection toggle at once; the press turning out to
+    // be a click is what decides it was really the toggle. Restore the selection the press
+    // collapsed and flip this module's membership. A Ctrl/Cmd+DRAG leaves the collapsed single
+    // selection alone, exactly like a plain drag does.
+    if (ctrlTogglePending) {
+        if (!moved) {
+            owner.setSelectedNodes(ctrlPressSelection);
+            owner.selectModule(nodeId, true); // additive: toggles membership
+        }
+        ctrlTogglePending = false;
+        ctrlPressSelection.clear();
+    }
+    if (cmdReparentPending) {
+        // FRO40: Cmd+CLICK (no movement) mirrors Ctrl's deferred toggle exactly.
+        if (!moved) {
+            owner.setSelectedNodes(cmdPressSelection);
+            owner.selectModule(nodeId, true);
+        }
+        cmdReparentPending = false;
+        cmdPressSelection.clear();
+    }
+
+    if (!moved) {
+        // Click without movement: drop the recorded origins without re-resolving positions.
+        owner.cancelSelectionDrag();
+        owner.clearMacroDragCandidate();
+        owner.endDragPreview();
+        return;
+    }
+
+    // FRO40 + the Windows/Linux Ctrl-vs-Cmd arbitration (see mouseDown's/reparentArmed's own
+    // comments): a reparent-armed drag that crossed a macro hull boundary reparents, landing
+    // position + membership + port splicing in ONE undo step. The LIVE candidate every mouseDrag
+    // tick computed above IS the answer — mouseUp never re-queries geometry of its own, so what
+    // gets finalized is exactly what was highlighted. Anything else (reparent not armed at all —
+    // a plain drag, or on macOS a Ctrl-only drag — or a reparent-armed drag that never crossed a
+    // hull) keeps the plain finalize path below, which is also what already carries Ctrl's
+    // insert-between behaviour (SmartConnectionEngine samples isInsertModifierDown() live, from
+    // inside finalizeModuleDrag) — on Windows/Linux that means a Ctrl-drag over a cable INSIDE a
+    // hull performs BOTH insert-between and join/leave from the one gesture, because the platform
+    // has no way to ask for one without the other (docs/macros_ports.md §5.10).
+    const juce::String macroCandidate = wasReparentArmed ? owner.getMacroDragCandidateId() : juce::String();
+    if (macroCandidate.isNotEmpty()) {
+        const bool isJoin = owner.macroForNode(nodeId) == nullptr;
+        // This capture was never going to be consumed by a pushSnapshotFromCapture — the reparent
+        // finalize below consumes it itself instead (GraphEditor::finalizeMacroMembershipDrag's
+        // own comment has the full story on why it needs the ORIGINAL mousedown-time capture
+        // rather than a fresh one). Finalize is the LAST thing this call does — nothing below may
+        // touch `this` again.
+        owner.finalizeMacroMembershipDrag(this, macroCandidate, isJoin);
+        return;
+    }
+
+    // Snap to grid and resolve overlap BEFORE the undo snapshot so the snapped/cleared final
+    // position is what gets captured in the diff.
+    //
+    // A group drag resolves as one rigid body (finalizeSelectionDrag); resolving each member
+    // independently would spiral them apart and destroy the arrangement.
+    if (owner.isSelectionDragActive())
+        owner.finalizeSelectionDrag();
+    else
+        owner.finalizeModuleDrag(this);
+
+    if (undoManager)
+        undoManager->pushSnapshotFromCapture(owner.getAudioEngine().getGraph());
+    owner.clearMacroDragCandidate();
+    owner.endDragPreview();
 }

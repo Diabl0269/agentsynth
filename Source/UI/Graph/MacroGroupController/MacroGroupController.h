@@ -125,8 +125,16 @@ public:
                                     juce::Point<int> origin);
     bool selectionHasCrossingMacroCable() const;
     void ungroupSelection();
-    void addSelectionToMacro(const juce::String& macroId, const std::vector<juce::String>& memberUuids);
-    void removeSelectionFromMacro(const juce::String& macroId, const std::vector<juce::String>& memberUuids);
+    /** `recordUndo=false` (FRO40): runs the `doAdd` mutation directly, with no
+     *  `recordGraphAndMacroChange` transaction of its own — for a caller (GraphEditor's Cmd/Ctrl-
+     *  drag reparent finalize) that already opened one around a bigger gesture (position + this
+     *  membership change + port splicing) and needs all of it in ONE undo step. Every existing
+     *  caller keeps the default and stays byte-identical. */
+    void addSelectionToMacro(const juce::String& macroId, const std::vector<juce::String>& memberUuids,
+                             bool recordUndo = true);
+    /** `recordUndo=false`: see addSelectionToMacro's doc comment above — same deal, mirrored. */
+    void removeSelectionFromMacro(const juce::String& macroId, const std::vector<juce::String>& memberUuids,
+                                  bool recordUndo = true);
     void removeNodeFromMacro(juce::AudioProcessorGraph::NodeID nodeId);
     void toggleSelectionMacrosCollapsed();
     void groupOrToggleSelectionMacros();
@@ -162,7 +170,25 @@ public:
     // ---- Geometry / hit-testing / card jacks (docs/macros_ports.md §5.4) -----------------------
 
     juce::Rectangle<int> macroHullBounds(const juce::String& macroId) const;
+    /** FRO40: `macroHullBounds` above, but with `excludedMemberUuid` left out of the union too —
+     *  the LEAVE half of a Cmd/Ctrl-drag needs this because the plain hull is a LIVE union of
+     *  member bounds, so the member being dragged OUT keeps inflating its own hull and could never
+     *  cross back out of it (see macroDragJoinOrLeaveTarget's own comment). Empty under the same
+     *  conditions as macroHullBounds (no macro, collapsed, or nothing left to union). */
+    juce::Rectangle<int> macroHullBoundsExcluding(const juce::String& macroId,
+                                                  const juce::String& excludedMemberUuid) const;
     juce::String macroHullAt(juce::Point<int> canvasPos) const;
+    /** FRO40: the ONE query behind the Cmd/Ctrl-drag-across-a-hull gesture (docs/macros_ports.md).
+     *  `draggedNodeId` not a member of any macro: JOIN test — `canvasCentre` (the dragged module's
+     *  own centre, not its top-left) against `macroHullAt`, which already only considers EXPANDED
+     *  macros, so a collapsed one is never a candidate. `draggedNodeId` already a member of macro
+     *  X: LEAVE test — `canvasCentre` against X's `macroHullBoundsExcluding` its own uuid; outside
+     *  that hull means "would leave X". Returns X's/the candidate's id, or empty for neither
+     *  (no resolvable uuid, inside its own macro's hull, or over no expanded hull at all). The flat
+     *  membership model (Macro's own class comment) means a member of one macro is never a JOIN
+     *  candidate for a different one, so this never tests JOIN for an already-grouped node. */
+    juce::String macroDragJoinOrLeaveTarget(juce::AudioProcessorGraph::NodeID draggedNodeId,
+                                            juce::Point<int> canvasCentre) const;
     juce::Rectangle<int> macroChipBounds(const juce::String& macroId) const;
     juce::String macroChipAt(juce::Point<int> canvasPos) const;
     juce::Rectangle<int> macroCollapseButtonBounds(const juce::String& macroId) const;

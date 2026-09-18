@@ -11,7 +11,6 @@
 251 Source/Modules/OscillatorModule.h::processPolyMode
 380 Source/PresetManager.cpp::PresetManager::getPresetJSON
 329 Source/Timeline/TimelineDoc/TimelineDocSerialization.cpp::TimelineDoc::fromVar
-230 Source/UI/Graph/GraphEditor/GraphEditorCables.cpp::GraphEditor::GraphContentComponent::paint
 303 Source/UI/Graph/GraphEditor/GraphEditorCables.cpp::GraphEditor::rebuildVisibleCables
 208 Source/UI/Graph/GraphEditor/GraphEditorStereoWiring.cpp::GraphEditor::completeStereoPairConnections
 231 Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp::ModuleComponent::paint
