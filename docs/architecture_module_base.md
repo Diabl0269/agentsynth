@@ -120,7 +120,7 @@ Related: look parameters up with `findParameterByID(processor, "paramID")` rathe
 
 `Source/UI/Layout/LayoutUtil.h/.cpp`
 
-Stateless grid-layout helpers (`snap`, `intersectsAny`, `findFreeSlot`, `computeAutoArrange`). No JUCE GUI dependencies — fully headless-testable. See [`docs/layout.md`](layout.md) for the full API reference.
+Stateless grid-layout helpers (`snap`, `intersectsAny`, `findFreeSlot`, `computeAutoArrange`). No JUCE GUI dependencies — fully headless-testable. See [`docs/layout/layout.md`](layout/layout.md#layoututil-api) for the full API reference.
 
 ## ModuleComponent
 
@@ -181,6 +181,6 @@ Actions capture the manager, not the callbacks, so hooks installed after an acti
 
 ## AppLookAndFeel + ThemeManager
 
-Central `LookAndFeel_V4` subclass and theme registry. Owns all stock-widget re-skins, treatment draw helpers, and the SVG `IconLibrary`. See [`docs/theming.md`](theming.md) for the full token reference, JSON schema, and how-to-add guide.
+Central `LookAndFeel_V4` subclass and theme registry. Owns all stock-widget re-skins, treatment draw helpers, and the SVG `IconLibrary`. See [`docs/layout/theming.md`](layout/theming.md) for the full token reference, and [`docs/layout/theme-authoring.md`](layout/theme-authoring.md) for the JSON schema.
 
 ---

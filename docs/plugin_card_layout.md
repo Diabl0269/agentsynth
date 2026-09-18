@@ -253,4 +253,4 @@ Epic FRO122; the parked module-layout epic is FRO123 (its first ticket, FRO129, 
 - [`midi_remote.md`](midi_remote.md) · [`midi_remote_ui.md`](midi_remote_ui.md)
 - [`modules.md`](modules.md) — hosted plugin channel rules · [`modulation.md`](modulation.md)
   — `resolveLaneParameter`'s hosted rules
-- [`layout.md`](layout.md) — knob grid and width buckets
+- [`layout/module-card.md`](layout/module-card.md) — knob grid and width buckets

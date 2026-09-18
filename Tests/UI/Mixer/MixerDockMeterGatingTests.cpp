@@ -183,7 +183,7 @@ TEST(MixerDockMeterGatingTests, TimerCallbackDoesNotRefreshMetersWhenTheMixerIsS
     const int before = mixerPanel.getRefreshMetersCallCountForTest();
     mc.timerCallback();
     EXPECT_EQ(mixerPanel.getRefreshMetersCallCountForTest(), before)
-        << "no work while the mixer isn't showing anywhere -- docs/layout_visuals_animation.md §2";
+        << "no work while the mixer isn't showing anywhere -- docs/layout/rendering.md";
 }
 
 TEST(MixerDockMeterGatingTests, DetachingAndRedockingTheMixerPreservesEveryColumnsLatchedReadoutState) {

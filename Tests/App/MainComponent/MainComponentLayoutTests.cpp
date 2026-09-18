@@ -120,7 +120,7 @@ TEST_F(MainComponentTest, StatusBarTimerGating) {
     EXPECT_EQ(mc.getStatusBarTickCountForTest(), 0);
 }
 
-// The always-visible transport cluster (see docs/layout.md §5): the status bar must receive
+// The always-visible transport cluster (see docs/layout/chrome.md): the status bar must receive
 // play-state/position/BPM from the SAME unconditional PositionSnapshot poll that already exists in
 // timerCallback(), so it works identically whether the timeline panel is open or closed.
 TEST_F(MainComponentTest, StatusBarReceivesTransportStateFromTimerCallback) {

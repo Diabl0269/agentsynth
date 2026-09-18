@@ -1,5 +1,5 @@
 // ThemeMeterZoneTests.cpp -- FRO146: the meter's mid/high/clip colour-zone tokens
-// (meterMid/meterHigh/meterClip, docs/theming.md's token table) -- loader plumbing only
+// (meterMid/meterHigh/meterClip, docs/layout/theming.md's token table) -- loader plumbing only
 // (optional-with-default parsing + JSON round-trip + built-in distinctness). Boundary/zone-
 // selection behaviour itself lives in MeterColourStopsTests.cpp. Split out of ThemeTests.cpp
 // (same "one topic, split by concern" convention as the note/track-button colour tokens there)

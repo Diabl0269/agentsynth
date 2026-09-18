@@ -168,7 +168,7 @@ void AgentSynthAudioProcessor::setStateInformation(const void* data, int sizeInB
         editor->prepareForGraphReplacement();
 
     // Validate untrusted, then apply trusted — the SnippetManager::insertSnippet pairing from
-    // docs/layout_selection_canvas.md §1.5. Host session files travel between machines and users, so they must
+    // docs/layout/snippets-clipboard.md. Host session files travel between machines and users, so they must
     // pass the full validatePatch() boundary and be rejected whole if tampered with. But the
     // values themselves are our own graphToJSON output: applying them untrusted would run the
     // [0,1] rescale heuristic meant for sloppy model output and silently corrupt exact values

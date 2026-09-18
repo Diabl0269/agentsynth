@@ -287,7 +287,7 @@ void GraphEditor::cancelSelectionDrag() {
 }
 
 // FRO19: cancels a live drag when the component that armed it (ModuleComponent or
-// MacroCardComponent) is destroyed/detached mid-gesture (see docs/layout_selection_canvas.md §1.4).
+// MacroCardComponent) is destroyed/detached mid-gesture (see docs/layout/selection.md).
 //
 // ---- Live-drag cancellation on component destruction/detach (FRO19) --------------------------
 //
@@ -303,7 +303,7 @@ void GraphEditor::cancelSelectionDrag() {
 // initiator (updateComponents' dragPreviewSelfId check, syncMacroCards' isBodyDragActive() check) —
 // a non-initiating group member vanishing on its own is harmless: the initiator survives, its real
 // mouseUp is still coming, and finalizeSelectionDrag's lookup simply skips a stale id it can't find.
-// See docs/layout_selection_canvas.md §1.4.
+// See docs/layout/selection.md.
 void GraphEditor::cancelLiveDragGestures() {
     if (selectionDragActive)
         cancelSelectionDrag();

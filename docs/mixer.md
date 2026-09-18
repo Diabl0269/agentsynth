@@ -190,13 +190,13 @@ instrument. Linked means:
 - **(b) Colour syncs live.** The track colour, the channel's macro colour and the mixer column
   colour always match, and they update **while the colour picker is still being dragged**, not
   only on commit. `synth::ui::ColourPickerPopup` (`Source/UI/Chrome/ColourPickerPopup.h`,
-  `docs/theming.md` §13) already separates a live-preview callback (fires on every drag/favourite
+  `docs/layout/colour-overrides.md`) already separates a live-preview callback (fires on every drag/favourite
   click, writes straight into its target with **no undo step**) from a commit-once callback (fires
   once, on close, as the real edit). A linked track/channel fans the SAME preview write out to all
   three destinations — track header swatch, macro colour, mixer column — on every drag frame; a
   cancel restores all three to their original colour, exactly like today's single-target case;
   a commit is **one** undo step covering all three, not three separate edits, matching the existing
-  "one `Cmd+Z` undoes a dozen preview colours" semantics `docs/theming.md` §13 already documents,
+  "one `Cmd+Z` undoes a dozen preview colours" semantics `docs/layout/colour-overrides.md` documents,
   now fanned out over TWO stored targets, not three: a channel's colour IS its macro's colour, so
   the mixer column reads the macro rather than a third copy on the strip (§8 item 3).
 - **(c) The track header's M/S drive the strip.** Not note gating — the linked channel's mute/solo.
@@ -590,7 +590,7 @@ explicit elapsed times rather than a wall clock. Repaint stays gated on the draw
 moving (the pre-FRO146 `MixerMeter`/`ChannelChipComponent` convention).
 
 *"Visible" means showing ANYWHERE, not just docked.* `MainComponent::timerCallback()`'s gate
-(docs/layout_visuals_animation.md §2) is `mixerDock.isMixerShowing() || mixerPlacement_.isOwnPanelShowing()`:
+(docs/layout/rendering.md) is `mixerDock.isMixerShowing() || mixerPlacement_.isOwnPanelShowing()`:
 `isMixerShowing()` covers both docked-on-the-Mixer-tab-with-the-dock-open AND detached into its own
 `DetachedPanelWindow` (the tab strip's own detach button, or FRO12's "Window" placement -- a
 detached window is a separate top-level `Component`, so this dock's own `isVisible()` says nothing
@@ -603,7 +603,7 @@ column's latched clip-readout state to "-inf" on every detach/redock.
 *Colour zones -- POSITIONAL bands, not one whole-bar colour.* Hard band edges,
 `Source/UI/Mixer/MeterColourStops.h`: below -18 dBFS = low (the `meterFill` token, kept for theme
 back-compat), -18..-6 = mid (`meterMid`), -6..0 = high (`meterHigh`), above 0 = clip (`meterClip`)
--- see [`docs/theming.md`](theming.md)'s token table. Cubase/most DAWs' own convention, and what
+-- see [`docs/layout/theming.md`](layout/theming.md#colours)'s token table. Cubase/most DAWs' own convention, and what
 `MeterColourStops::forEachBand(fromDb, toDb, callback)` exists to drive: a bar reaching +4 dB paints
 low/mid/high/clip STACKED bottom to top (each band only as tall as its own dB span), and a bar
 reaching only -10 dB paints low plus part of mid and stops there -- never a single colour for the
@@ -618,7 +618,7 @@ stops, with no painter change — `setStops()` sorts by `dbFrom`, drops exact-`d
 and always leaves at least one stop (the model's floor: any db value below the lowest stop's own
 `dbFrom` still resolves to that stop's colour, i.e. its `dbFrom` is treated as -inf, never a hard
 edge a quieter value could fall through). `fromTheme()` builds the default four-stop model above.
-Landed as FRO147 -- Settings > Appearance's "Meter Colours" section (`Source/UI/Settings/MeterColourStopsEditor.h`); see [`theming.md`](theming.md)'s meter-colours section.
+Landed as FRO147 -- Settings > Appearance's "Meter Colours" section (`Source/UI/Settings/MeterColourStopsEditor.h`); see [`layout/colour-overrides.md`](layout/colour-overrides.md#meter-colours).
 
 *Clip readout.* Cubase's "Meter Peak Level" field: `MixerMeterReadout`, one per metered column,
 sitting above its meter/fader. Shows the highest peak since the last reset ("-3.2", "+4.1", "-inf"),
@@ -996,5 +996,5 @@ P9-11 Gate module, T181 mixer accessibility. Item numbers there match every exis
   bypass/mute contract, plugin host modes.
 - [`docs/modules.md`](modules.md) — `kRightBase`, the stereo-pair conventions a `ChannelStrip`'s
   output follows, `VoiceMixerModule`.
-- [`docs/theming.md`](theming.md) §13 — `ColourPickerPopup`'s preview/commit split, the mechanism
+- [`docs/layout/colour-overrides.md`](layout/colour-overrides.md#colour-picker-popup) — `ColourPickerPopup`'s preview/commit split, the mechanism
   the track/channel colour link (§5.2) fans out over three targets.

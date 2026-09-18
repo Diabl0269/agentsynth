@@ -64,7 +64,7 @@ for backends that compile it, and a patch can also arrive from a local model or 
 that never saw it. The **trusted** path is untouched, because the app's own saves must round-trip an
 Attenuverter or a Track In. Callers that gate app-authored data with `trusted=false` before applying
 it trusted — session state, `.agsproj`, snippet files, the pairing described in
-[`layout_selection_canvas.md`](../layout_selection_canvas.md) — pass `allowInternalModuleTypes=true`:
+[`layout/snippets-clipboard.md`](../layout/snippets-clipboard.md) — pass `allowInternalModuleTypes=true`:
 they are gating structure, ids, ranges and tampering, not authorship, and the app's own files
 legitimately contain internal nodes. The parameter defaults to `false`, so a new model-facing caller
 gets the restriction without knowing it exists.

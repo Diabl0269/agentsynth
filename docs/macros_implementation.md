@@ -682,8 +682,8 @@ In order, each independently shippable:
 
 ## Related
 
-- `docs/layout_selection_canvas.md` — selection, group drag, cable interaction, the P8-12 macro
-  container's canvas behaviour
+- `docs/layout/selection.md` · `docs/layout/cables.md` · `docs/layout/macro-cards.md` — selection,
+  group drag, cable interaction, and the macro container's canvas behaviour
 - `docs/architecture.md` — the flat graph, latency compensation, plugin state format
 - `docs/modules.md` / `Source/Modules/CLAUDE.md` — channel-count and Dual I/O rules
 - `docs/modulation.md` — logical-port API, poly-bus wires

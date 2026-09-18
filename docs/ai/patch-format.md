@@ -71,7 +71,7 @@ that path; presets, snippets and AI apply all keep their own semantics. See
 ## Per-node `displayName`
 
 A node may carry a `"displayName"` string: the user's custom card title, set by double-clicking the
-card header (see [`layout.md`](../layout.md)). It is emitted only when set, so an un-renamed node's
+card header (see [`layout/module-card.md`](../layout/module-card.md#custom-card-titles)). It is emitted only when set, so an un-renamed node's
 JSON is byte-identical to a document from before the field existed.
 
 Unlike `uuid` and `state`, it is applied on **both** the trusted and untrusted paths, because it is

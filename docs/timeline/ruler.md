@@ -99,7 +99,7 @@ marker.
 `paint()` tints the hovered half with `accent` at 10% alpha, under the loop brace so the brace
 stays legible. `repaint()` fires only when the hovered zone or the hovered marker actually
 **changes** — never per mouse-move pixel — and no timer or animation is involved
-(`docs/layout_visuals_animation.md` §3).
+(`docs/layout/animation.md`).
 
 ## Markers
 
@@ -123,7 +123,7 @@ handles it *before* the host null-check.
 **How they draw.** `buildMarkerFlags()` is the single enumeration `paint()` and hit-testing both
 walk — computing them separately is how a drawn flag drifts from the clickable one, the same rule
 `GraphEditor::buildVisibleCables` exists to enforce for wires
-(`docs/layout_selection_canvas.md` §3). Each flag is a filled tab in the strip's own marker band,
+(`docs/layout/cables.md`). Each flag is a filled tab in the strip's own marker band,
 anchored at the marker's beat and running right, plus a full-height 1 px stem at the beat itself so
 the exact position stays readable when the label is clipped. Culling is **per flag**, not per
 marker: a flag whose anchor has scrolled off the left edge may still have most of its tab on
@@ -173,7 +173,7 @@ crosses the row boundary, because it is what names the exact beat.
 `kMarkerLaneStemAlpha` (0.40), which is what makes a marker locatable against the clips rather than
 only against the ruler. That is a static painted line on the panel's existing change-driven repaint
 path — `timelineChanged()` repaints the ruler and `gridLanesBounds_` — so there is no timer and no
-per-frame work, and `docs/layout_visuals_animation.md` §3's animation rules are untouched.
+per-frame work, and `docs/layout/animation.md`'s rules are untouched.
 Off-screen markers are culled per marker, not clamped to an edge.
 
 **Repaint discipline.** The ruler never listens to the doc and never polls it. A marker only moves

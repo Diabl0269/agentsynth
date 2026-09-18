@@ -38,7 +38,7 @@ public:
                        ShortcutManager* shortcutManager);
 
     /** Reads the persisted active tab once ("bottomDockActiveTab", default "timeline" --
-     *  docs/layout.md's "Panel collapse and persistence" table); writes it on every tab switch. */
+     *  docs/layout/chrome.md's "Panel collapse and persistence" table); writes it on every tab switch. */
     void setApplicationProperties(juce::ApplicationProperties* properties);
 
     /** MainComponent::reconcileTimelineAfterGraphChange -- fired after an insert-list mutation
@@ -74,7 +74,7 @@ public:
      *  itself (Tab placement: isMixerTabActive() && isVisible(); Window placement: the mixer's
      *  DetachablePanelHost is detached -- its own window is a separate top-level Component, so
      *  THIS dock's isVisible() says nothing about whether that window is on screen), matching the
-     *  Timeline panel's own precedent (docs/layout_visuals_animation.md §2). */
+     *  Timeline panel's own precedent (docs/layout/rendering.md). */
     void refreshMeters() { mixer_.refreshMeters(); }
 
     /** FRO146 follow-up: "is the mixer panel showing anywhere a meter tick would be visible" --

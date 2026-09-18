@@ -33,8 +33,8 @@ for the same reason -- new coverage that would have pushed `testing.md` past its
 
 ## Meter colour tests (FRO147)
 
-**FRO147 -- user-editable meter colours (docs/mixer.md's Meters subsection / docs/theming.md's
-meter-colours section): a Settings > Appearance "Meter Colours" section, one GLOBAL
+**FRO147 -- user-editable meter colours (docs/mixer.md's Meters subsection /
+docs/layout/colour-overrides.md's meter colours): a Settings > Appearance "Meter Colours" section, one GLOBAL
 `meterColourStops` override cached on `synth::theme::AppLookAndFeel` and read by every meter
 painter.**
 
@@ -56,6 +56,7 @@ depends on writing a file. `MeterColourStopsEditorTests.cpp`'s
 `RendersToPngForVisualInspection` follows the identical convention for the Settings > Appearance
 "Meter Colours" section itself (`METER_COLOUR_EDITOR_PNG=<path>`).
 
-See also [`testing.md`](testing.md) and [`theming.md`](theming.md)'s token table for `meterFill`/
-`meterMid`/`meterHigh`/`meterClip`, and its meter-colours section for the `meterColourStops` user
-override.
+See also [`testing.md`](testing.md) and [`layout/theming.md`](layout/theming.md)'s token table for
+`meterFill`/`meterMid`/`meterHigh`/`meterClip`, and
+[`layout/colour-overrides.md`](layout/colour-overrides.md#meter-colours) for the `meterColourStops`
+user override.

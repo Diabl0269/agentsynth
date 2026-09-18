@@ -167,7 +167,7 @@ TrackChannelLinkController::buildLinkedChannelColourPicker(synth::TrackId track,
     const juce::Colour originalMacroColour = macro->colour;
 
     // Writes BOTH targets with no undo step at all -- the same contract the header's single-target
-    // preview already has, just fanned out (docs/theming.md §13).
+    // preview already has, just fanned out (docs/layout/colour-overrides.md).
     auto applyBoth = [this, track, macroId](juce::Colour c) {
         doc_.setTrackColour(track, c.getARGB());
         if (auto* m = macros().find(macroId))

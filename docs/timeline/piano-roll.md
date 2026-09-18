@@ -171,7 +171,7 @@ recorder.
 ## Key labels
 
 The keys column paints alternating white/black-key row tints from `colors.pianoKeyWhite` /
-`pianoKeyBlack` (see [`theming.md` §2](../theming.md#2-token-reference)), so the column reads as an
+`pianoKeyBlack` (see [`layout/theming.md`](../layout/theming.md#colours)), so the column reads as an
 actual keyboard.
 
 `PianoRollComponent::KeyLabelMode` (`AllNotes` default, `OctavesOnly`) controls label density:
@@ -255,7 +255,8 @@ the clip's span outside `[clipStart, clipEnd)` dimmed.
 
 Notes are rounded rects whose fill and border colours come from the single resolver
 `synth::ui::resolveNoteColour()` (`Source/UI/PianoRoll/NoteColour.h` — see
-[`theming.md` §12](../theming.md#12-note-colours)): velocity brightens the fill, a note the active
+[`layout/colour-overrides.md`](../layout/colour-overrides.md#note-colours)): velocity brightens the
+fill, a note the active
 scale flags as outside it gets `noteOutOfScale` regardless of any per-pitch-class override, and
 selected notes get a `noteSelected`-coloured border. Repaints happen only on doc/listener refresh,
 interaction, and view-state changes — no timer.

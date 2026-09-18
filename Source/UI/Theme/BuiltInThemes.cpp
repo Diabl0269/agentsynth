@@ -167,7 +167,7 @@ Theme makeNeon() {
     // Typography. All built-in themes share Inter + JetBrains Mono: switching the embedded
     // typeface family at runtime corrupts text rendering globally (JUCE 8 + CoreText), so the
     // themes differ by colour/treatment/glow, not font. (The data model still supports per-theme
-    // fonts for user JSON themes chosen at launch; see docs/theming.md.)
+    // fonts for user JSON themes chosen at launch; see docs/layout/theming.md.)
     t.type.uiFamily = "Inter";
     t.type.monoFamily = "JetBrains Mono";
     t.type.h1 = 18.0f;

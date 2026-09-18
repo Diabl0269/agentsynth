@@ -29,8 +29,8 @@ constexpr double kFallbackSampleRate = 44100.0;
 // A copy-drag ghost: a translucent wash of the SOURCE track's colour, well under the 0.65/0.85 a
 // real clip body paints at, plus a soft one-pixel outline. Translucency alone carries "not real
 // yet" on purpose — a true blur would mean rendering the region to an image and filtering it once
-// per drag frame, which is exactly the kind of unbounded per-frame paint work docs/layout.md
-// §10-11 rules out.
+// per drag frame, which is exactly the kind of unbounded per-frame paint work
+// docs/layout/rendering.md rules out.
 constexpr float kDragGhostFillAlpha = 0.4f;
 constexpr float kDragGhostOutlineAlpha = 0.7f;
 } // namespace

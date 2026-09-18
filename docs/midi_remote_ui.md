@@ -275,6 +275,5 @@ when its PR has merged and the docs above describe what shipped.
 - [`midi_remote.md`](midi_remote.md) — model and decisions.
 - [`plugin_card_layout.md`](plugin_card_layout.md) — the hosted-plugin knobs this maps.
 - [`mixer.md`](mixer.md) §5.9 — the bottom dock the panel joins.
-- [`layout_visuals_animation.md`](layout_visuals_animation.md) — the animation rules the pulse
-  and the surface obey.
+- [`layout/animation.md`](layout/animation.md) — the animation rules the pulse and the surface obey.
 - [`shortcuts.md`](shortcuts.md) — action ids and display names the action picker reuses.

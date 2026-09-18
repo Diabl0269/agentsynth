@@ -13,9 +13,9 @@ namespace synth::ui {
  *  shaped by `EnvelopeGenerator::shape` (via the model), and lets the user drag nodes and bend
  *  handles (both modes) or add/remove points by double-click (`CurveMode::Free` only).
  *
- *  Used next by the envelope card (`CurveMode::Fixed`, a fixed origin/attack/hold/decay/release
- *  topology) and later by an LFO custom-waveform editor (`CurveMode::Free`). This change wires
- *  neither caller — see docs/layout_visuals_animation.md §1.
+ *  Used by the envelope card (`CurveMode::Fixed`, a fixed origin/attack/hold/decay/release
+ *  topology); `CurveMode::Free` (add/remove/reorder points) is the second supported topology
+ *  and has no caller yet — see docs/layout/visualizers.md.
  *
  *  Mouse handlers are thin wrappers over public primitives (`dragNodeTo`, `dragBendBy`,
  *  `addPointAt`, `removeNode`), mirroring `EQCurveComponent`, so interaction is unit-testable
