@@ -6,6 +6,7 @@
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Branding.h"
+#include "MidiRemote/RemoteEngine/RemoteEngine.h"
 #include "MidiRemote/RemoteModel.h"
 #include "Mixer/TrackPresetManager.h"
 #include "Modules/RecordTapModule.h"
@@ -651,6 +652,7 @@ private:
     void wireGraphEditorCallbacks();
     void wirePluginScanAndRecents();
     void wireCommandsAndShortcuts();
+    void wireMidiRemoteEngine(); // FRO127
     void addCanvasAndPanels();
     void addToolbarChrome();
     void addFileButtons();
@@ -935,6 +937,14 @@ private:
     ShortcutManager shortcutManager;
     juce::ApplicationCommandManager commandManager;
 
+    // FRO127: RemoteActionInvoker impl -- see wireMidiRemoteEngine()'s definition for the contract.
+    struct RemoteActionInvokerImpl : synth::midi::RemoteActionInvoker {
+        juce::ApplicationCommandManager& commandManager_;
+        explicit RemoteActionInvokerImpl(juce::ApplicationCommandManager& cm) noexcept;
+        void invokeRemoteCommand(juce::CommandID commandId) override;
+    };
+    synth::midi::RemoteEngine remoteEngine; // docs/midi_remote.md §6; wired in wireMidiRemoteEngine()
+    RemoteActionInvokerImpl remoteActionInvoker_{commandManager};
     // Consulted first by resolveEditSurface(); std::nullopt means "use real focus".
     std::optional<EditSurface> editSurfaceOverrideForTest_;
 

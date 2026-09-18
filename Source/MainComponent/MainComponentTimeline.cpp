@@ -90,6 +90,12 @@ void MainComponent::reconcileTimelineAfterGraphChange() {
     if (!synth::TimelineReconciler::reconcile(timelineDoc, audioEngine.getGraph()))
         publishTimelineAndRebindRecorder();
 
+    // FRO127: every assignment's live target is re-resolved against the graph as it now stands —
+    // same "graph changed under us" trigger as the timeline reconcile just above, orphaning
+    // whatever no longer resolves rather than silently rebinding (docs/architecture_app_wiring.md
+    // §8, hook 2).
+    remoteEngine.reconcile(audioEngine.getGraph());
+
     // FRO14: a LINKED track's M/S live on its channel strip, not in the doc, so a graph change (an
     // undo of a channel mute/solo included) moves state no doc notification would ever report.
     // Every header re-reads its channel here; refreshFromDoc() is idempotent and cheap.
@@ -111,6 +117,10 @@ void MainComponent::reconcileTimelineAfterGraphChange() {
 // there would be waste.
 void MainComponent::reconcileTimelineBindingsOnly() {
     synth::TimelineReconciler::reconcile(timelineDoc, audioEngine.getGraph());
+    // FRO127: the 2b/2c catch-all (docs/architecture_app_wiring.md §8) — MIDI Remote's own
+    // assignments need the same re-resolve the timeline bindings just got, for the same reasons
+    // (a canvas delete with no explicit reconcile site, a hosted plugin's async load completing).
+    remoteEngine.reconcile(audioEngine.getGraph());
 }
 
 // The ONE place a MIDI take ever commits — the transport bar's Record-off click and the

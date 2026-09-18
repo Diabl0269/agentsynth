@@ -5,7 +5,9 @@
 // in MainComponent.cpp for the ordered call sequence these steps implement.
 #include "AI/AIProviderRegistry.h"
 #include "MainComponent.h"
+#include "MidiRemote/ControllerProfileStore.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
+#include "ShortcutManager/AppCommands.h"
 #include "UI/Mixer/MixerPanelComponent/MixerFocusRegion.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 
@@ -314,6 +316,55 @@ void MainComponent::wireCommandsAndShortcuts() {
     commandManager.setFirstCommandTarget(this);
     shortcutManager.onBindingsChanged = [this] { updateCommandShortcuts(); };
     startTimerHz(10);
+}
+
+MainComponent::RemoteActionInvokerImpl::RemoteActionInvokerImpl(juce::ApplicationCommandManager& cm) noexcept
+    : commandManager_(cm) {}
+
+// MESSAGE THREAD (called from RemoteEngine::drain()). Synchronous, exactly like a menu item or a
+// keypress dispatch — never posted/async.
+void MainComponent::RemoteActionInvokerImpl::invokeRemoteCommand(juce::CommandID commandId) {
+    commandManager_.invokeDirectly(commandId, false);
+}
+
+// FRO127: wires synth::midi::RemoteEngine to the AudioEngine seam and primes it with whatever
+// controller profiles and project assignments already exist. Called right after
+// wireCommandsAndShortcuts() above (commandManager must exist — the action invoker dispatches
+// through it) and deliberately BEFORE initialiseAudioEngine() below: that function returns early
+// in Hosted mode (only the app-only welcome screen/focus regions depend on it), and MIDI Remote
+// must still wire up for a hosted plugin (docs/midi_remote.md §4.8's hostSourceKey exists exactly
+// for that case). openMidiDevicesForRemote/getOpenMidiInputIdentifiers are both no-ops/empty in
+// Hosted mode regardless of whether the real audio device has been opened yet, so nothing here
+// depends on initialiseAudioEngine() having run first.
+void MainComponent::wireMidiRemoteEngine() {
+    remoteEngine.setActionInvoker(&remoteActionInvoker_);
+    remoteEngine.setActionCommandLookup(
+        [](const juce::String& actionId) { return AppCommands::getCommandForAction(actionId); });
+    // The engine yields exactly as a second mouse would while a real gesture already holds the
+    // same parameter (docs/midi_remote.md §4.2) — GestureClaims::isClaimed is already exactly the
+    // audio-visible predicate AutomationApplier itself consults, so no new plumbing is needed here.
+    remoteEngine.setParameterClaimedPredicate([this](const juce::AudioProcessorParameter* param) {
+        return automationRecorder.getAudioState().claims.isClaimed(param);
+    });
+
+    synth::ControllerProfileStore profileStore;
+    const auto loaded = profileStore.loadAll();
+    remoteEngine.setProfiles(loaded.profiles);
+    remoteEngine.setAssignments(midiRemoteDoc.assignments);
+
+    std::vector<juce::String> deviceNames;
+    deviceNames.reserve(loaded.profiles.size());
+    for (const auto& profile : loaded.profiles)
+        deviceNames.push_back(profile.input.name);
+    audioEngine.openMidiDevicesForRemote(deviceNames); // no-op in Hosted mode
+
+    auto sources = audioEngine.getOpenMidiInputIdentifiers(); // empty in Hosted mode
+    if (audioEngine.isHosted())
+        sources.push_back(synth::midi::hostSourceKey());
+    remoteEngine.setSources(sources);
+
+    // Installed last: nothing may reach the sink before it has profiles/assignments/sources.
+    audioEngine.setRemoteMessageSink(&remoteEngine);
 }
 
 // Returns false exactly where initialiseCommon() used to `return;` early on the plugin path

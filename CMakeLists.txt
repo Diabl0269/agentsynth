@@ -249,6 +249,12 @@ add_library(Core STATIC
     Source/PatchDocument.h
     Source/ProjectBundle.cpp
     Source/ProjectBundle.h
+    # Headers omitted here (unlike RemoteModel.h below) to keep this file under its own 1000-line cap.
+    Source/MidiRemote/RemoteEngine/RemoteEngine.cpp
+    Source/MidiRemote/RemoteEngine/RemoteEngineApply.cpp
+    Source/MidiRemote/RemoteEngine/RemoteEngineDecode.cpp
+    Source/MidiRemote/RemoteEngine/RemoteEngineLearn.cpp
+    Source/MidiRemote/RemoteEngine/RemoteEngineReconcile.cpp
     Source/MidiRemote/RemoteModel.h
     Source/MidiRemote/RemoteModelJson.cpp
     Source/RecentProjects.cpp

@@ -2,6 +2,7 @@
 // standalone device-callback path without touching hardware.
 
 #include "AudioEngine.h"
+#include "MidiRemote/RemoteEngine/RemoteMessageSink.h"
 
 void AudioEngine::prepareForHost(double sampleRate, int blockSize, int numInputChannels, int numOutputChannels) {
     // The collector is still used in hosted mode: ExternalMidiModule-bound messages and any
@@ -30,6 +31,23 @@ void AudioEngine::processHostBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         captureDeviceInput(buffer.getArrayOfReadPointers(), hostInputChannels, buffer.getNumSamples());
     else
         captureDeviceInput(nullptr, 0, 0);
+
+    // MIDI Remote runs on the AUDIO thread here — HostMode::Hosted never opens hardware MIDI, so
+    // the host's own forwarded buffer IS the MIDI path (docs/midi_remote.md §4.8's hostSourceKey).
+    // RemoteMessageSink::handleMessage is lock-free and allocation-free by contract, which is what
+    // makes this safe to call from processBlock. Guarded on remoteMessageSink_ so the cost is zero
+    // while MIDI Remote is idle; remoteHostScratchMidi_ is a pre-allocated member so the clear()/
+    // addEvent() below never allocate once warmed up. Consumed messages are dropped from the
+    // buffer before renderNextBlock, same as the standalone path's "goes nowhere else" contract.
+    if (auto* sink = remoteMessageSink_.load(std::memory_order_acquire); sink != nullptr) {
+        remoteHostScratchMidi_.clear();
+        for (const auto metadata : midiMessages) {
+            const auto message = metadata.getMessage();
+            if (!sink->handleMessage(synth::midi::hostSourceKey(), message))
+                remoteHostScratchMidi_.addEvent(message, metadata.samplePosition);
+        }
+        midiMessages.swapWith(remoteHostScratchMidi_);
+    }
 
     renderNextBlock(buffer, midiMessages);
 }
