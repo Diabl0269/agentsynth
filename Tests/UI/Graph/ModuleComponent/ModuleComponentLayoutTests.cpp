@@ -198,7 +198,7 @@ juce::Slider* findAdsrSlider(ModuleComponent& moduleComponent, const juce::Strin
 } // namespace
 
 // FRO110 fix (skew-regression): attack/hold/decay/release keep a LINEAR parameter range (see
-// ADSRModule.h/docs/modules.md) so AIStateMapper's untrusted rescale heuristic is unaffected, but
+// ADSRModule.h/docs/modules/modules.md#adsr-envelope-module) so AIStateMapper's untrusted rescale heuristic is unaffected, but
 // the knob must still feel skewed at the 1 ms attack default. That skew lives on the SLIDER,
 // applied AFTER its SliderParameterAttachment is built -- setting it before (or relying on
 // NormalisableRange::skew once SliderParameterAttachment has installed its own lambda-based

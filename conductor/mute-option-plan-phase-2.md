@@ -42,4 +42,4 @@ Implement `isMuted()` check in `processBlock` for all remaining audio modules:
 - Verify existing bypass tests still pass with the new mute condition.
 
 ## Docs Updates
-- Update `Module_Development_Guide.md` if necessary to reflect the new mute requirement.
+- Update [`docs/modules/development-guide.md`](../docs/modules/development-guide.md) if necessary to reflect the new mute requirement.

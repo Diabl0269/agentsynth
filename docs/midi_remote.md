@@ -175,7 +175,7 @@ free), `AppUndoManager` gets one snapshot per gesture through the same
 `MixerFader`), the VST3/AU host sees a proper gesture, and every `SliderParameterAttachment`
 follows without a reflection path. Latency is one frame (≤ 16 ms), which is invisible on a knob
 and irrelevant to audio: **sample-accurate control of a parameter is what CV cables and the
-modulation matrix are for** (`modulation.md`), and this feature never competes with them.
+modulation matrix are for** ([`docs/modules/modulation.md`](modules/modulation.md)), and this feature never competes with them.
 
 *Gesture end:* `endChangeGesture` fires **250 ms** after the last message for that assignment
 (a constant, `kGestureIdleMs`), so a slow sweep is one undo step and one automation touch, not

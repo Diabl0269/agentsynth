@@ -167,7 +167,7 @@ Refer to [docs/shortcuts.md](docs/shortcuts.md) for the full list of configurabl
 - `Source/Modules/FX/DistortionModule.h`: Distortion effect with configurable oversampling (Off/2x/4x), soft-clipping using `tanh`-based curve, Drive and Mix parameters
 - `Tests/App/E2EWorkflowTests.cpp`: E2E workflow tests — preset loading, module drop/delete/replace, connection drag, mod matrix, undo/redo sequences, and stress tests
 - `Tests/`: ~460 tests across ~64 suites (audio rendering, integration, component workflow, state management, theme, icon library, status bar, layout, E2E workflow); `IconLibraryTests.cpp` and `StatusBarTests.cpp` are new in Phase 3
-- `docs/modulation.md`: Full reference for the modulation routing model, logical-port API, and poly-bus wire rendering
+- [`docs/modules/modulation.md`](docs/modules/modulation.md): Full reference for the modulation routing model, logical-port API, and poly-bus wire rendering
 - `Source/UI/Theme/Theme.h`: Pure data model — `Colors`, `Metrics`, `Typography`, `Treatment`, `ThemeStyle`, `Theme` structs with Obsidian defaults; no JUCE GUI deps beyond `juce::Colour`/`juce::String`
 - `Source/UI/Theme/ThemeManager.h/.cpp`: Theme registry, active-theme selection, JSON user-theme loading, persistence via shared `ApplicationProperties`
 - `Source/UI/Theme/ThemeLoader.h/.cpp`: JSON ↔ `Theme` (parse + serialize); `parseHexColour`, `parseStyle`, `styleToString` helpers; `getLastError()` for test/log use

@@ -31,5 +31,5 @@ Enable hardware MIDI controller support by implementing MIDI input device select
   - `Tests/UI/Settings/SettingsWindowTests.cpp`: Verify MIDI device selection persistence.
 
 ## Docs Updates
-- `docs/modules.md`: Update MIDI input section.
+- [`docs/modules/modules.md`](../docs/modules/modules.md): Update MIDI input section.
 - `CLAUDE.md`: Update architecture summary to reflect MIDI support.
