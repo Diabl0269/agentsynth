@@ -258,7 +258,7 @@ when its PR has merged and the docs above describe what shipped.
 |---|---|---|---|
 | 1 | **Model + persistence**: `Source/MidiRemote/` types, JSON round-trip, profile file store, `"midiRemote"` project key (stash/carry, refused untrusted, `MidiRemoteNotAllowed`), undo `recordMidiRemoteChange` | — | FRO124 — shipped (PR #410) |
 | 2 | **Transport verbs → command-dispatched actions** (play, stop, play/stop toggle, record, loop, metronome, return to start) | — | FRO125 — shipped (PR #412) |
-| 3 | **RemoteEngine**: `RemoteMessageSink` seam in `AudioEngine`, snapshot table, decode, FIFO, drain with gestures + takeover, action invoke, reconcile, Hosted source | 1, 2 | FRO127 |
+| 3 | **RemoteEngine**: `RemoteMessageSink` seam in `AudioEngine`, snapshot table, decode, FIFO, drain with gestures + takeover, action invoke, reconcile, Hosted source | 1, 2 | FRO127 — shipped (PR #421) |
 | 4 | **MIDI Learn on the module card**: menu block, arm/settle/bind, auto-profile, badge, `registerMidiLearnable` registry covering sliders, toggles, combos, bespoke cards, header buttons | 3 | FRO130 |
 | 5 | **Learn coverage: mixer, master, transport bar** | 4 | FRO133 |
 | 6 | **MIDI Remote panel**: dock tab, controllers list, surface with live activity, inspector | 3 | FRO131 |
