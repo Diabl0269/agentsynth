@@ -1,0 +1,36 @@
+name: PR Title
+
+# Validates the PR title, not a commit message: merges are squash-only and GitHub defaults the
+# squash commit's subject to the PR title, so the title is the only lever that actually reaches
+# main's commit history. Read-only (only inspects github.event.pull_request.title -- no checkout,
+# no secrets), so this is safe on `pull_request` for fork PRs too; no need for `pull_request_target`.
+#
+# NOT a required check yet (deliberately not added to branch protection) -- see
+# docs/pr-title-convention.md "Rollout" for why and when that changes (FRO182/FRO170).
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+jobs:
+  lint-title:
+    name: PR Title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR title format
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -uo pipefail
+          # type(scope)!: subject -- scope optional, "!" marks a breaking change. Full rule and
+          # the allowed type list: docs/pr-title-convention.md.
+          pattern='^(feat|fix|docs|ci|chore|refactor|test|perf|build)(\([A-Za-z0-9/_-]+\))?!?: .+$'
+          if [[ "$TITLE" =~ $pattern ]]; then
+            echo "OK: $TITLE"
+            exit 0
+          fi
+          echo "::error::PR title is not a conventional-commit subject: $TITLE"
+          echo "Expected: type(scope)?: subject   e.g. feat(FRO112): knob-and-graph envelope module card"
+          echo "Allowed types: feat fix docs ci chore refactor test perf build"
+          echo "Breaking change: put '!' right before the colon, e.g. feat(FRO112)!: ..."
+          echo "Full rule: docs/pr-title-convention.md"
+          exit 1
