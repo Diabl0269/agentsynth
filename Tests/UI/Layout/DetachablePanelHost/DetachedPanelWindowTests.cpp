@@ -10,7 +10,7 @@
 //   2. Bounds persistence round trip, including FRO101's implausible-bounds rejection.
 //   3. Close button -- fires onCloseRequested, never self-destroys.
 //   4. Plugin-mode LookAndFeel seam -- own scope, Desktop's default untouched.
-//   5. Per-window focus-region Tab cycling (T159/docs/shortcuts.md).
+//   5. Per-window focus-region Tab cycling (T159/docs/control/shortcuts.md).
 //   6. FRO102 -- themed background (theme's surface token, re-applied on lookAndFeelChanged()).
 
 #include "ShortcutManager/ShortcutManager.h"

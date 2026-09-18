@@ -53,7 +53,7 @@ bool readBool(const juce::var& v, bool& out) {
 }
 
 // -- Enum <-> doc-exact camelCase string ------------------------------------------------------
-// docs/midi_remote.md §5 names every enumerator exactly this way; a string this build doesn't
+// docs/control/midi-remote.md#data-model names every enumerator exactly this way; a string this build doesn't
 // recognise is a hard failure, never a silent default (§7 "never partially applies").
 
 const char* toString(MessageType t) {
@@ -384,7 +384,7 @@ bool Target::fromVar(const juce::var& v, Target& out) {
 
     const bool hasParameter = obj->hasProperty("parameter");
     const bool hasAction = obj->hasProperty("action");
-    // Reject BOTH present or NEITHER present — exactly one is a Target (docs/midi_remote.md §5).
+    // Reject BOTH present or NEITHER present — exactly one is a Target (docs/control/midi-remote.md#data-model).
     if (hasParameter == hasAction)
         return false;
 
@@ -589,7 +589,7 @@ bool ControllerProfile::fromVar(const juce::var& state) {
     if (!readControlList(obj->getProperty("controls"), parsed.controls))
         return false;
 
-    // "Reject a profile whose controls share a MessageSpec key" (docs/midi_remote.md §5's rule,
+    // "Reject a profile whose controls share a MessageSpec key" (docs/control/midi-remote.md#data-model's rule,
     // ticket FRO124): an O(n^2) scan is fine at controller-surface scale (tens of controls).
     for (size_t i = 0; i < parsed.controls.size(); ++i)
         for (size_t j = i + 1; j < parsed.controls.size(); ++j)

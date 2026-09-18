@@ -943,7 +943,7 @@ private:
         explicit RemoteActionInvokerImpl(juce::ApplicationCommandManager& cm) noexcept;
         void invokeRemoteCommand(juce::CommandID commandId) override;
     };
-    synth::midi::RemoteEngine remoteEngine; // docs/midi_remote.md §6; wired in wireMidiRemoteEngine()
+    synth::midi::RemoteEngine remoteEngine; // docs/control/midi-remote.md#the-engine; wired in wireMidiRemoteEngine()
     RemoteActionInvokerImpl remoteActionInvoker_{commandManager};
     // Consulted first by resolveEditSurface(); std::nullopt means "use real focus".
     std::optional<EditSurface> editSurfaceOverrideForTest_;

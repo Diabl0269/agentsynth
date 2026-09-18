@@ -332,17 +332,18 @@ void MainComponent::RemoteActionInvokerImpl::invokeRemoteCommand(juce::CommandID
 // wireCommandsAndShortcuts() above (commandManager must exist — the action invoker dispatches
 // through it) and deliberately BEFORE initialiseAudioEngine() below: that function returns early
 // in Hosted mode (only the app-only welcome screen/focus regions depend on it), and MIDI Remote
-// must still wire up for a hosted plugin (docs/midi_remote.md §4.8's hostSourceKey exists exactly
-// for that case). openMidiDevicesForRemote/getOpenMidiInputIdentifiers are both no-ops/empty in
-// Hosted mode regardless of whether the real audio device has been opened yet, so nothing here
-// depends on initialiseAudioEngine() having run first.
+// must still wire up for a hosted plugin (docs/control/midi-remote.md#the-plugin-build-vst3au-inside-a-host's
+// hostSourceKey exists exactly for that case). openMidiDevicesForRemote/getOpenMidiInputIdentifiers are both
+// no-ops/empty in Hosted mode regardless of whether the real audio device has been opened yet, so nothing here depends
+// on initialiseAudioEngine() having run first.
 void MainComponent::wireMidiRemoteEngine() {
     remoteEngine.setActionInvoker(&remoteActionInvoker_);
     remoteEngine.setActionCommandLookup(
         [](const juce::String& actionId) { return AppCommands::getCommandForAction(actionId); });
     // The engine yields exactly as a second mouse would while a real gesture already holds the
-    // same parameter (docs/midi_remote.md §4.2) — GestureClaims::isClaimed is already exactly the
-    // audio-visible predicate AutomationApplier itself consults, so no new plumbing is needed here.
+    // same parameter (docs/control/midi-remote.md#how-does-a-hardware-value-reach-a-parameter) —
+    // GestureClaims::isClaimed is already exactly the audio-visible predicate AutomationApplier itself consults, so no
+    // new plumbing is needed here.
     remoteEngine.setParameterClaimedPredicate([this](const juce::AudioProcessorParameter* param) {
         return automationRecorder.getAudioState().claims.isClaimed(param);
     });
@@ -470,7 +471,7 @@ void MainComponent::rebuildFocusRegions() {
     // ---- T159: focus-region registry ---------------------------------------------------------
     // Registered unconditionally (app AND plugin path — the plugin has every one of these panels
     // too, just no welcomeScreen_) after every region root above is fully constructed and wired.
-    // Order matches the Tab-cycle order docs/shortcuts.md documents: Toolbar, Library, Canvas,
+    // Order matches the Tab-cycle order docs/control/shortcuts.md documents: Toolbar, Library, Canvas,
     // Timeline, AI Panel, Mod Matrix. Wraps the getters/toggles that already exist rather than
     // migrating them to a new unified visibility enum — see Source/UI/Layout/FocusRegion.h's own header
     // comment.

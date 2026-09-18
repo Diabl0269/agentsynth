@@ -288,7 +288,7 @@ void MainComponent::promptRepeatSelection() {
 // ---- Keyboard/focus arbitration ----
 // ---- Keyboard/focus arbitration ----
 // Which surface currently owns Cmd+C/V/D (Space's togglePlayback is deliberately
-// surface-independent — see ShortcutManager's binding comment and docs/shortcuts.md).
+// surface-independent — see ShortcutManager's binding comment and docs/control/shortcuts.md).
 // TimelineClips/PianoRoll require BOTH the timeline panel to be visible AND real keyboard
 // focus (juce::Component::getCurrentlyFocusedComponent()) to sit inside the clip-lane area /
 // piano roll respectively — a hidden panel never owns the verbs, whatever a stale focus

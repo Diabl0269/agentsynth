@@ -1,6 +1,6 @@
 // Message thread. Applies a decoded RemoteEvent exactly as a mouse would: beginChangeGesture /
-// setValueNotifyingHost / endChangeGesture (docs/midi_remote.md §4.2), or invokes an action
-// command on press. This is where takeover (jump/pick-up/scale) and the 250 ms gesture-idle rule
+// setValueNotifyingHost / endChangeGesture (docs/control/midi-remote.md#how-does-a-hardware-value-reach-a-parameter),
+// or invokes an action command on press. This is where takeover (jump/pick-up/scale) and the 250 ms gesture-idle rule
 // live.
 
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
@@ -35,7 +35,7 @@ void RemoteEngine::applyToParameter(const RemoteMappingSnapshot::Slot& slot, con
     const auto existingIt = gestures_.find(slot.assignmentId);
     const bool hasActiveGesture = existingIt != gestures_.end() && existingIt->second.gestureActive;
     if (isClaimedByOther_ && !hasActiveGesture && isClaimedByOther_(slot.param))
-        return; // a real mouse wins (docs/midi_remote.md §4.2)
+        return; // a real mouse wins (docs/control/midi-remote.md#how-does-a-hardware-value-reach-a-parameter)
 
     const bool isNewGesture = existingIt == gestures_.end();
     GestureState& state = gestures_[slot.assignmentId];

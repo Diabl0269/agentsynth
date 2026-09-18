@@ -19,7 +19,7 @@ namespace synth::midi::detail {
 /** What handleMessage needs to know about a raw juce::MidiMessage before it can be looked up or
  *  decoded. `eligible` is false for anything that is not cc / noteOn / noteOff / pitchBend /
  *  channelPressure / programChange -- clock, active sensing, sysex and poly (per-note) aftertouch
- *  are never eligible and must never reach findSlot or the learn tally (docs/midi_remote.md
+ *  are never eligible and must never reach findSlot or the learn tally (docs/control/midi-remote.md
  *  §4.3/§4.5). */
 struct ClassifiedMessage {
     bool eligible = false;
@@ -70,7 +70,7 @@ inline ClassifiedMessage classifyMessage(const juce::MidiMessage& message) noexc
     }
     // Everything else -- poly (per-note) aftertouch, clock, active sensing, sysex, and the
     // transport realtime bytes -- stays ineligible and is dropped by the caller before any ring
-    // write, per docs/midi_remote.md §4.3's step 2.
+    // write, per docs/control/midi-remote.md#are-mapped-messages-consumed-or-also-forwarded-to-the-graph's step 2.
 
     return result;
 }

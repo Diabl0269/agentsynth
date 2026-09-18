@@ -860,7 +860,7 @@ if(ENABLE_PLUGIN)
         NEEDS_MIDI_INPUT TRUE
         NEEDS_MIDI_OUTPUT FALSE
         IS_MIDI_EFFECT FALSE
-        # The graph editor is keyboard-driven (see docs/shortcuts.md); without this the host
+        # The graph editor is keyboard-driven (see docs/control/shortcuts.md); without this the host
         # swallows every keystroke before the editor sees it.
         EDITOR_WANTS_KEYBOARD_FOCUS TRUE
         # Never install into the user's system plugin folders as a build side effect — CI

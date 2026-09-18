@@ -329,7 +329,7 @@ keypress belongs to in the first place.
 
 **P = loop the selection** (Cubase's locators-to-selection) rides on that same local half: an
 unmodified `P` handled in `TimelineClipLaneArea::keyPressed`, **not** a `ShortcutManager` command,
-for exactly the reason Delete and Escape are not (see [`shortcuts.md`](../shortcuts.md) and
+for exactly the reason Delete and Escape are not (see [`shortcuts.md`](../control/shortcuts.md) and
 [focus](focus.md#delete-stays-panel-local)) — a bare letter in the app-wide table would fire from
 any panel that does not consume it first.
 

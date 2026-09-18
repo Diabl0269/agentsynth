@@ -30,7 +30,7 @@ TimelinePanelComponent::TimelinePanelComponent() {
     // T159: makes grabKeyboardFocus() on THIS component (the "timeline" focus region's root)
     // succeed deterministically, rather than depending on JUCE's position-ordered descent into
     // children finding a focus-wanting one. This is deliberately separate from the clip-lane-area
-    // and piano-roll's OWN grabKeyboardFocus() calls on mouseDown (docs/shortcuts.md's edit-surface
+    // and piano-roll's OWN grabKeyboardFocus() calls on mouseDown (docs/control/shortcuts.md's edit-surface
     // routing) — those still work exactly as before; Cmd+Shift+T / Tab just land on the panel root
     // itself rather than wherever positional descent happened to end up.
     setWantsKeyboardFocus(true);

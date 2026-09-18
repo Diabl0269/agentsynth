@@ -1,6 +1,7 @@
 #pragma once
 
-// The immutable live mapping table and the discipline that publishes it (docs/midi_remote.md §4.4).
+// The immutable live mapping table and the discipline that publishes it
+// (docs/control/midi-remote.md#threading-the-mapping-table-crosses-threads).
 //
 // WHY NEITHER OF THE TWO OBVIOUS ANSWERS.
 //

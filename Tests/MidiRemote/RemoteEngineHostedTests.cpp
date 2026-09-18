@@ -1,5 +1,5 @@
-// docs/midi_remote.md §4.8: HostMode::Hosted never opens hardware MIDI, and the SAME early-return
-// in AudioEngine::handleIncomingMidiMessageFromSource (Source/AudioEngine/AudioEngineMidi.cpp)
+// docs/control/midi-remote.md#the-plugin-build-vst3au-inside-a-host: HostMode::Hosted never opens hardware MIDI, and
+// the SAME early-return in AudioEngine::handleIncomingMidiMessageFromSource (Source/AudioEngine/AudioEngineMidi.cpp)
 // gates BOTH of a message's non-RemoteEngine destinations -- the MidiMessageCollector push and the
 // ExternalMidiModule name-match fan-out:
 //

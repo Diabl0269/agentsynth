@@ -1,6 +1,6 @@
 #pragma once
 
-// synth::midi::RemoteEngine — the MIDI Remote engine (docs/midi_remote.md §6).
+// synth::midi::RemoteEngine — the MIDI Remote engine (docs/control/midi-remote.md#the-engine).
 //
 // Three threads meet here and the split is the whole design:
 //
@@ -43,16 +43,17 @@
 namespace synth::midi {
 
 /** endChangeGesture fires this long after the last event for an assignment, so one slow knob sweep
- *  is one undo step and one automation touch (docs/midi_remote.md §4.2). */
+ *  is one undo step and one automation touch (docs/control/midi-remote.md#how-does-a-hardware-value-reach-a-parameter).
+ */
 inline constexpr double kGestureIdleMs = 250.0;
 /** A learn binds the message key seen most often in this window after the first eligible message
- *  (docs/midi_remote.md §4.5). */
+ *  (docs/control/midi-remote.md#learn-what-does-the-first-message-mean). */
 inline constexpr double kLearnSettleMs = 300.0;
 /** A learn with no eligible message for this long cancels itself. */
 inline constexpr double kLearnTimeoutMs = 10000.0;
 /** Drain rate. One frame of latency on a knob; see §4.2 on why that is the right trade. */
 inline constexpr int kDrainHz = 60;
-/** One hardware tick of a relative encoder moves a parameter by this much (docs/midi_remote.md
+/** One hardware tick of a relative encoder moves a parameter by this much (docs/control/midi-remote.md
  *  §6 "relative -> signed delta x sensitivity"). */
 inline constexpr float kRelativeSensitivity = 1.0f / 127.0f;
 
@@ -72,7 +73,7 @@ using ActionCommandLookup = std::function<juce::CommandID(const juce::String& ac
 struct LearnRequest {
     Target target;
     /** Bool parameters and actions prefer note-on / CC-0-or-127 and infer buttonMode from what the
-     *  hardware does on release (docs/midi_remote.md §4.5). */
+     *  hardware does on release (docs/control/midi-remote.md#learn-what-does-the-first-message-mean). */
     bool buttonLike = false;
 };
 
@@ -117,8 +118,8 @@ public:
 
     /** Returns true while something *other* than this engine holds the parameter — a real mouse
      *  drag, via AutomationRecorder's gesture claim. The engine then yields exactly as a second
-     *  mouse would (docs/midi_remote.md §4.2). Injected so Core keeps no AutomationRecorder
-     *  dependency. */
+     *  mouse would (docs/control/midi-remote.md#how-does-a-hardware-value-reach-a-parameter). Injected so Core keeps no
+     * AutomationRecorder dependency. */
     void setParameterClaimedPredicate(std::function<bool(const juce::AudioProcessorParameter*)> pred) {
         isClaimedByOther_ = std::move(pred);
     }

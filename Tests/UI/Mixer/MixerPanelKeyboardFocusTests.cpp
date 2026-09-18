@@ -1,5 +1,5 @@
 // MixerPanelKeyboardFocusTests.cpp -- FRO18: MixerPanelComponent as the mixer's own keyboard
-// focus-region ROOT (docs/shortcuts.md's "Mixer column navigation") -- Left/Right column walk,
+// focus-region ROOT (docs/control/shortcuts.md's "Mixer column navigation") -- Left/Right column walk,
 // Up/Down fader nudge, Enter select-on-canvas, and the rebindable M/S/R actions, modeled on
 // TimelineTrackFocusTests.cpp's own drive-keyPressed()-directly style.
 //

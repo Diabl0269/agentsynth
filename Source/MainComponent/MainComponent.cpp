@@ -105,7 +105,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // ORDER: after commandManager exists (the action invoker dispatches through it) and BEFORE the
     // initialiseAudioEngine() early-return below — that return only skips the app-only welcome
     // screen/focus regions in Hosted mode, and MIDI Remote must still wire up for a hosted plugin
-    // (docs/midi_remote.md §4.8's hostSourceKey exists exactly for that case).
+    // (docs/control/midi-remote.md#the-plugin-build-vst3au-inside-a-host's hostSourceKey exists exactly for that case).
     wireMidiRemoteEngine();
     addCanvasAndPanels();
     addToolbarChrome(); // ORDER: z-order -- before any toolbar button

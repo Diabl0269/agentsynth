@@ -1,8 +1,8 @@
 // MIDI/audio thread: RemoteEngine::handleMessage's classify -> lookup -> decode pipeline
-// (docs/midi_remote.md §4.3, §6). Every test here drives handleMessage() directly and reads back
-// through drainActivity(), which mirrors every decoded event -- assigned or not -- without
-// requiring a resolved parameter (RemoteEvent.h's file comment). Suite names contain "MidiRemote"
-// per the ship-task --gtest_filter convention.
+// (docs/control/midi-remote.md#are-mapped-messages-consumed-or-also-forwarded-to-the-graph,
+// docs/control/midi-remote.md#the-engine). Every test here drives handleMessage() directly and reads back through
+// drainActivity(), which mirrors every decoded event -- assigned or not -- without requiring a resolved parameter
+// (RemoteEvent.h's file comment). Suite names contain "MidiRemote" per the ship-task --gtest_filter convention.
 
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
 
@@ -246,7 +246,8 @@ TEST(MidiRemoteEngineDecodeTest, ChannelZeroMeansAnyChannelButAnExactChannelIsEx
 }
 
 // ============================================================================
-// Unassigned-but-known control: activity fires, nothing is ever consumed (docs/midi_remote.md §4.3)
+// Unassigned-but-known control: activity fires, nothing is ever consumed
+// (docs/control/midi-remote.md#are-mapped-messages-consumed-or-also-forwarded-to-the-graph)
 // ============================================================================
 
 TEST(MidiRemoteEngineDecodeTest, UnassignedControlProducesActivityButIsNeverConsumed) {

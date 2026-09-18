@@ -53,7 +53,7 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
     }
 
     // T161: bare Down on the PANEL ROOT itself seeds keyboard focus into the track-header column.
-    // Cmd+Shift+T / Tab land here (docs/shortcuts.md's Focus regions section — every region root
+    // Cmd+Shift+T / Tab land here (docs/control/shortcuts.md's Focus regions section — every region root
     // wants its own focus, deterministically), not on any row, so without this a keyboard-only user
     // could never reach a track header at all. Scoped to REAL focus being on THIS exact component
     // (never "focus is somewhere in the panel") so it can't steal an arrow key the clip lane or piano

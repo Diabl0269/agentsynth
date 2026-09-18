@@ -128,7 +128,7 @@ public:
     /**
      * @brief Records a project-level MIDI Remote assignment change (create via Learn, edit,
      *        delete, re-link) as an undoable snapshot, on the SAME shared undo stack as the
-     *        graph's own changes (docs/midi_remote.md §8).
+     *        graph's own changes (docs/control/midi-remote.md#undo).
      *
      * Unlike recordTimelineChange, this does NOT run a mutation lambda itself — the caller
      * already has the before/after `juce::var` (typically doc.toVar() taken immediately before

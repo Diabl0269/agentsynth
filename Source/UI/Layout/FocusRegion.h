@@ -9,7 +9,7 @@
 
 // T159: the app-wide keyboard focus-region framework — Tab/Shift+Tab cycling plus two direct-focus
 // shortcuts, phase 1 of a 3-part epic (T160 adds arrow-key navigation WITHIN the module library,
-// T161 within the timeline track headers; neither is built here). See docs/shortcuts.md and
+// T161 within the timeline track headers; neither is built here). See docs/control/shortcuts.md and
 // docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step for the
 // user-facing behaviour this implements.
 //
@@ -90,7 +90,7 @@ public:
 
     // Pure decision: given the id currently holding focus (empty/unknown counts as "no current
     // region"), the id of the next OPEN region Tab-cycling should land in. Closed regions are
-    // skipped entirely — a LOCKED T159 decision, see docs/shortcuts.md — and the ends wrap. Every
+    // skipped entirely — a LOCKED T159 decision, see docs/control/shortcuts.md — and the ends wrap. Every
     // region closed (never happens today; Canvas has no closed state) answers an empty string.
     juce::String nextOpenRegionId(const juce::String& currentId, bool forward) const {
         const auto open = openRegions();

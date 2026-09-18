@@ -348,7 +348,7 @@ public:
     /** Fired from mouseDown() on anything that isn't a right-click (a background click, or one that
      *  lands on the row rather than being consumed by a child) — deliberately a callback rather than
      *  relying on the real focusGained() notification round-trip: grabKeyboardFocus() is a best-effort
-     *  no-op without a native peer (headless tests included — see docs/shortcuts.md's Focus regions
+     *  no-op without a native peer (headless tests included — see docs/control/shortcuts.md's Focus regions
      *  section), so TimelinePanelComponent::focusedTrackIndex_ has to be told directly rather than
      *  waiting on an OS focus event that may never arrive. */
     std::function<void()> onSelectRequested;

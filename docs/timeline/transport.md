@@ -179,7 +179,7 @@ path.
 play and stop are guarded on the current snapshot so each is idempotent, and return-to-start is
 `locateBeat(0)` with no implicit stop. `transportToggleLoop` and `transportToggleMetronome` reuse
 the loop and metronome buttons' own `triggerClick()` the same way `transportRecord` reuses
-Record's — see [`shortcuts.md`](../shortcuts.md#transport-family) for the full action-id table. All
+Record's — see [`shortcuts.md`](../control/shortcuts.md#transport-family) for the full action-id table. All
 six ship unbound by default; only `togglePlayback` keeps a default key (Space).
 
 ## Metronome and count-in

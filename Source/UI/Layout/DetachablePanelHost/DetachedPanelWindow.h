@@ -23,7 +23,7 @@ namespace synth::ui {
 // instance on the plugin path, exactly the AgentSynthPluginEditor/HostedPluginEditorWindow pattern -- and clears it in
 // its destructor. Never constructs its own ThemeManager/AppLookAndFeel.
 //
-// Keyboard focus is scoped to THIS window (T159/docs/shortcuts.md "Focus regions"): MainComponent's
+// Keyboard focus is scoped to THIS window (T159/docs/control/shortcuts.md "Focus regions"): MainComponent's
 // keyPressed dispatch is not reachable from a separate top-level window (MainComponent installs no
 // KeyListener -- see MainComponentSetup.cpp's comment -- so Tab here would otherwise go nowhere),
 // so this window resolves Tab/Shift+Tab itself, against its OWN one-region FocusRegionRegistry

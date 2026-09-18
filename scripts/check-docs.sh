@@ -73,7 +73,7 @@
 #      this check's -- the whole `[text](target)` span is masked out of the line before this check
 #      ever looks at it, so it is never double-reported here. FRO176's post-merge verification found
 #      two live dead references of exactly this shape surviving a clean run (docs/timeline/scale-
-#      assist.md and docs/plugin_card_layout.md, both fixed in the same PR that added this check) --
+#      assist.md and docs/control/plugin-card-layout.md, both fixed in the same PR that added this check) --
 #      proof the gap was real, not theoretical.
 #
 # Usage:

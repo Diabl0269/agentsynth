@@ -1,6 +1,6 @@
 #pragma once
 
-// Headless MIDI Remote data model (docs/midi_remote.md §5). Lives in Core: no
+// Headless MIDI Remote data model (docs/control/midi-remote.md#data-model). Lives in Core: no
 // juce::ApplicationProperties / juce::PropertiesFile include here or anywhere this header is
 // used from, per Source/CLAUDE.md's Core-layering rule — the file store that persists a
 // ControllerProfile to disk is app-layer (Source/MidiRemote/ControllerProfileStore.h), injected
@@ -12,7 +12,7 @@
 
 namespace synth {
 
-// -- Enums (docs/midi_remote.md §5) --------------------------------------------------------------
+// -- Enums (docs/control/midi-remote.md#data-model) --------------------------------------------------------------
 // Every enum here serialises as its doc-exact camelCase string (see RemoteModelJson.cpp); an
 // unrecognised string on load is a hard failure in fromVar, never a silent default.
 
@@ -20,17 +20,17 @@ enum class ControlKind { knob, fader, button, pad, encoder, wheel };
 
 enum class MessageType { cc, note, pitchBend, channelPressure, programChange };
 
-// abs14 (14-bit MSB/LSB pairs) is v2 (docs/midi_remote.md §9 item 2) — not modelled here.
+// abs14 (14-bit MSB/LSB pairs) is a v2 extension (FRO140) — not modelled here.
 enum class Encoding { abs7, relTwos, relBinOffset, relSignMag };
 
 enum class ButtonMode { momentary, toggle };
 
 // "default" is a C++ keyword, so the "use the Preferences default takeover" enumerator is named
-// useDefault instead (docs/midi_remote.md §4.6/§5).
+// useDefault instead (docs/control/midi-remote.md#takeover / docs/control/midi-remote.md#data-model).
 enum class Takeover { jump, pickup, scale, useDefault };
 
 // -- MessageSpec ----------------------------------------------------------------------------------
-/** The engine's lookup key for a hardware message (docs/midi_remote.md §5): (type, channel,
+/** The engine's lookup key for a hardware message (docs/control/midi-remote.md#data-model): (type, channel,
  *  number). `channel` == 0 means "any channel", else 1..16. `number` is the cc/note number and is
  *  ignored for pitchBend/channelPressure. Two controls on one ControllerProfile may not share a
  *  MessageSpec — see ControllerProfile::fromVar. */
@@ -50,7 +50,7 @@ struct MessageSpec {
 };
 
 // -- Control ---------------------------------------------------------------------------------------
-/** One physical control on a ControllerProfile's detected surface (docs/midi_remote.md §5). */
+/** One physical control on a ControllerProfile's detected surface (docs/control/midi-remote.md#data-model). */
 struct Control {
     juce::String id;
     juce::String name;
@@ -71,9 +71,10 @@ struct Control {
 
 // -- Target ----------------------------------------------------------------------------------------
 /** An Assignment's destination: exactly one of a graph parameter or a ShortcutManager-registered
- *  action (docs/midi_remote.md §4.1, §4.9, §5). Modelled as a tagged union (rather than two
- *  std::optional payloads) so fromVar can reject a JSON object carrying both "parameter" and
- *  "action", or neither, as a single well-defined check. */
+ *  action (docs/control/midi-remote.md#where-does-a-mapping-live--global-or-in-the-project,
+ *  docs/control/midi-remote.md#action-targets, docs/control/midi-remote.md#data-model). Modelled
+ *  as a tagged union (rather than two std::optional payloads) so fromVar can reject a JSON object
+ *  carrying both "parameter" and "action", or neither, as a single well-defined check. */
 struct Target {
     enum class Kind { parameter, action };
 
@@ -102,14 +103,14 @@ struct Target {
 
 // -- Assignment -------------------------------------------------------------------------------------
 /** One mapping from a control's message to a Target. Carries a DENORMALISED copy of the
- *  control's message spec (docs/midi_remote.md §4.1's "consequence") so it round-trips and stays
- *  meaningful even when the ControllerProfile it references isn't present on this machine — there
- *  is no cross-reference/lookup against a live profile at parse time. */
+ *  control's message spec (docs/control/midi-remote.md#where-does-a-mapping-live--global-or-in-the-project's
+ * "consequence") so it round-trips and stays meaningful even when the ControllerProfile it references isn't present on
+ * this machine — there is no cross-reference/lookup against a live profile at parse time. */
 struct Assignment {
     juce::String id;
 
     // The GLOBAL control this assignment maps, by reference only — may not resolve on this
-    // machine (an orphan controller, docs/midi_remote.md §4.1).
+    // machine (an orphan controller, docs/control/midi-remote.md#where-does-a-mapping-live--global-or-in-the-project).
     struct {
         juce::String profileId;
         juce::String controlId;
@@ -127,7 +128,7 @@ struct Assignment {
     struct {
         double min = 0.0;
         double max = 1.0;
-    } range; // normalised; min > max inverts (docs/midi_remote.md §5)
+    } range; // normalised; min > max inverts (docs/control/midi-remote.md#data-model)
 
     bool enabled = true;
 
@@ -138,7 +139,7 @@ struct Assignment {
 };
 
 // -- ControllerProfile --------------------------------------------------------------------------------
-/** GLOBAL — one per physical controller (docs/midi_remote.md §5). Persisted by the app-layer
+/** GLOBAL — one per physical controller (docs/control/midi-remote.md#data-model). Persisted by the app-layer
  *  ControllerProfileStore as one JSON file per profile (Source/MidiRemote/
  *  ControllerProfileStore.h); this struct only knows its own JSON shape. */
 struct ControllerProfile {
@@ -151,12 +152,14 @@ struct ControllerProfile {
     };
     Input input;
 
-    // Reserved for v2 feedback (docs/midi_remote.md §9 item 1); never read in v1. A nullable
+    // Reserved for a v2 feedback extension (FRO139); never read in v1. A nullable
     // struct: hasOutput == false means "no output device set" and `output` itself is inert.
     bool hasOutput = false;
     Input output;
 
-    bool passMapped = false; // §4.3's "also pass mapped messages to the patch" toggle, default off
+    // docs/control/midi-remote.md#are-mapped-messages-consumed-or-also-forwarded-to-the-graph's
+    // "also pass mapped messages to the patch" toggle, default off
+    bool passMapped = false;
 
     std::vector<Control> controls;
     std::vector<Assignment> actions; // GLOBAL assignments: target.kind == action only
@@ -173,10 +176,10 @@ struct ControllerProfile {
 };
 
 // -- MidiRemoteProjectDoc ------------------------------------------------------------------------------
-/** The project's reserved `"midiRemote"` top-level key value type (docs/midi_remote.md §5, §7) —
- *  mirrors synth::TimelineDoc's / synth::MacroSet's role for ProjectBundle: a plain, headless,
- *  serialisable value ProjectBundle reads/writes as a whole, with no engine or file-store
- *  dependency of its own. */
+/** The project's reserved `"midiRemote"` top-level key value type (docs/control/midi-remote.md#data-model,
+ * docs/control/midi-remote.md#persistence-and-the-trust-boundary) — mirrors synth::TimelineDoc's / synth::MacroSet's
+ * role for ProjectBundle: a plain, headless, serialisable value ProjectBundle reads/writes as a whole, with no engine
+ * or file-store dependency of its own. */
 class MidiRemoteProjectDoc {
 public:
     int version = 1;
@@ -186,7 +189,9 @@ public:
         juce::String profileId;
         juce::String name;
     };
-    std::vector<ControllerRef> controllers; // orphan-controller display, docs/midi_remote.md §4.1
+    std::vector<ControllerRef>
+        controllers; // orphan-controller display,
+                     // docs/control/midi-remote.md#where-does-a-mapping-live--global-or-in-the-project
 
     juce::var toVar() const;
 

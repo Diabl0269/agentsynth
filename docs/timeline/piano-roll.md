@@ -616,7 +616,7 @@ reason the panel's own Cmd+Shift+wheel branch does
 
 Cmd+= / Cmd+- and Cmd+Shift+= / Cmd+Shift+- reach the same `zoomHorizontal` / `zoomVertical` entry
 points (anchored at the grid's visible centre rather than the cursor) when the roll is the focused
-surface — see [`shortcuts.md`](../shortcuts.md#zoom). Zoom is not persisted across opens:
+surface — see [`shortcuts.md`](../control/shortcuts.md#zoom). Zoom is not persisted across opens:
 `openClip` reframes to the clip every time.
 
 ## The ruler above the roll

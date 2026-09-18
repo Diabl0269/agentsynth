@@ -177,7 +177,7 @@ ProjectLoadResult ProjectBundle::loadFromFile(const juce::File& projectFile, juc
 
     // "midiRemote" (FRO124) gets the identical treatment, for the identical reason: validatePatch
     // refuses any patch carrying it, and a .agsproj's "midiRemote" is this format's own dialect,
-    // not provider output (docs/midi_remote.md §7).
+    // not provider output (docs/control/midi-remote.md#persistence-and-the-trust-boundary).
     const bool hasMidiRemoteKey = rootObj->hasProperty(kMidiRemoteKey);
     juce::var detachedMidiRemoteVar;
     if (hasMidiRemoteKey) {

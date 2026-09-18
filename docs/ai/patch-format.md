@@ -66,7 +66,7 @@ live graph and keeps every node whose uuid still matches, instead of replaying i
 leaving the graph untouched, and the caller then falls back to
 `applyJSONToGraph(..., clearExisting=true, trusted=true)`. `applyJSONToGraph` itself is unchanged by
 that path; presets, snippets and AI apply all keep their own semantics. See
-[`architecture/module-base.md`](../docs/architecture/module-base.md#appundomanager).
+[`architecture/module-base.md`](../architecture/module-base.md#appundomanager).
 
 ## Per-node `displayName`
 

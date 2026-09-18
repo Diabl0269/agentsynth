@@ -10,7 +10,7 @@ any key except Escape commits it, swapping with whatever action in the **same ca
 held that key. The tab groups rows into one collapsible section per category with a search box
 above them (matches against both the action's description and its current binding text — "cmd"
 finds every Cmd shortcut, "transpose" finds the piano-roll block) and a top strip that flips between
-"COLLAPSE ALL"/"EXPAND ALL"; see [`layout/module-library.md`](layout/module-library.md#collapsible-sections) for
+"COLLAPSE ALL"/"EXPAND ALL"; see [`layout/module-library.md`](../layout/module-library.md#collapsible-sections) for
 the shared collapsible-list pattern it mirrors. Export/import round-trip every binding as JSON;
 Reset restores the defaults below. A native macOS menu bar (File + Edit) provides Undo/Redo via
 `ApplicationCommandManager`.
@@ -25,10 +25,10 @@ when reasoning about a key that "does nothing."
 |----------|--------|
 | Cmd+, | Open Settings |
 | Cmd+N | New Patch (clear canvas) |
-| Cmd+S | Save Preset — writes a project bundle (`.agsproj`, graph + timeline) and silently resaves to the remembered bundle on every subsequent press; prompts for a location only on the first save or when no bundle is open (see [`architecture_project_bundle.md`](architecture.md)) |
+| Cmd+S | Save Preset — writes a project bundle (`.agsproj`, graph + timeline) and silently resaves to the remembered bundle on every subsequent press; prompts for a location only on the first save or when no bundle is open (see [`architecture/project-bundle.md`](../architecture/project-bundle.md#opening-and-saving-one-from-the-app)) |
 | Cmd+Opt+S | Save Project As — always prompts for a new location |
-| Cmd+Shift+E | Export Audio — opens the Export Audio dialog (bounce the arrangement or the current loop range to WAV/AIFF, see [`architecture.md`](architecture_audio_engine.md#bounceexport)). Greyed out while a bounce is already running |
-| (menu only) | Export Stems — opens the same dialog in its stems mode, rendering each mixer channel to its own file in a folder (P9-8, see [`architecture.md`](architecture_audio_engine.md#stem-export)). A menu-only `AppCommands::exportStems` (File menu, immediately after Export Audio), with no default shortcut, like `openPreset`. Also greyed out while a render is already running |
+| Cmd+Shift+E | Export Audio — opens the Export Audio dialog (bounce the arrangement or the current loop range to WAV/AIFF, see [`architecture/audio-engine.md`](../architecture/audio-engine.md#bounceexport)). Greyed out while a bounce is already running |
+| (menu only) | Export Stems — opens the same dialog in its stems mode, rendering each mixer channel to its own file in a folder (see [`architecture/audio-engine.md`](../architecture/audio-engine.md#stem-export)). A menu-only `AppCommands::exportStems` (File menu, immediately after Export Audio), with no default shortcut, like `openPreset`. Also greyed out while a render is already running |
 | Cmd+Shift+P | Export Patch Only — saves just the patch (a legacy `.json` via `GraphEditor::savePreset`) without the timeline or bundle, never touching the window title. Rebindable since P8-20 |
 | Cmd+O | Open Project - a `.agsproj` bundle (patch + timeline). P8-31 split this from the former combined "Load from file..." chooser; it took Cmd+O from the old combined open, which is now the menu-only "Open Patch" |
 | (menu only) | Open Patch - a plain `.json` preset (graph only). A menu-only `AppCommands::openPreset` (the Load icon's **Patches** submenu and the top-bar **File** menu), with no default shortcut, like `checkForUpdates` |
@@ -38,8 +38,8 @@ when reasoning about a key that "does nothing."
 | Cmd+K | Toggle Minimap |
 | Ctrl+A (macOS) / Cmd+Shift+A (elsewhere) | Toggle AI Panel — moved off Cmd+A so Select All could take the platform-standard chord. One of the very few per-platform defaults: on macOS Ctrl is a real separate modifier, on Windows/Linux JUCE's Cmd IS Ctrl so Ctrl+A would collide with Select All |
 | Cmd+B | Toggle Module Library |
-| Cmd+T | Toggle Timeline Panel (see [`timeline/timeline.md`](timeline/timeline.md#docking-toggle-and-the-bottom-dock)) |
-| Cmd+Alt+M | Toggle Mixer Panel (`toggleMixerPanel`) — opens the bottom dock on the Mixer tab if closed, or on Timeline; closes it on a second press only when the dock is already open on Mixer, mirroring Cmd+T's own open/close symmetry. See [`mixer_implementation.md §8`](mixer_implementation.md) |
+| Cmd+T | Toggle Timeline Panel (see [`timeline/timeline.md`](../timeline/timeline.md#docking-toggle-and-the-bottom-dock)) |
+| Cmd+Alt+M | Toggle Mixer Panel (`toggleMixerPanel`) — opens the bottom dock on the Mixer tab if closed, or on Timeline; closes it on a second press only when the dock is already open on Mixer, mirroring Cmd+T's own open/close symmetry. See [`mixer_implementation.md`](../mixer_implementation.md) |
 | Cmd+A | Select All in Focused Editor (actionId/`AppCommands` name still `selectAllModules` — see "Surface routing" below) |
 | Cmd+Shift+S | Save Selection as Snippet |
 | Cmd+C | Copy (Selected Modules, or — see "Surface routing" below — the timeline's selected clips/notes) |
@@ -56,9 +56,9 @@ when reasoning about a key that "does nothing."
 | Tab / Shift+Tab | Focus Next / Previous Region — cycles keyboard focus between whichever of the app's focus regions are currently OPEN (Toolbar, Library, Canvas, Timeline, AI Panel, Mod Matrix); wraps at both ends. See [**Focus regions**](#focus-regions) below |
 | Cmd+Shift+T | Focus Timeline — opens the Timeline panel first if it's closed, then focuses it |
 | Cmd+Shift+L | Focus Library — opens the Module Library sidebar first if it's closed, then focuses it (lands on the sidebar container, not the search field — see Cmd+F below) |
-| Cmd+F | Focus Library Search — opens the Module Library first if it's closed, then focuses its search field specifically. See [**Library keyboard navigation (T160)**](#library-keyboard-navigation-t160) below |
+| Cmd+F | Focus Library Search — opens the Module Library first if it's closed, then focuses its search field specifically. See [**Library keyboard navigation**](#library-keyboard-navigation) below |
 
-Cmd+T and Space are always active (see [`timeline/timeline.md`](timeline/timeline.md#always-compiled-never-gated)). The grid
+Cmd+T and Space are always active (see [`timeline/timeline.md`](../timeline/timeline.md#always-compiled-never-gated)). The grid
 and zoom commands below are inactive whenever the panel itself isn't open (`isTimelineVisible`),
 the same as any other timeline-only command.
 
@@ -71,7 +71,7 @@ Settings — and note that a machine which already persisted the old bindings ke
 "Reset to Defaults" (bindings are stored per actionId, defaults only fill the gaps).
 
 `Cmd+Alt+M` (Toggle Mixer Panel) is neither bare `Cmd+M` (already Toggle Mod Matrix) nor
-`Cmd+Shift+M` (already Locate Master, see [**Locate Master (FRO45)**](#locate-master-fro45)
+`Cmd+Shift+M` (already Locate Master, see [**Locate Master**](#locate-master)
 below) — Alt claims a fresh chord in the same `m` family without contesting either, the same move
 `Cmd+Alt+G` (Collapse/Expand Macro) makes next to Graph's own bare-letter bindings.
 
@@ -118,7 +118,7 @@ below for the Mixer region's own keyboard behaviour.
   screen. Neither is suppressed by the welcome screen.
 - **Cmd+Shift+M is deliberately NOT used for a Library shortcut** — `Cmd+M` already owns "Toggle Mod
   Matrix", and the chord instead went to "Locate Master" (Graph category — see [**Locate Master
-  (FRO45)**](#locate-master-fro45)), the same "find the mix bus" need this reservation was
+  **](#locate-master)), the same "find the mix bus" need this reservation was
   originally held for, ahead of the eventual mixer panel (P9-5).
 - **Every region root explicitly wants keyboard focus** — each of the six roots calls
   `setWantsKeyboardFocus(true)` in its constructor, so `grabKeyboardFocus()` always lands
@@ -171,13 +171,13 @@ below for the Mixer region's own keyboard behaviour.
   softer region border, plus the focused row's identical treatment around just that row) — deliberate,
   the same double-outline T160 already ships for a focused row inside the Library region.
 
-### Library keyboard navigation (T160)
+### Library keyboard navigation
 
 **T160** builds arrow-key navigation WITHIN the Library region on top of T159's framework, plus a
 new direct-focus shortcut for the search field specifically (`Cmd+F`, distinct from `Cmd+Shift+L`'s
 region-root destination). `ModuleLibraryComponent` had zero keyboard handling before this — it is a
 hand-rolled, not-a-`Viewport` component (drag-and-drop constraint, see
-[`layout/module-library.md`](layout/module-library.md)), so this is new keyboard subsystem
+[`layout/module-library.md`](../layout/module-library.md)), so this is new keyboard subsystem
 work, not a rewire of something that already listened for keys.
 
 - **Two different focus destinations feed the same navigation** — `Cmd+Shift+L` / Tab-cycling land
@@ -277,7 +277,7 @@ and every module (`GraphEditor::selectAllModules()`) on Graph. Unlike the clipbo
 
 Cmd+=/Cmd+- is the platform's own zoom accelerator (every browser, every editor); Cmd+Shift+=/-
 is the vertical axis, mirroring the modifier the mouse wheel already uses (Cmd+wheel = horizontal,
-Cmd+Shift+wheel = vertical — see [`timeline/view.md`](timeline/view.md#wheel-and-trackpad-bindings)), so the keyboard and the wheel teach
+Cmd+Shift+wheel = vertical — see [`timeline/view.md`](../timeline/view.md#wheel-and-trackpad-bindings)), so the keyboard and the wheel teach
 the same shape. All four are `AppCommands`/`ApplicationCommandManager` commands (unlike the
 Timeline/PianoRoll surface keys below) and route by the SAME `resolveEditSurface()` the clipboard
 verbs use, in/out factor `1.25` / `1 / 1.25` (`MainComponent::kZoomInFactor`/`kZoomOutFactor`):
@@ -286,7 +286,7 @@ verbs use, in/out factor `1.25` / `1 / 1.25` (`MainComponent::kZoomInFactor`/`kZ
 |---|---|---|
 | Graph | `GraphEditor::zoomAroundCentre` — the canvas' one zoom level | **Inactive** — the canvas zooms uniformly (one `zoomLevel`, no separate axes), so a second key that did the same thing under a different modifier would be a trap, not a feature |
 | TimelineClips | `TimelinePanelComponent::zoomTimelineHorizontal` — `TimelineViewState::pixelsPerBeat`, anchored at the visible centre | `zoomTimelineVertical` — `TimelineViewState::rowHeightScale` (track row height), anchored at the visible centre |
-| PianoRoll | `PianoRollComponent::zoomHorizontal` — the roll's OWN `pixelsPerBeat` (never the shared `TimelineViewState` — see [`timeline/piano-roll.md`](timeline/piano-roll.md#horizontal-mapping)) | `zoomVertical` — `pixelsPerSemitone_` |
+| PianoRoll | `PianoRollComponent::zoomHorizontal` — the roll's OWN `pixelsPerBeat` (never the shared `TimelineViewState` — see [`timeline/piano-roll.md`](../timeline/piano-roll.md#horizontal-mapping)) | `zoomVertical` — `pixelsPerSemitone_` |
 
 Each keypress reports its own status-bar message ("Canvas: zoom", "Timeline: zoom" / "Timeline:
 track height", "Piano roll: zoom" / "Piano roll: vertical zoom") so a held key's effect is visible
@@ -295,7 +295,7 @@ even with no mouse involved.
 ### Transport family
 
 FRO125 promoted every transport verb to a command-dispatched `AppCommands` action — the
-[`midi_remote.md §4.9`](midi_remote.md) prerequisite for a MIDI Remote hardware button to trigger
+[`midi-remote.md`](midi-remote.md#action-targets) prerequisite for a MIDI Remote hardware button to trigger
 one via `ApplicationCommandManager::invokeDirectly`. All six are **General**, and ship **unbound**
 by default (no default keypress) — they exist first as command/MIDI-Remote targets, and a user may
 still bind one from Settings like any other action:
@@ -310,7 +310,7 @@ still bind one from Settings like any other action:
 | `transportToggleMetronome` | Toggle Metronome | Triggers the transport bar's own metronome button, so its persisted `timelineMetronomeEnabled` state stays authoritative |
 | `transportReturnToStart` | Return to Start | `TransportService::locateBeat(0)` — relocates only, does not stop |
 
-See [`timeline/transport.md`](timeline/transport.md) for the transport bar itself.
+See [`timeline/transport.md`](../timeline/transport.md) for the transport bar itself.
 
 ## Graph
 
@@ -321,10 +321,10 @@ See [`timeline/transport.md`](timeline/transport.md) for the transport bar itsel
 | Cmd+G | Group / Toggle Macro |
 | Cmd+Shift+G | Ungroup Macro |
 | Cmd+Alt+G | Collapse / Expand Macro (toggle) |
-| Cmd+Shift+M | Locate Master — selects Master (falling back to Audio Output when there is no Master yet) and pans it into view; a graceful no-op with neither. Also on the canvas's right-click menu. See [**Locate Master (FRO45)**](#locate-master-fro45) below |
+| Cmd+Shift+M | Locate Master — selects Master (falling back to Audio Output when there is no Master yet) and pans it into view; a graceful no-op with neither. Also on the canvas's right-click menu. See [**Locate Master**](#locate-master) below |
 
 Graph holds only the six verbs that mean nothing on any other surface — auto-arrange,
-save-selection-as-snippet, grouping/ungrouping/collapsing a macro (P8-12), and locating Master —
+save-selection-as-snippet, grouping/ungrouping/collapsing a macro, and locating Master —
 everything that means the same thing everywhere (copy/paste/cut/duplicate/repeat/select-all, both
 zoom pairs) is General instead, so it can route through `resolveEditSurface()`.
 
@@ -350,7 +350,7 @@ always wins). One command works because the menu/Settings-list label is a single
 Ungroup above stays its own command because dissolving a macro is a different precondition and a
 genuinely different verb from either grouping or toggling.
 
-### Locate Master (FRO45)
+### Locate Master
 
 Founder feedback on T183's live check: once Master and Audio Output exist (T187 seeds an Audio
 Output on New Patch, docs/mixer.md), auto-arrange or an ordinary drag can leave either node
@@ -386,7 +386,7 @@ and, for the loop-selection key, `TimelineClipLaneArea::keyPressed()` too):
 | L | Toggle Looping, keeping the existing bounds — the transport bar's loop button |
 | F | Toggle Follow Playhead (`timelineFollowPlayheadToggle`) — mirrors the transport strip's follow button; panel-scoped like J/L/P, so it works whichever timeline surface (lanes or roll) has focus |
 | P | Loop the Selection — sets the transport loop to the selected clips' (or, with the roll open, the edited clip's) span. Whether it also arms looping is `Settings → Preferences → "Timeline: P (loop selection) also switches looping on"` (default on; off = locators only) |
-| 1 / 3 / 4 / 5 / 7 / 8 | Switch the active edit tool: 1 Select, 3 Split, 4 Glue, 5 Erase, 7 Mute, 8 Draw (Cubase's own numbering — see [`timeline/edit-tools.md`](timeline/edit-tools.md#numbering)) |
+| 1 / 3 / 4 / 5 / 7 / 8 | Switch the active edit tool: 1 Select, 3 Split, 4 Glue, 5 Erase, 7 Mute, 8 Draw (Cubase's own numbering — see [`timeline/edit-tools.md`](../timeline/edit-tools.md#numbering)) |
 | Option+1 | Jump to Locator 1 — parks the cursor on the LEFT loop locator (`timelineJumpToLocator1`) |
 | Option+2 | Jump to Locator 2 — the RIGHT loop locator (`timelineJumpToLocator2`) |
 
@@ -612,7 +612,7 @@ with no chip: `J` (Toggle Snap — its chip was removed by FRO108 as redundant w
 toolbar's own Snap button, which shares the same underlying flag). Four of the remaining chips carry
 small drawn vector glyphs rather than letters — a second "Q" beside the Quantise chip for
 length-quantise or pitch-quantise would have told the user nothing about which was which. See
-[`timeline/piano-roll.md`](timeline/piano-roll.md#header-chips).
+[`timeline/piano-roll.md`](../timeline/piano-roll.md#header-chips).
 
 2 (Range Selection), 6 (Zoom) and 9 (Play/Scrub) are Cubase tools this app doesn't ship yet and stay
 **unassigned on purpose** — `editToolForKeyChar` (`Source/UI/Timeline/EditTool.h`) returns `nullopt` for
@@ -674,7 +674,7 @@ find in a rebinding list. Each surface's own `keyPressed()` hardcodes them direc
 
 | Shortcut | Context | Action |
 |----------|---------|--------|
-| Escape | AI panel, request in flight | Cancel the in-flight AI request (same as the Cancel button — actually aborts it, see [`ai/ollama-provider.md`](ai/ollama-provider.md#request-cancellation)) |
+| Escape | AI panel, request in flight | Cancel the in-flight AI request (same as the Cancel button — actually aborts it, see [`ai/ollama-provider.md`](../ai/ollama-provider.md#request-cancellation)) |
 | Escape | Canvas, modules selected | Clear the selection |
 | Delete / Backspace | Canvas, modules selected | Delete every selected module (one undo step) |
 | Escape | Clip lanes, clips selected | Clear the clip selection |
@@ -701,12 +701,12 @@ deliberately does **not** consume the tool digits at all — tool switching belo
 the roll and the panel can never disagree about which tool is active. The whole selection nudges/
 transposes by ONE shared delta (never per-note), clamped so the group stays inside the clip window
 (`[0, clipLength)`) or the pitch range (`[0, 127]`) as a unit — the same "clamp the group together"
-rule `TimelineClipLaneArea`'s cross-track move drag uses (see [`timeline/clips.md`](timeline/clips.md#cross-track-drag)).
+rule `TimelineClipLaneArea`'s cross-track move drag uses (see [`timeline/clips.md`](../timeline/clips.md#cross-track-drag)).
 
 ## Canvas mouse gestures
 
 Multi-select is layered on top of the existing pan gesture rather than replacing it, so no existing
-habit changes. See [`layout/selection.md`](layout/selection.md) for the full contract.
+habit changes. See [`layout/selection.md`](../layout/selection.md) for the full contract.
 
 | Gesture | Action |
 |---------|--------|
@@ -718,7 +718,7 @@ habit changes. See [`layout/selection.md`](layout/selection.md) for the full con
 | Drag any selected module | Move the whole selection together |
 | Click empty canvas | Clear the selection |
 | Right-click a module | Copy / Duplicate / Paste / Save as Snippet / Delete for the whole selection |
-| Right-click empty canvas | Paste Here (at the click point) / Select All Modules / Locate Master (see [FRO45](#locate-master-fro45); greyed out with neither Master nor Audio Output) |
+| Right-click empty canvas | Paste Here (at the click point) / Select All Modules / Locate Master (see [Locate Master](#locate-master); greyed out with neither Master nor Audio Output) |
 | Double-click a connected jack | Disconnect every cable on that port (on by default; `Settings → Preferences`) |
 
 Right-clicking empty canvas keeps the selection rather than clearing it, so the menu can still act

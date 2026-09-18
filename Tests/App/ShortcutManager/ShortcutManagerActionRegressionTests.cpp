@@ -454,12 +454,12 @@ TEST_F(ShortcutManagerTest, GetCommandForAction_TimelineFocusedTrackActionsHaveN
 
 // ---------------------------------------------------------------------------
 // FRO125: transportTogglePlayStop — the togglePlayback alias the MIDI Remote transport family
-// (docs/midi_remote.md §4.9) uses for the play/stop toggle. See
+// (docs/control/midi-remote.md#action-targets) uses for the play/stop toggle. See
 // Tests/App/ShortcutManager/ShortcutManagerTransportActionsTests.cpp for the rest of the family
 // (transportPlay/Stop/ToggleLoop/Record/ToggleMetronome/ReturnToStart) and their invokeDirectly
 // reachability tests. This one lives here because it is purely a regression against the EXISTING
 // togglePlayback action, not a new one: the whole point of the alias is that adding it must never
-// move togglePlayback's own persisted Space binding (docs/shortcuts.md's "moving a default does
+// move togglePlayback's own persisted Space binding (docs/control/shortcuts.md's "moving a default does
 // not move a persisted key" note is exactly the failure mode this guards).
 // ---------------------------------------------------------------------------
 
@@ -473,7 +473,7 @@ TEST_F(ShortcutManagerTest, TransportTogglePlayStopDoesNotShadowTogglePlaybackAs
     // The alias is resolved only by getCommandForAction() above -- it must never become its own
     // rebindable row (a second "Toggle Playback"-shaped row in Settings would let a user rebind
     // the alias away from Space while togglePlayback itself stayed on it, which is exactly the
-    // "two ids fight over one command" shape docs/shortcuts.md's alias note warns about).
+    // "two ids fight over one command" shape docs/control/shortcuts.md's alias note warns about).
     EXPECT_FALSE(manager.getActionIds().contains("transportTogglePlayStop"));
     EXPECT_TRUE(manager.getActionIds().contains("togglePlayback"));
 }

@@ -16,7 +16,7 @@ juce::File ControllerProfileStore::resolveDefaultControllersDirectory() {
     // it and then separately calls reload(), which is the actual I/O). This store must never open
     // one either, so it stops at the parent directory rather than going through PropertiesFile at
     // all — a profile is a shareable document living ALONGSIDE the settings file, not inside it
-    // (docs/midi_remote.md §7).
+    // (docs/control/midi-remote.md#persistence-and-the-trust-boundary).
     const juce::File settingsFile = userSettingsOptions().getDefaultFile();
     return settingsFile.getParentDirectory().getChildFile(kMidiRemoteFolderName).getChildFile(kControllersFolderName);
 }
@@ -70,8 +70,8 @@ bool ControllerProfileStore::importProfile(const juce::File& srcFile, Controller
         return false;
 
     const auto destFile = controllersDir_.getChildFile(parsed.id + ".json");
-    // Name-conflict check (docs/midi_remote.md §7) — see the header's importProfile() comment for
-    // why an id conflict and a destination-filename conflict are the same check here.
+    // Name-conflict check (docs/control/midi-remote.md#persistence-and-the-trust-boundary) — see the header's
+    // importProfile() comment for why an id conflict and a destination-filename conflict are the same check here.
     if (destFile.existsAsFile())
         return false;
 

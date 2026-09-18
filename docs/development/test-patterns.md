@@ -173,4 +173,4 @@ CI's sanitizer job builds with `-fsanitize=address` only, and it is label-gated 
 change that touches a thread contract — a lock-free queue, an atomic, a pointer shared across the
 audio, MIDI and message threads — is built and run locally with `-fsanitize=thread` by whoever
 makes it. `Tests/MidiRemote/RemoteEngineThreadingTests.cpp` is the suite written to be run that way;
-its contract is in [`../midi_remote.md`](../midi_remote.md) §4.4.
+its contract is in [`../control/midi-remote.md`](../control/midi-remote.md#threading-the-mapping-table-crosses-threads).

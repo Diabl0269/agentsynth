@@ -106,7 +106,7 @@ public:
     /** T160: grabs keyboard focus on the search field specifically — the destination
      *  `AppCommands::focusLibrarySearch` (Cmd+F) needs, distinct from `FocusRegionRegistry`'s
      *  region-root focus (Cmd+Shift+L lands on `this`, not the search field; see FocusRegion.h /
-     *  docs/shortcuts.md's Focus regions section). The caller (MainComponent) is responsible for
+     *  docs/control/shortcuts.md's Focus regions section). The caller (MainComponent) is responsible for
      *  opening the Library first if it is closed, mirroring every other direct-focus shortcut. */
     void focusSearchField() { searchEditor.grabKeyboardFocus(); }
 

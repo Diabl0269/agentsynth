@@ -191,7 +191,7 @@ public:
     };
 
     // The curated highest-value bindings for a first-time user — undo/redo, transport, snap,
-    // quantise, locator jumps, and the three panel toggles (see docs/shortcuts.md). Fallbacks
+    // quantise, locator jumps, and the three panel toggles (see docs/control/shortcuts.md). Fallbacks
     // mirror ShortcutManager::resetToDefaults() exactly; they are used only when `manager` is null
     // (shortcutHintFor's own contract), so a headless popover still shows real keys.
     static const std::vector<ShortcutEntry>& curatedShortcuts() {

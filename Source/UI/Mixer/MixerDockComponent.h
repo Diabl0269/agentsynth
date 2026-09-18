@@ -105,7 +105,7 @@ public:
 
     /** Fires whenever either host's detach state changes (docked<->detached, either direction --
      *  including a window's own close button). MainComponent hooks this to re-run its focus-region
-     *  registration pass (docs/shortcuts.md "Focus regions": a detached region must stop appearing
+     *  registration pass (docs/control/shortcuts.md "Focus regions": a detached region must stop appearing
      *  in the DOCKED window's Tab-cycle order). Separate from either DetachablePanelHost's own
      *  onDetachedStateChanged, which this class's constructor already claims for
      *  applyTabVisibility() -- both fire from the one place, in that order. */

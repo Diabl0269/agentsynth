@@ -1,7 +1,7 @@
 #pragma once
 
 // The POD the MIDI path hands to the message thread, and the lock-free rings that carry it
-// (docs/midi_remote.md §4.4, §6).
+// (docs/control/midi-remote.md#threading-the-mapping-table-crosses-threads, docs/control/midi-remote.md#the-engine).
 //
 // WHY A POOL OF RINGS AND NOT ONE. AutomationUiFeed (Source/Timeline/AutomationUiFeed.h) is the
 // pattern this copies, but it has exactly one producer — the audio thread. MIDI Remote does not:
@@ -65,12 +65,11 @@ static_assert(sizeof(RemoteEvent) <= 24, "keep RemoteEvent small: it is memcpy'd
  *  instance of the same finding). AbstractFifo publishes its indices through juce::Atomic,
  *  whose get()/set() are seq_cst, but it exposes no release/acquire pairing between the
  *  *payload* write and the index publication that a sanitizer can follow, so the payload
- *  handoff is not provably ordered. §4.4 of docs/midi_remote.md asks for a table crossing
- *  threads with no lock and no race, and "no race" has to mean provable, not untested — so
- *  this ring publishes the payload explicitly: the producer stores the event, then releases
- *  the write index; the consumer acquires the write index, then reads the event. The consumer
- *  advances the read index only after it has finished with every slot it read, and the
- *  producer acquires the read index before it may overwrite one, so a slot in flight is never
+ *  handoff is not provably ordered. docs/control/midi-remote.md#threading-the-mapping-table-crosses-threads asks for a
+ * table crossing threads with no lock and no race, and "no race" has to mean provable, not untested — so this ring
+ * publishes the payload explicitly: the producer stores the event, then releases the write index; the consumer acquires
+ * the write index, then reads the event. The consumer advances the read index only after it has finished with every
+ * slot it read, and the producer acquires the read index before it may overwrite one, so a slot in flight is never
  *  reclaimed. One slot is always left empty, which is what makes full and empty distinct. */
 class RemoteEventFifo {
 public:
@@ -117,7 +116,7 @@ private:
 };
 
 /** Everything one source (one device, or "host") writes. `activity` mirrors every decoded event,
- *  assigned or not, for the MIDI Remote panel's live surface (docs/midi_remote.md §6) — a separate
+ *  assigned or not, for the MIDI Remote panel's live surface (docs/control/midi-remote.md#the-engine) — a separate
  *  ring so the panel drawing at its own rate can never steal an event from apply(). */
 struct SourceLane {
     static constexpr int kEventCapacity = 512;

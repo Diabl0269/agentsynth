@@ -107,7 +107,7 @@ enum CommandIDs {
     // CMakeLists.txt's WhatsNewData.h generation and MainComponent::showWhatsNewDialog. Same
     // unconditional-registration, no-chord treatment as showWelcomeScreen above.
     whatsNew,
-    // T159: the focus-region framework (see Source/UI/Layout/FocusRegion.h and docs/shortcuts.md). Tab and
+    // T159: the focus-region framework (see Source/UI/Layout/FocusRegion.h and docs/control/shortcuts.md). Tab and
     // Shift+Tab cycle keyboard focus between whichever of the app's regions are currently OPEN
     // (Library/Canvas/Timeline/AI Panel/Mod Matrix); the two Focus* commands open their target
     // region first if it is closed, then focus it. All four are General, like every other
@@ -118,7 +118,7 @@ enum CommandIDs {
     focusLibrary,
     // T160: opens the Library (if closed) and grabs focus on its search field specifically, rather
     // than the region root focusLibrary lands on — see ModuleLibraryComponent::focusSearchField and
-    // docs/shortcuts.md's Focus regions section for why those are two different destinations. Same
+    // docs/control/shortcuts.md's Focus regions section for why those are two different destinations. Same
     // General/command-dispatched treatment as the other three Focus* actions above.
     focusLibrarySearch,
     // FRO45: selects Master (falling back to Audio Output when there is no Master yet) and pans it
@@ -128,8 +128,8 @@ enum CommandIDs {
     // action table below, alongside autoArrange, since it means nothing off the canvas.
     locateMaster,
     // FRO125: transport verbs promoted to command-dispatched actions -- the prerequisite
-    // docs/midi_remote.md §4.9 asks for, since a MIDI Remote action target invokes a
-    // juce::CommandID. Filed under General (docs/shortcuts.md). Deliberately unbound by default
+    // docs/control/midi-remote.md#action-targets asks for, since a MIDI Remote action target invokes a
+    // juce::CommandID. Filed under General (docs/control/shortcuts.md). Deliberately unbound by default
     // (see resetToDefaults()) -- these exist to be command/MIDI-Remote targets, not new default
     // keyboard shortcuts; togglePlayback's own Space binding is untouched. There is no
     // transportTogglePlayStop enumerator: that action id is a pure alias resolved by

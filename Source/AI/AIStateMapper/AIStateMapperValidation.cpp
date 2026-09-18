@@ -54,8 +54,8 @@ juce::String describeKnownIds(const std::set<juce::uint32>& knownIds) {
 // app-authored project data a provider could never legitimately produce, and each is refused
 // outright rather than ignored so a later build that starts honouring one of these can't silently
 // begin executing provider-authored data. See the per-key comment at each call site's origin
-// (docs/ai/patch-format.md#reserved-keys-and-forward-compatibility, docs/midi_remote.md §7) for
-// why each one specifically is reserved.
+// (docs/ai/patch-format.md#reserved-keys-and-forward-compatibility,
+// docs/control/midi-remote.md#persistence-and-the-trust-boundary) for why each one specifically is reserved.
 PatchValidationResult checkReservedKeysNotAllowed(const juce::DynamicObject* rootObj) {
     if (rootObj->hasProperty("timeline"))
         return {false, PatchValidationError::TimelineNotAllowed,

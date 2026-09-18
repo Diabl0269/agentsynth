@@ -43,9 +43,9 @@ std::vector<juce::String> AudioEngine::getOpenMidiInputIdentifiers() const {
 }
 
 void AudioEngine::handleIncomingMidiMessage(juce::MidiInput* source, const juce::MidiMessage& message) {
-    // The MIDI Remote source key is the device *identifier*, not getName() (docs/midi_remote.md
-    // §6) — getIdentifier() returns a refcounted juce::String copy, not an allocation.
-    // source == nullptr only from a test driving this override directly (see
+    // The MIDI Remote source key is the device *identifier*, not getName()
+    // (docs/control/midi-remote.md#the-plugin-build-vst3au-inside-a-host §6) — getIdentifier() returns a refcounted
+    // juce::String copy, not an allocation. source == nullptr only from a test driving this override directly (see
     // Tests/Engine/DeviceChangeTests.cpp, Tests/Engine/BounceExporterTests.cpp).
     const juce::String sourceKey = source != nullptr ? source->getIdentifier() : juce::String();
     handleIncomingMidiMessageFromSource(sourceKey, message, source);
@@ -62,7 +62,8 @@ void AudioEngine::handleIncomingMidiMessageFromSource(const juce::String& source
         return;
 
     // MIDI Remote gets first look, before the ExternalMidiModule fan-out and the collector push: a
-    // message it consumes goes nowhere else (docs/midi_remote.md §4.3).
+    // message it consumes goes nowhere else
+    // (docs/control/midi-remote.md#are-mapped-messages-consumed-or-also-forwarded-to-the-graph).
     //
     // This runs on a juce::MidiInput driver thread, which never enters a render pass — the old code
     // here (pre-FRO197) read remoteMessageSink_ unguarded, so setRemoteMessageSink(nullptr) could

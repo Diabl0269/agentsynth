@@ -1,5 +1,6 @@
-// Tests for Source/MidiRemote/ControllerProfileStore.h (docs/midi_remote.md §7). Suite name
-// deliberately contains "MidiRemote" so it matches the ship-task verification filter
+// Tests for Source/MidiRemote/ControllerProfileStore.h
+// (docs/control/midi-remote.md#persistence-and-the-trust-boundary). Suite name deliberately contains "MidiRemote" so it
+// matches the ship-task verification filter
 // (--gtest_filter="*MidiRemote*"). Every test points a store at its own temp directory — never
 // the real settings folder — so runs never collide with a concurrent test suite or a developer's
 // own profiles.

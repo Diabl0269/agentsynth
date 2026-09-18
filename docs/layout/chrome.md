@@ -141,7 +141,7 @@ unchanged latency, or vice versa:
   `AppUI`, is the one call site that formats. It is fed from `MainComponent::timerCallback`'s 5 Hz
   status-bar sub-tick, using the `PositionSnapshot` already read **unconditionally** every 10 Hz
   tick, before the `timelinePanel.isVisible()` guard — see
-  [architecture/app-wiring.md]( ../architecture/app-wiring.md)'s `timerCallback` inventory. The play/stop button's click is
+  [architecture/app-wiring.md](../architecture/app-wiring.md)'s `timerCallback` inventory. The play/stop button's click is
   wired by `MainComponent` to the same `TransportService::play()` / `stop()` calls
   `TimelineTransportBar`'s button uses; the button never flips its own toggle state
   (`setClickingTogglesState(false)` — the transport is the truth, and `updateTransport()` is the

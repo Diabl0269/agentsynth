@@ -81,7 +81,7 @@ and every frame of its slide.
 
 A toolbar toggle (`ToolbarComponent::Slot::ToggleTimeline`, right-hand group, immediately before
 `ToggleTheme`) and the **Cmd+T** shortcut (action id `toggleTimelinePanel`; see
-[`shortcuts.md`](../shortcuts.md)) both flip `MainComponent::isTimelineVisible`. Visibility persists
+[`shortcuts.md`](../control/shortcuts.md)) both flip `MainComponent::isTimelineVisible`. Visibility persists
 under the `timelinePanelVisible` key in `juce::ApplicationProperties`, default `false`.
 
 **The key and the flag gate the whole bottom dock, not just this panel.**

@@ -1,6 +1,7 @@
 // MIDI / audio thread. handleMessage() is the whole point of this ticket: no lock, no allocation,
 // no logging, no juce::String construction, no AsyncUpdater. See RemoteEngine.h's class comment
-// and docs/midi_remote.md §4.3/§4.4 for the contract this file must not violate.
+// and docs/control/midi-remote.md#are-mapped-messages-consumed-or-also-forwarded-to-the-graph /
+// docs/control/midi-remote.md#threading-the-mapping-table-crosses-threads for the contract this file must not violate.
 
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
 #include "MidiRemote/RemoteEngine/RemoteEngineInternal.h"

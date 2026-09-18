@@ -42,7 +42,7 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     mixerDock.setApplicationProperties(&appProperties);
     mixerDock.setOnGraphTopologyChanged([this] { reconcileTimelineAfterGraphChange(); });
     mixerDock.setOnMakeChannelForNode([this](juce::AudioProcessorGraph::NodeID source) { makeChannelForNode(source); });
-    // FRO12 (P9-6): each panel's ONE detached-window focus region (T159/docs/shortcuts.md) --
+    // FRO12 (P9-6): each panel's ONE detached-window focus region (docs/control/shortcuts.md) --
     // stored on the host now, applied to whichever DetachedPanelWindow it builds later. Re-running
     // MainComponent's own registration pass on every detach/redock (rather than reordering/renaming
     // anything already registered above) is the guard rule the plan's focus section spells out.

@@ -95,7 +95,7 @@ on PianoRoll, `GraphEditor::selectAllModules()` on Graph.
 
 Unlike the clipboard verbs it is **always active**, since each surface's own `selectAll*` just
 returns `false` harmlessly when there is nothing to select. See
-[`shortcuts.md`](../shortcuts.md#surface-routing-who-cmdcvdxr-and-cmda-act-on) for the user-facing
+[`shortcuts.md`](../control/shortcuts.md#surface-routing-who-cmdcvdxr-and-cmda-act-on) for the user-facing
 table.
 
 ## Space is global
@@ -116,7 +116,7 @@ preference that can hide the transport out from under this command.
 ## Delete stays panel-local
 
 Unlike C/V/D, Delete and Escape are not routed through `ShortcutManager` or
-`ApplicationCommandManager` at all (see [`shortcuts.md`](../shortcuts.md) for the reasoning). Each
+`ApplicationCommandManager` at all (see [`shortcuts.md`](../control/shortcuts.md) for the reasoning). Each
 surface's own `keyPressed` handles its own selection and falls through (`return false`) on an empty
 one, which is what makes an unmodified `Delete` binding surface-scoped for free.
 

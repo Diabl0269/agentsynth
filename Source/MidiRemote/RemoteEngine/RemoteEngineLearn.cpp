@@ -1,6 +1,6 @@
 // Message thread. Arms/cancels a learn, tallies the learnCandidate events the MIDI path pushes
 // while one is armed, and settles it 300 ms after the first eligible message onto the message key
-// seen most often (docs/midi_remote.md §4.5).
+// seen most often (docs/control/midi-remote.md#learn-what-does-the-first-message-mean).
 
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
 
@@ -50,7 +50,7 @@ void RemoteEngine::noteLearnCandidate(const juce::String& sourceKey, const Remot
     }
 
     // A value of 0 following a non-zero one for this key means the hardware returns to rest on
-    // release -- the momentary signature (docs/midi_remote.md §4.5).
+    // release -- the momentary signature (docs/control/midi-remote.md#learn-what-does-the-first-message-mean).
     if (event.value == 0.0f && found->maxValue > 0.0f)
         found->sawRelease = true;
 

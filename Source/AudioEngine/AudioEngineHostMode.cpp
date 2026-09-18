@@ -33,7 +33,8 @@ void AudioEngine::processHostBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         captureDeviceInput(nullptr, 0, 0);
 
     // MIDI Remote runs on the AUDIO thread here — HostMode::Hosted never opens hardware MIDI, so
-    // the host's own forwarded buffer IS the MIDI path (docs/midi_remote.md §4.8's hostSourceKey).
+    // the host's own forwarded buffer IS the MIDI path
+    // (docs/control/midi-remote.md#the-plugin-build-vst3au-inside-a-host's hostSourceKey).
     // RemoteMessageSink::handleMessage is lock-free and allocation-free by contract, which is what
     // makes this safe to call from processBlock. Guarded on remoteMessageSink_ so the cost is zero
     // while MIDI Remote is idle; remoteHostScratchMidi_ is a pre-allocated member so the clear()/

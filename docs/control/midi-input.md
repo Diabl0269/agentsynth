@@ -58,6 +58,6 @@ Block-granularity is an accepted trade-off for hand-played/CV-triggered input to
 
 `SequencerModule` / `PolySequencerModule`'s hardcoded offsets are left as-is deliberately: existing presets are golden-tested byte-identical against those exact sample positions, and computing the true beat-crossing sample is revisited under a future transport-sync task.
 
-## MIDI Remote (designed, not yet built)
+## MIDI Remote sits in front of this path
 
-[`midi_remote.md`](midi_remote.md) adds a controller-mapping layer that sits **in front of** the path above: `AudioEngine::handleIncomingMidiMessage` consults a `RemoteMessageSink` before the collector push and the `ExternalMidiModule` fan-out, and a message matched to an assigned control is consumed there by default (so it never reaches a recording take or an External MIDI module — a per-controller toggle passes it through). The seam and the engine behind it shipped with tracker item 3; everything above still describes what an *unmapped* message does, which is unchanged.
+[`midi-remote.md`](midi-remote.md) adds a controller-mapping layer in front of the path above: `AudioEngine::handleIncomingMidiMessage` consults a `RemoteMessageSink` before the collector push and the `ExternalMidiModule` fan-out, and a message matched to an assigned control is consumed there by default (so it never reaches a recording take or an External MIDI module — a per-controller toggle passes it through). The engine is built and wired into `AudioEngine`; everything above describes what an *unmapped* message does, which is unchanged either way.
