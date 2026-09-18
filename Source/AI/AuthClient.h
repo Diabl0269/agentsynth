@@ -79,7 +79,8 @@ public:
 
     /** Result of GET /v1/entitlement (P4-2/P4-3/P4-4). `requestsUsed`/`usagePeriodStartIso` come
         from the response's `usage` object; both stay at their defaults (0 / empty) against a
-        server that doesn't send it yet — see docs/billing.md for the full response shape. */
+        server that doesn't send it yet — see the backend repo's billing doc for the full response
+        shape. */
     struct EntitlementResult {
         bool ok = false;
         juce::String plan;

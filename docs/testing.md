@@ -672,7 +672,7 @@ There are two hosts involved, and only one of them was previously configurable:
   without hand-editing `Branding.h` and rebuilding per URL change.
 
 Run the private backend repo locally first (in-memory stores by default — no Postgres needed for
-this flow). See that repo's own `docs/local-development.md` for the full setup; the short version:
+this flow). See that repo's own local-development doc for the full setup; the short version:
 
 ```bash
 pnpm --filter @platform/api dev   # serves http://localhost:8787

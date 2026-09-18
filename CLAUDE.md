@@ -43,6 +43,7 @@ bash scripts/tests/check-nonascii-literals.test.sh # no raw/escaped non-ASCII in
 bash scripts/tests/utf8-literal-check.test.sh      # non-ASCII \x escape wrapping (also runs directly in the Lint job)
 bash scripts/check-file-sizes.sh            # 1000-line cap, strict ratchet baseline (--list / --update)
 bash scripts/check-function-sizes.sh        # 200-line-per-function cap, strict ratchet baseline (--list / --update)
+bash scripts/check-docs.sh                  # docs integrity: naming/links/refs/map, ratcheted naming only (--list / --update)
 
 # Reproduce CI locally (lint + build every CMake target CI builds + full test suite; prints the
 # built app bundle path on success). Single source of truth for "what CI will check" — also what
@@ -89,7 +90,7 @@ Everything else below is a tripwire index. The full rule lives in the named area
 - The device callback's render buffer is shared in-place with the graph; never allocate in the callback; audio input stays opt-in (restore requests 0 inputs). → [`docs/architecture.md`](docs/architecture.md)
 - A device/sample-rate change goes through the ONE hook (`AudioEngine::handleStreamFormatChange`), and a recording take never spans it. → [`docs/architecture.md`](docs/architecture.md)
 - Timeline data crosses threads only via `EpochExchange`: opened once per render pass, published snapshot-first/bindings-second, republished after any graph change. → [`docs/architecture.md`](docs/architecture.md)
-- `MainComponent` owns the app's live `TimelineDoc`; every graph change must reach `MainComponent::timelineChanged` / the reconcile pass (hook inventory: [`docs/architecture.md` §8](docs/architecture.md)); a binding is never re-established automatically. → [`docs/timeline_panel_tracks.md §3`](docs/timeline_panel_tracks.md)
+- `MainComponent` owns the app's live `TimelineDoc`; every graph change must reach `MainComponent::timelineChanged` / the reconcile pass (hook inventory: [`docs/architecture_app_wiring.md` §8](docs/architecture_app_wiring.md)); a binding is never re-established automatically. → [`docs/timeline_panel_tracks.md §3`](docs/timeline_panel_tracks.md)
 - Every node-uuid write mirrors into the processor via `ModuleBase::setNodeUuid`; written once, never rewritten. → [`docs/architecture.md`](docs/architecture.md)
 - Mixer solo is a render-time **per-leg** gate, never a `setMuted` fan-out: the engine recounts soloed strips AND republishes each strip's audible-leg mask inside `publishTimeline`, and a graph-replacing path that skips it calls `AudioEngine::refreshSoloGate()`. → [`docs/mixer.md §5.3`](docs/mixer.md) · [`docs/mixer.md §5.15`](docs/mixer.md) · [`docs/architecture.md`](docs/architecture.md)
 - A send is a strip-owned output leg and a bus is an ordinary `ChannelStrip` — no `SendModule`, no bus node type; a send's target is the graph edge itself and is never stored (node ids are reassigned on every rebuild-from-JSON). → [`docs/mixer.md §5.15`](docs/mixer.md)

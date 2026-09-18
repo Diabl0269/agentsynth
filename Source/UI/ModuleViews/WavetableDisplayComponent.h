@@ -12,7 +12,7 @@
     either side receding behind it so the stack reads as three-dimensional.
 
     Repaints are gated: the timer only calls repaint() when the table selection, the frame
-    count or the scan position actually changed (see docs/layout.md §10-11 — no
+    count or the scan position actually changed (see docs/layout_visuals_animation.md §2-3 — no
     unconditional per-tick repaints).
 */
 class WavetableDisplayComponent

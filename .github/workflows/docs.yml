@@ -1,0 +1,36 @@
+name: Docs
+
+# WHY THIS EXISTS AS A SEPARATE WORKFLOW: ci.yml's `pull_request`/`push` triggers both filter on
+# `paths:` (Source/**, Tests/**, scripts/**, the CMake files, etc.) and deliberately exclude
+# `docs/**` and any bare `**/*.md`. FRO169 also added a "Check docs integrity" step directly to
+# ci.yml's Lint job (unconditional, no `paths:` filter of its own -- Lint always runs), which
+# covers a PR that touches check C/D's *.cpp/*.h/*.sh/*.yml scope without touching docs/** at all.
+# This workflow is what covers the OTHER half: a docs-only PR (a rename, a rewritten section, a
+# link fixup) that changes nothing ci.yml's own `paths:` filter watches, so the Lint job itself
+# never runs. It's deliberately fast (no CMake configure, no compiler, no network) and, since
+# FRO169, has NO `paths:` filter of its own -- it fires on every pull request, full stop. A
+# path-filtered "docs checker" is exactly the coverage hole this workflow exists to close, so
+# giving it its own filter would just relocate the hole rather than close it; at a few seconds and
+# compiler-free, there's no cost to always running it.
+#
+# scripts/check-file-sizes.sh runs here too, even though its own cap applies to every extension
+# (see that script's own header) -- redundant with ci.yml's Lint job on every PR post-FRO169, but
+# cheap enough that keeping it here as a second line of defense costs nothing.
+
+on:
+  pull_request:
+
+jobs:
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check docs integrity
+        # Markdown link targets, docs/... path mentions, §-section references, and the docs/
+        # filename convention -- see scripts/check-docs.sh's own doc comment for the full
+        # mechanism and its ratchet baseline (scripts/docs-baseline.txt).
+        run: bash scripts/check-docs.sh
+      - name: Check file sizes
+        # FRO61: hard 1000-line cap + strict ratchet baseline (scripts/file-size-baseline.txt).
+        run: bash scripts/check-file-sizes.sh

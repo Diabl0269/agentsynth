@@ -53,7 +53,7 @@ struct TrackHeaderHost {
     /** One-click re-bind. NEVER called automatically: a binding is only ever changed by an explicit
      *  user choice from the chip menu. Matching an orphaned track back onto a node BY NAME is
      *  forbidden — two nodes can share a display name and a silent re-bind would point a track at
-     *  someone else's instrument (see docs/layout.md §16). */
+     *  someone else's instrument (see docs/timeline_panel_tracks.md §3). */
     virtual void bindTrackTo(synth::TrackId track, const juce::String& uuid) = 0;
 
     /** The chip menu's "New Track In node" entry: creates a node and binds this track to it, as one

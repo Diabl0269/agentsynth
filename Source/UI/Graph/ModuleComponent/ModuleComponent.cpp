@@ -214,7 +214,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     createWavetableControls();
 
     setTitle(module->getName());
-    // Buffered to image (docs/layout.md §10) through our own cache so a zoom gesture can pin the
+    // Buffered to image (docs/layout_visuals_animation.md §2) through our own cache so a zoom gesture can pin the
     // raster scale — see ZoomFrozenCachedImage. Do NOT add setBufferedToImage() back anywhere on
     // this component: JUCE asserts if a custom cache is already installed (juce_Component.cpp:567).
     {

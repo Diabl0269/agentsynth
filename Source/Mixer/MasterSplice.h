@@ -45,7 +45,7 @@ juce::AudioProcessorGraph::Node* spliceMasterNode(juce::AudioProcessorGraph& gra
  * CALLER OBLIGATION: this changes the graph, so the caller must then run the app's reconcile /
  * publish seam (MainComponent::timelineChanged -> AudioEngine::publishTimeline, which also
  * recounts the mixer solo gate) and refresh the editor (GraphEditor::updateComponents) — see the
- * hook inventory in docs/architecture.md §8.
+ * hook inventory in docs/architecture_app_wiring.md §8.
  *
  * @param position canvas position for a newly created node (ignored when Master already exists).
  * @return the Master node, or nullptr when the graph has no Audio Output to splice in front of.

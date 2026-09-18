@@ -362,7 +362,7 @@ void MainComponent::resized() {
     // from the themed Metrics tokens, with literal fallbacks for the headless test path.
     //
     // Each panel's SIZE is its open fraction times its full size, NOT a binary read of its
-    // visible/hidden flag (docs/layout.md §11). That is what makes this pass correct whenever it
+    // visible/hidden flag (docs/layout_visuals_animation.md §3). That is what makes this pass correct whenever it
     // runs — window resize, theme change, a timeline height drag mid-slide — and what lets a
     // toggle animate by moving the fraction and calling straight back in here (see
     // beginPanelSlide()). A fraction resting at 0 or 1 lays out pixel-identically to the old

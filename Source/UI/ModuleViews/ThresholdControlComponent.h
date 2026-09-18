@@ -20,7 +20,7 @@
  *  displayed value moves past a visible amount. It is deliberately a separate
  *  component rather than something ModuleComponent::paint draws, because
  *  ModuleComponent is setBufferedToImage(true) — painting the meter there would
- *  invalidate that cached image on every tick (see docs/layout.md §10).
+ *  invalidate that cached image on every tick (see docs/layout_visuals_animation.md §2).
  */
 class ThresholdControlComponent
     : public juce::Component

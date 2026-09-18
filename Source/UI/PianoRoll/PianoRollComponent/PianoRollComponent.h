@@ -91,7 +91,7 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 // copied block is anchored on its own earliest note and is therefore paste-able into any clip: the
 // roll keeps it across openClip so "copy in one clip, paste in another" works.
 //
-// See docs/layout.md §16 (TL5-8) for the gesture table.
+// See docs/timeline_panel_piano_roll.md §2 (TL5-8) for the gesture table.
 namespace synth::ui {
 
 class PianoRollComponent
@@ -866,7 +866,7 @@ private:
     // vblankUpdater, which is `this` (a juce::Component) and must therefore not exist before the
     // component does.
     std::optional<juce::VBlankAnimatorUpdater> scalePanelVblankUpdater_;
-    // Within the house 160-220 ms spec (docs/layout.md §11), matching MainComponent's own
+    // Within the house 160-220 ms spec (docs/layout_visuals_animation.md §3), matching MainComponent's own
     // kPanelSlideMs (~190 ms) feel for the app's other show/hide sidebars.
     static constexpr double kScalePanelAnimMs = 200.0;
 

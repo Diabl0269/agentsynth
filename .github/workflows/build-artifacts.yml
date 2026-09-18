@@ -56,7 +56,16 @@ jobs:
         uses: mathieudutour/github-tag-action@v6.2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          default_bump: minor
+          # patch, not minor: almost every commit subject here is "FROnnn: ..." rather than a
+          # conventional-commit prefix, which this action cannot parse, so nearly all of them
+          # fall through to default_bump. With minor, EVERY merge bumped the minor digit (hence
+          # v0.246.0 with a patch digit that is nearly always 0 -- the minor number had become a
+          # merge counter) and a docs or tooling change shipped the same size bump as a feature.
+          # With patch, an explicit "feat:" still earns a minor and everything else -- docs, CI,
+          # refactors, tooling -- takes a patch. Tradeoff: a feature whose subject is a bare
+          # "FROnnn: ..." also takes a patch, so a real feature has to say feat: to earn its
+          # minor. Both call sites (the dry run above and the real tag below) must stay equal.
+          default_bump: patch
           tag_prefix: "v"
           fetch_all_tags: true
           dry_run: true
@@ -526,7 +535,16 @@ jobs:
         uses: mathieudutour/github-tag-action@v6.2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          default_bump: minor
+          # patch, not minor: almost every commit subject here is "FROnnn: ..." rather than a
+          # conventional-commit prefix, which this action cannot parse, so nearly all of them
+          # fall through to default_bump. With minor, EVERY merge bumped the minor digit (hence
+          # v0.246.0 with a patch digit that is nearly always 0 -- the minor number had become a
+          # merge counter) and a docs or tooling change shipped the same size bump as a feature.
+          # With patch, an explicit "feat:" still earns a minor and everything else -- docs, CI,
+          # refactors, tooling -- takes a patch. Tradeoff: a feature whose subject is a bare
+          # "FROnnn: ..." also takes a patch, so a real feature has to say feat: to earn its
+          # minor. Both call sites (the dry run above and the real tag below) must stay equal.
+          default_bump: patch
           tag_prefix: "v"
           fetch_all_tags: true
           custom_tag: ${{ needs.version.outputs.version }}
