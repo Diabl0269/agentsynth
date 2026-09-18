@@ -7,7 +7,8 @@
 // here fails EveryFactoryModuleIsClassified, which is the point. The failure message tells you
 // which of the three buckets to put it in.
 //
-// See docs/modules/fx-modules.md#output-level-shared-stage and docs/modules/development-guide.md#modulebase-inheritance-and-core-methods.
+// See docs/modules/fx-modules.md#output-level-shared-stage and
+// docs/modules/development-guide.md#modulebase-inheritance-and-core-methods.
 
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "Modules/ModuleBase.h"

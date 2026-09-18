@@ -29,8 +29,8 @@ public:
         // knob feel at the new 1 ms attack default lives on the slider itself
         // (ModuleComponent.cpp's ADSR special case, applyAdsrTimeSliderSkew), never on the
         // parameter's own range -- a skewed NormalisableRange here would badly worsen
-        // AIStateMapper's pre-existing untrusted in-[0,1] rescale misfire. See docs/modules/modules.md#adsr-envelope-module
-        // for the full rationale and for why 5.0 stays the ceiling.
+        // AIStateMapper's pre-existing untrusted in-[0,1] rescale misfire. See
+        // docs/modules/modules.md#adsr-envelope-module for the full rationale and for why 5.0 stays the ceiling.
         //
         // FRO112: every float param below also carries readout Attributes (ms/s for the four
         // stage times, dB for sustain, plain for the three curve amounts) so the envelope card's

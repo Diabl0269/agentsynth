@@ -32,9 +32,9 @@ void setAdsrAwareSliderStyle(juce::Slider& slider, ModuleType type) {
 }
 
 // attack/hold/decay/release: the four ADSR TIME params. Their AudioParameterFloat range is
-// deliberately linear (see docs/modules/modules.md#adsr-envelope-module) -- a skewed NormalisableRange there would badly
-// worsen AIStateMapper's untrusted in-[0,1] rescale heuristic for AI-authored patches. Sustain
-// and the three curve params are excluded on purpose and stay linear on the slider too.
+// deliberately linear (see docs/modules/modules.md#adsr-envelope-module) -- a skewed NormalisableRange there would
+// badly worsen AIStateMapper's untrusted in-[0,1] rescale heuristic for AI-authored patches. Sustain and the three
+// curve params are excluded on purpose and stay linear on the slider too.
 bool isAdsrTimeParamId(const juce::String& paramID) {
     return paramID == "attack" || paramID == "hold" || paramID == "decay" || paramID == "release";
 }
