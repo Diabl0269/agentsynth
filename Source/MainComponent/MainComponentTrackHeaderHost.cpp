@@ -118,7 +118,7 @@ void MainComponent::selectNodeInGraph(const juce::String& uuid) {
 
 // The automation strip lane picker's "Add lane..." entries — the minimal creation surface
 // for a hosted plugin's own parameters, which have no ModuleComponent knob to right-click (the
-// plugin has its own editor; see docs/modulation.md's Hosted Plugin table). Every live
+// plugin has its own editor; see docs/modules/modulation.md#hosted-plugin-parameters-as-automation-lanes's Hosted Plugin table). Every live
 // HostedPluginModule with a published instance offers every parameter that doesn't already have a
 // lane; a bare or still-loading one offers nothing, same as it renders nothing elsewhere in the UI.
 std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> MainComponent::getAvailablePluginLaneOptions() const {

@@ -98,14 +98,14 @@ public:
     // button). Keyed by module type (ModuleBase::getName(), e.g. "Reverb", "Filter"); a type with
     // no entry follows the global default — nullopt here means exactly that. Consumed by
     // GraphEditor::applyDefaultDualIOForNewModule, the same new-modules-only site the global
-    // default itself is read from (see docs/fx_modules.md § Stereo I/O).
+    // default itself is read from (see docs/modules/fx-modules.md#stereo-io-dual-io-toggle).
     std::optional<bool> getDualIOOverrideForType(const juce::String& moduleType) const;
     void setDualIOOverrideForType(const juce::String& moduleType, std::optional<bool> overrideValue);
 
     // Every module type that carries the Dual I/O parameter (granted by ModuleBase's constructor from
     // the module's channel shape), in the per-module popup's row order: the FX plus the split-block
     // voice modules
-    // (docs/modules.md, docs/fx_modules.md § Stereo I/O).
+    // (docs/modules/modules.md, docs/modules/fx-modules.md#stereo-io-dual-io-toggle).
     //
     // DISCOVERED, not hand-listed — a thin wrapper over synth::AIStateMapper::dualIOCapableModuleTypes(),
     // which probes the module factory and asks each module hasDualIOParameter(). This was a literal

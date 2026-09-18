@@ -9,7 +9,7 @@
 // maxing Wet feeds the algorithmic tail at up to 3x, maxing Dry passes the input at up to 2x.
 // ModuleGainAudit (Tests/Engine/GainStaging/ModuleGainAuditTests.cpp) measures a worst case of
 // +8.91 dB (Wet at max) and +7.77 dB (Dry at max) against a continuous, hot test tone;
-// allow-listed there. See docs/fx_modules.md, Reverb Module section.
+// allow-listed there. See docs/modules/fx-modules.md#reverb-module.
 class ReverbModule : public ModuleBase {
 public:
     ReverbModule()

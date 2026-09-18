@@ -8,7 +8,7 @@
 // own wet/dry mix and Level stage. ModuleGainAudit (Tests/Engine/GainStaging/
 // ModuleGainAuditTests.cpp) measures a worst case of +13.56 dB at feedback's MINIMUM (-1), not
 // the maximum; allow-listed there as expected feedback/resonance behaviour. See
-// docs/fx_modules.md, Phaser Module section.
+// docs/modules/fx-modules.md#phaser-module.
 class PhaserModule : public ModuleBase {
 public:
     PhaserModule()

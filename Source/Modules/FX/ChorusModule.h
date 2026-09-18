@@ -7,7 +7,7 @@
 // steady tone can build up well past unity before this module's own wet/dry mix and Level stage.
 // ModuleGainAudit (Tests/Engine/GainStaging/ModuleGainAuditTests.cpp) measures a worst case of
 // +18.90 dB (feedback at max); allow-listed there as expected feedback/resonance behaviour, not
-// a gain-control bug. See docs/fx_modules.md, Chorus Module section.
+// a gain-control bug. See docs/modules/fx-modules.md#chorus-module.
 class ChorusModule : public ModuleBase {
 public:
     ChorusModule()
