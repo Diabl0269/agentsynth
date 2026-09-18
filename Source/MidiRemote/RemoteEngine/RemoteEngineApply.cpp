@@ -20,7 +20,7 @@ void RemoteEngine::applyEvent(const RemoteMappingSnapshot& snapshot, const Remot
 }
 
 void RemoteEngine::applyToAction(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event) {
-    // doc §4.9: momentary and toggle alike fire the action on press only.
+    // docs/control/midi-remote.md#action-targets: momentary and toggle alike fire the action on press only.
     if (event.kind != RemoteEventKind::buttonPress)
         return;
     if (actionInvoker_ == nullptr || slot.commandId == 0)

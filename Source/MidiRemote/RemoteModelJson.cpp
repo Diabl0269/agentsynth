@@ -54,7 +54,8 @@ bool readBool(const juce::var& v, bool& out) {
 
 // -- Enum <-> doc-exact camelCase string ------------------------------------------------------
 // docs/control/midi-remote.md#data-model names every enumerator exactly this way; a string this build doesn't
-// recognise is a hard failure, never a silent default (§7 "never partially applies").
+// recognise is a hard failure, never a silent default (docs/control/midi-remote.md#persistence-and-the-trust-boundary
+// "never partially applies").
 
 const char* toString(MessageType t) {
     switch (t) {
@@ -548,9 +549,9 @@ bool ControllerProfile::fromVar(const juce::var& state) {
     if (obj == nullptr)
         return false;
 
-    // §7: version must equal exactly 1; a higher (or otherwise wrong/missing) version is refused
-    // visibly rather than coerced — same strict, present-and-exact convention TimelineDoc::fromVar
-    // uses (there is no pre-versioning midiRemote data to be forward-compatible with).
+    // docs/control/midi-remote.md#persistence-and-the-trust-boundary: version must equal exactly 1; a higher (or
+    // otherwise wrong/missing) version is refused visibly rather than coerced — same strict, present-and-exact
+    // convention TimelineDoc::fromVar uses (there is no pre-versioning midiRemote data to be forward-compatible with).
     int parsedVersion = 0;
     if (!readInt(obj->getProperty("version"), parsedVersion) || parsedVersion != 1)
         return false;

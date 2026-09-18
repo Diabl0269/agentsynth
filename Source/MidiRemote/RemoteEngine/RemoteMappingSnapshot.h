@@ -13,7 +13,8 @@
 //  * std::atomic<std::shared_ptr<const Snapshot>> is not lock-free in any shipping standard
 //    library: libstdc++ and MSVC use a spinlock, libc++ a mutex pool. In HostMode::Hosted this code
 //    runs on the *audio* thread, so that is a lock on the audio thread contending with the message
-//    thread — precisely the tripwire §4.4 exists to prevent.
+//    thread — precisely the tripwire (docs/control/midi-remote.md#threading-the-mapping-table-crosses-threads) exists
+//    to prevent.
 //
 // SO: an atomic raw pointer plus a reader count plus a message-thread retire list.
 //

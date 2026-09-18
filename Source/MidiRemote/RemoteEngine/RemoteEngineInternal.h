@@ -19,8 +19,9 @@ namespace synth::midi::detail {
 /** What handleMessage needs to know about a raw juce::MidiMessage before it can be looked up or
  *  decoded. `eligible` is false for anything that is not cc / noteOn / noteOff / pitchBend /
  *  channelPressure / programChange -- clock, active sensing, sysex and poly (per-note) aftertouch
- *  are never eligible and must never reach findSlot or the learn tally (docs/control/midi-remote.md
- *  §4.3/§4.5). */
+ *  are never eligible and must never reach findSlot or the learn tally
+ * (docs/control/midi-remote.md#are-mapped-messages-consumed-or-also-forwarded-to-the-graph,
+ *  docs/control/midi-remote.md#learn-what-does-the-first-message-mean). */
 struct ClassifiedMessage {
     bool eligible = false;
     synth::MessageType type = synth::MessageType::cc;

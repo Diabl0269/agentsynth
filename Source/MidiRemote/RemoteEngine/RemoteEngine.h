@@ -51,10 +51,11 @@ inline constexpr double kGestureIdleMs = 250.0;
 inline constexpr double kLearnSettleMs = 300.0;
 /** A learn with no eligible message for this long cancels itself. */
 inline constexpr double kLearnTimeoutMs = 10000.0;
-/** Drain rate. One frame of latency on a knob; see §4.2 on why that is the right trade. */
+/** Drain rate. One frame of latency on a knob; see
+ * docs/control/midi-remote.md#how-does-a-hardware-value-reach-a-parameter on why that is the right trade. */
 inline constexpr int kDrainHz = 60;
-/** One hardware tick of a relative encoder moves a parameter by this much (docs/control/midi-remote.md
- *  §6 "relative -> signed delta x sensitivity"). */
+/** One hardware tick of a relative encoder moves a parameter by this much (see
+ *  docs/control/midi-remote.md#data-model, "relative -> signed delta x sensitivity"). */
 inline constexpr float kRelativeSensitivity = 1.0f / 127.0f;
 
 /** How the engine reaches an action target. Implemented in the app layer over
@@ -195,7 +196,8 @@ private:
     };
 
     /** One in-flight learn's tally. Message thread only — the MIDI path only ever pushes a
-     *  learnCandidate event, per the §4.4 tripwire. */
+     *  learnCandidate event, per the docs/control/midi-remote.md#threading-the-mapping-table-crosses-threads tripwire.
+     */
     struct LearnTally {
         juce::String sourceKey;
         MessageSpec spec;

@@ -136,7 +136,7 @@ public:
      * directly. No-op check: if `beforeJson` and `afterJson` serialise identically, nothing is
      * pushed and this returns false — a no-op edit must not create an undo step.
      *
-     * Scope (§8): this is for the PROJECT document only (`synth::MidiRemoteProjectDoc`, i.e. the
+     * Scope (docs/control/midi-remote.md#undo): the PROJECT document only (`synth::MidiRemoteProjectDoc`, i.e. the
      * `"midiRemote"` assignments). Profile edits (rename, retype, rearrange, templates, delete
      * controller) are GLOBAL settings and are never undoable, same as keyboard-shortcut rebinds —
      * never call this for a ControllerProfileStore edit.

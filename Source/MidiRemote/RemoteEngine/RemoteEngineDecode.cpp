@@ -73,7 +73,7 @@ void decodeButtonLike(RemoteEvent& event, const detail::ClassifiedMessage& class
     case MessageType::channelPressure:
     default:
         // Not a meaningful button encoding; decode as an inert release rather than fabricate a
-        // press (doc §5 never assigns a button-like control to these message types).
+        // press (docs/control/midi-remote.md#data-model never assigns a button-like control to these message types).
         event.kind = RemoteEventKind::buttonRelease;
         event.value = 0.0f;
         break;
