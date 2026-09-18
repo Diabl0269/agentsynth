@@ -383,28 +383,17 @@ private:
     std::vector<juce::AudioProcessorGraph::NodeID> ctrlPressSelection;
 
     // FRO40: Cmd+press mirrors ctrlTogglePending/ctrlPressSelection exactly — a deferred additive-
-    // select TOGGLE and a macro-membership DRAG armed at once, resolved at mouseUp by whether the
-    // press moved. See ModuleComponentInteraction.cpp's mouseDown/mouseUp for the full gesture and
-    // the Windows/Linux Ctrl-vs-Cmd arbitration (isCtrlDown() there wins the press on those
-    // platforms, so this flag is macOS-only in practice).
+    // select TOGGLE and a macro-membership DRAG armed at once. See mouseDown/mouseUp for the full
+    // gesture and the Windows/Linux Ctrl-vs-Cmd arbitration.
     bool cmdReparentPending = false;
     std::vector<juce::AudioProcessorGraph::NodeID> cmdPressSelection;
 
     // FRO40: whether THIS drag can reparent right now, independent of which of the two flags above
-    // it armed. Set in mouseDown to e.mods.isCommandDown() in BOTH the Ctrl and the Cmd branch —
-    // deliberately NOT `ctrlTogglePending || cmdReparentPending`, which is true for a PLAIN
-    // macOS Ctrl+drag too (Ctrl and Cmd are genuinely distinct keys there) and would silently
-    // compound the shipped insert-between gesture with a join/leave it was never designed to also
-    // do. On Windows/Linux isCommandDown() is true whenever Ctrl is down (commandModifier IS
-    // ctrlModifier there), which is the only platform where the two gestures cannot be told apart
-    // at press time at all — see mouseUp's own comment for how that case is arbitrated instead.
-    //
-    // Gap 3 (coordinator review round 4): re-derived on every mouseDrag tick too — NOT just latched
-    // at mouseDown — so pressing/releasing Cmd (Ctrl on Windows/Linux) mid-drag arms/disarms
-    // reparent live, discoverable via the candidate highlight following the cursor. Only for a
-    // SINGLE-module drag (mouseDrag checks !isSelectionDragActive() before overwriting it) —
-    // reparenting one member of a multi-selection group drag is ambiguous and stays out of scope,
-    // so a group drag keeps whatever mouseDown latched for its whole gesture, same as before this.
+    // armed the press — deliberately NOT `ctrlTogglePending || cmdReparentPending` (see mouseDown's
+    // own comment for why). Re-derived live on every mouseDrag tick for a single-module drag (Gap
+    // 3) so Cmd pressed/released mid-drag arms/disarms it; a group drag keeps mouseDown's latch.
+    // Full platform matrix and rationale: mouseDown/mouseDrag/mouseUp in
+    // ModuleComponentInteraction.cpp.
     bool reparentArmed = false;
 
     // Inline rename editor, alive only between beginTitleRename and finishTitleRename. A child
