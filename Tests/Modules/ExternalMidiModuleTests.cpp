@@ -158,10 +158,14 @@ TEST_F(ExternalMidiModuleTest, RelativeTimingBetweenMessagesIsPreserved) {
     ASSERT_EQ(hitAbsoluteSamples.size(), 2u);
     // Absolute placement has wall-clock jitter from the reset() call, and even the RELATIVE
     // spacing drifts when the drive loop runs late under CI/parallel-build load (the collector's
-    // window advances by exactly numSamples per call while wall time slips underneath it). The
-    // regression this test guards is the old collapse-to-sample-0 behaviour, where the spacing
-    // was 0 — so the tolerance only needs to separate ~512 from 0, not pin scheduler jitter.
-    EXPECT_NEAR(hitAbsoluteSamples[1] - hitAbsoluteSamples[0], blockSize, 256);
+    // window advances by exactly numSamples per call while wall time slips underneath it). t2 is
+    // deliberately one block after t1, i.e. right on a block boundary, so even a small scheduling
+    // delay can push msg2's push (and therefore its observed arrival) an extra block later,
+    // jumping the observed spacing by increments of blockSize on top of the jitter (seen on CI:
+    // spacing of 884 against a 512+-256 window). The regression this test guards is the old
+    // collapse-to-sample-0 behaviour, where the spacing was 0 -- an upper bound isn't needed to
+    // catch that, only a floor comfortably above 0 and comfortably below what jitter can produce.
+    EXPECT_GT(hitAbsoluteSamples[1] - hitAbsoluteSamples[0], 200);
 }
 
 TEST_F(ExternalMidiModuleTest, FutureTimestampedMessageArrivesInALaterBlock) {

@@ -260,6 +260,107 @@ TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportRecordRoutesThroughTh
     EXPECT_TRUE(mc.getMidiRecorderForTest().isRecording()) << "an armed MIDI track must actually start a take";
 }
 
+// Deterministic regression test for the FRO210 CI flake in the test above: handleRecordToggle()
+// (MainComponentSetupTimeline.cpp) calls transport.play() -- which only POSTS a command, taking
+// effect on the next processHostBlock -- and THEN MidiRecorder::startRecording(), synchronously.
+// MainComponent's 10 Hz commit-on-stop poll (timerCallback(), MainComponentCallbacks.cpp) commits
+// whenever wasTransportPlaying_ is stale true, the published snapshot still says not-playing and
+// isRecording() is true. If that tick lands in the gap between startRecording() and the posted
+// Play command actually landing, it sees exactly that combination and cancels the take it never
+// saw start -- even though nothing is actually wrong. On CI this needed the real 10 Hz timer to
+// land inside a ~50ms window (rare, hence the flake); stopping the real timer and firing
+// timerCallback() by hand makes the same race land every run.
+TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportRecordSurvivesATimerTickBetweenTakeStartAndTransportDrain) {
+    synth::theme::ThemeManager tm;
+    synth::theme::AppLookAndFeel lf;
+    AudioEngine engine(AudioEngine::HostMode::Hosted);
+    engine.initialise();
+    engine.prepareForHost(44100.0, 512, 0, 2);
+    MainComponent mc(tm, lf, engine, std::make_unique<TransportTestProvider>());
+    mc.stopTimer(); // drive the 10 Hz commit-on-stop poll by hand instead of by wall clock
+    auto& cm = mc.getCommandManager();
+    auto& transport = engine.getTransport();
+    juce::AudioBuffer<float> buffer(2, 512);
+    juce::MidiBuffer midi;
+
+    // Get to "was playing" the way a prior roll would, and let the timer observe it -- this is
+    // what makes wasTransportPlaying_ stale-true available for the race below.
+    ASSERT_TRUE(transport.play());
+    engine.processHostBlock(buffer, midi);
+    ASSERT_TRUE(transport.getPositionSnapshot().playing);
+    mc.timerCallback();
+
+    // Stop directly, bypassing the record-off click path -- exactly like the flaky test's raw
+    // transport.stop() between its two record cycles. Nothing re-observes this transition before
+    // the explicit timerCallback() call below, so wasTransportPlaying_ stays stale true.
+    ASSERT_TRUE(transport.stop());
+    engine.processHostBlock(buffer, midi);
+    ASSERT_FALSE(transport.getPositionSnapshot().playing);
+
+    auto& doc = mc.getTimelineDoc();
+    const auto trackA = doc.addTrack(synth::TrackKind::Midi, "A");
+    doc.setTrackArmed(trackA, true);
+
+    // Same reachability path as the test above: invoke the command, pump only far enough for the
+    // posted click to run (the real timer is stopped, so it can't coincidentally self-heal here).
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::transportRecord, false));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    ASSERT_TRUE(mc.getMidiRecorderForTest().isRecording())
+        << "the click must have started the take before the race window below";
+
+    // The race: fire the commit-on-stop tick before the posted Play command has been drained.
+    mc.timerCallback();
+
+    engine.processHostBlock(buffer, midi);
+    EXPECT_TRUE(transport.getPositionSnapshot().playing);
+    EXPECT_TRUE(mc.getMidiRecorderForTest().isRecording())
+        << "a commit-on-stop tick landing between take-start and the transport catching up must "
+           "not cancel a take it never saw start";
+}
+
+// Companion to the test above, guarding the fix's other side: Record pressed while ALREADY
+// playing takes the "no pre-roll, no transport.play()" branch in handleRecordToggle (see its
+// count-in comment), so wasTransportPlaying_ must be re-anchored to true (snap.playing), not
+// unconditionally cleared -- otherwise a Stop shortly after Record would never auto-commit, since
+// the edge-detector would have no "was playing" observation to compare against.
+TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportRecordEngagedMidRollStillAutoCommitsOnAQuickStop) {
+    synth::theme::ThemeManager tm;
+    synth::theme::AppLookAndFeel lf;
+    AudioEngine engine(AudioEngine::HostMode::Hosted);
+    engine.initialise();
+    engine.prepareForHost(44100.0, 512, 0, 2);
+    MainComponent mc(tm, lf, engine, std::make_unique<TransportTestProvider>());
+    mc.stopTimer(); // drive the 10 Hz commit-on-stop poll by hand instead of by wall clock
+    auto& cm = mc.getCommandManager();
+    auto& transport = engine.getTransport();
+    juce::AudioBuffer<float> buffer(2, 512);
+    juce::MidiBuffer midi;
+
+    // Already rolling before Record is pressed -- the mid-performance branch.
+    ASSERT_TRUE(transport.play());
+    engine.processHostBlock(buffer, midi);
+    ASSERT_TRUE(transport.getPositionSnapshot().playing);
+
+    auto& doc = mc.getTimelineDoc();
+    const auto trackA = doc.addTrack(synth::TrackKind::Midi, "A");
+    doc.setTrackArmed(trackA, true);
+
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::transportRecord, false));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    ASSERT_TRUE(mc.getMidiRecorderForTest().isRecording());
+
+    // Stop right away, then a single tick -- no intervening tick ever observed "playing" for
+    // this take, so only a correctly re-anchored wasTransportPlaying_ catches this edge.
+    ASSERT_TRUE(transport.stop());
+    engine.processHostBlock(buffer, midi);
+    ASSERT_FALSE(transport.getPositionSnapshot().playing);
+
+    mc.timerCallback();
+
+    EXPECT_FALSE(mc.getMidiRecorderForTest().isRecording())
+        << "record engaged mid-roll, then stopped within one tick, must still auto-commit";
+}
+
 TEST_F(ShortcutManagerTransportActionsInvokeTest, TransportReturnToStartLocatesToBeatZero) {
     synth::theme::ThemeManager tm;
     synth::theme::AppLookAndFeel lf;
