@@ -68,7 +68,7 @@ bool contains(const std::vector<juce::AudioProcessorGraph::NodeID>& ids, juce::A
 } // namespace
 
 // A track whose signal fans out and reaches TWO distinct strips gets whichever the BFS visits
-// first -- arbitrary but deterministic. §5.2's link rule is defined channel-side ("is THIS track
+// first -- arbitrary but deterministic. docs/mixer/mixer.md#channels-follow-audio-not-tracks's link rule is defined channel-side ("is THIS track
 // the channel's only source"), so a track feeding two channels at once is out of scope.
 juce::AudioProcessorGraph::NodeID findStripFedByTrackSource(juce::AudioProcessorGraph& graph,
                                                             juce::AudioProcessorGraph::NodeID trackSourceId) {

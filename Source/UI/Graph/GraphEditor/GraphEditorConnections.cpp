@@ -326,13 +326,13 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
             // node, rather than always minting a fresh one — "one jack per port" makes a jack a
             // real, precise drop target, not just the card as a whole. A jack whose direction or
             // kind doesn't match the drag is refused silently, the same way an ordinary mismatched
-            // module-jack drop is refused a few lines above (§5.3: not silently adapted).
+            // module-jack drop is refused a few lines above (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed: not silently adapted).
             // DEFERRED (not this stage): raw channel 0 only, same as createMacroPortFromDroppedCable
             // below. For a Mono port that IS the port's one visible jack; for an existing Stereo
             // port this wires the Left leg only and leaves Right unconnected — a card jack
-            // summarises the whole port as one dot (§5.4), so there is no separate "Right" drop
+            // summarises the whole port as one dot (docs/macros/ports.md#how-a-port-is-drawn), so there is no separate "Right" drop
             // target to land on yet. Widening this to resolvePolyLink-style fan-out for an
-            // existing Stereo/Poly-N port is future work, not a regression: the modal (§7 item 5)
+            // existing Stereo/Poly-N port is future work, not a regression: the modal (docs/macros/configure-io.md#renaming-and-reordering-ports)
             // remains the reliable way to wire a non-Mono port completely.
             if (auto hitPort = macroCardPortForPoint(card->getMacroId(), cardLocal)) {
                 if (hitPort->isInput == newPortIsInput &&
@@ -372,7 +372,7 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
             }
 
             // No jack under the cursor: fall back to the "shape from a dropped cable" convenience
-            // (§5.3, T140) — the whole card is still a valid drop target, and a fresh Mono port is
+            // (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed, T140) — the whole card is still a valid drop target, and a fresh Mono port is
             // created to receive the cable. T184 does NOT apply here: createMacroPortFromDroppedCable
             // wires no interior leg (the freshly-minted port has nothing behind it yet), so there is
             // nothing for findUnchanneledOutputFeeds to find.

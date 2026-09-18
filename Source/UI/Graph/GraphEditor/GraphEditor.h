@@ -948,14 +948,14 @@ private:
     std::vector<VisibleCable> rebuildVisibleCables();
     std::vector<VisibleCable> cablesCache;
     bool cablesCacheValid = false;
-    int cableRebuildCount = 0; // test seam, see §11 paint-count pattern
+    int cableRebuildCount = 0; // test seam, see docs/layout/animation.md#the-paint-count-pattern
     void repaintCanvas() override;
 
     // ---- Zoom gesture (raster freeze) ----
     // While a zoom gesture is in flight every card's raster scale is pinned, so a wheel tick
     // resamples the cached images instead of re-rendering every panel + slider at a new scale.
     // The gesture ends kZoomSettleMs after the last zoom event and thaws with exactly one
-    // crisp re-render. Time-bounded per §11: the driver has a no-op onUpdate (it requests zero
+    // crisp re-render. Time-bounded per docs/layout/animation.md#the-time-bounded-animation-rule: the driver has a no-op onUpdate (it requests zero
     // repaints of its own) and stops itself at t = 1.
     bool zoomGestureActive = false;
     synth::ui::AnimationDriver zoomSettleAnim;

@@ -406,7 +406,7 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
     // but their graph edges — and the cables above computed from them — don't know that. A cable
     // wholly inside one collapsed macro is dropped outright (both endpoints are off-screen, and
     // there is nothing useful to draw); a cable crossing a collapsed macro's boundary is
-    // re-anchored on the card. Two anchor treatments, per §5.4's table:
+    // re-anchored on the card. Two anchor treatments, per docs/macros/ports.md#cable-rendering-across-the-boundary's table:
     //   - the hidden endpoint IS one of the macro's own ports (a MacroInlet/Outlet or MIDI
     //     variant fronting a synth::MacroPort) -> anchor at that port's own jack
     //     (macroCardPortLayout), so the cable visibly enters/leaves through the port it actually
@@ -420,7 +420,7 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
     //     several crossing cables keep spreading vertically instead of collapsing onto one pixel)
     //     but is clamped into the card's jack band, and X lands exactly on the boundary (not
     //     inset like a real port jack) so this anchor never sits under a case-(a) port dot on the
-    //     same edge. That case doesn't disappear (§5.4) and must not be mistaken for an error.
+    //     same edge. That case doesn't disappear (docs/macros/ports.md#cable-rendering-across-the-boundary) and must not be mistaken for an error.
     // The rectangle/jack projected against is macroCableAnchorBounds(macro) — the LIVE
     // MacroCardComponent's bounds while a card exists, not the persisted `macro.bounds`, which is
     // only written back on drop (finalizeMacroCardDrag) and would leave a cable pointing at the

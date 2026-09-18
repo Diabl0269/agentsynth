@@ -179,7 +179,7 @@ public:
     // setChannelStripSoloed() is the one call a UI should make: it flips the strip's own flag and
     // recounts, ordered so no render pass ever sees the gate closed with nothing soloed. Returns
     // false when `node` is not a Channel Strip in this graph. Not undoable and not a parameter
-    // write, by design (§5.3).
+    // write, by design (docs/mixer/mixer.md#solo-is-a-render-time-gate).
     void refreshSoloGate();
     bool setChannelStripSoloed(juce::AudioProcessorGraph::NodeID node, bool soloed);
     int getSoloedStripCount() const noexcept { return soloedStripCount_.load(std::memory_order_relaxed); }

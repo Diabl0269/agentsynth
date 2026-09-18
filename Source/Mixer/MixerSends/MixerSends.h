@@ -19,7 +19,7 @@ namespace synth {
 
 // ---- Buses -------------------------------------------------------------------------------------
 //
-// A bus is an ordinary ChannelStripModule whose inputs are other strips' outputs (§5.15 D1) -- there
+// A bus is an ordinary ChannelStripModule whose inputs are other strips' outputs (docs/mixer/sends-and-buses.md#a-bus-is-a-channel-strip) -- there
 // is no bus node type, so "is this a bus?" is a query, not a class check.
 
 /** The strips feeding `stripId`, ascending NodeID: a backward walk along signal edges that stops AT

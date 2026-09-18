@@ -15,7 +15,7 @@
 
 namespace synth {
 
-/** What §5.2's link rule says about one track, right now. */
+/** What docs/mixer/mixer.md#channels-follow-audio-not-tracks's link rule says about one track, right now. */
 struct TrackChannelLinkInfo {
     /** This track's bound source node reaches SOME ChannelStripModule -- the channel chip's
      *  visibility rule ("linked or not"). False for an unbound/orphaned track, an Automation
@@ -26,7 +26,7 @@ struct TrackChannelLinkInfo {
     juce::AudioProcessorGraph::NodeID stripId;
     juce::String stripUuid;
 
-    /** `hasChannel` AND this track is that channel's ONLY source -- §5.2's link rule. */
+    /** `hasChannel` AND this track is that channel's ONLY source -- docs/mixer/mixer.md#channels-follow-audio-not-tracks's link rule. */
     bool linked = false;
 
     /** Every track-source node feeding `stripId` (this track's own included). Size 1 is exactly

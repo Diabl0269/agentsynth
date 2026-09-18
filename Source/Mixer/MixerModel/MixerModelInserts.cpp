@@ -1,7 +1,7 @@
 // Concern: FRO11 (P9-5, docs/mixer/mixer.md#inserts-in-a-free-form-graph) -- a column's insert list: the chain between its
 // feeding track's source and the strip, in signal order, plus linear-vs-branching classification,
 // plus the three insert-list mutation primitives (splice out / splice in / reorder). Also FRO15
-// (§5.15 D6): a bus has no feeding track, so its own EQ/Compressor chain is discovered by walking
+// (docs/mixer/sends-and-buses.md): a bus has no feeding track, so its own EQ/Compressor chain is discovered by walking
 // BACKWARD from the strip instead (buildBusInsertsForColumn).
 #include "MixerModel.h"
 
@@ -86,7 +86,7 @@ void resolveEditOnCanvasTarget(juce::AudioProcessorGraph& graph, const MacroSet&
         column.editOnCanvasTargetUuid = module->getNodeUuid();
 }
 
-// FRO15 (§5.15 D6): a bus has no feeding track (feedingTracks is empty by construction -- nothing
+// FRO15 (docs/mixer/sends-and-buses.md): a bus has no feeding track (feedingTracks is empty by construction -- nothing
 // in the timeline plays into it), so there is no source node to walk FORWARD from. Its own
 // EQ/Compressor chain -- built by "Add bus"/buildBusChannel, or rearranged since -- instead sits
 // immediately upstream of the strip, so walk BACKWARD from the strip along signal predecessors.
@@ -158,7 +158,7 @@ void buildInsertsForColumn(juce::AudioProcessorGraph& graph, const TimelineDoc& 
 
     // Forward walk from the source along signal edges, collecting the chain up to (not including)
     // the strip. A node with more than one signal predecessor or successor within the reach is a
-    // merge/fan-out -- the whole chain is then read-only ("branching"), per §5.6.
+    // merge/fan-out -- the whole chain is then read-only ("branching"), per docs/mixer/mixer.md#inserts-in-a-free-form-graph.
     bool branching = false;
     std::vector<NodeID> chain;
     std::vector<NodeID> visited{sourceId};

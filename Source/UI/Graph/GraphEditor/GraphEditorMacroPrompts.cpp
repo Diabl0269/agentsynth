@@ -300,8 +300,8 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
         if (uuid.isEmpty())
             continue;
         if (macro->hasMember(uuid)) {
-            // A port is a boundary jack, not a module the user put in the box (docs/macros/ports.md
-            // §5.1) — it has its own "Delete Port" affordance and must never be pulled out of
+            // A port is a boundary jack, not a module the user put in the box
+            // (docs/macros/ports.md#node-types) — it has its own "Delete Port" affordance and must never be pulled out of
             // `members` by this generic path.
             if (!macro->memberIsPort(uuid))
                 removableUuids.push_back(uuid);
@@ -356,7 +356,7 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
             safeThis->promptConfigureMacroIO(macroId);
     });
     m.addSeparator();
-    // Bypass/mute fan-out (§5.6, T142): each item names the action a click is about to perform,
+    // Bypass/mute fan-out (docs/macros/ports.md#bypass-and-mute, T142): each item names the action a click is about to perform,
     // so a Mixed or fully-off state reads as targeting ON ("Bypass"/"Mute") and a fully-on state
     // reads as targeting OFF ("Enable"/"Unmute") — the same convergence rule toggleMacroBypassed/
     // toggleMacroMuted apply. Mute is omitted entirely when no member could possibly honour it

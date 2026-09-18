@@ -319,7 +319,7 @@ juce::AudioProcessorGraph::NodeID findStripFedByTrackSource(juce::AudioProcessor
  *  reached upstream (that strip is another channel's terminus -- whatever feeds IT is not this
  *  strip's to claim).
  *
- *  `result.size() == 1` IS §5.2's link predicate ("the track is the channel's only source"), and it
+ *  `result.size() == 1` IS docs/mixer/mixer.md#channels-follow-audio-not-tracks's link predicate ("the track is the channel's only source"), and it
  *  is also FRO55's stem-naming rule ("exactly one feeding track names the file"), computed once for
  *  both -- see ChannelFlowsTrackChannelLink.cpp's file comment. */
 std::vector<juce::AudioProcessorGraph::NodeID> findTrackSourcesFeedingStrip(juce::AudioProcessorGraph& graph,
