@@ -46,7 +46,7 @@ std::vector<StemStripEntry> collectStemStrips(juce::AudioProcessorGraph& graph);
 // stop/unloop/locate/play -> stream blocks -> restore) is identical, but the shared pieces
 // (BounceGuards.h, synth::validateBounceOptions) are already factored out, and templating the
 // per-block sink over N writers would churn BounceSession/BounceExporterTests for no behavioural
-// gain — see docs/architecture.md's bounce/export section.
+// gain — see docs/architecture/audio-engine.md#bounceexport.
 //
 // MESSAGE THREAD, START TO FINISH — same contract as BounceSession.
 class StemSession {

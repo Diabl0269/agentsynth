@@ -132,7 +132,8 @@ public:
 
     /** Rebuild every slot's live target through synth::resolveLaneParameter and republish. Called
      *  from MainComponent's reconcile funnel after any graph change; orphans what no longer
-     *  resolves and never silently rebinds (docs/architecture_app_wiring.md §8). */
+     *  resolves and never silently rebinds
+     * (docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step). */
     void reconcile(juce::AudioProcessorGraph& graph);
 
     // ---- Message thread: learn -----------------------------------------------------------------

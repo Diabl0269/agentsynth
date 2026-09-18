@@ -106,7 +106,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
         // graph output while monitoring is disabled (TransportService::isInputMonitoringEnabledForBlock),
         // and AudioEngine::runFeedbackGuard (called from renderPass, post-graph) disables monitoring
         // and zeroes the block outright if the output stays near-clip too long. See
-        // docs/architecture.md's "Input monitoring & feedback guard".
+        // docs/architecture/audio-engine.md#input-monitoring--feedback-guard.
         if (src != nullptr)
             std::copy(src, src + numSamples, dest);
         else

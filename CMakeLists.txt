@@ -832,7 +832,7 @@ endif()
 # Wraps the SAME AudioEngine and MainComponent the standalone app runs (via the AppUI library
 # above) in a juce::AudioProcessor. The engine is constructed in HostMode::Hosted so it never
 # opens an audio device or MIDI input of its own — the host drives it. See Source/Plugin/ and
-# docs/architecture.md.
+# docs/architecture/architecture.md.
 #
 # Standalone is deliberately NOT in FORMATS: JUCE would emit a second "Agent Synth.app" that
 # collides with the AgentSynth app target's own artifact in release packaging, for a build that

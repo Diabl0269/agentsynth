@@ -208,7 +208,7 @@ public:
     synth::TimelineDoc& getTimelineDoc() { return timelineDoc; }
     synth::AutomationRecorder& getAutomationRecorder() { return automationRecorder; }
     void automateParameter(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId);
-    // The app's one live MidiRecorder — see docs/architecture.md. Test-only, mirrors
+    // The app's one live MidiRecorder — see docs/architecture/audio-engine.md#audioengine. Test-only, mirrors
     // getAutomationRecorder() above.
     synth::MidiRecorder& getMidiRecorderForTest() { return midiRecorder; }
     // juce::PopupMenu never runs in a test process — these drive the "+ Track" menu's own headless
@@ -273,7 +273,7 @@ public:
     /** Sweeps `<bundle>/Audio/` (+ `Peaks/`) for files no clip in the live timeline
      *  references and deletes exactly those — see synth::AssetManager::cleanUnusedAssets. A no-op
      *  (returns 0) outside a saved bundle. Not wired to any menu/shortcut yet — see
-     *  docs/architecture.md's asset-management subsection for why. */
+     *  docs/architecture/app-wiring.md#asset-management for why. */
     int cleanUnusedAssetsForTest() { return cleanUnusedAssets(); }
     GraphEditor& getGraphEditor() { return graphEditor; }
     // T114/P8-10: null in Hosted mode (the plugin path never constructs one — see
@@ -333,8 +333,8 @@ public:
 
     /** True once an undo-able edit has happened since the last save/load - see changeListenerCallback's
      *  AppUndoManager branch. Deliberately NOT reset by undoing back to the state that was saved -
-     *  see the dirty-state section of docs/architecture.md for why a false "clean" is the dangerous
-     *  direction. */
+     *  see docs/architecture/project-bundle.md#dirty-state-and-the-unsaved-changes-guard for why a false "clean" is the
+     * dangerous direction. */
     bool isProjectDirty() const { return isDirty_; }
 
     void guardUnsavedChanges(const juce::String& actionLabel, std::function<void()> proceed);

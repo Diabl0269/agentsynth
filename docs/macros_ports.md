@@ -394,7 +394,7 @@ no such carve-out: muting a channel macro mutes the strip too. The filter is
 
 Nothing macro-specific. Because the graph stays flat and macros are canvas presentation, a macro
 in the plugin build behaves as it does in the app: it is state in the same `project.json` blob
-the plugin already round-trips (`docs/architecture.md`, plugin state format). The plugin editor's
+the plugin already round-trips (`docs/architecture/plugin-layer.md#plugin-state-format`, plugin state format). The plugin editor's
 `GraphEditor` renders cards and hulls identically. No new host-mode branch.
 
 The one existing rule that still applies: an over-wide hosted plugin is **refused, never

@@ -13,7 +13,7 @@ namespace synth {
  *
  * Headless, message-thread-only (file I/O; never called from the audio thread), and stateless — a
  * bag of static functions over a `TimelineDoc` and a `juce::File` root, like `synth::PeaksFile` and
- * `synth::TimelineReconciler`. See `docs/architecture.md`'s asset-management subsection for the
+ * `synth::TimelineReconciler`. See docs/architecture/app-wiring.md#asset-management for the
  * policy this class enforces; the one invariant every function here shares is **never a silent
  * delete**: nothing is removed except the exact files `cleanUnusedAssets` names, and a clip whose
  * asset is simply MISSING (unresolvable, not "unused") never causes anything to be deleted.

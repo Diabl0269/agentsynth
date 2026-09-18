@@ -47,8 +47,8 @@ TEST_F(UndoRedoTest, EditSerialIgnoresAPushThatChangedNothing) {
 
 // THE property the dirty flag depends on: undo and redo move the serial FORWARD rather than back
 // to a previous value. That is what makes "undo back to the state I saved" still read as dirty —
-// the deliberate semantics documented in docs/architecture.md, chosen because a false "clean"
-// loses work silently while a false "dirty" only costs one extra prompt.
+// the deliberate semantics documented in docs/architecture/project-bundle.md#dirty-state-and-the-unsaved-changes-guard,
+// chosen because a false "clean" loses work silently while a false "dirty" only costs one extra prompt.
 TEST_F(UndoRedoTest, EditSerialAdvancesOnUndoAndRedoRatherThanRewinding) {
     auto* osc = graph.addNode(std::make_unique<OscillatorModule>()).get();
     undoManager.captureBeforeState(graph);

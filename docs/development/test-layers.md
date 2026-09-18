@@ -84,7 +84,7 @@ following suite drives the same one; see
 `audioInputNode`. Two layers: **module-level** tests drive an `AudioInputModule` directly with a
 bare `synth::TransportService` on its playhead (exactly what the engine does per block, minus the
 engine — one of them, `NoTransportRendersSilence`, is the no-playhead caveat described in
-[`../architecture_audio_engine.md`](../architecture_audio_engine.md#1-audioengine)), and
+[`../architecture/audio-engine.md`](../architecture/audio-engine.md#audioengine)), and
 **engine-level** tests drive the whole path through a real `AudioEngine`, exercising the playhead
 the engine itself installs.
 

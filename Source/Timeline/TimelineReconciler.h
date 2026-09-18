@@ -26,8 +26,9 @@ namespace synth {
  *
  * MainComponent owns the running app's live TimelineDoc and calls this
  * from every place a node can appear or disappear, because each of those is a place a binding can
- * start or stop resolving. The definitive list lives in docs/architecture.md ("App wiring")
- * — keep the two in step. In outline:
+ * start or stop resolving. The definitive list lives in
+ * docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step — keep the two
+ * in step. In outline:
  *  - MainComponent::reconcileTimelineAfterGraphChange(), from preset load, factory-preset load, New
  *    Patch, .agsproj open and AIIntegrationService's post-apply notification (which also covers
  *    AIStateMapper::applyJSONToGraph's undo/redo path).

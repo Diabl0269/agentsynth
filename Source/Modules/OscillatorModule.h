@@ -79,7 +79,7 @@ public:
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
-        // Two separate branches, per the bypass/mute contract in docs/architecture.md. A pure
+        // Two separate branches, per docs/architecture/module-base.md#bypassmute-contract. A pure
         // source has no dry audio path to pass through, so bypass clears here rather than
         // returning early — but it stays its own branch so the two cases can never be conflated.
         if (isBypassed()) {

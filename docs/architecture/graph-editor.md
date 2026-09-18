@@ -5,8 +5,6 @@ The visual patching canvas: its per-concern translation units, the three collabo
 Part of the architecture docs — start at [`architecture.md`](architecture.md) for the
 layer map, signal flow and the index of the other topic docs.
 
-## GraphEditor
-
 `Source/UI/Graph/GraphEditor/` — one class (declared in `GraphEditor.h`) split across per-concern translation units, none over 1,000 lines, plus a private `GraphEditorInternal.h` for helpers shared by two or more of them. Source layout:
 
 - `GraphEditor.cpp` — constructor/destructor, core lifecycle

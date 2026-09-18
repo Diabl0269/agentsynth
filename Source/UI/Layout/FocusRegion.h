@@ -10,7 +10,8 @@
 // T159: the app-wide keyboard focus-region framework — Tab/Shift+Tab cycling plus two direct-focus
 // shortcuts, phase 1 of a 3-part epic (T160 adds arrow-key navigation WITHIN the module library,
 // T161 within the timeline track headers; neither is built here). See docs/shortcuts.md and
-// docs/architecture_app_wiring.md §8 for the user-facing behaviour this implements.
+// docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step for the
+// user-facing behaviour this implements.
 //
 // Deliberately a plain, ownable type rather than a Desktop-global singleton (Source/Plugin/CLAUDE.md
 // forbids that shape for exactly this reason: a host process can run multiple plugin instances, and

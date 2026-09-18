@@ -234,9 +234,9 @@ TEST_F(AutosaveTest, DoesNotFireDuringAnActiveMidiRecording) {
 
 // A failing bounce test here would mean a future change (e.g. a P8-5 progress dialog that pumps
 // the message loop from inside BounceExporter::bounce()'s ProgressCallback) reopened the exact
-// re-entrancy window this file's header comment and docs/architecture.md warn about: bounce()
-// today never pumps juce::MessageManager internally, so MainComponent's own real 10 Hz
-// juce::Timer (started in its constructor) cannot be serviced while a bounce call is on the stack
+// re-entrancy window this file's header comment and docs/architecture/project-bundle.md#autosave-and-crash-recovery
+// warn about: bounce() today never pumps juce::MessageManager internally, so MainComponent's own real 10 Hz juce::Timer
+// (started in its constructor) cannot be serviced while a bounce call is on the stack
 // - there is no running dispatch loop to deliver it. This test proves that invariant holds for the
 // REAL, unmodified bounce() call, rather than only asserting it in a comment.
 TEST_F(AutosaveTest, DoesNotFireDuringABounce) {

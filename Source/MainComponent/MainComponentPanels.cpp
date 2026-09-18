@@ -101,7 +101,7 @@ void MainComponent::startPluginScan() {
  *  there would launch a copy of the DAW per candidate plugin, and the host owns plugin discovery
  *  in that world regardless. A hosted session still RESOLVES identities — against whatever list
  *  the constructor already restored from settings — it just never scans one itself; see
- *  docs/architecture.md's "Plugin scanning" section.
+ *  docs/architecture/plugin-layer.md#plugin-scanning--a-crash-must-kill-a-child-not-the-app.
  *
  *  FRO105: this used to call `ensureScanned()` with no progress callback at all, so the eager scan
  *  ran silently — the founder complaint this fixes was seeing only whatever the persisted list

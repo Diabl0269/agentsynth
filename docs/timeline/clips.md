@@ -63,7 +63,7 @@ current — possibly mid-drag — start).
 A muted clip keeps its shape, its selection border and its waveform or notes, and loses only the
 fill/border brightness and its name label's alpha (`kMutedClipLabelAlpha`) — painted straight from
 `synth::Clip::muted` on the doc, **never** from a `TimelineSnapshot`, which does not contain a
-muted clip at all (see [`architecture_timeline.md` §4](../architecture_timeline.md#4-timelinesnapshot-the-audio-threads-view-of-the-timeline)).
+muted clip at all (see [`architecture/timeline.md`](../architecture/timeline.md#timelinesnapshot-the-audio-threads-view-of-the-timeline)).
 Selected clips get a brighter border and a slight fill lift.
 
 Repaints happen only on doc changes (`refreshFromDoc()`, routed in from
@@ -232,7 +232,7 @@ leaving the lanes.
 
 Offered whenever the clicked clip's `assetRef` is non-empty, whether the asset currently resolves
 (a plain re-point) or is missing — see
-[`architecture_app_wiring.md`](../architecture_app_wiring.md)'s asset-management section for the
+[`architecture/app-wiring.md`](../architecture/app-wiring.md#asset-management)'s asset-management section for the
 missing-asset placeholder this same field drives.
 
 Unlike the three tool actions above, this is a plain callback (`onRelinkAudioRequested`) rather

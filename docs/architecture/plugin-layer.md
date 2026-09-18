@@ -5,8 +5,6 @@ Two directions at once: AgentSynth *as* a VST3/AU plugin (host modes, ownership,
 Part of the architecture docs — start at [`architecture.md`](architecture.md) for the
 layer map, signal flow and the index of the other topic docs.
 
-## Plugin Layer
-
 `Source/Plugin/` wraps the same `AudioEngine` and `MainComponent` the standalone app runs in a `juce::AudioProcessor` (`AgentSynthAudioProcessor` / `AgentSynthPluginEditor`), producing the VST3/AU targets described in Project Structure above.
 
 ## Host modes (`AudioEngine::HostMode`)

@@ -103,7 +103,7 @@ MixerSnapshot buildMixerSnapshot(juce::AudioProcessorGraph& graph, const Timelin
 // ---- Insert-list mutations (§5.6) -------------------------------------------------------------
 //
 // Plain graph splices, NO UNDO of their own -- same contract as Source/Mixer/ChannelFlows's own
-// builders (docs/architecture.md): the caller wraps each in one
+// builders (docs/architecture/module-base.md#appundomanager): the caller wraps each in one
 // AppUndoManager::recordGraphAndMacroChange. Only ever call these on a column whose own
 // insertChainIsLinear is true; behaviour on a branching chain's member is undefined (the UI never
 // offers add/reorder/remove there in the first place).

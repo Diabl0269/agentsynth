@@ -24,7 +24,8 @@ class Metronome; // Forward declaration (Source/Transport/Metronome.h)
 // Recording is the one control this bar is NOT authoritative over: starting a take requires an
 // armed MIDI track, which only MainComponent can see. onRecordToggled reports the user's INTENT;
 // the owner decides whether it actually happens and calls setRecordingState() with the real
-// outcome — see docs/architecture.md's MidiRecorder wiring entry.
+// outcome — see docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step
+// (MidiRecorder wiring entry).
 //
 // No SVG assets: the four transport glyphs (play/stop, record, loop, metronome) are drawn as plain
 // juce::Path/juce::Rectangle shapes in GlyphButton::paintButton, each inside a centred square with

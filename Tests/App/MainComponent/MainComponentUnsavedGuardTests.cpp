@@ -356,9 +356,9 @@ TEST_F(MainComponentTest, LoadingAProjectClearsTheDirtyFlag) {
     EXPECT_FALSE(mc.isProjectDirty()) << "a stale undo notification must not resurrect the flag";
 }
 
-// DOCUMENTS THE CHOSEN SEMANTICS (docs/architecture.md, "Dirty state, and the unsaved-changes
-// guard"): undoing back to the state that was saved still reads as dirty. This is deliberate, not
-// a bug - the edit serial is a monotonic count rather than a position on the stack, because
+// DOCUMENTS THE CHOSEN SEMANTICS (docs/architecture/project-bundle.md#dirty-state-and-the-unsaved-changes-guard),
+// "Dirty state, and the unsaved-changes guard"): undoing back to the state that was saved still reads as dirty. This is
+// deliberate, not a bug - the edit serial is a monotonic count rather than a position on the stack, because
 // juce::UndoManager exposes no stable save-point index, and the two failure directions are not
 // symmetrical: a false "clean" loses work silently, a false "dirty" costs one extra prompt.
 TEST_F(MainComponentTest, UndoBackToTheSavedStateIsStillDirty) {

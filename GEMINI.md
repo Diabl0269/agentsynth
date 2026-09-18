@@ -127,7 +127,7 @@ Post-merge, `.github/workflows/build-artifacts.yml` runs on push to main (4 jobs
 
 ## Keyboard Shortcuts
 
-Refer to [docs/shortcuts.md](docs/shortcuts.md) for the full list of configurable keyboard shortcuts.
+Refer to [docs/control/shortcuts.md](docs/control/shortcuts.md) for the full list of configurable keyboard shortcuts.
 
 
 ## Key Files to Understand

@@ -14,8 +14,9 @@
 
 // Lane/track binding reconciliation. The rule under test throughout: an unresolvable
 // uuid-keyed binding (Track::bindingUuid, AutomationLane::nodeUuid) becomes ORPHANED — retained,
-// flagged, re-bindable — and is never auto-deleted. See docs/architecture.md's TimelineDoc /
-// ProjectBundle sections for the full policy and the AI-merge-renumbering rationale.
+// flagged, re-bindable — and is never auto-deleted. See
+// docs/architecture/timeline.md#timelinedoc-the-timeline-document-model / ProjectBundle sections for the full policy
+// and the AI-merge-renumbering rationale.
 
 using synth::AutomationLane;
 using synth::LaneId;

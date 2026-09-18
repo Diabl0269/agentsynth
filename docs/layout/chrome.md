@@ -129,7 +129,7 @@ unchanged latency, or vice versa:
   latency drifting below the printed resolution costs no repaint at all. It shows
   `AudioEngine::getRecordingLatencySamples()` — input device plus graph plus output device, the
   amount a recorded take is shifted back by (see
-  [architecture_app_wiring.md#latency-alignment](../architecture_app_wiring.md#latency-alignment)) —
+  [architecture/app-wiring.md#latency-alignment](../architecture/app-wiring.md#latency-alignment)) —
   fed from the same 5 Hz poll. `available == false`, which is Hosted mode where the host owns both
   ends, draws `RT --` rather than a made-up number.
 - `updateTransport(bool playing, const juce::String& positionText, double bpm)` is gated
@@ -141,7 +141,7 @@ unchanged latency, or vice versa:
   `AppUI`, is the one call site that formats. It is fed from `MainComponent::timerCallback`'s 5 Hz
   status-bar sub-tick, using the `PositionSnapshot` already read **unconditionally** every 10 Hz
   tick, before the `timelinePanel.isVisible()` guard — see
-  [architecture.md](../architecture.md)'s `timerCallback` inventory. The play/stop button's click is
+  [architecture/app-wiring.md]( ../architecture/app-wiring.md)'s `timerCallback` inventory. The play/stop button's click is
   wired by `MainComponent` to the same `TransportService::play()` / `stop()` calls
   `TimelineTransportBar`'s button uses; the button never flips its own toggle state
   (`setClickingTogglesState(false)` — the transport is the truth, and `updateTransport()` is the
@@ -222,7 +222,7 @@ correctly positioned and stacked:
   stale rect from before the last window resize can never show through the instant
   `showWelcomeScreen()` makes it visible again.
 
-App-only, gated on `ownedAudioEngine != nullptr` — see [architecture.md](../architecture.md)'s
+App-only, gated on `ownedAudioEngine != nullptr` — see [architecture/audio-engine.md](../architecture/audio-engine.md)'s
 Welcome screen subsection for the gating rationale, the persisted `"showWelcomeScreenAtLaunch"` key
 and the guard-before-hide ordering that keeps a Cancel answer from dismissing it.
 

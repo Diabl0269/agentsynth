@@ -3,7 +3,7 @@
 `ModuleComponent` is the card one module draws as. It outgrew one file and is split by concern
 under `Source/UI/Graph/ModuleComponent/`, the same `<Class>/<Class><Concern>.cpp` pattern as
 `Source/UI/Graph/GraphEditor/` and `Source/MainComponent/` — the unit-by-unit table is in
-[architecture_module_base.md](../architecture_module_base.md#modulecomponent).
+[architecture/module-base.md](../architecture/module-base.md#modulecomponent).
 
 Where a card LANDS on the canvas is [layout](layout.md); what it draws inside itself is here.
 

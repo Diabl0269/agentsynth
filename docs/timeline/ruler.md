@@ -105,7 +105,7 @@ stays legible. `repaint()` fires only when the hovered zone or the hovered marke
 
 A **marker** is a named position in the arrangement — a cue point, not a track. It has no clips, no
 binding and no audible effect, so it lives on `TimelineDoc` itself (`std::vector<Marker>`, see
-[`architecture_timeline.md` §3](../architecture_timeline.md#3-timelinedoc-the-timeline-document-model))
+[`architecture/timeline.md`](../architecture/timeline.md#timelinedoc-the-timeline-document-model))
 rather than in the track list.
 
 **Why not a marker track.** It would have to be excluded from every place that iterates tracks to

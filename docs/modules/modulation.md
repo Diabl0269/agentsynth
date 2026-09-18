@@ -57,7 +57,7 @@ While a gesture *is* in flight, the hand wins: the parameter is "claimed", the a
 the automation lane stops fighting the mouse for as long as the button is down. Let go and playback
 resumes on the very next block — for a `Touch` lane; a `Latch` lane keeps writing until the
 transport stops. Full mode table and the commit/thinning rules:
-[`architecture_timeline.md`](../architecture_timeline.md#automationrecorder-record-modes-and-gesture-capture).
+[`architecture/timeline.md`](../architecture/timeline.md#automationrecorder-record-modes-and-gesture-capture).
 
 ### Hosted plugin parameters as automation lanes
 
@@ -93,7 +93,7 @@ Every lane-resolution call site — the audio-thread binding build, `TimelineRec
 through the one shared resolver, `synth::resolveLaneParameter`
 (`Source/Timeline/AutomationBinding.h`), so this rule cannot drift between the audio path, the
 AI-tool path and the UI path. The resolver's shape and the normalised-range note are in
-[`architecture_plugin_layer.md`](../architecture_plugin_layer.md#automation-lanes-on-hosted-plugin-parameters).
+[`architecture/plugin-layer.md`](../architecture/plugin-layer.md#automation-lanes-on-hosted-plugin-parameters).
 
 The automation strip's lane picker offers **"Add lane…"** entries for a hosted plugin's
 not-yet-automated instance parameters (there is no `ModuleComponent` knob to right-click for them —

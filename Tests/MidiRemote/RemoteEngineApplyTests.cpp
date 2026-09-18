@@ -95,7 +95,9 @@ struct ApplyHarness {
 
     // setProfiles/setSources/setAssignments (in the order RemoteEngineThreadingTests.cpp uses),
     // then an explicit reconcile(graph) -- a setter alone leaves a BRAND NEW assignment id
-    // unresolved (docs/architecture_app_wiring.md §8: "a setter is not a graph change").
+    // unresolved
+    // (docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step: "a
+    // setter is not a graph change").
     void publish(std::vector<ControllerProfile> profiles, std::vector<Assignment> assignments) {
         engine.setProfiles(std::move(profiles));
         engine.setSources({juce::String(kSource)});

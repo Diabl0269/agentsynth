@@ -186,8 +186,8 @@ public:
         //
         // Added here, second, rather than late in each module's own list: the base constructor is
         // the only place that runs for EVERY module without anyone opting in. Parameter order is
-        // explicitly not part of a module's contract (docs/architecture.md) — look parameters up
-        // with findParameterByID, never by index.
+        // explicitly not part of a module's contract (docs/architecture/module-base.md#bypassmute-contract) — look
+        // parameters up with findParameterByID, never by index.
         const bool declared = stereo == StereoAudio::Declared;
         if (declared || (stereo == StereoAudio::Auto && hasStereoOutputPairShape(numInputs, numOutputs)))
             addParameter(dualIOParam = new juce::AudioParameterBool("dualIO", "Dual I/O", declared));
@@ -620,7 +620,7 @@ protected:
     //
     // Call at the END of the normal processBlock path only. Never on the bypass branch
     // (dry pass-through must stay untouched) and never on mute (already cleared) — see
-    // the bypass/mute contract in docs/architecture.md. No-op when the module did not
+    // docs/architecture/module-base.md#bypassmute-contract. No-op when the module did not
     // call addOutputLevelParameter().
     void applyOutputLevel(juce::AudioBuffer<float>& buffer, int numAudioChannels) {
         if (outputLevelParam == nullptr)

@@ -345,7 +345,7 @@ void WavetableOscillatorModule::processBlock(juce::AudioBuffer<float>& buffer, j
         return;
 
     // Pure source module: no audio input, so bypass has no dry signal to pass through
-    // (same exception as OscillatorModule / PolyMidiModule — see docs/architecture.md).
+    // (same exception as OscillatorModule / PolyMidiModule — see docs/architecture/module-base.md#bypassmute-contract).
     if (isBypassed() || isMuted()) {
         buffer.clear();
         return;

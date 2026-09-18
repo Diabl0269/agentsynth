@@ -195,7 +195,7 @@ TEST(StereoDeclaration, MuteAndCVClearHoldForEveryDualIOCapableModuleInBothState
     // Mute is asserted for EVERY module in the registry: it clears the whole buffer, whatever the
     // channel layout. The CV-clear half is asserted only for the modules whose stereo pair the base
     // INFERRED (hasCollapsibleOutputPair() — audio on ch0/ch1, so every CV channel is >= 2, which is
-    // what the bypass/mute contract in docs/architecture.md is written against). It is deliberately
+    // what docs/architecture/module-base.md#bypassmute-contract is written against). It is deliberately
     // NOT asserted for the split-block modules: on those, ch0 is a pitch CV *input* and the Audio L
     // *output* at the same time, and ch1 is a CV input below the audio pair — "the CV channels are
     // zero after a block" is not a statement about them. Their clears are pinned per module by

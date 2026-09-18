@@ -72,7 +72,7 @@ struct AutomationRecordState {
  * ScopedProgrammaticApply is the belt-and-braces second guard, for a writer that wraps its own
  * writes in gestures: while one is alive, even gestured events are dropped. MainComponent opens
  * one (via its ProgrammaticApplyScope) around preset load, New Patch, project open, the AI apply
- * span, and every undo/redo restore — see docs/architecture.md's "App wiring" section.
+ * span, and every undo/redo restore — see docs/architecture/module-base.md#restore-hooks.
  *
  * -- Thread affinity --
  * A parameter listener is called on whatever thread wrote the parameter. Our own UI writes on the

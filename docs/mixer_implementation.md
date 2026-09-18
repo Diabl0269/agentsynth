@@ -14,7 +14,7 @@ Main line, in dependency order:
 
 1. **P9-2 (T172) — `ChannelStrip` + `Master` + the solo gate.** Engine only. **DONE.** How it
    landed (module detail in [`docs/modules/modules.md#channel-strip-module-mixer-channel-hidden`](modules/modules.md#channel-strip-module-mixer-channel-hidden), engine detail in
-   [`docs/architecture_audio_engine.md#mixer-solo-gate-p9-2`](architecture.md) § Mixer solo gate):
+   [`docs/architecture/audio-engine.md#mixer-solo-gate`](architecture/audio-engine.md#mixer-solo-gate) (Mixer solo gate):
    - *Strip layout*: 5 raw channels a side, Left ch0 / Right `kRightBase` = 4, ch1–3 reserved;
      params `gain` (dB), `pan`, `muted`; shape + solo in extra state.
    - *Master layout*: Mix L/R on ch0/1, Direct L/R on ch2/3; Direct summed in before the fader;
@@ -608,7 +608,7 @@ Side tracks (each independent of the main line beyond its own listed dependency)
   wiring it into a default track preset (§5.7/§7 D3) is still open.
 - **T181 (FRO18) — Mixer accessibility. DONE.** After P9-5. `MixerPanelComponent` joins T159's
   focus-region registry as a 7th region (sharing the dock with "timeline" — see
-  [`docs/shortcuts.md`](shortcuts.md#mixer-column-navigation)'s Focus regions section for the two
+  [`docs/control/shortcuts.md`](control/shortcuts.md#mixer-column-navigation)'s Focus regions section for the two
   regions' `isOpen`/`open` split) and becomes the mixer's own focusable leaf
   (`setWantsKeyboardFocus(true)`); every child control inside a column gives it back up, the same
   T160 trap avoidance `TimelineTrackHeaderComponent` uses, just one level higher since a column

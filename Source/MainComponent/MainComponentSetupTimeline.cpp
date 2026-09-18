@@ -127,7 +127,8 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
 
 void MainComponent::wireTimelineHookInventory() {
     // This component owns the app's one live TimelineDoc, so it owns the four hooks that
-    // keep the rest of the system in step with it. The full inventory is in docs/architecture.md
+    // keep the rest of the system in step with it. The full inventory is in
+    // docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step
     // ("App wiring") — keep the two in sync.
     //
     //  1. PUBLISH-ON-CHANGE: every effective doc mutation notifies us, and we republish the
@@ -198,7 +199,8 @@ void MainComponent::wireTimelineClipLaneCallbacks() {
 }
 
 void MainComponent::wireTimelineRecordToggle() {
-    // MidiRecorder is now app-wired (docs/architecture.md's hook inventory gains a
+    // MidiRecorder is now app-wired
+    // (docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step gains a
     // fifth entry) — this component owns the one live MidiRecorder, since it is the only thing
     // that can see both the armed tracks (timelineDoc) and the transport bar's record button.
     audioEngine.setMidiCaptureSink(&midiRecorder);

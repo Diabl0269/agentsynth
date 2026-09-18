@@ -517,7 +517,7 @@ check_f_violations() {
 # char-up-to-12 budget: every real bare-name-plus-marker occurrence in this repo is exactly a name
 # plus ONE space plus the marker, and a wider gap risks stealing a marker that actually belongs to a
 # CLOSER, different mention sitting between this bare name and it -- a real line in this repo reads
-# roughly "root CLAUDE.md, section 8 of docs/architecture.md": the comma-space gap there must NOT
+# roughly "root CLAUDE.md, section 8 of docs/architecture/app-wiring.md": the comma-space gap there must NOT
 # let the bare CLAUDE.md name (which is not even a docs/ file) claim a section marker that check
 # C/D already validate against the docs/-prefixed path that actually follows it.
 #
