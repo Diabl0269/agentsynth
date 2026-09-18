@@ -676,9 +676,9 @@ TEST(StemExportTest, TapCapturesSilenceWhenMutedAndWhenSoloGated) {
 }
 
 // ============================================================================
-// 8. FRO15 (docs/mixer/sends-and-buses.md/docs/mixer/stem-export.md): a group/send bus is a ChannelStrip, so it gets a
-// stem for
-//    free -- and the docs/mixer/stem-export.md identity has to survive the extra path. A source's stem stays PRE-send
+// 8. FRO15 (docs/mixer/sends-and-buses.md, docs/mixer/stem-export.md): a group/send bus is a ChannelStrip, so it gets
+// a stem for
+//    free -- and the stem-export identity has to survive the extra path. A source's stem stays PRE-send
 //    (the tap copies the main legs only), so nothing is double-counted for a post-fader send and
 //    nothing is lost for a pre-fader one: it appears only in the bus's own stem.
 // ============================================================================
