@@ -449,7 +449,7 @@ without an assignment.
   validation and reattached after; **refused on the untrusted path** by
   `AIStateMapper::validatePatch` with a new `PatchValidationError::MidiRemoteNotAllowed`
   (a provider-authored mapping could never resolve to real hardware and is one more channel
-  for smuggling state). `"midiRemote"` joins the reserved-keys list in `AI_Engine.md` /
+  for smuggling state). `"midiRemote"` joins the reserved-keys list in `ai/patch-format.md` /
   `layout_selection_canvas.md §1.7`. A plain preset (`GraphEditor::savePreset`) carries no
   assignments.
 - **Core layering:** Core never touches `juce::ApplicationProperties`

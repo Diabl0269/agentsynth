@@ -121,7 +121,7 @@ public:
         // `data.deletionScheduledAt` — empty when the server sent null (no grace-period deletion
         // pending). NOTE: this endpoint writes on read server-side — the first list call after a
         // plan lapse is what sets this date — so calling listConversations() is not a
-        // side-effect-free read. See docs/AI_Engine.md.
+        // side-effect-free read. See docs/ai/history.md#server-side-conversation-history.
         juce::String deletionScheduledAt;
         juce::String transportError;
     };

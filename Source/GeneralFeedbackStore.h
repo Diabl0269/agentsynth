@@ -12,7 +12,7 @@ namespace synth {
  * sign-in state or sync outcome. P6-16 additionally syncs each record to the server
  * (`POST /v1/feedback`, fire-and-forget, gated on sign-in only — not Pro) from
  * FeedbackSettingsTab::sendFeedback(); this store itself stays local-only and has no awareness of
- * that sync. See docs/AI_Engine.md.
+ * that sync. See docs/ai/feedback.md#general-feedback.
  */
 class GeneralFeedbackStore {
 public:

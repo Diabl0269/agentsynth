@@ -12,7 +12,8 @@ namespace synth {
  *        the timeline sibling of the patch-context injection
  *        (`AIIntegrationService::buildPatchAugmentedContent`, Source/AI/AIIntegrationService/AIIntegrationService.cpp).
  *
- * ### Security model (see TimelineValidator.h and docs/AI_Engine_patch_safety.md §5c)
+ * ### Security model (see TimelineValidator.h and
+ * docs/ai/arrangement-context.md#security-model-read-path-only)
  *
  * `summarize()` is a READ path only: it never mutates the doc, the graph or the transport
  * snapshot, and nothing it emits round-trips back into the timeline (there is no "un-summarize").

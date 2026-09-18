@@ -454,7 +454,7 @@ vocabulary is enumerable and a test can assert those two mutate nothing; the com
 
 **Persistence** rides `TimelineDoc::toVar`/`fromVar` (so the project bundle and undo/redo carry
 markers with no new code), and untrusted marker data is gated by `synth::validateTimeline` — see
-[`AI_Engine_patch_safety.md`](AI_Engine_patch_safety.md). The reserved-`"timeline"` refusal on the untrusted PATCH path is
+[`ai/timeline-safety.md`](ai/timeline-safety.md). The reserved-`"timeline"` refusal on the untrusted PATCH path is
 untouched.
 
 **Grid.** `TimelinePanelComponent::paint()` draws the SAME bar/beat/subdivision hierarchy directly

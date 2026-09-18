@@ -687,5 +687,5 @@ In order, each independently shippable:
 - `docs/architecture.md` — the flat graph, latency compensation, plugin state format
 - `docs/modules.md` / `Source/Modules/CLAUDE.md` — channel-count and Dual I/O rules
 - `docs/modulation.md` — logical-port API, poly-bus wires
-- `docs/AI_Engine_patch_safety.md` — `validatePatch`, the untrusted path
-- `docs/AI_Engine.md` — reserved patch-format keys
+- `docs/ai/patch-safety.md` — `validatePatch`, the untrusted path
+- `docs/ai/patch-format.md` — reserved patch-format keys

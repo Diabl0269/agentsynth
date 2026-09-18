@@ -262,7 +262,8 @@ void AIChatComponent::restoreConversation(const juce::String& id, bool isCloud) 
             self->replayMessagesFrom(pairs);
 
             // aiService's own chatHistory is cleared, NOT re-seeded with the restored turns —
-            // there is no API for that (see this method's doc comment / docs/AI_Engine.md). The
+            // there is no API for that (see this method's doc comment /
+            // docs/ai/history.md#restoring). The
             // model has no memory of the restored conversation until new turns accumulate.
             self->aiService.clearHistory();
 

@@ -50,7 +50,7 @@ class AIChatComponent::PatchCard : public juce::Component {
 public:
     // `changes`/`diffAvailable`/`summary` come from AIIntegrationService::computePatchPreview()'s
     // before/after AIStateMapper::graphToJSON() snapshots, computed by the caller in
-    // attachPatchPreview() — see docs/AI_Engine.md "Patch Diff Preview". This IS the preview: it's
+    // attachPatchPreview() — see docs/ai/patch-preview.md. This IS the preview: it's
     // the card's default view, rendered before Apply/Merge is ever clicked. The raw JSON stays
     // available behind the "View JSON" toggle for anyone who wants it.
     //

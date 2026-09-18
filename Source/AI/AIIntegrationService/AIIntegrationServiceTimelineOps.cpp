@@ -3,7 +3,7 @@
 // clicks Apply -> apply through the host callback. A deliberate mirror of the patch card's flow: a
 // timelineOps envelope is a SIBLING of a patch suggestion, never nested inside one, so a single
 // response may legitimately carry both — each half gets its own gate and its own button. (Also
-// documented in docs/AI_Engine_patch_safety.md §9 "Sibling, never nested".)
+// documented in docs/ai/timeline-ops.md#sibling-never-nested.)
 #include "AIIntegrationService.h"
 
 namespace synth {

@@ -21,8 +21,9 @@ namespace synth {
 // Trust posture is identical to a patch card: validate() runs untrusted, previewText is shown to
 // the user, and only an explicit Apply click leads to apply() — nothing here is ever applied
 // because a model asked for it. AIStateMapper::validatePatch(trusted=false) still refuses a
-// "timeline" key inside patch JSON and always will (see docs/AI_Engine_patch_safety.md §5c "the
-// two-door model") — timeline data reaches the app through this door or not at all. Because
+// "timeline" key inside patch JSON and always will (see
+// docs/ai/timeline-safety.md#the-two-door-model) — timeline data reaches the app through this
+// door or not at all. Because
 // "timelineOps" is a different key from "timeline", a response may legitimately carry a patch and
 // an ops envelope side by side; each is validated and applied by its own gate, with its own Apply
 // affordance.
