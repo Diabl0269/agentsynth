@@ -12,10 +12,14 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 - [`docs/architecture_graph_editor.md`](architecture_graph_editor.md) — GraphEditor: per-concern translation units and the three collaborator classes
 - [`docs/architecture_app_wiring.md`](architecture_app_wiring.md) — who owns the live TimelineDoc and every hook that keeps it in step; audio recording, latency alignment, AudioClipStreamer, asset management
 - [`docs/architecture_plugin_layer.md`](architecture_plugin_layer.md) — VST3/AU host modes, ownership, state format; hosting third-party plugins inside our own graph
-- [`docs/modules.md`](modules.md) — per-module specs + poly channel layouts (Oscillator, Filter, VCA, ADSR, LFO, Sequencer, Poly MIDI, Voice Mixer, Math …)
-- [`docs/fx_modules.md`](fx_modules.md) — FX specs (Distortion, Delay, Reverb, Chorus, Phaser, Compressor, Flanger, Limiter, Pitch Shifter, Parametric EQ, Ring Modulator)
-- [`docs/modulation.md`](modulation.md) — routing model, logical-port API, poly-bus wires, attenuverters, visual signal flow
-- [`docs/Module_Development_Guide.md`](Module_Development_Guide.md) — step-by-step guide to adding a module
+## Modules
+
+- [`docs/modules/modules.md`](modules/modules.md) — hub: per-module specs (Oscillator, Filter, VCA, ADSR, LFO, Sequencer, Poly MIDI, Voice Mixer, Math, Hosted Plugin …)
+- [`docs/modules/fx-modules.md`](modules/fx-modules.md) — FX specs and the shared Dual I/O / Output Level stages (Distortion, Delay, Reverb, Chorus, Phaser, Compressor, Flanger, Limiter, Gate, Bitcrusher, Parametric EQ, Pitch Shifter, Ring Modulator)
+- [`docs/modules/modulation.md`](modules/modulation.md) — routing model, logical-port API, poly-bus wires, attenuverters, visual signal flow
+- [`docs/modules/poly-channel-layout.md`](modules/poly-channel-layout.md) — the raw channel table for every poly-capable module
+- [`docs/modules/wavetable.md`](modules/wavetable.md) — the Wavetable oscillator: tables, warp, mip pyramid, interpolation, file import
+- [`docs/modules/development-guide.md`](modules/development-guide.md) — step-by-step guide to adding a module
 
 ## Layout, canvas & theming
 

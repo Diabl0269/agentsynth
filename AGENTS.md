@@ -71,14 +71,14 @@ Everything else below is a tripwire index. The full rule lives in the named area
 
 **Modules & channels** (`Source/Modules/CLAUDE.md`):
 
-- A second audio leg goes on a new `kRightBase` block, never ch1; pan is a balance law (unity centre); Dual I/O is **inherited** from channel shape (`hasStereoOutputPairShape`), never per-module registered, and "off" drops cables on the hidden right block. → [`docs/modules.md`](docs/modules.md)
-- A module's channel count is fixed for its lifetime; variable-port modules declare their maximum and vary only the visible count; an over-wide hosted plugin is refused, never truncated. → [`docs/modules.md`](docs/modules.md)
-- Every Wavetable warp mode must prove it doesn't alias (a documented defence + a parameterised-test entry). → [`docs/modules.md`](docs/modules.md)
+- A second audio leg goes on a new `kRightBase` block, never ch1; pan is a balance law (unity centre); Dual I/O is **inherited** from channel shape (`hasStereoOutputPairShape`), never per-module registered, and "off" drops cables on the hidden right block. → [`docs/modules/fx-modules.md#stereo-io-dual-io-toggle`](docs/modules/fx-modules.md#stereo-io-dual-io-toggle)
+- A module's channel count is fixed for its lifetime; variable-port modules declare their maximum and vary only the visible count; an over-wide hosted plugin is refused, never truncated. → [`docs/modules/modules.md#hosted-plugin-module-third-party-vst3-au-hidden`](docs/modules/modules.md#hosted-plugin-module-third-party-vst3-au-hidden)
+- Every Wavetable warp mode must prove it doesn't alias (a documented defence + a parameterised-test entry). → [`docs/modules/wavetable.md#warp`](docs/modules/wavetable.md#warp)
 
 **Timeline** (`Source/Timeline/CLAUDE.md`):
 
-- Audio clips STREAM; only the prefetch thread may touch a reader; nothing on the audio path opens a file. → [`docs/architecture.md`](docs/architecture.md) · [`docs/modules.md`](docs/modules.md)
-- Hosted-plugin automation lanes resolve only through `synth::resolveLaneParameter`, never by index alone. → [`docs/modulation.md`](docs/modulation.md) · [`docs/modules.md`](docs/modules.md)
+- Audio clips STREAM; only the prefetch thread may touch a reader; nothing on the audio path opens a file. → [`docs/architecture.md`](docs/architecture.md) · [`docs/modules/modules.md#track-audio-module-timeline-audio-source-hidden`](docs/modules/modules.md#track-audio-module-timeline-audio-source-hidden)
+- Hosted-plugin automation lanes resolve only through `synth::resolveLaneParameter`, never by index alone. → [`docs/modules/modulation.md#hosted-plugin-parameters-as-automation-lanes`](docs/modules/modulation.md#hosted-plugin-parameters-as-automation-lanes) · [`docs/modules/modules.md#load-ux`](docs/modules/modules.md#load-ux)
 
 **AI & trust boundaries** (`Source/AI/CLAUDE.md`):
 
