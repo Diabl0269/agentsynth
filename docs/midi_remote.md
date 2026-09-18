@@ -155,8 +155,15 @@ exactly as a mouse drag does: `beginChangeGesture` on the first message, `setVal
 per value, `endChangeGesture` after a short idle.
 
 **Decision: B.** The MIDI thread classifies and decodes the message and pushes a small POD event
-onto a lock-free SPSC FIFO; a message-thread drain (a 60 Hz `juce::Timer`, kicked early by an
-`AsyncUpdater` on the first event so an idle app reacts within a frame) applies it.
+onto its source's lock-free SPSC FIFO (§4.4); a message-thread drain applies it.
+
+*The drain is a plain 60 Hz `juce::Timer` and nothing wakes it from the MIDI path.* An
+`AsyncUpdater` kick was the original plan and is wrong: `triggerAsyncUpdate` takes a
+`CriticalSection` and allocates inside the system message queue, which in the plugin build would
+be a lock and an allocation on the audio thread. The timer instead simply runs whenever the
+published table is non-empty or a learn is armed — both message-thread facts, needing no
+cross-thread signal — and stops when neither holds. The worst-case latency is unchanged at one
+frame.
 
 *Why:* goal 6. Option A is right for playback automation because automation must *not* be
 recorded, undone or host-notified — it is a transient effect. A hardware knob is the opposite: it
@@ -191,19 +198,50 @@ it as a recording bug:* mapped CCs are absent from `MidiRecorder`'s take and fro
 "I want both" case. Unassigned controls on a profile are **not** consumed — detecting a control
 onto a surface never changes what the patch hears until you assign it.
 
+*Second stated consequence, for the same reason:* an assignment whose **target no longer
+resolves** (its node was deleted, or its hosted plugin has no instance) is still consumed. The
+assignment exists, so the control still belongs to MIDI Remote and the message is swallowed
+rather than reaching the patch. The alternative — falling through to the graph once a target
+dies — is worse: deleting a node would silently turn a mapped knob into a CC source that starts
+landing in recording takes, i.e. a control's behaviour would flip based on whether some
+unrelated node happens to exist. Consuming keeps "this control is mine" stable, and the panel's
+orphan display is where the user finds out and re-points it. Only a control with *no assignment
+at all* falls through.
+
 ### 4.4 Threading: the mapping table crosses threads
 
 The MIDI thread needs the consume filter and the learn-armed state inside
 `handleIncomingMidiMessage`; the message thread edits assignments and profiles.
 
 **Decision — a tripwire:** the engine never takes a lock on the MIDI path. The live mapping
-table is an **immutable snapshot** (`RemoteMappingSnapshot`: flat arrays of
-`{messageKey → assignment}` built on the message thread) published by **atomic pointer swap**
-(the same discipline as `EpochExchange` / the automation binding table: build, publish, retire
-the old one only after a grace period or via `std::atomic<std::shared_ptr<>>`). The learn-armed
-state is a single `std::atomic<LearnArm>` (target token + a settle-window start time). The
-only thing the MIDI thread writes is the SPSC FIFO. Anyone reaching for a `CriticalSection`
-here is doing it wrong.
+table is an **immutable snapshot** (`RemoteMappingSnapshot`: flat sorted arrays of
+`{packed message key → slot}` built on the message thread) published by **atomic pointer swap**.
+The learn-armed state is a single `std::atomic<std::uint32_t>` token (0 = disarmed). The only
+thing the MIDI thread writes is its source's lock-free FIFO. Anyone reaching for a
+`CriticalSection` here is doing it wrong.
+
+**There is more than one reader, and that decides the mechanism** (settled while building the
+engine, 2026-09-18). Standalone opens one `juce::MidiInput` per profiled device and each may
+deliver on its own driver thread; hosted delivers on the audio thread. So:
+
+- Not `EpochExchange` (`Source/Timeline/EpochExchange.h`, and note it is in `Timeline/`, not
+  `AudioEngine/`). It is single-consumer by construction — one epoch counter bumped once per
+  audio block by the one audio thread. The MIDI path has no block boundary to bump on, and its
+  "safe two epochs later" rule has no meaning with N readers.
+- Not `std::atomic<std::shared_ptr<const Snapshot>>`. It is not lock-free in any shipping
+  standard library — libstdc++ and MSVC use a spinlock, libc++ a mutex pool. In the plugin build
+  that is a lock on the *audio* thread, i.e. the exact thing this section forbids.
+- **Instead:** `std::atomic<const Snapshot*>` + a `std::atomic<int>` reader count + a
+  message-thread retire list, freed on the drain tick only when the count reads zero. A reader
+  holding a retired snapshot must have loaded the pointer before the swap, and its increment
+  precedes its load; so if the count reads zero its decrement has already happened, and a reader
+  arriving after the check cannot obtain the retired pointer at all. The proof is written out in
+  `Source/MidiRemote/RemoteEngine/RemoteMappingSnapshot.h`.
+- **One FIFO per source, not one shared FIFO.** `juce::AbstractFifo` (what `AutomationUiFeed`
+  uses) is single-producer, so a shared ring would be torn by two devices moving at once. Each
+  source owns a pre-allocated lane; a lane index is handed out on the message thread the first
+  time a source key is seen and is never recycled, so a lane can never gain a second concurrent
+  producer.
 
 ### 4.5 Learn: what does the first message mean?
 
@@ -358,14 +396,17 @@ Rules:
 ```text
 MIDI thread (or the host's audio thread in Hosted mode)
   RemoteEngine::handleMessage(sourceKey, const MidiMessage&)   // called from AudioEngine::handleIncomingMidiMessage
-    1. learn-armed?  → feed the settle window (atomic state + a tiny fixed-size histogram); return consumed=false
+    1. learn-armed?  → push RemoteEvent{kind=learnCandidate, spec}; return consumed=false
+                        (the 300 ms settle histogram is built on the MESSAGE thread during drain:
+                         §4.4 says the FIFO is the only thing this thread writes, and it means it)
     2. snapshot = table.load(acquire); look up (sourceKey, MessageSpec) → assignment slot
     3. no slot → return consumed=false (message flows to the graph as today)
     4. decode: abs7 → 0..1 | relative → delta | button → pressed/released
-    5. push RemoteEvent{slotIndex, kind, value} onto the SPSC FIFO; return consumed = !profile.passMapped
+    5. push RemoteEvent{slotIndex, kind, value} onto THIS SOURCE's SPSC FIFO (§4.4);
+       return consumed = !profile.passMapped
 
 message thread
-  RemoteEngine::drain()   // 60 Hz timer + AsyncUpdater kick on first event
+  RemoteEngine::drain()   // 60 Hz timer, running while the table is non-empty or a learn is armed
     per event: resolve slot → live target (cached from the last reconcile)
       parameter: takeover(value, current) → if first in gesture: beginChangeGesture; setValueNotifyingHost; arm idle timer
       action   : commandManager.invokeDirectly(commandId, asynchronously=false) on press (per buttonMode)

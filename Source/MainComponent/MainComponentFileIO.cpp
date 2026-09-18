@@ -167,6 +167,9 @@ bool MainComponent::loadBundleFromFile(const juce::File& bundleDir) {
         return false;
     }
 
+    // FRO127: ProjectBundle::load just replaced midiRemoteDoc wholesale — the engine's own copy
+    // must follow before the reconcile below re-resolves targets against it.
+    remoteEngine.setAssignments(midiRemoteDoc.assignments);
     // ProjectBundle::load already reconciled once; this republishes the freshly loaded document
     // (and rebinds the recorder) against the graph as it now stands.
     reconcileTimelineAfterGraphChange();
@@ -206,6 +209,8 @@ bool MainComponent::loadAutosaveFromFile(const juce::File& bundleDir) {
         return false;
     }
 
+    // FRO127: loadAutosave just replaced midiRemoteDoc wholesale, same as loadBundleFromFile above.
+    remoteEngine.setAssignments(midiRemoteDoc.assignments);
     reconcileTimelineAfterGraphChange();
     // Deliberately NOT markDocumentClean(): the recovered state is not what's on disk (project.json
     // still holds the older, last-explicitly-saved content), so the document must read as dirty —

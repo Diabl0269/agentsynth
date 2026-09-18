@@ -102,6 +102,11 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     wireGraphEditorCallbacks();
     wirePluginScanAndRecents(); // ORDER: HostMode-dependent (ownedAudioEngine == nullptr)
     wireCommandsAndShortcuts(); // ORDER: keep the "no KeyListener" comment
+    // ORDER: after commandManager exists (the action invoker dispatches through it) and BEFORE the
+    // initialiseAudioEngine() early-return below — that return only skips the app-only welcome
+    // screen/focus regions in Hosted mode, and MIDI Remote must still wire up for a hosted plugin
+    // (docs/midi_remote.md §4.8's hostSourceKey exists exactly for that case).
+    wireMidiRemoteEngine();
     addCanvasAndPanels();
     addToolbarChrome(); // ORDER: z-order -- before any toolbar button
     addFileButtons();
@@ -199,6 +204,13 @@ MainComponent::~MainComponent() {
     // that are about to go.
     timelineDoc.removeListener(this);
     timelinePanel.setTimelineDoc(nullptr);
+    // MUST run before remoteEngine itself is destroyed (declaration order below destroys it at the
+    // end of this body): setRemoteMessageSink(nullptr) publishes-then-drains (see AudioEngine.h's
+    // comment on the setter), so once this returns no audio callback can still be inside
+    // RemoteEngine::handleMessage reading the old pointer — the same borrowed-pointer contract as
+    // the two calls below, just for a sink whose destructor (unlike MidiRecorder/AutomationRecorder,
+    // both owned by MainComponent for the process's whole life) is about to run in THIS destructor.
+    audioEngine.setRemoteMessageSink(nullptr);
     audioEngine.setAutomationRecorder(nullptr);
     audioEngine.setMidiCaptureSink(nullptr);
     automationRecorder.detach();

@@ -22,6 +22,10 @@
 namespace synth {
 class MidiRecorder; // Forward declaration (Source/Timeline/MidiRecorder.h)
 class TimelineDoc;  // Forward declaration (Source/Timeline/TimelineDoc/TimelineDoc.h)
+
+namespace midi {
+class RemoteMessageSink; // Forward declaration (Source/MidiRemote/RemoteEngine/RemoteMessageSink.h)
+} // namespace midi
 } // namespace synth
 
 class AudioEngine
@@ -217,6 +221,10 @@ public:
     void audioDeviceStopped() override;
 
     void handleIncomingMidiMessage(juce::MidiInput* source, const juce::MidiMessage& message) override;
+    // MIDI driver thread, or the audio thread from processHostBlock. `source` is optional and used
+    // only for the ExternalMidiModule name match. Rationale: AudioEngineMidi.cpp.
+    void handleIncomingMidiMessageFromSource(const juce::String& sourceKey, const juce::MidiMessage& message,
+                                             juce::MidiInput* source = nullptr);
 
     juce::AudioProcessorGraph& getGraph() { return mainProcessorGraph; }
     juce::AudioDeviceManager& getDeviceManager() { return deviceManager; }
@@ -330,6 +338,14 @@ public:
     void setAutomationRecorder(synth::AutomationRecorder* recorder) noexcept {
         automationRecordState_.store(recorder != nullptr ? &recorder->getAudioState() : nullptr,
                                      std::memory_order_seq_cst);
+        drainAudioCallbacks();
+    }
+
+    // Borrowed, never owned; null by default. Message thread. The owner MUST clear this to nullptr
+    // before destroying the sink — this call's drain is what makes that safe for the audio thread
+    // (docs/midi_remote.md §4.3, docs/architecture_audio_engine.md).
+    void setRemoteMessageSink(synth::midi::RemoteMessageSink* sink) noexcept {
+        remoteMessageSink_.store(sink, std::memory_order_seq_cst);
         drainAudioCallbacks();
     }
 
@@ -474,6 +490,10 @@ public:
     bool isModBypassed(juce::AudioProcessorGraph::NodeID attenuverterNodeID) const;
     void updateModuleNames();
     void ensureMidiDeviceOpen(const juce::String& deviceName);
+    // Device *names*; a no-op in Hosted mode. Caller picks which, this only opens them.
+    void openMidiDevicesForRemote(const std::vector<juce::String>& deviceNames);
+    // Device *identifiers* (the MIDI Remote source key), never names. Empty in Hosted mode.
+    std::vector<juce::String> getOpenMidiInputIdentifiers() const;
 
 protected:
     // TEST SEAM, and the ONE place initialise() touches real hardware in Standalone mode:
@@ -564,6 +584,8 @@ private:
     // Borrowed, never owned. Set by setAutomationRecorder(); read once per render pass and
     // handed straight to the applier. Null default means "no recorder", not "no automation".
     std::atomic<const synth::AutomationRecordState*> automationRecordState_{nullptr};
+    // Borrowed, never owned. Read on the MIDI driver thread or the audio thread; null = idle.
+    std::atomic<synth::midi::RemoteMessageSink*> remoteMessageSink_{nullptr};
     // Render passes entered / left, bumped on the way into and out of renderNextBlock so the gap
     // between them is exactly the window in which the two borrowed pointers above are read and
     // used. Monotonic rather than an in-flight count because an engine inside a host renders
@@ -674,6 +696,8 @@ private:
     // `sliceMidi_` is refilled per slice with ensureSize()'d storage that clear() keeps.
     std::vector<float*> sliceChannelPointers_;
     juce::MidiBuffer sliceMidi_;
+    // Scratch for processHostBlock's remote pass; see AudioEngineHostMode.cpp. Never reallocates.
+    juce::MidiBuffer remoteHostScratchMidi_;
 
     juce::MidiMessageCollector midiMessageCollector;
     std::vector<std::unique_ptr<juce::MidiInput>> midiInputs;
