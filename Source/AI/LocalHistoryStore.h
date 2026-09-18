@@ -40,7 +40,7 @@ struct LocalConversation {
  *        `<userAppData>/<kSettingsFolderName>/History/<id>.json` (P6-8) — the local half of the
  *        local-first/cloud-as-sync history design. Every session writes here regardless of plan;
  *        Pro sessions additionally sync via the server's `x-conversation-id` mechanism
- *        (AIIntegrationService::setConversationId(), see docs/AI_Engine.md).
+ *        (AIIntegrationService::setConversationId(), see docs/ai/history.md#local-history).
  *
  * Follows SnippetManager's exact convention (Source/SnippetManager.h): static methods taking an
  * explicit directory (so tests never touch the real per-user location), a

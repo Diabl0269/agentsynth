@@ -480,8 +480,8 @@ int main(int argc, char* argv[]) {
         root->setProperty("stoppedForBudget", stoppedForBudget);
         // Sampling actually applied to the provider — omitted entirely for --provider remote,
         // which ignores these, so a report can never claim pinned sampling that never happened
-        // (docs/AI_Engine.md: "quoted validity numbers must name the model and the sampling
-        // settings").
+        // (docs/ai/patch-safety.md#measuring: a quoted rate must name the model and the sampling
+        // settings alongside it).
         if (samplingAppliesToThisProvider) {
             root->setProperty("temperature", temperature);
             root->setProperty("seed", seed);

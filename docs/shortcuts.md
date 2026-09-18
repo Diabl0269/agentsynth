@@ -674,7 +674,7 @@ find in a rebinding list. Each surface's own `keyPressed()` hardcodes them direc
 
 | Shortcut | Context | Action |
 |----------|---------|--------|
-| Escape | AI panel, request in flight | Cancel the in-flight AI request (same as the Cancel button — actually aborts it, see [`AI_Engine_providers_accounts.md`](AI_Engine_providers_accounts.md#10-request-cancellation)) |
+| Escape | AI panel, request in flight | Cancel the in-flight AI request (same as the Cancel button — actually aborts it, see [`ai/ollama-provider.md`](ai/ollama-provider.md#request-cancellation)) |
 | Escape | Canvas, modules selected | Clear the selection |
 | Delete / Backspace | Canvas, modules selected | Delete every selected module (one undo step) |
 | Escape | Clip lanes, clips selected | Clear the clip selection |

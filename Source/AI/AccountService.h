@@ -30,8 +30,8 @@ struct AccountSnapshot {
     int requestsUsed = 0;
     bool entitlementKnown = false;
 
-    // P6-7: opt-in flag for hosted-mode prompt collection used for product learning (human
-    // review, never model training/fine-tuning — see docs/AI_Engine.md). Off by default, matching
+    // P6-7: opt-in flag for hosted-mode prompt collection used for product learning (human review,
+    // never training/fine-tuning — see docs/ai/feedback.md#opt-in-prompt-collection). Off by default, matching
     // the server's default, so a default-constructed/not-yet-fetched snapshot is indistinguishable
     // from "known opted out" — same reasoning as `plan`'s empty-string default above, and safe
     // here for the same reason: a settings checkbox reading this before the first fetch shows

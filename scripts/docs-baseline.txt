@@ -5,11 +5,6 @@
 # --allow-growth is the deliberate, reviewed exception. See check-docs.sh's own header comment
 # for the full mechanism, and docs/docs-guard.md for why only naming is grandfathered -- every
 # other check (B/C/D/E) is zero-tolerance and never baselined.
-naming docs/AI_Engine.md
-naming docs/AI_Engine_chat_component.md
-naming docs/AI_Engine_patch_safety.md
-naming docs/AI_Engine_providers_accounts.md
-naming docs/AI_Usage_Guide.md
 naming docs/Module_Development_Guide.md
 naming docs/architecture_app_wiring.md
 naming docs/architecture_audio_engine.md

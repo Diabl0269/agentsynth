@@ -78,7 +78,7 @@ public:
     // The write half of the timeline seam. A timelineOps envelope is a SIBLING of a patch
     // suggestion, never nested inside one — a "timeline" key inside patch JSON stays refused by
     // validatePatch forever. See AIIntegrationServiceTimelineOps.cpp for the full flow (also
-    // documented in docs/AI_Engine_patch_safety.md §9 "Sibling, never nested").
+    // documented in docs/ai/timeline-ops.md#sibling-never-nested).
 
     /** The timelineOps envelope carried by a model response, or a void var if it has none. Static
      *  and public so a harness/test can reproduce the real extraction. */
@@ -280,7 +280,7 @@ private:
 
     // The (nodeUuid, paramId, range) inventory a `writeLane` op needs. See
     // AIIntegrationServiceRequestSending.cpp for why uuids are included here despite
-    // ArrangementContext's no-uuid rule (also documented in docs/AI_Engine_patch_safety.md §9).
+    // ArrangementContext's no-uuid rule (also in docs/ai/timeline-ops.md#the-local-path).
     juce::String buildAutomationTargetsSection() const;
 
     // One automatable parameter on one addressable node — the shared enumeration behind BOTH

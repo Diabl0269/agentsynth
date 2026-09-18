@@ -168,7 +168,7 @@ std::vector<AIIntegrationService::AutomationTargetInfo> AIIntegrationService::en
 // better and a leak buys nothing); this section is the ADDRESSING channel without which the
 // writeLane grammar is unusable. A node uuid is random per-node identity — never a file path,
 // plugin identifier or factory key — and validate() only accepts pairs that resolve against the
-// live graph anyway. (Also documented in docs/AI_Engine_patch_safety.md §9.)
+// live graph anyway. (Also documented in docs/ai/timeline-ops.md#the-local-path.)
 juce::String AIIntegrationService::buildAutomationTargetsSection() const {
     // One line per addressable node: `- "<uuid>" <Display Name>: <paramId> [min..max], ...`.
     // Bounded like the arrangement summary: whole LINES are dropped from the tail past the cap,

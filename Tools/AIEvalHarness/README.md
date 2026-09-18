@@ -23,17 +23,18 @@ cmake --build build --target AIEvalHarness
 | `--runs` | `1` | How many times to replay the whole scenario set. |
 | `--host` | `http://localhost:11434` (`ollama`) / `http://localhost:8787` (`remote`) | Base URL of the provider being measured. |
 | `--json` | *(none)* | Write per-attempt records to this file for later analysis. |
-| `--mode` | `patch` | `patch` replays the 40 golden prompts against `getPatchSchema()`. `timeline` replays a separate 8-prompt set against `getPatchSchemaWithTimelineOps()` instead — same request path, the extended schema. See P6-13 below. |
+| `--mode` | `patch` | `patch` replays the 40 golden prompts against `getPatchSchema()`. `timeline` replays a separate 8-prompt set against `getPatchSchemaWithTimelineOps()` instead — same request path, the extended schema. See Structured-output corruption below. |
 | `--think` | *(unset)* | `--provider ollama` only. `true`/`false` — sets Ollama's `think` request field. Unset sends today's exact request body (no `think` key at all). |
 | `--temperature` | *(unset)* | `--provider ollama` only. Nests under the request's `options.temperature`. |
 | `--seed` | *(unset)* | `--provider ollama` only. Nests under the request's `options.seed` — pin this alongside `--temperature 0` for a reproducible before/after comparison. |
 
-### P6-13: structured-output corruption investigation
+### Structured-output corruption
 
 `--think`/`--temperature`/`--seed`/`--mode timeline` exist to reproduce and compare fixes for a
 corruption bug where local Ollama structured-output decoding leaked model reasoning text into a
-constrained JSON string value (root-caused in `docs/AI_Engine.md`'s "P6-13" section — see that doc
-for the confirmed `{}`-open-schema defect and the `think`-field investigation). `--mode timeline`'s
+constrained JSON string value (see `docs/ai/structured-output.md` for the confirmed
+`{}`-open-schema defect, and `docs/ai/ollama-provider.md#sampling-options` for why `think: false`
+is not a fix for it). `--mode timeline`'s
 summary reports `timelineOps present in response` / `timelineOps corrupted/rejected` — validated
 via `AIIntegrationService::previewTimelineOps()` (checked, never applied), the timeline
 counterpart of the `applyError` corruption proxy the plain patch mode already surfaces (a

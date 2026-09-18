@@ -75,7 +75,8 @@ public:
         updateHostFieldForSelectedProvider();
 
         // P6-8: local chat-history retention. This is deliberately the only *local* retention
-        // control — cloud retention stays the server's single global default (see docs/AI_Engine.md).
+        // control — cloud retention stays the server's single global default
+        // (see docs/ai/history.md#retention).
         // Added AFTER providerCombo/hostEditor above so existing tests that grab "the first
         // ComboBox"/"the first TextEditor" in this tab keep resolving to the provider controls.
         addAndMakeVisible(historyRetentionLabel);
@@ -102,7 +103,8 @@ public:
         // Request timeout: how long the UI watchdog waits before cancelling an in-flight request
         // and how long the active provider's own HTTP connection timeout is set to — the SAME
         // value for both, by construction, so the two mechanisms can't drift apart the way the
-        // old hardcoded 120s (UI)/240s (provider) pair did. See docs/AI_Engine_chat_component.md.
+        // old hardcoded 120s (UI)/240s (provider) pair did. See
+        // docs/ai/chat-component.md#request-timeout.
         addAndMakeVisible(requestTimeoutLabel);
         requestTimeoutLabel.setText("Request Timeout:", juce::dontSendNotification);
 
@@ -127,7 +129,8 @@ public:
         };
 
         // P6-7: opt-in prompt collection for product learning. Human review only — never used to
-        // train/fine-tune models (see docs/AI_Engine.md, and the "we do not use your prompts to
+        // train/fine-tune models (see docs/ai/feedback.md#opt-in-prompt-collection, and the
+        // "we do not use your prompts to
         // train AI models" promise in the privacy policy this deliberately doesn't touch).
         // Disabled + "sign in required" tooltip when signed out, same gating precedent as
         // AccountRow/PlanBadge reading AccountService's published state.

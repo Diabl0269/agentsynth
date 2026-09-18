@@ -10,9 +10,9 @@ namespace synth {
  *
  * The device id is NOT a secret -- it is not tied to account access and grants no capability by
  * itself; it just lets the backend recognize "this install" for an anonymous free-trial tier and
- * as anti-abuse signal once signed in (see docs/AI_Engine.md). That is exactly why it belongs in a
- * plain file rather than the Keychain (contrast with KeychainTokenStore, which stores the refresh
- * token -- a real credential).
+ * as anti-abuse signal once signed in (see docs/ai/accounts.md#device-id-and-anonymous-trial). That
+ * is exactly why it belongs in a plain file rather than the Keychain (contrast with
+ * KeychainTokenStore, which stores the refresh token -- a real credential).
  *
  * One id is generated with juce::Uuid on first run and reused for the lifetime of the install.
  * If the backing file is missing, empty, or its contents don't look like a plausible id (wrong

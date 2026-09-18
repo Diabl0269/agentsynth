@@ -381,7 +381,7 @@ private:
     // P6-8 downgrade notice: "Your subscription has lapsed — your saved history will be deleted on
     // {date}." Shown only once signed in, !isProPlan(snapshot), AND a grace-period deletion date is
     // known — which is learned ONLY from an explicit History-button click (listConversations()
-    // writes on read server-side, see docs/AI_Engine.md — this must not be polled). See
+    // writes on read, docs/ai/history.md#server-side-conversation-history — must not be polled). See
     // historyButtonClicked()/updateDowngradeStrip().
     juce::Label downgradeStripLabel;
     juce::String lastDeletionScheduledAt; // "" = none known/pending
@@ -479,8 +479,8 @@ private:
     // message carrying a patch is created (every messages.push_back() site that can set
     // jsonPatch) — NOT in updateChatDisplay(), which reruns on every redraw (message arrival,
     // apply result, retry announcement) and would otherwise rebuild a scratch graph per
-    // patch-bearing message on every single one of those redraws. See docs/AI_Engine.md
-    // "Patch Diff Preview". Also more correct, not just faster: the diff is a snapshot of the
+    // patch-bearing message on every single one of those redraws. See
+    // docs/ai/patch-preview.md. Also more correct, not just faster: the diff is a snapshot of the
     // graph at proposal time and must not silently change if the live graph is edited later
     // (e.g. an earlier patch in the same conversation gets applied) while this message is still
     // on screen. No-op when data.jsonPatch is empty. Reads `messages` (must already contain every
@@ -551,7 +551,7 @@ private:
     // regardless of plan — that call is the only source of a pending grace-period deletion date
     // (see lastDeletionScheduledAt), and when the plan IS Pro its result is the list itself. Never
     // called speculatively/on a timer — see ListConversationsResult's read-writes-on-read caveat in
-    // docs/AI_Engine.md.
+    // docs/ai/history.md#server-side-conversation-history.
     void historyButtonClicked();
 
     // P6-8: builds a juce::PopupMenu from `list` (a "Clear my history" item plus one row per
@@ -565,7 +565,7 @@ private:
     // subsequent exchanges in this session continue THIS conversation locally; for a cloud (Pro)
     // restore, also calls aiService.setConversationId(id) so the server continues the same thread.
     // Deliberately does NOT attempt to re-seed aiService's chatHistory with the restored turns
-    // (there is no API for that — see docs/AI_Engine.md's "Local History (P6-8)" section), so the
+    // (there is no API for that — see docs/ai/history.md#restoring), so the
     // model has no memory of the restored conversation until new turns accumulate.
     void restoreConversation(const juce::String& id, bool isCloud);
 

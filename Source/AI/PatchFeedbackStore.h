@@ -11,7 +11,8 @@ namespace synth {
  * to the server, keyed on the optional conversationId/messageId below, but ONLY when the account
  * is signed-in Pro and a server-assigned message id is available (live, same-session assistant
  * messages only — see AIChatComponent::MessageData::serverMessageId); ratings on restored
- * conversations, offline sessions, and free-tier accounts stay local-only. See docs/AI_Engine.md.
+ * conversations, offline sessions, and free-tier accounts stay local-only. See
+ * docs/ai/feedback.md#patch-feedback.
  *
  * One JSON object per line (JSON Lines), appended — never rewritten. A user who edits a comment
  * after the fact produces a second line for the same patch/rating rather than mutating the first;

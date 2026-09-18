@@ -50,11 +50,23 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 
 ## AI
 
-- [`docs/AI_Engine.md`](AI_Engine.md) · [`docs/AI_Usage_Guide.md`](AI_Usage_Guide.md) — AI patching subsystem: architecture, communication pattern, patch-diff/feedback UI
-- [`docs/AI_Engine_patch_safety.md`](AI_Engine_patch_safety.md) — patch validity/few-shot/untrusted-timeline data/arrangement context/timeline operations/agentic security model
-- [`docs/AI_Engine_chat_component.md`](AI_Engine_chat_component.md) — AIChatComponent and its logging rules
-- [`docs/AI_Engine_providers_accounts.md`](AI_Engine_providers_accounts.md) — conversation history, provider registry (OllamaProvider/RemoteProvider), account sign-in, device id/trial, quota UI
-- [`docs/agents.md`](agents.md) — short overview of the AI providers (local Ollama, remote) and how the assistant is wired in
+- [`docs/ai/agents.md`](ai/agents.md) — overview: the two providers and what the assistant may author
+- [`docs/ai/usage-guide.md`](ai/usage-guide.md) — user-facing guide: prompting, timeline changes, the Patch/Arrange selector, troubleshooting
+- [`docs/ai/engine.md`](ai/engine.md) — AIIntegrationService/AIStateMapper architecture, request flow, the AI patch undo contract
+- [`docs/ai/patch-format.md`](ai/patch-format.md) — the JSON patch dialect: nodes/connections/params, `state`/`uuid`/`displayName`, reserved keys and forward compatibility
+- [`docs/ai/patch-safety.md`](ai/patch-safety.md) — `validatePatch`, the non-authorable module set, constrained decoding/retry/repair, worked examples, the harnesses
+- [`docs/ai/patch-preview.md`](ai/patch-preview.md) — the patch card's diff preview and `PatchDiff`'s snapshot-based diff
+- [`docs/ai/timeline-safety.md`](ai/timeline-safety.md) — `validateTimeline`, the two-door model, the checks, and the agentic security model
+- [`docs/ai/timeline-ops.md`](ai/timeline-ops.md) — the `timelineOps` envelope, `placeMidiClip`, trust posture, the chat seam
+- [`docs/ai/arrangement-context.md`](ai/arrangement-context.md) — the read-only arrangement summary sent to the model
+- [`docs/ai/chat-component.md`](ai/chat-component.md) — AIChatComponent: bubbles, timeout, logging rules, the model-discovery and auth-token ordering contracts
+- [`docs/ai/providers.md`](ai/providers.md) — the provider registry, which provider a launch gets, hosted-mode disclosure
+- [`docs/ai/ollama-provider.md`](ai/ollama-provider.md) — OllamaProvider: fail-fast, the worker-thread contract, request cancellation
+- [`docs/ai/remote-provider.md`](ai/remote-provider.md) — RemoteProvider: wire contract, error-kind mapping, capability requests and arrange mode
+- [`docs/ai/structured-output.md`](ai/structured-output.md) — schema generation, the vendored envelope codegen, grammar-compiler pitfalls
+- [`docs/ai/accounts.md`](ai/accounts.md) — sign-in surface, rotation-before-use, device id and trial, quota UI and PlanBadge
+- [`docs/ai/history.md`](ai/history.md) — server-side and local conversation history, retention, the history panel
+- [`docs/ai/feedback.md`](ai/feedback.md) — patch thumbs and their sync, general feedback, opt-in prompt collection
 
 ## Testing, CI & distribution
 

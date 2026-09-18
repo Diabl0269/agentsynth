@@ -15,8 +15,9 @@ AIIntegrationService::~AIIntegrationService() {}
 void AIIntegrationService::setProvider(std::unique_ptr<AIProvider> newProvider) {
     provider = std::move(newProvider);
 
-    // Re-push contract (mirrors AIChatComponent::refreshModels(), see docs/AI_Engine_chat_component.md "Model
-    // Discovery Ordering Contract"): a caller may have called setAuthToken() before a provider
+    // Re-push contract (mirrors AIChatComponent::refreshModels(), see
+    // docs/ai/chat-component.md#model-discovery-ordering-contract): a caller may have called
+    // setAuthToken() before a provider
     // existed at all, so the value must be forwarded to whatever provider is installed now.
     if (provider && currentAuthToken.isNotEmpty())
         provider->setAuthToken(currentAuthToken);
@@ -36,7 +37,7 @@ void AIIntegrationService::setProvider(std::unique_ptr<AIProvider> newProvider) 
 
 // Stored regardless of whether a provider is currently installed — setProvider() re-pushes it to
 // whatever provider it installs next, mirroring the model-discovery re-push contract documented
-// for this class (see docs/AI_Engine_chat_component.md "Model Discovery Ordering Contract"):
+// for this class (see docs/ai/chat-component.md#model-discovery-ordering-contract):
 // AIChatComponent/AccountService can be wired up before MainComponent::initialiseCommon() installs
 // the real provider, so a value set first must not be lost.
 void AIIntegrationService::setAuthToken(const juce::String& token) {
@@ -63,7 +64,7 @@ void AIIntegrationService::setConversationId(const juce::String& id) {
 // token or conversation id there's always a meaningful value) to whatever provider it installs
 // next — otherwise a provider swap would silently fall back to that provider's own hardcoded
 // default, re-introducing the exact drift this value exists to prevent (see
-// docs/AI_Engine_chat_component.md, request timeout section).
+// docs/ai/chat-component.md#request-timeout).
 void AIIntegrationService::setRequestTimeoutMs(int timeoutMs) {
     currentRequestTimeoutMs = timeoutMs;
     if (provider)
