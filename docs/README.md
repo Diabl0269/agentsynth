@@ -19,10 +19,24 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 
 ## Layout, canvas & theming
 
-- [`docs/layout.md`](layout.md) — grid/snap/auto-arrange, toolbar & status-bar chrome, width buckets, LayoutUtil API, drag affordance + smart connections
-- [`docs/layout_visuals_animation.md`](layout_visuals_animation.md) — visualizer components, UI rendering performance, animation system (UIAnimation.h, AnimationDriver, PanelSlide, micro-interactions), alignment guides
-- [`docs/layout_selection_canvas.md`](layout_selection_canvas.md) — multi-select + group drag + snippets/clipboard (§1.5), collapsible library sections, cable interaction, minimap overlay
-- [`docs/theming.md`](theming.md) — theme tokens, SVG icons, JSON user themes, LookAndFeel, font limitation
+- [`docs/layout/layout.md`](layout/layout.md) — hub: the soft grid, anti-overlap search, auto-arrange, the `LayoutUtil` API, drag affordance and alignment guides
+- [`docs/layout/chrome.md`](layout/chrome.md) — toolbar, status bar, minimum window size, panel collapse and persistence, the welcome overlay, the mod-matrix panel
+- [`docs/layout/module-card.md`](layout/module-card.md) — a card's own geometry: width buckets, body layout, header buttons, custom titles, the Audio Output identity treatment, the Wavetable card
+- [`docs/layout/module-library.md`](layout/module-library.md) — the library sidebar: rows, search, collapsible sections, scrolling, the help popover, the Shortcuts tab that mirrors it
+- [`docs/layout/preset-positions.md`](layout/preset-positions.md) — where factory presets place their modules
+- [`docs/layout/selection.md`](layout/selection.md) — multi-select, `SelectionModel`, group drag as one rigid body, the drag-flag reset sites
+- [`docs/layout/snippets-clipboard.md`](layout/snippets-clipboard.md) — snippets, copy/paste/duplicate, and the validate-strictly/apply-faithfully trust boundary
+- [`docs/layout/macro-cards.md`](layout/macro-cards.md) — macro containers on the canvas: collapse, the hull and its chip, the shared menu, undo and persistence
+- [`docs/layout/cables.md`](layout/cables.md) — a cable is not a graph edge: enumeration, hit-testing, hover, the menu, and colour resolution
+- [`docs/layout/smart-connections.md`](layout/smart-connections.md) — cables suggested while dragging, Ctrl to insert in series, double-click a port to disconnect
+- [`docs/layout/minimap.md`](layout/minimap.md) — the graph overview overlay
+- [`docs/layout/rendering.md`](layout/rendering.md) — repaint discipline: the zoom-frozen card cache, the one canvas invalidation seam, gated timers
+- [`docs/layout/animation.md`](layout/animation.md) — `AnimationDriver`, `PanelSlide`, what moves, and the time-bounded animation rule with its two exceptions
+- [`docs/layout/visualizers.md`](layout/visualizers.md) — in-card signal displays and editors (frequency response, EQ curve, scope, threshold meter, wavetable, curve editor)
+- [`docs/layout/theming.md`](layout/theming.md) — the token reference (colours, metrics, typography, treatment), the font limitation, reload, themed widgets
+- [`docs/layout/theme-authoring.md`](layout/theme-authoring.md) — the `*.gtheme.json` schema, a worked example, and what each treatment parameter does
+- [`docs/layout/icons.md`](layout/icons.md) — the SVG icon enum, the token-to-tint map, the null-fallback contract, adding an icon
+- [`docs/layout/colour-overrides.md`](layout/colour-overrides.md) — piano-roll note colours, mixer meter colour stops, and the shared colour picker popup
 
 ## Macros & mixer
 

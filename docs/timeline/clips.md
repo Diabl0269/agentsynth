@@ -8,7 +8,7 @@ multi-select.
 
 Selection is backed by `synth::ui::ClipSelectionModel`
 (`Source/UI/Timeline/ClipSelectionModel.h`), the clip analogue of `SelectionModel`
-(`docs/layout_selection_canvas.md` §1.2) — a `std::set<synth::ClipId>` with the same
+(`docs/layout/selection.md`) — a `std::set<synth::ClipId>` with the same
 add/remove/toggle/setSelection/retainOnly contract, ordered ascending by id so a batched move or
 delete always walks clips in a stable order regardless of click order.
 
@@ -110,7 +110,7 @@ A copy-drag never moves the originals on EITHER axis: `effectiveGeometryFor` and
 share the same `copyDrag_` guard — they must agree, or the original slides while its row holds — so
 the destinations paint as translucent ghosts (`paintDragGhosts`: source-track colour at 0.4 alpha
 plus a 1 px outline, no name label; a real blur would be per-frame image filtering, which
-`docs/layout_visuals_animation.md` §2–3 rules out) while the source clips keep painting where they
+`docs/layout/rendering.md` rules out) while the source clips keep painting where they
 are. Ghost geometry comes from one helper (`dragGhostRectFor`) shared with
 `getDragGhostRectsForTest()`, the same single-enumeration reasoning as `buildVisibleCables()`.
 

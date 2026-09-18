@@ -48,7 +48,7 @@ struct MacroPort {
 };
 
 /** A named, coloured, collapsible grouping of graph nodes on the canvas — presentation over a
- *  flat graph (P8-12; docs/layout_selection_canvas.md), now gaining optional named ports
+ *  flat graph (P8-12; docs/layout/macro-cards.md), now gaining optional named ports
  *  (P8-15 Macro I/O, docs/macros_ports.md §5). A Macro still adds no graph edges and no processing of
  *  its own: `ports` is a description of which of its OWN inlet/outlet member nodes are exposed as
  *  named jacks, not a mechanism the macro itself implements — the boundary stays a rendering

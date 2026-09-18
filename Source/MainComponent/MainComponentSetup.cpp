@@ -393,8 +393,8 @@ bool MainComponent::initialiseAudioEngine() {
             // card's jacks (plus any cable on a jack that just vanished) have to follow it.
             graphEditor.refreshIoModulesAfterDeviceChange();
 
-            // Same reasoning for the Audio Output card's destination line (docs/layout.md —
-            // module chrome): a device/rate/channel change is exactly what it needs to reflect,
+            // Same reasoning for the Audio Output card's destination line
+            // (docs/layout/module-card.md): a device/rate/channel change is exactly what it reflects,
             // and it must not wait for a repaint that has no other reason to happen.
             graphEditor.refreshOutputDeviceInfo();
 

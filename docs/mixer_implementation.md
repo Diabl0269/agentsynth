@@ -332,7 +332,7 @@ Main line, in dependency order:
      changes that one override, with no change to chip or header. ONE 15 Hz `juce::Timer` on
      `TimelinePanelComponent` ticks every header, never one per row; it idles while hidden, reads
      only `getChannelMeterPeak` (a cached strip id, not a graph walk), and each chip repaints only
-     past a coarse threshold (`docs/layout_visuals_animation.md` §2-3).
+     past a coarse threshold (`docs/layout/rendering.md`).
    - Tests: `ChannelFlowTrackChannelLinkCoreTests.cpp` (the rule) and
      `ChannelFlowTrackChannelLinkTests.cpp` (the behaviour through the real header buttons,
      including the mixed linked-solo + shared-solo case asserted on the rendered strip meters).

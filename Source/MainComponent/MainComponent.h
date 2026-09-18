@@ -152,7 +152,7 @@ public:
     /** The three sliding panels this component docks, for the slide test seams below. */
     enum class SlidingPanel { Library, AiChat, Timeline };
 
-    // Panel-slide test seams (docs/layout_visuals_animation.md §3); the fractions ARE the layout.
+    // Panel-slide test seams (docs/layout/animation.md); the fractions ARE the layout.
     float getPanelOpenProgressForTest(SlidingPanel p) const noexcept { return panelSlide(p).getProgress(); }
     void setPanelOpenProgressForTest(SlidingPanel p, float progress) {
         panelSlide(p).snapTo(progress);
@@ -962,7 +962,7 @@ private:
     // ---- Panel slide animations (fraction-driven, time-bounded, auto-stop) ----
     //
     // Each sliding panel owns a [0..1] open fraction and resized() derives its size from that, so a
-    // layout pass is correct whenever it runs (docs/layout_visuals_animation.md §3). ONE driver moves ALL THREE: the
+    // layout pass is correct whenever it runs (docs/layout/animation.md). ONE driver moves ALL THREE: the
     // panels share a window, so a per-panel animator would leave one slide frozen half-open.
     juce::VBlankAnimatorUpdater vblankUpdater{this};
     synth::ui::AnimationDriver panelSlideAnim_;
@@ -970,7 +970,7 @@ private:
     synth::ui::PanelSlide aiPanelSlide_;
     synth::ui::PanelSlide timelineSlide_;
 
-    /** ~190 ms, inside the house 160–220 ms spec (docs/layout_visuals_animation.md §3) — the duration the panels
+    /** ~190 ms, inside the house 160–220 ms spec (docs/layout/animation.md) — the duration the panels
      *  have always slid for, now shared by all three of them. */
     static constexpr double kPanelSlideMs = 190.0;
 

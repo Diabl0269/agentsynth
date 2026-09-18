@@ -10,7 +10,7 @@ namespace synth::ui {
  *  canvas is zoomLevel * deviceScale — so without this, one wheel tick re-rasterizes every visible
  *  card (panel + every child slider/label) at a new size. Frozen, the existing image is just
  *  resampled; unfreezing drops it so exactly one crisp re-render happens when the gesture settles.
- *  Still the setBufferedToImage(true) contract of docs/layout_visuals_animation.md §2 — same cache, same
+ *  Still the setBufferedToImage(true) contract of docs/layout/rendering.md — same cache, same
  *  invalidate() semantics, only the scale is deferred. */
 class ZoomFrozenCachedImage : public juce::CachedComponentImage {
 public:
@@ -81,7 +81,7 @@ public:
     }
     bool isFrozen() const noexcept { return frozen; }
 
-    // Test seam (docs/layout_visuals_animation.md §3 paint-count pattern): how many times the owner's paint tree
+    // Test seam (docs/layout/animation.md's paint-count pattern): how many times the owner's paint tree
     // has actually been re-run into this image.
     int getRasterCountForTest() const noexcept { return rasterCount; }
     juce::Rectangle<int> getImageBoundsForTest() const noexcept { return image.getBounds(); }

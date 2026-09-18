@@ -134,7 +134,7 @@ The trim is expressed as `sourceStartSeconds`, never by rewriting the WAV: **the
 
 **The playhead is a different sum, and stays that way.** The playhead's drawn line offsets by the **output latency alone**, because it answers "where is the audio the user is *hearing* right now?" — not "where was this note played?". Recording compensation is the full round trip; the playhead is one leg of it. Pinned by `LatencyFlowTest.PlayheadUsesOutputLatencyOnlyNotTheRecordingSum`.
 
-The round trip is surfaced in the status bar as `RT <n> ms` — see [`layout.md §4.1`](layout.md).
+The round trip is surfaced in the status bar as `RT <n> ms` — see [`layout/chrome.md`](layout/chrome.md#status-bar).
 
 **Commit.** `commitAudioRecording()` is the single choke point, called by both the Record-off click and the poll's playing→stopped edge (exactly mirroring `commitMidiRecording()`): `stopCapture()`, then `computeTakePlacement`, then **one** `recordTimelineChange` that adds the clip and sets its asset. `startBeat`, `lengthBeats` (floored at 1/32 beat) and `sourceStartSeconds` all come from the placement. An empty take, or one that is all pre-roll, commits nothing and pushes no undo step. **Undo removes the clip; the file stays** — nothing auto-deletes a recording.
 

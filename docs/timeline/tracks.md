@@ -225,7 +225,8 @@ active the last time `refreshFromDoc()` ran.
 ## Colour swatch
 
 Clicking it builds a `synth::ui::ColourPickerPopup` (`Source/UI/Chrome/ColourPickerPopup.h` — see
-[`theming.md` §13](../theming.md#13-colour-picker-popup)) via `buildColourPicker()` and launches it
+[`layout/colour-overrides.md`](../layout/colour-overrides.md#colour-picker-popup)) via
+`buildColourPicker()` and launches it
 in a `juce::CallOutBox` anchored on the swatch.
 
 Its favourites shelf persists through `TrackHeaderHost::getAppProperties()` — a non-pure
@@ -233,7 +234,8 @@ Its favourites shelf persists through `TrackHeaderHost::getAppProperties()` — 
 `nullptr` degrades to an in-memory-only picker, same as a headless test gets. Preview writes the
 doc directly with no undo step on every drag or favourite click; closing the popup either restores
 the original colour with no undo step (no net change) or performs the real edit as ONE undo step
-whose undo target is the original colour — see `theming.md` §13 for the exact preview/commit
+whose undo target is the original colour — see `docs/layout/colour-overrides.md` for the exact
+preview/commit
 contract. `createColourPickerForTest()` exposes `buildColourPicker()`'s exact wiring without ever
 launching the `CallOutBox`.
 
@@ -337,7 +339,7 @@ and the header falls through to its existing behaviour unchanged, so the link ca
 (started by `setTrackHeaderHost`) that ticks every header's `tickChannelMeter()`; each chip
 repaints only when its drawn level crosses `ChannelChipComponent::kMeterRepaintThreshold`. With up
 to `TimelineDoc::kMaxTracks` rows, a timer per chip would be 256 timers, and an ungated repaint
-would breach the per-tick repaint rule (`docs/layout_visuals_animation.md` §2) — this is the same
+would breach the per-tick repaint rule (`docs/layout/rendering.md`) — this is the same
 gated 15 Hz shape `ModuleComponent`'s own meter poll uses.
 
 **A linked track's M/S show and drive its CHANNEL, not note gating** (`docs/mixer.md` §5.2 (c)):

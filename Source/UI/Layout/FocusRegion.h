@@ -147,7 +147,7 @@ private:
     std::vector<FocusRegion> regions_;
 };
 
-// The theme's one "selected/focused" token (docs/theming.md's `accent`), painted as a translucent
+// The theme's one "selected/focused" token (docs/layout/theming.md's `accent`), painted as a translucent
 // outline (55% alpha, at the theme's normal border weight) around `comp`'s own bounds whenever it or
 // a descendant holds keyboard focus (`hasKeyboardFocus(true)`) — the visual half of T159, shared by
 // every focus-region root's paint() rather than each one reinventing it. Softer than the "accent when

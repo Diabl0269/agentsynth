@@ -10,7 +10,7 @@ vertical line in `theme.colors.accent` (literal cyan fallback with no themed LnF
 
 **This is the second of the two exceptions to the no-unconditional-per-tick-repaint rule.** Its
 confinement contract, the paint-count test pattern it introduces, and why a third exception is not
-free are all in `docs/layout_visuals_animation.md` §3 — read that before touching this component.
+free are all in `docs/layout/animation.md` — read that before touching this component.
 
 ## Two timers
 
@@ -68,7 +68,7 @@ restricts; asking for a repaint is.
 
 A toggle button sits immediately next to the snap toggle in the panel's snap/tool strip
 (`followPlayheadButton_`, tinted via `Icon::FollowPlayhead` — see
-[`theming.md` §3](../theming.md#3-icon-tinting)). `kFollowPlayheadButtonWidth` is 30 px; the snap
+[`layout/icons.md`](../layout/icons.md)). `kFollowPlayheadButtonWidth` is 30 px; the snap
 toggle's `kSnapToggleButtonWidth` is **46 px**, wide enough for the word `"Snap"`.
 
 **The button is labelled with the VERB, not with its key.** A button that spells its own letter

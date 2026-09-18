@@ -14,7 +14,7 @@
 // never needs to know which reader it is).
 //
 // Driven by MixerPanelComponent's refresh(), itself polled from MainComponent's existing 10 Hz
-// timer while the mixer tab is showing (docs/layout_visuals_animation.md §2's precedent for the
+// timer while the mixer tab is showing (docs/layout/rendering.md's precedent for the
 // Timeline panel's own tick-riding transport poll) -- NOT a new AnimationDriver/timer of its own.
 // refresh(elapsedSeconds) advances each bar's ballistics by the caller-measured elapsed time (so
 // they stay rate-independent of the poll's actual, tab-visibility-gated cadence) and repaints only

@@ -729,7 +729,7 @@ juce::Rectangle<float> ModuleComponent::outputCardIconBoundsForTest(const synth:
     const juce::Font titleFont(juce::FontOptions(lf.getTheme().type.h2, juce::Font::bold));
 
     // JUCE exposes no direct cap-height accessor. 0.72x ascent is the standard sans-serif
-    // approximation (Inter — embedded for every UI face here, see docs/theming.md — sits close to
+    // approximation (Inter — embedded for every UI face here, see docs/layout/theming.md — sits close
     // this) and tracks the visible glyph ink far more closely than the full ascent+descent box
     // drawText centres text within: an all-caps, all-punctuation-free title (the title is upper-
     // cased + letter-spaced in drawModulePanel) never touches the descender clearance that box

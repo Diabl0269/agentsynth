@@ -69,7 +69,7 @@ processing of its own. Concretely:
 Cables that cross a collapsed macro's boundary are re-anchored to the card's edge by
 `rebuildVisibleCables()`; cables wholly inside one collapsed macro are dropped from the visible
 set. This is a **rendering** rule — the underlying graph edges are untouched, consistent with
-"a cable is not a graph edge" (`docs/layout_selection_canvas.md` §3).
+"a cable is not a graph edge" (`docs/layout/cables.md`).
 
 `"macros"` is a **reserved patch-format key**: `validatePatch` refuses it outright on the
 untrusted path (`PatchValidationError::MacrosNotAllowed`). See §8.
@@ -92,7 +92,7 @@ architecturally hard item in P8:
 bus layout in. A container whose ports the user defines cannot simply grow channels at runtime.
 
 **(b) A cable is not a graph edge.**
-`docs/layout_selection_canvas.md` §3: cables are enumerated through
+`docs/layout/cables.md`: cables are enumerated through
 `GraphEditor::buildVisibleCables()`, which already applies macro-aware treatment. Anything
 crossing a boundary is a rendering decision, not a graph one.
 

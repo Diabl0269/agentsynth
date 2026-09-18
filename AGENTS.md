@@ -53,7 +53,7 @@ Three rules stated in full because they're cheap to follow and catastrophic to m
 
 - **Bypass/mute contract** — in every signal-processing `processBlock`, use **two separate branches**: `isBypassed()` → dry pass-through (return early WITHOUT touching audio channels; clear only CV channels ≥2 so mod CV doesn't leak as audio); `isMuted()` → `buffer.clear()` then return. Never `if (isBypassed() || isMuted()) buffer.clear()` — that mutes on bypass. **Exception:** modules with no dry audio path (pure sources like Oscillator / Poly MIDI; audio-in/CV-out taps like Envelope Follower / Comparator) clear on bypass, still as two branches. → [`docs/architecture.md`](docs/architecture.md)
 - **Never relax `validatePatch` to raise the AI pass rate** — it is the security boundary for untrusted model output. Fix validity on the *generation* side, most upstream first: schema → bounded retry → narrow repair → prompt; measure with `Tools/AIPatchHarness` first. A node's `"state"` object (`ModuleBase::setExtraState`) is applied on the **trusted path only** — honouring it for provider output makes a patch suggestion an arbitrary file read. → [`docs/ai/patch-safety.md`](docs/ai/patch-safety.md)
-- **`trusted=true` on `applyJSONToGraph` is about parameter fidelity, not skipping checks** — the untrusted path rescales in-`[0,1]` values against wider ranges (a heuristic for models), which corrupts app-authored values like a 0.5 Hz LFO rate. Replaying our own `graphToJSON` output applies trusted; if it came off disk, run `validatePatch(..., trusted=false)` as a separate gate first (`SnippetManager::insertSnippet` / `ProjectBundle::load` are the reference pairing). → [`docs/layout_selection_canvas.md §1.5`](docs/layout_selection_canvas.md)
+- **`trusted=true` on `applyJSONToGraph` is about parameter fidelity, not skipping checks** — the untrusted path rescales in-`[0,1]` values against wider ranges (a heuristic for models), which corrupts app-authored values like a 0.5 Hz LFO rate. Replaying our own `graphToJSON` output applies trusted; if it came off disk, run `validatePatch(..., trusted=false)` as a separate gate first (`SnippetManager::insertSnippet` / `ProjectBundle::load` are the reference pairing). → [`docs/layout/snippets-clipboard.md`](docs/layout/snippets-clipboard.md)
 
 Everything else below is a tripwire index. The full rule lives in the named area `CLAUDE.md` (auto-loaded when you work under that directory); the mechanism and history live in the linked doc — **read it before touching the area**. A new invariant gets one line here, its rule in the area file, and its detail in the doc.
 
@@ -82,17 +82,17 @@ Everything else below is a tripwire index. The full rule lives in the named area
 
 **AI & trust boundaries** (`Source/AI/CLAUDE.md`):
 
-- `applyJSONToGraph` merge mode auto-connects new nodes; exact-sub-graph callers pass `autoConnectNewNodes=false`. → [`docs/layout_selection_canvas.md §1.5`](docs/layout_selection_canvas.md)
-- Patch-format reserved fields stay reserved (`"timeline"` and `"macros"` (P8-12) both refused untrusted; flat scalar params; `uuid` trusted-only). → [`docs/ai/patch-format.md`](docs/ai/patch-format.md) · [`docs/layout_selection_canvas.md §1.7`](docs/layout_selection_canvas.md)
+- `applyJSONToGraph` merge mode auto-connects new nodes; exact-sub-graph callers pass `autoConnectNewNodes=false`. → [`docs/layout/snippets-clipboard.md`](docs/layout/snippets-clipboard.md)
+- Patch-format reserved fields stay reserved (`"timeline"` and `"macros"` (P8-12) both refused untrusted; flat scalar params; `uuid` trusted-only). → [`docs/ai/patch-format.md`](docs/ai/patch-format.md) · [`docs/layout/macro-cards.md`](docs/layout/macro-cards.md)
 - Conversation-history persistence is resolved server-side from the entitlement, never trusted from a client header. → [`docs/ai/history.md`](docs/ai/history.md#server-side-conversation-history)
 - Persist a rotated refresh token before using the access token that came with it (`AccountService::completeSignIn` is the funnel). → [`docs/ai/accounts.md`](docs/ai/accounts.md#rotation-before-use)
 - Installing an AI provider after construction requires calling `refreshModels()` again, or every `/api/chat` gets a 400. → [`docs/ai/chat-component.md`](docs/ai/chat-component.md#model-discovery-ordering-contract)
 
 **UI & theming** (`Source/UI/CLAUDE.md`, `Source/Plugin/CLAUDE.md`):
 
-- No unconditional per-tick repaint; all animations use `AnimationDriver`; exactly two blessed exceptions. → [`docs/layout_visuals_animation.md §2–3`](docs/layout_visuals_animation.md)
-- A cable is not a graph edge — enumerate via `GraphEditor::buildVisibleCables()`, colour via `synth::ui::resolveCableColour`. → [`docs/layout_selection_canvas.md §3`](docs/layout_selection_canvas.md) · [`docs/theming.md §11`](docs/theming.md)
-- Themes never swap font families (JUCE 8 + CoreText corrupts text); colour/treatment/glow only. → [`docs/theming.md`](docs/theming.md)
+- No unconditional per-tick repaint; all animations use `AnimationDriver`; exactly two blessed exceptions. → [`docs/layout/rendering.md`](docs/layout/rendering.md) · [`docs/layout/animation.md`](docs/layout/animation.md)
+- A cable is not a graph edge — enumerate via `GraphEditor::buildVisibleCables()`, colour via `synth::ui::resolveCableColour`. → [`docs/layout/cables.md`](docs/layout/cables.md)
+- Themes never swap font families (JUCE 8 + CoreText corrupts text); colour/treatment/glow only. → [`docs/layout/theming.md`](docs/layout/theming.md)
 - A plugin editor never calls `Desktop::setDefaultLookAndFeel` — it's process-global inside the host. → [`docs/architecture.md`](docs/architecture.md)
 - No per-sample / per-frame / per-parameter logging — a global Logger pipes into a UI-thread console. → [`docs/ai/chat-component.md`](docs/ai/chat-component.md#logging-rules)
 

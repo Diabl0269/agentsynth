@@ -274,7 +274,7 @@ void MainComponent::timerCallback() {
     // The timeline panel's low-rate transport poll, on the same existing timer — no new
     // timer, and nothing at all when the panel is hidden (a collapsed timeline must cost exactly
     // what it did before). This is what starts/stops the playhead's playing-only 30 Hz strip
-    // repaint; see docs/layout_visuals_animation.md §3.
+    // repaint; see docs/layout/animation.md.
     //
     // FRO11 (P9-5): timelinePanel is now nested inside mixerDock (the Timeline/Mixer tab
     // strip), so its own isVisible() flag only reflects "the Timeline tab is selected", not "the
@@ -311,7 +311,7 @@ void MainComponent::timerCallback() {
 
     // FRO11 (P9-5): the mixer's meters, on the SAME existing 10 Hz tick -- no new timer, nothing
     // at all while the mixer isn't showing ANYWHERE, exactly the Timeline panel's own precedent
-    // just above (docs/layout_visuals_animation.md §2: "rides MainComponent's existing 10 Hz tick,
+    // just above (docs/layout/rendering.md: "rides MainComponent's existing 10 Hz tick,
     // only while the panel is visible"; isVisible(), not isShowing() -- see that block's own
     // comment). FRO146 follow-up: "showing" now means docked-and-active (isMixerShowing()'s own
     // check, unchanged) OR detached into its own window (also isMixerShowing() -- Window placement
@@ -336,7 +336,7 @@ void MainComponent::timerCallback() {
 
         // The always-visible transport cluster (play/stop + position + BPM) — fed from `position`,
         // which is read UNCONDITIONALLY above (before the timelinePanel.isVisible() guard), so this
-        // is identical whether the timeline panel is open or closed; see docs/layout.md §5. Reuses
+        // is identical whether the timeline panel is open or closed; see docs/layout/chrome.md. Reuses
         // TimelineTransportBar's own static formatBarBeat() for the "bar.beat.ticks" text rather
         // than reimplementing it — StatusBarComponent can't call it itself (Core cannot depend on
         // AppUI), so this is the one call site that does the formatting.

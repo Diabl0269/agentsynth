@@ -75,7 +75,8 @@ one group without pushing the transport controls off their left-aligned home.
 `applyToolStripTheme()` (constructor plus `lookAndFeelChanged()`) re-applies each icon from
 `AppLookAndFeel::getIcon` and sets the active-tool highlight as a **background colour**
 (`colors.toolActive`), not a different icon tint — the glyph reads the same lit or not; see
-[`theming.md`](../theming.md). Null-guarded on both a headless LnF and a headless icon library.
+[`layout/icons.md`](../layout/icons.md). Null-guarded on both a headless LnF and a headless icon
+library.
 
 ## Tool cursors
 

@@ -214,7 +214,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     createWavetableControls();
 
     setTitle(module->getName());
-    // Buffered to image (docs/layout_visuals_animation.md §2) through our own cache so a zoom gesture can pin the
+    // Buffered to image (docs/layout/rendering.md) through our own cache so a zoom gesture can pin the
     // raster scale — see ZoomFrozenCachedImage. Do NOT add setBufferedToImage() back anywhere on
     // this component: JUCE asserts if a custom cache is already installed (juce_Component.cpp:567).
     {
@@ -449,7 +449,7 @@ void ModuleComponent::timerCallback() {
     }
 
     // Envelope playhead: reuses this existing gated 15 Hz tick rather than a new Timer (see
-    // docs/layout_visuals_animation.md §2-3) — self-guards on type/visibility, and setPlayhead
+    // docs/layout/rendering.md) — self-guards on type/visibility, and setPlayhead
     // itself no-ops when the (segment, progress) pair is unchanged, so an idle or collapsed card
     // costs nothing beyond the guard check.
     updateEnvelopePlayhead();

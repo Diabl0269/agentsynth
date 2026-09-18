@@ -72,7 +72,7 @@ clip lanes or piano roll the user last clicked owns Cmd+C/V/D — see [focus](fo
 ## Docking, toggle and the bottom dock
 
 `MainComponent` carves the panel full-width, directly above the status bar: `resized()` — the one
-geometry authority, see [`layout_visuals_animation.md` §3](../layout_visuals_animation.md)'s
+geometry authority, see [`layout/animation.md`](../layout/animation.md#panelslide)'s
 `PanelSlide` subsection — removes it from the bottom AFTER the status bar and BEFORE the
 AI-panel/library removals, so it spans the whole window width regardless of which side panels are
 open. The height it removes is `timelineSlide_.sizeBetween(0, timelinePanelHeight_)`, i.e. the
@@ -130,7 +130,7 @@ minimum**:
   tile exactly), but the transport controls inside it are laid out below the strip, so a resize
   grab never lands on a transport button. Idle it paints exactly the hairline the panel already
   drew there; hovered or dragging it brightens to the accent colour with a faint wash, and it
-  repaints **only on a hover-state change** (`docs/layout_visuals_animation.md` §2–3's repaint
+  repaints **only on a hover-state change** (`docs/layout/rendering.md`'s repaint
   discipline).
 - **The panel never resizes itself.** Dragging reports the *desired* height — measured absolutely,
   from the panel's pinned bottom edge in screen coordinates, so the owner moving the top edge under
@@ -147,7 +147,7 @@ and AI panels use (`MainComponent::beginPanelSlide()`, ~190 ms ease-in-out-cubic
 at all: only the axis differs, and that lives in `resized()`'s carve order. `timelineSlide_`'s
 fraction drives the height against a pinned bottom edge, so the panel grows upward into place and
 shrinks back down the same way; `setVisible(false)` happens in `finishPanelSlide()`, once the slide
-is actually done, same as the sibling panels. See `docs/layout_visuals_animation.md` §3 for the
+is actually done, same as the sibling panels. See `docs/layout/animation.md` for the
 full contract: mid-flight reversal, the synchronous off-screen path, and why one driver serves all
 three panels.
 

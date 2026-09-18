@@ -24,7 +24,7 @@
 // Tooltips: the patch/CPU/round-trip/transport segments are PAINTED TEXT, not child components, so
 // there is nothing for juce::TooltipWindow to hit-test individually. StatusBarComponent is instead
 // itself a juce::TooltipClient — MainComponent already owns the app's one shared
-// juce::TooltipWindow (docs/theming.md's "TooltipWindow" entry), which finds any TooltipClient it
+// juce::TooltipWindow (docs/layout/theming.md's "TooltipWindow" entry), which finds any TooltipClient
 // is the exact component under the mouse (juce::TooltipWindow::getTipFor() does not walk up
 // parents — see juce_TooltipWindow.cpp), which is true here for the painted segments since no
 // child covers that area. Hovering the masterMuteButton_/transportButton_ children instead reaches

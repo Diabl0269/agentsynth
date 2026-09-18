@@ -36,7 +36,7 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     timelinePanel.setApplicationProperties(&appProperties);
 
     // FRO11 (P9-5): the dock's own persisted-tab key, read once and written on every tab click
-    // (docs/layout.md's "Panel collapse and persistence" table); the graph-topology-mutated and
+    // (docs/layout/chrome.md's "Panel collapse and persistence" table); the graph-topology-mutated and
     // Direct's "Make channel" callbacks route the mixer's own actions through the SAME funnels
     // every other "Make channel" trigger and every other graph-structural edit already use.
     mixerDock.setApplicationProperties(&appProperties);

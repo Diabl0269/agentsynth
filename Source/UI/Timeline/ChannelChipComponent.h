@@ -16,7 +16,7 @@
 // independent timers; TimelinePanelComponent owns ONE 15 Hz timer and ticks its headers, and each
 // chip's setMeterLevel() decides whether that tick is worth a repaint at all (a coarse threshold).
 // That is what keeps this compliant with the "no unconditional per-tick repaint" invariant
-// (docs/layout_visuals_animation.md §2-3) -- the repaint is gated on the drawn value actually
+// (docs/layout/rendering.md) -- the repaint is gated on the drawn value actually
 // moving, exactly like ModuleComponent's own 15 Hz meter poll.
 
 namespace synth::ui {

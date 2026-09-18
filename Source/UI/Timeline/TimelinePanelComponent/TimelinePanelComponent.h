@@ -36,7 +36,7 @@ class Metronome; // Forward declaration (Source/Transport/Metronome.h)
 // none of that: it is layout + paint, with no timer and no animation of its own — updateFromTransport()
 // is driven by MainComponent's EXISTING 10 Hz timer, and the only timer anywhere under this panel
 // is the playhead overlay's, which runs only while the transport plays (see
-// TimelinePlayheadOverlay.h and docs/layout_visuals_animation.md §3).
+// TimelinePlayheadOverlay.h and docs/layout/animation.md).
 //
 // resized() lays out three regions:
 //   - transport bar strip   (top,    Metrics::timelineTransportBarHeight) — houses the snap

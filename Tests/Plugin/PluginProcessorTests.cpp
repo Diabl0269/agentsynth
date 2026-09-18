@@ -441,7 +441,7 @@ TEST(AgentSynthAudioProcessorStateTest, ParameterValuesSurviveStateRoundTripExac
     // Regression: session state used to be APPLIED untrusted, so the untrusted path's [0,1]
     // rescale heuristic (meant for sloppy model output) corrupted exact app-authored values —
     // an LFO rate of 0.5 Hz on the 0.01–20 Hz range reloaded as ~10 Hz. setStateInformation now
-    // validates untrusted, then applies trusted (the docs/layout_selection_canvas.md §1.5 pairing), so values
+    // validates untrusted, then applies trusted (the docs/layout/snippets-clipboard.md pairing), so values
     // inside [0,1] on wider ranges must survive bit-for-bit.
     synth::AgentSynthAudioProcessor first;
     auto& graph1 = first.getAudioEngine().getGraph();

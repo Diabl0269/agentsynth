@@ -370,7 +370,7 @@ TEST_F(GraphEditorTest, DoubleClickUnconnectedPortIsANoOp) {
 // --- Output-card identity treatment (module chrome) --------------------------
 // GraphEditor::setOutputDeviceInfoProvider / refreshOutputDeviceInfo: MainComponent -> GraphEditor
 // -> the Audio Output ModuleComponent, refreshed only when told to (no polling — see
-// ModuleComponent::setOutputDeviceInfoText and docs/layout.md's module chrome section).
+// ModuleComponent::setOutputDeviceInfoText and docs/layout/module-card.md).
 
 TEST_F(GraphEditorTest, RefreshOutputDeviceInfoPushesProviderTextToTheOutputCard) {
     AudioEngine engine;

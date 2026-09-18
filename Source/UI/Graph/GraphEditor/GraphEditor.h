@@ -142,7 +142,7 @@ public:
 
     void refreshIoModulesAfterDeviceChange();
 
-    /** Output-card identity treatment (docs/layout.md — module chrome): installs the callback
+    /** Output-card identity treatment (docs/layout/module-card.md): installs the callback
      *  MainComponent uses to describe where the signal actually goes (device name + sample rate +
      *  channel count, "Host audio" in HostMode::Hosted, or an empty string to hide the line). Set
      *  once; MainComponent already owns the Standalone-vs-Hosted framing (see how
@@ -427,7 +427,7 @@ public:
 
     // ---- Copy / paste / duplicate -------------------------------------------------------
     // All three run through the snippet pipeline (self-contained connections, modulation as
-    // intent, ids renumbered on insert) — see docs/layout_selection_canvas.md §1.5.
+    // intent, ids renumbered on insert) — see docs/layout/snippets-clipboard.md.
 
     bool copySelection();
 

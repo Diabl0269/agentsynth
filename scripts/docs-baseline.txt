@@ -14,8 +14,6 @@ naming docs/architecture_plugin_layer.md
 naming docs/architecture_project_bundle.md
 naming docs/architecture_timeline.md
 naming docs/fx_modules.md
-naming docs/layout_selection_canvas.md
-naming docs/layout_visuals_animation.md
 naming docs/macros_implementation.md
 naming docs/macros_ports.md
 naming docs/midi_input.md

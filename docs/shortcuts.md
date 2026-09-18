@@ -10,7 +10,7 @@ any key except Escape commits it, swapping with whatever action in the **same ca
 held that key. The tab groups rows into one collapsible section per category with a search box
 above them (matches against both the action's description and its current binding text — "cmd"
 finds every Cmd shortcut, "transpose" finds the piano-roll block) and a top strip that flips between
-"COLLAPSE ALL"/"EXPAND ALL"; see [`layout_selection_canvas.md §2`](layout_selection_canvas.md#2-collapsible-library-sections) for
+"COLLAPSE ALL"/"EXPAND ALL"; see [`layout/module-library.md`](layout/module-library.md#collapsible-sections) for
 the shared collapsible-list pattern it mirrors. Export/import round-trip every binding as JSON;
 Reset restores the defaults below. A native macOS menu bar (File + Edit) provides Undo/Redo via
 `ApplicationCommandManager`.
@@ -147,7 +147,7 @@ below for the Mixer region's own keyboard behaviour.
   entirely (re-added the moment it redocks), so Tab-cycling in the MAIN window never lands on
   something that isn't there.
 - **Visual indicator** — a region's root component paints a translucent outline (55% alpha) in the
-  theme's `accent` colour (`docs/theming.md`), at the theme's normal border weight (1px in every
+  theme's `accent` colour (`docs/layout/theming.md`), at the theme's normal border weight (1px in every
   built-in theme, `theme.metrics.borderWidth`) rather than an arbitrary heavier one, whenever it or a
   descendant holds keyboard focus (`hasKeyboardFocus(true)`) — deliberately softer than the same
   `accent`-outline treatment on a small control (ComboBox/TextEditor), since a hard-edged fully-opaque
@@ -177,7 +177,7 @@ below for the Mixer region's own keyboard behaviour.
 new direct-focus shortcut for the search field specifically (`Cmd+F`, distinct from `Cmd+Shift+L`'s
 region-root destination). `ModuleLibraryComponent` had zero keyboard handling before this — it is a
 hand-rolled, not-a-`Viewport` component (drag-and-drop constraint, see
-[`layout_selection_canvas.md §2`](layout_selection_canvas.md)), so this is new keyboard subsystem
+[`layout/module-library.md`](layout/module-library.md)), so this is new keyboard subsystem
 work, not a rewire of something that already listened for keys.
 
 - **Two different focus destinations feed the same navigation** — `Cmd+Shift+L` / Tab-cycling land
@@ -706,7 +706,7 @@ rule `TimelineClipLaneArea`'s cross-track move drag uses (see [`timeline/clips.m
 ## Canvas mouse gestures
 
 Multi-select is layered on top of the existing pan gesture rather than replacing it, so no existing
-habit changes. See [`layout_selection_canvas.md §1`](layout_selection_canvas.md) for the full contract.
+habit changes. See [`layout/selection.md`](layout/selection.md) for the full contract.
 
 | Gesture | Action |
 |---------|--------|

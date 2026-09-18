@@ -138,7 +138,7 @@ juce::String StatusBarComponent::getTooltipForPosition(juce::Point<int> localPos
     const int x = localPosition.x;
 
     // CPU % — AudioEngine::isHosted() ? 0.0f : deviceManager.getCpuUsage() * 100.0, read at
-    // MainComponent::timerCallback's 5 Hz status-bar poll (see docs/layout.md §5). getCpuUsage() is
+    // MainComponent::timerCallback's 5 Hz status-bar poll (see docs/layout/chrome.md). getCpuUsage() is
     // JUCE's own "proportion of the audio callback's time budget spent in the callback" figure.
     if (x >= kCpuX && x < kCpuX + kCpuWidth)
         return "Audio-engine DSP load: percentage of the audio callback's time budget spent "

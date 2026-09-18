@@ -70,7 +70,7 @@ TEST_F(ModuleComponentTest, MidiKeyboardKeysFollowThemeChange) {
 // --- Output-card identity treatment (module chrome) --------------------------
 // Audio Output is a bare juce::AudioGraphIOProcessor, not a ModuleBase — setOutputDeviceInfoText
 // / getOutputDeviceInfoTextForTest are the seam GraphEditor::refreshOutputDeviceInfo drives
-// (MainComponent -> GraphEditor -> here). See docs/layout.md's module chrome section.
+// (MainComponent -> GraphEditor -> here). See docs/layout/module-card.md.
 
 namespace {
 /** Adds the graph's terminal audio sink the way AudioEngine does — the channel layout has to be
@@ -155,7 +155,7 @@ TEST_F(ModuleComponentTest, SetOutputDeviceInfoTextIsANoOpOnAudioInputNode) {
 
 // --- Output-card identity glyph alignment/sizing (visual follow-up) ----------
 // outputCardIconBoundsForTest() is the exact geometry ModuleComponent::paint() draws the CatIO
-// glyph into — see docs/layout.md's "Audio Output card identity treatment". These tests recompute
+// glyph into — see docs/layout/module-card.md's Audio Output card identity. These tests recompute
 // the same public JUCE font-metric calls independently (never reach into ModuleComponent's private
 // paint code) so they pin the FORMULA/contract, not a platform-specific pixel constant.
 
