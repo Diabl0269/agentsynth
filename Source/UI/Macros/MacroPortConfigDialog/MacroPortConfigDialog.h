@@ -15,11 +15,11 @@ namespace synth::ui {
  * @brief The "Configure I/O" modal for one Macro (P8-15b, T140; redesigned in the F1 founder-review
  * fix pass).
  *
- * Unifies docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port items 3 ("Add Input"/"Add Output") and 5
- * (rename/reorder) into ONE small modal, per an explicit founder request rather than piecemeal menu actions:
- * add/remove/ rename/reorder every input and output on the macro from one place, picking Mono/Stereo/Poly-N/ MIDI at
- * creation time (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed — a port's shape/kind is fixed
- * once created; changing shape means deleting the port and adding a new one, which `onChangePortShape` below asks the
+ * Unifies docs/macros/configure-io.md items 3 ("Add Input"/"Add Output") and 5 (rename/reorder) into ONE small
+ * modal, per an explicit founder request rather than piecemeal menu actions: add/remove/rename/reorder every input
+ * and output on the macro from one place, picking Mono/Stereo/Poly-N/MIDI at creation time
+ * (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed — a port's shape/kind is fixed once
+ * created; changing shape means deleting the port and adding a new one, which `onChangePortShape` below asks the
  * OWNER to do as ONE undo step, not a delete followed by a separately-undoable add).
  *
  * Pure UI, exactly like ExportAudioDialog: it holds no graph or synth::MacroSet reference of its
@@ -337,9 +337,8 @@ private:
 
 /**
  * @brief "Create ports for the crossing cables?" modal (founder-review fix F5,
- * docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port item 6.2) — shown by
- * GraphEditor::requestGroupSelectionIntoMacro() the first time a group has a cable crossing its would-be boundary and
- * the auto-port preference is still Unset.
+ * docs/macros/auto-ports.md#auto-creating-ports-when-grouping) — shown by GraphEditor::requestGroupSelectionIntoMacro()
+ * the first time a group has a cable crossing its would-be boundary and the auto-port preference is still Unset.
  *
  * Pure UI, the same split as MacroPortConfigDialog above: no GraphEditor/MacroSet reference of its
  * own, one intent callback fired on a button press. Deliberately NOT reused as a nested class of

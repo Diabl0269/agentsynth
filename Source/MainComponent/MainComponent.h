@@ -806,8 +806,8 @@ private:
     bool isLibraryVisible{true};
     bool isAlignmentGuidesEnabled{true}; // NEW: default TRUE for backward compatibility
 
-    // FRO14 (docs/mixer/mixer.md 5.2): the track <-> channel link, its own collaborator rather than more
-    // methods here. Declared after the members it references. Contract: TrackChannelLinkController.h.
+    // FRO14 (docs/mixer/mixer.md#channels-follow-audio-not-tracks): the track <-> channel link, its own collaborator
+    // rather than more methods here. Declared after the members it references. Contract: TrackChannelLinkController.h.
     synth::ui::TrackChannelLinkController trackChannelLink_{audioEngine, timelineDoc, undoManager, graphEditor};
 
     // Bottom-docked timeline panel shell.

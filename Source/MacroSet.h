@@ -80,8 +80,7 @@ struct Macro {
     // Named jacks on this macro's boundary (P8-15). Every port's nodeUuid MUST also appear in
     // `members` — an inlet/outlet is a member like any other node (docs/macros/ports.md#node-types) — and
     // MacroSet::fromVar rejects a saved macro where that does not hold. Order in this vector is
-    // NOT the draw order; use each port's own `order` field (user-reorderable,
-    // docs/macros/configure-io.md#renaming-and-reordering-ports).
+    // NOT the draw order; each port's own `order` decides (docs/macros/configure-io.md#renaming-and-reordering-ports).
     std::vector<MacroPort> ports;
 
     bool hasMember(const juce::String& memberUuid) const {

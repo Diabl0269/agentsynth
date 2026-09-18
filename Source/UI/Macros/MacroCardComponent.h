@@ -49,7 +49,7 @@ public:
     juce::String getTooltip() override;
 
     /** The card's own "N modules[, M ports]" line (founder-review fix G6,
-     * docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port item 4 note) — a MODULE count, excluding port
+     * docs/macros/ports.md#member-counts-report-modules-not-ports) — a MODULE count, excluding port
      * nodes, with the port count named alongside it (never silently dropped) whenever the macro actually has one.
      * Public so a test can pin the exact text against a founder-reported scenario (group 2 modules with a crossing
      * cable

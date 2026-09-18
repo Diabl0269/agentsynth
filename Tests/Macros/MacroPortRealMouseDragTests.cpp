@@ -1,5 +1,5 @@
 // Real-mouse-gesture regression coverage for T148's auto-create-on-drag
-// (docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port item 9). Every T148 test in MacroPortFlowTests.cpp
+// (docs/macros/auto-ports.md#ports-on-a-cable-drag). Every T148 test in MacroPortFlowTests.cpp
 // drives the feature through GraphEditor::beginConnectionDrag/endConnectionDrag called directly -- a convenient
 // shortcut, but one that never touches ModuleComponent::mouseDown/mouseDrag/mouseUp at all. Those real entry points
 // have their own state machine: notably, ModuleComponent::mouseUp gates on e.getMouseDownPosition(), which JUCE holds

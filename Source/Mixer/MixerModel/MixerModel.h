@@ -48,8 +48,7 @@ struct MixerColumn {
     juce::String name;
     juce::Colour colour{0xff5a7dff};
 
-    /** docs/mixer/mixer.md#channels-follow-audio-not-tracks's link rule: this strip's ONLY feeding track source.
-     * Meaningless for Direct/Master. */
+    /** Strip's ONLY feeding source (docs/mixer/mixer.md#channels-follow-audio-not-tracks). None for Direct/Master. */
     bool linkedToTrack = false;
 
     /** Every track whose header shows this column's chip (docs/mixer/mixer.md#channels-follow-audio-not-tracks). Empty
@@ -101,8 +100,7 @@ struct MixerSnapshot {
  * change notification (a handful of strips, never per-frame). */
 MixerSnapshot buildMixerSnapshot(juce::AudioProcessorGraph& graph, const TimelineDoc& doc, const MacroSet& macros);
 
-// ---- Insert-list mutations (docs/mixer/mixer.md#inserts-in-a-free-form-graph)
-// -------------------------------------------------------------
+// ---- Insert-list mutations (docs/mixer/mixer.md#inserts-in-a-free-form-graph) --------------
 //
 // Plain graph splices, NO UNDO of their own -- same contract as Source/Mixer/ChannelFlows's own
 // builders (docs/architecture/module-base.md#appundomanager): the caller wraps each in one

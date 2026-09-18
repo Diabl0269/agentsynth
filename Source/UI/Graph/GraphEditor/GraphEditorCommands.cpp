@@ -224,7 +224,7 @@ void GraphEditor::showCanvasContextMenu(juce::Point<int> canvasPos) {
         // Calls requestGroupSelectionIntoMacro() directly, not the Cmd+G dispatch — see the
         // matching comment in ModuleComponent.cpp's right-click menu for why. That entry point
         // gates the auto-port-preference modal (founder-review fix F5,
-        // docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port item 6.2) the same way Cmd+G does.
+        // docs/macros/auto-ports.md#auto-creating-ports-when-grouping) the same way Cmd+G does.
         m.addItem("Create Macro from " + juce::String(selectionCount) + " Modules", [safeThis] {
             if (safeThis != nullptr)
                 safeThis->requestGroupSelectionIntoMacro();

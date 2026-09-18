@@ -190,8 +190,7 @@ DefaultChannel buildChannelForFeeds(juce::AudioProcessorGraph& graph,
  */
 DefaultChannel buildBusChannel(juce::AudioProcessorGraph& graph, const DefaultChannelLayout& layout);
 
-// ---- FRO25 (P9-3d, docs/mixer/mixer.md#make-channel-and-shared-modules): "Make channel"
-// ------------------------------------------
+// ---- FRO25 (P9-3d, docs/mixer/mixer.md#make-channel-and-shared-modules): "Make channel" ----------
 
 /** True for a track's own source node — a Track In (ModuleType::TimelineMidiSource) or Track Audio
  *  (ModuleType::TimelineAudioSource). See ChannelFlowsMakeChannel.cpp for why. */
@@ -264,8 +263,7 @@ MadeChannel buildMakeChannel(juce::AudioProcessorGraph& graph, const MakeChannel
 juce::AudioProcessorGraph::NodeID resolveChannelSource(juce::AudioProcessorGraph& graph,
                                                        const std::vector<juce::AudioProcessorGraph::NodeID>& nodes);
 
-// ---- FRO11 (P9-5, docs/mixer/mixer.md#inserts-in-a-free-form-graph): the signal-edge rule, shared
-// -------------------------------
+// ---- FRO11 (P9-5, docs/mixer/mixer.md#inserts-in-a-free-form-graph): signal-edge rule, shared -----
 //
 // planMakeChannel's own "what counts as signal" test (never an attenuverter's hidden modulation
 // leg, never an audio edge landing on a PortRole::ModCV pin), promoted out of
@@ -301,8 +299,7 @@ collectOutsideModulatorsForTrackPreset(juce::AudioProcessorGraph& graph, const M
  *  "stop at another CHANNEL's strip, but not at a plain FX group" rule (ChannelFlowsTrackPreset.cpp). */
 bool isChannelMacro(const Macro& macro, juce::AudioProcessorGraph& graph);
 
-// ---- FRO14 (P9-4, docs/mixer/mixer.md#channels-follow-audio-not-tracks): which channel a track plays into, and back
-// ---------------
+// ---- FRO14 (P9-4, docs/mixer/mixer.md#channels-follow-audio-not-tracks): track <-> channel ----------
 //
 // Both are pure signal-reach reads (no mutation, no undo, no TimelineDoc), defined in
 // ChannelFlowsTrackChannelLink.cpp. They follow the same signal-edge rule as each other: never

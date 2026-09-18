@@ -373,7 +373,7 @@ TEST(MacroSetPortReconciliation, RemoveMemberEverywhereDropsThePortItFronted) {
 
 // ---------------------------------------------------------------------------------------------
 // Macro::memberIsPort / Macro::moduleMemberCount (founder-review fix G6,
-// docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port item 4 note): "the number of modules indicator seems
+// docs/macros/ports.md#member-counts-report-modules-not-ports): "the number of modules indicator seems
 // to show more than there are - 4 when i grouped the delay and reverb in the default patch - should have shown 2."
 // members.size() counts port nodes as members (correctly - see the class comment on synth::Macro); the user-facing
 // MODULE count must not.

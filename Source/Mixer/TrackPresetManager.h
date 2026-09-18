@@ -10,8 +10,7 @@ namespace synth {
 /** Which `+ Track` submenu group (and which Preferences -> Mixer dropdown) a saved track preset
  *  belongs to. Written once at save time from the same track-kind resolution the track header
  *  already has (never inferred from node shape at load time — docs/mixer/track-presets.md). A MIDI track
- *  that alone drives an instrument counts as Instrument, per docs/mixer/mixer.md#channels-follow-audio-not-tracks's
- * link rule. */
+ *  that alone drives an instrument counts as Instrument (docs/mixer/mixer.md#channels-follow-audio-not-tracks). */
 enum class TrackPresetKind { Audio, Instrument };
 
 /** One track preset as surfaced in a menu or a Preferences dropdown. */

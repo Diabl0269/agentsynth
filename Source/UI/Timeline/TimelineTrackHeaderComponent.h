@@ -107,7 +107,8 @@ struct TrackHeaderHost {
 
     /** FRO25 (P9-3d, docs/mixer/mixer.md#make-channel-and-shared-modules): true when the header menu's "Make Channel"
      * would build something for `track` — its bound node's chain has no Channel Strip of its own yet (or merges into a
-     * shared module that has none). Non-pure with an inert `false` default, same reason as hasTracksNeedingChannels. */
+     * shared module that has none). Non-pure with an inert `false` default, for the same reason
+     * `hasTracksNeedingChannels()` above uses one. */
     virtual bool canMakeChannelForTrack(synth::TrackId track) const {
         juce::ignoreUnused(track);
         return false;
@@ -248,8 +249,8 @@ struct TrackHeaderHost {
      *  default. */
     virtual void addTrackFromPresetFile() {}
 
-    /** FRO14 (P9-4, docs/mixer/mixer.md 5.2): everything the header needs about the CHANNEL its track
-     *  plays into -- the channel chip, and the linked-track name/colour/mute/solo fan-out. ONE
+    /** FRO14 (P9-4, docs/mixer/mixer.md#channels-follow-audio-not-tracks): everything the header needs about the
+     * CHANNEL its track plays into -- the channel chip, and the linked-track name/colour/mute/solo fan-out. ONE
      *  accessor rather than a method per feature, so this interface (and MainComponent, which
      *  implements it) does not grow one line per channel behaviour; the real surface is
      *  TrackChannelLinkSurface. Non-pure with a null default: a header built against a stub host
