@@ -1,7 +1,7 @@
 <!-- Title format: type(scope)!: subject — e.g. "feat(FRO112): knob-and-graph envelope module card".
      Types: feat fix docs ci chore refactor test perf build. Scope = ticket id (optional). "!" before
-     the colon marks a breaking change. See docs/development/pr-title-convention.md. Checked by CI but not yet a
-     required check (FRO182). -->
+     the colon marks a breaking change. See docs/development/pr-title-convention.md. A required
+     status check: a bad title blocks the merge. -->
 
 ## Summary
 

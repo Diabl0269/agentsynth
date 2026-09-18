@@ -9,7 +9,8 @@ git-tracked source, test, docs, script and config file. It runs in
 One cap for everything: a 6,000-line test file is exactly as unreviewable as a 6,000-line source
 file, and a per-directory cap would only move the goalposts.
 
-**Why.** `Source/UI/GraphEditor.cpp` crossed 9,000 lines and several test files passed 6,000 before
+**Why.** The editor's single graph-editor source file crossed 9,000 lines — it is now the
+per-concern units under `Source/UI/Graph/GraphEditor/` — and several test files passed 6,000, before
 this guard existed. A file that size turns every change into a scroll through unrelated concerns,
 inflates review diffs with untouched context lines, and makes merge conflicts far likelier between
 two people editing different features that happen to share a file.

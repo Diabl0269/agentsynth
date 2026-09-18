@@ -155,7 +155,7 @@ it are in [`../testing_mixer_meters.md`](../testing_mixer_meters.md).
 
 ## Channel creation flows
 
-`Tests/ChannelFlowTests.cpp` — `Source/Mixer/ChannelFlows/ChannelFlows.h`/`.cpp`'s builders and the
+`Tests/Mixer/ChannelFlow/` — `Source/Mixer/ChannelFlows/ChannelFlows.h`/`.cpp`'s builders and the
 three "+ Track"/drag flows that call them ([`../mixer.md`](../mixer.md) §5.2). Headless except the
 `ChannelFlowTest` fixture, which drives a real `MainComponent` off-screen.
 `ChannelFlowAutoChannelCore` cases build a bare `AudioEngine`/graph directly
@@ -179,8 +179,7 @@ and module-card right-click menus through their
 | `buildChannelForFeeds` exit handling | exit edges are removed before the chain is built, and wired through to a freshly spliced Master (`RemovesExitEdgesAndWiresThroughToANewMaster`) or an existing one, clearing prior Direct feeds (`ReusesAnExistingMasterAndClearsDirectFeeds`) |
 | `ChannelFlowTest.AutoChannelOnConnect_*` (real mouse drag) | toggle ON builds exactly one channel as one undo step (`ToggleOnBuildsOneChannelAsOneUndoStep`); toggle OFF only makes the connection, byte-identical to the pre-feature behaviour (`ToggleOffOnlyConnectsNoChannel`); an instrument that already has a channel gets nothing new when a second Track In connects (`AlreadyChanneledInstrumentGetsNoNewStrip`); the new EQ/Compressor/Strip join the instrument's existing macro when boxing applies (`NewChainNodesJoinTheInstrumentsExistingMacro`) |
 
-The suite is split by topic under `Tests/Mixer/ChannelFlow/`, all sharing the `ChannelFlowTest`
-fixture, `MockProviderCFT`, the plugin-scan stub backend and the render-identity rig helpers in
+The suite is split by topic, all sharing the `ChannelFlowTest` fixture, `MockProviderCFT`, the plugin-scan stub backend and the render-identity rig helpers in
 `Tests/Mixer/ChannelFlow/ChannelFlowTestFixture.h` (header-only, not built on its own):
 
 | File | Covers |

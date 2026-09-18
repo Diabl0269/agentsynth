@@ -50,7 +50,9 @@ cmake --build build
 
 ## Adding tests for a new module
 
-1. **Unit tests** in `Tests/<ModuleName>Tests.cpp` — DSP output, parameter handling, edge cases.
+1. **Unit tests** in `Tests/Modules/<ModuleName>Tests.cpp`, or `Tests/FX/` for an FX module — DSP
+   output, parameter handling, edge cases. `Tests/` mirrors `Source/` by area; see
+   [`file-size-guard.md`](file-size-guard.md#how-to-split-an-over-cap-file).
 2. **End-to-end coverage** — add the module's name string to the `moduleTypes` array in
    `E2EWorkflowTest.DropAllModuleTypes_NoCrash`.
 3. **Add the file to `Tests/CMakeLists.txt`.** A test file that no CMake target compiles passes
