@@ -63,9 +63,23 @@ void AudioEngine::handleIncomingMidiMessageFromSource(const juce::String& source
 
     // MIDI Remote gets first look, before the ExternalMidiModule fan-out and the collector push: a
     // message it consumes goes nowhere else (docs/midi_remote.md §4.3).
-    if (auto* sink = remoteMessageSink_.load(std::memory_order_acquire); sink != nullptr)
-        if (sink->handleMessage(sourceKey, message))
-            return;
+    //
+    // This runs on a juce::MidiInput driver thread, which never enters a render pass — the old code
+    // here (pre-FRO197) read remoteMessageSink_ unguarded, so setRemoteMessageSink(nullptr) could
+    // return and the sink object be destroyed while this thread was already past the load, about to
+    // call handleMessage on it: a teardown use-after-free. ScopedRemoteSinkCall's fetch_add, BEFORE
+    // the pointer load below (not just wrapping the handleMessage call), fixes that: both it and the
+    // pointer store/load are seq_cst, so either this fetch_add is globally ordered before
+    // setRemoteMessageSink's store — in which case drainRemoteSinkCalls() must observe a nonzero
+    // count and wait — or this thread's load reads the store's nullptr and skips the call entirely.
+    // There is no interleaving where this thread can dereference a sink the message thread has
+    // already been allowed to free.
+    {
+        const ScopedRemoteSinkCall remoteSinkGuard(remoteSinkCallsInFlight_);
+        if (auto* sink = remoteMessageSink_.load(std::memory_order_seq_cst); sink != nullptr)
+            if (sink->handleMessage(sourceKey, message))
+                return;
+    }
 
     for (auto* node : mainProcessorGraph.getNodes()) {
         if (auto* extMidi = dynamic_cast<ExternalMidiModule*>(node->getProcessor())) {

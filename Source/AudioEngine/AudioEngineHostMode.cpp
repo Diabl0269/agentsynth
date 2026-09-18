@@ -39,14 +39,21 @@ void AudioEngine::processHostBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     // while MIDI Remote is idle; remoteHostScratchMidi_ is a pre-allocated member so the clear()/
     // addEvent() below never allocate once warmed up. Consumed messages are dropped from the
     // buffer before renderNextBlock, same as the standalone path's "goes nowhere else" contract.
-    if (auto* sink = remoteMessageSink_.load(std::memory_order_acquire); sink != nullptr) {
-        remoteHostScratchMidi_.clear();
-        for (const auto metadata : midiMessages) {
-            const auto message = metadata.getMessage();
-            if (!sink->handleMessage(synth::midi::hostSourceKey(), message))
-                remoteHostScratchMidi_.addEvent(message, metadata.samplePosition);
+    //
+    // This whole block runs BEFORE renderNextBlock(), so it is outside ScopedRenderPass too —
+    // ScopedRemoteSinkCall covers it exactly like the standalone MIDI-thread call site, entered once
+    // for the loop rather than per message since the sink is loaded once (FRO197).
+    {
+        const ScopedRemoteSinkCall remoteSinkGuard(remoteSinkCallsInFlight_);
+        if (auto* sink = remoteMessageSink_.load(std::memory_order_seq_cst); sink != nullptr) {
+            remoteHostScratchMidi_.clear();
+            for (const auto metadata : midiMessages) {
+                const auto message = metadata.getMessage();
+                if (!sink->handleMessage(synth::midi::hostSourceKey(), message))
+                    remoteHostScratchMidi_.addEvent(message, metadata.samplePosition);
+            }
+            midiMessages.swapWith(remoteHostScratchMidi_);
         }
-        midiMessages.swapWith(remoteHostScratchMidi_);
     }
 
     renderNextBlock(buffer, midiMessages);

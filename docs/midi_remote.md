@@ -8,8 +8,10 @@ implementation tracker live in [`midi_remote_ui.md`](midi_remote_ui.md). The sib
 that lets a hosted plugin card show a chosen set of its parameters as knobs — the knobs MIDI
 Remote then maps like any other — is [`plugin_card_layout.md`](plugin_card_layout.md).
 
-**Status:** designed, not built. The tracker in `midi_remote_ui.md` §8 is the record of what
-actually exists; until an item there is ticked, nothing below is shipped.
+**Status:** the model, persistence and `RemoteEngine` (tracker items 1-3) are built and wired
+into `AudioEngine`, but nothing in the shipped UI can create an assignment yet — no user can
+reach this feature until MIDI Learn (item 4) lands. The tracker in `midi_remote_ui.md` §8 is
+the record of what actually exists; until an item there is ticked, nothing below is shipped.
 
 ---
 

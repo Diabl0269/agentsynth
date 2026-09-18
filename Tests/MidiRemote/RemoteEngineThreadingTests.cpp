@@ -6,10 +6,12 @@
 // CI's label-gated sanitizer job builds with -fsanitize=address only, so a TSan run is a local
 // gate (see docs/testing.md).
 
+#include "AudioEngine/AudioEngine.h"
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
 
 #include <atomic>
 #include <gtest/gtest.h>
+#include <memory>
 #include <thread>
 #include <vector>
 
@@ -198,6 +200,68 @@ TEST(MidiRemoteEngineThreading, BurstWhileSwappingTheTable) {
     EXPECT_GT(sent.load(), 10000) << "the burst was too small to have exercised a concurrent republish";
     EXPECT_EQ(engine.publisher().retiredCount(), 0)
         << "every snapshot retired during the burst should be reclaimable once the burst stops";
+}
+
+// FRO197: AudioEngine::setRemoteMessageSink(nullptr) must be safe to call concurrently with the
+// threads that read remoteMessageSink_ and call into it OUTSIDE any render pass --
+// AudioEngineMidi.cpp's handleIncomingMidiMessageFromSource (the standalone juce::MidiInput driver
+// thread's real entry point) is exactly that call site. Before ScopedRemoteSinkCall /
+// drainRemoteSinkCalls() existed, a producer thread here could load the old (non-null) sink pointer
+// just before this loop clears and destroys it, then dereference a dead RemoteEngine a moment later
+// -- a nanosecond-wide use-after-free at teardown. This hammers that window directly through the
+// real seam, repeatedly, so a regression shows up as a crash (and reliably under ThreadSanitizer;
+// see the file header) rather than passing by luck on a quiet machine.
+TEST(MidiRemoteEngineThreading, TeardownSurvivesConcurrentMidiThreadDelivery) {
+    AudioEngine engine(AudioEngine::HostMode::Standalone);
+
+    std::atomic<bool> stop{false};
+    std::atomic<long> delivered{0};
+
+    std::vector<std::thread> producers;
+    for (int d = 0; d < kDevices; ++d) {
+        producers.emplace_back([&, d] {
+            const juce::String key = deviceKey(d); // built once: the MIDI path allocates nothing
+            int step = 0;
+            while (!stop.load(std::memory_order_relaxed)) {
+                const auto message =
+                    juce::MidiMessage::controllerEvent(1, kFirstCc + (step % kControlsPerDevice), step % 128);
+                engine.handleIncomingMidiMessageFromSource(key, message);
+                ++step;
+                delivered.fetch_add(1, std::memory_order_relaxed);
+            }
+        });
+    }
+
+    // Repeatedly wire a fresh RemoteEngine in, clear it, and destroy it -- setRemoteMessageSink(nullptr)
+    // must return only once every handleMessage call already in flight on the producer threads above
+    // has left, or the unique_ptr reset below is a use-after-free waiting to happen.
+    //
+    // Bounded on BOTH a minimum iteration count and a minimum delivered-message floor, not a fixed
+    // iteration count: constructing a RemoteEngine is expensive enough that a fast machine can clear
+    // 300 iterations before the producer threads have delivered a meaningful burst, which would let
+    // this pass without ever really contending the teardown window. kMaxIterations is only a safety
+    // cap against a wedged producer thread stalling the test outright.
+    constexpr int kMinIterations = 300;
+    constexpr long kMinDelivered = 10000;
+    constexpr int kMaxIterations = 20000;
+    int iteration = 0;
+    while (iteration < kMaxIterations &&
+           (iteration < kMinIterations || delivered.load(std::memory_order_relaxed) < kMinDelivered)) {
+        auto remote = std::make_unique<RemoteEngine>();
+        remote->setProfiles(makeProfiles());
+        remote->setSources(allDeviceKeys());
+        remote->setAssignments(makeAssignments(iteration));
+        engine.setRemoteMessageSink(remote.get());
+        engine.setRemoteMessageSink(nullptr);
+        remote.reset(); // the FRO197 use-after-free, if the handshake above were incomplete
+        ++iteration;
+    }
+
+    stop.store(true, std::memory_order_relaxed);
+    for (auto& producer : producers)
+        producer.join();
+
+    EXPECT_GT(delivered.load(), 10000) << "the burst was too small to have exercised the teardown window";
 }
 
 // A message from a source the engine has not been told about is ignored outright — never consumed,
