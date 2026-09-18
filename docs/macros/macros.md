@@ -151,8 +151,10 @@ macro from a validated node set — never a `"macros"` key the model writes dire
   behaviour.
 - [`docs/layout/selection.md`](../layout/selection.md) · [`docs/layout/cables.md`](../layout/cables.md)
   — selection, group drag and cable interaction.
-- [`docs/architecture.md`](../architecture.md) — the flat graph, latency compensation, plugin state
-  format.
+- [`docs/architecture/architecture.md`](../architecture/architecture.md) — the flat graph.
+  [`docs/architecture/plugin-layer.md#latency-compensation`](../architecture/plugin-layer.md#latency-compensation) ·
+  [`docs/architecture/plugin-layer.md#plugin-state-format`](../architecture/plugin-layer.md#plugin-state-format)
+  — latency compensation, plugin state format.
 - [`docs/modules/modules.md`](../modules/modules.md) · `Source/Modules/CLAUDE.md` — channel-count
   rules; [`docs/modules/fx-modules.md#stereo-io-dual-io-toggle`](../modules/fx-modules.md#stereo-io-dual-io-toggle)
   — Dual I/O rules.

@@ -121,7 +121,8 @@ Every real control gets Tab, Return and Space for free from `juce::Button`, `juc
   command modifier FIRST and fire `onReorderPort`, falling through to the bare-arrow row navigation
   above only when it is not held. This matches the app's existing convention of the command modifier
   for editing-type actions (Cmd+D duplicate, Cmd+R repeat —
-  [`docs/shortcuts.md`](../shortcuts.md)) and is dialog-local key handling, not a `ShortcutManager`
+  [`docs/control/shortcuts.md`](../control/shortcuts.md#surface-routing-who-cmdcvdxr-and-cmda-act-on))
+  and is dialog-local key handling, not a `ShortcutManager`
   action.
 - **Keyboard focus is visible.** `juce::Button::paint()` hands `paintButton()` only `isOver()` and
   `isDown()`, never keyboard-focus state, so a custom `paintButton` override draws nothing different

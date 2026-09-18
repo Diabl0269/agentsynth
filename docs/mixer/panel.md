@@ -301,7 +301,7 @@ child deliberately does not, so a screen reader's cursor moves without stealing 
 keyboard focus.
 
 The full key table, the region's open predicate and the accessibility handler details live in
-[`docs/shortcuts.md`](../shortcuts.md#mixer-column-navigation).
+[`docs/control/shortcuts.md#mixer-column-navigation`](../control/shortcuts.md#mixer-column-navigation).
 
 ## Related
 

@@ -328,4 +328,4 @@ unexplained Linux-only segfault.
 - [`docs/macros/auto-ports.md`](auto-ports.md) — the crossing-plan machinery these paths reuse.
 - [`docs/macros/configure-io.md`](configure-io.md) — the Configure I/O dialog this menu opens.
 - [`docs/layout/selection.md`](../layout/selection.md) — selection and group drag.
-- [`docs/shortcuts.md`](../shortcuts.md) — `Cmd+G` and the modifier conventions.
+- [`docs/control/shortcuts.md#graph`](../control/shortcuts.md#graph) — `Cmd+G` and the modifier conventions.

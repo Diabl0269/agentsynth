@@ -95,4 +95,4 @@ export leaves no stem files behind, never touches a pre-existing file, and disar
 - [`docs/mixer/mixer.md`](mixer.md) — what a channel is, and the solo gate the tap sits after.
 - [`docs/mixer/sends-and-buses.md`](sends-and-buses.md) — why a source's stem is pre-send.
 - [`docs/mixer/panel.md`](panel.md#what-the-mixer-shows) — why Direct is not a channel.
-- [`docs/architecture.md`](../architecture.md) — the offline bounce path this shares.
+- [`docs/architecture/audio-engine.md#bounceexport`](../architecture/audio-engine.md#bounceexport) — the offline bounce path this shares.

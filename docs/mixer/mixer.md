@@ -584,12 +584,16 @@ macro".
   side of the track and channel relationship.
 - [`docs/timeline/add-track.md`](../timeline/add-track.md) — the "+ Track" menu and every flow it
   starts.
-- [`docs/architecture.md`](../architecture.md) — `ensureMasterRecordTap()`, `EpochExchange`, the
-  bypass and mute contract, plugin host modes.
+- [`docs/architecture/audio-engine.md#audioengine`](../architecture/audio-engine.md#audioengine) —
+  `ensureMasterRecordTap()`, `EpochExchange`.
+  [`docs/architecture/module-base.md#bypassmute-contract`](../architecture/module-base.md#bypassmute-contract)
+  — the bypass and mute contract.
+  [`docs/architecture/plugin-layer.md#host-modes-audioenginehostmode`](../architecture/plugin-layer.md#host-modes-audioenginehostmode)
+  — plugin host modes.
 - [`docs/modules/modules.md#channel-strip-module-mixer-channel-hidden`](../modules/modules.md#channel-strip-module-mixer-channel-hidden)
   — `kRightBase`, the stereo-pair conventions a strip's output follows, and
   [`docs/modules/modules.md#voice-mixer-module`](../modules/modules.md#voice-mixer-module).
 - [`docs/layout/colour-overrides.md#colour-picker-popup`](../layout/colour-overrides.md#colour-picker-popup)
   — `ColourPickerPopup`'s preview and commit split, the mechanism the track and channel colour link
   fans out.
-- [`docs/shortcuts.md`](../shortcuts.md) — "Locate Master" and the mixer's own key bindings.
+- [`docs/control/shortcuts.md#locate-master`](../control/shortcuts.md#locate-master) — "Locate Master" and the mixer's own key bindings.
