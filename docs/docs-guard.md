@@ -17,7 +17,7 @@ bash scripts/check-docs.sh --list                    # summarize current violati
 bash scripts/check-docs.sh --root <dir>              # scan a different repo root (for tests)
 ```
 
-## The five checks
+## The six checks
 
 Every check scans the same file set: every git-tracked-**or-untracked** `*.md`, `*.cpp`, `*.h`,
 `*.sh` and `*.yml` anywhere under the repo root — so `Tests/**` and `Tools/**` count exactly like
@@ -77,6 +77,32 @@ exists but isn't linked from it is invisible to anyone reading the map instead o
 directory, and this check is what keeps that map trustworthy without relying on every PR author to
 remember it by hand.
 
+### F. `docs/...#anchor` mentions resolve outside markdown link syntax too
+
+Check B only validates an anchor when it's written as genuine markdown link syntax — square-bracket
+link text immediately followed by a parenthesized target ending in `.md`, optionally `#anchor` —
+in a `*.md` file. A `docs/<path>.md#<slug>` mention written any other way (plain
+prose in a `*.md` file, or anywhere in a `*.cpp`/`*.h`/`*.sh`/`*.yml` file — a comment naming a doc
+section, for instance) was invisible to every check until FRO196: check C confirms the *doc* named
+exists, but never looks at an anchor tacked onto it. **Not baselined — zero tolerance**, same as
+B/C/D/E. This mattered immediately: FRO166's docs restructure makes every heading unnumbered and
+converts the ~500 existing `§N` references (hard-gated by check D, zero tolerance) into `#anchor`
+references — without check F, that restructure would trade ~500 gated references for ungated ones,
+exactly the rot check D exists to stop.
+
+Check F does not reimplement anything check B or check C already got right:
+
+- **Slug rules** — it validates against the exact same slug table check B builds (GitHub-style:
+  lowercase, non-alphanumeric stripped, spaces to hyphens), built once per run and shared by both
+  checks, so they can never disagree about what a valid slug is.
+- **Boundary rule** — it reuses check C's rule that the character immediately before `docs/` must
+  be neither `/` nor alphanumeric, so a qualified sibling-repo path like
+  `synth-platform/docs/billing.md#some-section` is never misread as naming *this* repo's `docs/`
+  tree, anchor and all.
+- **No double-reporting** — a `docs/<path>.md#<anchor>` mention where `<path>.md` doesn't exist at
+  all is check C's failure to report, not check F's; check F skips it rather than raising a second,
+  redundant error for the same underlying mistake.
+
 ## Naming ratchet
 
 Check A works exactly like the [file-size](testing.md#file-size-cap-lint-job) and
@@ -95,10 +121,10 @@ Check A works exactly like the [file-size](testing.md#file-size-cap-lint-job) an
 - A first-ever `--update` (no baseline file present yet) bootstraps without needing
   `--allow-growth` — there's nothing to compare against yet, so nothing can be a growth.
 
-Checks B, C, D, and E have no baseline at all — they're always a hard failure. A broken link, a
-stale `docs/...` mention, a stale `§`-section reference, or a `docs/README.md` map gap is never
-something to grandfather; each is wrong the moment it exists; the ratchet exists only to migrate
-the legacy filename convention without a disruptive mass rename.
+Checks B, C, D, E, and F have no baseline at all — they're always a hard failure. A broken link, a
+stale `docs/...` mention, a stale `§`-section reference, a `docs/README.md` map gap, or a stale
+`#anchor` mention is never something to grandfather; each is wrong the moment it exists; the
+ratchet exists only to migrate the legacy filename convention without a disruptive mass rename.
 
 ## Running it
 
@@ -163,9 +189,10 @@ tooling that reads it the same naive way) can look momentarily misleading during
 
 ## Zero tolerance for stale references
 
-Checks B, C, D, and E exist specifically because [check A's grandfathering](#naming-ratchet)
-doesn't generalize: a stale link or section reference is never "legacy debt to migrate later" the
-way an old filename is — it actively misdirects the next reader the moment it goes stale. That's
-why only the naming convention gets a ratchet at all, and why fixing a check-B/C/D/E violation
-means finding the CORRECT destination (via git history for a moved/renumbered section, never a
-guess) and pointing at that, not adding an exception anywhere.
+Checks B, C, D, E, and F exist specifically because [check A's grandfathering](#naming-ratchet)
+doesn't generalize: a stale link, section reference, or anchor mention is never "legacy debt to
+migrate later" the way an old filename is — it actively misdirects the next reader the moment it
+goes stale. That's why only the naming convention gets a ratchet at all, and why fixing a
+check-B/C/D/E/F violation means finding the CORRECT destination (via git history for a
+moved/renumbered/renamed section, never a guess) and pointing at that, not adding an exception
+anywhere.

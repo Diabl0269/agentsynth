@@ -283,6 +283,81 @@ write_file "$D$S""nested/deep/README.md" <<'EOF'
 EOF
 assert_fail "only the top-level docs/README.md is exempt -- a nested README.md still needs a map link" "${D}${S}nested/deep/README.md: not linked from ${D}${S}README.md"
 
+# --- check F: docs/...#anchor mentions outside markdown link syntax ---------------------------
+
+reset_repo
+seed_clean_tree
+write_file "Source/Some.cpp" <<EOF
+// see ${DOCPFX}architecture.md#1-overview for the real deal, in a .cpp comment (not a markdown link)
+EOF
+assert_pass "an anchor mention in a .cpp comment that resolves passes"
+
+reset_repo
+seed_clean_tree
+write_file "Source/Some.cpp" <<EOF
+// see ${DOCPFX}architecture.md#9-nope in a .cpp comment (not a markdown link)
+EOF
+assert_fail "an anchor mention in a .cpp comment that does not resolve fails" "anchor mention '${D}${S}architecture.md#9-nope' has no heading matching anchor '#9-nope'"
+
+reset_repo
+seed_clean_tree
+write_file "Source/Some.h" <<EOF
+// see ${DOCPFX}does-not-exist.md#whatever for a doc that does not exist at all
+EOF
+f_doubled_output="$(run_check 2>&1)"
+f_doubled_status=$?
+if [ "$f_doubled_status" -ne 0 ] && echo "$f_doubled_output" | grep -qF -- "${D}${S}does-not-exist.md' does not exist" \
+    && ! echo "$f_doubled_output" | grep -qF -- "has no heading matching anchor"; then
+    echo "PASS: an anchor mention on a doc that doesn't exist is check C's failure only -- check F never double-reports it"
+    pass=$((pass + 1))
+else
+    echo "FAIL: an anchor mention on a doc that doesn't exist is check C's failure only -- check F never double-reports it"
+    echo "exit=$f_doubled_status"
+    echo "$f_doubled_output"
+    fail=$((fail + 1))
+fi
+
+reset_repo
+seed_clean_tree
+write_file "$D$S""punctuation.md" <<'EOF'
+# Punctuation
+
+## Mixed CASE, Punctuation!
+
+Some text.
+EOF
+write_file "Source/Some.h" <<EOF
+// a heading with punctuation and mixed case still slugifies to lowercase-hyphenated text (GitHub
+// slug rules: lowercase, strip everything not alnum/space/hyphen, spaces to hyphens)
+// see ${DOCPFX}punctuation.md#mixed-case-punctuation for the rationale
+EOF
+link_from_readme "punctuation.md"
+assert_pass "an anchor mention resolves correctly against a heading with punctuation and mixed case"
+
+reset_repo
+seed_clean_tree
+write_file "scripts/example.sh" <<EOF
+#!/usr/bin/env bash
+# see ${DOCPFX}architecture.md#2-details for the rationale (a .sh file, not a markdown link)
+EOF
+assert_pass "an anchor mention in a .sh file that resolves passes"
+
+reset_repo
+seed_clean_tree
+write_file ".github/workflows/example.yml" <<EOF
+# see ${DOCPFX}architecture.md#9-nope here (a .yml file, not a markdown link)
+name: example
+EOF
+assert_fail "an anchor mention in a .yml file that does not resolve fails" "anchor mention '${D}${S}architecture.md#9-nope' has no heading matching anchor '#9-nope'"
+
+reset_repo
+seed_clean_tree
+write_file "Source/Some.cpp" <<EOF
+// see other-repo${S}${DOCPFX}billing.md#some-anchor -- a QUALIFIED path into a sibling repo's
+// docs/ tree, which must never be misread as naming OUR docs/ tree, even with an anchor attached
+EOF
+assert_pass "a qualified sibling-repo docs/ path with an anchor (preceded by '/') is not flagged, even though the bare filename doesn't exist here"
+
 # --- --update semantics -----------------------------------------------------------------------
 
 reset_repo
