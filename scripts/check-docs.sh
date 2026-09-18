@@ -6,7 +6,7 @@
 # git-ls-files-based scan would miss is exactly the kind of rename that leaves a stale reference
 # behind), a section gets renumbered or deleted, a link target moves -- and nothing catches it until
 # a reader clicks a dead link or a stale `§N` pointer in a Source/** comment sends them to the wrong
-# place (or nowhere). Six checks, all against the WORKING TREE via `find` (never `git ls-files` --
+# place (or nowhere). Seven checks, all against the WORKING TREE via `find` (never `git ls-files` --
 # that misses untracked new files, the exact trap that bit an earlier verify script in this repo):
 #
 #   A. Doc filename convention -- every docs/**/*.md basename must be lowercase kebab-case
@@ -48,9 +48,36 @@
 #      a qualified sibling-repo path like `synth-platform/docs/x.md#y` is never misread as ours
 #      either. A `docs/<path>.md#<slug>` mention whose doc doesn't exist at all is check C's failure
 #      to report, not this one's -- skipped here to avoid double-reporting the same mistake twice.
+#   G. Bare basename references resolve -- checks C/D/F all require a literal `docs/` prefix before
+#      a filename, so a reference written as a BARE backticked basename in prose (typically followed
+#      by a `§N` section marker or `#anchor`, with no markdown link target at all) matched none of
+#      them and was invisible to every check before FRO217. For every in-scope file, a backtick-
+#      wrapped `` `<name>.md` `` token -- outside markdown link syntax (masked the same way check B
+#      parses it) and with no `docs/` or other path prefix (the boundary rule below excludes both) --
+#      must resolve to EXACTLY ONE real docs/**/*.md file by basename: matching zero is a doc that
+#      is gone outright, matching more than one is itself a failure (a bare name a script cannot
+#      resolve is one a reader cannot resolve either), checked EVERY time the bare name appears,
+#      marker or none. Separately, whatever immediately follows the name -- whitespace only, up to 3
+#      characters, narrower than check D's any-char budget; see check_g_violations' own comment for
+#      why -- is checked as an OPTIONAL trailing `§N`/`§N.M`/`§N.M.K` marker or `#anchor`: present
+#      and the basename resolves to exactly one doc, that marker must name a section/anchor that
+#      actually exists in it; present and the basename resolves to zero docs, that is the "doc is
+#      gone outright" failure above; absent, there is nothing more to check (a bare mention with no
+#      marker is not a structured cross-reference this check gates). The fix for every failure here
+#      is the same: write the full `docs/` path (converting it to a real link, or a full-path
+#      mention checks C/D/F already cover). NOT baselined -- ZERO TOLERANCE, same as B/C/D/E/F.
+#      Reuses check B's own slug table (for a trailing `#anchor`) and a new `build_headings_file`
+#      shared table (for a trailing `§N`, also now used by check D) rather than adding a third
+#      slug/section implementation -- see build_headings_file's own comment. A bare name that IS
+#      inside proper markdown link syntax (`` [`name.md`](target) ``) is check B's business, not
+#      this check's -- the whole `[text](target)` span is masked out of the line before this check
+#      ever looks at it, so it is never double-reported here. FRO176's post-merge verification found
+#      two live dead references of exactly this shape surviving a clean run (docs/timeline/scale-
+#      assist.md and docs/plugin_card_layout.md, both fixed in the same PR that added this check) --
+#      proof the gap was real, not theoretical.
 #
 # Usage:
-#   bash scripts/check-docs.sh                  # check the tree (A against baseline; B-F hard)
+#   bash scripts/check-docs.sh                  # check the tree (A against baseline; B-G hard)
 #   bash scripts/check-docs.sh --update         # rewrite the naming baseline from the current tree
 #   bash scripts/check-docs.sh --update --allow-growth  # ...and let a new naming entry through
 #   bash scripts/check-docs.sh --list           # summarize current violations in every check
@@ -63,7 +90,7 @@
 #
 # Exit status (check mode only -- --update/--list/--help always exit 0 on success):
 #   0  no violation
-#   1  any check-B/C/D/E/F failure, any check-A violation not (or no longer) covered by the
+#   1  any check-B/C/D/E/F/G failure, any check-A violation not (or no longer) covered by the
 #      baseline, or the tree has zero .md files in scope (see the vacuous-pass fail-safe below)
 #
 # Portable bash 3.2 (macOS default) + grep/sed/find -- no python, no GNU-only flags. Every bash
@@ -123,13 +150,14 @@ usage() {
     cat <<'USAGE'
 Usage: bash scripts/check-docs.sh [--update] [--list] [--root <dir>] [-h|--help]
 
-Six checks against docs/ and every in-scope *.cpp/*.h/*.sh/*.yml/*.txt/*.json/*.cmake/*.py file in
+Seven checks against docs/ and every in-scope *.cpp/*.h/*.sh/*.yml/*.txt/*.json/*.cmake/*.py file in
 the repo (Source/, Tests/, Tools/, scripts/, .github/ -- see EXTENSIONS/EXCLUDED_PREFIXES below):
 doc filename convention (A), markdown link targets (B), `docs/...` path mentions (C), `§`-section
 references (D), docs/README.md map completeness (E), `docs/...#anchor` mentions outside markdown
-link syntax (F). Only A is ratcheted, against scripts/docs-baseline.txt; B, C, D, E, F are always a
-hard failure (zero tolerance, never baselined). See this script's own header comment for the full
-mechanism.
+link syntax (F), bare backticked basename references outside markdown link syntax and outside any
+`docs/` path (G). Only A is ratcheted, against scripts/docs-baseline.txt; B, C, D, E, F, G are
+always a hard failure (zero tolerance, never baselined). See this script's own header comment for
+the full mechanism.
 
   (no flags)     Check the tree. Exit 1 on any violation.
   --update       Rewrite the naming baseline from the current tree's check-A violations and print
@@ -187,6 +215,12 @@ while [ $# -gt 0 ]; do
 done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# check_b_violations through check_g_violations (and the awk helpers they share) live in
+# scripts/lib/check-docs-checks.sh -- split out once this file grew past the repo file-size cap;
+# see that file's own header comment for why.
+# shellcheck source=scripts/lib/check-docs-checks.sh
+source "$SCRIPT_DIR/lib/check-docs-checks.sh"
 if [ -n "$ROOT_OVERRIDE" ]; then
     ROOT="$(cd "$ROOT_OVERRIDE" && pwd)"
 else
@@ -276,48 +310,6 @@ normalize_rel_path() {
     printf '%s' "$out"
 }
 
-# --- heading helpers --------------------------------------------------------------------------
-
-# build_slugs_file <pairs-file (md-only)> <out-file> -- "relpath\tslug" (GitHub-style: lowercase,
-# strip everything not alnum/space/hyphen, spaces->hyphens) for every heading line in every *.md
-# file in <pairs-file>. One awk process for every file's headings, computed ONCE regardless of how
-# many links reference them -- check_b_violations used to call a 5-process grep|sed|tr|sed|tr
-# pipeline PER anchored link (this repo has ~95 of them), which dominated this script's runtime
-# under this environment's per-process overhead; a single upfront table plus a plain lookup fixed
-# it. Same getline-per-file technique as awk_scan/build_headings_file.
-build_slugs_file() {
-    local pairs="$1" out="$2"
-    awk -v filelist="$pairs" '
-        BEGIN {
-            while ((getline pairline < filelist) > 0) {
-                n = split(pairline, cols, "\t")
-                if (n < 2) continue
-                relpath = cols[1]
-                abspath = cols[2]
-                while ((getline line < abspath) > 0) {
-                    if (line !~ /^#{1,6}[ \t]/) continue
-                    text = line
-                    sub(/^#{1,6}[ \t]+/, "", text)
-                    text = tolower(text)
-                    gsub(/[^a-z0-9 \t-]/, "", text)
-                    gsub(/[ \t]/, "-", text)
-                    print relpath "\t" text
-                }
-                close(abspath)
-            }
-            close(filelist)
-            exit
-        }
-    ' >"$out"
-}
-
-# slug_exists <relpath> <anchor> <slugs-file> -- true if <relpath> has a heading whose slug is
-# exactly <anchor>.
-slug_exists() {
-    local doc="$1" anchor="$2" slugs_file="$3"
-    awk -F'\t' -v d="$doc" -v a="$anchor" '$1 == d && $2 == a { found = 1 } END { exit !found }' "$slugs_file"
-}
-
 # --- scan materialization ---------------------------------------------------------------------
 #
 # Every check below needs the same per-line regex extraction over potentially hundreds of files.
@@ -357,409 +349,6 @@ build_pairs_file() {
 # was given), which is harmless when stdin is already closed/empty (every run in this script's own
 # tests and in CI) but would BLOCK waiting for input if this ever runs with a real tty on stdin
 # (e.g. the pre-commit hook during an interactive `git commit`). `exit` makes that impossible.
-awk_scan() {
-    local pairs="$1" pattern="$2"
-    # awk applies escape-sequence processing to a `-v var=value` assignment (POSIX: same rules as
-    # a string constant in the program text) -- an UNESCAPED `\]`/`\(`/`\.` etc in <pattern> can
-    # silently lose its backslash (implementation-defined for an unrecognized escape), turning
-    # `\]\([^)]*\)` into the unanchored `][^)]*` and matching from the wrong `]` entirely. Doubling
-    # every backslash here survives that processing and restores the caller's literal pattern.
-    local escaped_pattern="${pattern//\\/\\\\}"
-    awk -v filelist="$pairs" -v pat="$escaped_pattern" '
-        BEGIN {
-            while ((getline pairline < filelist) > 0) {
-                n = split(pairline, cols, "\t")
-                if (n < 2) continue
-                relpath = cols[1]
-                abspath = cols[2]
-                fnr = 0
-                while ((getline line < abspath) > 0) {
-                    fnr++
-                    remaining = line
-                    while ((idx = match(remaining, pat)) > 0) {
-                        text = substr(remaining, idx, RLENGTH)
-                        print relpath "\t" fnr "\t" text
-                        if (RLENGTH == 0) { remaining = substr(remaining, idx + 1) } else { remaining = substr(remaining, idx + RLENGTH) }
-                    }
-                }
-                close(abspath)
-            }
-            close(filelist)
-            exit
-        }
-    '
-}
-
-# --- check B: markdown link targets ------------------------------------------------------------
-
-# check_b_violations <pairs-file (md-only)> <slugs-file (from build_slugs_file)> --
-# "relpath:line: message" per broken link. <slugs-file> is built once by the caller (run_check /
-# run_list) and shared with check_f_violations, so B and F can never disagree about what counts as
-# a valid slug -- there is exactly one slug implementation in this file.
-check_b_violations() {
-    local md_pairs="$1" slugs_file="$2"
-    awk_scan "$md_pairs" '\]\([^)]*\)' | while IFS="$(printf '\t')" read -r path line rest; do
-        [ -n "$path" ] || continue
-        # Pure bash `dirname` equivalent -- the real /usr/bin/dirname is an external process, and
-        # this loop runs it once per markdown link (500+ across the repo); at this environment's
-        # per-process overhead that alone was a meaningful chunk of check B's runtime.
-        dir="${path%/*}"
-        [ "$dir" = "$path" ] && dir="."
-        target="${rest#](}"
-        target="${target%)}"
-        case "$target" in
-            http:* | https:* | mailto:* | '#'*) continue ;;
-        esac
-        case "$target" in
-            *.md | *.md'#'*) ;;
-            *) continue ;;
-        esac
-        anchor=""
-        tpath="$target"
-        case "$target" in
-            *'#'*)
-                tpath="${target%%#*}"
-                anchor="${target#*#}"
-                ;;
-        esac
-        if [ "$dir" = "." ]; then
-            resolved="$(normalize_rel_path "$tpath")"
-        else
-            resolved="$(normalize_rel_path "$dir/$tpath")"
-        fi
-        # A link that still starts with ".." after normalization points above this repo's root
-        # (e.g. the workspace-root map link) -- out of scope for a repo-scoped checker; see the
-        # header comment.
-        case "$resolved" in
-            '..' | '../'*) continue ;;
-        esac
-        if [ ! -f "$ROOT/$resolved" ]; then
-            printf '%s:%s: link target '\''%s'\'' resolves to '\''%s'\'', which does not exist\n' "$path" "$line" "$target" "$resolved"
-            continue
-        fi
-        if [ -n "$anchor" ]; then
-            if ! slug_exists "$resolved" "$anchor" "$slugs_file"; then
-                printf '%s:%s: link target '\''%s'\'' has no heading matching anchor '\''#%s'\''\n' "$path" "$line" "$target" "$anchor"
-            fi
-        fi
-    done
-}
-
-# --- check C: docs/... path mentions -----------------------------------------------------------
-
-# awk_scan_docs_path <pairs-file> -- "relpath\tfnr\tmatch" for every `docs/<path>.md` mention,
-# BOUNDARY-CHECKED: the character immediately before "docs/" must be neither `/` nor alphanumeric.
-# Without this, a qualified path like `synth-platform/docs/billing.md` would be misread as naming
-# OUR docs/ tree (FRO169: synth-platform is a private sibling repo, and even after the cross-repo
-# prose in this repo stopped naming its paths outright, the regex itself needed tightening so a
-# FUTURE qualified mention can't slip through either). Same offset-tracking technique as
-# check_d_violations' pass 3 below -- see that function's comment for why.
-awk_scan_docs_path() {
-    local pairs="$1"
-    awk -v filelist="$pairs" '
-        BEGIN {
-            pat = "docs\\/[A-Za-z0-9_.\\/-]+\\.md"
-            while ((getline pairline < filelist) > 0) {
-                n = split(pairline, cols, "\t")
-                if (n < 2) continue
-                relpath = cols[1]
-                abspath = cols[2]
-                fnr = 0
-                while ((getline line < abspath) > 0) {
-                    fnr++
-                    remaining = line
-                    offset = 0
-                    while ((idx = match(remaining, pat)) > 0) {
-                        abs_idx = offset + idx
-                        ok = 1
-                        if (abs_idx > 1) {
-                            prevchar = substr(line, abs_idx - 1, 1)
-                            if (prevchar ~ /[A-Za-z0-9\/]/) { ok = 0 }
-                        }
-                        if (ok) {
-                            text = substr(remaining, idx, RLENGTH)
-                            print relpath "\t" fnr "\t" text
-                        }
-                        offset += idx + RLENGTH - 1
-                        remaining = substr(remaining, idx + RLENGTH)
-                    }
-                }
-                close(abspath)
-            }
-            close(filelist)
-            exit
-        }
-    '
-}
-
-# check_c_violations <pairs-file> -- "relpath:line: message" per docs/... mention that doesn't
-# resolve. Scans every in-scope file, not just *.md -- this is what catches a rename that missed a
-# Source/** comment.
-check_c_violations() {
-    local pairs="$1"
-    awk_scan_docs_path "$pairs" | while IFS="$(printf '\t')" read -r path line match; do
-        [ -n "$path" ] || continue
-        if [ ! -f "$ROOT/$match" ]; then
-            printf '%s:%s: '\''%s'\'' does not exist\n' "$path" "$line" "$match"
-        fi
-    done
-}
-
-# --- check D: §-section references -------------------------------------------------------------
-
-# check_d_violations <pairs-file> -- "relpath:line: message" per stale §-reference in the current
-# tree. ZERO TOLERANCE -- unlike check A this is never baselined; see the header comment for why.
-#
-# ONE awk process does everything check D needs: loads every docs/**/*.md heading number into an
-# in-memory table, then scans every in-scope file's content for `docs/<path>.md ... §N` mentions
-# and checks each one against that table directly -- no per-occurrence subshell or external `awk`
-# call. An earlier version split this into three pieces (a headings-table builder, an occurrence
-# extractor, and a `section_exists` helper invoked once per occurrence via its own `awk`
-# subprocess) for clarity; correct, but with 500+ §-references in this repo, spawning a process per
-# occurrence was the single largest cost in this script under this environment's per-process
-# overhead. Same boundary check as check C (awk_scan_docs_path) -- the character immediately
-# before "docs/" must be neither `/` nor alphanumeric, so a qualified path like
-# `synth-platform/docs/foo.md §3` is never misread as naming OUR docs/ tree -- and the same
-# greedy-`.{0,12}`-then-first-`§` rule for what one occurrence means (see check C's own comment on
-# the GNU-vs-BSD lazy-quantifier mismatch that greedy works around).
-check_d_violations() {
-    local pairs="$1"
-    awk -v filelist="$pairs" '
-        BEGIN {
-            # Pass 1: which relpaths actually exist (a docpath not in this set is check C''s to
-            # report, not ours -- skip it here rather than double-report).
-            while ((getline pairline < filelist) > 0) {
-                split(pairline, cols, "\t")
-                exists[cols[1]] = 1
-            }
-            close(filelist)
-
-            # Pass 2: every h2-h6 heading number in every docs/**/*.md file, keyed by doc, as a
-            # SOH-separated list (awk has no portable 2D array iteration, so a query does its own
-            # split()+loop below rather than a hash lookup -- cheap: a doc has a handful of
-            # headings, not hundreds).
-            while ((getline pairline < filelist) > 0) {
-                split(pairline, cols, "\t")
-                relpath = cols[1]; abspath = cols[2]
-                if (relpath !~ /^docs\/.*\.md$/) continue
-                while ((getline line < abspath) > 0) {
-                    if (line !~ /^#{2,6}[ \t]/) continue
-                    rest = line
-                    sub(/^#{2,6}[ \t]+/, "", rest)
-                    if (match(rest, /^[0-9]+(\.[0-9]+)*/)) {
-                        num = substr(rest, RSTART, RLENGTH)
-                        after = substr(rest, RLENGTH + 1)
-                        if (after == "" || after ~ /^\.?[ \t]/ || after ~ /^\.$/) {
-                            headings[relpath] = (relpath in headings) ? headings[relpath] "\x01" num : num
-                        }
-                    }
-                }
-                close(abspath)
-            }
-            close(filelist)
-
-            outer = "docs\\/[A-Za-z0-9_.\\/-]+\\.md.{0,12}§[ \t]*[0-9]+(\\.[0-9]+){0,2}"
-            docre = "^docs\\/[A-Za-z0-9_.\\/-]+\\.md"
-            secre = "§[ \t]*[0-9]+(\\.[0-9]+){0,2}"
-
-            # Pass 3: scan every in-scope file'"'"'s content for occurrences and check each one
-            # in-memory against the headings table built above.
-            while ((getline pairline < filelist) > 0) {
-                split(pairline, cols, "\t")
-                relpath = cols[1]; abspath = cols[2]
-                fnr = 0
-                while ((getline line < abspath) > 0) {
-                    fnr++
-                    remaining = line
-                    offset = 0
-                    while ((idx = match(remaining, outer)) > 0) {
-                        abs_idx = offset + idx
-                        ok = 1
-                        if (abs_idx > 1) {
-                            prevchar = substr(line, abs_idx - 1, 1)
-                            if (prevchar ~ /[A-Za-z0-9\/]/) { ok = 0 }
-                        }
-                        if (ok) {
-                            text = substr(remaining, idx, RLENGTH)
-                            match(text, docre)
-                            docpath = substr(text, RSTART, RLENGTH)
-                            spos = index(text, "§")
-                            secpart = substr(text, spos)
-                            match(secpart, secre)
-                            secnum = substr(secpart, RSTART, RLENGTH)
-                            sub(/^§[ \t]*/, "", secnum)
-                            if (docpath != "" && secnum != "" && (docpath in exists)) {
-                                found = 0
-                                if (docpath in headings) {
-                                    ns = split(headings[docpath], nums, "\x01")
-                                    qq = secnum "."
-                                    for (i = 1; i <= ns; i++) {
-                                        if (nums[i] == secnum || index(nums[i], qq) == 1) { found = 1; break }
-                                    }
-                                }
-                                if (!found) {
-                                    print relpath ":" fnr ": " docpath " §" secnum " -- no such section in " docpath
-                                }
-                            }
-                        }
-                        offset += idx + RLENGTH - 1
-                        remaining = substr(remaining, idx + RLENGTH)
-                    }
-                }
-                close(abspath)
-            }
-            close(filelist)
-            exit
-        }
-    '
-}
-
-# --- check E: docs/README.md map completeness --------------------------------------------------
-
-# readme_linked_docs -- "docs/<name>.md" (sorted, deduped) for every markdown-link target
-# docs/README.md points at within docs/ itself (relative targets ending in .md, resolved against
-# README.md's own directory -- i.e. docs/). Reuses awk_scan's generic extractor on a one-line
-# pairs file built just for docs/README.md.
-readme_linked_docs() {
-    local readme_pairs
-    readme_pairs="$(mktemp)"
-    printf 'docs/README.md\t%s/docs/README.md\n' "$ROOT" >"$readme_pairs"
-    awk_scan "$readme_pairs" '\]\([^)]*\)' | while IFS="$(printf '\t')" read -r path line rest; do
-        [ -n "$path" ] || continue
-        target="${rest#](}"
-        target="${target%)}"
-        case "$target" in
-            http:* | https:* | mailto:* | '#'*) continue ;;
-        esac
-        case "$target" in
-            *.md | *.md'#'*) ;;
-            *) continue ;;
-        esac
-        tpath="${target%%#*}"
-        resolved="$(normalize_rel_path "docs/$tpath")"
-        printf '%s\n' "$resolved"
-    done | sort -u
-    rm -f "$readme_pairs"
-}
-
-# check_e_violations <scanned-file> -- "relpath: message" per docs/README.md map-completeness
-# violation: a real docs/**/*.md file (other than README.md) that the map never links, or a map
-# link that resolves to a file that doesn't exist (check B already catches the latter as a broken
-# link -- this is belt-and-braces so check E stands on its own without depending on check B having
-# run first). <scanned-file> is list_scanned_paths' own output, shared across every check in this
-# run -- see the perf note above run_check.
-check_e_violations() {
-    local scanned="$1"
-    local linked_file real_file
-    linked_file="$(mktemp)"
-    real_file="$(mktemp)"
-    readme_linked_docs >"$linked_file"
-    while IFS= read -r path; do
-        case "$path" in
-            docs/*.md) [ "$path" = "docs/README.md" ] || printf '%s\n' "$path" ;;
-        esac
-    done <"$scanned" | sort >"$real_file"
-
-    while IFS= read -r path; do
-        [ -n "$path" ] || continue
-        if ! grep -qxF -- "$path" "$linked_file"; then
-            printf '%s: not linked from docs/README.md\n' "$path"
-        fi
-    done <"$real_file"
-
-    while IFS= read -r linked; do
-        [ -n "$linked" ] || continue
-        if [ ! -f "$ROOT/$linked" ]; then
-            printf 'docs/README.md: links to %s, which does not exist\n' "$linked"
-        fi
-    done <"$linked_file"
-
-    rm -f "$linked_file" "$real_file"
-}
-
-# --- check F: docs/...#anchor mentions outside markdown link syntax ---------------------------
-
-# check_f_violations <pairs-file (all)> <slugs-file (from build_slugs_file, md-only)> --
-# "relpath:line: message" per `docs/<path>.md#<anchor>` mention, in ANY in-scope file, whose anchor
-# doesn't match a real heading slug in the target doc. NOT baselined -- zero tolerance, same as
-# B/C/D/E. This is what stops the FRO166 docs restructure (converting ~500 `§N` references, hard-
-# gated by check D, into `#anchor` references) from trading gated references for ungated ones: an
-# anchor mention written as plain prose or a Source/**/*.cpp comment -- not `](target)` markdown
-# link syntax -- is invisible to check B, which only looks inside that syntax in *.md files.
-#
-# ONE awk process does everything, same reasoning as check_d_violations above it: with ~500 anchor
-# references coming in the wake of this ticket, a per-occurrence subshell/subprocess (as an earlier
-# version of this script paid for elsewhere) would dominate runtime the same way it used to for
-# check B. Pass 1 loads which relpaths actually exist (a docpath that doesn't exist at all is check
-# C's failure to report, not ours -- skipped here to avoid double-reporting the same mistake under
-# two different checks). Pass 2 loads <slugs-file> -- the EXACT SAME table check_b_violations uses,
-# built once by build_slugs_file and shared by both callers in run_check/run_list -- into an
-# in-memory set, so check B and check F can never disagree about what counts as a valid slug (no
-# second slug implementation exists anywhere in this file). Pass 3 scans every in-scope file for the
-# `docs/<path>.md#<anchor>` pattern with the SAME boundary rule as check C's awk_scan_docs_path (the
-# character immediately before "docs/" must be neither `/` nor alphanumeric, so a qualified path
-# like `synth-platform/docs/x.md#y` is never misread as naming OUR docs/ tree either), and checks
-# each occurrence in-memory against the two tables built above.
-check_f_violations() {
-    local pairs="$1" slugs_file="$2"
-    awk -v filelist="$pairs" -v slugsfile="$slugs_file" '
-        BEGIN {
-            # Pass 1: which relpaths actually exist (a docpath not in this set is check C'"'"'s to
-            # report, not ours -- skip it here rather than double-report).
-            while ((getline pairline < filelist) > 0) {
-                split(pairline, cols, "\t")
-                exists[cols[1]] = 1
-            }
-            close(filelist)
-
-            # Pass 2: check B'"'"'s own slug table, keyed "relpath\x01slug" for an O(1) lookup.
-            while ((getline sline < slugsfile) > 0) {
-                split(sline, scols, "\t")
-                slugs[scols[1] "\x01" scols[2]] = 1
-            }
-            close(slugsfile)
-
-            pat = "docs\\/[A-Za-z0-9_.\\/-]+\\.md#[A-Za-z0-9_-]+"
-
-            # Pass 3: scan every in-scope file'"'"'s content for occurrences and check each one
-            # in-memory against the tables built above.
-            while ((getline pairline < filelist) > 0) {
-                n = split(pairline, cols, "\t")
-                if (n < 2) continue
-                relpath = cols[1]; abspath = cols[2]
-                fnr = 0
-                while ((getline line < abspath) > 0) {
-                    fnr++
-                    remaining = line
-                    offset = 0
-                    while ((idx = match(remaining, pat)) > 0) {
-                        abs_idx = offset + idx
-                        ok = 1
-                        if (abs_idx > 1) {
-                            prevchar = substr(line, abs_idx - 1, 1)
-                            if (prevchar ~ /[A-Za-z0-9\/]/) { ok = 0 }
-                        }
-                        if (ok) {
-                            text = substr(remaining, idx, RLENGTH)
-                            hashpos = index(text, "#")
-                            docpath = substr(text, 1, hashpos - 1)
-                            anchor = substr(text, hashpos + 1)
-                            if ((docpath in exists) && !((docpath "\x01" anchor) in slugs)) {
-                                printf "%s:%d: anchor mention '"'"'%s'"'"' has no heading matching anchor '"'"'#%s'"'"'\n", relpath, fnr, text, anchor
-                            }
-                        }
-                        offset += idx + RLENGTH - 1
-                        remaining = substr(remaining, idx + RLENGTH)
-                    }
-                }
-                close(abspath)
-            }
-            close(filelist)
-            exit
-        }
-    '
-}
-
 # --- naming (check A) ---------------------------------------------------------------------------
 
 # current_naming_violations <scanned-file> -- every docs/**/*.md relpath whose basename isn't
@@ -816,6 +405,8 @@ run_check() {
 
     # Built once, shared by check B and check F -- see check_b_violations' own comment on why.
     build_slugs_file "$workdir/pairs_md.txt" "$workdir/slugs.txt"
+    # Built once, shared by check D and check G -- see build_headings_file's own comment on why.
+    build_headings_file "$workdir/pairs_all.txt" "$workdir/headings.txt"
 
     b_out="$(check_b_violations "$workdir/pairs_md.txt" "$workdir/slugs.txt")"
     if [ -n "$b_out" ]; then
@@ -835,7 +426,7 @@ run_check() {
         done <<<"$c_out"
     fi
 
-    d_out="$(check_d_violations "$workdir/pairs_all.txt")"
+    d_out="$(check_d_violations "$workdir/pairs_all.txt" "$workdir/headings.txt")"
     d_current_n=0
     if [ -n "$d_out" ]; then
         while IFS= read -r line; do
@@ -862,6 +453,15 @@ run_check() {
             echo "::error::check-docs (anchor): $line"
             errors=$((errors + 1))
         done <<<"$f_out"
+    fi
+
+    g_out="$(check_g_violations "$workdir/pairs_all.txt" "$workdir/slugs.txt" "$workdir/headings.txt")"
+    if [ -n "$g_out" ]; then
+        while IFS= read -r line; do
+            [ -n "$line" ] || continue
+            echo "::error::check-docs (bare ref): $line"
+            errors=$((errors + 1))
+        done <<<"$g_out"
     fi
 
     current_naming_violations "$workdir/scanned.txt" >"$workdir/naming_current.txt"
@@ -961,6 +561,7 @@ run_list() {
     build_pairs_file "$workdir/scanned.txt" "$workdir/pairs_all.txt"
     build_pairs_file "$workdir/scanned.txt" "$workdir/pairs_md.txt" md_only
     build_slugs_file "$workdir/pairs_md.txt" "$workdir/slugs.txt"
+    build_headings_file "$workdir/pairs_all.txt" "$workdir/headings.txt"
 
     echo "=== naming violations (check A) ==="
     current_naming_violations "$workdir/scanned.txt"
@@ -972,13 +573,16 @@ run_list() {
     check_c_violations "$workdir/pairs_all.txt"
     echo
     echo "=== stale §-section references (check D) ==="
-    check_d_violations "$workdir/pairs_all.txt"
+    check_d_violations "$workdir/pairs_all.txt" "$workdir/headings.txt"
     echo
     echo "=== docs/README.md map completeness (check E) ==="
     check_e_violations "$workdir/scanned.txt"
     echo
     echo "=== anchor mentions outside markdown link syntax (check F) ==="
     check_f_violations "$workdir/pairs_all.txt" "$workdir/slugs.txt"
+    echo
+    echo "=== bare basename references (check G) ==="
+    check_g_violations "$workdir/pairs_all.txt" "$workdir/slugs.txt" "$workdir/headings.txt"
 }
 
 case "$MODE" in
