@@ -2,7 +2,7 @@
 
 The `"+ Track"` button at the top of the timeline panel's header column, and every flow it starts.
 The header rows it creates are [tracks](tracks.md); the channel chains it builds are
-[`mixer_implementation.md`](../mixer_implementation.md).
+[`docs/mixer/mixer.md`](../mixer/mixer.md#building-a-channel).
 
 ## The menu
 
@@ -60,7 +60,7 @@ that loads one saved anywhere on disk.
 
 This is a **separate** path from the plain MIDI/Audio/Instrument entries above: those consult only
 each type's *default* preset (Preferences → Mixer), while this submenu can insert ANY saved preset
-regardless of which one is currently the default. See [`mixer.md`](../mixer.md) §5.7.
+regardless of which one is currently the default. See [`docs/mixer/track-presets.md`](../mixer/track-presets.md#what-a-track-preset-is).
 
 ## The Plugin sub-submenu
 
@@ -85,7 +85,7 @@ real entry's label ALWAYS carries its format in parentheses, using the sidebar's
 ("Massive (VST3)" / "Massive (AU)"), never a bare name.
 
 Choosing one calls `TrackHeaderHost::addInstrumentPluginTrack(identity)` — see
-[`mixer_implementation.md`](../mixer_implementation.md)'s P9-3h entry for what it builds, why the
+[`docs/mixer/mixer.md`](../mixer/mixer.md#a-hosted-plugin-as-the-instrument) for what it builds, why the
 load has to be asynchronous, and how a document replaced mid-load (New Patch, Open, Load preset) is
 handled.
 
@@ -124,7 +124,7 @@ transaction, so one Cmd+Z removes all of it and redo restores it with the same n
 ## Adding an Audio track
 
 The Audio entry builds a **whole mixer channel**, not just a `Track Audio` node — see
-[`mixer_implementation.md` item 2](../mixer_implementation.md) for the full design. Steps 1 and 2
+[`docs/mixer/mixer.md`](../mixer/mixer.md#building-a-channel) for the full design. Steps 1 and 2
 are the same as the MIDI entry (doc side first, so `kMaxTracks` refuses before any node is created;
 factory-created node, uuid minted and mirrored, placed at the left edge), but everything downstream
 of step 2 differs, and it is all still ONE undo step —
@@ -142,7 +142,7 @@ graph+timeline transaction with a third domain, the macro set:
 3. `GraphEditor::addMacroForMembers` boxes `{Track Audio, EQ, Compressor, Channel Strip}` into ONE
    collapsed macro named after the track. **Master stays outside the macro**, and the
    Strip → Master cable is left a plain graph edge, deliberately never a macro port — see
-   `mixer_implementation.md`'s item 2 for why: the Mix-vs-Direct classification `spliceMasterNode`
+   [`docs/mixer/mixer.md`](../mixer/mixer.md#the-factory-default-chain) for why: the Mix-vs-Direct classification `spliceMasterNode`
    does would break behind a `MacroOutlet`.
 4. Bind the track to the `Track Audio` node's uuid and give it the palette colour for its index.
 
@@ -152,7 +152,7 @@ graph+timeline transaction with a third domain, the macro set:
 ## Adding an Instrument track
 
 The MIDI-track mirror of the Audio entry: a `Track In` feeding a chosen instrument, then the same
-factory default chain — see [`mixer_implementation.md` item 2](../mixer_implementation.md) for the
+factory default chain — see [`docs/mixer/mixer.md`](../mixer/mixer.md#an-instrument-track) for the
 full design.
 
 The picker offers exactly the audio-producing MIDI instruments (**Oscillator**, **Wavetable**,
@@ -164,16 +164,16 @@ audio. One undo step (`AppUndoManager::recordGraphTimelineAndMacroChange`,
 1. Add a `Midi` track (doc side first, same `kMaxTracks` ordering reason as every other entry).
    **This stays a `TrackKind::Midi` track rather than a new kind**: it is exactly what the MIDI
    entry's own auto-wire produces once a cable is drawn by hand — this flow just draws that cable
-   and builds the channel automatically. See `docs/mixer.md` §5.2's table note.
+   and builds the channel automatically. See [`docs/mixer/mixer.md`](../mixer/mixer.md#channels-follow-audio-not-tracks)'s table note.
 2. Create the `Track In` node (same factory, uuid and placement idiom as the MIDI entry), then the
    chosen instrument to its right, and wire `Track In -> instrument` on the MIDI channel — always
    unambiguous, since the instrument was just created for this track alone.
 3. A poly instrument's raw ch0-7 (up to 8 simultaneous voices) cannot feed
    `buildDefaultAudioChannel` directly, which wants one stereo pair, so
    `synth::addVoiceMixerForPolyInstrument` (Core, `ChannelFlows.h`) sums them into a Voice Mixer
-   first when the instrument's own `poly` parameter is on (`docs/mixer.md` §5.4/§5.8). A
+   first when the instrument's own `poly` parameter is on ([`docs/mixer/mixer.md`](../mixer/mixer.md#mono-and-stereo)). A
    factory-created instrument defaults to poly OFF, so this is a no-op on the golden path.
-4. For an **Oscillator** or **Wavetable** instrument (`docs/mixer.md`'s P9-3i entry): neither has an
+4. For an **Oscillator** or **Wavetable** instrument ([`docs/mixer/mixer.md`](../mixer/mixer.md#envelope-and-vca-for-a-raw-instrument)): neither has an
    envelope of its own, so a held or released note drones forever.
    `synth::addEnvelopeAndVCAForRawInstrument` inserts an ADSR (gated by the same Track In MIDI as
    the instrument, forced non-poly) driving a VCA (also forced non-poly) ahead of the rest of the
