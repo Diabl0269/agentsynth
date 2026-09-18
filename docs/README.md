@@ -50,7 +50,7 @@ One topic per doc, split at section boundaries. Every doc below is the mechanism
 
 ## AI
 
-- [`docs/ai/agents.md`](ai/agents.md) — overview: the two providers and what the assistant may author
+- [`docs/ai/ai.md`](ai/ai.md) — overview: the two providers and what the assistant may author
 - [`docs/ai/usage-guide.md`](ai/usage-guide.md) — user-facing guide: prompting, timeline changes, the Patch/Arrange selector, troubleshooting
 - [`docs/ai/engine.md`](ai/engine.md) — AIIntegrationService/AIStateMapper architecture, request flow, the AI patch undo contract
 - [`docs/ai/patch-format.md`](ai/patch-format.md) — the JSON patch dialect: nodes/connections/params, `state`/`uuid`/`displayName`, reserved keys and forward compatibility

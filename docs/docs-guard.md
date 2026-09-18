@@ -20,11 +20,18 @@ bash scripts/check-docs.sh --root <dir>              # scan a different repo roo
 ## The six checks
 
 Every check scans the same file set: every git-tracked-**or-untracked** `*.md`, `*.cpp`, `*.h`,
-`*.sh` and `*.yml` anywhere under the repo root — so `Tests/**` and `Tools/**` count exactly like
-`Source/**` and `docs/**` do, which matters because `Tests/**` alone carries well over a hundred
-`docs/...` references. Excluded are only generated, vendored and scratch trees (`build*`,
-`.claude/`, `worktrees/`, `mockups/`, `assets/`, and the two recorded-fixture directories). Found
-via `find` —
+`*.sh`, `*.yml`, `*.txt`, `*.json`, `*.cmake` and `*.py` anywhere under the repo root — so
+`Tests/**` and `Tools/**` count exactly like `Source/**` and `docs/**` do, which matters because
+`Tests/**` alone carries well over a hundred `docs/...` references. FRO208 widened the extension
+list from `(md cpp h sh yml)` to add `txt`/`json`/`cmake`/`py` after a stale reference survived a
+whole restructure PR hidden inside a `Tools/**/Fixtures/*.json` description field, and because
+`CMakeLists.txt` itself carries several doc references (a `§`-section reference among them) that no
+check could previously see at all. Excluded are only generated, vendored and scratch trees
+(`build*`, `.claude/`, `worktrees/`, `mockups/`, `assets/`, and `Tests/fixtures/`) — RECORDED MODEL
+OUTPUT, not hand-authored, so a docs-looking string that happens to appear inside one is not ours
+to fix. `Tools/TimelineOpsHarness/Fixtures/` used to be excluded on that same reasoning, but those
+fixtures carry a hand-authored `description` field rather than model output, so FRO208 removed the
+exclusion once it was shown to be hiding a real stale reference there. Found via `find` —
 deliberately not `git ls-files`, which would silently skip a doc mid-rename that hasn't been
 `git add`ed yet. An earlier verify script in this repo was bitten by exactly that gap (a
 git-index-based scan missing a genuinely new, untracked file); this guard scans the working tree
@@ -82,8 +89,9 @@ remember it by hand.
 Check B only validates an anchor when it's written as genuine markdown link syntax — square-bracket
 link text immediately followed by a parenthesized target ending in `.md`, optionally `#anchor` —
 in a `*.md` file. A `docs/<path>.md#<slug>` mention written any other way (plain
-prose in a `*.md` file, or anywhere in a `*.cpp`/`*.h`/`*.sh`/`*.yml` file — a comment naming a doc
-section, for instance) was invisible to every check until FRO196: check C confirms the *doc* named
+prose in a `*.md` file, or anywhere in a `*.cpp`/`*.h`/`*.sh`/`*.yml`/`*.txt`/`*.json`/`*.cmake`/
+`*.py` file — a comment naming a doc section, or a hand-authored fixture's description field, for
+instance) was invisible to every check until FRO196: check C confirms the *doc* named
 exists, but never looks at an anchor tacked onto it. **Not baselined — zero tolerance**, same as
 B/C/D/E. This mattered immediately: FRO166's docs restructure makes every heading unnumbered and
 converts the ~500 existing `§N` references (hard-gated by check D, zero tolerance) into `#anchor`
@@ -125,6 +133,27 @@ Checks B, C, D, E, and F have no baseline at all — they're always a hard failu
 stale `docs/...` mention, a stale `§`-section reference, a `docs/README.md` map gap, or a stale
 `#anchor` mention is never something to grandfather; each is wrong the moment it exists; the
 ratchet exists only to migrate the legacy filename convention without a disruptive mass rename.
+
+### Ordering: `git mv`, then `--update` — never a plain check in between
+
+`scripts/docs-baseline.txt` lists doc paths by construction (every `naming <path>` line names a
+docs/**/*.md file, and the file's own mechanism comment above names several more). Now that `.txt`
+is in `EXTENSIONS` (see the widened-scope note above), the baseline is itself scanned by check C
+like any other in-scope file. That creates a real ordering trap for the FRO166 area PRs that
+rename docs wholesale: right after an area's `git mv` (rename step) but before `check-docs.sh
+--update` regenerates the baseline, the baseline still names the pre-mv path — which check C now
+correctly flags as a `docs/...` mention that doesn't resolve, on top of check A's own "stale
+baseline entry" error for the same rename. **This is expected and harmless**, verified against a
+full scratch copy of this repo (FRO208): `--update` never reads the *old* baseline content to
+decide anything — it recomputes every naming violation from the tree as it stands right now and
+overwrites the file outright — so running `--update` immediately after the `git mv`, in that exact
+"intermediate" state, still exits 0 and rewrites a fully clean baseline; a plain check afterward
+also passes clean. The trap only bites if a plain (non-`--update`) check is run in the gap between
+the `git mv` and the `--update` — which the mandated per-area sequence (`git mv` → `check-docs.sh
+--update` → commit both together) never does. `scripts/docs-baseline.txt` therefore stays in scope
+for check C rather than being excluded from it: excluding it would have hidden a real class of bug
+(a baseline entry left stale — pointing at a path nothing renamed it *to* — after a rename that
+missed updating it), for a transient state that never reaches a commit.
 
 ## Running it
 
