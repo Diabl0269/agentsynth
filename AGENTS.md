@@ -38,14 +38,14 @@ bash scripts/install-hooks.sh   # pre-commit: clang-format lint;  pre-push: lint
 pip install "clang-format==$(cat .clang-format-version)"
 ```
 
-See [`docs/testing.md`](docs/testing.md) for the full build/test/CI/hooks reference.
+See [`docs/development/testing.md`](docs/development/testing.md) for the full build/test reference.
 
 ## Planning Rules
 
 Every implementation plan **must** include:
 
 1. A **Tests** section — list new test cases, the test file, and what each verifies.
-2. A **Docs Updates** section — list which docs (`docs/testing.md`, `CLAUDE.md`, etc.) need updating.
+2. A **Docs Updates** section — list which docs (`docs/development/testing.md`, `CLAUDE.md`, etc.) need updating.
 
 ## Critical invariants (break these and you ship bugs)
 
@@ -67,7 +67,7 @@ Everything else below is a tripwire index. The full rule lives in the named area
 - Every node-uuid write mirrors into the processor via `ModuleBase::setNodeUuid`; written once, never rewritten. → [`docs/architecture.md`](docs/architecture.md)
 - Every document-replacing action goes through `MainComponent::guardUnsavedChanges` (async — hand it the work, never do it then ask), and any path that replaces the document with something that is not a bundle drops `currentBundleDir_`. → [`docs/architecture.md`](docs/architecture.md)
 - Autosave writes a sidecar (`autosave.json`), never `project.json`, and rotates a configurable number of numbered backups; gates on edit-serial movement (not `isDirty_`) and never fires during a recording take or a bounce. → [`docs/architecture.md`](docs/architecture.md)
-- No non-ASCII bytes in a `Source/` string literal — `juce::String`'s `const char*` ctor decodes as Latin-1, so `"Rename…"` (or its hex-escape spelling) ships mojibake; use ASCII or `juce::CharPointer_UTF8`/`String::fromUTF8`. Guarded by `scripts/tests/check-nonascii-literals.test.sh`. → [`docs/testing.md`](docs/testing.md)
+- No non-ASCII bytes in a `Source/` string literal — `juce::String`'s `const char*` ctor decodes as Latin-1, so `"Rename…"` (or its hex-escape spelling) ships mojibake; use ASCII or `juce::CharPointer_UTF8`/`String::fromUTF8`. Guarded by `scripts/tests/check-nonascii-literals.test.sh`. → [`docs/development/ascii-literal-guard.md`](docs/development/ascii-literal-guard.md)
 
 **Modules & channels** (`Source/Modules/CLAUDE.md`):
 
@@ -98,7 +98,7 @@ Everything else below is a tripwire index. The full rule lives in the named area
 
 **CI** (`.github/CLAUDE.md`):
 
-- The CI cache is load-bearing and fails silently: per-language compiler launchers, keep the `push: main` trigger, key `build/_deps` on `cmake/DependencyVersions.cmake` only (pin new dependencies there), explicit `CCACHE_DIR` per job. → [`docs/testing.md`](docs/testing.md)
+- The CI cache is load-bearing and fails silently: per-language compiler launchers, keep the `push: main` trigger, key `build/_deps` on `cmake/DependencyVersions.cmake` only (pin new dependencies there), explicit `CCACHE_DIR` per job. → [`docs/development/ci-caching.md`](docs/development/ci-caching.md)
 
 ## Docs map
 

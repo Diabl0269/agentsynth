@@ -271,7 +271,7 @@ TEST_F(FeedbackSettingsTabTest, SignedInUserSyncsFeedbackToServer) {
 // Pins the one deliberate difference from P6-9's submitMessageFeedback sync (which uses the
 // hardcoded synth::branding::kApiBaseUrl): this sync path must go through resolveApiBaseUrl(), so
 // AGENTSYNTH_LOCAL_API_URL redirects it exactly like every other cloud-gated feature (see
-// docs/testing.md "Testing Cloud-Gated Features Locally"). Only asserting url.endsWith("/v1/
+// docs/development/local-cloud-dev.md). Only asserting url.endsWith("/v1/
 // feedback") elsewhere wouldn't catch a regression to the hardcoded constant, since both resolve
 // to the same production host by default -- this test only compiles/runs in Debug builds, since
 // the override itself is compiled out of Release (see resolveApiBaseUrl()'s doc comment).

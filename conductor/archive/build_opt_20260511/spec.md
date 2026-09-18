@@ -14,7 +14,7 @@ This track focuses on improving local development iteration speed by decoupling 
 - **CI/CD Integration**:
     - Update all CI pipeline jobs (`.github/workflows/ci.yml`) to pass `-DENABLE_TESTS=ON` to ensure validation coverage is maintained.
 - **Documentation**:
-    - Update `docs/testing.md` and `README.md` to reflect the new build procedure and directory structure.
+    - Update `docs/development/testing.md` and `README.md` to reflect the new build procedure and directory structure.
 
 ## Non-Functional Requirements
 - Maintain existing test coverage (>80%).

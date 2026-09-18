@@ -111,7 +111,7 @@ public:
     enum class EditSurface { Graph, TimelineClips, PianoRoll };
     EditSurface resolveEditSurface() const;
 
-    // Test-only edit-surface override; consulted before any real focus check. See docs/testing.md.
+    // Test-only override; consulted before any real focus check. See docs/development/test-patterns.md.
     void setEditSurfaceOverrideForTest(std::optional<EditSurface> surface) { editSurfaceOverrideForTest_ = surface; }
 
     bool performRepeatSelection(int count);

@@ -4,7 +4,7 @@
 //
 // These are the tests that are meant to be run under ThreadSanitizer as well as normally —
 // CI's label-gated sanitizer job builds with -fsanitize=address only, so a TSan run is a local
-// gate (see docs/testing.md).
+// gate (see docs/development/test-patterns.md).
 
 #include "AudioEngine/AudioEngine.h"
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"

@@ -4,7 +4,8 @@
 // juce::AudioIODeviceCallback half headlessly — see Tests/FakeAudioIODevice.h, where it now lives
 // so other tests can drive the same device.
 //
-// Headless/deterministic house rules (docs/testing.md, and the header of AudioEngineTransportTests):
+// Headless/deterministic house rules (docs/development/test-patterns.md, and the header of
+// AudioEngineTransportTests):
 // no real audio device, no network, no sleeps. A HostMode::Standalone engine must never have
 // initialise() called on it in a test, because that opens real hardware — the two tests here that
 // DO exercise initialise() go through a subclass that overrides the AudioEngine::initialiseDevices

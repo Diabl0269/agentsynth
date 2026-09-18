@@ -39,7 +39,7 @@
 // T184 (P9-3c, docs/mixer.md §5.2 "main workflow"): a MIDI track auto-creates the destination's
 // mixer channel on connect. Core-level tests for synth::findUnchanneledOutputFeeds /
 // synth::buildChannelForFeeds first, then real-mouse-gesture coverage through GraphEditor's
-// endConnectionDrag (docs/testing.md's "test the real mouse path" guidance — the same reason
+// endConnectionDrag (docs/development/test-patterns.md's real-mouse-path guidance — the same reason
 // Tests/Macros/MacroPortRealMouseDragTests.cpp drives ModuleComponent::mouseDown/mouseDrag/mouseUp
 // directly rather than calling GraphEditor's drag methods).
 // =================================================================================================

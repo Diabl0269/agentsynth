@@ -12,7 +12,7 @@
 # ci.yml's Lint job or a build-and-test job's flags change, update THIS script (and re-read
 # ci.yml -- don't guess), not the hook.
 #
-# WHAT IT CHECKS (mirrors ci.yml -- see docs/testing.md "Local CI reproduction" for the mapping):
+# WHAT IT CHECKS (mirrors ci.yml -- see docs/development/local-ci.md for the mapping):
 #   1. clang-format --dry-run --Werror over Source/ Tests/ Tools/, exactly like the Lint job's
 #      "Check Formatting" step. CHECK-ONLY, never -i: a violation fails loudly here rather than
 #      being silently rewritten.
@@ -43,7 +43,7 @@
 #      but the point where a local build exists to sign; see that script's header for why).
 #   10. Run the full suite: build-ci-local/Tests/Tests.
 #
-# NOT reproduced here (deliberately -- see docs/testing.md): the Ubuntu coverage gate
+# NOT reproduced here (deliberately -- see docs/development/local-ci.md): the Ubuntu coverage gate
 # (a separate opt-in, `bash scripts/coverage.sh`), the label-gated ASAN job, and actual
 # cross-platform compilation -- this only exercises the toolchain installed on THIS machine.
 #
@@ -86,7 +86,7 @@ the docs integrity guard, every scripts/tests/*.test.sh, then a full Release
 build of every CMake target CI builds (Core, AppUI, AgentSynth,
 AgentSynthPlugin, Tests) with
 ENABLE_TESTS=ON, followed by the full test suite. See the header comment in
-this file, and docs/testing.md's "Local CI reproduction" section, for the
+this file, and docs/development/local-ci.md, for the
 full mapping to what CI actually runs.
 
   --open        After every check passes, `open` the built app bundle

@@ -66,7 +66,7 @@ constexpr const char* kApiBaseUrl = "https://synth-api-6eft3t2kxq-uc.a.run.app";
 // auth/entitlement/cloud-history traffic (AccountService/AuthClient, see MainComponent.h) at a
 // locally-run synth-platform server, so testing Pro-gated flows end-to-end (e.g. cloud conversation
 // history) doesn't require hand-editing this file and rebuilding per URL change. See
-// docs/testing.md "Testing Cloud-Gated Features Locally". Compiled out of Release builds entirely
+// docs/development/local-cloud-dev.md. Compiled out of Release builds entirely
 // (#ifndef NDEBUG) so a tampered environment variable can never redirect a shipped binary's auth
 // traffic away from production — same trust boundary as every other "never trust the client"
 // invariant in this codebase (see CLAUDE.md).

@@ -239,7 +239,7 @@ Main line, in dependency order:
        `BuildChannelForFeedsReusesAnExistingMasterAndClearsDirectFeeds`,
        `BypassedEQAndCompressorReportZeroLatencyAfterPrepare` (latency-zero gate: neither module
        calls `setLatencySamples`). Real-mouse-path (`ChannelFlowTest`, `MainComponent` fixture,
-       synthesized `juce::MouseEvent`s driven straight into `ModuleComponent`, docs/testing.md's
+       synthesized `juce::MouseEvent`s driven straight into `ModuleComponent`, docs/development/test-patterns.md's
        "test the real mouse path"): `AutoChannelOnConnect_ToggleOnBuildsOneChannelAsOneUndoStep`,
        `AutoChannelOnConnect_ToggleOffOnlyConnectsNoChannel`,
        `AutoChannelOnConnect_AlreadyChanneledInstrumentGetsNoNewStrip`,

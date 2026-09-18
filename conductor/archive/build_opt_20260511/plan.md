@@ -20,7 +20,7 @@
 
 ### Phase 3: Documentation Updates
 - [x] Task: Update Docs
-    - [x] Update `docs/testing.md` to reflect the new structure and `-DENABLE_TESTS=ON` workflow.
+    - [x] Update `docs/development/testing.md` to reflect the new structure and `-DENABLE_TESTS=ON` workflow.
     - [x] Update `README.md` with instructions on how to enable test builds.
     - [x] Task: Conductor - User Manual Verification 'Documentation Updates' (Protocol in workflow.md)
 

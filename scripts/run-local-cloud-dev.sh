@@ -2,7 +2,7 @@
 # Boots the whole client<->server loop locally, so Pro-gated features (cloud conversation
 # history, x-conversation-id threading) can be exercised end-to-end with nothing deployed:
 # local Postgres, a local synth-platform API server (dev IdP, real Ollama inference), and this
-# repo's locally-built Debug app pointed at both. See docs/testing.md "Testing Cloud-Gated
+# repo's locally-built Debug app pointed at both. See docs/development/local-cloud-dev.md "Cloud-Gated
 # Features Locally" for the full manual walkthrough this automates, and background/context on
 # why two separate hosts are involved.
 #

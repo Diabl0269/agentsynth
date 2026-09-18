@@ -1,13 +1,12 @@
 # Docs Guard
 
-`scripts/check-docs.sh` (FRO169) checks `docs/` for CONTENT correctness, sibling to
-[`docs/testing.md`](testing.md)'s [file-size](testing.md#file-size-cap-lint-job) and
-[function-size](testing.md#function-size-cap-lint-job) guards, which check size instead. A doc
-tree drifts silently: a file gets renamed, a section gets renumbered or deleted, a link target
-moves — and nothing catches it until a reader clicks a dead link or a stale `§N` pointer in a
-`Source/**` comment sends them to the wrong place (or nowhere). This is the first doc named under
-the guard's own naming rule (see check A below) — it has no `scripts/docs-baseline.txt` entry
-because `docs-guard.md` is already lowercase kebab-case.
+`scripts/check-docs.sh` checks `docs/` for CONTENT correctness, sibling to the
+[file-size](file-size-guard.md) and [function-size](function-size-guard.md) guards, which check
+size instead.
+
+**Why.** A doc tree drifts silently: a file gets renamed, a section gets renumbered or deleted, a
+link target moves — and nothing catches it until a reader clicks a dead link, or a stale `§N`
+pointer in a `Source/**` comment sends them to the wrong place, or nowhere.
 
 ```bash
 bash scripts/check-docs.sh                          # check the tree (A against baseline; B-G hard)
@@ -22,16 +21,16 @@ bash scripts/check-docs.sh --root <dir>              # scan a different repo roo
 Every check scans the same file set: every git-tracked-**or-untracked** `*.md`, `*.cpp`, `*.h`,
 `*.sh`, `*.yml`, `*.txt`, `*.json`, `*.cmake` and `*.py` anywhere under the repo root — so
 `Tests/**` and `Tools/**` count exactly like `Source/**` and `docs/**` do, which matters because
-`Tests/**` alone carries well over a hundred `docs/...` references. FRO208 widened the extension
-list from `(md cpp h sh yml)` to add `txt`/`json`/`cmake`/`py` after a stale reference survived a
-whole restructure PR hidden inside a `Tools/**/Fixtures/*.json` description field, and because
+`Tests/**` alone carries well over a hundred `docs/...` references. The extension list grew from
+`(md cpp h sh yml)` to add `txt`/`json`/`cmake`/`py` after a stale reference survived a whole
+restructure PR hidden inside a `Tools/**/Fixtures/*.json` description field, and because
 `CMakeLists.txt` itself carries several doc references (a `§`-section reference among them) that no
 check could previously see at all. Excluded are only generated, vendored and scratch trees
 (`build*`, `.claude/`, `worktrees/`, `mockups/`, `assets/`, and `Tests/fixtures/`) — RECORDED MODEL
 OUTPUT, not hand-authored, so a docs-looking string that happens to appear inside one is not ours
 to fix. `Tools/TimelineOpsHarness/Fixtures/` used to be excluded on that same reasoning, but those
-fixtures carry a hand-authored `description` field rather than model output, so FRO208 removed the
-exclusion once it was shown to be hiding a real stale reference there. Found via `find` —
+fixtures carry a hand-authored `description` field rather than model output, so the exclusion was
+removed once it was shown to be hiding a real stale reference there. Found via `find` —
 deliberately not `git ls-files`, which would silently skip a doc mid-rename that hasn't been
 `git add`ed yet. An earlier verify script in this repo was bitten by exactly that gap (a
 git-index-based scan missing a genuinely new, untracked file); this guard scans the working tree
@@ -40,7 +39,8 @@ directly to avoid repeating it.
 `scripts/check-docs.sh` itself holds only the CLI, the file-tree scan, the naming ratchet (check A)
 and its baseline I/O, and the three run modes (check/update/list) — checks B through G, and the awk
 helpers they share, live in `scripts/lib/check-docs-checks.sh` (sourced, never executed directly),
-split out once check G (FRO217) pushed the single file past this repo's own 1,000-line cap.
+split out once check G pushed the single file past this repo's own
+[1,000-line cap](file-size-guard.md).
 
 ### A. Filename convention (ratcheted)
 
@@ -74,15 +74,15 @@ literal path.
 section that actually exists in that doc — a heading `## 5.3 Foo` satisfies both `§5.3` and the
 coarser `§5`. **Not baselined — zero tolerance.** Unlike check A, there is no grandfathering here:
 a stale section reference is actively misleading (it sends a reader to the wrong place, or
-nowhere), so it's fixed at the point it goes stale, not parked for later cleanup. FRO169 fixed the
-last 38 stale references that had accumulated across `Source/**`, `docs/**`, and `Tests/**` before
-this rule went zero-tolerance — deriving every one of the 38 destinations from git history (which
-commit split or renumbered the doc, what the section was called before and after), never guessed.
+nowhere), so it is fixed at the point it goes stale, not parked for later cleanup. The 38 stale
+references that had accumulated across `Source/**`, `docs/**` and `Tests/**` before this rule went
+zero-tolerance were each fixed by deriving the destination from git history — which commit split or
+renumbered the doc, and what the section was called before and after — never by guessing.
 
 ### E. `docs/README.md` map completeness
 
 Every `docs/**/*.md` file except `README.md` itself must be linked at least once from
-[`docs/README.md`](README.md), and every link `docs/README.md` makes into `docs/` must resolve to
+[`docs/README.md`](../README.md), and every link `docs/README.md` makes into `docs/` must resolve to
 a real file. **Not baselined** — the map is either complete or it isn't. `docs/README.md` is the
 map referenced throughout this repo's `CLAUDE.md` files (root and per-directory); a doc that
 exists but isn't linked from it is invisible to anyone reading the map instead of grepping the
@@ -96,12 +96,13 @@ link text immediately followed by a parenthesized target ending in `.md`, option
 in a `*.md` file. A `docs/<path>.md#<slug>` mention written any other way (plain
 prose in a `*.md` file, or anywhere in a `*.cpp`/`*.h`/`*.sh`/`*.yml`/`*.txt`/`*.json`/`*.cmake`/
 `*.py` file — a comment naming a doc section, or a hand-authored fixture's description field, for
-instance) was invisible to every check until FRO196: check C confirms the *doc* named
-exists, but never looks at an anchor tacked onto it. **Not baselined — zero tolerance**, same as
-B/C/D/E. This mattered immediately: FRO166's docs restructure makes every heading unnumbered and
-converts the ~500 existing `§N` references (hard-gated by check D, zero tolerance) into `#anchor`
-references — without check F, that restructure would trade ~500 gated references for ungated ones,
-exactly the rot check D exists to stop.
+instance) was invisible to every check before this one: check C confirms the *doc* named exists, but
+never looks at an anchor tacked onto it. **Not baselined — zero tolerance**, same as B/C/D/E.
+
+**Why it exists.** The docs restructure makes every heading unnumbered and converts the roughly 500
+existing `§N` references — hard-gated by check D, zero tolerance — into `#anchor` references.
+Without check F, that restructure would trade 500 gated references for ungated ones, exactly the rot
+check D exists to stop.
 
 Check F does not reimplement anything check B or check C already got right:
 
@@ -120,12 +121,14 @@ Check F does not reimplement anything check B or check C already got right:
 
 Checks C, D, and F all require a literal `docs/` prefix before the filename they validate. A
 reference written as a bare, backtick-wrapped basename in prose — `` `<name>.md` §<N> ``, with no
-`docs/` prefix and no markdown link target at all — matches none of them and was invisible to every
-check before FRO217. FRO176's post-merge verification found two live examples surviving a clean
-run: `docs/timeline/scale-assist.md` pointed at a `§12` in `theming.md` that had been renumbered
-away entirely, and `docs/plugin_card_layout.md` named a `layout.md` that no longer exists (the
-material it wanted had moved into `docs/layout/module-card.md`) — both fixed in the same PR that
-added this check, converting each into a real markdown link so check B now guards it going forward.
+`docs/` prefix and no markdown link target at all — matches none of them, and was invisible to
+every check before this one.
+
+**Why.** Two live examples were found surviving a clean run: one doc pointed at a `§12` in
+`theming.md` that had been renumbered away entirely, and another named a `layout.md` that no longer
+exists, the material it wanted having moved into
+[`layout/module-card.md`](../layout/module-card.md). Both became real markdown links, so check B
+guards them going forward.
 
 For every in-scope file, a backtick-wrapped `` `<name>.md` `` token — outside markdown link syntax
 (the whole `[text](target)` span is masked out of the line first, the same construct check B
@@ -148,26 +151,25 @@ Check G does not reimplement anything check B, C, or D already got right:
 - **Slug table** — a trailing `#anchor` is checked against the exact same slug table check B/F
   build, never a second implementation.
 - **Section table** — a trailing `§N` is checked against `build_headings_file`'s table, the same
-  one check D itself now reads (FRO217 pulled check D's own heading-number table out into this
-  shared builder specifically so check G could reuse it instead of adding a third section-resolution
-  implementation).
+  one check D itself reads — check D's own heading-number table was pulled out into this shared
+  builder specifically so check G could reuse it instead of adding a third section-resolution
+  implementation.
 - **No double-reporting** — a bare name that *is* written as proper markdown link syntax (as
   `` [`name.md`](target) ``, link text and target both) is check B's business, not check G's; the
   whole link span is masked out of the line before check G ever looks at it.
 
 ## Naming ratchet
 
-Check A works exactly like the [file-size](testing.md#file-size-cap-lint-job) and
-[function-size](testing.md#function-size-cap-lint-job) guards' baselines, with one entry kind
+Check A works exactly like the [file-size](file-size-guard.md#strict-ratchet-baseline) and
+[function-size](function-size-guard.md#strict-ratchet-baseline) guards' baselines, with one entry kind
 (`naming <path>`) instead of several, in `scripts/docs-baseline.txt`:
 
 - A baselined file is presence-only grandfathered — fixing it (renaming to kebab-case) makes the
   entry stale, and `--update` removes it.
 - No file may join the baseline as new. A newly authored doc that violates the convention fails
-  outright, naming the rename it needs — this doc is the demonstration case: it passes check A
-  with zero baseline entries because its name was chosen correctly from the start.
-- `--update` never adds or raises an entry without `--allow-growth` (mirrors FRO83's rule for the
-  file-size guard) — it refuses, baseline left untouched, rather than launder a newly-violating
+  outright, naming the rename it needs.
+- `--update` never adds or raises an entry without `--allow-growth`, mirroring the file-size
+  guard's rule — it refuses, baseline left untouched, rather than launder a newly-violating
   file through silently. `--allow-growth` is the deliberate, reviewed exception, printing a
   `::warning::` per new entry so it stays visible in CI logs and PR review.
 - A first-ever `--update` (no baseline file present yet) bootstraps without needing
@@ -184,18 +186,18 @@ convention without a disruptive mass rename.
 `scripts/docs-baseline.txt` lists doc paths by construction (every `naming <path>` line names a
 docs/**/*.md file, and the file's own mechanism comment above names several more). Now that `.txt`
 is in `EXTENSIONS` (see the widened-scope note above), the baseline is itself scanned by check C
-like any other in-scope file. That creates a real ordering trap for the FRO166 area PRs that
-rename docs wholesale: right after an area's `git mv` (rename step) but before `check-docs.sh
---update` regenerates the baseline, the baseline still names the pre-mv path — which check C now
+like any other in-scope file. That creates a real ordering trap for a PR that renames docs
+wholesale: right after the `git mv` but before `check-docs.sh --update` regenerates the baseline,
+the baseline still names the pre-mv path — which check C now
 correctly flags as a `docs/...` mention that doesn't resolve, on top of check A's own "stale
 baseline entry" error for the same rename. **This is expected and harmless**, verified against a
-full scratch copy of this repo (FRO208): `--update` never reads the *old* baseline content to
+full scratch copy of this repo: `--update` never reads the *old* baseline content to
 decide anything — it recomputes every naming violation from the tree as it stands right now and
 overwrites the file outright — so running `--update` immediately after the `git mv`, in that exact
 "intermediate" state, still exits 0 and rewrites a fully clean baseline; a plain check afterward
 also passes clean. The trap only bites if a plain (non-`--update`) check is run in the gap between
-the `git mv` and the `--update` — which the mandated per-area sequence (`git mv` → `check-docs.sh
---update` → commit both together) never does. `scripts/docs-baseline.txt` therefore stays in scope
+the `git mv` and the `--update` — which the mandated sequence (`git mv` → `check-docs.sh --update` →
+commit both together) never does. `scripts/docs-baseline.txt` therefore stays in scope
 for check C rather than being excluded from it: excluding it would have hidden a real class of bug
 (a baseline entry left stale — pointing at a path nothing renamed it *to* — after a rename that
 missed updating it), for a transient state that never reaches a commit.
@@ -216,7 +218,7 @@ docs cleanup pass, since it doesn't stop at the first failure the way the plain 
 ## Where it runs
 
 - **Pre-commit hook** (`scripts/pre-commit-lint.sh`, installed via `bash scripts/install-hooks.sh`
-  — see [Git Hooks](testing.md#git-hooks)): whole tree, unconditionally, for any commit with
+  — see [Git hooks](local-ci.md#git-hooks)): whole tree, unconditionally, for any commit with
   staged changes — a doc or script edit can introduce a stale reference or map gap just as easily
   as a `Source/**` change can leave a `§`-reference dangling without touching `docs/` at all.
 - **`.github/workflows/ci.yml`'s Lint job**, "Check docs integrity" step, next to "Check file
@@ -237,29 +239,20 @@ docs cleanup pass, since it doesn't stop at the first failure the way the plain 
 Between the three, every commit and every PR gets checked at least once before merge, and a commit
 that would fail is caught locally before it's ever pushed.
 
-## Enforcement (FRO170)
+## Enforcement
 
-Running the check isn't the same as it gating a merge. Before FRO170, the Docs job ran on every
-PR but wasn't in `main`'s required-status-checks list, so a red Docs job didn't block anything —
-and a docs-only PR was BLOCKED anyway (ci.yml's four required jobs never post a status, since its
-`paths:` filter excludes `docs/**`/`*.md`), so the routine workaround, `gh pr merge --admin`,
-bypassed every check including a red Docs job. Two changes closed that:
+Running the check is not the same as it gating a merge. The "Docs" job is a required status check
+in `main`'s branch protection, and `.github/workflows/ci-passthrough.yml` covers `ci.yml`'s four
+path-filtered jobs on a docs-only PR — see
+[`ci-pipeline.md`](ci-pipeline.md#docs-only-pull-requests) for both mechanisms and the required
+check names.
 
-1. "Docs" (and "PR Title") were added to `main`'s required-status-checks list —
-   `.github/CLAUDE.md` names the six required contexts.
-2. `.github/workflows/ci-passthrough.yml` posts a synthetic success under ci.yml's four required
-   job names whenever ci.yml's own `paths:` filter doesn't match, so a docs-only PR's required
-   checks all post a real status and the PR merges normally once green — no more routine
-   `--admin` override, and a red Docs job now actually blocks the merge it should.
-
-A mixed code+docs PR (this repo's convention requires updating docs in the same PR as the
-behavior change, so this is common, not rare) triggers both ci.yml and the passthrough, producing
-a duplicate check run under each of the four shared job names — see `ci-passthrough.yml`'s own
-header for why that duplication can't be eliminated with a path-filter tweak, and why it's
-verified harmless anyway: `mergeStateStatus` was confirmed live (PR #420) to stay non-`CLEAN`
-while any run under a required context name is still non-terminal, so the real job's result is
-never shadowed by an earlier synthetic success. Only a raw `gh pr checks`-style listing (or
-tooling that reads it the same naive way) can look momentarily misleading during that window.
+**Why both are needed.** While the Docs job ran on every PR but was not required, a red Docs job
+blocked nothing — and a docs-only PR was blocked anyway, because `ci.yml`'s four required jobs never
+post a status when its `paths:` filter excludes `docs/**` and `*.md`. The routine workaround, `gh pr
+merge --admin`, bypassed every check including a red Docs job. Making "Docs" required without the
+passthrough would have left docs-only PRs unmergeable; adding the passthrough without making "Docs"
+required would have left the guard advisory.
 
 ## Zero tolerance for stale references
 

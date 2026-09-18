@@ -3,7 +3,7 @@
 #                     Presence-only: fixed (renamed) means the entry is simply gone from a
 #                     future --update. Never add a NEW entry -- rename the file instead.
 # --allow-growth is the deliberate, reviewed exception. See check-docs.sh's own header comment
-# for the full mechanism, and docs/docs-guard.md for why only naming is grandfathered -- every
+# for the full mechanism, and docs/development/docs-guard.md for why only naming is grandfathered -- every
 # other check (B/C/D/E) is zero-tolerance and never baselined.
 naming docs/Module_Development_Guide.md
 naming docs/architecture_app_wiring.md
@@ -22,5 +22,4 @@ naming docs/midi_remote_ui.md
 naming docs/mixer_fader.md
 naming docs/mixer_implementation.md
 naming docs/plugin_card_layout.md
-naming docs/testing_gain_staging.md
 naming docs/testing_mixer_meters.md

@@ -56,9 +56,9 @@ public:
      *  hidden when there is nothing to show). */
     MixerEqThumbnail& getEqThumbnailForTest() noexcept { return eqThumbnail_; }
 
-    /** The column's own insert list -- juce::PopupMenu never runs in a test process
-     *  (docs/testing.md), so a test drives MixerInsertList::removeRow()/moveRow()/addModule()
-     *  directly through this, exactly like the row menu's own async callbacks would. */
+    /** The column's own insert list -- juce::PopupMenu never runs in a test process (see
+     *  docs/development/test-patterns.md), so a test drives MixerInsertList::removeRow()/moveRow()/
+     *  addModule() directly through this, exactly like the row menu's own async callbacks would. */
     MixerInsertList& getInsertListForTest() noexcept { return insertList_; }
 
     /** FRO18: toggles this strip's mute/solo through exactly the same path the M/S buttons'

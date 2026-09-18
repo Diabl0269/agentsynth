@@ -33,7 +33,7 @@
 #      grandfathering here (unlike check A) -- a stale section reference is actively misleading (it
 #      sends a reader to the wrong place, or nowhere), so it is fixed at the point it goes stale,
 #      not parked for later. FRO169 fixed the last 38 stale references that had accumulated; see
-#      docs/docs-guard.md for the mechanism this enforces going forward.
+#      docs/development/docs-guard.md for the mechanism this enforces going forward.
 #   E. `docs/README.md` map completeness -- every `docs/**/*.md` file except README.md itself must
 #      be linked at least once from `docs/README.md`, and every link `docs/README.md` makes into
 #      docs/ must resolve to a real file. NOT baselined -- the map is either complete or it isn't.
@@ -114,7 +114,7 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
 # Text file extensions this guard scans -- source comments, scripts and CI config can all carry a
 # `docs/...` reference or a `§`-section pointer, not just the docs themselves. FRO208 widened this
 # from (md cpp h sh yml) to also cover txt/json/cmake/py: CMakeLists.txt alone carries five doc
-# references (a section reference to docs/mixer.md, plus refs to docs/distribution.md,
+# references (a section reference to docs/mixer.md, plus refs to docs/development/distribution.md,
 # docs/architecture.md and docs/shortcuts.md) that no check could ever see, and a hand-authored
 # Tools/**/Fixtures/*.json description field can cite a doc too (see the
 # Tools/TimelineOpsHarness/Fixtures/ note below) -- verified to add ZERO new violations on the
@@ -538,7 +538,7 @@ run_update() {
         echo "#                     Presence-only: fixed (renamed) means the entry is simply gone from a"
         echo "#                     future --update. Never add a NEW entry -- rename the file instead."
         echo "# --allow-growth is the deliberate, reviewed exception. See check-docs.sh's own header comment"
-        echo "# for the full mechanism, and docs/docs-guard.md for why only naming is grandfathered -- every"
+        echo "# for the full mechanism, and docs/development/docs-guard.md for why only naming is grandfathered -- every"
         echo "# other check (B/C/D/E) is zero-tolerance and never baselined."
         sort "$workdir/naming_new.txt" | sed 's/^/naming /'
     } >"$DOCS_BASELINE"

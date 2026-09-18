@@ -94,7 +94,7 @@ set(SYNTH_PRODUCT_NAME "Agent Synth" CACHE STRING "Display name: window title, A
 set(SYNTH_COMPANY_NAME "yourcompany" CACHE STRING "JUCE COMPANY_NAME / macOS bundle vendor")
 set(SYNTH_BUNDLE_ID "com.agentsynth.app" CACHE STRING "macOS/iOS CFBundleIdentifier")
 
-# Auto-update (Sparkle on macOS, WinSparkle on Windows — see docs/distribution.md).
+# Auto-update (Sparkle on macOS, WinSparkle on Windows — see docs/development/auto-update.md).
 # SYNTH_SPARKLE_PUBLIC_KEY / SYNTH_WINSPARKLE_PUBLIC_KEY are deliberately empty by default: both
 # update managers check for a non-empty key at startup and stay inert without one, so a dev/local
 # build never shows an "app is misconfigured" alert. CI supplies the real keys via
@@ -147,7 +147,7 @@ set(SYNTH_BUILD_NUMBER "0" CACHE STRING "CFBundleVersion — monotonic build num
 #
 # Sensitive-info boundary: COMMIT SUBJECT LINES ONLY (the first line of each commit message) from
 # this project's own public commit history — never the body, never author name/email. See
-# docs/distribution.md's "What's New" section for the full rationale.
+# docs/development/distribution.md's "What's New" section for the full rationale.
 execute_process(
     COMMAND git describe --tags --abbrev=0
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}

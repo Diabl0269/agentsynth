@@ -3,7 +3,8 @@
 # WHY THIS EXISTS: a freshly created git worktree's first `cmake` configure has nothing in its
 # own build-ci-local/_deps -- FetchContent re-downloads JUCE (~600 MB), GoogleTest and Sparkle
 # from scratch, originally observed taking 15-20 minutes before a single line of C++ compiles
-# (network-dependent -- measured at 4m 12.7s on the machine this was fixed on, see docs/testing.md
+# (network-dependent -- measured at 4m 12.7s on the machine this was fixed on, see
+# docs/development/local-ci.md
 # "Worktree dependency-source reuse"), even though the main checkout sitting right next to it
 # (under agentsynth-suite/) already has those exact sources on disk. Passing
 # -DFETCHCONTENT_SOURCE_DIR_<NAME>=<path> makes FetchContent use that path directly instead of

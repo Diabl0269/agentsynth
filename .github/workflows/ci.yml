@@ -151,14 +151,14 @@ jobs:
     - name: Check file sizes
       # FRO61: hard 1000-line cap + strict ratchet baseline (scripts/file-size-baseline.txt) for
       # legacy files already over it. See scripts/check-file-sizes.sh's own doc comment and
-      # docs/testing.md "File-size cap" for the full mechanism.
+      # docs/development/file-size-guard.md for the full mechanism.
       run: bash scripts/check-file-sizes.sh
     - name: Check docs integrity
       # FRO169: runs scripts/check-docs.sh against the REAL tree, not just its unit test -- a PR
       # that only edits a Source/*.h comment (in scope for check C/D, but never under docs/**)
       # needs docs-integrity signal too, and this job's own `paths:` filter would let such a PR
       # through untouched otherwise. See scripts/check-docs.sh's own doc comment and
-      # docs/docs-guard.md for the full mechanism.
+      # docs/development/docs-guard.md for the full mechanism.
       run: bash scripts/check-docs.sh
     - name: Test function-size guard
       # Same story as the file-size guard's own test above, one level down: a hole in the scanner
@@ -168,7 +168,7 @@ jobs:
     - name: Check function sizes
       # FRO78: hard 200-line cap per function + strict ratchet baseline
       # (scripts/function-size-baseline.txt) for legacy functions already over it. See
-      # scripts/check-function-sizes.sh's own doc comment and docs/testing.md "Function-size cap"
+      # scripts/check-function-sizes.sh's own doc comment and docs/development/function-size-guard.md
       # for the full mechanism.
       run: bash scripts/check-function-sizes.sh
     - name: Test header-comment-placement guard
@@ -183,7 +183,7 @@ jobs:
       # floor 60, has a sibling .cpp) + strict ratchet baseline (scripts/header-comment-baseline.txt)
       # for headers already over it -- tracking excess (not a raw comment count) so adding a member
       # with its own one-line caller contract never trips the ratchet. See
-      # scripts/check-header-comments.sh's own doc comment and docs/testing.md "Header comment
+      # scripts/check-header-comments.sh's own doc comment and docs/development/header-comment-guard.md "Header comment
       # placement" for the full mechanism.
       run: bash scripts/check-header-comments.sh
     - name: Test docs checker
