@@ -160,3 +160,5 @@ way an old filename is — it actively misdirects the next reader the moment it 
 why only the naming convention gets a ratchet at all, and why fixing a check-B/C/D/E violation
 means finding the CORRECT destination (via git history for a moved/renumbered section, never a
 guess) and pointing at that, not adding an exception anywhere.
+
+<!-- FRO170 verification: throwaway commit confirming a docs-only PR merges cleanly via the new required Docs/PR Title checks + ci-passthrough.yml. Never merge this PR. -->
