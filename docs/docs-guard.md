@@ -152,6 +152,15 @@ bypassed every check including a red Docs job. Two changes closed that:
    checks all post a real status and the PR merges normally once green — no more routine
    `--admin` override, and a red Docs job now actually blocks the merge it should.
 
+A mixed code+docs PR (this repo's convention requires updating docs in the same PR as the
+behavior change, so this is common, not rare) triggers both ci.yml and the passthrough, producing
+a duplicate check run under each of the four shared job names — see `ci-passthrough.yml`'s own
+header for why that duplication can't be eliminated with a path-filter tweak, and why it's
+verified harmless anyway: `mergeStateStatus` was confirmed live (PR #420) to stay non-`CLEAN`
+while any run under a required context name is still non-terminal, so the real job's result is
+never shadowed by an earlier synthetic success. Only a raw `gh pr checks`-style listing (or
+tooling that reads it the same naive way) can look momentarily misleading during that window.
+
 ## Zero tolerance for stale references
 
 Checks B, C, D, and E exist specifically because [check A's grandfathering](#naming-ratchet)

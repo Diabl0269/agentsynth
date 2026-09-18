@@ -22,16 +22,36 @@ name: CI Passthrough
 # path list (pull_request, push, and this file); if you touch one, touch all three, and add the
 # new path to ci.yml's `paths:` too if it should trigger a real build.
 #
-# KNOWN HAZARD: a mixed PR (e.g. one commit touching both Source/** and docs/**) matches
-# ci.yml's `paths:` filter (so ci.yml runs) but does NOT match every entry in this file's
-# `paths-ignore:` list either (docs/** isn't ignored here), so both workflows fire and both post
-# a status under the same job name (e.g. two "Lint" check runs on the same commit). GitHub shows
-# whichever run completes last; this workflow's job is instantaneous, so in practice the real
-# ci.yml run posts after and wins. If that ordering ever inverts (a passthrough success masking
-# a real failure), this pattern is unsafe and needs a job-level `if:` refactor of ci.yml instead
-# (dropping the workflow-level `paths:` filter for a `changes`-job gate) — see FRO170's ticket
-# for why that wasn't the first choice (bigger blast radius on a load-bearing file, and a fails
-# more dangerously: a skipped dependent job still satisfies branch protection).
+# KNOWN HAZARD (confirmed live on PR #420, 2026-09-18): a mixed PR (e.g. one commit touching
+# both Source/** and docs/**) matches ci.yml's `paths:` filter (so ci.yml runs) but does NOT
+# match every entry in this file's `paths-ignore:` list either (docs/** isn't ignored here), so
+# both workflows fire and both post a status under the same job name (e.g. two "Lint" check runs
+# on the same commit) -- and mixed PRs are the norm here, not an edge case, since this repo's own
+# convention requires updating docs/ in the same PR as the behavior change. DO NOT "fix" this by
+# adding docs/**, *.md, etc. to the `paths-ignore:` list below -- that makes a PURE docs-only
+# PR's own changed file match an ignore pattern too, so ALL its changed files would match and
+# this workflow would stop firing exactly for the case FRO170 exists to cover, reintroducing the
+# original BLOCKED-forever bug. GitHub's `paths:` filter is an existential match (any file
+# triggers) and `paths-ignore:` is a universal one (skip only if every file matches) -- these two
+# quantifiers can't be made to partition an arbitrary mixed changeset with simple prefix lists,
+# so true mutual exclusivity isn't reachable this way at all; only a single-workflow job-level
+# `if:` refactor of ci.yml (dropping its `paths:` filter for a `changes`-job gate) would fully
+# eliminate the duplicate runs, and that's a bigger, riskier change to a load-bearing file not
+# currently justified (see below for why the duplication isn't actually dangerous).
+#
+# VERIFIED SAFE, not just "in practice": checked live on PR #420 while the real ci.yml jobs were
+# still `IN_PROGRESS` and only this workflow's synthetic successes had posted -- `mergeStateStatus`
+# already read `BLOCKED`, not `CLEAN`. Branch protection does not consider a required context
+# satisfied while ANY run under that context name is non-terminal, regardless of what an earlier
+# duplicate run under the same name already posted; it isn't "whichever run completes last wins",
+# it's "not satisfied until every run for that context is terminal, and none of them failed". So
+# GitHub's actual merge gate (what "Merge pull request" and native auto-merge both consult) is
+# never fooled by this duplication, in either direction. The real, narrower hazard is cosmetic:
+# `gh pr checks` and any hand-rolled tooling that reads conclusion=="success" for a context name
+# without checking status=="completed" for every run under that name could be misled during the
+# window before the real jobs finish. Prefer `mergeStateStatus`/`mergeable` (or `gh pr merge`
+# itself, which respects them) over a raw `gh pr checks` reading for any automation that decides
+# whether to act on a PR's checks.
 
 on:
   pull_request:
