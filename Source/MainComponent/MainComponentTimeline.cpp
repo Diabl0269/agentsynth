@@ -77,10 +77,10 @@ void MainComponent::publishTimelineAndRebindRecorder() {
 // ONLY when the reconcile itself changed nothing — a reconcile that flips a flag is a doc
 // mutation, so timelineChanged has already published by the time it returns.
 void MainComponent::reconcileTimelineAfterGraphChange() {
-    // FRO14 (docs/mixer/mixer.md#channels-follow-audio-not-tracks): a link forming around an already-muted/soloed track moves that
-    // state onto its channel (and a link can only form or break via a graph change, which is
-    // exactly what reaches here). Runs FIRST so the reconcile/publish below already sees the
-    // transferred doc flags. Deliberately not undoable — same rule as the orphan flag next to it.
+    // FRO14 (docs/mixer/mixer.md#channels-follow-audio-not-tracks): a link forming around an already-muted/soloed track
+    // moves that state onto its channel (and a link can only form or break via a graph change, which is exactly what
+    // reaches here). Runs FIRST so the reconcile/publish below already sees the transferred doc flags. Deliberately not
+    // undoable — same rule as the orphan flag next to it.
     trackChannelLink_.reconcileLinkedTracks();
 
     // reconcileBindings routes through the doc's single mutation choke point when (and only when) a

@@ -1,9 +1,9 @@
 // ChannelFlowAutoChannelTests.cpp
 //
-// T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks): a MIDI track auto-creates the destination's mixer channel
-// on connect. Core-level tests for synth::findUnchanneledOutputFeeds/buildChannelForFeeds
-// first, then real-mouse-gesture coverage through GraphEditor::endConnectionDrag.
-// dragRealMidiCableBetweenCFT below is local to this file.
+// T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks): a MIDI track auto-creates the destination's mixer
+// channel on connect. Core-level tests for synth::findUnchanneledOutputFeeds/buildChannelForFeeds first, then
+// real-mouse-gesture coverage through GraphEditor::endConnectionDrag. dragRealMidiCableBetweenCFT below is local to
+// this file.
 
 #include "../../StubPluginInstance.h"
 #include "AI/AIProvider.h"
@@ -36,8 +36,8 @@
 #include <thread>
 
 // =================================================================================================
-// T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow"): a MIDI track auto-creates the destination's
-// mixer channel on connect. Core-level tests for synth::findUnchanneledOutputFeeds /
+// T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow"): a MIDI track auto-creates the
+// destination's mixer channel on connect. Core-level tests for synth::findUnchanneledOutputFeeds /
 // synth::buildChannelForFeeds first, then real-mouse-gesture coverage through GraphEditor's
 // endConnectionDrag (docs/development/test-patterns.md's real-mouse-path guidance — the same reason
 // Tests/Macros/MacroPortRealMouseDragTests.cpp drives ModuleComponent::mouseDown/mouseDrag/mouseUp

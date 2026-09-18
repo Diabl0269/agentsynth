@@ -1,7 +1,7 @@
 // MacroAutoPortUngroupTests.cpp
 // Ungrouping removes a macro's auto-created ports and splices cables back (founder-review fix G7,
-// docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port); the presentation-count/tooltip rules that exclude auto-created ports; and
-// the tri-state auto-create-ports preference's modal-firing conditions plus its
+// docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port); the presentation-count/tooltip rules that exclude
+// auto-created ports; and the tri-state auto-create-ports preference's modal-firing conditions plus its
 // remember/skip-the-modal paths. Shared test modules/helpers live in MacroAutoPortTestHelpers.h.
 //
 // Creation tests live in MacroAutoPortCreationTests.cpp; the T148/T154 auto-delete suite lives in
@@ -23,9 +23,9 @@
 
 // ============================================================================
 // Ungroup removes the macro's ports and splices the cable back (founder-review fix G7,
-// docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port): "ungroup leaves the macro input/output in place (They should be removed)".
-// Group then Ungroup must be a true round trip — every port node gone, every boundary cable it
-// proxied reconnected external<->internal directly, on the original raw channels.
+// docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port): "ungroup leaves the macro input/output in place
+// (They should be removed)". Group then Ungroup must be a true round trip — every port node gone, every boundary cable
+// it proxied reconnected external<->internal directly, on the original raw channels.
 // ============================================================================
 
 TEST(MacroUngroupPorts, RemovesTheAutoCreatedPortsAndSplicesTheCablesBack) {

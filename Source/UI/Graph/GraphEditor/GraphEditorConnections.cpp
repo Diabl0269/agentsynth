@@ -251,14 +251,13 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                 const int srcJack = dragSourceIsInput ? port->index : dragSourceChannel;
                 const int dstJack = dragSourceIsInput ? dragSourceChannel : port->index;
 
-                // T184 (docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow"): a MIDI cable from a Track In node
-                // landing here may newly make some audio reach the output with no channel — build
-                // one, in the SAME undo step as the connection itself (and as any T148 macro port
-                // the connection below also mints, so a Track In dragged across a macro boundary
-                // straight onto an unchanneled instrument gets ALL of it undone by one Cmd+Z).
-                // Gated by autoCreateChannelOnConnectEnabled (Preferences); OFF (or not a MIDI
-                // drag from a Track In) falls straight through to the T148/plain-connect branch
-                // below, byte for byte as it was before T184.
+                // T184 (docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow"): a MIDI cable from a
+                // Track In node landing here may newly make some audio reach the output with no channel — build one, in
+                // the SAME undo step as the connection itself (and as any T148 macro port the connection below also
+                // mints, so a Track In dragged across a macro boundary straight onto an unchanneled instrument gets ALL
+                // of it undone by one Cmd+Z). Gated by autoCreateChannelOnConnectEnabled (Preferences); OFF (or not a
+                // MIDI drag from a Track In) falls straight through to the T148/plain-connect branch below, byte for
+                // byte as it was before T184.
                 if (autoCreateChannelOnConnectEnabled && dragSourceIsMidi &&
                     nodeIsTimelineMidiSource(realSrc->nodeID)) {
                     const auto realSrcId = realSrc->nodeID;
@@ -326,14 +325,15 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
             // node, rather than always minting a fresh one — "one jack per port" makes a jack a
             // real, precise drop target, not just the card as a whole. A jack whose direction or
             // kind doesn't match the drag is refused silently, the same way an ordinary mismatched
-            // module-jack drop is refused a few lines above (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed: not silently adapted).
-            // DEFERRED (not this stage): raw channel 0 only, same as createMacroPortFromDroppedCable
-            // below. For a Mono port that IS the port's one visible jack; for an existing Stereo
-            // port this wires the Left leg only and leaves Right unconnected — a card jack
-            // summarises the whole port as one dot (docs/macros/ports.md#how-a-port-is-drawn), so there is no separate "Right" drop
-            // target to land on yet. Widening this to resolvePolyLink-style fan-out for an
-            // existing Stereo/Poly-N port is future work, not a regression: the modal (docs/macros/configure-io.md#renaming-and-reordering-ports)
-            // remains the reliable way to wire a non-Mono port completely.
+            // module-jack drop is refused a few lines above
+            // (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed: not silently adapted). DEFERRED
+            // (not this stage): raw channel 0 only, same as createMacroPortFromDroppedCable below. For a Mono port that
+            // IS the port's one visible jack; for an existing Stereo port this wires the Left leg only and leaves Right
+            // unconnected — a card jack summarises the whole port as one dot
+            // (docs/macros/ports.md#how-a-port-is-drawn), so there is no separate "Right" drop target to land on yet.
+            // Widening this to resolvePolyLink-style fan-out for an existing Stereo/Poly-N port is future work, not a
+            // regression: the modal (docs/macros/configure-io.md#renaming-and-reordering-ports) remains the reliable
+            // way to wire a non-Mono port completely.
             if (auto hitPort = macroCardPortForPoint(card->getMacroId(), cardLocal)) {
                 if (hitPort->isInput == newPortIsInput &&
                     (hitPort->kind == synth::MacroPortKind::Midi) == dragSourceIsMidi) {
@@ -372,10 +372,10 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
             }
 
             // No jack under the cursor: fall back to the "shape from a dropped cable" convenience
-            // (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed, T140) — the whole card is still a valid drop target, and a fresh Mono port is
-            // created to receive the cable. T184 does NOT apply here: createMacroPortFromDroppedCable
-            // wires no interior leg (the freshly-minted port has nothing behind it yet), so there is
-            // nothing for findUnchanneledOutputFeeds to find.
+            // (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed, T140) — the whole card is still
+            // a valid drop target, and a fresh Mono port is created to receive the cable. T184 does NOT apply here:
+            // createMacroPortFromDroppedCable wires no interior leg (the freshly-minted port has nothing behind it
+            // yet), so there is nothing for findUnchanneledOutputFeeds to find.
             macroController_.createMacroPortFromDroppedCable(card->getMacroId(), newPortIsInput, dragSourceIsMidi,
                                                              srcNode->nodeID, dragSourceChannel);
             break;

@@ -52,7 +52,8 @@ TEST(MixerPanelComponentTests, MixerPanelRendersOneColumnPerStripPlusDirectPlusM
     auto& mixerPanel = mc.getMixerDock().getMixerPanel();
     mixerPanel.rebuild();
 
-    EXPECT_EQ(mixerPanel.getColumnCount(), 4) << "2 strips + Direct + Master (docs/mixer/panel.md#what-the-mixer-shows)";
+    EXPECT_EQ(mixerPanel.getColumnCount(), 4)
+        << "2 strips + Direct + Master (docs/mixer/panel.md#what-the-mixer-shows)";
 }
 
 TEST(MixerPanelComponentTests, MixerPanelPngRenderSmokeTestDarkTheme) {

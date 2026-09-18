@@ -36,7 +36,8 @@ public:
     }
     juce::String getDisplayName() const { return name_; }
 
-    /** docs/mixer/mixer.md#channels-follow-audio-not-tracks: a small "+R" badge next to the name when this strip is linked to a track. */
+    /** docs/mixer/mixer.md#channels-follow-audio-not-tracks: a small "+R" badge next to the name when this strip is
+     * linked to a track. */
     void setLinkedBadgeVisible(bool visible) {
         if (linkedBadgeVisible_ == visible)
             return;
@@ -44,8 +45,8 @@ public:
         repaint();
     }
 
-    /** FRO15 (docs/mixer/sends-and-buses.md): a "BUS" badge in place of the linked badge when this column is a group/send
-     *  bus -- a bus has no track to link to, so the two are mutually exclusive by construction. */
+    /** FRO15 (docs/mixer/sends-and-buses.md): a "BUS" badge in place of the linked badge when this column is a
+     * group/send bus -- a bus has no track to link to, so the two are mutually exclusive by construction. */
     void setBusBadgeVisible(bool visible) {
         if (busBadgeVisible_ == visible)
             return;
@@ -53,9 +54,9 @@ public:
         repaint();
     }
 
-    /** Fires on a click anywhere in the header background -- docs/mixer/panel.md#what-the-mixer-shows's "clicking a column selects
-     *  its macro on the canvas". Left null (the default) for Direct/Master, which have no macro of
-     *  their own to select. */
+    /** Fires on a click anywhere in the header background -- docs/mixer/panel.md#what-the-mixer-shows's "clicking a
+     * column selects its macro on the canvas". Left null (the default) for Direct/Master, which have no macro of their
+     * own to select. */
     std::function<void()> onHeaderClicked;
 
     void paint(juce::Graphics& g) override {

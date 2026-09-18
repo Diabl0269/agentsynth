@@ -15,9 +15,9 @@
  * buildVisibleCables() anchors a cable crossing a collapsed card to this node's card jack — this
  * module carries no boundary logic of its own.
  *
- * CHANNEL SHAPE (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed): "a port node's channel shape is decided when the node is
- * constructed, and is immutable for that node's lifetime." JUCE settles the bus layout in the
- * ModuleBase constructor, so this node always carries kMaxChannels raw channels — the same
+ * CHANNEL SHAPE (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed): "a port node's channel shape
+ * is decided when the node is constructed, and is immutable for that node's lifetime." JUCE settles the bus layout in
+ * the ModuleBase constructor, so this node always carries kMaxChannels raw channels — the same
  * declare-a-maximum-and-vary-the-visible-count pattern Audio Input and Hosted Plugin already use
  * (Source/Modules/CLAUDE.md) — and `shape_`/`voiceCount_` (persisted via getExtraState, TRUSTED-
  * PATH ONLY like every module's "state") say how those raw channels map to visible jacks:
@@ -30,9 +30,10 @@
  *   - Poly  — raw ch0..voiceCount_-1 are ONE visible jack (a poly-bus fan), ch0 the group head.
  *
  * setPortShape() is called exactly ONCE, by the port-creation flow, immediately after
- * construction and before the node is wired into a live graph — never again (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed's immutability
- * rule). This is what lets a Stereo/Poly-N port exist with no new factory type and no migration
- * for a Macro In already on disk: the bus was sized for it from P8-15a onward.
+ * construction and before the node is wired into a live graph — never again
+ * (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed's immutability rule). This is what lets a
+ * Stereo/Poly-N port exist with no new factory type and no migration for a Macro In already on disk: the bus was sized
+ * for it from P8-15a onward.
  *
  * INTERNAL-ONLY, the same three exclusions as Track In / Rec Tap / Track Audio: not in the module
  * library, not offered by the replace menu, never authorable by a model
@@ -40,9 +41,9 @@
  *
  * No "muted" parameter, following the same three modules: there is nothing here for a mute to
  * silence beyond what bypass already covers, and it is deliberately not added just because a
- * future macro-level mute fan-out (docs/macros/ports.md#bypass-and-mute, docs/macros/ports.md#bypass-and-mute) might want to
- * call setMuted on every member — that fan-out already has to guard against members with no mute parameter today (any
- * macro can already contain a Track In / Rec Tap / Track Audio node), so this is not a new gap.
+ * future macro-level mute fan-out (docs/macros/ports.md#bypass-and-mute, docs/macros/ports.md#bypass-and-mute) might
+ * want to call setMuted on every member — that fan-out already has to guard against members with no mute parameter
+ * today (any macro can already contain a Track In / Rec Tap / Track Audio node), so this is not a new gap.
  */
 class MacroInletModule : public ModuleBase {
 public:
@@ -234,9 +235,9 @@ private:
 
     // Written once — by setExtraState() on a trusted load, or by setPortShape() from the
     // port-creation flow immediately after construction, before the node is added to a running
-    // graph — and never again: docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed's "immutable for that node's lifetime" rule. Atomic because it
-    // is written on the message thread and read every block on the audio thread; relaxed is
-    // enough since nothing else depends on ordering against it.
+    // graph — and never again: docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed's "immutable for
+    // that node's lifetime" rule. Atomic because it is written on the message thread and read every block on the audio
+    // thread; relaxed is enough since nothing else depends on ordering against it.
     std::atomic<MacroPortShape> shape_{MacroPortShape::Mono}; // Mono default — matches every save
     std::atomic<int> voiceCount_{1};                          // meaningful only when shape_ == Poly
 

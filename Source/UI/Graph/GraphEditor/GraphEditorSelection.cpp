@@ -265,12 +265,11 @@ void GraphEditor::finalizeSelectionDrag() {
 
     // A WHOLE-macro selection (selectMacro() — chip drag, or Cmd/Shift-selecting a macro's every
     // member) moves the hull by the same uniform delta+offset every port widget above just moved
-    // by, so it stays consistent for free (macroHullBounds' docs/macros/ports.md#how-a-port-is-drawn doc). A PARTIAL selection — a
-    // marquee that happens to catch one port widget plus an unrelated module, without the macro's
-    // other members — has no such guarantee: the hull (built from non-port members, selected or
-    // not) may not have moved by that same delta, desyncing the port from its dock. Re-deriving
-    // here (idempotent — a no-op for the whole-macro case, which already agrees) is the P8-15 fix
-    // F2 guard for that gap.
+    // by, so it stays consistent for free (macroHullBounds' docs/macros/ports.md#how-a-port-is-drawn doc). A PARTIAL
+    // selection — a marquee that happens to catch one port widget plus an unrelated module, without the macro's other
+    // members — has no such guarantee: the hull (built from non-port members, selected or not) may not have moved by
+    // that same delta, desyncing the port from its dock. Re-deriving here (idempotent — a no-op for the whole-macro
+    // case, which already agrees) is the P8-15 fix F2 guard for that gap.
     macroController_.dockMacroPortWidgets();
 
     selectionDragActive = false;

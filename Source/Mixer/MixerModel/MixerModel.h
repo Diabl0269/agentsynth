@@ -22,9 +22,9 @@ struct MixerInsertEntry {
     bool bypassed = false;
 };
 
-/** One of a source column's active send slots, in slot order (FRO15, docs/mixer/sends-and-buses.md). The slot index is the
- *  identity -- it names the jack, the row, and the `sendNLevel` parameter alike -- and the target is
- *  read off the graph every rebuild, never stored. */
+/** One of a source column's active send slots, in slot order (FRO15, docs/mixer/sends-and-buses.md). The slot index is
+ * the identity -- it names the jack, the row, and the `sendNLevel` parameter alike -- and the target is read off the
+ * graph every rebuild, never stored. */
 struct MixerSendEntry {
     int slot = 0;
     bool preFader = false;
@@ -35,8 +35,8 @@ struct MixerSendEntry {
 };
 
 /** One column of the mixer panel: a ChannelStrip, a group/send bus (also a ChannelStrip --
- *  docs/mixer/sends-and-buses.md#a-bus-is-a-channel-strip: there is no separate bus node type), the always-present Direct bus once Master exists, or
- *  Master itself. */
+ *  docs/mixer/sends-and-buses.md#a-bus-is-a-channel-strip: there is no separate bus node type), the always-present
+ * Direct bus once Master exists, or Master itself. */
 struct MixerColumn {
     enum class Kind { Strip, Bus, Direct, Master };
 
@@ -48,11 +48,12 @@ struct MixerColumn {
     juce::String name;
     juce::Colour colour{0xff5a7dff};
 
-    /** docs/mixer/mixer.md#channels-follow-audio-not-tracks's link rule: this strip's ONLY feeding track source. Meaningless for Direct/Master. */
+    /** docs/mixer/mixer.md#channels-follow-audio-not-tracks's link rule: this strip's ONLY feeding track source.
+     * Meaningless for Direct/Master. */
     bool linkedToTrack = false;
 
-    /** Every track whose header shows this column's chip (docs/mixer/mixer.md#channels-follow-audio-not-tracks). Empty for an orphan strip nothing
-     *  in the timeline feeds, and for Direct/Master. */
+    /** Every track whose header shows this column's chip (docs/mixer/mixer.md#channels-follow-audio-not-tracks). Empty
+     * for an orphan strip nothing in the timeline feeds, and for Direct/Master. */
     std::vector<TrackId> feedingTracks;
 
     /** The feeding track's own source node -- the insert chain's implicit predecessor (needed to
@@ -62,10 +63,10 @@ struct MixerColumn {
      *  to move a row to the very front of a bus's chain rather than splice against an invalid id). */
     juce::AudioProcessorGraph::NodeID sourceNodeId;
 
-    /** The chain between this strip and its own upstream source, in signal order (docs/mixer/mixer.md#inserts-in-a-free-form-graph): the
-     *  feeding track's source for an ordinary strip, or (FRO15, docs/mixer/sends-and-buses.md) the strip's own
-     *  EQ/Compressor chain walked BACKWARD for a Kind::Bus column, which has no feeding track to
-     *  walk forward from. A send feeding the bus (landing on the same strip input channels an
+    /** The chain between this strip and its own upstream source, in signal order
+     * (docs/mixer/mixer.md#inserts-in-a-free-form-graph): the feeding track's source for an ordinary strip, or (FRO15,
+     * docs/mixer/sends-and-buses.md) the strip's own EQ/Compressor chain walked BACKWARD for a Kind::Bus column, which
+     * has no feeding track to walk forward from. A send feeding the bus (landing on the same strip input channels an
      *  insert's own output would) is excluded from this walk, never counted as a bus insert or as
      *  branching. Empty for Direct/Master and for a non-bus orphan strip with no track to walk
      *  from. */
@@ -76,8 +77,8 @@ struct MixerColumn {
      *  canvas" instead of add/reorder/remove. Meaningless when `inserts` is empty. */
     bool insertChainIsLinear = false;
 
-    /** This strip's active send slots, in slot order (docs/mixer/sends-and-buses.md). Empty for Direct/Master and for any
-     *  strip with no sends. */
+    /** This strip's active send slots, in slot order (docs/mixer/sends-and-buses.md). Empty for Direct/Master and for
+     * any strip with no sends. */
     std::vector<MixerSendEntry> sends;
 
     /** Kind::Bus only: the names of the strips feeding this bus, in ascending NodeID -- what a bus
@@ -95,12 +96,13 @@ struct MixerSnapshot {
     bool hasMaster = false;
 };
 
-/** Builds the full column set (docs/mixer/panel.md#what-the-mixer-shows: strips in track order, then buses, then Direct,
- *  then Master -- nothing else). Recomputed on demand; cheap enough to call on every graph/timeline/
- *  macro change notification (a handful of strips, never per-frame). */
+/** Builds the full column set (docs/mixer/panel.md#what-the-mixer-shows: strips in track order, then buses, then
+ * Direct, then Master -- nothing else). Recomputed on demand; cheap enough to call on every graph/timeline/ macro
+ * change notification (a handful of strips, never per-frame). */
 MixerSnapshot buildMixerSnapshot(juce::AudioProcessorGraph& graph, const TimelineDoc& doc, const MacroSet& macros);
 
-// ---- Insert-list mutations (docs/mixer/mixer.md#inserts-in-a-free-form-graph) -------------------------------------------------------------
+// ---- Insert-list mutations (docs/mixer/mixer.md#inserts-in-a-free-form-graph)
+// -------------------------------------------------------------
 //
 // Plain graph splices, NO UNDO of their own -- same contract as Source/Mixer/ChannelFlows's own
 // builders (docs/architecture/module-base.md#appundomanager): the caller wraps each in one

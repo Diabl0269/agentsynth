@@ -3,7 +3,8 @@
 #include <juce_core/juce_core.h>
 
 /**
- * @brief Channel shape of an audio/CV Macro port (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed, P8-15 Macro I/O).
+ * @brief Channel shape of an audio/CV Macro port
+ * (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed, P8-15 Macro I/O).
  *
  * Meaningless for a MIDI port — MacroMidiInletModule/MacroMidiOutletModule carry no shape at all,
  * just acceptsMidi()/producesMidi() (see that class's comment). Chosen once, at port-creation
@@ -12,9 +13,11 @@
  * that, as one undo step, never a live renegotiation of MacroInletModule/MacroOutletModule's
  * fixed kMaxChannels bus.
  *
- * `Stereo` vs `StereoCollapsed` (founder-review fix G2, docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed / docs/macros/auto-ports.md#auto-creating-ports-when-grouping):
- * these are deliberately TWO values, not one overloaded meaning, because they answer a genuinely different
- * question — "how many visible jacks does this port show" — for two different sources of a stereo pair:
+ * `Stereo` vs `StereoCollapsed` (founder-review fix G2,
+ * docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed /
+ * docs/macros/auto-ports.md#auto-creating-ports-when-grouping): these are deliberately TWO values, not one overloaded
+ * meaning, because they answer a genuinely different question — "how many visible jacks does this port show" — for two
+ * different sources of a stereo pair:
  *
  *   - `Stereo` is the HAND-PICKED shape, reachable only from the Configure I/O modal
  *     (MacroPortConfigDialog never offers `StereoCollapsed` as a choice). It presents TWO visible
@@ -58,8 +61,8 @@ inline juce::String macroPortShapeToString(MacroPortShape shape) {
 
 /** Unrecognised/absent input parses as Mono — every pre-P8-15c save (and every MIDI-kind port,
  *  which never writes this key at all) has no "shape" property, and Mono is the shape those saves
- *  already behave as (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed's implementation note: "today the only value anything
- *  ever sets is Mono"). */
+ *  already behave as (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed's implementation note:
+ * "today the only value anything ever sets is Mono"). */
 inline MacroPortShape macroPortShapeFromString(const juce::String& s) {
     if (s == "stereo")
         return MacroPortShape::Stereo;

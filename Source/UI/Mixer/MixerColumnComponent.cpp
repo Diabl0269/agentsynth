@@ -124,8 +124,8 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
     header_.setLinkedBadgeVisible(column.linkedToTrack);
     header_.setBusBadgeVisible(column.kind == synth::MixerColumn::Kind::Bus);
 
-    // Doubles as docs/mixer/panel.md#what-the-mixer-shows's "the tracks that play into it" row -- `sourceLine` is the caller-resolved
-    // (comma-joined) names of column.feedingTracks, the same tracks a "source line" names for a
+    // Doubles as docs/mixer/panel.md#what-the-mixer-shows's "the tracks that play into it" row -- `sourceLine` is the
+    // caller-resolved (comma-joined) names of column.feedingTracks, the same tracks a "source line" names for a
     // single-source column.
     sourceLineLabel_.setText(sourceLine_, juce::dontSendNotification);
     insertList_.setEntries(column.inserts, column.insertChainIsLinear, column.editOnCanvasTargetUuid,

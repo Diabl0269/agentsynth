@@ -1,9 +1,9 @@
 // ChannelFlowsTrackChannelLink.cpp
 //
-// The two signal-reach queries the track <-> channel link rule (docs/mixer/mixer.md#channels-follow-audio-not-tracks) is decided
-// from: forward from a track's own source node to the Channel Strip it plays into, and backward
-// from a Channel Strip to every track source that feeds it. Both are pure graph reads -- no
-// mutation, no undo, no TimelineDoc -- so they live in Core next to the rest of ChannelFlows.
+// The two signal-reach queries the track <-> channel link rule (docs/mixer/mixer.md#channels-follow-audio-not-tracks)
+// is decided from: forward from a track's own source node to the Channel Strip it plays into, and backward from a
+// Channel Strip to every track source that feeds it. Both are pure graph reads -- no mutation, no undo, no TimelineDoc
+// -- so they live in Core next to the rest of ChannelFlows.
 //
 // findTrackSourcesFeedingStrip() is StemSession.cpp's former private upstreamTrackSources() (FRO55,
 // stem file naming) promoted verbatim to a shared Core query: "which track feeds this strip" is the
@@ -68,8 +68,8 @@ bool contains(const std::vector<juce::AudioProcessorGraph::NodeID>& ids, juce::A
 } // namespace
 
 // A track whose signal fans out and reaches TWO distinct strips gets whichever the BFS visits
-// first -- arbitrary but deterministic. docs/mixer/mixer.md#channels-follow-audio-not-tracks's link rule is defined channel-side ("is THIS track
-// the channel's only source"), so a track feeding two channels at once is out of scope.
+// first -- arbitrary but deterministic. docs/mixer/mixer.md#channels-follow-audio-not-tracks's link rule is defined
+// channel-side ("is THIS track the channel's only source"), so a track feeding two channels at once is out of scope.
 juce::AudioProcessorGraph::NodeID findStripFedByTrackSource(juce::AudioProcessorGraph& graph,
                                                             juce::AudioProcessorGraph::NodeID trackSourceId) {
     if (graph.getNodeForId(trackSourceId) == nullptr)

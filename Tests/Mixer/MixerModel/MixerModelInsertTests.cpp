@@ -1,5 +1,5 @@
-// MixerModelInsertTests.cpp -- FRO11 (P9-5, docs/mixer/mixer.md#inserts-in-a-free-form-graph): a column's insert list (linear
-// vs. branching, in signal order) and the three insert-list mutation primitives. Headless: a bare
+// MixerModelInsertTests.cpp -- FRO11 (P9-5, docs/mixer/mixer.md#inserts-in-a-free-form-graph): a column's insert list
+// (linear vs. branching, in signal order) and the three insert-list mutation primitives. Headless: a bare
 // AudioEngine/TimelineDoc/MacroSet, no MainComponent/GraphEditor.
 #include "Mixer/MixerModel/MixerModel.h"
 #include "MixerModelTestFixture.h"
@@ -64,7 +64,8 @@ TEST(MixerModelInsertTests, ASharedEqFeedingTwoStripsMakesTheChainBranching) {
     const auto snapshot = synth::buildMixerSnapshot(graph, doc, macros);
     // strip1 is reached by the one bound track; strip2 is never reached by ANY track's own walk
     // (only strip1 is), so it appears too, as its own orphan column
-    // (docs/mixer/panel.md#what-the-mixer-shows's own ordering rule) -- this test only cares about strip1's insert list.
+    // (docs/mixer/panel.md#what-the-mixer-shows's own ordering rule) -- this test only cares about strip1's insert
+    // list.
     ASSERT_EQ(snapshot.columns.size(), 2u);
     const auto it = std::find_if(snapshot.columns.begin(), snapshot.columns.end(),
                                  [&](const auto& c) { return c.nodeId == strip1->nodeID; });

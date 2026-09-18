@@ -74,8 +74,8 @@ juce::var TrackPresetManager::extractTrackPreset(juce::AudioProcessorGraph& grap
     if (selection.empty())
         return {};
 
-    // Step 2 (founder requirement, docs/mixer/track-presets.md#what-a-saved-preset-carries-beyond-the-box): every outside module feeding this
-    // channel through a port (or a raw un-ported jack), transitively.
+    // Step 2 (founder requirement, docs/mixer/track-presets.md#what-a-saved-preset-carries-beyond-the-box): every
+    // outside module feeding this channel through a port (or a raw un-ported jack), transitively.
     for (const auto id : collectOutsideModulatorsForTrackPreset(graph, macros, channelMacroId))
         if (std::find(selection.begin(), selection.end(), id) == selection.end())
             selection.push_back(id);

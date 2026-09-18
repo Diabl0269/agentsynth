@@ -7,7 +7,8 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <map>
 
-// TrackChannelLinkController.h -- FRO14 (P9-4, docs/mixer/mixer.md#channels-follow-audio-not-tracks): the app-side half of the track
+// TrackChannelLinkController.h -- FRO14 (P9-4, docs/mixer/mixer.md#channels-follow-audio-not-tracks): the app-side half
+// of the track
 // <-> channel link. The rule itself is Core (Source/Mixer/TrackChannelLink.h, a pure query); this
 // class is what ACTS on it -- renaming both sides, fanning a live colour preview out over track and
 // macro, driving a linked channel's mute/solo, and revealing a channel in the graph.
@@ -61,8 +62,8 @@ public:
     /** Runs from MainComponent::reconcileTimelineAfterGraphChange -- the funnel every
      *  graph-structural change and every undo/redo restore already reaches.
      *
-     *  docs/mixer/mixer.md#channels-follow-audio-not-tracks: a linked track stores its mute/solo on the CHANNEL, not on the track, so there is
-     *  exactly one of each. When a link forms around a track that was muted/soloed while it still
+     *  docs/mixer/mixer.md#channels-follow-audio-not-tracks: a linked track stores its mute/solo on the CHANNEL, not on
+     * the track, so there is exactly one of each. When a link forms around a track that was muted/soloed while it still
      *  had note gating, this transfers that state onto the strip and clears the doc flag. Not
      *  undoable, exactly like the orphan-flag reconciliation next to it: it derives runtime state
      *  rather than performing a user edit. A link BREAKING transfers nothing back -- the strip's

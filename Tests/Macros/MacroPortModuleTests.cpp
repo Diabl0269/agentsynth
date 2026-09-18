@@ -7,7 +7,8 @@
 //   • bypass         — the two-branch contract: visible channels stay dry either way (there is
 //                       no processing to skip), hidden channels are always cleared
 //   • extra state    — the audio/CV variants' visible-channel-count round-trips through
-//                       getExtraState/setExtraState (the mechanism docs/macros/configure-io.md#adding-a-port will drive)
+//                       getExtraState/setExtraState (the mechanism docs/macros/configure-io.md#adding-a-port will
+//                       drive)
 //   • registration   — internal-only exclusion from the AI factory checklist lives in
 //                       Tests/AI/AIStateMapperTests.cpp (AuthorableModuleTypesGolden,
 //                       UntrustedPatchRejectsInternalOnlyModuleTypes); not duplicated here.
@@ -167,10 +168,11 @@ TEST(MacroInletModuleTest, SetPortShapeStereoExposesChannelZeroAndKRightBaseAsTw
     EXPECT_NE(inlet.mapOutputChannel(1).role, PortRole::Audio);
 }
 
-// StereoCollapsed (founder-review fix G2, docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed / docs/macros/auto-ports.md#auto-creating-ports-when-grouping):
-// auto-derived only, produced when a crossing cable lands on an ordinary module's own COLLAPSED stereo jack (e.g. an FX
-// module's single "Audio" jack). The port must present the SAME one visible jack that internal jack does, while still
-// carrying both raw channels — never the two-jack MacroPortShape::Stereo a hand-picked Configure I/O choice means.
+// StereoCollapsed (founder-review fix G2, docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed /
+// docs/macros/auto-ports.md#auto-creating-ports-when-grouping): auto-derived only, produced when a crossing cable lands
+// on an ordinary module's own COLLAPSED stereo jack (e.g. an FX module's single "Audio" jack). The port must present
+// the SAME one visible jack that internal jack does, while still carrying both raw channels — never the two-jack
+// MacroPortShape::Stereo a hand-picked Configure I/O choice means.
 TEST(MacroInletModuleTest, SetPortShapeStereoCollapsedExposesOneJackCarryingBothRawChannels) {
     MacroInletModule inlet;
     inlet.setPortShape(MacroPortShape::StereoCollapsed);

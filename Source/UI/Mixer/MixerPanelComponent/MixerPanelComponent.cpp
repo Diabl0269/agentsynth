@@ -56,8 +56,8 @@ void MixerPanelComponent::selectOnCanvas(const juce::String& targetId) {
     // `targetId` is either a macro id directly (MixerInsertList's editOnCanvasTargetUuid, per
     // MixerModel.h's own contract) or a node uuid (a column's own strip uuid, from
     // onColumnClicked) -- try the macro id first, then "which macro (if any) boxes this node",
-    // else select the node itself (docs/mixer/panel.md#what-the-mixer-shows: "clicking a column selects its macro", falling back to
-    // the node when it isn't boxed).
+    // else select the node itself (docs/mixer/panel.md#what-the-mixer-shows: "clicking a column selects its macro",
+    // falling back to the node when it isn't boxed).
     if (macros_->find(targetId) != nullptr) {
         graphEditor_->selectMacro(targetId, false);
         return;

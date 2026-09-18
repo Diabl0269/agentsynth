@@ -85,7 +85,8 @@ enum class ModuleType {
     // by the macro port-creation flow, never offered by the library or the replace menu, and
     // never authorable by a model (kNonAuthorableModuleTypes) — a Macro Inlet only means anything
     // relative to the macro that created it, which a model has no way to have done. A pure
-    // pass-through with a channel shape fixed at construction (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed).
+    // pass-through with a channel shape fixed at construction
+    // (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed).
     MacroInlet,
     // Internal-only: a Macro's audio/CV outlet jack. Same exclusions and shape rule as
     // MacroInlet, mirrored in the other direction.

@@ -1,14 +1,13 @@
-// Real-mouse-gesture regression coverage for T148's auto-create-on-drag (docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port
-// item 9). Every T148 test in MacroPortFlowTests.cpp drives the feature through
-// GraphEditor::beginConnectionDrag/endConnectionDrag called directly -- a convenient shortcut,
-// but one that never touches ModuleComponent::mouseDown/mouseDrag/mouseUp at all. Those real
-// entry points have their own state machine: notably, ModuleComponent::mouseUp gates on
-// e.getMouseDownPosition(), which JUCE holds FIXED at the original press point for the whole
-// gesture while e.getPosition() tracks the live cursor -- a synthetic MouseEvent that (wrongly)
-// moves both together makes that gate miss the source jack and silently no-ops the whole gesture.
-// This file drives mouseDown -> mouseDrag -> mouseUp on the real ModuleComponent callbacks, with
-// a correctly-held-fixed mouseDownPosition, closing that gap (see
-// docs/development/test-patterns.md's real-mouse-path guidance).
+// Real-mouse-gesture regression coverage for T148's auto-create-on-drag
+// (docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port item 9). Every T148 test in MacroPortFlowTests.cpp
+// drives the feature through GraphEditor::beginConnectionDrag/endConnectionDrag called directly -- a convenient
+// shortcut, but one that never touches ModuleComponent::mouseDown/mouseDrag/mouseUp at all. Those real entry points
+// have their own state machine: notably, ModuleComponent::mouseUp gates on e.getMouseDownPosition(), which JUCE holds
+// FIXED at the original press point for the whole gesture while e.getPosition() tracks the live cursor -- a synthetic
+// MouseEvent that (wrongly) moves both together makes that gate miss the source jack and silently no-ops the whole
+// gesture. This file drives mouseDown -> mouseDrag -> mouseUp on the real ModuleComponent callbacks, with a
+// correctly-held-fixed mouseDownPosition, closing that gap (see docs/development/test-patterns.md's real-mouse-path
+// guidance).
 
 #include "Modules/FilterModule.h"
 #include "Modules/OscillatorModule.h"

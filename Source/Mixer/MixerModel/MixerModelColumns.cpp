@@ -81,8 +81,9 @@ MixerSnapshot buildMixerSnapshot(juce::AudioProcessorGraph& graph, const Timelin
             continue;
 
         MixerColumn column;
-        // FRO15 (docs/mixer/sends-and-buses.md#a-bus-is-a-channel-strip): a bus IS a ChannelStrip -- the Kind only changes what the column PAINTS
-        // (a BUS badge and a feeding-strips source line instead of a track chip and colour link).
+        // FRO15 (docs/mixer/sends-and-buses.md#a-bus-is-a-channel-strip): a bus IS a ChannelStrip -- the Kind only
+        // changes what the column PAINTS (a BUS badge and a feeding-strips source line instead of a track chip and
+        // colour link).
         column.kind = isBusStrip(graph, entry.stripId) ? MixerColumn::Kind::Bus : MixerColumn::Kind::Strip;
         column.nodeId = entry.stripId;
         column.uuid = node->properties["uuid"].toString();

@@ -19,9 +19,9 @@ namespace synth::ui {
 // header button/title, borrowed the same way) on redock -- see DetachablePanelHost::setDetached().
 // Never touches Desktop::setDefaultLookAndFeel (Source/Plugin/CLAUDE.md /
 // docs/architecture/plugin-layer.md#who-owns-what's plugin-layer invariant, restated for this window in
-// docs/mixer/panel.md): it calls setLookAndFeel() on ITSELF with the AppLookAndFeel instance its owner hands it -- the processor's own
-// instance on the plugin path, exactly the AgentSynthPluginEditor/HostedPluginEditorWindow pattern -- and clears it in
-// its destructor. Never constructs its own ThemeManager/AppLookAndFeel.
+// docs/mixer/panel.md): it calls setLookAndFeel() on ITSELF with the AppLookAndFeel instance its owner hands it -- the
+// processor's own instance on the plugin path, exactly the AgentSynthPluginEditor/HostedPluginEditorWindow pattern --
+// and clears it in its destructor. Never constructs its own ThemeManager/AppLookAndFeel.
 //
 // Keyboard focus is scoped to THIS window (T159/docs/control/shortcuts.md "Focus regions"): MainComponent's
 // keyPressed dispatch is not reachable from a separate top-level window (MainComponent installs no

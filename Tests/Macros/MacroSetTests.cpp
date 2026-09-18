@@ -1,7 +1,7 @@
 // MacroSetTests.cpp
 // Pure struct-level unit tests for synth::MacroPort and its interaction with synth::MacroSet
-// (P8-15 Macro I/O, docs/macros/ports.md#port-set-and-ordering, docs/macros/ports.md#port-set-and-ordering) — no GraphEditor, no
-// AudioEngine. The GraphEditor-level Macro behaviour (wrap/unwrap, persistence, cables, ...) lives in
+// (P8-15 Macro I/O, docs/macros/ports.md#port-set-and-ordering, docs/macros/ports.md#port-set-and-ordering) — no
+// GraphEditor, no AudioEngine. The GraphEditor-level Macro behaviour (wrap/unwrap, persistence, cables, ...) lives in
 // Tests/MacroContainerTests.cpp; this file covers only:
 //
 //   • MacroPort::toVar/fromVar   — round trip, both kinds, and rejection of malformed input
@@ -372,11 +372,11 @@ TEST(MacroSetPortReconciliation, RemoveMemberEverywhereDropsThePortItFronted) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Macro::memberIsPort / Macro::moduleMemberCount (founder-review fix G6, docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port item
-// 4 note): "the number of modules indicator seems to show more than there are - 4 when i
-// grouped the delay and reverb in the default patch - should have shown 2." members.size()
-// counts port nodes as members (correctly - see the class comment on synth::Macro); the
-// user-facing MODULE count must not.
+// Macro::memberIsPort / Macro::moduleMemberCount (founder-review fix G6,
+// docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port item 4 note): "the number of modules indicator seems
+// to show more than there are - 4 when i grouped the delay and reverb in the default patch - should have shown 2."
+// members.size() counts port nodes as members (correctly - see the class comment on synth::Macro); the user-facing
+// MODULE count must not.
 // ---------------------------------------------------------------------------------------------
 
 TEST(MacroModuleCount, PlainGroupingWithNoPortsReportsMembersSizeUnchanged) {

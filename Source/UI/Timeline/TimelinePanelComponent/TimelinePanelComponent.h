@@ -329,11 +329,11 @@ public:
     // parameter, so it has no poly entry.
     static constexpr int kAddInstrumentOscillatorPolyMenuId = 7;
     static constexpr int kAddInstrumentWavetablePolyMenuId = 8;
-    // FRO26 (P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project): "Create channels" for existing projects. Lives on this
-    // same menu rather than a per-track context menu or a mixer panel — there is no mixer panel yet
-    // (P9-5), and "+ Track" is already where every other channel-creating action in this doc lives
-    // (Audio Track, Instrument Track); a project-wide sweep belongs beside them, not off a single
-    // track header, since it acts on every track at once.
+    // FRO26 (P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project): "Create channels" for existing
+    // projects. Lives on this same menu rather than a per-track context menu or a mixer panel — there is no mixer panel
+    // yet (P9-5), and "+ Track" is already where every other channel-creating action in this doc lives (Audio Track,
+    // Instrument Track); a project-wide sweep belongs beside them, not off a single track header, since it acts on
+    // every track at once.
     static constexpr int kCreateChannelsMenuId = 9;
     // FRO42 (P9-3h): the Instrument submenu's "Plugin" sub-submenu. The single disabled row shown
     // in place of an empty/scanning submenu (never actually selectable — JUCE never delivers a

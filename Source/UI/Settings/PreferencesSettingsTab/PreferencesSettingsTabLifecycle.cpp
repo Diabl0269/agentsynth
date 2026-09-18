@@ -237,9 +237,9 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         persistMacroAutoDeletePortsOnLastCable(macroAutoDeletePortsOnLastCableToggle.getToggleState());
     };
 
-    // T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow"): auto-create a mixer channel when a MIDI
-    // cable from a Track In node connects to an instrument/macro whose audio reaches the output
-    // with no channel yet. Same "plain on/off, ON by default" shape as the two T148 toggles above.
+    // T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow"): auto-create a mixer channel
+    // when a MIDI cable from a Track In node connects to an instrument/macro whose audio reaches the output with no
+    // channel yet. Same "plain on/off, ON by default" shape as the two T148 toggles above.
     contentHost.addAndMakeVisible(mixerAutoCreateChannelOnConnectToggle);
     mixerAutoCreateChannelOnConnectToggle.setToggleState(
         appProperties.getUserSettings()->getBoolValue("mixerAutoCreateChannelOnConnect", true),

@@ -26,8 +26,8 @@ public:
     ModuleType getModuleType() const override { return ModuleType::Math; }
 };
 
-// A single Poly-8 ModCV bus, both directions — the shape docs/macros/auto-ports.md#the-auto-port-preference calls "a poly-bus crossing".
-// Mirrors PolyMidiModule's own pitch-fan mapping (raw 0-7, head at 0, span 8, ModCV role) but
+// A single Poly-8 ModCV bus, both directions — the shape docs/macros/auto-ports.md#the-auto-port-preference calls "a
+// poly-bus crossing". Mirrors PolyMidiModule's own pitch-fan mapping (raw 0-7, head at 0, span 8, ModCV role) but
 // isolated from that module's other quirks (its own getVisibleOutputPortCount() override, a
 // second Gate fan sharing jack 0) which would make a test depend on code this fix does not own.
 class TestPolyCVModule : public ModuleBase {

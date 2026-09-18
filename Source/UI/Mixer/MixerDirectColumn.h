@@ -5,9 +5,9 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 // MixerDirectColumn.h -- FRO11 (P9-5, docs/mixer/panel.md#what-the-mixer-shows): Direct's column. Not a channel --
-// name fixed to "Direct", no colour/fader/pan/insert list/M-S (docs/mixer/panel.md#what-the-mixer-shows) -- just a "Make channel"
-// button for whatever feeds Master's Direct bus today, reusing the P9-3d "Make channel" flow
-// verbatim (MainComponent::makeChannelForNode).
+// name fixed to "Direct", no colour/fader/pan/insert list/M-S (docs/mixer/panel.md#what-the-mixer-shows) -- just a
+// "Make channel" button for whatever feeds Master's Direct bus today, reusing the P9-3d "Make channel" flow verbatim
+// (MainComponent::makeChannelForNode).
 namespace synth::ui {
 
 class MixerDirectColumn : public juce::Component {

@@ -115,7 +115,8 @@ TEST_F(PreferencesSettingsTabTest, ChangingControlsPersistsAndPushesToEditor) {
     EXPECT_EQ(appProperties.getUserSettings()->getValue("defaultDualIOForNewModules"), "0");
     EXPECT_FALSE(editor.getDefaultDualIOForNewModules());
 
-    // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): a toggle flip must reach the live GraphEditor immediately.
+    // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): a toggle flip must reach the live GraphEditor
+    // immediately.
     tab.setMacroAutoCreatePortsOnDragEnabled(false);
     EXPECT_EQ(appProperties.getUserSettings()->getValue("macroAutoCreatePortsOnDrag"), "0");
     EXPECT_FALSE(editor.getAutoCreateMacroPortsOnDragEnabled());
@@ -132,7 +133,8 @@ TEST_F(PreferencesSettingsTabTest, ChangingControlsPersistsAndPushesToEditor) {
     EXPECT_EQ(appProperties.getUserSettings()->getValue("macroAutoDeletePortsOnLastCable"), "1");
     EXPECT_TRUE(editor.getAutoDeleteMacroPortsOnLastCableEnabled());
 
-    // T184 (docs/mixer/mixer.md#channels-follow-audio-not-tracks): a toggle flip must reach the live GraphEditor immediately.
+    // T184 (docs/mixer/mixer.md#channels-follow-audio-not-tracks): a toggle flip must reach the live GraphEditor
+    // immediately.
     tab.setMixerAutoCreateChannelOnConnectEnabled(false);
     EXPECT_EQ(appProperties.getUserSettings()->getValue("mixerAutoCreateChannelOnConnect"), "0");
     EXPECT_FALSE(editor.getAutoCreateChannelOnConnectEnabled());
@@ -142,9 +144,9 @@ TEST_F(PreferencesSettingsTabTest, ChangingControlsPersistsAndPushesToEditor) {
     EXPECT_TRUE(editor.getAutoCreateChannelOnConnectEnabled());
 }
 
-// Founder-review fix F5 (docs/macros/auto-ports.md#auto-creating-ports-when-grouping): the macro auto-port preference. Tri-state,
-// DEFAULT "ask" (Unset) — a silent default of either behaviour would change what grouping does the
-// first time this ships with no warning.
+// Founder-review fix F5 (docs/macros/auto-ports.md#auto-creating-ports-when-grouping): the macro auto-port preference.
+// Tri-state, DEFAULT "ask" (Unset) — a silent default of either behaviour would change what grouping does the first
+// time this ships with no warning.
 TEST_F(PreferencesSettingsTabTest, MacroAutoPortDefaultsToAskAndDoesNotWriteUntouched) {
     PreferencesSettingsTab tab(appProperties);
     EXPECT_EQ(tab.getMacroAutoPortPreference(), GraphEditor::MacroAutoPortPreference::Unset);

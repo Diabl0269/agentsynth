@@ -55,10 +55,10 @@ constexpr int kDefaultAutosaveIntervalMinutes = 2;
 constexpr const char* kAutosaveBackupCountKey = "autosaveBackupCount";
 constexpr int kDefaultAutosaveBackupCount = 5;
 
-// FRO13 (P9-7, docs/mixer/track-presets.md#saving-and-setting-a-default): the per-type default track preset. Value is the preset's
-// sanitised file NAME (no extension), or absent/empty = "use the factory chain". Read at use time
-// by MainComponent::addAudioTrack/addInstrumentTrack, duplicated here for the same "one-line
-// string not worth a header dependency" reason as kAutosaveEnabledKey above.
+// FRO13 (P9-7, docs/mixer/track-presets.md#saving-and-setting-a-default): the per-type default track preset. Value is
+// the preset's sanitised file NAME (no extension), or absent/empty = "use the factory chain". Read at use time by
+// MainComponent::addAudioTrack/addInstrumentTrack, duplicated here for the same "one-line string not worth a header
+// dependency" reason as kAutosaveEnabledKey above.
 constexpr const char* kMixerDefaultTrackPresetAudioKey = "mixerDefaultTrackPresetAudio";
 constexpr const char* kMixerDefaultTrackPresetInstrumentKey = "mixerDefaultTrackPresetInstrument";
 // juce::ComboBox reserves id 0 for "nothing selected", so the "Factory Default" sentinel row (which

@@ -2,7 +2,8 @@
 #include "PreferencesSettingsTab.h"
 #include "PreferencesSettingsTabInternal.h"
 
-// Concern: Mixer -> per-type default track preset combos (FRO13, P9-7, docs/mixer/track-presets.md#saving-and-setting-a-default).
+// Concern: Mixer -> per-type default track preset combos (FRO13, P9-7,
+// docs/mixer/track-presets.md#saving-and-setting-a-default).
 
 // Populates `combo` with the "Factory Default" sentinel (kMixerDefaultPresetFactoryComboId) plus
 // every saved `kind` preset (kMixerDefaultPresetComboIdBase + index) — same snapshot-at-populate-

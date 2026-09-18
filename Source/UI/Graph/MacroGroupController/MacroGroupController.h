@@ -167,7 +167,8 @@ public:
     void toggleMacroBypassed(const juce::String& macroId);
     void toggleMacroMuted(const juce::String& macroId);
 
-    // ---- Geometry / hit-testing / card jacks (docs/macros/ports.md#cable-rendering-across-the-boundary) -----------------------
+    // ---- Geometry / hit-testing / card jacks (docs/macros/ports.md#cable-rendering-across-the-boundary)
+    // -----------------------
 
     juce::Rectangle<int> macroHullBounds(const juce::String& macroId) const;
     /** FRO40: `macroHullBounds` above, but with `excludedMemberUuid` left out of the union too —
@@ -222,12 +223,14 @@ public:
      *  async dialog), which calls this directly. */
     std::vector<synth::ui::MacroPortConfigDialog::PortRow> macroPortRowsForDialog(const juce::String& macroId) const;
 
-    /** The "shape from a dropped cable" convenience (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed). GraphEditorConnections.cpp's
+    /** The "shape from a dropped cable" convenience
+     * (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed). GraphEditorConnections.cpp's
      *  endConnectionDrag calls this directly. */
     void createMacroPortFromDroppedCable(const juce::String& macroId, bool newPortIsInput, bool isMidi,
                                          juce::AudioProcessorGraph::NodeID otherNodeId, int otherVisibleJack);
 
-    // ---- Auto-create-ports-on-group (founder-review fix F5, docs/macros/auto-ports.md#auto-creating-ports-when-grouping) ----
+    // ---- Auto-create-ports-on-group (founder-review fix F5,
+    // docs/macros/auto-ports.md#auto-creating-ports-when-grouping) ----
 
     /** The crossing plan a would-be macro's members (by NodeID) would need on creation. */
     std::vector<MacroPortCrossingGroup>
@@ -256,7 +259,8 @@ public:
     /** Splices ONE port node back out of its macro, reconnecting the cable it proxied. */
     void spliceOutMacroPort(synth::Macro& macro, const juce::String& portNodeUuid);
 
-    // ---- Auto-create-port-on-drag / auto-delete-on-last-cable (T148, docs/macros/auto-ports.md#ports-on-a-cable-drag) ----
+    // ---- Auto-create-port-on-drag / auto-delete-on-last-cable (T148, docs/macros/auto-ports.md#ports-on-a-cable-drag)
+    // ----
 
     /** True if `nodeId` resolves to a live macro member that itself fronts one of that macro's
      *  ports. GraphEditorCables.cpp/Commands.cpp call this directly. */

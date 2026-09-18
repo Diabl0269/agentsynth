@@ -97,12 +97,11 @@ void MacroCardComponent::paint(juce::Graphics& g) {
             g.setColour(port.colour.value_or(kindTint));
             g.fillEllipse((float)port.jackPos.x - 5.0f, (float)port.jackPos.y - 5.0f, 10.0f, 10.0f);
 
-            // Port name (founder-review fix F2, item 3/docs/macros/ports.md#cable-rendering-across-the-boundary: "it's not shown
-            // on the module UI... it should be presented"): left-aligned inside the left edge for
-            // an input, right-aligned inside the right edge for an output — mirroring the docked
-            // widget's own left/right convention (docs/macros/ports.md#how-a-port-is-drawn) so an expanded and collapsed macro
-            // read a port's name the same way. Elided (drawFittedText, one line) if the card is
-            // too narrow for the full name.
+            // Port name (founder-review fix F2, item 3/docs/macros/ports.md#cable-rendering-across-the-boundary: "it's
+            // not shown on the module UI... it should be presented"): left-aligned inside the left edge for an input,
+            // right-aligned inside the right edge for an output — mirroring the docked widget's own left/right
+            // convention (docs/macros/ports.md#how-a-port-is-drawn) so an expanded and collapsed macro read a port's
+            // name the same way. Elided (drawFittedText, one line) if the card is too narrow for the full name.
             if (port.name.isNotEmpty()) {
                 g.setColour(juce::Colours::white.withAlpha(0.85f));
                 g.setFont(juce::Font(juce::FontOptions(9.5f)));

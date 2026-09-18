@@ -87,8 +87,8 @@
  * The solo gate is applied in BOTH the dry and the normal branch. That is not the forbidden
  * `isBypassed() || isMuted()` collapse: bypass is about this module's own processing, while the
  * solo gate is an engine-level mixer decision layered on top of whatever the strip outputs —
- * a bypassed non-soloed strip leaking into a soloed mix would break docs/mixer/mixer.md#solo-is-a-render-time-gate's "every non-soloed strip
- * outputs silence".
+ * a bypassed non-soloed strip leaking into a soloed mix would break docs/mixer/mixer.md#solo-is-a-render-time-gate's
+ * "every non-soloed strip outputs silence".
  *
  * STEM TAP (P9-8, docs/mixer/stem-export.md). An opt-in, non-owning tap for offline stem export: a
  * message-thread-armed pointer to a caller-owned stereo destination buffer, null during normal/live

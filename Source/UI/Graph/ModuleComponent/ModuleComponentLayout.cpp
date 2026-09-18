@@ -78,8 +78,9 @@ void ModuleComponent::updateLayout() {
 // floor a real module card carries. Sized purely from the module's own visible jack count, which
 // for a Mono/Poly-N port (or a MIDI port, no shape at all) is one row on each side (getVisible*
 // PortCount()==1) and for Stereo is two (==2) — MacroInletModule/MacroOutletModule's
-// declare-max/vary-visible mechanism (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed's implementation note) already keeps that in sync with
-// the port's shape, so this needs no shape-aware branching of its own.
+// declare-max/vary-visible mechanism (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed's
+// implementation note) already keeps that in sync with the port's shape, so this needs no shape-aware branching of its
+// own.
 void ModuleComponent::layoutMacroPortWidget() {
     int rows = 1;
     if (!(module->acceptsMidi() || module->producesMidi())) {

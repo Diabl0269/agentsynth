@@ -52,8 +52,8 @@ void setProcessorPoly(juce::AudioProcessor* processor, bool poly) {
         setBoolParam(*processor, "poly", poly);
 }
 
-// Builds the factory default mixer channel (docs/mixer/mixer.md#the-factory-default-chain, T173a) that "+ Track -> Audio
-// Track" wires after a freshly-created Track Audio node's stereo output:
+// Builds the factory default mixer channel (docs/mixer/mixer.md#the-factory-default-chain, T173a) that "+ Track ->
+// Audio Track" wires after a freshly-created Track Audio node's stereo output:
 //
 //     source 0/1 -> Parametric EQ 0/1 -> Compressor 0/1 -> Channel Strip (Stereo) -> Master (Mix)
 //

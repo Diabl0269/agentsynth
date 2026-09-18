@@ -345,11 +345,11 @@ public:
     // sample. Non-null in every ctor (Main.cpp-injected, plugin-injected, or the delegating test
     // ctor's ownedLookAndFeel).
     synth::theme::AppLookAndFeel& getLookAndFeelForTest() { return *lookAndFeel; }
-    // FRO26 (P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project): hasTracksNeedingChannels() is a private TrackHeaderHost
-    // override (MainComponent inherits that interface privately), so a test can't call it directly
-    // the way it can drive the menu action itself via getTimelinePanel().applyAddTrackMenuChoice() —
-    // this thin public wrapper is the same idiom as newPatchForTest() above, just for a query
-    // instead of a mutation, so a test can assert the "+ Track" menu's own enabled/disabled state.
+    // FRO26 (P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project): hasTracksNeedingChannels() is a
+    // private TrackHeaderHost override (MainComponent inherits that interface privately), so a test can't call it
+    // directly the way it can drive the menu action itself via getTimelinePanel().applyAddTrackMenuChoice() — this thin
+    // public wrapper is the same idiom as newPatchForTest() above, just for a query instead of a mutation, so a test
+    // can assert the "+ Track" menu's own enabled/disabled state.
     bool hasTracksNeedingChannelsForTest() const { return hasTracksNeedingChannels(); }
     int getStatusBarTickCountForTest() const { return statusBarTickCount_; }
     void simulateLoadFactoryPresetForTest(int index);

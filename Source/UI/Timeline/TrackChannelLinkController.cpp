@@ -13,7 +13,8 @@ namespace synth::ui {
 
 namespace {
 // The chip's last-resort label, when the strip is neither boxed in a macro nor fed by exactly one
-// named track (docs/mixer/mixer.md#channels-follow-audio-not-tracks: a shared channel keeps its own independently-chosen name).
+// named track (docs/mixer/mixer.md#channels-follow-audio-not-tracks: a shared channel keeps its own
+// independently-chosen name).
 constexpr const char* kUnnamedChannel = "Channel";
 } // namespace
 
@@ -73,8 +74,9 @@ TrackChannelLinkSurface::ChannelInfo TrackChannelLinkController::getChannelInfo(
     out.hasChannel = true;
     out.linked = info.linked;
     meterStripIds_[track.value] = info.stripId; // keeps the 15 Hz meter read off the graph walk
-    // A channel's name IS its macro's name when it is boxed (the macro is the container, docs/mixer/mixer.md#channels-follow-audio-not-tracks);
-    // otherwise the shared Core rule -- the one feeding track's name, else the fallback.
+    // A channel's name IS its macro's name when it is boxed (the macro is the container,
+    // docs/mixer/mixer.md#channels-follow-audio-not-tracks); otherwise the shared Core rule -- the one feeding track's
+    // name, else the fallback.
     const auto* macro = macroForStrip(info.stripUuid);
     out.channelName = macro != nullptr && macro->name.isNotEmpty()
                           ? macro->name

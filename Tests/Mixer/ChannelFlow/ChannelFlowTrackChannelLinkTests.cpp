@@ -1,6 +1,6 @@
 // =================================================================================================
-// FRO14 (P9-4, docs/mixer/mixer.md#channels-follow-audio-not-tracks) — what a LINK actually does, driven through the real track-header
-// buttons: names sync both ways, colour previews live and commits as one undo step, a linked track's
+// FRO14 (P9-4, docs/mixer/mixer.md#channels-follow-audio-not-tracks) — what a LINK actually does, driven through the
+// real track-header buttons: names sync both ways, colour previews live and commits as one undo step, a linked track's
 // M/S drive its CHANNEL (not note gating) while a shared channel's tracks keep today's note gating,
 // and the channel chip names/reveals the channel with a repaint-gated meter.
 //

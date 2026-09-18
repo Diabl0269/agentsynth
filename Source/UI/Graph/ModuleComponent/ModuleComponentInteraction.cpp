@@ -346,9 +346,9 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
         m.addItem("Delete " + juce::String(selectionCount) + " Selected Modules", [this] { owner.deleteSelection(); });
     }
 
-    // FRO25 (P9-3d, docs/mixer/mixer.md#make-channel-and-shared-modules): "Make Channel" for the chain this selection belongs to
-    // (shown only when one resolves, disabled once it already has a channel), and "Duplicate into
-    // Channel" when this module is shared into a channel macro from outside it.
+    // FRO25 (P9-3d, docs/mixer/mixer.md#make-channel-and-shared-modules): "Make Channel" for the chain this selection
+    // belongs to (shown only when one resolves, disabled once it already has a channel), and "Duplicate into Channel"
+    // when this module is shared into a channel macro from outside it.
     owner.addMakeChannelMenuItem(m);
     owner.addDuplicateIntoChannelMenuItems(m, nodeId);
 
@@ -459,8 +459,8 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
 
     m.addItem("Delete Module", [this] { owner.deleteModule(this); });
 
-    // Founder-review item 4 (docs/macros/menu-and-membership.md#the-macro-menus-entry-points): this module's own menu also offers the macro it
-    // belongs to, as an appended submenu — never folded into the items above, and never built
+    // Founder-review item 4 (docs/macros/menu-and-membership.md#the-macro-menus-entry-points): this module's own menu
+    // also offers the macro it belongs to, as an appended submenu — never folded into the items above, and never built
     // when this module is in no macro (a module in no macro sees no change at all). buildMacroMenu
     // itself now selects THIS macro before running its "Ungroup"/"Save as Snippet..." items (see
     // its own comment), which is what makes it safe to graft on here without disturbing the module

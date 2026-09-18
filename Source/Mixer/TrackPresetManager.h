@@ -10,7 +10,8 @@ namespace synth {
 /** Which `+ Track` submenu group (and which Preferences -> Mixer dropdown) a saved track preset
  *  belongs to. Written once at save time from the same track-kind resolution the track header
  *  already has (never inferred from node shape at load time — docs/mixer/track-presets.md). A MIDI track
- *  that alone drives an instrument counts as Instrument, per docs/mixer/mixer.md#channels-follow-audio-not-tracks's link rule. */
+ *  that alone drives an instrument counts as Instrument, per docs/mixer/mixer.md#channels-follow-audio-not-tracks's
+ * link rule. */
 enum class TrackPresetKind { Audio, Instrument };
 
 /** One track preset as surfaced in a menu or a Preferences dropdown. */
@@ -70,8 +71,8 @@ public:
 
     /**
      * Captures `channelMacroId`'s own members (the "own box") PLUS every outside module that
-     * feeds it through a port (docs/mixer/track-presets.md#what-a-saved-preset-carries-beyond-the-box's founder requirement,
-     * collectOutsideModulatorsForTrackPreset), as one preset var.
+     * feeds it through a port (docs/mixer/track-presets.md#what-a-saved-preset-carries-beyond-the-box's founder
+     * requirement, collectOutsideModulatorsForTrackPreset), as one preset var.
      *
      * `includeExtraState` is always forced on internally — a track preset must always carry
      * strip shape/gain/pan (ChannelStripModule's extra state) or a Mono strip would silently

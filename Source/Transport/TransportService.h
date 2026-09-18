@@ -146,8 +146,8 @@ public:
     bool isInputMonitoringEnabledForBlock() const noexcept { return inputMonitoringEnabledForBlock; }
 
     // -- This block's MIXER SOLO flag ------------------------------------------
-    // "Is any ChannelStrip soloed?" (docs/mixer/mixer.md#solo-is-a-render-time-gate), carried exactly like the input-monitoring
-    // flag above: AudioEngine owns the count (AudioEngine::refreshSoloGate, message thread), reads it
+    // "Is any ChannelStrip soloed?" (docs/mixer/mixer.md#solo-is-a-render-time-gate), carried exactly like the
+    // input-monitoring flag above: AudioEngine owns the count (AudioEngine::refreshSoloGate, message thread), reads it
     // once per render pass and parks the answer here BEFORE the graph runs, so every strip and
     // Master's Direct input agree on the same answer for the whole pass. Audio thread only; not
     // reset at the end of the pass. Defaults to false — no transport (a foreign host, a bare unit

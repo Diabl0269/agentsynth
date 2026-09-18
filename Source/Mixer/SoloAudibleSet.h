@@ -1,7 +1,7 @@
 #pragma once
 
-// SoloAudibleSet.h -- FRO15 (P9-9, docs/mixer/sends-and-buses.md#solo-is-a-per-leg-audible-mask): which of each Channel Strip's output
-// legs stay audible while the mixer solo gate is active.
+// SoloAudibleSet.h -- FRO15 (P9-9, docs/mixer/sends-and-buses.md#solo-is-a-per-leg-audible-mask): which of each Channel
+// Strip's output legs stay audible while the mixer solo gate is active.
 //
 // Core, headless, no UI and no AudioEngine dependency (Source/Mixer/CLAUDE.md's "Core, no-UI-dep"
 // discipline, same as MixerModel and ChannelFlows): a pure read off the live graph, recomputed on

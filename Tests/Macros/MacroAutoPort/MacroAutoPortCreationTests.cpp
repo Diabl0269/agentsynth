@@ -173,7 +173,8 @@ TEST(MacroAutoPort, CollapsedStereoOutputCrossingCreatesAOneJackStereoCollapsedO
     ASSERT_NE(outlet, nullptr);
     EXPECT_EQ(outlet->getPortShape(), MacroPortShape::StereoCollapsed);
     // The bug this fix closes: the port must present exactly as many VISIBLE jacks as the
-    // internal jack it fronts (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed). Reverb's own jack is ONE jack; so must this be.
+    // internal jack it fronts (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed). Reverb's own
+    // jack is ONE jack; so must this be.
     EXPECT_EQ(outlet->getVisibleInputPortCount(), 1);
     EXPECT_EQ(outlet->getVisibleOutputPortCount(), 1);
 

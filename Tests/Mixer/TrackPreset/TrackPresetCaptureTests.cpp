@@ -1,9 +1,9 @@
-// Concern: FRO13 (P9-7, docs/mixer/track-presets.md#what-a-saved-preset-carries-beyond-the-box) -- what TrackPresetManager::extractTrackPreset
-// captures beyond a channel macro's own members: an outside module modulating it through a port
-// (collectOutsideModulatorsForTrackPreset's forward-seeded, backward/upstream walk) travels with
-// the preset and is re-wired to the SAME modulation target on import; another channel's own strip
-// (reached only by walking through a hidden AttenuverterModule) is never captured, matching the
-// walk's own "that channel's business, not this preset's" stop rule.
+// Concern: FRO13 (P9-7, docs/mixer/track-presets.md#what-a-saved-preset-carries-beyond-the-box) -- what
+// TrackPresetManager::extractTrackPreset captures beyond a channel macro's own members: an outside module modulating it
+// through a port (collectOutsideModulatorsForTrackPreset's forward-seeded, backward/upstream walk) travels with the
+// preset and is re-wired to the SAME modulation target on import; another channel's own strip (reached only by walking
+// through a hidden AttenuverterModule) is never captured, matching the walk's own "that channel's business, not this
+// preset's" stop rule.
 //
 // Uses TrackPresetRigCFT (TrackPresetTestFixture.h), which wires BOTH: the shared LFO -> this
 // track's Filter Cutoff (the modulator that must be captured) and another channel's bare Channel
@@ -133,7 +133,8 @@ TEST(TrackPresetCapture, SoloScrubbedFromCapturedChannelStrip) {
 
 TEST(TrackPresetCapture, IsBusScrubbedFromCapturedChannelStrip) {
     // FRO98 follow-up to the solo scrub above: a preset captured from a bus strip must not carry
-    // "isBus" into wherever it's inserted, or it badges an ordinary track channel as BUS (docs/mixer/sends-and-buses.md).
+    // "isBus" into wherever it's inserted, or it badges an ordinary track channel as BUS
+    // (docs/mixer/sends-and-buses.md).
     HostedPatchCFT patch;
     GraphEditor editor(patch.engine);
     const auto rig = buildSimpleTrackRigCFT(editor, patch.engine, patch.output);
@@ -173,7 +174,8 @@ TEST(TrackPresetCapture, IsBusScrubbedFromCapturedChannelStrip) {
 TEST(TrackPresetCapture, SendsScrubbedFromCapturedChannelStrip) {
     // FRO98 follow-up to the solo scrub above: a preset captured from a strip with configured
     // sends must not carry "sends" slot state -- a send's target is a graph edge that is never
-    // stored (docs/mixer/sends-and-buses.md), so a captured slot would restore with no cable, showing a "No target" row.
+    // stored (docs/mixer/sends-and-buses.md), so a captured slot would restore with no cable, showing a "No target"
+    // row.
     HostedPatchCFT patch;
     GraphEditor editor(patch.engine);
     const auto rig = buildSimpleTrackRigCFT(editor, patch.engine, patch.output);

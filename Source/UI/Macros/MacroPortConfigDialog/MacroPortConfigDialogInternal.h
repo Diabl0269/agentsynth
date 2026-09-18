@@ -288,12 +288,12 @@ public:
         nameEditor.setFont(juce::Font(juce::FontOptions(12.5f)));
         nameEditor.onFocusLost = [this] { maybeCommitName(); };
         nameEditor.onReturnKey = nameEditor.onFocusLost;
-        // T153: Escape closes the WHOLE modal (docs/macros/configure-io.md#keyboard-handling decision on this — see the class
-        // comment) rather than just reverting this field's edit, matching Close's own behaviour
-        // exactly (a focus-loss side effect during teardown commits whatever text is here, the
-        // same as clicking Close already does — Escape does not discard anything Close wouldn't).
-        // Wired here (rather than relying on the bubble MacroPortConfigDialog::keyPressed catches)
-        // because juce::TextEditor consumes Escape itself before it ever bubbles.
+        // T153: Escape closes the WHOLE modal (docs/macros/configure-io.md#keyboard-handling decision on this — see the
+        // class comment) rather than just reverting this field's edit, matching Close's own behaviour exactly (a
+        // focus-loss side effect during teardown commits whatever text is here, the same as clicking Close already does
+        // — Escape does not discard anything Close wouldn't). Wired here (rather than relying on the bubble
+        // MacroPortConfigDialog::keyPressed catches) because juce::TextEditor consumes Escape itself before it ever
+        // bubbles.
         nameEditor.onEscapeKey = [this] { owner_.requestClose(); };
         addAndMakeVisible(nameEditor);
 

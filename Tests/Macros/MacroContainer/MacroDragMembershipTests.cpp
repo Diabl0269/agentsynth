@@ -4,10 +4,11 @@
 // (position + membership + any macro-port splicing) landing in ONE undo step.
 //
 // Every test below drives the REAL ModuleComponent::mouseDown/mouseDrag/mouseUp callbacks, never a
-// direct addSelectionToMacro/removeSelectionFromMacro call — docs/macros/menu-and-membership.md#adding-to-and-removing-from-a-macro's T138 note
-// documents a real prior case of a direct-call test hiding an unreachable feature, and this file's
-// whole point is to prove the GESTURE (modifier arbitration, deferred click-vs-drag classification,
-// the live highlight, the single undo step) actually works end to end.
+// direct addSelectionToMacro/removeSelectionFromMacro call —
+// docs/macros/menu-and-membership.md#adding-to-and-removing-from-a-macro's T138 note documents a real prior case of a
+// direct-call test hiding an unreachable feature, and this file's whole point is to prove the GESTURE (modifier
+// arbitration, deferred click-vs-drag classification, the live highlight, the single undo step) actually works end to
+// end.
 
 #include "AppUndoManager.h"
 #include "MacroContainerTestHelpers.h"
@@ -572,7 +573,8 @@ TEST(MacroDragMembership, CmdReleasedMidDragRevertsToAPlainMove) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// 7. The platform matrix (docs/macros/menu-and-membership.md#cmd-drag-across-a-hull-border): reparenting is gated on `reparentArmed`
+// 7. The platform matrix (docs/macros/menu-and-membership.md#cmd-drag-across-a-hull-border): reparenting is gated on
+// `reparentArmed`
 //    (== e.mods.isCommandDown() at press), NOT on which of ctrlTogglePending/cmdReparentPending
 //    armed the press. On macOS Ctrl and Cmd are distinct keys, so a PLAIN Ctrl-drag must NEVER
 //    reparent even when it crosses a hull — that is the shipped insert-between gesture and this

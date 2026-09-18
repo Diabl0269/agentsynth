@@ -387,8 +387,8 @@ public:
     /** Quick "Rename Port" prompt -- the one-name alternative to Configure I/O. */
     void promptRenameMacroPort(const juce::String& macroId, const juce::String& nodeUuid);
 
-    // ---- Macro card jacks (P8-15c, T141, docs/macros/ports.md#cable-rendering-across-the-boundary) -----------------------------
-    // See MacroGroupController::MacroCardPort for the full on-card-jack layout contract.
+    // ---- Macro card jacks (P8-15c, T141, docs/macros/ports.md#cable-rendering-across-the-boundary)
+    // ----------------------------- See MacroGroupController::MacroCardPort for the full on-card-jack layout contract.
     using MacroCardPort = MacroGroupController::MacroCardPort;
 
     std::vector<MacroCardPort> macroCardPortLayout(const juce::String& macroId) const;
@@ -468,14 +468,15 @@ public:
     void setAutoCreateMacroPortsOnDragEnabled(bool enabled) { autoCreateMacroPortsOnDragEnabled = enabled; }
     bool getAutoCreateMacroPortsOnDragEnabled() const noexcept { return autoCreateMacroPortsOnDragEnabled; }
 
-    // T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks): auto-creates a mixer channel on a qualifying MIDI connect;
-    // Preferences ("mixerAutoCreateChannelOnConnect") can turn this off.
+    // T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks): auto-creates a mixer channel on a qualifying
+    // MIDI connect; Preferences ("mixerAutoCreateChannelOnConnect") can turn this off.
     void setAutoCreateChannelOnConnectEnabled(bool enabled) { autoCreateChannelOnConnectEnabled = enabled; }
     bool getAutoCreateChannelOnConnectEnabled() const noexcept { return autoCreateChannelOnConnectEnabled; }
 
     void createChannelsForUnchanneledTracks(const std::vector<juce::AudioProcessorGraph::NodeID>& trackSourceNodeIds);
 
-    // ---- FRO25 (P9-3d, docs/mixer/mixer.md#make-channel-and-shared-modules): "Make channel" / "Duplicate into this channel" ------
+    // ---- FRO25 (P9-3d, docs/mixer/mixer.md#make-channel-and-shared-modules): "Make channel" / "Duplicate into this
+    // channel" ------
 
     /** "Make channel" for the chain starting at `source`; boxes it into a new collapsed macro. */
     bool makeChannelFromNode(juce::AudioProcessorGraph::NodeID source, const juce::String& channelName);
@@ -895,7 +896,8 @@ private:
 
     std::unique_ptr<synth::ui::ColourPickerPopup> buildMacroColourPicker(const juce::String& macroId);
 
-    // ---- Auto-create-channel-on-connect (T184, P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow") ------
+    // ---- Auto-create-channel-on-connect (T184, P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main
+    // workflow") ------
 
     bool nodeIsTimelineMidiSource(juce::AudioProcessorGraph::NodeID nodeId) const;
 
@@ -955,8 +957,8 @@ private:
     // While a zoom gesture is in flight every card's raster scale is pinned, so a wheel tick
     // resamples the cached images instead of re-rendering every panel + slider at a new scale.
     // The gesture ends kZoomSettleMs after the last zoom event and thaws with exactly one
-    // crisp re-render. Time-bounded per docs/layout/animation.md#the-time-bounded-animation-rule: the driver has a no-op onUpdate (it requests zero
-    // repaints of its own) and stops itself at t = 1.
+    // crisp re-render. Time-bounded per docs/layout/animation.md#the-time-bounded-animation-rule: the driver has a
+    // no-op onUpdate (it requests zero repaints of its own) and stops itself at t = 1.
     bool zoomGestureActive = false;
     synth::ui::AnimationDriver zoomSettleAnim;
     static constexpr double kZoomSettleMs = 140.0;
