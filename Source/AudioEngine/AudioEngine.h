@@ -141,7 +141,7 @@ public:
     void suspendExternalMidi() noexcept { externalMidiSuspended_.store(true, std::memory_order_release); }
     void resumeExternalMidi() noexcept { externalMidiSuspended_.store(false, std::memory_order_release); }
 
-    // Voice count / mute API (§4.2)
+    // Voice count / mute API (docs/architecture/audio-engine.md#audioengine)
     struct VoiceInfo {
         int activeVoices = 0;
         int maxVoices = 0;

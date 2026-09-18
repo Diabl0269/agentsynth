@@ -357,9 +357,9 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
 }
 
 void MainComponent::resized() {
-    // CANONICAL LAYOUT (§2.4). Carve top→bottom: toolbar strip, status bar, timeline panel
-    // (bottom), AI panel (right), library sidebar (left), canvas (remainder). Dimensions come
-    // from the themed Metrics tokens, with literal fallbacks for the headless test path.
+    // CANONICAL LAYOUT (docs/layout/chrome.md#application-chrome). Carve top→bottom: toolbar strip, status bar,
+    // timeline panel (bottom), AI panel (right), library sidebar (left), canvas (remainder). Dimensions come from the
+    // themed Metrics tokens, with literal fallbacks for the headless test path.
     //
     // Each panel's SIZE is its open fraction times its full size, NOT a binary read of its
     // visible/hidden flag (docs/layout/animation.md). That is what makes this pass correct whenever it
