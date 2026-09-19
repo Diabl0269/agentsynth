@@ -1,4 +1,4 @@
-// MixerModelColumnTests.cpp -- FRO11 (P9-5, docs/mixer.md §5.10): buildMixerSnapshot's column
+// MixerModelColumnTests.cpp -- FRO11 (P9-5, docs/mixer/panel.md#what-the-mixer-shows): buildMixerSnapshot's column
 // enumeration. Headless: a bare AudioEngine/TimelineDoc/MacroSet, no MainComponent/GraphEditor.
 #include "Mixer/MasterSplice.h"
 #include "Mixer/MixerModel/MixerModel.h"
@@ -94,7 +94,8 @@ TEST(MixerModelColumnTests, TwoTracksSharingOneChannelProduceOneColumnListingBot
     ASSERT_EQ(snapshot.columns[0].feedingTracks.size(), 2u);
     EXPECT_EQ(snapshot.columns[0].feedingTracks[0], trackA);
     EXPECT_EQ(snapshot.columns[0].feedingTracks[1], trackB);
-    EXPECT_FALSE(snapshot.columns[0].linkedToTrack) << "two feeders is shared, not the §5.2 link";
+    EXPECT_FALSE(snapshot.columns[0].linkedToTrack)
+        << "two feeders is shared, not the docs/mixer/mixer.md#channels-follow-audio-not-tracks link";
 }
 
 TEST(MixerModelColumnTests, AnOrphanStripWithNoTrackBindingStillAppearsAppendedByNodeId) {

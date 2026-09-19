@@ -1,4 +1,4 @@
-// Module-level tests for the mixer's Channel Strip and Master nodes (P9-2, docs/mixer.md §5).
+// Module-level tests for the mixer's Channel Strip and Master nodes (P9-2, docs/mixer/mixer.md#node-types).
 //
 //   • pan law        -- balance law, unity at centre, for both Mono and Stereo strips
 //   • gain           -- dB fader, the -60 dB floor is silence

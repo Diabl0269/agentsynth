@@ -1,7 +1,7 @@
 // MacroAutoPortUngroupTests.cpp
 // Ungrouping removes a macro's auto-created ports and splices cables back (founder-review fix G7,
-// docs/macros_implementation.md §7); the presentation-count/tooltip rules that exclude auto-created ports; and
-// the tri-state auto-create-ports preference's modal-firing conditions plus its
+// docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port); the presentation-count/tooltip rules that exclude
+// auto-created ports; and the tri-state auto-create-ports preference's modal-firing conditions plus its
 // remember/skip-the-modal paths. Shared test modules/helpers live in MacroAutoPortTestHelpers.h.
 //
 // Creation tests live in MacroAutoPortCreationTests.cpp; the T148/T154 auto-delete suite lives in
@@ -23,9 +23,9 @@
 
 // ============================================================================
 // Ungroup removes the macro's ports and splices the cable back (founder-review fix G7,
-// docs/macros_implementation.md §7): "ungroup leaves the macro input/output in place (They should be removed)".
-// Group then Ungroup must be a true round trip — every port node gone, every boundary cable it
-// proxied reconnected external<->internal directly, on the original raw channels.
+// docs/macros/auto-ports.md#ungroup-and-direct-deletion-of-a-port): "ungroup leaves the macro input/output in place
+// (They should be removed)". Group then Ungroup must be a true round trip — every port node gone, every boundary cable
+// it proxied reconnected external<->internal directly, on the original raw channels.
 // ============================================================================
 
 TEST(MacroUngroupPorts, RemovesTheAutoCreatedPortsAndSplicesTheCablesBack) {
@@ -247,7 +247,7 @@ TEST(MacroUngroupPorts, ReachesTheGraphStructureChangedNotificationHook) {
 }
 
 // ============================================================================
-// Presentation (founder-review fix G6, docs/macros_implementation.md §7 item 4 note): the module-count
+// Presentation (founder-review fix G6, docs/macros/ports.md#member-counts-report-modules-not-ports): the module-count
 // indicator, the tooltip's member list and the content preview must count/list MODULES, never
 // the port nodes a crossing cable spliced in — members.size() itself stays untouched.
 // ============================================================================

@@ -1,7 +1,7 @@
 // DetachedPanelWindowTests.cpp
 //
 // synth::ui::DetachedPanelWindow -- the top-level window a DetachablePanelHost detaches a panel
-// into (FRO12, P9-6, docs/mixer.md §5.9). Mirrors Tests/Plugin/HostedPluginEditorWindowTests.cpp's
+// into (FRO12, P9-6, docs/mixer/panel.md). Mirrors Tests/Plugin/HostedPluginEditorWindowTests.cpp's
 // own structure: every window here is built with addToDesktop=false, so constructing one never
 // creates a native peer.
 //

@@ -48,10 +48,11 @@ public:
      *  unreadable tooltip. */
     juce::String getTooltip() override;
 
-    /** The card's own "N modules[, M ports]" line (founder-review fix G6, docs/macros_implementation.md §7
-     *  item 4 note) — a MODULE count, excluding port nodes, with the port count named alongside
-     *  it (never silently dropped) whenever the macro actually has one. Public so a test can pin
-     *  the exact text against a founder-reported scenario (group 2 modules with a crossing cable
+    /** The card's own "N modules[, M ports]" line (founder-review fix G6,
+     * docs/macros/ports.md#member-counts-report-modules-not-ports) — a MODULE count, excluding port
+     * nodes, with the port count named alongside it (never silently dropped) whenever the macro actually has one.
+     * Public so a test can pin the exact text against a founder-reported scenario (group 2 modules with a crossing
+     * cable
      *  -> 2 auto-created ports -> must read "2 modules", never "4 modules"), the same accessor
      *  pattern getTooltip() above already uses. Empty if `macroId` doesn't resolve. */
     juce::String getModuleCountText() const;
@@ -95,12 +96,12 @@ private:
      *  then finding your way back into them was a guessing game (double-click, undocumented). */
     juce::Rectangle<float> getExpandButtonBounds() const;
 
-    /** One bypass/mute indeterminate-indicator badge's bounds (P8-15d, T142, docs/macros_ports.md
-     *  §5.6), just left of the expand chevron — `mute=false` is the outer (bypass) slot, `true`
-     *  the inner (mute) slot nearer the chevron. Purely a function of `getExpandButtonBounds()`,
-     *  so paint() and getTitleRowBounds() (which reserves room for both slots so a long macro
-     *  name can never paint under them) read the SAME rectangles a test can assert against —
-     *  the same "one layout definition" principle macroCardPortLayout applies to port jacks. */
+    /** One bypass/mute indeterminate-indicator badge's bounds (P8-15d, T142, docs/macros/ports.md
+     *  docs/macros/ports.md#bypass-and-mute), just left of the expand chevron — `mute=false` is the outer (bypass)
+     * slot, `true` the inner (mute) slot nearer the chevron. Purely a function of `getExpandButtonBounds()`, so paint()
+     * and getTitleRowBounds() (which reserves room for both slots so a long macro name can never paint under them) read
+     * the SAME rectangles a test can assert against — the same "one layout definition" principle macroCardPortLayout
+     * applies to port jacks. */
     juce::Rectangle<float> getToggleBadgeBounds(bool mute) const;
 
     // Shared by getToggleBadgeBounds() and getTitleRowBounds() so the badge size/spacing can

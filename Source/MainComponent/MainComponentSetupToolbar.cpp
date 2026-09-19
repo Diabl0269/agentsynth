@@ -56,7 +56,7 @@ void MainComponent::addCanvasAndPanels() {
     // (the only code that ever flips it, the toggle button's onClick, is gated below), so this is
     // an inert invisible child there, same as any other never-shown component.
     // FRO11 (P9-5): mixerDock is timelinePanel's new direct parent -- it adds timelinePanel as
-    // ITS OWN child in its constructor (docs/mixer_implementation.md item 4), so MainComponent
+    // ITS OWN child in its constructor (docs/mixer/panel.md#what-the-mixer-shows), so MainComponent
     // parents mixerDock here instead of timelinePanel directly. Unchanged: which of the dock's two
     // tabs is visible stays keyed to isTimelineVisible/timelineSlide_ regardless of active tab.
     addAndMakeVisible(mixerDock);

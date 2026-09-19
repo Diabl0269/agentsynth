@@ -36,7 +36,7 @@ struct DefaultChannelLayout {
 };
 
 /**
- * Builds the factory default mixer channel (docs/mixer.md §5.7/D3, T173a): EQ (bypassed) ->
+ * Builds the factory default mixer channel (docs/mixer/mixer.md#the-factory-default-chain, T173a): EQ (bypassed) ->
  * Compressor (bypassed) -> Channel Strip (Stereo) -> Master (Mix), after `source`. See
  * ChannelFlowsDefaultChannel.cpp for the channel-numbering derivation, the Master-splice ordering,
  * and why Strip->Master is a plain edge.
@@ -190,7 +190,7 @@ DefaultChannel buildChannelForFeeds(juce::AudioProcessorGraph& graph,
  */
 DefaultChannel buildBusChannel(juce::AudioProcessorGraph& graph, const DefaultChannelLayout& layout);
 
-// ---- FRO25 (P9-3d, docs/mixer.md §5.8): "Make channel" ------------------------------------------
+// ---- FRO25 (P9-3d, docs/mixer/mixer.md#make-channel-and-shared-modules): "Make channel" ----------
 
 /** True for a track's own source node — a Track In (ModuleType::TimelineMidiSource) or Track Audio
  *  (ModuleType::TimelineAudioSource). See ChannelFlowsMakeChannel.cpp for why. */
@@ -263,7 +263,7 @@ MadeChannel buildMakeChannel(juce::AudioProcessorGraph& graph, const MakeChannel
 juce::AudioProcessorGraph::NodeID resolveChannelSource(juce::AudioProcessorGraph& graph,
                                                        const std::vector<juce::AudioProcessorGraph::NodeID>& nodes);
 
-// ---- FRO11 (P9-5, docs/mixer.md §5.6): the signal-edge rule, shared -------------------------------
+// ---- FRO11 (P9-5, docs/mixer/mixer.md#inserts-in-a-free-form-graph): signal-edge rule, shared -----
 //
 // planMakeChannel's own "what counts as signal" test (never an attenuverter's hidden modulation
 // leg, never an audio edge landing on a PortRole::ModCV pin), promoted out of
@@ -279,7 +279,7 @@ bool isSignalEdge(juce::AudioProcessorGraph& graph,
                   const std::vector<juce::AudioProcessorGraph::Connection>& connections,
                   const juce::AudioProcessorGraph::Connection& c);
 
-// ---- FRO13 (P9-7, docs/mixer.md §5.7): track presets ---------------------------------------------
+// ---- FRO13 (P9-7, docs/mixer/track-presets.md): track presets ---------------------------------------------
 
 /**
  * The outside-macro modules that feed `channelMacroId`'s members through a port (or a raw
@@ -299,7 +299,7 @@ collectOutsideModulatorsForTrackPreset(juce::AudioProcessorGraph& graph, const M
  *  "stop at another CHANNEL's strip, but not at a plain FX group" rule (ChannelFlowsTrackPreset.cpp). */
 bool isChannelMacro(const Macro& macro, juce::AudioProcessorGraph& graph);
 
-// ---- FRO14 (P9-4, docs/mixer.md §5.2): which channel a track plays into, and back ---------------
+// ---- FRO14 (P9-4, docs/mixer/mixer.md#channels-follow-audio-not-tracks): track <-> channel ----------
 //
 // Both are pure signal-reach reads (no mutation, no undo, no TimelineDoc), defined in
 // ChannelFlowsTrackChannelLink.cpp. They follow the same signal-edge rule as each other: never
@@ -319,9 +319,9 @@ juce::AudioProcessorGraph::NodeID findStripFedByTrackSource(juce::AudioProcessor
  *  reached upstream (that strip is another channel's terminus -- whatever feeds IT is not this
  *  strip's to claim).
  *
- *  `result.size() == 1` IS §5.2's link predicate ("the track is the channel's only source"), and it
- *  is also FRO55's stem-naming rule ("exactly one feeding track names the file"), computed once for
- *  both -- see ChannelFlowsTrackChannelLink.cpp's file comment. */
+ *  `result.size() == 1` IS docs/mixer/mixer.md#channels-follow-audio-not-tracks's link predicate ("the track is the
+ * channel's only source"), and it is also FRO55's stem-naming rule ("exactly one feeding track names the file"),
+ * computed once for both -- see ChannelFlowsTrackChannelLink.cpp's file comment. */
 std::vector<juce::AudioProcessorGraph::NodeID> findTrackSourcesFeedingStrip(juce::AudioProcessorGraph& graph,
                                                                             juce::AudioProcessorGraph::NodeID stripId);
 

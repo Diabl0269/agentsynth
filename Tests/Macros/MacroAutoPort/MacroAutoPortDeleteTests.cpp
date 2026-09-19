@@ -1,9 +1,8 @@
 // MacroAutoPortDeleteTests.cpp
-// T148 (docs/macros_implementation.md §7 item 9): auto-delete a macro port once its last cable is gone, hooked at
-// disconnectCable/disconnectPort. T154 extends the same auto-delete primitive to whole-node
-// deletion (deleteSelection/deleteModule/requestDeleteModule) via
-// GraphEditor::macroPortDeletionNeighbors. Shared test modules/helpers live in
-// MacroAutoPortTestHelpers.h.
+// T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): auto-delete a macro port once its last cable is gone, hooked
+// at disconnectCable/disconnectPort. T154 extends the same auto-delete primitive to whole-node deletion
+// (deleteSelection/deleteModule/requestDeleteModule) via GraphEditor::macroPortDeletionNeighbors. Shared test
+// modules/helpers live in MacroAutoPortTestHelpers.h.
 //
 // Creation tests live in MacroAutoPortCreationTests.cpp; ungroup/presentation/modal-preference
 // tests live in MacroAutoPortUngroupTests.cpp.
@@ -23,7 +22,7 @@
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 
 // ============================================================================
-// T148 (docs/macros_implementation.md §7 item 9): auto-delete a macro port once its last cable is gone — the
+// T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): auto-delete a macro port once its last cable is gone — the
 // reverse of the auto-create-on-group behaviour above. GraphEditor::disconnectCable and
 // disconnectPort are the two explicit user-gesture call sites hooked. T154 extends the same
 // auto-delete primitive (autoDeleteOrphanedMacroPort) to whole-node deletion —
@@ -268,8 +267,8 @@ TEST(MacroAutoPortDelete, DisabledPreferenceLeavesACablelessPortInPlaceRegressio
 }
 
 // ============================================================================
-// T154 (docs/macros_implementation.md §7 item 9's follow-up): the same auto-delete primitive, now also swept
-// after a whole-node deletion (deleteSelection/deleteModule/requestDeleteModule) via
+// T154 (docs/macros/auto-ports.md#auto-deleting-a-port-when-its-last-cable-goes): the same auto-delete primitive, now
+// also swept after a whole-node deletion (deleteSelection/deleteModule/requestDeleteModule) via
 // GraphEditor::macroPortDeletionNeighbors.
 // ============================================================================
 

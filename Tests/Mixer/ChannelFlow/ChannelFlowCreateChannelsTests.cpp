@@ -1,8 +1,8 @@
 // ChannelFlowCreateChannelsTests.cpp
 //
-// "Create Channels" for existing projects (FRO26, P9-3e, docs/mixer.md §5.13): wraps every
-// channel-less track's chain into a strip as one undo step, with no automatic migration on
-// load. Uses the ChannelFlowTest fixture from ChannelFlowTestFixture.h.
+// "Create Channels" for existing projects (FRO26, P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project):
+// wraps every channel-less track's chain into a strip as one undo step, with no automatic migration on load. Uses the
+// ChannelFlowTest fixture from ChannelFlowTestFixture.h.
 
 #include "../../StubPluginInstance.h"
 #include "AI/AIProvider.h"
@@ -35,9 +35,10 @@
 #include <thread>
 
 // -------------------------------------------------------------------------------------------
-// "Create Channels" for existing projects (FRO26, P9-3e, docs/mixer.md §5.13)
+// "Create Channels" for existing projects (FRO26, P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project)
 //
-// docs/mixer.md §5.13: an old project opens UNCHANGED -- no automatic migration on load. The
+// docs/mixer/mixer.md#creating-channels-in-an-existing-project: an old project opens UNCHANGED -- no automatic
+// migration on load. The
 // "+ Track" menu's "Create Channels" entry (TimelinePanelComponent::kCreateChannelsMenuId, driven
 // here through the same applyAddTrackMenuChoice() headless seam addAudioTrack()/addInstrumentTrack()
 // use above) wraps every channel-less track's chain into a strip, as ONE undo step covering all of
@@ -199,11 +200,11 @@ TEST_F(ChannelFlowTest, CreateChannelsIsANoOpWhenNothingNeedsAChannel) {
     EXPECT_FALSE(mc.getUndoManager().canUndo());
 }
 
-// D1 (docs/mixer.md §7): "channels follow audio," not tracks, so two tracks that share one
-// unchanneled instrument must come out of the sweep with exactly ONE channel between them, not
-// two. This falls out for free from reusing T184's own per-node builder: the first track's call
-// builds the channel and removes the shared instrument's exit edges, so the second track's call
-// sees findUnchanneledOutputFeeds already empty and does nothing.
+// D1 (docs/mixer/mixer.md#channels-follow-audio-not-tracks): "channels follow audio," not tracks, so two tracks that
+// share one unchanneled instrument must come out of the sweep with exactly ONE channel between them, not two. This
+// falls out for free from reusing T184's own per-node builder: the first track's call builds the channel and removes
+// the shared instrument's exit edges, so the second track's call sees findUnchanneledOutputFeeds already empty and does
+// nothing.
 TEST_F(ChannelFlowTest, CreateChannelsGivesTwoTracksSharingOneInstrumentJustOneChannel) {
     MainComponent mc(std::make_unique<MockProviderCFT>());
     mc.setSize(1600, 900);

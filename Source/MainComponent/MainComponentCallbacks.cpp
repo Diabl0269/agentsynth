@@ -707,11 +707,11 @@ void MainComponent::promptExportAudio() {
     window->enterModalState(true, nullptr, true);
 }
 
-// The stem export flow (P9-8, docs/mixer.md §5.12) — the same options dialog as Export Audio,
+// The stem export flow (P9-8, docs/mixer/stem-export.md) — the same options dialog as Export Audio,
 // opened in its stems mode, driving a StemRunner instead of a BounceRunner. Mirrors
 // promptExportAudio() above closely on purpose: same modal choreography, same isBounceInProgress_
 // gate (shared across both — see its own comment), same progress polling in timerCallback().
-// The "Export Stems..." menu item's handler (P9-8, docs/mixer.md §5.12): same
+// The "Export Stems..." menu item's handler (P9-8, docs/mixer/stem-export.md): same
 // synth::ui::ExportAudioDialog, opened in its stems mode, driving a StemRunner instead of a
 // BounceRunner. Shows a status message instead of opening the dialog when the patch has no
 // mixer channels yet (synth::StemExporter::hasChannelStrips).
@@ -769,7 +769,7 @@ void MainComponent::promptExportStems() {
                 statusBar.showMessage(result.message);
             },
             /*chunkBlocks=*/64, /*tickMs=*/10,
-            // FRO55 (docs/mixer.md §5.12): names each stem after the track that feeds it.
+            // FRO55 (docs/mixer/stem-export.md): names each stem after the track that feeds it.
             &timelineDoc);
     };
 

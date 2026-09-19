@@ -187,7 +187,7 @@ void AgentSynthAudioProcessor::setStateInformation(const void* data, int sizeInB
     AIStateMapper::applyJSONToGraph(patch, engine.getGraph(), /*clearExisting=*/true, /*trusted=*/true);
     // This path replaces the graph without going through publishTimeline, so it recounts the
     // mixer's soloed strips itself — a restored session's solo flags live in the strips' extra
-    // state (docs/mixer.md §5.3), and a stale count would leave the mix stuck (un)gated.
+    // state (docs/mixer/mixer.md#solo-is-a-render-time-gate), and a stale count would leave the mix stuck (un)gated.
     engine.refreshSoloGate();
 
     // Reconcile the view against whatever the graph now holds — including after a rejected

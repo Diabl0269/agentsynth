@@ -5,8 +5,3 @@
 # --allow-growth is the deliberate, reviewed exception. See check-docs.sh's own header comment
 # for the full mechanism, and docs/development/docs-guard.md for why only naming is grandfathered -- every
 # other check (B/C/D/E) is zero-tolerance and never baselined.
-naming docs/macros_implementation.md
-naming docs/macros_ports.md
-naming docs/mixer_fader.md
-naming docs/mixer_implementation.md
-naming docs/testing_mixer_meters.md

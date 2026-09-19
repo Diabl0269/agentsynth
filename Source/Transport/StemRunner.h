@@ -24,7 +24,7 @@ public:
     // MESSAGE THREAD. Begins the render's setup synchronously and starts ticking. onComplete fires
     // exactly once, always from a timer tick.
     //
-    // `timelineDoc` (FRO55, docs/mixer.md §5.12): forwarded to StemSession unchanged - null is fine
+    // `timelineDoc` (FRO55, docs/mixer/stem-export.md): forwarded to StemSession unchanged - null is fine
     // (every stem then falls back to "Channel N"). Trailing with a default so every existing caller
     // keeps compiling unchanged.
     StemRunner(AudioEngine& engine, const juce::File& destinationFolder, const BounceOptions& options,

@@ -280,7 +280,7 @@ BuiltChain buildChainFromEdges(juce::AudioProcessorGraph& graph, const std::vect
     for (const auto& crossing : crossings)
         graph.removeConnection(crossing);
 
-    // docs/mixer.md §5.4/§5.8: a chain ending poly gets a Voice Mixer ahead of the strip — one per
+    // docs/mixer/mixer.md#an-instrument-track: a chain ending poly gets a Voice Mixer ahead of the strip — one per
     // poly source node, its ch0 standing in for every Left feed from that node and ch1 for Right.
     std::vector<std::pair<NodeID, juce::AudioProcessorGraph::Node*>> mixers;
     auto substitutePoly = [&](std::vector<NodeAndChannel>& feeds, int mixerChannel) {
@@ -558,7 +558,7 @@ MakeChannelPlan planMakeChannel(juce::AudioProcessorGraph& graph, juce::AudioPro
 //
 // A feed from a poly module's poly jack (isProcessorPoly, span > 1 — so a poly VCA, which self-sums
 // to one channel, never qualifies) gets addVoiceMixerForPolyInstrument ahead of the strip instead
-// (docs/mixer.md §5.4/§5.8). The one intended sound change: the channel then carries every voice,
+// (docs/mixer/mixer.md#an-instrument-track). The one intended sound change: the channel then carries every voice,
 // where a bare poly jack wired to a mono input carried voice 0 only.
 //
 // Assigns every member a uuid via AIStateMapper::ensureNodeUuid.
@@ -595,7 +595,7 @@ MadeChannel buildMakeChannel(juce::AudioProcessorGraph& graph, const MakeChannel
         members.push_back(built.channel.eqUuid);
         members.push_back(built.channel.compressorUuid);
         members.push_back(built.channel.stripUuid);
-        // FRO15 (docs/mixer.md §5.15): a merge-point bus IS a bus — mark it so its mixer column
+        // FRO15 (docs/mixer/sends-and-buses.md): a merge-point bus IS a bus — mark it so its mixer column
         // gets the BUS badge and a feeding-strips source line instead of a track chip.
         if (built.channel.strip != nullptr)
             if (auto* busStrip = dynamic_cast<ChannelStripModule*>(built.channel.strip->getProcessor()))

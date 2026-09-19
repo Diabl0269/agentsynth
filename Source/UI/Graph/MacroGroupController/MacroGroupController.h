@@ -1,7 +1,7 @@
 // MacroGroupController.h
 //
 // Macro grouping/membership/collapse, macro geometry + card jacks, macro port CRUD, the
-// port-crossing-plan math, and the bypass/mute fan-out (docs/macros.md, docs/macros_ports.md).
+// port-crossing-plan math, and the bypass/mute fan-out (docs/macros/macros.md, docs/macros/ports.md).
 // Reaches its owning canvas only through GraphCanvasHost — see that header for the narrow seam
 // this depends on. GraphEditor holds one instance (`macroController_`) and forwards its own
 // (unchanged) public macro API to it; the `synth::MacroSet` state itself stays on GraphEditor
@@ -72,7 +72,7 @@ public:
      *  MacroCardComponent::paint(), buildVisibleCables()'s boundary-cable anchoring, and
      *  endConnectionDrag()'s jack hit-test all read this rather than recomputing it, so the drawn
      *  dot, the anchored cable and the drop target can never drift apart. (P8-15c, T141,
-     *  docs/macros_ports.md §5.4). Aliased as GraphEditor::MacroCardPort. */
+     *  docs/macros/ports.md#cable-rendering-across-the-boundary). Aliased as GraphEditor::MacroCardPort. */
     struct MacroCardPort {
         juce::String nodeUuid;
         bool isInput = false;
@@ -82,7 +82,7 @@ public:
         std::optional<juce::Colour> colour; // T152; unset -> kind tint fallback
     };
 
-    /** Tri-state read of a macro's members' bypass (or mute) state (§5.6). See
+    /** Tri-state read of a macro's members' bypass (or mute) state (docs/macros/ports.md#bypass-and-mute). See
      *  GraphEditor::MacroToggleState. */
     enum class MacroToggleState { AllOff, AllOn, Mixed };
 
@@ -110,7 +110,7 @@ public:
         std::vector<MacroPortCrossingEdge> edges;
     };
 
-    // ---- Grouping / membership / collapse (docs/macros.md) -------------------------------------
+    // ---- Grouping / membership / collapse (docs/macros/macros.md) -------------------------------------
     //
     // A Macro is a named, coloured, collapsible container: membership plus presentation, no
     // graph change. Flat model — a node already in a macro cannot be grouped into a second one.
@@ -144,12 +144,11 @@ public:
     void setMacroCollapsed(const juce::String& macroId, bool collapsed);
     void renameMacro(const juce::String& macroId, const juce::String& newName);
 
-    /** FRO14 (docs/mixer.md 5.2): installed by the app when renaming a macro may also have to
-     *  rename a LINKED track, so both halves land in ONE undo step. Called by renameMacro INSTEAD
-     *  of its own recordGraphAndMacroChange, with the macro id, the new name, and the rename
-     *  mutation to run inside whatever transaction the hook opens; returning false (nothing linked)
-     *  leaves renameMacro to record exactly as it always has. Unset by default -- a standalone
-     *  editor and every test keep today's behaviour with no wiring at all. */
+    /** FRO14 (docs/mixer/mixer.md#channels-follow-audio-not-tracks): installed by the app when renaming a macro may
+     * also have to rename a LINKED track, so both halves land in ONE undo step. Called by renameMacro INSTEAD of its
+     * own recordGraphAndMacroChange, with the macro id, the new name, and the rename mutation to run inside whatever
+     * transaction the hook opens; returning false (nothing linked) leaves renameMacro to record exactly as it always
+     * has. Unset by default -- a standalone editor and every test keep today's behaviour with no wiring at all. */
     std::function<bool(const juce::String& macroId, const juce::String& newName,
                        const std::function<void()>& renameMutation)>
         recordMacroRenameHook;
@@ -158,7 +157,7 @@ public:
     std::vector<MacroMemberPreview> macroMemberPreviews(const juce::String& macroId) const;
     juce::StringArray macroMemberNames(const juce::String& macroId) const;
 
-    // ---- Bypass/mute fan-out (P8-15d, T142, docs/macros_ports.md §5.6) -------------------------
+    // ---- Bypass/mute fan-out (P8-15d, T142, docs/macros/ports.md#bypass-and-mute) -------------------------
 
     MacroToggleState macroBypassState(const juce::String& macroId) const;
     MacroToggleState macroMuteState(const juce::String& macroId) const;
@@ -167,7 +166,8 @@ public:
     void toggleMacroBypassed(const juce::String& macroId);
     void toggleMacroMuted(const juce::String& macroId);
 
-    // ---- Geometry / hit-testing / card jacks (docs/macros_ports.md §5.4) -----------------------
+    // ---- Geometry / hit-testing / card jacks (docs/macros/ports.md#cable-rendering-across-the-boundary)
+    // -----------------------
 
     juce::Rectangle<int> macroHullBounds(const juce::String& macroId) const;
     /** FRO40: `macroHullBounds` above, but with `excludedMemberUuid` left out of the union too —
@@ -178,7 +178,7 @@ public:
     juce::Rectangle<int> macroHullBoundsExcluding(const juce::String& macroId,
                                                   const juce::String& excludedMemberUuid) const;
     juce::String macroHullAt(juce::Point<int> canvasPos) const;
-    /** FRO40: the ONE query behind the Cmd/Ctrl-drag-across-a-hull gesture (docs/macros_ports.md).
+    /** FRO40: the ONE query behind the Cmd/Ctrl-drag-across-a-hull gesture (docs/macros/ports.md).
      *  `draggedNodeId` not a member of any macro: JOIN test — `canvasCentre` (the dragged module's
      *  own centre, not its top-left) against `macroHullAt`, which already only considers EXPANDED
      *  macros, so a collapsed one is never a candidate. `draggedNodeId` already a member of macro
@@ -200,11 +200,11 @@ public:
     MacroPortOwner macroPortOwnerFor(juce::AudioProcessorGraph::NodeID nodeId) const;
 
     /** Positions every EXPANDED macro's port widgets against macroHullBounds() (P8-15 fix F2,
-     *  docs/macros_ports.md §5.4 has the full layout contract). GraphEditorCanvas.cpp/
+     *  docs/macros/ports.md#how-a-port-is-drawn has the full layout contract). GraphEditorCanvas.cpp/
      *  GraphEditorDragDrop.cpp/GraphEditorSelection.cpp call this directly. */
     void dockMacroPortWidgets();
 
-    // ---- Macro I/O CRUD (P8-15b, T140, docs/macros_ports.md §5) --------------------------------
+    // ---- Macro I/O CRUD (P8-15b, T140, docs/macros/ports.md) --------------------------------
 
     juce::String addMacroPort(const juce::String& macroId, bool isInput, synth::MacroPortKind kind,
                               MacroPortShape shape, int voiceCount, const juce::String& portName);
@@ -222,12 +222,14 @@ public:
      *  async dialog), which calls this directly. */
     std::vector<synth::ui::MacroPortConfigDialog::PortRow> macroPortRowsForDialog(const juce::String& macroId) const;
 
-    /** The "shape from a dropped cable" convenience (§5.3). GraphEditorConnections.cpp's
+    /** The "shape from a dropped cable" convenience
+     * (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed). GraphEditorConnections.cpp's
      *  endConnectionDrag calls this directly. */
     void createMacroPortFromDroppedCable(const juce::String& macroId, bool newPortIsInput, bool isMidi,
                                          juce::AudioProcessorGraph::NodeID otherNodeId, int otherVisibleJack);
 
-    // ---- Auto-create-ports-on-group (founder-review fix F5, docs/macros_implementation.md §7 item 7) ----
+    // ---- Auto-create-ports-on-group (founder-review fix F5,
+    // docs/macros/auto-ports.md#auto-creating-ports-when-grouping) ----
 
     /** The crossing plan a would-be macro's members (by NodeID) would need on creation. */
     std::vector<MacroPortCrossingGroup>
@@ -256,7 +258,8 @@ public:
     /** Splices ONE port node back out of its macro, reconnecting the cable it proxied. */
     void spliceOutMacroPort(synth::Macro& macro, const juce::String& portNodeUuid);
 
-    // ---- Auto-create-port-on-drag / auto-delete-on-last-cable (T148, docs/macros_implementation.md §7 item 9) ----
+    // ---- Auto-create-port-on-drag / auto-delete-on-last-cable (T148, docs/macros/auto-ports.md#ports-on-a-cable-drag)
+    // ----
 
     /** True if `nodeId` resolves to a live macro member that itself fronts one of that macro's
      *  ports. GraphEditorCables.cpp/Commands.cpp call this directly. */

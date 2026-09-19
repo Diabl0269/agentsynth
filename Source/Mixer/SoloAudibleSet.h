@@ -1,7 +1,7 @@
 #pragma once
 
-// SoloAudibleSet.h -- FRO15 (P9-9, docs/mixer.md §5.15/§5.3): which of each Channel Strip's output
-// legs stay audible while the mixer solo gate is active.
+// SoloAudibleSet.h -- FRO15 (P9-9, docs/mixer/sends-and-buses.md#solo-is-a-per-leg-audible-mask): which of each Channel
+// Strip's output legs stay audible while the mixer solo gate is active.
 //
 // Core, headless, no UI and no AudioEngine dependency (Source/Mixer/CLAUDE.md's "Core, no-UI-dep"
 // discipline, same as MixerModel and ChannelFlows): a pure read off the live graph, recomputed on
@@ -53,7 +53,7 @@ namespace synth {
  *
  * DOCUMENTED LIMITATION. The gate is per-LEG, not per-EDGE: a main leg that feeds both Master and a
  * soloed bus stays open, so that strip's dry signal is still heard alongside the bus. Splitting it
- * would need a delay-compensated per-edge mute node -- out of scope (docs/mixer.md §5.15).
+ * would need a delay-compensated per-edge mute node -- out of scope (docs/mixer/sends-and-buses.md).
  *
  * Pure query: no mutation, no undo, safe to call as often as a caller likes (a handful of strips
  * and a bounded walk each, never per-block).

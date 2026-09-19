@@ -57,9 +57,9 @@ TrackChannelLinkInfo resolveTrackChannelLink(juce::AudioProcessorGraph& graph, c
     info.stripId = stripId;
     info.stripUuid = nodeUuidOf(stripNode);
     info.feedingTrackSources = findTrackSourcesFeedingStrip(graph, stripId);
-    // "The track is the channel's ONLY source" (§5.2). The one feeder must be this track's own
-    // node: a strip fed by exactly one track source that is somebody ELSE's is not this track's
-    // link (it cannot be reached from here in practice, but asserting it keeps the rule literal).
+    // "The track is the channel's ONLY source" (docs/mixer/mixer.md#channels-follow-audio-not-tracks). The one feeder
+    // must be this track's own node: a strip fed by exactly one track source that is somebody ELSE's is not this
+    // track's link (it cannot be reached from here in practice, but asserting it keeps the rule literal).
     info.linked = info.feedingTrackSources.size() == 1 && info.feedingTrackSources.front() == sourceNode->nodeID;
     return info;
 }

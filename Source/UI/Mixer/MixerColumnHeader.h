@@ -3,7 +3,7 @@
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
-// MixerColumnHeader.h -- FRO11 (P9-5, docs/mixer.md §5.10): the colour swatch + name label +
+// MixerColumnHeader.h -- FRO11 (P9-5, docs/mixer/panel.md#what-the-mixer-shows): the colour swatch + name label +
 // click-to-select-macro row shared by MixerColumnComponent, MixerDirectColumn and
 // MixerMasterColumn, so the three column kinds don't triplicate the same paint code (root
 // CLAUDE.md's "extract a real collaborator class" preference over copy-pasted paint()). Small
@@ -16,7 +16,7 @@ public:
     MixerColumnHeader() { setInterceptsMouseClicks(true, false); }
 
     /** An unset (default-constructed, alpha 0) colour paints no swatch -- Direct's header has no
-     *  colour of its own (§5.10). */
+     *  colour of its own (docs/mixer/panel.md#what-the-mixer-shows). */
     void setColour(juce::Colour colour) {
         if (colour_ == colour)
             return;
@@ -36,7 +36,8 @@ public:
     }
     juce::String getDisplayName() const { return name_; }
 
-    /** §5.2: a small "+R" badge next to the name when this strip is linked to a track. */
+    /** docs/mixer/mixer.md#channels-follow-audio-not-tracks: a small "+R" badge next to the name when this strip is
+     * linked to a track. */
     void setLinkedBadgeVisible(bool visible) {
         if (linkedBadgeVisible_ == visible)
             return;
@@ -44,8 +45,8 @@ public:
         repaint();
     }
 
-    /** FRO15 (§5.15): a "BUS" badge in place of the linked badge when this column is a group/send
-     *  bus -- a bus has no track to link to, so the two are mutually exclusive by construction. */
+    /** FRO15 (docs/mixer/sends-and-buses.md): a "BUS" badge in place of the linked badge when this column is a
+     * group/send bus -- a bus has no track to link to, so the two are mutually exclusive by construction. */
     void setBusBadgeVisible(bool visible) {
         if (busBadgeVisible_ == visible)
             return;
@@ -53,9 +54,9 @@ public:
         repaint();
     }
 
-    /** Fires on a click anywhere in the header background -- §5.10's "clicking a column selects
-     *  its macro on the canvas". Left null (the default) for Direct/Master, which have no macro of
-     *  their own to select. */
+    /** Fires on a click anywhere in the header background -- docs/mixer/panel.md#what-the-mixer-shows's "clicking a
+     * column selects its macro on the canvas". Left null (the default) for Direct/Master, which have no macro of their
+     * own to select. */
     std::function<void()> onHeaderClicked;
 
     void paint(juce::Graphics& g) override {

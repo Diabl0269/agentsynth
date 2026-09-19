@@ -8,7 +8,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 
 /**
- * @brief "Master" — the mix bus every channel strip feeds (P9-2, docs/mixer.md §5.1).
+ * @brief "Master" — the mix bus every channel strip feeds (P9-2, docs/mixer/mixer.md#node-types).
  *
  * Spliced in front of Rec Tap / Audio Output when the first channel is created
  * (synth::ensureMasterNode, Source/Mixer/MasterSplice.h), so the chain reads
@@ -20,7 +20,7 @@
  *   - Direct L / Direct R (ch2/ch3) — whatever went straight to the output before the splice. It
  *     stays audible, but it is not a channel: while any strip is soloed
  *     (TransportService::isMixerSoloActiveForBlock) Direct is silenced along with every non-soloed
- *     strip (docs/mixer.md §5.3).
+ *     strip (docs/mixer/mixer.md#solo-is-a-render-time-gate).
  * Outputs: Left / Right (ch0 / ch1).
  *
  * Direct is summed into Mix FIRST and the Master gain applied after, so Direct is post-fader like
@@ -35,7 +35,7 @@
  * its inputs are two stereo BLOCKS, not a pair plus CV — so it opts out of the inherited Dual I/O
  * toggle (StereoAudio::None; recorded in the StereoDeclaration sweep's kDualIOOptOuts).
  *
- * INTERNAL-ONLY, same three exclusions as ChannelStripModule (docs/mixer.md §6).
+ * INTERNAL-ONLY, same three exclusions as ChannelStripModule (docs/mixer/mixer.md#ai-authorability).
  */
 class MasterModule : public ModuleBase {
 public:

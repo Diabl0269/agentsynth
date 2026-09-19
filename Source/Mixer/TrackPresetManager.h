@@ -9,8 +9,8 @@ namespace synth {
 
 /** Which `+ Track` submenu group (and which Preferences -> Mixer dropdown) a saved track preset
  *  belongs to. Written once at save time from the same track-kind resolution the track header
- *  already has (never inferred from node shape at load time — docs/mixer.md §5.7). A MIDI track
- *  that alone drives an instrument counts as Instrument, per §5.2's link rule. */
+ *  already has (never inferred from node shape at load time — docs/mixer/track-presets.md). A MIDI track
+ *  that alone drives an instrument counts as Instrument (docs/mixer/mixer.md#channels-follow-audio-not-tracks). */
 enum class TrackPresetKind { Audio, Instrument };
 
 /** One track preset as surfaced in a menu or a Preferences dropdown. */
@@ -70,8 +70,8 @@ public:
 
     /**
      * Captures `channelMacroId`'s own members (the "own box") PLUS every outside module that
-     * feeds it through a port (docs/mixer.md §5.7/§5.8's founder requirement,
-     * collectOutsideModulatorsForTrackPreset), as one preset var.
+     * feeds it through a port (docs/mixer/track-presets.md#what-a-saved-preset-carries-beyond-the-box's founder
+     * requirement, collectOutsideModulatorsForTrackPreset), as one preset var.
      *
      * `includeExtraState` is always forced on internally — a track preset must always carry
      * strip shape/gain/pan (ChannelStripModule's extra state) or a Mono strip would silently
@@ -94,7 +94,7 @@ public:
 
     /**
      * Thin wrapper over SnippetManager::insertSnippet — THIS is the SnippetManager::insertSnippet /
-     * ProjectBundle::load pairing docs/mixer.md §5.7 and the root CLAUDE.md both name: strict
+     * ProjectBundle::load pairing docs/mixer/track-presets.md and the root CLAUDE.md both name: strict
      * (untrusted) validatePatch first, then a trusted, exact-subgraph applyJSONToGraph, ids
      * renumbered via nextFreeIdBase.
      *

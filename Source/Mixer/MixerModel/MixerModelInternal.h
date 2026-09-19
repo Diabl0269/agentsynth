@@ -15,7 +15,7 @@ namespace synth {
 void buildInsertsForColumn(juce::AudioProcessorGraph& graph, const TimelineDoc& doc, const MacroSet& macros,
                            MixerColumn& column);
 
-// ---- FRO15 (P9-9, docs/mixer.md §5.15), defined in MixerModelSends.cpp. The bus/send graph
+// ---- FRO15 (P9-9, docs/mixer/sends-and-buses.md), defined in MixerModelSends.cpp. The bus/send graph
 // queries these build on (isBusStrip, busFallbackName, findSendTarget) are public Core surface in
 // Mixer/MixerSends/MixerSends.h. ----------------------------------------------------------------
 

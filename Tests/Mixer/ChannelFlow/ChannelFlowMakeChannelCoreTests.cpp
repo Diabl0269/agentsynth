@@ -1,10 +1,10 @@
 // =================================================================================================
-// FRO25 (P9-3d, docs/mixer.md §5.8): "Make channel" on a track (header menu) or a selected chain
-// (canvas / module menu). The track's exclusive chain moves into a channel macro with the default
-// EQ -> Compressor -> Channel Strip -> Master chain; a module another track also uses stays outside
-// (a shared LFO reaches in through an auto-created port); a merge point becomes its own bus channel;
-// "Duplicate into Channel" gives this channel an independent copy of a shared module; a poly chain
-// gets a Voice Mixer; an already-channeled target is a no-op; every action is ONE undo step.
+// FRO25 (P9-3d, docs/mixer/mixer.md#make-channel-and-shared-modules): "Make channel" on a track (header menu) or a
+// selected chain (canvas / module menu). The track's exclusive chain moves into a channel macro with the default EQ ->
+// Compressor -> Channel Strip -> Master chain; a module another track also uses stays outside (a shared LFO reaches in
+// through an auto-created port); a merge point becomes its own bus channel; "Duplicate into Channel" gives this channel
+// an independent copy of a shared module; a poly chain gets a Voice Mixer; an already-channeled target is a no-op;
+// every action is ONE undo step.
 //
 // The render-identity tests build the same legacy patch in two Hosted engines, convert one through a
 // standalone GraphEditor, and compare the offline renders sample for sample.

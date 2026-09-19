@@ -17,7 +17,7 @@ namespace synth::ui {
 
 namespace {
 // FRO146: widened from the pre-meters-rework 10 px so two dB-scale bars + tick labels are legible
-// (docs/mixer.md meters section) -- see MixerMeterScale.h's kBarsAreaWidth/kLabelMinWidth for the
+// (docs/mixer/mixer.md meters section) -- see MixerMeterScale.h's kBarsAreaWidth/kLabelMinWidth for the
 // exact pixel budget this must cover. Kept as narrow as that budget allows so the column itself
 // doesn't grow wider than necessary.
 constexpr int kMeterWidth = 32;
@@ -124,8 +124,8 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
     header_.setLinkedBadgeVisible(column.linkedToTrack);
     header_.setBusBadgeVisible(column.kind == synth::MixerColumn::Kind::Bus);
 
-    // Doubles as §5.10's "the tracks that play into it" row -- `sourceLine` is the caller-resolved
-    // (comma-joined) names of column.feedingTracks, the same tracks a "source line" names for a
+    // Doubles as docs/mixer/panel.md#what-the-mixer-shows's "the tracks that play into it" row -- `sourceLine` is the
+    // caller-resolved (comma-joined) names of column.feedingTracks, the same tracks a "source line" names for a
     // single-source column.
     sourceLineLabel_.setText(sourceLine_, juce::dontSendNotification);
     insertList_.setEntries(column.inserts, column.insertChainIsLinear, column.editOnCanvasTargetUuid,

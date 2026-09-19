@@ -1,4 +1,4 @@
-// MainComponentTrackPresets.cpp — FRO13 (P9-7, docs/mixer.md §5.7): "Save track as preset.../Set
+// MainComponentTrackPresets.cpp — FRO13 (P9-7, docs/mixer/track-presets.md): "Save track as preset.../Set
 // as default" (track header menu + channel macro menu), the "+ Track" grouped preset list, "Insert
 // Track Preset from File...", and the per-type default consulted by addAudioTrack/
 // buildInstrumentTrackAndChain (see MainComponentTrackCreation.cpp's own edits for that half).
@@ -19,11 +19,10 @@ namespace {
 // each unit that lays out cards, not a cross-file contract).
 constexpr int kTrackPresetCardGapX = 40;
 
-// FRO13 (P9-7, docs/mixer.md §7 D3): the per-type default track preset settings keys — duplicated
-// from PreferencesSettingsTabInternal.h's own copy for the same "one-line string not worth a
-// header dependency" reason every other cross-file settings key in this codebase is (see
-// MainComponentFileIO.cpp's own kAutosaveEnabledKey). The two writers/readers MUST agree on the
-// string values.
+// FRO13 (P9-7, docs/mixer/track-presets.md#saving-and-setting-a-default): the per-type default track preset settings
+// keys — duplicated from PreferencesSettingsTabInternal.h's own copy for the same "one-line string not worth a header
+// dependency" reason every other cross-file settings key in this codebase is (see MainComponentFileIO.cpp's own
+// kAutosaveEnabledKey). The two writers/readers MUST agree on the string values.
 constexpr const char* kMixerDefaultTrackPresetAudioKey = "mixerDefaultTrackPresetAudio";
 constexpr const char* kMixerDefaultTrackPresetInstrumentKey = "mixerDefaultTrackPresetInstrument";
 
@@ -109,8 +108,8 @@ void MainComponent::setTrackPresetAsDefault(synth::TrackId trackId) {
     const auto kind =
         track->kind == synth::TrackKind::Audio ? synth::TrackPresetKind::Audio : synth::TrackPresetKind::Instrument;
 
-    // One-or-two-click requirement (docs/mixer.md §5.7/§7 D3): auto-save under a generated name
-    // right now rather than requiring "Save track as preset..." to have already been run.
+    // One-or-two-click requirement (docs/mixer/track-presets.md#saving-and-setting-a-default): auto-save under a
+    // generated name right now rather than requiring "Save track as preset..." to have already been run.
     const auto name = synth::TrackPresetManager::sanitiseName(track->name + " (default)");
     if (name.isEmpty() || !extractAndSaveTrackPreset(*this, track->bindingUuid, kind, name)) {
         statusBar.showMessage("Could not set the default track preset");

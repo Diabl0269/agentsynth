@@ -1,10 +1,11 @@
 #include "MacroPortFlowTestHelpers.h"
 
 // Topic: dragging a cable onto a collapsed macro card creates a port and wires it, with no
-// Configure I/O dialog involved (§5.3 convenience path).
+// Configure I/O dialog involved (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed convenience
+// path).
 
 // ============================================================================
-// Cable-drop convenience (§5.3)
+// Cable-drop convenience (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed)
 // ============================================================================
 
 TEST(MacroPortFlow, DroppingACableOnACollapsedCardCreatesAMonoInputAndWiresIt) {

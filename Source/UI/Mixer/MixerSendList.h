@@ -10,7 +10,7 @@
 class AppUndoManager;
 class GraphEditor;
 
-// MixerSendList.h -- FRO15 (P9-9, docs/mixer.md §5.15): a column's send rows, sibling of
+// MixerSendList.h -- FRO15 (P9-9, docs/mixer/sends-and-buses.md): a column's send rows, sibling of
 // MixerInsertList and laid out directly under it.
 //
 // One row per ACTIVE slot, in slot order: the target bus's name (click to retarget), a small rotary

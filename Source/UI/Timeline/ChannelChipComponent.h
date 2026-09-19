@@ -2,7 +2,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
-// ChannelChipComponent.h -- FRO14 (P9-4, docs/mixer.md §5.2): the track header's CHANNEL chip.
+// ChannelChipComponent.h -- FRO14 (P9-4, docs/mixer/mixer.md#channels-follow-audio-not-tracks): the track header's
+// CHANNEL chip.
 //
 // Shown on every track header whose notes/audio play into a channel, linked or not: the channel's
 // name plus a compact level meter. Clicking it reveals that channel (P9-5: its mixer column). It is

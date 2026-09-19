@@ -1,6 +1,6 @@
 #pragma once
 
-// MixerSends.h -- FRO15 (P9-9, docs/mixer.md §5.15): the Core flows behind a strip's send slots.
+// MixerSends.h -- FRO15 (P9-9, docs/mixer/sends-and-buses.md): the Core flows behind a strip's send slots.
 //
 // Headless, no UI dependency (Source/Mixer/CLAUDE.md), and -- like ChannelFlows and MixerModel's
 // insert splices -- NO UNDO OF THEIR OWN: each is a plain graph mutation for a caller already
@@ -19,8 +19,9 @@ namespace synth {
 
 // ---- Buses -------------------------------------------------------------------------------------
 //
-// A bus is an ordinary ChannelStripModule whose inputs are other strips' outputs (§5.15 D1) -- there
-// is no bus node type, so "is this a bus?" is a query, not a class check.
+// A bus is an ordinary ChannelStripModule whose inputs are other strips' outputs
+// (docs/mixer/sends-and-buses.md#a-bus-is-a-channel-strip) -- there is no bus node type, so "is this a bus?" is a
+// query, not a class check.
 
 /** The strips feeding `stripId`, ascending NodeID: a backward walk along signal edges that stops AT
  *  the first strip it meets (that strip IS a source, not something to expand through). Pure query. */

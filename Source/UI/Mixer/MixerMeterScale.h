@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <juce_audio_basics/juce_audio_basics.h>
 
-// MixerMeterScale.h -- FRO146 (docs/mixer.md meters section): the meter's dB scale, shared by the
+// MixerMeterScale.h -- FRO146 (docs/mixer/mixer.md meters section): the meter's dB scale, shared by the
 // painter (MixerMeter), the clip readout (MixerMeterReadout) and the track header's channel chip
 // (ChannelChipComponent), and unit-tested directly so the boundary behaviour never has to be
 // reverse-engineered from pixels.

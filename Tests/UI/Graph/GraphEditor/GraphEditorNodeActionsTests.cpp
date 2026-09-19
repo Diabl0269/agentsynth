@@ -497,7 +497,7 @@ TEST_F(GraphEditorTest, LocateMasterSelectsMasterAndPansItIntoView) {
         << "the viewport must now contain Master";
 }
 
-// No Master yet (the common case before the first channel exists, docs/mixer.md) — falls back to
+// No Master yet (the common case before the first channel exists, docs/mixer/mixer.md) — falls back to
 // Audio Output, which T187 seeds on New Patch (a bare test AudioEngine starts with NEITHER node
 // until something adds one — see addAudioOutputNode above — so this seeds one explicitly).
 TEST_F(GraphEditorTest, LocateMasterFallsBackToAudioOutputWhenThereIsNoMaster) {

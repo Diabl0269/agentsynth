@@ -9,12 +9,12 @@
 
 namespace synth::ui {
 
-// DetachablePanelHost.h -- FRO12 (P9-6, docs/mixer.md §5.9): the ONE mechanism that moves a panel
+// DetachablePanelHost.h -- FRO12 (P9-6, docs/mixer/panel.md): the ONE mechanism that moves a panel
 // between its dock slot and its own top-level window, shared by the Timeline and the Mixer panel.
 // Holds `panel` BY REFERENCE -- the same Component instance its owner already constructed, never
 // copied or recreated -- so detach/redock never disturbs the panel's own live state (scroll
 // position, zoom, selection). Reparenting is not a graph replacement, so it is orthogonal to (and
-// never bypasses) docs/mixer.md §5.3's own "unbind before any graph replacement" seam
+// never bypasses) docs/mixer/mixer.md#solo-is-a-render-time-gate's own "unbind before any graph replacement" seam
 // (GraphEditor::onBeforeDetachAllModuleComponents -> MixerPanelComponent::unbindAllColumns()).
 //
 // Docked, this draws a small header strip (title + a right-aligned icon-only detach button) above

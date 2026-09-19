@@ -123,7 +123,7 @@ public:
     static constexpr int kPortGutterHeaderHeight = 38;
 
     /** Compact docked-widget geometry for the four macro-port types (Macro In/Out, Macro MIDI
-     *  In/Out — P8-15 founder-review fix F2, docs/macros_ports.md §5.3/§5.4). Shared with
+     *  In/Out — P8-15 founder-review fix F2, docs/macros/ports.md#how-a-port-is-drawn). Shared with
      *  GraphEditor::estimateModuleSize (its own drag-ghost estimate must match the real widget) and
      *  GraphEditor::dockMacroPortWidgets (the widget's docked position reads its live getWidth/
      *  getHeight, sized from these), the same "one constant so two files cannot drift apart"
@@ -222,9 +222,9 @@ public:
 
     /** Builds the same right-click menu mouseDown() shows for a body right-click (Copy/Duplicate/
      *  Replace with.../Delete Module and, when this module is a macro member, a "Macro: <name>"
-     *  submenu — founder-review item 4, docs/macros_ports.md §5.8). Split out of mouseDown() so a test can
-     *  inspect the menu's actual content and invoke an item's action directly: juce::PopupMenu's
-     *  own showMenuAsync() never displays anything headless, so driving a synthesised right-click
+     *  submenu — founder-review item 4, docs/macros/menu-and-membership.md#the-macro-menus-entry-points). Split out of
+     * mouseDown() so a test can inspect the menu's actual content and invoke an item's action directly:
+     * juce::PopupMenu's own showMenuAsync() never displays anything headless, so driving a synthesised right-click
      *  MouseEvent into mouseDown() alone has nothing observable to assert on. Public so a test can
      *  call it after that same synthesised mouseDown() (the real gesture/hit-test/selection-
      *  retargeting entry point) rather than skip straight to menu construction. */
@@ -414,7 +414,7 @@ private:
     void updateLayout();
 
     // Compact docked widget for the four macro-port types (P8-15 founder-review fix F2,
-    // docs/macros_ports.md §5.3/§5.4) — no header chrome, no body. layoutMacroPortWidget sizes the
+    // docs/macros/ports.md#how-a-port-is-drawn) — no header chrome, no body. layoutMacroPortWidget sizes the
     // card from the module's own visible jack count (updateLayout's early branch); its actual
     // canvas POSITION is decided separately, by GraphEditor::dockMacroPortWidgets against the
     // owning macro's hull. paintMacroPortWidget draws the tinted row, its jacks and the resolved

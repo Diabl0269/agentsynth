@@ -314,7 +314,7 @@ target node no longer resolves — rather than crashing.
 
 ## The channel chip
 
-The CHANNEL chip (`docs/mixer.md` §5.2) shares the bottom half-row, right of the binding chip,
+The CHANNEL chip ([`docs/mixer/mixer.md#channels-follow-audio-not-tracks`](../mixer/mixer.md#channels-follow-audio-not-tracks)) shares the bottom half-row, right of the binding chip,
 whenever the track's notes or audio actually reach a `ChannelStripModule` — **linked or shared
 alike**.
 
@@ -342,7 +342,7 @@ to `TimelineDoc::kMaxTracks` rows, a timer per chip would be 256 timers, and an 
 would breach the per-tick repaint rule (`docs/layout/rendering.md`) — this is the same
 gated 15 Hz shape `ModuleComponent`'s own meter poll uses.
 
-**A linked track's M/S show and drive its CHANNEL, not note gating** (`docs/mixer.md` §5.2 (c)):
+**A linked track's M/S show and drive its CHANNEL, not note gating** ([`docs/mixer/mixer.md#channels-follow-audio-not-tracks`](../mixer/mixer.md#channels-follow-audio-not-tracks) (c)):
 `refreshFromDoc()` reads the strip's mute and solo for a linked track and the doc's own flags for
 every other one, and the toggles write through the link surface first, falling back to the
 unchanged `doc.setTrackMuted` / `setTrackSoloed` path when the track is not linked. Because a strip
@@ -382,7 +382,7 @@ The menu's items:
 - **Delete track** — the same compound step the add-track flows produce, in reverse: the track and
   its bound `Track In` / `Track Audio` node go together, and come back together.
 - **Make Channel** (above Delete Track) turns the track's bound chain into a mixer channel — see
-  [`mixer.md`](../mixer.md) §5.8 for what moves and what stays shared. Enabled only while
+  [`docs/mixer/mixer.md#make-channel-and-shared-modules`](../mixer/mixer.md#make-channel-and-shared-modules) for what moves and what stays shared. Enabled only while
   `TrackHeaderHost::canMakeChannelForTrack()` is true (the chain has no Channel Strip of its own
   yet), disabled — not hidden — afterwards, and `MainComponent` runs it as ONE graph + timeline +
   macro undo step followed by the reconcile pass.
@@ -391,7 +391,7 @@ The menu's items:
   needs a channel before it has anything to save. The channel macro's own right-click menu offers
   the identical pair, gated instead on `synth::isChannelMacro` — there it is omitted entirely
   rather than disabled, matching that menu's existing "Mute Macro" omit-when-meaningless
-  precedent. See [`mixer.md`](../mixer.md) §5.7/§5.8 for what a saved preset carries and how
+  precedent. See [`docs/mixer/track-presets.md#what-a-saved-preset-carries-beyond-the-box`](../mixer/track-presets.md#what-a-saved-preset-carries-beyond-the-box) for what a saved preset carries and how
   loading it is gated.
 
 ## Test seams

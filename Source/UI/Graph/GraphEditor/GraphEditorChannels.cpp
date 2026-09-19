@@ -24,7 +24,8 @@
 
 using namespace detail;
 
-// ---- Auto-create-channel-on-connect (T184, P9-3c, docs/mixer.md §5.2 "main workflow") ----------
+// ---- Auto-create-channel-on-connect (T184, P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main
+// workflow") ----------
 
 // True when `nodeId` resolves to a live TimelineMidiSource ("Track In") node — the one
 // trigger condition endConnectionDrag checks before opening the T184 auto-channel path.
@@ -143,12 +144,12 @@ void GraphEditor::maybeAutoCreateChannelAfterConnect(juce::AudioProcessorGraph::
     }
 }
 
-// FRO26 (P9-3e, docs/mixer.md §5.13): "Create channels" for existing projects, one call per
-// entry in `trackSourceNodeIds`. See the note below for the full
+// FRO26 (P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project): "Create channels" for existing projects,
+// one call per entry in `trackSourceNodeIds`. See the note below for the full
 // trackSourceNodeIds/skip-condition/transaction rationale.
 //
-// FRO26 (P9-3e, docs/mixer.md §5.13): "Create channels" for existing projects — runs the exact
-// same per-node channel-creation maybeAutoCreateChannelAfterConnect() already does for T184's
+// FRO26 (P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project): "Create channels" for existing projects
+// — runs the exact same per-node channel-creation maybeAutoCreateChannelAfterConnect() already does for T184's
 // connect-triggered case, once per entry in `trackSourceNodeIds` (each track's own bound node — a
 // "Track Audio" or "Track In" — as MainComponent resolves from TimelineDoc, which GraphEditor
 // deliberately owns no reference to). A track that already reaches the output through an existing
@@ -168,7 +169,8 @@ void GraphEditor::createChannelsForUnchanneledTracks(
         maybeAutoCreateChannelAfterConnect(nodeId);
 }
 
-// ---- FRO25 (P9-3d, docs/mixer.md §5.8): "Make channel" / "Duplicate into this channel" -----------
+// ---- FRO25 (P9-3d, docs/mixer/mixer.md#make-channel-and-shared-modules): "Make channel" / "Duplicate into this
+// channel" -----------
 
 namespace {
 

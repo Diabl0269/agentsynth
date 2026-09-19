@@ -91,33 +91,33 @@ struct TrackHeaderHost {
      *  it up. */
     virtual void addInstrumentTrack(const juce::String& instrumentModuleType, bool poly) = 0;
 
-    /** FRO26 (P9-3e, docs/mixer.md §5.13): true when at least one track's chain still reaches the
-     *  output without passing through a ChannelStripModule — the "+ Track" menu's "Create Channels"
-     *  entry is enabled exactly when this is true. Non-pure with an inert `false` default so every
-     *  existing TrackHeaderHost implementer (test stubs included) keeps compiling. */
+    /** FRO26 (P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project): true when at least one track's
+     * chain still reaches the output without passing through a ChannelStripModule — the "+ Track" menu's "Create
+     * Channels" entry is enabled exactly when this is true. Non-pure with an inert `false` default so every existing
+     * TrackHeaderHost implementer (test stubs included) keeps compiling. */
     virtual bool hasTracksNeedingChannels() const { return false; }
 
-    /** FRO26 (P9-3e, docs/mixer.md §5.13): the "+ Track" menu's "Create Channels" entry — wraps
-     *  every channel-less track's chain into a mixer channel (docs/mixer.md's factory default:
-     *  EQ -> Compressor, both bypassed -> Channel Strip -> Master), as ONE undo step covering every
-     *  track it touches. A track that already has a channel is left untouched; a no-op (nothing
-     *  pushed to the undo stack) when hasTracksNeedingChannels() would return false. Non-pure with
-     *  an inert no-op default so every existing TrackHeaderHost implementer keeps compiling. */
+    /** FRO26 (P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project): the "+ Track" menu's "Create
+     * Channels" entry — wraps every channel-less track's chain into a mixer channel (docs/mixer/mixer.md's factory
+     * default: EQ -> Compressor, both bypassed -> Channel Strip -> Master), as ONE undo step covering every track it
+     * touches. A track that already has a channel is left untouched; a no-op (nothing pushed to the undo stack) when
+     * hasTracksNeedingChannels() would return false. Non-pure with an inert no-op default so every existing
+     * TrackHeaderHost implementer keeps compiling. */
     virtual void createChannelsForExistingTracks() {}
 
-    /** FRO25 (P9-3d, docs/mixer.md §5.8): true when the header menu's "Make Channel" would build
-     *  something for `track` — its bound node's chain has no Channel Strip of its own yet (or merges
-     *  into a shared module that has none). Non-pure with an inert `false` default, same reason as
-     *  hasTracksNeedingChannels. */
+    /** FRO25 (P9-3d, docs/mixer/mixer.md#make-channel-and-shared-modules): true when the header menu's "Make Channel"
+     * would build something for `track` — its bound node's chain has no Channel Strip of its own yet (or merges into a
+     * shared module that has none). Non-pure with an inert `false` default, for the same reason
+     * `hasTracksNeedingChannels()` above uses one. */
     virtual bool canMakeChannelForTrack(synth::TrackId track) const {
         juce::ignoreUnused(track);
         return false;
     }
 
-    /** FRO25 (P9-3d, docs/mixer.md §5.8): the header menu's "Make Channel" — gathers the track's
-     *  exclusive chain into a channel macro with the default EQ -> Compressor -> Channel Strip ->
-     *  Master chain as ONE undo step (a merge point becomes its own bus channel). A no-op when
-     *  canMakeChannelForTrack() is false. Non-pure with an inert no-op default. */
+    /** FRO25 (P9-3d, docs/mixer/mixer.md#make-channel-and-shared-modules): the header menu's "Make Channel" — gathers
+     * the track's exclusive chain into a channel macro with the default EQ -> Compressor -> Channel Strip -> Master
+     * chain as ONE undo step (a merge point becomes its own bus channel). A no-op when canMakeChannelForTrack() is
+     * false. Non-pure with an inert no-op default. */
     virtual void makeChannelForTrack(synth::TrackId track) { juce::ignoreUnused(track); }
 
     /** FRO42 (P9-3h): instrument-capable hosted plugins for the "+ Track -> Instrument -> Plugin"
@@ -219,7 +219,7 @@ struct TrackHeaderHost {
      *  every test stub — keeps compiling. */
     virtual void auditionTrackNote(synth::TrackId, int /*pitch*/, int /*velocity*/, bool /*noteOn*/) {}
 
-    /** FRO13 (P9-7, docs/mixer.md §5.7): true when `track`'s bound node has a channel of its own
+    /** FRO13 (P9-7, docs/mixer/track-presets.md): true when `track`'s bound node has a channel of its own
      *  (its macro boxes a Channel Strip) — gates the header menu's "Save track as preset.../Set as
      *  default" pair, same disabled-not-hidden precedent canMakeChannelForTrack states. Non-pure
      *  with an inert `false` default. */
@@ -249,8 +249,8 @@ struct TrackHeaderHost {
      *  default. */
     virtual void addTrackFromPresetFile() {}
 
-    /** FRO14 (P9-4, docs/mixer.md 5.2): everything the header needs about the CHANNEL its track
-     *  plays into -- the channel chip, and the linked-track name/colour/mute/solo fan-out. ONE
+    /** FRO14 (P9-4, docs/mixer/mixer.md#channels-follow-audio-not-tracks): everything the header needs about the
+     * CHANNEL its track plays into -- the channel chip, and the linked-track name/colour/mute/solo fan-out. ONE
      *  accessor rather than a method per feature, so this interface (and MainComponent, which
      *  implements it) does not grow one line per channel behaviour; the real surface is
      *  TrackChannelLinkSurface. Non-pure with a null default: a header built against a stub host

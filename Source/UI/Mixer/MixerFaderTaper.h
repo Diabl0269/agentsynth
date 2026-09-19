@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <juce_core/juce_core.h>
 
-// MixerFaderTaper.h -- FRO150 (docs/mixer_fader.md): the FADER's own Cubase-like dB<->position
+// MixerFaderTaper.h -- FRO150 (docs/mixer/fader.md): the FADER's own Cubase-like dB<->position
 // taper. Deliberately a SEPARATE mapping from the METER's own taper (MixerMeterScale.h) -- Cubase's
 // fader and meter read differently, and MixerMeterScale.h's own class comment already promised this
 // file would never be reused there.

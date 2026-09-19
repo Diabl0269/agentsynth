@@ -78,7 +78,7 @@ void MixerMeter::paint(juce::Graphics& g) {
     const auto stops = laf != nullptr ? laf->getMeterColourStops() : MeterColourStops::fromTheme(fallback);
 
     auto bounds = getLocalBounds();
-    // Tick numbers only where the column has room (docs/mixer.md meters section) -- below this
+    // Tick numbers only where the column has room (docs/mixer/mixer.md meters section) -- below this
     // width the ticks still draw as dashes across the bars, just unlabelled.
     const bool showLabels = bounds.getWidth() >= kBarsAreaWidth + kLabelMinWidth;
     const auto barsArea = showLabels ? bounds.removeFromRight(kBarsAreaWidth) : bounds;

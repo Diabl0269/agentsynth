@@ -1,5 +1,5 @@
 // Concern: FRO15 (P9-9) -- the send slot flows (add / remove / retarget / resolve target / offer
-// legal targets). See MixerSends.h for the contract; docs/mixer.md §5.15 for the design.
+// legal targets). See MixerSends.h for the contract; docs/mixer/sends-and-buses.md for the design.
 
 #include "MixerSends.h"
 

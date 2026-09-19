@@ -1,4 +1,4 @@
-// Concern: FRO13 (P9-7, docs/mixer.md §5.7) -- the track-preset-specific queries:
+// Concern: FRO13 (P9-7, docs/mixer/track-presets.md) -- the track-preset-specific queries:
 // collectOutsideModulatorsForTrackPreset (the transitive upstream walk that finds every module
 // outside a channel macro that feeds it through a port, so saving a track also captures a shared
 // LFO) and isChannelMacro (the "is this macro a mixer channel" predicate both the walk's own stop

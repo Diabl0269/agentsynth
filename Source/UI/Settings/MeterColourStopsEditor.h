@@ -5,8 +5,8 @@
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 
-// MeterColourStopsEditor.h -- FRO147 ("Preferences > Metering > Appearance" equivalent, docs/
-// mixer.md's Meters section / docs/layout/colour-overrides.md's meter colours): a vertical -60..+3 dB
+// MeterColourStopsEditor.h -- FRO147 ("Preferences > Metering > Appearance" equivalent,
+// docs/mixer/meters.md / docs/layout/colour-overrides.md's meter colours): a vertical -60..+3 dB
 // scale (the SAME taper/tick marks MixerMeter itself draws -- MixerMeterScale.h) with a live
 // preview bar painted through MeterColourStops::forEachBand across the full range, and one
 // draggable handle per stop beside it.

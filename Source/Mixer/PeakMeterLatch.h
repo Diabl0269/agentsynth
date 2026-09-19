@@ -3,7 +3,7 @@
 #include <array>
 #include <atomic>
 
-// PeakMeterLatch.h -- FRO146 (docs/mixer.md meters section): a lock-free "peak since I last
+// PeakMeterLatch.h -- FRO146 (docs/mixer/mixer.md meters section): a lock-free "peak since I last
 // looked" latch, one per output leg of a metered module (ChannelStripModule/MasterModule).
 //
 // THE MISSED-OVERS BUG THIS REPLACES. The old scheme stored exactly one float per leg, overwritten

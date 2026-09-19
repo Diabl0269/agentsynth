@@ -2,7 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
-// MixerFaderSlider.h -- FRO150 (docs/mixer_fader.md): MixerFader's own juce::Slider subclass,
+// MixerFaderSlider.h -- FRO150 (docs/mixer/fader.md): MixerFader's own juce::Slider subclass,
 // giving the vertical fader the Cubase drag conventions stock juce::Slider doesn't provide:
 // Shift-drag = fine adjust at 1/8 rate, anchored to wherever the drag IS when Shift toggles (never
 // a jump), Shift+wheel = a finer wheel step, and Cmd-click (Ctrl-click on Windows)/double-click

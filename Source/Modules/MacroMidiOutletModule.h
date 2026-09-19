@@ -5,7 +5,7 @@
 
 /**
  * @brief "Macro MIDI Out" — a MIDI outlet jack on a Macro's boundary (P8-15 Macro I/O,
- * docs/macros_ports.md §5).
+ * docs/macros/ports.md).
  *
  * The exact mirror of MacroMidiInletModule in the other direction — see that class's comment for
  * the full reasoning (why this is a separate type from MacroOutletModule rather than a "kind"
@@ -13,7 +13,7 @@
  *
  * INTERNAL-ONLY, the same three exclusions as Track In / Rec Tap / Track Audio: not in the module
  * library, not offered by the replace menu, never authorable by a model
- * (kNonAuthorableModuleTypes, docs/macros_implementation.md §6).
+ * (kNonAuthorableModuleTypes, docs/macros/macros.md#ai-authorability).
  */
 class MacroMidiOutletModule : public ModuleBase {
 public:

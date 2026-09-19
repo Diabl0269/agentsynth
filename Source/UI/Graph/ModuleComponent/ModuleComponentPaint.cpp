@@ -287,17 +287,17 @@ void ModuleComponent::paint(juce::Graphics& g) {
     }
 }
 
-// Compact docked port widget (P8-15 founder-review fix F2, docs/macros_ports.md §5.3/§5.4): a small
+// Compact docked port widget (P8-15 founder-review fix F2, docs/macros/ports.md#how-a-port-is-drawn): a small
 // row tinted with the owning macro's colour, showing the port's own NAME (resolved live through
 // GraphEditor — the name lives on synth::MacroPort, not this node, so a rename in the Configure
 // I/O dialog is reflected the next time this repaints, with nothing to cache or invalidate) and
 // its jack(s). Both directions of the pass-through are drawn (the port's own boundary-facing
 // side, matching MacroPort::isInput — an external cable's landing point — AND the interior side
-// that feeds/is-fed-by a specific member, §5.4's "a manual cable drawn after expanding the
-// macro"): getPortForPoint/getPortCenter are otherwise UNCHANGED for these types (just compacted,
-// see the getPortCenter branch above), so drag/drop keeps working exactly as it does for every
-// other module. Only the interior jack goes unlabelled — the resolved name sits next to the
-// boundary one, mirroring the collapsed card's own left/right convention (item 4).
+// that feeds/is-fed-by a specific member, docs/macros/ports.md#cable-rendering-across-the-boundary's "a manual cable
+// drawn after expanding the macro"): getPortForPoint/getPortCenter are otherwise UNCHANGED for these types (just
+// compacted, see the getPortCenter branch above), so drag/drop keeps working exactly as it does for every other module.
+// Only the interior jack goes unlabelled — the resolved name sits next to the boundary one, mirroring the collapsed
+// card's own left/right convention (item 4).
 //
 // Founder-review fix G4 ("too large" — see kMacroPortWidgetWidth's own comment): the drawn jack
 // shrank from a full module card's 10px dot to 7px, the corner radius from 6 to 4 and the name

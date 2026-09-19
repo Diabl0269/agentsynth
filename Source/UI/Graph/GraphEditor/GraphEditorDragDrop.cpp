@@ -214,11 +214,12 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
         return {280, 131};
     if (typeName == "Macro In" || typeName == "Macro Out")
-        // Founder-review fix F2 (docs/macros_ports.md §5.3 / docs/macros_implementation.md §7 item 3): no longer a full
-        // module card — a small docked widget (ModuleComponent::layoutMacroPortWidget), constructed Mono by default
-        // (one jack row) — the port-creation flow grows it to two rows for Stereo via the ordinary component re-layout,
-        // same as any other jack-count change. Library-less (the "Configure I/O" modal places it). Measured against the
-        // real card by MacroPortFlow.AllFourTypesAreAbsentFromTheLibraryWithAPinnedSizeEstimate.
+        // Founder-review fix F2 (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed /
+        // docs/macros/configure-io.md#adding-a-port): no longer a full module card — a small docked widget
+        // (ModuleComponent::layoutMacroPortWidget), constructed Mono by default (one jack row) — the port-creation flow
+        // grows it to two rows for Stereo via the ordinary component re-layout, same as any other jack-count change.
+        // Library-less (the "Configure I/O" modal places it). Measured against the real card by
+        // MacroPortFlow.AllFourTypesAreAbsentFromTheLibraryWithAPinnedSizeEstimate.
         return {ModuleComponent::kMacroPortWidgetWidth,
                 ModuleComponent::kMacroPortWidgetHeaderY + ModuleComponent::kMacroPortWidgetBottomPad};
     if (typeName == "Macro MIDI In" || typeName == "Macro MIDI Out")
@@ -514,7 +515,7 @@ void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
     repaintCanvas();
 }
 
-// ---- Cmd/Ctrl-drag macro reparent (FRO40, docs/macros_ports.md) ------------------------------
+// ---- Cmd/Ctrl-drag macro reparent (FRO40, docs/macros/ports.md) ------------------------------
 //
 // A Cmd- or Ctrl-armed drag joins/leaves an expanded macro by crossing its hull border.
 // ModuleComponentInteraction.cpp's mouseDrag calls updateMacroDragCandidate on every tick (only
@@ -565,7 +566,7 @@ juce::Rectangle<int> GraphEditor::paintedMacroHullBounds(const juce::String& mac
     return macroHullBounds(macroId);
 }
 
-// The single-undo-step finalize (docs/macros_ports.md): modeled on finalizeMacroCardDrag
+// The single-undo-step finalize (docs/macros/ports.md): modeled on finalizeMacroCardDrag
 // (GraphEditorSelection.cpp) — ONE lambda runs the ordinary position finalize AND the membership
 // mutation, handed to ONE recordGraphAndMacroChange call, so Cmd+Z undoes the whole gesture
 // (position + membership + any macro-port splicing addSelectionToMacro/removeSelectionFromMacro

@@ -32,26 +32,26 @@ public:
     void setSmartConnectionMode(GraphEditor::SmartConnectionMode mode);
     bool isDoubleClickPortDisconnectEnabled() const;
     void setDoubleClickPortDisconnectEnabled(bool enabled);
-    // T148 (docs/macros_implementation.md §7 item 9): plain on/off, unlike getMacroAutoPortPreference() below —
+    // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): plain on/off, unlike getMacroAutoPortPreference() below —
     // these are brand-new automations shipped ON by default, with a plain escape hatch, not a
     // replacement for pre-existing silent behaviour (which is why that one is a tri-state "ask").
     bool isMacroAutoCreatePortsOnDragEnabled() const;
     void setMacroAutoCreatePortsOnDragEnabled(bool enabled);
     bool isMacroAutoDeletePortsOnLastCableEnabled() const;
     void setMacroAutoDeletePortsOnLastCableEnabled(bool enabled);
-    // T184 (P9-3c, docs/mixer.md §5.2 "main workflow"): plain on/off, ON by default — same shape
-    // as the two T148 toggles above (a brand-new automation, not a replacement for pre-existing
-    // silent behaviour).
+    // T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow"): plain on/off, ON by default —
+    // same shape as the two T148 toggles above (a brand-new automation, not a replacement for pre-existing silent
+    // behaviour).
     bool isMixerAutoCreateChannelOnConnectEnabled() const;
     void setMixerAutoCreateChannelOnConnectEnabled(bool enabled);
     bool isAlignmentGuidesEnabled() const;
     void setAlignmentGuidesEnabled(bool enabled);
     bool getDefaultDualIOForNewModules() const;
     void setDefaultDualIOForNewModules(bool enabled);
-    // Founder-review fix F5 (docs/macros_implementation.md §7 item 6.2): whether grouping a selection with a
-    // crossing cable into a macro auto-creates matching ports, leaves the cables as they are, or
-    // asks every time (the default). "Always ask" here is what lets a user who picked a side once
-    // reconsider — GraphEditor's own modal offers no such way back in, only "remember this choice".
+    // Founder-review fix F5 (docs/macros/auto-ports.md#auto-creating-ports-when-grouping): whether grouping a selection
+    // with a crossing cable into a macro auto-creates matching ports, leaves the cables as they are, or asks every time
+    // (the default). "Always ask" here is what lets a user who picked a side once reconsider — GraphEditor's own modal
+    // offers no such way back in, only "remember this choice".
     GraphEditor::MacroAutoPortPreference getMacroAutoPortPreference() const;
     void setMacroAutoPortPreference(GraphEditor::MacroAutoPortPreference pref);
     bool isLoopSelectionArmsEnabled() const;
@@ -75,15 +75,15 @@ public:
     // autosave.json. Any exact integer 0-50; 0 disables the backup history entirely. DEFAULT 5.
     int getAutosaveBackupCount() const;
     void setAutosaveBackupCount(int count);
-    // FRO13 (P9-7, docs/mixer.md §5.7/§7 D3): per-type default track preset. Empty string ==
-    // "Factory Default" (the sentinel row, id kMixerDefaultPresetFactoryComboId) == the unchanged
+    // FRO13 (P9-7, docs/mixer/track-presets.md#saving-and-setting-a-default): per-type default track preset. Empty
+    // string == "Factory Default" (the sentinel row, id kMixerDefaultPresetFactoryComboId) == the unchanged
     // buildDefaultAudioChannel-based chain; a non-empty name that no longer resolves to a listed
     // preset is silently ignored by the setter (the combo keeps its current selection).
     juce::String getMixerDefaultTrackPresetAudio() const;
     void setMixerDefaultTrackPresetAudio(const juce::String& presetName);
     juce::String getMixerDefaultTrackPresetInstrument() const;
     void setMixerDefaultTrackPresetInstrument(const juce::String& presetName);
-    // FRO12 (P9-6, docs/mixer.md §5.9): where the Mixer panel lives -- "tab"/"ownPanel"/"window",
+    // FRO12 (P9-6, docs/mixer/panel.md): where the Mixer panel lives -- "tab"/"ownPanel"/"window",
     // default "tab" (D4 = A, made configurable). Read once at launch by
     // MainComponent/MixerPlacementController and re-applied immediately on every change (no
     // restart) via the same settings-file ChangeListener every other live preference here uses.
@@ -269,19 +269,19 @@ private:
     // module type that carries the Dual I/O parameter — see buildDualIOPerModuleDefaultsPopup() and
     // the "dualIOPerModuleDefaults" JSON key.
     juce::TextButton perModuleDefaultsButton{"Per-module I/O defaults..."};
-    // Founder-review fix F5 (docs/macros_implementation.md §7 item 6.1/6.2): "Always ask" / "Auto-create ports" /
+    // Founder-review fix F5 (docs/macros/auto-ports.md): "Always ask" / "Auto-create ports" /
     // "Leave cables as is" — the tri-state GraphEditor::MacroAutoPortPreference the "Create Macro"
     // gesture reads before deciding whether to show its own modal.
     juce::Label macroAutoPortLabel_;
     juce::ComboBox macroAutoPortCombo_;
-    // T148 (docs/macros_implementation.md §7 item 9): plain on/off toggles, ON by default — see their getter/
+    // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): plain on/off toggles, ON by default — see their getter/
     // setter declarations above for why these are a different shape from macroAutoPortCombo_.
     juce::ToggleButton macroAutoCreatePortsOnDragToggle{"Auto-create macro ports when dragging a cable across a "
                                                         "boundary"};
     juce::ToggleButton macroAutoDeletePortsOnLastCableToggle{"Auto-delete macro ports when their last cable is "
                                                              "removed"};
-    // T184 (P9-3c, docs/mixer.md §5.2 "main workflow"): plain on/off, ON by default — see the
-    // getter/setter declarations above for why this is a different shape from a tri-state "ask".
+    // T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow"): plain on/off, ON by default —
+    // see the getter/setter declarations above for why this is a different shape from a tri-state "ask".
     juce::ToggleButton mixerAutoCreateChannelOnConnectToggle{
         "Auto-create a mixer channel when a MIDI track is connected"};
     juce::ToggleButton loopSelectionArmsToggle{"Timeline: P (loop selection) also switches looping on"};
@@ -329,7 +329,7 @@ private:
     juce::ComboBox mixerDefaultTrackPresetAudioCombo;
     juce::Label mixerDefaultTrackPresetInstrumentLabel;
     juce::ComboBox mixerDefaultTrackPresetInstrumentCombo;
-    // FRO12 (P9-6, docs/mixer.md §5.9): Mixer placement -- Tab beside the Timeline (default,
+    // FRO12 (P9-6, docs/mixer/panel.md): Mixer placement -- Tab beside the Timeline (default,
     // combo id 1) / Own panel (2) / Window (3).
     juce::Label mixerPlacementLabel;
     juce::ComboBox mixerPlacementCombo;

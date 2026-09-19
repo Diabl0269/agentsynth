@@ -109,7 +109,7 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
         // FRO40: a live Cmd/Ctrl-drag whose candidate (GraphEditor::getMacroDragCandidateId) is
         // THIS macro gets the SAME dashed hull, just emphasized — heavier, fully opaque, and
         // topped with a solid stroke — rather than a second visual language for "about to change"
-        // (docs/macros_ports.md).
+        // (docs/macros/ports.md).
         const bool isDragCandidate = macro.id == editor.getMacroDragCandidateId();
 
         juce::Path outline;
@@ -406,7 +406,7 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
     // but their graph edges — and the cables above computed from them — don't know that. A cable
     // wholly inside one collapsed macro is dropped outright (both endpoints are off-screen, and
     // there is nothing useful to draw); a cable crossing a collapsed macro's boundary is
-    // re-anchored on the card. Two anchor treatments, per §5.4's table:
+    // re-anchored on the card -- two treatments (docs/macros/ports.md#cable-rendering-across-the-boundary):
     //   - the hidden endpoint IS one of the macro's own ports (a MacroInlet/Outlet or MIDI
     //     variant fronting a synth::MacroPort) -> anchor at that port's own jack
     //     (macroCardPortLayout), so the cable visibly enters/leaves through the port it actually
@@ -420,7 +420,7 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
     //     several crossing cables keep spreading vertically instead of collapsing onto one pixel)
     //     but is clamped into the card's jack band, and X lands exactly on the boundary (not
     //     inset like a real port jack) so this anchor never sits under a case-(a) port dot on the
-    //     same edge. That case doesn't disappear (§5.4) and must not be mistaken for an error.
+    //     same edge; that case is expected (docs/macros/ports.md#cable-rendering-across-the-boundary), not an error.
     // The rectangle/jack projected against is macroCableAnchorBounds(macro) — the LIVE
     // MacroCardComponent's bounds while a card exists, not the persisted `macro.bounds`, which is
     // only written back on drop (finalizeMacroCardDrag) and would leave a cable pointing at the
@@ -540,7 +540,7 @@ void GraphEditor::setCableColourOverrides(const synth::ui::CableColourOverrides&
 void GraphEditor::disconnectCable(const VisibleCable& cable) {
     auto& graph = audioEngine.getGraph();
 
-    // T148 (docs/macros_implementation.md §7 item 9): both cable kinds populate id.srcUid/dstUid with the REAL
+    // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): both cable kinds populate id.srcUid/dstUid with the REAL
     // logical endpoints — for an AttenuverterChain that's the true mod source/destination the
     // chain proxies, never the hidden attenuverter itself (buildVisibleCables() constructs it
     // that way, and G3's own splice logic already treats them as such). Decide BEFORE mutating

@@ -1,4 +1,4 @@
-// MixerEqThumbnailTests.cpp -- FRO16 (P9-10, docs/mixer.md §5.10): the mixer column's EQ curve
+// MixerEqThumbnailTests.cpp -- FRO16 (P9-10, docs/mixer/panel.md#what-the-mixer-shows): the mixer column's EQ curve
 // thumbnail. Covers the ticket's own test list -- hidden with no EQ, visible with an enabled
 // band, dark/light PNG render showing a boost/cut difference, dimmed when bypassed, and the
 // recompute-only-on-parameter-change discipline (root CLAUDE.md "No unconditional per-tick

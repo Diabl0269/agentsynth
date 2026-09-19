@@ -161,7 +161,7 @@ public:
     void setInputMonitoringEnabled(bool enabled) noexcept;
     bool isInputMonitoringEnabled() const noexcept;
 
-    // ---- Mixer solo gate (docs/mixer.md §5.3) ----
+    // ---- Mixer solo gate (docs/mixer/mixer.md#solo-is-a-render-time-gate) ----
     // The engine owns "how many ChannelStrips are soloed?". MESSAGE THREAD: recounted by scanning
     // the graph — refreshSoloGate() runs inside publishTimeline(), which every graph change already
     // has to call, so a deleted/replaced/undone soloed strip can never leave the mix stuck silent.
@@ -170,7 +170,7 @@ public:
     // per render pass and publishes "any soloed?" to TransportService::setMixerSoloActiveForBlock.
     //
     // WHAT is silenced while the gate is closed is decided PER LEG, not per strip (FRO15,
-    // docs/mixer.md §5.15): refreshSoloGate() also runs synth::computeSoloAudibleLegs() and hands
+    // docs/mixer/sends-and-buses.md): refreshSoloGate() also runs synth::computeSoloAudibleLegs() and hands
     // each strip its own audible-leg mask, open-before-close, so soloing a send bus keeps its
     // sources' SEND legs open while their dry main legs close, and soloing a source keeps the buses
     // it feeds audible. The count itself stays a plain global "is anything soloed?" — that is still
@@ -179,7 +179,7 @@ public:
     // setChannelStripSoloed() is the one call a UI should make: it flips the strip's own flag and
     // recounts, ordered so no render pass ever sees the gate closed with nothing soloed. Returns
     // false when `node` is not a Channel Strip in this graph. Not undoable and not a parameter
-    // write, by design (§5.3).
+    // write, by design (docs/mixer/mixer.md#solo-is-a-render-time-gate).
     void refreshSoloGate();
     bool setChannelStripSoloed(juce::AudioProcessorGraph::NodeID node, bool soloed);
     int getSoloedStripCount() const noexcept { return soloedStripCount_.load(std::memory_order_relaxed); }

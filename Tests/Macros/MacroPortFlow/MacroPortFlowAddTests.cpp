@@ -101,7 +101,7 @@ TEST(MacroPortFlow, AddIsOneUndoStep) {
 }
 
 // ============================================================================
-// Library absence + pinned size estimate (docs/macros_implementation.md §7 item 3's own requirement)
+// Library absence + pinned size estimate (docs/macros/configure-io.md#adding-a-port's own requirement)
 // ============================================================================
 
 TEST(MacroPortFlow, AllFourTypesAreAbsentFromTheLibraryWithAPinnedSizeEstimate) {

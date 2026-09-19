@@ -1,7 +1,7 @@
 #include "MacroPortFlowTestHelpers.h"
 
-// Topic: shape change — the load-bearing case (docs/macros_ports.md §5.3): delete-node +
-// create-node + rewire as ONE undo step, cable survival/drop by raw channel, MIDI no-op.
+// Topic: shape change — the load-bearing case (docs/macros/ports.md#a-port-shape-is-chosen-at-creation-and-then-fixed):
+// delete-node + create-node + rewire as ONE undo step, cable survival/drop by raw channel, MIDI no-op.
 
 // ============================================================================
 // Shape change — the load-bearing case

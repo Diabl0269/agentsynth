@@ -223,8 +223,8 @@ void GraphEditor::showCanvasContextMenu(juce::Point<int> canvasPos) {
     if (selectionCount > 1) {
         // Calls requestGroupSelectionIntoMacro() directly, not the Cmd+G dispatch — see the
         // matching comment in ModuleComponent.cpp's right-click menu for why. That entry point
-        // gates the auto-port-preference modal (founder-review fix F5, docs/macros_implementation.md §7 item
-        // 6.2) the same way Cmd+G does.
+        // gates the auto-port-preference modal (founder-review fix F5,
+        // docs/macros/auto-ports.md#auto-creating-ports-when-grouping) the same way Cmd+G does.
         m.addItem("Create Macro from " + juce::String(selectionCount) + " Modules", [safeThis] {
             if (safeThis != nullptr)
                 safeThis->requestGroupSelectionIntoMacro();
@@ -594,11 +594,10 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
         targetChannels.push_back(portIndex);
     }
 
-    // T148 (docs/macros_implementation.md §7 item 9): decide BEFORE mutating whether this disconnect can leave a
-    // macro port cableless — nodeId's own jack, or the far end of any plain (non-attenuverter)
-    // connection about to be removed. Only then does the transaction upgrade to
-    // recordGraphAndMacroChange; an ordinary disconnect keeps the existing graph-only
-    // recordStructuralChange path exactly as before. Gated on
+    // T148 (docs/macros/auto-ports.md#ports-on-a-cable-drag): decide BEFORE mutating whether this disconnect can leave
+    // a macro port cableless — nodeId's own jack, or the far end of any plain (non-attenuverter) connection about to be
+    // removed. Only then does the transaction upgrade to recordGraphAndMacroChange; an ordinary disconnect keeps the
+    // existing graph-only recordStructuralChange path exactly as before. Gated on
     // autoDeleteMacroPortsOnLastCableEnabled (Preferences) — off, this is always false.
     bool touchesMacroPort = autoDeleteMacroPortsOnLastCableEnabled && macroController_.nodeIsMacroPort(nodeId);
     if (autoDeleteMacroPortsOnLastCableEnabled && !touchesMacroPort) {

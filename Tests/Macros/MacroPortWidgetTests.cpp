@@ -1,5 +1,5 @@
 // GraphEditor/ModuleComponent-level tests for the compact docked port widget (P8-15
-// founder-review fix F2, docs/macros_ports.md §5.3/§5.4): a macro port renders as a small named row
+// founder-review fix F2, docs/macros/ports.md#how-a-port-is-drawn): a macro port renders as a small named row
 // docked to its macro's hull edge instead of an ordinary 280x111 module card.
 //
 //   • hull    — macroHullBounds() excludes port members from the union it computes, so docking a

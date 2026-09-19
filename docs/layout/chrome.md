@@ -204,7 +204,7 @@ Both keys are read at the top of `initialiseCommon()`, before any `setVisible()`
 The Timeline and Mixer panels are a separate mechanism: each can additionally DETACH into its own
 top-level window (`Source/UI/Layout/DetachablePanelHost/`) rather than only hide and show in place,
 and the Mixer's dock-vs-own-panel-vs-window placement is itself a Preferences setting. See
-[mixer](../mixer.md).
+[`docs/mixer/mixer.md`](../mixer/mixer.md).
 
 ## Welcome screen overlay
 

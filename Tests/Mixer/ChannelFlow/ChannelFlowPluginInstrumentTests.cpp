@@ -529,7 +529,7 @@ TEST_F(ChannelFlowTest, PluginInstrumentTrackOverMaxChannelsIsRefusedGraphAndUnd
 // chain-source selection, exercised directly at the ChannelFlows level: a factory-default
 // Oscillator is poly OFF (see InstrumentTrackOscillatorWiresSplitBlockRightLegNeverCh1 above), so
 // the golden "+ Track -> Instrument" path never takes this branch today — this proves it wires
-// correctly for whenever an instrument IS poly (docs/mixer.md §5.4/§5.8).
+// correctly for whenever an instrument IS poly (docs/mixer/mixer.md#an-instrument-track).
 TEST_F(ChannelFlowTest, PolyInstrumentGetsVoiceMixerAheadOfStripAndFeedsTheChannel) {
     AudioEngine engine;
     auto& graph = engine.getGraph();

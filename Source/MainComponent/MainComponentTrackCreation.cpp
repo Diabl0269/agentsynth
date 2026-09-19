@@ -22,9 +22,9 @@ namespace {
 // overlap regardless of how wide an individual card is (e.g. Parametric EQ's double-width card).
 constexpr int kChannelCardGapX = 40;
 
-// FRO13 (P9-7, docs/mixer.md §7 D3): the per-type default track preset settings keys — duplicated
-// from PreferencesSettingsTabInternal.h's own copy for the same "one-line string not worth a
-// header dependency" reason every other cross-file settings key in this codebase is.
+// FRO13 (P9-7, docs/mixer/track-presets.md#saving-and-setting-a-default): the per-type default track preset settings
+// keys — duplicated from PreferencesSettingsTabInternal.h's own copy for the same "one-line string not worth a header
+// dependency" reason every other cross-file settings key in this codebase is.
 constexpr const char* kMixerDefaultTrackPresetAudioKey = "mixerDefaultTrackPresetAudio";
 constexpr const char* kMixerDefaultTrackPresetInstrumentKey = "mixerDefaultTrackPresetInstrument";
 
@@ -100,10 +100,10 @@ void MainComponent::addAudioTrack() {
     // subtask depends on.
     const bool pushed = undoManager.recordGraphTimelineAndMacroChange(
         audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(), [this, index, &trackName] {
-            // FRO13 (P9-7, docs/mixer.md §5.7/§7 D3): consult the per-type default BEFORE any node
-            // is created. Defaults only steer this plain "+ Track -> Audio" gesture — a saved
-            // preset is always reachable regardless via the grouped list / file insert
-            // (TimelinePanelTrackHeaders.cpp), independent of what's set here.
+            // FRO13 (P9-7, docs/mixer/track-presets.md#saving-and-setting-a-default): consult the per-type default
+            // BEFORE any node is created. Defaults only steer this plain "+ Track -> Audio" gesture — a saved preset is
+            // always reachable regardless via the grouped list / file insert (TimelinePanelTrackHeaders.cpp),
+            // independent of what's set here.
             const juce::String defaultPresetName =
                 appProperties.getUserSettings()->getValue(kMixerDefaultTrackPresetAudioKey, {});
             if (defaultPresetName.isNotEmpty()) {
@@ -115,7 +115,7 @@ void MainComponent::addAudioTrack() {
                         return; // inserted from the default preset - skip the factory chain below
                 }
                 // else: the name resolves to nothing (deleted file) -> fall through to the
-                // unchanged factory path below, SILENTLY (docs/mixer.md gives no "tell the user
+                // unchanged factory path below, SILENTLY (docs/mixer/mixer.md gives no "tell the user
                 // their default vanished" requirement for v1).
             }
 
@@ -210,8 +210,8 @@ void MainComponent::addInstrumentTrack(const juce::String& instrumentModuleType,
     //
     // This is a TrackKind::Midi track — a Track In feeding exactly one instrument is already what
     // addMidiTrack() produces once a cable is drawn by hand; this flow just draws that cable and
-    // builds the channel automatically. docs/mixer.md §5.2 once called this "(new track kind)" but
-    // T183's own scope never asked for a new TrackKind, and adding one is a format/serialization
+    // builds the channel automatically. docs/mixer/mixer.md#channels-follow-audio-not-tracks once called this "(new
+    // track kind)" but T183's own scope never asked for a new TrackKind, and adding one is a format/serialization
     // change nothing here requires — see that doc's update alongside this change.
     buildInstrumentTrackAndChain(synth::AIStateMapper::createModule(instrumentModuleType), instrumentModuleType, poly);
 }
@@ -249,7 +249,7 @@ void MainComponent::buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProc
     const bool pushed = undoManager.recordGraphTimelineAndMacroChange(
         audioEngine.getGraph(), timelineDoc, graphEditor.getMacros(),
         [this, index, &trackName, trackNamePrefix, poly, stagedInstrument] {
-            // FRO13 (P9-7, docs/mixer.md §5.7/§7 D3): same default-consulting branch as
+            // FRO13 (P9-7, docs/mixer/track-presets.md#saving-and-setting-a-default): same default-consulting branch as
             // addAudioTrack's own, before any node is created (including `stagedInstrument`,
             // which is simply discarded unused when a default wins — never added to the graph).
             const juce::String defaultPresetName =
@@ -492,8 +492,8 @@ bool MainComponent::buildInstrumentChannelAndMacro(const juce::String& trackName
     return true;
 }
 
-// FRO26 (P9-3e, docs/mixer.md §5.13): every track whose bound node's chain still reaches the
-// output without passing through a ChannelStripModule — the same synth::findUnchanneledOutputFeeds
+// FRO26 (P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project): every track whose bound node's chain
+// still reaches the output without passing through a ChannelStripModule — the same synth::findUnchanneledOutputFeeds
 // query T184's connect-triggered auto-channel already runs, just from each track's own binding
 // instead of a just-completed cable drag. An unbound or orphaned track (empty/unresolved
 // bindingUuid) contributes nothing — there is no chain to channel.
@@ -511,10 +511,10 @@ bool MainComponent::hasTracksNeedingChannels() const {
     return false;
 }
 
-// FRO26 (P9-3e, docs/mixer.md §5.13): the "+ Track" menu's "Create Channels" action for existing
-// projects — docs/mixer.md §5.13 says the project itself opens unchanged (no automatic migration on
-// load; this method is never called from anywhere but the explicit menu choice below). Gathers
-// every track's own bound node first (outside the undo transaction — this is a pure read), then
+// FRO26 (P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project): the "+ Track" menu's "Create Channels"
+// action for existing projects — docs/mixer/mixer.md#creating-channels-in-an-existing-project says the project itself
+// opens unchanged (no automatic migration on load; this method is never called from anywhere but the explicit menu
+// choice below). Gathers every track's own bound node first (outside the undo transaction — this is a pure read), then
 // wraps GraphEditor::createChannelsForUnchanneledTracks() in ONE
 // recordGraphTimelineAndMacroChange transaction, the same shape addAudioTrack/addInstrumentTrack
 // use, so N channel-less tracks becoming N new channels is a SINGLE Cmd+Z. A track already reaching
@@ -553,9 +553,9 @@ void MainComponent::createChannelsForExistingTracks() {
     statusBar.showMessage(pushed ? "Created channels" : "Could not create channels");
 }
 
-// FRO25 (P9-3d, docs/mixer.md §5.8): "Make channel" on one track's bound node — the header menu's
-// enabled state is the same synth::planMakeChannel query the action itself runs.
-// FRO25 (P9-3d): the header menu's "Make Channel".
+// FRO25 (P9-3d, docs/mixer/mixer.md#make-channel-and-shared-modules): "Make channel" on one track's bound node — the
+// header menu's enabled state is the same synth::planMakeChannel query the action itself runs. FRO25 (P9-3d): the
+// header menu's "Make Channel".
 bool MainComponent::canMakeChannelForTrack(synth::TrackId trackId) const {
     const auto* track = timelineDoc.getTrack(trackId);
     if (track == nullptr || track->bindingUuid.isEmpty())

@@ -1,10 +1,9 @@
 // ChannelFlowMakeChannelAppTests.cpp
 //
-// FRO25 (P9-3d, docs/mixer.md §5.8): "Make channel", real app wiring — the track header,
-// canvas selection and module right-click menus, each as one undo step. Core render-identity
-// coverage (standalone GraphEditor + HostedPatchCFT) lives in ChannelFlowMakeChannelCoreTests.cpp;
-// shared rig helpers (LegacyRigCFT, HostedPatchCFT, McRigCFT, ...) live in
-// ChannelFlowTestFixture.h.
+// FRO25 (P9-3d, docs/mixer/mixer.md#make-channel-and-shared-modules): "Make channel", real app wiring — the track
+// header, canvas selection and module right-click menus, each as one undo step. Core render-identity coverage
+// (standalone GraphEditor + HostedPatchCFT) lives in ChannelFlowMakeChannelCoreTests.cpp; shared rig helpers
+// (LegacyRigCFT, HostedPatchCFT, McRigCFT, ...) live in ChannelFlowTestFixture.h.
 
 #include "../../StubPluginInstance.h"
 #include "AI/AIProvider.h"

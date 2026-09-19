@@ -2,7 +2,8 @@
 #include "PreferencesSettingsTab.h"
 #include "PreferencesSettingsTabInternal.h"
 
-// Concern: Mixer -> per-type default track preset combos (FRO13, P9-7, docs/mixer.md §5.7/§7 D3).
+// Concern: Mixer -> per-type default track preset combos (FRO13, P9-7,
+// docs/mixer/track-presets.md#saving-and-setting-a-default).
 
 // Populates `combo` with the "Factory Default" sentinel (kMixerDefaultPresetFactoryComboId) plus
 // every saved `kind` preset (kMixerDefaultPresetComboIdBase + index) — same snapshot-at-populate-
@@ -139,7 +140,7 @@ void PreferencesSettingsTab::layoutMixerDefaultTrackPresetGroup(
 }
 
 // ---------------------------------------------------------------------------------------------
-// FRO12 (P9-6, docs/mixer.md §5.9): Mixer placement -- Tab beside the Timeline / Own panel /
+// FRO12 (P9-6, docs/mixer/panel.md): Mixer placement -- Tab beside the Timeline / Own panel /
 // Window. Same "own named step, pulled out of the constructor/layoutContent" pattern the two
 // functions above follow.
 // ---------------------------------------------------------------------------------------------

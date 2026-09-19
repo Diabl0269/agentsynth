@@ -225,7 +225,7 @@ TEST(TimelineTrackHeaderContextMenuTest, ColourSwatchRightClickNeverReachesTheHe
 }
 
 // =============================================================================
-// FRO13 (P9-7, docs/mixer.md §5.7): "Save Track as Preset.../Set as Default Track Preset" reached
+// FRO13 (P9-7, docs/mixer/track-presets.md): "Save Track as Preset.../Set as Default Track Preset" reached
 // through the SAME real-child-click path as Make Channel/Delete Track above.
 // =============================================================================
 

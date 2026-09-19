@@ -126,16 +126,16 @@ inline const std::unordered_map<juce::String, ModuleFactoryFunc>& moduleFactory(
         {"Track Audio", []() { return std::make_unique<TimelineAudioSourceModule>(); }},
         // A Macro's audio/CV inlet/outlet jacks (P8-15 Macro I/O). In the factory so our own saves
         // round-trip a patch that has one; kNonAuthorableModuleTypes below keeps them away from the
-        // model — see docs/macros_implementation.md §6.
+        // model — see docs/macros/macros.md#ai-authorability.
         {"Macro In", []() { return std::make_unique<MacroInletModule>(); }},
         {"Macro Out", []() { return std::make_unique<MacroOutletModule>(); }},
         // A Macro's MIDI inlet/outlet jacks — a separate type from the audio/CV pair above (see
         // MacroMidiInletModule's class comment for why), same reason for being in the factory.
         {"Macro MIDI In", []() { return std::make_unique<MacroMidiInletModule>(); }},
         {"Macro MIDI Out", []() { return std::make_unique<MacroMidiOutletModule>(); }},
-        // The mixer's channel strip and mix bus (P9-2; docs/mixer.md §5.1). In the factory so our own
+        // The mixer's channel strip and mix bus (P9-2; docs/mixer/mixer.md#node-types). In the factory so our own
         // saves round-trip a patch that has them; kNonAuthorableModuleTypes below keeps them away from
-        // the model — see docs/mixer.md §6.
+        // the model — see docs/mixer/mixer.md#ai-authorability.
         {"Channel Strip", []() { return std::make_unique<ChannelStripModule>(); }},
         {"Master", []() { return std::make_unique<MasterModule>(); }},
     };
@@ -181,7 +181,7 @@ inline const std::set<juce::String> kNonAuthorableModuleTypes = {
     // (PatchValidationError::InternalModuleNotAllowed) rather than sanitised. Only the app's own
     // load UX may create one.
     "Hosted Plugin",
-    // A Macro's audio/CV inlet/outlet jack (P8-15 Macro I/O; docs/macros_implementation.md §6). Membership of
+    // A Macro's audio/CV inlet/outlet jack (P8-15 Macro I/O; docs/macros/macros.md#ai-authorability). Membership of
     // the macro it belongs to is keyed by node uuid, and a provider-supplied uuid is ignored
     // (adoptUuidIfTrusted) — so a model-authored one could never resolve to a real macro's port
     // list even if it were let through. The macro's own port-creation flow is the only thing that
@@ -192,7 +192,7 @@ inline const std::set<juce::String> kNonAuthorableModuleTypes = {
     // MacroMidiInletModule's class comment for why it is a separate type at all.
     "Macro MIDI In",
     "Macro MIDI Out",
-    // The mixer's channel strip (docs/mixer.md §6). A strip's meaning is the channel the app built
+    // The mixer's channel strip (docs/mixer/mixer.md#ai-authorability). A strip's meaning is the channel the app built
     // around it — its shape, its place at the end of a chain, the track it may be linked to — and
     // its solo flag rides in trusted extra state. "The AI can build a channel" is an app-side
     // action the model invokes, never a patch node it writes directly.

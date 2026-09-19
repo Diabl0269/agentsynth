@@ -49,7 +49,7 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     mixerDock.getTimelineHost().setHostedPanelFocusRegion("timeline", timelinePanel);
     mixerDock.getMixerHost().setHostedPanelFocusRegion("mixer", mixerDock.getMixerPanel());
     mixerDock.onPanelDetachStateChanged = [this] { rebuildFocusRegions(); };
-    // Placement preference (Tab/Own panel/Window, docs/mixer.md §5.9) -- read once here (both
+    // Placement preference (Tab/Own panel/Window, docs/mixer/panel.md) -- read once here (both
     // panels already exist by this point in initialiseCommon()'s ORDER) and again on every
     // settings-file write, see MainComponent::changeListenerCallback's settings branch.
     mixerPlacement_.applyPlacementPreference();

@@ -409,7 +409,7 @@ void MainComponent::resized() {
     // MixerPlacementController's class comment): a plain visible/hidden carve, same "|| isVisible()
     // frame-0" guard as every other panel above. Carved FIRST (before the Timeline dock below)
     // so it claims the window's actual bottom edge -- carving it second would instead stack it
-    // ABOVE the Timeline dock, the opposite of docs/mixer.md §5.9's own layout.
+    // ABOVE the Timeline dock, the opposite of docs/mixer/panel.md's own layout.
     if (mixerPlacement_.isOwnPanelShowing())
         mixerPlacement_.setBounds(bounds.removeFromBottom(synth::ui::MixerPlacementController::kOwnPanelHeight));
 

@@ -9,7 +9,7 @@
 
 namespace synth::ui {
 
-// DetachedPanelWindow.h -- FRO12 (P9-6, docs/mixer.md §5.9): a native top-level window hosting one
+// DetachedPanelWindow.h -- FRO12 (P9-6, docs/mixer/panel.md): a native top-level window hosting one
 // panel a DetachablePanelHost has detached from its dock. Modeled on
 // Source/Plugin/Hosting/HostedPluginEditorWindow.{h,cpp}: constructed with addToDesktop=false, so
 // building this (and every test below) never creates a native peer -- only a later
@@ -18,10 +18,10 @@ namespace synth::ui {
 // Owned EXCLUSIVELY by the DetachablePanelHost that created it, which reclaims `panel` (and the
 // header button/title, borrowed the same way) on redock -- see DetachablePanelHost::setDetached().
 // Never touches Desktop::setDefaultLookAndFeel (Source/Plugin/CLAUDE.md /
-// docs/architecture/plugin-layer.md#who-owns-what's plugin-layer invariant, restated for this window in docs/mixer.md
-// §5.9): it calls setLookAndFeel() on ITSELF with the AppLookAndFeel instance its owner hands it -- the processor's own
-// instance on the plugin path, exactly the AgentSynthPluginEditor/HostedPluginEditorWindow pattern -- and clears it in
-// its destructor. Never constructs its own ThemeManager/AppLookAndFeel.
+// docs/architecture/plugin-layer.md#who-owns-what's plugin-layer invariant, restated for this window in
+// docs/mixer/panel.md): it calls setLookAndFeel() on ITSELF with the AppLookAndFeel instance its owner hands it -- the
+// processor's own instance on the plugin path, exactly the AgentSynthPluginEditor/HostedPluginEditorWindow pattern --
+// and clears it in its destructor. Never constructs its own ThemeManager/AppLookAndFeel.
 //
 // Keyboard focus is scoped to THIS window (T159/docs/control/shortcuts.md "Focus regions"): MainComponent's
 // keyPressed dispatch is not reachable from a separate top-level window (MainComponent installs no
@@ -40,7 +40,7 @@ public:
     // content for its life, and DetachablePanelHost reclaims them on redock (see its class
     // comment on why this is not a literal single shared widget instance in every placement mode).
     // `boundsKey` is the ApplicationProperties key this window's position/size persists under
-    // ("timelineWindowBounds" / "mixerWindowBounds" -- docs/mixer.md §5.9).
+    // ("timelineWindowBounds" / "mixerWindowBounds" -- docs/mixer/panel.md).
     DetachedPanelWindow(juce::Component& panel, juce::DrawableButton& headerButton, juce::Label& headerTitle,
                         juce::String boundsKey, juce::ApplicationProperties* appProperties,
                         synth::theme::AppLookAndFeel* lookAndFeel, ShortcutManager* shortcutManager);

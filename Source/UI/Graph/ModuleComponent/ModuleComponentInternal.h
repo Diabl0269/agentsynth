@@ -41,7 +41,7 @@ inline ModuleType getType(juce::AudioProcessor* module) {
     return ModuleType::Oscillator;
 }
 
-/** The four macro-boundary node types (Macro In/Out, Macro MIDI In/Out — docs/macros_ports.md §5.1),
+/** The four macro-boundary node types (Macro In/Out, Macro MIDI In/Out — docs/macros/ports.md#node-types),
  *  which render as the compact docked port widget (P8-15 founder-review fix F2) rather than an
  *  ordinary module card: no header chrome, no body, a small tinted row docked to their macro's
  *  hull edge instead of freely placed. See layoutMacroPortWidget()/paintMacroPortWidget(). */

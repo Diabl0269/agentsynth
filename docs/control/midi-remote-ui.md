@@ -254,6 +254,6 @@ fake message source (no real `juce::MidiInput`):
 
 - [`midi-remote.md`](midi-remote.md) — model and decisions.
 - [`plugin-card-layout.md`](plugin-card-layout.md) — the hosted-plugin knobs this maps.
-- [`mixer.md`](../mixer.md#59-mixer-panel--windows) — the bottom dock the panel joins.
+- [`docs/mixer/panel.md`](../mixer/panel.md) — the bottom dock the panel joins.
 - [`layout/animation.md`](../layout/animation.md) — the animation rules the pulse and the surface obey.
 - [`shortcuts.md`](shortcuts.md) — action ids and display names the action picker reuses.

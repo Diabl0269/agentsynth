@@ -1,8 +1,8 @@
-// Concern: FRO13 (P9-7, docs/mixer.md §5.7/§7 D3) -- the per-type default track preset consulted
-// by "+ Track -> Audio Track" (MainComponentTrackCreation.cpp's addAudioTrack) BEFORE the factory
-// Track Audio -> EQ -> Compressor -> Strip -> Master chain is built. Unlike TrackPresetTests.cpp /
-// TrackPresetCaptureTests.cpp (pure TrackPresetManager, no MainComponent needed), this exercises
-// the real settings key (mixerDefaultTrackPresetAudio) AND the real on-disk preset directory
+// Concern: FRO13 (P9-7, docs/mixer/track-presets.md#saving-and-setting-a-default) -- the per-type default track preset
+// consulted by "+ Track -> Audio Track" (MainComponentTrackCreation.cpp's addAudioTrack) BEFORE the factory Track Audio
+// -> EQ -> Compressor -> Strip -> Master chain is built. Unlike TrackPresetTests.cpp / TrackPresetCaptureTests.cpp
+// (pure TrackPresetManager, no MainComponent needed), this exercises the real settings key
+// (mixerDefaultTrackPresetAudio) AND the real on-disk preset directory
 // (TrackPresetManager::getDefaultTrackPresetsDirectory(), hardcoded at the addAudioTrack call
 // site -- there is no injectable override), so this file follows AutosaveTests.cpp's own posture
 // toward that shared, real, process-global state: a distinctive-enough name to not collide with a

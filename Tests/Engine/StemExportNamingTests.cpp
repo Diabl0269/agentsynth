@@ -1,4 +1,4 @@
-// synth::StemSession stem-file naming (FRO55, docs/mixer.md §5.12): each stem is named after the
+// synth::StemSession stem-file naming (FRO55, docs/mixer/stem-export.md): each stem is named after the
 // ONE TimelineMidiSource/TimelineAudioSource ("Track In"/"Track Audio") track whose signal feeds
 // that strip, walked upstream through the graph transitively (through an EQ/Compressor, the way
 // buildDefaultAudioChannel's own chain does — Source/Mixer/ChannelFlows/ChannelFlows.cpp), not the strip's own
@@ -229,7 +229,7 @@ TEST(StemExportNamingTest, StripFedByNoTrackFallsBackToChannelN) {
     ASSERT_TRUE(rig.start());
     auto& graph = rig.engine.getGraph();
 
-    // An orphaned strip - nothing feeds it at all (same shape docs/mixer.md §5.12 already documents
+    // An orphaned strip - nothing feeds it at all (same shape docs/mixer/stem-export.md already documents
     // as legal: "an orphaned strip ... still gets a stem file").
     const auto strip = addFactoryNode(graph, "Channel Strip");
     wireStripToMaster(graph, strip, rig.master);

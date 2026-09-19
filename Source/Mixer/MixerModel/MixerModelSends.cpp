@@ -1,4 +1,4 @@
-// Concern: FRO15 (P9-9, docs/mixer.md §5.15) -- the bus/send half of buildMixerSnapshot: which
+// Concern: FRO15 (P9-9, docs/mixer/sends-and-buses.md) -- the bus/send half of buildMixerSnapshot: which
 // strips are buses, what a bus column calls itself and lists as its sources, and each column's
 // active send rows. Its own unit rather than more lines in MixerModelColumns.cpp (root CLAUDE.md's
 // one-concern-per-unit rule).

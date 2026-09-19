@@ -1,4 +1,4 @@
-// MixerModelBusColumnTests.cpp -- FRO15 (P9-9, docs/mixer.md §5.15): how buildMixerSnapshot sees
+// MixerModelBusColumnTests.cpp -- FRO15 (P9-9, docs/mixer/sends-and-buses.md): how buildMixerSnapshot sees
 // buses and sends. Headless, same bare AudioEngine/TimelineDoc/MacroSet rig as the rest of the
 // MixerModel suite.
 #include "Mixer/ChannelFlows/ChannelFlows.h"
@@ -177,7 +177,7 @@ TEST(MixerModelBusColumnTests, ANewlyCreatedBusListsItsBypassedEqAndCompressorIn
 }
 
 // A send lands on the SAME strip input channels (ch0/kRightBase) an insert's own output would
-// (docs/mixer.md §5.15 D2) -- so without the ChannelStripModule-predecessor exclusion, a wired send
+// (docs/mixer/sends-and-buses.md D2) -- so without the ChannelStripModule-predecessor exclusion, a wired send
 // would either misclassify the bus's own chain as "branching" (losing add/reorder/remove) or have
 // the walk wander into the SENDING strip's own chain and list its inserts as this bus's.
 TEST(MixerModelBusColumnTests, ASendWiredIntoABusIsNeverListedAsAnInsertAndStaysLinear) {

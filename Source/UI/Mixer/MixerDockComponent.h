@@ -12,10 +12,10 @@ class AppUndoManager;
 class GraphEditor;
 class AudioEngine;
 
-// MixerDockComponent.h -- FRO11 (P9-5, docs/mixer.md §5.9): the bottom dock's own tab strip.
+// MixerDockComponent.h -- FRO11 (P9-5, docs/mixer/panel.md): the bottom dock's own tab strip.
 //
 // The ONE component MainComponent.h holds for this ticket (see the plan's file-size-budget
-// constraint, docs/mixer_implementation.md item 4): owns `timelinePanel` by reference (NOT a
+// constraint, docs/mixer/panel.md#what-the-mixer-shows): owns `timelinePanel` by reference (NOT a
 // copy/move -- MainComponent still owns and constructs it) and a MixerPanelComponent by value.
 // MainComponent::resized()'s existing dock carve (`timelinePanel.setBounds(...)`) becomes
 // `mixerDock.setBounds(...)` -- one line changed, not two new carve blocks; the open/close slide,
@@ -28,7 +28,7 @@ class MixerDockComponent : public juce::Component {
 public:
     enum class Tab { Timeline, Mixer };
 
-    // FRO12 (P9-6, docs/mixer.md §5.9): `appProperties`/`lookAndFeel`/`shortcutManager` are
+    // FRO12 (P9-6, docs/mixer/panel.md): `appProperties`/`lookAndFeel`/`shortcutManager` are
     // forwarded straight into timelineHost_/mixerHost_ (both DetachablePanelHost) -- see that
     // class for what each is for. `lookAndFeel`/`shortcutManager` may be null in a headless test
     // that never detaches a panel.
@@ -96,7 +96,7 @@ public:
     void setMixerTabEnabled(bool enabled);
 
     /** The Timeline's own detach-to-window host -- always owned and shown here, in every Mixer
-     *  placement (docs/mixer.md §5.9's placement table: "Timeline dock: unaffected"). */
+     *  placement (docs/mixer/panel.md's placement table: "Timeline dock: unaffected"). */
     synth::ui::DetachablePanelHost& getTimelineHost() noexcept { return timelineHost_; }
     /** The Mixer's detach-to-window host. Owned here always, but only PARENTED here in Tab
      *  placement -- MixerPlacementController reparents it into its own "Own panel" strip, or
@@ -140,7 +140,7 @@ private:
     void applyTabVisibility(bool allowMixerRebuild = true);
     void persistActiveTab();
     // FRO12: the active tab's DetachablePanelHost -- whichever the tab-strip detach button acts
-    // on (docs/mixer.md §5.9: "the tab-strip button detaches whichever tab is active").
+    // on (docs/mixer/panel.md: "the tab-strip button detaches whichever tab is active").
     synth::ui::DetachablePanelHost& activeHost() noexcept;
     void refreshDetachButton();
 
@@ -157,11 +157,11 @@ private:
     // DetachablePanelHost's class comment on why this is a separate button instance rather than a
     // literal shared one across three different parents).
     juce::DrawableButton detachButton_{"detachActiveTab", juce::DrawableButton::ImageFitted};
-    // FRO15 (docs/mixer.md §5.15): "Add bus" sits on the tab strip and is visible only on the Mixer
+    // FRO15 (docs/mixer/sends-and-buses.md): "Add bus" sits on the tab strip and is visible only on the Mixer
     // tab -- it has no meaning while the Timeline tab is showing.
     juce::TextButton addBusButton_{"+ Bus"};
     // FRO146: sits next to "+ Bus" (same Mixer-tab-only visibility) -- resets every column's clip
-    // readout (docs/mixer.md meters section's "Meter Peak Level" reset action).
+    // readout (docs/mixer/mixer.md meters section's "Meter Peak Level" reset action).
     juce::TextButton resetMetersButton_{"Reset Meters"};
     Tab activeTab_ = Tab::Timeline;
     bool mixerTabEnabled_ = true;

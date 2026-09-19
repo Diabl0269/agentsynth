@@ -7,7 +7,7 @@
 
 namespace synth::ui {
 
-// MixerPlacementController.h -- FRO12 (P9-6, docs/mixer.md §5.9): owns the Mixer placement
+// MixerPlacementController.h -- FRO12 (P9-6, docs/mixer/panel.md): owns the Mixer placement
 // preference (Tab beside the Timeline / Own panel / Window) and moves MixerDockComponent's
 // mixerHost_ (the SAME MixerPanelComponent instance throughout -- DetachablePanelHost's own
 // "never copied" contract) between the three homes it can live in. The ONE collaborator
@@ -28,7 +28,7 @@ namespace synth::ui {
 // "Own panel" ships without the Timeline dock's animated open/close slide or persisted height in
 // this ticket -- a plain visible/hidden strip at a fixed height (an explicit scope cut, matching
 // the plan's own "no resize handle" cut for the same row). The MixerDockComponent/isTimelineVisible
-// rename mentioned in FRO11's own comments stays deferred -- see docs/mixer_implementation.md item 5.
+// rename mentioned in FRO11's own comments stays deferred -- see docs/mixer/panel.md#the-three-placements.
 class MixerPlacementController : public juce::Component {
 public:
     enum class Placement { Tab, OwnPanel, Window };

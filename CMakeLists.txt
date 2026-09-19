@@ -668,7 +668,7 @@ juce_add_binary_data(Assets SOURCES
     # I/O category icon (speaker glyph) — Audio Input/Output library rows and the Audio Output
     # card's identity treatment; both previously fell back to CatUtility.
     assets/icons/cat-io.svg
-    # FRO12 (P9-6, docs/mixer.md §5.9): detach-to-window icon, shared by DetachablePanelHost for
+    # FRO12 (P9-6, docs/mixer/panel.md): detach-to-window icon, shared by DetachablePanelHost for
     # both the Timeline and Mixer panels. BinaryData symbol: actiondetachwindow_svg.
     assets/icons/action-detach-window.svg
 )

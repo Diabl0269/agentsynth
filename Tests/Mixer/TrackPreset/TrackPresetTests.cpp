@@ -1,4 +1,4 @@
-// Concern: FRO13 (P9-7, docs/mixer.md §5.7) -- TrackPresetManager's save/load round trip: a
+// Concern: FRO13 (P9-7, docs/mixer/track-presets.md) -- TrackPresetManager's save/load round trip: a
 // captured track renders identically once reinserted, ids are renumbered so two inserts of the
 // same preset never collide, and a hostile/malformed preset is refused whole (never partially
 // applied) -- the SnippetManager::insertSnippet / ProjectBundle::load pairing's own contract,

@@ -11,8 +11,8 @@
 
 namespace synth {
 
-// T184 (P9-3c, docs/mixer.md §5.2 "main workflow"): BFS forward from `start`, following every
-// outgoing graph edge (audio AND MIDI — an `AudioProcessorGraph::Connection` is always one or the
+// T184 (P9-3c, docs/mixer/mixer.md#channels-follow-audio-not-tracks "main workflow"): BFS forward from `start`,
+// following every outgoing graph edge (audio AND MIDI — an `AudioProcessorGraph::Connection` is always one or the
 // other), to find every point where `start`'s own signal path reaches the output WITHOUT already
 // passing through a `ChannelStripModule`. Each such point is returned as the exact `Connection`
 // that crosses it — the caller (buildChannelForFeeds below) removes those edges and rebuilds a
