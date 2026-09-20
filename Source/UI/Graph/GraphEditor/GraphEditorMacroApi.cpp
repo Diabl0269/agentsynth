@@ -224,6 +224,16 @@ juce::String GraphEditor::changeMacroPortShape(const juce::String& macroId, cons
 void GraphEditor::changeMacroPortColour(const juce::String& macroId, const juce::String& nodeUuid,
                                         std::optional<juce::Colour> newColour) {
     macroController_.changeMacroPortColour(macroId, nodeUuid, newColour);
+
+    // A commit is exactly when any armed live preview must be disarmed, so BOTH: repaint the just-stored
+    // colour on the two surfaces through the shared finder (forced, so a NON-previewed commit - an AI or
+    // programmatic colour - still shows it immediately: the repaint guarantee a preview alone never had),
+    // then clear the armed preview (a real no-op when nothing was previewed, so a previewed-then-committed
+    // port paints only that one new colour). Doing it here, the public commit boundary, means EVERY path
+    // that commits a colour does both - not just the Configure I/O modal - so the jack shows the just-
+    // stored value (which equals the armed preview) and never glitches on commit.
+    repaintMacroPortColourTargets(macroId, nodeUuid);
+    clearMacroPortColourPreview(macroId, nodeUuid);
 }
 
 // Every port on `macroId`'s collapsed card, laid out. Empty if `macroId` doesn't resolve or

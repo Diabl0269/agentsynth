@@ -83,3 +83,102 @@ juce::Colour GraphEditor::categoryPreviewColour(synth::ui::ModuleCategory catego
     return synth::ui::resolveCableBaseColour(synth::ui::CableColourMode::BySourceCategory,
                                              synth::ui::CableSignal::Audio, category, colors, cableColourOverrides);
 }
+
+// Live macro-port jack-colour preview.
+// The colour lives on a macro SET, not the graph, so no listener repaints the two surfaces that draw
+// the jack on their own -- the collapsed card and the port's docked widget. The preview is view-layer
+// only (never MacroPort::colour, so a drag pushes no undo); the single commit on close stores it.
+GraphEditor::MacroPortRecolourTargets GraphEditor::findMacroPortRecolourTargets(const juce::String& macroId,
+                                                                                const juce::String& nodeUuid) {
+    MacroPortRecolourTargets targets;
+
+    // The collapsed card draws EVERY port's jack, so it alone must repaint to show a new colour.
+    targets.card = macroController_.getMacroCard(macroId);
+
+    // The port fronts a docked ModuleComponent; while the macro is collapsed it is hidden, so a repaint is
+    // a harmless no-op until it expands -- its first expand-time paint already reads the colour.
+    const auto nodeId = macroController_.resolveMemberNodeId(nodeUuid);
+    if (nodeId.uid != 0)
+        targets.widget = moduleComponentFor(nodeId);
+
+    return targets;
+}
+
+GraphEditor::MacroPortRecolourTargets GraphEditor::repaintMacroPortColourTargets(const juce::String& macroId,
+                                                                                 const juce::String& nodeUuid) {
+    // A bare canvas repaint reaches the card but not the docked widget; force BOTH — thin over the
+    // shared finder so a preview and a commit can never target different surfaces.
+    auto targets = findMacroPortRecolourTargets(macroId, nodeUuid);
+    if (targets.card != nullptr)
+        targets.card->repaint();
+    if (targets.widget != nullptr)
+        targets.widget->repaint();
+    return targets;
+}
+
+void GraphEditor::previewMacroPortColour(const juce::String& macroId, const juce::String& nodeUuid,
+                                         juce::Colour colour) {
+    // Arm the view-layer preview and repaint only the changed surfaces, so a picker drag touches no
+    // MacroPort::colour. Two guards: (1) the modal FREEZES the graph for its session, so the targets are
+    // stable -- resolve ONCE when this node's session first arms, reuse the cached pair for every later
+    // tick, re-resolving on a new node; the pair holds raw surfaces, safe exactly like a returned one.
+    // (2) setPortColourPreview reports the changed surfaces, so a redundant re-press repaints nothing.
+    auto& session = previewSessionTargets_;
+    if (previewSessionNode_ != nodeUuid) {
+        previewSessionNode_ = nodeUuid;
+        session = findMacroPortRecolourTargets(macroId, nodeUuid);
+    }
+    if (auto* card = session.card) {
+        if (card->setPortColourPreview(nodeUuid, colour))
+            card->repaint();
+    }
+    if (auto* widget = session.widget) {
+        if (widget->setPortColourPreview(colour))
+            widget->repaint();
+    }
+}
+
+void GraphEditor::clearMacroPortColourPreview(const juce::String& macroId, const juce::String& nodeUuid) {
+    // Disarm the preview so the jack falls back to the now-stored colour. clearPortColourPreview reports
+    // whether a surface actually disarmed, so a commit to an unpreviewed port issues no repaint. End this
+    // picker's session so a later arm re-resolves; route the repaint through the same finder.
+    auto targets = findMacroPortRecolourTargets(macroId, nodeUuid);
+    previewSessionNode_.clear();
+    previewSessionTargets_ = MacroPortRecolourTargets{};
+
+    bool cleared = false;
+    if (auto* card = targets.card)
+        cleared |= card->clearPortColourPreview(nodeUuid);
+    if (auto* widget = targets.widget)
+        cleared |= widget->clearPortColourPreview();
+    if (!cleared)
+        return;
+    if (targets.card != nullptr)
+        targets.card->repaint();
+    if (targets.widget != nullptr)
+        targets.widget->repaint();
+}
+
+// Teardown backstop for a picker abandoned without committing: its CallOutBox can outlive the dialog,
+// which the commit path's own clear can't reach. Disarm whatever THIS session armed, by the node/targets
+// it cached -- no node arg; a no-op when nothing is armed.
+void GraphEditor::cancelArmedMacroPortColourPreview() {
+    if (previewSessionNode_.isEmpty())
+        return;
+    auto node = previewSessionNode_;
+    auto targets = previewSessionTargets_;
+    previewSessionNode_.clear();
+    previewSessionTargets_ = MacroPortRecolourTargets{};
+
+    bool cleared = false;
+    if (auto* card = targets.card)
+        cleared |= card->clearPortColourPreview(node);
+    if (auto* widget = targets.widget)
+        cleared |= widget->clearPortColourPreview();
+    if (!cleared)
+        return;
+    if (targets.card != nullptr)
+        targets.card->repaint();
+    if (targets.widget != nullptr)
+        targets.widget->repaint();
+}

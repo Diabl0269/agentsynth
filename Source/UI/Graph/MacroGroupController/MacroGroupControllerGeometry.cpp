@@ -293,6 +293,10 @@ MacroGroupController::macroCardPortForPoint(const juce::String& macroId, juce::P
     return std::nullopt;
 }
 
+MacroCardComponent* MacroGroupController::getMacroCard(const juce::String& macroId) {
+    return getMacroCardForTest(macroId);
+}
+
 MacroCardComponent* MacroGroupController::getMacroCardForTest(const juce::String& macroId) {
     for (auto* card : host_.macroCards())
         if (card != nullptr && card->getMacroId() == macroId)

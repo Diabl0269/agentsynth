@@ -194,6 +194,8 @@ public:
     juce::Rectangle<int> macroCollapseButtonBounds(const juce::String& macroId) const;
     juce::String macroCollapseButtonAt(juce::Point<int> canvasPos) const;
     MacroCardComponent* getMacroCardForTest(const juce::String& macroId);
+    // Non-test-named twin of getMacroCardForTest -- the recolour finder runs on a real user path, not headless.
+    MacroCardComponent* getMacroCard(const juce::String& macroId);
     std::vector<MacroCardPort> macroCardPortLayout(const juce::String& macroId) const;
     std::optional<MacroCardPort> macroCardPortForPoint(const juce::String& macroId,
                                                        juce::Point<int> cardLocalPos) const;

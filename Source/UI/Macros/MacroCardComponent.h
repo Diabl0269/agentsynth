@@ -6,6 +6,8 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <optional>
+#include <utility>
 #include <vector>
 
 class GraphEditor; // Forward declaration
@@ -81,6 +83,14 @@ public:
             hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
     }
 
+    // Live jack-colour preview -- per-port, idempotent bool set/clear so a picker tick repaints only
+    // the changed port (view-layer transient, never MacroPort::colour).
+    bool setPortColourPreview(const juce::String& nodeUuid, juce::Colour c);
+    bool clearPortColourPreview(const juce::String& nodeUuid);
+    bool hasPortColourPreviewForTest(const juce::String& nodeUuid) const;
+    juce::Colour resolvePortJackColour(const juce::String& nodeUuid, const std::optional<juce::Colour>& stored,
+                                       juce::Colour kindTint) const;
+
 private:
     /** `priorSelection` (T138): whatever was selected right before mouseDown's own reselect —
      *  see GraphEditor::buildMacroMenu's addCandidateSelection comment for why this must be
@@ -123,6 +133,9 @@ private:
     bool bodyDragActive = false;
 
     std::unique_ptr<juce::TextEditor> nameEditor;
+
+    // Live-jack-colour preview for the single open picker's port -- one optional entry,
+    std::optional<std::pair<juce::String, juce::Colour>> portColourPreview_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MacroCardComponent)
 };

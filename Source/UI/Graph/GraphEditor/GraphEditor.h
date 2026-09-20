@@ -382,6 +382,23 @@ public:
     void changeMacroPortColour(const juce::String& macroId, const juce::String& nodeUuid,
                                std::optional<juce::Colour> newColour);
 
+    // Per-port jack colour: neither paint surface (the collapsed card, the port's docked widget) repaints
+    // on its own, so these force BOTH. A live picker previews view-layer-only; the commit disarms it.
+    struct MacroPortRecolourTargets { // card/widget null when the macro is collapsed/absent
+        MacroCardComponent* card = nullptr;
+        ModuleComponent* widget = nullptr;
+    };
+    // Repaint BOTH surfaces; return the (possibly-null) pair for a headless reach check -- commit + repaint.
+    MacroPortRecolourTargets repaintMacroPortColourTargets(const juce::String& macroId, const juce::String& nodeUuid);
+    // Arm the view-layer-only PREVIEW (no stored colour); idempotent -- an unchanged tick repaints nothing.
+    void previewMacroPortColour(const juce::String& macroId, const juce::String& nodeUuid, juce::Colour colour);
+    // Disarm the armed preview so the jack falls back to stored; a real no-op (no repaint) when unarmed.
+    void clearMacroPortColourPreview(const juce::String& macroId, const juce::String& nodeUuid);
+    // Teardown BACKSTOP for a picker abandoned with no commit (its CallOutBox outlives the dialog).
+    void cancelArmedMacroPortColourPreview();
+    // The shared lookup every path runs through, so a preview and its commit can never diverge.
+    MacroPortRecolourTargets findMacroPortRecolourTargets(const juce::String& macroId, const juce::String& nodeUuid);
+
     void promptConfigureMacroIO(const juce::String& macroId);
 
     /** Quick "Rename Port" prompt -- the one-name alternative to Configure I/O. */
@@ -803,6 +820,10 @@ private:
     SmartConnectionEngine smartConnections_{*this};
     MacroGroupController macroController_{*this};
     GraphDragDropController dragDropController_{*this};
+    // The open picker's armed preview: cached resolve + the node that armed it, so
+    // cancelArmedMacroPortColourPreview() can tear an aborted picker down.
+    MacroPortRecolourTargets previewSessionTargets_;
+    juce::String previewSessionNode_;
 
     juce::AudioProcessorGraph::NodeID draggingAttenuverterNodeId;
     float attenDragStartValue = 0.0f;
