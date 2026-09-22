@@ -52,7 +52,9 @@ break in ways that look exactly like a healthy build, just slower — which is w
    Objective-C++ as its own language, so for a time every `.mm` compile bypassed ccache: **103
    translation units per macOS build**, because JUCE ships each of its modules as a single ObjC++
    unity file and each target compiles its own copy (Core, AppUI, AgentSynth, the plugin, `Tests`,
-   both AI harnesses). Those units never change, and they were still rebuilt cold on every run —
+   both AI harnesses — the macOS and Windows jobs stopped building the harnesses in FRO248, so that
+   per-target multiplier is smaller today). Those units never change, and they were still rebuilt
+   cold on every run —
    roughly 12 minutes of a 12 min 45 s macOS job, ending in a near-serial tail of 20–35 s
    `juce_gui_basics` / `juce_audio_processors` compiles while the rest of the build had finished. It
    survived four earlier cache fixes and the health check itself because it does not look like a

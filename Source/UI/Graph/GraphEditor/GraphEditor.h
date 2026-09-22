@@ -5,8 +5,6 @@
 #include "MacroSet.h"
 #include "Modules/MacroPortShape.h"
 #include "PatchDocument.h"
-#include "Plugin/Hosting/HostedPluginBackend.h"
-#include "UI/Chrome/ColourPickerPopup.h"
 #include "UI/Graph/CableColour.h"
 #include "UI/Graph/GraphCanvasHost.h"
 #include "UI/Graph/GraphDragDropController/GraphDragDropController.h"
@@ -17,7 +15,6 @@
 #include "UI/Graph/SmartConnectionEngine/SmartConnectionEngine.h"
 #include "UI/Layout/LayoutUtil.h"
 #include "UI/Layout/UIAnimation.h"
-#include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
 #include <memory>
@@ -26,6 +23,9 @@
 
 class ModuleComponent;
 class MacroCardComponent;
+namespace synth::ui {
+class ColourPickerPopup; // a unique_ptr return type only; 89 files include this header
+}
 #include "UI/Graph/MinimapComponent.h"
 #include "UI/Graph/ModMatrixComponent.h"
 

@@ -34,8 +34,8 @@
 #      check-function-sizes, check-header-comments, check-docs as of this writing, globbed so a
 #      newly added one is picked up automatically. check-nonascii-literals.test.sh's own last case
 #      scans the real Source/ tree, so this also covers the Lint job's ASCII-literal gate.
-#   8. Configure (-DENABLE_TESTS=ON -DENABLE_AI_HARNESS=ON, Release, matching the macOS/Windows
-#      build-and-test jobs) and build EVERY target those jobs build with a plain
+#   8. Configure (-DENABLE_TESTS=ON -DENABLE_AI_HARNESS=ON, Release) and build EVERY target the
+#      macOS/Windows build-and-test jobs build with a plain
 #      `cmake --build` -- Core, AppUI, AgentSynth, AgentSynthPlugin, Tests -- into
 #      build-ci-local/. ccache and Ninja are picked up automatically when present (see the
 #      top of CMakeLists.txt), so repeat runs are incremental.
@@ -185,6 +185,9 @@ done
 # --- 8. Configure + build every target the CI build-and-test jobs build -----------------------
 step "Configure ($BUILD_DIR)"
 
+# ENABLE_AI_HARNESS is ON here even though the macOS/Windows CI jobs no longer set it (only the
+# Linux job does, for compile coverage). This is the pre-push gate, so catching a harness that
+# stopped compiling BEFORE the push is worth the extra targets; ccache makes repeat runs cheap.
 cmake_args=(-B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=ON -DENABLE_AI_HARNESS=ON)
 # Only pick a generator on the FIRST configure. Once build-ci-local/CMakeCache.txt exists, CMake
 # is locked to whatever generator created it -- re-passing -G Ninja against an existing Makefiles

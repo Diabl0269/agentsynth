@@ -33,7 +33,7 @@ Fast checks first, so a lint failure does not wait on a full build.
    itself, so this also covers the Lint job's
    [ASCII-literal gate](ascii-literal-guard.md) on live code, not just the checker's fixtures.
 8. Configure `build-ci-local/` with `-DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=ON
-   -DENABLE_AI_HARNESS=ON` (matching the macOS/Windows build-and-test jobs) and build with a plain
+   -DENABLE_AI_HARNESS=ON` and build with a plain
    `cmake --build` — every target those jobs build (`Core`, `AppUI`, `AgentSynth`,
    `AgentSynthPlugin`, `Tests`), the same way a missing `CMakeLists.txt` entry shows up in CI.
    ccache and Ninja are picked up automatically when installed (the `find_program(CCACHE_PROGRAM
