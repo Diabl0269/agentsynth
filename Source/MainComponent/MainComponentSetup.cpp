@@ -375,6 +375,28 @@ void MainComponent::wireMidiRemoteEngine() {
         sources.push_back(synth::midi::hostSourceKey());
     remoteEngine.setSources(sources);
 
+    // FRO133: the mixer panel and transport bar are plain MainComponent members, already fully
+    // constructed by the time any constructor-body wiring function runs (member-init order, not
+    // this function's own call order) -- so it's safe to hand MidiLearnController their addresses
+    // here regardless of whether mixerDock/timelinePanel have run their own configure() yet. See
+    // MidiLearnController::setMixerPanel()/setTransportBar()'s own doc comment for why this exists:
+    // GraphEditor::setMidiLearnArmed() only reaches the canvas card, not the mixer column or the
+    // transport bar's own breathing outline for the SAME/an action target.
+    midiLearnController_.setMixerPanel(&mixerDock.getMixerPanel());
+    midiLearnController_.setTransportBar(&timelinePanel.getTransportBar());
+
+    // Transport-bar right-click MIDI Learn (FRO133) -- action targets, so these three forward to
+    // MidiLearnController's action-keyed overloads rather than GraphEditor's node-keyed ones (see
+    // this function's own graphEditor.onMidiLearnRequested sibling in wireGraphEditorCallbacks()).
+    auto& transportBar = timelinePanel.getTransportBar();
+    transportBar.onQueryMidiMappingsForActions = [this] { return midiLearnController_.queryActionMappings(); };
+    transportBar.onMidiLearnRequested = [this](const juce::String& actionId) {
+        midiLearnController_.armAction(actionId);
+    };
+    transportBar.onMidiForgetRequested = [this](const juce::String& actionId) {
+        midiLearnController_.forgetAction(actionId);
+    };
+
     // Installed last: nothing may reach the sink before it has profiles/assignments/sources.
     audioEngine.setRemoteMessageSink(&remoteEngine);
 }

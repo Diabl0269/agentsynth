@@ -145,6 +145,11 @@ public:
      *  column's own clip readout -- resets every strip/Master readout to "-inf", not clipped. */
     void resetAllMeterReadouts();
 
+    /** FRO133: no-op if no visible column has `nodeId`. */
+    void setMidiLearnArmed(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId);
+    /** Idempotent -- a no-op if nothing is armed. */
+    void clearMidiLearnArmed();
+
     bool keyPressed(const juce::KeyPress& key) override;
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
@@ -212,6 +217,8 @@ private:
 
     std::vector<ColumnEntry> columnEntries_;
     int focusedColumnIndex_ = -1;
+
+    juce::AudioProcessorGraph::NodeID midiLearnArmedNodeId_; // FRO133; invalid = nothing armed
 
     /** FRO146: juce::Time::getMillisecondCounterHiRes() as of the last refreshMeters() call, or 0.0
      *  before the first one -- lets refreshMeters() measure real elapsed time for the ballistics

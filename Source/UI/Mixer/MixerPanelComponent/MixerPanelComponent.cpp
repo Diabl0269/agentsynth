@@ -46,7 +46,7 @@ void MixerPanelComponent::configure(juce::AudioProcessorGraph& graph, synth::Tim
             onMakeChannelForNode(source);
     };
     masterColumn_ = std::make_unique<MixerMasterColumn>();
-    masterColumn_->configure(graph, undoManager);
+    masterColumn_->configure(graph, undoManager, graphEditor);
     masterColumn_->onResetAllMetersRequested = [this] { resetAllMeterReadouts(); };
 }
 
@@ -233,6 +233,24 @@ bool MixerPanelComponent::revealColumn(juce::AudioProcessorGraph::NodeID stripId
         return false;
     viewport_.setViewPosition(target->getX(), 0);
     return true;
+}
+
+void MixerPanelComponent::setMidiLearnArmed(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
+    midiLearnArmedNodeId_ = nodeId;
+    for (auto& column : stripColumns_)
+        if (column != nullptr)
+            column->setMidiLearnArmedParam(column->getNodeId() == nodeId ? paramId : juce::String());
+    if (masterColumn_ != nullptr)
+        masterColumn_->setMidiLearnArmedParam(masterColumn_->getNodeId() == nodeId ? paramId : juce::String());
+}
+
+void MixerPanelComponent::clearMidiLearnArmed() {
+    for (auto& column : stripColumns_)
+        if (column != nullptr && column->getNodeId() == midiLearnArmedNodeId_)
+            column->setMidiLearnArmedParam({});
+    if (masterColumn_ != nullptr && masterColumn_->getNodeId() == midiLearnArmedNodeId_)
+        masterColumn_->setMidiLearnArmedParam({});
+    midiLearnArmedNodeId_ = {};
 }
 
 namespace {
