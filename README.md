@@ -44,6 +44,10 @@ Agent Synth uses a hidden **Attenuverter** node architecture for modulation rout
 - **AI Sound Designer**: Describe a sound in natural language and the AI generates the complete patch (modules, parameters, and connections).
 - **One-Click Apply**: Instantly apply AI-generated patches to the graph editor.
 
+## Support
+
+Agent Synth is free and open source, built by one person in the evenings. If it has earned a place in your setup, you can buy me a coffee (one-off or monthly) at https://agentsynth.app/support. No pressure, it stays free either way.
+
 ## Building
 
 Agent Synth uses CMake for its build system.
