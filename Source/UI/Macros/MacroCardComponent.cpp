@@ -94,7 +94,8 @@ void MacroCardComponent::paint(juce::Graphics& g) {
         for (const auto& port : owner.macroCardPortLayout(macro->id)) {
             const juce::Colour kindTint =
                 port.kind == synth::MacroPortKind::Midi ? themeColors.audioWire : themeColors.accent;
-            g.setColour(port.colour.value_or(kindTint));
+            // An armed preview is the jack's colour; else the stored user colour, else the kind tint.
+            g.setColour(resolvePortJackColour(port.nodeUuid, port.colour, kindTint));
             g.fillEllipse((float)port.jackPos.x - 5.0f, (float)port.jackPos.y - 5.0f, 10.0f, 10.0f);
 
             // Port name (founder-review fix F2, item 3/docs/macros/ports.md#cable-rendering-across-the-boundary: "it's
@@ -369,4 +370,42 @@ juce::String MacroCardComponent::getTooltip() {
         shown.add("+" + juce::String(names.size() - kMaxNamesShown) + " more");
 
     return shown.joinIntoString("\n");
+}
+
+// ---- live jack-colour preview (view-layer only; never the stored MacroPort::colour) -------
+//
+// Per-port, because one card draws EVERY port's jack at once: the armed entry is keyed by nodeUuid, so
+// previewing one port cannot recolour its siblings. Both set/clear return whether the card actually
+// moved, so GraphEditor::previewMacroPortColour can skip the repaint on an unchanged tick (the picker
+// re-fires the same colour on commit) and clearMacroPortColourPreview stays a real no-op when the
+// committed port was never previewed. Transient view state only -- it is never written back to
+// MacroPort::colour, so dragging the selector pushes no undo step.
+bool MacroCardComponent::setPortColourPreview(const juce::String& nodeUuid, juce::Colour c) {
+    // Idempotent -- re-arming the same node with the same colour changes nothing, so repaint nothing.
+    if (portColourPreview_ && portColourPreview_->first == nodeUuid && portColourPreview_->second == c)
+        return false;
+    portColourPreview_ = {nodeUuid, c};
+    return true;
+}
+
+bool MacroCardComponent::clearPortColourPreview(const juce::String& nodeUuid) {
+    // Only clear when this entry matches the node told to clear, so a stale clear for a different
+    // port (one the picker no longer previews) does not wipe a fresh preview.
+    if (!portColourPreview_ || portColourPreview_->first != nodeUuid)
+        return false;
+    portColourPreview_.reset();
+    return true;
+}
+
+bool MacroCardComponent::hasPortColourPreviewForTest(const juce::String& nodeUuid) const {
+    return portColourPreview_.has_value() && portColourPreview_->first == nodeUuid;
+}
+
+juce::Colour MacroCardComponent::resolvePortJackColour(const juce::String& nodeUuid,
+                                                       const std::optional<juce::Colour>& stored,
+                                                       juce::Colour kindTint) const {
+    // Mirrors paint()'s branch: a preview for this node wins, else the stored colour, else the kind tint.
+    if (portColourPreview_.has_value() && portColourPreview_->first == nodeUuid)
+        return portColourPreview_->second;
+    return stored.value_or(kindTint);
 }

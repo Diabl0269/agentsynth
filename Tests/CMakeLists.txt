@@ -1,13 +1,13 @@
 enable_testing()
 
 include(FetchContent)
-# URL pinned in cmake/DependencyVersions.cmake (included by the top-level CMakeLists) so the
-# CI build/_deps cache key tracks the pin and nothing else.
+#URL pinned in cmake / DependencyVersions.cmake(included by the top - level CMakeLists) so the
+#CI build / _deps cache key tracks the pin and nothing else.
 FetchContent_Declare(
   googletest
   URL ${SYNTH_GOOGLETEST_URL}
 )
-# For Windows: Prevent overriding the parent project's compiler/linker settings
+#For Windows : Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
@@ -322,6 +322,7 @@ add_executable(Tests
     Macros/MacroAutoPort/MacroAutoPortDeleteTests.cpp
     Macros/MacroCardJackTests.cpp
     Macros/MacroPortWidgetTests.cpp
+    Macros/MacroPortWidgetColourTests.cpp
     Macros/MacroBypassMuteTests.cpp
     UI/Graph/ClipboardTests.cpp
     UI/Layout/PanelAnimationAndLoadingTests.cpp
@@ -430,7 +431,7 @@ add_executable(Tests
     App/BrandingTests.cpp
     ../Source/ShortcutManager/ShortcutManagerActionNames.cpp
     ../Source/MidiRemote/ControllerProfileStore.cpp
-    # Source/MidiRemote/RemoteEngine/*.cpp is NOT listed here on purpose: those five units are
+#Source / MidiRemote / RemoteEngine/*.cpp is NOT listed here on purpose: those five units are
     # registered in the root CMakeLists.txt (Core), same as RemoteModel.h/RemoteModelJson.cpp right
     # above them there, because Core's own AudioEngineMidi.cpp/AudioEngineHostMode.cpp call into
     # synth::midi::RemoteMessageSink/hostSourceKey(). Tests links Core directly (see the

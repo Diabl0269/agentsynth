@@ -332,8 +332,8 @@ void ModuleComponent::paintMacroPortWidget(juce::Graphics& g) {
     // paints its dot in THAT colour; otherwise the kind tint (audioWire for MIDI, accent for
     // AudioCV) — the same fallback the collapsed card's MacroCardComponent::paint uses, so an
     // expanded docked widget and a collapsed card read a port's jack identically.
-    const juce::Colour midiJackColour = resolveMacroPortJackColour(ownership.port, audioJackColour);
-    const juce::Colour cvJackColour = resolveMacroPortJackColour(ownership.port, jackAccentColour);
+    const juce::Colour midiJackColour = effectiveMacroPortJackColour(ownership.port, audioJackColour);
+    const juce::Colour cvJackColour = effectiveMacroPortJackColour(ownership.port, jackAccentColour);
 
     if (module->acceptsMidi() || module->producesMidi()) {
         if (module->acceptsMidi()) {
@@ -380,6 +380,14 @@ void ModuleComponent::paintMacroPortWidget(juce::Graphics& g) {
     // the test named above), so in practice this is a safety net, not the common case.
     g.drawFittedText(name, textArea,
                      boundaryIsInput ? juce::Justification::centredLeft : juce::Justification::centredRight, 1);
+}
+
+juce::Colour ModuleComponent::effectiveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint) const {
+    // The armed preview wins (one picked colour drives both a MIDI and a CV jack); else the stored
+    // colour, else the kind tint -- exactly what resolveMacroPortJackColour yields.
+    if (portColourPreview_.has_value())
+        return *portColourPreview_;
+    return resolveMacroPortJackColour(port, kindTint);
 }
 
 juce::Colour ModuleComponent::resolveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint) {
