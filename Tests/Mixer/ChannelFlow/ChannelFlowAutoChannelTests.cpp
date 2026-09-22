@@ -414,7 +414,7 @@ TEST_F(ChannelFlowTest, AutoChannelOnConnect_AlreadyChanneledInstrumentGetsNoNew
     // Expand: the instrument's own ModuleComponent must be a real, visible drop target for the
     // direct-jack drag below (a collapsed macro's hidden members are not "on the canvas" —
     // endConnectionDrag's own comment).
-    mc.getGraphEditor().setMacroCollapsed(macroId, false);
+    mc.getGraphEditor().getMacroController().setMacroCollapsed(macroId, false);
 
     // A second, independent MIDI track — added directly (not through createTrackInNode, whose own
     // "exactly one instrument" auto-wire would otherwise wire it for us and never exercise this
@@ -474,9 +474,11 @@ TEST_F(ChannelFlowTest, AutoChannelOnConnect_NewChainNodesJoinTheInstrumentsExis
     // that's already someone's macro member, unrelated to a channel, is a realistic starting state.
     // Track In stays OUTSIDE this macro, which is exactly what makes the coming drag a
     // boundary-crossing one.
-    const auto macroId = mc.getGraphEditor().addMacroForMembers({instrumentUuid}, "TestMacro", {600, 600});
+    const auto macroId =
+        mc.getGraphEditor().getMacroController().addMacroForMembers({instrumentUuid}, "TestMacro", {600, 600});
     ASSERT_FALSE(macroId.isEmpty());
-    mc.getGraphEditor().setMacroCollapsed(macroId, false); // expand: instrument becomes visible again
+    mc.getGraphEditor().getMacroController().setMacroCollapsed(macroId,
+                                                               false); // expand: instrument becomes visible again
 
     auto* trackInComp = compForCFT(mc.getGraphEditor(), trackIn->nodeID);
     auto* instrumentComp = compForCFT(mc.getGraphEditor(), instrument->nodeID);

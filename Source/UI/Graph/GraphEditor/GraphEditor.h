@@ -124,7 +124,6 @@ public:
     // types below are aliased so `GraphEditor::X` keeps compiling for every existing caller.
     // Full contracts live on MacroGroupController.h.
     using MacroPortOwner = MacroGroupController::MacroPortOwner;
-    MacroPortOwner macroPortOwnerFor(juce::AudioProcessorGraph::NodeID nodeId) const;
 
     // Layout / anti-overlap
     juce::Point<int> resolvePlacement(juce::Point<int> desired, int w, int h,
@@ -209,11 +208,6 @@ public:
     // ---- Macros ----
     // See MacroGroupController.h's "Grouping / membership / collapse" section for what a Macro is
     // and the collapsed-macro selection/drag/delete model.
-    juce::String groupSelectionIntoMacro(bool autoCreatePorts = false);
-
-    /** NON-RECORDING: the caller owns the surrounding undo transaction. */
-    juce::String addMacroForMembers(const std::vector<juce::String>& memberUuids, const juce::String& name,
-                                    juce::Point<int> origin);
 
     // ---- Macro auto-port preference (docs/macros/auto-ports.md) ----
     // See GraphEditorMacroPrompts.cpp's requestGroupSelectionIntoMacro() for the tri-state/
@@ -223,8 +217,6 @@ public:
     void setMacroAutoPortPreference(MacroAutoPortPreference pref) noexcept { macroAutoPortPreference_ = pref; }
     MacroAutoPortPreference getMacroAutoPortPreference() const noexcept { return macroAutoPortPreference_; }
 
-    bool selectionHasCrossingMacroCable() const;
-
     /** Cmd+G / right-click "Create Macro" entry point; may show the auto-port modal. */
     void requestGroupSelectionIntoMacro() override;
 
@@ -232,30 +224,19 @@ public:
      *  production. */
     std::function<void(std::function<void(bool createPorts, bool remember)> respond)> macroAutoPortModalForTest;
 
-    void ungroupSelection();
     /** The controller itself, for the app to install its hooks on. */
     MacroGroupController& getMacroController() noexcept { return macroController_; }
-
-    void addSelectionToMacro(const juce::String& macroId, const std::vector<juce::String>& memberUuids);
-
-    void removeSelectionFromMacro(const juce::String& macroId, const std::vector<juce::String>& memberUuids);
-
-    void removeNodeFromMacro(juce::AudioProcessorGraph::NodeID nodeId);
-
-    void toggleSelectionMacrosCollapsed();
-
-    void groupOrToggleSelectionMacros();
-
-    void selectMacro(const juce::String& macroId, bool additive);
-
-    bool isMacroSelected(const juce::String& macroId) const;
-
-    const synth::Macro* macroForNode(juce::AudioProcessorGraph::NodeID nodeId) const;
-
-    void setMacroCollapsed(const juce::String& macroId, bool collapsed);
-
-    void renameMacro(const juce::String& macroId, const juce::String& newName);
-    void setMacroColour(const juce::String& macroId, juce::Colour colour);
+    /** Const overload — FRO254: many migrated call sites reach the controller from a const
+     *  GraphEditor method (e.g. a read-only predicate), which the non-const overload can't serve. */
+    const MacroGroupController& getMacroController() const noexcept { return macroController_; }
+    /** The controller itself, for the app to install its hooks on. */
+    SmartConnectionEngine& getSmartConnections() noexcept { return smartConnections_; }
+    /** Const overload — see getMacroController()'s const overload above for why. */
+    const SmartConnectionEngine& getSmartConnections() const noexcept { return smartConnections_; }
+    /** The controller itself, for the app to install its hooks on. */
+    GraphDragDropController& getDragDropController() noexcept { return dragDropController_; }
+    /** Const overload — see getMacroController()'s const overload above for why. */
+    const GraphDragDropController& getDragDropController() const noexcept { return dragDropController_; }
 
     /** Async rename prompt for a macro with no card (e.g. the expanded hull menu). */
     void promptRenameMacro(const juce::String& macroId);
@@ -271,35 +252,12 @@ public:
      *  gets — mirrors TimelineRulerComponent::setPropertiesFile exactly. */
     void setPropertiesFile(juce::PropertiesFile* props) noexcept { propertiesFile_ = props; }
 
-    void deleteMacroAndMembers(const juce::String& macroId);
-
     // ---- Macro bypass/mute (docs/macros/ports.md#bypass-and-mute) ----
     //
     // "Bypass macro" / "Mute macro" are FAN-OUT COMMANDS over a macro's members, not a
     // macro-level reinterpretation of the contract — a macro has no processBlock and no
     // bypass/mute state of its own. See MacroGroupController.h for the full fan-out contract.
     using MacroToggleState = MacroGroupController::MacroToggleState;
-    MacroToggleState macroBypassState(const juce::String& macroId) const;
-    MacroToggleState macroMuteState(const juce::String& macroId) const;
-
-    void setMacroBypassed(const juce::String& macroId, bool bypassed);
-    void setMacroMuted(const juce::String& macroId, bool muted);
-    void toggleMacroBypassed(const juce::String& macroId);
-    void toggleMacroMuted(const juce::String& macroId);
-
-    juce::Rectangle<int> macroHullBounds(const juce::String& macroId) const;
-
-    juce::String macroHullAt(juce::Point<int> canvasPos) const;
-
-    juce::Rectangle<int> macroChipBounds(const juce::String& macroId) const;
-
-    juce::String macroChipAt(juce::Point<int> canvasPos) const;
-
-    juce::Rectangle<int> macroCollapseButtonBounds(const juce::String& macroId) const;
-
-    juce::String macroCollapseButtonAt(juce::Point<int> canvasPos) const;
-
-    MacroCardComponent* getMacroCardForTest(const juce::String& macroId);
 
     std::unique_ptr<synth::ui::ColourPickerPopup> createMacroColourPickerForTest(const juce::String& macroId);
 
@@ -311,9 +269,6 @@ public:
     /** Live bounds + colour category for the currently-resolvable MODULE members of `macroId`
      *  (a port node is excluded). See MacroGroupController::macroMemberPreviews. */
     using MacroMemberPreview = MacroGroupController::MacroMemberPreview;
-    std::vector<MacroMemberPreview> macroMemberPreviews(const juce::String& macroId) const;
-
-    juce::StringArray macroMemberNames(const juce::String& macroId) const;
 
     juce::Colour categoryPreviewColour(synth::ui::ModuleCategory category) const;
 
@@ -335,22 +290,11 @@ public:
     // "Add Output"/"Rename"/"Reorder" menu actions. Every entry point below is a single
     // recordGraphAndMacroChange transaction, so add/remove/rename/reorder and a shape change are
     // each exactly one undo step.
-    juce::String addMacroPort(const juce::String& macroId, bool isInput, synth::MacroPortKind kind,
-                              MacroPortShape shape, int voiceCount, const juce::String& portName);
 
-    void removeMacroPort(const juce::String& macroId, const juce::String& nodeUuid);
-
-    void deleteMacroPortNode(const juce::String& macroId, const juce::String& nodeUuid);
-
-    void renameMacroPort(const juce::String& macroId, const juce::String& nodeUuid, const juce::String& newName);
-
-    void moveMacroPortOrder(const juce::String& macroId, const juce::String& nodeUuid, bool moveUp);
-
-    void reorderMacroPortToIndex(const juce::String& macroId, const juce::String& nodeUuid, int newIndexInGroup);
-
-    juce::String changeMacroPortShape(const juce::String& macroId, const juce::String& nodeUuid,
-                                      MacroPortShape newShape, int newVoiceCount);
-
+    // FRO254 exception: NOT a pure forwarder (unlike the rest of this file's former macro API) —
+    // its body does real work beyond the pass-through call (repaintMacroPortColourTargets() +
+    // clearMacroPortColourPreview() below), so it stays on GraphEditor rather than moving to
+    // MacroGroupController::changeMacroPortColour, which callers must not call directly.
     void changeMacroPortColour(const juce::String& macroId, const juce::String& nodeUuid,
                                std::optional<juce::Colour> newColour);
 
@@ -379,11 +323,6 @@ public:
     // ---- Macro card jacks (docs/macros/ports.md#cable-rendering-across-the-boundary) ----
     // See MacroGroupController::MacroCardPort for the full on-card-jack layout contract.
     using MacroCardPort = MacroGroupController::MacroCardPort;
-
-    std::vector<MacroCardPort> macroCardPortLayout(const juce::String& macroId) const;
-
-    std::optional<MacroCardPort> macroCardPortForPoint(const juce::String& macroId,
-                                                       juce::Point<int> cardLocalPos) const;
 
     // ---- Snippets ----
     juce::var extractSelectionSnippet(const juce::String& name);
@@ -431,19 +370,6 @@ public:
     bool pasteClipboardAt(juce::Point<int> canvasPos);
 
     bool duplicateSelection();
-
-    // Drag-preview (grid + landing ghost shown during a module drag). Bodies live on
-    // GraphDragDropController; these stay one-line forwarders so every existing caller
-    // (ModuleComponent, tests) keeps compiling unchanged.
-    void beginDragPreview(int w, int h, juce::AudioProcessorGraph::NodeID selfId);
-    void updateDragPreview(juce::Point<int> desiredTopLeftCanvas);
-    void endDragPreview();
-
-    // Test accessors for drag-preview state
-    bool isDragPreviewActive() const;
-    juce::Rectangle<int> getDragPreviewGhost() const;
-
-    const std::vector<GraphDragDropController::AlignmentGuide>& getAlignmentGuides() const;
 
     // Alignment guides toggle (UI Phase 7 - Item 4)
     void setAlignmentGuidesEnabled(bool enabled) { alignmentGuidesEnabled = enabled; }
@@ -553,13 +479,6 @@ public:
     using SmartConnectionMode = SmartConnectionEngine::SmartConnectionMode;
     using SmartSuggestion = SmartConnectionEngine::SmartSuggestion;
 
-    void setSmartConnectionMode(SmartConnectionMode mode);
-    SmartConnectionMode getSmartConnectionMode() const noexcept;
-
-    /** Test override for the insert-modifier read; unset means read the real keyboard. */
-    void setInsertModifierOverrideForTests(std::optional<bool> down);
-    bool isInsertModifierDown() const;
-
     /** Persist / restore helpers (Preferences tab + MainComponent launch restore). */
     static SmartConnectionMode smartConnectionModeFromString(const juce::String& s);
     static juce::String smartConnectionModeToString(SmartConnectionMode mode);
@@ -567,13 +486,12 @@ public:
     void connectPorts(juce::AudioProcessorGraph::NodeID srcId, int srcJack, juce::AudioProcessorGraph::NodeID dstId,
                       int dstJack, bool isMidi, bool recordUndo = true) override;
 
-    // Test accessors
-    int getSmartSuggestionCount() const noexcept;
-    const std::vector<SmartSuggestion>& getSmartSuggestions() const noexcept;
     bool nodeHasCables(juce::AudioProcessorGraph::NodeID nodeId) const;
     /** Runs just the drag tick's modifier re-sample, so a test can exercise a press/release that
      *  happens without any mouse movement without needing a real 30 Hz timer. */
-    void pumpDragModifierTickForTests() { refreshSuggestionsIfInsertModifierChanged(); }
+    void pumpDragModifierTickForTests() {
+        smartConnections_.refreshSuggestionsIfInsertModifierChanged(dragDropController_.buildDragPreviewState());
+    }
 
     /** Test seam: exposes the private GraphCanvasHost base for a test driving a
      *  SmartConnectionEngine of its own directly. Production code never calls this. */
@@ -581,10 +499,6 @@ public:
 
     static juce::Point<int> estimatePortCenter(juce::AudioProcessor* proc, juce::Rectangle<int> bounds, int jack,
                                                bool isInput, bool isMidi);
-
-    /** Audio-jack occupancy, for asserting that a reroute left nothing dangling. */
-    bool isInputJackFreeForTests(juce::AudioProcessorGraph::NodeID nodeId, int jack) const;
-    bool isOutputJackFreeForTests(juce::AudioProcessorGraph::NodeID nodeId, int jack) const;
 
     // ---- Onboarding helpers (headless-testable) ----
     /** True when the canvas has no modules. nodeCount is the number of non-Attenuverter nodes
@@ -727,15 +641,9 @@ private:
     bool dragSourceIsMidi = false;
     juce::Point<int> dragCurrentPos;
 
-    juce::AudioProcessorGraph::NodeID getDragPreviewSelfId() const;
-
     void refreshSmartSuggestions() override;
-    void applySmartSuggestions(juce::AudioProcessorGraph::NodeID ghostNodeId, bool recordUndo);
     void clearSmartSuggestions() override;
     void applyDefaultDualIOForNewModule(juce::AudioProcessor& processor, const juce::String& moduleType) const override;
-    void refreshSuggestionsIfInsertModifierChanged();
-
-    SmartConnectionEngine::DragPreviewState buildDragPreviewState() const;
 
     // ---- GraphCanvasHost (private: only code holding a GraphCanvasHost& can call these) ----
     juce::AudioProcessorGraph& graph() override { return audioEngine.getGraph(); }

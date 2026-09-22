@@ -59,7 +59,7 @@ juce::MouseEvent realMouseEvent(juce::Component& eventComp, juce::Point<int> loc
 /** Asserts every GraphEditor-owned drag/marquee flag is at rest — the five flags FRO19's ticket
  *  says "live in GraphEditor and have few reset sites", plus FRO40's macro drag-candidate id. */
 void expectNoStuckDragState(GraphEditor& editor, const char* context) {
-    EXPECT_FALSE(editor.isDragPreviewActive()) << context << ": drag-preview ghost left stuck";
+    EXPECT_FALSE(editor.getDragDropController().isDragPreviewActive()) << context << ": drag-preview ghost left stuck";
     EXPECT_FALSE(editor.isMarqueeActive()) << context << ": marquee rectangle left stuck";
     EXPECT_FALSE(editor.isSelectionDragActive()) << context << ": selection-drag bookkeeping left stuck";
     EXPECT_FALSE(editor.isMacroChipDragActive()) << context << ": macro chip drag id left stuck";
@@ -88,7 +88,8 @@ TEST(DragStateReset, PlainModuleBodyDragClearsAllStateOnMouseUp) {
     const juce::Point<int> dragPos = pressPos + juce::Point<int>(40, 30);
 
     comp->mouseDown(realMouseEvent(*comp, pressPos, pressPos, leftClick));
-    ASSERT_TRUE(editor.isDragPreviewActive()) << "sanity: a plain body drag must arm the ghost preview";
+    ASSERT_TRUE(editor.getDragDropController().isDragPreviewActive())
+        << "sanity: a plain body drag must arm the ghost preview";
     // isSelectionDragActive() only turns true for a MULTI-module selection (beginSelectionDrag:
     // selectionDragActive = selectionDragStartPositions.size() > 1) — a lone module's drag never
     // sets it, by design (see GraphEditor.cpp:3386's own comment on why a one-member "group" never
@@ -119,7 +120,7 @@ TEST(DragStateReset, MultiSelectBodyDragClearsAllStateOnMouseUp) {
     // drag (ModuleComponent::mouseDown) — this is the real "drag one of several selected modules"
     // gesture, distinct from the single-module case above.
     comp->mouseDown(realMouseEvent(*comp, pressPos, pressPos, leftClick));
-    ASSERT_TRUE(editor.isDragPreviewActive());
+    ASSERT_TRUE(editor.getDragDropController().isDragPreviewActive());
     ASSERT_TRUE(editor.isSelectionDragActive()) << "sanity: a real multi-selection body drag must arm group-drag";
 
     comp->mouseDrag(realMouseEvent(*comp, dragPos, pressPos, leftClick, /*wasDragged=*/true));
@@ -142,7 +143,8 @@ TEST(DragStateReset, CtrlInsertDragClearsAllStateOnMouseUp) {
     const juce::Point<int> dragPos = pressPos + juce::Point<int>(60, 5);
 
     comp->mouseDown(realMouseEvent(*comp, pressPos, pressPos, ctrlClick));
-    ASSERT_TRUE(editor.isDragPreviewActive()) << "sanity: Ctrl+drag arms the insert-preview ghost too";
+    ASSERT_TRUE(editor.getDragDropController().isDragPreviewActive())
+        << "sanity: Ctrl+drag arms the insert-preview ghost too";
 
     comp->mouseDrag(realMouseEvent(*comp, dragPos, pressPos, ctrlClick, /*wasDragged=*/true));
     comp->mouseUp(realMouseEvent(*comp, dragPos, pressPos, ctrlClick, /*wasDragged=*/true));
@@ -167,15 +169,15 @@ TEST(DragStateReset, CmdReparentDragJoinClearsAllStateOnMouseUp) {
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 400);
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false); // expand: the hull becomes live
+    editor.getMacroController().setMacroCollapsed(macroId, false); // expand: the hull becomes live
 
     auto c = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 100);
     auto* comp = compFor(editor, c);
     ASSERT_NE(comp, nullptr);
 
-    const auto hull = editor.macroHullBounds(macroId);
+    const auto hull = editor.getMacroController().macroHullBounds(macroId);
     ASSERT_FALSE(hull.isEmpty());
     const auto delta = hull.getCentre() - comp->getBounds().getCentre();
 
@@ -184,7 +186,7 @@ TEST(DragStateReset, CmdReparentDragJoinClearsAllStateOnMouseUp) {
     const juce::Point<int> dragPos = pressPos + delta;
 
     comp->mouseDown(realMouseEvent(*comp, pressPos, pressPos, cmdClick));
-    ASSERT_TRUE(editor.isDragPreviewActive()) << "sanity: Cmd+drag arms the ghost preview too";
+    ASSERT_TRUE(editor.getDragDropController().isDragPreviewActive()) << "sanity: Cmd+drag arms the ghost preview too";
 
     comp->mouseDrag(realMouseEvent(*comp, dragPos, pressPos, cmdClick, /*wasDragged=*/true));
     ASSERT_FALSE(editor.getMacroDragCandidateId().isEmpty())
@@ -193,7 +195,7 @@ TEST(DragStateReset, CmdReparentDragJoinClearsAllStateOnMouseUp) {
 
     comp->mouseUp(realMouseEvent(*comp, dragPos, pressPos, cmdClick, /*wasDragged=*/true));
 
-    ASSERT_NE(editor.macroForNode(c), nullptr) << "sanity: the drag must actually have reparented";
+    ASSERT_NE(editor.getMacroController().macroForNode(c), nullptr) << "sanity: the drag must actually have reparented";
     expectNoStuckDragState(editor, "cmd reparent-drag (join)");
 }
 
@@ -205,9 +207,9 @@ TEST(DragStateReset, CmdReparentDragLeaveClearsAllStateOnMouseUp) {
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 400);
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
     auto* comp = compFor(editor, a);
     ASSERT_NE(comp, nullptr);
@@ -218,7 +220,7 @@ TEST(DragStateReset, CmdReparentDragLeaveClearsAllStateOnMouseUp) {
     const juce::Point<int> dragPos = pressPos + juce::Point<int>(2400, 0);
 
     comp->mouseDown(realMouseEvent(*comp, pressPos, pressPos, cmdClick));
-    ASSERT_TRUE(editor.isDragPreviewActive());
+    ASSERT_TRUE(editor.getDragDropController().isDragPreviewActive());
 
     comp->mouseDrag(realMouseEvent(*comp, dragPos, pressPos, cmdClick, /*wasDragged=*/true));
     ASSERT_FALSE(editor.getMacroDragCandidateId().isEmpty())
@@ -226,7 +228,8 @@ TEST(DragStateReset, CmdReparentDragLeaveClearsAllStateOnMouseUp) {
 
     comp->mouseUp(realMouseEvent(*comp, dragPos, pressPos, cmdClick, /*wasDragged=*/true));
 
-    ASSERT_EQ(editor.macroForNode(a), nullptr) << "sanity: the drag must actually have left the macro";
+    ASSERT_EQ(editor.getMacroController().macroForNode(a), nullptr)
+        << "sanity: the drag must actually have left the macro";
     expectNoStuckDragState(editor, "cmd reparent-drag (leave)");
 }
 
@@ -258,11 +261,11 @@ TEST(DragStateReset, MacroChipDragClearsAllStateOnMouseUp) {
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 400);
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false); // expand: the hull + name chip become live
+    editor.getMacroController().setMacroCollapsed(macroId, false); // expand: the hull + name chip become live
 
-    const auto chipBounds = editor.macroChipBounds(macroId);
+    const auto chipBounds = editor.getMacroController().macroChipBounds(macroId);
     ASSERT_FALSE(chipBounds.isEmpty());
     const juce::Point<int> pressPos = chipBounds.getCentre();
     const juce::Point<int> dragPos = pressPos + juce::Point<int>(50, 20);
@@ -286,11 +289,11 @@ TEST(DragStateReset, MacroCardDragClearsAllStateOnMouseUp) {
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 400);
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
     // Collapsed (the default after grouping): a MacroCardComponent stands in for the whole macro.
 
-    auto* card = editor.getMacroCardForTest(macroId);
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
     ASSERT_NE(card, nullptr);
 
     // Body point away from the title row (rename zone) and the expand chevron (top-right).
@@ -321,11 +324,11 @@ TEST(DragStateReset, MacroChipDoubleClickRenameCancelsTheArmedChipDrag) {
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 400);
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto chipBounds = editor.macroChipBounds(macroId);
+    const auto chipBounds = editor.getMacroController().macroChipBounds(macroId);
     ASSERT_FALSE(chipBounds.isEmpty());
     const juce::Point<int> pressPos = chipBounds.getCentre();
     const juce::ModifierKeys leftClick(juce::ModifierKeys::leftButtonModifier);
@@ -356,10 +359,10 @@ TEST(DragStateReset, MacroCardDoubleClickRenameCancelsTheArmedCardDrag) {
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 400);
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
-    auto* card = editor.getMacroCardForTest(macroId);
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
     ASSERT_NE(card, nullptr);
 
     const auto titleRow = card->getTitleRowBoundsForTest();
@@ -398,7 +401,7 @@ TEST(DragStateReset, ModuleBodyDragReleasedFarOutsideComponentBoundsStillClearsS
     const juce::Point<int> farOutside(5000, -3000);
 
     comp->mouseDown(realMouseEvent(*comp, pressPos, pressPos, leftClick));
-    ASSERT_TRUE(editor.isDragPreviewActive());
+    ASSERT_TRUE(editor.getDragDropController().isDragPreviewActive());
 
     comp->mouseDrag(realMouseEvent(*comp, farOutside, pressPos, leftClick, /*wasDragged=*/true));
     comp->mouseUp(realMouseEvent(*comp, farOutside, pressPos, leftClick, /*wasDragged=*/true));

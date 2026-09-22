@@ -39,7 +39,7 @@ void MainComponent::restorePanelPreferences() {
         appProperties.getUserSettings()->getIntValue(kTimelinePanelHeightKey, defaultTimelinePanelHeight()));
     graphEditor.setAlignmentGuidesEnabled(
         appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true));
-    graphEditor.setSmartConnectionMode(GraphEditor::smartConnectionModeFromString(
+    graphEditor.getSmartConnections().setSmartConnectionMode(GraphEditor::smartConnectionModeFromString(
         appProperties.getUserSettings()->getValue("smartConnectionMode", "NewAndUnwired")));
     graphEditor.setDoubleClickPortDisconnectEnabled(
         appProperties.getUserSettings()->getBoolValue("doubleClickPortDisconnect", true));

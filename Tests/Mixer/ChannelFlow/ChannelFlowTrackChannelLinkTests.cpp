@@ -108,7 +108,8 @@ struct LinkRigApp {
         wireStereo(osc, leadStrip);
         wireStripToOutput(leadStrip);
         lead = addTrack("Lead", leadInUuid);
-        leadMacroId = editor.addMacroForMembers({leadInUuid, oscUuid, leadStripUuid}, "Lead", {0, 0});
+        leadMacroId =
+            editor.getMacroController().addMacroForMembers({leadInUuid, oscUuid, leadStripUuid}, "Lead", {0, 0});
 
         juce::String kickInUuid, snareInUuid, samplerUuid, sharedStripUuid;
         auto* kickIn = addPlainNodeCFT(graph(), "Track In", {0, 400}, kickInUuid);
@@ -121,8 +122,8 @@ struct LinkRigApp {
         wireStripToOutput(sharedStrip);
         kick = addTrack("Kick", kickInUuid);
         snare = addTrack("Snare", snareInUuid);
-        drumsMacroId =
-            editor.addMacroForMembers({kickInUuid, snareInUuid, samplerUuid, sharedStripUuid}, "Drums", {0, 400});
+        drumsMacroId = editor.getMacroController().addMacroForMembers(
+            {kickInUuid, snareInUuid, samplerUuid, sharedStripUuid}, "Drums", {0, 400});
 
         editor.updateComponents();
         for (const auto& track : doc.getTracks())
@@ -207,7 +208,7 @@ TEST_F(ChannelFlowTest, RenamingAChannelMacroRenamesItsLinkedTrackAsOneUndoStep)
     LinkRigApp rig;
     ASSERT_FALSE(rig.undo.canUndo());
 
-    rig.editor.renameMacro(rig.leadMacroId, "Vocals");
+    rig.editor.getMacroController().renameMacro(rig.leadMacroId, "Vocals");
 
     EXPECT_EQ(rig.editor.getMacros().find(rig.leadMacroId)->name, "Vocals");
     EXPECT_EQ(rig.doc.getTrack(rig.lead)->name, "Vocals") << "renaming the channel renames the track";
@@ -416,13 +417,13 @@ TEST_F(ChannelFlowTest, TheChannelChipNamesTheChannelForLinkedAndSharedTracksAli
 
 TEST_F(ChannelFlowTest, ClickingTheChannelChipSelectsThatChannelInTheGraph) {
     LinkRigApp rig;
-    rig.editor.selectMacro(rig.drumsMacroId, /*additive=*/false);
-    ASSERT_FALSE(rig.editor.isMacroSelected(rig.leadMacroId));
+    rig.editor.getMacroController().selectMacro(rig.drumsMacroId, /*additive=*/false);
+    ASSERT_FALSE(rig.editor.getMacroController().isMacroSelected(rig.leadMacroId));
 
     rig.header(rig.lead).getChannelChip().onClick();
 
-    EXPECT_TRUE(rig.editor.isMacroSelected(rig.leadMacroId)) << "the chip reveals its own channel";
-    EXPECT_FALSE(rig.editor.isMacroSelected(rig.drumsMacroId));
+    EXPECT_TRUE(rig.editor.getMacroController().isMacroSelected(rig.leadMacroId)) << "the chip reveals its own channel";
+    EXPECT_FALSE(rig.editor.getMacroController().isMacroSelected(rig.drumsMacroId));
 }
 
 TEST_F(ChannelFlowTest, TheChipMeterRepaintsOnlyWhenTheDrawnLevelActuallyMoves) {

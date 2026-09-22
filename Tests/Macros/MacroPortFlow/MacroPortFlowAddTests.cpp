@@ -10,8 +10,8 @@ TEST(MacroPortFlow, AddMonoInputCreatesAMacroInletMemberAndPort) {
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
 
-    const auto uuid = editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV,
-                                          MacroPortShape::Mono, 1, "Pitch In");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "Pitch In");
     ASSERT_FALSE(uuid.isEmpty());
 
     auto* macro = editor.getMacros().find(macroId);
@@ -35,8 +35,8 @@ TEST(MacroPortFlow, AddOutputMidiCreatesAMacroMidiOutletMember) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
 
-    const auto uuid =
-        editor.addMacroPort(macroId, /*isInput=*/false, synth::MacroPortKind::Midi, MacroPortShape::Mono, 1, "");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, /*isInput=*/false, synth::MacroPortKind::Midi,
+                                                               MacroPortShape::Mono, 1, "");
     ASSERT_FALSE(uuid.isEmpty());
 
     auto* macro = editor.getMacros().find(macroId);
@@ -61,16 +61,16 @@ TEST(MacroPortFlow, AddStereoAndPolySetTheChosenShapeOnTheNode) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
 
-    const auto stereoUuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Stereo, 1, "Stereo In");
+    const auto stereoUuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                                     MacroPortShape::Stereo, 1, "Stereo In");
     auto* stereoInlet = dynamic_cast<MacroInletModule*>(
         engine.getGraph().getNodeForId(nodeIdForUuid(engine, stereoUuid))->getProcessor());
     ASSERT_NE(stereoInlet, nullptr);
     EXPECT_EQ(stereoInlet->getPortShape(), MacroPortShape::Stereo);
     EXPECT_EQ(stereoInlet->getVisibleInputPortCount(), 2);
 
-    const auto polyUuid =
-        editor.addMacroPort(macroId, false, synth::MacroPortKind::AudioCV, MacroPortShape::Poly, 5, "Poly Out");
+    const auto polyUuid = editor.getMacroController().addMacroPort(macroId, false, synth::MacroPortKind::AudioCV,
+                                                                   MacroPortShape::Poly, 5, "Poly Out");
     auto* polyOutlet = dynamic_cast<MacroOutletModule*>(
         engine.getGraph().getNodeForId(nodeIdForUuid(engine, polyUuid))->getProcessor());
     ASSERT_NE(polyOutlet, nullptr);
@@ -88,7 +88,8 @@ TEST(MacroPortFlow, AddIsOneUndoStep) {
     auto macroId = makeTwoMemberMacro(editor, engine);
     const int nodesBefore = engine.getGraph().getNodes().size();
 
-    const auto uuid = editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "In");
     ASSERT_FALSE(uuid.isEmpty());
     EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore + 1);
 

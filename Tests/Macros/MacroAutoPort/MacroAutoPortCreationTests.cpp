@@ -36,7 +36,7 @@ TEST(MacroAutoPort, DefaultCallCreatesNoPorts) {
     engine.getGraph().addConnection({{ext, 0}, {a, 0}});
 
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro(); // autoCreatePorts defaults false
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(); // autoCreatePorts defaults false
     ASSERT_FALSE(macroId.isEmpty());
 
     auto* macro = editor.getMacros().find(macroId);
@@ -63,7 +63,7 @@ TEST(MacroAutoPort, MonoCrossingCreatesAnInletAndAnOutlet) {
 
     const auto before = allNodeIds(engine);
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro(true);
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroId.isEmpty());
 
     auto* macro = editor.getMacros().find(macroId);
@@ -125,7 +125,7 @@ TEST(MacroAutoPort, TwoCablesIntoTheSameInternalJackShareOnePort) {
 
     const auto before = allNodeIds(engine);
     editor.setSelectedNodes({filter, b});
-    const auto macroId = editor.groupSelectionIntoMacro(true);
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroId.isEmpty());
 
     auto* macro = editor.getMacros().find(macroId);
@@ -161,7 +161,7 @@ TEST(MacroAutoPort, CollapsedStereoOutputCrossingCreatesAOneJackStereoCollapsedO
 
     const auto before = allNodeIds(engine);
     editor.setSelectedNodes({reverb, b});
-    const auto macroId = editor.groupSelectionIntoMacro(true);
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroId.isEmpty());
 
     auto* macro = editor.getMacros().find(macroId);
@@ -203,7 +203,7 @@ TEST(MacroAutoPort, CollapsedStereoOutletPassesBothChannelsOfAudio) {
 
     const auto before = allNodeIds(engine);
     editor.setSelectedNodes({reverb, b});
-    const auto macroId = editor.groupSelectionIntoMacro(true);
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroId.isEmpty());
     juce::ignoreUnused(macroId);
 
@@ -248,7 +248,7 @@ TEST(MacroAutoPort, SeparatelyJackedLeftRightCrossingsMergeIntoOneStereoInlet) {
 
     const auto before = allNodeIds(engine);
     editor.setSelectedNodes({filter, b});
-    const auto macroId = editor.groupSelectionIntoMacro(true);
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroId.isEmpty());
 
     auto* macro = editor.getMacros().find(macroId);
@@ -289,7 +289,7 @@ TEST(MacroAutoPort, PolyCrossingCreatesAPolyInletWithTheRightVoiceCount) {
 
     const auto before = allNodeIds(engine);
     editor.setSelectedNodes({poly, b});
-    const auto macroId = editor.groupSelectionIntoMacro(true);
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroId.isEmpty());
 
     auto* macro = editor.getMacros().find(macroId);
@@ -329,7 +329,7 @@ TEST(MacroAutoPort, MidiCrossingCreatesMidiInletAndOutletNodes) {
         {{b, juce::AudioProcessorGraph::midiChannelIndex}, {midiDst, juce::AudioProcessorGraph::midiChannelIndex}});
 
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro(true);
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroId.isEmpty());
 
     auto* macro = editor.getMacros().find(macroId);
@@ -378,7 +378,7 @@ TEST(MacroAutoPort, AttenuverterAdjacentCrossingIsSplicedForAGenuineExternalCros
 
     const auto before = allNodeIds(engine);
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro(true);
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroId.isEmpty());
 
     auto* macro = editor.getMacros().find(macroId);
@@ -461,7 +461,7 @@ TEST(MacroAutoPort, ModRoutingWithBothRealEndpointsInsideStaysWhollyInternal) {
 
     const auto before = allNodeIds(engine);
     editor.setSelectedNodes({source, dest});
-    const auto macroId = editor.groupSelectionIntoMacro(true);
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroId.isEmpty());
 
     auto* macro = editor.getMacros().find(macroId);
@@ -499,7 +499,7 @@ TEST(MacroAutoPort, AttenuverterAdjacentCrossingSplicedModulationSurvives) {
     ASSERT_TRUE(attenId.uid != 0);
 
     editor.setSelectedNodes({dest, other});
-    const auto macroId = editor.groupSelectionIntoMacro(true);
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroId.isEmpty());
 
     auto* macro = editor.getMacros().find(macroId);
@@ -574,7 +574,7 @@ TEST(MacroAutoPort, UndoRestoresAModRoutingCrossingSpliceExactly) {
     const int nodesBefore = engine.getGraph().getNodes().size();
 
     editor.setSelectedNodes({dest, other});
-    const auto macroId = editor.groupSelectionIntoMacro(true);
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroId.isEmpty());
     ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u);
     EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore + 1);
@@ -632,12 +632,12 @@ TEST(MacroAutoPort, TwoMacroCrossingKnobHitTestMatchesPaintedGeometryInEveryColl
     ASSERT_TRUE(attenId.uid != 0);
 
     editor.setSelectedNodes({source, other1});
-    const auto macroA = editor.groupSelectionIntoMacro(true);
+    const auto macroA = editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroA.isEmpty());
     ASSERT_EQ(editor.getMacros().find(macroA)->ports.size(), 1u) << "source's crossing gets an outlet port";
 
     editor.setSelectedNodes({dest, other2});
-    const auto macroB = editor.groupSelectionIntoMacro(true);
+    const auto macroB = editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroB.isEmpty());
     ASSERT_EQ(editor.getMacros().find(macroB)->ports.size(), 1u) << "dest's crossing gets an inlet port";
 
@@ -659,11 +659,11 @@ TEST(MacroAutoPort, TwoMacroCrossingKnobHitTestMatchesPaintedGeometryInEveryColl
 
     assertKnobIsClickableAtItsPaintedMidpoint("both expanded");
 
-    editor.setMacroCollapsed(macroA, true);
+    editor.getMacroController().setMacroCollapsed(macroA, true);
     editor.updateComponents();
     assertKnobIsClickableAtItsPaintedMidpoint("macro A collapsed");
 
-    editor.setMacroCollapsed(macroB, true);
+    editor.getMacroController().setMacroCollapsed(macroB, true);
     editor.updateComponents();
     assertKnobIsClickableAtItsPaintedMidpoint("both collapsed");
 }
@@ -686,12 +686,12 @@ TEST(MacroAutoPort, TwoMacroCrossingKnobRespondsToARealMouseDrag) {
     ASSERT_TRUE(attenId.uid != 0);
 
     editor.setSelectedNodes({source, other1});
-    ASSERT_FALSE(editor.groupSelectionIntoMacro(true).isEmpty());
+    ASSERT_FALSE(editor.getMacroController().groupSelectionIntoMacro(true).isEmpty());
     editor.setSelectedNodes({dest, other2});
-    const auto macroB = editor.groupSelectionIntoMacro(true);
+    const auto macroB = editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroB.isEmpty());
 
-    editor.setMacroCollapsed(macroB, true); // the realistic case: macros collapsed to hide detail
+    editor.getMacroController().setMacroCollapsed(macroB, true); // the realistic case: macros collapsed to hide detail
     editor.updateComponents();
 
     const GraphEditor::VisibleCable* chain = nullptr;
@@ -746,7 +746,7 @@ TEST(MacroAutoPort, GroupingAndSplicedPortsIsOneUndoStep) {
     const int nodesBefore = engine.getGraph().getNodes().size();
 
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro(true);
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroId.isEmpty());
     ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 2u);
     EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore + 2);

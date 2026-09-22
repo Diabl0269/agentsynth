@@ -702,7 +702,7 @@ TEST_F(ModMatrixTest, DestinationLabelStillResolvesAfterGroupingSplicesAMacroPor
     engine.addModRouting(lfoNode->nodeID, 0, filterNode->nodeID, 1); // LFO -> atten -> Filter Cutoff
 
     editor.setSelectedNodes({filterNode->nodeID, otherNode->nodeID});
-    const auto macroId = editor.groupSelectionIntoMacro(true);
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroId.isEmpty());
     auto* macro = editor.getMacros().find(macroId);
     ASSERT_NE(macro, nullptr);

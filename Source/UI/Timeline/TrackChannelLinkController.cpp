@@ -291,7 +291,7 @@ void TrackChannelLinkController::revealChannelForTrack(synth::TrackId track) {
     if (macro != nullptr) {
         const bool collapsed = macro->collapsed;
         const auto cardCentre = macro->bounds.toFloat().getCentre();
-        graphEditor_.selectMacro(macro->id, /*additive=*/false);
+        graphEditor_.getMacroController().selectMacro(macro->id, /*additive=*/false);
         if (collapsed) {
             graphEditor_.centreViewOn(cardCentre);
             return;

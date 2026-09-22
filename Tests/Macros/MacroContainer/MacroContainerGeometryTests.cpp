@@ -37,7 +37,7 @@ TEST(MacroCollapse, CollapsingHidesMembersAndExpandingShowsThemAgain) {
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro(); // grouping collapses by default
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro(); // grouping collapses by default
     ASSERT_FALSE(macroId.isEmpty());
 
     auto* compA = findComponent(editor, a);
@@ -52,11 +52,11 @@ TEST(MacroCollapse, CollapsingHidesMembersAndExpandingShowsThemAgain) {
     EXPECT_GT(macro->bounds.getWidth(), 0);
     EXPECT_GT(macro->bounds.getHeight(), 0);
 
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
     EXPECT_TRUE(compA->isVisible());
     EXPECT_TRUE(compB->isVisible());
 
-    editor.setMacroCollapsed(macroId, true);
+    editor.getMacroController().setMacroCollapsed(macroId, true);
     EXPECT_FALSE(compA->isVisible());
     EXPECT_FALSE(compB->isVisible());
 }
@@ -75,13 +75,13 @@ TEST(MacroCollapse, ToggleSelectionMacrosCollapsedRoundTripsExpandedAndCollapsed
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro(); // grouping collapses by default
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro(); // grouping collapses by default
     ASSERT_FALSE(macroId.isEmpty());
     ASSERT_TRUE(editor.getMacros().find(macroId)->collapsed);
 
     // Collapsed + selection -> expands.
     editor.setSelectedNodes({a});
-    editor.toggleSelectionMacrosCollapsed();
+    editor.getMacroController().toggleSelectionMacrosCollapsed();
     ASSERT_NE(editor.getMacros().find(macroId), nullptr);
     EXPECT_FALSE(editor.getMacros().find(macroId)->collapsed);
 
@@ -89,7 +89,7 @@ TEST(MacroCollapse, ToggleSelectionMacrosCollapsedRoundTripsExpandedAndCollapsed
     // and act on the whole macro, matching ungroupSelection's "touches at least one selected
     // node" semantics).
     editor.selectModule(a, false);
-    editor.toggleSelectionMacrosCollapsed();
+    editor.getMacroController().toggleSelectionMacrosCollapsed();
     ASSERT_NE(editor.getMacros().find(macroId), nullptr);
     EXPECT_TRUE(editor.getMacros().find(macroId)->collapsed) << "round trip must return to collapsed";
 }
@@ -108,19 +108,19 @@ TEST(MacroCollapse, ToggleSelectionMacrosCollapsedWithMixedSelectionCollapsesBot
     auto d = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 1300, 100);
 
     editor.setSelectedNodes({a, b});
-    auto macroOne = editor.groupSelectionIntoMacro(); // collapsed by default
+    auto macroOne = editor.getMacroController().groupSelectionIntoMacro(); // collapsed by default
     ASSERT_FALSE(macroOne.isEmpty());
 
     editor.setSelectedNodes({c, d});
-    auto macroTwo = editor.groupSelectionIntoMacro();
+    auto macroTwo = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroTwo.isEmpty());
-    editor.setMacroCollapsed(macroTwo, false); // now expanded
+    editor.getMacroController().setMacroCollapsed(macroTwo, false); // now expanded
 
     ASSERT_TRUE(editor.getMacros().find(macroOne)->collapsed);
     ASSERT_FALSE(editor.getMacros().find(macroTwo)->collapsed);
 
     editor.setSelectedNodes({a, c}); // one member from each macro
-    editor.toggleSelectionMacrosCollapsed();
+    editor.getMacroController().toggleSelectionMacrosCollapsed();
 
     EXPECT_TRUE(editor.getMacros().find(macroOne)->collapsed) << "already-collapsed macro stays collapsed";
     EXPECT_TRUE(editor.getMacros().find(macroTwo)->collapsed) << "expanded macro must collapse too";
@@ -135,14 +135,14 @@ TEST(MacroCollapse, ToggleSelectionMacrosCollapsedIsANoOpWithStatusMessageWhenSe
     editor.onStatusMessage = [&](const juce::String& msg) { lastMessage = msg; };
 
     // Nothing selected at all -> refused.
-    editor.toggleSelectionMacrosCollapsed();
+    editor.getMacroController().toggleSelectionMacrosCollapsed();
     EXPECT_FALSE(lastMessage.isEmpty());
 
     // A plain, non-macro module selected -> refused (the selection touches no macro).
     lastMessage.clear();
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 0, 0);
     editor.selectModule(a, false);
-    editor.toggleSelectionMacrosCollapsed();
+    editor.getMacroController().toggleSelectionMacrosCollapsed();
     EXPECT_FALSE(lastMessage.isEmpty());
     EXPECT_TRUE(editor.getMacros().empty()) << "nothing should have been created or changed";
 }
@@ -156,19 +156,19 @@ TEST(MacroCollapse, MacroForNodeFindsTheOwningMacroOnlyWhileGrouped) {
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 300, 0);
     auto c = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 600, 0);
 
-    EXPECT_EQ(editor.macroForNode(a), nullptr);
+    EXPECT_EQ(editor.getMacroController().macroForNode(a), nullptr);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
-    const auto* found = editor.macroForNode(a);
+    const auto* found = editor.getMacroController().macroForNode(a);
     ASSERT_NE(found, nullptr);
     EXPECT_EQ(found->id, macroId);
-    EXPECT_EQ(editor.macroForNode(c), nullptr);
+    EXPECT_EQ(editor.getMacroController().macroForNode(c), nullptr);
 
-    editor.ungroupSelection();
-    EXPECT_EQ(editor.macroForNode(a), nullptr);
+    editor.getMacroController().ungroupSelection();
+    EXPECT_EQ(editor.getMacroController().macroForNode(a), nullptr);
 }
 
 // ============================================================================
@@ -186,11 +186,11 @@ TEST(MacroGroupOrToggle, SelectionTouchingNoMacroGroups) {
     editor.setSelectedNodes({a, b});
     ASSERT_TRUE(editor.getMacros().empty());
 
-    editor.groupOrToggleSelectionMacros();
+    editor.getMacroController().groupOrToggleSelectionMacros();
 
     ASSERT_EQ(editor.getMacros().size(), 1) << "no macro touched -> Cmd+G groups";
-    EXPECT_NE(editor.macroForNode(a), nullptr);
-    EXPECT_NE(editor.macroForNode(b), nullptr);
+    EXPECT_NE(editor.getMacroController().macroForNode(a), nullptr);
+    EXPECT_NE(editor.getMacroController().macroForNode(b), nullptr);
 }
 
 TEST(MacroGroupOrToggle, SelectionWhollyInsideCollapsedMacroExpandsAndCreatesNoNewMacro) {
@@ -202,12 +202,12 @@ TEST(MacroGroupOrToggle, SelectionWhollyInsideCollapsedMacroExpandsAndCreatesNoN
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro(); // collapsed by default
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro(); // collapsed by default
     ASSERT_FALSE(macroId.isEmpty());
     ASSERT_TRUE(editor.getMacros().find(macroId)->collapsed);
 
     editor.setSelectedNodes({a, b}); // wholly inside the one macro
-    editor.groupOrToggleSelectionMacros();
+    editor.getMacroController().groupOrToggleSelectionMacros();
 
     ASSERT_EQ(editor.getMacros().size(), 1) << "must toggle the existing macro, not create a new one";
     EXPECT_FALSE(editor.getMacros().find(macroId)->collapsed) << "collapsed selection -> expands";
@@ -222,12 +222,12 @@ TEST(MacroGroupOrToggle, SelectionWhollyInsideExpandedMacroCollapsesAndCreatesNo
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false); // now expanded
+    editor.getMacroController().setMacroCollapsed(macroId, false); // now expanded
 
     editor.setSelectedNodes({a, b}); // wholly inside the one macro
-    editor.groupOrToggleSelectionMacros();
+    editor.getMacroController().groupOrToggleSelectionMacros();
 
     ASSERT_EQ(editor.getMacros().size(), 1) << "must toggle the existing macro, not create a new one";
     EXPECT_TRUE(editor.getMacros().find(macroId)->collapsed) << "expanded selection -> collapses";
@@ -246,7 +246,7 @@ TEST(MacroGroupOrToggle, MixedSelectionTogglesTheMacroAndLeavesLooseModulesAlone
     auto loose = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 900, 100);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro(); // collapsed by default
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro(); // collapsed by default
     ASSERT_FALSE(macroId.isEmpty());
     ASSERT_TRUE(editor.getMacros().find(macroId)->collapsed);
 
@@ -254,11 +254,12 @@ TEST(MacroGroupOrToggle, MixedSelectionTogglesTheMacroAndLeavesLooseModulesAlone
     editor.onStatusMessage = [&](const juce::String& msg) { lastMessage = msg; };
 
     editor.setSelectedNodes({a, loose}); // a is grouped, loose is not
-    editor.groupOrToggleSelectionMacros();
+    editor.getMacroController().groupOrToggleSelectionMacros();
 
     EXPECT_EQ(editor.getMacros().size(), 1) << "must not create a second macro";
     EXPECT_FALSE(editor.getMacros().find(macroId)->collapsed) << "the touched macro must still toggle";
-    EXPECT_EQ(editor.macroForNode(loose), nullptr) << "the loose module must not be pulled into the macro";
+    EXPECT_EQ(editor.getMacroController().macroForNode(loose), nullptr)
+        << "the loose module must not be pulled into the macro";
     EXPECT_FALSE(lastMessage.isEmpty()) << "the mixed-selection outcome must be explained";
 }
 
@@ -273,7 +274,7 @@ TEST(MacroGroupOrToggle, SingleLooseModuleStillRefusesViaGroupSelectionIntoMacro
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 0, 0);
     editor.selectModule(a, false);
 
-    editor.groupOrToggleSelectionMacros();
+    editor.getMacroController().groupOrToggleSelectionMacros();
 
     EXPECT_TRUE(editor.getMacros().empty()) << "fewer than two modules must still refuse to group";
     EXPECT_FALSE(lastMessage.isEmpty());
@@ -292,14 +293,14 @@ TEST(MacroHull, HullBoundsIsEmptyWhileCollapsedAndTheMemberUnionWhileExpanded) {
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro(); // collapses by default
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro(); // collapses by default
     ASSERT_FALSE(macroId.isEmpty());
 
-    EXPECT_TRUE(editor.macroHullBounds(macroId).isEmpty()) << "a collapsed macro has no hull";
-    EXPECT_TRUE(editor.macroHullBounds("no-such-macro-id").isEmpty());
+    EXPECT_TRUE(editor.getMacroController().macroHullBounds(macroId).isEmpty()) << "a collapsed macro has no hull";
+    EXPECT_TRUE(editor.getMacroController().macroHullBounds("no-such-macro-id").isEmpty());
 
-    editor.setMacroCollapsed(macroId, false);
-    const auto hull = editor.macroHullBounds(macroId);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+    const auto hull = editor.getMacroController().macroHullBounds(macroId);
     ASSERT_FALSE(hull.isEmpty());
 
     auto* compA = findComponent(editor, a);
@@ -319,18 +320,19 @@ TEST(MacroHull, HullAtHitsInsideAndMissesOutsideAndWhileCollapsed) {
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
     // Collapsed: no hull to hit, anywhere.
-    EXPECT_TRUE(editor.macroHullAt({150, 150}).isEmpty());
+    EXPECT_TRUE(editor.getMacroController().macroHullAt({150, 150}).isEmpty());
 
-    editor.setMacroCollapsed(macroId, false);
-    const auto hull = editor.macroHullBounds(macroId);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+    const auto hull = editor.getMacroController().macroHullBounds(macroId);
     ASSERT_FALSE(hull.isEmpty());
 
-    EXPECT_EQ(editor.macroHullAt(hull.getCentre()), macroId);
-    EXPECT_TRUE(editor.macroHullAt(juce::Point<int>(hull.getX() - 500, hull.getY() - 500)).isEmpty());
+    EXPECT_EQ(editor.getMacroController().macroHullAt(hull.getCentre()), macroId);
+    EXPECT_TRUE(
+        editor.getMacroController().macroHullAt(juce::Point<int>(hull.getX() - 500, hull.getY() - 500)).isEmpty());
 }
 
 // ============================================================================
@@ -346,17 +348,17 @@ TEST(MacroChip, ChipBoundsIsEmptyWhileCollapsedAndSitsOnTheHullsTopEdgeWhileExpa
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro(); // collapses by default
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro(); // collapses by default
     ASSERT_FALSE(macroId.isEmpty());
 
-    EXPECT_TRUE(editor.macroChipBounds(macroId).isEmpty()) << "a collapsed macro has no chip";
-    EXPECT_TRUE(editor.macroChipBounds("no-such-macro-id").isEmpty());
+    EXPECT_TRUE(editor.getMacroController().macroChipBounds(macroId).isEmpty()) << "a collapsed macro has no chip";
+    EXPECT_TRUE(editor.getMacroController().macroChipBounds("no-such-macro-id").isEmpty());
 
-    editor.setMacroCollapsed(macroId, false);
-    const auto hull = editor.macroHullBounds(macroId);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+    const auto hull = editor.getMacroController().macroHullBounds(macroId);
     ASSERT_FALSE(hull.isEmpty());
 
-    const auto chip = editor.macroChipBounds(macroId);
+    const auto chip = editor.getMacroController().macroChipBounds(macroId);
     ASSERT_FALSE(chip.isEmpty());
     EXPECT_EQ(chip.getY(), hull.getY()) << "the chip sits on the hull's top edge";
     EXPECT_GE(chip.getX(), hull.getX()) << "the chip stays within the hull's horizontal span";
@@ -372,20 +374,21 @@ TEST(MacroChip, ChipAtHitsInsideAndMissesJustOutsideAndWhileCollapsed) {
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
     // Collapsed: no chip to hit, anywhere.
-    EXPECT_TRUE(editor.macroChipAt({150, 150}).isEmpty());
+    EXPECT_TRUE(editor.getMacroController().macroChipAt({150, 150}).isEmpty());
 
-    editor.setMacroCollapsed(macroId, false);
-    const auto chip = editor.macroChipBounds(macroId);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+    const auto chip = editor.getMacroController().macroChipBounds(macroId);
     ASSERT_FALSE(chip.isEmpty());
 
-    EXPECT_EQ(editor.macroChipAt(chip.getCentre()), macroId);
+    EXPECT_EQ(editor.getMacroController().macroChipAt(chip.getCentre()), macroId);
     // Just past the chip's right/bottom edge — still comfortably inside the hull, so a miss here
     // proves the hit-test is scoped to the chip itself, not the whole hull.
-    EXPECT_TRUE(editor.macroChipAt(juce::Point<int>(chip.getRight() + 5, chip.getBottom() + 5)).isEmpty());
+    EXPECT_TRUE(
+        editor.getMacroController().macroChipAt(juce::Point<int>(chip.getRight() + 5, chip.getBottom() + 5)).isEmpty());
 }
 
 // ============================================================================
@@ -401,9 +404,9 @@ TEST(MacroChipDrag, DraggingMovesEveryMemberByTheDragDeltaAsARigidBody) {
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
     auto* compA = findComponent(editor, a);
     auto* compB = findComponent(editor, b);
@@ -416,7 +419,7 @@ TEST(MacroChipDrag, DraggingMovesEveryMemberByTheDragDeltaAsARigidBody) {
     // Synthesizing real mouse events into GraphEditor is not reliable headless (no real OS event
     // loop/window to deliver them through); drive the same primitives GraphEditor::mouseDown/
     // mouseDrag/mouseUp use for a chip drag directly instead.
-    editor.selectMacro(macroId, false);
+    editor.getMacroController().selectMacro(macroId, false);
     editor.beginSelectionDrag();
     const juce::Point<int> delta(120, 40);
     editor.dragSelectionBy(delta, nullptr);
@@ -442,9 +445,9 @@ TEST(MacroChipDrag, ChipDragIsOneUndoStep) {
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
     auto* compA = findComponent(editor, a);
     auto* compB = findComponent(editor, b);
@@ -457,7 +460,7 @@ TEST(MacroChipDrag, ChipDragIsOneUndoStep) {
     // (captureBeforeState before the drag starts, pushSnapshotFromCapture once it finalizes) —
     // see the comment on the previous test for why this drives the primitives directly rather
     // than synthesizing mouse events.
-    editor.selectMacro(macroId, false);
+    editor.getMacroController().selectMacro(macroId, false);
     undo.captureBeforeState(engine.getGraph());
     editor.beginSelectionDrag();
     editor.dragSelectionBy({120, 40}, nullptr);
@@ -494,17 +497,17 @@ TEST(MacroRename, RenameMacroHasNoEmptyInputGuardOfItsOwnTheDialogCallbackProvid
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
     ASSERT_EQ(editor.getMacros().find(macroId)->name, juce::String("Macro"));
 
     // What the dialog's callback does on non-empty trimmed input.
-    editor.renameMacro(macroId, "Filter Chain");
+    editor.getMacroController().renameMacro(macroId, "Filter Chain");
     EXPECT_EQ(editor.getMacros().find(macroId)->name, juce::String("Filter Chain"));
 
     // renameMacro alone has no guard against an empty name -- proving the dialog's own
     // `typed.isEmpty()` check (never reached in this test) is load-bearing, not redundant.
-    editor.renameMacro(macroId, "");
+    editor.getMacroController().renameMacro(macroId, "");
     EXPECT_TRUE(editor.getMacros().find(macroId)->name.isEmpty())
         << "renameMacro itself sets whatever it's given; promptRenameMacro's callback is what "
            "keeps an empty/whitespace-only typed value from ever reaching it";
@@ -535,7 +538,7 @@ TEST(MacroUndo, UndoOfGroupRefreshesTheCanvasAndRedoReCollapses) {
     ASSERT_TRUE(compB->isVisible());
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
     EXPECT_FALSE(compA->isVisible());
     EXPECT_FALSE(compB->isVisible());
@@ -565,10 +568,10 @@ TEST(MacroUndo, UndoOfRenameAndRecolourRefreshesTheCanvas) {
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
-    editor.renameMacro(macroId, "Renamed");
+    editor.getMacroController().renameMacro(macroId, "Renamed");
     ASSERT_TRUE(undo.canUndo());
     undo.undo();
     auto* macroAfterUndo = editor.getMacros().find(macroId);
@@ -581,7 +584,7 @@ TEST(MacroUndo, UndoOfRenameAndRecolourRefreshesTheCanvas) {
     ASSERT_NE(macroAfterRedo, nullptr);
     EXPECT_EQ(macroAfterRedo->name, juce::String("Renamed"));
 
-    editor.setMacroColour(macroId, juce::Colour(0xff112233));
+    editor.getMacroController().setMacroColour(macroId, juce::Colour(0xff112233));
     ASSERT_TRUE(undo.canUndo());
     undo.undo();
     auto* macroColourUndo = editor.getMacros().find(macroId);
@@ -617,7 +620,7 @@ TEST(MacroCable, CollapsedMacroHidesInternalCablesAndReanchorsBoundaryCrossingOn
     ASSERT_EQ(editor.getVisibleCableCount(), 2);
 
     editor.setSelectedNodes({osc, filter});
-    auto macroId = editor.groupSelectionIntoMacro(); // collapses by default
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro(); // collapses by default
     ASSERT_FALSE(macroId.isEmpty());
 
     auto* macro = editor.getMacros().find(macroId);
@@ -670,10 +673,10 @@ TEST(MacroCable, BoundaryCableTracksTheLiveCardBoundsBeforeFinalizeMacroCardDrag
     ASSERT_TRUE(engine.getGraph().addConnection({{filter, 0}, {vca, 0}}));
 
     editor.setSelectedNodes({osc, filter});
-    auto macroId = editor.groupSelectionIntoMacro(); // collapses by default
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro(); // collapses by default
     ASSERT_FALSE(macroId.isEmpty());
 
-    auto* card = editor.getMacroCardForTest(macroId);
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
     ASSERT_NE(card, nullptr);
 
     const auto movedTopLeft = card->getPosition() + juce::Point<int>(0, 400);
@@ -741,10 +744,10 @@ TEST(MacroUndo, TogglingASelectionSpanningTwoMacrosIsOneUndoStep) {
     auto d = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 1300, 100);
 
     editor.setSelectedNodes({a, b});
-    auto macroOne = editor.groupSelectionIntoMacro();
+    auto macroOne = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroOne.isEmpty());
     editor.setSelectedNodes({c, d});
-    auto macroTwo = editor.groupSelectionIntoMacro();
+    auto macroTwo = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroTwo.isEmpty());
 
     // Both start collapsed (groupSelectionIntoMacro collapses by default), so one toggle expands
@@ -753,7 +756,7 @@ TEST(MacroUndo, TogglingASelectionSpanningTwoMacrosIsOneUndoStep) {
     ASSERT_TRUE(editor.getMacros().find(macroTwo)->collapsed);
 
     editor.setSelectedNodes({a, c}); // one member from each macro
-    editor.toggleSelectionMacrosCollapsed();
+    editor.getMacroController().toggleSelectionMacrosCollapsed();
     ASSERT_FALSE(editor.getMacros().find(macroOne)->collapsed);
     ASSERT_FALSE(editor.getMacros().find(macroTwo)->collapsed);
 
@@ -788,11 +791,11 @@ TEST(MacroChipDrag, ChipRectNeverOverlapsAMemberModule) {
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 700, 300);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false); // expanded: the hull and chip exist
+    editor.getMacroController().setMacroCollapsed(macroId, false); // expanded: the hull and chip exist
 
-    const auto chip = editor.macroChipBounds(macroId);
+    const auto chip = editor.getMacroController().macroChipBounds(macroId);
     ASSERT_FALSE(chip.isEmpty());
 
     for (auto id : {a, b}) {
@@ -813,9 +816,9 @@ TEST(MacroChipDrag, PressingAndDraggingTheChipMovesTheMacroThroughTheRealMousePa
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 700, 300);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
     // Canvas coordinates equal GraphEditor-local coordinates only at the identity transform, which
     // is the freshly constructed editor's state. Assert it rather than assume it - a future default
@@ -832,7 +835,7 @@ TEST(MacroChipDrag, PressingAndDraggingTheChipMovesTheMacroThroughTheRealMousePa
     const auto startA = compA->getPosition();
     const auto startB = compB->getPosition();
 
-    const auto chipCentre = editor.macroChipBounds(macroId).getCentre();
+    const auto chipCentre = editor.getMacroController().macroChipBounds(macroId).getCentre();
     const juce::Point<int> delta(120, 80);
 
     editor.mouseDown(makeCanvasMouseEvent(editor, chipCentre));

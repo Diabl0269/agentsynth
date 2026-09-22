@@ -55,9 +55,9 @@ public:
     }
 
     /** The current drag-preview fields, packaged for SmartConnectionEngine (see
-     *  SmartConnectionEngine::DragPreviewState). GraphEditor's own buildDragPreviewState() (still
-     *  called by GraphEditorSmartConnections.cpp, which needs no host indirection for its own
-     *  member) forwards here now that this controller owns the fields. */
+     *  SmartConnectionEngine::DragPreviewState). FRO254: GraphEditor's own former
+     *  buildDragPreviewState() forwarder is gone — GraphEditorSmartConnections.cpp and
+     *  GraphEditorDragDrop.cpp now call this directly via the dragDropController_ member. */
     SmartConnectionEngine::DragPreviewState buildDragPreviewState() const;
 
     // ---- Alignment guides (UI Phase 7 - Item 4) -------------------------------------------

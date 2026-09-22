@@ -306,8 +306,8 @@ void GraphEditor::cancelSelectionDrag() {
 void GraphEditor::cancelLiveDragGestures() {
     if (selectionDragActive)
         cancelSelectionDrag();
-    if (isDragPreviewActive())
-        endDragPreview();
+    if (dragDropController_.isDragPreviewActive())
+        dragDropController_.endDragPreview();
     // FRO40: a component destroyed mid-Cmd/Ctrl-drag would otherwise leave the candidate hull
     // highlighted forever — no-op when nothing was armed, same as the two clears above.
     clearMacroDragCandidate();
@@ -322,7 +322,7 @@ void GraphEditor::cancelLiveDragGestures() {
 // MacroGroupController.h's class comment.
 
 void GraphEditor::beginMacroCardDrag(const juce::String& macroId) {
-    selectMacro(macroId, false);
+    macroController_.selectMacro(macroId, false);
     beginSelectionDrag();
 }
 

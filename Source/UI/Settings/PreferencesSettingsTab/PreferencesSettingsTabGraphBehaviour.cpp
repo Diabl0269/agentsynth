@@ -209,7 +209,7 @@ void PreferencesSettingsTab::persistSmartConnectionMode(GraphEditor::SmartConnec
     appProperties.getUserSettings()->setValue("smartConnectionMode", GraphEditor::smartConnectionModeToString(mode));
     appProperties.getUserSettings()->saveIfNeeded();
     if (graphEditor)
-        graphEditor->setSmartConnectionMode(mode);
+        graphEditor->getSmartConnections().setSmartConnectionMode(mode);
 }
 
 void PreferencesSettingsTab::persistDoubleClickPortDisconnect(bool enabled) {

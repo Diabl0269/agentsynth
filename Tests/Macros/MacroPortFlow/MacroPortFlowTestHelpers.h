@@ -60,7 +60,7 @@ juce::String makeTwoMemberMacro(GraphEditor& editor, AudioEngine& engine) {
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     editor.setSelectedNodes({a, b});
-    return editor.groupSelectionIntoMacro();
+    return editor.getMacroController().groupSelectionIntoMacro();
 }
 
 /** The live ModuleComponent for `id`, or nullptr — the same lookup every drag-based test below

@@ -67,7 +67,8 @@ void GraphEditor::updateComponents() {
             // non-initiating group member vanishing on its own is harmless: the initiator survives,
             // its real mouseUp is still coming, and finalizeSelectionDrag's lookup simply skips a
             // stale id it can't find (see cancelLiveDragGestures' own comment).
-            if (isDragPreviewActive() && comp->getNodeId() == getDragPreviewSelfId())
+            if (dragDropController_.isDragPreviewActive() &&
+                comp->getNodeId() == dragDropController_.getDragPreviewSelfId())
                 cancelLiveDragGestures();
             content.removeChildComponent(comp);
             modules.remove(i);
@@ -575,7 +576,7 @@ void GraphEditor::mouseMove(const juce::MouseEvent& e) {
     // handle. Tracked with its own bool (rather than early-returning) so leaving the chip falls
     // through to the ordinary cable/canvas cursor logic below instead of getting stuck on the hand
     // cursor - cheap either way (one hull-list walk), no repaint needed for a cursor-only change.
-    const bool overChip = !macroChipAt(localPos.roundToInt()).isEmpty();
+    const bool overChip = !macroController_.macroChipAt(localPos.roundToInt()).isEmpty();
     if (overChip != hoveringMacroChip) {
         hoveringMacroChip = overChip;
         setMouseCursor(overChip ? juce::MouseCursor::DraggingHandCursor : juce::MouseCursor::NormalCursor);
@@ -652,7 +653,7 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
         // Now redundant — buildMacroMenu selects the macro itself before either item runs
         // (founder-review item 4, docs/macros/menu-and-membership.md#the-macro-menus-entry-points, so the same fix also
         // covers a macro member's own right-click menu) — left in place to keep this fix's diff scoped.
-        if (const auto hullMacroId = macroHullAt(canvasPos.roundToInt()); hullMacroId.isNotEmpty()) {
+        if (const auto hullMacroId = macroController_.macroHullAt(canvasPos.roundToInt()); hullMacroId.isNotEmpty()) {
             // T138: captured BEFORE the reselect above, which otherwise destroys any external
             // batch (or a partial subset of this macro's own members, picked for a targeted
             // "Remove Selection from Macro") the user chose before right-clicking this hull —
@@ -661,7 +662,7 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
             // there was NO prior selection at all.
             const auto priorSelection = getSelectedNodes();
             if (priorSelection.empty())
-                selectMacro(hullMacroId, false);
+                macroController_.selectMacro(hullMacroId, false);
             buildMacroMenu(hullMacroId, nullptr, &priorSelection).showMenuAsync(juce::PopupMenu::Options());
             return;
         }
@@ -687,8 +688,8 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
         // one code path that can collapse a macro. Not gated on Shift the way the chip is: the
         // button is a small fixed target near the hull's top-right corner, not the drag-prone
         // strip the marquee-vs-chip carve-out below exists for.
-        if (auto macroId = macroCollapseButtonAt(localPos.roundToInt()); macroId.isNotEmpty()) {
-            setMacroCollapsed(macroId, true);
+        if (auto macroId = macroController_.macroCollapseButtonAt(localPos.roundToInt()); macroId.isNotEmpty()) {
+            macroController_.setMacroCollapsed(macroId, true);
             return;
         }
 
@@ -700,8 +701,9 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
         // happens to start on a chip should still be a marquee. The chip is a small target, so
         // letting it swallow Shift+drag would make marquees fail unpredictably near a hull's top
         // edge. Unmodified drag is the chip's gesture; Shift keeps belonging to the marquee.
-        if (auto macroId = macroChipAt(localPos.roundToInt()); macroId.isNotEmpty() && !e.mods.isShiftDown()) {
-            selectMacro(macroId, false);
+        if (auto macroId = macroController_.macroChipAt(localPos.roundToInt());
+            macroId.isNotEmpty() && !e.mods.isShiftDown()) {
+            macroController_.selectMacro(macroId, false);
             if (undoManager)
                 undoManager->captureBeforeState(audioEngine.getGraph());
             beginSelectionDrag();
@@ -818,8 +820,8 @@ void GraphEditor::mouseUp(const juce::MouseEvent& e) {
             return; // right-click keeps the selection so the context menu can act on it
 
         const auto canvasPos = content.getLocalPoint(this, e.getPosition());
-        if (const auto hullMacroId = macroHullAt(canvasPos); hullMacroId.isNotEmpty())
-            selectMacro(hullMacroId, false);
+        if (const auto hullMacroId = macroController_.macroHullAt(canvasPos); hullMacroId.isNotEmpty())
+            macroController_.selectMacro(hullMacroId, false);
         else
             clearSelection();
     }

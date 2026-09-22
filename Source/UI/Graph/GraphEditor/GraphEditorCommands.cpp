@@ -268,7 +268,7 @@ void GraphEditor::mouseDoubleClick(const juce::MouseEvent& e) {
 
     // Double-clicking an expanded macro's name chip renames it - mirrors the collapsed card's own
     // double-click-to-rename affordance.
-    if (auto macroId = macroChipAt(localPos.roundToInt()); macroId.isNotEmpty()) {
+    if (auto macroId = macroController_.macroChipAt(localPos.roundToInt()); macroId.isNotEmpty()) {
         // JUCE delivers mouseDown before mouseDoubleClick, so the second click already armed a
         // chip drag (see mouseDown). The modal rename AlertWindow below can swallow the mouseUp
         // that would otherwise clear it, leaving macroChipDragId stuck non-empty and the next drag
@@ -900,7 +900,7 @@ void GraphEditor::timerCallback() {
     // still). Re-evaluate on this existing 30 Hz tick rather than a new timer, and only when the
     // sampled state actually flipped: a drag that holds its modifier costs one bool compare, and
     // refreshSmartSuggestions repaints only when the suggestion set really changed.
-    refreshSuggestionsIfInsertModifierChanged();
+    smartConnections_.refreshSuggestionsIfInsertModifierChanged(dragDropController_.buildDragPreviewState());
 
     // Minimap (issue #159): only build the model while visible, and only when it's needed —
     // setModel() itself only repaints when the model actually changed (no repaint storm on a

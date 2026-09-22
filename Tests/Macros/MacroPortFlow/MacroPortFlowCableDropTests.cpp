@@ -22,7 +22,7 @@ TEST(MacroPortFlow, DroppingACableOnACollapsedCardCreatesAMonoInputAndWiresIt) {
             extComp = c;
     ASSERT_NE(extComp, nullptr);
 
-    auto* card = editor.getMacroCardForTest(macroId);
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
     ASSERT_NE(card, nullptr);
     ASSERT_TRUE(card->isVisible());
     const auto dropPoint = card->getBounds().getCentre();
@@ -55,7 +55,7 @@ TEST(MacroPortFlow, DroppingAMidiCableOnACollapsedCardCreatesAMidiOutput) {
             extComp = c;
     ASSERT_NE(extComp, nullptr);
 
-    auto* card = editor.getMacroCardForTest(macroId);
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
     ASSERT_NE(card, nullptr);
     const auto dropPoint = card->getBounds().getCentre();
 

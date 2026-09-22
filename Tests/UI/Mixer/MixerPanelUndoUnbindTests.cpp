@@ -175,7 +175,7 @@ TEST(MixerPanelUndoUnbindTests, MixerPanelUnbindsBeforeDeleteSelectionFreesTheSt
     // (including the ChannelStrip the fader is bound to) synchronously. No crash/hang is the
     // primary assertion here; the counter proves the fix's own pre-removal hook actually ran
     // rather than the test getting lucky on this run's heap layout.
-    mc.getGraphEditor().deleteMacroAndMembers(macroId);
+    mc.getGraphEditor().getMacroController().deleteMacroAndMembers(macroId);
 
     EXPECT_GT(synth::ui::MixerFader::getLiveUnbindCallCountForTest(), liveUnbindsBefore)
         << "deleteSelection() must unbind the strip's fader before removeNode() frees it";

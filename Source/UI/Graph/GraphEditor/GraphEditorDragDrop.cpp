@@ -4,10 +4,16 @@
 // resolution (resolvePlacement and friends), hosted-plugin/module drop creation, and drop-landing
 // animation — the drag-and-drop helpers that stay on GraphEditor (FRO77 PR3 design: not
 // drag-exclusive, or SafePointer<GraphEditor>-based and therefore tied to this Component's own
-// identity). The drag-preview API and the actual DragAndDropTarget/FileDragAndDropTarget bodies
-// moved onto GraphDragDropController; this file's overrides are now one-line forwarders onto it.
-// GraphEditor is declared in GraphEditor.h; sibling GraphEditor*.cpp files in this directory hold
-// the rest of the class.
+// identity). FRO254: the drag-preview API's plain one-line forwarders onto
+// GraphDragDropController (beginDragPreview/updateDragPreview/endDragPreview/
+// isDragPreviewActive/getDragPreviewGhost/getAlignmentGuides/getDragPreviewSelfId/
+// buildDragPreviewState) are gone — every call site now reaches it directly, either through
+// GraphEditor::getDragDropController() (external callers) or the dragDropController_ member
+// itself (GraphEditor's own other .cpp files). The DragAndDropTarget/FileDragAndDropTarget
+// overrides below stay as forwarders — JUCE resolves a drop target by Component identity, so the
+// actual override must stay a GraphEditor member even though everything it does is one call into
+// the controller. GraphEditor is declared in GraphEditor.h; sibling GraphEditor*.cpp files in
+// this directory hold the rest of the class.
 
 #include "GraphEditor.h"
 
@@ -25,45 +31,6 @@
 // Heights are measured from the real components, not guessed — see
 // ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents, which constructs every type and
 // fails if this table drifts from what layoutDefaultContent() actually produces.
-void GraphEditor::beginDragPreview(int w, int h, juce::AudioProcessorGraph::NodeID selfId) {
-    dragDropController_.beginDragPreview(w, h, selfId);
-}
-
-void GraphEditor::updateDragPreview(juce::Point<int> desiredTopLeftCanvas) {
-    dragDropController_.updateDragPreview(desiredTopLeftCanvas);
-}
-
-void GraphEditor::endDragPreview() { dragDropController_.endDragPreview(); }
-
-bool GraphEditor::isDragPreviewActive() const { return dragDropController_.isDragPreviewActive(); }
-
-juce::Rectangle<int> GraphEditor::getDragPreviewGhost() const { return dragDropController_.getDragPreviewGhost(); }
-
-// Every alignment guide computed by the current drag preview — see
-// GraphDragDropController::AlignmentGuide. Only GraphEditorCables.cpp's paint path reads
-// this; the enable/disable preference (alignmentGuidesEnabled below) stays on GraphEditor.
-const std::vector<GraphDragDropController::AlignmentGuide>& GraphEditor::getAlignmentGuides() const {
-    return dragDropController_.getAlignmentGuides();
-}
-
-// The NodeID the live drag preview is tracking, or an invalid NodeID before one starts —
-// GraphDragDropController's own field, forwarded because GraphEditorCanvas.cpp's
-// updateComponents() (a same-class caller, not a GraphCanvasHost one) still needs it by this
-// name now that the field itself lives off GraphEditor (FRO77 PR3).
-juce::AudioProcessorGraph::NodeID GraphEditor::getDragPreviewSelfId() const {
-    return dragDropController_.getDragPreviewSelfId();
-}
-
-// The current drag-preview fields, packaged for SmartConnectionEngine (see
-// SmartConnectionEngine::DragPreviewState). The fields themselves moved onto
-// GraphDragDropController in FRO77 PR3; this stays a private GraphEditor method (rather than
-// callers reaching the controller directly) because GraphEditorSmartConnections.cpp's own
-// refreshSmartSuggestions()/refreshSuggestionsIfInsertModifierChanged() call it unqualified,
-// same as every other same-class forwarder on this page.
-SmartConnectionEngine::DragPreviewState GraphEditor::buildDragPreviewState() const {
-    return dragDropController_.buildDragPreviewState();
-}
-
 // Estimated (w, h) footprint for a module type name, used for the library drag ghost before a
 // real component exists. Public so a test can hold it to the real component sizes — see
 // ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents.
@@ -366,7 +333,7 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
 
             // Auto-wire any smart-connection previews the user saw while dragging. Already inside
             // a structural undo transaction when one is open, so do not nest another.
-            applySmartSuggestions(newNodeId, /*recordUndo=*/false);
+            smartConnections_.applySmartSuggestions(newNodeId, /*recordUndo=*/false);
         };
 
         if (undoManager) {
@@ -508,9 +475,9 @@ void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
     // surrounding module-drag undo snapshot (captureBeforeState / pushSnapshotFromCapture).
     // FRO77 PR1: shouldOfferSmartConnections/smartSuggestions moved onto SmartConnectionEngine —
     // same two conditions, read through the engine instead of GraphEditor's own former fields.
-    if (smartConnections_.shouldOfferSmartConnections(buildDragPreviewState()) &&
+    if (smartConnections_.shouldOfferSmartConnections(dragDropController_.buildDragPreviewState()) &&
         smartConnections_.getSmartSuggestionCount() > 0)
-        applySmartSuggestions(module->getNodeId(), /*recordUndo=*/false);
+        smartConnections_.applySmartSuggestions(module->getNodeId(), /*recordUndo=*/false);
 
     repaintCanvas();
 }
@@ -559,13 +526,13 @@ void GraphEditor::clearMacroDragCandidate() {
 // accidentally shrink a JOIN target's hull.
 juce::Rectangle<int> GraphEditor::paintedMacroHullBounds(const juce::String& macroId) const {
     if (macroDragDraggedNodeId_ != juce::AudioProcessorGraph::NodeID{}) {
-        const auto* ownMacro = macroForNode(macroDragDraggedNodeId_);
+        const auto* ownMacro = macroController_.macroForNode(macroDragDraggedNodeId_);
         if (ownMacro != nullptr && ownMacro->id == macroId) {
             const juce::String uuid = macroController_.nodeUuidFor(macroDragDraggedNodeId_);
             return macroController_.macroHullBoundsExcluding(macroId, uuid);
         }
     }
-    return macroHullBounds(macroId);
+    return macroController_.macroHullBounds(macroId);
 }
 
 // The single-undo-step finalize (docs/macros/ports.md): modeled on finalizeMacroCardDrag
@@ -621,7 +588,7 @@ void GraphEditor::finalizeMacroMembershipDrag(ModuleComponent* module, const juc
     // Torn down HERE, not by the mouseUp call site, because doFinalize (still running above) calls
     // finalizeModuleDrag, which reads buildDragPreviewState() for smart-connection suggestions — the
     // preview has to stay live for that and only end once this method is otherwise done with it.
-    endDragPreview();
+    dragDropController_.endDragPreview();
     repaintCanvas();
 }
 

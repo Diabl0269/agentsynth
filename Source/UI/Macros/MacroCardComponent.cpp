@@ -17,7 +17,7 @@ void MacroCardComponent::paint(juce::Graphics& g) {
         return;
 
     auto bounds = getLocalBounds().toFloat();
-    const bool selected = owner.isMacroSelected(macroId);
+    const bool selected = owner.getMacroController().isMacroSelected(macroId);
 
     g.setColour(macro->colour.withAlpha(0.22f));
     g.fillRoundedRectangle(bounds, 8.0f);
@@ -49,7 +49,7 @@ void MacroCardComponent::paint(juce::Graphics& g) {
     // size on the same canvas.
     const auto previewArea = textArea.reduced(0, 2);
     if (!previewArea.isEmpty()) {
-        const auto members = owner.macroMemberPreviews(macroId);
+        const auto members = owner.getMacroController().macroMemberPreviews(macroId);
         juce::Rectangle<int> unionBounds;
         for (const auto& member : members)
             unionBounds = unionBounds.isEmpty() ? member.bounds : unionBounds.getUnion(member.bounds);
@@ -76,7 +76,7 @@ void MacroCardComponent::paint(juce::Graphics& g) {
 
     // ---- Port jacks (P8-15c, T141: docs/macros/ports.md#cable-rendering-across-the-boundary) ----
     // One jack per configured port — inputs down the left edge, outputs down the right, from the
-    // SAME owner.macroCardPortLayout() that this card's own hit-testing (endConnectionDrag's jack
+    // SAME owner.getMacroController().macroCardPortLayout() that this card's own hit-testing (endConnectionDrag's jack
     // check) and buildVisibleCables()'s boundary-cable anchoring both read, so the drawn dot is
     // never anywhere those two disagree about. Colour matches ModuleComponent::paint's own jack
     // convention verbatim (its comment: "Audio-signal jacks (MIDI in/out) -> audioWire;
@@ -91,7 +91,7 @@ void MacroCardComponent::paint(juce::Graphics& g) {
     static const synth::theme::Colors fallbackColors{};
     const auto& themeColors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
     {
-        for (const auto& port : owner.macroCardPortLayout(macro->id)) {
+        for (const auto& port : owner.getMacroController().macroCardPortLayout(macro->id)) {
             const juce::Colour kindTint =
                 port.kind == synth::MacroPortKind::Midi ? themeColors.audioWire : themeColors.accent;
             // An armed preview is the jack's colour; else the stored user colour, else the kind tint.
@@ -153,8 +153,10 @@ void MacroCardComponent::paint(juce::Graphics& g) {
 
     // colors.warning is the bypass family (ModMatrixComponent's own bypass toggle uses it);
     // colors.error is documented as "error / mute" on Theme::Colors itself.
-    paintToggleBadge(getToggleBadgeBounds(false), themeColors.warning, owner.macroBypassState(macro->id));
-    paintToggleBadge(getToggleBadgeBounds(true), themeColors.error, owner.macroMuteState(macro->id));
+    paintToggleBadge(getToggleBadgeBounds(false), themeColors.warning,
+                     owner.getMacroController().macroBypassState(macro->id));
+    paintToggleBadge(getToggleBadgeBounds(true), themeColors.error,
+                     owner.getMacroController().macroMuteState(macro->id));
 
     // Expand chevron — a filled triangle rather than a text glyph, so there's no non-ASCII
     // string literal to trip check-nonascii-literals.test.sh and no themed icon asset to add for
@@ -211,23 +213,23 @@ void MacroCardComponent::mouseDown(const juce::MouseEvent& e) {
         // case, 2026-09-10).
         const auto priorSelection = owner.getSelectedNodes();
         if (priorSelection.empty())
-            owner.selectMacro(macroId, false);
+            owner.getMacroController().selectMacro(macroId, false);
         showContextMenu(priorSelection);
         return;
     }
 
     if (getExpandButtonBounds().contains(e.position)) {
-        owner.setMacroCollapsed(macroId, false);
+        owner.getMacroController().setMacroCollapsed(macroId, false);
         return;
     }
 
     if (e.mods.isShiftDown() || e.mods.isCommandDown()) {
-        owner.selectMacro(macroId, true);
+        owner.getMacroController().selectMacro(macroId, true);
         return;
     }
 
-    if (!owner.isMacroSelected(macroId))
-        owner.selectMacro(macroId, false);
+    if (!owner.getMacroController().isMacroSelected(macroId))
+        owner.getMacroController().selectMacro(macroId, false);
 
     dragStartPosition = getPosition();
     bodyDragActive = true;
@@ -275,7 +277,7 @@ void MacroCardComponent::mouseDoubleClick(const juce::MouseEvent& e) {
         return;
     }
 
-    owner.setMacroCollapsed(macroId, false);
+    owner.getMacroController().setMacroCollapsed(macroId, false);
 }
 
 void MacroCardComponent::beginRename() {
@@ -309,7 +311,7 @@ void MacroCardComponent::finishRename(bool commit) {
     editor.reset();
 
     if (commit)
-        owner.renameMacro(macroId, typed.trim());
+        owner.getMacroController().renameMacro(macroId, typed.trim());
     repaint();
 }
 
@@ -360,7 +362,7 @@ juce::String MacroCardComponent::getModuleCountText() const {
 }
 
 juce::String MacroCardComponent::getTooltip() {
-    const auto names = owner.macroMemberNames(macroId);
+    const auto names = owner.getMacroController().macroMemberNames(macroId);
     constexpr int kMaxNamesShown = 10;
 
     juce::StringArray shown;

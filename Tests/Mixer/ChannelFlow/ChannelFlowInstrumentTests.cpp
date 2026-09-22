@@ -393,7 +393,7 @@ TEST_F(ChannelFlowTest, InstrumentTrackWavetableCardsDoNotOverlap) {
 
     ASSERT_EQ(macros.size(), 1);
     const auto macroId = macros.getAll().front().id;
-    mc.getGraphEditor().setMacroCollapsed(macroId, false);
+    mc.getGraphEditor().getMacroController().setMacroCollapsed(macroId, false);
     ASSERT_FALSE(macros.find(macroId)->collapsed);
 
     // The factory default preset every fresh MainComponent loads already has its own ADSR-type

@@ -46,13 +46,13 @@ ModuleComponent* findComponent(GraphEditor& editor, NodeID id) {
 
 /** Groups two fresh Oscillator/Filter modules into a new collapsed macro (the min-2 rule) and
  *  returns its id. Callers that need a docked widget must expand it first
- *  (editor.setMacroCollapsed(id, false)) -- a port's ModuleComponent is hidden, same as any other
+ *  (editor.getMacroController().setMacroCollapsed(id, false)) -- a port's ModuleComponent is hidden, same as any other
  *  member, while its macro is collapsed. */
 juce::String makeTwoMemberMacro(GraphEditor& editor, AudioEngine& engine) {
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     editor.setSelectedNodes({a, b});
-    return editor.groupSelectionIntoMacro();
+    return editor.getMacroController().groupSelectionIntoMacro();
 }
 
 } // namespace

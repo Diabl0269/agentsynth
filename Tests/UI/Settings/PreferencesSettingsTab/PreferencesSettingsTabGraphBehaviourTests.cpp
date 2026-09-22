@@ -97,7 +97,7 @@ TEST_F(PreferencesSettingsTabTest, ChangingControlsPersistsAndPushesToEditor) {
 
     tab.setSmartConnectionMode(GraphEditor::SmartConnectionMode::AllMoves);
     EXPECT_EQ(appProperties.getUserSettings()->getValue("smartConnectionMode"), "AllMoves");
-    EXPECT_EQ(editor.getSmartConnectionMode(), GraphEditor::SmartConnectionMode::AllMoves);
+    EXPECT_EQ(editor.getSmartConnections().getSmartConnectionMode(), GraphEditor::SmartConnectionMode::AllMoves);
 
     tab.setDoubleClickPortDisconnectEnabled(false);
     EXPECT_EQ(appProperties.getUserSettings()->getValue("doubleClickPortDisconnect"), "0");
@@ -313,7 +313,7 @@ TEST_F(PreferencesSettingsTabTest, SetGraphEditorPushesCurrentValues) {
     PreferencesSettingsTab tab(appProperties);
     AudioEngine engine;
     GraphEditor editor(engine);
-    ASSERT_EQ(editor.getSmartConnectionMode(), GraphEditor::SmartConnectionMode::NewAndUnwired);
+    ASSERT_EQ(editor.getSmartConnections().getSmartConnectionMode(), GraphEditor::SmartConnectionMode::NewAndUnwired);
     ASSERT_TRUE(editor.getDoubleClickPortDisconnectEnabled());
     ASSERT_FALSE(editor.getDefaultDualIOForNewModules());
     ASSERT_TRUE(editor.getAutoCreateMacroPortsOnDragEnabled());
@@ -321,7 +321,7 @@ TEST_F(PreferencesSettingsTabTest, SetGraphEditorPushesCurrentValues) {
     ASSERT_TRUE(editor.getAutoCreateChannelOnConnectEnabled());
 
     tab.setGraphEditor(&editor);
-    EXPECT_EQ(editor.getSmartConnectionMode(), GraphEditor::SmartConnectionMode::NewOnly);
+    EXPECT_EQ(editor.getSmartConnections().getSmartConnectionMode(), GraphEditor::SmartConnectionMode::NewOnly);
     EXPECT_FALSE(editor.getDoubleClickPortDisconnectEnabled());
     EXPECT_TRUE(editor.getDefaultDualIOForNewModules());
     EXPECT_FALSE(editor.getAutoCreateMacroPortsOnDragEnabled());

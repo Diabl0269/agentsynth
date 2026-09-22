@@ -284,7 +284,7 @@ bool MainComponent::applyZoomCommand(juce::CommandID commandID) {
 
 bool MainComponent::touchesAnyMacro() const {
     for (auto nodeId : graphEditor.getSelectedNodes()) {
-        if (graphEditor.macroForNode(nodeId) != nullptr)
+        if (graphEditor.getMacroController().macroForNode(nodeId) != nullptr)
             return true;
     }
     return false;
@@ -557,14 +557,14 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
          "Group the selection into a new Macro, or toggle collapse/expand if it already touches one", "Edit",
          "groupSelection", [](const MainComponent& m) { return m.canGroupSelection(); },
          [](MainComponent& m) {
-             m.graphEditor.groupOrToggleSelectionMacros();
+             m.graphEditor.getMacroController().groupOrToggleSelectionMacros();
              return true;
          }},
         {AppCommands::ungroupSelection, "Ungroup Macro",
          "Dissolve the macro the selection belongs to, keeping its modules", "Edit", "ungroupSelection",
          [](const MainComponent& m) { return m.hasSelection(); },
          [](MainComponent& m) {
-             m.graphEditor.ungroupSelection();
+             m.graphEditor.getMacroController().ungroupSelection();
              return true;
          }},
         // toggleSelectionMacrosCollapsed() itself refuses (with a status message) when the
@@ -575,7 +575,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
          "Toggle the collapsed state of the macro the selection belongs to", "Edit", "collapseMacro",
          [](const MainComponent& m) { return m.touchesAnyMacro(); },
          [](MainComponent& m) {
-             m.graphEditor.toggleSelectionMacrosCollapsed();
+             m.graphEditor.getMacroController().toggleSelectionMacrosCollapsed();
              return true;
          }},
         // Mirrors the canvas context menu item's setEnabled -- same predicate, so the two

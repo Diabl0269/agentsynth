@@ -687,7 +687,7 @@ void PreferencesSettingsTab::setGraphEditor(GraphEditor* ge) {
     graphEditor = ge;
     if (graphEditor == nullptr)
         return;
-    graphEditor->setSmartConnectionMode(modeFromComboId(smartConnectionCombo.getSelectedId()));
+    graphEditor->getSmartConnections().setSmartConnectionMode(modeFromComboId(smartConnectionCombo.getSelectedId()));
     graphEditor->setDoubleClickPortDisconnectEnabled(doubleClickDisconnectToggle.getToggleState());
     graphEditor->setAlignmentGuidesEnabled(alignmentGuideToggle.getToggleState());
     graphEditor->setDefaultDualIOForNewModules(defaultDualIOToggle.getToggleState());

@@ -1,13 +1,18 @@
 // GraphEditorSmartConnections.cpp
 //
-// GraphEditor's own smart-connection surface: one-line forwarders onto SmartConnectionEngine
-// (Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngine.{h,cpp}, which now owns the mode,
-// the drag-tick insert-modifier re-sample, and the suggestion list), the DragPreviewState builder
-// those forwarders share, and the couple of members that stayed on GraphEditor because they need
-// nothing SmartConnectionEngine has that GraphEditor doesn't already have more directly
-// (nodeHasCables, estimatePortCenter — both pure reads of audioEngine / a bounds rect, no drag or
-// suggestion state, and estimatePortCenter is called statically by tests as
-// GraphEditor::estimatePortCenter). GraphEditor is declared in GraphEditor.h.
+// GraphEditor's own smart-connection surface. FRO254: the plain one-line forwarders onto
+// SmartConnectionEngine (Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngine.{h,cpp})
+// are gone now that every call site reaches it directly, either through
+// GraphEditor::getSmartConnections() (external callers) or the smartConnections_ member itself
+// (GraphEditor's own other .cpp files). What's left: the three GraphCanvasHost pure-virtual
+// overrides below (refreshSmartSuggestions/clearSmartSuggestions/seedInsertModifierSample), which
+// stay on GraphEditor because GraphDragDropController calls them polymorphically through the
+// host interface, and
+// the couple of members that stayed on GraphEditor because they need nothing
+// SmartConnectionEngine has that GraphEditor doesn't already have more directly (nodeHasCables,
+// estimatePortCenter — both pure reads of audioEngine / a bounds rect, no drag or suggestion
+// state, and estimatePortCenter is called statically by tests as GraphEditor::estimatePortCenter).
+// GraphEditor is declared in GraphEditor.h.
 //
 // (Custom module titles, formerly also in this file, moved to GraphEditorModuleTitles.cpp —
 // titles were never a smart-connections concern.)
@@ -25,19 +30,15 @@ juce::String GraphEditor::smartConnectionModeToString(SmartConnectionMode mode) 
     return SmartConnectionEngine::smartConnectionModeToString(mode);
 }
 
-void GraphEditor::refreshSmartSuggestions() { smartConnections_.refreshSmartSuggestions(buildDragPreviewState()); }
-
-void GraphEditor::applySmartSuggestions(juce::AudioProcessorGraph::NodeID ghostNodeId, bool recordUndo) {
-    smartConnections_.applySmartSuggestions(ghostNodeId, recordUndo);
+// GraphCanvasHost pure-virtual override — GraphDragDropController calls this polymorphically
+// through the host interface, so it can't move onto SmartConnectionEngine even though every
+// other forwarder in this file already has (FRO254).
+void GraphEditor::refreshSmartSuggestions() {
+    smartConnections_.refreshSmartSuggestions(dragDropController_.buildDragPreviewState());
 }
 
+// GraphCanvasHost pure-virtual override — see refreshSmartSuggestions() above.
 void GraphEditor::clearSmartSuggestions() { smartConnections_.clearSmartSuggestions(); }
-
-// Re-evaluates the suggestions when the insert modifier changed since the last drag tick.
-// A modifier press/release is not a mouse move, so nothing else would notice it.
-void GraphEditor::refreshSuggestionsIfInsertModifierChanged() {
-    smartConnections_.refreshSuggestionsIfInsertModifierChanged(buildDragPreviewState());
-}
 
 bool GraphEditor::nodeHasCables(juce::AudioProcessorGraph::NodeID nodeId) const {
     auto& graph = audioEngine.getGraph();
@@ -52,34 +53,7 @@ bool GraphEditor::nodeHasCables(juce::AudioProcessorGraph::NodeID nodeId) const 
     return false;
 }
 
-void GraphEditor::setSmartConnectionMode(SmartConnectionMode mode) { smartConnections_.setSmartConnectionMode(mode); }
-
-GraphEditor::SmartConnectionMode GraphEditor::getSmartConnectionMode() const noexcept {
-    return smartConnections_.getSmartConnectionMode();
-}
-
-// Tests set the override; production leaves it empty and reads the real keyboard. See
-// SmartConnectionEngine::isInsertModifierDown for the CTRL/insert-in-series rationale.
-void GraphEditor::setInsertModifierOverrideForTests(std::optional<bool> down) {
-    smartConnections_.setInsertModifierOverrideForTests(down);
-}
-
-bool GraphEditor::isInsertModifierDown() const { return smartConnections_.isInsertModifierDown(); }
-
-int GraphEditor::getSmartSuggestionCount() const noexcept { return smartConnections_.getSmartSuggestionCount(); }
-
-const std::vector<GraphEditor::SmartSuggestion>& GraphEditor::getSmartSuggestions() const noexcept {
-    return smartConnections_.getSmartSuggestions();
-}
-
-bool GraphEditor::isInputJackFreeForTests(juce::AudioProcessorGraph::NodeID nodeId, int jack) const {
-    return smartConnections_.isInputJackFree(nodeId, jack, false);
-}
-
-bool GraphEditor::isOutputJackFreeForTests(juce::AudioProcessorGraph::NodeID nodeId, int jack) const {
-    return smartConnections_.isOutputJackFree(nodeId, jack, false);
-}
-
+// GraphCanvasHost pure-virtual override — see refreshSmartSuggestions() above.
 void GraphEditor::seedInsertModifierSample() { smartConnections_.seedInsertModifierSample(); }
 
 // Port centre inside a bounds rect — must agree with ModuleComponent::getPortCenter.

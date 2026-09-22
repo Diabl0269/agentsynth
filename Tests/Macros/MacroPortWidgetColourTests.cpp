@@ -29,10 +29,10 @@ TEST(MacroPortWidget, ExpandsRecolourReachesBothTheCardAndTheDockedWidget) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "In A");
     ASSERT_FALSE(uuid.isEmpty());
 
     const juce::Colour userColour(0xff123456);
@@ -47,12 +47,14 @@ TEST(MacroPortWidget, ExpandsRecolourReachesBothTheCardAndTheDockedWidget) {
 
     // They are the SAME components the rest of the codebase reaches for this macro/port - the fix
     // hit the real paint surfaces, not a fabricated target.
-    EXPECT_EQ(targets.card, editor.getMacroCardForTest(macroId)) << "the card must be the macro's own live card";
+    EXPECT_EQ(targets.card, editor.getMacroController().getMacroCardForTest(macroId))
+        << "the card must be the macro's own live card";
     EXPECT_EQ(targets.widget, findComponent(editor, nodeIdForUuid(engine, uuid)))
         << "the widget must be this port's own docked ModuleComponent";
 
     // And the data paint reads is the new colour, so the forced repaint actually shows it.
-    const GraphEditor::MacroPortOwner ownership = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid));
+    const GraphEditor::MacroPortOwner ownership =
+        editor.getMacroController().macroPortOwnerFor(nodeIdForUuid(engine, uuid));
     ASSERT_NE(ownership.port, nullptr);
     EXPECT_EQ(*ownership.port->colour, userColour);
     EXPECT_EQ(ModuleComponent::resolveMacroPortJackColour(ownership.port, juce::Colour(0xff00cc33)), userColour);
@@ -64,14 +66,14 @@ TEST(MacroPortWidget, EveryPortKindReachesItsDockedWidget) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
     // A MIDI input and a stereo Audio output must each resolve to their own widget plus the shared
     // card, never falling through to a null on the MIDI branch or the wide-shape branch.
-    const auto midiUuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::Midi, MacroPortShape::Mono, 1, "MIDI In");
-    const auto stereoUuid =
-        editor.addMacroPort(macroId, false, synth::MacroPortKind::AudioCV, MacroPortShape::Stereo, 2, "Out A");
+    const auto midiUuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::Midi,
+                                                                   MacroPortShape::Mono, 1, "MIDI In");
+    const auto stereoUuid = editor.getMacroController().addMacroPort(macroId, false, synth::MacroPortKind::AudioCV,
+                                                                     MacroPortShape::Stereo, 2, "Out A");
     ASSERT_FALSE(midiUuid.isEmpty());
     ASSERT_FALSE(stereoUuid.isEmpty());
 
@@ -83,10 +85,10 @@ TEST(MacroPortWidget, EveryPortKindReachesItsDockedWidget) {
         auto targets = editor.repaintMacroPortColourTargets(macroId, portUuid);
         EXPECT_NE(targets.card, nullptr);
         EXPECT_NE(targets.widget, nullptr);
-        EXPECT_EQ(targets.card, editor.getMacroCardForTest(macroId));
+        EXPECT_EQ(targets.card, editor.getMacroController().getMacroCardForTest(macroId));
         EXPECT_EQ(targets.widget, findComponent(editor, nodeIdForUuid(engine, portUuid)));
         // The paint data this forced repaint reads is the port's own colour, not its neighbour's.
-        EXPECT_EQ(editor.macroPortOwnerFor(nodeIdForUuid(engine, portUuid)).port->colour, colour);
+        EXPECT_EQ(editor.getMacroController().macroPortOwnerFor(nodeIdForUuid(engine, portUuid)).port->colour, colour);
     };
     check(midiUuid, juce::Colour(0xff112233));
     check(stereoUuid, juce::Colour(0xff445566));
@@ -103,14 +105,14 @@ TEST(MacroPortWidget, CollapsedRecolourStillTargetsTheCardAndTheHiddenWidget) {
     ASSERT_FALSE(macroId.isEmpty());
     // NOTE: left COLLAPSED on purpose.
 
-    const auto uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "In A");
     ASSERT_FALSE(uuid.isEmpty());
     editor.changeMacroPortColour(macroId, uuid, juce::Colour(0xff123456));
 
     auto targets = editor.repaintMacroPortColourTargets(macroId, uuid);
     EXPECT_NE(targets.card, nullptr) << "the collapsed card is the one surface that must repaint";
-    EXPECT_EQ(targets.card, editor.getMacroCardForTest(macroId));
+    EXPECT_EQ(targets.card, editor.getMacroController().getMacroCardForTest(macroId));
     // The port node persists while folded, so its widget is still found (and hidden) rather than null.
     EXPECT_EQ(targets.widget, findComponent(editor, nodeIdForUuid(engine, uuid)));
 }
@@ -140,20 +142,20 @@ TEST(MacroPortWidget, ChangeMacroPortColourIsOneUndoStep) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "In A");
     ASSERT_FALSE(uuid.isEmpty());
 
     editor.changeMacroPortColour(macroId, uuid, juce::Colour(0xff123456));
-    ASSERT_TRUE(editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port->colour.has_value());
+    ASSERT_TRUE(editor.getMacroController().macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port->colour.has_value());
 
     // The recolor recorded exactly one undo step (the colour only mutates `macros`, so a
     // MacroSnapshotAction, like every other port-metadatum edit).
     ASSERT_TRUE(undo.canUndo());
     undo.undo();
-    EXPECT_FALSE(editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port->colour.has_value())
+    EXPECT_FALSE(editor.getMacroController().macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port->colour.has_value())
         << "undo cleared the user colour";
 
     // And the repaint targets still resolve to the same live surfaces after the round trip.
@@ -190,15 +192,15 @@ TEST(MacroPortWidget, PreviewArmsBothSurfacesButWritesNoStoredColourAndNoUndo) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "In A");
     ASSERT_FALSE(uuid.isEmpty());
 
-    auto* card = editor.getMacroCardForTest(macroId);
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
     auto* widget = findComponent(editor, nodeIdForUuid(engine, uuid));
-    auto* port = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
+    auto* port = editor.getMacroController().macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
     ASSERT_NE(card, nullptr);
     ASSERT_NE(widget, nullptr);
     ASSERT_NE(port, nullptr);
@@ -235,14 +237,14 @@ TEST(MacroPortWidget, DockedWidgetResolvesPreviewThenStoredThenKindTint) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
-    const auto uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "In A");
     ASSERT_FALSE(uuid.isEmpty());
     auto* widget = findComponent(editor, nodeIdForUuid(engine, uuid));
     ASSERT_NE(widget, nullptr);
 
-    auto* port = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
+    auto* port = editor.getMacroController().macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
     ASSERT_FALSE(port->colour.has_value());
     EXPECT_FALSE(widget->hasPortColourPreviewForTest());
     const juce::Colour kindTint(0xff00cc33);
@@ -257,7 +259,7 @@ TEST(MacroPortWidget, DockedWidgetResolvesPreviewThenStoredThenKindTint) {
     // resolves to the stored colour — no glitch, because preview and store converged on one value.
     editor.changeMacroPortColour(macroId, uuid, juce::Colours::cyan);
     EXPECT_FALSE(widget->hasPortColourPreviewForTest());
-    auto* committedPort = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
+    auto* committedPort = editor.getMacroController().macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
     ASSERT_TRUE(committedPort->colour.has_value());
     EXPECT_EQ(widget->effectiveMacroPortJackColour(committedPort, juce::Colour(0xff00cc33)), juce::Colours::cyan);
 }
@@ -274,11 +276,11 @@ TEST(MacroPortWidget, CollapsedCardPreviewIsScopedToOnePort) {
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
     // Left collapsed on purpose — the card is the live collapsed surface here.
-    const auto uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "In A");
     ASSERT_FALSE(uuid.isEmpty());
-    auto* card = editor.getMacroCardForTest(macroId);
-    auto* port = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
+    auto* port = editor.getMacroController().macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
     ASSERT_NE(card, nullptr);
     ASSERT_NE(port, nullptr);
 
@@ -307,14 +309,14 @@ TEST(MacroPortWidget, PreviewThenCommitIsOneUndoStepAndShowsStoredColour) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
-    const auto uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "In A");
     ASSERT_FALSE(uuid.isEmpty());
     auto* widget = findComponent(editor, nodeIdForUuid(engine, uuid));
     ASSERT_NE(widget, nullptr);
 
-    auto* port = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
+    auto* port = editor.getMacroController().macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
     const bool hadUndo = undo.canUndo();
 
     // A drag: several live preview ticks — no data written, no undo step.
@@ -327,7 +329,7 @@ TEST(MacroPortWidget, PreviewThenCommitIsOneUndoStepAndShowsStoredColour) {
 
     // The commit: exactly one undo step, the colour stored, and the identical preview cleared.
     editor.changeMacroPortColour(macroId, uuid, juce::Colours::blue);
-    auto* committedPort = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
+    auto* committedPort = editor.getMacroController().macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
     ASSERT_TRUE(committedPort->colour.has_value());
     EXPECT_EQ(committedPort->colour.value(), juce::Colours::blue);
     EXPECT_FALSE(widget->hasPortColourPreviewForTest());
@@ -346,14 +348,14 @@ TEST(MacroPortWidget, ColourPickerFiresOnPreviewThenCommitsOnce) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
-    const auto uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "In A");
     ASSERT_FALSE(uuid.isEmpty());
     auto* widget = findComponent(editor, nodeIdForUuid(engine, uuid));
     ASSERT_NE(widget, nullptr);
 
-    auto* port = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
+    auto* port = editor.getMacroController().macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
     const bool hadUndo = undo.canUndo();
 
     synth::ui::MacroPortConfigDialog dialog(
@@ -382,7 +384,7 @@ TEST(MacroPortWidget, ColourPickerFiresOnPreviewThenCommitsOnce) {
 
     // Closing the popup fires onCommit exactly once: one undo step, the colour stored, preview cleared.
     picker->commitForTest();
-    auto* committedPort = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
+    auto* committedPort = editor.getMacroController().macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
     ASSERT_TRUE(committedPort->colour.has_value());
     EXPECT_EQ(committedPort->colour.value(), juce::Colour(0xff222222));
     ASSERT_TRUE(undo.canUndo());
@@ -402,13 +404,13 @@ TEST(MacroPortWidget, AbandonedPickerTearsDownTheArmedPreview) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
-    const auto uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "In A");
     ASSERT_FALSE(uuid.isEmpty());
     auto* widget = findComponent(editor, nodeIdForUuid(engine, uuid));
-    auto* card = editor.getMacroCardForTest(macroId);
-    auto* port = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
+    auto* port = editor.getMacroController().macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
     ASSERT_NE(widget, nullptr);
     ASSERT_NE(card, nullptr);
     ASSERT_NE(port, nullptr);
@@ -440,9 +442,9 @@ TEST(MacroPortWidget, CancelWithNoArmedPreviewIsNoOp) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
-    const auto uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "In A");
     ASSERT_FALSE(uuid.isEmpty());
     auto* widget = findComponent(editor, nodeIdForUuid(engine, uuid));
     ASSERT_NE(widget, nullptr);
@@ -453,7 +455,7 @@ TEST(MacroPortWidget, CancelWithNoArmedPreviewIsNoOp) {
     // And the public commit boundary is still a one-repaint, one-undo-step operation after a no-op
     // cancel: repaintMacroPortColourTargets forces a repaint, clearMacroPortColourPreview is the no-op.
     editor.changeMacroPortColour(macroId, uuid, juce::Colours::green);
-    auto* committedPort = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
+    auto* committedPort = editor.getMacroController().macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port;
     ASSERT_TRUE(committedPort->colour.has_value());
     EXPECT_FALSE(widget->hasPortColourPreviewForTest());
     EXPECT_TRUE(undo.canUndo());
@@ -473,36 +475,36 @@ TEST(MacroPortWidget, ArmedPreviewSurvivesTheSurfaceItArmedBeingDestroyed) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
-    const auto uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "In A");
     ASSERT_FALSE(uuid.isEmpty());
     ASSERT_NE(findComponent(editor, nodeIdForUuid(engine, uuid)), nullptr);
-    ASSERT_NE(editor.getMacroCardForTest(macroId), nullptr);
+    ASSERT_NE(editor.getMacroController().getMacroCardForTest(macroId), nullptr);
 
     // A picker drag arms both surfaces and caches them for the rest of this session.
     editor.previewMacroPortColour(macroId, uuid, juce::Colours::purple);
     ASSERT_TRUE(findComponent(editor, nodeIdForUuid(engine, uuid))->hasPortColourPreviewForTest());
-    ASSERT_TRUE(editor.getMacroCardForTest(macroId)->hasPortColourPreviewForTest(uuid));
+    ASSERT_TRUE(editor.getMacroController().getMacroCardForTest(macroId)->hasPortColourPreviewForTest(uuid));
 
     // The port goes away underneath the still-open picker: its docked widget is destroyed.
-    editor.removeMacroPort(macroId, uuid);
+    editor.getMacroController().removeMacroPort(macroId, uuid);
     editor.updateComponents();
     ASSERT_EQ(findComponent(editor, nodeIdForUuid(engine, uuid)), nullptr);
 
     // The abandoned-picker backstop still runs, reaching only the surface that is still alive.
     editor.cancelArmedMacroPortColourPreview();
-    auto* card = editor.getMacroCardForTest(macroId);
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
     ASSERT_NE(card, nullptr) << "the macro still has both of its module members, so its card outlives the port";
     EXPECT_FALSE(card->hasPortColourPreviewForTest(uuid));
 
     // And the next arm re-resolves from scratch rather than reusing anything the dead session cached.
-    const auto second =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In B");
+    const auto second = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                                 MacroPortShape::Mono, 1, "In B");
     ASSERT_FALSE(second.isEmpty());
     auto* secondWidget = findComponent(editor, nodeIdForUuid(engine, second));
     ASSERT_NE(secondWidget, nullptr);
     editor.previewMacroPortColour(macroId, second, juce::Colours::orange);
     EXPECT_TRUE(secondWidget->hasPortColourPreviewForTest());
-    EXPECT_TRUE(editor.getMacroCardForTest(macroId)->hasPortColourPreviewForTest(second));
+    EXPECT_TRUE(editor.getMacroController().getMacroCardForTest(macroId)->hasPortColourPreviewForTest(second));
 }

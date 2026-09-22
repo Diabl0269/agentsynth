@@ -129,15 +129,15 @@ TEST_F(GraphEditorTest, DragPreviewGhostTracksResolvedPlacement) {
     }
 
     // Start a drag preview for a new (library) module: selfId = {} (no existing node)
-    EXPECT_FALSE(editor.isDragPreviewActive());
-    editor.beginDragPreview(280, 300, juce::AudioProcessorGraph::NodeID{});
-    EXPECT_TRUE(editor.isDragPreviewActive());
+    EXPECT_FALSE(editor.getDragDropController().isDragPreviewActive());
+    editor.getDragDropController().beginDragPreview(280, 300, juce::AudioProcessorGraph::NodeID{});
+    EXPECT_TRUE(editor.getDragDropController().isDragPreviewActive());
 
     // Desired position OVERLAPS the existing oscillator (same coordinates).
     juce::Point<int> desiredOverlap(100, 100);
-    editor.updateDragPreview(desiredOverlap);
+    editor.getDragDropController().updateDragPreview(desiredOverlap);
 
-    auto ghost = editor.getDragPreviewGhost();
+    auto ghost = editor.getDragDropController().getDragPreviewGhost();
     EXPECT_FALSE(ghost.isEmpty()) << "Ghost rect should be non-empty after updateDragPreview";
 
     // The ghost must equal what resolvePlacement returns for the same inputs.
@@ -153,9 +153,9 @@ TEST_F(GraphEditorTest, DragPreviewGhostTracksResolvedPlacement) {
         << ") after anti-overlap resolution";
 
     // endDragPreview clears the active flag.
-    editor.endDragPreview();
-    EXPECT_FALSE(editor.isDragPreviewActive());
-    EXPECT_TRUE(editor.getDragPreviewGhost().isEmpty());
+    editor.getDragDropController().endDragPreview();
+    EXPECT_FALSE(editor.getDragDropController().isDragPreviewActive());
+    EXPECT_TRUE(editor.getDragDropController().getDragPreviewGhost().isEmpty());
 }
 
 // DropUsesRealModuleSizeForAntiOverlap: drop two tall Oscillator modules at the same canvas

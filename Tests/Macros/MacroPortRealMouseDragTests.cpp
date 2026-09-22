@@ -73,9 +73,10 @@ TEST(MacroPortRealMouseDrag, DraggingFromAnExpandedMacroMembersOutputJackToAnExt
     auto oscMember = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto filterMember = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 400);
     editor.setSelectedNodes({oscMember, filterMember});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false); // expand: members become real, visible ModuleComponents
+    editor.getMacroController().setMacroCollapsed(macroId,
+                                                  false); // expand: members become real, visible ModuleComponents
 
     auto* memberComp = compFor(editor, oscMember);
     ASSERT_NE(memberComp, nullptr);
@@ -105,9 +106,9 @@ TEST(MacroPortRealMouseDrag, DraggingFromAnExternalModulesOutputJackToAnExpanded
     auto oscMember = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto filterMember = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 400);
     editor.setSelectedNodes({oscMember, filterMember});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
     auto* memberComp = compFor(editor, filterMember); // Filter's audio INPUT jack 0
     ASSERT_NE(memberComp, nullptr);

@@ -325,7 +325,7 @@ void ModuleComponent::paintMacroPortWidget(juce::Graphics& g) {
     static const synth::theme::Colors fallbackColors{};
     const auto& themeColors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
 
-    const auto ownership = owner.macroPortOwnerFor(nodeId);
+    const auto ownership = owner.getMacroController().macroPortOwnerFor(nodeId);
     const juce::Colour tint = ownership.macro != nullptr ? ownership.macro->colour : themeColors.accent;
     const juce::String name =
         (ownership.port != nullptr && ownership.port->name.isNotEmpty()) ? ownership.port->name : cardTitle();
