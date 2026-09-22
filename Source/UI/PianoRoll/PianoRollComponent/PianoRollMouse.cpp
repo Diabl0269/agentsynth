@@ -666,6 +666,9 @@ void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::M
         // needs no mapping of its own.
         const double amountPx = (double)scrollAmount(delta, scrollInverted_) * kScrollPixelsPerWheelUnit;
         if (amountPx != 0.0) {
+            // The user is deliberately looking elsewhere -- follow must not undo it on the next
+            // playhead tick. See followSuspended_'s comment.
+            followSuspended_ = true;
             rollView_.scrollBeats(amountPx / rollView_.pixelsPerBeat);
             repaint();
             if (onHorizontalViewChanged)
@@ -707,7 +710,12 @@ void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::M
 void PianoRollComponent::tickAutoScrollForTest() { autoScrollTick(); }
 bool PianoRollComponent::isAutoScrollTimerRunningForTest() const noexcept { return autoScrollTimer_.isTimerRunning(); }
 
-void PianoRollComponent::setFollowPlayhead(bool follow) noexcept { followPlayhead_ = follow; }
+void PianoRollComponent::setFollowPlayhead(bool follow) noexcept {
+    followPlayhead_ = follow;
+    // Turning follow on is the one gesture that means "snap to the playhead now" -- it re-arms
+    // whatever suspended it (a manual scroll, or the fresh framing from opening this clip).
+    followSuspended_ = false;
+}
 bool PianoRollComponent::isFollowPlayhead() const noexcept { return followPlayhead_; }
 
 } // namespace synth::ui

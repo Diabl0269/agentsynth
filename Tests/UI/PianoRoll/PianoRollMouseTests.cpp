@@ -414,6 +414,72 @@ TEST(PianoRollFollowPlayheadTest, NeverFlipsWhileADragIsInFlight) {
     f.roll.mouseUp(leftDrag(f.roll, dragged, anchor));
 }
 
+// FRO247: opening a clip must show ITS pattern, never jump toward wherever a follow flag left over
+// from a PREVIOUS clip (or from before the clip was even opened) happens to think the playhead is.
+TEST(PianoRollFollowPlayheadTest, OpeningAClipSuppressesAStaleFollowPageUntilReArmed) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipA = f.doc.addClip(trackId, 0.0, 8.0, "Clip A");
+    const auto clipB = f.doc.addClip(trackId, 100.0, 8.0, "Clip B");
+
+    f.open(clipA, 40.0);
+    f.roll.setFollowPlayhead(true);
+    f.roll.setPlayheadBeat(2.0); // parks the (stale) playhead inside clip A's own view
+
+    // Switching to clip B re-frames the view on clip B's own bounds -- exactly openClip's job.
+    f.open(clipB, 40.0);
+    const double framedBeat = f.roll.getFirstVisibleBeat();
+
+    // The panel's periodic transport poll delivers the SAME stale beat (still parked inside clip
+    // A, way outside clip B's freshly framed view) right after the switch -- follow must not act
+    // on it, or the roll would open on an empty grid instead of clip B's notes.
+    f.roll.setPlayheadBeat(2.0);
+    EXPECT_DOUBLE_EQ(f.roll.getFirstVisibleBeat(), framedBeat)
+        << "opening a new clip must show ITS pattern, not jump toward a stale follow position";
+
+    // An explicit re-enable is the one gesture that resumes following.
+    f.roll.setFollowPlayhead(true);
+    f.roll.setPlayheadBeat(2.0);
+    EXPECT_NE(f.roll.getFirstVisibleBeat(), framedBeat) << "re-arming follow still works once the user asks again";
+}
+
+// FRO247: a manual scroll away from the playhead must stick -- not get undone by the very next
+// follow tick, which is what a mouse-wheel scroll (or a trackpad pan) previously read as.
+TEST(PianoRollFollowPlayheadTest, ManualScrollSuspendsFollowUntilReArmed) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 64.0, "Clip");
+    f.open(clipId, 40.0);
+    f.roll.setFollowPlayhead(true);
+
+    // Follow pages toward the playhead once, same setup as PageFlipsTheViewWhenTheBeatWouldLeaveIt
+    // -- landing it just inside the LEFT edge of the view (setPlayheadBeat's own 0.1*visibleBeats
+    // margin), so scrolling the view further RIGHT (forward in time) is what leaves it behind.
+    f.roll.setPlayheadBeat(40.0);
+    const double followedBeat = f.roll.getFirstVisibleBeat();
+    ASSERT_GT(followedBeat, 0.0);
+
+    // The user scrolls away on purpose -- same Shift+wheel gesture ShiftWheelScrollsTimeLocally
+    // exercises (scrolls RIGHT, past the playhead at beat 40, leaving it off the left edge).
+    juce::MouseWheelDetails wheel{};
+    wheel.deltaY = -0.5f;
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}, juce::ModifierKeys::shiftModifier), wheel);
+    const double scrolledBeat = f.roll.getFirstVisibleBeat();
+    ASSERT_GT(scrolledBeat, followedBeat) << "the scroll itself must have moved the view right, past the playhead";
+
+    // The SAME playhead position again -- as if the panel's low-rate transport poll ticked again
+    // without the beat itself moving -- must not snap the view back to where follow last put it.
+    f.roll.setPlayheadBeat(40.0);
+    EXPECT_DOUBLE_EQ(f.roll.getFirstVisibleBeat(), scrolledBeat)
+        << "a manual scroll away from the playhead must stick until follow is explicitly re-armed";
+
+    // Re-enabling follow resumes the paging behaviour, exactly like turning it on fresh.
+    f.roll.setFollowPlayhead(true);
+    f.roll.setPlayheadBeat(40.0);
+    EXPECT_DOUBLE_EQ(f.roll.getFirstVisibleBeat(), followedBeat)
+        << "an explicit re-enable pages back toward the playhead";
+}
+
 // ============================================================================
 // 21. MULTI-NOTE RESIZE (11.1), the Cmd unquantized resize (11.2), and the clip-overrun prompt.
 // ============================================================================

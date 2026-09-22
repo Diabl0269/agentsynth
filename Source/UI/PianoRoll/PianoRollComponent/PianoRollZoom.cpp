@@ -24,6 +24,9 @@ using namespace synth::ui::detail;
 void PianoRollComponent::zoomHorizontalAroundX(double factor, double anchorGridX) {
     if (!std::isfinite(factor) || factor <= 0.0)
         return;
+    // A deliberate view change, same as a manual scroll -- see followSuspended_'s comment on
+    // PianoRollComponent.h and mouseWheelMove's horizontal branch.
+    followSuspended_ = true;
     rollView_.zoomAroundX(factor, anchorGridX);
     repaint();
     if (onHorizontalViewChanged)
