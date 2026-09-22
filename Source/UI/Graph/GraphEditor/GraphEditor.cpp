@@ -59,3 +59,18 @@ ModuleComponent* GraphEditor::moduleComponentFor(juce::AudioProcessorGraph::Node
             return c;
     return nullptr;
 }
+
+// A learn can be armed while its target card is scrolled out of view or the module has since been
+// deleted (MainComponent's arm/cancel flow doesn't know either), so this is a best-effort push, not
+// a hard dependency -- moduleComponentFor() returning nullptr is the normal "nothing to repaint" case,
+// not an error.
+void GraphEditor::setMidiLearnArmed(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
+    if (auto* module = moduleComponentFor(nodeId))
+        module->setMidiLearnArmedParam(paramId);
+}
+
+void GraphEditor::clearMidiLearnArmed() {
+    for (auto* c : content.getModules())
+        if (c != nullptr)
+            c->setMidiLearnArmedParam({});
+}

@@ -257,6 +257,8 @@ add_library(Core STATIC
     Source/MidiRemote/RemoteEngine/RemoteEngineReconcile.cpp
     Source/MidiRemote/RemoteModel.h
     Source/MidiRemote/RemoteModelJson.cpp
+    Source/MidiRemote/MidiRemoteLearnBinder.h
+    Source/MidiRemote/MidiRemoteLearnBinder.cpp
     Source/RecentProjects.cpp
     Source/RecentProjects.h
     Source/SnippetManager.cpp

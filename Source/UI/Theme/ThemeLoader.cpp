@@ -172,6 +172,7 @@ static constexpr OptionalColourKey kOptionalColourKeys[] = {
     {"modRingPositive", &Colors::modRingPositive},
     {"modRingNegative", &Colors::modRingNegative},
     {"toolActive", &Colors::toolActive},
+    {"midiMapped", &Colors::midiMapped},
     {"noteFill", &Colors::noteFill},
     {"noteBorder", &Colors::noteBorder},
     {"noteSelected", &Colors::noteSelected},
@@ -525,6 +526,7 @@ juce::var ThemeLoader::themeToJson(const Theme& theme) {
         colors->setProperty("modRingPositive", colourToHex(c.modRingPositive));
         colors->setProperty("modRingNegative", colourToHex(c.modRingNegative));
         colors->setProperty("toolActive", colourToHex(c.toolActive));
+        colors->setProperty("midiMapped", colourToHex(c.midiMapped));
         colors->setProperty("noteFill", colourToHex(c.noteFill));
         colors->setProperty("noteBorder", colourToHex(c.noteBorder));
         colors->setProperty("noteSelected", colourToHex(c.noteSelected));

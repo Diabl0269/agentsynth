@@ -6,6 +6,7 @@
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Branding.h"
+#include "MidiRemote/MidiLearnController.h"
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
 #include "MidiRemote/RemoteModel.h"
 #include "Mixer/TrackPresetManager.h"
@@ -719,22 +720,18 @@ private:
     synth::theme::ThemeManager* themeManager{nullptr};
     synth::theme::AppLookAndFeel* lookAndFeel{nullptr};
 
-    // The app's ONE live timeline document, and the recorder that captures parameter gestures into
-    // its automation lanes.
-    //
-    // DECLARATION ORDER IS LOAD-BEARING - both precede `undoManager` so both outlive it: a
-    // TimelineSnapshotAction on the undo stack holds a reference to this doc, and to the recorder.
+    // The app's ONE live timeline document + the recorder that captures parameter gestures into its
+    // automation lanes. DECLARATION ORDER IS LOAD-BEARING: both precede `undoManager` so both
+    // outlive it -- a TimelineSnapshotAction on the undo stack holds a reference to this doc and the recorder.
     synth::TimelineDoc timelineDoc;
     synth::AutomationRecorder automationRecorder;
     // The app's ONE live MIDI Remote project document (the reserved "midiRemote" project.json
-    // key) — plain project state, sitting beside timelineDoc rather than owned by GraphEditor the
-    // way macros are, since there is no engine/panel consumer of it yet (FRO127/FRO131). Same
-    // load-bearing declaration-order rule as timelineDoc: it must precede `undoManager` so it
-    // outlives any MidiRemoteSnapshotAction on the undo stack that holds a reference to it.
+    // key), read/written by MidiLearnController and wireMidiRemoteEngine(). Same load-bearing
+    // declaration-order rule as timelineDoc: must precede `undoManager` so it outlives any
+    // MidiRemoteSnapshotAction on the undo stack that holds a reference to it.
     synth::MidiRemoteProjectDoc midiRemoteDoc;
-    // The app's one live MidiRecorder — no lifetime constraint against undoManager the way
-    // timelineDoc/automationRecorder have (it holds no reference to the doc or the undo manager
-    // between calls; stopAndCommit() takes both as parameters), so ordering here is not load-bearing.
+    // The app's one live MidiRecorder -- no lifetime constraint vs undoManager (holds no doc/undo
+    // reference between calls; stopAndCommit() takes both as parameters).
     synth::MidiRecorder midiRecorder;
 
     AppUndoManager undoManager;
@@ -945,6 +942,9 @@ private:
     };
     synth::midi::RemoteEngine remoteEngine; // docs/control/midi-remote.md#the-engine; wired in wireMidiRemoteEngine()
     RemoteActionInvokerImpl remoteActionInvoker_{commandManager};
+    // FRO130 (docs/control/midi-remote-ui.md#the-learn-interaction) -- declared last of its refs.
+    synth::midi::MidiLearnController midiLearnController_{audioEngine,   graphEditor, remoteEngine,
+                                                          midiRemoteDoc, undoManager, statusBar};
     // Consulted first by resolveEditSurface(); std::nullopt means "use real focus".
     std::optional<EditSurface> editSurfaceOverrideForTest_;
 

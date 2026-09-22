@@ -37,6 +37,7 @@ add_executable(AIPatchHarness
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
+    ${CMAKE_SOURCE_DIR}/Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/ModuleViews/CurveEditor/CurveModel.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/ModuleViews/CurveEditor/CurveEditorGeometry.cpp
     ${CMAKE_SOURCE_DIR}/Source/UI/ModuleViews/CurveEditor/CurveEditorComponent.cpp

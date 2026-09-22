@@ -205,7 +205,19 @@ private:
         bool sawRelease = false;
         float minValue = 1.0f;
         float maxValue = 0.0f;
+        /** CC only: true once a value other than exactly 0.0/1.0 (raw 0/127) has been seen — the
+         *  continuous-sweep signature settleLearnIfDue's buttonLike preference rules out
+         *  (docs/control/midi-remote.md#learn-what-does-the-first-message-mean). Always false for
+         *  note/pitchBend/channelPressure/programChange tallies; a note-on/off pair is button-like
+         *  by type alone, regardless of velocity. */
+        bool sawIntermediateValue = false;
     };
+
+    /** True for a tally whose message key looks like a button press rather than a continuous
+     *  sweep: any note (on/off), or a CC that has only ever carried 0/127 — settleLearnIfDue's
+     *  buttonLike preference (docs/control/midi-remote.md#learn-what-does-the-first-message-mean).
+     */
+    static bool looksButtonLike(const LearnTally& tally) noexcept;
 
     SnapshotPublisher publisher_;
     std::array<std::unique_ptr<SourceLane>, kMaxRemoteSources> lanes_;
@@ -229,6 +241,13 @@ private:
     std::uint32_t nextLearnToken_ = 1;
     LearnRequest learnRequest_;
     std::vector<LearnTally> learnTallies_;
+    // FRO130: whether learnFirstEventMs_ has been stamped yet -- NOT "learnFirstEventMs_ != 0.0"
+    // (the bug this replaces). A test clock legitimately reads exactly 0.0 at t=0, which made the
+    // very first candidate at time zero indistinguishable from "no candidate yet" and left
+    // settleLearnIfDue() waiting for a settle window that could never start; a real
+    // juce::Time::getMillisecondCounterHiRes() never returns exactly 0.0 in practice, which is why
+    // this stayed latent until RemoteEngineLearnTests.cpp exercised a fake clock starting at zero.
+    bool learnHasFirstEvent_ = false;
     double learnFirstEventMs_ = 0.0;
     double learnArmedMs_ = 0.0;
 

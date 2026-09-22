@@ -190,6 +190,7 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentWavetableTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentPaintTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentEnvelopeCardTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentMidiLearnTests.cpp
     UI/Graph/AutomationUiReflectionTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentHistoryTests.cpp
@@ -237,7 +238,10 @@ add_executable(Tests
     MidiRemote/RemoteEngineReconcileTests.cpp
     MidiRemote/RemoteEngineHostedTests.cpp
     MidiRemote/RemoteEngineThreadingTests.cpp
+    MidiRemote/RemoteEngineLearnTests.cpp
     MidiRemote/ControllerProfileStoreTests.cpp
+    MidiRemote/MidiRemoteLearnBinderTests.cpp
+    MidiRemote/MidiLearnControllerTests.cpp
     App/E2EWorkflowTests.cpp
     Modules/ExternalMidiModuleTests.cpp
     Project/PresetManagerTests.cpp
@@ -430,6 +434,7 @@ add_executable(Tests
     App/BrandingTests.cpp
     ../Source/ShortcutManager/ShortcutManagerActionNames.cpp
     ../Source/MidiRemote/ControllerProfileStore.cpp
+    ../Source/MidiRemote/MidiLearnController.cpp
     # Source/MidiRemote/RemoteEngine/*.cpp is NOT listed here on purpose: those five units are
     # registered in the root CMakeLists.txt (Core), same as RemoteModel.h/RemoteModelJson.cpp right
     # above them there, because Core's own AudioEngineMidi.cpp/AudioEngineHostMode.cpp call into
@@ -538,6 +543,7 @@ add_executable(Tests
     ../Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
     ../Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
     ../Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
+    ../Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibrarySearch.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryRows.cpp

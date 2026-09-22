@@ -315,6 +315,14 @@ MainComponent::EditSurface MainComponent::resolveEditSurface() const {
 }
 
 bool MainComponent::keyPressed(const juce::KeyPress& key) {
+    // FRO130: Esc cancels an armed MIDI Learn (docs/control/midi-remote-ui.md#the-learn-interaction),
+    // ahead of everything below -- including GraphEditor's own canvas Escape (clears the selection),
+    // which only reaches here at all when nothing is selected.
+    if (key == juce::KeyPress::escapeKey && midiLearnController_.isArmed()) {
+        midiLearnController_.cancelArmed();
+        return true;
+    }
+
     // The LAST stop for a key: JUCE bubbles an unhandled keyPressed up the parent chain, so
     // everything the focused surface wanted has already had its turn. Only COMMAND actions are
     // dispatched from here.

@@ -418,6 +418,26 @@ public:
      *  GraphEditor deliberately owns no TimelineDoc, mirroring onSaveSnippetRequested above. */
     std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)> onAutomateParameterRequested;
 
+    // ---- MIDI Learn (FRO130) ---- see docs/control/midi-remote-ui.md#the-learn-interaction.
+    // Set by MainComponent::wireGraphEditorCallbacks(); GraphEditor owns no RemoteEngine/doc.
+
+    /** Every mapped paramID on `nodeId` -> its display label; absent key means unmapped. */
+    std::function<std::map<juce::String, juce::String>(juce::AudioProcessorGraph::NodeID)> onQueryMidiMappingsForNode;
+
+    /** Arms a learn on this (nodeId, paramId) parameter target. */
+    std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)> onMidiLearnRequested;
+
+    /** Removes this (nodeId, paramId)'s project assignment, undoably. */
+    std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)> onMidiForgetRequested;
+
+    /** Left unset until the MIDI Remote panel exists (FRO131). */
+    std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)> onEditMidiAssignmentRequested;
+
+    /** Pushes/clears the breathing-outline armed state onto the target's ModuleComponent, if it's
+     *  currently on screen. See GraphEditor.cpp for why this can't just be a moduleComponentFor() call site. */
+    void setMidiLearnArmed(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId);
+    void clearMidiLearnArmed();
+
     /** A hosted-plugin card's "Open Editor" button (ModuleComponent's HostedPluginModule branch).
      *  Set by the owner (MainComponent) to resolve `nodeId` to its live HostedPluginModule and hand
      *  it to HostedPluginWindowManager::openEditorFor — mirrors onAutomateParameterRequested's

@@ -60,6 +60,7 @@ are also accepted.
 | `modRingPositive` | `#FF00E5FF` | Modulation ring, positive modulation |
 | `modRingNegative` | `#FFFF6E00` | Modulation ring, negative modulation |
 | `toolActive` | `#FF00D1FF` | Timeline edit-tool strip — active-tool button highlight |
+| `midiMapped` | `#FFB48EF5` | MIDI Learn "mapped" badge on a control with an assignment ([`midi-remote-ui.md`](../control/midi-remote-ui.md#the-learn-interaction)) |
 | `noteFill` | `#FFB48EF5` | Piano-roll note body, unselected — see [colour-overrides](colour-overrides.md#note-colours) |
 | `noteBorder` | `#FF4A3B75` | Piano-roll note outline, unselected — deliberately a distinct literal, not a `.darker()` derivation of `noteFill` |
 | `noteSelected` | `#FF00D1FF` | Piano-roll note border/highlight when selected |

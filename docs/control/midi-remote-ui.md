@@ -3,8 +3,9 @@
 Companion to [`midi-remote.md`](midi-remote.md) (the model and decisions; read it first). This
 doc is the **user-facing design**: what right-click MIDI Learn does on every surface, what the
 MIDI Remote panel looks like and how each flow in it works, the settings, the plugin-build
-behaviour and the tests. As with `midi-remote.md`, this describes the feature as designed;
-MIDI Learn on the module card is not wired up yet in the shipped UI.
+behaviour and the tests. Module-card MIDI Learn (the "Generic module card"/"Bespoke cards"/"Header
+buttons" rows below) shipped in FRO130; the MIDI Remote panel, the mixer/transport/hosted-plugin
+rows, and "Edit MIDI assignment..." (FRO131) are still design-only.
 
 ---
 
@@ -18,11 +19,11 @@ Learn from there binds the right parameter.
 
 | Surface | Control(s) | Where the hook goes | Acceptance |
 |---|---|---|---|
-| Generic module card | rotary sliders (float/int params) | the existing `mouseDown` slider-identity match in `ModuleComponentInteraction.cpp` → `showAutomateMenuForSlider` grows the MIDI items | right-click "Cutoff" on Filter → Learn → CC binds `(uuid, "cutoff")` |
-| Generic module card | `ToggleButton` per bool param | add the same `addMouseListener(this)` for toggles; `mouseDown` matches against `toggles`/`buttonAttachments` (a parallel `toggleParams` array is needed — today no param pointer is kept) | right-click a bool toggle → Learn → note/CC toggles it |
-| Generic module card | `ComboBox` per choice param | right-click on a `ComboBox` must **not** open its popup: intercept `mouseDown` with `isPopupMenu()` before the combo sees it (a `juce::ComboBox` subclass or the parent listener consuming the event) | right-click a choice combo → Learn → CC 0..127 scales across choices; button steps to next |
-| Bespoke cards | EQ card bands, Envelope card knobs, Wavetable card, Sampler controls | each card's own control creation registers its controls with the same registry the generic path uses (`registerMidiLearnable(component, param)`), so `mouseDown` needs no card-specific branches | every parameter visible on a bespoke card is learnable; a control with no parameter shows no MIDI items |
-| Header buttons | Bypass, Mute, Dual I/O | same registry (`bypassAttachment` etc. already know the params) | right-click Bypass → Learn → pad toggles bypass |
+| Generic module card | rotary sliders (float/int params) | the existing `mouseDown` slider-identity match in `ModuleComponentInteraction.cpp` → `showAutomateMenuForSlider` grows the MIDI items | **shipped**: right-click "Cutoff" on Filter → Learn → CC binds `(uuid, "cutoff")` |
+| Generic module card | `ToggleButton` per bool param | `registerMidiLearnable` + a `RightClickSafeButton<juce::ToggleButton>` guard so a right-click never also toggles it | **shipped**: right-click a bool toggle → Learn → note/CC toggles it |
+| Generic module card | `ComboBox` per choice param | right-click on a `ComboBox` must **not** open its popup: `ModuleComponent::mouseDown`'s registry lookup runs before the combo's own native popup handling | **shipped**: right-click a choice combo → Learn shows the MIDI block; the popup never opens |
+| Bespoke cards | EQ card bands, Envelope card knobs, Wavetable card, Sampler controls | each card's own control creation registers its controls with the same registry the generic path uses (`registerMidiLearnable(component, param)`), so `mouseDown` needs no card-specific branches | **shipped**: every parameter visible on a bespoke card is learnable; a control with no parameter shows no MIDI items |
+| Header buttons | Bypass, Mute, Dual I/O | same registry, via `RightClickSafeButton<juce::DrawableButton>` | **shipped**: right-click Bypass → Learn → pad toggles bypass |
 | Hosted plugin card | the chosen knobs (`plugin-card-layout.md`) | the card unit registers each knob with the hosted parameter's `(uuid, paramId, indexHint)` triple | Learn on a plugin knob binds through `resolveLaneParameter`'s hosted rules |
 | Mixer column | fader (`MixerFader`), pan, Mute, Solo, each send level (`MixerSendList`) | one `mouseDown` in `MixerColumnComponent` over its bound params (they are `ChannelStripModule` params, so ordinary parameter targets) | right-click a fader → Learn → CC drives the strip's level |
 | Master / Direct column | master level | same | learnable |
@@ -52,6 +53,9 @@ MIDI: Knob 1 on Launchkey Mini       ← mapped: disabled title row, tells you w
    MIDI Learn again…                 ← replaces the assignment
    Forget MIDI                       ← removes it (undoable)
 ```
+
+"Edit MIDI assignment..." is omitted until the MIDI Remote panel exists to open (FRO131) — there is
+no dead menu item in the shipped module-card menu today.
 
 **States while learning (target-first learn):**
 
