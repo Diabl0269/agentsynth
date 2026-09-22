@@ -146,6 +146,9 @@ void PianoRollComponent::openClip(synth::ClipId id) {
     selection_.clear();
     // The line has to be re-announced against the new framing before it is drawn again.
     hasPlayheadX_ = false;
+    // A follow-page left over from the PREVIOUS clip (or from a playhead that simply isn't inside
+    // THIS clip yet) must not fight the fresh fit-to-clip framing set below -- see followSuspended_.
+    followSuspended_ = true;
     // The hovered cut belonged to a note in the OLD clip. (The clipboard deliberately survives —
     // see copySelectedNotes.)
     hasSplitPreview_ = false;

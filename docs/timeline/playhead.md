@@ -109,5 +109,19 @@ all, so the zero-repaint-while-unmoved contract is untouched.
 `TimelinePanelComponent::setApplicationProperties()` pushes the shared preference into the roll via
 `pianoRoll_.setFollowPlayhead(followPlayhead_)`: one preference, two independent view states.
 
+**Suspension (FRO247).** A fifth gate, `!followSuspended_`, sits alongside the three above.
+`followSuspended_` is set whenever the view moves for a reason OTHER than follow itself: opening a
+clip (`openClip()` — a stale follow position from the PREVIOUS clip, or from before the roll was
+even open, must not fight the fresh fit-to-clip framing `openClip()` computes from the clip's own
+bounds) or a manual horizontal scroll/zoom (`mouseWheelMove`'s horizontal-scroll branch,
+`zoomHorizontalAroundX` — covering the wheel, the trackpad pinch, and the zoom-in/out command). It
+is cleared only by an explicit `setFollowPlayhead(true)`, the one gesture that means "snap to the
+playhead now." Without it, the very next `setPlayheadBeat()` tick after either action — which the
+panel's 10 Hz poll delivers unconditionally, whether or not the transport is playing — would
+immediately undo it: the notes editor would open on an empty grid centred on wherever the playhead
+happens to be instead of the pattern, and a manual scroll away from the playhead would snap straight
+back.
+
 Tests: `Tests/UI/Timeline/TimelinePlayheadTests.cpp`,
-`Tests/UI/Timeline/TimelinePanel/TimelinePanelFollowPlayheadTests.cpp`.
+`Tests/UI/Timeline/TimelinePanel/TimelinePanelFollowPlayheadTests.cpp`,
+`Tests/UI/PianoRoll/PianoRollMouseTests.cpp` (`PianoRollFollowPlayheadTest`).
