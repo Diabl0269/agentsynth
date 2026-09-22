@@ -130,6 +130,11 @@ void GraphEditor::showMacroAutoPortModal(std::function<void(bool createPorts, bo
 // ModalCallbackFunction + a unique_ptr taken inside the callback). The collapsed card keeps its
 // own nicer inline rename (MacroCardComponent::beginRename) — this is only for the case that has
 // no card.
+//
+// promptRenameMacroForTest (see GraphEditor.h) replaces the real juce::AlertWindow below when set:
+// a real AlertWindow segfaults on a headless Linux CI runner with no display, the same class of
+// issue ModuleComponent::setShowContextMenuHookForTest documents for PopupMenu and
+// macroAutoPortModalForTest works around for the auto-port prompt.
 void GraphEditor::promptRenameMacro(const juce::String& macroId) {
     const auto* macro = macros.find(macroId);
     if (macro == nullptr)
