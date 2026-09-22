@@ -63,9 +63,9 @@ juce::String makeExpandedTwoMemberMacro(GraphEditor& editor, AudioEngine& engine
     outA = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     outB = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 400);
     editor.setSelectedNodes({outA, outB});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     if (!macroId.isEmpty())
-        editor.setMacroCollapsed(macroId, false);
+        editor.getMacroController().setMacroCollapsed(macroId, false);
     return macroId;
 }
 
@@ -87,9 +87,9 @@ TEST(MacroDragMembership, CmdDragOutsideModuleIntoExpandedHullJoinsTheMacro) {
     auto c = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 100);
     auto* compC = findComponent(editor, c);
     ASSERT_NE(compC, nullptr);
-    ASSERT_EQ(editor.macroForNode(c), nullptr) << "sanity: C starts outside every macro";
+    ASSERT_EQ(editor.getMacroController().macroForNode(c), nullptr) << "sanity: C starts outside every macro";
 
-    const auto hull = editor.macroHullBounds(macroId);
+    const auto hull = editor.getMacroController().macroHullBounds(macroId);
     ASSERT_FALSE(hull.isEmpty());
     const auto delta = hull.getCentre() - compC->getBounds().getCentre();
 
@@ -99,7 +99,7 @@ TEST(MacroDragMembership, CmdDragOutsideModuleIntoExpandedHullJoinsTheMacro) {
                "without this the assertions below could silently pass on the plain finalize path";
     });
 
-    const auto* macro = editor.macroForNode(c);
+    const auto* macro = editor.getMacroController().macroForNode(c);
     ASSERT_NE(macro, nullptr) << "Cmd-dragging C's centre into the hull must join it to the macro";
     EXPECT_EQ(macro->id, macroId);
 
@@ -125,7 +125,7 @@ TEST(MacroDragMembership, CmdDragMemberOutPastHullLeavesTheMacro) {
 
     auto* compA = findComponent(editor, a);
     ASSERT_NE(compA, nullptr);
-    ASSERT_NE(editor.macroForNode(a), nullptr) << "sanity: A starts as a member";
+    ASSERT_NE(editor.getMacroController().macroForNode(a), nullptr) << "sanity: A starts as a member";
 
     // Comfortably outside the (B-only) hull-excluding-self that this drag is tested against — see
     // MacroGroupController::macroDragJoinOrLeaveTarget's own comment on why the LEAVE test can
@@ -135,7 +135,8 @@ TEST(MacroDragMembership, CmdDragMemberOutPastHullLeavesTheMacro) {
             << "sanity: dragging A well outside the hull must arm the LEAVE candidate mid-drag";
     });
 
-    EXPECT_EQ(editor.macroForNode(a), nullptr) << "Cmd-dragging A well outside the hull must remove it";
+    EXPECT_EQ(editor.getMacroController().macroForNode(a), nullptr)
+        << "Cmd-dragging A well outside the hull must remove it";
 
     const auto* macro = editor.getMacros().find(macroId);
     ASSERT_NE(macro, nullptr) << "the macro itself must survive — B is still a member";
@@ -195,7 +196,7 @@ TEST(MacroDragMembership, PaintedHullOfAJoinTargetStaysTheOrdinaryLiveHull) {
     auto* compC = findComponent(editor, c);
     ASSERT_NE(compC, nullptr);
 
-    const auto liveHull = editor.macroHullBounds(macroId);
+    const auto liveHull = editor.getMacroController().macroHullBounds(macroId);
     ASSERT_FALSE(liveHull.isEmpty());
     const auto delta = liveHull.getCentre() - compC->getBounds().getCentre();
 
@@ -227,9 +228,9 @@ TEST(MacroDragMembership, ThreeMemberMacroLeaveIsReachablePerpendicularToTheRow)
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     auto c = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 100);
     editor.setSelectedNodes({a, b, c});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
     auto* compB = findComponent(editor, b);
     ASSERT_NE(compB, nullptr);
@@ -250,7 +251,8 @@ TEST(MacroDragMembership, ThreeMemberMacroLeaveIsReachablePerpendicularToTheRow)
         EXPECT_TRUE(editor.getMacroDragCandidateId().isEmpty())
             << "moving the middle member ALONG the row must stay inside the wide A/C bounding box";
     });
-    ASSERT_NE(editor.macroForNode(b), nullptr) << "sanity: B is still a member after the along-row move";
+    ASSERT_NE(editor.getMacroController().macroForNode(b), nullptr)
+        << "sanity: B is still a member after the along-row move";
 
     // PERPENDICULAR to the row: exits just past the hull's own bottom edge -- bounded by half the
     // row's height plus the hull margin, regardless of how far apart A and C are horizontally.
@@ -260,7 +262,7 @@ TEST(MacroDragMembership, ThreeMemberMacroLeaveIsReachablePerpendicularToTheRow)
             << "moving the middle member PAST the hull's bottom edge must arm the LEAVE candidate";
     });
 
-    EXPECT_EQ(editor.macroForNode(b), nullptr) << "dragging B past the row's hull must remove it";
+    EXPECT_EQ(editor.getMacroController().macroForNode(b), nullptr) << "dragging B past the row's hull must remove it";
     const auto* macro = editor.getMacros().find(macroId);
     ASSERT_NE(macro, nullptr) << "the macro survives with A and C still members";
     EXPECT_TRUE(macro->hasMember(uuidOf(engine, a)));
@@ -290,9 +292,9 @@ TEST(MacroDragMembership, CmdDragJoinSplicesOutInteriorPortAndCreatesNewCrossing
     editor.connectPorts(f, 0, g, 0, /*isMidi=*/false);
 
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro(/*autoCreatePorts=*/true);
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(/*autoCreatePorts=*/true);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
     auto* macroBeforeDrag = editor.getMacros().find(macroId);
     ASSERT_NE(macroBeforeDrag, nullptr);
@@ -304,14 +306,14 @@ TEST(MacroDragMembership, CmdDragJoinSplicesOutInteriorPortAndCreatesNewCrossing
 
     auto* compF = findComponent(editor, f);
     ASSERT_NE(compF, nullptr);
-    const auto hull = editor.macroHullBounds(macroId);
+    const auto hull = editor.getMacroController().macroHullBounds(macroId);
     ASSERT_FALSE(hull.isEmpty());
     dragBodyBy(*compF, hull.getCentre() - compF->getBounds().getCentre(), kCmdClick, [&] {
         EXPECT_FALSE(editor.getMacroDragCandidateId().isEmpty())
             << "sanity: dragging F's centre into the hull must arm the JOIN candidate mid-drag";
     });
 
-    ASSERT_NE(editor.macroForNode(f), nullptr) << "F must have joined the macro";
+    ASSERT_NE(editor.getMacroController().macroForNode(f), nullptr) << "F must have joined the macro";
 
     // Net node count is unchanged: the OLD port (A->F, now fully interior) is spliced out, and a
     // NEW port (F->G, now the crossing cable) is created to replace it.
@@ -356,7 +358,7 @@ TEST(MacroDragMembership, OneUndoStepRestoresBothPositionAndMembership) {
     const int originalX = engine.getGraph().getNodeForId(c)->properties["x"];
     const int originalY = engine.getGraph().getNodeForId(c)->properties["y"];
 
-    const auto hull = editor.macroHullBounds(macroId);
+    const auto hull = editor.getMacroController().macroHullBounds(macroId);
     ASSERT_FALSE(hull.isEmpty());
     const auto delta = hull.getCentre() - compC->getBounds().getCentre();
 
@@ -366,7 +368,7 @@ TEST(MacroDragMembership, OneUndoStepRestoresBothPositionAndMembership) {
             << "sanity: dragging C's centre into the hull must arm the JOIN candidate mid-drag";
     });
 
-    ASSERT_NE(editor.macroForNode(c), nullptr) << "sanity: the drag must have joined the macro";
+    ASSERT_NE(editor.getMacroController().macroForNode(c), nullptr) << "sanity: the drag must have joined the macro";
     EXPECT_EQ(undo.getEditSerial(), serialBeforeDrag + 1)
         << "position + membership + port splicing must land in exactly ONE undo step, not two";
 
@@ -424,9 +426,10 @@ TEST(MacroDragMembership, CmdClickWithNoMovementStillTogglesSelectionMembershipU
     EXPECT_TRUE(std::find(selected.begin(), selected.end(), a) != selected.end());
     EXPECT_TRUE(std::find(selected.begin(), selected.end(), b) != selected.end());
 
-    ASSERT_NE(editor.macroForNode(a), nullptr) << "membership must be untouched by a click with no movement";
-    EXPECT_EQ(editor.macroForNode(a)->id, macroId);
-    ASSERT_NE(editor.macroForNode(b), nullptr);
+    ASSERT_NE(editor.getMacroController().macroForNode(a), nullptr)
+        << "membership must be untouched by a click with no movement";
+    EXPECT_EQ(editor.getMacroController().macroForNode(a)->id, macroId);
+    ASSERT_NE(editor.getMacroController().macroForNode(b), nullptr);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -456,7 +459,8 @@ TEST(MacroDragMembership, CmdDragStayingOutsideEveryHullIsAPlainMoveMembershipUn
 
     EXPECT_EQ(undo.getEditSerial(), serialBeforeDrag + 1) << "the plain finalize path still pushes its usual one step";
     EXPECT_NE(compC->getPosition(), positionBeforeDrag) << "sanity: it actually moved";
-    EXPECT_EQ(editor.macroForNode(c), nullptr) << "a drag that never crossed a hull must not join anything";
+    EXPECT_EQ(editor.getMacroController().macroForNode(c), nullptr)
+        << "a drag that never crossed a hull must not join anything";
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -517,7 +521,7 @@ TEST(MacroDragMembership, CmdPressedAfterDragBeganStillReparentsInOneUndoStep) {
     const int serialBeforeUp = undo.getEditSerial();
     compA->mouseUp(realMouseEvent(*compA, pressPos, pressPos, kCmdClick, /*wasDragged=*/true));
 
-    EXPECT_EQ(editor.macroForNode(nodeIdForUuid(engine, uuidA)), nullptr)
+    EXPECT_EQ(editor.getMacroController().macroForNode(nodeIdForUuid(engine, uuidA)), nullptr)
         << "Cmd armed only mid-drag must still finalize as a real reparent";
     EXPECT_EQ(undo.getEditSerial(), serialBeforeUp + 1) << "and land as exactly ONE undo step, same as any other";
 
@@ -567,7 +571,7 @@ TEST(MacroDragMembership, CmdReleasedMidDragRevertsToAPlainMove) {
 
     compA->mouseUp(realMouseEvent(*compA, pressPos, pressPos, plain, /*wasDragged=*/true));
 
-    EXPECT_NE(editor.macroForNode(a), nullptr)
+    EXPECT_NE(editor.getMacroController().macroForNode(a), nullptr)
         << "Cmd released before mouseUp must finalize as an ordinary plain move -- A stays a member";
     EXPECT_NE(compA->getPosition(), positionBeforeDrag) << "sanity: it actually moved";
 }
@@ -597,7 +601,7 @@ TEST(MacroDragMembership, WindowsLinuxCtrlDragCrossingHullReparents) {
     auto* compC = findComponent(editor, c);
     ASSERT_NE(compC, nullptr);
 
-    const auto hull = editor.macroHullBounds(macroId);
+    const auto hull = editor.getMacroController().macroHullBounds(macroId);
     ASSERT_FALSE(hull.isEmpty());
     dragBodyBy(*compC, hull.getCentre() - compC->getBounds().getCentre(), kCtrlOrWindowsLinuxCmdClick, [&] {
         EXPECT_FALSE(editor.getMacroDragCandidateId().isEmpty())
@@ -605,7 +609,7 @@ TEST(MacroDragMembership, WindowsLinuxCtrlDragCrossingHullReparents) {
                "with BOTH ctrlModifier and commandModifier set (the Windows/Linux shape)";
     });
 
-    const auto* macro = editor.macroForNode(c);
+    const auto* macro = editor.getMacroController().macroForNode(c);
     ASSERT_NE(macro, nullptr) << "a Windows/Linux-shaped Ctrl-drag that crosses the hull must reparent";
     EXPECT_EQ(macro->id, macroId);
 }
@@ -630,7 +634,8 @@ TEST(MacroDragMembership, WindowsLinuxCtrlDragNotCrossingAHullKeepsThePlainInser
     }); // nowhere near the macro's hull
 
     EXPECT_NE(compC->getPosition(), positionBeforeDrag) << "sanity: the existing Ctrl-drag machinery still moves it";
-    EXPECT_EQ(editor.macroForNode(c), nullptr) << "no hull crossed -> no reparent, same as before FRO40";
+    EXPECT_EQ(editor.getMacroController().macroForNode(c), nullptr)
+        << "no hull crossed -> no reparent, same as before FRO40";
 }
 
 // THE REGRESSION this coordinator review caught: a PLAIN macOS Ctrl-drag (ctrlModifier alone,
@@ -673,7 +678,7 @@ TEST(MacroDragMembership, MacOsPlainCtrlDragCrossingHullDoesNotReparent) {
     const juce::ModifierKeys macOsCtrlOnly(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::ctrlModifier);
     ASSERT_FALSE(macOsCtrlOnly.isCommandDown()) << "sanity: this construction must NOT set the command bit";
 
-    const auto hull = editor.macroHullBounds(macroId);
+    const auto hull = editor.getMacroController().macroHullBounds(macroId);
     ASSERT_FALSE(hull.isEmpty());
     const auto delta = hull.getCentre() - compC->getBounds().getCentre();
 
@@ -682,6 +687,6 @@ TEST(MacroDragMembership, MacOsPlainCtrlDragCrossingHullDoesNotReparent) {
             << "a plain Ctrl-drag (no Cmd) must never arm the reparent candidate, even crossing a hull";
     });
 
-    EXPECT_EQ(editor.macroForNode(c), nullptr)
+    EXPECT_EQ(editor.getMacroController().macroForNode(c), nullptr)
         << "a plain macOS Ctrl-drag across a hull must stay insert-between only and must NOT join the macro";
 }

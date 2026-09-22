@@ -110,15 +110,15 @@ TEST(DragStateAsyncRebuild, DetachAllModuleComponentsCancelsLiveMacroDragCandida
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 400);
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
     auto c = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 100);
     auto* comp = compFor(editor, c);
     ASSERT_NE(comp, nullptr);
 
-    const auto hull = editor.macroHullBounds(macroId);
+    const auto hull = editor.getMacroController().macroHullBounds(macroId);
     ASSERT_FALSE(hull.isEmpty());
     const auto delta = hull.getCentre() - comp->getBounds().getCentre();
 
@@ -173,11 +173,11 @@ TEST(DragStateAsyncRebuild, DetachAllModuleComponentsCancelsLiveMacroCardDrag) {
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 400);
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
     // Collapsed (the default after grouping): a MacroCardComponent stands in for the whole macro.
 
-    auto* card = editor.getMacroCardForTest(macroId);
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
     ASSERT_NE(card, nullptr);
 
     const juce::Point<int> pressPos(card->getWidth() / 2, card->getHeight() - 20);
@@ -237,10 +237,10 @@ TEST(DragStateAsyncRebuild, MacroDeletedMidCardDragThenUpdateComponentsCancelsLi
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 400);
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
-    auto* card = editor.getMacroCardForTest(macroId);
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
     ASSERT_NE(card, nullptr);
 
     const juce::Point<int> pressPos(card->getWidth() / 2, card->getHeight() - 20);

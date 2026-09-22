@@ -334,7 +334,7 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
             // Widening this to resolvePolyLink-style fan-out for an existing Stereo/Poly-N port is future work, not a
             // regression: the modal (docs/macros/configure-io.md#renaming-and-reordering-ports) remains the reliable
             // way to wire a non-Mono port completely.
-            if (auto hitPort = macroCardPortForPoint(card->getMacroId(), cardLocal)) {
+            if (auto hitPort = macroController_.macroCardPortForPoint(card->getMacroId(), cardLocal)) {
                 if (hitPort->isInput == newPortIsInput &&
                     (hitPort->kind == synth::MacroPortKind::Midi) == dragSourceIsMidi) {
                     const auto portNodeId = macroController_.resolveMemberNodeId(hitPort->nodeUuid);

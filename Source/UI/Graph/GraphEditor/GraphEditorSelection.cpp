@@ -322,7 +322,7 @@ void GraphEditor::cancelLiveDragGestures() {
 // MacroGroupController.h's class comment.
 
 void GraphEditor::beginMacroCardDrag(const juce::String& macroId) {
-    selectMacro(macroId, false);
+    macroController_.selectMacro(macroId, false);
     beginSelectionDrag();
 }
 

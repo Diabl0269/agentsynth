@@ -292,7 +292,7 @@ void ModuleComponent::parameterGestureChanged(int parameterIndex, bool gestureIs
 
 juce::PopupMenu ModuleComponent::buildMacroPortContextMenu() {
     juce::PopupMenu m;
-    const auto ownership = owner.macroPortOwnerFor(nodeId);
+    const auto ownership = owner.getMacroController().macroPortOwnerFor(nodeId);
 
     if (ownership.macro != nullptr && ownership.port != nullptr) {
         const juce::String macroId = ownership.macro->id;
@@ -302,7 +302,8 @@ juce::PopupMenu ModuleComponent::buildMacroPortContextMenu() {
         m.addSeparator();
         // Splices the boundary cable back together rather than dropping it (founder-review fix
         // G7) — GraphEditor::deleteMacroPortNode, sharing spliceOutMacroPort with ungroup.
-        m.addItem("Delete Port", [this, macroId, uuid] { owner.deleteMacroPortNode(macroId, uuid); });
+        m.addItem("Delete Port",
+                  [this, macroId, uuid] { owner.getMacroController().deleteMacroPortNode(macroId, uuid); });
     } else {
         // Defensive: macroPortOwnerFor's own header comment says this shouldn't happen (every
         // port node is constructed as a macro member with a matching MacroPort entry), but a port
@@ -363,10 +364,10 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
     // is the only always-reachable UI for the round trip. Shown for either state now —
     // toggleSelectionMacrosCollapsed() picks the right direction from the touched
     // macro's own current state, matching the label offered here.
-    const auto* macro = owner.macroForNode(nodeId);
+    const auto* macro = owner.getMacroController().macroForNode(nodeId);
     if (macro != nullptr)
         m.addItem(macro->collapsed ? "Expand Macro" : "Collapse Macro",
-                  [this] { owner.toggleSelectionMacrosCollapsed(); });
+                  [this] { owner.getMacroController().toggleSelectionMacrosCollapsed(); });
     // T138: a top-level escape hatch for the single most common macro-membership gesture — right-
     // click a member module you want OUT, without hunting for the nested "Macro: <name>" submenu's
     // own "Remove from Macro" item (found via live testing 2026-09-10: a user's first instinct was
@@ -379,7 +380,7 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
     // this method's own early-return above — so `macro != nullptr` here always means an ordinary
     // member.
     if (macro != nullptr)
-        m.addItem("Remove from Macro", [this] { owner.removeNodeFromMacro(nodeId); });
+        m.addItem("Remove from Macro", [this] { owner.getMacroController().removeNodeFromMacro(nodeId); });
 
     m.addSeparator();
 
@@ -811,7 +812,7 @@ void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
     // has no way to ask for one without the other (docs/macros/menu-and-membership.md#cmd-drag-across-a-hull-border).
     const juce::String macroCandidate = wasReparentArmed ? owner.getMacroDragCandidateId() : juce::String();
     if (macroCandidate.isNotEmpty()) {
-        const bool isJoin = owner.macroForNode(nodeId) == nullptr;
+        const bool isJoin = owner.getMacroController().macroForNode(nodeId) == nullptr;
         // This capture was never going to be consumed by a pushSnapshotFromCapture — the reparent
         // finalize below consumes it itself instead (GraphEditor::finalizeMacroMembershipDrag's
         // own comment has the full story on why it needs the ORIGINAL mousedown-time capture

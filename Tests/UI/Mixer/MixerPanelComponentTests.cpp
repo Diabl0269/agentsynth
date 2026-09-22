@@ -121,7 +121,7 @@ TEST(MixerPanelComponentTests, ClickingAColumnSelectsItsOwningMacroOnTheCanvas) 
 
     ASSERT_EQ(mc.getGraphEditor().getMacros().size(), 1);
     const auto macroId = mc.getGraphEditor().getMacros().getAll().front().id;
-    EXPECT_FALSE(mc.getGraphEditor().isMacroSelected(macroId));
+    EXPECT_FALSE(mc.getGraphEditor().getMacroController().isMacroSelected(macroId));
 
     // getStripColumnForTest is a stable handle onto the real column component -- a real
     // juce::Viewport's own child layout (scrollbars, the viewed-content wrapper) is not something
@@ -138,5 +138,5 @@ TEST(MixerPanelComponentTests, ClickingAColumnSelectsItsOwningMacroOnTheCanvas) 
         juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, columnComponent,
         columnComponent, juce::Time::getCurrentTime(), centre.toFloat(), juce::Time::getCurrentTime(), 1, false));
 
-    EXPECT_TRUE(mc.getGraphEditor().isMacroSelected(macroId));
+    EXPECT_TRUE(mc.getGraphEditor().getMacroController().isMacroSelected(macroId));
 }

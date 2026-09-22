@@ -36,14 +36,15 @@ TEST(MacroPortWidget, HullBoundsExcludesPortMembersFromTheUnion) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto hullBefore = editor.macroHullBounds(macroId);
+    const auto hullBefore = editor.getMacroController().macroHullBounds(macroId);
     ASSERT_FALSE(hullBefore.isEmpty());
 
-    editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    editor.getMacroController().addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV,
+                                             MacroPortShape::Mono, 1, "In A");
 
-    const auto hullAfter = editor.macroHullBounds(macroId);
+    const auto hullAfter = editor.getMacroController().macroHullBounds(macroId);
     EXPECT_EQ(hullAfter, hullBefore) << "a port's own node must not grow the hull it then docks against";
 }
 
@@ -57,19 +58,19 @@ TEST(MacroPortWidget, InputWidgetsDockLeftOfTheHullOutputsRightInOrder) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto in0Uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
-    const auto in1Uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In B");
-    const auto outUuid =
-        editor.addMacroPort(macroId, false, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "Out A");
+    const auto in0Uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                                  MacroPortShape::Mono, 1, "In A");
+    const auto in1Uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                                  MacroPortShape::Mono, 1, "In B");
+    const auto outUuid = editor.getMacroController().addMacroPort(macroId, false, synth::MacroPortKind::AudioCV,
+                                                                  MacroPortShape::Mono, 1, "Out A");
     ASSERT_FALSE(in0Uuid.isEmpty());
     ASSERT_FALSE(in1Uuid.isEmpty());
     ASSERT_FALSE(outUuid.isEmpty());
 
-    const auto hull = editor.macroHullBounds(macroId);
+    const auto hull = editor.getMacroController().macroHullBounds(macroId);
     ASSERT_FALSE(hull.isEmpty());
 
     auto* in0Comp = findComponent(editor, nodeIdForUuid(engine, in0Uuid));
@@ -101,10 +102,10 @@ TEST(MacroPortWidget, DockingSurvivesAnUpdateComponentsPassUnchanged) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "In A");
     ASSERT_FALSE(uuid.isEmpty());
     auto* comp = findComponent(editor, nodeIdForUuid(engine, uuid));
     ASSERT_NE(comp, nullptr);
@@ -124,14 +125,14 @@ TEST(MacroPortWidget, WidgetResolvesThePortNameThroughTheOwningMacro) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "Pitch In");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "Pitch In");
     ASSERT_FALSE(uuid.isEmpty());
     const auto nodeId = nodeIdForUuid(engine, uuid);
 
-    const auto ownership = editor.macroPortOwnerFor(nodeId);
+    const auto ownership = editor.getMacroController().macroPortOwnerFor(nodeId);
     ASSERT_NE(ownership.macro, nullptr);
     ASSERT_NE(ownership.port, nullptr);
     EXPECT_EQ(ownership.port->name, "Pitch In");
@@ -145,25 +146,25 @@ TEST(MacroPortWidget, RenamingAPortUpdatesBothTheWidgetsResolutionAndTheCollapse
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "Old Name");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "Old Name");
     ASSERT_FALSE(uuid.isEmpty());
     const auto nodeId = nodeIdForUuid(engine, uuid);
 
-    editor.renameMacroPort(macroId, uuid, "New Name");
+    editor.getMacroController().renameMacroPort(macroId, uuid, "New Name");
 
     // The docked widget (ModuleComponent::paintMacroPortWidget) resolves the name via this call
     // at paint time, with nothing cached — so this alone proves a rename is reflected immediately.
-    const auto ownership = editor.macroPortOwnerFor(nodeId);
+    const auto ownership = editor.getMacroController().macroPortOwnerFor(nodeId);
     ASSERT_NE(ownership.port, nullptr);
     EXPECT_EQ(ownership.port->name, "New Name");
 
     // MacroCardComponent::paint's collapsed-card jack label reads the SAME macroCardPortLayout()
     // this asserts against — item 4's "the collapsed card too" half of the fix.
     bool foundOnCard = false;
-    for (const auto& port : editor.macroCardPortLayout(macroId)) {
+    for (const auto& port : editor.getMacroController().macroCardPortLayout(macroId)) {
         if (port.nodeUuid == uuid) {
             EXPECT_EQ(port.name, "New Name");
             foundOnCard = true;
@@ -182,10 +183,10 @@ TEST(MacroPortWidget, StereoPortWidgetShowsTwoDistinctJacksAndGrowsASecondRow) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Stereo, 1, "Stereo In");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Stereo, 1, "Stereo In");
     ASSERT_FALSE(uuid.isEmpty());
     auto* comp = findComponent(editor, nodeIdForUuid(engine, uuid));
     ASSERT_NE(comp, nullptr);
@@ -211,10 +212,10 @@ TEST(MacroPortWidget, MidiPortWidgetShowsAMidiJackAtTheCompactHeaderPosition) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::Midi, MacroPortShape::Mono, 1, "MIDI In");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::Midi,
+                                                               MacroPortShape::Mono, 1, "MIDI In");
     ASSERT_FALSE(uuid.isEmpty());
     auto* comp = findComponent(editor, nodeIdForUuid(engine, uuid));
     ASSERT_NE(comp, nullptr);
@@ -239,10 +240,10 @@ TEST(MacroPortWidget, AudioJackHitTestRoundTripsForMonoAndStereo) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto monoUuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "Mono In");
+    const auto monoUuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                                   MacroPortShape::Mono, 1, "Mono In");
     auto* monoComp = findComponent(editor, nodeIdForUuid(engine, monoUuid));
     ASSERT_NE(monoComp, nullptr);
     {
@@ -254,8 +255,8 @@ TEST(MacroPortWidget, AudioJackHitTestRoundTripsForMonoAndStereo) {
         EXPECT_EQ(port->index, 0);
     }
 
-    const auto stereoUuid =
-        editor.addMacroPort(macroId, false, synth::MacroPortKind::AudioCV, MacroPortShape::Stereo, 1, "Stereo Out");
+    const auto stereoUuid = editor.getMacroController().addMacroPort(macroId, false, synth::MacroPortKind::AudioCV,
+                                                                     MacroPortShape::Stereo, 1, "Stereo Out");
     auto* stereoComp = findComponent(editor, nodeIdForUuid(engine, stereoUuid));
     ASSERT_NE(stereoComp, nullptr);
     for (int i = 0; i < 2; ++i) {
@@ -283,16 +284,16 @@ TEST(MacroPortWidget, PartialSelectionDragReDocksThePortWidgetAfterFinalize) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto portUuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    const auto portUuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                                   MacroPortShape::Mono, 1, "In A");
     ASSERT_FALSE(portUuid.isEmpty());
     auto portNodeId = nodeIdForUuid(engine, portUuid);
     auto* portComp = findComponent(editor, portNodeId);
     ASSERT_NE(portComp, nullptr);
 
-    const auto hullBefore = editor.macroHullBounds(macroId);
+    const auto hullBefore = editor.getMacroController().macroHullBounds(macroId);
     ASSERT_FALSE(hullBefore.isEmpty());
     const auto dockedPos = portComp->getPosition();
 
@@ -310,7 +311,8 @@ TEST(MacroPortWidget, PartialSelectionDragReDocksThePortWidgetAfterFinalize) {
     editor.finalizeSelectionDrag();
 
     EXPECT_EQ(portComp->getPosition(), dockedPos) << "finalize must re-dock a partially-selected port widget";
-    EXPECT_EQ(editor.macroHullBounds(macroId), hullBefore) << "the macro's own members never moved";
+    EXPECT_EQ(editor.getMacroController().macroHullBounds(macroId), hullBefore)
+        << "the macro's own members never moved";
 }
 
 // ============================================================================
@@ -324,12 +326,12 @@ TEST(MacroPortWidget, AllPortsMacroFallsBackToMacroBoundsForTheHull) {
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto portUuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    const auto portUuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                                   MacroPortShape::Mono, 1, "In A");
     ASSERT_FALSE(portUuid.isEmpty());
 
     // Delete BOTH ordinary members (MacroDelete.DeletingDownToOneMemberDoesNotDissolve's own
@@ -343,7 +345,7 @@ TEST(MacroPortWidget, AllPortsMacroFallsBackToMacroBoundsForTheHull) {
     ASSERT_NE(macro, nullptr) << "one remaining member (the port) must not dissolve the macro";
     EXPECT_EQ(macro->members.size(), 1u);
 
-    const auto hull = editor.macroHullBounds(macroId);
+    const auto hull = editor.getMacroController().macroHullBounds(macroId);
     EXPECT_FALSE(hull.isEmpty()) << "an all-ports macro must fall back to macro->bounds, not divide by zero";
 
     auto* portComp = findComponent(editor, nodeIdForUuid(engine, portUuid));
@@ -365,12 +367,12 @@ TEST(MacroPortWidget, CollapsingSeedsCardBoundsFromNonPortMembersOnly) {
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 400, 400);
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 700, 400);
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto portUuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    const auto portUuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                                   MacroPortShape::Mono, 1, "In A");
     ASSERT_FALSE(portUuid.isEmpty());
     auto* portComp = findComponent(editor, nodeIdForUuid(engine, portUuid));
     ASSERT_NE(portComp, nullptr);
@@ -378,7 +380,7 @@ TEST(MacroPortWidget, CollapsingSeedsCardBoundsFromNonPortMembersOnly) {
     EXPECT_LT(portComp->getRight(), findComponent(editor, a)->getX());
     const int portRightBeforeCollapse = portComp->getRight(); // read BEFORE collapse hides members
 
-    editor.setMacroCollapsed(macroId, true);
+    editor.getMacroController().setMacroCollapsed(macroId, true);
 
     auto* macro = editor.getMacros().find(macroId);
     ASSERT_NE(macro, nullptr);
@@ -393,10 +395,10 @@ TEST(MacroPortWidget, MonoPortWidgetSizeMatchesEstimateModuleSize) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto uuid =
-        editor.addMacroPort(macroId, false, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "Out A");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, false, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "Out A");
     ASSERT_FALSE(uuid.isEmpty());
     auto* comp = findComponent(editor, nodeIdForUuid(engine, uuid));
     ASSERT_NE(comp, nullptr);
@@ -422,7 +424,7 @@ TEST(MacroPortWidgetG4, GeometryIsSelfConsistentForMonoStereoPolyAndMidi) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
     struct Case {
         const char* label;
@@ -439,7 +441,8 @@ TEST(MacroPortWidgetG4, GeometryIsSelfConsistentForMonoStereoPolyAndMidi) {
     };
 
     for (const auto& c : cases) {
-        const auto uuid = editor.addMacroPort(macroId, /*isInput=*/true, c.kind, c.shape, c.voiceCount, c.label);
+        const auto uuid =
+            editor.getMacroController().addMacroPort(macroId, /*isInput=*/true, c.kind, c.shape, c.voiceCount, c.label);
         ASSERT_FALSE(uuid.isEmpty()) << c.label;
         auto* comp = findComponent(editor, nodeIdForUuid(engine, uuid));
         ASSERT_NE(comp, nullptr) << c.label;
@@ -490,10 +493,10 @@ TEST(MacroPortWidgetG4, HitTestStaysGenerousAroundTheShrunkJackDot) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "In A");
     ASSERT_FALSE(uuid.isEmpty());
     auto* comp = findComponent(editor, nodeIdForUuid(engine, uuid));
     ASSERT_NE(comp, nullptr);
@@ -582,10 +585,10 @@ TEST(MacroPortContextMenu, RightClickOffersRenameConfigureAndDeleteWhileTheMacro
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto uuid =
-        editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "In A");
     ASSERT_FALSE(uuid.isEmpty());
     auto* comp = findComponent(editor, nodeIdForUuid(engine, uuid));
     ASSERT_NE(comp, nullptr);
@@ -611,9 +614,9 @@ TEST(MacroPortContextMenu, RightClickStillWorksAfterItsMacroIsGoneRegressionForT
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
-    editor.setMacroCollapsed(macroId, false);
-    const auto uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "In A");
     ASSERT_FALSE(uuid.isEmpty());
     const auto portId = nodeIdForUuid(engine, uuid);
     auto* comp = findComponent(editor, portId);
@@ -623,7 +626,7 @@ TEST(MacroPortContextMenu, RightClickStillWorksAfterItsMacroIsGoneRegressionForT
     // spliceOutMacroPort — deliberately a raw metadata removal, to exercise the menu's own
     // defensive branch rather than re-testing ungroup's own splice-out).
     editor.getMacros().remove(macroId);
-    ASSERT_EQ(editor.macroPortOwnerFor(portId).macro, nullptr);
+    ASSERT_EQ(editor.getMacroController().macroPortOwnerFor(portId).macro, nullptr);
 
     juce::PopupMenu capturedMenu;
     comp->setShowContextMenuHookForTest([&capturedMenu](juce::PopupMenu& m) { capturedMenu = m; });
@@ -647,9 +650,9 @@ TEST(MacroPortContextMenu, LeftClickOnAPortBodyIsStillANoOp) {
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
-    editor.setMacroCollapsed(macroId, false);
-    const auto uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "In A");
     auto* comp = findComponent(editor, nodeIdForUuid(engine, uuid));
     ASSERT_NE(comp, nullptr);
 
@@ -666,12 +669,12 @@ TEST(MacroPortContextMenu, DeleteFromTheMenuSplicesTheCableBackAndRemovesTheNode
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto uuid =
-        editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "In");
     ASSERT_FALSE(uuid.isEmpty());
     const auto portId = nodeIdForUuid(engine, uuid);
 
@@ -712,10 +715,11 @@ TEST(MacroPortContextMenu, DeletingThePortNodeDirectlyIsOneUndoStep) {
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
-    const auto uuid = editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "In");
     ASSERT_FALSE(uuid.isEmpty());
     const auto portId = nodeIdForUuid(engine, uuid);
     // `a` is an Oscillator (no audio input jack) -- wire the port to `b` (the Filter) instead.
@@ -723,7 +727,7 @@ TEST(MacroPortContextMenu, DeletingThePortNodeDirectlyIsOneUndoStep) {
     editor.connectPorts(ext, 0, portId, 0, false, false);
     editor.connectPorts(portId, 0, b, 0, false, false);
 
-    editor.deleteMacroPortNode(macroId, uuid);
+    editor.getMacroController().deleteMacroPortNode(macroId, uuid);
     EXPECT_EQ(engine.getGraph().getNodeForId(portId), nullptr);
     EXPECT_TRUE(hasConnection(engine, ext, 0, b, 0));
 
@@ -756,16 +760,17 @@ TEST(MacroPortWidget, UncolouredAudioCVPaintsItsJackInTheAccentTint) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto uuid =
-        editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "In A");
     ASSERT_FALSE(uuid.isEmpty());
     auto* comp = findComponent(editor, nodeIdForUuid(engine, uuid));
     ASSERT_NE(comp, nullptr);
 
     // Resolve the same port the widget's paintMacroPortWidget reads for this node.
-    const GraphEditor::MacroPortOwner ownership = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid));
+    const GraphEditor::MacroPortOwner ownership =
+        editor.getMacroController().macroPortOwnerFor(nodeIdForUuid(engine, uuid));
     ASSERT_NE(ownership.port, nullptr);
     ASSERT_FALSE(ownership.port->colour.has_value()) << "a fresh port carries no user colour";
 
@@ -780,10 +785,10 @@ TEST(MacroPortWidget, UserColouredPortOverrideTheTintOnTheDockedWidget) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "In A");
     ASSERT_FALSE(uuid.isEmpty());
 
     const juce::Colour userColour(0xff123456);
@@ -791,7 +796,8 @@ TEST(MacroPortWidget, UserColouredPortOverrideTheTintOnTheDockedWidget) {
 
     auto* comp = findComponent(editor, nodeIdForUuid(engine, uuid));
     ASSERT_NE(comp, nullptr);
-    const GraphEditor::MacroPortOwner ownership = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid));
+    const GraphEditor::MacroPortOwner ownership =
+        editor.getMacroController().macroPortOwnerFor(nodeIdForUuid(engine, uuid));
     ASSERT_NE(ownership.port, nullptr);
     ASSERT_TRUE(ownership.port->colour.has_value());
     EXPECT_EQ(*ownership.port->colour, userColour);
@@ -809,14 +815,15 @@ TEST(MacroPortWidget, UserColouredMidiPortWinsOnTheMidiJackTint) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::Midi, MacroPortShape::Mono, 1, "MIDI In");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::Midi,
+                                                               MacroPortShape::Mono, 1, "MIDI In");
     ASSERT_FALSE(uuid.isEmpty());
     editor.changeMacroPortColour(macroId, uuid, juce::Colour(0xffabcdef));
 
-    const GraphEditor::MacroPortOwner ownership = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid));
+    const GraphEditor::MacroPortOwner ownership =
+        editor.getMacroController().macroPortOwnerFor(nodeIdForUuid(engine, uuid));
     ASSERT_NE(ownership.port, nullptr);
     ASSERT_TRUE(ownership.port->colour.has_value());
     // Unset-tint fallback is the audioWire branch's own (accent here proves the override is tint-agnostic).
@@ -830,19 +837,20 @@ TEST(MacroPortWidget, ClearingAPortColourFallsBackToTheKindTintAgain) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "In A");
     ASSERT_FALSE(uuid.isEmpty());
 
     juce::Colour accent(0xff00cc33);
     editor.changeMacroPortColour(macroId, uuid, juce::Colour(0xff123456));
-    ASSERT_TRUE(editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port->colour.has_value());
+    ASSERT_TRUE(editor.getMacroController().macroPortOwnerFor(nodeIdForUuid(engine, uuid)).port->colour.has_value());
 
     // Resetting (the swatch's right-click) clears the user colour -> the tint returns.
     editor.changeMacroPortColour(macroId, uuid, std::nullopt);
-    const GraphEditor::MacroPortOwner ownership = editor.macroPortOwnerFor(nodeIdForUuid(engine, uuid));
+    const GraphEditor::MacroPortOwner ownership =
+        editor.getMacroController().macroPortOwnerFor(nodeIdForUuid(engine, uuid));
     ASSERT_FALSE(ownership.port->colour.has_value());
     EXPECT_EQ(ModuleComponent::resolveMacroPortJackColour(ownership.port, accent), accent);
 }

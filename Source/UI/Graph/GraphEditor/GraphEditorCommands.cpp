@@ -268,7 +268,7 @@ void GraphEditor::mouseDoubleClick(const juce::MouseEvent& e) {
 
     // Double-clicking an expanded macro's name chip renames it - mirrors the collapsed card's own
     // double-click-to-rename affordance.
-    if (auto macroId = macroChipAt(localPos.roundToInt()); macroId.isNotEmpty()) {
+    if (auto macroId = macroController_.macroChipAt(localPos.roundToInt()); macroId.isNotEmpty()) {
         // JUCE delivers mouseDown before mouseDoubleClick, so the second click already armed a
         // chip drag (see mouseDown). The modal rename AlertWindow below can swallow the mouseUp
         // that would otherwise clear it, leaving macroChipDragId stuck non-empty and the next drag

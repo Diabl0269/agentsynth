@@ -59,11 +59,11 @@ void MixerPanelComponent::selectOnCanvas(const juce::String& targetId) {
     // else select the node itself (docs/mixer/panel.md#what-the-mixer-shows: "clicking a column selects its macro",
     // falling back to the node when it isn't boxed).
     if (macros_->find(targetId) != nullptr) {
-        graphEditor_->selectMacro(targetId, false);
+        graphEditor_->getMacroController().selectMacro(targetId, false);
         return;
     }
     if (const auto* macro = macros_->findByMember(targetId)) {
-        graphEditor_->selectMacro(macro->id, false);
+        graphEditor_->getMacroController().selectMacro(macro->id, false);
         return;
     }
     for (auto* node : graph_->getNodes())

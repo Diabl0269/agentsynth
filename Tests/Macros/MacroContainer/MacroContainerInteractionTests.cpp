@@ -39,22 +39,22 @@ TEST(MacroCollapseButton, BoundsIsEmptyWhileCollapsedAndSitsInsideTheHullClearOf
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro(); // collapses by default
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro(); // collapses by default
     ASSERT_FALSE(macroId.isEmpty());
 
-    EXPECT_TRUE(editor.macroCollapseButtonBounds(macroId).isEmpty())
+    EXPECT_TRUE(editor.getMacroController().macroCollapseButtonBounds(macroId).isEmpty())
         << "a collapsed macro already has its own expand chevron on the card - no button on the hull";
-    EXPECT_TRUE(editor.macroCollapseButtonBounds("no-such-macro-id").isEmpty());
+    EXPECT_TRUE(editor.getMacroController().macroCollapseButtonBounds("no-such-macro-id").isEmpty());
 
-    editor.setMacroCollapsed(macroId, false);
-    const auto hull = editor.macroHullBounds(macroId);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+    const auto hull = editor.getMacroController().macroHullBounds(macroId);
     ASSERT_FALSE(hull.isEmpty());
 
-    const auto button = editor.macroCollapseButtonBounds(macroId);
+    const auto button = editor.getMacroController().macroCollapseButtonBounds(macroId);
     ASSERT_FALSE(button.isEmpty());
     EXPECT_TRUE(hull.contains(button)) << "the button must sit entirely inside the hull";
 
-    const auto chip = editor.macroChipBounds(macroId);
+    const auto chip = editor.getMacroController().macroChipBounds(macroId);
     ASSERT_FALSE(chip.isEmpty());
     EXPECT_FALSE(chip.intersects(button))
         << "chip " << chip.toString() << " overlaps the collapse button " << button.toString();
@@ -72,13 +72,13 @@ TEST(MacroCollapseButton, DoesNotOverlapTheChipOrAMemberEvenForATwoModuleMacroPa
     auto b = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 700); // stacked, same X
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto button = editor.macroCollapseButtonBounds(macroId);
+    const auto button = editor.getMacroController().macroCollapseButtonBounds(macroId);
     ASSERT_FALSE(button.isEmpty());
-    const auto chip = editor.macroChipBounds(macroId);
+    const auto chip = editor.getMacroController().macroChipBounds(macroId);
     ASSERT_FALSE(chip.isEmpty());
     EXPECT_FALSE(chip.intersects(button));
 
@@ -99,18 +99,19 @@ TEST(MacroCollapseButton, AtHitsInsideAndMissesJustOutsideAndWhileCollapsed) {
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
-    EXPECT_TRUE(editor.macroCollapseButtonAt({150, 150}).isEmpty());
+    EXPECT_TRUE(editor.getMacroController().macroCollapseButtonAt({150, 150}).isEmpty());
 
-    editor.setMacroCollapsed(macroId, false);
-    const auto button = editor.macroCollapseButtonBounds(macroId);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
+    const auto button = editor.getMacroController().macroCollapseButtonBounds(macroId);
     ASSERT_FALSE(button.isEmpty());
 
-    EXPECT_EQ(editor.macroCollapseButtonAt(button.getCentre()), macroId);
-    EXPECT_TRUE(
-        editor.macroCollapseButtonAt(juce::Point<int>(button.getRight() + 5, button.getBottom() + 5)).isEmpty());
+    EXPECT_EQ(editor.getMacroController().macroCollapseButtonAt(button.getCentre()), macroId);
+    EXPECT_TRUE(editor.getMacroController()
+                    .macroCollapseButtonAt(juce::Point<int>(button.getRight() + 5, button.getBottom() + 5))
+                    .isEmpty());
 }
 
 TEST(MacroCollapseButton, ClickingItCollapsesTheMacroThroughTheRealMousePath) {
@@ -122,13 +123,13 @@ TEST(MacroCollapseButton, ClickingItCollapsesTheMacroThroughTheRealMousePath) {
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
     ASSERT_FALSE(editor.getMacros().find(macroId)->collapsed);
 
     editor.clearSelection();
-    const auto buttonCentre = editor.macroCollapseButtonBounds(macroId).getCentre();
+    const auto buttonCentre = editor.getMacroController().macroCollapseButtonBounds(macroId).getCentre();
 
     editor.mouseDown(makeCanvasMouseEvent(editor, buttonCentre));
 
@@ -152,17 +153,17 @@ TEST(MacroCollapseButton, ClickJustOutsideItDoesNotCollapse) {
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto button = editor.macroCollapseButtonBounds(macroId);
+    const auto button = editor.getMacroController().macroCollapseButtonBounds(macroId);
     ASSERT_FALSE(button.isEmpty());
     // Just left of the button, same row (button's own vertical centre) - stays inside the hull
     // (the button sits comfortably clear of the hull's edges), so a miss here proves the hit-test
     // is scoped to the button itself rather than the whole hull.
     const juce::Point<int> justOutside(button.getX() - 5, button.getCentreY());
-    ASSERT_TRUE(editor.macroHullBounds(macroId).contains(justOutside))
+    ASSERT_TRUE(editor.getMacroController().macroHullBounds(macroId).contains(justOutside))
         << "the probe point must still land inside the hull, so a miss proves the hit-test is "
            "scoped to the button rather than the whole hull";
 
@@ -183,11 +184,11 @@ TEST(MacroCollapseButton, CollapseViaTheButtonIsOneUndoStepAndUndoReExpands) {
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto buttonCentre = editor.macroCollapseButtonBounds(macroId).getCentre();
+    const auto buttonCentre = editor.getMacroController().macroCollapseButtonBounds(macroId).getCentre();
     const int serialBeforeCollapse = undo.getEditSerial();
 
     editor.mouseDown(makeCanvasMouseEvent(editor, buttonCentre));
@@ -224,7 +225,7 @@ TEST(MacroRecolour, PreviewThenCommitToADifferentColourIsOneUndoStepThatRestores
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
     const auto originalColour = editor.getMacros().find(macroId)->colour;
@@ -266,7 +267,7 @@ TEST(MacroRecolour, PreviewThenCommitBackToTheOriginalColourPushesNoUndoEntry) {
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
     const auto originalColour = editor.getMacros().find(macroId)->colour;
@@ -308,10 +309,10 @@ TEST(MacroCardDoubleClick, TitleRowStartsInlineRenameAndDoesNotExpand) {
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro(); // collapses by default
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro(); // collapses by default
     ASSERT_FALSE(macroId.isEmpty());
 
-    auto* card = editor.getMacroCardForTest(macroId);
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
     ASSERT_NE(card, nullptr);
     ASSERT_FALSE(card->isRenamingTitle());
 
@@ -332,10 +333,10 @@ TEST(MacroCardDoubleClick, OutsideTitleRowExpandsAndDoesNotRename) {
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
-    auto* card = editor.getMacroCardForTest(macroId);
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
     ASSERT_NE(card, nullptr);
 
     card->mouseDoubleClick(makeCanvasMouseEvent(*card, kBodyPoint, 2));
@@ -361,10 +362,10 @@ TEST(MacroCardDoubleClick, TitleRowRenameCancelsAnyArmedCardDragSoMouseUpIsANoOp
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
-    auto* card = editor.getMacroCardForTest(macroId);
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
     ASSERT_NE(card, nullptr);
     auto* compA = findComponent(editor, a);
     auto* compB = findComponent(editor, b);
@@ -452,7 +453,7 @@ TEST(MacroMemberContextMenu, ModuleInNoMacroMenuIsUnchanged) {
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto* comp = findComponent(editor, a);
     ASSERT_NE(comp, nullptr);
-    ASSERT_EQ(editor.macroForNode(a), nullptr) << "precondition: this module is in no macro";
+    ASSERT_EQ(editor.getMacroController().macroForNode(a), nullptr) << "precondition: this module is in no macro";
 
     juce::PopupMenu capturedMenu;
     comp->setShowContextMenuHookForTest([&capturedMenu](juce::PopupMenu& m) { capturedMenu = m; });
@@ -473,9 +474,9 @@ TEST(MacroMemberContextMenu, RightClickingAMacroMemberOffersTheMacroSubmenu) {
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false); // expand: members are what get right-clicked
+    editor.getMacroController().setMacroCollapsed(macroId, false); // expand: members are what get right-clicked
 
     // Select something OTHER than `a` first, so the retarget below is actually observable.
     editor.setSelectedNodes({b});
@@ -522,16 +523,16 @@ TEST(MacroMemberContextMenu, UngroupFromTheSubmenuDissolvesTheRightMacroDespiteA
     auto a1 = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto a2 = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 300, 100);
     editor.setSelectedNodes({a1, a2});
-    auto macroA = editor.groupSelectionIntoMacro();
+    auto macroA = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroA.isEmpty());
-    editor.setMacroCollapsed(macroA, false);
+    editor.getMacroController().setMacroCollapsed(macroA, false);
 
     auto b1 = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 700, 100);
     auto b2 = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 900, 100);
     editor.setSelectedNodes({b1, b2});
-    auto macroB = editor.groupSelectionIntoMacro();
+    auto macroB = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroB.isEmpty());
-    editor.setMacroCollapsed(macroB, false);
+    editor.getMacroController().setMacroCollapsed(macroB, false);
 
     // A mixed selection spanning BOTH macros, with b1 (about to be right-clicked) already part of
     // it -- mouseDown's retarget guard therefore does NOT fire, and the selection at click time
@@ -610,9 +611,9 @@ TEST(MacroMemberContextMenu, TopLevelRemoveFromMacroItemActsOnThisModuleAloneReg
     auto uuidA = uuidOf(engine, a);
 
     editor.setSelectedNodes({a, b, c});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
     // The whole macro is selected -- if this item read live selection the way the nested submenu's
     // own "Remove Selection from Macro" does, it would remove all three. It must not: it targets
@@ -654,7 +655,7 @@ TEST(MacroMembershipMenu, AddItemAppearsOnlyWhenSelectionHasSomethingToAddAndAct
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
     // Nothing else selected -- the collapsed card's own right-click (entry point 1) does NOT touch
@@ -685,7 +686,7 @@ TEST(MacroMembershipMenu, RemoveItemAppearsOnlyWhenSelectionHasAMemberAndActsOnI
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
     auto loose = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 900, 100);
@@ -716,7 +717,7 @@ TEST(MacroMembershipMenu, RemoveItemLabelPluralizesForAMultiMemberSelection) {
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     auto c = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 900, 100);
     editor.setSelectedNodes({a, b, c});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
     editor.setSelectedNodes({a, b});
@@ -735,8 +736,8 @@ juce::MouseEvent makeCardRightClick(MacroCardComponent& comp, juce::Point<int> p
 } // namespace
 
 // Regression guard for a real bug found via live GUI testing (2026-09-10): MacroCardComponent's
-// own real right-click handler calls owner.selectMacro(macroId, false) BEFORE building the menu
-// (mouseDown's "if (!owner.isMacroSelected(macroId))" guard), which silently clobbers any OTHER
+// own real right-click handler calls owner.getMacroController().selectMacro(macroId, false) BEFORE building the menu
+// (mouseDown's "if (!owner.getMacroController().isMacroSelected(macroId))" guard), which silently clobbers any OTHER
 // selection the user made before right-clicking. Calling GraphEditor::buildMacroMenu() directly
 // with setSelectedNodes() already set (as every other MacroMembershipMenu test above does) can
 // never catch this -- it bypasses the real mouseDown()/reselect entirely, which is exactly why the
@@ -752,14 +753,14 @@ TEST(MacroMembershipMenu, AddItemAndSelectionBorderBothSurviveTheRealCardRightCl
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
     auto loose = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 900, 100);
     auto uuidLoose = uuidOf(engine, loose);
     editor.setSelectedNodes({loose}); // the external batch the card's own reselect must not lose
 
-    auto* card = editor.getMacroCardForTest(macroId);
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
     ASSERT_NE(card, nullptr);
 
     juce::PopupMenu capturedMenu;
@@ -803,12 +804,12 @@ TEST(MacroMembershipMenu, CardRightClickStillReselectsMacroWhenNothingWasSelecte
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
     editor.setSelectedNodes({}); // nothing selected -- the plain "click a fresh card" case
 
-    auto* card = editor.getMacroCardForTest(macroId);
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
     ASSERT_NE(card, nullptr);
 
     juce::PopupMenu capturedMenu;
@@ -819,7 +820,7 @@ TEST(MacroMembershipMenu, CardRightClickStillReselectsMacroWhenNothingWasSelecte
     // Nothing at all was selected beforehand, so the old "highlight what you're about to act
     // on" reselect must still fire -- this is what lets "Remove Selection from Macro" and
     // "Ungroup" find the macro's own members via live selection when nothing else was selected.
-    EXPECT_TRUE(editor.isMacroSelected(macroId));
+    EXPECT_TRUE(editor.getMacroController().isMacroSelected(macroId));
     EXPECT_NE(findMenuItemByText(capturedMenu, "Remove Selection from Macro"), nullptr);
 }
 
@@ -840,12 +841,12 @@ TEST(MacroMembershipMenu, RemoveSelectionFromMacroSurvivesTheRealCardRightClickW
     auto uuidA = uuidOf(engine, a);
 
     editor.setSelectedNodes({a, b, c});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
     editor.setSelectedNodes({a}); // deliberately just ONE of the macro's own three members
 
-    auto* card = editor.getMacroCardForTest(macroId);
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
     ASSERT_NE(card, nullptr);
 
     juce::PopupMenu capturedMenu;

@@ -43,7 +43,7 @@ TEST(MacroUngroupPorts, RemovesTheAutoCreatedPortsAndSplicesTheCablesBack) {
     const int nodesBefore = engine.getGraph().getNodes().size();
 
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro(true);
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroId.isEmpty());
     ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 2u);
     EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore + 2);
@@ -51,7 +51,7 @@ TEST(MacroUngroupPorts, RemovesTheAutoCreatedPortsAndSplicesTheCablesBack) {
     EXPECT_FALSE(hasConnection(engine, b, 0, cout, 0));
 
     editor.setSelectedNodes({a, b});
-    editor.ungroupSelection();
+    editor.getMacroController().ungroupSelection();
 
     EXPECT_TRUE(editor.getMacros().empty()) << "the macro record itself is gone";
     EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore)
@@ -100,14 +100,14 @@ TEST(MacroUngroupPorts, UndoRoundTripRestoresTheActualLiveSignalPath) {
     };
 
     editor.setSelectedNodes({a, spare});
-    const auto macroId = editor.groupSelectionIntoMacro(true);
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroId.isEmpty());
     ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 2u);
     EXPECT_NEAR(renderAndReadProbe(), kSourceValue, 0.001f)
         << "signal flows through the auto-spliced inlet/outlet ports before ungroup";
 
     editor.setSelectedNodes({a});
-    editor.ungroupSelection();
+    editor.getMacroController().ungroupSelection();
     ASSERT_TRUE(editor.getMacros().empty());
     EXPECT_NEAR(renderAndReadProbe(), kSourceValue, 0.001f)
         << "the direct cable ungroup spliced back still carries the signal";
@@ -144,12 +144,12 @@ TEST(MacroUngroupPorts, SplicesTheFullCrossProductForFanInAndFanOut) {
     engine.getGraph().addConnection({{b, 0}, {dst2, 0}});
 
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro(true);
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroId.isEmpty());
     ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 2u);
 
     editor.setSelectedNodes({a, b});
-    editor.ungroupSelection();
+    editor.getMacroController().ungroupSelection();
 
     EXPECT_TRUE(editor.getMacros().empty());
     EXPECT_TRUE(hasConnection(engine, src1, 0, a, 0)) << "fan-in: BOTH original sources reconnect";
@@ -166,12 +166,12 @@ TEST(MacroUngroupPorts, RemovesAHandAddedPortTooNoProvenanceDistinctionNeeded) {
     auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro(); // no crossing -> no auto-created ports
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(); // no crossing -> no auto-created ports
     ASSERT_FALSE(macroId.isEmpty());
     ASSERT_TRUE(editor.getMacros().find(macroId)->ports.empty());
 
-    const auto uuid = editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV,
-                                          MacroPortShape::Mono, 1, "Hand Added");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "Hand Added");
     ASSERT_FALSE(uuid.isEmpty());
     const auto portId = nodeIdForUuid(engine, uuid);
     ASSERT_TRUE(portId.uid != 0);
@@ -181,7 +181,7 @@ TEST(MacroUngroupPorts, RemovesAHandAddedPortTooNoProvenanceDistinctionNeeded) {
     engine.getGraph().addConnection({{portId, 0}, {b, 0}});
 
     editor.setSelectedNodes({a});
-    editor.ungroupSelection();
+    editor.getMacroController().ungroupSelection();
 
     EXPECT_TRUE(editor.getMacros().empty());
     EXPECT_EQ(engine.getGraph().getNodeForId(portId), nullptr)
@@ -200,13 +200,13 @@ TEST(MacroUngroupPorts, AMacroWithNoPortsUngroupsExactlyAsBeforeRegressionGuard)
     const int nodesBefore = engine.getGraph().getNodes().size();
 
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro(true); // no crossing cable -> no ports
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true); // no crossing cable -> no ports
     ASSERT_FALSE(macroId.isEmpty());
     ASSERT_TRUE(editor.getMacros().find(macroId)->ports.empty());
     EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore);
 
     editor.setSelectedNodes({a, b});
-    editor.ungroupSelection();
+    editor.getMacroController().ungroupSelection();
 
     EXPECT_TRUE(editor.getMacros().empty());
     EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore) << "nothing was ever spliced, nothing to remove";
@@ -231,7 +231,7 @@ TEST(MacroUngroupPorts, ReachesTheGraphStructureChangedNotificationHook) {
     engine.getGraph().addConnection({{cin, 0}, {a, 0}});
 
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro(true);
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroId.isEmpty());
     ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u);
 
@@ -239,7 +239,7 @@ TEST(MacroUngroupPorts, ReachesTheGraphStructureChangedNotificationHook) {
     editor.onGraphStructureChanged = [&] { ++fireCount; };
 
     editor.setSelectedNodes({a});
-    editor.ungroupSelection();
+    editor.getMacroController().ungroupSelection();
 
     EXPECT_GE(fireCount, 1) << "ungrouping a macro with ports removes nodes and rewires connections -- it MUST fire "
                                "onGraphStructureChanged (mirroring deleteSelection's own updateComponents() call), or "
@@ -276,7 +276,7 @@ TEST(MacroAutoPort, PresentationCountExcludesAutoCreatedPortsFounderScenario) {
     engine.getGraph().addConnection({{reverb, 1}, {coutR, 0}});
 
     editor.setSelectedNodes({delay, reverb});
-    const auto macroId = editor.groupSelectionIntoMacro(true);
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroId.isEmpty());
 
     auto* macro = editor.getMacros().find(macroId);
@@ -287,7 +287,7 @@ TEST(MacroAutoPort, PresentationCountExcludesAutoCreatedPortsFounderScenario) {
     // The fix: the user-facing MODULE count must read 2, not members.size()'s 4.
     EXPECT_EQ(macro->moduleMemberCount(), 2);
 
-    const auto* card = editor.getMacroCardForTest(macroId);
+    const auto* card = editor.getMacroController().getMacroCardForTest(macroId);
     ASSERT_NE(card, nullptr) << "groupSelectionIntoMacro leaves the macro collapsed by default";
     EXPECT_EQ(card->getModuleCountText(), "2 modules, 2 ports")
         << "honest about both quantities, never a bare '2' that hides the ports entirely";
@@ -312,11 +312,11 @@ TEST(MacroAutoPort, PresentationTooltipListsModulesNotPortNodes) {
     engine.getGraph().addConnection({{b, 0}, {cout, 0}});
 
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro(true);
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroId.isEmpty());
     ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 2u);
 
-    auto* card = editor.getMacroCardForTest(macroId);
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
     ASSERT_NE(card, nullptr);
     const auto tooltip = card->getTooltip();
     EXPECT_TRUE(tooltip.contains("Delay"));
@@ -336,7 +336,7 @@ TEST(MacroAutoPort, PresentationCountIsUnchangedForAPlainMacroWithNoPorts) {
     auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
 
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro(true); // no crossing cable -> no ports
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true); // no crossing cable -> no ports
     ASSERT_FALSE(macroId.isEmpty());
 
     auto* macro = editor.getMacros().find(macroId);
@@ -344,7 +344,7 @@ TEST(MacroAutoPort, PresentationCountIsUnchangedForAPlainMacroWithNoPorts) {
     EXPECT_TRUE(macro->ports.empty());
     EXPECT_EQ(macro->moduleMemberCount(), 2);
 
-    const auto* card = editor.getMacroCardForTest(macroId);
+    const auto* card = editor.getMacroController().getMacroCardForTest(macroId);
     ASSERT_NE(card, nullptr);
     EXPECT_EQ(card->getModuleCountText(), "2 modules");
 }
@@ -362,21 +362,21 @@ TEST(MacroAutoPort, PresentationCountUpdatesWhenAPortIsDeleted) {
     engine.getGraph().addConnection({{b, 0}, {cout, 0}});
 
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro(true);
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroId.isEmpty());
     auto* macro = editor.getMacros().find(macroId);
     ASSERT_EQ(macro->ports.size(), 2u);
     ASSERT_EQ(macro->moduleMemberCount(), 2);
 
     const juce::String outletUuid = macro->ports[0].isInput ? macro->ports[1].nodeUuid : macro->ports[0].nodeUuid;
-    editor.removeMacroPort(macroId, outletUuid);
+    editor.getMacroController().removeMacroPort(macroId, outletUuid);
 
     macro = editor.getMacros().find(macroId);
     ASSERT_NE(macro, nullptr);
     EXPECT_EQ(macro->ports.size(), 1u);
     EXPECT_EQ(macro->moduleMemberCount(), 2) << "deleting a port must never touch the MODULE count";
 
-    const auto* card = editor.getMacroCardForTest(macroId);
+    const auto* card = editor.getMacroController().getMacroCardForTest(macroId);
     ASSERT_NE(card, nullptr);
     EXPECT_EQ(card->getModuleCountText(), "2 modules, 1 port");
 }
@@ -391,12 +391,12 @@ TEST(MacroAutoPort, PresentationCountExcludesAHandAddedPortViaConfigureIO) {
     auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro(); // no auto-ports
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(); // no auto-ports
     ASSERT_FALSE(macroId.isEmpty());
     ASSERT_TRUE(editor.getMacros().find(macroId)->ports.empty());
 
-    const auto portUuid = editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV,
-                                              MacroPortShape::Mono, 1, "Extra In");
+    const auto portUuid = editor.getMacroController().addMacroPort(
+        macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "Extra In");
     ASSERT_FALSE(portUuid.isEmpty());
 
     auto* macro = editor.getMacros().find(macroId);
@@ -405,7 +405,7 @@ TEST(MacroAutoPort, PresentationCountExcludesAHandAddedPortViaConfigureIO) {
     EXPECT_EQ((int)macro->members.size(), 3);
     EXPECT_EQ(macro->moduleMemberCount(), 2) << "a hand-added port must not inflate the module count";
 
-    const auto* card = editor.getMacroCardForTest(macroId);
+    const auto* card = editor.getMacroController().getMacroCardForTest(macroId);
     ASSERT_NE(card, nullptr);
     EXPECT_EQ(card->getModuleCountText(), "2 modules, 1 port");
 }
@@ -441,9 +441,9 @@ TEST(MacroAutoPort, ModalFiresWhenUnsetAndTheSelectionHasACrossingCable) {
     auto ext = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Ext", 100, 100);
     engine.getGraph().addConnection({{ext, 0}, {a, 0}});
 
-    ASSERT_TRUE(editor.selectionHasCrossingMacroCable() == false) << "nothing selected yet";
+    ASSERT_TRUE(editor.getMacroController().selectionHasCrossingMacroCable() == false) << "nothing selected yet";
     editor.setSelectedNodes({a, b});
-    ASSERT_TRUE(editor.selectionHasCrossingMacroCable());
+    ASSERT_TRUE(editor.getMacroController().selectionHasCrossingMacroCable());
 
     bool modalShown = false;
     std::function<void(bool, bool)> capturedRespond;
@@ -489,7 +489,8 @@ TEST(MacroAutoPort, ModalFiresEvenWhenTheSelectedModulesHaveNoUuidYet) {
     engine.getGraph().addConnection({{ext, 0}, {a, 0}});
 
     editor.setSelectedNodes({a, b});
-    ASSERT_TRUE(editor.selectionHasCrossingMacroCable()) << "must detect the crossing cable without any uuid";
+    ASSERT_TRUE(editor.getMacroController().selectionHasCrossingMacroCable())
+        << "must detect the crossing cable without any uuid";
 
     bool modalShown = false;
     editor.macroAutoPortModalForTest = [&](std::function<void(bool, bool)>) { modalShown = true; };
@@ -509,7 +510,7 @@ TEST(MacroAutoPort, ModalDoesNotFireWhenASelectedModuleIsAlreadyInAMacro) {
     auto x = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "X", 400, 100);
     auto y = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Y", 400, 300);
     editor.setSelectedNodes({x, y});
-    const auto firstMacroId = editor.groupSelectionIntoMacro(false);
+    const auto firstMacroId = editor.getMacroController().groupSelectionIntoMacro(false);
     ASSERT_FALSE(firstMacroId.isEmpty());
 
     auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 700, 100);
@@ -517,7 +518,7 @@ TEST(MacroAutoPort, ModalDoesNotFireWhenASelectedModuleIsAlreadyInAMacro) {
     engine.getGraph().addConnection({{ext, 0}, {b, 0}});
 
     editor.setSelectedNodes({x, b}); // x is already a macro member
-    EXPECT_FALSE(editor.selectionHasCrossingMacroCable());
+    EXPECT_FALSE(editor.getMacroController().selectionHasCrossingMacroCable());
 
     bool modalShown = false;
     editor.macroAutoPortModalForTest = [&](std::function<void(bool, bool)>) { modalShown = true; };

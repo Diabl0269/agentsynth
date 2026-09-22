@@ -316,7 +316,7 @@ TEST_F(ChannelFlowTest, ChannelCardsDoNotOverlapAndMasterIsRightOfStrip) {
     // Expand the macro through the same API the "Expand" menu item and the collapsed card's own
     // click use (GraphEditor::setMacroCollapsed) so member ModuleComponents are laid out for real
     // (applyMacroCollapsed calls updateComponents()) rather than inferring bounds ourselves.
-    mc.getGraphEditor().setMacroCollapsed(macroId, false);
+    mc.getGraphEditor().getMacroController().setMacroCollapsed(macroId, false);
     ASSERT_FALSE(macros.find(macroId)->collapsed);
 
     auto* trackAudioNode = findNodeOfTypeCFT(graph, ModuleType::TimelineAudioSource);

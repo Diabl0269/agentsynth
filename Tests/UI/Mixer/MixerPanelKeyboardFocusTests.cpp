@@ -204,11 +204,11 @@ TEST(MixerPanelKeyboardFocusTest, EnterSelectsTheFocusedColumnsMacroOnCanvas) {
     PanelFixture f(1);
     ASSERT_EQ(f.mc.getGraphEditor().getMacros().size(), 1);
     const auto macroId = f.mc.getGraphEditor().getMacros().getAll().front().id;
-    EXPECT_FALSE(f.mc.getGraphEditor().isMacroSelected(macroId));
+    EXPECT_FALSE(f.mc.getGraphEditor().getMacroController().isMacroSelected(macroId));
 
     f.panel->keyPressed(rightKey()); // -> strip0
     EXPECT_TRUE(f.panel->keyPressed(returnKey()));
-    EXPECT_TRUE(f.mc.getGraphEditor().isMacroSelected(macroId));
+    EXPECT_TRUE(f.mc.getGraphEditor().getMacroController().isMacroSelected(macroId));
 }
 
 TEST(MixerPanelKeyboardFocusTest, MuteKeyTogglesFocusedColumnThroughTheSameOnClickPath) {
@@ -328,7 +328,7 @@ TEST(MixerPanelKeyboardFocusTest, DeletingTheFocusedStripClearsFocus) {
 
     ASSERT_EQ(f.mc.getGraphEditor().getMacros().size(), 2);
     const auto macroId = f.mc.getGraphEditor().getMacros().getAll()[1].id;
-    f.mc.getGraphEditor().deleteMacroAndMembers(macroId);
+    f.mc.getGraphEditor().getMacroController().deleteMacroAndMembers(macroId);
 
     f.panel->rebuild();
     EXPECT_EQ(f.panel->getFocusedColumnIndexForTest(), -1)

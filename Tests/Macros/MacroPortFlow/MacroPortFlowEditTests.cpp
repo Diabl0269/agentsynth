@@ -8,10 +8,11 @@ TEST(MacroPortFlow, RemoveDeletesTheNodeAndDropsThePort) {
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
-    const auto uuid = editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "In");
     ASSERT_FALSE(uuid.isEmpty());
 
-    editor.removeMacroPort(macroId, uuid);
+    editor.getMacroController().removeMacroPort(macroId, uuid);
 
     EXPECT_TRUE(nodeIdForUuid(engine, uuid).uid == 0);
     auto* macro = editor.getMacros().find(macroId);
@@ -29,11 +30,11 @@ TEST(MacroPortFlow, RenameTouchesOnlyTheName) {
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
-    const auto uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "Old Name");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "Old Name");
     const int order = editor.getMacros().find(macroId)->ports[0].order;
 
-    editor.renameMacroPort(macroId, uuid, "New Name");
+    editor.getMacroController().renameMacroPort(macroId, uuid, "New Name");
 
     auto* port = &editor.getMacros().find(macroId)->ports[0];
     EXPECT_EQ(port->name, "New Name");
@@ -45,10 +46,10 @@ TEST(MacroPortFlow, RenameToBlankIsANoOp) {
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
-    const auto uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "Keep Me");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "Keep Me");
 
-    editor.renameMacroPort(macroId, uuid, "   ");
+    editor.getMacroController().renameMacroPort(macroId, uuid, "   ");
 
     EXPECT_EQ(editor.getMacros().find(macroId)->ports[0].name, "Keep Me");
 }
@@ -59,10 +60,12 @@ TEST(MacroPortFlow, ReorderIsScopedToOneDirectionAndNoOpsAtTheEdge) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
 
-    const auto in1 = editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In1");
-    const auto in2 = editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In2");
-    const auto out1 =
-        editor.addMacroPort(macroId, false, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "Out1");
+    const auto in1 = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                              MacroPortShape::Mono, 1, "In1");
+    const auto in2 = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                              MacroPortShape::Mono, 1, "In2");
+    const auto out1 = editor.getMacroController().addMacroPort(macroId, false, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "Out1");
 
     auto orderOf = [&](const juce::String& uuid) {
         for (const auto& p : editor.getMacros().find(macroId)->ports)
@@ -72,16 +75,17 @@ TEST(MacroPortFlow, ReorderIsScopedToOneDirectionAndNoOpsAtTheEdge) {
     };
     ASSERT_LT(orderOf(in1), orderOf(in2)); // In1 was added first
 
-    editor.moveMacroPortOrder(macroId, in2, /*moveUp=*/true);
+    editor.getMacroController().moveMacroPortOrder(macroId, in2, /*moveUp=*/true);
     EXPECT_LT(orderOf(in2), orderOf(in1)) << "In2 swapped ahead of In1";
 
     // Already first in its group: a further move-up is a no-op, not a crash or an order collision.
-    editor.moveMacroPortOrder(macroId, in2, /*moveUp=*/true);
+    editor.getMacroController().moveMacroPortOrder(macroId, in2, /*moveUp=*/true);
     EXPECT_LT(orderOf(in2), orderOf(in1));
 
     // The lone output never moves relative to the inputs — reorder is per-direction.
     const int out1OrderBefore = orderOf(out1);
-    editor.moveMacroPortOrder(macroId, out1, /*moveUp=*/false); // only output -> no-op (at the edge)
+    editor.getMacroController().moveMacroPortOrder(macroId, out1,
+                                                   /*moveUp=*/false); // only output -> no-op (at the edge)
     EXPECT_EQ(orderOf(out1), out1OrderBefore);
 }
 
@@ -93,9 +97,12 @@ TEST(MacroPortFlow, ReorderToIndexMovesAnArbitraryDistanceAndRenumbersTheWholeGr
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
 
-    const auto in1 = editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In1");
-    const auto in2 = editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In2");
-    const auto in3 = editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In3");
+    const auto in1 = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                              MacroPortShape::Mono, 1, "In1");
+    const auto in2 = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                              MacroPortShape::Mono, 1, "In2");
+    const auto in3 = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                              MacroPortShape::Mono, 1, "In3");
 
     auto orderOf = [&](const juce::String& uuid) {
         for (const auto& p : editor.getMacros().find(macroId)->ports)
@@ -107,7 +114,7 @@ TEST(MacroPortFlow, ReorderToIndexMovesAnArbitraryDistanceAndRenumbersTheWholeGr
     ASSERT_LT(orderOf(in2), orderOf(in3));
 
     // Drag In1 (currently index 0) to index 2 — the last slot — in one call.
-    editor.reorderMacroPortToIndex(macroId, in1, 2);
+    editor.getMacroController().reorderMacroPortToIndex(macroId, in1, 2);
 
     EXPECT_LT(orderOf(in2), orderOf(in3));
     EXPECT_LT(orderOf(in3), orderOf(in1)) << "In1 must now be LAST in its group";
@@ -119,12 +126,14 @@ TEST(MacroPortFlow, ReorderToIndexNeverTouchesTheOppositeDirectionsOrder) {
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
 
-    const auto in1 = editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In1");
-    const auto in2 = editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In2");
-    const auto out1 =
-        editor.addMacroPort(macroId, false, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "Out1");
-    const auto out2 =
-        editor.addMacroPort(macroId, false, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "Out2");
+    const auto in1 = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                              MacroPortShape::Mono, 1, "In1");
+    const auto in2 = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                              MacroPortShape::Mono, 1, "In2");
+    const auto out1 = editor.getMacroController().addMacroPort(macroId, false, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "Out1");
+    const auto out2 = editor.getMacroController().addMacroPort(macroId, false, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Mono, 1, "Out2");
 
     auto orderOf = [&](const juce::String& uuid) {
         for (const auto& p : editor.getMacros().find(macroId)->ports)
@@ -139,7 +148,7 @@ TEST(MacroPortFlow, ReorderToIndexNeverTouchesTheOppositeDirectionsOrder) {
     // outputs — this is what makes "can't drag an input into the output section" structural: there
     // is no isInput parameter on reorderMacroPortToIndex at all for a cross-direction move to
     // express. An out-of-range index also just clamps to the group's own last slot.
-    editor.reorderMacroPortToIndex(macroId, in1, 99);
+    editor.getMacroController().reorderMacroPortToIndex(macroId, in1, 99);
 
     EXPECT_EQ(orderOf(out1), out1OrderBefore);
     EXPECT_EQ(orderOf(out2), out2OrderBefore);
@@ -153,10 +162,11 @@ TEST(MacroPortFlow, ReorderToIndexIsANoOpWhenAlreadyAtThatIndex) {
     undo.setGraphEditor(&editor);
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
-    const auto in1 = editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In1");
+    const auto in1 = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                              MacroPortShape::Mono, 1, "In1");
 
     const int serialBefore = undo.getEditSerial();
-    editor.reorderMacroPortToIndex(macroId, in1, 0); // already at index 0 — the only input
+    editor.getMacroController().reorderMacroPortToIndex(macroId, in1, 0); // already at index 0 — the only input
     EXPECT_EQ(undo.getEditSerial(), serialBefore) << "no-op must not push an undo entry";
 }
 
@@ -169,8 +179,8 @@ TEST(MacroPortFlow, ChangeColourSetsAndClearsThePortsColour) {
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
-    const auto in1 =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "Pitch In");
+    const auto in1 = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                              MacroPortShape::Mono, 1, "Pitch In");
 
     auto colourOf = [&]() -> std::optional<juce::Colour> {
         for (const auto& p : editor.getMacros().find(macroId)->ports)

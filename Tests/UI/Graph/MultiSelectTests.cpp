@@ -276,9 +276,9 @@ TEST(MultiSelectMarquee, CollapsedMacroMembersAreNotMarqueeSelectable) {
     auto band = boundsA.getUnion(boundsB);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, true);
+    editor.getMacroController().setMacroCollapsed(macroId, true);
 
     editor.beginMarquee(band.getTopLeft(), /*additive=*/false);
     editor.updateMarquee(band.getBottomRight());

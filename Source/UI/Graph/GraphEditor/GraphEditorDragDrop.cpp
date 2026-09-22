@@ -559,13 +559,13 @@ void GraphEditor::clearMacroDragCandidate() {
 // accidentally shrink a JOIN target's hull.
 juce::Rectangle<int> GraphEditor::paintedMacroHullBounds(const juce::String& macroId) const {
     if (macroDragDraggedNodeId_ != juce::AudioProcessorGraph::NodeID{}) {
-        const auto* ownMacro = macroForNode(macroDragDraggedNodeId_);
+        const auto* ownMacro = macroController_.macroForNode(macroDragDraggedNodeId_);
         if (ownMacro != nullptr && ownMacro->id == macroId) {
             const juce::String uuid = macroController_.nodeUuidFor(macroDragDraggedNodeId_);
             return macroController_.macroHullBoundsExcluding(macroId, uuid);
         }
     }
-    return macroHullBounds(macroId);
+    return macroController_.macroHullBounds(macroId);
 }
 
 // The single-undo-step finalize (docs/macros/ports.md): modeled on finalizeMacroCardDrag

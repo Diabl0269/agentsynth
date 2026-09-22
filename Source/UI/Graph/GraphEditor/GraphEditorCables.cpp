@@ -132,7 +132,7 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
         // rather than computing its own width.
         const juce::String label = macro.name.isNotEmpty() ? macro.name : juce::String("Macro");
         g.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
-        const auto chipBounds = editor.macroChipBounds(macro.id);
+        const auto chipBounds = editor.getMacroController().macroChipBounds(macro.id);
         juce::Rectangle<float> chip = chipBounds.toFloat();
         g.setColour(macro.colour.withAlpha(0.85f));
         g.fillRoundedRectangle(chip, 6.0f);
@@ -158,7 +158,7 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
         // the same control in its two states. macroCollapseButtonBounds is the ONE definition of
         // this rect — hit-testing (GraphEditor::macroCollapseButtonAt, used by mouseDown) must see
         // exactly what gets painted here.
-        const auto collapseBounds = editor.macroCollapseButtonBounds(macro.id).toFloat();
+        const auto collapseBounds = editor.getMacroController().macroCollapseButtonBounds(macro.id).toFloat();
         g.setColour(macro.colour.withAlpha(0.85f));
         g.fillRoundedRectangle(collapseBounds, 4.0f);
 
@@ -441,7 +441,7 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
                 if (nodeId.uid != 0)
                     collapsedMacroForNode[nodeId.uid] = &macro;
             }
-            for (const auto& port : macroCardPortLayout(macro.id)) {
+            for (const auto& port : macroController_.macroCardPortLayout(macro.id)) {
                 auto nodeId = macroController_.resolveMemberNodeId(port.nodeUuid);
                 if (nodeId.uid != 0)
                     portJackLocalForNode[nodeId.uid] = port.jackPos;
