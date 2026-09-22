@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MidiRemote/ControllerProfileStore.h"
+#include "MidiRemote/MidiRemoteLearnBinder.h"
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
 #include "MidiRemote/RemoteModel.h"
 #include <functional>
@@ -26,6 +27,11 @@ class AppUndoManager;
 class GraphEditor;
 class StatusBarComponent;
 
+namespace synth::ui {
+class MixerPanelComponent;  // Forward declaration -- Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.h
+class TimelineTransportBar; // Forward declaration -- Source/UI/Timeline/TimelineTransportBar.h
+} // namespace synth::ui
+
 namespace synth::midi {
 
 class MidiLearnController final {
@@ -50,6 +56,24 @@ public:
     /** Wired to GraphEditor::onQueryMidiMappingsForNode. */
     std::map<juce::String, juce::String> queryMappings(juce::AudioProcessorGraph::NodeID nodeId) const;
 
+    /** FRO133 (docs/control/midi-remote.md#action-targets): arms a learn on a ShortcutManager
+     *  action id (e.g. "transportTogglePlayStop") rather than a graph parameter -- always
+     *  buttonLike. Unlike arm() above, an action assignment is GLOBAL: it is written into whatever
+     *  ControllerProfile the learned device belongs to, not the project doc
+     *  (docs/control/midi-remote.md#where-does-a-mapping-live--global-or-in-the-project). Wired to
+     *  TimelineTransportBar::onMidiLearnRequested. */
+    void armAction(const juce::String& actionId);
+
+    /** "Forget MIDI" for an action target. Removes the assignment from every profile that carries
+     *  it (in practice at most one) and persists the change. A no-op if none carries it. Wired to
+     *  TimelineTransportBar::onMidiForgetRequested. */
+    void forgetAction(const juce::String& actionId);
+
+    /** Every action id currently mapped, to its display label ("Knob 1 on Launchkey Mini"),
+     *  scanning every profile's global action assignments. Wired to
+     *  TimelineTransportBar::onQueryMidiMappingForAction. */
+    std::map<juce::String, juce::String> queryActionMappings() const;
+
     /** Republishes the project doc's assignments to the engine. Called after every mutation here,
      *  as the undo/redo postRestore, and by MainComponent after a project load/autosave-restore
      *  replaces midiRemoteDoc wholesale. */
@@ -58,6 +82,16 @@ public:
     bool isArmed() const noexcept;
     /** Esc key / clicking the canvas elsewhere while armed. A no-op if nothing is armed. */
     void cancelArmed();
+
+    /** FRO133: non-owning, may be null (tests, or before MainComponent finishes wiring -- same
+     *  null contract as TimelineTransportBar::setTransport). Set once so a mixer-fader/pan/mute
+     *  learn shows its OWN breathing outline on the mixer column, not only on the canvas card
+     *  GraphEditor already reaches via setMidiLearnArmed()/clearMidiLearnArmed(). */
+    void setMixerPanel(synth::ui::MixerPanelComponent* panel) noexcept { mixerPanel_ = panel; }
+
+    /** Same null contract as setMixerPanel(), for the transport bar's action-target armed outline
+     *  and badges. */
+    void setTransportBar(synth::ui::TimelineTransportBar* bar) noexcept { transportBar_ = bar; }
 
 private:
     /** Forwards MouseListener clicks and polls RemoteEngine::isLearnArmed() for the silent-timeout
@@ -87,6 +121,7 @@ private:
 
     void refreshSources();
     void handleLearned(const LearnResult& result);
+    void handleLearnedAction(const LearnResult& result, LearnBindOutcome& outcome);
     void endArmedUi();
     juce::String resolveNodeUuid(juce::AudioProcessorGraph::NodeID nodeId) const;
     juce::String ensureNodeUuid(juce::AudioProcessorGraph::NodeID nodeId) const;
@@ -102,6 +137,9 @@ private:
 
     ControllerProfileStore profileStore_;
     std::vector<ControllerProfile> profiles_;
+
+    synth::ui::MixerPanelComponent* mixerPanel_ = nullptr;
+    synth::ui::TimelineTransportBar* transportBar_ = nullptr;
 
     UiWatcher watcher_;
 

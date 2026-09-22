@@ -181,6 +181,15 @@ pointers **without destroying anything** (`MixerColumnComponent::unbindFromGraph
 `~MainComponent()`'s own `detachAllModuleComponents()` call, already ordered before
 `audioEngine.shutdown()`, covers the same teardown hazard for free.
 
+**FRO133 (right-click MIDI Learn on the mixer, [`docs/control/midi-remote-ui.md`](../control/midi-remote-ui.md#right-click-midi-learn--coverage))
+adds one more thing to this list.** Both `unbindFromGraph()` methods above also clear a small MIDI
+Learn registry (`MixerColumnComponent`'s own `midiLearnableEntries_`, `MixerMasterColumn`'s own
+`midiLearnableFaderParam_`) — each entry's `param` is the exact same kind of raw
+`juce::RangedAudioParameter*` into a graph node that the fader/pan/mute bindings above exist to
+protect, just read by the right-click menu and the mapped-badge paint instead of a
+`SliderParameterAttachment`. Rebuilt by the next `rebindControls()`/`setNodeId()`, same lifecycle as
+everything else this section covers.
+
 **Why a pre-restore hook rather than relying on the rebuild.** A graph-structural undo or redo, New
 Patch, Open, or an AI patch apply freezes the affected `ChannelStripModule`/`MasterModule` nodes'
 parameters, and `MixerPanelComponent::rebuild()` is reached from the AFTER-restore hook

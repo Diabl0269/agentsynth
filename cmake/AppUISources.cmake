@@ -43,6 +43,7 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TrackChannelLinkController.cpp
     Source/UI/Timeline/TimelineTransportBar.h
     Source/UI/Timeline/TimelineTransportBar.cpp
+    Source/UI/Timeline/TimelineTransportBarMidiLearn.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneInternal.h
@@ -75,6 +76,7 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerSendList.cpp
     Source/UI/Mixer/MixerColumnComponent.h
     Source/UI/Mixer/MixerColumnComponent.cpp
+    Source/UI/Mixer/MixerColumnMidiLearn.cpp
     Source/UI/Mixer/MixerDirectColumn.h
     Source/UI/Mixer/MixerDirectColumn.cpp
     Source/UI/Mixer/MixerMasterColumn.h
@@ -166,6 +168,8 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp
+    Source/UI/MidiRemote/MidiLearnMenu.h
+    Source/UI/MidiRemote/MidiLearnMenu.cpp
     Source/UI/Macros/MacroCardComponent.cpp
     Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogLifecycle.cpp
     Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogRowOrdering.cpp

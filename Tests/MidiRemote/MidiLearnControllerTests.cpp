@@ -168,3 +168,110 @@ TEST_F(MidiLearnControllerTest, ArmingAgainOnADifferentControlTearsDownThePrevio
     ASSERT_EQ(doc_.assignments.size(), 1u);
     EXPECT_EQ(doc_.assignments[0].target.parameter.paramId, "resonance");
 }
+
+// ============================================================================
+// FRO133: action targets (docs/control/midi-remote.md#action-targets) -- armAction()/
+// forgetAction()/queryActionMappings() mirror arm()/forget()/queryMappings() above, but write the
+// assignment into the learned device's ControllerProfile.actions (GLOBAL) rather than doc_
+// (project), and are NOT undoable (docs/control/midi-remote.md#undo: "Profile edits ... not
+// undoable").
+// ============================================================================
+
+TEST_F(MidiLearnControllerTest, ArmActionMakesTheEngineArmed) {
+    controller_->armAction("transportRecord");
+    EXPECT_TRUE(controller_->isArmed());
+
+    controller_->cancelArmed();
+    EXPECT_FALSE(controller_->isArmed());
+}
+
+TEST_F(MidiLearnControllerTest, LearnActionCreatesAGlobalProfileAssignmentNeverAProjectOne) {
+    controller_->armAction("transportRecord");
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+
+    EXPECT_TRUE(doc_.assignments.empty()) << "an action assignment never touches the project doc";
+    EXPECT_TRUE(doc_.controllers.empty());
+
+    ASSERT_EQ(controller_->getProfiles().size(), 1u);
+    const auto& actions = controller_->getProfiles()[0].actions;
+    ASSERT_EQ(actions.size(), 1u);
+    EXPECT_TRUE(actions[0].target.isAction());
+    EXPECT_EQ(actions[0].target.action.actionId, "transportRecord");
+    EXPECT_EQ(actions[0].spec.number, 20);
+
+    EXPECT_FALSE(controller_->isArmed());
+    EXPECT_EQ(statusBar_.getTransientMessageForTest(), "Mapped to CC 20 on Host MIDI");
+}
+
+TEST_F(MidiLearnControllerTest, LearnActionAgainReplacesRatherThanDuplicating) {
+    controller_->armAction("transportRecord");
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+    ASSERT_EQ(controller_->getProfiles()[0].actions.size(), 1u);
+
+    controller_->armAction("transportRecord");
+    send(juce::MidiMessage::controllerEvent(1, 30, 64));
+    settle();
+
+    const auto& actions = controller_->getProfiles()[0].actions;
+    ASSERT_EQ(actions.size(), 1u) << "learn again replaces, never duplicates";
+    EXPECT_EQ(actions[0].spec.number, 30);
+}
+
+TEST_F(MidiLearnControllerTest, LearnActionIsNotUndoable) {
+    controller_->armAction("transportRecord");
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+    ASSERT_EQ(controller_->getProfiles()[0].actions.size(), 1u);
+
+    EXPECT_FALSE(undo_.canUndo()) << "a profile edit is a global setting, not a project-doc undo step";
+}
+
+TEST_F(MidiLearnControllerTest, ForgetActionRemovesTheAssignmentFromTheProfile) {
+    controller_->armAction("transportRecord");
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+    ASSERT_EQ(controller_->getProfiles()[0].actions.size(), 1u);
+
+    controller_->forgetAction("transportRecord");
+    EXPECT_TRUE(controller_->getProfiles()[0].actions.empty());
+    EXPECT_EQ(statusBar_.getTransientMessageForTest(), "MIDI mapping removed");
+}
+
+TEST_F(MidiLearnControllerTest, ForgetActionOnAnUnmappedActionIsANoOp) {
+    controller_->forgetAction("transportRecord");
+    EXPECT_TRUE(statusBar_.getTransientMessageForTest().isEmpty());
+}
+
+TEST_F(MidiLearnControllerTest, QueryActionMappingsReturnsALabelForEachMappedAction) {
+    controller_->armAction("transportRecord");
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+
+    const auto mappings = controller_->queryActionMappings();
+    ASSERT_EQ(mappings.count("transportRecord"), 1u);
+    EXPECT_EQ(mappings.at("transportRecord"), "CC 20 on Host MIDI");
+    EXPECT_EQ(mappings.count("transportToggleLoop"), 0u);
+}
+
+TEST_F(MidiLearnControllerTest, ArmActionTearsDownAPreviouslyArmedParameterLearnAndViceVersa) {
+    controller_->arm(node_->nodeID, "cutoff");
+    ASSERT_TRUE(controller_->isArmed());
+
+    controller_->armAction("transportRecord");
+    EXPECT_TRUE(controller_->isArmed());
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+
+    EXPECT_TRUE(doc_.assignments.empty()) << "only the action learn should have settled";
+    ASSERT_EQ(controller_->getProfiles()[0].actions.size(), 1u);
+
+    controller_->arm(node_->nodeID, "resonance");
+    EXPECT_TRUE(controller_->isArmed());
+    send(juce::MidiMessage::controllerEvent(1, 30, 64));
+    settle();
+
+    ASSERT_EQ(doc_.assignments.size(), 1u);
+    EXPECT_EQ(doc_.assignments[0].target.parameter.paramId, "resonance");
+}

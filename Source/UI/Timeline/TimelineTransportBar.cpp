@@ -338,6 +338,9 @@ void TimelineTransportBar::updateFromTransport(const synth::TransportService::Po
                               juce::dontSendNotification);
 
     refreshReadout(snapshot);
+    // FRO133: no timer of its own -- rides the SAME 10 Hz poll as everything else this method
+    // resyncs (the class comment's "never any faster" rule).
+    refreshMidiLearnBadges();
 }
 
 void TimelineTransportBar::refreshReadout(const synth::TransportService::PositionSnapshot& snapshot) {
@@ -439,5 +442,10 @@ void TimelineTransportBar::paint(juce::Graphics& g) {
         g.drawText(lastReadoutText_, readoutBounds_, juce::Justification::centredLeft, false);
     }
 }
+
+// FRO133: the four glyph buttons are children, so the badge/armed-outline overlay must paint OVER
+// them -- paint() above runs BEFORE children paint (ModuleComponent/MixerColumnComponent's own
+// overlay is the same paintOverChildren() split, for the same reason).
+void TimelineTransportBar::paintOverChildren(juce::Graphics& g) { paintMidiLearnOverlays(g); }
 
 } // namespace synth::ui

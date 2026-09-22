@@ -375,6 +375,7 @@ add_executable(Tests
     UI/Layout/FocusRegionTests.cpp
     UI/Timeline/AutomationEditorTests.cpp
     UI/Timeline/TimelineTransportBarTests.cpp
+    UI/Timeline/TransportBarMidiLearnTests.cpp
     UI/Timeline/TimelineViewStateTests.cpp
     UI/Mixer/MixerPanelComponentTests.cpp
     UI/Mixer/MixerPanelUndoUnbindTests.cpp
@@ -387,6 +388,8 @@ add_executable(Tests
     UI/Mixer/MixerEqThumbnailTests.cpp
     UI/Mixer/MixerColumnComponentTests.cpp
     UI/Mixer/MixerColumnComponentMeterTests.cpp
+    UI/Mixer/MixerColumnMidiLearnTests.cpp
+    UI/Mixer/MixerMasterColumnMidiLearnTests.cpp
     UI/Mixer/MixerMeterScaleTests.cpp
     UI/Mixer/MeterColourStopsTests.cpp
     UI/Mixer/MeterColourStopsPersistenceTests.cpp
@@ -467,6 +470,7 @@ add_executable(Tests
     ../Source/UI/Timeline/ChannelChipComponent.cpp
     ../Source/UI/Timeline/TrackChannelLinkController.cpp
     ../Source/UI/Timeline/TimelineTransportBar.cpp
+    ../Source/UI/Timeline/TimelineTransportBarMidiLearn.cpp
     ../Source/UI/Mixer/MixerMeter.cpp
     # MeterColourStops.cpp is now compiled into Core (root CMakeLists.txt, FRO147) -- Tests links
     # Core directly, so it must NOT also be listed here (would double-compile/duplicate-symbol it).
@@ -477,6 +481,7 @@ add_executable(Tests
     ../Source/UI/Mixer/MixerEqThumbnail.cpp
     ../Source/UI/Mixer/MixerSendList.cpp
     ../Source/UI/Mixer/MixerColumnComponent.cpp
+    ../Source/UI/Mixer/MixerColumnMidiLearn.cpp
     ../Source/UI/Mixer/MixerDirectColumn.cpp
     ../Source/UI/Mixer/MixerMasterColumn.cpp
     ../Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.cpp
@@ -545,6 +550,7 @@ add_executable(Tests
     ../Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
     ../Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
     ../Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp
+    ../Source/UI/MidiRemote/MidiLearnMenu.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibrarySearch.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryRows.cpp

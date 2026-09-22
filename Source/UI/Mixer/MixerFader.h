@@ -63,6 +63,7 @@ public:
     static int getLiveUnbindCallCountForTest() noexcept { return liveUnbindCallCountForTest_; }
 
     juce::Slider& getSlider() noexcept { return slider_; }
+    const juce::Slider& getSlider() const noexcept { return slider_; }
 
     /** FRO18: "<channel name> fader" (e.g. "Lead 1 fader") -- the accessible name VoiceOver reads
      *  ahead of the slider's own value text below. */

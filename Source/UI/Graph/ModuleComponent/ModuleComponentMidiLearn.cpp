@@ -8,27 +8,29 @@
 //              right-click on anything other than a generic slider (which is already matched
 //              against `sliders` for the "Automate" item; see showAutomateMenuForSlider in
 //              ModuleComponentInteraction.cpp).
-//   MENU       appendMidiLearnMenuItems() builds the doc-exact block; showAutomateMenuForSlider
-//              (sliders) and showMidiLearnOnlyMenu (everything else) both call it, then both route
-//              through showContextMenuHook_ so a test can capture the result headlessly.
+//   MENU       appendMidiLearnMenuItems() builds the doc-exact block by calling the surface-
+//              agnostic synth::ui::midilearn::appendMidiLearnMenuItems() (FRO133,
+//              Source/UI/MidiRemote/MidiLearnMenu.h) with this card's own callbacks;
+//              showAutomateMenuForSlider (sliders) and showMidiLearnOnlyMenu (everything else)
+//              both call it, then both route through showContextMenuHook_ so a test can capture
+//              the result headlessly.
 //   BADGES     refreshMidiLearnBadges(), called once per module from the existing gated 15 Hz
 //              timerCallback (never a new timer -- Source/UI/CLAUDE.md's envelope-playhead
-//              precedent), and paintMidiLearnOverlays(), called from paint().
+//              precedent), and paintMidiLearnOverlays(), called from paint() -- both now painted
+//              via the shared synth::ui::midilearn paint helpers.
 //
-// The armed-control "breathing outline" also lives in paintMidiLearnOverlays(): a plain
-// elapsed-time sine computed at paint time, repainted only by the SAME gated 15 Hz tick while
-// armed (setMidiLearnArmedParam), confined to repaint(controlBounds) -- never a new AnimationDriver
-// or a third exception to the two-exception time-bounded-animation rule
-// (docs/layout/animation.md#the-time-bounded-animation-rule). It is bounded overall by
-// RemoteEngine's own 10 s learn timeout, which is what clears the armed param via
-// setMidiLearnArmedParam({}) on cancel/bind/timeout.
+// The armed-control "breathing outline" also lives in paintMidiLearnOverlays(): repainted only by
+// the SAME gated 15 Hz tick while armed (setMidiLearnArmedParam), confined to
+// repaint(controlBounds) -- never a new AnimationDriver or a third exception to the two-exception
+// time-bounded-animation rule (docs/layout/animation.md#the-time-bounded-animation-rule). It is
+// bounded overall by RemoteEngine's own 10 s learn timeout, which is what clears the armed param
+// via setMidiLearnArmedParam({}) on cancel/bind/timeout.
 
 #include "ModuleComponent.h"
 #include "ModuleComponentInternal.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/MidiRemote/MidiLearnMenu.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
-
-#include <cmath>
 
 using namespace detail;
 
@@ -113,32 +115,24 @@ void ModuleComponent::appendMidiLearnMenuItems(juce::PopupMenu& menu, juce::Rang
     juce::Component::SafePointer<ModuleComponent> safeThis(this);
     const juce::String paramId = param->paramID;
 
-    menu.addSeparator();
-
-    if (label.isEmpty()) {
-        menu.addItem("MIDI Learn '" + param->getName(100) + "'...", [safeThis, paramId] {
-            if (safeThis != nullptr)
-                safeThis->armMidiLearnFor(paramId);
-        });
-        return;
-    }
-
-    menu.addItem(-1, "MIDI: " + label, false, false); // disabled title row -- tells you what drives it
-
-    if (owner.onEditMidiAssignmentRequested) {
-        menu.addItem("Edit MIDI assignment...", [safeThis, paramId] {
-            if (safeThis != nullptr && safeThis->owner.onEditMidiAssignmentRequested)
-                safeThis->owner.onEditMidiAssignmentRequested(safeThis->nodeId, paramId);
-        });
-    }
-    menu.addItem("MIDI Learn again...", [safeThis, paramId] {
+    synth::ui::midilearn::MenuContent content;
+    content.targetName = param->getName(100);
+    content.mappingLabel = label;
+    content.learn = [safeThis, paramId] {
         if (safeThis != nullptr)
             safeThis->armMidiLearnFor(paramId);
-    });
-    menu.addItem("Forget MIDI", [safeThis, paramId] {
+    };
+    content.forget = [safeThis, paramId] {
         if (safeThis != nullptr)
             safeThis->forgetMidiFor(paramId);
-    });
+    };
+    if (owner.onEditMidiAssignmentRequested) {
+        content.editAssignment = [safeThis, paramId] {
+            if (safeThis != nullptr && safeThis->owner.onEditMidiAssignmentRequested)
+                safeThis->owner.onEditMidiAssignmentRequested(safeThis->nodeId, paramId);
+        };
+    }
+    synth::ui::midilearn::appendMidiLearnMenuItems(menu, content);
 }
 
 void ModuleComponent::armMidiLearnFor(const juce::String& paramId) {
@@ -195,14 +189,9 @@ void ModuleComponent::paintMidiLearnOverlays(juce::Graphics& g) {
     const juce::Colour badgeColour = lf != nullptr ? lf->getTheme().colors.midiMapped : juce::Colour(0xffB48EF5);
     const juce::Colour armedColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
 
-    constexpr int kBadgeDiameter = 6;
     for (const auto& e : midiLearnableRegistry_.entries()) {
-        if (!e.mapped)
-            continue;
-        const auto bounds = e.component->getBounds();
-        g.setColour(badgeColour);
-        g.fillEllipse(static_cast<float>(bounds.getRight() - kBadgeDiameter), static_cast<float>(bounds.getY()),
-                      static_cast<float>(kBadgeDiameter), static_cast<float>(kBadgeDiameter));
+        if (e.mapped)
+            synth::ui::midilearn::paintMidiMappedBadge(g, e.component->getBounds(), badgeColour);
     }
 
     if (midiLearnArmedParamId_.isEmpty())
@@ -211,19 +200,11 @@ void ModuleComponent::paintMidiLearnOverlays(juce::Graphics& g) {
     for (const auto& e : midiLearnableRegistry_.entries()) {
         if (e.param == nullptr || e.param->paramID != midiLearnArmedParamId_)
             continue;
-        // A thin breathing outline, alpha easing ~0.4..1.0 -- explicitly not a glow (Obsidian has
-        // glow 0, and this must read the same in every theme;
-        // docs/control/midi-remote-ui.md#the-learn-interaction). Time-bounded overall by
-        // RemoteEngine's 10 s learn timeout (setMidiLearnArmedParam({}) on cancel/bind/timeout);
-        // repainted only by the existing gated 15 Hz timerCallback while armed -- never a free-
-        // running animation.
-        const double elapsedSec = (juce::Time::getMillisecondCounterHiRes() - midiLearnArmedSinceMs_) / 1000.0;
-        constexpr double kBreathPeriodSec = 1.2;
-        const float phase = static_cast<float>(
-            0.5 * (1.0 - std::cos(2.0 * juce::MathConstants<double>::pi * elapsedSec / kBreathPeriodSec)));
-        const float alpha = 0.4f + 0.6f * phase;
-        g.setColour(armedColour.withAlpha(alpha));
-        g.drawRect(e.component->getBounds(), 1);
+        // Time-bounded overall by RemoteEngine's 10 s learn timeout (setMidiLearnArmedParam({})
+        // on cancel/bind/timeout); repainted only by the existing gated 15 Hz timerCallback while
+        // armed -- never a free-running animation (docs/control/midi-remote-ui.md#the-learn-interaction).
+        synth::ui::midilearn::paintMidiLearnArmedOutline(g, e.component->getBounds(), armedColour,
+                                                         midiLearnArmedSinceMs_);
         break;
     }
 }

@@ -50,6 +50,13 @@ void MixerFaderSlider::mouseDown(const juce::MouseEvent& e) {
     if (!isEnabled())
         return;
 
+    // FRO133: a right-click opens the MIDI Learn menu (MixerColumnComponent::mouseDown, via a
+    // MouseListener registered on this slider) rather than starting a drag -- without this guard
+    // a right-click would ALSO set dragging_/fire onDragStart, exactly the RightClickSafeButton
+    // bug (Source/UI/MidiRemote/MidiLearnMenu.h) but for a Slider instead of a Button.
+    if (e.mods.isPopupMenu())
+        return;
+
     if (e.mods.isCommandDown()) {
         // Cmd-click (Ctrl-click on Windows -- isCommandDown() is already the platform-correct
         // check) resets to 0 dB, Cubase's convention -- no drag starts.

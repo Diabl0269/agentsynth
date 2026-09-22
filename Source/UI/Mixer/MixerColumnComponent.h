@@ -8,8 +8,10 @@
 #include "MixerMeter.h"
 #include "MixerMeterReadout.h"
 #include "MixerSendList.h"
+#include "UI/MidiRemote/MidiLearnMenu.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <vector>
 
 class AppUndoManager;
 class GraphEditor;
@@ -149,10 +151,67 @@ public:
     // untouched -- see Tests/UI/Layout/DetachablePanelHost/DetachRedockStateTests.cpp.
     bool isSelectedForTest() const noexcept { return selected_; }
 
+    // ---- MIDI Learn (FRO133, MixerColumnMidiLearn.cpp -- see its file comment for the design;
+    // reuses the FRO130 module-card pattern via Source/UI/MidiRemote/MidiLearnMenu.h) ----
+
+    /** Test/inspection: the param a right-click on `component` would open MIDI Learn for, or null
+     *  -- mirrors ModuleComponent::findMidiLearnableParamForTest. */
+    juce::RangedAudioParameter* findMidiLearnableParamForTest(const juce::Component* component) const;
+
+    /** Test/inspection: `component`'s MIDI-mapped badge cache, as of the last refreshMidiLearnBadges(). */
+    bool isMidiLearnBadgeMappedForTest(const juce::Component* component) const;
+
+    /** Same seam as ModuleComponent::setShowContextMenuHookForTest -- juce::PopupMenu never runs
+     *  in a test process (docs/development/test-patterns.md), so a test installs a capturing hook
+     *  to inspect the menu a real right-click mouseDown() built, without ever opening a popup. A
+     *  null hook restores the real showMenuAsync() behaviour. */
+    void setShowContextMenuHookForTest(std::function<void(juce::PopupMenu&)> hook) {
+        showContextMenuHook_ =
+            hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
+    }
+
+    void mouseDown(const juce::MouseEvent& event) override;
+
+    /** Arms/clears (empty id) the breathing outline for the control bound to `paramId`. Message
+     *  thread only -- called by MidiLearnController via MixerPanelComponent::setMidiLearnArmed. */
+    void setMidiLearnArmedParam(const juce::String& paramId);
+
 private:
     void rebindControls();
     void refreshMuteSoloAccessibility(ModuleBase* module, ChannelStripModule* strip);
 
+    /** Registers `control` as a MIDI-learnable target for `param` (a no-op if `param` is null,
+     *  mirroring ModuleComponent::MidiLearnableRegistry::add) and, the FIRST time `control` is
+     *  seen, attaches this column as its MouseListener so a right-click on it reaches mouseDown()
+     *  below -- see MixerColumnMidiLearn.cpp. */
+    void registerMidiLearnable(juce::Component& control, juce::RangedAudioParameter* param);
+    void refreshMidiLearnBadges();
+    void paintMidiLearnOverlays(juce::Graphics& g);
+
+    /** One entry per learnable control currently bound -- cleared and rebuilt by rebindControls()
+     *  (and, for send rows, by sendList_'s own onSendKnobBuilt callback fired from inside it),
+     *  and cleared again by unbindFromGraph() since `param` is a raw pointer into the graph node
+     *  this column is about to be detached from (Source/UI/CLAUDE.md's mixer-unbind invariant). */
+    struct MidiLearnableEntry {
+        juce::Component* component = nullptr;
+        juce::RangedAudioParameter* param = nullptr;
+        bool mapped = false;
+    };
+    std::vector<MidiLearnableEntry> midiLearnableEntries_;
+    /** Controls this column has already addMouseListener'd itself onto -- registerMidiLearnable()
+     *  consults this so a control shared across two rebindControls() calls (the fader, pan, mute)
+     *  is never double-registered as a listener. Send-row knobs are recreated by
+     *  MixerSendList::rebuildKnobs() on every setEntries(), so they're never in here twice either. */
+    std::vector<juce::Component*> midiLearnListenerTargets_;
+    juce::String midiLearnArmedParamId_;
+    double midiLearnArmedSinceMs_ = 0.0;
+    /** Set in the constructor to `[](juce::PopupMenu& m) { m.showMenuAsync(...); }`; a test
+     *  replaces it via setShowContextMenuHookForTest(). */
+    std::function<void(juce::PopupMenu&)> showContextMenuHook_ = [](juce::PopupMenu& m) {
+        m.showMenuAsync(juce::PopupMenu::Options());
+    };
+
+    GraphEditor* graphEditor_ = nullptr;
     juce::AudioProcessorGraph* graph_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;
     AudioEngine* audioEngine_ = nullptr;
@@ -179,7 +238,12 @@ private:
     MixerFader fader_;
     MixerMeter meter_;
     MixerMeterReadout meterReadout_;
-    juce::TextButton muteButton_{"M"};
+    // FRO133: right-click-safe so a MIDI Learn menu can open on Mute without also toggling it --
+    // see Source/UI/MidiRemote/MidiLearnMenu.h's RightClickSafeButton comment. Solo stays a plain
+    // TextButton: ChannelStripModule::soloed_ is engine state, not a juce::RangedAudioParameter
+    // (Source/Modules/ChannelStripModule.h), so it has no MIDI Learn menu to guard against yet --
+    // see the FRO133 follow-up ticket.
+    synth::ui::midilearn::RightClickSafeButton<juce::TextButton> muteButton_{"M"};
     juce::TextButton soloButton_{"S"};
     bool selected_ = false;
     bool keyboardFocused_ = false;

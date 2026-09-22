@@ -4,8 +4,9 @@ Companion to [`midi-remote.md`](midi-remote.md) (the model and decisions; read i
 doc is the **user-facing design**: what right-click MIDI Learn does on every surface, what the
 MIDI Remote panel looks like and how each flow in it works, the settings, the plugin-build
 behaviour and the tests. Module-card MIDI Learn (the "Generic module card"/"Bespoke cards"/"Header
-buttons" rows below) shipped in FRO130; the MIDI Remote panel, the mixer/transport/hosted-plugin
-rows, and "Edit MIDI assignment..." (FRO131) are still design-only.
+buttons" rows below) shipped in FRO130; the mixer column, Master's fader and the transport bar
+(FRO133) ship here too. The MIDI Remote panel, the hosted-plugin row, mixer column Solo (see its
+row below), and "Edit MIDI assignment..." (FRO131) are still design-only/not yet learnable.
 
 ---
 
@@ -25,9 +26,11 @@ Learn from there binds the right parameter.
 | Bespoke cards | EQ card bands, Envelope card knobs, Wavetable card, Sampler controls | each card's own control creation registers its controls with the same registry the generic path uses (`registerMidiLearnable(component, param)`), so `mouseDown` needs no card-specific branches | **shipped**: every parameter visible on a bespoke card is learnable; a control with no parameter shows no MIDI items |
 | Header buttons | Bypass, Mute, Dual I/O | same registry, via `RightClickSafeButton<juce::DrawableButton>` | **shipped**: right-click Bypass → Learn → pad toggles bypass |
 | Hosted plugin card | the chosen knobs (`plugin-card-layout.md`) | the card unit registers each knob with the hosted parameter's `(uuid, paramId, indexHint)` triple | Learn on a plugin knob binds through `resolveLaneParameter`'s hosted rules |
-| Mixer column | fader (`MixerFader`), pan, Mute, Solo, each send level (`MixerSendList`) | one `mouseDown` in `MixerColumnComponent` over its bound params (they are `ChannelStripModule` params, so ordinary parameter targets) | right-click a fader → Learn → CC drives the strip's level |
-| Master / Direct column | master level | same | learnable |
-| Transport bar | Play/Stop, Record, Loop, Metronome (`TimelineTransportBar::GlyphButton`) | right-click shows Learn with an **action** target ([`midi-remote.md`](midi-remote.md#action-targets)) | right-click Play → Learn → pad toggles playback; badge shows on the button |
+| Mixer column | fader (`MixerFader`), pan, Mute, each send level (`MixerSendList`) | one `mouseDown` in `MixerColumnComponent` over its bound params (they are `ChannelStripModule` params, so ordinary parameter targets); `MixerSendList::onSendKnobBuilt` hands send-row knobs back for the SAME registry | **shipped**: right-click a fader → Learn → CC drives the strip's level |
+| Mixer column | Solo | not learnable in v1 — `ChannelStripModule::soloed_` is engine state (`std::atomic<bool>`), never a `juce::RangedAudioParameter` ([`Source/Modules/ChannelStripModule.h`](../../Source/Modules/ChannelStripModule.h), root `CLAUDE.md`'s solo invariant), so there is no parameter for a `Target::Parameter` to point at and no per-strip action id for a `Target::Action` either | tracked as a v1.x follow-up under this epic — needs `Target` to grow a third kind or per-node action ids before it can ship |
+| Master column | master level (fader only — Master has no pan/insert list, and no Mute learn in v1 either, just the fader) | `MixerMasterColumn` registers its own fader the same way, via a `GraphEditor&` threaded through `configure()` | **shipped**: right-click Master's fader → Learn → CC drives Master's level |
+| Direct column | none | `MixerDirectColumn` has no fader/pan/M-S of its own (just "Make channel") — nothing to register | — not applicable, not a gap |
+| Transport bar | Play/Stop, Record, Loop, Metronome (`TimelineTransportBar::GlyphButton`) | right-click shows Learn with an **action** target ([`midi-remote.md`](midi-remote.md#action-targets)); `GlyphButton` is right-click-safe the same way Mute/Bypass are, and `MidiLearnController::armAction()`/`forgetAction()` write the assignment into the learned device's `ControllerProfile.actions` (global, not the project doc — [`midi-remote.md`](midi-remote.md#undo)) | **shipped**: right-click Play → Learn → pad toggles playback; badge shows on the button |
 | Macro card / macro ports | none | no parameters of their own — not learnable; a collapsed macro's member knobs are learnable once expanded | — |
 
 Not covered by design: the piano roll, timeline clip lanes, library, AI panel (nothing there is
