@@ -270,6 +270,11 @@ jobs:
         # Use clang for consistent coverage flags
         export CC=clang
         export CXX=clang++
+        # This is the ONE job that builds the Tools/ harnesses, and only to keep them compiling:
+        # they gate no tests and are never run here (AIPatchHarness/AIEvalHarness need a live
+        # Ollama). They cost 183 translation units, so the macOS and Windows jobs deliberately
+        # leave them out — see the note in each. Keep exactly one platform building them; dropping
+        # the last one means a harness can rot until someone runs it by hand.
         cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=Debug \
           -DENABLE_COVERAGE=ON \
@@ -505,10 +510,16 @@ jobs:
         # cold on every run: ~12 min of a 12 min 45 s macOS job, tailing off into a near-serial
         # chain of 20–35 s juce_gui_basics / juce_audio_processors compiles. CMakeLists.txt sets the
         # same four launchers when it finds ccache; these stay explicit to match the C/CXX flags.
+        # No -DENABLE_AI_HARNESS here, deliberately: the three Tools/ harnesses are measurement
+        # instruments that CI never runs (they gate no tests and need a live Ollama), yet building
+        # them added 183 translation units — 15.8% of this job — of which exactly 3 were harness
+        # code. The other 180 were 18 JUCE module unity files recompiled once per harness target,
+        # 36 of them the .mm units the launchers above exist to make cheap, plus 42 Source/*.cpp
+        # units per harness already compiled into Core and AppUI. The Linux job still builds them,
+        # so a harness that stops compiling is still caught on every PR, once instead of 3×.
         cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
           -DENABLE_TESTS=ON \
-          -DENABLE_AI_HARNESS=ON \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -DCMAKE_OBJC_COMPILER_LAUNCHER=ccache \
@@ -644,10 +655,12 @@ jobs:
     - name: Configure CMake
       shell: bash
       run: |
+        # No -DENABLE_AI_HARNESS here — same reasoning as the macOS job above, and this is the
+        # slowest of the three at ~4.6 s per cache miss, so the 183 skipped units are worth most
+        # here. The Linux job keeps building the harnesses for compile coverage.
         cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
           -DENABLE_TESTS=ON \
-          -DENABLE_AI_HARNESS=ON \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 

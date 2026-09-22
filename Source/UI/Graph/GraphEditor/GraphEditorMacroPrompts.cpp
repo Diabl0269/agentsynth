@@ -19,6 +19,8 @@
 // owned outright by MacroGroupController), rewritten to go through macroController_ directly.
 
 #include "GraphEditor.h"
+#include "UI/Chrome/ColourPickerPopup.h"
+#include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
 
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "UI/Macros/MacroCardComponent.h"
