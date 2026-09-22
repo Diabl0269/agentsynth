@@ -492,13 +492,6 @@ public:
     using SmartConnectionMode = SmartConnectionEngine::SmartConnectionMode;
     using SmartSuggestion = SmartConnectionEngine::SmartSuggestion;
 
-    void setSmartConnectionMode(SmartConnectionMode mode);
-    SmartConnectionMode getSmartConnectionMode() const noexcept;
-
-    /** Test override for the insert-modifier read; unset means read the real keyboard. */
-    void setInsertModifierOverrideForTests(std::optional<bool> down);
-    bool isInsertModifierDown() const;
-
     /** Persist / restore helpers (Preferences tab + MainComponent launch restore). */
     static SmartConnectionMode smartConnectionModeFromString(const juce::String& s);
     static juce::String smartConnectionModeToString(SmartConnectionMode mode);
@@ -506,13 +499,12 @@ public:
     void connectPorts(juce::AudioProcessorGraph::NodeID srcId, int srcJack, juce::AudioProcessorGraph::NodeID dstId,
                       int dstJack, bool isMidi, bool recordUndo = true) override;
 
-    // Test accessors
-    int getSmartSuggestionCount() const noexcept;
-    const std::vector<SmartSuggestion>& getSmartSuggestions() const noexcept;
     bool nodeHasCables(juce::AudioProcessorGraph::NodeID nodeId) const;
     /** Runs just the drag tick's modifier re-sample, so a test can exercise a press/release that
      *  happens without any mouse movement without needing a real 30 Hz timer. */
-    void pumpDragModifierTickForTests() { refreshSuggestionsIfInsertModifierChanged(); }
+    void pumpDragModifierTickForTests() {
+        smartConnections_.refreshSuggestionsIfInsertModifierChanged(buildDragPreviewState());
+    }
 
     /** Test seam: exposes the private GraphCanvasHost base for a test driving a
      *  SmartConnectionEngine of its own directly. Production code never calls this. */
@@ -520,10 +512,6 @@ public:
 
     static juce::Point<int> estimatePortCenter(juce::AudioProcessor* proc, juce::Rectangle<int> bounds, int jack,
                                                bool isInput, bool isMidi);
-
-    /** Audio-jack occupancy, for asserting that a reroute left nothing dangling. */
-    bool isInputJackFreeForTests(juce::AudioProcessorGraph::NodeID nodeId, int jack) const;
-    bool isOutputJackFreeForTests(juce::AudioProcessorGraph::NodeID nodeId, int jack) const;
 
     // ---- Onboarding helpers (headless-testable) ----
     /** True when the canvas has no modules. nodeCount is the number of non-Attenuverter nodes
@@ -669,10 +657,8 @@ private:
     juce::AudioProcessorGraph::NodeID getDragPreviewSelfId() const;
 
     void refreshSmartSuggestions() override;
-    void applySmartSuggestions(juce::AudioProcessorGraph::NodeID ghostNodeId, bool recordUndo);
     void clearSmartSuggestions() override;
     void applyDefaultDualIOForNewModule(juce::AudioProcessor& processor, const juce::String& moduleType) const override;
-    void refreshSuggestionsIfInsertModifierChanged();
 
     SmartConnectionEngine::DragPreviewState buildDragPreviewState() const;
 

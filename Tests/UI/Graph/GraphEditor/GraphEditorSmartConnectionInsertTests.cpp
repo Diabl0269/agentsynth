@@ -26,8 +26,8 @@ TEST_F(GraphEditorTest, SmartConnectionAddsParallelCableAtOccupiedAudioOutput) {
     AppUndoManager undoMgr;
     GraphEditor editor(engine, &undoMgr);
     editor.setSize(1200, 700);
-    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
-    editor.setInsertModifierOverrideForTests(false); // no Ctrl
+    editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setInsertModifierOverrideForTests(false); // no Ctrl
 
     auto& graph = engine.getGraph();
     auto f = makeWiredSink(engine, editor);
@@ -38,8 +38,9 @@ TEST_F(GraphEditorTest, SmartConnectionAddsParallelCableAtOccupiedAudioOutput) {
                                                    libraryCursorForGhostTopLeft("Chorus", {440, 100}));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
-    ASSERT_GT(editor.getSmartSuggestionCount(), 0) << "an occupied sink must still offer a parallel cable";
-    for (const auto& s : editor.getSmartSuggestions()) {
+    ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0)
+        << "an occupied sink must still offer a parallel cable";
+    for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
         EXPECT_FALSE(s.isInsert) << "without Ctrl nothing is ever rerouted";
         EXPECT_TRUE(s.doomedLinks.empty());
         EXPECT_EQ(s.neighborId, f.outId);
@@ -74,8 +75,8 @@ TEST_F(GraphEditorTest, SmartConnectionAddsParallelCableForPureSourceAtOccupiedA
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1200, 700);
-    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
-    editor.setInsertModifierOverrideForTests(false);
+    editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setInsertModifierOverrideForTests(false);
 
     auto& graph = engine.getGraph();
     auto f = makeWiredSink(engine, editor);
@@ -85,8 +86,9 @@ TEST_F(GraphEditorTest, SmartConnectionAddsParallelCableForPureSourceAtOccupiedA
                                                    libraryCursorForGhostTopLeft("Oscillator", {440, 100}));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
-    ASSERT_GT(editor.getSmartSuggestionCount(), 0) << "a source at an occupied sink gets a parallel cable";
-    for (const auto& s : editor.getSmartSuggestions())
+    ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0)
+        << "a source at an occupied sink gets a parallel cable";
+    for (const auto& s : editor.getSmartConnections().getSmartSuggestions())
         EXPECT_FALSE(s.isInsert);
     editor.itemDropped(details);
 
@@ -102,8 +104,8 @@ TEST_F(GraphEditorTest, SmartConnectionWithoutCtrlNeverInsertsIntoOccupiedModule
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1200, 700);
-    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
-    editor.setInsertModifierOverrideForTests(false);
+    editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setInsertModifierOverrideForTests(false);
 
     auto f = makeWiredChain(engine, editor, /*wireIt=*/false);
 
@@ -114,7 +116,8 @@ TEST_F(GraphEditorTest, SmartConnectionWithoutCtrlNeverInsertsIntoOccupiedModule
     // Positive control, so the zero below is the modifier rule and not a geometry accident.
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
-    ASSERT_GT(editor.getSmartSuggestionCount(), 0) << "geometry check: Chorus → free Delay input is in range";
+    ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0)
+        << "geometry check: Chorus → free Delay input is in range";
     editor.endDragPreview();
 
     editor.connectPorts(f.upstreamId, 0, f.targetId, 0, false, false);
@@ -123,7 +126,7 @@ TEST_F(GraphEditorTest, SmartConnectionWithoutCtrlNeverInsertsIntoOccupiedModule
     editor.itemDragMove(details);
     // The group is fully occupied and a valid insert in every other respect — the ONLY thing
     // missing is the modifier. A surprise reroute mid-patch is exactly what this prevents.
-    EXPECT_EQ(editor.getSmartSuggestionCount(), 0);
+    EXPECT_EQ(editor.getSmartConnections().getSmartSuggestionCount(), 0);
     editor.endDragPreview();
 }
 
@@ -131,8 +134,8 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlInsertsIntoOccupiedOrdinaryModule) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1200, 700);
-    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
-    editor.setInsertModifierOverrideForTests(true); // Ctrl held
+    editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setInsertModifierOverrideForTests(true); // Ctrl held
 
     auto f = makeWiredChain(engine, editor);
 
@@ -142,8 +145,9 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlInsertsIntoOccupiedOrdinaryModule) {
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
 
-    ASSERT_GT(editor.getSmartSuggestionCount(), 0) << "Ctrl must offer an insert at an ordinary module";
-    for (const auto& s : editor.getSmartSuggestions()) {
+    ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0)
+        << "Ctrl must offer an insert at an ordinary module";
+    for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
         EXPECT_TRUE(s.isInsert);
         EXPECT_TRUE(s.ghostIsSource);
         EXPECT_EQ(s.neighborId, f.targetId) << "insert is no longer limited to the terminal sink";
@@ -167,8 +171,8 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlInsertAtOccupiedModuleIsOneUndoStep) 
     AppUndoManager undoMgr;
     GraphEditor editor(engine, &undoMgr);
     editor.setSize(1200, 700);
-    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
-    editor.setInsertModifierOverrideForTests(true);
+    editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setInsertModifierOverrideForTests(true);
 
     auto& graph = engine.getGraph();
     auto f = makeWiredChain(engine, editor);
@@ -179,7 +183,7 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlInsertAtOccupiedModuleIsOneUndoStep) 
                                                    libraryCursorForGhostTopLeft("Chorus", {440, 100}));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
-    ASSERT_GT(editor.getSmartSuggestionCount(), 0);
+    ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0);
     editor.itemDropped(details);
 
     const auto chorusId = findNodeIdByName(graph, "Chorus");
@@ -203,8 +207,8 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlDoesNotInsertPureSourceIntoOccupiedMo
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1200, 700);
-    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
-    editor.setInsertModifierOverrideForTests(true); // Ctrl held, and still refused
+    editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setInsertModifierOverrideForTests(true); // Ctrl held, and still refused
 
     auto f = makeWiredChain(engine, editor, /*wireIt=*/false);
 
@@ -214,7 +218,8 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlDoesNotInsertPureSourceIntoOccupiedMo
 
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
-    ASSERT_GT(editor.getSmartSuggestionCount(), 0) << "geometry check: Osc → free Delay input is in range";
+    ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0)
+        << "geometry check: Osc → free Delay input is in range";
     editor.endDragPreview();
 
     editor.connectPorts(f.upstreamId, 0, f.targetId, 0, false, false);
@@ -223,7 +228,7 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlDoesNotInsertPureSourceIntoOccupiedMo
     editor.itemDragMove(details);
     // Even with Ctrl: an Oscillator has no audio input, so there is nothing to put in series. And
     // outside the terminal sink a parallel sum is not offered either.
-    EXPECT_EQ(editor.getSmartSuggestionCount(), 0);
+    EXPECT_EQ(editor.getSmartConnections().getSmartSuggestionCount(), 0);
     editor.endDragPreview();
 }
 
@@ -235,8 +240,8 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlInsertIsBothOrNeitherAcrossStereoInpu
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1200, 700);
-    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
-    editor.setInsertModifierOverrideForTests(true);
+    editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setInsertModifierOverrideForTests(true);
 
     auto& graph = engine.getGraph();
     auto filterNode = graph.addNode(std::make_unique<FilterModule>());
@@ -268,7 +273,7 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlInsertIsBothOrNeitherAcrossStereoInpu
     editor.connectPorts(reverbNode->nodeID, 0, filterNode->nodeID, audioLegs[0], false, false);
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
-    for (const auto& s : editor.getSmartSuggestions())
+    for (const auto& s : editor.getSmartConnections().getSmartSuggestions())
         EXPECT_FALSE(s.isInsert) << "a half-wired stereo input must not be rerouted";
     editor.endDragPreview();
 
@@ -277,8 +282,8 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlInsertIsBothOrNeitherAcrossStereoInpu
         editor.connectPorts(reverbNode->nodeID, 0, filterNode->nodeID, audioLegs[i], false, false);
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
-    ASSERT_GT(editor.getSmartSuggestionCount(), 0);
-    for (const auto& s : editor.getSmartSuggestions()) {
+    ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0);
+    for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
         EXPECT_TRUE(s.isInsert) << "a fully occupied group is a valid Ctrl insert";
         EXPECT_EQ(s.upstreamId, reverbNode->nodeID);
     }
@@ -296,8 +301,8 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlInsertRemovesEveryDoomedLegOfADualIOU
     AppUndoManager undoMgr;
     GraphEditor editor(engine, &undoMgr);
     editor.setSize(1200, 700);
-    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
-    editor.setInsertModifierOverrideForTests(true);
+    editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setInsertModifierOverrideForTests(true);
 
     auto& graph = engine.getGraph();
     auto outNode = addAudioOutputNode(graph, 760, 100);
@@ -321,9 +326,9 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlInsertRemovesEveryDoomedLegOfADualIOU
                                                    libraryCursorForGhostTopLeft("Chorus", {440, 100}));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
-    ASSERT_GT(editor.getSmartSuggestionCount(), 0);
+    ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0);
     // Both legs must be marked for removal even though only one jack pair survives the dedupe.
-    for (const auto& s : editor.getSmartSuggestions()) {
+    for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
         ASSERT_TRUE(s.isInsert);
         EXPECT_EQ(s.doomedLinks.size(), 2u) << "one doomed cable per occupied sink leg";
     }
@@ -367,8 +372,8 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlInsertDoesNotDuplicateOneUpstreamLegO
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1200, 700);
-    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
-    editor.setInsertModifierOverrideForTests(true);
+    editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setInsertModifierOverrideForTests(true);
 
     auto& graph = engine.getGraph();
     auto outNode = addAudioOutputNode(graph, 760, 100);
@@ -397,8 +402,8 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlInsertDoesNotDuplicateOneUpstreamLegO
 
     editor.beginDragPreview(chorusComp->getWidth(), chorusComp->getHeight(), chorusId);
     editor.updateDragPreview({440, 100});
-    ASSERT_GT(editor.getSmartSuggestionCount(), 0);
-    for (const auto& s : editor.getSmartSuggestions()) {
+    ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0);
+    for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
         ASSERT_TRUE(s.isInsert);
         EXPECT_EQ(s.upstreamCables.size(), 1u) << "one collapsed upstream jack needs exactly one cable";
     }

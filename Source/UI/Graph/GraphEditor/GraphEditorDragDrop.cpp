@@ -366,7 +366,7 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
 
             // Auto-wire any smart-connection previews the user saw while dragging. Already inside
             // a structural undo transaction when one is open, so do not nest another.
-            applySmartSuggestions(newNodeId, /*recordUndo=*/false);
+            smartConnections_.applySmartSuggestions(newNodeId, /*recordUndo=*/false);
         };
 
         if (undoManager) {
@@ -510,7 +510,7 @@ void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
     // same two conditions, read through the engine instead of GraphEditor's own former fields.
     if (smartConnections_.shouldOfferSmartConnections(buildDragPreviewState()) &&
         smartConnections_.getSmartSuggestionCount() > 0)
-        applySmartSuggestions(module->getNodeId(), /*recordUndo=*/false);
+        smartConnections_.applySmartSuggestions(module->getNodeId(), /*recordUndo=*/false);
 
     repaintCanvas();
 }

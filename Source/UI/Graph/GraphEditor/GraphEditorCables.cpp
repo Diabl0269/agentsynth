@@ -852,7 +852,7 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
     }
 
     // ---- Smart-connection frosted preview cables ----
-    if (editor.isDragPreviewActive() && !editor.getSmartSuggestions().empty()) {
+    if (editor.isDragPreviewActive() && !editor.getSmartConnections().getSmartSuggestions().empty()) {
         auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
 
         // Colours resolve only through colourForCable (→ synth::ui::resolveCableColour), so the
@@ -892,7 +892,7 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
         // segments taking their place — otherwise the extra previews read as "and also", and the
         // user expects the old wires to still be there after the drop. All of them, not just this
         // leg's: a stereo upstream can have one doomed cable per leg.
-        for (const auto& s : editor.getSmartSuggestions()) {
+        for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
             if (!s.isInsert)
                 continue;
             for (const auto& doomed : s.doomedLinks) {
@@ -909,7 +909,7 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
         // Draw the RESOLVED legs, not one segment per suggestion: a collapsed jack landing on the
         // terminal sink is one suggestion but two cables, and a preview that showed a single wire
         // while the drop fanned both raws was lying about what was about to happen.
-        for (const auto& s : editor.getSmartSuggestions()) {
+        for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
             const auto legColour = [&](synth::ui::ModuleCategory category) {
                 const auto base = previewColour(s.signal, category, 0.40f);
                 return s.isInsert ? insertTint(base) : base;

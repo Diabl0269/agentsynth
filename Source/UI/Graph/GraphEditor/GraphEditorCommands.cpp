@@ -900,7 +900,7 @@ void GraphEditor::timerCallback() {
     // still). Re-evaluate on this existing 30 Hz tick rather than a new timer, and only when the
     // sampled state actually flipped: a drag that holds its modifier costs one bool compare, and
     // refreshSmartSuggestions repaints only when the suggestion set really changed.
-    refreshSuggestionsIfInsertModifierChanged();
+    smartConnections_.refreshSuggestionsIfInsertModifierChanged(buildDragPreviewState());
 
     // Minimap (issue #159): only build the model while visible, and only when it's needed —
     // setModel() itself only repaints when the model actually changed (no repaint storm on a
