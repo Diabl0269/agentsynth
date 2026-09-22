@@ -550,7 +550,9 @@ void GraphEditor::clearMacroDragCandidate() {
     repaintCanvas();
 }
 
-// See GraphEditor.h's doc comment. Only the macro the dragged module is CURRENTLY a member of
+// macroHullBounds(macroId), except while a reparent drag is pulling one of macroId's OWN members
+// out: then it's macroHullBoundsExcluding that member, so the hull visibly shrinks away from the
+// module instead of the live union chasing it. Paint-only. Only the macro the dragged module is CURRENTLY a member of
 // (the one a LEAVE would remove it from) gets the excluding hull; a macro it might JOIN is never
 // its current macro (the flat membership model means a member of one macro is never re-tested as
 // a JOIN candidate for another, per macroDragJoinOrLeaveTarget's own comment), so this can never

@@ -56,3 +56,14 @@ The visual patching interface. Lives in the `AgentSynth` app target.
 - **Delete** — `requestDeleteModule(NodeID)` is the canonical deletion entry point; `ModuleComponent::deleteButton.onClick` delegates here.
 
 See [`docs/layout/layout.md`](../layout/layout.md) for the grid model, anti-overlap algorithm, and `autoArrange` constants.
+
+## New API goes on the collaborator, not GraphEditor
+
+`GraphEditor` is a thin owner of these three collaborators, not a facade over them. The forwarders
+above (42 macro, 9 smart-connection, 8 drag-drop) are legacy: they stay until their call sites
+migrate, but a new method for one of these concerns is declared on the collaborator only and
+reached through `getMacroController()`; the smart-connection and drag-drop collaborators have no
+accessor yet, so the first such method adds one beside it rather than a forwarder. Re-declaring it on
+`GraphEditor` would add it to a header that ~300 translation units include, and make the same API
+reachable two ways. `GraphEditor.h` itself grows only for work that genuinely needs the editor:
+canvas, component lifetime, and wiring between collaborators.

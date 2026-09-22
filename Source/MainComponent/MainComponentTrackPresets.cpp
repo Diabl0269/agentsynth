@@ -125,7 +125,10 @@ void MainComponent::setTrackPresetAsDefault(synth::TrackId trackId) {
 }
 
 // The shared insert path (default-consulting branch, "+ Track" preset list, "Insert from File...").
-// NO UNDO TRANSACTION OF ITS OWN — see MainComponent.h's own comment on this declaration.
+// NO UNDO TRANSACTION OF ITS OWN — the default-consulting branch is already inside
+// addAudioTrack's own; callers that aren't already inside one wrap this in
+// recordGraphTimelineAndMacroChange themselves. Returns the created track's name, or an empty
+// string on rejection/failure.
 juce::String MainComponent::insertTrackFromPresetVar(const juce::var& preset, synth::TrackPresetKind kind,
                                                      const juce::String& trackNamePrefix) {
     if (!preset.isObject())

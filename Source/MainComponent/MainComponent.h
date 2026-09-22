@@ -61,31 +61,27 @@ class MainComponent
     // create/re-bind/delete their Track In nodes (TrackHeaderHost).
     , private synth::TimelineDoc::Listener
     , private synth::ui::TrackHeaderHost
-    // T159: repaints a focus-region root's accent outline when keyboard focus moves into or out of
-    // it. Component::focusGained/focusLost are no-op virtuals for most components, so this listener
-    // is the one thing that actually triggers the repaint (see FocusRegion.h's paint helper).
+    // Repaints a focus-region root's accent outline on keyboard focus change — the one thing that
+    // actually triggers the repaint (see FocusRegion.h's paint helper).
     , private juce::FocusChangeListener
-    // FRO44: registers on the ONE shared PluginScanService (ours, or the plugin path's adopted one)
-    // so the sidebar refreshes and the list is persisted no matter which caller — the sidebar's own
-    // "Scan for plugins..." row, or the eager startup scan below — actually triggered the scan.
+    // Registers on the ONE shared PluginScanService (ours, or the plugin path's adopted one) so the
+    // sidebar refreshes and the list is persisted no matter which caller triggered the scan.
     , private synth::PluginScanService::Listener {
 public:
-    // Primary ctor: receives injected ThemeManager and LookAndFeel from Main.cpp.
-    // provider is optional (nullptr → reads saved provider pref from appProperties).
-    // Owns its own (standalone) AudioEngine, which it initialises and shuts down.
+    // Primary ctor: receives injected ThemeManager and LookAndFeel from Main.cpp. provider is
+    // optional (nullptr -> reads saved provider pref from appProperties). Owns its own
+    // (standalone) AudioEngine, which it initialises and shuts down.
     MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLookAndFeel& lf,
                   std::unique_ptr<synth::AIProvider> provider = nullptr);
 
     // Plugin ctor: the editor's AudioEngine is owned by AgentSynthAudioProcessor and outlives
-    // every editor instance, so it is injected rather than owned here. The engine's lifecycle
-    // (initialise/shutdown) belongs to the processor — this component must not touch it, or
-    // closing the plugin window would tear down the running graph.
+    // every editor instance, so it is injected rather than owned here. This component must not
+    // touch its lifecycle, or closing the plugin window would tear down the running graph.
     MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLookAndFeel& lf, AudioEngine& externalEngine,
                   std::unique_ptr<synth::AIProvider> provider = nullptr);
 
-    // Delegating ctor for tests and legacy call sites that don't inject theme objects.
-    // Lazily owns private default ThemeManager + AppLookAndFeel instances
-    // (stored in ownedThemeManager / ownedLookAndFeel below).
+    // Delegating ctor for tests and legacy call sites that don't inject theme objects. Lazily owns
+    // private default ThemeManager + AppLookAndFeel instances (ownedThemeManager/ownedLookAndFeel).
     explicit MainComponent(std::unique_ptr<synth::AIProvider> provider = nullptr,
                            synth::AIProviderRegistry registry = synth::AIProviderRegistry::createDefault());
 
@@ -120,8 +116,8 @@ public:
     static constexpr int kMinRepeatCount = 1; // Repeat's count bounds (dialog clamp + performRepeatSelection).
     static constexpr int kMaxRepeatCount = 64;
 
-    // P4-6: default AI provider id when none is persisted yet ("remote" for a brand-new install,
-    // else the existing "ollama" default). See initialiseCommon() for the caller.
+    // Default AI provider id when none is persisted yet ("remote" for a brand-new install, else
+    // the existing "ollama" default). See initialiseCommon() for the caller.
     static juce::String resolveDefaultProviderId(bool hasExistingSettingsFile) {
         return hasExistingSettingsFile ? juce::String("ollama") : juce::String("remote");
     }
@@ -185,9 +181,8 @@ public:
     bool isTimelineConfiguredVisible() const { return isTimelineVisible; }
     synth::ui::TimelinePanelComponent& getTimelinePanel() { return timelinePanel; }
     synth::ui::MixerDockComponent& getMixerDock() { return mixerDock; }
-    // FRO100: the app's/plugin's real construction site calls
-    // getPluginWindowManager().setCreatesNativeWindows(true) here, same as it does for the two
-    // detach hosts via getMixerDock() above.
+    // The app's/plugin's real construction site calls setCreatesNativeWindows(true) here, same as
+    // it does for the two detach hosts via getMixerDock() above.
     synth::HostedPluginWindowManager& getPluginWindowManager() { return pluginWindowManager; }
     // Test-only: Own-panel placement reparents the Mixer host INTO this controller (it IS the
     // second strip), not to nullptr -- see MixerPlacementController.h's class comment.
@@ -203,14 +198,12 @@ public:
 
     /** The panel's current docked height in px, always clamped (see clampTimelinePanelHeight()). */
     int getTimelinePanelHeight() const noexcept { return timelinePanelHeight_; }
-    // Test hooks. The doc and the recorder are real app state (not test-only objects), so
-    // these are plain accessors; the simulate*/…ForTest entry points below drive the same code
-    // paths the buttons and file dialogs do, minus the dialogs.
+    // Test hooks. The doc and the recorder are real app state, so these are plain accessors; the
+    // simulate*/…ForTest entry points below drive the same code paths the buttons/dialogs do.
     synth::TimelineDoc& getTimelineDoc() { return timelineDoc; }
     synth::AutomationRecorder& getAutomationRecorder() { return automationRecorder; }
     void automateParameter(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId);
-    // The app's one live MidiRecorder — see docs/architecture/audio-engine.md#audioengine. Test-only, mirrors
-    // getAutomationRecorder() above.
+    // The app's one live MidiRecorder (docs/architecture/audio-engine.md#audioengine). Test-only.
     synth::MidiRecorder& getMidiRecorderForTest() { return midiRecorder; }
     // juce::PopupMenu never runs in a test process — these drive the "+ Track" menu's own headless
     // seam (TimelinePanelComponent::applyAddTrackMenuChoice) directly.
@@ -220,7 +213,7 @@ public:
     void simulateAddAudioTrackClick() {
         timelinePanel.applyAddTrackMenuChoice(synth::ui::TimelinePanelComponent::kAddAudioTrackMenuId);
     }
-    /** T183 (P9-3b): drives the Instrument submenu's headless seam directly, by menu id. */
+    /** Drives the Instrument submenu's headless seam directly, by menu id. */
     void simulateAddInstrumentTrackClick(int menuId) { timelinePanel.applyAddTrackMenuChoice(menuId); }
     /** Exactly what the Save dialog's callback runs: `.agsproj` writes a bundle, else a preset. */
     bool saveProjectForTest(const juce::File& file) { return saveToFile(file); }
@@ -232,8 +225,8 @@ public:
      *  kicks off the async recovery prompt instead and returns true before any load has happened -
      *  a test drives autosaveRecoveryPrompt directly, the same idiom unsavedChangesPrompt uses. */
     bool openProjectForTest(const juce::File& file) { return openFromFile(file); }
-    // P8-31: reaches openFromFile's PATCH branch with an explicit load mode (`append == true` adds
-    // onto the live graph; false replaces it), without a native file chooser.
+    // Reaches openFromFile's PATCH branch with an explicit load mode (`append == true` adds onto
+    // the live graph; false replaces it), without a native file chooser.
     bool openPatchForTest(const juce::File& file, bool append) { return openFromFile(file, append); }
     /** Runs performAutosave()'s exact gate check once, synchronously — the same call
      *  timerCallback() makes on every tick, exposed so a test can drive it without a real
@@ -246,39 +239,33 @@ public:
     void setAutosaveElapsedMsForTest(juce::uint32 elapsedMs) {
         lastAutosaveMs_ = juce::Time::getMillisecondCounter() - elapsedMs;
     }
-    /** True once an audio or MIDI take is capturing — see isRecordingActive(). Test-only seam so a
-     *  test can assert the autosave gate is actually reading live recording state without making
-     *  AudioTake/MidiRecorder internals public. */
+    /** True once an audio or MIDI take is capturing. Test-only seam, see isRecordingActive(). */
     bool isRecordingActiveForTest() const { return isRecordingActive(); }
-    /** Test-only: forces AudioTake::capturing without the real record-arm/record-button/master-tap
-     *  machinery — used only to verify the autosave gate respects this flag. Never commits a clip;
-     *  callers must reset it back to false before the test ends. */
+    /** Forces AudioTake::capturing without the real record-arm machinery, to verify the autosave
+     *  gate respects this flag. Never commits a clip; caller must reset it before the test ends. */
     void setAudioTakeCapturingForTest(bool capturing) { audioTake_.capturing = capturing; }
     /** What performSaveProject(false) will do next: true if there's no bundle to resave to
      *  silently, so Cmd+S is about to prompt for a location. */
     bool wouldPromptOnSaveForTest() const {
         return !(currentBundleDir_ != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir_));
     }
-    /** Exactly what the "Export Patch Only" menu item's chooser callback runs once the user has
-     *  picked a file — bypasses the async dialog itself, same idiom as saveProjectForTest. */
+    /** Exactly what the "Export Patch Only" chooser callback runs once a file is picked — bypasses
+     *  the async dialog, same idiom as saveProjectForTest. */
     void exportPatchOnlyForTest(const juce::File& file) { exportPatchOnly(file); }
-    /** Exactly what the production "Relink audio…" FileChooser callback runs once the user
-     *  has picked a file — bypasses the async dialog itself, same idiom as saveProjectForTest. */
+    /** Exactly what the production "Relink audio…" FileChooser callback runs, same idiom as
+     *  saveProjectForTest. */
     void relinkClipAssetForTest(synth::ClipId id, const juce::File& chosenFile) { relinkClipAsset(id, chosenFile); }
-    /** Exactly what the clip lane area reports when the user drops an audio file on an audio row
-     *  (or picks one from the double-click chooser) — bypasses the OS drag/dialog, same idiom as
-     *  relinkClipAssetForTest. */
+    /** What the clip lane area reports on an audio-file drop/chooser pick, bypassing the OS
+     *  drag/dialog, same idiom as relinkClipAssetForTest. */
     void importAudioFileToClipForTest(synth::TrackId track, double startBeat, const juce::File& sourceFile) {
         importAudioFileToClip(track, startBeat, sourceFile);
     }
-    /** Sweeps `<bundle>/Audio/` (+ `Peaks/`) for files no clip in the live timeline
-     *  references and deletes exactly those — see synth::AssetManager::cleanUnusedAssets. A no-op
-     *  (returns 0) outside a saved bundle. Not wired to any menu/shortcut yet — see
-     *  docs/architecture/app-wiring.md#asset-management for why. */
+    /** Sweeps `<bundle>/Audio/` (+ `Peaks/`) for files no clip references and deletes them — see
+     *  synth::AssetManager::cleanUnusedAssets. A no-op outside a saved bundle. */
     int cleanUnusedAssetsForTest() { return cleanUnusedAssets(); }
     GraphEditor& getGraphEditor() { return graphEditor; }
-    // T114/P8-10: null in Hosted mode (the plugin path never constructs one — see
-    // ownedAudioEngine's gate in initialiseCommon()).
+    // Null in Hosted mode (the plugin path never constructs one — see ownedAudioEngine's gate in
+    // initialiseCommon()).
     synth::ui::WelcomeScreenComponent* getWelcomeScreenForTest() const { return welcomeScreen_.get(); }
     ToolbarComponent& getToolbar() { return toolbar; }
     StatusBarComponent& getStatusBar() { return statusBar; }
@@ -313,44 +300,36 @@ public:
     std::function<void(const juce::String& actionLabel, std::function<void(UnsavedChangesChoice)> onChoice)>
         unsavedChangesPrompt;
 
-    /** What the user picked when openFromFile found a pending autosave sidecar on the bundle being
-     *  opened. Restore loads autosave.json instead of project.json and leaves the document dirty
-     *  (the loaded state diverges from what's on disk); Discard loads project.json normally. Either
-     *  arm deletes the sidecar afterwards — see ProjectBundle::discardAutosave. */
+    /** What the user picked when openFromFile found a pending autosave sidecar. Restore loads
+     *  autosave.json instead of project.json and leaves the document dirty; Discard loads
+     *  project.json normally. Either arm deletes the sidecar — see ProjectBundle::discardAutosave. */
     enum class AutosaveRecoveryChoice { Restore, Discard };
 
-    /** Test/automation seam for the autosave-recovery prompt, same idiom as unsavedChangesPrompt:
-     *  when set it REPLACES the real async juce::AlertWindow. */
+    /** Test/automation seam for the autosave-recovery prompt, same idiom as unsavedChangesPrompt. */
     std::function<void(std::function<void(AutosaveRecoveryChoice)> onChoice)> autosaveRecoveryPrompt;
 
-    /** The choice the user makes when opening a `.json` patch (P8-31): replace the current patch,
-     *  add the loaded one on top of it, or cancel the open. */
+    /** The choice the user makes when opening a `.json` patch: replace the current patch, add the
+     *  loaded one on top of it, or cancel the open. */
     enum class PatchLoadMode { Replace, Append, Cancel };
 
     /** Test/automation seam for the patch load-mode prompt, same idiom as unsavedChangesPrompt and
-     *  autosaveRecoveryPrompt: when set it REPLACES the real async juce::AlertWindow. The load only
-     *  happens when the seam fires a non-Cancel choice. */
+     *  autosaveRecoveryPrompt. The load only happens on a non-Cancel choice. */
     std::function<void(std::function<void(PatchLoadMode)> onChoice)> patchLoadPrompt;
 
-    /** True once an undo-able edit has happened since the last save/load - see changeListenerCallback's
-     *  AppUndoManager branch. Deliberately NOT reset by undoing back to the state that was saved -
-     *  see docs/architecture/project-bundle.md#dirty-state-and-the-unsaved-changes-guard for why a false "clean" is the
-     * dangerous direction. */
+    /** True once an undo-able edit has happened since the last save/load. Deliberately NOT reset
+     *  by undoing back to the saved state — see
+     *  docs/architecture/project-bundle.md#dirty-state-and-the-unsaved-changes-guard. */
     bool isProjectDirty() const { return isDirty_; }
 
     void guardUnsavedChanges(const juce::String& actionLabel, std::function<void()> proceed);
     // Non-const access to ApplicationProperties for persistence tests (read-back within session).
     juce::ApplicationProperties& getAppPropertiesForTest() { return appProperties; }
-    // FRO147: the one AppLookAndFeel instance every meter painter reads through — lets a test
-    // assert the effective meter-colour stops it caches without going through a real paint/pixel
-    // sample. Non-null in every ctor (Main.cpp-injected, plugin-injected, or the delegating test
-    // ctor's ownedLookAndFeel).
+    // The one AppLookAndFeel instance every meter painter reads through — lets a test assert the
+    // effective meter-colour stops without a real paint/pixel sample. Non-null in every ctor.
     synth::theme::AppLookAndFeel& getLookAndFeelForTest() { return *lookAndFeel; }
-    // FRO26 (P9-3e, docs/mixer/mixer.md#creating-channels-in-an-existing-project): hasTracksNeedingChannels() is a
-    // private TrackHeaderHost override (MainComponent inherits that interface privately), so a test can't call it
-    // directly the way it can drive the menu action itself via getTimelinePanel().applyAddTrackMenuChoice() — this thin
-    // public wrapper is the same idiom as newPatchForTest() above, just for a query instead of a mutation, so a test
-    // can assert the "+ Track" menu's own enabled/disabled state.
+    // hasTracksNeedingChannels() is a private TrackHeaderHost override, so a test can't call it
+    // directly — this thin public wrapper (same idiom as newPatchForTest()) lets a test assert the
+    // "+ Track" menu's own enabled/disabled state.
     bool hasTracksNeedingChannelsForTest() const { return hasTracksNeedingChannels(); }
     int getStatusBarTickCountForTest() const { return statusBarTickCount_; }
     void simulateLoadFactoryPresetForTest(int index);
@@ -358,8 +337,7 @@ public:
     void openProjectFromFile();
     synth::AIIntegrationService& getAiServiceForTest() { return aiService; }
 
-    // ---- Snippets (issue #156) ----
-
+    // ---- Snippets ----
     void refreshSnippetLibrary();
 
     void promptSaveSnippet();
@@ -375,7 +353,6 @@ public:
     // in use: on the plugin path AgentSynthAudioProcessor installs its OWN, longer-lived service
     // before any editor exists, and an editor on an external engine ADOPTS that rather than replacing
     // it. Everything below goes through getPluginScanService(), never the member directly.
-
     synth::PluginScanService& getPluginScanService() noexcept { return *activeScanService; }
     const synth::PluginScanService& getPluginScanService() const noexcept { return *activeScanService; }
 
@@ -398,7 +375,6 @@ public:
     static constexpr const char* kPluginScanListKey = synth::kPluginScanListSettingKey;
 
     // ---- Recent projects ----
-
     /** The recent-projects list the Load menu's "Recent Projects" section is built from. Single
      *  owner (unlike the scan list above) — see kRecentProjectsSettingKey's comment. */
     synth::RecentProjects& getRecentProjects() noexcept { return recentProjects; }
@@ -412,7 +388,7 @@ public:
     void rebuildGraphForLatencyChange();
 
 private:
-    // ---- Command table (FRO76) -- backs getAllCommands/getCommandInfo/perform, table order is
+    // ---- Command table -- backs getAllCommands/getCommandInfo/perform, table order is
     // getAllCommands() order; name == nullptr derives it via ShortcutManager::getActionDescription
     // (the snap/zoom blocks). See MainComponentCommandTable.cpp.
     struct CommandSpec {
@@ -425,13 +401,12 @@ private:
         std::function<bool(MainComponent&)> run;            // returns what perform() returns for this case
     };
     const std::vector<CommandSpec>& commandTable() const;
-    // FRO11: commandTable()'s own row groups, split out to keep it under the function-size cap.
+    // commandTable()'s own row groups, split out to keep it under the function-size cap.
     static std::vector<CommandSpec> buildGeneralCommandRows();
     static std::vector<CommandSpec> buildEditAndGraphCommandRows();
     static std::vector<CommandSpec> buildTimelineAndPanelCommandRows();
     static std::vector<CommandSpec> buildFocusAndHelpCommandRows();
-    // FRO125: play/stop/record/loop/metronome/return-to-start, appended last in commandTable() --
-    // see MainComponentCommandTable.cpp.
+    // Play/stop/record/loop/metronome/return-to-start, appended last in commandTable().
     static std::vector<CommandSpec> buildTransportCommandRows();
 
     // Named perform() bodies, too long for an inline table lambda.
@@ -459,8 +434,7 @@ private:
     void aiPatchAboutToApply() override;
     void aiPatchApplied() override;
 
-    // ---- Timeline app wiring. ----
-
+    // ---- Timeline app wiring ----
     void timelineChanged(const synth::TimelineDoc& doc) override;
 
     void publishTimelineAndRebindRecorder();
@@ -472,7 +446,7 @@ private:
     void buildInstrumentTrackAndChain(std::unique_ptr<juce::AudioProcessor> instrumentProcessor,
                                       const juce::String& trackNamePrefix, bool poly);
 
-    // ---- buildInstrumentTrackAndChain step state (FRO76 §C) -- see MainComponentTrackCreation.cpp ----
+    // ---- buildInstrumentTrackAndChain step state -- see MainComponentTrackCreation.cpp ----
     struct InstrumentChainBuild {
         synth::TrackId trackId;
         juce::AudioProcessorGraph::Node* trackInNode = nullptr;
@@ -492,20 +466,13 @@ private:
                                      bool poly, InstrumentChainBuild& build);
     void buildInstrumentEnvelopeChain(InstrumentChainBuild& build);
     bool buildInstrumentChannelAndMacro(const juce::String& trackName, InstrumentChainBuild& build);
-    // Shared by the default-consulting branch in addAudioTrack/buildInstrumentTrackAndChain, the
-    // "+ Track" preset-list click and "Insert Track Preset from File...". NO UNDO TRANSACTION OF
-    // ITS OWN (the default-consulting branch is already inside addAudioTrack's own) — callers that
-    // aren't already inside one wrap this in recordGraphTimelineAndMacroChange themselves. Returns
-    // the created track's name, or an empty string on rejection/failure.
+    // Shared insert path; NO UNDO TRANSACTION OF ITS OWN — see MainComponentTrackPresets.cpp.
     juce::String insertTrackFromPresetVar(const juce::var& preset, synth::TrackPresetKind kind,
                                           const juce::String& trackNamePrefix);
 
-    // FRO42: hosted-plugin instrument loads in flight — see addInstrumentPluginTrack's own comment
-    // for why THIS (an external, independent owner) holds the staged processor rather than a
-    // shared_ptr captured by the module's own onLoadCompleted callback, which would make the object
-    // keep itself alive via its own member. A failed/refused load is dropped via
-    // dropPendingInstrumentPluginLoad(), deferred to the next message-loop turn so the module is
-    // never destroyed from inside its own currently-executing onLoadCompleted callback.
+    // Hosted-plugin instrument loads in flight — see addInstrumentPluginTrack's own comment for
+    // why this external owner holds the staged processor. A failed/refused load is dropped via
+    // dropPendingInstrumentPluginLoad(), deferred to the next message-loop turn.
     std::vector<std::unique_ptr<juce::AudioProcessor>> pendingInstrumentPluginLoads_;
     void dropPendingInstrumentPluginLoad(juce::AudioProcessor* processor);
 
@@ -532,11 +499,8 @@ private:
         juce::String assetRef;    // what the committed clip stores (see synth::Clip::assetRef)
         juce::AudioProcessorGraph::NodeID tapNode;
 
-        // Rate/tempo/latency FROZEN at capture start, never re-read at commit: every recording
-        // anchor is in THIS rate's sample domain, and a device/sample-rate change mid-take (which
-        // forces an early commit - AudioEngine::handleStreamFormatChange) would otherwise have
-        // commitAudioRecording() convert an old-rate anchor with the new rate. A no-op when the rate
-        // never changes, which is the overwhelmingly common case.
+        // FROZEN at capture start, never re-read at commit — see MainComponentTimeline.cpp
+        // (commitAudioRecording) for why.
         double captureSampleRate = 44100.0;
         double captureBpm = 120.0;
         int captureRecordingLatencySamples = 0;
@@ -572,7 +536,7 @@ private:
     void createChannelsForExistingTracks() override;
     bool canMakeChannelForTrack(synth::TrackId track) const override;
     void makeChannelForTrack(synth::TrackId track) override;
-    // FRO13 (P9-7, docs/mixer/track-presets.md): track presets.
+    // Track presets (docs/mixer/track-presets.md).
     bool canSaveTrackPresetForTrack(synth::TrackId track) const override;
     void saveTrackAsPreset(synth::TrackId track) override;
     void setTrackPresetAsDefault(synth::TrackId track) override;
@@ -602,7 +566,6 @@ private:
     void refreshAssetRoots();
 
     // ---- Asset management (import/relink/collect-clean/adopt-on-save) ----
-
     void promptRelinkClipAsset(synth::ClipId id);
     void relinkClipAsset(synth::ClipId id, const juce::File& chosenFile);
 
@@ -641,11 +604,10 @@ private:
 
     void initialiseCommon(std::unique_ptr<synth::AIProvider> provider, synth::AIProviderRegistry registry);
 
-    // ---- initialiseCommon()'s ordered setup steps (FRO76) ----
-    // Bodies moved verbatim out of the former single-function initialiseCommon(); the call order in
-    // initialiseCommon() IS the contract (see the ORDER comments at each call site) — these are
-    // declared in that same order for the same reason. Defined across MainComponentSetup.cpp /
-    // MainComponentSetupToolbar.cpp / MainComponentSetupTimeline.cpp.
+    // ---- initialiseCommon()'s ordered setup steps ----
+    // The call order in initialiseCommon() IS the contract (see the ORDER comments at each call
+    // site) — these are declared in that same order for the same reason. Defined across
+    // MainComponentSetup.cpp / MainComponentSetupToolbar.cpp / MainComponentSetupTimeline.cpp.
     void restorePanelPreferences();
     void restoreGraphEditorPreferences();
     void configureAiProvider(std::unique_ptr<synth::AIProvider> provider, synth::AIProviderRegistry registry);
@@ -653,7 +615,7 @@ private:
     void wireGraphEditorCallbacks();
     void wirePluginScanAndRecents();
     void wireCommandsAndShortcuts();
-    void wireMidiRemoteEngine(); // FRO127
+    void wireMidiRemoteEngine();
     void addCanvasAndPanels();
     void addToolbarChrome();
     void addFileButtons();
@@ -671,32 +633,25 @@ private:
     bool initialiseAudioEngine();
     void createWelcomeScreen();
     void registerFocusRegions();
-    // FRO12: the clear+rebuild half of registerFocusRegions(), re-run after every detach/redock
-    // (mixerDock.onPanelDetachStateChanged) so a region currently detached to its own window stops
-    // appearing in the DOCKED window's Tab-cycle order -- split out so the one-time
-    // addFocusChangeListener(this) call in registerFocusRegions() itself never re-registers.
+    // The clear+rebuild half of registerFocusRegions(), re-run after every detach/redock so a
+    // region currently detached to its own window stops appearing in the DOCKED window's Tab-cycle
+    // order — split out so registerFocusRegions()'s one-time addFocusChangeListener(this) call
+    // never re-registers.
     void rebuildFocusRegions();
 
     void applyToolbarIcons();
-
     void applyStoredDualIOPreferenceToPatch();
-
     juce::String computeOutputDeviceInfoText() const;
-
     void setLibraryVisible(bool v);
 
-    // ---- Welcome screen (T114/P8-10) ----
-
+    // ---- Welcome screen ----
     void hideWelcomeScreen();
     void showWelcomeScreen();
     void showWhatsNewDialog();
 
     // ---- Timeline panel height (user-resizable, persisted) ----
-
     int defaultTimelinePanelHeight() const;
-
     int clampTimelinePanelHeight(int desiredHeight) const;
-
     void setTimelinePanelHeight(int desiredHeight, bool persist);
 
     void setCurrentPatchName(const juce::String& name);
@@ -709,53 +664,47 @@ private:
     void promptUnsavedChanges(const juce::String& actionLabel, std::function<void(UnsavedChangesChoice)> onChoice);
     void applyUnsavedChangesAnswer(UnsavedChangesChoice choice, std::function<void()> proceed);
 
-    // Owned fallback objects used when the delegating ctor is called (tests/legacy).
-    // Null when the primary ctor is used (refs point at external objects instead).
+    // Owned fallback objects used when the delegating ctor is called (tests/legacy). Null when the
+    // primary ctor is used (refs point at external objects instead).
     std::unique_ptr<synth::theme::ThemeManager> ownedThemeManager;
     std::unique_ptr<synth::theme::AppLookAndFeel> ownedLookAndFeel;
 
-    // Non-owning references to the active ThemeManager and LookAndFeel.
-    // Always valid — set by both constructors (either to external objects or to the
-    // owned fallbacks above).
+    // Non-owning references to the active ThemeManager and LookAndFeel. Always valid — set by
+    // both constructors (either to external objects or to the owned fallbacks above).
     synth::theme::ThemeManager* themeManager{nullptr};
     synth::theme::AppLookAndFeel* lookAndFeel{nullptr};
 
-    // The app's ONE live timeline document + the recorder that captures parameter gestures into its
-    // automation lanes. DECLARATION ORDER IS LOAD-BEARING: both precede `undoManager` so both
-    // outlive it -- a TimelineSnapshotAction on the undo stack holds a reference to this doc and the recorder.
+    // The app's ONE live timeline document + the recorder that captures parameter gestures into
+    // its automation lanes. DECLARATION ORDER IS LOAD-BEARING: both precede `undoManager` so both
+    // outlive it -- a TimelineSnapshotAction on the undo stack holds a reference to both.
     synth::TimelineDoc timelineDoc;
     synth::AutomationRecorder automationRecorder;
     // The app's ONE live MIDI Remote project document (the reserved "midiRemote" project.json
-    // key), read/written by MidiLearnController and wireMidiRemoteEngine(). Same load-bearing
-    // declaration-order rule as timelineDoc: must precede `undoManager` so it outlives any
-    // MidiRemoteSnapshotAction on the undo stack that holds a reference to it.
+    // key). Same load-bearing declaration-order rule as timelineDoc: must precede `undoManager` so
+    // it outlives any MidiRemoteSnapshotAction on the undo stack that references it.
     synth::MidiRemoteProjectDoc midiRemoteDoc;
-    // The app's one live MidiRecorder -- no lifetime constraint vs undoManager (holds no doc/undo
-    // reference between calls; stopAndCommit() takes both as parameters).
+    // The app's one live MidiRecorder -- no lifetime constraint vs undoManager (stopAndCommit()
+    // takes both as parameters).
     synth::MidiRecorder midiRecorder;
 
     AppUndoManager undoManager;
 
-    // Owned only on the standalone paths (both ctors that don't take an external engine).
-    // Null when the plugin ctor injected the processor's engine — see the `audioEngine`
-    // reference below, which is the single access point either way. Mirrors the
-    // ownedThemeManager / themeManager split above.
+    // Owned only on the standalone paths. Null when the plugin ctor injected the processor's
+    // engine — see `audioEngine` below, the single access point either way.
     std::unique_ptr<AudioEngine> ownedAudioEngine;
     AudioEngine& audioEngine;
 
     GraphEditor graphEditor;
 
-    // T114/P8-10: the startup overlay offering New/Open Default/Open Existing/Recent instead of
-    // silently auto-loading the factory preset. Null in Hosted mode — see ownedAudioEngine's gate
-    // in initialiseCommon(); a hosted plugin's document is host-owned, so it must never construct
-    // or show this. Added to the component tree LAST (after every other addAndMakeVisible() call in
-    // initialiseCommon()), so it paints on top of the toolbar/canvas while visible.
+    // The startup overlay offering New/Open Default/Open Existing/Recent instead of silently
+    // auto-loading the factory preset. Null in Hosted mode (host-owned document, see
+    // ownedAudioEngine's gate in initialiseCommon()). Added to the component tree LAST so it
+    // paints on top of the toolbar/canvas while visible.
     std::unique_ptr<synth::ui::WelcomeScreenComponent> welcomeScreen_;
 
     // Every open hosted-plugin editor window. Declared AFTER ownedAudioEngine/audioEngine (and
     // graphEditor) so reverse-order destruction kills it FIRST: a window's content can hold a live
-    // juce::AudioPluginInstance editor that must not outlive its graph node. ~MainComponent() also
-    // calls closeAll() as its first line - a second, independent defence (see that class' comment).
+    // juce::AudioPluginInstance editor that must not outlive its graph node.
     synth::HostedPluginWindowManager pluginWindowManager;
 
     ModuleLibraryComponent moduleLibrary;
@@ -809,35 +758,29 @@ private:
 
     // Bottom-docked timeline panel shell.
     synth::ui::TimelinePanelComponent timelinePanel;
-    // FRO11 (P9-5): the ONE member this ticket adds here (MainComponent.h's tight line budget --
-    // see docs/mixer/panel.md#what-the-mixer-shows). Takes timelinePanel by reference, constructed
-    // after it in this same member list so the reference is valid; owns the tab strip and the
-    // mixer panel itself, and becomes the dock's direct child in place of timelinePanel (which
-    // becomes MixerDockComponent's own child instead -- see MainComponentSetupToolbar.cpp).
-    // FRO12: appProperties/lookAndFeel/shortcutManager are declared earlier in this class (see
-    // each field's own declaration) so all three are already valid pointers/references here,
-    // even though shortcutManager itself finishes constructing later -- see
-    // DetachablePanelHost.h's "held by reference" contract; only the ADDRESS is taken now.
+    // Takes timelinePanel by reference, constructed after it in this same member list so the
+    // reference is valid; owns the tab strip and the mixer panel itself, and becomes the dock's
+    // direct child in place of timelinePanel (docs/mixer/panel.md#what-the-mixer-shows).
+    // appProperties/lookAndFeel/shortcutManager are declared earlier so all three are already
+    // valid pointers/references here, even though shortcutManager itself finishes constructing
+    // later — see DetachablePanelHost.h's "held by reference" contract; only the ADDRESS is taken.
     synth::ui::MixerDockComponent mixerDock{timelinePanel, audioEngine,   timelineDoc, undoManager,
                                             graphEditor,   appProperties, lookAndFeel, &shortcutManager};
-    // FRO12 (P9-6, docs/mixer/panel.md): Mixer placement (Tab/Own panel/Window) + both panels'
-    // detach-to-window support -- ONE collaborator so this header doesn't grow a field per panel
-    // (see the plan's own MainComponent.h budget note). Declared after mixerDock so its Mixer-
-    // panel reference stays valid.
+    // Mixer placement (Tab/Own panel/Window) + both panels' detach-to-window support (docs/mixer/panel.md) --
+    // ONE collaborator so this header doesn't grow a field per panel. Declared after mixerDock so
+    // its Mixer-panel reference stays valid.
     synth::ui::MixerPlacementController mixerPlacement_{mixerDock, appProperties};
     bool isTimelineVisible = false;
     // The panel's docked height. Resolved in initialiseCommon() from kTimelinePanelHeightKey (theme
-    // metric when absent) and moved by the panel's top-edge drag; 0 only before that, and forever in
-    // a flag-OFF build, where nothing carries it into a layout.
+    // metric when absent) and moved by the panel's top-edge drag; 0 only before that.
     int timelinePanelHeight_ = 0;
-    // Playing->stopped edge detection for the MIDI recorder's auto-commit-on-stop, updated
-    // once per 10 Hz poll tick — mirrors AutomationRecorder's own `lastPlaying` bookkeeping.
+    // Playing->stopped edge detection for the MIDI recorder's auto-commit-on-stop, updated once
+    // per 10 Hz poll tick — mirrors AutomationRecorder's own `lastPlaying` bookkeeping.
     bool wasTransportPlaying_ = false;
 
-    // The feedback-guard re-arm latch. True from a guard trip until the explicit reset
-    // gesture — the armed-Audio-track set going from NONE armed to at least one armed again (disarm
-    // then re-arm). While true, the poll keeps input monitoring off even though an Audio track is
-    // still armed; simply staying armed must not re-enable it.
+    // The feedback-guard re-arm latch. True from a guard trip until the armed-Audio-track set goes
+    // from NONE armed to at least one armed again. While true, the poll keeps input monitoring off
+    // even though an Audio track is still armed; simply staying armed must not re-enable it.
     bool feedbackGuardLatched_ = false;
     // Previous poll's "is any Audio-kind track armed" result — the FALSE -> TRUE edge is what
     // clears the latch above.
@@ -960,10 +903,9 @@ private:
 #endif
 
     // ---- Panel slide animations (fraction-driven, time-bounded, auto-stop) ----
-    //
     // Each sliding panel owns a [0..1] open fraction and resized() derives its size from that, so a
-    // layout pass is correct whenever it runs (docs/layout/animation.md). ONE driver moves ALL THREE: the
-    // panels share a window, so a per-panel animator would leave one slide frozen half-open.
+    // layout pass is correct whenever it runs (docs/layout/animation.md). ONE driver moves ALL
+    // THREE: the panels share a window, so a per-panel animator would leave one slide frozen half-open.
     juce::VBlankAnimatorUpdater vblankUpdater{this};
     synth::ui::AnimationDriver panelSlideAnim_;
     synth::ui::PanelSlide librarySlide_;
@@ -990,9 +932,8 @@ private:
 
     void setAlignmentGuidesEnabled(bool enabled);
 
-    // Provides native-style tooltips for any child Component that has a tooltip
-    // string set via setTooltip(). Constructed last so all child components exist.
-    // Do NOT set tooltips on controls here; each feature owner does that.
+    // Provides native-style tooltips for any child Component with a tooltip string set via
+    // setTooltip(). Constructed last so all child components exist. Do NOT set tooltips here.
     juce::TooltipWindow tooltipWindow{this};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
