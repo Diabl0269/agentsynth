@@ -701,11 +701,15 @@ void PianoRollComponent::setPlayheadBeat(double absoluteBeat) {
     // computed against the (possibly just-moved) mapping the line will actually draw at. Gated on
     // no drag being in flight and the edge-auto-scroll timer being idle — either one is already
     // steering rollView_ on its own terms, and a follow flip landing on top of it would fight the
-    // gesture the user is mid-way through. The check costs nothing while the beat is already
+    // gesture the user is mid-way through. Also gated on !followSuspended_ — set whenever the user
+    // scrolled/zoomed the roll on their own terms, or a clip was just opened and hasn't had an
+    // explicit "resume following" yet (setFollowPlayhead(true)); without it, a stale or freshly-
+    // suppressed follow position would win the very next tick over both a deliberate manual scroll
+    // and openClip's own fit-to-clip framing. The check costs nothing while the beat is already
     // inside the view (the common, playing-and-visible case): it returns without ever calling
     // setHorizontalView, so the zero-repaint-while-unmoved contract below is untouched — follow
     // adds no work at all until the line is about to leave the visible grid.
-    if (followPlayhead_ && dragMode_ == DragMode::None && !autoScrollTimer_.isTimerRunning()) {
+    if (followPlayhead_ && !followSuspended_ && dragMode_ == DragMode::None && !autoScrollTimer_.isTimerRunning()) {
         const auto grid = gridRegion();
         if (!grid.isEmpty() && rollView_.pixelsPerBeat > 0.0) {
             const int rawX = (int)std::llround(beatToX(absoluteBeat));
