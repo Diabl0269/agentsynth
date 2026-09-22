@@ -46,7 +46,8 @@ void ModuleComponent::reflectParameterValue(const juce::AudioProcessorParameter*
     }
 }
 
-// Right-click-any-knob -> "Automate '<Param>'". `param` may be null (a control this
+// Right-click-any-knob -> "Automate '<Param>'" plus the MIDI Learn block (FRO130,
+// appendMidiLearnMenuItems, ModuleComponentMidiLearn.cpp). `param` may be null (a control this
 // component built without a real RangedAudioParameter behind it, e.g. the ExternalMidiModule
 // device/channel combos — never true for anything reaching here through `sliders`, but checked
 // anyway since sliderParams can hold a null entry per its own header comment).
@@ -54,7 +55,7 @@ void ModuleComponent::showAutomateMenuForSlider(juce::RangedAudioParameter* para
     if (param == nullptr)
         return;
 
-    // The popup's action runs asynchronously (showMenuAsync), so `this` must be re-checked rather
+    // The popup's actions run asynchronously (showMenuAsync), so `this` must be re-checked rather
     // than captured raw — the module (and its GraphEditor selection) could be gone by the time the
     // user picks an item (a delete, an undo, a preset load while the menu is open).
     juce::Component::SafePointer<ModuleComponent> safeThis(this);
@@ -68,7 +69,12 @@ void ModuleComponent::showAutomateMenuForSlider(juce::RangedAudioParameter* para
         if (safeThis->owner.onAutomateParameterRequested)
             safeThis->owner.onAutomateParameterRequested(nodeIdCopy, paramId);
     });
-    menu.showMenuAsync(juce::PopupMenu::Options());
+    appendMidiLearnMenuItems(menu, param);
+    // Routed through showContextMenuHook_ (rather than a direct showMenuAsync) so a test can
+    // capture the built menu headlessly, the same seam buildModuleContextMenu()/
+    // buildMacroPortContextMenu() already use — this menu had never needed it before FRO130 added
+    // MIDI items worth asserting on.
+    showContextMenuHook_(menu);
 }
 
 void ModuleComponent::parameterValueChanged(int parameterIndex, float newValue) {
@@ -493,6 +499,14 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
                     showAutomateMenuForSlider(sliderParams[i]);
                 return;
             }
+        }
+        // FRO130: every other learnable control (toggles, combos, header buttons, bespoke-card
+        // knobs already matched above via `sliders`) -- ONE registry lookup rather than a new
+        // per-kind identity loop (docs/control/midi-remote-ui.md#right-click-midi-learn--coverage,
+        // Source/UI/CLAUDE.md). No "Automate" item here: that has only ever existed for sliders.
+        if (e.mods.isPopupMenu()) {
+            if (auto* param = midiLearnableRegistry_.find(e.eventComponent))
+                showMidiLearnOnlyMenu(param);
         }
         return; // some other attached child's own click — nothing for the module body to do
     }

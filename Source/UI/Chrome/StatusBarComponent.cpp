@@ -164,9 +164,27 @@ juce::String StatusBarComponent::getTooltipForPosition(juce::Point<int> localPos
 // ---------------------------------------------------------------------------
 void StatusBarComponent::showMessage(const juce::String& msg) {
     transientMessage_ = msg;
+    messageIsSticky_ = false;
     repaint();
     // (Re-)start the single-shot auto-clear timer: 2500 ms, fires once.
     startTimer(2500);
+}
+
+// ---------------------------------------------------------------------------
+void StatusBarComponent::showStickyMessage(const juce::String& msg) {
+    stopTimer(); // no auto-clear -- clearMessage()/a later showMessage() ends it
+    transientMessage_ = msg;
+    messageIsSticky_ = true;
+    repaint();
+}
+
+// ---------------------------------------------------------------------------
+void StatusBarComponent::clearMessage() {
+    if (!messageIsSticky_)
+        return; // nothing sticky is showing: empty, or a transient message running its own timer
+    transientMessage_ = {};
+    messageIsSticky_ = false;
+    repaint();
 }
 
 // ---------------------------------------------------------------------------

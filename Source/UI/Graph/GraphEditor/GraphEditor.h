@@ -419,27 +419,32 @@ public:
 
     bool insertSnippetAt(const juce::var& snippet, juce::Point<int> canvasPos) override;
 
-    /** Set by the owner (MainComponent) to prompt for a name and persist the snippet. Invoked
-     *  from the canvas context menu; GraphEditor deliberately owns no file dialogs. */
+    // Prompts for a name and persists the snippet; invoked from the canvas context menu.
+    // GraphEditor deliberately owns no file dialogs.
     std::function<void()> onSaveSnippetRequested;
-
-    /** Set by the owner to resolve a snippet name (from a library drag payload) to its JSON. */
+    // Resolves a snippet name (from a library drag payload) to its JSON.
     std::function<juce::var(const juce::String&)> snippetProvider;
-
     // FRO13: the channel macro menu's Save-preset/Set-default pair; 2nd arg true = set default.
     std::function<void(const juce::String& macroId, bool setAsDefault)> onTrackPresetMenuAction;
 
-    /** right-click-any-knob -> "Automate '<Param>'" (ModuleComponent's generic auto-UI slider
-     *  branch). Set by the owner (MainComponent::automateParameter) to resolve the node's uuid,
-     *  find-or-create the doc's Automation track, bind a lane and open the automation strip —
-     *  GraphEditor deliberately owns no TimelineDoc, mirroring onSaveSnippetRequested above. */
+    // right-click-any-knob -> "Automate '<Param>'". Set by MainComponent::automateParameter;
+    // GraphEditor owns no TimelineDoc, mirroring onSaveSnippetRequested above.
     std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)> onAutomateParameterRequested;
 
-    /** A hosted-plugin card's "Open Editor" button (ModuleComponent's HostedPluginModule branch).
-     *  Set by the owner (MainComponent) to resolve `nodeId` to its live HostedPluginModule and hand
-     *  it to HostedPluginWindowManager::openEditorFor — mirrors onAutomateParameterRequested's
-     *  shape exactly, for the same reason: GraphEditor owns neither the module lookup nor the
-     *  window manager. */
+    // ---- MIDI Learn (FRO130, docs/control/midi-remote-ui.md#the-learn-interaction) ----
+    // Set by MainComponent::wireGraphEditorCallbacks(); GraphEditor owns no RemoteEngine/doc.
+    std::function<std::map<juce::String, juce::String>(juce::AudioProcessorGraph::NodeID)>
+        onQueryMidiMappingsForNode; // mapped paramID -> display label; absent means unmapped
+    std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)> onMidiLearnRequested;
+    std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)> onMidiForgetRequested;
+    std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)>
+        onEditMidiAssignmentRequested; // unset until the MIDI Remote panel exists (FRO131)
+    // Pushes/clears the armed breathing outline onto the target ModuleComponent, if on screen.
+    void setMidiLearnArmed(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId);
+    void clearMidiLearnArmed();
+
+    // A hosted-plugin card's "Open Editor" button; resolves `nodeId` to its HostedPluginModule and
+    // hands it to HostedPluginWindowManager::openEditorFor -- same reason as the callbacks above.
     std::function<void(juce::AudioProcessorGraph::NodeID)> onOpenPluginEditorRequested;
 
     // ---- Copy / paste / duplicate -------------------------------------------------------
@@ -785,12 +790,10 @@ private:
     ModuleComponent* moduleComponentFor(juce::AudioProcessorGraph::NodeID nodeId) override;
     juce::OwnedArray<ModuleComponent>& modules() override { return content.getModules(); }
     AppUndoManager* undo() override { return undoManager; }
-    // repaintCanvas(), updateComponents() and connectPorts() are declared as GraphEditor's own
-    // (public) methods above/below; matching GraphCanvasHost's pure virtuals makes those the
-    // overrides too, with no separate declaration needed here. FRO77 PR2 adds eight more that
-    // reuse an existing GraphEditor method the same way (getMacros(), getSelection(),
-    // applySelectionChange() below, setSelectedNodes()/deleteSelection()/getModuleTitle()/
-    // requestGroupSelectionIntoMacro() above) — only the four genuinely new ones are declared here.
+    // Most GraphCanvasHost pure virtuals are satisfied by an existing same-signature GraphEditor
+    // method declared elsewhere (repaintCanvas, updateComponents, connectPorts, getMacros,
+    // getSelection, applySelectionChange, setSelectedNodes, deleteSelection, getModuleTitle,
+    // requestGroupSelectionIntoMacro) -- only the genuinely new ones are declared here.
     juce::OwnedArray<MacroCardComponent>& macroCards() override { return content.getMacroCards(); }
     void reportStatusMessage(const juce::String& message) override {
         if (onStatusMessage)
@@ -798,13 +801,11 @@ private:
     }
     void clearModMatrixRows() override { modMatrix.clearRows(); }
     void requestRepaint() override { repaint(); }
-    // FRO77 PR3 adds five more GraphCanvasHost methods for GraphDragDropController — see
-    // GraphCanvasHost.h's own "PR3 additions" comment for which of these are genuinely new
-    // (lookAndFeel/seedInsertModifierSample/canvasPositionOfLocalPoint/estimateModuleSizeForType/
-    // resolveSnippetPayload, all declared here) versus dual-purpose `override`s declared alongside
-    // the GraphEditor method they reuse (resolvePlacement, estimateSnippetSize, insertSnippetAt,
-    // addHostedPluginAtCanvasPosition, addModuleAtCanvasPosition, isSelectionDragActive,
-    // applyDefaultDualIOForNewModule, refreshSmartSuggestions, clearSmartSuggestions above).
+    // GraphDragDropController's remaining GraphCanvasHost methods: some genuinely new (below),
+    // others dual-purpose overrides declared alongside the GraphEditor method they reuse
+    // (resolvePlacement, estimateSnippetSize, insertSnippetAt, addHostedPluginAtCanvasPosition,
+    // addModuleAtCanvasPosition, isSelectionDragActive, applyDefaultDualIOForNewModule,
+    // refreshSmartSuggestions, clearSmartSuggestions above) -- see GraphCanvasHost.h for the split.
     juce::LookAndFeel& lookAndFeel() override { return getLookAndFeel(); }
     void seedInsertModifierSample() override;
     juce::Point<int> canvasPositionOfLocalPoint(juce::Point<int> pointOnHost) const override {

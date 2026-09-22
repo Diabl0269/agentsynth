@@ -21,6 +21,8 @@ set(APPUI_SOURCES
     Source/UserSettings.h
     Source/MidiRemote/ControllerProfileStore.h
     Source/MidiRemote/ControllerProfileStore.cpp
+    Source/MidiRemote/MidiLearnController.h
+    Source/MidiRemote/MidiLearnController.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelStrips.cpp
@@ -163,6 +165,7 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp
     Source/UI/Macros/MacroCardComponent.cpp
     Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogLifecycle.cpp
     Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogRowOrdering.cpp

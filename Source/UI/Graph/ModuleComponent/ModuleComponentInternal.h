@@ -9,6 +9,11 @@
 
 #include "Modules/ModuleBase.h"
 
+#include <functional>
+#include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_gui_basics/juce_gui_basics.h>
+#include <vector>
+
 namespace detail {
 
 // Sentinel wavetable tab-strip page ids for controls that live outside the strip (see
@@ -68,5 +73,35 @@ inline bool isAudioOutputIONode(juce::AudioProcessor* module) {
     auto* io = dynamic_cast<IOProcessor*>(module);
     return io != nullptr && io->getType() == IOProcessor::audioOutputNode;
 }
+
+/** juce::Button::mouseDown/mouseUp have no isPopupMenu() guard of their own -- a plain
+ *  juce::ToggleButton or juce::DrawableButton fires its click (toggling the parameter it is
+ *  attached to, an undo step and a host notify) on a RIGHT click exactly as it would on a left
+ *  one. FRO130's MIDI Learn menu needs a right-click on these SAME controls to open a context
+ *  menu instead, via the addMouseListener(this) sibling every generic slider already carries
+ *  (ModuleComponent.h's showAutomateMenuForSlider comment) -- so the button itself must swallow a
+ *  popup-menu press/release before Button ever sees it, leaving the registered MouseListener (this
+ *  component's own mouseDown()) as the only thing that reacts. Left clicks are untouched: they
+ *  fall straight through to the real Button behaviour. */
+template <typename ButtonBase>
+class RightClickSafeButton : public ButtonBase {
+public:
+    using ButtonBase::ButtonBase;
+
+    void mouseDown(const juce::MouseEvent& e) override {
+        if (e.mods.isPopupMenu())
+            return;
+        ButtonBase::mouseDown(e);
+    }
+
+    void mouseUp(const juce::MouseEvent& e) override {
+        if (e.mods.isPopupMenu())
+            return;
+        ButtonBase::mouseUp(e);
+    }
+};
+
+using MidiLearnableToggleButton = RightClickSafeButton<juce::ToggleButton>;
+using MidiLearnableDrawableButton = RightClickSafeButton<juce::DrawableButton>;
 
 } // namespace detail

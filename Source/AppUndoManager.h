@@ -131,28 +131,19 @@ public:
      *        graph's own changes (docs/control/midi-remote.md#undo).
      *
      * Unlike recordTimelineChange, this does NOT run a mutation lambda itself — the caller
-     * already has the before/after `juce::var` (typically doc.toVar() taken immediately before
-     * and after its own edit), the same shape MacroSnapshotAction's callers already construct
-     * directly. No-op check: if `beforeJson` and `afterJson` serialise identically, nothing is
-     * pushed and this returns false — a no-op edit must not create an undo step.
-     *
-     * Scope (docs/control/midi-remote.md#undo): the PROJECT document only (`synth::MidiRemoteProjectDoc`, i.e. the
-     * `"midiRemote"` assignments). Profile edits (rename, retype, rearrange, templates, delete
-     * controller) are GLOBAL settings and are never undoable, same as keyboard-shortcut rebinds —
-     * never call this for a ControllerProfileStore edit.
-     *
-     * Lifetime note: exactly like TimelineSnapshotAction, the pushed MidiRemoteSnapshotAction
-     * holds a reference to `doc` for as long as it sits on the undo stack — `doc` must outlive
-     * this AppUndoManager, or clearUndoHistory() must run before the doc is destroyed.
+     * supplies before/after `juce::var` (typically doc.toVar() around its own edit). Scope
+     * (docs/control/midi-remote.md#undo): the PROJECT document only — never call this for a
+     * ControllerProfileStore edit. See the .cpp for the no-op check and the lifetime note.
      *
      * @param doc Reference to the MIDI Remote project document.
      * @param beforeJson doc.toVar() captured before the edit.
      * @param afterJson doc.toVar() captured after the edit.
-     * @return true if the two snapshots differ and an undo entry was pushed, false if they were
-     *         identical (no-op).
+     * @param postRestore Optional lambda called after undo/redo restores `doc`; NOT called for the
+     *        initial edit itself (mirrors MidiRemoteSnapshotAction's firstPerform skip).
+     * @return true if an undo entry was pushed, false if the two snapshots were identical.
      */
     bool recordMidiRemoteChange(synth::MidiRemoteProjectDoc& doc, const juce::var& beforeJson,
-                                const juce::var& afterJson);
+                                const juce::var& afterJson, std::function<void()> postRestore = {});
 
     /**
      * @brief Records a mutation that may touch BOTH the graph and the timeline in a single gesture

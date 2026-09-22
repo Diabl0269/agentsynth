@@ -225,8 +225,20 @@ void ModuleComponent::paint(juce::Graphics& g) {
         g.drawText(label, p.x - 70, p.y - 10, 60, 20, juce::Justification::right, false);
     }
 
-    // Pending modulation drop target: ring the knob a released cable would land on, so the drop
-    // is aimed rather than guessed at.
+    paintModulationRings(g, mod, jackAccentColour);
+
+    // FRO130: MIDI-mapped badges + the armed-control breathing outline, drawn last so they sit on
+    // top of every knob/toggle/combo/header button (ModuleComponentMidiLearn.cpp).
+    paintMidiLearnOverlays(g);
+}
+
+// The pending-drop-target ring (a released cable would land on this knob) and the live Serum-style
+// modulation rings, both driven by ModuleBase::getModulationTargets(). `mod`/`jackAccentColour` are
+// paint()'s own locals, computed once there. Split out of paint() (which was at the function-size
+// ratchet's ceiling) rather than grown further.
+void ModuleComponent::paintModulationRings(juce::Graphics& g, ModuleBase* mod, juce::Colour jackAccentColour) {
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+
     if (mod != nullptr && modDropTargetChannel >= 0) {
         for (const auto& t : mod->getModulationTargets()) {
             if (t.channelIndex != modDropTargetChannel)
@@ -242,48 +254,49 @@ void ModuleComponent::paint(juce::Graphics& g) {
         }
     }
 
-    // Serum-style modulation rings on knobs
-    if (mod != nullptr) {
-        auto targets = mod->getModulationTargets();
-        const auto& modInfo = owner.getCachedModDisplayInfo();
+    if (mod == nullptr)
+        return;
 
-        for (const auto& info : modInfo) {
-            if (info.destNodeID != nodeId || info.isBypassed)
-                continue;
+    auto targets = mod->getModulationTargets();
+    const auto& modInfo = owner.getCachedModDisplayInfo();
 
-            juce::String targetParamName;
-            for (const auto& t : targets) {
-                if (t.channelIndex == info.destChannelIndex) {
-                    targetParamName = t.name;
-                    break;
-                }
-            }
-            if (targetParamName.isEmpty())
-                continue;
+    for (const auto& info : modInfo) {
+        if (info.destNodeID != nodeId || info.isBypassed)
+            continue;
 
-            const int si = getModRingSliderIndex(targetParamName);
-            if (si >= 0) {
-                auto sliderBounds = sliders[si]->getBounds().toFloat();
-                float cx = sliderBounds.getCentreX();
-                float cy = sliderBounds.getCentreY() - 10.0f;
-                float radius = std::min(sliderBounds.getWidth(), sliderBounds.getHeight()) / 2.0f - 11.0f;
-
-                float baseNorm = 0.5f;
-                for (auto* param : module->getParameters()) {
-                    if (param->getName(100) == targetParamName) {
-                        baseNorm = param->getValue();
-                        break;
-                    }
-                }
-
-                float modNorm = juce::jlimit(0.0f, 1.0f, baseNorm + info.modSignalValue);
-
-                // Serum-style mod ring now drawn by the themed LnF (270° sweep + theme tokens).
-                // Guarded: headless tests without our LnF simply skip the ring.
-                if (lf != nullptr)
-                    lf->drawModulationRing(g, {cx, cy}, radius, baseNorm, modNorm, info.modSignalValue >= 0.0f);
+        juce::String targetParamName;
+        for (const auto& t : targets) {
+            if (t.channelIndex == info.destChannelIndex) {
+                targetParamName = t.name;
+                break;
             }
         }
+        if (targetParamName.isEmpty())
+            continue;
+
+        const int si = getModRingSliderIndex(targetParamName);
+        if (si < 0)
+            continue;
+
+        auto sliderBounds = sliders[si]->getBounds().toFloat();
+        float cx = sliderBounds.getCentreX();
+        float cy = sliderBounds.getCentreY() - 10.0f;
+        float radius = std::min(sliderBounds.getWidth(), sliderBounds.getHeight()) / 2.0f - 11.0f;
+
+        float baseNorm = 0.5f;
+        for (auto* param : module->getParameters()) {
+            if (param->getName(100) == targetParamName) {
+                baseNorm = param->getValue();
+                break;
+            }
+        }
+
+        float modNorm = juce::jlimit(0.0f, 1.0f, baseNorm + info.modSignalValue);
+
+        // Serum-style mod ring drawn by the themed LnF (270 degree sweep + theme tokens). Guarded:
+        // headless tests without our LnF simply skip the ring.
+        if (lf != nullptr)
+            lf->drawModulationRing(g, {cx, cy}, radius, baseNorm, modNorm, info.modSignalValue >= 0.0f);
     }
 }
 

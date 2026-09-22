@@ -262,7 +262,9 @@ on a *button-like* target (bool param, action) prefers note-on / CC 0-or-127 pat
 after the device, and if the message key is not a known control on that profile, a control is
 **added** (kind guessed: CC → knob, note → button; encoding absolute-7; layout: next free grid
 cell; name "CC 21" / "Note C3"). The user renames and retypes later in the panel, or never.
-This is what makes goal 2 true.
+This is what makes goal 2 true. Implemented in `Source/MidiRemote/MidiRemoteLearnBinder.h`
+(the pure bind-the-result function) and `Source/MidiRemote/MidiLearnController.h` (the app-layer
+arm/cancel/undo glue a module-card right-click drives, docs/control/midi-remote-ui.md#right-click-midi-learn--coverage).
 
 *Cancel:* Esc, clicking anywhere, or 10 s without an eligible message. Only one learn can be
 armed at a time; arming another replaces it.

@@ -11,7 +11,7 @@
 2 Source/AI/AccountService.h
 30 Source/AI/PatchDiff.h
 25 Source/AI/RemoteProvider.h
-141 Source/AppUndoManager.h
+132 Source/AppUndoManager.h
 132 Source/AudioEngine/AudioEngine.h
 50 Source/MacroSet.h
 103 Source/Mixer/ChannelFlows/ChannelFlows.h
@@ -38,8 +38,8 @@
 27 Source/Transport/OfflineTransportDriver.h
 1 Source/Transport/TransportService.h
 62 Source/UI/Assistant/AIChatComponent/AIChatComponent.h
-41 Source/UI/Chrome/StatusBarComponent.h
-57 Source/UI/Graph/ModuleComponent/ModuleComponent.h
+40 Source/UI/Chrome/StatusBarComponent.h
+48 Source/UI/Graph/ModuleComponent/ModuleComponent.h
 1 Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.h
 125 Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h
 70 Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h

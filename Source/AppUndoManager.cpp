@@ -637,13 +637,17 @@ bool AppUndoManager::recordTimelineChange(synth::TimelineDoc& doc, const std::fu
     return true;
 }
 
+// No-op check: if beforeJson/afterJson serialise identically, nothing is pushed -- a no-op edit
+// must not create an undo step. Lifetime note: exactly like TimelineSnapshotAction, the pushed
+// MidiRemoteSnapshotAction holds a reference to `doc` for as long as it sits on the undo stack --
+// `doc` must outlive this AppUndoManager, or clearUndoHistory() must run before it is destroyed.
 bool AppUndoManager::recordMidiRemoteChange(synth::MidiRemoteProjectDoc& doc, const juce::var& beforeJson,
-                                            const juce::var& afterJson) {
+                                            const juce::var& afterJson, std::function<void()> postRestore) {
     if (juce::JSON::toString(beforeJson) == juce::JSON::toString(afterJson))
         return false; // no-op edit: don't create an undo step
 
     undoManager.beginNewTransaction();
-    performAction(new MidiRemoteSnapshotAction(doc, beforeJson, afterJson));
+    performAction(new MidiRemoteSnapshotAction(doc, beforeJson, afterJson, std::move(postRestore)));
     return true;
 }
 

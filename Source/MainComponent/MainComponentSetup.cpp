@@ -5,7 +5,6 @@
 // in MainComponent.cpp for the ordered call sequence these steps implement.
 #include "AI/AIProviderRegistry.h"
 #include "MainComponent.h"
-#include "MidiRemote/ControllerProfileStore.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ShortcutManager/AppCommands.h"
 #include "UI/Mixer/MixerPanelComponent/MixerFocusRegion.h"
@@ -236,6 +235,17 @@ void MainComponent::wireGraphEditorCallbacks() {
             if (auto* hostedPlugin = dynamic_cast<synth::HostedPluginModule*>(node->getProcessor()))
                 pluginWindowManager.openEditorFor(hostedPlugin, nodeId);
     };
+    // Module-card right-click MIDI Learn (FRO130) -- all three forward to the one collaborator
+    // that owns RemoteEngine/midiRemoteDoc access; see MidiLearnController.h.
+    graphEditor.onQueryMidiMappingsForNode = [this](juce::AudioProcessorGraph::NodeID nodeId) {
+        return midiLearnController_.queryMappings(nodeId);
+    };
+    graphEditor.onMidiLearnRequested = [this](juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
+        midiLearnController_.arm(nodeId, paramId);
+    };
+    graphEditor.onMidiForgetRequested = [this](juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
+        midiLearnController_.forget(nodeId, paramId);
+    };
     graphEditor.snippetProvider = [this](const juce::String& name) -> juce::var {
         return synth::SnippetManager::loadSnippet(
             synth::SnippetManager::fileForName(synth::SnippetManager::getDefaultSnippetsDirectory(), name));
@@ -348,14 +358,15 @@ void MainComponent::wireMidiRemoteEngine() {
         return automationRecorder.getAudioState().claims.isClaimed(param);
     });
 
-    synth::ControllerProfileStore profileStore;
-    const auto loaded = profileStore.loadAll();
-    remoteEngine.setProfiles(loaded.profiles);
+    // Profiles are loaded once by MidiLearnController's own construction (a member declared right
+    // after remoteEngine, so it is already alive here) -- this just republishes that same load.
+    const auto& profiles = midiLearnController_.getProfiles();
+    remoteEngine.setProfiles(profiles);
     remoteEngine.setAssignments(midiRemoteDoc.assignments);
 
     std::vector<juce::String> deviceNames;
-    deviceNames.reserve(loaded.profiles.size());
-    for (const auto& profile : loaded.profiles)
+    deviceNames.reserve(profiles.size());
+    for (const auto& profile : profiles)
         deviceNames.push_back(profile.input.name);
     audioEngine.openMidiDevicesForRemote(deviceNames); // no-op in Hosted mode
 

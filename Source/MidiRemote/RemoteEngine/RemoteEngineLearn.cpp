@@ -14,6 +14,7 @@ namespace synth::midi {
 void RemoteEngine::armLearn(const LearnRequest& request) {
     learnRequest_ = request;
     learnTallies_.clear();
+    learnHasFirstEvent_ = false;
     learnFirstEventMs_ = 0.0;
     learnArmedMs_ = clock_();
 
@@ -33,8 +34,10 @@ void RemoteEngine::noteLearnCandidate(const juce::String& sourceKey, const Remot
     if (!isLearnArmed())
         return;
 
-    if (learnFirstEventMs_ == 0.0)
+    if (!learnHasFirstEvent_) {
+        learnHasFirstEvent_ = true;
         learnFirstEventMs_ = clock_();
+    }
 
     MessageSpec spec;
     spec.type = static_cast<MessageType>(event.specType);
@@ -45,7 +48,7 @@ void RemoteEngine::noteLearnCandidate(const juce::String& sourceKey, const Remot
         return tally.sourceKey == sourceKey && tally.spec == spec;
     });
     if (found == learnTallies_.end()) {
-        learnTallies_.push_back(LearnTally{sourceKey, spec, 0, false, 1.0f, 0.0f});
+        learnTallies_.push_back(LearnTally{sourceKey, spec, 0, false, 1.0f, 0.0f, false});
         found = std::prev(learnTallies_.end());
     }
 
@@ -54,9 +57,22 @@ void RemoteEngine::noteLearnCandidate(const juce::String& sourceKey, const Remot
     if (event.value == 0.0f && found->maxValue > 0.0f)
         found->sawRelease = true;
 
+    // CC only: rawNormalisedValue() is rawValue/127.0f exactly, so a genuine 0 or 127 raw value
+    // round-trips to exactly 0.0f/1.0f in IEEE-754 float division -- anything else is a real
+    // intermediate value, i.e. a sweep rather than a button tap (FRO130's buttonLike preference
+    // below).
+    if (spec.type == MessageType::cc && event.value != 0.0f && event.value != 1.0f)
+        found->sawIntermediateValue = true;
+
     ++found->count;
     found->minValue = juce::jmin(found->minValue, event.value);
     found->maxValue = juce::jmax(found->maxValue, event.value);
+}
+
+bool RemoteEngine::looksButtonLike(const LearnTally& tally) noexcept {
+    if (tally.spec.type == MessageType::note)
+        return true;
+    return tally.spec.type == MessageType::cc && !tally.sawIntermediateValue;
 }
 
 void RemoteEngine::settleLearnIfDue() {
@@ -65,7 +81,7 @@ void RemoteEngine::settleLearnIfDue() {
 
     const double now = clock_();
 
-    if (learnFirstEventMs_ == 0.0) {
+    if (!learnHasFirstEvent_) {
         if (now - learnArmedMs_ >= kLearnTimeoutMs)
             cancelLearn();
         return;
@@ -75,11 +91,22 @@ void RemoteEngine::settleLearnIfDue() {
         return;
 
     // The tally with the highest count wins; ties keep the first seen (strict '>' never replaces
-    // an equal count).
+    // an equal count). A button-like learn (bool param / action) prefers a button-shaped tally
+    // over a higher-count sweep that arrived in the same settle window -- e.g. a knob wobbled
+    // while reaching for the intended pad (docs/control/midi-remote.md#learn-what-does-the-first-message-mean)
+    // -- but only among tallies that actually look like a button; falls through to the plain
+    // highest-count rule when none do.
     const LearnTally* best = nullptr;
-    for (const auto& tally : learnTallies_)
-        if (best == nullptr || tally.count > best->count)
-            best = &tally;
+    if (learnRequest_.buttonLike) {
+        for (const auto& tally : learnTallies_)
+            if (looksButtonLike(tally) && (best == nullptr || tally.count > best->count))
+                best = &tally;
+    }
+    if (best == nullptr) {
+        for (const auto& tally : learnTallies_)
+            if (best == nullptr || tally.count > best->count)
+                best = &tally;
+    }
 
     LearnResult result;
     const bool haveResult = best != nullptr;
