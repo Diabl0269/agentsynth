@@ -81,6 +81,10 @@ struct RemoteMappingSnapshot {
         // dereferences these — it only reports the slot index.
         juce::AudioProcessorParameter* param = nullptr;
         juce::CommandID commandId = 0;
+        // FRO253: the resolved graph node for a nodeCommand target (Target::isNodeCommand()) --
+        // resolved by nodeUuid alongside `param` above, on the message thread, in
+        // RemoteEngineReconcile.cpp.
+        juce::AudioProcessorGraph::NodeID nodeId;
         bool orphaned = false;
     };
 

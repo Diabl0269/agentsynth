@@ -22,9 +22,8 @@
 // MIDI driver thread and the hosted pre-render sink loop, FRO197) -- so once it returns, no reader
 // can run again, which is what makes SnapshotPublisher's destructor safe.
 //
-// NOT YET REACHABLE BY A USER: nothing in the shipped UI can create an assignment until the
-// right-click MIDI Learn ticket lands. The engine is wired end to end and covered by tests that
-// drive AudioEngine::handleIncomingMidiMessage for real.
+// Reachable end to end from the shipped UI via right-click MIDI Learn (FRO130/FRO133/FRO253) on a
+// module-card parameter, a transport-bar action, or a mixer column's Solo node command.
 
 #include "MidiRemote/RemoteEngine/RemoteEvent.h"
 #include "MidiRemote/RemoteEngine/RemoteMappingSnapshot.h"
@@ -65,6 +64,11 @@ public:
     virtual ~RemoteActionInvoker() = default;
     /** MESSAGE THREAD. Invoke synchronously, as a menu item or a keypress would. */
     virtual void invokeRemoteCommand(juce::CommandID commandId) = 0;
+    /** MESSAGE THREAD. FRO253: perform `command` on `nodeId`, exactly as a mouse click on the
+     *  mixer column's own control would (undo bracket included) -- the ONE seam a nodeCommand
+     *  target reaches the app layer through, since Core knows neither ChannelStripModule nor
+     *  AudioEngine::setChannelStripSoloed. */
+    virtual void invokeNodeCommand(juce::AudioProcessorGraph::NodeID nodeId, NodeCommandKind command) = 0;
 };
 
 /** Resolves a ShortcutManager action id to its juce::CommandID. Injected for the same reason. */
@@ -176,6 +180,7 @@ private:
     void applyEvent(const RemoteMappingSnapshot& snapshot, const RemoteEvent& event);
     void applyToParameter(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event);
     void applyToAction(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event);
+    void applyToNodeCommand(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event);
     void expireIdleGestures();
     void endAllGestures();
 

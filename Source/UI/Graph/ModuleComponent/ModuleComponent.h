@@ -295,6 +295,9 @@ public:
         return false;
     }
 
+    // FRO256: test seam for the armed breathing outline's per-tick repaint -- see timerCallback().
+    int getMidiLearnArmedRepaintCountForTest() const noexcept { return midiLearnArmedRepaintCount_; }
+
 private:
     // Non-owning: the juce::Component base owns this via setCachedComponentImage(). See
     // ZoomFrozenCachedImage.h — installed instead of setBufferedToImage(true) so a canvas zoom
@@ -360,6 +363,8 @@ private:
     MidiLearnableRegistry midiLearnableRegistry_;
     juce::String midiLearnArmedParamId_; // the control that should breathe, while armed
     double midiLearnArmedSinceMs_ = 0.0;
+    // FRO256: backs getMidiLearnArmedRepaintCountForTest() -- test-only, never read in production.
+    int midiLearnArmedRepaintCount_ = 0;
 
     // Attachments need to be kept alive.
     // We are using raw pointers for parameters currently.

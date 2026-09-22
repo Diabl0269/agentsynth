@@ -17,8 +17,16 @@ namespace synth::midi {
 namespace {
 
 using ProcessorByUuid = std::map<juce::String, juce::AudioProcessor*>;
-// assignmentId -> (previously resolved live parameter, previously resolved orphaned flag).
-using PreviousResolution = std::map<juce::String, std::pair<juce::AudioProcessorParameter*, bool>>;
+using NodeIdByUuid = std::map<juce::String, juce::AudioProcessorGraph::NodeID>;
+// assignmentId -> the last real reconcile's resolution, for a parameter OR a nodeCommand target
+// (a setter's graph==nullptr rebuild keeps whichever of the two applies -- see resolveParameterTarget
+// / resolveNodeCommandTarget below).
+struct PreviousResolutionEntry {
+    juce::AudioProcessorParameter* param = nullptr;
+    juce::AudioProcessorGraph::NodeID nodeId;
+    bool orphaned = false;
+};
+using PreviousResolution = std::map<juce::String, PreviousResolutionEntry>;
 
 // Same uuid -> processor lookup TimelineReconciler::reconcile uses (Source/Timeline/
 // TimelineReconciler.cpp): read once per rebuild, never cached across calls.
@@ -36,12 +44,28 @@ ProcessorByUuid buildProcessorByUuid(juce::AudioProcessorGraph* graph) {
     return result;
 }
 
+// FRO253: uuid -> NodeID, alongside buildProcessorByUuid above -- a nodeCommand target resolves to
+// the node itself (there is no processor-level lookup for it, unlike resolveLaneParameter).
+NodeIdByUuid buildNodeIdByUuid(juce::AudioProcessorGraph* graph) {
+    NodeIdByUuid result;
+    if (graph == nullptr)
+        return result;
+    for (auto* node : graph->getNodes()) {
+        if (node == nullptr)
+            continue;
+        const juce::String uuid = node->properties["uuid"].toString();
+        if (uuid.isNotEmpty())
+            result.emplace(uuid, node->nodeID);
+    }
+    return result;
+}
+
 PreviousResolution buildPreviousResolution(const RemoteMappingSnapshot* previous) {
     PreviousResolution result;
     if (previous == nullptr)
         return result;
     for (const auto& slot : previous->slots)
-        result.emplace(slot.assignmentId, std::make_pair(slot.param, slot.orphaned));
+        result.emplace(slot.assignmentId, PreviousResolutionEntry{slot.param, slot.nodeId, slot.orphaned});
     return result;
 }
 
@@ -95,8 +119,37 @@ void resolveParameterTarget(const Assignment& assignment, juce::AudioProcessorGr
     // assignment id; a brand new assignment simply stays unresolved until the next real reconcile.
     const auto found = previousResolution.find(assignment.id);
     if (found != previousResolution.end()) {
-        slot.param = found->second.first;
-        slot.orphaned = found->second.second;
+        slot.param = found->second.param;
+        slot.orphaned = found->second.orphaned;
+    }
+}
+
+// FRO253 (docs/control/midi-remote.md#node-command-targets): mirrors resolveParameterTarget above,
+// but resolves to a NodeID rather than a juce::AudioProcessorParameter* -- a node command has no
+// parameter to point at (ChannelStripModule::soloed_ is engine state, not a
+// juce::RangedAudioParameter). Missing from `nodeIdByUuid` means orphaned, same as an unresolved
+// parameter.
+void resolveNodeCommandTarget(const Assignment& assignment, juce::AudioProcessorGraph* graph,
+                              const NodeIdByUuid& nodeIdByUuid, const PreviousResolution& previousResolution,
+                              RemoteMappingSnapshot::Slot& slot) {
+    if (graph != nullptr) {
+        const auto found = nodeIdByUuid.find(assignment.target.nodeCommand.nodeUuid);
+        if (found != nodeIdByUuid.end()) {
+            slot.nodeId = found->second;
+            slot.orphaned = false;
+        } else {
+            slot.nodeId = {};
+            slot.orphaned = true;
+        }
+        return;
+    }
+
+    // A setter, not a graph change: same "keep the last real reconcile's resolution" rule as
+    // resolveParameterTarget.
+    const auto found = previousResolution.find(assignment.id);
+    if (found != previousResolution.end()) {
+        slot.nodeId = found->second.nodeId;
+        slot.orphaned = found->second.orphaned;
     }
 }
 
@@ -110,12 +163,12 @@ void addLookupEntry(const std::vector<ControllerProfile>& profiles,
     pending.emplace_back(key, slotIndex);
 }
 
-// One parameter- or action-target assignment -> one Slot, appended to `fresh`, plus its pending
-// lookup-table entry (if its profile's device is currently open).
+// One parameter-, action- or nodeCommand-target assignment -> one Slot, appended to `fresh`, plus
+// its pending lookup-table entry (if its profile's device is currently open).
 void addSlot(const Assignment& assignment, juce::AudioProcessorGraph* graph, const ProcessorByUuid& processorByUuid,
-             const PreviousResolution& previousResolution, const std::vector<ControllerProfile>& profiles,
-             const ActionCommandLookup& actionLookup, RemoteMappingSnapshot& fresh,
-             std::vector<std::pair<std::uint32_t, std::int32_t>>& lookupPending) {
+             const NodeIdByUuid& nodeIdByUuid, const PreviousResolution& previousResolution,
+             const std::vector<ControllerProfile>& profiles, const ActionCommandLookup& actionLookup,
+             RemoteMappingSnapshot& fresh, std::vector<std::pair<std::uint32_t, std::int32_t>>& lookupPending) {
     if (!assignment.enabled)
         return;
 
@@ -132,11 +185,13 @@ void addSlot(const Assignment& assignment, juce::AudioProcessorGraph* graph, con
         resolveParameterTarget(assignment, graph, processorByUuid, previousResolution, slot);
     else if (assignment.target.isAction() && actionLookup)
         slot.commandId = actionLookup(assignment.target.action.actionId);
+    else if (assignment.target.isNodeCommand())
+        resolveNodeCommandTarget(assignment, graph, nodeIdByUuid, previousResolution, slot);
 
     const Control* control = findControl(profiles, assignment.control.profileId, assignment.control.controlId);
     const bool controlIsButtonLike =
         control != nullptr && (control->kind == ControlKind::button || control->kind == ControlKind::pad);
-    slot.buttonLike = assignment.target.isAction() || controlIsButtonLike ||
+    slot.buttonLike = assignment.target.isAction() || assignment.target.isNodeCommand() || controlIsButtonLike ||
                       dynamic_cast<juce::AudioParameterBool*>(slot.param) != nullptr;
 
     const int slotIndex = static_cast<int>(fresh.slots.size());
@@ -150,6 +205,7 @@ void RemoteEngine::reconcile(juce::AudioProcessorGraph& graph) { rebuildAndPubli
 
 void RemoteEngine::rebuildAndPublish(juce::AudioProcessorGraph* graph) {
     const ProcessorByUuid processorByUuid = buildProcessorByUuid(graph);
+    const NodeIdByUuid nodeIdByUuid = buildNodeIdByUuid(graph);
     const PreviousResolution previousResolution = buildPreviousResolution(publisher_.live());
 
     auto fresh = std::make_unique<RemoteMappingSnapshot>();
@@ -174,12 +230,12 @@ void RemoteEngine::rebuildAndPublish(juce::AudioProcessorGraph* graph) {
     std::vector<std::pair<std::uint32_t, std::int32_t>> lookupPending;
 
     for (const auto& assignment : assignments_)
-        addSlot(assignment, graph, processorByUuid, previousResolution, profiles_, actionLookup_, *fresh,
+        addSlot(assignment, graph, processorByUuid, nodeIdByUuid, previousResolution, profiles_, actionLookup_, *fresh,
                 lookupPending);
     for (const auto& profile : profiles_)
         for (const auto& assignment : profile.actions)
-            addSlot(assignment, graph, processorByUuid, previousResolution, profiles_, actionLookup_, *fresh,
-                    lookupPending);
+            addSlot(assignment, graph, processorByUuid, nodeIdByUuid, previousResolution, profiles_, actionLookup_,
+                    *fresh, lookupPending);
 
     // Sorted lookup table, first-inserted wins on a duplicate key (stable_sort keeps ties in
     // insertion order).

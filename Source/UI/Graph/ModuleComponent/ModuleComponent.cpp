@@ -532,12 +532,19 @@ void ModuleComponent::timerCallback() {
     // FRO130: MIDI-mapped badges (ONE query per module, repainting only on an actual change --
     // see refreshMidiLearnBadges' own comment) and, while a control on THIS card is armed, its
     // breathing outline -- confined to that control's own bounds, never the whole card, and
-    // bounded overall by RemoteEngine's 10 s learn timeout, not by this tick.
+    // bounded overall by RemoteEngine's 10 s learn timeout, not by this tick. FRO256: this repaint
+    // is what makes the outline's alpha (computed from wall time on every paint(), see
+    // synth::ui::midilearn::paintMidiLearnArmedOutline) actually animate -- MixerColumnComponent/
+    // MixerMasterColumn/TimelineTransportBar turned out to have NO equivalent repaint at all, which
+    // froze their own outlines at whatever alpha their first paint happened to land on;
+    // midiLearnArmedRepaintCount_ (getMidiLearnArmedRepaintCountForTest()) proves this one already
+    // fires on every tick, the same way those three surfaces' own new counters prove their fix.
     refreshMidiLearnBadges();
     if (midiLearnArmedParamId_.isNotEmpty()) {
         for (const auto& e : midiLearnableRegistry_.entries()) {
             if (e.param != nullptr && e.param->paramID == midiLearnArmedParamId_) {
                 repaint(e.component->getBounds().expanded(2));
+                ++midiLearnArmedRepaintCount_;
                 break;
             }
         }

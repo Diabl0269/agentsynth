@@ -64,6 +64,23 @@ Assignment makeParamAssignment(const juce::String& id, const juce::String& contr
     return a;
 }
 
+// FRO253 (docs/control/midi-remote.md#node-command-targets).
+Assignment makeNodeCommandAssignment(const juce::String& id, const juce::String& controlId, MessageType type,
+                                     int channel, int number, Encoding encoding, const juce::String& nodeUuid) {
+    Assignment a;
+    a.id = id;
+    a.control.profileId = "profile";
+    a.control.controlId = controlId;
+    a.spec.type = type;
+    a.spec.channel = channel;
+    a.spec.number = number;
+    a.specEncoding = encoding;
+    a.target.kind = Target::Kind::nodeCommand;
+    a.target.nodeCommand.nodeUuid = nodeUuid;
+    a.target.nodeCommand.command = NodeCommandKind::toggleSolo;
+    return a;
+}
+
 // Mirrors ModuleBase::setNodeUuid + node->properties.set("uuid", ...), exactly as
 // RemoteEngineReconcile.cpp's buildProcessorByUuid expects (it reads node->properties["uuid"]).
 void setUuid(juce::AudioProcessorGraph::Node& node, const juce::String& uuid) {
@@ -254,4 +271,67 @@ TEST(MidiRemoteEngineReconcileTest, DuplicateMessageKeyLeavesTheSecondControlIne
 
     EXPECT_NEAR(cutoff->getValue(), 0.0f, 1e-5f) << "the first-inserted control wins the lookup slot";
     EXPECT_NEAR(resonance->getValue(), 0.5f, 1e-6f) << "the second, colliding control must stay completely inert";
+}
+
+// ============================================================================
+// FRO253: node command targets resolve to a NodeID, orphan/rebind exactly like a parameter target
+// ============================================================================
+
+TEST(MidiRemoteEngineReconcileTest, NodeCommandResolvesTheNodeIdForAnExistingUuid) {
+    juce::AudioProcessorGraph graph;
+    auto node = graph.addNode(std::make_unique<FilterModule>());
+    setUuid(*node, kNodeUuid);
+
+    RemoteEngine engine;
+    engine.setProfiles({makeProfile({makeControl("c", MessageType::cc, 1, 10, Encoding::abs7)})});
+    engine.setSources({juce::String(kSource)});
+    engine.setAssignments({makeNodeCommandAssignment("a1", "c", MessageType::cc, 1, 10, Encoding::abs7, kNodeUuid)});
+    engine.reconcile(graph);
+
+    const auto* slot = findSlotByAssignmentId(engine, "a1");
+    ASSERT_NE(slot, nullptr);
+    EXPECT_FALSE(slot->orphaned);
+    EXPECT_EQ(slot->nodeId, node->nodeID);
+    EXPECT_TRUE(slot->buttonLike)
+        << "every node command is button-like (docs/control/midi-remote.md#node-command-targets)";
+}
+
+TEST(MidiRemoteEngineReconcileTest, NodeCommandOrphansForAMissingUuid) {
+    juce::AudioProcessorGraph graph; // no node with this uuid at all
+
+    RemoteEngine engine;
+    engine.setProfiles({makeProfile({makeControl("c", MessageType::cc, 1, 10, Encoding::abs7)})});
+    engine.setSources({juce::String(kSource)});
+    engine.setAssignments(
+        {makeNodeCommandAssignment("a1", "c", MessageType::cc, 1, 10, Encoding::abs7, "no-such-node-uuid")});
+    engine.reconcile(graph);
+
+    const auto* slot = findSlotByAssignmentId(engine, "a1");
+    ASSERT_NE(slot, nullptr);
+    EXPECT_TRUE(slot->orphaned);
+    EXPECT_EQ(slot->nodeId, juce::AudioProcessorGraph::NodeID{});
+}
+
+TEST(MidiRemoteEngineReconcileTest, NodeCommandSetterAloneKeepsThePreviousResolution) {
+    juce::AudioProcessorGraph graph;
+    auto node = graph.addNode(std::make_unique<FilterModule>());
+    setUuid(*node, kNodeUuid);
+
+    RemoteEngine engine;
+    const Assignment a1 = makeNodeCommandAssignment("a1", "c", MessageType::cc, 1, 10, Encoding::abs7, kNodeUuid);
+    engine.setProfiles({makeProfile({makeControl("c", MessageType::cc, 1, 10, Encoding::abs7)})});
+    engine.setSources({juce::String(kSource)});
+    engine.setAssignments({a1});
+    engine.reconcile(graph);
+    ASSERT_FALSE(findSlotByAssignmentId(engine, "a1")->orphaned);
+    ASSERT_EQ(findSlotByAssignmentId(engine, "a1")->nodeId, node->nodeID);
+
+    // setAssignments with graph == nullptr must NOT re-resolve -- same "a setter is not a graph
+    // change" rule resolveParameterTarget's own setter branch follows.
+    engine.setAssignments({a1});
+
+    const auto* stillResolved = findSlotByAssignmentId(engine, "a1");
+    ASSERT_NE(stillResolved, nullptr);
+    EXPECT_FALSE(stillResolved->orphaned);
+    EXPECT_EQ(stillResolved->nodeId, node->nodeID);
 }

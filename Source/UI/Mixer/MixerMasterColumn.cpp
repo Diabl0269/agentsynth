@@ -123,6 +123,9 @@ void MixerMasterColumn::refreshMeter(float elapsedSeconds) {
     meter_.refresh(elapsedSeconds);
     meterReadout_.updatePeak(std::max(meter_.getDisplayedDbForTest(0), meter_.getDisplayedDbForTest(1)));
     refreshMidiLearnBadges();
+    // FRO256: same tick also keeps the armed breathing outline animating -- see
+    // repaintArmedMidiLearnOutline()'s own comment.
+    repaintArmedMidiLearnOutline();
 }
 
 // ============================================================================
@@ -199,9 +202,28 @@ void MixerMasterColumn::refreshMidiLearnBadges() {
     repaint();
 }
 
+// FRO256: called from refreshMeter()'s existing 10 Hz tick -- see
+// MixerColumnComponent::repaintArmedMidiLearnOutline's own comment for why this needs to exist at
+// all (paintMidiLearnArmedOutline() recomputes alpha from wall time on every paint(), so nothing
+// visibly breathes unless something keeps asking for a repaint while armed).
+void MixerMasterColumn::repaintArmedMidiLearnOutline() {
+    if (midiLearnArmedParamId_.isEmpty() || midiLearnableFaderParam_ == nullptr ||
+        midiLearnableFaderParam_->paramID != midiLearnArmedParamId_)
+        return;
+    repaint(getLocalArea(&fader_.getSlider(), fader_.getSlider().getLocalBounds()).expanded(2));
+    ++midiLearnArmedRepaintCount_;
+}
+
 void MixerMasterColumn::paintMidiLearnOverlays(juce::Graphics& g) {
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const auto bounds = getLocalArea(fader_.getSlider().getParentComponent(), fader_.getSlider().getLocalBounds());
+    // FRO256: the slider is nested inside fader_ (a MixerFader, itself a direct child of this
+    // column), so its bounds must be walked up TWO levels into this column's own coordinate frame
+    // -- getLocalArea(&slider, slider's own local bounds) does that regardless of depth; the
+    // pre-fix code passed the slider's PARENT as the source but the slider's own local bounds
+    // (0,0,w,h) as the area, mixing two different coordinate frames and landing the badge/outline
+    // at this column's own top-left corner instead of on the fader (see MixerColumnMidiLearn.cpp's
+    // matching fix for the same mistake).
+    const auto bounds = getLocalArea(&fader_.getSlider(), fader_.getSlider().getLocalBounds());
 
     if (midiLearnBadgeMapped_) {
         const juce::Colour badgeColour = lf != nullptr ? lf->getTheme().colors.midiMapped : juce::Colour(0xffB48EF5);

@@ -5,8 +5,9 @@ doc is the **user-facing design**: what right-click MIDI Learn does on every sur
 MIDI Remote panel looks like and how each flow in it works, the settings, the plugin-build
 behaviour and the tests. Module-card MIDI Learn (the "Generic module card"/"Bespoke cards"/"Header
 buttons" rows below) shipped in FRO130; the mixer column, Master's fader and the transport bar
-(FRO133) ship here too. The MIDI Remote panel, the hosted-plugin row, mixer column Solo (see its
-row below), and "Edit MIDI assignment..." (FRO131) are still design-only/not yet learnable.
+(FRO133) ship here too, and the mixer column's Solo (FRO253, a [node command target](midi-remote.md#node-command-targets)
+rather than a parameter) ships here as well. The MIDI Remote panel, the hosted-plugin row, and
+"Edit MIDI assignment..." (FRO131) are still design-only/not yet learnable.
 
 ---
 
@@ -16,7 +17,7 @@ The requirement is *every* knob, slider and button on *any* module. The generic-
 choke point (`slider->addMouseListener(this)` in `ModuleComponent::createControls`) covers
 generic float/int sliders only, so coverage is an explicit list with one acceptance line each.
 A surface is "covered" when right-clicking its control shows the MIDI item block of [The learn interaction](#the-learn-interaction) and a
-Learn from there binds the right parameter.
+Learn from there binds the right parameter (or, for the mixer column's Solo, a [node command target](midi-remote.md#node-command-targets)).
 
 | Surface | Control(s) | Where the hook goes | Acceptance |
 |---|---|---|---|
@@ -27,7 +28,7 @@ Learn from there binds the right parameter.
 | Header buttons | Bypass, Mute, Dual I/O | same registry, via `RightClickSafeButton<juce::DrawableButton>` | **shipped**: right-click Bypass → Learn → pad toggles bypass |
 | Hosted plugin card | the chosen knobs (`plugin-card-layout.md`) | the card unit registers each knob with the hosted parameter's `(uuid, paramId, indexHint)` triple | Learn on a plugin knob binds through `resolveLaneParameter`'s hosted rules |
 | Mixer column | fader (`MixerFader`), pan, Mute, each send level (`MixerSendList`) | one `mouseDown` in `MixerColumnComponent` over its bound params (they are `ChannelStripModule` params, so ordinary parameter targets); `MixerSendList::onSendKnobBuilt` hands send-row knobs back for the SAME registry | **shipped**: right-click a fader → Learn → CC drives the strip's level |
-| Mixer column | Solo | not learnable in v1 — `ChannelStripModule::soloed_` is engine state (`std::atomic<bool>`), never a `juce::RangedAudioParameter` ([`Source/Modules/ChannelStripModule.h`](../../Source/Modules/ChannelStripModule.h), root `CLAUDE.md`'s solo invariant), so there is no parameter for a `Target::Parameter` to point at and no per-strip action id for a `Target::Action` either | tracked as a v1.x follow-up under this epic — needs `Target` to grow a third kind or per-node action ids before it can ship |
+| Mixer column | Solo | `MixerColumnComponent`'s registry gets an `isSolo` entry (no parameter — `ChannelStripModule::soloed_` is engine state, [`Source/Modules/ChannelStripModule.h`](../../Source/Modules/ChannelStripModule.h)); its menu/badge/armed outline route through `MixerPanelComponent::onSoloMidiLearnRequested`/`onSoloMidiForgetRequested`/`onQuerySoloMidiMapping` to `MidiLearnController::armNodeCommand`/`forgetNodeCommand`/`queryNodeCommandMappings` rather than `GraphEditor`'s parameter-keyed callbacks | **shipped**: right-click S → MIDI Learn 'Solo'... → press a pad/button → it toggles solo (one undo step per press); Forget MIDI clears it |
 | Master column | master level (fader only — Master has no pan/insert list, and no Mute learn in v1 either, just the fader) | `MixerMasterColumn` registers its own fader the same way, via a `GraphEditor&` threaded through `configure()` | **shipped**: right-click Master's fader → Learn → CC drives Master's level |
 | Direct column | none | `MixerDirectColumn` has no fader/pan/M-S of its own (just "Make channel") — nothing to register | — not applicable, not a gap |
 | Transport bar | Play/Stop, Record, Loop, Metronome (`TimelineTransportBar::GlyphButton`) | right-click shows Learn with an **action** target ([`midi-remote.md`](midi-remote.md#action-targets)); `GlyphButton` is right-click-safe the same way Mute/Bypass are, and `MidiLearnController::armAction()`/`forgetAction()` write the assignment into the learned device's `ControllerProfile.actions` (global, not the project doc — [`midi-remote.md`](midi-remote.md#undo)) | **shipped**: right-click Play → Learn → pad toggles playback; badge shows on the button |
@@ -64,8 +65,14 @@ no dead menu item in the shipped module-card menu today.
 
 1. **Armed.** The control's outline breathes: a thin 1px outline in the theme's accent colour on
    the control's bounds, its alpha easing between ~0.4 and 1.0, time-bounded to the 10 s
-   timeout, restarted by activity — never an unconditional repaint. This is explicitly not a
-   glow: Obsidian has glow 0, and this state must read the same in every theme. The status bar
+   timeout, restarted by activity — never an unconditional repaint. The alpha is recomputed from
+   wall time on every paint, but nothing repaints on its own, so each surface must actually ask
+   for one: every learnable surface repaints the armed control's own bounds from its EXISTING
+   gated per-surface tick while (and only while) something on it is armed — `ModuleComponent`'s
+   15 Hz `timerCallback`, `MixerColumnComponent`/`MixerMasterColumn`'s 10 Hz `refreshMeter`, and
+   `TimelineTransportBar`'s 10 Hz `updateFromTransport` (FRO256) — never a new timer or an
+   AnimationDriver entry. This is explicitly not a glow: Obsidian has glow 0, and this state must
+   read the same in every theme. The status bar
    (the existing `StatusBarComponent`, `Source/UI/Chrome/`) shows *"MIDI Learn: move a control on
    your controller for 'Cutoff' — Esc to cancel"*. If no controller profile exists yet and no
    MIDI input is open, the status line adds *"No MIDI device is enabled — open Settings →

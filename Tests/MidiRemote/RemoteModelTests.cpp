@@ -166,6 +166,55 @@ TEST(MidiRemoteModelTest, TargetWithNeitherParameterNorActionIsRejected) {
     EXPECT_FALSE(Target::fromVar(v, parsed));
 }
 
+// -- Target::NodeCommand (FRO253, docs/control/midi-remote.md#node-command-targets) -----------------
+
+TEST(MidiRemoteModelTest, TargetNodeCommandVariantRoundTrips) {
+    Target target;
+    target.kind = Target::Kind::nodeCommand;
+    target.nodeCommand.nodeUuid = "node-1";
+    target.nodeCommand.command = NodeCommandKind::toggleSolo;
+
+    Target parsed;
+    ASSERT_TRUE(Target::fromVar(target.toVar(), parsed));
+    EXPECT_TRUE(parsed.isNodeCommand());
+    EXPECT_FALSE(parsed.isParameter());
+    EXPECT_FALSE(parsed.isAction());
+    EXPECT_EQ(parsed.nodeCommand.nodeUuid, target.nodeCommand.nodeUuid);
+    EXPECT_EQ(parsed.nodeCommand.command, NodeCommandKind::toggleSolo);
+}
+
+TEST(MidiRemoteModelTest, TargetNodeCommandSerialisesAsToggleSoloString) {
+    Target target;
+    target.kind = Target::Kind::nodeCommand;
+    target.nodeCommand.nodeUuid = "node-1";
+    target.nodeCommand.command = NodeCommandKind::toggleSolo;
+
+    const auto v = target.toVar();
+    EXPECT_EQ(v.getDynamicObject()->getProperty("nodeCommand").getDynamicObject()->getProperty("command").toString(),
+              "toggleSolo");
+}
+
+TEST(MidiRemoteModelTest, TargetWithTwoOfThreeKindsIsRejected) {
+    juce::var v = juce::JSON::parse(R"({
+        "parameter": {"nodeUuid": "n1", "paramId": "p1", "paramIndexHint": -1},
+        "nodeCommand": {"nodeUuid": "n1", "command": "toggleSolo"}
+    })");
+    Target parsed;
+    EXPECT_FALSE(Target::fromVar(v, parsed));
+}
+
+TEST(MidiRemoteModelTest, TargetNodeCommandRejectsUnknownCommandString) {
+    juce::var v = juce::JSON::parse(R"({"nodeCommand": {"nodeUuid": "n1", "command": "toggleMute"}})");
+    Target parsed;
+    EXPECT_FALSE(Target::fromVar(v, parsed));
+}
+
+TEST(MidiRemoteModelTest, TargetNodeCommandRejectsEmptyNodeUuid) {
+    juce::var v = juce::JSON::parse(R"({"nodeCommand": {"nodeUuid": "", "command": "toggleSolo"}})");
+    Target parsed;
+    EXPECT_FALSE(Target::fromVar(v, parsed));
+}
+
 // -- Assignment -------------------------------------------------------------------------------------
 
 TEST(MidiRemoteModelTest, AssignmentRoundTrips) {
@@ -357,6 +406,25 @@ TEST(MidiRemoteModelTest, MidiRemoteProjectDocRoundTrips) {
     ASSERT_EQ(parsed.controllers.size(), 1u);
     EXPECT_EQ(parsed.controllers[0].profileId, ref.profileId);
     EXPECT_EQ(parsed.controllers[0].name, ref.name);
+}
+
+TEST(MidiRemoteModelTest, MidiRemoteProjectDocWithNodeCommandAssignmentRoundTrips) {
+    Assignment a = makeParameterAssignment("assign-solo");
+    a.target.kind = Target::Kind::nodeCommand;
+    a.target.parameter = {}; // FRO253: the previous kind's payload must not survive the switch
+    a.target.nodeCommand.nodeUuid = "strip-node-uuid";
+    a.target.nodeCommand.command = NodeCommandKind::toggleSolo;
+
+    MidiRemoteProjectDoc doc;
+    doc.version = 1;
+    doc.assignments.push_back(a);
+
+    MidiRemoteProjectDoc parsed;
+    ASSERT_TRUE(parsed.fromVar(doc.toVar()));
+    ASSERT_EQ(parsed.assignments.size(), 1u);
+    EXPECT_TRUE(parsed.assignments[0].target.isNodeCommand());
+    EXPECT_EQ(parsed.assignments[0].target.nodeCommand.nodeUuid, "strip-node-uuid");
+    EXPECT_EQ(parsed.assignments[0].target.nodeCommand.command, NodeCommandKind::toggleSolo);
 }
 
 TEST(MidiRemoteModelTest, MidiRemoteProjectDocEmptyDocRoundTrips) {

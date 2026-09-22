@@ -6,6 +6,7 @@
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "Branding.h"
+#include "MainComponentRemoteActionInvoker.h"
 #include "MidiRemote/MidiLearnController.h"
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
 #include "MidiRemote/RemoteModel.h"
@@ -83,9 +84,14 @@ public:
     // Delegating ctor for tests and legacy call sites that don't inject theme objects. Lazily owns
     // private default ThemeManager + AppLookAndFeel instances (ownedThemeManager/ownedLookAndFeel).
     explicit MainComponent(std::unique_ptr<synth::AIProvider> provider = nullptr,
-                           synth::AIProviderRegistry registry = synth::AIProviderRegistry::createDefault());
+                           synth::AIProviderRegistry registry = synth::AIProviderRegistry::createDefault(),
+                           synth::ControllerProfileStore profileStore = controllerProfileStoreForCtor());
 
     ~MainComponent() override;
+
+    static synth::ControllerProfileStore controllerProfileStoreForCtor(); // FRO193: real folder, or the test override
+    static void setControllerProfileTestDirectory(const juce::File& dir); // test-only; see .cpp
+    synth::midi::MidiLearnController& getMidiLearnControllerForTest() noexcept { return midiLearnController_; }
 
     void timerCallback() override;
 
@@ -877,14 +883,10 @@ private:
     ShortcutManager shortcutManager;
     juce::ApplicationCommandManager commandManager;
 
-    // FRO127: RemoteActionInvoker impl -- see wireMidiRemoteEngine()'s definition for the contract.
-    struct RemoteActionInvokerImpl : synth::midi::RemoteActionInvoker {
-        juce::ApplicationCommandManager& commandManager_;
-        explicit RemoteActionInvokerImpl(juce::ApplicationCommandManager& cm) noexcept;
-        void invokeRemoteCommand(juce::CommandID commandId) override;
-    };
+    // FRO127/FRO253: see MainComponentRemoteActionInvoker.h -- extracted to its own file rather
+    // than nested here (this header sits at the 1,000-line cap).
     synth::midi::RemoteEngine remoteEngine; // docs/control/midi-remote.md#the-engine; wired in wireMidiRemoteEngine()
-    RemoteActionInvokerImpl remoteActionInvoker_{commandManager};
+    MainComponentRemoteActionInvoker remoteActionInvoker_{commandManager, audioEngine, undoManager};
     // FRO130 (docs/control/midi-remote-ui.md#the-learn-interaction) -- declared last of its refs.
     synth::midi::MidiLearnController midiLearnController_{audioEngine,   graphEditor, remoteEngine,
                                                           midiRemoteDoc, undoManager, statusBar};

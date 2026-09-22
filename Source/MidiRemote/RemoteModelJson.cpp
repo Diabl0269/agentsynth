@@ -213,6 +213,22 @@ const char* toString(Takeover t) {
     return "default";
 }
 
+const char* toString(NodeCommandKind k) {
+    switch (k) {
+    case NodeCommandKind::toggleSolo:
+        return "toggleSolo";
+    }
+    return "toggleSolo";
+}
+
+bool nodeCommandKindFromString(const juce::String& s, NodeCommandKind& out) {
+    if (s == "toggleSolo") {
+        out = NodeCommandKind::toggleSolo;
+        return true;
+    }
+    return false;
+}
+
 bool takeoverFromString(const juce::String& s, Takeover& out) {
     if (s == "jump") {
         out = Takeover::jump;
@@ -370,10 +386,15 @@ juce::var Target::toVar() const {
         p->setProperty("paramId", parameter.paramId);
         p->setProperty("paramIndexHint", parameter.paramIndexHint);
         obj->setProperty("parameter", juce::var(p));
-    } else {
+    } else if (kind == Kind::action) {
         auto* a = new juce::DynamicObject();
         a->setProperty("actionId", action.actionId);
         obj->setProperty("action", juce::var(a));
+    } else {
+        auto* n = new juce::DynamicObject();
+        n->setProperty("nodeUuid", nodeCommand.nodeUuid);
+        n->setProperty("command", toString(nodeCommand.command));
+        obj->setProperty("nodeCommand", juce::var(n));
     }
     return juce::var(obj);
 }
@@ -385,8 +406,10 @@ bool Target::fromVar(const juce::var& v, Target& out) {
 
     const bool hasParameter = obj->hasProperty("parameter");
     const bool hasAction = obj->hasProperty("action");
-    // Reject BOTH present or NEITHER present — exactly one is a Target (docs/control/midi-remote.md#data-model).
-    if (hasParameter == hasAction)
+    const bool hasNodeCommand = obj->hasProperty("nodeCommand");
+    // Reject anything but EXACTLY ONE of the three present (docs/control/midi-remote.md#data-model).
+    const int presentCount = (hasParameter ? 1 : 0) + (hasAction ? 1 : 0) + (hasNodeCommand ? 1 : 0);
+    if (presentCount != 1)
         return false;
 
     Target parsed;
@@ -405,7 +428,7 @@ bool Target::fromVar(const juce::var& v, Target& out) {
 
         parsed.kind = Target::Kind::parameter;
         parsed.parameter = param;
-    } else {
+    } else if (hasAction) {
         auto* a = obj->getProperty("action").getDynamicObject();
         if (a == nullptr)
             return false;
@@ -416,6 +439,20 @@ bool Target::fromVar(const juce::var& v, Target& out) {
 
         parsed.kind = Target::Kind::action;
         parsed.action = act;
+    } else {
+        auto* n = obj->getProperty("nodeCommand").getDynamicObject();
+        if (n == nullptr)
+            return false;
+
+        Target::NodeCommand cmd;
+        if (!readString(n->getProperty("nodeUuid"), cmd.nodeUuid) || cmd.nodeUuid.isEmpty())
+            return false;
+        juce::String commandStr;
+        if (!readString(n->getProperty("command"), commandStr) || !nodeCommandKindFromString(commandStr, cmd.command))
+            return false;
+
+        parsed.kind = Target::Kind::nodeCommand;
+        parsed.nodeCommand = cmd;
     }
 
     out = parsed;

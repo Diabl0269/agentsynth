@@ -79,7 +79,12 @@ ControllerProfile makeProfile(const juce::String& id, const juce::String& device
 class CountingActionInvoker : public RemoteActionInvoker {
 public:
     void invokeRemoteCommand(juce::CommandID commandId) override { invoked.push_back(commandId); }
+    // FRO253: records a nodeCommand invocation the same way invokeRemoteCommand above does.
+    void invokeNodeCommand(juce::AudioProcessorGraph::NodeID nodeId, NodeCommandKind command) override {
+        invokedNodeCommands.push_back({nodeId, command});
+    }
     std::vector<juce::CommandID> invoked;
+    std::vector<std::pair<juce::AudioProcessorGraph::NodeID, NodeCommandKind>> invokedNodeCommands;
 };
 
 // One silent standalone device callback, exactly like Tests/Engine/DeviceChangeTests.cpp's

@@ -168,6 +168,19 @@ void TimelineTransportBar::refreshMidiLearnBadges() {
         repaint();
 }
 
+// FRO256: called from updateFromTransport()'s existing 10 Hz poll -- see
+// MixerColumnComponent::repaintArmedMidiLearnOutline's own comment for why this needs to exist at
+// all (paintMidiLearnArmedOutline() recomputes alpha from wall time on every paint(), so nothing
+// visibly breathes unless something keeps asking for a repaint while armed).
+void TimelineTransportBar::repaintArmedMidiLearnOutline() {
+    if (midiLearnArmedActionId_.isEmpty())
+        return;
+    if (auto* button = glyphButtonForAction(midiLearnArmedActionId_)) {
+        repaint(button->getBounds().expanded(2));
+        ++midiLearnArmedRepaintCount_;
+    }
+}
+
 void TimelineTransportBar::paintMidiLearnOverlays(juce::Graphics& g) {
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     const juce::Colour badgeColour = lf != nullptr ? lf->getTheme().colors.midiMapped : juce::Colour(0xffB48EF5);

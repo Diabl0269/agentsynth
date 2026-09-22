@@ -323,6 +323,27 @@ A button target's `buttonMode` (momentary / toggle) decides whether note-off / C
 anything (momentary: nothing; toggle: the action fires on every press only). BPM and playhead
 position as *continuous* action targets are a planned extension, tracked separately.
 
+### Node command targets
+
+*Options:* model the mixer column's Solo button as a fake boolean parameter on
+`ChannelStripModule`, or give `Target` a third kind that names a graph node and a command rather
+than a parameter.
+
+**Decision:** a third `Target` kind, **`nodeCommand`** — `{ nodeUuid, command }`, `command` today
+only `toggleSolo`. Solo is deliberately not a `juce::RangedAudioParameter` (`ChannelStripModule::soloed_`
+is trusted engine state the render-time solo gate reads, `mixer.md#solo-is-a-render-time-gate`), so
+it has nothing for a `Target::Parameter` to point at, and it is not a `ShortcutManager` action
+either — actions are a fixed, per-app id set, and a per-*node* id would grow that registry once per
+strip a project happens to have. A `nodeCommand` assignment is **project-scoped**, exactly like a
+parameter assignment (it names a node uuid that only means something within this project) —
+`MidiRemoteProjectDoc::assignments`, never a `ControllerProfile`'s global `actions`. It resolves
+against the graph and orphans on a missing node exactly like a parameter target. It fires
+**press-only**, in both momentary and toggle button modes, exactly like an action target — a pad
+press toggles solo, like a mouse click; hold-to-solo is not v1. Applying reaches the app layer
+through a new `RemoteActionInvoker::invokeNodeCommand(nodeId, command)` (Core knows neither
+`ChannelStripModule` nor `AudioEngine::setChannelStripSoloed`), which performs the SAME undo-bracketed
+call the mixer column's own click does — one undo step per press.
+
 ---
 
 ## Data model
@@ -367,10 +388,11 @@ Assignment
 Target (exactly one)
   parameter     : { nodeUuid, paramId, paramIndexHint }   // same triple as an automation lane
   action        : { actionId }                            // ShortcutManager action id
+  nodeCommand   : { nodeUuid, command }                   // command: toggleSolo -- see Node command targets
 
 Project "midiRemote" (reserved top-level key in project.json)
   version       : 1
-  assignments[] : Assignment               // target.kind == parameter only
+  assignments[] : Assignment               // target.kind == parameter or nodeCommand; never action
   controllers[] : { profileId, name }      // for the orphan-controller display, see Where does a mapping live
 ```
 

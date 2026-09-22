@@ -29,6 +29,13 @@ enum class ButtonMode { momentary, toggle };
 // useDefault instead (docs/control/midi-remote.md#takeover / docs/control/midi-remote.md#data-model).
 enum class Takeover { jump, pickup, scale, useDefault };
 
+// FRO253 (docs/control/midi-remote.md#node-command-targets): what a Target::NodeCommand asks the
+// app-layer invoker to do to one graph node. toggleSolo is the only member today (the mixer
+// column's Solo button, which is engine state -- ChannelStripModule::soloed_ -- not a
+// juce::RangedAudioParameter, so it has no Target::Parameter to point at); a second node command
+// extends this enum rather than growing Target with a fourth kind.
+enum class NodeCommandKind { toggleSolo };
+
 // -- MessageSpec ----------------------------------------------------------------------------------
 /** The engine's lookup key for a hardware message (docs/control/midi-remote.md#data-model): (type, channel,
  *  number). `channel` == 0 means "any channel", else 1..16. `number` is the cc/note number and is
@@ -70,13 +77,14 @@ struct Control {
 };
 
 // -- Target ----------------------------------------------------------------------------------------
-/** An Assignment's destination: exactly one of a graph parameter or a ShortcutManager-registered
- *  action (docs/control/midi-remote.md#where-does-a-mapping-live--global-or-in-the-project,
- *  docs/control/midi-remote.md#action-targets, docs/control/midi-remote.md#data-model). Modelled
- *  as a tagged union (rather than two std::optional payloads) so fromVar can reject a JSON object
- *  carrying both "parameter" and "action", or neither, as a single well-defined check. */
+/** An Assignment's destination: exactly one of a graph parameter, a ShortcutManager-registered
+ *  action, or a node command (docs/control/midi-remote.md#where-does-a-mapping-live--global-or-in-the-project,
+ *  docs/control/midi-remote.md#action-targets, docs/control/midi-remote.md#node-command-targets,
+ *  docs/control/midi-remote.md#data-model). Modelled as a tagged union (rather than three
+ *  std::optional payloads) so fromVar can reject a JSON object carrying more than one of
+ *  "parameter"/"action"/"nodeCommand", or none, as a single well-defined check. */
 struct Target {
-    enum class Kind { parameter, action };
+    enum class Kind { parameter, action, nodeCommand };
 
     struct Parameter {
         juce::String nodeUuid;
@@ -86,18 +94,26 @@ struct Target {
     struct Action {
         juce::String actionId; // ShortcutManager / juce::CommandID-backed action id
     };
+    // FRO253: a graph node this doesn't resolve to a parameter for -- see NodeCommandKind's own
+    // comment. Resolved by nodeUuid, exactly like Parameter::nodeUuid.
+    struct NodeCommand {
+        juce::String nodeUuid;
+        NodeCommandKind command = NodeCommandKind::toggleSolo;
+    };
 
     Kind kind = Kind::parameter;
     Parameter parameter;
     Action action;
+    NodeCommand nodeCommand;
 
     bool isParameter() const noexcept { return kind == Kind::parameter; }
     bool isAction() const noexcept { return kind == Kind::action; }
+    bool isNodeCommand() const noexcept { return kind == Kind::nodeCommand; }
 
-    // Only the payload matching `kind` is written — see fromVar for the both/neither rejection.
+    // Only the payload matching `kind` is written — see fromVar for the "exactly one" rejection.
     juce::var toVar() const;
-    /** All-or-nothing: rejects (returns false, leaves `out` untouched) if the JSON object carries
-     *  BOTH "parameter" and "action", or NEITHER. */
+    /** All-or-nothing: rejects (returns false, leaves `out` untouched) unless the JSON object
+     *  carries EXACTLY ONE of "parameter"/"action"/"nodeCommand". */
     static bool fromVar(const juce::var& v, Target& out);
 };
 
@@ -183,7 +199,9 @@ struct ControllerProfile {
 class MidiRemoteProjectDoc {
 public:
     int version = 1;
-    std::vector<Assignment> assignments; // target.kind == parameter only
+    // FRO253: a project assignment is never an action (actions are GLOBAL, ControllerProfile::actions
+    // only) -- parameter and nodeCommand targets both live here.
+    std::vector<Assignment> assignments;
 
     struct ControllerRef {
         juce::String profileId;

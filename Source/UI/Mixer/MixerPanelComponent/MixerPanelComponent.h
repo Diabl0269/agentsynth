@@ -150,6 +150,21 @@ public:
     /** Idempotent -- a no-op if nothing is armed. */
     void clearMidiLearnArmed();
 
+    /** FRO253: same contract as setMidiLearnArmed()/clearMidiLearnArmed() above, for Solo. */
+    void setMidiLearnArmedSolo(juce::AudioProcessorGraph::NodeID nodeId);
+    /** Idempotent -- a no-op if nothing is armed. */
+    void clearMidiLearnArmedSolo();
+
+    /** FRO253: forwarded to every strip column -- wired once by MainComponent to
+     *  MidiLearnController::armNodeCommand/forgetNodeCommand/queryNodeCommandMappings. */
+    std::function<void(juce::AudioProcessorGraph::NodeID)> onSoloMidiLearnRequested;
+    std::function<void(juce::AudioProcessorGraph::NodeID)> onSoloMidiForgetRequested;
+    std::function<juce::String(juce::AudioProcessorGraph::NodeID)> onQuerySoloMidiMapping;
+
+    /** FRO253: re-syncs every column's M/S visuals after something other than a click changed
+     *  solo. See MixerPanelComponent.cpp's definition for why this exists. */
+    void refreshMuteSoloVisuals();
+
     bool keyPressed(const juce::KeyPress& key) override;
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
@@ -218,7 +233,8 @@ private:
     std::vector<ColumnEntry> columnEntries_;
     int focusedColumnIndex_ = -1;
 
-    juce::AudioProcessorGraph::NodeID midiLearnArmedNodeId_; // FRO133; invalid = nothing armed
+    juce::AudioProcessorGraph::NodeID midiLearnArmedNodeId_;     // FRO133; invalid = nothing armed
+    juce::AudioProcessorGraph::NodeID midiLearnArmedSoloNodeId_; // FRO253; invalid = nothing armed
 
     /** FRO146: juce::Time::getMillisecondCounterHiRes() as of the last refreshMeters() call, or 0.0
      *  before the first one -- lets refreshMeters() measure real elapsed time for the ballistics
