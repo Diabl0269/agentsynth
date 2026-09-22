@@ -67,7 +67,8 @@ void GraphEditor::updateComponents() {
             // non-initiating group member vanishing on its own is harmless: the initiator survives,
             // its real mouseUp is still coming, and finalizeSelectionDrag's lookup simply skips a
             // stale id it can't find (see cancelLiveDragGestures' own comment).
-            if (isDragPreviewActive() && comp->getNodeId() == getDragPreviewSelfId())
+            if (dragDropController_.isDragPreviewActive() &&
+                comp->getNodeId() == dragDropController_.getDragPreviewSelfId())
                 cancelLiveDragGestures();
             content.removeChildComponent(comp);
             modules.remove(i);

@@ -371,19 +371,6 @@ public:
 
     bool duplicateSelection();
 
-    // Drag-preview (grid + landing ghost shown during a module drag). Bodies live on
-    // GraphDragDropController; these stay one-line forwarders so every existing caller
-    // (ModuleComponent, tests) keeps compiling unchanged.
-    void beginDragPreview(int w, int h, juce::AudioProcessorGraph::NodeID selfId);
-    void updateDragPreview(juce::Point<int> desiredTopLeftCanvas);
-    void endDragPreview();
-
-    // Test accessors for drag-preview state
-    bool isDragPreviewActive() const;
-    juce::Rectangle<int> getDragPreviewGhost() const;
-
-    const std::vector<GraphDragDropController::AlignmentGuide>& getAlignmentGuides() const;
-
     // Alignment guides toggle (UI Phase 7 - Item 4)
     void setAlignmentGuidesEnabled(bool enabled) { alignmentGuidesEnabled = enabled; }
     bool getAlignmentGuidesEnabled() const { return alignmentGuidesEnabled; }
@@ -503,7 +490,7 @@ public:
     /** Runs just the drag tick's modifier re-sample, so a test can exercise a press/release that
      *  happens without any mouse movement without needing a real 30 Hz timer. */
     void pumpDragModifierTickForTests() {
-        smartConnections_.refreshSuggestionsIfInsertModifierChanged(buildDragPreviewState());
+        smartConnections_.refreshSuggestionsIfInsertModifierChanged(dragDropController_.buildDragPreviewState());
     }
 
     /** Test seam: exposes the private GraphCanvasHost base for a test driving a
@@ -654,13 +641,9 @@ private:
     bool dragSourceIsMidi = false;
     juce::Point<int> dragCurrentPos;
 
-    juce::AudioProcessorGraph::NodeID getDragPreviewSelfId() const;
-
     void refreshSmartSuggestions() override;
     void clearSmartSuggestions() override;
     void applyDefaultDualIOForNewModule(juce::AudioProcessor& processor, const juce::String& moduleType) const override;
-
-    SmartConnectionEngine::DragPreviewState buildDragPreviewState() const;
 
     // ---- GraphCanvasHost (private: only code holding a GraphCanvasHost& can call these) ----
     juce::AudioProcessorGraph& graph() override { return audioEngine.getGraph(); }

@@ -71,7 +71,7 @@ TEST_F(GraphEditorTest, SmartConnectionSuggestsNearCompatibleNeighbor) {
                                                libraryCursorForGhostTopLeft("Oscillator", {50, 500}));
     editor.itemDragMove(far);
     EXPECT_EQ(editor.getSmartConnections().getSmartSuggestionCount(), 0);
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 }
 
 TEST_F(GraphEditorTest, SmartConnectionNewDropAutoWires) {
@@ -127,11 +127,11 @@ TEST_F(GraphEditorTest, SmartConnectionNewOnlyDoesNotWireOnUnwiredMove) {
     }
     ASSERT_NE(oscComp, nullptr);
 
-    editor.beginDragPreview(oscComp->getWidth(), oscComp->getHeight(), oscComp->getNodeId());
-    editor.updateDragPreview({280, 100}); // slide near filter
+    editor.getDragDropController().beginDragPreview(oscComp->getWidth(), oscComp->getHeight(), oscComp->getNodeId());
+    editor.getDragDropController().updateDragPreview({280, 100}); // slide near filter
     EXPECT_EQ(editor.getSmartConnections().getSmartSuggestionCount(), 0) << "NewOnly must not suggest on moves";
     editor.finalizeModuleDrag(oscComp);
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
     EXPECT_EQ(countAudioConnectionsBetween(graph, oscNode->nodeID, filterNode->nodeID), 0);
 }
 
@@ -159,12 +159,12 @@ TEST_F(GraphEditorTest, SmartConnectionNewAndUnwiredWiresUnwiredMove) {
     ASSERT_NE(oscComp, nullptr);
     EXPECT_FALSE(editor.nodeHasCables(oscNode->nodeID));
 
-    editor.beginDragPreview(oscComp->getWidth(), oscComp->getHeight(), oscComp->getNodeId());
+    editor.getDragDropController().beginDragPreview(oscComp->getWidth(), oscComp->getHeight(), oscComp->getNodeId());
     // Land just left of the Filter so output/input jacks face each other (not overlapping).
-    editor.updateDragPreview({100, 100});
+    editor.getDragDropController().updateDragPreview({100, 100});
     ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0);
     editor.finalizeModuleDrag(oscComp);
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
     EXPECT_GT(countAudioConnectionsBetween(graph, oscNode->nodeID, filterNode->nodeID), 0);
 }
 
@@ -198,11 +198,11 @@ TEST_F(GraphEditorTest, SmartConnectionNewAndUnwiredSkipsAlreadyWiredMove) {
     }
     ASSERT_NE(oscComp, nullptr);
 
-    editor.beginDragPreview(oscComp->getWidth(), oscComp->getHeight(), oscComp->getNodeId());
-    editor.updateDragPreview({560, 100}); // near VCA
+    editor.getDragDropController().beginDragPreview(oscComp->getWidth(), oscComp->getHeight(), oscComp->getNodeId());
+    editor.getDragDropController().updateDragPreview({560, 100}); // near VCA
     EXPECT_EQ(editor.getSmartConnections().getSmartSuggestionCount(), 0);
     editor.finalizeModuleDrag(oscComp);
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
     EXPECT_EQ(countAudioConnectionsBetween(graph, oscNode->nodeID, vcaNode->nodeID), 0);
 }
 
@@ -229,14 +229,15 @@ TEST_F(GraphEditorTest, SmartConnectionDoesNotWrapAroundToRightNeighbor) {
     }
     ASSERT_NE(filterComp, nullptr);
 
-    editor.beginDragPreview(filterComp->getWidth(), filterComp->getHeight(), filterComp->getNodeId());
-    editor.updateDragPreview({100, 100}); // slide toward the Delay on the right
+    editor.getDragDropController().beginDragPreview(filterComp->getWidth(), filterComp->getHeight(),
+                                                    filterComp->getNodeId());
+    editor.getDragDropController().updateDragPreview({100, 100}); // slide toward the Delay on the right
     for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
         EXPECT_TRUE(s.ghostIsSource) << "must not wrap Delay's right outputs into Filter's left inputs";
         EXPECT_FALSE(s.isMidi);
         EXPECT_EQ(s.neighborId, delayNode->nodeID);
     }
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 }
 
 TEST_F(GraphEditorTest, SmartConnectionNewAndUnwiredWiresFreeOutputDespiteOtherCables) {
@@ -268,8 +269,10 @@ TEST_F(GraphEditorTest, SmartConnectionNewAndUnwiredWiresFreeOutputDespiteOtherC
     }
     ASSERT_NE(filterComp, nullptr);
 
-    editor.beginDragPreview(filterComp->getWidth(), filterComp->getHeight(), filterComp->getNodeId());
-    editor.updateDragPreview({420, 100}); // near Delay; Filter audio in is taken, audio out is free
+    editor.getDragDropController().beginDragPreview(filterComp->getWidth(), filterComp->getHeight(),
+                                                    filterComp->getNodeId());
+    editor.getDragDropController().updateDragPreview(
+        {420, 100}); // near Delay; Filter audio in is taken, audio out is free
     ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0)
         << "NewAndUnwired should still offer Filter → Delay when the output jack is free";
     for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
@@ -277,7 +280,7 @@ TEST_F(GraphEditorTest, SmartConnectionNewAndUnwiredWiresFreeOutputDespiteOtherC
         EXPECT_EQ(s.neighborId, delayNode->nodeID);
     }
     editor.finalizeModuleDrag(filterComp);
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
     EXPECT_GT(countAudioConnectionsBetween(graph, filterNode->nodeID, delayNode->nodeID), 0);
 }
 
@@ -309,17 +312,17 @@ TEST_F(GraphEditorTest, SmartConnectionAllMovesCanAddWireToFreeJack) {
     }
     ASSERT_NE(oscComp, nullptr);
 
-    editor.beginDragPreview(oscComp->getWidth(), oscComp->getHeight(), oscComp->getNodeId());
-    editor.updateDragPreview({560, 100});
+    editor.getDragDropController().beginDragPreview(oscComp->getWidth(), oscComp->getHeight(), oscComp->getNodeId());
+    editor.getDragDropController().updateDragPreview({560, 100});
     // Osc already feeds Filter; a free VCA audio in can still be suggested under AllMoves.
     if (editor.getSmartConnections().getSmartSuggestionCount() > 0) {
         editor.finalizeModuleDrag(oscComp);
-        editor.endDragPreview();
+        editor.getDragDropController().endDragPreview();
         EXPECT_GT(countAudioConnectionsBetween(graph, oscNode->nodeID, vcaNode->nodeID), 0);
     } else {
         // Acceptable if heuristics prefer not to dual-route the same output; AllMoves still
         // must not crash and must leave the existing Filter wire intact.
-        editor.endDragPreview();
+        editor.getDragDropController().endDragPreview();
         EXPECT_GT(countAudioConnectionsBetween(graph, oscNode->nodeID, filterNode->nodeID), 0);
     }
 }
@@ -352,7 +355,7 @@ TEST_F(GraphEditorTest, SmartConnectionIncompatiblePairSuggestsNothing) {
     editor.itemDragMove(details);
     // LFO is not a known MIDI source; Filter audio in is taken; mod CV is not suggested in v1.
     EXPECT_EQ(editor.getSmartConnections().getSmartSuggestionCount(), 0);
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 }
 
 TEST_F(GraphEditorTest, SmartConnectionModeRoundTrip) {
@@ -504,7 +507,7 @@ TEST_F(GraphEditorTest, SmartConnectionDoesNotTreatMathABAsStereo) {
         EXPECT_FALSE(anyIntoB) << "Math B is a second operand, not a right audio channel";
         EXPECT_TRUE(graph.isConnected({{oscId, 0}, {mathNode->nodeID, 0}})) << "Audio L should reach Math A";
     } else {
-        editor.endDragPreview();
+        editor.getDragDropController().endDragPreview();
     }
 }
 
@@ -536,5 +539,5 @@ TEST_F(GraphEditorTest, SmartConnectionMonoToStereoIsBothOrNeither) {
     editor.itemDragMove(details);
     // Left taken → both-or-neither: no mono→stereo fan onto Right alone.
     EXPECT_EQ(editor.getSmartConnections().getSmartSuggestionCount(), 0);
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 }

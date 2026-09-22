@@ -128,7 +128,7 @@ TEST_F(GraphEditorTest, SmartConnectionInsertAimWindowSpansTheWholeGap) {
         for (const auto& s : editor.getSmartConnections().getSmartSuggestions())
             if (s.isInsert)
                 ++n;
-        editor.endDragPreview();
+        editor.getDragDropController().endDragPreview();
         return n;
     };
 
@@ -171,7 +171,7 @@ TEST_F(GraphEditorTest, SmartConnectionPlainSuggestionKeepsTheLeftToRightFlowRul
         EXPECT_FALSE(s.isInsert) << "no modifier, so nothing may be rerouted";
         EXPECT_FALSE(s.ghostIsSource) << "a ghost to the right must not feed the module on its left";
     }
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 }
 
 // --- Vertical aim: the whole destination card, both axes ---------------------
@@ -201,7 +201,7 @@ static VerticalAimProbe probeVerticalAim(GraphEditor& editor, juce::AudioProcess
         for (const auto& s : editor.getSmartConnections().getSmartSuggestions())
             if (s.isInsert && s.neighborId == destId)
                 hit = true;
-        editor.endDragPreview();
+        editor.getDragDropController().endDragPreview();
 
         if (hit) {
             if (p.firstHit < 0)
@@ -316,7 +316,7 @@ TEST_F(GraphEditorTest, SmartConnectionInsertOutranksAPlainSuggestionFromTheUpst
         EXPECT_EQ(s.neighborId, outNode->nodeID);
         EXPECT_EQ(s.upstreamId, up->nodeID);
     }
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 }
 
 // --- Ctrl with nothing to insert must still connect normally -----------------
@@ -382,14 +382,14 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlWithNothingToInsertStillConnectsOnCan
             ghostComp = c;
     ASSERT_NE(ghostComp, nullptr);
 
-    editor.beginDragPreview(ghostComp->getWidth(), ghostComp->getHeight(), ghost->nodeID);
-    editor.updateDragPreview({700 - 280 - 40, 400}); // a move is top-left anchored
+    editor.getDragDropController().beginDragPreview(ghostComp->getWidth(), ghostComp->getHeight(), ghost->nodeID);
+    editor.getDragDropController().updateDragPreview({700 - 280 - 40, 400}); // a move is top-left anchored
     ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0)
         << "Ctrl must not suppress an ordinary connection on a move";
     for (const auto& s : editor.getSmartConnections().getSmartSuggestions())
         EXPECT_FALSE(s.isInsert);
     editor.finalizeModuleDrag(ghostComp);
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 
     EXPECT_GT(countAudioConnectionsBetween(graph, ghost->nodeID, dest->nodeID), 0);
 }
@@ -427,7 +427,7 @@ TEST_F(GraphEditorTest, SmartConnectionInsertDoesNotStealFromTheModuleBeingAimed
         EXPECT_EQ(s.neighborId, freeDest->nodeID) << "the insert stole the drop from the module under the cursor";
         EXPECT_FALSE(s.isInsert);
     }
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 }
 
 // --- Role-named mono audio inputs (Ring Modulator Carrier / Modulator) -------
@@ -470,13 +470,13 @@ TEST_F(GraphEditorTest, SmartConnectionDualUpstreamSumsBothLegsIntoRingModulator
             distComp = c;
     ASSERT_NE(distComp, nullptr);
 
-    editor.beginDragPreview(distComp->getWidth(), distComp->getHeight(), dist->nodeID);
-    editor.updateDragPreview({140, 400});
+    editor.getDragDropController().beginDragPreview(distComp->getWidth(), distComp->getHeight(), dist->nodeID);
+    editor.getDragDropController().updateDragPreview({140, 400});
     ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0);
     for (const auto& s : editor.getSmartConnections().getSmartSuggestions())
         EXPECT_EQ(s.neighborJack, 0) << "only Carrier may be proposed; Modulator is patched deliberately";
     editor.finalizeModuleDrag(distComp);
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 
     // Both legs summed into Carrier (raw 0), and nothing on Modulator (raw 1).
     EXPECT_TRUE(graph.isConnected({{dist->nodeID, 0}, {ring->nodeID, 0}})) << "Left leg missing from Carrier";
@@ -511,8 +511,8 @@ TEST_F(GraphEditorTest, SmartConnectionRingModulatorAsSourceIsUnchanged) {
             ringComp = c;
     ASSERT_NE(ringComp, nullptr);
 
-    editor.beginDragPreview(ringComp->getWidth(), ringComp->getHeight(), ring->nodeID);
-    editor.updateDragPreview({700 - 280 - 40, 400});
+    editor.getDragDropController().beginDragPreview(ringComp->getWidth(), ringComp->getHeight(), ring->nodeID);
+    editor.getDragDropController().updateDragPreview({700 - 280 - 40, 400});
     ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0)
         << "Ring Modulator must still work as a source";
     for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
@@ -520,7 +520,7 @@ TEST_F(GraphEditorTest, SmartConnectionRingModulatorAsSourceIsUnchanged) {
         EXPECT_EQ(s.neighborId, dest->nodeID);
     }
     editor.finalizeModuleDrag(ringComp);
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
     EXPECT_GT(countAudioConnectionsBetween(graph, ring->nodeID, dest->nodeID), 0);
 }
 
@@ -665,7 +665,7 @@ TEST_F(GraphEditorTest, SmartConnectionStillRefusesAJackMixedFromDifferentNodes)
     editor.itemDragMove(d);
     for (const auto& s : editor.getSmartConnections().getSmartSuggestions())
         EXPECT_FALSE(s.isInsert) << "a mix from two different nodes must never be rerouted";
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 }
 
 // --- Gesture matrix: the whole smart-connect contract in one table -----------
@@ -839,8 +839,8 @@ TEST_P(SmartConnectionGestureMatrixTest, MatchesTheExpectedOutcome) {
             if (mc->getNodeId() == ghostId)
                 ghostComp = mc;
         ASSERT_NE(ghostComp, nullptr);
-        editor.beginDragPreview(ghostComp->getWidth(), ghostComp->getHeight(), ghostId);
-        editor.updateDragPreview(ghostTopLeft);
+        editor.getDragDropController().beginDragPreview(ghostComp->getWidth(), ghostComp->getHeight(), ghostId);
+        editor.getDragDropController().updateDragPreview(ghostTopLeft);
     }
 
     // Mid-drag modifier transitions go through the live per-tick re-sample, with NO mouse movement.
@@ -864,7 +864,7 @@ TEST_P(SmartConnectionGestureMatrixTest, MatchesTheExpectedOutcome) {
                                       << " dest=" << (int)c.row.dest << " modifier=" << (int)c.row.modifier
                                       << " expected=" << outcomeName(c.row.expected)
                                       << " actual=" << outcomeName(actual);
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 }
 
 INSTANTIATE_TEST_SUITE_P(EveryCell, SmartConnectionGestureMatrixTest, ::testing::ValuesIn(allGestureMatrixCases()));

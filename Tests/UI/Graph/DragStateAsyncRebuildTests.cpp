@@ -55,7 +55,7 @@ juce::MouseEvent realMouseEvent(juce::Component& eventComp, juce::Point<int> loc
 }
 
 void expectNoStuckDragState(GraphEditor& editor, const char* context) {
-    EXPECT_FALSE(editor.isDragPreviewActive()) << context << ": drag-preview ghost left stuck";
+    EXPECT_FALSE(editor.getDragDropController().isDragPreviewActive()) << context << ": drag-preview ghost left stuck";
     EXPECT_FALSE(editor.isSelectionDragActive()) << context << ": selection-drag bookkeeping left stuck";
     // FRO40: cancelLiveDragGestures() must clear the macro drag-candidate highlight too, or an
     // async rebuild mid-Cmd/Ctrl-drag leaves a hull highlighted with no gesture left to end it.
@@ -87,7 +87,8 @@ TEST(DragStateAsyncRebuild, DetachAllModuleComponentsCancelsLiveBodyDragMidGestu
     // Arm the drag through the real gesture — no mouseUp follows.
     comp->mouseDown(realMouseEvent(*comp, pressPos, pressPos, leftClick));
     comp->mouseDrag(realMouseEvent(*comp, dragPos, pressPos, leftClick, /*wasDragged=*/true));
-    ASSERT_TRUE(editor.isDragPreviewActive()) << "sanity: a real body drag must arm the ghost preview";
+    ASSERT_TRUE(editor.getDragDropController().isDragPreviewActive())
+        << "sanity: a real body drag must arm the ghost preview";
 
     // Simulate an AI patch apply landing mid-drag: aiPatchAboutToApply() detaches every
     // ModuleComponent (deleting the one holding this live drag, whose mouseUp will now never come),
@@ -220,7 +221,8 @@ TEST(DragStateAsyncRebuild, DraggedNodeRemovedMidGestureThenUpdateComponentsCanc
 
     comp->mouseDown(realMouseEvent(*comp, pressPos, pressPos, leftClick));
     comp->mouseDrag(realMouseEvent(*comp, dragPos, pressPos, leftClick, /*wasDragged=*/true));
-    ASSERT_TRUE(editor.isDragPreviewActive()) << "sanity: a real body drag must arm the ghost preview";
+    ASSERT_TRUE(editor.getDragDropController().isDragPreviewActive())
+        << "sanity: a real body drag must arm the ghost preview";
 
     // Simulate an undo (or any other doc mutation) removing the dragged node itself, out from under
     // the live gesture, then the reconcile pass that always follows a graph mutation.

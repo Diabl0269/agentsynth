@@ -33,7 +33,9 @@ juce::String GraphEditor::smartConnectionModeToString(SmartConnectionMode mode) 
 // GraphCanvasHost pure-virtual override — GraphDragDropController calls this polymorphically
 // through the host interface, so it can't move onto SmartConnectionEngine even though every
 // other forwarder in this file already has (FRO254).
-void GraphEditor::refreshSmartSuggestions() { smartConnections_.refreshSmartSuggestions(buildDragPreviewState()); }
+void GraphEditor::refreshSmartSuggestions() {
+    smartConnections_.refreshSmartSuggestions(dragDropController_.buildDragPreviewState());
+}
 
 // GraphCanvasHost pure-virtual override — see refreshSmartSuggestions() above.
 void GraphEditor::clearSmartSuggestions() { smartConnections_.clearSmartSuggestions(); }

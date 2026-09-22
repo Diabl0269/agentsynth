@@ -596,7 +596,7 @@ TEST(MultiSelectSnippet, DroppingASnippetPayloadFromTheLibraryInsertsTheGroup) {
 
     const int before = engine.getGraph().getNumNodes();
     editor.itemDragEnter(details); // must size the ghost from the group, not one module
-    EXPECT_TRUE(editor.isDragPreviewActive());
+    EXPECT_TRUE(editor.getDragDropController().isDragPreviewActive());
     editor.itemDropped(details);
 
     EXPECT_EQ(engine.getGraph().getNumNodes(), before + 2);

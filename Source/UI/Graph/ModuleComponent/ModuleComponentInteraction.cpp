@@ -658,7 +658,7 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
             // Record every selected module's origin so they can all follow this one.
             owner.beginSelectionDrag();
             // Show grid + ghost for this module-body drag.
-            owner.beginDragPreview(getWidth(), getHeight(), getNodeId());
+            owner.getDragDropController().beginDragPreview(getWidth(), getHeight(), getNodeId());
         }
     }
 }
@@ -727,7 +727,7 @@ void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
         // Carry every other selected module by the same delta from its own recorded origin.
         owner.dragSelectionBy(getPosition() - dragStartPosition, this);
         // Update the landing ghost to follow the live drag position.
-        owner.updateDragPreview(getPosition());
+        owner.getDragDropController().updateDragPreview(getPosition());
 
         // Gap 3: re-derive reparentArmed live for a SINGLE-module drag, so Cmd pressed or released
         // mid-drag arms/disarms reparent on the spot instead of only whatever mouseDown latched —
@@ -795,7 +795,7 @@ void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
         // Click without movement: drop the recorded origins without re-resolving positions.
         owner.cancelSelectionDrag();
         owner.clearMacroDragCandidate();
-        owner.endDragPreview();
+        owner.getDragDropController().endDragPreview();
         return;
     }
 
@@ -835,5 +835,5 @@ void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
     if (undoManager)
         undoManager->pushSnapshotFromCapture(owner.getAudioEngine().getGraph());
     owner.clearMacroDragCandidate();
-    owner.endDragPreview();
+    owner.getDragDropController().endDragPreview();
 }

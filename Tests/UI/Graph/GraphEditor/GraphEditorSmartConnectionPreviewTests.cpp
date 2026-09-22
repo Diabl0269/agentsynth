@@ -235,7 +235,7 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlHeldBeforePressStillArmsAnInsertDrag)
     ASSERT_FALSE(f.ghostComp->getPortForPoint(bodyPoint).has_value()) << "the press must land on the card BODY";
 
     f.ghostComp->mouseDown(makeModuleClickWithMods(*f.ghostComp, bodyPoint, ctrlLeftClick()));
-    editor.updateDragPreview({440, 100}); // drag it between upstream and target
+    editor.getDragDropController().updateDragPreview({440, 100}); // drag it between upstream and target
 
     ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0)
         << "Ctrl-held press never armed the drag (selection early-return, or a context menu)";
@@ -244,7 +244,7 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlHeldBeforePressStillArmsAnInsertDrag)
         EXPECT_EQ(s.neighborId, f.targetId);
         EXPECT_EQ(s.upstreamId, f.upstreamId);
     }
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 }
 
 TEST_F(GraphEditorTest, SmartConnectionCtrlPressedMidDragTurnsTheSuggestionIntoAnInsert) {
@@ -261,12 +261,12 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlPressedMidDragTurnsTheSuggestionIntoA
 
     const juce::Point<int> bodyPoint{f.ghostComp->getWidth() / 2, f.ghostComp->getHeight() / 2};
     f.ghostComp->mouseDown(makeModuleClickWithMods(*f.ghostComp, bodyPoint, plainLeftClick()));
-    editor.updateDragPreview({440, 100});
+    editor.getDragDropController().updateDragPreview({440, 100});
     EXPECT_EQ(editor.getSmartConnections().getSmartSuggestionCount(), 0)
         << "the target's input is occupied and it is not the sink, so an unmodified drag gets nothing";
 
     editor.getSmartConnections().setInsertModifierOverrideForTests(true); // user presses Ctrl mid-drag
-    editor.updateDragPreview({440, 100});
+    editor.getDragDropController().updateDragPreview({440, 100});
 
     ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0)
         << "pressing Ctrl mid-drag must offer the insert";
@@ -274,7 +274,7 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlPressedMidDragTurnsTheSuggestionIntoA
         EXPECT_TRUE(s.isInsert);
         EXPECT_EQ(s.upstreamId, f.upstreamId);
     }
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 }
 
 TEST_F(GraphEditorTest, CtrlClickTogglesSelectionButCtrlDragDoesNot) {
@@ -331,7 +331,7 @@ TEST_F(GraphEditorTest, CtrlClickTogglesSelectionButCtrlDragDoesNot) {
 
     EXPECT_TRUE(editor.isNodeSelected(c->nodeID)) << "a Ctrl+drag must not toggle the dragged card away";
     EXPECT_EQ(editor.getSelectionCount(), 1) << "and must not resurrect the pre-press selection either";
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 }
 
 // ---- Round 5 regressions: library Ctrl, live downgrade, jack alignment, dual fan ----
@@ -444,7 +444,7 @@ TEST_F(GraphEditorTest, SmartConnectionPreviewLegsLandOnTheRealDestinationJack) 
                 << "preview leg ends at " << leg.p2.y << " but the jack dot is at " << expected.y;
         }
     }
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 }
 
 TEST_F(GraphEditorTest, SmartConnectionReleasingCtrlMidDragDowngradesTheInsert) {
@@ -462,7 +462,7 @@ TEST_F(GraphEditorTest, SmartConnectionReleasingCtrlMidDragDowngradesTheInsert) 
 
     const juce::Point<int> bodyPoint{f.ghostComp->getWidth() / 2, f.ghostComp->getHeight() / 2};
     f.ghostComp->mouseDown(makeModuleClickWithMods(*f.ghostComp, bodyPoint, ctrlLeftClick()));
-    editor.updateDragPreview({440, 100});
+    editor.getDragDropController().updateDragPreview({440, 100});
     ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0);
     for (const auto& s : editor.getSmartConnections().getSmartSuggestions())
         ASSERT_TRUE(s.isInsert);
@@ -480,7 +480,7 @@ TEST_F(GraphEditorTest, SmartConnectionReleasingCtrlMidDragDowngradesTheInsert) 
     for (const auto& s : editor.getSmartConnections().getSmartSuggestions())
         EXPECT_TRUE(s.isInsert) << "re-pressing Ctrl without moving must re-offer the insert";
 
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 }
 
 TEST_F(GraphEditorTest, SmartConnectionDualOutputWiresBothLegsIntoACollapsedInput) {
@@ -510,11 +510,11 @@ TEST_F(GraphEditorTest, SmartConnectionDualOutputWiresBothLegsIntoACollapsedInpu
 
     auto* reverbComp = findModuleComp(editor, reverbNode->getProcessor());
     ASSERT_NE(reverbComp, nullptr);
-    editor.beginDragPreview(reverbComp->getWidth(), reverbComp->getHeight(), reverbId);
-    editor.updateDragPreview({440, 100});
+    editor.getDragDropController().beginDragPreview(reverbComp->getWidth(), reverbComp->getHeight(), reverbId);
+    editor.getDragDropController().updateDragPreview({440, 100});
     ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0);
     editor.finalizeModuleDrag(reverbComp);
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 
     EXPECT_TRUE(graph.isConnected({{reverbId, 0}, {chorusId, 0}})) << "Left must reach the collapsed jack's raw0";
     EXPECT_TRUE(graph.isConnected({{reverbId, 1}, {chorusId, 1}})) << "Right must reach the collapsed jack's raw1";

@@ -107,7 +107,8 @@ TEST(MacroDragMembership, CmdDragOutsideModuleIntoExpandedHullJoinsTheMacro) {
     // never called endDragPreview(), so a SUCCESSFUL reparent left the landing ghost + grid overlay
     // on screen (Tests/UI/Graph/DragStateResetTests.cpp's CmdReparentDrag* cases cover this more
     // generally; pinned here too since this is the file that owns the feature).
-    EXPECT_FALSE(editor.isDragPreviewActive()) << "a completed reparent must tear down the drag preview too";
+    EXPECT_FALSE(editor.getDragDropController().isDragPreviewActive())
+        << "a completed reparent must tear down the drag preview too";
 }
 
 // ---------------------------------------------------------------------------------------------

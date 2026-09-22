@@ -118,7 +118,7 @@ TEST_F(GraphEditorTest, SmartConnectionWithoutCtrlNeverInsertsIntoOccupiedModule
     editor.itemDragMove(details);
     ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0)
         << "geometry check: Chorus → free Delay input is in range";
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 
     editor.connectPorts(f.upstreamId, 0, f.targetId, 0, false, false);
 
@@ -127,7 +127,7 @@ TEST_F(GraphEditorTest, SmartConnectionWithoutCtrlNeverInsertsIntoOccupiedModule
     // The group is fully occupied and a valid insert in every other respect — the ONLY thing
     // missing is the modifier. A surprise reroute mid-patch is exactly what this prevents.
     EXPECT_EQ(editor.getSmartConnections().getSmartSuggestionCount(), 0);
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 }
 
 TEST_F(GraphEditorTest, SmartConnectionCtrlInsertsIntoOccupiedOrdinaryModule) {
@@ -163,7 +163,7 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlInsertsIntoOccupiedOrdinaryModule) {
             EXPECT_NE(c.p2, juce::Point<float>());
         }
     }
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 }
 
 TEST_F(GraphEditorTest, SmartConnectionCtrlInsertAtOccupiedModuleIsOneUndoStep) {
@@ -220,7 +220,7 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlDoesNotInsertPureSourceIntoOccupiedMo
     editor.itemDragMove(details);
     ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0)
         << "geometry check: Osc → free Delay input is in range";
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 
     editor.connectPorts(f.upstreamId, 0, f.targetId, 0, false, false);
 
@@ -229,7 +229,7 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlDoesNotInsertPureSourceIntoOccupiedMo
     // Even with Ctrl: an Oscillator has no audio input, so there is nothing to put in series. And
     // outside the terminal sink a parallel sum is not offered either.
     EXPECT_EQ(editor.getSmartConnections().getSmartSuggestionCount(), 0);
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 }
 
 TEST_F(GraphEditorTest, SmartConnectionCtrlInsertIsBothOrNeitherAcrossStereoInputLegs) {
@@ -275,7 +275,7 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlInsertIsBothOrNeitherAcrossStereoInpu
     editor.itemDragMove(details);
     for (const auto& s : editor.getSmartConnections().getSmartSuggestions())
         EXPECT_FALSE(s.isInsert) << "a half-wired stereo input must not be rerouted";
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 
     // Phase 2: wire the rest → fully occupied group, and now the same drag inserts.
     for (size_t i = 1; i < audioLegs.size(); ++i)
@@ -287,7 +287,7 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlInsertIsBothOrNeitherAcrossStereoInpu
         EXPECT_TRUE(s.isInsert) << "a fully occupied group is a valid Ctrl insert";
         EXPECT_EQ(s.upstreamId, reverbNode->nodeID);
     }
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 }
 
 // ---- Ctrl insert: stereo fan correctness ------------------------------------
@@ -400,15 +400,15 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlInsertDoesNotDuplicateOneUpstreamLegO
     }
     ASSERT_NE(chorusComp, nullptr);
 
-    editor.beginDragPreview(chorusComp->getWidth(), chorusComp->getHeight(), chorusId);
-    editor.updateDragPreview({440, 100});
+    editor.getDragDropController().beginDragPreview(chorusComp->getWidth(), chorusComp->getHeight(), chorusId);
+    editor.getDragDropController().updateDragPreview({440, 100});
     ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0);
     for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
         ASSERT_TRUE(s.isInsert);
         EXPECT_EQ(s.upstreamCables.size(), 1u) << "one collapsed upstream jack needs exactly one cable";
     }
     editor.finalizeModuleDrag(chorusComp);
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 
     EXPECT_EQ(countAudioConnectionsBetween(graph, reverbId, outId), 0);
     EXPECT_TRUE(graph.isConnected({{reverbId, 0}, {chorusId, 0}}));
