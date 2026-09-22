@@ -17,6 +17,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+#include <optional>
 #include <vector>
 
 class GraphEditor;        // Forward declaration
@@ -74,6 +75,26 @@ public:
      *  and static so a test can pin the propagation without capturing pixels — paintMacroPortWidget
      *  is the only caller. */
     static juce::Colour resolveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint);
+
+    // Live preview of a docked widget's jack colour while the Configure I/O picker is open -- a view-layer
+    // transient, so a pick pushes no undo step. Each setter is idempotent: it reports whether this
+    // surface actually changed, so a tick that left the colour alone repaints nothing.
+    bool setPortColourPreview(juce::Colour c) {
+        if (portColourPreview_ && *portColourPreview_ == c)
+            return false;
+        portColourPreview_ = c;
+        return true;
+    }
+    bool clearPortColourPreview() {
+        if (!portColourPreview_.has_value())
+            return false;
+        portColourPreview_.reset();
+        return true;
+    }
+
+    // The jack's actual colour (preview > stored > tint) -- mirrors paint, so a headless test can read it.
+    juce::Colour effectiveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint) const;
+    bool hasPortColourPreviewForTest() const noexcept { return portColourPreview_.has_value(); }
 
     /** Re-measures the card after its VISIBLE PORT COUNT changed for a reason that is not a
      *  parameter gesture — today only Audio Input, whose jacks follow the audio device. Same three
@@ -283,6 +304,7 @@ private:
 
     juce::AudioProcessor* module;
     juce::AudioProcessorGraph::NodeID nodeId;
+    std::optional<juce::Colour> portColourPreview_; // live jack-colour preview; view-layer only
     GraphEditor& owner;
     juce::ComponentDragger dragger;
 

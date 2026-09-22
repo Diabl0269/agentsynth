@@ -138,6 +138,9 @@ public:
     /** T152 per-port colour: `newColour` is nullopt when the user resets to the kind-tint default
      *  (the swatch's right-click), otherwise the colour just picked. */
     std::function<void(const juce::String& nodeUuid, std::optional<juce::Colour> newColour)> onChangePortColour;
+
+    // Live preview: picker-tick colour, view-layer only (never writes MacroPort::colour).
+    std::function<void(const juce::String& nodeUuid, juce::Colour previewedColour)> onPreviewPortColour;
     std::function<void()> onRequestClose;
 
     /** Favourites shelf storage for the per-row colour picker (T152) — shares the same

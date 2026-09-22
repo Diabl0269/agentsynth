@@ -6,6 +6,8 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <optional>
+#include <utility>
 #include <vector>
 
 class GraphEditor; // Forward declaration
@@ -81,6 +83,12 @@ public:
             hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
     }
 
+    bool setPortColourPreview(const juce::String& nodeUuid, juce::Colour c); // live jack preview; true iff moved
+    bool clearPortColourPreview(const juce::String& nodeUuid);               // true iff it had been armed
+    bool hasPortColourPreviewForTest(const juce::String& nodeUuid) const;
+    juce::Colour resolvePortJackColour(const juce::String& nodeUuid, const std::optional<juce::Colour>& stored,
+                                       juce::Colour kindTint) const; // preview -> stored -> kindTint
+
 private:
     /** `priorSelection` (T138): whatever was selected right before mouseDown's own reselect —
      *  see GraphEditor::buildMacroMenu's addCandidateSelection comment for why this must be
@@ -123,6 +131,8 @@ private:
     bool bodyDragActive = false;
 
     std::unique_ptr<juce::TextEditor> nameEditor;
+
+    std::optional<std::pair<juce::String, juce::Colour>> portColourPreview_; // the open picker's one port
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MacroCardComponent)
 };

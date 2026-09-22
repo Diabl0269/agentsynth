@@ -467,9 +467,14 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
     juce::Component::SafePointer<GraphEditor> safeThis(this);
     juce::Component::SafePointer<synth::ui::MacroPortConfigDialog> safeDialog(dialog);
 
-    dialog->onRequestClose = [window] {
+    dialog->onRequestClose = [safeThis, window] {
         if (window != nullptr)
             window->exitModalState(0);
+        // Teardown backstop: an abandoned picker's CallOutBox can outlive this dialog and its onCommit
+        // clear may never reach it, so disarm whatever this session armed (by the node it cached, no node
+        // arg); a no-op when nothing was armed, so a plain Close of a never-previewed picker repaints nothing.
+        if (auto* self = safeThis.getComponent())
+            self->cancelArmedMacroPortColourPreview();
     };
 
     // Every callback below defers its mutate-then-refresh to the next message-loop tick — a
@@ -551,6 +556,14 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
         });
     };
 
+    // Live preview: fired on every selector tick with the in-progress colour, so the jack on both surfaces
+    // tracks the pick without committing (view-layer only, no undo). No callAsync (unlike the mutators
+    // above): previewMacroPortColour mutates no data and rebuilds nothing, so it runs synchronously on the
+    // picker's own broadcast -- a rebuild would tear down the row still inside its own dispatch.
+    dialog->onPreviewPortColour = [safeThis, macroId](const juce::String& nodeUuid, juce::Colour colour) {
+        if (auto* self = safeThis.getComponent())
+            self->previewMacroPortColour(macroId, nodeUuid, colour);
+    };
     window->enterModalState(true, nullptr, true);
 }
 
