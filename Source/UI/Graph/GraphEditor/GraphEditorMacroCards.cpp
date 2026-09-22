@@ -5,6 +5,11 @@
 // class comment: syncMacroCards() constructs `new MacroCardComponent(*this, ...)`, and
 // categoryPreviewColour() calls juce::Component::getLookAndFeel(). GraphEditor is declared in
 // GraphEditor.h; sibling GraphEditor*.cpp files in this directory hold the rest of the class.
+//
+// Plus the macro-port jack-colour recolour/preview block (T165) at the bottom: it lives here because
+// every surface it drives is a presentation component this file already owns -- the collapsed
+// MacroCardComponent and the port's docked ModuleComponent -- reached through GraphEditor's own
+// children. Its one production caller is GraphEditor::changeMacroPortColour in GraphEditorMacroApi.cpp.
 
 #include "GraphEditor.h"
 
@@ -119,20 +124,25 @@ GraphEditor::MacroPortRecolourTargets GraphEditor::repaintMacroPortColourTargets
 void GraphEditor::previewMacroPortColour(const juce::String& macroId, const juce::String& nodeUuid,
                                          juce::Colour colour) {
     // Arm the view-layer preview and repaint only the changed surfaces, so a picker drag touches no
-    // MacroPort::colour. Two guards: (1) the modal FREEZES the graph for its session, so the targets are
-    // stable -- resolve ONCE when this node's session first arms, reuse the cached pair for every later
-    // tick, re-resolving on a new node; the pair holds raw surfaces, safe exactly like a returned one.
+    // MacroPort::colour. Two guards: (1) resolve ONCE when this node's session first arms and reuse the
+    // pair for every later tick, re-resolving on a new node -- but hold each surface through a
+    // SafePointer, NEVER raw. The modal does NOT freeze the graph: the dialog's own callbacks run via
+    // callAsync and land while the CallOutBox is still open (see MacroPortConfigDialogInternal.h's
+    // buildColourPicker comment), and a reshaped or removed port -- like any clearGraph(), e.g. a preset
+    // load or an AI patch apply -- destroys the very ModuleComponent resolved here. A destroyed surface
+    // then reads back null and is skipped, exactly as re-resolving every tick would have skipped it.
     // (2) setPortColourPreview reports the changed surfaces, so a redundant re-press repaints nothing.
-    auto& session = previewSessionTargets_;
     if (previewSessionNode_ != nodeUuid) {
+        const auto targets = findMacroPortRecolourTargets(macroId, nodeUuid);
         previewSessionNode_ = nodeUuid;
-        session = findMacroPortRecolourTargets(macroId, nodeUuid);
+        previewSessionCard_ = targets.card;
+        previewSessionWidget_ = targets.widget;
     }
-    if (auto* card = session.card) {
+    if (auto* card = previewSessionCard_.getComponent()) {
         if (card->setPortColourPreview(nodeUuid, colour))
             card->repaint();
     }
-    if (auto* widget = session.widget) {
+    if (auto* widget = previewSessionWidget_.getComponent()) {
         if (widget->setPortColourPreview(colour))
             widget->repaint();
     }
@@ -143,8 +153,7 @@ void GraphEditor::clearMacroPortColourPreview(const juce::String& macroId, const
     // whether a surface actually disarmed, so a commit to an unpreviewed port issues no repaint. End this
     // picker's session so a later arm re-resolves; route the repaint through the same finder.
     auto targets = findMacroPortRecolourTargets(macroId, nodeUuid);
-    previewSessionNode_.clear();
-    previewSessionTargets_ = MacroPortRecolourTargets{};
+    endMacroPortPreviewSession();
 
     bool cleared = false;
     if (auto* card = targets.card)
@@ -165,20 +174,27 @@ void GraphEditor::clearMacroPortColourPreview(const juce::String& macroId, const
 void GraphEditor::cancelArmedMacroPortColourPreview() {
     if (previewSessionNode_.isEmpty())
         return;
-    auto node = previewSessionNode_;
-    auto targets = previewSessionTargets_;
-    previewSessionNode_.clear();
-    previewSessionTargets_ = MacroPortRecolourTargets{};
+    const auto node = previewSessionNode_;
+    // Null for a surface destroyed since it was armed -- the whole reason these are SafePointers.
+    auto* card = previewSessionCard_.getComponent();
+    auto* widget = previewSessionWidget_.getComponent();
+    endMacroPortPreviewSession();
 
     bool cleared = false;
-    if (auto* card = targets.card)
+    if (card != nullptr)
         cleared |= card->clearPortColourPreview(node);
-    if (auto* widget = targets.widget)
+    if (widget != nullptr)
         cleared |= widget->clearPortColourPreview();
     if (!cleared)
         return;
-    if (targets.card != nullptr)
-        targets.card->repaint();
-    if (targets.widget != nullptr)
-        targets.widget->repaint();
+    if (card != nullptr)
+        card->repaint();
+    if (widget != nullptr)
+        widget->repaint();
+}
+
+void GraphEditor::endMacroPortPreviewSession() {
+    previewSessionNode_.clear();
+    previewSessionCard_ = nullptr;
+    previewSessionWidget_ = nullptr;
 }

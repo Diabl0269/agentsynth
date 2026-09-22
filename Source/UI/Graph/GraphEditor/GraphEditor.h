@@ -820,10 +820,11 @@ private:
     SmartConnectionEngine smartConnections_{*this};
     MacroGroupController macroController_{*this};
     GraphDragDropController dragDropController_{*this};
-    // The open picker's armed preview: cached resolve + the node that armed it, so
-    // cancelArmedMacroPortColourPreview() can tear an aborted picker down.
-    MacroPortRecolourTargets previewSessionTargets_;
+    // The open picker's armed preview: node + WEAK handles, never raw -- see previewMacroPortColour.
     juce::String previewSessionNode_;
+    juce::Component::SafePointer<MacroCardComponent> previewSessionCard_;
+    juce::Component::SafePointer<ModuleComponent> previewSessionWidget_;
+    void endMacroPortPreviewSession(); // forget an armed session; out of line (both types fwd-declared)
 
     juce::AudioProcessorGraph::NodeID draggingAttenuverterNodeId;
     float attenDragStartValue = 0.0f;

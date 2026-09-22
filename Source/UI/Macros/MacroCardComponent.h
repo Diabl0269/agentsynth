@@ -83,13 +83,11 @@ public:
             hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
     }
 
-    // Live jack-colour preview -- per-port, idempotent bool set/clear so a picker tick repaints only
-    // the changed port (view-layer transient, never MacroPort::colour).
-    bool setPortColourPreview(const juce::String& nodeUuid, juce::Colour c);
-    bool clearPortColourPreview(const juce::String& nodeUuid);
+    bool setPortColourPreview(const juce::String& nodeUuid, juce::Colour c); // live jack preview; true iff moved
+    bool clearPortColourPreview(const juce::String& nodeUuid);               // true iff it had been armed
     bool hasPortColourPreviewForTest(const juce::String& nodeUuid) const;
     juce::Colour resolvePortJackColour(const juce::String& nodeUuid, const std::optional<juce::Colour>& stored,
-                                       juce::Colour kindTint) const;
+                                       juce::Colour kindTint) const; // preview -> stored -> kindTint
 
 private:
     /** `priorSelection` (T138): whatever was selected right before mouseDown's own reselect —
@@ -134,8 +132,7 @@ private:
 
     std::unique_ptr<juce::TextEditor> nameEditor;
 
-    // Live-jack-colour preview for the single open picker's port -- one optional entry,
-    std::optional<std::pair<juce::String, juce::Colour>> portColourPreview_;
+    std::optional<std::pair<juce::String, juce::Colour>> portColourPreview_; // the open picker's one port
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MacroCardComponent)
 };

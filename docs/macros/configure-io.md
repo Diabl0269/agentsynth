@@ -107,8 +107,8 @@ lookup is the single seam every colour path runs through.
    members), so the widget is *always* found; a repaint of a hidden widget is a harmless no-op until the
    macro is expanded, at which point its first paint already reads the new colour. This is what made a
    port's jack "only show the new colour after a collapse/expand" — an expand re-runs the layout and forces
-   a fresh paint (the old `repaintMacroPortColourTargets` was a `const` no-op that could not repaint
-   anything).
+   a fresh paint, which before this change was the only thing that ever reached the widget at all: no
+   commit path repainted it.
 
 The method returns the (possibly-null) `MacroPortRecolourTargets{card, widget}` it targeted, precisely
 because a headless test cannot observe a `repaint()` (a no-op with no window; `StatusBarTests`'
@@ -144,7 +144,7 @@ the single `onCommit` (on close) still writes the stored `MacroPort::colour`.
    commit path uses, so a preview and its commit can never target different surfaces.
 - **The commit repaints THEN disarms.** `GraphEditor::changeMacroPortColour` now ends by calling BOTH
 `repaintMacroPortColourTargets(macroId, nodeUuid)` (forces the two surfaces to the just-stored value — so a NON-previewed commit, e.g. an AI or programmatic colour, shows it immediately: the repaint a preview alone never had) and `clearMacroPortColourPreview(macroId, nodeUuid)` (a REAL no-op — it repaints nothing — when no preview was armed), so **every** path that commits a colour — not just the modal — shows it on both surfaces and disarms the armed preview in the same call. Because the committed colour equals the one that was armed, the jack shows it continuously and never glitches.
-- Per-tick previews aren’t re-scanned: the picker — the modal — owns a frozen graph for its whole session and nothing mutates the macro set on its thread, so `previewMacroPortColour` resolves the two targets ONCE when the session first arms and reuses the cached pair on every subsequent tick.
+- Per-tick previews aren’t re-scanned: `previewMacroPortColour` resolves the two targets ONCE when the session first arms and reuses them on every subsequent tick. The modal does **not** freeze the graph — the dialog’s own callbacks run via `callAsync` and land while the picker’s `CallOutBox` is still open (see `MacroPortConfigDialogInternal.h`’s `buildColourPicker` comment), and a reshaped or removed port destroys the very `ModuleComponent` that was resolved, as does any `clearGraph()` (a preset load, an AI patch apply). So the session holds each surface through a `juce::Component::SafePointer`, never a raw pointer: a surface destroyed mid-session reads back null and is skipped, exactly as re-resolving every tick would have skipped it. `GraphEditor::endMacroPortPreviewSession()` is the one place that forgets an armed session.
 - `setPortColourPreview` / `clearPortColourPreview` report whether a surface actually moved, so an idempotent re-press (and the popup’s `commitOnce()` re-firing the same colour just before the store) repaints nothing.
 - **The teardown backstop.** A picker the user *abandons* without committing — a Close/Escape whose `CallOutBox` outlives the dialog’s own destruction (the `safeDialog`-vs-`safeRow` window its `onPreview` lambda names) — leaves an armed preview the commit path’s clear can never reach. `MacroPortConfigDialog::onRequestClose` now also calls `GraphEditor::cancelArmedMacroPortColourPreview()`, which disarms whatever the open session armed (by the node it cached, no node arg at teardown). A no-op when nothing was armed, so an unrelated Close costs zero repaints.
 - **The docked-widget variant ("only updates after closing the modal").** The docked
@@ -163,7 +163,7 @@ MissingMacroIdReachesNoSurfacesAndDoesNotCrash, ChangeMacroPortColourIsOneUndoSt
 PreviewArmsBothSurfacesButWritesNoStoredColourAndNoUndo, DockedWidgetResolvesPreviewThenStoredThenKindTint,
 CollapsedCardPreviewIsScopedToOnePort, PreviewThenCommitIsOneUndoStepAndShowsStoredColour,
 ColourPickerFiresOnPreviewThenCommitsOnce, AbandonedPickerTearsDownTheArmedPreview,
-CancelWithNoArmedPreviewIsNoOp}`. No data
+CancelWithNoArmedPreviewIsNoOp, ArmedPreviewSurvivesTheSurfaceItArmedBeingDestroyed}`. No data
 or undo change here: the preview is view-layer only, and the commit is the same single
 `MacroSnapshotAction` as before.
 

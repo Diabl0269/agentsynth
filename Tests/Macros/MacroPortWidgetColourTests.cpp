@@ -458,3 +458,51 @@ TEST(MacroPortWidget, CancelWithNoArmedPreviewIsNoOp) {
     EXPECT_FALSE(widget->hasPortColourPreviewForTest());
     EXPECT_TRUE(undo.canUndo());
 }
+
+TEST(MacroPortWidget, ArmedPreviewSurvivesTheSurfaceItArmedBeingDestroyed) {
+    // The session resolves its two paint surfaces ONCE per picker (re-resolving on every tick was the
+    // per-drag cost this replaced), so it must hold them WEAKLY. The modal does NOT freeze the graph:
+    // the dialog's own callbacks run via callAsync and land while the picker's CallOutBox is still open
+    // (see MacroPortConfigDialogInternal.h's buildColourPicker comment), and a removed or reshaped port
+    // destroys the very ModuleComponent the session resolved. Held raw, the teardown backstop below
+    // would touch freed memory; held through SafePointer the dead surface reads back null and is simply
+    // skipped, exactly as re-resolving every tick would have skipped it. ASan (the CI test job) is what
+    // turns a regression here into a red build rather than a silent one.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1600, 1200);
+    auto macroId = makeTwoMemberMacro(editor, engine);
+    ASSERT_FALSE(macroId.isEmpty());
+    editor.setMacroCollapsed(macroId, false);
+    const auto uuid =
+        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    ASSERT_FALSE(uuid.isEmpty());
+    ASSERT_NE(findComponent(editor, nodeIdForUuid(engine, uuid)), nullptr);
+    ASSERT_NE(editor.getMacroCardForTest(macroId), nullptr);
+
+    // A picker drag arms both surfaces and caches them for the rest of this session.
+    editor.previewMacroPortColour(macroId, uuid, juce::Colours::purple);
+    ASSERT_TRUE(findComponent(editor, nodeIdForUuid(engine, uuid))->hasPortColourPreviewForTest());
+    ASSERT_TRUE(editor.getMacroCardForTest(macroId)->hasPortColourPreviewForTest(uuid));
+
+    // The port goes away underneath the still-open picker: its docked widget is destroyed.
+    editor.removeMacroPort(macroId, uuid);
+    editor.updateComponents();
+    ASSERT_EQ(findComponent(editor, nodeIdForUuid(engine, uuid)), nullptr);
+
+    // The abandoned-picker backstop still runs, reaching only the surface that is still alive.
+    editor.cancelArmedMacroPortColourPreview();
+    auto* card = editor.getMacroCardForTest(macroId);
+    ASSERT_NE(card, nullptr) << "the macro still has both of its module members, so its card outlives the port";
+    EXPECT_FALSE(card->hasPortColourPreviewForTest(uuid));
+
+    // And the next arm re-resolves from scratch rather than reusing anything the dead session cached.
+    const auto second =
+        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In B");
+    ASSERT_FALSE(second.isEmpty());
+    auto* secondWidget = findComponent(editor, nodeIdForUuid(engine, second));
+    ASSERT_NE(secondWidget, nullptr);
+    editor.previewMacroPortColour(macroId, second, juce::Colours::orange);
+    EXPECT_TRUE(secondWidget->hasPortColourPreviewForTest());
+    EXPECT_TRUE(editor.getMacroCardForTest(macroId)->hasPortColourPreviewForTest(second));
+}

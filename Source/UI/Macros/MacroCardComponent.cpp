@@ -373,6 +373,13 @@ juce::String MacroCardComponent::getTooltip() {
 }
 
 // ---- live jack-colour preview (view-layer only; never the stored MacroPort::colour) -------
+//
+// Per-port, because one card draws EVERY port's jack at once: the armed entry is keyed by nodeUuid, so
+// previewing one port cannot recolour its siblings. Both set/clear return whether the card actually
+// moved, so GraphEditor::previewMacroPortColour can skip the repaint on an unchanged tick (the picker
+// re-fires the same colour on commit) and clearMacroPortColourPreview stays a real no-op when the
+// committed port was never previewed. Transient view state only -- it is never written back to
+// MacroPort::colour, so dragging the selector pushes no undo step.
 bool MacroCardComponent::setPortColourPreview(const juce::String& nodeUuid, juce::Colour c) {
     // Idempotent -- re-arming the same node with the same colour changes nothing, so repaint nothing.
     if (portColourPreview_ && portColourPreview_->first == nodeUuid && portColourPreview_->second == c)
