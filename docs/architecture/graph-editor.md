@@ -10,12 +10,12 @@ layer map, signal flow and the index of the other topic docs.
 - `GraphEditor.cpp` — constructor/destructor, core lifecycle
 - `GraphEditorCables.cpp` — cable geometry/colour, `GraphContentComponent::paint`/`paintOverChildren`/`resized`
 - `GraphEditorConnections.cpp` — poly-link resolution, connection drag begin/drag/end
-- `GraphEditorSmartConnections.cpp` — forwarders onto `SmartConnectionEngine` (below), `nodeHasCables`, `estimatePortCenter`
+- `GraphEditorSmartConnections.cpp` — the three `SmartConnectionEngine` forwarders (below) GraphEditor keeps because they satisfy `GraphCanvasHost` pure virtuals, plus `nodeHasCables`, `estimatePortCenter`
 - `GraphEditorModuleTitles.cpp` — custom module title get/set/resolve, committing an open inline title editor
 - `GraphEditorCanvas.cpp` — component lifecycle, paint/resized, zoom/pan/minimap, canvas mouse handling
 - `GraphEditorSelection.cpp` — selection model, marquee, selection drag
 - `GraphEditorChannels.cpp` — auto-create-channel-on-connect, "Make channel"/"Duplicate into this channel"
-- `GraphEditorMacroApi.cpp` — out-of-line definitions for `GraphEditor`'s public/private macro forwarders onto `MacroGroupController` (header hygiene, moved bodies out of `GraphEditor.h` unchanged)
+- `GraphEditorMacroApi.cpp` — FRO254: down to one method, `changeMacroPortColour`, the one deliberate exception left after every other macro forwarder onto `MacroGroupController` was migrated and deleted (its body does real work beyond a pass-through: it also repaints both port-colour paint surfaces and disarms any live preview)
 - `GraphEditorMacroCards.cpp` — the macro-presentation pieces that need a genuine `GraphEditor&`/`juce::Component` identity and so stayed out of `MacroGroupController` (`syncMacroCards()`, `categoryPreviewColour()`)
 - `GraphEditorMacroPrompts.cpp` — every macro dialog/popup/menu builder that constructs a `juce::Component::SafePointer<GraphEditor>` for an async callback, for the same reason
 - `GraphEditorCommands.cpp` — snippets, copy/paste/duplicate, context menu, keyboard, delete/replace, timer
@@ -27,22 +27,30 @@ layer map, signal flow and the index of the other topic docs.
 collaborator class extracted out of `GraphEditor`: owns smart-connection mode/suggestion state and
 the proximity-suggestion algorithm (`refreshSmartSuggestions`/`applySmartSuggestions`), reaching its
 canvas only through `Source/UI/Graph/GraphCanvasHost.h` — the narrow interface GraphEditor
-implements privately. `GraphEditor` holds one instance (`smartConnections_`) and forwards its
-existing public smart-connection API to it unchanged.
+implements privately. `GraphEditor` holds one instance (`smartConnections_`), reached externally via
+`getSmartConnections()`. FRO254: its plain one-line forwarders are gone — only
+`refreshSmartSuggestions`/`clearSmartSuggestions`/`seedInsertModifierSample` stay on `GraphEditor`,
+because `GraphDragDropController` calls them polymorphically through the `GraphCanvasHost`
+interface, which a call through `getSmartConnections()` can't satisfy.
 
 `Source/UI/Graph/MacroGroupController/` — `MacroGroupController`, the second
 collaborator: macro grouping/membership/collapse, geometry + card jacks, port CRUD, the
 port-crossing-plan math, and the bypass/mute fan-out, through the same `GraphCanvasHost` seam.
-`GraphEditor` holds `macroController_` and forwards its own macro API to it; a handful of methods
-needing a genuine `GraphEditor&` stay on `GraphEditor` — see `MacroGroupController.h`'s class
-comment.
+`GraphEditor` holds `macroController_`, reached externally via `getMacroController()`. FRO254: its
+plain one-line forwarders are gone — only `changeMacroPortColour` stays (see
+`GraphEditorMacroApi.cpp` above); a handful of other methods needing a genuine `GraphEditor&` also
+stay on `GraphEditor` — see `MacroGroupController.h`'s class comment.
 
 `Source/UI/Graph/GraphDragDropController/` — `GraphDragDropController`, the third
 collaborator: drag-preview state (grid + landing ghost), alignment guides, and the
 `DragAndDropTarget`/`FileDragAndDropTarget` overrides, through the same seam (five new host
 methods: `lookAndFeel`, `seedInsertModifierSample`, `canvasPositionOfLocalPoint`,
-`estimateModuleSizeForType`, `resolveSnippetPayload`). `GraphEditor` holds `dragDropController_`
-and forwards its existing drag-preview/drag-and-drop API to it unchanged.
+`estimateModuleSizeForType`, `resolveSnippetPayload`). `GraphEditor` holds `dragDropController_`,
+reached externally via `getDragDropController()`. FRO254: its plain one-line forwarders
+(beginDragPreview/updateDragPreview/endDragPreview/isDragPreviewActive/getDragPreviewGhost/
+getAlignmentGuides/getDragPreviewSelfId/buildDragPreviewState) are gone; the
+`DragAndDropTarget`/`FileDragAndDropTarget` overrides stay as forwarders unchanged — JUCE resolves
+a drop target by Component identity, so the override itself can't move off `GraphEditor`.
 
 The visual patching interface. Lives in the `AgentSynth` app target.
 
@@ -59,11 +67,27 @@ See [`docs/layout/layout.md`](../layout/layout.md) for the grid model, anti-over
 
 ## New API goes on the collaborator, not GraphEditor
 
-`GraphEditor` is a thin owner of these three collaborators, not a facade over them. The forwarders
-above (42 macro, 9 smart-connection, 8 drag-drop) are legacy: they stay until their call sites
-migrate, but a new method for one of these concerns is declared on the collaborator only and
-reached through `getMacroController()`; the smart-connection and drag-drop collaborators have no
-accessor yet, so the first such method adds one beside it rather than a forwarder. Re-declaring it on
-`GraphEditor` would add it to a header that ~300 translation units include, and make the same API
-reachable two ways. `GraphEditor.h` itself grows only for work that genuinely needs the editor:
-canvas, component lifetime, and wiring between collaborators.
+`GraphEditor` is a thin owner of these three collaborators, not a facade over them. A new method
+for one of these concerns is declared on the collaborator only and reached through
+`getMacroController()` / `getSmartConnections()` / `getDragDropController()` — all three accessors
+exist (FRO254). Re-declaring it on `GraphEditor` would add it to a header that ~300 translation
+units include, and make the same API reachable two ways. `GraphEditor.h` itself grows only for work
+that genuinely needs the editor: canvas, component lifetime, and wiring between collaborators.
+
+FRO254 migrated every call site off the legacy one-line forwarders this rule used to describe as
+"stay until migrated" and deleted them, except a small, deliberate set that can't move:
+
+- **`MacroGroupController::changeMacroPortColour`** — `GraphEditor::changeMacroPortColour`
+  (`GraphEditorMacroApi.cpp`) stays: its body does real work beyond the pass-through (it also
+  repaints both port-colour paint surfaces and disarms any live preview), so callers must keep
+  going through `GraphEditor`, not `getMacroController().changeMacroPortColour(...)` directly.
+- **`SmartConnectionEngine::refreshSmartSuggestions` / `clearSmartSuggestions` /
+  `seedInsertModifierSample`** (`GraphEditorSmartConnections.cpp`) — stay because they satisfy
+  `GraphCanvasHost` pure virtuals that `GraphDragDropController` calls polymorphically through the
+  host interface; a caller reaching the engine directly through `getSmartConnections()` can't
+  satisfy that contract.
+- **`GraphDragDropController`'s `DragAndDropTarget`/`FileDragAndDropTarget` overrides**
+  (`isInterestedInDragSource`/`itemDragEnter`/`itemDragMove`/`itemDragExit`/`itemDropped`/
+  `isInterestedInFileDrag`/`filesDropped`, `GraphEditorDragDrop.cpp`) — stay because JUCE resolves
+  a drop target by Component identity, so the override itself has to stay a `GraphEditor` member
+  even though its body is one call into the controller.
