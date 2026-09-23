@@ -209,7 +209,10 @@ TEST_F(ControlInspectorComponentTest, ProjectRowRendersScopeAndDrivesAndLocatesO
         ++locateCount;
     };
 
-    drivesLabel->mouseUp(realClickEvent(*drivesLabel));
+    // juce::Label::mouseUp is protected; call through the juce::Component base (public there),
+    // relying on virtual dispatch to still reach ClickableLabel's real override -- the "test the
+    // real mouse path" convention, not a direct private-method call.
+    static_cast<juce::Component*>(drivesLabel)->mouseUp(realClickEvent(*drivesLabel));
 
     EXPECT_EQ(locateCount, 1);
     EXPECT_EQ(locatedUuid, "node-uuid-1");

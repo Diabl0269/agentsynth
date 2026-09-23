@@ -237,11 +237,12 @@ private:
     public:
         std::function<void()> onClicked;
 
-    protected:
-        // Not gated on juce::MouseEvent::mouseWasClicked() -- same call as
-        // MixerColumnComponent::mouseUp (see its own comment): that flag reads real
-        // MouseInputSource drag-distance/time state a synthesized event never populates the same
-        // way a live click does, so a headless "press and release" test never satisfies it.
+        // Public, matching MixerColumnComponent/ControllersListComponent's own convention, so a
+        // test can drive a real click through this exactly like a genuine one would. Not gated on
+        // juce::MouseEvent::mouseWasClicked() -- same call as MixerColumnComponent::mouseUp (see
+        // its own comment): that flag reads real MouseInputSource drag-distance/time state a
+        // synthesized event never populates the same way a live click does, so a headless
+        // "press and release" test never satisfies it.
         void mouseUp(const juce::MouseEvent& e) override {
             juce::Label::mouseUp(e);
             if (onClicked)

@@ -59,6 +59,9 @@ public:
 
     void paint(juce::Graphics& g) override;
     void resized() override;
+    // Public, matching MixerColumnComponent's own convention, so a test can drive a real
+    // right-click through this exactly like a genuine click would.
+    void mouseDown(const juce::MouseEvent& event) override;
 
     static constexpr int kRowHeight = 28;
 
@@ -70,8 +73,6 @@ private:
     void showContextMenuForRow(int rowIndex);
     juce::Rectangle<int> boundsForRow(int rowIndex) const;
     int rowIndexAt(juce::Point<int> position) const;
-
-    void mouseDown(const juce::MouseEvent& event) override;
 
     std::vector<Row> rows_;
     juce::String selectedProfileId_;
