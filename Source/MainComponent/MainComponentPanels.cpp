@@ -875,7 +875,9 @@ void MainComponent::applyMidiRemotePreferences() {
     const auto* settings = appProperties.getUserSettings();
     if (settings == nullptr)
         return;
-    remoteEngine.setDefaultTakeover(synth::midi::loadDefaultTakeover(*settings));
+    const auto defaultTakeover = synth::midi::loadDefaultTakeover(*settings);
+    remoteEngine.setDefaultTakeover(defaultTakeover);
+    mixerDock.getMidiRemotePanel().setDefaultTakeover(defaultTakeover);
 
     const bool showBadges = synth::midi::loadShowBadges(*settings);
     if (showBadges == synth::ui::midilearn::areMappedBadgesVisible())

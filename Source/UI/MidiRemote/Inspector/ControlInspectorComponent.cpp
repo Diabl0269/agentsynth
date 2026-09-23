@@ -142,8 +142,20 @@ void populateEncodingCombo(juce::ComboBox& combo) {
     combo.addItem(encodingDisplayName(synth::Encoding::relSignMag), encodingToComboId(synth::Encoding::relSignMag));
 }
 
-void populateTakeoverCombo(juce::ComboBox& combo) {
-    combo.addItem("Default (Scale)", takeoverToComboId(synth::Takeover::useDefault));
+// "Default (<the Preferences default>)": the row names what Default currently means (FRO136).
+juce::String defaultTakeoverItemText(synth::Takeover preferencesDefault) {
+    switch (preferencesDefault) {
+    case synth::Takeover::jump:
+        return "Default (Jump)";
+    case synth::Takeover::pickup:
+        return "Default (Pick-up)";
+    default:
+        return "Default (Scale)";
+    }
+}
+
+void populateTakeoverCombo(juce::ComboBox& combo, synth::Takeover preferencesDefault) {
+    combo.addItem(defaultTakeoverItemText(preferencesDefault), takeoverToComboId(synth::Takeover::useDefault));
     combo.addItem("Jump", takeoverToComboId(synth::Takeover::jump));
     combo.addItem("Pick-up", takeoverToComboId(synth::Takeover::pickup));
     combo.addItem("Scale", takeoverToComboId(synth::Takeover::scale));
@@ -157,7 +169,7 @@ void populateTakeoverCombo(juce::ComboBox& combo) {
 // ================================================================================================
 class ControlInspectorComponent::AssignmentRow : public juce::Component {
 public:
-    AssignmentRow(const AssignmentRowModel& rowModel, int index)
+    AssignmentRow(const AssignmentRowModel& rowModel, int index, synth::Takeover preferencesDefault)
         : model_(rowModel) {
         setComponentID("assignmentRow" + juce::String(index));
 
@@ -178,7 +190,7 @@ public:
         }
         addAndMakeVisible(drivesLabel_);
 
-        populateTakeoverCombo(takeoverCombo_);
+        populateTakeoverCombo(takeoverCombo_, preferencesDefault);
         takeoverCombo_.setComponentID("assignmentTakeoverCombo" + juce::String(index));
         takeoverCombo_.onChange = [this] { commitTakeover(); };
         addAndMakeVisible(takeoverCombo_);
@@ -483,6 +495,13 @@ void ControlInspectorComponent::setControl(const ControlModel& model) {
     repaint();
 }
 
+void ControlInspectorComponent::setDefaultTakeover(synth::Takeover takeover) {
+    if (takeover == synth::Takeover::useDefault || takeover == defaultTakeover_)
+        return;
+    defaultTakeover_ = takeover;
+    setControl(model_); // the rows' Default item carries the name
+}
+
 void ControlInspectorComponent::fireControlEdited() {
     if (onControlEdited)
         onControlEdited(model_.control);
@@ -495,7 +514,7 @@ void ControlInspectorComponent::rebuildRows() {
 
     int index = 0;
     for (const auto& rowModel : model_.assignments) {
-        auto* row = assignmentRows_.add(new AssignmentRow(rowModel, index++));
+        auto* row = assignmentRows_.add(new AssignmentRow(rowModel, index++, defaultTakeover_));
         row->onLocateRequested = [this](const juce::String& nodeUuid) {
             if (onLocateRequested)
                 onLocateRequested(nodeUuid);

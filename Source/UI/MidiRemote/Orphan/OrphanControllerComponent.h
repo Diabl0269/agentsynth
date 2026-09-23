@@ -16,8 +16,9 @@ public:
     ~OrphanControllerComponent() override;
 
     /** `assignmentCount` is how many of this project's assignments reference the controller;
-     *  `canRecreate` is false when no MIDI input is free to recreate it on. */
-    void setOrphan(const juce::String& name, int assignmentCount, bool canRecreate);
+     *  `canRecreate` is false when no MIDI input is free to recreate it on. `hosted` (the plugin
+     *  build, FRO136) adds that a standalone assignment does not fire inside a host. */
+    void setOrphan(const juce::String& name, int assignmentCount, bool canRecreate, bool hosted = false);
     /** Result line under the buttons ("2 assignments stay orphaned ..."); empty clears it. */
     void setStatusText(const juce::String& text);
 
@@ -27,6 +28,7 @@ public:
 
     juce::String getTitleForTest() const { return titleLabel_.getText(); }
     juce::String getStatusTextForTest() const { return statusLabel_.getText(); }
+    juce::String getBodyTextForTest() const { return bodyLabel_.getText(); }
     juce::TextButton& getRelinkButtonForTest() { return relinkButton_; }
     juce::TextButton& getRecreateButtonForTest() { return recreateButton_; }
 

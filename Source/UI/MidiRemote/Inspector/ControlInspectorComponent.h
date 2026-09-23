@@ -39,6 +39,10 @@ public:
      *  no live state of its own between rebuilds. */
     void setControl(const ControlModel& model);
 
+    /** FRO136: the Preferences default takeover, so an assignment set to Default reads "Default (Jump)"
+     *  and so on. Rebuilds the rows when it changes; Scale until set. */
+    void setDefaultTakeover(synth::Takeover takeover);
+
     /** Parameter-target row's "Drives" label clicked -- jump to the module on the canvas. */
     std::function<void(const juce::String& nodeUuid)> onLocateRequested;
     /** A takeover/range/invert edit was committed (Enter / focus-lost / combo change) on the row
@@ -68,6 +72,7 @@ private:
     void fireControlEdited();
 
     ControlModel model_;
+    synth::Takeover defaultTakeover_ = synth::Takeover::scale;
     juce::Label nameLabel_;
     juce::ComboBox kindCombo_;
     juce::Label messageSpecLabel_;

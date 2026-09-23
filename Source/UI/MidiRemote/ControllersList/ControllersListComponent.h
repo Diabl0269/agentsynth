@@ -15,9 +15,13 @@
 // renders (state glyph + "not on this machine" tooltip) but offers no action of its own yet.
 namespace synth::ui {
 
-class ControllersListComponent : public juce::Component {
+class ControllersListComponent
+    : public juce::Component
+    , public juce::TooltipClient {
 public:
-    enum class RowState { present, absent, orphan };
+    /** `standaloneOnly` (plugin build only): a profile for a real device -- it lives on this machine but
+     *  the host never sends its messages, so it is listed and inert. */
+    enum class RowState { present, absent, orphan, standaloneOnly };
 
     struct RowModel {
         juce::String profileId;
@@ -47,6 +51,15 @@ public:
 
     /** FRO134: hidden in the plugin build, where the list holds only Host MIDI. */
     void setAddControllerVisible(bool visible);
+    /** FRO136: the plugin build. Hides "+ Add controller" and words the standalone-only / orphan
+     *  rows' tooltip for a host (a standalone assignment does not fire there). */
+    void setHosted(bool hosted);
+
+    /** The tooltip a hover over `profileId`'s row shows; empty for a row that needs none. */
+    juce::String getTooltipForProfile(const juce::String& profileId) const;
+    juce::String getTooltip() override;
+    /** Row text as painted, for tests. */
+    juce::String getRowDisplayNameForTest(const juce::String& profileId) const;
     /** "+ Add controller" clicked; `anchor` is the button, for the popover to point at. */
     std::function<void(juce::Component& anchor)> onAddControllerRequested;
 
@@ -86,6 +99,7 @@ private:
 
     std::vector<Row> rows_;
     juce::String selectedProfileId_;
+    bool hosted_ = false;
     juce::TextButton addControllerButton_{"+ Add controller"};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ControllersListComponent)

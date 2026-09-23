@@ -179,6 +179,7 @@ set(APPUI_SOURCES
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.h
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.cpp
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelDetect.cpp
+    Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelHosted.cpp
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelControllers.cpp
     Source/UI/MidiRemote/Detect/DetectModeController.h
     Source/UI/MidiRemote/Detect/DetectModeController.cpp

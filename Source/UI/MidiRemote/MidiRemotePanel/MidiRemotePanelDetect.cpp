@@ -9,8 +9,8 @@
 namespace synth::ui {
 
 void MidiRemotePanelComponent::setDetectActive(bool active) {
-    if (active && findSelectedProfile() == nullptr)
-        active = false;
+    if (active && !isSelectedProfileUsable())
+        active = false; // nothing selected, or (in a host) a standalone-only controller that hears nothing
     detect_.setActive(active);
     toolbar_.setDetectOn(active);
     if (!active)

@@ -2,9 +2,9 @@
 // Preferences keys reach the things they govern live, through the settings-file broadcast
 // MainComponent already listens to -- Default takeover into RemoteEngine (Core never reads
 // settings), and the badge switch into the MIDI Learn badge painter every surface shares.
-#include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
 #include "MidiRemote/MidiRemotePreferences.h"
+#include "MidiRemoteMockProvider.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 #include "UserSettings.h"
@@ -14,31 +14,6 @@
 #include <vector>
 
 namespace {
-
-class MockProviderMRPref : public synth::AIProvider {
-public:
-    juce::String getProviderName() const override { return "MockMRPref"; }
-    void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
-        callback({"MockModel"}, true);
-    }
-    RequestId sendPrompt(const std::vector<Message>&, CompletionCallback callback, const juce::var&,
-                         std::function<void(const juce::String&)> = {}) override {
-        AIResponse response;
-        response.success = true;
-        if (callback)
-            callback(response);
-        return {};
-    }
-    void cancel(RequestId) override {}
-    void setModel(const juce::String& name) override { model = name; }
-    juce::String getCurrentModel() const override { return model; }
-    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
-    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
-
-private:
-    juce::String model = "MockModel";
-    int requestTimeoutMs = 240000;
-};
 
 // MainComponent reads and writes the developer's real settings file, so the two keys go back exactly
 // as they were (including "absent"), and the process-wide badge switch goes back to its default.
@@ -71,7 +46,7 @@ void pump() { juce::MessageManager::getInstance()->runDispatchLoopUntil(60); }
 } // namespace
 
 TEST(MidiRemotePreferencesTests, DefaultTakeoverReachesTheEngineLive) {
-    MainComponent mc(std::make_unique<MockProviderMRPref>());
+    MainComponent mc(std::make_unique<MidiRemoteMockProvider>());
     mc.setSize(1200, 800);
     auto& props = mc.getAppPropertiesForTest();
     MidiRemotePrefsKeysGuard guard(*props.getUserSettings());
@@ -93,19 +68,19 @@ TEST(MidiRemotePreferencesTests, DefaultTakeoverReachesTheEngineLive) {
 
 TEST(MidiRemotePreferencesTests, TheStoredTakeoverIsAppliedAtLaunch) {
     {
-        MainComponent seed(std::make_unique<MockProviderMRPref>());
+        MainComponent seed(std::make_unique<MidiRemoteMockProvider>());
         MidiRemotePrefsKeysGuard guard(*seed.getAppPropertiesForTest().getUserSettings());
         seed.getAppPropertiesForTest().getUserSettings()->setValue(synth::kMidiRemoteDefaultTakeoverSettingKey,
                                                                    "pickup");
         seed.getAppPropertiesForTest().getUserSettings()->saveIfNeeded();
 
-        MainComponent mc(std::make_unique<MockProviderMRPref>());
+        MainComponent mc(std::make_unique<MidiRemoteMockProvider>());
         EXPECT_EQ(mc.getRemoteEngineForTest().getDefaultTakeover(), synth::Takeover::pickup);
     }
 }
 
 TEST(MidiRemotePreferencesTests, BadgeSwitchReachesThePainterLive) {
-    MainComponent mc(std::make_unique<MockProviderMRPref>());
+    MainComponent mc(std::make_unique<MidiRemoteMockProvider>());
     mc.setSize(1200, 800);
     auto& props = mc.getAppPropertiesForTest();
     MidiRemotePrefsKeysGuard guard(*props.getUserSettings());

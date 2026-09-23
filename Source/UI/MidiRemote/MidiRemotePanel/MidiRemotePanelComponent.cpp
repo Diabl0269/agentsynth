@@ -121,10 +121,13 @@ void MidiRemotePanelComponent::rebuildFromProfiles() {
     const bool hosted = audioEngine_->isHosted();
 
     std::vector<ControllersListComponent::RowModel> rows;
+    if (hosted && !hostMidiProfileExists())
+        rows.push_back({kHostMidiProfileId, "Host MIDI", ControllersListComponent::RowState::present});
     for (const auto& profile : profiles) {
+        const auto notHere =
+            hosted ? ControllersListComponent::RowState::standaloneOnly : ControllersListComponent::RowState::absent;
         rows.push_back({profile.id, profile.name,
-                        isProfilePresent(profile) ? ControllersListComponent::RowState::present
-                                                  : ControllersListComponent::RowState::absent});
+                        isProfilePresent(profile) ? ControllersListComponent::RowState::present : notHere});
     }
     for (const auto& ref : doc_->controllers) {
         const bool hasLocalProfile =
@@ -133,14 +136,16 @@ void MidiRemotePanelComponent::rebuildFromProfiles() {
             rows.push_back({ref.profileId, ref.name, ControllersListComponent::RowState::orphan});
     }
     controllersList_.setRows(rows);
-    controllersList_.setAddControllerVisible(!hosted); // the plugin build's list is exactly Host MIDI
+    controllersList_.setHosted(hosted); // the plugin build's live list is exactly Host MIDI
 
-    if (!selectedProfileId_.isEmpty() && findSelectedProfile() == nullptr && !isOrphanId(selectedProfileId_)) {
+    const bool selectedIsHostMidiRow = hosted && selectedProfileId_ == kHostMidiProfileId;
+    if (!selectedProfileId_.isEmpty() && findSelectedProfile() == nullptr && !isOrphanId(selectedProfileId_) &&
+        !selectedIsHostMidiRow) {
         selectedProfileId_.clear();
         selectedControlId_.clear();
         setDetectActive(false);
     }
-    toolbar_.setProfileSelected(findSelectedProfile() != nullptr);
+    toolbar_.setProfileSelected(isSelectedProfileUsable());
     refreshSurfaceForSelectedProfile();
     refreshInspectorForSelection();
 }
@@ -229,6 +234,9 @@ bool MidiRemotePanelComponent::selectAssignmentForParameter(const juce::String& 
 }
 
 void MidiRemotePanelComponent::selectProfile(const juce::String& profileId) {
+    if (profileId == kHostMidiProfileId && audioEngine_ != nullptr && audioEngine_->isHosted() &&
+        !hostMidiProfileExists())
+        createHostMidiProfile();
     if (profileId != selectedProfileId_) {
         setDetectActive(false); // Detect belongs to one controller
         encoderDetect_.cancel();
@@ -238,7 +246,7 @@ void MidiRemotePanelComponent::selectProfile(const juce::String& profileId) {
     selectedProfileId_ = profileId;
     selectedControlId_.clear();
     controllersList_.setSelectedProfileId(profileId);
-    toolbar_.setProfileSelected(findSelectedProfile() != nullptr);
+    toolbar_.setProfileSelected(isSelectedProfileUsable());
     refreshSurfaceForSelectedProfile();
     refreshInspectorForSelection();
 }
@@ -356,7 +364,7 @@ void MidiRemotePanelComponent::refreshInspectorForSelection() {
             if (ref.profileId == selectedProfileId_)
                 name = ref.name;
         orphanView_.setOrphan(name, learnController_->countProjectAssignmentsForProfile(selectedProfileId_),
-                              !getRecreateInputs().empty());
+                              !getRecreateInputs().empty(), audioEngine_ != nullptr && audioEngine_->isHosted());
         orphanView_.setStatusText(orphanStatus_);
         return;
     }

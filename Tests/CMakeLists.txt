@@ -394,6 +394,7 @@ add_executable(Tests
     UI/Mixer/MixerDockComponentTests.cpp
     UI/MidiRemote/MidiRemotePanelTests.cpp
     UI/MidiRemote/MidiRemotePreferencesTests.cpp
+    UI/MidiRemote/MidiRemotePanelHostedTests.cpp
     UI/MidiRemote/ControllerSurfaceDetectTests.cpp
     UI/MidiRemote/MidiRemotePanelControllersTests.cpp
     UI/MidiRemote/AddControllerPopoverTests.cpp
@@ -579,6 +580,7 @@ add_executable(Tests
     ../Source/UI/MidiRemote/MidiLearnMenu.cpp
     ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.cpp
     ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelDetect.cpp
+    ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelHosted.cpp
     ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelControllers.cpp
     ../Source/UI/MidiRemote/Detect/DetectModeController.cpp
     ../Source/UI/MidiRemote/AddController/AddControllerPopover.cpp
