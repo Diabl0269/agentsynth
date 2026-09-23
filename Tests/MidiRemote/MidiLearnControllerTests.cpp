@@ -563,8 +563,9 @@ TEST_F(MidiLearnControllerTest, DeleteProfileRemovesItFromGetProfilesAndDisk) {
     ASSERT_EQ(controller_->getProfiles().size(), 1u);
     const juce::String profileId = controller_->getProfiles()[0].id;
 
-    // Verify the profile file exists on disk
-    auto profiles = profileStore_.loadAll();
+    // Verify the profile file exists on disk -- a fresh store against the same root_, since
+    // controller_ owns its own ControllerProfileStore instance rather than exposing it.
+    auto profiles = synth::ControllerProfileStore(root_).loadAll();
     ASSERT_EQ(profiles.profiles.size(), 1u);
 
     EXPECT_TRUE(controller_->deleteProfile(profileId));
@@ -572,7 +573,7 @@ TEST_F(MidiLearnControllerTest, DeleteProfileRemovesItFromGetProfilesAndDisk) {
     EXPECT_TRUE(controller_->getProfiles().empty()) << "the profile is removed from getProfiles()";
 
     // Verify the profile file is deleted from disk
-    profiles = profileStore_.loadAll();
+    profiles = synth::ControllerProfileStore(root_).loadAll();
     EXPECT_TRUE(profiles.profiles.empty()) << "the profile file is deleted";
 }
 
