@@ -47,6 +47,11 @@ node is simply created with no sample loaded.
 Nothing in `getPatchSchema()` advertises `state`, so a constrained decoder is never invited to emit
 one.
 
+A `Hosted Plugin` node's `state` also carries the optional key `"cardLayout"` (the per-instance
+knob layout, see [`../control/plugin-card-layout.md`](../control/plugin-card-layout.md)): trusted-only
+like the rest of it, and doubly unreachable from a provider because the type itself is
+non-authorable.
+
 ## Per-node `uuid`
 
 A stable per-node identity, generated lazily by `graphToJSON` and persisted back into the graph

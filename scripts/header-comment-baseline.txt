@@ -11,7 +11,7 @@
 2 Source/AI/AccountService.h
 30 Source/AI/PatchDiff.h
 25 Source/AI/RemoteProvider.h
-132 Source/AppUndoManager.h
+131 Source/AppUndoManager.h
 132 Source/AudioEngine/AudioEngine.h
 50 Source/MacroSet.h
 103 Source/Mixer/ChannelFlows/ChannelFlows.h
@@ -19,7 +19,7 @@
 49 Source/Mixer/TrackPresetManager.h
 45 Source/Modules/RecordTapModule.h
 38 Source/Plugin/Hosting/HostedPluginBackend.h
-81 Source/Plugin/Hosting/HostedPluginModule.h
+80 Source/Plugin/Hosting/HostedPluginModule.h
 147 Source/Plugin/Hosting/PluginScanService.h
 60 Source/ProjectBundle.h
 56 Source/SnippetManager.h

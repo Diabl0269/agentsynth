@@ -358,6 +358,8 @@ add_library(Core STATIC
     Source/Modules/ComparatorModule.h
     Source/Modules/AttenuverterModule.h
     Source/Modules/EnvelopeFollowerModule.h
+    Source/Modules/CardLayout.cpp
+    Source/Modules/CardLayout.h
     Source/Modules/MacroControlModule.h
     Source/Modules/RecordTapModule.cpp
     Source/Modules/RecordTapModule.h
@@ -391,6 +393,7 @@ add_library(Core STATIC
     Source/Plugin/Hosting/HostedPluginBackend.h
     Source/Plugin/Hosting/HostedPluginModule.cpp
     Source/Plugin/Hosting/HostedPluginModule.h
+    Source/Plugin/Hosting/HostedPluginModuleCardLayout.cpp
     Source/Plugin/Hosting/PluginScanService.cpp
     Source/Plugin/Hosting/PluginScanService.h
     Source/Plugin/Hosting/PluginScanCrashGuard.cpp

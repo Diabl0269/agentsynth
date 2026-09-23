@@ -40,17 +40,31 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StubPluginEditor)
 };
 
+/** Optional parameter-kind traits shared by both stub parameter classes: what the card layout's
+ *  automatic default and kind derivation key on (isAutomatable / isBoolean / isDiscrete + value strings). */
+struct StubParamTraits {
+    bool automatable = true;
+    bool boolean = false;
+    juce::StringArray choices; // non-empty => a discrete parameter with these value strings
+};
+
 /** A stable-id (VST3/AU/LV2-style) stub parameter. Implements
  *  juce::HostedAudioProcessorParameter, the real hierarchy hosted plugin parameters use (NOT
  *  RangedAudioParameter — see HostedPluginModule.h), so tests exercise the exact type the resolver
  *  branches on. */
 class StubHostedParameter : public juce::HostedAudioProcessorParameter {
 public:
-    StubHostedParameter(juce::String paramId, juce::String name, float defaultValue = 0.0f)
+    StubHostedParameter(juce::String paramId, juce::String name, float defaultValue = 0.0f, StubParamTraits traits = {})
         : paramId_(std::move(paramId))
         , name_(std::move(name))
         , value_(defaultValue)
-        , defaultValue_(defaultValue) {}
+        , defaultValue_(defaultValue)
+        , traits_(std::move(traits)) {}
+
+    bool isAutomatable() const override { return traits_.automatable; }
+    bool isBoolean() const override { return traits_.boolean; }
+    bool isDiscrete() const override { return traits_.boolean || !traits_.choices.isEmpty(); }
+    juce::StringArray getAllValueStrings() const override { return traits_.choices; }
 
     juce::String getParameterID() const override { return paramId_; }
 
@@ -66,6 +80,7 @@ private:
     juce::String name_;
     float value_;
     float defaultValue_;
+    StubParamTraits traits_;
 };
 
 /** A LEGACY stub parameter with NO stable id — the same shape JUCE's own VST2 wrapper produces for
@@ -77,10 +92,13 @@ private:
  *  returning an EMPTY string, not by opting out of the interface entirely. */
 class StubLegacyParameter : public juce::HostedAudioProcessorParameter {
 public:
-    explicit StubLegacyParameter(juce::String name, float defaultValue = 0.0f)
+    explicit StubLegacyParameter(juce::String name, float defaultValue = 0.0f, StubParamTraits traits = {})
         : name_(std::move(name))
         , value_(defaultValue)
-        , defaultValue_(defaultValue) {}
+        , defaultValue_(defaultValue)
+        , traits_(std::move(traits)) {}
+
+    bool isAutomatable() const override { return traits_.automatable; }
 
     juce::String getParameterID() const override { return {}; }
 
@@ -95,6 +113,7 @@ private:
     juce::String name_;
     float value_;
     float defaultValue_;
+    StubParamTraits traits_;
 };
 
 /** One entry in the constructor's parameter list: a stable id + name builds a StubHostedParameter,
@@ -103,6 +122,8 @@ struct StubParamSpec {
     juce::String paramId; // empty => legacy/no-id parameter
     juce::String name;
     float defaultValue = 0.0f;
+    StubParamTraits traits;
+    bool isBypass = false; // the instance reports this parameter from getBypassParameter()
 };
 
 /** A juce::AudioPluginInstance that marks the audio it touches and round-trips a state blob.
@@ -160,10 +181,14 @@ public:
         // hosted parameter must be a HostedAudioProcessorParameter) takes ownership, exactly like
         // juce::AudioProcessor::addParameter does for our own modules' parameters.
         for (const auto& spec : params) {
+            std::unique_ptr<juce::HostedAudioProcessorParameter> param;
             if (spec.paramId.isNotEmpty())
-                addHostedParameter(std::make_unique<StubHostedParameter>(spec.paramId, spec.name, spec.defaultValue));
+                param = std::make_unique<StubHostedParameter>(spec.paramId, spec.name, spec.defaultValue, spec.traits);
             else
-                addHostedParameter(std::make_unique<StubLegacyParameter>(spec.name, spec.defaultValue));
+                param = std::make_unique<StubLegacyParameter>(spec.name, spec.defaultValue, spec.traits);
+            if (spec.isBypass)
+                bypassParameter_ = param.get();
+            addHostedParameter(std::move(param));
         }
 
         if (initialLatency > 0)
@@ -195,6 +220,8 @@ public:
     }
 
     const juce::String getName() const override { return name_; }
+
+    juce::AudioProcessorParameter* getBypassParameter() const override { return bypassParameter_; }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
         preparedSampleRate = sampleRate;
@@ -294,6 +321,7 @@ private:
         delayWritePos = 0;
     }
 
+    juce::AudioProcessorParameter* bypassParameter_ = nullptr; // owned by the base's parameter tree
     juce::String name_;
     juce::String format_;
     int uid_ = 0;

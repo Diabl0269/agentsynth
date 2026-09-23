@@ -15,6 +15,7 @@ add_executable(Tests
     TestMain.cpp
     UI/Layout/LayoutUtilTests.cpp
     Modules/OscillatorTests.cpp
+    Modules/CardLayoutTests.cpp
     Modules/FilterTests.cpp
     Modules/StereoVoiceModule/StereoVoiceModulePanLawTests.cpp
     Modules/StereoVoiceModule/StereoVoiceModuleOscillatorTests.cpp
@@ -120,6 +121,7 @@ add_executable(Tests
     Engine/LatencyAlignmentTests.cpp
     Timeline/AudioClipPlaybackTests.cpp
     Plugin/HostedPluginTests.cpp
+    Plugin/PluginCardLayoutStoreTests.cpp
     Plugin/PluginScan/PluginScanLifecycleTests.cpp
     Plugin/PluginScan/PluginScanCrashTimeoutTests.cpp
     Plugin/PluginScan/PluginScanCrashGuardTests.cpp
@@ -606,6 +608,8 @@ add_executable(Tests
     ../Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogRowOrdering.cpp
     ../Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogTestSeams.cpp
     ../Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogAutoPortPrompt.cpp
+    ../Source/Plugin/Hosting/PluginCardLayoutStore.cpp
+    ../Source/Plugin/Hosting/HostedPluginCardLayout.cpp
     ../Source/Plugin/Hosting/HostedPluginEditorWindow.cpp
     ../Source/UI/Settings/AudioSettingsTab.cpp
     ../Source/UI/Settings/SettingsWindow.cpp
