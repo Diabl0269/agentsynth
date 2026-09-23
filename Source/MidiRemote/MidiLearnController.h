@@ -157,6 +157,9 @@ public:
      *  -- see the .cpp for why action/nodeCommand targets are rejected here. */
     bool updateAssignment(const Assignment& updated);
 
+    // MESSAGE THREAD (FRO262). Republishes the engine's open MIDI inputs to RemoteEngine::setSources().
+    void refreshSources();
+
 private:
     /** Forwards MouseListener clicks and polls RemoteEngine::isLearnArmed() for the silent-timeout
      *  cancel path, which fires no callback of its own
@@ -183,7 +186,6 @@ private:
         }
     };
 
-    void refreshSources();
     void handleLearned(const LearnResult& result);
     void handleLearnedAction(const LearnResult& result, LearnBindOutcome& outcome);
     void endArmedUi();

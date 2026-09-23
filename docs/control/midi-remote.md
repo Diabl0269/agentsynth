@@ -457,8 +457,17 @@ buffer — on the audio thread, which the sink is already built for (no locks, n
 see [Threading](#threading-the-mapping-table-crosses-threads)).
 
 Device opening: the standalone engine opens every input device that has a profile
-(`ensureMidiDeviceOpen`) at startup and on device-list change, in addition to the Audio tab's
-ticked devices — a profiled controller must never need a second checkbox to work.
+(`ensureMidiDeviceOpen`) at startup, in addition to the Audio tab's ticked devices — a profiled
+controller must never need a second checkbox to work. Ticking a device in the Audio tab (or a
+controller reconnecting) after that startup priming also opens it live: `AudioEngine::changeListenerCallback`
+reconciles the open set against the Audio tab's checkboxes on every device-manager change
+broadcast (FRO262 — see [`docs/architecture/audio-engine.md`](../architecture/audio-engine.md#audioengine)),
+and `MidiLearnController::refreshSources()` republishes the resulting source list to
+`RemoteEngine::setSources()` so an armed Learn sees the new source without waiting for its own
+next arm. Unticking a device does **not** close it live — only a physical disconnect does; see
+`AudioEngine::reconcileMidiInputs()`'s own comment (`Source/AudioEngine/AudioEngineMidi.cpp`) for
+why treating "unticked" as a close signal would regress every user who has never opened the Audio
+tab at all.
 
 Live activity for the panel ([`midi-remote-ui.md`](midi-remote-ui.md#the-midi-remote-panel)) rides the same FIFO: every event carries its
 decoded value; the panel drains a separate mirror ring at its own rate, and an unassigned control

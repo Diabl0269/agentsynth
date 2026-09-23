@@ -385,6 +385,16 @@ void MainComponent::wireMidiRemoteEngine() {
         sources.push_back(synth::midi::hostSourceKey());
     remoteEngine.setSources(sources);
 
+    // FRO262: the priming above only ever runs once, here. A device ticked in the Audio tab (or one
+    // that reappears after a reconnect) afterwards needs the SAME re-registration --
+    // AudioEngine::reconcileMidiInputs() (changeListenerCallback) decides WHICH devices end up
+    // open, and refreshSources() just republishes the resulting set through the identical
+    // getOpenMidiInputIdentifiers -> RemoteEngine::setSources() path used above. A no-op assignment
+    // in Hosted mode: the callback that would invoke it can structurally never fire there
+    // (changeListenerCallback's own isHosted() guard) -- cleared in MainComponent's destructor
+    // beside onDeviceStateChanged.
+    audioEngine.onMidiDevicesChanged = [this] { midiLearnController_.refreshSources(); };
+
     // FRO133: the mixer panel and transport bar are plain MainComponent members, already fully
     // constructed by the time any constructor-body wiring function runs (member-init order, not
     // this function's own call order) -- so it's safe to hand MidiLearnController their addresses

@@ -100,23 +100,28 @@ void AudioEngine::initialiseDevices(const juce::XmlElement* savedDeviceState) {
     midiMessageCollector.reset(collectorRate > 0.0 ? collectorRate : 44100.0);
 
     // Enable all available MIDI inputs by default
-    for (auto& info : juce::MidiInput::getAvailableDevices()) {
-        auto input = juce::MidiInput::openDevice(info.identifier, this);
-        if (input != nullptr) {
-            input->start();
-            midiInputs.push_back(std::move(input));
-        }
-    }
+    for (auto& info : availableMidiInputs())
+        openMidiInput(info);
 }
 
 void AudioEngine::changeListenerCallback(juce::ChangeBroadcaster* source) {
     // Only ever subscribed to our own device manager, and only in Standalone mode; both checks are
-    // here so a future subscription can't silently start persisting something else's state.
+    // here so a future subscription can't silently start persisting something else's state. The
+    // same guard is what makes reconcileMidiInputs() below structurally unreachable in Hosted mode
+    // -- HostMode::Hosted never opens hardware MIDI itself (Source/CLAUDE.md).
     if (isHosted() || source != &deviceManager)
         return;
 
     if (onDeviceStateChanged)
         onDeviceStateChanged(deviceManager.createStateXml());
+
+    // FRO262: this broadcast is also JUCE's only signal that the Audio tab's MIDI Input list
+    // changed -- a device ticked (or one that reappears after a reconnect) after
+    // initialiseDevices()'s one-shot launch loop ran must still reach MIDI Learn/MIDI Remote and
+    // general MIDI input. See reconcileMidiInputs() (AudioEngineMidi.cpp) for what "reconcile"
+    // does and does not do.
+    if (reconcileMidiInputs() && onMidiDevicesChanged)
+        onMidiDevicesChanged();
 }
 
 void AudioEngine::shutdown() {

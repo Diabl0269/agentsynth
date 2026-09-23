@@ -434,6 +434,7 @@ add_executable(Tests
     UI/Chrome/ExportAudioDialogTests.cpp
     Engine/MetronomeTests.cpp
     Engine/DeviceChangeTests.cpp
+    Engine/MidiInputReconcileTests.cpp
     Timeline/TimelineE2ETests.cpp
     Project/PatchDocumentTests.cpp
     Project/ProjectBundleTests.cpp
