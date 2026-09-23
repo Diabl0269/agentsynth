@@ -111,6 +111,11 @@ public:
     /** Esc key / clicking the canvas elsewhere while armed. A no-op if nothing is armed. */
     void cancelArmed();
 
+    /** FRO263: fires after every mutation that changes what the MIDI Remote panel shows. May be
+     *  null (tests, or before MainComponent finishes wiring). See publishAssignments()'s .cpp
+     *  comment for exactly which call sites fire it and why the panel-side handler must defer. */
+    std::function<void()> onChanged;
+
     /** FRO133: non-owning, may be null (tests, or before MainComponent finishes wiring -- same
      *  null contract as TimelineTransportBar::setTransport). Set once so a mixer-fader/pan/mute
      *  learn shows its OWN breathing outline on the mixer column, not only on the canvas card

@@ -78,6 +78,9 @@ public:
     void rebuildMixer() { mixer_.rebuild(); }
     MixerPanelComponent& getMixerPanel() noexcept { return mixer_; }
 
+    /** FRO263: mirrors rebuildMixer() above -- see its call site's own comment. */
+    void rebuildMidiRemote() { midiRemotePanel_.rebuildFromProfiles(); }
+
     /** THE P9-5 HOOK for TrackChannelLinkController::setMixerRevealHook: switches to the Mixer
      *  tab and reveals `stripId`'s column. False when nothing resolves (no such column --
      *  TrackChannelLinkController falls back to the canvas reveal then). Does NOT open the dock

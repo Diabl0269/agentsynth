@@ -130,6 +130,19 @@ void MidiRemotePanelComponent::rebuildFromProfiles() {
     refreshInspectorForSelection();
 }
 
+void MidiRemotePanelComponent::scheduleLiveRefresh() {
+    if (liveRefreshPending_)
+        return;
+    liveRefreshPending_ = true;
+    juce::Component::SafePointer<MidiRemotePanelComponent> safeThis(this);
+    juce::MessageManager::callAsync([safeThis] {
+        if (safeThis == nullptr)
+            return;
+        safeThis->liveRefreshPending_ = false;
+        safeThis->rebuildFromProfiles();
+    });
+}
+
 void MidiRemotePanelComponent::refreshActivity() {
     if (remoteEngine_ == nullptr || learnController_ == nullptr)
         return;
