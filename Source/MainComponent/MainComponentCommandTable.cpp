@@ -284,7 +284,7 @@ bool MainComponent::applyZoomCommand(juce::CommandID commandID) {
 
 bool MainComponent::touchesAnyMacro() const {
     for (auto nodeId : graphEditor.getSelectedNodes()) {
-        if (graphEditor.getMacroController().macroForNode(nodeId) != nullptr)
+        if (graphEditor.macroForNode(nodeId) != nullptr)
             return true;
     }
     return false;
@@ -557,14 +557,14 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
          "Group the selection into a new Macro, or toggle collapse/expand if it already touches one", "Edit",
          "groupSelection", [](const MainComponent& m) { return m.canGroupSelection(); },
          [](MainComponent& m) {
-             m.graphEditor.getMacroController().groupOrToggleSelectionMacros();
+             m.graphEditor.groupOrToggleSelectionMacros();
              return true;
          }},
         {AppCommands::ungroupSelection, "Ungroup Macro",
          "Dissolve the macro the selection belongs to, keeping its modules", "Edit", "ungroupSelection",
          [](const MainComponent& m) { return m.hasSelection(); },
          [](MainComponent& m) {
-             m.graphEditor.getMacroController().ungroupSelection();
+             m.graphEditor.ungroupSelection();
              return true;
          }},
         // toggleSelectionMacrosCollapsed() itself refuses (with a status message) when the
@@ -575,7 +575,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
          "Toggle the collapsed state of the macro the selection belongs to", "Edit", "collapseMacro",
          [](const MainComponent& m) { return m.touchesAnyMacro(); },
          [](MainComponent& m) {
-             m.graphEditor.getMacroController().toggleSelectionMacrosCollapsed();
+             m.graphEditor.toggleSelectionMacrosCollapsed();
              return true;
          }},
         // Mirrors the canvas context menu item's setEnabled -- same predicate, so the two
@@ -719,6 +719,17 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTimelineAndPanelComm
          {},
          [](MainComponent& m) {
              m.performToggleMixerPanel();
+             return true;
+         }},
+        // FRO131: same shape as toggleMixerPanel's own row above -- a third tab on the same dock.
+        {AppCommands::toggleMidiRemotePanel,
+         "Toggle MIDI Remote Panel",
+         "Toggle the MIDI Remote tab in the bottom-docked panel",
+         "View",
+         "toggleMidiRemotePanel",
+         {},
+         [](MainComponent& m) {
+             m.performToggleMidiRemotePanel();
              return true;
          }},
     };

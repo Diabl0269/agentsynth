@@ -3,6 +3,7 @@
 #include "MixerPanelComponent/MixerPanelComponent.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/DetachablePanelHost/DetachablePanelHost.h"
+#include "UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include <functional>
@@ -11,6 +12,15 @@
 class AppUndoManager;
 class GraphEditor;
 class AudioEngine;
+
+namespace synth {
+class MidiRemoteProjectDoc;
+} // namespace synth
+
+namespace synth::midi {
+class RemoteEngine;
+class MidiLearnController;
+} // namespace synth::midi
 
 // MixerDockComponent.h -- FRO11 (P9-5, docs/mixer/panel.md): the bottom dock's own tab strip.
 //
@@ -26,7 +36,10 @@ namespace synth::ui {
 
 class MixerDockComponent : public juce::Component {
 public:
-    enum class Tab { Timeline, Mixer };
+    // FRO131 (docs/control/midi-remote-ui.md#the-midi-remote-panel): MidiRemote is a third,
+    // always-offered tab -- unlike Mixer it has no OwnPanel/Window placement variant, so there is
+    // no MidiRemote counterpart to mixerTabEnabled_.
+    enum class Tab { Timeline, Mixer, MidiRemote };
 
     // FRO12 (P9-6, docs/mixer/panel.md): `appProperties`/`lookAndFeel`/`shortcutManager` are
     // forwarded straight into timelineHost_/mixerHost_ (both DetachablePanelHost) -- see that
@@ -54,6 +67,7 @@ public:
 
     Tab getActiveTab() const noexcept { return activeTab_; }
     bool isMixerTabActive() const noexcept { return activeTab_ == Tab::Mixer; }
+    bool isMidiRemoteTabActive() const noexcept { return activeTab_ == Tab::MidiRemote; }
     /** Switches tabs (persisting the choice) and lays out; a no-op if already on `tab`. Does NOT
      *  open/close the dock itself -- that stays MainComponent's own isTimelineVisible/
      *  beginPanelSlide() (see the class comment). */
@@ -89,6 +103,12 @@ public:
      *  check already had (isVisible() doesn't know the app itself is minimized either). */
     bool isMixerShowing() const noexcept { return mixerHost_.isDetached() || (isMixerTabActive() && isVisible()); }
 
+    /** FRO131: same "showing anywhere a tick would be visible" shape as isMixerShowing() above,
+     *  for MainComponent::timerCallback's refreshMidiRemoteActivity() gate. */
+    bool isMidiRemoteShowing() const noexcept {
+        return midiRemoteHost_.isDetached() || (isMidiRemoteTabActive() && isVisible());
+    }
+
     // FRO12 (P9-6): whether the Mixer tab itself is offered at all -- false when the Mixer
     // placement preference is "Own panel" or "Window" (MixerPlacementController owns mixerHost_
     // entirely in those modes; see that class). Forces the active tab back to Timeline if it was
@@ -102,6 +122,32 @@ public:
      *  placement -- MixerPlacementController reparents it into its own "Own panel" strip, or
      *  leaves it unparented (never eagerly shown) in "Window" placement until first reveal. */
     synth::ui::DetachablePanelHost& getMixerHost() noexcept { return mixerHost_; }
+    /** The MIDI Remote panel's detach-to-window host, and the panel itself -- always owned and,
+     *  since MidiRemote has no placement variant, always parented here (unlike getMixerHost()). */
+    synth::ui::DetachablePanelHost& getMidiRemoteHost() noexcept { return midiRemoteHost_; }
+    synth::ui::MidiRemotePanelComponent& getMidiRemotePanel() noexcept { return midiRemotePanel_; }
+
+    /** MainComponent::wireMidiRemoteEngine(): wires the panel's live dependencies, which (like
+     *  MidiLearnController itself) don't exist yet at THIS component's own construction time --
+     *  see MidiRemotePanelComponent.h's class comment for why configure() exists instead of
+     *  constructor params. */
+    void configureMidiRemote(AudioEngine& audioEngine, synth::midi::RemoteEngine& remoteEngine,
+                             synth::midi::MidiLearnController& learnController, synth::MidiRemoteProjectDoc& doc,
+                             GraphEditor& graphEditor) {
+        midiRemotePanel_.configure(audioEngine, remoteEngine, learnController, doc, graphEditor);
+    }
+
+    /** MainComponent::wireGraphEditorCallbacks()'s onEditMidiAssignmentRequested target: switches
+     *  to the MidiRemote tab and selects the assignment for (nodeUuid, paramId). Does NOT open the
+     *  dock if it's closed -- same contract as revealColumnForStrip() above, the caller does that
+     *  first. Returns false if no assignment exists for that parameter yet. */
+    bool selectMidiRemoteAssignment(const juce::String& nodeUuid, const juce::String& paramId) {
+        setActiveTab(Tab::MidiRemote);
+        return midiRemotePanel_.selectAssignmentForParameter(nodeUuid, paramId);
+    }
+
+    /** MainComponent::timerCallback's gated tick -- mirrors refreshMeters() below exactly. */
+    void refreshMidiRemoteActivity() { midiRemotePanel_.refreshActivity(); }
 
     /** Fires whenever either host's detach state changes (docked<->detached, either direction --
      *  including a window's own close button). MainComponent hooks this to re-run its focus-region
@@ -146,13 +192,18 @@ private:
 
     TimelinePanelComponent& timelinePanel_;
     MixerPanelComponent mixer_;
+    // FRO131: the panel and its host follow the same "declared before its host so the reference
+    // is valid" rule as mixer_/mixerHost_ below.
+    synth::ui::MidiRemotePanelComponent midiRemotePanel_;
     // FRO12 (P9-6): both panels' detach-to-window hosts. Declared after timelinePanel_/mixer_ so
     // both references are valid -- see DetachablePanelHost's own "held by reference, never
     // copied" contract.
     synth::ui::DetachablePanelHost timelineHost_;
     synth::ui::DetachablePanelHost mixerHost_;
+    synth::ui::DetachablePanelHost midiRemoteHost_;
     juce::TextButton timelineTabButton_{"Timeline"};
     juce::TextButton mixerTabButton_{"Mixer"};
+    juce::TextButton midiRemoteTabButton_{"MIDI Remote"};
     // FRO12: icon-only, embedded in this tab strip (not either host's own header -- see
     // DetachablePanelHost's class comment on why this is a separate button instance rather than a
     // literal shared one across three different parents).

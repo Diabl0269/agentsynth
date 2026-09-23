@@ -46,6 +46,7 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     // stored on the host now, applied to whichever DetachedPanelWindow it builds later. Re-running
     // MainComponent's own registration pass on every detach/redock (rather than reordering/renaming
     // anything already registered above) is the guard rule the plan's focus section spells out.
+    mixerDock.getMidiRemoteHost().setHostedPanelFocusRegion("midiRemote", mixerDock.getMidiRemotePanel());
     mixerDock.getTimelineHost().setHostedPanelFocusRegion("timeline", timelinePanel);
     mixerDock.getMixerHost().setHostedPanelFocusRegion("mixer", mixerDock.getMixerPanel());
     mixerDock.onPanelDetachStateChanged = [this] { rebuildFocusRegions(); };

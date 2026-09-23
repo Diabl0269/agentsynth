@@ -39,7 +39,7 @@ void MainComponent::restorePanelPreferences() {
         appProperties.getUserSettings()->getIntValue(kTimelinePanelHeightKey, defaultTimelinePanelHeight()));
     graphEditor.setAlignmentGuidesEnabled(
         appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true));
-    graphEditor.getSmartConnections().setSmartConnectionMode(GraphEditor::smartConnectionModeFromString(
+    graphEditor.setSmartConnectionMode(GraphEditor::smartConnectionModeFromString(
         appProperties.getUserSettings()->getValue("smartConnectionMode", "NewAndUnwired")));
     graphEditor.setDoubleClickPortDisconnectEnabled(
         appProperties.getUserSettings()->getBoolValue("doubleClickPortDisconnect", true));
@@ -246,6 +246,25 @@ void MainComponent::wireGraphEditorCallbacks() {
     graphEditor.onMidiForgetRequested = [this](juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
         midiLearnController_.forget(nodeId, paramId);
     };
+    // FRO131 decision (2026-09-22): "Edit MIDI assignment..." -- open the dock (same sequence
+    // performToggleMidiRemotePanel()'s own "closed" branch runs, mirroring
+    // trackChannelLink_.setMixerRevealHook()'s own "open before reveal" shape above) before asking
+    // the panel to select the assignment; a closed dock has nothing on screen to select into yet.
+    graphEditor.onEditMidiAssignmentRequested = [this](juce::AudioProcessorGraph::NodeID nodeId,
+                                                       const juce::String& paramId) {
+        auto* node = audioEngine.getGraph().getNodeForId(nodeId);
+        const juce::String nodeUuid = node != nullptr ? node->properties["uuid"].toString() : juce::String();
+        if (nodeUuid.isEmpty())
+            return;
+        if (!isTimelineVisible) {
+            isTimelineVisible = true;
+            appProperties.getUserSettings()->setValue("timelinePanelVisible", "1");
+            appProperties.getUserSettings()->saveIfNeeded();
+            applyToolbarIcons();
+            beginPanelSlide();
+        }
+        mixerDock.selectMidiRemoteAssignment(nodeUuid, paramId);
+    };
     graphEditor.snippetProvider = [this](const juce::String& name) -> juce::var {
         return synth::SnippetManager::loadSnippet(
             synth::SnippetManager::fileForName(synth::SnippetManager::getDefaultSnippetsDirectory(), name));
@@ -328,6 +347,15 @@ void MainComponent::wireCommandsAndShortcuts() {
     startTimerHz(10);
 }
 
+MainComponent::RemoteActionInvokerImpl::RemoteActionInvokerImpl(juce::ApplicationCommandManager& cm) noexcept
+    : commandManager_(cm) {}
+
+// MESSAGE THREAD (called from RemoteEngine::drain()). Synchronous, exactly like a menu item or a
+// keypress dispatch — never posted/async.
+void MainComponent::RemoteActionInvokerImpl::invokeRemoteCommand(juce::CommandID commandId) {
+    commandManager_.invokeDirectly(commandId, false);
+}
+
 // FRO127: wires synth::midi::RemoteEngine to the AudioEngine seam and primes it with whatever
 // controller profiles and project assignments already exist. Called right after
 // wireCommandsAndShortcuts() above (commandManager must exist — the action invoker dispatches
@@ -376,6 +404,13 @@ void MainComponent::wireMidiRemoteEngine() {
     midiLearnController_.setMixerPanel(&mixerDock.getMixerPanel());
     midiLearnController_.setTransportBar(&timelinePanel.getTransportBar());
 
+    // FRO131: same "wire it once everything it needs is alive" reasoning as the two calls above --
+    // the MIDI Remote panel needs remoteEngine/midiLearnController_/midiRemoteDoc, none of which
+    // exist yet at MixerDockComponent's own construction time (see MixerDockComponent::
+    // configureMidiRemote()'s doc comment).
+    mixerDock.configureMidiRemote(audioEngine, remoteEngine, midiLearnController_, midiRemoteDoc, graphEditor);
+    mixerDock.getMidiRemotePanel().onLocateNode = [this](const juce::String& nodeUuid) { selectNodeInGraph(nodeUuid); };
+
     // Transport-bar right-click MIDI Learn (FRO133) -- action targets, so these three forward to
     // MidiLearnController's action-keyed overloads rather than GraphEditor's node-keyed ones (see
     // this function's own graphEditor.onMidiLearnRequested sibling in wireGraphEditorCallbacks()).
@@ -386,29 +421,6 @@ void MainComponent::wireMidiRemoteEngine() {
     };
     transportBar.onMidiForgetRequested = [this](const juce::String& actionId) {
         midiLearnController_.forgetAction(actionId);
-    };
-
-    // FRO253: mixer column Solo right-click MIDI Learn -- a nodeCommand target, so these three
-    // forward to MidiLearnController's node-command-keyed overloads (mirrors the transport-bar
-    // action wiring immediately above; unlike a parameter target, Solo has no
-    // GraphEditor::onMidiLearnRequested sibling to reuse -- see MixerColumnMidiLearn.cpp).
-    auto& mixerPanel = mixerDock.getMixerPanel();
-    mixerPanel.onQuerySoloMidiMapping = [this](juce::AudioProcessorGraph::NodeID nodeId) -> juce::String {
-        const auto mappings = midiLearnController_.queryNodeCommandMappings(nodeId);
-        const auto found = mappings.find(synth::NodeCommandKind::toggleSolo);
-        return found != mappings.end() ? found->second : juce::String();
-    };
-    mixerPanel.onSoloMidiLearnRequested = [this](juce::AudioProcessorGraph::NodeID nodeId) {
-        midiLearnController_.armNodeCommand(nodeId, synth::NodeCommandKind::toggleSolo);
-    };
-    mixerPanel.onSoloMidiForgetRequested = [this](juce::AudioProcessorGraph::NodeID nodeId) {
-        midiLearnController_.forgetNodeCommand(nodeId, synth::NodeCommandKind::toggleSolo);
-    };
-    // FRO253: re-syncs the mixer column's M/S visuals after a hardware press flips solo outside
-    // any column's own click -- see MixerColumnComponent::toggleSoloed's callers for why nothing
-    // else does this (MixerColumnMidiLearn.cpp / RemoteActionInvokerImpl's own comment).
-    remoteActionInvoker_.onNodeCommandApplied = [&mixerPanel](juce::AudioProcessorGraph::NodeID) {
-        mixerPanel.refreshMuteSoloVisuals();
     };
 
     // Installed last: nothing may reach the sink before it has profiles/assignments/sources.
@@ -579,6 +591,19 @@ void MainComponent::rebuildFocusRegions() {
             focusRegions_.addRegion(
                 {"mixer", &mixerDock.getMixerPanel(), [this] { return mixerPlacement_.isOwnPanelShowing(); }, nullptr});
     }
+    // FRO131: same guard shape as "timeline" above -- MidiRemote has no placement variant (no
+    // Own-panel/Window controller like Mixer's mixerPlacement_), so it is always parented here
+    // unless detached to its own window, in which case that window's own one-region registry
+    // covers it (DetachablePanelHost::setHostedPanelFocusRegion, wired alongside the other two in
+    // wireTimelinePanelServicesAndShortcuts() below).
+    if (!mixerDock.getMidiRemoteHost().isDetached())
+        focusRegions_.addRegion({"midiRemote", &mixerDock.getMidiRemotePanel(),
+                                 [this] { return isTimelineVisible && mixerDock.isMidiRemoteTabActive(); },
+                                 [this] {
+                                     mixerDock.setActiveTab(synth::ui::MixerDockComponent::Tab::MidiRemote);
+                                     if (!isTimelineVisible && toggleMidiRemoteButton.onClick)
+                                         toggleMidiRemoteButton.onClick();
+                                 }});
     focusRegions_.addRegion({"aiPanel", &aiChatComponent, [this] { return isAiPanelVisible; },
                              [this] {
                                  if (!isAiPanelVisible && toggleAiPanelButton.onClick)

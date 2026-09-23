@@ -153,6 +153,7 @@ private:
                 // DetachablePanelHost::setCreatesNativeWindows()'s doc comment.
                 mc->getMixerDock().getTimelineHost().setCreatesNativeWindows(true);
                 mc->getMixerDock().getMixerHost().setCreatesNativeWindows(true);
+                mc->getMixerDock().getMidiRemoteHost().setCreatesNativeWindows(true);
 
                 // FRO100: same reasoning, for the hosted-plugin "Open Editor" window. See
                 // HostedPluginWindowManager::setCreatesNativeWindows()'s doc comment.

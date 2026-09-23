@@ -45,9 +45,6 @@ public:
     ~MidiLearnController();
 
     const std::vector<ControllerProfile>& getProfiles() const { return profiles_; }
-    /** Test/inspection (FRO193): proves which directory this instance's ControllerProfileStore
-     *  actually resolved to, without exposing the store itself. */
-    const juce::File& getControllersDirectoryForTest() const { return profileStore_.getControllersDirectory(); }
 
     /** "MIDI Learn '<Param>'..." / "MIDI Learn again...". Wired to GraphEditor::onMidiLearnRequested. */
     void arm(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId);
@@ -58,23 +55,6 @@ public:
 
     /** Wired to GraphEditor::onQueryMidiMappingsForNode. */
     std::map<juce::String, juce::String> queryMappings(juce::AudioProcessorGraph::NodeID nodeId) const;
-
-    /** FRO253 (docs/control/midi-remote.md#node-command-targets): arms a learn on a node command
-     *  (e.g. Solo, ChannelStripModule::soloed_) rather than a graph parameter -- modelled on arm()
-     *  above, not armAction(): a node command is PROJECT-scoped, same as a parameter (it lives on
-     *  MidiRemoteProjectDoc::assignments, not a ControllerProfile), because it names a graph node
-     *  that only makes sense within this project, unlike a fixed ShortcutManager action id.
-     *  Wired to MixerPanelComponent::onSoloMidiLearnRequested. */
-    void armNodeCommand(juce::AudioProcessorGraph::NodeID nodeId, NodeCommandKind command);
-
-    /** "Forget MIDI" for a node command target. A no-op if there is no assignment for it. Wired to
-     *  MixerPanelComponent::onSoloMidiForgetRequested. */
-    void forgetNodeCommand(juce::AudioProcessorGraph::NodeID nodeId, NodeCommandKind command);
-
-    /** Every node command mapped for `nodeId`, to its display label -- mirrors queryMappings()
-     *  above, keyed by NodeCommandKind instead of a paramId string. Wired to
-     *  MixerPanelComponent::onQuerySoloMidiMapping. */
-    std::map<NodeCommandKind, juce::String> queryNodeCommandMappings(juce::AudioProcessorGraph::NodeID nodeId) const;
 
     /** FRO133 (docs/control/midi-remote.md#action-targets): arms a learn on a ShortcutManager
      *  action id (e.g. "transportTogglePlayStop") rather than a graph parameter -- always
@@ -94,17 +74,9 @@ public:
      *  TimelineTransportBar::onQueryMidiMappingForAction. */
     std::map<juce::String, juce::String> queryActionMappings() const;
 
-    /** Republishes the project doc's assignments to the engine and re-resolves them against the
-     *  live graph. Called after every mutation here, as the undo/redo postRestore, and by
-     *  MainComponent after a project load/autosave-restore replaces midiRemoteDoc wholesale.
-     *
-     *  FRO253: RemoteEngine::setAssignments() rebuilds its snapshot with graph == nullptr by
-     *  design (docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step)
-     *  -- it can only keep each assignment id's PREVIOUS resolution, so a brand-new id (a
-     *  just-settled learn, or its undo/redo) has none and its slot stays unresolved until some
-     *  unrelated graph change happens to reach MainComponent's reconcile funnel. This method
-     *  reconciles against the live graph itself right after setAssignments() so a fresh learn's
-     *  target works immediately, without changing RemoteEngine's setter semantics. */
+    /** Republishes the project doc's assignments to the engine. Called after every mutation here,
+     *  as the undo/redo postRestore, and by MainComponent after a project load/autosave-restore
+     *  replaces midiRemoteDoc wholesale. */
     void publishAssignments();
 
     bool isArmed() const noexcept;
@@ -120,6 +92,50 @@ public:
     /** Same null contract as setMixerPanel(), for the transport bar's action-target armed outline
      *  and badges. */
     void setTransportBar(synth::ui::TimelineTransportBar* bar) noexcept { transportBar_ = bar; }
+
+    // ---- FRO131: MIDI Remote panel profile mutations ----
+    // Every panel-side edit to a ControllerProfile routes through ONE of these rather than the
+    // panel writing ControllerProfileStore directly, so the engine's published snapshot can never
+    // go stale relative to what's on disk (docs/control/midi-remote.md's "assignment exists ->
+    // consumed" rule means a deleted control that never reaches setProfiles() would keep consuming
+    // messages). All are profile edits, so -- like arm()/armAction()'s own profile writes -- NONE
+    // of these are undoable (docs/control/midi-remote.md#undo: "Profile edits ... not undoable").
+
+    /** Rename, or a drag-to-move layout change: saves `profile` verbatim (it must already carry
+     *  the caller's edit) and republishes. Returns false if `profile.id` doesn't match a known
+     *  profile. */
+    bool updateProfile(const ControllerProfile& profile);
+
+    /** How many project ("midiRemote") assignments reference `profileId` -- for the Delete
+     *  controller confirm dialog's "will orphan N assignments" count. */
+    int countProjectAssignmentsForProfile(const juce::String& profileId) const;
+
+    /** Right-click Delete on a controller row: deletes the profile file and drops it from the live
+     *  set. Project assignments referencing it are left untouched -- they become exactly the
+     *  "orphan controller" state a profile missing from this machine already produces
+     *  (docs/control/midi-remote.md#where-does-a-mapping-live--global-or-in-the-project). Returns
+     *  false if `profileId` isn't known. */
+    bool deleteProfile(const juce::String& profileId);
+
+    /** Removes one control from a profile: drops it from `profile.controls`, drops any global
+     *  action assignment on it from `profile.actions` (not undoable, same as the profile edit
+     *  itself), and removes any PROJECT assignment referencing it (undoable, mirroring forget()'s
+     *  own before/after-JSON snapshot). Returns false if the control isn't found. */
+    bool deleteControl(const juce::String& profileId, const juce::String& controlId);
+
+    /** Plain file-copy passthrough to the underlying store, for the Controllers list's right-click
+     *  "Export...". */
+    bool exportProfile(const juce::String& profileId, const juce::File& destFile) const {
+        return profileStore_.exportProfile(profileId, destFile);
+    }
+
+    /** Inspector edit of an existing PROJECT (parameter-target) assignment's takeover/range/invert
+     *  -- `updated` must carry the same `id` as an existing entry in the project doc; every other
+     *  field is replaced verbatim. Undoable (docs/control/midi-remote.md#undo: "Project
+     *  assignments ... edit ... undoable"), same before/after-JSON shape as forget(). Returns false
+     *  if no project assignment has `updated.id`, or if `updated.target` isn't a parameter target
+     *  (a global action assignment is a profile edit, not this method's job). */
+    bool updateAssignment(const Assignment& updated);
 
 private:
     /** Forwards MouseListener clicks and polls RemoteEngine::isLearnArmed() for the silent-timeout

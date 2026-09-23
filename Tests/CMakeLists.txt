@@ -237,7 +237,6 @@ add_executable(Tests
     MidiRemote/RemoteEngineApplyTests.cpp
     MidiRemote/RemoteEngineReconcileTests.cpp
     MidiRemote/RemoteEngineHostedTests.cpp
-    MidiRemote/RemoteEngineNodeCommandE2ETests.cpp
     MidiRemote/RemoteEngineThreadingTests.cpp
     MidiRemote/RemoteEngineLearnTests.cpp
     MidiRemote/ControllerProfileStoreTests.cpp
@@ -385,6 +384,10 @@ add_executable(Tests
     UI/Mixer/MixerFaderDragTests.cpp
     UI/Mixer/MixerSendListTests.cpp
     UI/Mixer/MixerDockComponentTests.cpp
+    UI/MidiRemote/MidiRemotePanelTests.cpp
+    UI/MidiRemote/ControllersListTests.cpp
+    UI/MidiRemote/ControllerSurfaceTests.cpp
+    UI/MidiRemote/ControlInspectorTests.cpp
     UI/Mixer/MixerDockMeterGatingTests.cpp
     UI/Mixer/MixerEqThumbnailTests.cpp
     UI/Mixer/MixerColumnComponentTests.cpp
@@ -440,14 +443,13 @@ add_executable(Tests
     ../Source/ShortcutManager/ShortcutManagerActionNames.cpp
     ../Source/MidiRemote/ControllerProfileStore.cpp
     ../Source/MidiRemote/MidiLearnController.cpp
-    # Source/MidiRemote/RemoteEngine/*.cpp is NOT listed here on purpose: those five units are
+#Source / MidiRemote / RemoteEngine/*.cpp is NOT listed here on purpose: those five units are
     # registered in the root CMakeLists.txt (Core), same as RemoteModel.h/RemoteModelJson.cpp right
     # above them there, because Core's own AudioEngineMidi.cpp/AudioEngineHostMode.cpp call into
     # synth::midi::RemoteMessageSink/hostSourceKey(). Tests links Core directly (see the
     # MeterColourStops.cpp comment above), so re-listing them here would double-compile/duplicate-
     # symbol them exactly like that comment warns against.
     ../Source/MainComponent/MainComponent.cpp
-    ../Source/MainComponent/MainComponentRemoteActionInvoker.cpp
     ../Source/MainComponent/MainComponentSetup.cpp
     ../Source/MainComponent/MainComponentSetupToolbar.cpp
     ../Source/MainComponent/MainComponentSetupTimeline.cpp
@@ -553,6 +555,11 @@ add_executable(Tests
     ../Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
     ../Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp
     ../Source/UI/MidiRemote/MidiLearnMenu.cpp
+    ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.cpp
+    ../Source/UI/MidiRemote/ControllersList/ControllersListComponent.cpp
+    ../Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceComponent.cpp
+    ../Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceCell.cpp
+    ../Source/UI/MidiRemote/Inspector/ControlInspectorComponent.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibrarySearch.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryRows.cpp

@@ -650,6 +650,11 @@ private:
             {"toggleLibrary", ShortcutCategory::General},
             {"toggleTimelinePanel", ShortcutCategory::General},
             {"toggleMixerPanel", ShortcutCategory::General},
+            // FRO131 (docs/control/midi-remote-ui.md#the-midi-remote-panel): default unbound --
+            // deliberately absent from resetToDefaults()'s bindings map below, not merely an empty
+            // KeyPress (the strict-resolution contract other surfaces rely on treats "no key in the
+            // map" as "no key at all", MainComponent::keyPressed's sole-dispatch-point comment).
+            {"toggleMidiRemotePanel", ShortcutCategory::General},
             {"selectAllModules", ShortcutCategory::General},
             {"copySelection", ShortcutCategory::General},
             {"pasteSelection", ShortcutCategory::General},

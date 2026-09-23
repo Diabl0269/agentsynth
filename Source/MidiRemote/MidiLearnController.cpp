@@ -137,39 +137,6 @@ void MidiLearnController::armAction(const juce::String& actionId) {
     watcher_.start();
 }
 
-// FRO253: mirrors arm() above -- endArmedUi() first (armLearn() would replace any pending learn
-// regardless, but its UI must follow), then arm the engine and the mixer column's own breathing
-// outline. Unlike armAction(), a node command has no ShortcutManager id and no transport-bar
-// outline to arm -- it always shows on the mixer column via MixerPanelComponent::setMidiLearnArmedSolo.
-void MidiLearnController::armNodeCommand(juce::AudioProcessorGraph::NodeID nodeId, NodeCommandKind command) {
-    const juce::String uuid = ensureNodeUuid(nodeId);
-    if (uuid.isEmpty())
-        return;
-
-    endArmedUi();
-    refreshSources();
-
-    LearnRequest request;
-    request.target.kind = synth::Target::Kind::nodeCommand;
-    request.target.nodeCommand.nodeUuid = uuid;
-    request.target.nodeCommand.command = command;
-    request.buttonLike = true; // every node command is a button (docs/control/midi-remote.md#node-command-targets)
-    remoteEngine_.armLearn(request);
-
-    if (mixerPanel_ != nullptr)
-        mixerPanel_->setMidiLearnArmedSolo(nodeId);
-    statusBar_.showStickyMessage("Move a control on your MIDI device to map it... (Esc to cancel)");
-
-    watcher_.onAnyClick = [this] { cancelArmed(); };
-    watcher_.stillArmed = [this] { return remoteEngine_.isLearnArmed(); };
-    watcher_.onExternallyCancelled = [this] {
-        endArmedUi();
-        statusBar_.showMessage("MIDI Learn timed out");
-    };
-    juce::Desktop::getInstance().addGlobalMouseListener(&watcher_);
-    watcher_.start();
-}
-
 void MidiLearnController::cancelArmed() {
     if (!remoteEngine_.isLearnArmed())
         return;
@@ -182,10 +149,8 @@ void MidiLearnController::endArmedUi() {
     watcher_.stop();
     juce::Desktop::getInstance().removeGlobalMouseListener(&watcher_);
     graphEditor_.clearMidiLearnArmed();
-    if (mixerPanel_ != nullptr) {
+    if (mixerPanel_ != nullptr)
         mixerPanel_->clearMidiLearnArmed();
-        mixerPanel_->clearMidiLearnArmedSolo(); // FRO253; idempotent when nothing is armed there
-    }
     if (transportBar_ != nullptr)
         transportBar_->clearMidiLearnArmedAction();
     statusBar_.clearMessage();
@@ -232,22 +197,16 @@ void MidiLearnController::handleLearned(const LearnResult& result) {
 
     const juce::var beforeJson = doc_.toVar();
 
-    // "MIDI Learn again..." on an already-mapped target replaces its assignment, never duplicates
-    // it -- for a parameter target (nodeUuid+paramId) OR a node command target (nodeUuid+command),
-    // the only two kinds MidiRemoteProjectDoc::assignments ever holds (FRO253: it is never action).
+    // "MIDI Learn again..." on an already-mapped target replaces its assignment, never duplicates it.
     auto& assignments = doc_.assignments;
-    const auto& newTarget = outcome.assignment.target;
-    assignments.erase(std::remove_if(assignments.begin(), assignments.end(),
-                                     [&](const synth::Assignment& a) {
-                                         if (a.target.isParameter() && newTarget.isParameter())
-                                             return a.target.parameter.nodeUuid == newTarget.parameter.nodeUuid &&
-                                                    a.target.parameter.paramId == newTarget.parameter.paramId;
-                                         if (a.target.isNodeCommand() && newTarget.isNodeCommand())
-                                             return a.target.nodeCommand.nodeUuid == newTarget.nodeCommand.nodeUuid &&
-                                                    a.target.nodeCommand.command == newTarget.nodeCommand.command;
-                                         return false;
-                                     }),
-                      assignments.end());
+    assignments.erase(
+        std::remove_if(assignments.begin(), assignments.end(),
+                       [&](const synth::Assignment& a) {
+                           return a.target.isParameter() &&
+                                  a.target.parameter.nodeUuid == outcome.assignment.target.parameter.nodeUuid &&
+                                  a.target.parameter.paramId == outcome.assignment.target.parameter.paramId;
+                       }),
+        assignments.end());
     assignments.push_back(outcome.assignment);
 
     const bool controllerKnown = std::any_of(doc_.controllers.begin(), doc_.controllers.end(),
@@ -373,60 +332,87 @@ std::map<juce::String, juce::String> MidiLearnController::queryActionMappings() 
     return result;
 }
 
-// FRO253: mirrors forget() above but matches on (nodeUuid, command) rather than (nodeUuid,
-// paramId) -- a node command target has no paramId.
-void MidiLearnController::forgetNodeCommand(juce::AudioProcessorGraph::NodeID nodeId, NodeCommandKind command) {
-    const juce::String uuid = resolveNodeUuid(nodeId);
-    if (uuid.isEmpty())
-        return;
+void MidiLearnController::publishAssignments() { remoteEngine_.setAssignments(doc_.assignments); }
 
+bool MidiLearnController::updateProfile(const ControllerProfile& profile) {
+    auto existing = std::find_if(profiles_.begin(), profiles_.end(),
+                                 [&](const ControllerProfile& p) { return p.id == profile.id; });
+    if (existing == profiles_.end())
+        return false;
+    *existing = profile;
+    profileStore_.save(profile);
+    remoteEngine_.setProfiles(profiles_);
+    return true;
+}
+
+int MidiLearnController::countProjectAssignmentsForProfile(const juce::String& profileId) const {
+    return static_cast<int>(
+        std::count_if(doc_.assignments.begin(), doc_.assignments.end(),
+                      [&](const synth::Assignment& a) { return a.control.profileId == profileId; }));
+}
+
+bool MidiLearnController::deleteProfile(const juce::String& profileId) {
+    auto existing =
+        std::find_if(profiles_.begin(), profiles_.end(), [&](const ControllerProfile& p) { return p.id == profileId; });
+    if (existing == profiles_.end())
+        return false;
+    profileStore_.deleteProfile(profileId);
+    profiles_.erase(existing);
+    remoteEngine_.setProfiles(profiles_);
+    return true;
+}
+
+bool MidiLearnController::deleteControl(const juce::String& profileId, const juce::String& controlId) {
+    auto profileIt =
+        std::find_if(profiles_.begin(), profiles_.end(), [&](const ControllerProfile& p) { return p.id == profileId; });
+    if (profileIt == profiles_.end())
+        return false;
+
+    auto& controls = profileIt->controls;
+    const auto controlIt =
+        std::find_if(controls.begin(), controls.end(), [&](const Control& c) { return c.id == controlId; });
+    if (controlIt == controls.end())
+        return false;
+    controls.erase(controlIt);
+
+    // Not undoable, same as every other profile edit -- drop any global action assignment on it too.
+    auto& actions = profileIt->actions;
+    actions.erase(std::remove_if(actions.begin(), actions.end(),
+                                 [&](const synth::Assignment& a) { return a.control.controlId == controlId; }),
+                  actions.end());
+    profileStore_.save(*profileIt);
+    remoteEngine_.setProfiles(profiles_);
+
+    // The project half IS undoable, mirroring forget()'s own before/after-JSON snapshot.
     const juce::var beforeJson = doc_.toVar();
     auto& assignments = doc_.assignments;
     const auto sizeBefore = assignments.size();
     assignments.erase(std::remove_if(assignments.begin(), assignments.end(),
-                                     [&](const synth::Assignment& a) {
-                                         return a.target.isNodeCommand() && a.target.nodeCommand.nodeUuid == uuid &&
-                                                a.target.nodeCommand.command == command;
-                                     }),
+                                     [&](const synth::Assignment& a) { return a.control.controlId == controlId; }),
                       assignments.end());
-    if (assignments.size() == sizeBefore)
-        return; // nothing was mapped
+    if (assignments.size() != sizeBefore) {
+        const juce::var afterJson = doc_.toVar();
+        undo_.recordMidiRemoteChange(doc_, beforeJson, afterJson, [this] { publishAssignments(); });
+        publishAssignments();
+    }
+    return true;
+}
 
+bool MidiLearnController::updateAssignment(const Assignment& updated) {
+    if (!updated.target.isParameter())
+        return false;
+
+    auto it = std::find_if(doc_.assignments.begin(), doc_.assignments.end(),
+                           [&](const synth::Assignment& a) { return a.id == updated.id; });
+    if (it == doc_.assignments.end())
+        return false;
+
+    const juce::var beforeJson = doc_.toVar();
+    *it = updated;
     const juce::var afterJson = doc_.toVar();
     undo_.recordMidiRemoteChange(doc_, beforeJson, afterJson, [this] { publishAssignments(); });
     publishAssignments();
-    statusBar_.showMessage("MIDI mapping removed");
-}
-
-// FRO253: mirrors queryMappings() above, keyed by NodeCommandKind rather than a paramId string.
-std::map<NodeCommandKind, juce::String>
-MidiLearnController::queryNodeCommandMappings(juce::AudioProcessorGraph::NodeID nodeId) const {
-    std::map<NodeCommandKind, juce::String> result;
-    const juce::String uuid = resolveNodeUuid(nodeId);
-    if (uuid.isEmpty())
-        return result;
-
-    for (const auto& a : doc_.assignments) {
-        if (!a.target.isNodeCommand() || a.target.nodeCommand.nodeUuid != uuid)
-            continue;
-        juce::String label = a.specControlName;
-        if (const auto* profile = findProfile(a.control.profileId))
-            label << " on " << profile->name;
-        result[a.target.nodeCommand.command] = label;
-    }
-    return result;
-}
-
-void MidiLearnController::publishAssignments() {
-    remoteEngine_.setAssignments(doc_.assignments);
-    // FRO253: setAssignments() rebuilds the snapshot with graph == nullptr by design, so it can
-    // only carry forward each assignment id's PREVIOUS resolution -- a brand-new assignment (a
-    // just-completed learn, or its undo/redo) has none, so its slot stays unresolved until some
-    // unrelated graph change happens to reach MainComponent's reconcile funnel. Reconcile against
-    // the live graph right here so a fresh learn's target works immediately. MainComponent's own
-    // callers (project load / autosave restore) already reconcile again right after this call --
-    // that second pass is a cheap no-op re-resolve against the same graph, not a correctness fix.
-    remoteEngine_.reconcile(engine_.getGraph());
+    return true;
 }
 
 } // namespace synth::midi

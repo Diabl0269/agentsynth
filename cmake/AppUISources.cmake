@@ -1,225 +1,140 @@
-# AppUI's source list, split out of the root CMakeLists.txt (FRO62) purely to keep that file
-# under the repo's 1,000-line file-size cap (scripts/check-file-sizes.sh) -- registering the
-# GraphEditor split's new per-concern units pushed it over. No behavior change: paths stay
-# relative to the repo root, exactly as when they sat inline in add_library(AppUI STATIC ...).
-set(APPUI_SOURCES
-    Source/MainComponent/MainComponent.cpp
-    Source/MainComponent/MainComponent.h
-    Source/MainComponent/MainComponentInternal.h
-    Source/MainComponent/MainComponentRemoteActionInvoker.h
-    Source/MainComponent/MainComponentRemoteActionInvoker.cpp
-    Source/MainComponent/MainComponentSetup.cpp
-    Source/MainComponent/MainComponentSetupToolbar.cpp
-    Source/MainComponent/MainComponentSetupTimeline.cpp
-    Source/MainComponent/MainComponentCallbacks.cpp
-    Source/MainComponent/MainComponentFileIO.cpp
-    Source/MainComponent/MainComponentCommands.cpp
-    Source/MainComponent/MainComponentCommandTable.cpp
-    Source/MainComponent/MainComponentPanels.cpp
-    Source/MainComponent/MainComponentTimeline.cpp
-    Source/MainComponent/MainComponentTrackHeaderHost.cpp
-    Source/MainComponent/MainComponentTrackCreation.cpp
-    Source/MainComponent/MainComponentTrackPresets.cpp
-    Source/UserSettings.h
-    Source/MidiRemote/ControllerProfileStore.h
-    Source/MidiRemote/ControllerProfileStore.cpp
-    Source/MidiRemote/MidiLearnController.h
-    Source/MidiRemote/MidiLearnController.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelStrips.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelClipClipboard.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelShortcuts.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelTrackHeaders.cpp
-    Source/UI/Timeline/TimelinePanelComponent/TimelinePanelLayout.cpp
-    Source/UI/Timeline/TimelineRulerComponent.h
-    Source/UI/Timeline/TimelineRulerComponent.cpp
-    Source/UI/Timeline/TimelinePlayheadOverlay.h
-    Source/UI/Timeline/TimelinePlayheadOverlay.cpp
-    Source/UI/Timeline/TimelineTrackHeaderComponent.h
-    Source/UI/Timeline/TimelineTrackHeaderComponent.cpp
-    Source/UI/Timeline/ChannelChipComponent.h
-    Source/UI/Timeline/ChannelChipComponent.cpp
-    Source/UI/Timeline/TrackChannelLinkSurface.h
-    Source/UI/Timeline/TrackChannelLinkController.h
-    Source/UI/Timeline/TrackChannelLinkController.cpp
-    Source/UI/Timeline/TimelineTransportBar.h
-    Source/UI/Timeline/TimelineTransportBar.cpp
-    Source/UI/Timeline/TimelineTransportBarMidiLearn.cpp
-    Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h
-    Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.cpp
-    Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneInternal.h
-    Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLanePainting.cpp
-    Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneMouse.cpp
-    Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneSelection.cpp
-    Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneEditTools.cpp
-    Source/UI/Timeline/ClipSelectionModel.h
-    Source/UI/Mixer/MixerColumnHeader.h
-    Source/UI/Mixer/MixerMeterScale.h
-    Source/UI/Mixer/MixerMeterBallistics.h
-    # MeterColourStops.h/.cpp moved to Core's own source list (root CMakeLists.txt, FRO147) --
-    # AppLookAndFeel (Core) caches an effective MeterColourStops itself now, and this file's
-    # PUBLIC link to Core is how MixerMeter.cpp below still reaches it.
-    Source/UI/Mixer/MixerMeter.h
-    Source/UI/Mixer/MixerMeter.cpp
-    Source/UI/Mixer/MixerMeterReadout.h
-    Source/UI/Mixer/MixerMeterReadout.cpp
-    Source/UI/Mixer/MixerFaderTaper.h
-    Source/UI/Mixer/MixerFaderSlider.h
-    Source/UI/Mixer/MixerFaderSlider.cpp
-    Source/UI/Mixer/MixerFader.h
-    Source/UI/Mixer/MixerFader.cpp
-    Source/UI/Mixer/MixerInsertList.h
-    Source/UI/Mixer/MixerInsertList.cpp
-    Source/UI/Mixer/EqResponseCurve.h
-    Source/UI/Mixer/MixerEqThumbnail.h
-    Source/UI/Mixer/MixerEqThumbnail.cpp
-    Source/UI/Mixer/MixerSendList.h
-    Source/UI/Mixer/MixerSendList.cpp
-    Source/UI/Mixer/MixerColumnComponent.h
-    Source/UI/Mixer/MixerColumnComponent.cpp
-    Source/UI/Mixer/MixerColumnMidiLearn.cpp
-    Source/UI/Mixer/MixerDirectColumn.h
-    Source/UI/Mixer/MixerDirectColumn.cpp
-    Source/UI/Mixer/MixerMasterColumn.h
-    Source/UI/Mixer/MixerMasterColumn.cpp
-    Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.h
-    Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.cpp
-    Source/UI/Mixer/MixerPanelComponent/MixerPanelKeyboard.cpp
-    Source/UI/Mixer/MixerPanelComponent/MixerFocusRegion.h
-    Source/UI/Mixer/MixerDockComponent.h
-    Source/UI/Mixer/MixerDockComponent.cpp
-    Source/UI/Mixer/MixerPlacementController.h
-    Source/UI/Mixer/MixerPlacementController.cpp
-    Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.h
-    Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.cpp
-    Source/UI/Layout/DetachablePanelHost/DetachedPanelWindow.h
-    Source/UI/Layout/DetachablePanelHost/DetachedPanelWindow.cpp
-    Source/UI/PianoRoll/PianoRollComponent/PianoRollComponent.h
-    Source/UI/PianoRoll/PianoRollComponent/PianoRollComponent.cpp
-    Source/UI/PianoRoll/PianoRollComponent/PianoRollScaleAssist.cpp
-    Source/UI/PianoRoll/PianoRollComponent/PianoRollPainting.cpp
-    Source/UI/PianoRoll/PianoRollComponent/PianoRollEditTools.cpp
-    Source/UI/PianoRoll/PianoRollComponent/PianoRollAudition.cpp
-    Source/UI/PianoRoll/PianoRollComponent/PianoRollClipboardAndKeys.cpp
-    Source/UI/PianoRoll/PianoRollComponent/PianoRollMouse.cpp
-    Source/UI/PianoRoll/PianoRollComponent/PianoRollZoom.cpp
-    Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h
-    Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.cpp
-    Source/UI/Library/ModuleLibraryComponent/ModuleLibrarySearch.cpp
-    Source/UI/Library/ModuleLibraryComponent/ModuleLibraryRows.cpp
-    Source/UI/Library/ModuleLibraryComponent/ModuleLibraryCollapse.cpp
-    Source/UI/Library/ModuleLibraryComponent/ModuleLibraryLayout.cpp
-    Source/UI/Library/ModuleLibraryComponent/ModuleLibraryPainting.cpp
-    Source/UI/Library/ModuleLibraryComponent/ModuleLibraryInput.cpp
-    Source/UI/Library/ModuleLibraryComponent/ModuleLibraryHelpPopover.cpp
-    Source/UI/PianoRoll/NoteSelectionModel.h
-    Source/UI/Timeline/AutomationLaneEditor.h
-    Source/UI/Timeline/AutomationLaneEditor.cpp
-    Source/UI/Timeline/TrackColour.h
-    Source/UI/Timeline/TimelineViewState.h
-    Source/UI/Assistant/AIChatComponent/AIChatComponent.cpp
-    Source/UI/Assistant/AIChatComponent/AIChatComponentMessageList.cpp
-    Source/UI/Assistant/AIChatComponent/AIChatComponentSending.cpp
-    Source/UI/Assistant/AIChatComponent/AIChatComponentProvider.cpp
-    Source/UI/Assistant/AIChatComponent/AIChatComponentHistory.cpp
-    Source/UI/Assistant/AccountRow.cpp
-    Source/UI/Assistant/AccountRow.h
-    Source/UI/Assistant/PlanBadge.cpp
-    Source/UI/Assistant/PlanBadge.h
-    Source/UI/Assistant/SignInDialog.cpp
-    Source/UI/Assistant/SignInDialog.h
-    Source/UI/Chrome/ExportAudioDialog.cpp
-    Source/UI/Chrome/ExportAudioDialog.h
-    Source/UI/Graph/GraphEditor/GraphEditor.cpp
-    Source/UI/Graph/GraphEditor/GraphEditor.h
-    Source/UI/Graph/GraphEditor/GraphEditorTypes.h
-    Source/UI/Graph/GraphEditor/GraphEditorCables.cpp
-    Source/UI/Graph/GraphEditor/GraphEditorConnections.cpp
-    Source/UI/Graph/GraphEditor/GraphEditorModuleTitles.cpp
-    Source/UI/Graph/GraphEditor/GraphEditorSmartConnections.cpp
-    Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngine.h
-    Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngine.cpp
-    Source/UI/Graph/SmartConnectionEngine/SmartConnectionEngineApply.cpp
-    Source/UI/Graph/GraphEditor/GraphEditorCanvas.cpp
-    Source/UI/Graph/GraphEditor/GraphEditorSelection.cpp
-    Source/UI/Graph/GraphEditor/GraphEditorMacroApi.cpp
-    Source/UI/Graph/GraphEditor/GraphEditorMacroCards.cpp
-    Source/UI/Graph/GraphEditor/GraphEditorMacroPrompts.cpp
-    Source/UI/Graph/MacroGroupController/MacroGroupController.h
-    Source/UI/Graph/MacroGroupController/MacroGroupControllerGeometry.cpp
-    Source/UI/Graph/MacroGroupController/MacroGroupControllerGrouping.cpp
-    Source/UI/Graph/MacroGroupController/MacroGroupControllerBypassMute.cpp
-    Source/UI/Graph/MacroGroupController/MacroGroupControllerPortSplice.cpp
-    Source/UI/Graph/MacroGroupController/MacroGroupControllerPorts.cpp
-    Source/UI/Graph/GraphEditor/GraphEditorChannels.cpp
-    Source/UI/Graph/GraphEditor/GraphEditorCommands.cpp
-    Source/UI/Graph/GraphEditor/GraphEditorDragDrop.cpp
-    Source/UI/Graph/GraphDragDropController/GraphDragDropController.h
-    Source/UI/Graph/GraphDragDropController/GraphDragDropController.cpp
-    Source/UI/Graph/GraphEditor/GraphEditorStereoWiring.cpp
-    Source/UI/Graph/GraphEditor/GraphEditorPersistence.cpp
-    Source/UI/Graph/ModuleComponent/ModuleComponent.cpp
-    Source/UI/Graph/ModuleComponent/ModuleComponent.h
-    Source/UI/Graph/ModuleComponent/ModuleComponentInternal.h
-    Source/UI/Graph/ModuleComponent/ModuleComponentEQCard.cpp
-    Source/UI/Graph/ModuleComponent/ModuleComponentAudioDrop.cpp
-    Source/UI/Graph/ModuleComponent/ModuleComponentWavetable.cpp
-    Source/UI/Graph/ModuleComponent/ModuleComponentLayout.cpp
-    Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
-    Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
-    Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
-    Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp
-    Source/UI/MidiRemote/MidiLearnMenu.h
-    Source/UI/MidiRemote/MidiLearnMenu.cpp
-    Source/UI/Macros/MacroCardComponent.cpp
-    Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogLifecycle.cpp
-    Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogRowOrdering.cpp
-    Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogTestSeams.cpp
-    Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogAutoPortPrompt.cpp
-    Source/UI/Macros/MacroCardComponent.h
-    Source/UI/ModuleViews/FrequencyResponseComponent.h
-    Source/UI/ModuleViews/FrequencyGrid.h
-    Source/UI/ModuleViews/EQCurveComponent.h
-    Source/UI/ModuleViews/EQWindow.h
-    Source/UI/ModuleViews/SampleWaveformComponent.h
-    # Reusable breakpoint curve editor (FRO111) -- not yet wired into any module card.
-    Source/UI/ModuleViews/CurveEditor/CurveModel.h
-    Source/UI/ModuleViews/CurveEditor/CurveModel.cpp
-    Source/UI/ModuleViews/CurveEditor/CurveEditorGeometry.h
-    Source/UI/ModuleViews/CurveEditor/CurveEditorGeometry.cpp
-    Source/UI/ModuleViews/CurveEditor/CurveEditorComponent.h
-    Source/UI/ModuleViews/CurveEditor/CurveEditorComponent.cpp
-    Source/UI/ModuleViews/CurveEditor/CurveEditorPaint.cpp
-    Source/UI/ModuleViews/WavetableDisplayComponent.h
-    Source/UI/ModuleViews/TriggerMeterComponent.h
-    Source/UI/ModuleViews/ThresholdControlComponent.h
-    Source/UI/Graph/ModMatrixComponent.cpp
-    Source/UI/Graph/ModMatrixComponent.h
-    Source/UI/Settings/SettingsWindow.cpp
-    Source/UI/Settings/SettingsWindow.h
-    Source/UI/Chrome/WelcomeScreenComponent.cpp
-    Source/UI/Chrome/WelcomeScreenComponent.h
-    # Plugin hosting UI (TL7-5) — native editor windows for hosted VST3/AU plugins. In AppUI (a
-    # window), not Core, mirroring HostedPluginModule/HostedPluginBackend's Core placement above.
-    Source/Plugin/Hosting/HostedPluginEditorWindow.cpp
-    Source/Plugin/Hosting/HostedPluginEditorWindow.h
-    Source/Plugin/Hosting/HostedPluginWindowManager.h
-    Source/UI/Settings/AppearanceSettingsTab.cpp
-    Source/UI/Settings/AppearanceSettingsTab.h
-    Source/UI/Settings/MeterColourStopsEditor.cpp
-    Source/UI/Settings/MeterColourStopsEditor.h
-    Source/UI/Settings/FeedbackSettingsTab.cpp
-    Source/UI/Settings/FeedbackSettingsTab.h
-    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp
-    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGraphBehaviour.cpp
-    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviour.cpp
-    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAutosave.cpp
-    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMixerDefaults.cpp
-    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h
-    Source/UI/Settings/ShortcutsSettingsTab.cpp
-    Source/ShortcutManager/AppCommands.h
-    Source/ShortcutManager/ShortcutManager.h
-    Source/ShortcutManager/ShortcutManagerActionNames.cpp
-    Source/Update/UpdateManager.h
-)
+#AppUI's source list, split out of the root CMakeLists.txt (FRO62) purely to keep that file
+#under the repo's 1,000-line file-size cap (scripts/check-file-sizes.sh) -- registering the
+#GraphEditor split's new per-concern units pushed it over. No behavior change: paths stay
+#relative to the repo root, exactly as when they sat inline in add_library(AppUI STATIC...).
+set(APPUI_SOURCES Source / MainComponent / MainComponent.cpp Source / MainComponent / MainComponent.h Source /
+    MainComponent / MainComponentInternal.h Source / MainComponent / MainComponentSetup.cpp Source / MainComponent /
+    MainComponentSetupToolbar.cpp Source / MainComponent / MainComponentSetupTimeline.cpp Source / MainComponent /
+    MainComponentCallbacks.cpp Source / MainComponent / MainComponentFileIO.cpp Source / MainComponent /
+    MainComponentCommands.cpp Source / MainComponent / MainComponentCommandTable.cpp Source / MainComponent /
+    MainComponentPanels.cpp Source / MainComponent / MainComponentTimeline.cpp Source / MainComponent /
+    MainComponentTrackHeaderHost.cpp Source / MainComponent / MainComponentTrackCreation.cpp Source / MainComponent /
+    MainComponentTrackPresets.cpp Source / UserSettings.h Source / MidiRemote / ControllerProfileStore.h Source /
+    MidiRemote / ControllerProfileStore.cpp Source / MidiRemote / MidiLearnController.h Source / MidiRemote /
+    MidiLearnController.cpp Source / UI / Timeline / TimelinePanelComponent / TimelinePanelComponent.h Source / UI /
+    Timeline / TimelinePanelComponent / TimelinePanelComponent.cpp Source / UI / Timeline / TimelinePanelComponent /
+    TimelinePanelStrips.cpp Source / UI / Timeline / TimelinePanelComponent / TimelinePanelClipClipboard.cpp Source /
+    UI / Timeline / TimelinePanelComponent / TimelinePanelShortcuts.cpp Source / UI / Timeline /
+    TimelinePanelComponent / TimelinePanelTrackHeaders.cpp Source / UI / Timeline / TimelinePanelComponent /
+    TimelinePanelLayout.cpp Source / UI / Timeline / TimelineRulerComponent.h Source / UI / Timeline /
+    TimelineRulerComponent.cpp Source / UI / Timeline / TimelinePlayheadOverlay.h Source / UI / Timeline /
+    TimelinePlayheadOverlay.cpp Source / UI / Timeline / TimelineTrackHeaderComponent.h Source / UI / Timeline /
+    TimelineTrackHeaderComponent.cpp Source / UI / Timeline / ChannelChipComponent.h Source / UI / Timeline /
+    ChannelChipComponent.cpp Source / UI / Timeline / TrackChannelLinkSurface.h Source / UI / Timeline /
+    TrackChannelLinkController.h Source / UI / Timeline / TrackChannelLinkController.cpp Source / UI / Timeline /
+    TimelineTransportBar.h Source / UI / Timeline / TimelineTransportBar.cpp Source / UI / Timeline /
+    TimelineTransportBarMidiLearn.cpp Source / UI / Timeline / TimelineClipLaneArea / TimelineClipLaneArea.h Source /
+    UI / Timeline / TimelineClipLaneArea / TimelineClipLaneArea.cpp Source / UI / Timeline / TimelineClipLaneArea /
+    TimelineClipLaneInternal.h Source / UI / Timeline / TimelineClipLaneArea / TimelineClipLanePainting.cpp Source /
+    UI / Timeline / TimelineClipLaneArea / TimelineClipLaneMouse.cpp Source / UI / Timeline / TimelineClipLaneArea /
+    TimelineClipLaneSelection.cpp Source / UI / Timeline / TimelineClipLaneArea / TimelineClipLaneEditTools.cpp Source /
+    UI / Timeline / ClipSelectionModel.h Source / UI / Mixer / MixerColumnHeader.h Source / UI / Mixer /
+    MixerMeterScale.h Source / UI / Mixer /
+    MixerMeterBallistics.h
+#MeterColourStops.h /.cpp moved to Core's own source list (root CMakeLists.txt, FRO147) --
+#AppLookAndFeel(Core) caches an effective MeterColourStops itself now, and this file's
+#PUBLIC link to Core is how MixerMeter.cpp below still reaches it.
+        Source /
+    UI / Mixer / MixerMeter.h Source / UI / Mixer / MixerMeter.cpp Source / UI / Mixer / MixerMeterReadout.h Source /
+    UI / Mixer / MixerMeterReadout.cpp Source / UI / Mixer / MixerFaderTaper.h Source / UI / Mixer /
+    MixerFaderSlider.h Source / UI / Mixer / MixerFaderSlider.cpp Source / UI / Mixer / MixerFader.h Source / UI /
+    Mixer / MixerFader.cpp Source / UI / Mixer / MixerInsertList.h Source / UI / Mixer / MixerInsertList.cpp Source /
+    UI / Mixer / EqResponseCurve.h Source / UI / Mixer / MixerEqThumbnail.h Source / UI / Mixer /
+    MixerEqThumbnail.cpp Source / UI / Mixer / MixerSendList.h Source / UI / Mixer / MixerSendList.cpp Source / UI /
+    Mixer / MixerColumnComponent.h Source / UI / Mixer / MixerColumnComponent.cpp Source / UI / Mixer /
+    MixerColumnMidiLearn.cpp Source / UI / Mixer / MixerDirectColumn.h Source / UI / Mixer /
+    MixerDirectColumn.cpp Source / UI / Mixer / MixerMasterColumn.h Source / UI / Mixer / MixerMasterColumn.cpp Source /
+    UI / Mixer / MixerPanelComponent / MixerPanelComponent.h Source / UI / Mixer / MixerPanelComponent /
+    MixerPanelComponent.cpp Source / UI / Mixer / MixerPanelComponent / MixerPanelKeyboard.cpp Source / UI / Mixer /
+    MixerPanelComponent / MixerFocusRegion.h Source / UI / Mixer / MixerDockComponent.h Source / UI / Mixer /
+    MixerDockComponent.cpp Source / UI / Mixer / MixerPlacementController.h Source / UI / Mixer /
+    MixerPlacementController.cpp Source / UI / Layout / DetachablePanelHost / DetachablePanelHost.h Source / UI /
+    Layout / DetachablePanelHost / DetachablePanelHost.cpp Source / UI / Layout / DetachablePanelHost /
+    DetachedPanelWindow.h Source / UI / Layout / DetachablePanelHost / DetachedPanelWindow.cpp Source / UI / PianoRoll /
+    PianoRollComponent / PianoRollComponent.h Source / UI / PianoRoll / PianoRollComponent /
+    PianoRollComponent.cpp Source / UI / PianoRoll / PianoRollComponent / PianoRollScaleAssist.cpp Source / UI /
+    PianoRoll / PianoRollComponent / PianoRollPainting.cpp Source / UI / PianoRoll / PianoRollComponent /
+    PianoRollEditTools.cpp Source / UI / PianoRoll / PianoRollComponent / PianoRollAudition.cpp Source / UI /
+    PianoRoll / PianoRollComponent / PianoRollClipboardAndKeys.cpp Source / UI / PianoRoll / PianoRollComponent /
+    PianoRollMouse.cpp Source / UI / PianoRoll / PianoRollComponent / PianoRollZoom.cpp Source / UI / Library /
+    ModuleLibraryComponent / ModuleLibraryComponent.h Source / UI / Library / ModuleLibraryComponent /
+    ModuleLibraryComponent.cpp Source / UI / Library / ModuleLibraryComponent / ModuleLibrarySearch.cpp Source / UI /
+    Library / ModuleLibraryComponent / ModuleLibraryRows.cpp Source / UI / Library / ModuleLibraryComponent /
+    ModuleLibraryCollapse.cpp Source / UI / Library / ModuleLibraryComponent / ModuleLibraryLayout.cpp Source / UI /
+    Library / ModuleLibraryComponent / ModuleLibraryPainting.cpp Source / UI / Library / ModuleLibraryComponent /
+    ModuleLibraryInput.cpp Source / UI / Library / ModuleLibraryComponent / ModuleLibraryHelpPopover.cpp Source / UI /
+    PianoRoll / NoteSelectionModel.h Source / UI / Timeline / AutomationLaneEditor.h Source / UI / Timeline /
+    AutomationLaneEditor.cpp Source / UI / Timeline / TrackColour.h Source / UI / Timeline /
+    TimelineViewState.h Source / UI / Assistant / AIChatComponent / AIChatComponent.cpp Source / UI / Assistant /
+    AIChatComponent / AIChatComponentMessageList.cpp Source / UI / Assistant / AIChatComponent /
+    AIChatComponentSending.cpp Source / UI / Assistant / AIChatComponent / AIChatComponentProvider.cpp Source / UI /
+    Assistant / AIChatComponent / AIChatComponentHistory.cpp Source / UI / Assistant / AccountRow.cpp Source / UI /
+    Assistant / AccountRow.h Source / UI / Assistant / PlanBadge.cpp Source / UI / Assistant / PlanBadge.h Source / UI /
+    Assistant / SignInDialog.cpp Source / UI / Assistant / SignInDialog.h Source / UI / Chrome /
+    ExportAudioDialog.cpp Source / UI / Chrome / ExportAudioDialog.h Source / UI / Graph / GraphEditor /
+    GraphEditor.cpp Source / UI / Graph / GraphEditor / GraphEditor.h Source / UI / Graph / GraphEditor /
+    GraphEditorTypes.h Source / UI / Graph / GraphEditor / GraphEditorCables.cpp Source / UI / Graph / GraphEditor /
+    GraphEditorConnections.cpp Source / UI / Graph / GraphEditor / GraphEditorModuleTitles.cpp Source / UI / Graph /
+    GraphEditor / GraphEditorSmartConnections.cpp Source / UI / Graph / SmartConnectionEngine /
+    SmartConnectionEngine.h Source / UI / Graph / SmartConnectionEngine / SmartConnectionEngine.cpp Source / UI /
+    Graph / SmartConnectionEngine / SmartConnectionEngineApply.cpp Source / UI / Graph / GraphEditor /
+    GraphEditorCanvas.cpp Source / UI / Graph / GraphEditor / GraphEditorSelection.cpp Source / UI / Graph /
+    GraphEditor / GraphEditorMacroApi.cpp Source / UI / Graph / GraphEditor / GraphEditorMacroCards.cpp Source / UI /
+    Graph / GraphEditor / GraphEditorMacroPrompts.cpp Source / UI / Graph / MacroGroupController /
+    MacroGroupController.h Source / UI / Graph / MacroGroupController / MacroGroupControllerGeometry.cpp Source / UI /
+    Graph / MacroGroupController / MacroGroupControllerGrouping.cpp Source / UI / Graph / MacroGroupController /
+    MacroGroupControllerBypassMute.cpp Source / UI / Graph / MacroGroupController /
+    MacroGroupControllerPortSplice.cpp Source / UI / Graph / MacroGroupController /
+    MacroGroupControllerPorts.cpp Source / UI / Graph / GraphEditor / GraphEditorChannels.cpp Source / UI / Graph /
+    GraphEditor / GraphEditorCommands.cpp Source / UI / Graph / GraphEditor / GraphEditorDragDrop.cpp Source / UI /
+    Graph / GraphDragDropController / GraphDragDropController.h Source / UI / Graph / GraphDragDropController /
+    GraphDragDropController.cpp Source / UI / Graph / GraphEditor / GraphEditorStereoWiring.cpp Source / UI / Graph /
+    GraphEditor / GraphEditorPersistence.cpp Source / UI / Graph / ModuleComponent / ModuleComponent.cpp Source / UI /
+    Graph / ModuleComponent / ModuleComponent.h Source / UI / Graph / ModuleComponent /
+    ModuleComponentInternal.h Source / UI / Graph / ModuleComponent / ModuleComponentEQCard.cpp Source / UI / Graph /
+    ModuleComponent / ModuleComponentAudioDrop.cpp Source / UI / Graph / ModuleComponent /
+    ModuleComponentWavetable.cpp Source / UI / Graph / ModuleComponent / ModuleComponentLayout.cpp Source / UI / Graph /
+    ModuleComponent / ModuleComponentPaint.cpp Source / UI / Graph / ModuleComponent /
+    ModuleComponentInteraction.cpp Source / UI / Graph / ModuleComponent / ModuleComponentEnvelopeCard.cpp Source / UI /
+    Graph / ModuleComponent / ModuleComponentMidiLearn.cpp Source / UI / MidiRemote / MidiLearnMenu.h Source / UI /
+    MidiRemote / MidiLearnMenu.cpp Source / UI / MidiRemote / MidiRemotePanel / MidiRemotePanelComponent.h Source / UI /
+    MidiRemote / MidiRemotePanel / MidiRemotePanelComponent.cpp Source / UI / MidiRemote / ControllersList /
+    ControllersListComponent.h Source / UI / MidiRemote / ControllersList / ControllersListComponent.cpp Source / UI /
+    MidiRemote / ControllerSurface / ControllerSurfaceComponent.h Source / UI / MidiRemote / ControllerSurface /
+    ControllerSurfaceComponent.cpp Source / UI / MidiRemote / ControllerSurface / ControllerSurfaceCell.h Source / UI /
+    MidiRemote / ControllerSurface / ControllerSurfaceCell.cpp Source / UI / MidiRemote / Inspector /
+    ControlInspectorComponent.h Source / UI / MidiRemote / Inspector / ControlInspectorComponent.cpp Source / UI /
+    Macros / MacroCardComponent.cpp Source / UI / Macros / MacroPortConfigDialog /
+    MacroPortConfigDialogLifecycle.cpp Source / UI / Macros / MacroPortConfigDialog /
+    MacroPortConfigDialogRowOrdering.cpp Source / UI / Macros / MacroPortConfigDialog /
+    MacroPortConfigDialogTestSeams.cpp Source / UI / Macros / MacroPortConfigDialog /
+    MacroPortConfigDialogAutoPortPrompt.cpp Source / UI / Macros / MacroCardComponent.h Source / UI / ModuleViews /
+    FrequencyResponseComponent.h Source / UI / ModuleViews / FrequencyGrid.h Source / UI / ModuleViews /
+    EQCurveComponent.h Source / UI / ModuleViews / EQWindow.h Source / UI / ModuleViews /
+    SampleWaveformComponent.h
+#Reusable breakpoint curve editor(FRO111)-- not yet wired into any module card.
+        Source /
+    UI / ModuleViews / CurveEditor / CurveModel.h Source / UI / ModuleViews / CurveEditor / CurveModel.cpp Source / UI /
+    ModuleViews / CurveEditor / CurveEditorGeometry.h Source / UI / ModuleViews / CurveEditor /
+    CurveEditorGeometry.cpp Source / UI / ModuleViews / CurveEditor / CurveEditorComponent.h Source / UI / ModuleViews /
+    CurveEditor / CurveEditorComponent.cpp Source / UI / ModuleViews / CurveEditor / CurveEditorPaint.cpp Source / UI /
+    ModuleViews / WavetableDisplayComponent.h Source / UI / ModuleViews / TriggerMeterComponent.h Source / UI /
+    ModuleViews / ThresholdControlComponent.h Source / UI / Graph / ModMatrixComponent.cpp Source / UI / Graph /
+    ModMatrixComponent.h Source / UI / Settings / SettingsWindow.cpp Source / UI / Settings / SettingsWindow.h Source /
+    UI / Chrome / WelcomeScreenComponent.cpp Source / UI / Chrome /
+    WelcomeScreenComponent.h
+#Plugin hosting UI(TL7 - 5) — native editor windows for hosted VST3 / AU plugins.In AppUI(a
+#window), not Core, mirroring HostedPluginModule / HostedPluginBackend's Core placement above.
+        Source /
+    Plugin / Hosting / HostedPluginEditorWindow.cpp Source / Plugin / Hosting / HostedPluginEditorWindow.h Source /
+    Plugin / Hosting / HostedPluginWindowManager.h Source / UI / Settings / AppearanceSettingsTab.cpp Source / UI /
+    Settings / AppearanceSettingsTab.h Source / UI / Settings / MeterColourStopsEditor.cpp Source / UI / Settings /
+    MeterColourStopsEditor.h Source / UI / Settings / FeedbackSettingsTab.cpp Source / UI / Settings /
+    FeedbackSettingsTab.h Source / UI / Settings / PreferencesSettingsTab / PreferencesSettingsTabLifecycle.cpp Source /
+    UI / Settings / PreferencesSettingsTab / PreferencesSettingsTabGraphBehaviour.cpp Source / UI / Settings /
+    PreferencesSettingsTab / PreferencesSettingsTabTimelineBehaviour.cpp Source / UI / Settings /
+    PreferencesSettingsTab / PreferencesSettingsTabAutosave.cpp Source / UI / Settings / PreferencesSettingsTab /
+    PreferencesSettingsTabMixerDefaults.cpp Source / UI / Settings / PreferencesSettingsTab /
+    PreferencesSettingsTab.h Source / UI / Settings / ShortcutsSettingsTab.cpp Source / ShortcutManager /
+    AppCommands.h Source / ShortcutManager / ShortcutManager.h Source / ShortcutManager /
+    ShortcutManagerActionNames.cpp Source / Update / UpdateManager.h)
