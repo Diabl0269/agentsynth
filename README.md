@@ -54,7 +54,7 @@ Agent Synth uses a hidden **Attenuverter** node architecture for modulation rout
 
 ## Support
 
-Agent Synth is free and open source, built by one person in the evenings. If it has earned a place in your setup, you can buy me a coffee (one-off or monthly) at https://agentsynth.app/support. No pressure, it stays free either way.
+Agent Synth is free and open source, built by one person in the evenings. If it has earned a place in your setup, you can buy me a coffee (one-off or monthly) at https://agentsynth.app/donate. No pressure, it stays free either way.
 
 ## Building
 
