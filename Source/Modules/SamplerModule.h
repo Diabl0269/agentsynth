@@ -2,6 +2,7 @@
 
 #include "ModuleBase.h"
 #include <array>
+#include <bitset>
 #include <cmath>
 #include <juce_audio_formats/juce_audio_formats.h>
 
@@ -253,26 +254,11 @@ public:
         const bool hasSprayCV = cacheChannel(buffer, kSprayCVCh, ns, numSamples, sprayCache);
         const bool hasLevelCV = cacheChannel(buffer, kLevelCVCh, ns, numSamples, levelCache);
 
-        // ---- 2. MIDI: note-on retriggers and transposes -------------------------------------
-        for (const auto metadata : midiMessages) {
-            const auto msg = metadata.getMessage();
-            if (msg.isNoteOn()) {
-                midiNote = (float)msg.getNoteNumber();
-                heldMidiNote = msg.getNoteNumber();
-                midiGateOpen = true;
-                midiEverReceived = true;
-            } else if (msg.isNoteOff() && msg.getNoteNumber() == heldMidiNote) {
-                midiGateOpen = false;
-            } else if (msg.isAllNotesOff() || msg.isAllSoundOff()) {
-                midiGateOpen = false;
-            }
-        }
-
-        // ---- 3. Clear every declared output channel -----------------------------------------
+        // ---- 2. Clear every declared output channel -----------------------------------------
         for (int ch = 0; ch < getTotalNumOutputChannels() && ch < numCh; ++ch)
             buffer.clear(ch, 0, numSamples);
 
-        // ---- 4. Nothing loaded -> silence ----------------------------------------------------
+        // ---- 3. Nothing loaded -> silence ----------------------------------------------------
         SampleData::Ptr sample = getSample();
         if (sample == nullptr || sample->audio.getNumSamples() < 2) {
             playingFlag.store(false);
@@ -280,7 +266,7 @@ public:
             return;
         }
 
-        // ---- 5. Render -----------------------------------------------------------------------
+        // ---- 4. Render (MIDI note-on/off is consumed sample-accurately below, step 4b) -------
         const int sampleFrames = sample->audio.getNumSamples();
         const int sampleChannels = sample->audio.getNumChannels();
         const float* srcL = sample->audio.getReadPointer(0);
@@ -288,7 +274,9 @@ public:
 
         // Source-rate correction: a 48k file on a 44.1k device must read slightly faster than 1.0.
         const double rateRatio = sample->sourceSampleRate / currentSampleRate;
-        const float midiSemis = midiEverReceived ? (midiNote - (float)rootNoteParam->get()) : 0.0f;
+        // Mutable: a same-block Note-On (legato, or a loop-restart Note-Off+Note-On pair) updates
+        // these mid-loop so the retriggered note plays at its own pitch, not the block's stale one.
+        float midiSemis = midiEverReceived ? (midiNote - (float)rootNoteParam->get()) : 0.0f;
         // Pitch is a playback *rate* (the read head stays continuous through a change), and Start /
         // Grain Size / Density / Spray are only consulted when a grain spawns or a loop wraps —
         // discrete events. None of them can put a step in the rendered signal, so all five are
@@ -308,8 +296,8 @@ public:
             granular ? 1.0f / std::sqrt(juce::jmax(1.0f, baseDensity * baseGrainMs * 0.001f)) : 1.0f;
 
         // Pitch only varies per sample when pitch CV is patched, so the common case pays for one
-        // std::pow per block instead of one per sample.
-        const double baseIncrement = std::pow(2.0, (double)(basePitch + midiSemis) / 12.0) * rateRatio;
+        // std::pow per block instead of one per sample. Mutable for the same reason as midiSemis.
+        double baseIncrement = std::pow(2.0, (double)(basePitch + midiSemis) / 12.0) * rateRatio;
 
         float* outL = buffer.getWritePointer(0);
         float* outR = (numCh > 1) ? buffer.getWritePointer(1) : nullptr;
@@ -317,9 +305,24 @@ public:
         for (int i = 0; i < numSamples; ++i) {
             const int idx = juce::jmin(i, ns - 1);
 
+            // --- MIDI: consume any note-on/off landing on exactly this sample --------------
+            // Sample-accurate on purpose (mirrors ADSRModule's mono branch, FRO110) -- see
+            // applyHeldNoteMessage's doc comment for why a block-net gate drops notes (FRO246).
+            bool midiNoteOnThisSample = false;
+            for (const auto metadata : midiMessages) {
+                if (metadata.samplePosition != i)
+                    continue;
+                if (applyHeldNoteMessage(metadata.getMessage())) {
+                    midiSemis = midiNote - (float)rootNoteParam->get();
+                    baseIncrement = std::pow(2.0, (double)(basePitch + midiSemis) / 12.0) * rateRatio;
+                    midiNoteOnThisSample = true;
+                }
+            }
+
             // --- gate ---
             const bool gate = gateAt(idx);
-            if (gate && !lastGate)
+            // The Note-On EVENT retriggers, not an edge in the gate -- see the comment above.
+            if ((gate && !lastGate) || (midiNoteOnThisSample && !triggerEverConnected))
                 onGateRising(baseStart, hasPosCV ? positionCache[idx] : 0.0f, sampleFrames);
             else if (!gate && lastGate)
                 envelopeTarget = 0.0f;
@@ -381,6 +384,12 @@ public:
             if (envelope <= 0.0f && envelopeTarget <= 0.0f && !granular)
                 playhead = -1.0; // fully faded out: stop reading until the next trigger
         }
+
+        // A MidiBuffer should never carry an event at/past numSamples, but keep heldNotes correct
+        // defensively (mirrors ADSRModule) rather than silently dropping it.
+        for (const auto metadata : midiMessages)
+            if (metadata.samplePosition >= numSamples)
+                applyHeldNoteMessage(metadata.getMessage());
 
         // Position readout for the UI — once per block, never per sample.
         if (granular)
@@ -507,8 +516,32 @@ private:
         if (triggerEverConnected)
             return triggerCache[(size_t)idx] >= 0.5f;
         if (midiEverReceived)
-            return midiGateOpen;
+            return heldNotes.any();
         return true;
+    }
+
+    /** Updates `heldNotes`/`midiNote` from one MIDI message. Returns whether it was a Note-On --
+     *  the caller uses that to force a retrigger (via `onGateRising`) regardless of whether `gateAt`
+     *  itself reads a rising edge this sample.
+     *
+     *  Called once per message at its own exact `samplePosition` (see the processBlock loop), not
+     *  batched over the whole block: a block-net gate (the previous design) collapsed two Note-Ons
+     *  with no Note-Off between them (legato) into "gate never fell", and a Note-Off immediately
+     *  followed by a Note-On in the SAME block (a transport loop restart whose boundary lands inside
+     *  this block, see TimelineMidiSourceModule::emitBlock) into "gate never rose" -- both silently
+     *  swallowed the new note (FRO246). Mirrors ADSRModule's mono branch (FRO110). */
+    bool applyHeldNoteMessage(const juce::MidiMessage& message) {
+        if (message.isNoteOn()) {
+            heldNotes.set(static_cast<size_t>(message.getNoteNumber()));
+            midiEverReceived = true;
+            midiNote = (float)message.getNoteNumber();
+            return true;
+        }
+        if (message.isNoteOff())
+            heldNotes.reset(static_cast<size_t>(message.getNoteNumber()));
+        else if (message.isAllNotesOff() || message.isAllSoundOff())
+            heldNotes.reset();
+        return false;
     }
 
     void onGateRising(float baseStart, float positionCV, int sampleFrames) {
@@ -657,9 +690,8 @@ private:
     bool lastGate = false;
     bool triggerEverConnected = false;
     bool midiEverReceived = false;
-    bool midiGateOpen = false;
     float midiNote = 60.0f;
-    int heldMidiNote = -1;
+    std::bitset<128> heldNotes; // keyed by MIDI note number only, channel-agnostic (mirrors ADSRModule)
 
     std::array<Grain, kMaxGrains> grains{};
     juce::Random random;

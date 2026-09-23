@@ -307,6 +307,135 @@ TEST_F(SamplerModuleTest, MidiNoteTransposesRelativeToRootNote) {
     file.deleteFile();
 }
 
+// FRO246: two Note-Ons with no Note-Off between them (legato) used to collapse onto the block-net
+// `midiGateOpen` flag -- the gate never read as "fallen", so the rising-edge check never fired and
+// the second note stayed silent. Sample-accurate retrigger-on-event fixes it whether the two
+// Note-Ons land in different blocks (the common hand-played case) or the same one.
+TEST_F(SamplerModuleTest, ConsecutiveNoteOnsAcrossBlocksBothRetrigger) {
+    constexpr int kFrames = 8192;
+    auto file = writeRampWav("sampler-consecutive-246.wav", kFrames);
+    ASSERT_TRUE(module->loadSampleFile(file));
+    level()->setValueNotifyingHost(1.0f);
+
+    auto midi1 = TestAudioHelpers::createNoteOnMidi(60); // root note -> unity rate
+    juce::AudioBuffer<float> block1(SamplerModule::kNumChannels, 512);
+    block1.clear();
+    module->processBlock(block1, midi1);
+    for (int i = SamplerModule::kFadeSamples; i < 512; ++i)
+        ASSERT_NEAR(block1.getSample(0, i), rampValue(i, kFrames), 1e-4f) << "first note, frame " << i;
+
+    // No Note-Off in between -- a gapless legato transition straight to the second note.
+    auto midi2 = TestAudioHelpers::createNoteOnMidi(72); // +12 semitones -> 2x rate
+    juce::AudioBuffer<float> block2(SamplerModule::kNumChannels, 512);
+    block2.clear();
+    module->processBlock(block2, midi2);
+
+    for (int i = SamplerModule::kFadeSamples; i < 512; ++i)
+        EXPECT_NEAR(block2.getSample(0, i), rampValue(2 * i, kFrames), 1e-4f)
+            << "second note must retrigger from the sample start at its own pitch, frame " << i;
+    file.deleteFile();
+}
+
+TEST_F(SamplerModuleTest, ConsecutiveNoteOnsWithinOneBlockBothRetrigger) {
+    constexpr int kFrames = 8192;
+    auto file = writeRampWav("sampler-same-block-246.wav", kFrames);
+    ASSERT_TRUE(module->loadSampleFile(file));
+    level()->setValueNotifyingHost(1.0f);
+
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 60, 1.0f), 0);
+    midi.addEvent(juce::MidiMessage::noteOn(1, 72, 1.0f), 256); // legato retrigger mid-block
+    juce::AudioBuffer<float> block(SamplerModule::kNumChannels, 512);
+    block.clear();
+    module->processBlock(block, midi);
+
+    for (int i = SamplerModule::kFadeSamples; i < 256; ++i)
+        EXPECT_NEAR(block.getSample(0, i), rampValue(i, kFrames), 1e-4f) << "first note, frame " << i;
+    for (int i = 256 + SamplerModule::kFadeSamples; i < 512; ++i)
+        EXPECT_NEAR(block.getSample(0, i), rampValue(2 * (i - 256), kFrames), 1e-4f)
+            << "second note retriggered mid-block at its own pitch, frame " << i;
+    file.deleteFile();
+}
+
+// FRO246: a transport loop restart whose boundary lands inside one audio block flushes a Note-Off
+// then emits the restarted Note-On a few samples later, in the SAME MidiBuffer (see
+// TimelineMidiSourceModule::emitBlock). That used to collapse to "gate never rose" for the block
+// (net effect: still held) and silently drop the first note of the new pass.
+TEST_F(SamplerModuleTest, NoteOffThenNoteOnInSameBlockStillRetriggers) {
+    constexpr int kFrames = 8192;
+    auto file = writeRampWav("sampler-loop-restart-246.wav", kFrames);
+    ASSERT_TRUE(module->loadSampleFile(file));
+    level()->setValueNotifyingHost(1.0f);
+
+    auto midi1 = TestAudioHelpers::createNoteOnMidi(60);
+    juce::AudioBuffer<float> block1(SamplerModule::kNumChannels, 512);
+    block1.clear();
+    module->processBlock(block1, midi1);
+    for (int i = SamplerModule::kFadeSamples; i < 512; ++i)
+        ASSERT_NEAR(block1.getSample(0, i), rampValue(i, kFrames), 1e-4f) << "first note, frame " << i;
+
+    juce::MidiBuffer midi2;
+    midi2.addEvent(juce::MidiMessage::noteOff(1, 60, 0.0f), 100);
+    midi2.addEvent(juce::MidiMessage::noteOn(1, 60, 1.0f), 103);
+    juce::AudioBuffer<float> block2(SamplerModule::kNumChannels, 512);
+    block2.clear();
+    module->processBlock(block2, midi2);
+
+    for (int i = 103 + SamplerModule::kFadeSamples; i < 512; ++i)
+        EXPECT_NEAR(block2.getSample(0, i), rampValue(i - 103, kFrames), 1e-4f)
+            << "the restarted note must play from the sample start, frame " << i;
+    file.deleteFile();
+}
+
+// The exact-boundary case: TimelineMidiSourceLoopTests confirms the Note-Off and the wrapped
+// Note-On both land on the SAME sample (the block's loopWrapSample), not merely nearby ones.
+// juce::MidiBuffer preserves insertion order for equal positions, so Off is still seen before On.
+TEST_F(SamplerModuleTest, NoteOffThenNoteOnOnTheSameSampleStillRetriggers) {
+    constexpr int kFrames = 8192;
+    auto file = writeRampWav("sampler-loop-restart-same-sample-246.wav", kFrames);
+    ASSERT_TRUE(module->loadSampleFile(file));
+    level()->setValueNotifyingHost(1.0f);
+
+    auto midi1 = TestAudioHelpers::createNoteOnMidi(60);
+    juce::AudioBuffer<float> block1(SamplerModule::kNumChannels, 512);
+    block1.clear();
+    module->processBlock(block1, midi1);
+
+    juce::MidiBuffer midi2;
+    midi2.addEvent(juce::MidiMessage::noteOff(1, 60, 0.0f), 100);
+    midi2.addEvent(juce::MidiMessage::noteOn(1, 60, 1.0f), 100);
+    juce::AudioBuffer<float> block2(SamplerModule::kNumChannels, 512);
+    block2.clear();
+    module->processBlock(block2, midi2);
+
+    for (int i = 100 + SamplerModule::kFadeSamples; i < 512; ++i)
+        EXPECT_NEAR(block2.getSample(0, i), rampValue(i - 100, kFrames), 1e-4f)
+            << "same-sample Off+On must still retrigger from the sample start, frame " << i;
+    file.deleteFile();
+}
+
+TEST_F(SamplerModuleTest, AllNotesOffClearsHeldNotesAndReleases) {
+    auto file = writeTestWav("sampler-allnotesoff-246.wav", 4096, 1, kRate, [](int, int) { return 0.5f; });
+    ASSERT_TRUE(module->loadSampleFile(file));
+    level()->setValueNotifyingHost(1.0f);
+
+    auto midi1 = TestAudioHelpers::createNoteOnMidi(60);
+    juce::AudioBuffer<float> block1(SamplerModule::kNumChannels, 512);
+    block1.clear();
+    module->processBlock(block1, midi1);
+    ASSERT_TRUE(module->isPlaying());
+
+    juce::MidiBuffer midi2;
+    midi2.addEvent(juce::MidiMessage::allNotesOff(1), 100);
+    juce::AudioBuffer<float> block2(SamplerModule::kNumChannels, 512);
+    block2.clear();
+    module->processBlock(block2, midi2);
+
+    EXPECT_NEAR(TestAudioHelpers::computeRMSInRange(block2, 100 + SamplerModule::kFadeSamples, 512, 0), 0.0f, 1e-6f)
+        << "an All Notes Off must clear heldNotes and release the gate";
+    file.deleteFile();
+}
+
 TEST_F(SamplerModuleTest, StartParameterOffsetsPlayhead) {
     constexpr int kFrames = 4096;
     auto file = writeRampWav("sampler-start-146.wav", kFrames);
