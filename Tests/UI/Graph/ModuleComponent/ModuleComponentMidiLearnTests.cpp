@@ -356,3 +356,30 @@ TEST_F(ModuleComponentTest, TimerCallbackNeverCrashesWithNoMidiLearnHostWired) {
     ModuleComponent card(&filter, juce::AudioProcessorGraph::NodeID(1), editor);
     EXPECT_NO_THROW(card.timerCallback());
 }
+
+// FRO256: this card already repainted the armed control's own bounds on every gated timer tick
+// (unlike MixerColumnComponent/MixerMasterColumn/TimelineTransportBar, which had NO such repaint at
+// all) -- this proves it the same way those siblings' new tests do, via a counter, rather than
+// leaning on the fact that it happened to already work.
+TEST_F(ModuleComponentTest, TimerCallbackKeepsRepaintingTheArmedOutlineWhileArmed) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    FilterModule filter;
+    ModuleComponent card(&filter, juce::AudioProcessorGraph::NodeID(1), editor);
+    card.setSize(280, 500);
+
+    auto* slider = findSlider(card, "Cutoff");
+    ASSERT_NE(slider, nullptr);
+    editor.onMidiLearnRequested = [](juce::AudioProcessorGraph::NodeID, const juce::String&) {};
+    card.setMidiLearnArmedParam("cutoff");
+
+    card.timerCallback();
+    card.timerCallback();
+    card.timerCallback();
+    EXPECT_EQ(card.getMidiLearnArmedRepaintCountForTest(), 3)
+        << "every tick while armed must repaint the breathing outline's region, or it freezes";
+
+    card.setMidiLearnArmedParam({});
+    card.timerCallback();
+    EXPECT_EQ(card.getMidiLearnArmedRepaintCountForTest(), 3) << "no longer armed -- must stop repainting";
+}

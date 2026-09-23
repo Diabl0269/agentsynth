@@ -149,6 +149,9 @@ public:
     juce::String findMidiLearnableActionForTest(const juce::Component* component) const;
     /** Test/inspection: `component`'s MIDI-mapped badge cache, as of the last refreshMidiLearnBadges(). */
     bool isMidiLearnBadgeMappedForTest(const juce::Component* component) const;
+    /** FRO256: mirrors MixerColumnComponent::getMidiLearnArmedRepaintCountForTest -- see that
+     *  method's own comment on why this exists. */
+    int getMidiLearnArmedRepaintCountForTest() const noexcept { return midiLearnArmedRepaintCount_; }
 
     /** Same seam as ModuleComponent::setShowContextMenuHookForTest -- see
      *  MixerColumnComponent::setShowContextMenuHookForTest's comment. */
@@ -188,6 +191,9 @@ private:
 
     // ---- MIDI Learn private helpers (FRO133) -- see the public section above for the wiring ----
     void refreshMidiLearnBadges();
+    /** FRO256: mirrors MixerColumnComponent::repaintArmedMidiLearnOutline -- called from
+     *  updateFromTransport()'s existing 10 Hz poll so the breathing outline actually animates. */
+    void repaintArmedMidiLearnOutline();
     void paintMidiLearnOverlays(juce::Graphics& g);
     /** The four glyph buttons' fixed action ids — a plain switch rather than a per-button stored
      *  field, since the mapping never changes after construction. */
@@ -200,6 +206,8 @@ private:
     std::map<GlyphButton::Glyph, bool> midiLearnMappedBadges_;
     juce::String midiLearnArmedActionId_;
     double midiLearnArmedSinceMs_ = 0.0;
+    // FRO256: backs getMidiLearnArmedRepaintCountForTest() -- test-only, never read in production.
+    int midiLearnArmedRepaintCount_ = 0;
     std::function<void(juce::PopupMenu&)> showContextMenuHook_ = [](juce::PopupMenu& m) {
         m.showMenuAsync(juce::PopupMenu::Options());
     };

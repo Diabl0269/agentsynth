@@ -328,15 +328,6 @@ void MainComponent::wireCommandsAndShortcuts() {
     startTimerHz(10);
 }
 
-MainComponent::RemoteActionInvokerImpl::RemoteActionInvokerImpl(juce::ApplicationCommandManager& cm) noexcept
-    : commandManager_(cm) {}
-
-// MESSAGE THREAD (called from RemoteEngine::drain()). Synchronous, exactly like a menu item or a
-// keypress dispatch — never posted/async.
-void MainComponent::RemoteActionInvokerImpl::invokeRemoteCommand(juce::CommandID commandId) {
-    commandManager_.invokeDirectly(commandId, false);
-}
-
 // FRO127: wires synth::midi::RemoteEngine to the AudioEngine seam and primes it with whatever
 // controller profiles and project assignments already exist. Called right after
 // wireCommandsAndShortcuts() above (commandManager must exist — the action invoker dispatches
@@ -395,6 +386,29 @@ void MainComponent::wireMidiRemoteEngine() {
     };
     transportBar.onMidiForgetRequested = [this](const juce::String& actionId) {
         midiLearnController_.forgetAction(actionId);
+    };
+
+    // FRO253: mixer column Solo right-click MIDI Learn -- a nodeCommand target, so these three
+    // forward to MidiLearnController's node-command-keyed overloads (mirrors the transport-bar
+    // action wiring immediately above; unlike a parameter target, Solo has no
+    // GraphEditor::onMidiLearnRequested sibling to reuse -- see MixerColumnMidiLearn.cpp).
+    auto& mixerPanel = mixerDock.getMixerPanel();
+    mixerPanel.onQuerySoloMidiMapping = [this](juce::AudioProcessorGraph::NodeID nodeId) -> juce::String {
+        const auto mappings = midiLearnController_.queryNodeCommandMappings(nodeId);
+        const auto found = mappings.find(synth::NodeCommandKind::toggleSolo);
+        return found != mappings.end() ? found->second : juce::String();
+    };
+    mixerPanel.onSoloMidiLearnRequested = [this](juce::AudioProcessorGraph::NodeID nodeId) {
+        midiLearnController_.armNodeCommand(nodeId, synth::NodeCommandKind::toggleSolo);
+    };
+    mixerPanel.onSoloMidiForgetRequested = [this](juce::AudioProcessorGraph::NodeID nodeId) {
+        midiLearnController_.forgetNodeCommand(nodeId, synth::NodeCommandKind::toggleSolo);
+    };
+    // FRO253: re-syncs the mixer column's M/S visuals after a hardware press flips solo outside
+    // any column's own click -- see MixerColumnComponent::toggleSoloed's callers for why nothing
+    // else does this (MixerColumnMidiLearn.cpp / RemoteActionInvokerImpl's own comment).
+    remoteActionInvoker_.onNodeCommandApplied = [&mixerPanel](juce::AudioProcessorGraph::NodeID) {
+        mixerPanel.refreshMuteSoloVisuals();
     };
 
     // Installed last: nothing may reach the sink before it has profiles/assignments/sources.

@@ -176,3 +176,55 @@ TEST(MixerMasterColumnMidiLearnTests, UnbindFromGraphClearsTheRegistrySoARightCl
     fixture.column.unbindFromGraph();
     EXPECT_EQ(fixture.column.findMidiLearnableParamForTest(&slider), nullptr);
 }
+
+// ============================================================================
+// FRO256: same coordinate-frame bug as MixerColumnMidiLearnTests.cpp's own "not the column's
+// corner" tests -- paintMidiLearnOverlays() here passed the slider's PARENT (fader_, itself nested
+// inside this column) as the getLocalArea() source but the slider's OWN local bounds as the area,
+// so the badge landed at fader_'s origin translated into this column's frame, not on the slider.
+// ============================================================================
+
+TEST(MixerMasterColumnMidiLearnTests, BadgePaintsOnTheFaderItselfNotAtAWrongOffset) {
+    MasterColumnFixture fixture;
+    fixture.editor.onQueryMidiMappingsForNode =
+        [](juce::AudioProcessorGraph::NodeID) -> std::map<juce::String, juce::String> {
+        return {{"gain", "Fader 1 on Launchkey Mini"}};
+    };
+    fixture.column.refreshMeter(0.1f);
+
+    auto& slider = fixture.column.getAccessibilityFocusTargetForTest();
+    const auto sliderBoundsInColumn =
+        fixture.column.getLocalArea(&slider, slider.getLocalBounds()); // the CORRECT conversion
+    const auto image = fixture.column.createComponentSnapshot(fixture.column.getLocalBounds());
+
+    const juce::Point<int> badgeCentre(sliderBoundsInColumn.getRight() - 3, sliderBoundsInColumn.getY() + 3);
+    const juce::Colour target(0xffB48EF5u);
+    bool found = false;
+    for (int dx = -2; dx <= 2 && !found; ++dx)
+        for (int dy = -2; dy <= 2 && !found; ++dy) {
+            const auto p = badgeCentre + juce::Point<int>(dx, dy);
+            if (image.getBounds().contains(p) && image.getPixelAt(p.x, p.y) == target)
+                found = true;
+        }
+    EXPECT_TRUE(found) << "badge should be at the fader's own top-right corner, (" << badgeCentre.x << ", "
+                       << badgeCentre.y << ")";
+}
+
+// ============================================================================
+// FRO256: the armed breathing outline must keep repainting while armed, same fix as
+// MixerColumnComponent -- refreshMeter() had no such repaint at all before this.
+// ============================================================================
+
+TEST(MixerMasterColumnMidiLearnTests, RefreshMeterKeepsRepaintingTheArmedOutlineWhileArmed) {
+    MasterColumnFixture fixture;
+    fixture.column.setMidiLearnArmedParam("gain");
+
+    fixture.column.refreshMeter(0.1f);
+    fixture.column.refreshMeter(0.1f);
+    fixture.column.refreshMeter(0.1f);
+    EXPECT_EQ(fixture.column.getMidiLearnArmedRepaintCountForTest(), 3);
+
+    fixture.column.setMidiLearnArmedParam({});
+    fixture.column.refreshMeter(0.1f);
+    EXPECT_EQ(fixture.column.getMidiLearnArmedRepaintCountForTest(), 3) << "no longer armed -- must stop repainting";
+}

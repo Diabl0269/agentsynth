@@ -215,8 +215,13 @@ void MixerColumnComponent::rebindControls() {
 
     auto* module = dynamic_cast<ModuleBase*>(processor);
     muteButton_.onClick = [this] { toggleMuted(); };
-    soloButton_.setVisible(dynamic_cast<ChannelStripModule*>(processor) != nullptr);
+    const bool isChannelStrip = dynamic_cast<ChannelStripModule*>(processor) != nullptr;
+    soloButton_.setVisible(isChannelStrip);
     soloButton_.onClick = [this] { toggleSoloed(); };
+    // FRO253: only a ChannelStrip column's Solo is MIDI-learnable (soloButton_ is hidden, and has
+    // no node command to point at, on every other column kind).
+    if (isChannelStrip)
+        registerSoloMidiLearnable();
     refreshMuteSoloAccessibility(module, dynamic_cast<ChannelStripModule*>(processor));
     juce::ignoreUnused(module);
 }
@@ -272,6 +277,19 @@ void MixerColumnComponent::toggleSoloed() {
     repaint();
 }
 
+// FRO253: see this method's own header comment -- re-syncs the M/S visuals after something other
+// than THIS column's own click flips solo (a MIDI Remote node-command press).
+void MixerColumnComponent::refreshMuteSoloVisual() {
+    if (graph_ == nullptr)
+        return;
+    auto* n = graph_->getNodeForId(nodeId_);
+    auto* processor = n != nullptr ? n->getProcessor() : nullptr;
+    if (processor == nullptr)
+        return;
+    refreshMuteSoloAccessibility(dynamic_cast<ModuleBase*>(processor), dynamic_cast<ChannelStripModule*>(processor));
+    repaint();
+}
+
 void MixerColumnComponent::unbindFromGraph() {
     panAttachment_.reset();
     fader_.unbind();
@@ -310,6 +328,9 @@ void MixerColumnComponent::refreshMeter(float elapsedSeconds) {
     // already uses (Source/UI/CLAUDE.md's no-unconditional-repaint rule), mirroring
     // ModuleComponent's own gated-timer precedent for its badge refresh.
     refreshMidiLearnBadges();
+    // FRO256: same tick also keeps the armed breathing outline animating -- see that method's own
+    // comment for why nothing did before this.
+    repaintArmedMidiLearnOutline();
 }
 
 void MixerColumnComponent::setSelected(bool selected) {

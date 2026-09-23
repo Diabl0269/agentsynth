@@ -70,6 +70,9 @@ public:
     // one) ----
     juce::RangedAudioParameter* findMidiLearnableParamForTest(const juce::Component* component) const;
     bool isMidiLearnBadgeMappedForTest(const juce::Component* component) const;
+    /** FRO256: mirrors MixerColumnComponent::getMidiLearnArmedRepaintCountForTest -- see that
+     *  method's own comment on why this exists. */
+    int getMidiLearnArmedRepaintCountForTest() const noexcept { return midiLearnArmedRepaintCount_; }
     /** Arms/clears (empty id) the breathing outline. Message thread only -- called by
      *  MidiLearnController via MixerPanelComponent::setMidiLearnArmed. */
     void setMidiLearnArmedParam(const juce::String& paramId);
@@ -83,6 +86,9 @@ public:
 private:
     void refreshMuteAccessibility();
     void refreshMidiLearnBadges();
+    /** FRO256: mirrors MixerColumnComponent::repaintArmedMidiLearnOutline -- called from
+     *  refreshMeter()'s existing 10 Hz tick so the breathing outline actually animates. */
+    void repaintArmedMidiLearnOutline();
     void paintMidiLearnOverlays(juce::Graphics& g);
 
     juce::AudioProcessorGraph* graph_ = nullptr;
@@ -97,6 +103,8 @@ private:
     bool midiLearnBadgeMapped_ = false;
     juce::String midiLearnArmedParamId_;
     double midiLearnArmedSinceMs_ = 0.0;
+    // FRO256: backs getMidiLearnArmedRepaintCountForTest() -- test-only, never read in production.
+    int midiLearnArmedRepaintCount_ = 0;
     std::function<void(juce::PopupMenu&)> showContextMenuHook_ = [](juce::PopupMenu& m) {
         m.showMenuAsync(juce::PopupMenu::Options());
     };

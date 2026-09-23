@@ -45,6 +45,9 @@ public:
     ~MidiLearnController();
 
     const std::vector<ControllerProfile>& getProfiles() const { return profiles_; }
+    /** Test/inspection (FRO193): proves which directory this instance's ControllerProfileStore
+     *  actually resolved to, without exposing the store itself. */
+    const juce::File& getControllersDirectoryForTest() const { return profileStore_.getControllersDirectory(); }
 
     /** "MIDI Learn '<Param>'..." / "MIDI Learn again...". Wired to GraphEditor::onMidiLearnRequested. */
     void arm(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId);
@@ -55,6 +58,23 @@ public:
 
     /** Wired to GraphEditor::onQueryMidiMappingsForNode. */
     std::map<juce::String, juce::String> queryMappings(juce::AudioProcessorGraph::NodeID nodeId) const;
+
+    /** FRO253 (docs/control/midi-remote.md#node-command-targets): arms a learn on a node command
+     *  (e.g. Solo, ChannelStripModule::soloed_) rather than a graph parameter -- modelled on arm()
+     *  above, not armAction(): a node command is PROJECT-scoped, same as a parameter (it lives on
+     *  MidiRemoteProjectDoc::assignments, not a ControllerProfile), because it names a graph node
+     *  that only makes sense within this project, unlike a fixed ShortcutManager action id.
+     *  Wired to MixerPanelComponent::onSoloMidiLearnRequested. */
+    void armNodeCommand(juce::AudioProcessorGraph::NodeID nodeId, NodeCommandKind command);
+
+    /** "Forget MIDI" for a node command target. A no-op if there is no assignment for it. Wired to
+     *  MixerPanelComponent::onSoloMidiForgetRequested. */
+    void forgetNodeCommand(juce::AudioProcessorGraph::NodeID nodeId, NodeCommandKind command);
+
+    /** Every node command mapped for `nodeId`, to its display label -- mirrors queryMappings()
+     *  above, keyed by NodeCommandKind instead of a paramId string. Wired to
+     *  MixerPanelComponent::onQuerySoloMidiMapping. */
+    std::map<NodeCommandKind, juce::String> queryNodeCommandMappings(juce::AudioProcessorGraph::NodeID nodeId) const;
 
     /** FRO133 (docs/control/midi-remote.md#action-targets): arms a learn on a ShortcutManager
      *  action id (e.g. "transportTogglePlayStop") rather than a graph parameter -- always
@@ -74,9 +94,17 @@ public:
      *  TimelineTransportBar::onQueryMidiMappingForAction. */
     std::map<juce::String, juce::String> queryActionMappings() const;
 
-    /** Republishes the project doc's assignments to the engine. Called after every mutation here,
-     *  as the undo/redo postRestore, and by MainComponent after a project load/autosave-restore
-     *  replaces midiRemoteDoc wholesale. */
+    /** Republishes the project doc's assignments to the engine and re-resolves them against the
+     *  live graph. Called after every mutation here, as the undo/redo postRestore, and by
+     *  MainComponent after a project load/autosave-restore replaces midiRemoteDoc wholesale.
+     *
+     *  FRO253: RemoteEngine::setAssignments() rebuilds its snapshot with graph == nullptr by
+     *  design (docs/architecture/app-wiring.md#app-wiring--who-owns-the-timeline-and-every-hook-that-keeps-it-in-step)
+     *  -- it can only keep each assignment id's PREVIOUS resolution, so a brand-new id (a
+     *  just-settled learn, or its undo/redo) has none and its slot stays unresolved until some
+     *  unrelated graph change happens to reach MainComponent's reconcile funnel. This method
+     *  reconciles against the live graph itself right after setAssignments() so a fresh learn's
+     *  target works immediately, without changing RemoteEngine's setter semantics. */
     void publishAssignments();
 
     bool isArmed() const noexcept;

@@ -127,7 +127,12 @@ public:
 class CountingActionInvoker : public RemoteActionInvoker {
 public:
     void invokeRemoteCommand(juce::CommandID commandId) override { invoked.push_back(commandId); }
+    // FRO253: records a nodeCommand invocation the same way invokeRemoteCommand above does.
+    void invokeNodeCommand(juce::AudioProcessorGraph::NodeID nodeId, NodeCommandKind command) override {
+        invokedNodeCommands.push_back({nodeId, command});
+    }
     std::vector<juce::CommandID> invoked;
+    std::vector<std::pair<juce::AudioProcessorGraph::NodeID, NodeCommandKind>> invokedNodeCommands;
 };
 
 } // namespace
@@ -455,4 +460,64 @@ TEST(MidiRemoteEngineApplyTest, ActionFiresOnPressOnlyForBothButtonModes) {
             << "press fires exactly once and release fires nothing, buttonMode=" << modeName;
         EXPECT_EQ(invoker.invoked.front(), 4242) << "buttonMode=" << modeName;
     }
+}
+
+// ============================================================================
+// FRO253: node command targets fire on press only too (docs/control/midi-remote.md#node-command-targets),
+// for both momentary and toggle button modes -- mirrors ActionFiresOnPressOnlyForBothButtonModes above.
+// ============================================================================
+
+namespace {
+Assignment makeNodeCommandAssignment(ButtonMode mode) {
+    Assignment a;
+    a.id = "a1";
+    a.control.profileId = "profile";
+    a.control.controlId = "btn";
+    a.spec.type = MessageType::note;
+    a.spec.channel = 1;
+    a.spec.number = 30;
+    a.specEncoding = Encoding::abs7;
+    a.specButtonMode = mode;
+    a.target.kind = Target::Kind::nodeCommand;
+    a.target.nodeCommand.nodeUuid = juce::String(kNodeUuid);
+    a.target.nodeCommand.command = NodeCommandKind::toggleSolo;
+    return a;
+}
+} // namespace
+
+TEST(MidiRemoteEngineApplyTest, NodeCommandFiresOnPressOnlyForBothButtonModes) {
+    for (const ButtonMode mode : {ButtonMode::momentary, ButtonMode::toggle}) {
+        ApplyHarness h;
+        CountingActionInvoker invoker;
+        h.engine.setActionInvoker(&invoker);
+
+        h.publish({makeProfile({makeControl("btn", MessageType::note, 1, 30, Encoding::abs7, ControlKind::button)})},
+                  {makeNodeCommandAssignment(mode)});
+
+        h.send(juce::MidiMessage::noteOn(1, 30, (juce::uint8)100)); // press
+        h.engine.drain();
+        h.send(juce::MidiMessage::noteOff(1, 30)); // release
+        h.engine.drain();
+
+        const char* modeName = mode == ButtonMode::momentary ? "momentary" : "toggle";
+        ASSERT_EQ(invoker.invokedNodeCommands.size(), 1u)
+            << "press fires exactly once and release fires nothing, buttonMode=" << modeName;
+        EXPECT_EQ(invoker.invokedNodeCommands.front().first, h.node->nodeID) << "buttonMode=" << modeName;
+        EXPECT_EQ(invoker.invokedNodeCommands.front().second, NodeCommandKind::toggleSolo) << "buttonMode=" << modeName;
+    }
+}
+
+TEST(MidiRemoteEngineApplyTest, OrphanedNodeCommandInvokesNothing) {
+    ApplyHarness h;
+    CountingActionInvoker invoker;
+    h.engine.setActionInvoker(&invoker);
+
+    Assignment a = makeNodeCommandAssignment(ButtonMode::momentary);
+    a.target.nodeCommand.nodeUuid = "no-such-node"; // never resolves -- orphaned
+    h.publish({makeProfile({makeControl("btn", MessageType::note, 1, 30, Encoding::abs7, ControlKind::button)})}, {a});
+
+    h.send(juce::MidiMessage::noteOn(1, 30, (juce::uint8)100));
+    h.engine.drain();
+
+    EXPECT_TRUE(invoker.invokedNodeCommands.empty()) << "an orphaned node command must invoke nothing";
 }

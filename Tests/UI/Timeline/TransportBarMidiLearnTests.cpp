@@ -235,3 +235,23 @@ TEST(TransportBarMidiLearnTests, ArmingADifferentActionReplacesTheArmedOne) {
     // repaint-only contract.
     SUCCEED();
 }
+
+// FRO256: updateFromTransport() must keep repainting the armed glyph's bounds on every poll while
+// armed, or the breathing outline (its alpha computed from wall time on every paint()) freezes at
+// whatever alpha its first paint happened to land on.
+TEST(TransportBarMidiLearnTests, UpdateFromTransportKeepsRepaintingTheArmedOutlineWhileArmed) {
+    synth::ui::TimelineTransportBar bar;
+    bar.setSize(500, 28);
+    bar.setMidiLearnArmedAction("transportRecord");
+
+    synth::TransportService::PositionSnapshot snapshot;
+    bar.updateFromTransport(snapshot);
+    bar.updateFromTransport(snapshot);
+    bar.updateFromTransport(snapshot);
+    EXPECT_EQ(bar.getMidiLearnArmedRepaintCountForTest(), 3)
+        << "every poll while armed must repaint the breathing outline's region, or it freezes";
+
+    bar.clearMidiLearnArmedAction();
+    bar.updateFromTransport(snapshot);
+    EXPECT_EQ(bar.getMidiLearnArmedRepaintCountForTest(), 3) << "no longer armed -- must stop repainting";
+}

@@ -341,6 +341,9 @@ void TimelineTransportBar::updateFromTransport(const synth::TransportService::Po
     // FRO133: no timer of its own -- rides the SAME 10 Hz poll as everything else this method
     // resyncs (the class comment's "never any faster" rule).
     refreshMidiLearnBadges();
+    // FRO256: same poll also keeps the armed breathing outline animating -- see
+    // repaintArmedMidiLearnOutline()'s own comment.
+    repaintArmedMidiLearnOutline();
 }
 
 void TimelineTransportBar::refreshReadout(const synth::TransportService::PositionSnapshot& snapshot) {

@@ -10,6 +10,7 @@
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
 #include "MidiRemote/MidiLearnController.h"
+#include "Modules/ChannelStripModule.h"
 #include "Modules/FilterModule.h"
 #include "UI/Chrome/StatusBarComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -18,6 +19,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <memory>
 
+using namespace synth;
 using namespace synth::midi;
 
 namespace {
@@ -61,6 +63,35 @@ protected:
     std::unique_ptr<GraphEditor> graphEditor_;
     std::unique_ptr<MidiLearnController> controller_;
     juce::AudioProcessorGraph::Node::Ptr node_;
+};
+
+// Mirrors MainComponent::RemoteActionInvokerImpl::invokeNodeCommand's body exactly, same as
+// RemoteEngineNodeCommandE2ETests.cpp's ToggleSoloInvoker -- that real type is a private nested
+// type of MainComponent, out of reach for this headless suite.
+class ToggleSoloInvoker : public RemoteActionInvoker {
+public:
+    ToggleSoloInvoker(AudioEngine& engine, AppUndoManager& undo)
+        : engine_(engine)
+        , undo_(undo) {}
+
+    void invokeRemoteCommand(juce::CommandID) override {}
+
+    void invokeNodeCommand(juce::AudioProcessorGraph::NodeID nodeId, NodeCommandKind command) override {
+        if (command != NodeCommandKind::toggleSolo)
+            return;
+        auto& graph = engine_.getGraph();
+        auto* node = graph.getNodeForId(nodeId);
+        auto* strip = node != nullptr ? dynamic_cast<ChannelStripModule*>(node->getProcessor()) : nullptr;
+        if (strip == nullptr)
+            return;
+        undo_.captureBeforeState(graph);
+        engine_.setChannelStripSoloed(nodeId, !strip->isSoloed());
+        undo_.pushSnapshotFromCapture(graph);
+    }
+
+private:
+    AudioEngine& engine_;
+    AppUndoManager& undo_;
 };
 
 } // namespace
@@ -255,6 +286,102 @@ TEST_F(MidiLearnControllerTest, QueryActionMappingsReturnsALabelForEachMappedAct
     EXPECT_EQ(mappings.count("transportToggleLoop"), 0u);
 }
 
+// ============================================================================
+// FRO253: node command targets (docs/control/midi-remote.md#node-command-targets) --
+// armNodeCommand()/forgetNodeCommand()/queryNodeCommandMappings() mirror arm()/forget()/
+// queryMappings() above (PROJECT-scoped, undoable, "learn again" replaces), unlike the action
+// overloads (GLOBAL, not undoable).
+// ============================================================================
+
+TEST_F(MidiLearnControllerTest, ArmNodeCommandMakesTheEngineArmed) {
+    controller_->armNodeCommand(node_->nodeID, synth::NodeCommandKind::toggleSolo);
+    EXPECT_TRUE(controller_->isArmed());
+
+    controller_->cancelArmed();
+    EXPECT_FALSE(controller_->isArmed());
+}
+
+TEST_F(MidiLearnControllerTest, LearnNodeCommandCreatesAProjectDocAssignment) {
+    controller_->armNodeCommand(node_->nodeID, synth::NodeCommandKind::toggleSolo);
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+
+    ASSERT_EQ(doc_.assignments.size(), 1u);
+    EXPECT_TRUE(doc_.assignments[0].target.isNodeCommand());
+    EXPECT_EQ(doc_.assignments[0].target.nodeCommand.command, synth::NodeCommandKind::toggleSolo);
+    EXPECT_FALSE(doc_.assignments[0].target.nodeCommand.nodeUuid.isEmpty());
+
+    EXPECT_FALSE(controller_->isArmed());
+}
+
+TEST_F(MidiLearnControllerTest, LearnNodeCommandAgainReplacesRatherThanDuplicating) {
+    controller_->armNodeCommand(node_->nodeID, synth::NodeCommandKind::toggleSolo);
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+    ASSERT_EQ(doc_.assignments.size(), 1u);
+
+    controller_->armNodeCommand(node_->nodeID, synth::NodeCommandKind::toggleSolo);
+    send(juce::MidiMessage::controllerEvent(1, 30, 64));
+    settle();
+
+    ASSERT_EQ(doc_.assignments.size(), 1u) << "learn again replaces, never duplicates";
+    EXPECT_EQ(doc_.assignments[0].spec.number, 30);
+}
+
+TEST_F(MidiLearnControllerTest, LearnNodeCommandIsUndoable) {
+    controller_->armNodeCommand(node_->nodeID, synth::NodeCommandKind::toggleSolo);
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+    ASSERT_EQ(doc_.assignments.size(), 1u);
+
+    ASSERT_TRUE(undo_.canUndo());
+    undo_.undo();
+    EXPECT_TRUE(doc_.assignments.empty());
+}
+
+TEST_F(MidiLearnControllerTest, ForgetNodeCommandRemovesTheAssignment) {
+    controller_->armNodeCommand(node_->nodeID, synth::NodeCommandKind::toggleSolo);
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+    ASSERT_EQ(doc_.assignments.size(), 1u);
+
+    controller_->forgetNodeCommand(node_->nodeID, synth::NodeCommandKind::toggleSolo);
+    EXPECT_TRUE(doc_.assignments.empty());
+    EXPECT_EQ(statusBar_.getTransientMessageForTest(), "MIDI mapping removed");
+}
+
+TEST_F(MidiLearnControllerTest, ForgetNodeCommandOnAnUnmappedTargetIsANoOp) {
+    controller_->forgetNodeCommand(node_->nodeID, synth::NodeCommandKind::toggleSolo);
+    EXPECT_TRUE(doc_.assignments.empty());
+    EXPECT_TRUE(statusBar_.getTransientMessageForTest().isEmpty());
+}
+
+TEST_F(MidiLearnControllerTest, QueryNodeCommandMappingsReportsTheLabelForItsOwnNode) {
+    controller_->armNodeCommand(node_->nodeID, synth::NodeCommandKind::toggleSolo);
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+
+    const auto mappings = controller_->queryNodeCommandMappings(node_->nodeID);
+    ASSERT_EQ(mappings.count(synth::NodeCommandKind::toggleSolo), 1u);
+    EXPECT_EQ(mappings.at(synth::NodeCommandKind::toggleSolo), "CC 20 on Host MIDI");
+
+    const juce::AudioProcessorGraph::NodeID unrelatedNodeId(999);
+    EXPECT_TRUE(controller_->queryNodeCommandMappings(unrelatedNodeId).empty());
+}
+
+TEST_F(MidiLearnControllerTest, ArmNodeCommandTearsDownAPreviouslyArmedParameterLearnAndViceVersa) {
+    controller_->arm(node_->nodeID, "cutoff");
+    ASSERT_TRUE(controller_->isArmed());
+
+    controller_->armNodeCommand(node_->nodeID, synth::NodeCommandKind::toggleSolo);
+    EXPECT_TRUE(controller_->isArmed());
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+
+    EXPECT_TRUE(doc_.assignments.size() == 1u && doc_.assignments[0].target.isNodeCommand())
+        << "only the node command learn should have settled";
+}
+
 TEST_F(MidiLearnControllerTest, ArmActionTearsDownAPreviouslyArmedParameterLearnAndViceVersa) {
     controller_->arm(node_->nodeID, "cutoff");
     ASSERT_TRUE(controller_->isArmed());
@@ -274,4 +401,75 @@ TEST_F(MidiLearnControllerTest, ArmActionTearsDownAPreviouslyArmedParameterLearn
 
     ASSERT_EQ(doc_.assignments.size(), 1u);
     EXPECT_EQ(doc_.assignments[0].target.parameter.paramId, "resonance");
+}
+
+// ============================================================================
+// FRO253 regression: publishAssignments() must re-resolve against the live graph itself.
+// RemoteEngine::setAssignments() rebuilds its snapshot with graph == nullptr by design, which only
+// carries forward each assignment id's PREVIOUS resolution -- a brand-new id (a just-settled
+// learn, or its undo/redo) has none, so without publishAssignments() also reconciling, the target
+// stays unresolved until some unrelated graph change happens to reach MainComponent's reconcile
+// funnel. These drive real MIDI through the same handleMessage()/drain() path as every test above,
+// immediately after settle(), and deliberately never call remoteEngine_.reconcile() themselves --
+// the fix must be publishAssignments() doing it internally.
+// ============================================================================
+
+TEST_F(MidiLearnControllerTest, LearnThenImmediateCcDrivesTheParameterWithoutAnExplicitReconcile) {
+    // Takeover::jump, not the pickup default -- pickup's first hardware move after a fresh learn
+    // deliberately doesn't apply (it only arms the crossing check), which would be a false
+    // negative here; this test is about resolution, not takeover semantics.
+    remoteEngine_.setDefaultTakeover(synth::Takeover::jump);
+
+    controller_->arm(node_->nodeID, "cutoff");
+    send(juce::MidiMessage::controllerEvent(1, 20, 0));
+    settle();
+    ASSERT_EQ(doc_.assignments.size(), 1u);
+
+    juce::RangedAudioParameter* cutoff = nullptr;
+    for (auto* p : node_->getProcessor()->getParameters()) {
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(p);
+            ranged != nullptr && ranged->paramID == "cutoff") {
+            cutoff = ranged;
+            break;
+        }
+    }
+    ASSERT_NE(cutoff, nullptr);
+    const float before = cutoff->getValue();
+
+    // Same control, a fresh value -- an ordinary hardware move right after the learn settled, with
+    // no explicit reconcile() call in between.
+    send(juce::MidiMessage::controllerEvent(1, 20, 127));
+    remoteEngine_.drain();
+
+    EXPECT_NE(cutoff->getValue(), before)
+        << "the freshly learned assignment must already be resolved against the live graph";
+
+    // Same idle-gesture end as RemoteEngineApplyTests.cpp -- close the still-open change gesture
+    // before the fixture tears down the graph, or ~RemoteEngine's endAllGestures() dereferences a
+    // now-dangling juce::AudioParameterFloat*.
+    fakeNowMs_ += kGestureIdleMs + 1.0;
+    remoteEngine_.drain();
+}
+
+TEST_F(MidiLearnControllerTest, LearnNodeCommandThenImmediatePressTogglesSoloWithoutAnExplicitReconcile) {
+    auto stripNode = engine_->getGraph().addNode(std::make_unique<ChannelStripModule>());
+    auto* strip = dynamic_cast<ChannelStripModule*>(stripNode->getProcessor());
+    ASSERT_NE(strip, nullptr);
+    graphEditor_->updateComponents();
+
+    ToggleSoloInvoker invoker(*engine_, undo_);
+    remoteEngine_.setActionInvoker(&invoker);
+
+    controller_->armNodeCommand(stripNode->nodeID, synth::NodeCommandKind::toggleSolo);
+    send(juce::MidiMessage::controllerEvent(1, 20, 127));
+    settle();
+    ASSERT_EQ(doc_.assignments.size(), 1u);
+    ASSERT_FALSE(strip->isSoloed());
+
+    // A second press right after the learn settled, no explicit reconcile() call in between.
+    send(juce::MidiMessage::controllerEvent(1, 20, 127));
+    remoteEngine_.drain();
+
+    EXPECT_TRUE(strip->isSoloed())
+        << "the freshly learned node-command assignment must already be resolved against the live graph";
 }

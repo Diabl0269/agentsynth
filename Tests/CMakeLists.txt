@@ -237,6 +237,7 @@ add_executable(Tests
     MidiRemote/RemoteEngineApplyTests.cpp
     MidiRemote/RemoteEngineReconcileTests.cpp
     MidiRemote/RemoteEngineHostedTests.cpp
+    MidiRemote/RemoteEngineNodeCommandE2ETests.cpp
     MidiRemote/RemoteEngineThreadingTests.cpp
     MidiRemote/RemoteEngineLearnTests.cpp
     MidiRemote/ControllerProfileStoreTests.cpp
@@ -446,6 +447,7 @@ add_executable(Tests
     # MeterColourStops.cpp comment above), so re-listing them here would double-compile/duplicate-
     # symbol them exactly like that comment warns against.
     ../Source/MainComponent/MainComponent.cpp
+    ../Source/MainComponent/MainComponentRemoteActionInvoker.cpp
     ../Source/MainComponent/MainComponentSetup.cpp
     ../Source/MainComponent/MainComponentSetupToolbar.cpp
     ../Source/MainComponent/MainComponentSetupTimeline.cpp
