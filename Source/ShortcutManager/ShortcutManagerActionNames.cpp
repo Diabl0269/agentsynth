@@ -8,7 +8,7 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
     if (actionId == "openSettings")
         return "Open Settings";
     if (actionId == "savePreset")
-        return "Save Preset";
+        return "Save Project";
     if (actionId == "saveProjectAs")
         return "Save Project As";
     if (actionId == "exportAudio")

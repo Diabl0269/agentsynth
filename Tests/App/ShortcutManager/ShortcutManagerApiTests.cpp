@@ -97,6 +97,43 @@ TEST_F(ShortcutManagerTest, SaveAndLoad_RoundTrips) {
         settings->clear();
 }
 
+// Installs that ever saved their settings persist EVERY action's key, so the Cmd+Shift+S <-> Cmd+Opt+S
+// swap between Save Project As and Save Snippet has to be migrated on load, once, and only for a
+// pair that still holds the old defaults.
+TEST_F(ShortcutManagerTest, LoadMigratesOldSaveAsAndSnippetChordsOnce) {
+    juce::ApplicationProperties props;
+    juce::PropertiesFile::Options opts;
+    opts.applicationName = "ShortcutMigrationTest";
+    opts.folderName = "ShortcutMigrationTest";
+    opts.filenameSuffix = "settings";
+    opts.osxLibrarySubFolder = "Application Support";
+    opts.storageFormat = juce::PropertiesFile::storeAsXML;
+    props.setStorageParameters(opts);
+    auto* settings = props.getUserSettings();
+    ASSERT_NE(settings, nullptr);
+    settings->clear();
+
+    const juce::KeyPress cmdShiftS('s', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+    const juce::KeyPress cmdOptS('s', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
+    settings->setValue("shortcut_saveSnippet", ShortcutManager::encodeKeyPress(cmdShiftS));
+    settings->setValue("shortcut_saveProjectAs", ShortcutManager::encodeKeyPress(cmdOptS));
+
+    ShortcutManager migrated;
+    migrated.loadFromProperties(props);
+    EXPECT_EQ(migrated.getBinding("saveProjectAs"), cmdShiftS);
+    EXPECT_EQ(migrated.getBinding("saveSnippet"), cmdOptS);
+
+    // Once only: a user who deliberately rebinds back to the old pair is left alone.
+    settings->setValue("shortcut_saveSnippet", ShortcutManager::encodeKeyPress(cmdShiftS));
+    settings->setValue("shortcut_saveProjectAs", ShortcutManager::encodeKeyPress(cmdOptS));
+    ShortcutManager again;
+    again.loadFromProperties(props);
+    EXPECT_EQ(again.getBinding("saveProjectAs"), cmdOptS);
+    EXPECT_EQ(again.getBinding("saveSnippet"), cmdShiftS);
+
+    settings->clear();
+}
+
 TEST_F(ShortcutManagerTest, ResetToDefaults_Restores) {
     juce::KeyPress cmdK('k', juce::ModifierKeys::commandModifier, 0);
     manager.setBinding("openSettings", cmdK);
@@ -117,7 +154,7 @@ TEST_F(ShortcutManagerTest, KeyPressToDisplayString_Formats) {
 
 TEST_F(ShortcutManagerTest, GetActionDescription_Works) {
     EXPECT_EQ(ShortcutManager::getActionDescription("openSettings"), "Open Settings");
-    EXPECT_EQ(ShortcutManager::getActionDescription("savePreset"), "Save Preset");
+    EXPECT_EQ(ShortcutManager::getActionDescription("savePreset"), "Save Project");
     EXPECT_EQ(ShortcutManager::getActionDescription("openProject"), "Open Project");
     EXPECT_EQ(ShortcutManager::getActionDescription("undo"), "Undo");
     EXPECT_EQ(ShortcutManager::getActionDescription("redo"), "Redo");

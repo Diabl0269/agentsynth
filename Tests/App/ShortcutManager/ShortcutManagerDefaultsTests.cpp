@@ -84,18 +84,24 @@ TEST_F(ShortcutManagerTest, DefaultBindingsCorrect) {
     EXPECT_TRUE(manager.getBinding("redo").getModifiers().isShiftDown());
 }
 
-// "Save Project As" lives on Cmd+Opt+S, deliberately one modifier away from BOTH "savePreset"
-// (Cmd+S) and "saveSnippet" (Cmd+Shift+S) — and, in a different category entirely, the piano
-// roll's bare Alt+S ("pianoRollToggleScaleFilter"). Pinned explicitly rather than relying only on
-// the generic sweep tests, since a collision here would leave one of the two 's' actions
+// "Save Project As" lives on the platform-standard Cmd+Shift+S (it used to be Save Snippet's, and
+// the snippet command is inactive without a selection, so the chord just beeped). Save Snippet is
+// on Cmd+Opt+S. Neither may collide with "savePreset" (Cmd+S) or, in a different category, the
+// piano roll's bare Alt+S ("pianoRollToggleScaleFilter"). Pinned explicitly rather than relying
+// only on the generic sweep tests, since a collision here would leave one of the two 's' actions
 // permanently dead (MainComponent::keyPressed dispatches the FIRST bound action with a command).
-TEST_F(ShortcutManagerTest, SaveProjectAsUsesCmdOptSAndDoesNotCollideWithPianoRollAltS) {
+TEST_F(ShortcutManagerTest, SaveProjectAsUsesCmdShiftSAndDoesNotCollideWithPianoRollAltS) {
     const auto saveAs = manager.getBinding("saveProjectAs");
     EXPECT_EQ(saveAs.getKeyCode(), 's');
     EXPECT_TRUE(saveAs.getModifiers().isCommandDown());
-    EXPECT_TRUE(saveAs.getModifiers().isAltDown());
-    EXPECT_FALSE(saveAs.getModifiers().isShiftDown());
+    EXPECT_TRUE(saveAs.getModifiers().isShiftDown());
+    EXPECT_FALSE(saveAs.getModifiers().isAltDown());
     EXPECT_TRUE(manager.getConflictingAction("saveProjectAs", saveAs).isEmpty());
+
+    const auto snippet = manager.getBinding("saveSnippet");
+    EXPECT_TRUE(snippet.getModifiers().isCommandDown());
+    EXPECT_TRUE(snippet.getModifiers().isAltDown());
+    EXPECT_NE(saveAs, snippet);
 
     const auto scaleFilter = manager.getBinding("pianoRollToggleScaleFilter");
     EXPECT_EQ(scaleFilter.getKeyCode(), 's');

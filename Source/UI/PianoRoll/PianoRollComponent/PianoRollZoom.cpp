@@ -162,7 +162,7 @@ bool PianoRollComponent::keyPressed(const juce::KeyPress& key) {
     }
 
     // Ctrl+S (the ACTUAL Control key — modKey(..., ctrlModifier), never Cmd, which is the app's
-    // Save Preset shortcut) toggles the scale-assist panel, the keyboard equivalent of the header's
+    // Save Project shortcut) toggles the scale-assist panel, the keyboard equivalent of the header's
     // "Scale" button. Guarded against a focused child TEXT EDITOR (the custom-scale name field is
     // the only one this surface owns) because juce::TextEditor does not treat a Ctrl-chorded letter
     // as text input, so an unhandled Ctrl+S bubbles straight up to us mid-typing — toggling the
