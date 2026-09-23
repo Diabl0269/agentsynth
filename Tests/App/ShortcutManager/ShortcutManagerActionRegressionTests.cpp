@@ -241,7 +241,7 @@ TEST_F(ShortcutManagerTest, GetActionDescription_ExportPatchOnlyIsNonEmpty) {
 
 // T133's "does not collide": within its (General) category nothing else owns Cmd+Shift+P, and the
 // rhyming export/save chords stay distinct -- Export Audio shares the Cmd+Shift modifier set on a
-// different letter, Save Project As is Cmd+Opt+S, and Save Snippet is a Graph-category action so it
+// different letter, Save Project As is Cmd+Shift+S, and Save Snippet (Cmd+Opt+S) is a Graph-category action so it
 // is out of scope for a General conflict probe.
 TEST_F(ShortcutManagerTest, ExportPatchOnlyDoesNotCollideWithNeighbouringChords) {
     auto bounce = manager.getBinding("exportPatchOnly"); // Cmd+Shift+P (General)
@@ -255,8 +255,8 @@ TEST_F(ShortcutManagerTest, ExportPatchOnlyDoesNotCollideWithNeighbouringChords)
     EXPECT_NE(bounce, manager.getBinding("exportAudio")) << "Cmd+Shift+P vs Cmd+Shift+E";
     EXPECT_NE(bounce, manager.getBinding("saveProjectAs")) << "Cmd+Shift+P vs Cmd+Opt+S";
 
-    // saveSnippet (Cmd+Shift+S) rhymes hardest by modifier set but is a Graph-category action, so
-    // out of scope for a General conflict probe; it coexists by construction.
+    // saveSnippet (Cmd+Opt+S) is a Graph-category action, so out of scope for a General conflict
+    // probe; it coexists by construction.
     EXPECT_EQ(ShortcutManager::getCategory("saveSnippet"), ShortcutCategory::Graph);
     EXPECT_NE(bounce, manager.getBinding("saveSnippet")) << "Cmd+Shift+P vs Cmd+Shift+S";
 }

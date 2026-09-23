@@ -25,8 +25,8 @@ when reasoning about a key that "does nothing."
 |----------|--------|
 | Cmd+, | Open Settings |
 | Cmd+N | New Patch (clear canvas) |
-| Cmd+S | Save Preset — writes a project bundle (`.agsproj`, graph + timeline) and silently resaves to the remembered bundle on every subsequent press; prompts for a location only on the first save or when no bundle is open (see [`architecture/project-bundle.md`](../architecture/project-bundle.md#opening-and-saving-one-from-the-app)) |
-| Cmd+Opt+S | Save Project As — always prompts for a new location |
+| Cmd+S | Save Project — writes a project bundle (`.agsproj`, graph + timeline) and silently resaves to the remembered bundle on every subsequent press; prompts for a location only on the first save or when no bundle is open (see [`architecture/project-bundle.md`](../architecture/project-bundle.md#opening-and-saving-one-from-the-app)) |
+| Cmd+Shift+S | Save Project As — always prompts for a new `.agsproj` location |
 | Cmd+Shift+E | Export Audio — opens the Export Audio dialog (bounce the arrangement or the current loop range to WAV/AIFF, see [`architecture/audio-engine.md`](../architecture/audio-engine.md#bounceexport)). Greyed out while a bounce is already running |
 | (menu only) | Export Stems — opens the same dialog in its stems mode, rendering each mixer channel to its own file in a folder (see [`architecture/audio-engine.md`](../architecture/audio-engine.md#stem-export)). A menu-only `AppCommands::exportStems` (File menu, immediately after Export Audio), with no default shortcut, like `openPreset`. Also greyed out while a render is already running |
 | Cmd+Shift+P | Export Patch Only — saves just the patch (a legacy `.json` via `GraphEditor::savePreset`) without the timeline or bundle, never touching the window title. Rebindable |
@@ -41,7 +41,7 @@ when reasoning about a key that "does nothing."
 | Cmd+T | Toggle Timeline Panel (see [`timeline/timeline.md`](../timeline/timeline.md#docking-toggle-and-the-bottom-dock)) |
 | Cmd+Alt+M | Toggle Mixer Panel (`toggleMixerPanel`) — opens the bottom dock on the Mixer tab if closed, or on Timeline; closes it on a second press only when the dock is already open on Mixer, mirroring Cmd+T's own open/close symmetry. See [`docs/mixer/panel.md#placement-and-detachable-windows`](../mixer/panel.md#placement-and-detachable-windows) |
 | Cmd+A | Select All in Focused Editor (actionId/`AppCommands` name still `selectAllModules` — see "Surface routing" below) |
-| Cmd+Shift+S | Save Selection as Snippet |
+| Cmd+Opt+S | Save Selection as Snippet |
 | Cmd+C | Copy (Selected Modules, or — see "Surface routing" below — the timeline's selected clips/notes) |
 | Cmd+V | Paste (Modules, or the copied clips/notes) |
 | Cmd+D | Duplicate (Selected Modules, or the selected clips/notes) |
@@ -66,7 +66,7 @@ the same as any other timeline-only command.
 owns the bare chord and the AI panel sits on a REAL `Ctrl+A` on macOS (Ctrl is a distinct physical
 modifier there) and on `Cmd+Shift+A` everywhere else: on Windows/Linux JUCE's `commandModifier` IS
 Ctrl, so a Ctrl+A default there would be the same chord as Select All and the two commands would
-collide. `Cmd+Shift+S` keeps its Shift variant because `Cmd+S` (Save Preset) is bound. Like every row above, all of these are rebindable in
+collide. Like every row above, all of these are rebindable in
 Settings — and note that a machine which already persisted the old bindings keeps them until
 "Reset to Defaults" (bindings are stored per actionId, defaults only fill the gaps).
 
@@ -319,7 +319,7 @@ See [`timeline/transport.md`](../timeline/transport.md) for the transport bar it
 | Shortcut | Action |
 |----------|--------|
 | Cmd+L | Auto Arrange |
-| Cmd+Shift+S | Save Selection as Snippet |
+| Cmd+Opt+S | Save Selection as Snippet |
 | Cmd+G | Group / Toggle Macro |
 | Cmd+Shift+G | Ungroup Macro |
 | Cmd+Alt+G | Collapse / Expand Macro (toggle) |

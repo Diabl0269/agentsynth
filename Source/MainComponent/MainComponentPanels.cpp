@@ -549,7 +549,7 @@ void MainComponent::applyToolbarIcons() {
     };
 
     newButton.setTooltip(hint("New patch", "newPatch"));
-    saveButton.setTooltip(hint("Save preset", "savePreset"));
+    saveButton.setTooltip(hint("Save project", "savePreset"));
     loadButton.setTooltip(hint("Load a patch or project", "openProject"));
     settingsButton.setTooltip(hint("Open settings", "openSettings"));
     feedbackButton.setTooltip("Send feedback");

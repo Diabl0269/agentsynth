@@ -267,7 +267,7 @@ TEST(PianoRollShortcutTest, EscapeAndDeleteStayFixedRegardlessOfTheManager) {
     f.roll.setShortcutManager(nullptr);
 }
 
-// Ctrl+S (the actual Control key — never Cmd, which is Save Preset) toggles the scale-assist
+// Ctrl+S (the actual Control key — never Cmd, which is Save Project) toggles the scale-assist
 // panel, with no ShortcutManager installed at all.
 TEST(PianoRollShortcutTest, DefaultCtrlSTogglesTheScalePanel) {
     PianoRollFixture f;

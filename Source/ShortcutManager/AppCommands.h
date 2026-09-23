@@ -7,7 +7,7 @@ enum CommandIDs {
     openSettings = 0x100,
     savePreset,
     // Save-with-a-chooser, always — the explicit escape hatch from savePreset's "resave silently
-    // to the remembered bundle" default. Rebindable (Cmd+Opt+S) — see resetToDefaults().
+    // to the remembered bundle" default. Rebindable (Cmd+Shift+S) — see resetToDefaults().
     saveProjectAs,
     // Legacy patch-only export: writes a plain `.json` via GraphEditor::savePreset directly, never
     // touching currentBundleDir_ or the window title -- a SIDE export, not "the project got

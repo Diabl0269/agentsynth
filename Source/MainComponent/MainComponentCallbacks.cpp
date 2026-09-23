@@ -578,7 +578,7 @@ void MainComponent::launchOpenProjectChooser() {
 // Cmd+S's actual decision: resave silently to the remembered bundle when one is open and
 // `forceChooser` is false, otherwise prompt (defaulting the suggested name to `.agsproj`, which
 // is what steers a first save toward the bundle format instead of the legacy plain preset).
-// `forceChooser` is what "Save Project As" (Cmd+Opt+S) sets to always prompt even with a bundle
+// `forceChooser` is what "Save Project As" (Cmd+Shift+S) sets to always prompt even with a bundle
 // already open. `onFinished` (optional) reports whether the save actually happened: false for a
 // cancelled chooser AND for a save that ran but failed — the unsaved-changes guard's Save arm
 // is the only caller that supplies it, since every other call site (menu/toolbar) has nothing
@@ -593,7 +593,9 @@ void MainComponent::performSaveProject(bool forceChooser, std::function<void(boo
 
     const auto suggested = synth::ProjectBundle::getDefaultProjectsDirectory().getChildFile(
         currentPatchName_ + synth::ProjectBundle::kBundleExtension);
-    fileChooser = std::make_unique<juce::FileChooser>("Save Project", suggested, kPatchFileFilter);
+    // Bundle-only filter: with "*.json;*.agsproj" the macOS panel appended the FIRST listed type to
+    // a bare typed name, so "Save Project As" silently wrote a plain .json patch.
+    fileChooser = std::make_unique<juce::FileChooser>("Save Project", suggested, "*.agsproj");
     auto flags = juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles;
     fileChooser->launchAsync(flags, [this, onFinished](const juce::FileChooser& fc) {
         auto file = fc.getResult();
@@ -602,6 +604,9 @@ void MainComponent::performSaveProject(bool forceChooser, std::function<void(boo
                 onFinished(false);
             return;
         }
+        // Whatever the user typed (no extension, or a stray .json), this command saves a project.
+        if (file.getFileExtension() != synth::ProjectBundle::kBundleExtension)
+            file = file.withFileExtension(synth::ProjectBundle::kBundleExtension);
         const bool ok = saveToFile(file);
         if (onFinished)
             onFinished(ok);
