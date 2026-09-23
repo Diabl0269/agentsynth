@@ -296,6 +296,8 @@ void MidiLearnController::handleLearnedAction(const LearnResult& result, LearnBi
     const juce::String deviceName = deviceNameForSourceKey(result.sourceKey);
     endArmedUi();
     statusBar_.showMessage("Mapped to " + outcome.assignment.specControlName + " on " + deviceName);
+    if (onChanged)
+        onChanged();
 }
 
 void MidiLearnController::forget(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
@@ -363,6 +365,8 @@ void MidiLearnController::forgetAction(const juce::String& actionId) {
 
     remoteEngine_.setProfiles(profiles_);
     statusBar_.showMessage("MIDI mapping removed");
+    if (onChanged)
+        onChanged();
 }
 
 std::map<juce::String, juce::String> MidiLearnController::queryActionMappings() const {
@@ -429,6 +433,8 @@ bool MidiLearnController::updateProfile(const ControllerProfile& profile) {
     *existing = profile;
     profileStore_.save(profile);
     remoteEngine_.setProfiles(profiles_);
+    if (onChanged)
+        onChanged();
     return true;
 }
 
@@ -449,6 +455,8 @@ bool MidiLearnController::deleteProfile(const juce::String& profileId) {
     profileStore_.deleteProfile(profileId);
     profiles_.erase(existing);
     remoteEngine_.setProfiles(profiles_);
+    if (onChanged)
+        onChanged();
     return true;
 }
 
@@ -486,7 +494,12 @@ bool MidiLearnController::deleteControl(const juce::String& profileId, const juc
     if (assignments.size() != sizeBefore) {
         const juce::var afterJson = doc_.toVar();
         undo_.recordMidiRemoteChange(doc_, beforeJson, afterJson, [this] { publishAssignments(); });
-        publishAssignments();
+        publishAssignments(); // already notifies onChanged -- see below
+    } else if (onChanged) {
+        // The profile half above (the control's removal from profiles_) always notifies, even when
+        // there was no project assignment to remove -- publishAssignments() only covers the branch
+        // above.
+        onChanged();
     }
     return true;
 }
@@ -511,6 +524,15 @@ bool MidiLearnController::updateAssignment(const Assignment& updated) {
     return true;
 }
 
+// FRO263: onChanged fires here, and at the end of every profile-only mutation (updateProfile,
+// deleteProfile, deleteControl, forgetAction, handleLearnedAction) that calls
+// remoteEngine_.setProfiles() WITHOUT going through this function -- those never touch
+// doc_.assignments, so they'd otherwise leave the panel stale for a rename/retype/delete/action-
+// Learn/Forget the same way a project assignment change would. Wired once, in
+// MainComponent::wireMidiRemoteEngine(), to MidiRemotePanelComponent::scheduleLiveRefresh() -- NOT
+// a synchronous rebuildFromProfiles(), because this can fire from inside a cell's own mouseUp call
+// stack (updateProfile() called from a drag-to-reposition's onDragEnded) where a synchronous
+// rebuild would free the very ControllerSurfaceCell whose mouseUp is still executing.
 void MidiLearnController::publishAssignments() {
     remoteEngine_.setAssignments(doc_.assignments);
     // FRO253: setAssignments() rebuilds the snapshot with graph == nullptr by design, so it can
@@ -521,6 +543,8 @@ void MidiLearnController::publishAssignments() {
     // callers (project load / autosave restore) already reconcile again right after this call --
     // that second pass is a cheap no-op re-resolve against the same graph, not a correctness fix.
     remoteEngine_.reconcile(engine_.getGraph());
+    if (onChanged)
+        onChanged();
 }
 
 } // namespace synth::midi

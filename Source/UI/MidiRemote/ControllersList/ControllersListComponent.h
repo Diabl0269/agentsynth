@@ -41,6 +41,10 @@ public:
     void setSelectedProfileId(const juce::String& profileId);
     juce::String getSelectedProfileId() const noexcept { return selectedProfileId_; }
 
+    /** FRO263: proves the live-refresh pipeline actually reaches this component's rows, without a
+     *  getter into every row's own fields. */
+    int getRowCountForTest() const noexcept { return static_cast<int>(rows_.size()); }
+
     /** Row clicked -- select it (also drives the surface/inspector via MidiRemotePanelComponent). */
     std::function<void(const juce::String& profileId)> onSelectProfile;
     /** Right-click "Rename" committed (inline text-edit or an alert text prompt -- implementation's
