@@ -4,6 +4,7 @@
 #include "MixerFader.h"
 #include "MixerMeter.h"
 #include "MixerMeterReadout.h"
+#include "UI/Graph/PickTargetOverlay/PickCandidate.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -70,6 +71,8 @@ public:
     // one) ----
     juce::RangedAudioParameter* findMidiLearnableParamForTest(const juce::Component* component) const;
     bool isMidiLearnBadgeMappedForTest(const juce::Component* component) const;
+    /** FRO135: the fader, for the pick-target overlay. */
+    void collectPickCandidates(std::vector<PickCandidate>& out) const;
     /** FRO256: mirrors MixerColumnComponent::getMidiLearnArmedRepaintCountForTest -- see that
      *  method's own comment on why this exists. */
     int getMidiLearnArmedRepaintCountForTest() const noexcept { return midiLearnArmedRepaintCount_; }

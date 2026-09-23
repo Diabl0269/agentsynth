@@ -25,6 +25,10 @@ set(APPUI_SOURCES
     Source/MidiRemote/ControllerProfileStore.cpp
     Source/MidiRemote/MidiLearnController.h
     Source/MidiRemote/MidiLearnController.cpp
+    Source/MidiRemote/MidiLearnControllerMapping.cpp
+    Source/MidiRemote/MidiLearnControllerPick.cpp
+    Source/UI/Graph/PickTargetOverlay/GraphPickCandidates.cpp
+    Source/UI/Graph/PickTargetOverlay/PickTargetOverlay.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelStrips.cpp
@@ -190,6 +194,10 @@ set(APPUI_SOURCES
     Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceCell.cpp
     Source/UI/MidiRemote/Inspector/ControlInspectorComponent.h
     Source/UI/MidiRemote/Inspector/ControlInspectorComponent.cpp
+    Source/UI/MidiRemote/ActionPicker/ActionPickerComponent.cpp
+    Source/UI/MidiRemote/Orphan/OrphanControllerComponent.cpp
+    Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelAssign.cpp
+    Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelOrphans.cpp
     Source/UI/Macros/MacroCardComponent.cpp
     Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogLifecycle.cpp
     Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogRowOrdering.cpp

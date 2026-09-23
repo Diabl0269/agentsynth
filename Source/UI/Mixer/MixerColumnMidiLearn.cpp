@@ -70,6 +70,16 @@ void MixerColumnComponent::registerSoloMidiLearnable() {
     midiLearnableEntries_.push_back(e);
 }
 
+void MixerColumnComponent::collectPickCandidates(std::vector<PickCandidate>& out) const {
+    for (const auto& e : midiLearnableEntries_) {
+        if (e.isSolo)
+            out.push_back(
+                {e.component, synth::midi::PickTarget::nodeCommandTarget(nodeId_, synth::NodeCommandKind::toggleSolo)});
+        else if (e.param != nullptr)
+            out.push_back({e.component, synth::midi::PickTarget::parameter(nodeId_, e.param->paramID)});
+    }
+}
+
 juce::RangedAudioParameter*
 MixerColumnComponent::findMidiLearnableParamForTest(const juce::Component* component) const {
     for (const auto& e : midiLearnableEntries_)

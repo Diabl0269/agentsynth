@@ -111,6 +111,8 @@ void MixerDockComponent::setActiveTab(Tab tab) {
     activeTab_ = tab;
     applyTabVisibility();
     persistActiveTab();
+    if (onActiveTabChanged)
+        onActiveTabChanged();
 }
 
 void MixerDockComponent::setMixerTabEnabled(bool enabled) {

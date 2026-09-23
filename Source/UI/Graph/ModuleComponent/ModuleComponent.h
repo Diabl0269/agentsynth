@@ -4,6 +4,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/FilterModule.h"
 #include "Modules/MidiKeyboardModule.h"
+#include "UI/Graph/PickTargetOverlay/PickCandidate.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
 #include "UI/ModuleViews/EQWindow.h"
@@ -297,6 +298,7 @@ public:
 
     // FRO256: test seam for the armed breathing outline's per-tick repaint -- see timerCallback().
     int getMidiLearnArmedRepaintCountForTest() const noexcept { return midiLearnArmedRepaintCount_; }
+    void collectPickCandidates(std::vector<synth::ui::PickCandidate>& out) const;
 
 private:
     // Non-owning: the juce::Component base owns this via setCachedComponentImage(). See

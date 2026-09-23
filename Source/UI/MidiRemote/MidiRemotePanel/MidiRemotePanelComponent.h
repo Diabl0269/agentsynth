@@ -1,12 +1,14 @@
 #pragma once
 
 #include "MidiRemote/EncoderAutoDetect.h"
+#include "MidiRemote/PickTarget.h"
 #include "UI/MidiRemote/AddController/AddControllerPopover.h"
 #include "UI/MidiRemote/ControllerSurface/ControllerSurfaceComponent.h"
 #include "UI/MidiRemote/ControllerSurface/ControllerSurfaceToolbar.h"
 #include "UI/MidiRemote/ControllersList/ControllersListComponent.h"
 #include "UI/MidiRemote/Detect/DetectModeController.h"
 #include "UI/MidiRemote/Inspector/ControlInspectorComponent.h"
+#include "UI/MidiRemote/Orphan/OrphanControllerComponent.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
@@ -130,6 +132,45 @@ public:
                                           std::function<void(bool ok)> done)>;
     void setPromptHookForTest(PromptHook hook) { promptHook_ = std::move(hook); }
 
+    // ---- FRO135: assign from the panel, orphan controllers ----
+    // (docs/control/midi-remote-ui.md#assign-from-the-panel-control-first-learn, #controllers-list-left).
+    // Units: MidiRemotePanelAssign.cpp and MidiRemotePanelOrphans.cpp.
+
+    /** Assign... / Learn target: a two-item menu -- "Pick a module control" or "Choose an action...". */
+    void showAssignMenu(juce::Component& anchor);
+    /** "Pick a module control": the pick-target overlay for the selected control. False with no control selected. */
+    bool startPickTargetForSelectedControl();
+    /** "Choose an action...": the searchable picker, anchored to `anchor`. */
+    void showActionPicker(juce::Component& anchor);
+    /** The picker's choice: assigns the selected control to `actionId`. False if nothing is selected or the action is
+     * not invokable. */
+    bool assignSelectedControlToAction(const juce::String& actionId);
+
+    /** An orphan controller row (a project reference with no local profile) is selected. */
+    bool isOrphanSelected() const;
+    void showRelinkMenu(juce::Component& anchor);
+    void showRecreateMenu(juce::Component& anchor);
+    /** Re-link: the selected orphan's assignments onto `profileId`'s controls. Selects that profile if nothing stays
+     * orphaned. */
+    synth::midi::RelinkOutcome relinkSelectedOrphanTo(const juce::String& profileId);
+    /** Recreate on `device`; selects the new profile. Returns its id, or empty. */
+    juce::String recreateSelectedOrphanOn(const synth::ControllerProfile::Input& device);
+    /** MIDI inputs a Recreate could bind to: not already used by a profile (Host MIDI in the plugin build). */
+    std::vector<synth::ControllerProfile::Input> getRecreateInputs() const;
+    juce::String getOrphanStatusTextForTest() const { return orphanView_.getStatusTextForTest(); }
+    bool isOrphanViewShownForTest() const { return orphanView_.isVisible(); }
+    OrphanControllerComponent& getOrphanViewForTest() { return orphanView_; }
+    ControlInspectorComponent& getInspectorForTest() { return inspector_; }
+    const ControllerSurfaceCell* findSurfaceCellForTest(const juce::String& controlId) const {
+        return controllerSurface_.findCellForTest(controlId);
+    }
+    ControllerSurfaceToolbar& getToolbarForTest() { return toolbar_; }
+    void selectForTest(const juce::String& profileId, const juce::String& controlId) {
+        selectProfile(profileId);
+        if (controlId.isNotEmpty())
+            selectControl(controlId);
+    }
+
     /** GraphEditor::onEditMidiAssignmentRequested's target, via MixerDockComponent -- resolves the
      *  project assignment for (nodeUuid, paramId), selects its controller/control and switches the
      *  surface/inspector to show it. Returns false (and leaves selection untouched) if no such
@@ -176,6 +217,8 @@ private:
                           const std::vector<synth::midi::RemoteEvent>& events);
 
     const synth::ControllerProfile* findSelectedProfile() const;
+    bool isOrphanId(const juce::String& profileId) const;
+    bool isProfilePresent(const synth::ControllerProfile& profile) const;
 
     AudioEngine* audioEngine_ = nullptr;
     synth::midi::RemoteEngine* remoteEngine_ = nullptr;
@@ -206,6 +249,8 @@ private:
     ControllerSurfaceToolbar toolbar_;
     ControllerSurfaceComponent controllerSurface_;
     ControlInspectorComponent inspector_;
+    OrphanControllerComponent orphanView_;
+    juce::String orphanStatus_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MidiRemotePanelComponent)
 };

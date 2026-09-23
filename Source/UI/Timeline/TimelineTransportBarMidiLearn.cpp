@@ -132,6 +132,12 @@ void TimelineTransportBar::setMidiLearnArmedAction(const juce::String& actionId)
 // Test/inspection
 // ============================================================================
 
+void TimelineTransportBar::collectPickCandidates(std::vector<PickCandidate>& out) const {
+    for (const auto* button : {&playStopButton_, &recordButton_, &loopButton_, &metronomeButton_})
+        out.push_back(
+            {const_cast<GlyphButton*>(button), synth::midi::PickTarget::action(actionIdForGlyph(button->getGlyph()))});
+}
+
 juce::String TimelineTransportBar::findMidiLearnableActionForTest(const juce::Component* component) const {
     if (auto* button = dynamic_cast<const GlyphButton*>(component))
         return actionIdForGlyph(button->getGlyph());

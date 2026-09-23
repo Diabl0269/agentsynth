@@ -232,6 +232,9 @@ add_library(Core STATIC
     Source/MidiRemote/RemoteModelJson.cpp
     Source/MidiRemote/MidiRemoteLearnBinder.h
     Source/MidiRemote/MidiRemoteLearnBinder.cpp
+    Source/MidiRemote/MidiRemoteMapping.h
+    Source/MidiRemote/MidiRemoteMapping.cpp
+    Source/MidiRemote/PickTarget.h
     Source/MidiRemote/ControllerDetect.h
     Source/MidiRemote/ControllerDetect.cpp
     Source/MidiRemote/EncoderAutoDetect.h

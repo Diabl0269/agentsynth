@@ -416,6 +416,16 @@ void MainComponent::wireMidiRemoteEngine() {
     // transport bar's own breathing outline for the SAME/an action target.
     midiLearnController_.setMixerPanel(&mixerDock.getMixerPanel());
     midiLearnController_.setTransportBar(&timelinePanel.getTransportBar());
+    midiLearnController_.setPickOverlayHost(this); // FRO135: the pick-target overlay covers canvas, dock and transport
+    midiLearnController_.setPickPassThrough(mixerDock.getTabButtons());
+    mixerDock.onActiveTabChanged = [this] {
+        midiLearnController_.refreshPickTarget();
+        // Rebuilds and layout the switch queued land after this call; re-measure once they have.
+        juce::MessageManager::callAsync([safe = juce::Component::SafePointer<MainComponent>(this)] {
+            if (safe != nullptr)
+                safe->midiLearnController_.refreshPickTarget();
+        });
+    };
 
     // FRO131: same "wire it once everything it needs is alive" reasoning as the two calls above --
     // the MIDI Remote panel needs remoteEngine/midiLearnController_/midiRemoteDoc, none of which

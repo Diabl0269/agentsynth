@@ -154,6 +154,7 @@ public:
     void setMidiLearnArmedSolo(juce::AudioProcessorGraph::NodeID nodeId);
     /** Idempotent -- a no-op if nothing is armed. */
     void clearMidiLearnArmedSolo();
+    void collectPickCandidates(std::vector<PickCandidate>& out) const;
 
     /** FRO253: forwarded to every strip column -- wired once by MainComponent to
      *  MidiLearnController::armNodeCommand/forgetNodeCommand/queryNodeCommandMappings. */

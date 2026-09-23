@@ -8,6 +8,7 @@
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <vector>
 
 class AppUndoManager;
 class GraphEditor;
@@ -159,6 +160,12 @@ public:
      *  onDetachedStateChanged, which this class's constructor already claims for
      *  applyTabVisibility() -- both fire from the one place, in that order. */
     std::function<void()> onPanelDetachStateChanged;
+    /** Fires after every real tab switch (the surfaces it revealed or rebuilt are already laid out). */
+    std::function<void()> onActiveTabChanged;
+    /** The three tab-strip buttons, in strip order: what the MIDI Remote pick overlay lets clicks through to. */
+    std::vector<juce::Component*> getTabButtons() {
+        return {&timelineTabButton_, &mixerTabButton_, &midiRemoteTabButton_};
+    }
 
     void resized() override;
     void lookAndFeelChanged() override; // refreshes the tab-strip detach button's themed icon

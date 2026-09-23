@@ -64,7 +64,12 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     // called from the AFTER-restore hook) AFTER the restore already freed the param --
     // MixerFader::unbind()'s removeListener() on that freed memory is what hung the Linux CI build
     // (deadlock inside CriticalSection::enter on freed memory) that this fixes.
-    graphEditor.onBeforeDetachAllModuleComponents = [this] { mixerDock.getMixerPanel().unbindAllColumns(); };
+    // FRO135: a pick-target session also ends here -- its candidates are components this rebuild is
+    // about to free, and a click on one must never assign to a node that no longer exists.
+    graphEditor.onBeforeDetachAllModuleComponents = [this] {
+        midiLearnController_.cancelPickTarget();
+        mixerDock.getMixerPanel().unbindAllColumns();
+    };
     // The channel chip's click (TrackChannelLinkSurface::revealChannelForTrack, "THE P9-5 HOOK"
     // per its own comment): open the dock (same sequence performToggleMixerPanel's own "closed"
     // branch runs) before revealColumnForStrip switches tabs and scrolls to the column -- a closed

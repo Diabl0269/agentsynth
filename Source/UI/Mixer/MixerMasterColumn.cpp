@@ -179,6 +179,12 @@ juce::RangedAudioParameter* MixerMasterColumn::findMidiLearnableParamForTest(con
     return component == &fader_.getSlider() ? midiLearnableFaderParam_ : nullptr;
 }
 
+void MixerMasterColumn::collectPickCandidates(std::vector<PickCandidate>& out) const {
+    if (midiLearnableFaderParam_ != nullptr)
+        out.push_back({static_cast<juce::Component*>(const_cast<juce::Slider*>(&fader_.getSlider())),
+                       synth::midi::PickTarget::parameter(nodeId_, midiLearnableFaderParam_->paramID)});
+}
+
 bool MixerMasterColumn::isMidiLearnBadgeMappedForTest(const juce::Component* component) const {
     return component == &fader_.getSlider() && midiLearnBadgeMapped_;
 }

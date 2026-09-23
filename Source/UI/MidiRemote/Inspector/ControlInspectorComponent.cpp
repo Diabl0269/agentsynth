@@ -21,6 +21,7 @@ constexpr int kHeaderLineHeight = 20;
 constexpr int kHeaderRowHeight = 26;
 constexpr int kDividerGap = 14;
 constexpr int kAssignmentRowHeight = 132;
+constexpr int kLearnTargetRowHeight = 32;
 constexpr int kRowSpacing = 10;
 
 // -- Display-string helpers (docs/control/midi-remote.md#data-model) ---------------------------
@@ -269,7 +270,10 @@ private:
     // Applies `model_.assignment.target.kind == parameter` -- the only target kind takeover/range
     // apply to (docs/control/midi-remote.md#takeover: "not buttons", and an action or nodeCommand
     // target is always button-like, docs/control/midi-remote.md#node-command-targets).
-    bool isTakeoverEditable() const { return model_.assignment.target.kind == synth::Target::Kind::parameter; }
+    // An orphaned row (its target no longer resolves) offers Forget only.
+    bool isTakeoverEditable() const {
+        return model_.assignment.target.kind == synth::Target::Kind::parameter && !model_.isOrphaned;
+    }
 
     // Same dynamic_cast-with-null-fallback convention MixerDockComponent::refreshDetachButton()
     // uses (Source/UI/Mixer/MixerDockComponent.cpp) -- resolved once here rather than in paint(),
@@ -295,8 +299,10 @@ private:
         rangeMinEditor_.setEnabled(editable);
         rangeMaxEditor_.setEnabled(editable);
         invertToggle_.setEnabled(editable);
-        const juce::String reason = "Takeover and range apply only to a parameter target's absolute "
-                                    "continuous encoding, not a button-like action";
+        const juce::String reason = model_.isOrphaned
+                                        ? juce::String("This target is missing - Forget it, or map the control again")
+                                        : juce::String("Takeover and range apply only to a parameter target's absolute "
+                                                       "continuous encoding, not a button-like action");
         takeoverCombo_.setTooltip(editable ? juce::String() : reason);
         rangeMinEditor_.setTooltip(editable ? juce::String() : reason);
         rangeMaxEditor_.setTooltip(editable ? juce::String() : reason);
@@ -417,6 +423,14 @@ ControlInspectorComponent::ControlInspectorComponent() {
 
     buttonModeLabel_.setComponentID("buttonModeLabel");
     addAndMakeVisible(buttonModeLabel_);
+
+    learnTargetButton_.setComponentID("learnTargetButton");
+    learnTargetButton_.setTooltip("Choose what this control drives: a control on the canvas, or an action");
+    learnTargetButton_.onClick = [this] {
+        if (model_.hasControl && onLearnTargetRequested)
+            onLearnTargetRequested(learnTargetButton_);
+    };
+    addAndMakeVisible(learnTargetButton_);
 }
 
 // Out-of-line so the OwnedArray<AssignmentRow> member can delete its (complete, here) element
@@ -437,6 +451,7 @@ void ControlInspectorComponent::setControl(const ControlModel& model) {
         encodingCombo_.setVisible(false);
         autoDetectButton_.setVisible(false);
         buttonModeLabel_.setVisible(false);
+        learnTargetButton_.setVisible(false);
         resized();
         repaint();
         return;
@@ -462,6 +477,7 @@ void ControlInspectorComponent::setControl(const ControlModel& model) {
     buttonModeLabel_.setText(model_.control.buttonMode == synth::ButtonMode::toggle ? "Toggle" : "Momentary",
                              juce::dontSendNotification);
     buttonModeLabel_.setVisible(true);
+    learnTargetButton_.setVisible(true);
 
     resized();
     repaint();
@@ -517,6 +533,7 @@ void ControlInspectorComponent::resized() {
     buttonModeLabel_.setBounds(bounds.removeFromTop(kHeaderLineHeight));
 
     bounds.removeFromTop(kDividerGap);
+    learnTargetButton_.setBounds(bounds.removeFromTop(kLearnTargetRowHeight).removeFromLeft(120).reduced(0, 3));
     for (auto* row : assignmentRows_) {
         row->setBounds(bounds.removeFromTop(kAssignmentRowHeight));
         bounds.removeFromTop(kRowSpacing);

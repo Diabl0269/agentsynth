@@ -11,9 +11,10 @@ MIDI Remote then maps like any other — is [`plugin-card-layout.md`](plugin-car
 Right-click MIDI Learn is shipped and creates real assignments on every covered surface, including
 the mixer column's Solo (FRO253's `nodeCommand` target). The MIDI Remote panel (FRO131) is shipped
 — dock tab, Controllers list, Surface, Inspector, and "Edit MIDI assignment..." — as are Detect
-mode, Add controller, Templates, import/export and the encoder Auto-detect (FRO134); the
-control-first "Assign from the panel" popover, orphan Re-link/Recreate and the Inspector's Relearn
-are still design-only.
+mode, Add controller, Templates, import/export and the encoder Auto-detect (FRO134); and the
+mapping assistant (FRO135) — the control-first "Assign from the panel" flow (pick-target overlay,
+action picker), orphan-controller Re-link/Recreate and the orphan-node display. Only the
+Inspector's Relearn is still design-only.
 This doc, and [`midi-remote-ui.md`](midi-remote-ui.md), describe the feature as designed; where
 current behaviour differs from the design, the surrounding text says so explicitly.
 
@@ -149,7 +150,12 @@ project assignment therefore carries a **denormalised copy of the control's mess
 assignments still resolve to *messages*; the panel shows the controller as an **orphan
 controller** ("Launchkey Mini — not on this machine") and offers **Re-link** (pick a present
 profile; controls match by message spec) or **Recreate** (mint a profile from the carried
-specs). Mappings never silently die because a settings folder is elsewhere. This is the same
+specs). Re-link matches each assignment's denormalised spec to a control of the chosen profile by
+exact `MessageSpec` (type, channel, number); the assignments with no match stay orphaned and the panel
+says how many. Recreate mints a profile under a fresh id, bound to a MIDI input the user picks (Host MIDI in
+the plugin build), named from `controllers[].name`, with one control per distinct spec and the
+assignments repointed at it. Both are one undo step for the project half (Recreate's new profile file is
+a profile edit and stays). Mappings never silently die because a settings folder is elsewhere. This is the same
 shape as the timeline's rule that a binding is never re-established automatically
 ([`timeline/tracks.md`](../timeline/tracks.md#a-binding-is-never-re-established-automatically)): degrade visibly, repair explicitly.
 

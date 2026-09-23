@@ -2,6 +2,7 @@
 
 #include "MidiRemote/ControllerProfileStore.h"
 #include "MidiRemote/MidiRemoteLearnBinder.h"
+#include "MidiRemote/PickTarget.h"
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
 #include "MidiRemote/RemoteModel.h"
 #include <functional>
@@ -9,6 +10,7 @@
 #include <juce_events/juce_events.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+#include <memory>
 #include <vector>
 
 // MidiLearnController.h -- FRO130 (docs/control/midi-remote-ui.md#the-learn-interaction): the
@@ -29,6 +31,7 @@ class StatusBarComponent;
 
 namespace synth::ui {
 class MixerPanelComponent;  // Forward declaration -- Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.h
+class PickTargetOverlay;    // Forward declaration -- Source/UI/Graph/PickTargetOverlay/PickTargetOverlay.h
 class TimelineTransportBar; // Forward declaration -- Source/UI/Timeline/TimelineTransportBar.h
 } // namespace synth::ui
 
@@ -106,6 +109,30 @@ public:
      *  reconciles against the live graph itself right after setAssignments() so a fresh learn's
      *  target works immediately, without changing RemoteEngine's setter semantics. */
     void publishAssignments();
+
+    // ---- FRO135: mapping assistant (MidiLearnControllerMapping.cpp, MidiLearnControllerPick.cpp) ----
+
+    /** Project scope for a parameter/node command (undoable), global for an action. Nothing changes unless `assigned`.
+     */
+    AssignStatus assignControl(const juce::String& profileId, const juce::String& controlId, const PickTarget& target);
+    /** By assignment id (project or global), so an orphaned target can still be forgotten. */
+    bool forgetAssignment(const juce::String& assignmentId);
+    /** Orphan Re-link: one undo step. `ok` is false for an unknown target or a non-orphan source. */
+    RelinkOutcome relinkController(const juce::String& orphanProfileId, const juce::String& targetProfileId);
+    /** Orphan Recreate on `device`; returns the new profile id, or empty if `orphanProfileId` is not an orphan. */
+    juce::String recreateController(const juce::String& orphanProfileId, const ControllerProfile::Input& device);
+
+    /** The layer the pick-target overlay covers (MainComponent). Null until wired. */
+    void setPickOverlayHost(juce::Component* host) noexcept { pickOverlayHost_ = host; }
+    /** False with no host or an unknown control. Message thread only. */
+    bool beginPickTarget(const juce::String& profileId, const juce::String& controlId);
+    bool isPickingTarget() const noexcept;
+    synth::ui::PickTargetOverlay* getPickOverlayForTest() noexcept { return pickOverlay_.get(); }
+    void cancelPickTarget();
+    /** Re-collects the pick candidates from every surface (a dock tab switch changed what is showing). */
+    void refreshPickTarget();
+    /** Components (the dock's tab buttons) whose clicks reach them instead of ending the pick. */
+    void setPickPassThrough(std::vector<juce::Component*> components) { pickPassThrough_ = std::move(components); }
 
     bool isArmed() const noexcept;
     /** Esc key / clicking the canvas elsewhere while armed. A no-op if nothing is armed. */
@@ -234,6 +261,12 @@ private:
     synth::ui::TimelineTransportBar* transportBar_ = nullptr;
 
     UiWatcher watcher_;
+
+    juce::Component::SafePointer<juce::Component> pickOverlayHost_;
+    std::unique_ptr<synth::ui::PickTargetOverlay> pickOverlay_;
+    std::vector<juce::Component*> pickPassThrough_;
+    juce::String pickProfileId_;
+    juce::String pickControlId_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MidiLearnController)
 };

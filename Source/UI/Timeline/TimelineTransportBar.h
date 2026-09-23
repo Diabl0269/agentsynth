@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Transport/TransportService.h"
+#include "UI/Graph/PickTargetOverlay/PickCandidate.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include <functional>
 #include <juce_data_structures/juce_data_structures.h>
@@ -147,6 +148,8 @@ public:
     /** Test/inspection: the action id a right-click on `component` would open MIDI Learn for, or
      *  empty — mirrors ModuleComponent::findMidiLearnableParamForTest. */
     juce::String findMidiLearnableActionForTest(const juce::Component* component) const;
+    /** FRO135: the four glyph buttons, each with its action id, for the pick-target overlay. */
+    void collectPickCandidates(std::vector<PickCandidate>& out) const;
     /** Test/inspection: `component`'s MIDI-mapped badge cache, as of the last refreshMidiLearnBadges(). */
     bool isMidiLearnBadgeMappedForTest(const juce::Component* component) const;
     /** FRO256: mirrors MixerColumnComponent::getMidiLearnArmedRepaintCountForTest -- see that

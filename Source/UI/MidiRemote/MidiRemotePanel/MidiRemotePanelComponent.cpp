@@ -34,6 +34,14 @@ juce::AudioProcessor* resolveProcessor(AudioEngine& audioEngine, const juce::Str
     return nullptr;
 }
 
+// A parameter target that no longer resolves (its module is gone, or a hosted plugin's parameter
+// drifted away) is an orphan node: shown as "(missing module)", never silently re-bound.
+bool parameterTargetResolves(AudioEngine& audioEngine, const synth::Target::Parameter& target) {
+    auto* processor = resolveProcessor(audioEngine, target.nodeUuid);
+    return processor != nullptr &&
+           synth::resolveLaneParameter(processor, target.paramId, target.paramIndexHint).resolved();
+}
+
 } // namespace
 
 MidiRemotePanelComponent::MidiRemotePanelComponent() {
@@ -46,6 +54,7 @@ MidiRemotePanelComponent::MidiRemotePanelComponent() {
     addAndMakeVisible(toolbar_);
     addAndMakeVisible(controllerSurface_);
     addAndMakeVisible(inspector_);
+    addChildComponent(orphanView_);
 
     controllersList_.onSelectProfile = [this](const juce::String& profileId) { selectProfile(profileId); };
     controllersList_.onRenameRequested = [this](const juce::String& profileId, const juce::String& newName) {
@@ -62,6 +71,7 @@ MidiRemotePanelComponent::MidiRemotePanelComponent() {
     controllersList_.onAddControllerRequested = [this](juce::Component& anchor) { showAddControllerPopover(anchor); };
 
     toolbar_.onDetectToggled = [this](bool on) { setDetectActive(on); };
+    toolbar_.onAssignRequested = [this](juce::Component& anchor) { showAssignMenu(anchor); };
     toolbar_.onTemplatesRequested = [this](juce::Component& anchor) { showTemplatesMenu(anchor); };
     toolbar_.onMoreRequested = [this](juce::Component& anchor) { showMoreMenu(anchor); };
 
@@ -85,6 +95,9 @@ MidiRemotePanelComponent::MidiRemotePanelComponent() {
     inspector_.onForgetRequested = [this](const juce::String& assignmentId) { handleForgetRequested(assignmentId); };
     inspector_.onControlEdited = [this](const synth::Control& control) { handleControlEdited(control); };
     inspector_.onAutoDetectRequested = [this](const synth::Control& control) { beginEncoderAutoDetect(control); };
+    inspector_.onLearnTargetRequested = [this](juce::Component& anchor) { showAssignMenu(anchor); };
+    orphanView_.onRelinkRequested = [this](juce::Component& anchor) { showRelinkMenu(anchor); };
+    orphanView_.onRecreateRequested = [this](juce::Component& anchor) { showRecreateMenu(anchor); };
 }
 
 MidiRemotePanelComponent::~MidiRemotePanelComponent() = default;
@@ -105,17 +118,13 @@ void MidiRemotePanelComponent::rebuildFromProfiles() {
         return;
 
     const auto& profiles = learnController_->getProfiles();
-    const auto openIdentifiers = audioEngine_->getOpenMidiInputIdentifiers();
     const bool hosted = audioEngine_->isHosted();
 
     std::vector<ControllersListComponent::RowModel> rows;
     for (const auto& profile : profiles) {
-        const bool present = hosted ? profile.input.identifier == synth::midi::hostSourceKey()
-                                    : std::find(openIdentifiers.begin(), openIdentifiers.end(),
-                                                profile.input.identifier) != openIdentifiers.end();
-        rows.push_back(
-            {profile.id, profile.name,
-             present ? ControllersListComponent::RowState::present : ControllersListComponent::RowState::absent});
+        rows.push_back({profile.id, profile.name,
+                        isProfilePresent(profile) ? ControllersListComponent::RowState::present
+                                                  : ControllersListComponent::RowState::absent});
     }
     for (const auto& ref : doc_->controllers) {
         const bool hasLocalProfile =
@@ -126,7 +135,7 @@ void MidiRemotePanelComponent::rebuildFromProfiles() {
     controllersList_.setRows(rows);
     controllersList_.setAddControllerVisible(!hosted); // the plugin build's list is exactly Host MIDI
 
-    if (!selectedProfileId_.isEmpty() && findSelectedProfile() == nullptr) {
+    if (!selectedProfileId_.isEmpty() && findSelectedProfile() == nullptr && !isOrphanId(selectedProfileId_)) {
         selectedProfileId_.clear();
         selectedControlId_.clear();
         setDetectActive(false);
@@ -224,6 +233,8 @@ void MidiRemotePanelComponent::selectProfile(const juce::String& profileId) {
         setDetectActive(false); // Detect belongs to one controller
         encoderDetect_.cancel();
     }
+    if (profileId != selectedProfileId_)
+        orphanStatus_.clear();
     selectedProfileId_ = profileId;
     selectedControlId_.clear();
     controllersList_.setSelectedProfileId(profileId);
@@ -271,7 +282,7 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
         if (projectIt != doc_->assignments.end() && projectIt->target.isParameter()) {
             cell.isMapped = true;
             const juce::String moduleName = resolveModuleName(*audioEngine_, projectIt->target.parameter.nodeUuid);
-            if (moduleName.isEmpty()) {
+            if (moduleName.isEmpty() || !parameterTargetResolves(*audioEngine_, projectIt->target.parameter)) {
                 cell.assignmentLabel = "(missing module)";
                 cell.isWarning = true;
             } else {
@@ -335,22 +346,40 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
 }
 
 void MidiRemotePanelComponent::refreshInspectorForSelection() {
+    const bool orphan = isOrphanSelected();
+    orphanView_.setVisible(orphan);
+    inspector_.setVisible(!orphan);
+    if (orphan) {
+        toolbar_.setControlSelected(false);
+        juce::String name;
+        for (const auto& ref : doc_->controllers)
+            if (ref.profileId == selectedProfileId_)
+                name = ref.name;
+        orphanView_.setOrphan(name, learnController_->countProjectAssignmentsForProfile(selectedProfileId_),
+                              !getRecreateInputs().empty());
+        orphanView_.setStatusText(orphanStatus_);
+        return;
+    }
+
     const auto* profile = findSelectedProfile();
     ControlInspectorComponent::ControlModel model;
 
     if (profile == nullptr || selectedControlId_.isEmpty()) {
+        toolbar_.setControlSelected(false);
         inspector_.setControl(model);
         return;
     }
     auto controlIt = std::find_if(profile->controls.begin(), profile->controls.end(),
                                   [&](const auto& c) { return c.id == selectedControlId_; });
     if (controlIt == profile->controls.end()) {
+        toolbar_.setControlSelected(false);
         inspector_.setControl(model);
         return;
     }
 
     model.hasControl = true;
     model.control = *controlIt;
+    toolbar_.setControlSelected(true);
 
     if (doc_ != nullptr) {
         for (const auto& a : doc_->assignments) {
@@ -365,7 +394,8 @@ void MidiRemotePanelComponent::refreshInspectorForSelection() {
                 row.nodeUuid = a.target.parameter.nodeUuid;
                 const juce::String moduleName =
                     audioEngine_ != nullptr ? resolveModuleName(*audioEngine_, row.nodeUuid) : "";
-                row.isOrphaned = moduleName.isEmpty();
+                row.isOrphaned = moduleName.isEmpty() || (audioEngine_ != nullptr &&
+                                                          !parameterTargetResolves(*audioEngine_, a.target.parameter));
                 row.drivesLabel = row.isOrphaned
                                       ? "(missing module)"
                                       : moduleName + juce::String::fromUTF8(" \xc2\xb7 ") + a.specControlName;
@@ -473,45 +503,11 @@ void MidiRemotePanelComponent::handleDeleteControlRequested(const juce::String& 
 }
 
 void MidiRemotePanelComponent::handleForgetRequested(const juce::String& assignmentId) {
-    // Assignment ids aren't a MidiLearnController lookup key today -- forget() resolves a
-    // PROJECT (parameter-target) assignment by node/paramId, forgetAction() resolves a GLOBAL
-    // (action-target) one by actionId. Resolve here and forget via whichever existing API matches,
-    // rather than adding a second removal path per scope.
+    // By assignment id (project or global), so it still works when the target's module is gone --
+    // an orphaned assignment's only action.
     if (learnController_ == nullptr)
         return;
-
-    if (doc_ != nullptr) {
-        auto it = std::find_if(doc_->assignments.begin(), doc_->assignments.end(),
-                               [&](const auto& a) { return a.id == assignmentId; });
-        if (it != doc_->assignments.end()) {
-            // FRO253's Target::Kind::nodeCommand (Solo mapping) shares this list with parameter
-            // targets -- forget() resolves the former by (nodeId, paramId), forgetNodeCommand() the
-            // latter by (nodeId, NodeCommandKind); guard the union read and call whichever matches.
-            if (audioEngine_ != nullptr) {
-                const juce::String targetUuid =
-                    it->target.isParameter() ? it->target.parameter.nodeUuid : it->target.nodeCommand.nodeUuid;
-                for (auto* node : audioEngine_->getGraph().getNodes()) {
-                    if (node->properties["uuid"].toString() != targetUuid)
-                        continue;
-                    if (it->target.isParameter())
-                        learnController_->forget(node->nodeID, it->target.parameter.paramId);
-                    else if (it->target.isNodeCommand())
-                        learnController_->forgetNodeCommand(node->nodeID, it->target.nodeCommand.command);
-                    break;
-                }
-            }
-            refreshSurfaceForSelectedProfile();
-            refreshInspectorForSelection();
-            return;
-        }
-    }
-
-    if (const auto* profile = findSelectedProfile()) {
-        auto it = std::find_if(profile->actions.begin(), profile->actions.end(),
-                               [&](const auto& a) { return a.id == assignmentId; });
-        if (it != profile->actions.end())
-            learnController_->forgetAction(it->target.action.actionId);
-    }
+    learnController_->forgetAssignment(assignmentId);
     refreshSurfaceForSelectedProfile();
     refreshInspectorForSelection();
 }
@@ -531,6 +527,7 @@ void MidiRemotePanelComponent::resized() {
     auto bounds = getLocalBounds();
     controllersList_.setBounds(bounds.removeFromLeft(kListWidth));
     inspector_.setBounds(bounds.removeFromRight(kInspectorWidth));
+    orphanView_.setBounds(inspector_.getBounds());
     toolbar_.setBounds(bounds.removeFromTop(toolbar_.getPreferredHeight()));
     controllerSurface_.setBounds(bounds);
 }
