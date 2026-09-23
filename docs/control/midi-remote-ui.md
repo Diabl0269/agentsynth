@@ -116,7 +116,7 @@ opening the Mixer tab can leave the dock blank; FRO131 does not depend on it and
 to reproduce or fix it.
 
 The panel stays live while it's open (FRO263) — it re-pulls the profile/assignment set on every
-mutation that changes it, wherever it happens: a canvas Learn/Forget, Undo/Redo, an action Learn on
+mutation that changes it, wherever it happens: a canvas Learn/Forget, a module deleted from the canvas (its assignments turn to "(missing module)"), Undo/Redo, an action Learn on
 the transport bar, or the panel's own Rename/Delete/Retype/drag-to-reposition. It is not limited to
 catching up when the tab is switched into, which is now the fallback for changes made while the tab
 was hidden, not the only refresh path. FRO262 extends the same live-refresh seam to a MIDI device

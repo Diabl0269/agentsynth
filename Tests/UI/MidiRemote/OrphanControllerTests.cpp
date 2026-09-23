@@ -5,7 +5,11 @@
 // own rules are MidiLearnControllerOrphanTests.cpp; this file drives them through the panel. Suite names
 // contain "MidiRemote" per the ship-task --gtest_filter convention.
 
+#include "../Mixer/MixerDockActiveTabResetGuard.h"
+#include "MainComponent/MainComponent.h"
+#include "MidiRemoteMockProvider.h"
 #include "MidiRemotePanelTestFixture.h"
+#include "Modules/FilterModule.h"
 
 using synth::midi::PickTarget;
 
@@ -200,4 +204,51 @@ TEST_F(MidiRemoteOrphanPanelTest, AnOrphanNodeShowsMissingModuleInTheWarningColo
     undo_.undo();
     ASSERT_EQ(doc_.assignments.size(), 1u);
     EXPECT_EQ(doc_.assignments[0].id, assignmentId);
+}
+
+// End-to-end through a real MainComponent: with the panel open, deleting the module from the canvas leaves
+// the surface saying "(missing module)" with no tab switch. (The structural-change hook that schedules the
+// refresh is what the real app needed -- the surface stayed stale until a tab switch without it -- but this
+// headless path is also refreshed by the graph reconcile, so it checks the end state, not that hook alone.)
+TEST(MidiRemoteOrphanMainComponentTest, ADeletedModuleShowsAsMissingWithoutATabSwitch) {
+    MixerDockActiveTabResetGuardMDT resetGuard;
+    const auto root = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                          .getChildFile("agentsynth-orphan-mc-" + juce::Uuid().toString());
+    {
+        MainComponent mc(std::make_unique<MidiRemoteMockProvider>(), synth::AIProviderRegistry::createDefault(),
+                         synth::ControllerProfileStore(root));
+        mc.setSize(1400, 900);
+        mc.setVisible(true);
+        mc.newPatchForTest();
+
+        auto& editor = mc.getGraphEditor();
+        auto node = editor.getAudioEngine().getGraph().addNode(std::make_unique<FilterModule>());
+        editor.updateComponents();
+
+        synth::ControllerProfile profile;
+        profile.id = "p1";
+        profile.name = "Launchkey";
+        profile.input.identifier = synth::midi::hostSourceKey();
+        profile.controls = {makeControl("k", synth::MessageType::cc, 21, "Knob 1")};
+        auto& controller = mc.getMidiLearnControllerForTest();
+        ASSERT_TRUE(controller.addProfile(profile));
+        ASSERT_EQ(controller.assignControl("p1", "k", PickTarget::parameter(node->nodeID, "cutoff")),
+                  synth::midi::AssignStatus::assigned);
+
+        mc.getMixerDock().setActiveTab(synth::ui::MixerDockComponent::Tab::MidiRemote); // the panel is open
+        auto& panel = mc.getMixerDock().getMidiRemotePanel();
+        panel.selectForTest("p1", "k");
+        const auto* before = panel.findSurfaceCellForTest("k");
+        ASSERT_NE(before, nullptr);
+        EXPECT_NE(before->getAssignmentLabelForTest(), "(missing module)");
+
+        editor.requestDeleteModule(node->nodeID); // the card's own delete button
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+
+        const auto* after = panel.findSurfaceCellForTest("k");
+        ASSERT_NE(after, nullptr);
+        EXPECT_EQ(after->getAssignmentLabelForTest(), "(missing module)");
+        EXPECT_TRUE(after->isAssignmentWarningForTest());
+    }
+    root.deleteRecursively();
 }

@@ -40,6 +40,9 @@ void MainComponent::addCanvasAndPanels() {
         // exactly the cases that need it — a binding can only start or stop resolving when a node
         // appears or disappears, which is also the only way an orphan flag moves.
         reconcileTimelineBindingsOnly();
+        // FRO135: a canvas delete orphans MIDI Remote assignments; the open panel shows "(missing module)"
+        // only once it rebuilds. Deferred and coalesced, so a burst of structural changes is one rebuild.
+        mixerDock.getMidiRemotePanel().scheduleLiveRefresh();
         // FRO103: the other half of onBeforeDetachAllModuleComponents. A single-node removal
         // (deleteSelection, requestDeleteModule, replaceModule) unbinds the WHOLE mixer before it
         // frees anything, and has no rebuild of its own -- reconcileTimelineBindingsOnly() above

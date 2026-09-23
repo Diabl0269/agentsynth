@@ -7,8 +7,8 @@
 // bar. Suite name contains "MidiRemote" per the ship-task --gtest_filter convention.
 
 #include "../Mixer/MixerDockActiveTabResetGuard.h"
-#include "AI/AIProvider.h"
 #include "MainComponent/MainComponent.h"
+#include "MidiRemoteMockProvider.h"
 #include "MidiRemotePanelTestFixture.h"
 
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
@@ -27,32 +27,6 @@ juce::MouseEvent overlayMouseEvent(juce::Component& overlay, juce::Point<int> po
                             &overlay, &overlay, juce::Time::getCurrentTime(), p, juce::Time::getCurrentTime(), 1,
                             false);
 }
-
-// MainComponent must not get the default Ollama provider: its async model fetch outlives the test.
-class MockProviderPTO : public synth::AIProvider {
-public:
-    juce::String getProviderName() const override { return "MockPTO"; }
-    void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
-        callback({"MockModel"}, true);
-    }
-    RequestId sendPrompt(const std::vector<Message>&, CompletionCallback callback, const juce::var&,
-                         std::function<void(const juce::String&)> = {}) override {
-        AIResponse response;
-        response.success = true;
-        if (callback)
-            callback(response);
-        return {};
-    }
-    void cancel(RequestId) override {}
-    void setModel(const juce::String& name) override { model = name; }
-    juce::String getCurrentModel() const override { return model; }
-    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
-    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
-
-private:
-    juce::String model = "MockModel";
-    int requestTimeoutMs = 240000;
-};
 
 juce::ModifierKeys leftClick() { return juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier); }
 juce::ModifierKeys rightClick() { return juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier); }
@@ -254,7 +228,7 @@ TEST(MidiRemotePickTargetMainComponentTest, TheOverlayCoversTheWholeWindowAndEsc
     const auto root = juce::File::getSpecialLocation(juce::File::tempDirectory)
                           .getChildFile("agentsynth-pickoverlay-mc-" + juce::Uuid().toString());
     {
-        MainComponent mc(std::make_unique<MockProviderPTO>(), synth::AIProviderRegistry::createDefault(),
+        MainComponent mc(std::make_unique<MidiRemoteMockProvider>(), synth::AIProviderRegistry::createDefault(),
                          synth::ControllerProfileStore(root));
         mc.setSize(1400, 900);
         mc.setVisible(true);
