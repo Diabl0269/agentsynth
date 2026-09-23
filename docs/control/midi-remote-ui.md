@@ -145,8 +145,8 @@ The profile's controls drawn on a grid (`col`, `row` from the profile; default c
 snapped) using the app's own widgets: a rotary for `knob`/`encoder`, a vertical slider for
 `fader`, a square for `pad`, a round button for `button`, a horizontal strip for `wheel`.
 Each cell shows the control's name above and its **assignment label** below (parameter:
-*"Filter · Cutoff"*, action: *"Play"*, none: *"—"*, orphaned node: *"(missing module)"* in the
-warning colour). Widgets are **display-only** — they move with the hardware (activity events,
+*"Filter · Cutoff"*, node command (FRO253's Solo): *"Kick · Solo"*, action: *"Play"*, none: *"—"*,
+orphaned node: *"(missing module)"* in the warning colour). Widgets are **display-only** — they move with the hardware (activity events,
 [`midi-remote.md`](midi-remote.md#the-engine)) and are never dragged to send MIDI. Clicking a cell selects it (inspector);
 dragging moves it on the grid; Delete removes the control (and its assignments, undoable for the
 project half). Repaint is event-driven from the activity ring at ≤ 30 Hz while the tab is

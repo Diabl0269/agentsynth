@@ -97,6 +97,34 @@ ControlInspectorComponent::AssignmentRowModel makeProjectRow() {
     return row;
 }
 
+synth::Assignment makeNodeCommandAssignment() {
+    synth::Assignment assignment;
+    assignment.id = "assign-solo";
+    assignment.control.profileId = "profile-1";
+    assignment.control.controlId = "control-1";
+    assignment.target.kind = synth::Target::Kind::nodeCommand;
+    assignment.target.nodeCommand.nodeUuid = "node-uuid-2";
+    assignment.target.nodeCommand.command = synth::NodeCommandKind::toggleSolo;
+    assignment.takeover = synth::Takeover::useDefault;
+    assignment.range.min = 0.0;
+    assignment.range.max = 1.0;
+    return assignment;
+}
+
+// FRO253's node command target lives in the PROJECT doc alongside parameter targets (never
+// Global), so it carries the same "Project" scope tag -- MidiRemotePanelComponent's own
+// refreshInspectorForSelection() branches on target.kind only for the drivesLabel/nodeUuid, same
+// as ControlInspectorComponent::isTakeoverEditable() branching on it for the enabled state below.
+ControlInspectorComponent::AssignmentRowModel makeNodeCommandRow() {
+    ControlInspectorComponent::AssignmentRowModel row;
+    row.assignment = makeNodeCommandAssignment();
+    row.scopeLabel = "Project";
+    row.drivesLabel = "Kick . Solo";
+    row.nodeUuid = "node-uuid-2";
+    row.isOrphaned = false;
+    return row;
+}
+
 ControlInspectorComponent::AssignmentRowModel makeGlobalRow() {
     ControlInspectorComponent::AssignmentRowModel row;
     row.assignment = makeActionAssignment();
@@ -275,6 +303,53 @@ TEST_F(ControlInspectorComponentTest, GlobalRowDisablesTakeoverRangeInvertButFor
 
     EXPECT_EQ(forgetCount, 1);
     EXPECT_EQ(forgottenId, "assign-global");
+}
+
+// FRO253's Solo (node command) row: Project scope like a parameter row, but takeover/range/invert
+// disabled like a Global row (isTakeoverEditable() is parameter-only) and Forget still works.
+TEST_F(ControlInspectorComponentTest, NodeCommandRowIsProjectScopedButDisablesTakeoverLikeGlobal) {
+    inspector.setControl(makeModel({makeNodeCommandRow()}));
+
+    auto* scopeLabel = dynamic_cast<juce::Label*>(findComponentWithID(inspector, "assignmentScopeLabel0"));
+    ASSERT_NE(scopeLabel, nullptr);
+    EXPECT_EQ(scopeLabel->getText(), "Project");
+
+    auto* drivesLabel = dynamic_cast<juce::Label*>(findComponentWithID(inspector, "assignmentDrivesLabel0"));
+    ASSERT_NE(drivesLabel, nullptr);
+    EXPECT_EQ(drivesLabel->getText(), "Kick . Solo");
+
+    auto* takeoverCombo = dynamic_cast<juce::ComboBox*>(findComponentWithID(inspector, "assignmentTakeoverCombo0"));
+    auto* rangeMin = dynamic_cast<juce::TextEditor*>(findComponentWithID(inspector, "assignmentRangeMinEditor0"));
+    auto* rangeMax = dynamic_cast<juce::TextEditor*>(findComponentWithID(inspector, "assignmentRangeMaxEditor0"));
+    auto* invertToggle = dynamic_cast<juce::ToggleButton*>(findComponentWithID(inspector, "assignmentInvertToggle0"));
+    ASSERT_NE(takeoverCombo, nullptr);
+    ASSERT_NE(rangeMin, nullptr);
+    ASSERT_NE(rangeMax, nullptr);
+    ASSERT_NE(invertToggle, nullptr);
+    EXPECT_FALSE(takeoverCombo->isEnabled());
+    EXPECT_FALSE(rangeMin->isEnabled());
+    EXPECT_FALSE(rangeMax->isEnabled());
+    EXPECT_FALSE(invertToggle->isEnabled());
+
+    auto* forgetButton = dynamic_cast<juce::TextButton*>(findComponentWithID(inspector, "assignmentForgetButton0"));
+    ASSERT_NE(forgetButton, nullptr);
+    EXPECT_TRUE(forgetButton->isEnabled()) << "Forget must still work on a node command row";
+
+    juce::String forgottenId;
+    int forgetCount = 0;
+    inspector.onForgetRequested = [&](const juce::String& id) {
+        forgottenId = id;
+        ++forgetCount;
+    };
+    forgetButton->onClick();
+
+    EXPECT_EQ(forgetCount, 1);
+    EXPECT_EQ(forgottenId, "assign-solo");
+
+    juce::String locatedUuid;
+    inspector.onLocateRequested = [&](const juce::String& uuid) { locatedUuid = uuid; };
+    static_cast<juce::Component*>(drivesLabel)->mouseUp(realClickEvent(*drivesLabel));
+    EXPECT_EQ(locatedUuid, "node-uuid-2") << "click-to-locate works the same as a parameter row";
 }
 
 //==============================================================================
