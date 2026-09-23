@@ -134,7 +134,8 @@ public:
      *  field is replaced verbatim. Undoable (docs/control/midi-remote.md#undo: "Project
      *  assignments ... edit ... undoable"), same before/after-JSON shape as forget(). Returns false
      *  if no project assignment has `updated.id`, or if `updated.target` isn't a parameter target
-     *  (a global action assignment is a profile edit, not this method's job). */
+     *  -- a global action assignment is a profile edit, not this method's job, and a nodeCommand
+     *  target (FRO253) has no arm/edit path yet either, so it is rejected the same way. */
     bool updateAssignment(const Assignment& updated);
 
 private:

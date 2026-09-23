@@ -215,9 +215,15 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
         ControllerSurfaceComponent::CellModel cell;
         cell.control = control;
 
+        // FRO253's Target::Kind::nodeCommand (Solo mapping) can also live in doc_->assignments --
+        // no in-app path creates one yet (MixerPanelComponent::onSoloMidiLearnRequested is declared
+        // but never assigned to MidiLearnController), but RemoteModelJson deserializes one from a
+        // project file and RemoteEngine plays it back, so it's a real case, not a hypothetical one.
+        // Only a parameter target has the .target.parameter fields this cell label reads.
         auto paramIt =
             std::find_if(doc_->assignments.begin(), doc_->assignments.end(), [&](const synth::Assignment& a) {
-                return a.control.profileId == profile->id && a.control.controlId == control.id;
+                return a.control.profileId == profile->id && a.control.controlId == control.id &&
+                       a.target.isParameter();
             });
         auto actionIt = std::find_if(profile->actions.begin(), profile->actions.end(),
                                      [&](const synth::Assignment& a) { return a.control.controlId == control.id; });
@@ -273,6 +279,12 @@ void MidiRemotePanelComponent::refreshInspectorForSelection() {
     if (doc_ != nullptr) {
         for (const auto& a : doc_->assignments) {
             if (a.control.profileId != profile->id || a.control.controlId != selectedControlId_)
+                continue;
+            // A nodeCommand-target assignment (FRO253's Solo mapping, loadable from a project file
+            // even though no in-app Learn path creates one yet) can share this list with parameter
+            // targets, and this row's label reads .target.parameter -- skip rather than misread the
+            // union until Solo gets its own inspector row (MidiLearnController::armNodeCommand).
+            if (!a.target.isParameter())
                 continue;
             ControlInspectorComponent::AssignmentRowModel row;
             row.assignment = a;
@@ -388,7 +400,10 @@ void MidiRemotePanelComponent::handleForgetRequested(const juce::String& assignm
         auto it = std::find_if(doc_->assignments.begin(), doc_->assignments.end(),
                                [&](const auto& a) { return a.id == assignmentId; });
         if (it != doc_->assignments.end()) {
-            if (audioEngine_ != nullptr) {
+            // A nodeCommand-target entry (FRO253's Solo mapping) has no forget path yet either
+            // (no MidiLearnController::forgetNodeCommand) -- guard the union read rather than
+            // assume every project assignment is a parameter target.
+            if (it->target.isParameter() && audioEngine_ != nullptr) {
                 for (auto* node : audioEngine_->getGraph().getNodes()) {
                     if (node->properties["uuid"].toString() == it->target.parameter.nodeUuid) {
                         learnController_->forget(node->nodeID, it->target.parameter.paramId);
