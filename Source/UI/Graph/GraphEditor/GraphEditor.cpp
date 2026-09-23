@@ -69,6 +69,14 @@ void GraphEditor::setMidiLearnArmed(juce::AudioProcessorGraph::NodeID nodeId, co
         module->setMidiLearnArmedParam(paramId);
 }
 
+// A ModuleComponent paints from a cached image that only its own repaint() invalidates, so a repaint of
+// the canvas would leave every badge as it was; each card is asked directly.
+void GraphEditor::repaintMidiLearnBadges() {
+    for (auto* c : content.getModules())
+        if (c != nullptr)
+            c->repaint();
+}
+
 void GraphEditor::clearMidiLearnArmed() {
     for (auto* c : content.getModules())
         if (c != nullptr)

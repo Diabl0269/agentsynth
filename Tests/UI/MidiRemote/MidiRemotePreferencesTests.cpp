@@ -5,6 +5,9 @@
 #include "MainComponent/MainComponent.h"
 #include "MidiRemote/MidiRemotePreferences.h"
 #include "MidiRemoteMockProvider.h"
+#include "MidiRemotePanelTestFixture.h"
+#include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Layout/ZoomFrozenCachedImage.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 #include "UserSettings.h"
@@ -125,4 +128,38 @@ TEST(MidiRemotePreferencesTests, MappedBadgePaintsOnlyWhileTheSwitchIsOnButTheSu
     synth::ui::midilearn::setMappedBadgesVisible(false);
     EXPECT_EQ(dotAlphaAfter(false), 0.0f) << "switch off: no badge on the mapped control";
     EXPECT_GT(dotAlphaAfter(true), 0.5f) << "the panel's own surface cells are not decoration";
+}
+
+namespace {
+ModuleComponent* findCard(juce::Component& root) {
+    for (auto* child : root.getChildren()) {
+        if (auto* card = dynamic_cast<ModuleComponent*>(child))
+            return card;
+        if (auto* found = findCard(*child))
+            return found;
+    }
+    return nullptr;
+}
+} // namespace
+
+// A module card paints from a cached image that only its own repaint() invalidates, so flipping the badge
+// switch must reach each card directly: repainting the canvas around it would leave every badge as it was
+// (found by checking the running app, not by the flag tests above).
+TEST_F(MidiRemotePanelLiveRefreshTest, FlippingTheBadgeSwitchInvalidatesEachCardsCachedImage) {
+    graphEditor_->setSize(800, 600);
+    ModuleComponent* card = findCard(*graphEditor_);
+    ASSERT_NE(card, nullptr);
+    auto* cache = dynamic_cast<synth::ui::ZoomFrozenCachedImage*>(card->getCachedComponentImage());
+    ASSERT_NE(cache, nullptr) << "cards are cached; if this changes, the test's premise has too";
+
+    juce::Image target(juce::Image::ARGB, card->getWidth(), card->getHeight(), true);
+    juce::Graphics g(target);
+    cache->paint(g);
+    const int rastersAfterFirstPaint = cache->getRasterCountForTest();
+    cache->paint(g);
+    ASSERT_EQ(cache->getRasterCountForTest(), rastersAfterFirstPaint) << "a second paint reuses the image";
+
+    graphEditor_->repaintMidiLearnBadges();
+    cache->paint(g);
+    EXPECT_EQ(cache->getRasterCountForTest(), rastersAfterFirstPaint + 1) << "the card re-rasters after the flip";
 }

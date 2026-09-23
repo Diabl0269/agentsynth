@@ -883,7 +883,7 @@ void MainComponent::applyMidiRemotePreferences() {
     if (showBadges == synth::ui::midilearn::areMappedBadgesVisible())
         return;
     synth::ui::midilearn::setMappedBadgesVisible(showBadges);
-    graphEditor.repaint();
+    graphEditor.repaintMidiLearnBadges();
     mixerDock.getMixerPanel().repaint();
     timelinePanel.repaint();
 }

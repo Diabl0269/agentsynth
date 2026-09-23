@@ -352,6 +352,8 @@ public:
     // Pushes/clears the armed breathing outline onto the target ModuleComponent, if on screen.
     void setMidiLearnArmed(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId);
     void clearMidiLearnArmed();
+    // Repaints every card so its MIDI-mapped badges follow the Preferences switch (a card paints from a cached image).
+    void repaintMidiLearnBadges();
 
     // A hosted-plugin card's "Open Editor" button; resolves `nodeId` to its HostedPluginModule and
     // hands it to HostedPluginWindowManager::openEditorFor -- same reason as the callbacks above.
