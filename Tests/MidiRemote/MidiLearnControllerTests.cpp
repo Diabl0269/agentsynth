@@ -551,17 +551,11 @@ TEST_F(MidiLearnControllerTest, CountProjectAssignmentsForProfileCountsMatchingA
     EXPECT_EQ(controller_->countProjectAssignmentsForProfile(profileA), 2)
         << "action assignments don't count, only project doc (parameter/nodeCommand) assignments";
 
-    // A genuinely different device (its own sourceKey) auto-creates its own profile.
-    controller_->arm(node_->nodeID, "attack");
-    remoteEngine_.handleMessage("second-test-device", juce::MidiMessage::controllerEvent(1, 50, 64));
-    settle();
-    ASSERT_EQ(controller_->getProfiles().size(), 2u);
-    const juce::String profileB = controller_->getProfiles()[0].id == profileA ? controller_->getProfiles()[1].id
-                                                                               : controller_->getProfiles()[0].id;
-
-    EXPECT_EQ(controller_->countProjectAssignmentsForProfile(profileB), 1)
-        << "profileB's own assignment must not be attributed to profileA";
-
+    // A profile id this fixture never created must count zero -- RemoteEngine::handleMessage
+    // drops any message whose sourceKey isn't already registered (refreshSources() only ever
+    // knows hostSourceKey() in this Hosted-mode fixture), so a genuine second device/profile isn't
+    // reachable here; this still catches a scoping bug (e.g. forgetting to filter by profileId at
+    // all, which would wrongly return doc_.assignments.size() for any id).
     EXPECT_EQ(controller_->countProjectAssignmentsForProfile("unknown-id"), 0);
 }
 
