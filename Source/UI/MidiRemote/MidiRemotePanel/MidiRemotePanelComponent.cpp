@@ -354,10 +354,14 @@ void MidiRemotePanelComponent::handleControlMoved(const juce::String& controlId,
     // ControllerSurfaceCell::onDragEnded, still on that cell's own mouseUp call stack -- rebuilding
     // the grid synchronously here (setControls() clears and reallocates every cell) would free the
     // very cell whose mouseUp is still executing. Defer to the next message-loop iteration instead,
-    // same fix shape as a live-drag survivor elsewhere in this codebase.
-    juce::MessageManager::callAsync([this] {
-        refreshSurfaceForSelectedProfile();
-        controllerSurface_.setSelectedControlId(selectedControlId_);
+    // same fix shape as a live-drag survivor elsewhere in this codebase. SafePointer guards against
+    // the panel itself being torn down before the deferred call runs (dock closed mid-drag).
+    juce::Component::SafePointer<MidiRemotePanelComponent> safeThis(this);
+    juce::MessageManager::callAsync([safeThis] {
+        if (safeThis == nullptr)
+            return;
+        safeThis->refreshSurfaceForSelectedProfile();
+        safeThis->controllerSurface_.setSelectedControlId(safeThis->selectedControlId_);
     });
 }
 
@@ -380,14 +384,16 @@ void MidiRemotePanelComponent::handleForgetRequested(const juce::String& assignm
     if (learnController_ == nullptr)
         return;
 
-    if (doc_ != nullptr && audioEngine_ != nullptr) {
+    if (doc_ != nullptr) {
         auto it = std::find_if(doc_->assignments.begin(), doc_->assignments.end(),
                                [&](const auto& a) { return a.id == assignmentId; });
         if (it != doc_->assignments.end()) {
-            for (auto* node : audioEngine_->getGraph().getNodes()) {
-                if (node->properties["uuid"].toString() == it->target.parameter.nodeUuid) {
-                    learnController_->forget(node->nodeID, it->target.parameter.paramId);
-                    break;
+            if (audioEngine_ != nullptr) {
+                for (auto* node : audioEngine_->getGraph().getNodes()) {
+                    if (node->properties["uuid"].toString() == it->target.parameter.nodeUuid) {
+                        learnController_->forget(node->nodeID, it->target.parameter.paramId);
+                        break;
+                    }
                 }
             }
             refreshSurfaceForSelectedProfile();
