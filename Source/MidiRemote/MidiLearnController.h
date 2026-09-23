@@ -139,6 +139,27 @@ public:
      *  profile. */
     bool updateProfile(const ControllerProfile& profile);
 
+    /** FRO134: adds a brand-new profile (Add controller, Detect-from-scratch). Saved, published to
+     *  the engine and announced via onChanged. Returns false if `profile.id` is empty or already known. */
+    bool addProfile(const ControllerProfile& profile);
+
+    enum class ImportStatus { imported, replaced, conflict, invalid };
+    struct ImportResult {
+        ImportStatus status = ImportStatus::invalid;
+        ControllerProfile profile; // set for imported / replaced / conflict (the file's profile)
+    };
+    /** FRO134: "Import controller..." -- reads the profile document in `srcFile`. `invalid` if it
+     *  doesn't parse; `conflict` (nothing changed) if a profile with the same id is already known
+     *  and `replaceExisting` is false, so the caller can prompt and call again with true. */
+    ImportResult importProfile(const juce::File& srcFile, bool replaceExisting = false);
+
+    /** FRO134/FRO264: the Inspector's edit of an existing control's name, kind or encoding. Replaces
+     *  the control (matched by id; its message key and layout are kept as they are on the stored
+     *  one) and re-copies the denormalised name/encoding/button-mode onto every assignment that
+     *  references it, since the engine reads those from the assignment. A profile edit, so not
+     *  undoable. Returns false if the profile or control is unknown. */
+    bool updateControl(const juce::String& profileId, const Control& edited);
+
     /** How many project ("midiRemote") assignments reference `profileId` -- for the Delete
      *  controller confirm dialog's "will orphan N assignments" count. */
     int countProjectAssignmentsForProfile(const juce::String& profileId) const;

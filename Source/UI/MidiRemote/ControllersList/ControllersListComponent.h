@@ -10,9 +10,9 @@
 // builds each rebuild (mirroring MixerColumnComponent's own callback-driven-child shape), so this
 // component is headless-testable with no engine/store at all.
 //
-// Out of scope for FRO131 (task 7): "+ Add controller", Detect. Re-link/Recreate for an orphan row
-// are task 8 -- an orphan row renders (state glyph + "not on this machine" tooltip) but offers no
-// action of its own yet.
+// "+ Add controller" (FRO134) is a footer button; the popover itself is AddControllerPopover,
+// owned by MidiRemotePanelComponent. Re-link/Recreate for an orphan row are task 8 -- an orphan row
+// renders (state glyph + "not on this machine" tooltip) but offers no action of its own yet.
 namespace synth::ui {
 
 class ControllersListComponent : public juce::Component {
@@ -45,6 +45,11 @@ public:
      *  getter into every row's own fields. */
     int getRowCountForTest() const noexcept { return static_cast<int>(rows_.size()); }
 
+    /** FRO134: hidden in the plugin build, where the list holds only Host MIDI. */
+    void setAddControllerVisible(bool visible);
+    /** "+ Add controller" clicked; `anchor` is the button, for the popover to point at. */
+    std::function<void(juce::Component& anchor)> onAddControllerRequested;
+
     /** Row clicked -- select it (also drives the surface/inspector via MidiRemotePanelComponent). */
     std::function<void(const juce::String& profileId)> onSelectProfile;
     /** Right-click "Rename" committed (inline text-edit or an alert text prompt -- implementation's
@@ -68,6 +73,7 @@ public:
     void mouseDown(const juce::MouseEvent& event) override;
 
     static constexpr int kRowHeight = 28;
+    static constexpr int kFooterHeight = 34;
 
 private:
     struct Row : RowModel {
@@ -80,6 +86,7 @@ private:
 
     std::vector<Row> rows_;
     juce::String selectedProfileId_;
+    juce::TextButton addControllerButton_{"+ Add controller"};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ControllersListComponent)
 };

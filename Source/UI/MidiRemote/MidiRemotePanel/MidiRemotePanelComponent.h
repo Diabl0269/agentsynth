@@ -1,11 +1,17 @@
 #pragma once
 
+#include "MidiRemote/EncoderAutoDetect.h"
+#include "UI/MidiRemote/AddController/AddControllerPopover.h"
 #include "UI/MidiRemote/ControllerSurface/ControllerSurfaceComponent.h"
+#include "UI/MidiRemote/ControllerSurface/ControllerSurfaceToolbar.h"
 #include "UI/MidiRemote/ControllersList/ControllersListComponent.h"
+#include "UI/MidiRemote/Detect/DetectModeController.h"
 #include "UI/MidiRemote/Inspector/ControlInspectorComponent.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+#include <optional>
+#include <vector>
 
 class AudioEngine;
 class GraphEditor;
@@ -80,6 +86,50 @@ public:
      *  no free-running timer"). */
     void refreshActivity();
 
+    // ---- FRO134: Detect, Add controller, Templates, Import/Export, encoder auto-detect -------------
+    // (docs/control/midi-remote-ui.md#detect-mode, #add-controller). Units: MidiRemotePanelDetect.cpp
+    // (Detect + auto-detect) and MidiRemotePanelControllers.cpp (Add / Templates / Import).
+
+    /** The toolbar's Detect toggle. While on, refreshActivity() turns unknown messages from the
+     *  selected profile's device into cells. Turned off by selecting another controller. */
+    void setDetectActive(bool active);
+    bool isDetectActive() const noexcept { return detect_.isActive(); }
+
+    /** Applies a shipped template to the selected controller (empty: as-is; non-empty: merged, existing
+     *  message keys win). Returns how many controls were added, or -1 with no controller selected or
+     *  an unknown template. */
+    int applyTemplateToSelectedProfile(const juce::String& templateId);
+
+    /** "+ Add controller" -> the popover, anchored to `anchor`. Hidden in Hosted mode by the list. */
+    void showAddControllerPopover(juce::Component& anchor);
+    /** The popover's OK: creates the profile, opens the device, selects it and (Detect choice) enters
+     *  Detect. Returns the new profile's id, or empty if it could not be created. */
+    juce::String createControllerFromChoice(const AddControllerPopover::Choice& choice);
+
+    enum class ImportOutcome { imported, replaced, conflict, invalid };
+    /** Import controller... with the file already chosen: prompts (async) if a controller with the
+     *  same id exists. */
+    void importControllerFile(const juce::File& file);
+    /** The prompt-free half: `replaceExisting` false reports `conflict` and changes nothing. A
+     *  successful import selects the controller. */
+    ImportOutcome importControllerFileNow(const juce::File& file, bool replaceExisting);
+
+    /** Inspector "Auto-detect...": the two-step turn-left / turn-right prompt, then the encoding is
+     *  set on the control. advanceEncoderAutoDetect() is what each prompt's button calls. */
+    void beginEncoderAutoDetect(const synth::Control& control);
+    void advanceEncoderAutoDetect();
+    const synth::midi::EncoderAutoDetect& getEncoderAutoDetectForTest() const noexcept { return encoderDetect_; }
+    /** Whether `controlId`'s surface cell is pulsing or flashing right now. */
+    bool isSurfaceCellHighlightedForTest(const juce::String& controlId) const {
+        return controllerSurface_.isControlPulsingForTest(controlId);
+    }
+
+    /** Every prompt this panel raises (auto-detect steps, import conflict/invalid) goes through this
+     *  when set, instead of an AlertWindow. `done(true)` = the OK button. */
+    using PromptHook = std::function<void(const juce::String& title, const juce::String& message, bool cancellable,
+                                          std::function<void(bool ok)> done)>;
+    void setPromptHookForTest(PromptHook hook) { promptHook_ = std::move(hook); }
+
     /** GraphEditor::onEditMidiAssignmentRequested's target, via MixerDockComponent -- resolves the
      *  project assignment for (nodeUuid, paramId), selects its controller/control and switches the
      *  surface/inspector to show it. Returns false (and leaves selection untouched) if no such
@@ -110,6 +160,20 @@ private:
     void handleControlMoved(const juce::String& controlId, int col, int row);
     void handleDeleteControlRequested(const juce::String& controlId);
     void handleForgetRequested(const juce::String& assignmentId);
+    void handleControlEdited(const synth::Control& control);
+
+    // FRO134
+    void showPrompt(const juce::String& title, const juce::String& message, bool cancellable,
+                    std::function<void(bool ok)> done);
+    void showTemplatesMenu(juce::Component& anchor);
+    void showMoreMenu(juce::Component& anchor);
+    void showImportChooser();
+    void promptEncoderStep();
+    void finishEncoderAutoDetect();
+    /** After refreshActivity()'s drain: persist Detect's additions once and drive the pulse/flash. */
+    void commitDetectStep(const std::optional<synth::ControllerProfile>& working, bool profileChanged,
+                          const std::vector<juce::String>& litControlIds,
+                          const std::vector<synth::midi::RemoteEvent>& events);
 
     const synth::ControllerProfile* findSelectedProfile() const;
 
@@ -133,7 +197,13 @@ private:
     // rebuild rather than one per notification.
     bool liveRefreshPending_ = false;
 
+    DetectModeController detect_;
+    synth::midi::EncoderAutoDetect encoderDetect_;
+    juce::String encoderTargetControlId_;
+    PromptHook promptHook_;
+
     ControllersListComponent controllersList_;
+    ControllerSurfaceToolbar toolbar_;
     ControllerSurfaceComponent controllerSurface_;
     ControlInspectorComponent inspector_;
 

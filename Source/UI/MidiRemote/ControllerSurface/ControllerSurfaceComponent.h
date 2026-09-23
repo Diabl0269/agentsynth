@@ -9,9 +9,8 @@
 
 // ControllerSurfaceComponent.h -- FRO131 (docs/control/midi-remote-ui.md#surface-centre): the MIDI
 // Remote panel's centre region -- the selected controller's controls drawn on a 56 px grid
-// (Control::layout {col,row}, snapped). Out of scope for FRO131 (task 7/8): the
-// [Detect]/[Assign...]/[Templates]/[...] toolbar row shown in the design doc's wireframe -- this
-// component owns only the grid itself.
+// (Control::layout {col,row}, snapped). The toolbar row above it is ControllerSurfaceToolbar
+// (FRO134); this component owns only the grid itself.
 namespace synth::ui {
 
 class ControllerSurfaceComponent : public juce::Component {
@@ -37,6 +36,16 @@ public:
     /** MidiRemotePanelComponent::refreshActivity()'s per-control fan-out. A no-op if `controlId`
      *  isn't on the currently shown grid -- the caller doesn't filter first. */
     void noteActivity(const juce::String& controlId, synth::midi::RemoteEventKind kind, float value);
+
+    /** FRO134 (Detect): the control that should be pulsing (empty = none). Survives setControls():
+     *  the pulse is re-applied to the rebuilt cell, since every detected control persists the
+     *  profile and so rebuilds the grid. */
+    void setDetectPulseControlId(const juce::String& controlId);
+    /** Lights an existing control's cell briefly (Detect: "an existing control's cell lights instead"). */
+    void flashControl(const juce::String& controlId);
+    /** Advances pulse/flash repaints; call from the panel's gated activity tick. */
+    void tickDetectHighlights();
+    bool isControlPulsingForTest(const juce::String& controlId) const;
 
     void setSelectedControlId(const juce::String& controlId);
     juce::String getSelectedControlId() const noexcept { return selectedControlId_; }
@@ -65,6 +74,8 @@ public:
 private:
     juce::String profileId_;
     juce::String selectedControlId_;
+    juce::String pulseControlId_;
+    double pulseSinceMs_ = 0.0;
     juce::OwnedArray<ControllerSurfaceCell> cells_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ControllerSurfaceComponent)

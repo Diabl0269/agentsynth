@@ -9,11 +9,12 @@ buttons" rows below) shipped in FRO130; the mixer column, Master's fader and the
 rather than a parameter) ships here as well. The MIDI Remote panel itself
 (FRO131) shipped: the dock tab, Controllers list, Surface and Inspector (including Solo's own
 Surface cell / Inspector row, resolved by node command rather than parameter), and
-`GraphEditor::onEditMidiAssignmentRequested`. Still design-only/not yet built: Detect mode, the
-"+ Add controller" popover, Templates and the Surface toolbar's Import/Export (a per-profile
-right-click Export… is shipped; the Templates/Import flow is not), the "Assign from the panel"
-control-first-learn popover and its pick-target overlay, and orphan Re-link/Recreate — all
-listed with their own sections below and left for follow-up tickets.
+`GraphEditor::onEditMidiAssignmentRequested`. Detect mode, the "+ Add controller" popover,
+Templates, Import/Export and the Inspector's encoder Auto-detect (FRO134) shipped too, along with
+the Inspector's editable name, kind and encoding. Still design-only/not yet built: the "Assign from
+the panel" control-first-learn popover and its pick-target overlay, orphan Re-link/Recreate, and
+the Inspector's **Relearn** button (rendered, disabled) — all listed with their own sections below
+and left for follow-up tickets.
 
 ---
 
@@ -167,7 +168,10 @@ showing, gated exactly like `MixerDockComponent::refreshMeters` — no free-runn
 
 For the selected control: name, kind, message spec (editable, with a **Relearn** button that
 re-detects the message), encoding (with **Auto-detect…** for encoders: "turn left… now right",
-which observes the two value patterns and picks the encoding), button mode. Below the divider,
+which observes the two value patterns and picks the encoding), button mode. Name (double-click),
+kind and encoding are editable (FRO134/FRO264); each edit is a profile edit — global, not undoable —
+and is copied onto every assignment that references the control, because the engine reads the
+encoding from the assignment. **Relearn** is still a disabled placeholder. Below the divider,
 its assignment(s): what it drives (click jumps to the module on the canvas via the existing
 locate path), scope tag, takeover, range with an invert toggle, **Learn target**
 ([Assign from the panel](#assign-from-the-panel-control-first-learn)),
@@ -195,19 +199,48 @@ two choices:
 
 **Detect** toggles the surface into detection: every message the profile's device sends that
 is not yet a control appears as a new cell in touch order (kind guessed: CC → knob, note →
-pad; name "CC 21" / "C3"), pulsing until the next one arrives; an existing control's cell lights
+pad, pitch bend → wheel; name "CC 21" / "C3"), pulsing until the next one arrives; an existing control's cell lights
 instead. A hint row reads *"Touch each knob, fader and button once. Rename or retype them
 afterwards. Turn an encoder left then right to detect its encoding."* Leaving Detect keeps
 everything. Detect never consumes messages, never assigns anything, and never touches the
 patch's MIDI flow.
 
+How it is built (`Source/UI/MidiRemote/Detect/`, `MidiRemotePanelDetect.cpp`): the panel's single
+`RemoteEngine::drainActivity` pass feeds `DetectModeController`, which decides per event on a copy of
+the selected profile; the additions are persisted once per drain (`MidiLearnController::updateProfile`)
+and the drain's events are replayed onto the rebuilt cells so the control the user just touched
+shows its value. The engine mirrors every eligible message from a profile's device onto the activity
+ring whether or not a control or assignment exists (`pushActivityOnly`), which is the only thing
+Detect needs from it. Details a reader would not guess:
+
+- A note-off, a program change and a learn candidate never create a cell (the press already did;
+  each program number is its own message key). A detected control keeps the channel it arrived on.
+- The pulse is a breathing accent outline **bounded to 10 s** — the animation rules forbid an
+  unbounded animation — repainted only from the panel's existing gated activity tick, per cell. The
+  "lit" flash on an existing control is a solid outline for 250 ms.
+- Selecting another controller turns Detect off; it belongs to one controller.
+- Detect works on an empty profile, and in `HostMode::Hosted` (it reads the host stream).
+
+**Auto-detect…** (Inspector, enabled for a CC knob/encoder) asks the user to turn the control left, then
+right, each step ending with a **Next** press (async prompts — a modal loop would stop the activity
+tick the samples arrive on). `EncoderAutoDetect` classifies the raw 7-bit values (`RemoteEvent::rawValue`,
+so it sees the hardware's bytes whatever encoding the control currently claims): left high and right
+low is two's complement when the left values are ≈127 and sign-magnitude when they are ≈65; left low
+and right high is binary offset (63 / 65); a falling left sweep followed by a rising right sweep that
+matches none of those is absolute. Anything else says it could not tell and changes nothing. A
+relative result on a plain knob also retypes it as an encoder. This helper is the only place an
+encoding is ever inferred — the runtime never guesses.
+
 ### Templates and import/export
 
 **Templates ▾** applies a shipped generic layout (8 knobs; 8 faders + 8 buttons; transport
 strip; keyboard-with-8-knobs) to an empty profile or **merges** it into a non-empty one
-(existing message keys win). **⋯** has *Import controller…* / *Export controller…* (JSON file,
-the profile document of [`midi-remote.md`](midi-remote.md#data-model), name conflicts prompt). Shipped templates are
-resources under `Resources/MidiRemote/Templates/`.
+(existing message keys win; the additions get fresh ids and are stacked below the existing rows). **⋯** has *Import controller…* / *Export controller…* (JSON file,
+the profile document of [`midi-remote.md`](midi-remote.md#data-model)). Importing a document whose id is already set up on this
+machine prompts **Replace / Cancel** (a replace keeps the project's assignments linked, since they
+reference the profile by id). Shipped templates are JSON resources under
+`assets/midi-remote-templates/`, embedded through the `Assets` binary-data library and enumerated
+by `synth::midi::listControllerTemplates()` (`Source/MidiRemote/ControllerTemplates.h`).
 
 ---
 
@@ -216,8 +249,9 @@ resources under `Resources/MidiRemote/Templates/`.
 "+ Add controller" → a popover: **MIDI input device** (the `juce::MidiInput::getAvailableDevices()`
 list, devices that already have a profile greyed with the profile's name), **Name** (prefilled
 from the device), **Start with**: *Detect controls now* (default) / a template / *Empty*. OK
-creates the profile file, opens the device (`AudioEngine::ensureMidiDeviceOpen`), selects it
-in the list and, for the default choice, enters Detect. A controller created implicitly by a
+creates the profile file, opens the device (`AudioEngine::ensureMidiDeviceOpen`, then republishes the engine's sources — the
+engine ignores a device it has not been told about), selects it
+in the list and, for the default choice, enters Detect. The button is hidden in the plugin build. A controller created implicitly by a
 Learn ([`midi-remote.md`](midi-remote.md#learn-what-does-the-first-message-mean)) is exactly this with *Empty* plus the one detected control.
 
 ---
@@ -274,7 +308,7 @@ fake message source (no real `juce::MidiInput`):
   `Tests/UI/Mixer/MixerColumnMidiLearnTests.cpp`, `Tests/UI/Timeline/TransportBarMidiLearnTests.cpp`):
   the right-click block appears on every surface in [Right-click MIDI Learn — coverage](#right-click-midi-learn--coverage)'s table (one test per row, "test the
   real mouse path" convention); the badge paints only when mapped; the panel's list/surface/
-  inspector render from a profile; Detect adds cells in order; pick-target overlay assigns and
+  inspector render from a profile; Detect adds cells in order (`ControllerSurfaceDetectTests.cpp`); pick-target overlay assigns and
   cancels; orphan controller Re-link/Recreate; PNG render of the surface for visual inspection
   (`MIDI_SURFACE_PNG=<path>`, like the ADSR card's).
 - **E2E** (`Tests/E2E/E2EMidiRemoteWorkflow.cpp`): fake device → Learn on Filter cutoff → sweep

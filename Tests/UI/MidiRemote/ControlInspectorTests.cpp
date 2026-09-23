@@ -177,9 +177,9 @@ TEST_F(ControlInspectorComponentTest, EmptyStateShowsPlaceholderAndHidesEverythi
     EXPECT_EQ(nameLabel->getText(), "No control selected");
     EXPECT_TRUE(nameLabel->isVisible());
 
-    auto* kindLabel = dynamic_cast<juce::Label*>(findComponentWithID(inspector, "controlKindLabel"));
-    ASSERT_NE(kindLabel, nullptr);
-    EXPECT_FALSE(kindLabel->isVisible());
+    auto* kindCombo = dynamic_cast<juce::ComboBox*>(findComponentWithID(inspector, "controlKindCombo"));
+    ASSERT_NE(kindCombo, nullptr);
+    EXPECT_FALSE(kindCombo->isVisible());
     auto* messageLabel = findComponentWithID(inspector, "controlMessageSpecLabel");
     ASSERT_NE(messageLabel, nullptr);
     EXPECT_FALSE(messageLabel->isVisible());
@@ -452,20 +452,99 @@ TEST_F(ControlInspectorComponentTest, CommittingRangeEditorsFiresOnAssignmentEdi
 }
 
 //==============================================================================
-// The inert widgets: Relearn, the encoding combo, Auto-detect... -- disabled (task 7).
+// Relearn stays inert; FRO134 made name, kind, encoding and Auto-detect... live.
 //==============================================================================
 
-TEST_F(ControlInspectorComponentTest, RelearnEncodingAndAutoDetectAreDisabled) {
+TEST_F(ControlInspectorComponentTest, RelearnIsStillDisabled) {
     inspector.setControl(makeModel({}));
-
     auto* relearn = dynamic_cast<juce::TextButton*>(findComponentWithID(inspector, "relearnButton"));
-    auto* encoding = dynamic_cast<juce::ComboBox*>(findComponentWithID(inspector, "encodingCombo"));
-    auto* autoDetect = dynamic_cast<juce::TextButton*>(findComponentWithID(inspector, "autoDetectButton"));
     ASSERT_NE(relearn, nullptr);
+    EXPECT_FALSE(relearn->isEnabled());
+}
+
+TEST_F(ControlInspectorComponentTest, EncodingComboEditsTheControlThroughOnControlEdited) {
+    inspector.setControl(makeModel({}));
+    std::vector<synth::Control> edits;
+    inspector.onControlEdited = [&](const synth::Control& c) { edits.push_back(c); };
+
+    auto* encoding = dynamic_cast<juce::ComboBox*>(findComponentWithID(inspector, "encodingCombo"));
     ASSERT_NE(encoding, nullptr);
+    EXPECT_TRUE(encoding->isEnabled());
+    encoding->setSelectedId(3, juce::sendNotificationSync); // relBinOffset (declaration order + 1)
+
+    ASSERT_EQ(edits.size(), 1u);
+    EXPECT_EQ(edits[0].encoding, synth::Encoding::relBinOffset);
+    EXPECT_EQ(edits[0].id, "control-1");
+
+    encoding->setSelectedId(3, juce::sendNotificationSync);
+    EXPECT_EQ(edits.size(), 1u) << "re-selecting the current encoding is not an edit";
+}
+
+TEST_F(ControlInspectorComponentTest, KindComboRetypesTheControl) {
+    inspector.setControl(makeModel({}));
+    std::vector<synth::Control> edits;
+    inspector.onControlEdited = [&](const synth::Control& c) { edits.push_back(c); };
+
+    auto* kind = dynamic_cast<juce::ComboBox*>(findComponentWithID(inspector, "controlKindCombo"));
+    ASSERT_NE(kind, nullptr);
+    EXPECT_TRUE(kind->isVisible());
+    kind->setSelectedId(static_cast<int>(synth::ControlKind::fader) + 1, juce::sendNotificationSync);
+
+    ASSERT_EQ(edits.size(), 1u);
+    EXPECT_EQ(edits[0].kind, synth::ControlKind::fader);
+}
+
+TEST_F(ControlInspectorComponentTest, NameLabelCommitsARenameButRejectsAnEmptyName) {
+    inspector.setControl(makeModel({}));
+    std::vector<synth::Control> edits;
+    inspector.onControlEdited = [&](const synth::Control& c) { edits.push_back(c); };
+
+    auto* name = dynamic_cast<juce::Label*>(findComponentWithID(inspector, "controlNameLabel"));
+    ASSERT_NE(name, nullptr);
+    EXPECT_TRUE(name->isEditable());
+
+    name->setText("  Cutoff  ", juce::sendNotificationSync);
+    ASSERT_EQ(edits.size(), 1u);
+    EXPECT_EQ(edits[0].name, "Cutoff");
+
+    name->setText("   ", juce::sendNotificationSync);
+    EXPECT_EQ(edits.size(), 1u);
+    EXPECT_EQ(name->getText(), "Cutoff") << "an empty rename reverts";
+}
+
+TEST_F(ControlInspectorComponentTest, AutoDetectIsEnabledOnlyForACcKnobOrEncoder) {
+    auto* autoDetect = dynamic_cast<juce::TextButton*>(findComponentWithID(inspector, "autoDetectButton"));
     ASSERT_NE(autoDetect, nullptr);
 
-    EXPECT_FALSE(relearn->isEnabled());
-    EXPECT_FALSE(encoding->isEnabled());
+    inspector.setControl(makeModel({}));
+    EXPECT_TRUE(autoDetect->isEnabled()) << "a CC knob";
+
+    ControlInspectorComponent::ControlModel pad;
+    pad.hasControl = true;
+    pad.control = makeControl();
+    pad.control.kind = synth::ControlKind::pad;
+    inspector.setControl(pad);
     EXPECT_FALSE(autoDetect->isEnabled());
+
+    ControlInspectorComponent::ControlModel note;
+    note.hasControl = true;
+    note.control = makeControl();
+    note.control.message.type = synth::MessageType::note;
+    inspector.setControl(note);
+    EXPECT_FALSE(autoDetect->isEnabled()) << "a note is not an encoder";
+
+    ControlInspectorComponent::ControlModel encoder;
+    encoder.hasControl = true;
+    encoder.control = makeControl();
+    encoder.control.kind = synth::ControlKind::encoder;
+    inspector.setControl(encoder);
+    EXPECT_TRUE(autoDetect->isEnabled());
+
+    int requested = 0;
+    inspector.onAutoDetectRequested = [&](const synth::Control& c) {
+        ++requested;
+        EXPECT_EQ(c.id, "control-1");
+    };
+    autoDetect->onClick();
+    EXPECT_EQ(requested, 1);
 }

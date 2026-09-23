@@ -354,3 +354,30 @@ TEST_F(ControllersListComponentTest, DeleteConfirmMessageSingularAndZeroPhrasing
     ASSERT_TRUE(triggerMenuItem(captured, "Delete..."));
     EXPECT_NE(message.indexOf("no project assignments"), -1);
 }
+
+// ============================================================================
+// FRO134: "+ Add controller"
+// ============================================================================
+
+TEST_F(ControllersListComponentTest, AddControllerFooterFiresTheCallbackWithItsButtonAndCanBeHidden) {
+    ControllersListComponent list;
+    list.setSize(240, 300);
+    list.setRows(makeRows());
+
+    juce::Component* reported = nullptr;
+    list.onAddControllerRequested = [&](juce::Component& anchor) { reported = &anchor; };
+
+    juce::Component* button = nullptr;
+    for (auto* child : list.getChildren())
+        if (child->getComponentID() == "addControllerButton")
+            button = child;
+    ASSERT_NE(button, nullptr);
+    EXPECT_TRUE(button->isVisible());
+    EXPECT_LE(button->getBottom(), list.getHeight());
+
+    dynamic_cast<juce::Button*>(button)->onClick();
+    EXPECT_EQ(reported, button);
+
+    list.setAddControllerVisible(false);
+    EXPECT_FALSE(button->isVisible());
+}

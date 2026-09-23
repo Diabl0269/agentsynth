@@ -232,6 +232,12 @@ add_library(Core STATIC
     Source/MidiRemote/RemoteModelJson.cpp
     Source/MidiRemote/MidiRemoteLearnBinder.h
     Source/MidiRemote/MidiRemoteLearnBinder.cpp
+    Source/MidiRemote/ControllerDetect.h
+    Source/MidiRemote/ControllerDetect.cpp
+    Source/MidiRemote/EncoderAutoDetect.h
+    Source/MidiRemote/EncoderAutoDetect.cpp
+    Source/MidiRemote/ControllerTemplates.h
+    Source/MidiRemote/ControllerTemplates.cpp
     Source/RecentProjects.cpp
     Source/RecentProjects.h
     Source/SnippetManager.cpp
@@ -646,6 +652,13 @@ juce_add_binary_data(Assets SOURCES
     # FRO12 (P9-6, docs/mixer/panel.md): detach-to-window icon, shared by DetachablePanelHost for
     # both the Timeline and Mixer panels. BinaryData symbol: actiondetachwindow_svg.
     assets/icons/action-detach-window.svg
+    # FRO134 (docs/control/midi-remote.md): generic MIDI-controller templates, each a full
+    # ControllerProfile JSON document, enumerated at runtime by synth::midi::listControllerTemplates
+    # via BinaryData::namedResourceList (no per-file symbol is referenced by name).
+    assets/midi-remote-templates/template-8-knobs.json
+    assets/midi-remote-templates/template-8-faders-8-buttons.json
+    assets/midi-remote-templates/template-transport-strip.json
+    assets/midi-remote-templates/template-keyboard-8-knobs.json
 )
 
 # The themed LookAndFeel lives in Core and pulls typefaces from BinaryData;

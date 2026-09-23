@@ -18,6 +18,7 @@ RemoteEvent buildBaseEvent(const detail::ClassifiedMessage& classified, int sour
     event.specType = static_cast<std::uint8_t>(classified.type);
     event.specChannel = static_cast<std::uint8_t>(classified.channel);
     event.specNumber = static_cast<std::uint8_t>(classified.number);
+    event.rawValue = static_cast<std::uint8_t>(classified.rawValue);
     return event;
 }
 

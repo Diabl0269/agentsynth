@@ -10,9 +10,10 @@ MIDI Remote then maps like any other — is [`plugin-card-layout.md`](plugin-car
 **Status:** the model, persistence and `RemoteEngine` are built and wired into `AudioEngine`.
 Right-click MIDI Learn is shipped and creates real assignments on every covered surface, including
 the mixer column's Solo (FRO253's `nodeCommand` target). The MIDI Remote panel (FRO131) is shipped
-— dock tab, Controllers list, Surface, Inspector, and "Edit MIDI assignment..." — except Detect
-mode, Add controller, Templates/import-export, the control-first "Assign from the panel" popover
-and orphan Re-link/Recreate, all still design-only.
+— dock tab, Controllers list, Surface, Inspector, and "Edit MIDI assignment..." — as are Detect
+mode, Add controller, Templates, import/export and the encoder Auto-detect (FRO134); the
+control-first "Assign from the panel" popover, orphan Re-link/Recreate and the Inspector's Relearn
+are still design-only.
 This doc, and [`midi-remote-ui.md`](midi-remote-ui.md), describe the feature as designed; where
 current behaviour differs from the design, the surrounding text says so explicitly.
 
@@ -481,7 +482,7 @@ without an assignment.
 - **Profiles** are JSON files, one per controller, under the settings folder:
   `<settings>/MidiRemote/Controllers/<profileId>.json` (`branding::kSettingsFolderName`, the
   same folder as the `PropertiesFile`, but *not inside* it — a profile is a shareable document).
-  Export / import is a file copy with a name check. Generic templates ship as resources.
+  Export / import is a file copy with a name check. Generic templates ship as resources (`assets/midi-remote-templates/*.json`, embedded via the `Assets` library).
 - **Project assignments** are the reserved top-level key **`"midiRemote"`** in `project.json`,
   written by `ProjectBundle` **last**, exactly like `"timeline"` and `"macros"`: detached before
   validation and reattached after; **refused on the untrusted path** by

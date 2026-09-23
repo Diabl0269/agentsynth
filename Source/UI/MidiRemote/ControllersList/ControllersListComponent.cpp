@@ -176,7 +176,14 @@ void beginRename(ControllersListComponent& self, const juce::String& profileId, 
 
 } // namespace
 
-ControllersListComponent::ControllersListComponent() = default;
+ControllersListComponent::ControllersListComponent() {
+    addControllerButton_.setComponentID("addControllerButton");
+    addControllerButton_.onClick = [this] {
+        if (onAddControllerRequested)
+            onAddControllerRequested(addControllerButton_);
+    };
+    addAndMakeVisible(addControllerButton_);
+}
 ControllersListComponent::~ControllersListComponent() = default;
 
 void ControllersListComponent::setRows(const std::vector<RowModel>& rows) {
@@ -238,11 +245,13 @@ void ControllersListComponent::paint(juce::Graphics& g) {
     }
 }
 
+// Rows are painted directly from rows_ in paint() and boundsForRow()/rowIndexAt() derive their
+// geometry on demand, so the only child to lay out is the FRO134 "+ Add controller" footer.
 void ControllersListComponent::resized() {
-    // No child components -- every row is painted directly from rows_ in paint(), and
-    // boundsForRow()/rowIndexAt() derive row geometry from getWidth()/kRowHeight on demand, so a
-    // resize needs no layout pass of its own here.
+    addControllerButton_.setBounds(getLocalBounds().removeFromBottom(kFooterHeight).reduced(8, 4));
 }
+
+void ControllersListComponent::setAddControllerVisible(bool visible) { addControllerButton_.setVisible(visible); }
 
 void ControllersListComponent::showContextMenuForRow(int rowIndex) {
     if (rowIndex < 0 || rowIndex >= static_cast<int>(rows_.size()))

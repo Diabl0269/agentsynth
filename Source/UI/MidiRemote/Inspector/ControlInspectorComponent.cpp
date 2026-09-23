@@ -85,9 +85,25 @@ juce::String encodingDisplayName(synth::Encoding encoding) {
 }
 
 // ComboBox ids are 1-based (0 means "nothing selected" in JUCE), in the enum's own declaration
-// order -- encodingCombo_ never lets the user pick one (disabled/read-only, task 7), so this only
-// needs to round-trip Encoding -> id for display.
+// order.
 int encodingToComboId(synth::Encoding encoding) { return static_cast<int>(encoding) + 1; }
+synth::Encoding comboIdToEncoding(int id) { return static_cast<synth::Encoding>(juce::jmax(1, id) - 1); }
+
+// Same 1-based, declaration-order ids for the kind picker (FRO134 / FRO264).
+int kindToComboId(synth::ControlKind kind) { return static_cast<int>(kind) + 1; }
+synth::ControlKind comboIdToKind(int id) { return static_cast<synth::ControlKind>(juce::jmax(1, id) - 1); }
+
+void populateKindCombo(juce::ComboBox& combo) {
+    for (auto kind : {synth::ControlKind::knob, synth::ControlKind::fader, synth::ControlKind::button,
+                      synth::ControlKind::pad, synth::ControlKind::encoder, synth::ControlKind::wheel})
+        combo.addItem(controlKindDisplayName(kind), kindToComboId(kind));
+}
+
+// Only a continuous CC control can be an encoder whose encoding is worth detecting.
+bool canAutoDetectEncoding(const synth::Control& control) {
+    return control.message.type == synth::MessageType::cc &&
+           (control.kind == synth::ControlKind::knob || control.kind == synth::ControlKind::encoder);
+}
 
 // -- Takeover combo (docs/control/midi-remote.md#takeover): "Default/Jump/Pick-up/Scale" ---------
 int takeoverToComboId(synth::Takeover takeover) {
@@ -344,16 +360,35 @@ private:
 ControlInspectorComponent::ControlInspectorComponent() {
     nameLabel_.setComponentID("controlNameLabel");
     nameLabel_.setFont(juce::Font(juce::FontOptions(16.0f, juce::Font::bold)));
+    nameLabel_.setEditable(false, true, false); // FRO134: double-click to rename
+    nameLabel_.onTextChange = [this] {
+        const auto trimmed = nameLabel_.getText().trim();
+        if (!model_.hasControl || trimmed.isEmpty() || trimmed == model_.control.name) {
+            nameLabel_.setText(model_.control.name, juce::dontSendNotification); // revert an empty/no-op edit
+            return;
+        }
+        model_.control.name = trimmed;
+        fireControlEdited();
+    };
     addAndMakeVisible(nameLabel_);
 
-    kindLabel_.setComponentID("controlKindLabel");
-    addAndMakeVisible(kindLabel_);
+    populateKindCombo(kindCombo_);
+    kindCombo_.setComponentID("controlKindCombo");
+    kindCombo_.onChange = [this] {
+        if (!model_.hasControl)
+            return;
+        const auto kind = comboIdToKind(kindCombo_.getSelectedId());
+        if (kind == model_.control.kind)
+            return;
+        model_.control.kind = kind;
+        fireControlEdited();
+    };
+    addAndMakeVisible(kindCombo_);
 
     messageSpecLabel_.setComponentID("controlMessageSpecLabel");
     addAndMakeVisible(messageSpecLabel_);
 
-    // Relearn / Auto-detect / the encoding combo are rendered but INERT in this ticket's scope --
-    // the shared re-detect engine primitive is task 7 (see the header's own comment).
+    // Relearn stays rendered but INERT (see the header's own comment).
     relearnButton_.setComponentID("relearnButton");
     relearnButton_.setEnabled(false);
     relearnButton_.setTooltip("Coming in a later update");
@@ -361,13 +396,23 @@ ControlInspectorComponent::ControlInspectorComponent() {
 
     populateEncodingCombo(encodingCombo_);
     encodingCombo_.setComponentID("encodingCombo");
-    encodingCombo_.setEnabled(false);
-    encodingCombo_.setTooltip("Coming in a later update");
+    encodingCombo_.onChange = [this] {
+        if (!model_.hasControl)
+            return;
+        const auto encoding = comboIdToEncoding(encodingCombo_.getSelectedId());
+        if (encoding == model_.control.encoding)
+            return;
+        model_.control.encoding = encoding;
+        fireControlEdited();
+    };
     addAndMakeVisible(encodingCombo_);
 
     autoDetectButton_.setComponentID("autoDetectButton");
-    autoDetectButton_.setEnabled(false);
-    autoDetectButton_.setTooltip("Coming in a later update");
+    autoDetectButton_.setTooltip("Turn the control left, then right, to detect how it encodes");
+    autoDetectButton_.onClick = [this] {
+        if (model_.hasControl && onAutoDetectRequested)
+            onAutoDetectRequested(model_.control);
+    };
     addAndMakeVisible(autoDetectButton_);
 
     buttonModeLabel_.setComponentID("buttonModeLabel");
@@ -380,12 +425,13 @@ ControlInspectorComponent::~ControlInspectorComponent() = default;
 
 void ControlInspectorComponent::setControl(const ControlModel& model) {
     model_ = model;
+    nameLabel_.setEditable(false, model_.hasControl, false);
     rebuildRows();
 
     if (!model_.hasControl) {
         nameLabel_.setText("No control selected", juce::dontSendNotification);
         nameLabel_.setVisible(true);
-        kindLabel_.setVisible(false);
+        kindCombo_.setVisible(false);
         messageSpecLabel_.setVisible(false);
         relearnButton_.setVisible(false);
         encodingCombo_.setVisible(false);
@@ -399,8 +445,8 @@ void ControlInspectorComponent::setControl(const ControlModel& model) {
     nameLabel_.setText(model_.control.name, juce::dontSendNotification);
     nameLabel_.setVisible(true);
 
-    kindLabel_.setText(controlKindDisplayName(model_.control.kind), juce::dontSendNotification);
-    kindLabel_.setVisible(true);
+    kindCombo_.setSelectedId(kindToComboId(model_.control.kind), juce::dontSendNotification);
+    kindCombo_.setVisible(true);
 
     messageSpecLabel_.setText(formatMessageSpec(model_.control.message), juce::dontSendNotification);
     messageSpecLabel_.setVisible(true);
@@ -411,6 +457,7 @@ void ControlInspectorComponent::setControl(const ControlModel& model) {
     encodingCombo_.setVisible(true);
 
     autoDetectButton_.setVisible(true);
+    autoDetectButton_.setEnabled(canAutoDetectEncoding(model_.control));
 
     buttonModeLabel_.setText(model_.control.buttonMode == synth::ButtonMode::toggle ? "Toggle" : "Momentary",
                              juce::dontSendNotification);
@@ -418,6 +465,11 @@ void ControlInspectorComponent::setControl(const ControlModel& model) {
 
     resized();
     repaint();
+}
+
+void ControlInspectorComponent::fireControlEdited() {
+    if (onControlEdited)
+        onControlEdited(model_.control);
 }
 
 void ControlInspectorComponent::rebuildRows() {
@@ -451,7 +503,7 @@ void ControlInspectorComponent::resized() {
     if (!model_.hasControl)
         return;
 
-    kindLabel_.setBounds(bounds.removeFromTop(kHeaderLineHeight));
+    kindCombo_.setBounds(bounds.removeFromTop(kHeaderRowHeight).removeFromLeft(180));
     messageSpecLabel_.setBounds(bounds.removeFromTop(kHeaderLineHeight));
 
     auto relearnRow = bounds.removeFromTop(kHeaderRowHeight);

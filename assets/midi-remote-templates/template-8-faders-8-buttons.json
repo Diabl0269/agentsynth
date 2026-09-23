@@ -1,0 +1,269 @@
+{
+  "version": 1,
+  "id": "template-8-faders-8-buttons",
+  "name": "8 faders + 8 buttons",
+  "input": {
+    "identifier": "",
+    "name": ""
+  },
+  "passMapped": false,
+  "controls": [
+    {
+      "id": "f1",
+      "name": "Fader 1",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 41
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 0
+      }
+    },
+    {
+      "id": "f2",
+      "name": "Fader 2",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 42
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 0
+      }
+    },
+    {
+      "id": "f3",
+      "name": "Fader 3",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 43
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 2,
+        "row": 0
+      }
+    },
+    {
+      "id": "f4",
+      "name": "Fader 4",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 44
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 3,
+        "row": 0
+      }
+    },
+    {
+      "id": "f5",
+      "name": "Fader 5",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 45
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 4,
+        "row": 0
+      }
+    },
+    {
+      "id": "f6",
+      "name": "Fader 6",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 46
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 5,
+        "row": 0
+      }
+    },
+    {
+      "id": "f7",
+      "name": "Fader 7",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 47
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 6,
+        "row": 0
+      }
+    },
+    {
+      "id": "f8",
+      "name": "Fader 8",
+      "kind": "fader",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 48
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 7,
+        "row": 0
+      }
+    },
+    {
+      "id": "b1",
+      "name": "Button 1",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 51
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 1
+      }
+    },
+    {
+      "id": "b2",
+      "name": "Button 2",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 52
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 1
+      }
+    },
+    {
+      "id": "b3",
+      "name": "Button 3",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 53
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 2,
+        "row": 1
+      }
+    },
+    {
+      "id": "b4",
+      "name": "Button 4",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 54
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 3,
+        "row": 1
+      }
+    },
+    {
+      "id": "b5",
+      "name": "Button 5",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 55
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 4,
+        "row": 1
+      }
+    },
+    {
+      "id": "b6",
+      "name": "Button 6",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 56
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 5,
+        "row": 1
+      }
+    },
+    {
+      "id": "b7",
+      "name": "Button 7",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 57
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 6,
+        "row": 1
+      }
+    },
+    {
+      "id": "b8",
+      "name": "Button 8",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 58
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 7,
+        "row": 1
+      }
+    }
+  ],
+  "actions": []
+}

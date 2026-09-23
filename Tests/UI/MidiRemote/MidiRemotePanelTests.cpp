@@ -8,6 +8,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "MainComponent/MainComponent.h"
 #include "MidiRemote/MidiLearnController.h"
+#include "MidiRemotePanelTestFixture.h"
 #include "Modules/FilterModule.h"
 #include "UI/Chrome/StatusBarComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -110,55 +111,6 @@ TEST(MidiRemotePanelComponentTests, SwitchingDockToMidiRemoteTabShowsThePanelAnd
 // wired directly, same ingredients as MidiLearnControllerTests.cpp) rather than a full MainComponent,
 // since only this one seam -- not the whole app -- is under test. The onChanged wiring itself is
 // reproduced here exactly as MainComponent::wireMidiRemoteEngine() does it.
-
-namespace {
-
-class MidiRemotePanelLiveRefreshTest : public ::testing::Test {
-protected:
-    void SetUp() override {
-        root_ = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                    .getChildFile("agentsynth-midiremotepanel-liverefresh-tests-" + juce::Uuid().toString());
-        root_.deleteRecursively();
-
-        engine_ = std::make_unique<AudioEngine>(AudioEngine::HostMode::Hosted);
-        graphEditor_ = std::make_unique<GraphEditor>(*engine_);
-        controller_ = std::make_unique<synth::midi::MidiLearnController>(
-            *engine_, *graphEditor_, remoteEngine_, doc_, undo_, statusBar_, synth::ControllerProfileStore(root_));
-        remoteEngine_.setClock([this] { return fakeNowMs_; });
-
-        node_ = engine_->getGraph().addNode(std::make_unique<FilterModule>());
-        graphEditor_->updateComponents();
-
-        panel_.configure(*engine_, remoteEngine_, *controller_, doc_, *graphEditor_);
-        // The wiring MainComponent::wireMidiRemoteEngine() sets up between the two, reproduced
-        // directly since this test has no MainComponent of its own.
-        controller_->onChanged = [this] { panel_.scheduleLiveRefresh(); };
-    }
-
-    void TearDown() override { root_.deleteRecursively(); }
-
-    void send(const juce::MidiMessage& message) { remoteEngine_.handleMessage(synth::midi::hostSourceKey(), message); }
-    void settle() {
-        remoteEngine_.drain();
-        fakeNowMs_ += 600.0; // past RemoteEngine's learn settle window, mirrors MidiLearnControllerTests.cpp
-        remoteEngine_.drain();
-    }
-    void pump() { juce::MessageManager::getInstance()->runDispatchLoopUntil(20); }
-
-    juce::File root_;
-    double fakeNowMs_ = 0.0;
-    synth::midi::RemoteEngine remoteEngine_;
-    synth::MidiRemoteProjectDoc doc_;
-    AppUndoManager undo_;
-    StatusBarComponent statusBar_;
-    std::unique_ptr<AudioEngine> engine_;
-    std::unique_ptr<GraphEditor> graphEditor_;
-    std::unique_ptr<synth::midi::MidiLearnController> controller_;
-    juce::AudioProcessorGraph::Node::Ptr node_;
-    synth::ui::MidiRemotePanelComponent panel_;
-};
-
-} // namespace
 
 TEST_F(MidiRemotePanelLiveRefreshTest, LearnDoneWhileThePanelIsOpenAppearsWithoutATabSwitch) {
     ASSERT_EQ(panel_.getControllersListRowCountForTest(), 0);
