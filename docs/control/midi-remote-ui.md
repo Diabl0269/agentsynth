@@ -6,8 +6,14 @@ MIDI Remote panel looks like and how each flow in it works, the settings, the pl
 behaviour and the tests. Module-card MIDI Learn (the "Generic module card"/"Bespoke cards"/"Header
 buttons" rows below) shipped in FRO130; the mixer column, Master's fader and the transport bar
 (FRO133) ship here too, and the mixer column's Solo (FRO253, a [node command target](midi-remote.md#node-command-targets)
-rather than a parameter) ships here as well. The MIDI Remote panel, the hosted-plugin row, and
-"Edit MIDI assignment..." (FRO131) are still design-only/not yet learnable.
+rather than a parameter) ships here as well. The MIDI Remote panel itself
+(FRO131) shipped: the dock tab, Controllers list, Surface and Inspector (including Solo's own
+Surface cell / Inspector row, resolved by node command rather than parameter), and
+`GraphEditor::onEditMidiAssignmentRequested`. Still design-only/not yet built: Detect mode, the
+"+ Add controller" popover, Templates and the Surface toolbar's Import/Export (a per-profile
+right-click Export… is shipped; the Templates/Import flow is not), the "Assign from the panel"
+control-first-learn popover and its pick-target overlay, and orphan Re-link/Recreate — all
+listed with their own sections below and left for follow-up tickets.
 
 ---
 
@@ -28,7 +34,7 @@ Learn from there binds the right parameter (or, for the mixer column's Solo, a [
 | Header buttons | Bypass, Mute, Dual I/O | same registry, via `RightClickSafeButton<juce::DrawableButton>` | **shipped**: right-click Bypass → Learn → pad toggles bypass |
 | Hosted plugin card | the chosen knobs (`plugin-card-layout.md`) | the card unit registers each knob with the hosted parameter's `(uuid, paramId, indexHint)` triple | Learn on a plugin knob binds through `resolveLaneParameter`'s hosted rules |
 | Mixer column | fader (`MixerFader`), pan, Mute, each send level (`MixerSendList`) | one `mouseDown` in `MixerColumnComponent` over its bound params (they are `ChannelStripModule` params, so ordinary parameter targets); `MixerSendList::onSendKnobBuilt` hands send-row knobs back for the SAME registry | **shipped**: right-click a fader → Learn → CC drives the strip's level |
-| Mixer column | Solo | `MixerColumnComponent`'s registry gets an `isSolo` entry (no parameter — `ChannelStripModule::soloed_` is engine state, [`Source/Modules/ChannelStripModule.h`](../../Source/Modules/ChannelStripModule.h)); its menu/badge/armed outline route through `MixerPanelComponent::onSoloMidiLearnRequested`/`onSoloMidiForgetRequested`/`onQuerySoloMidiMapping` to `MidiLearnController::armNodeCommand`/`forgetNodeCommand`/`queryNodeCommandMappings` rather than `GraphEditor`'s parameter-keyed callbacks | **shipped**: right-click S → MIDI Learn 'Solo'... → press a pad/button → it toggles solo (one undo step per press); Forget MIDI clears it |
+| Mixer column | Solo | `MixerColumnComponent`'s registry gets an `isSolo` entry (no parameter — `ChannelStripModule::soloed_` is engine state, [`Source/Modules/ChannelStripModule.h`](../../Source/Modules/ChannelStripModule.h)); its menu/badge/armed outline route through `MixerPanelComponent::onSoloMidiLearnRequested`/`onSoloMidiForgetRequested`/`onQuerySoloMidiMapping` to `MidiLearnController::armNodeCommand`/`forgetNodeCommand`/`queryNodeCommandMappings` rather than `GraphEditor`'s parameter-keyed callbacks | **shipped**: right-click S → MIDI Learn 'Solo'... → press a pad/button → it toggles solo (one undo step per press); Forget MIDI clears it. The MIDI Remote panel's Surface cell and Inspector row resolve it too (FRO131, "ModuleName · Solo") |
 | Master column | master level (fader only — Master has no pan/insert list, and no Mute learn in v1 either, just the fader) | `MixerMasterColumn` registers its own fader the same way, via a `GraphEditor&` threaded through `configure()` | **shipped**: right-click Master's fader → Learn → CC drives Master's level |
 | Direct column | none | `MixerDirectColumn` has no fader/pan/M-S of its own (just "Make channel") — nothing to register | — not applicable, not a gap |
 | Transport bar | Play/Stop, Record, Loop, Metronome (`TimelineTransportBar::GlyphButton`) | right-click shows Learn with an **action** target ([`midi-remote.md`](midi-remote.md#action-targets)); `GlyphButton` is right-click-safe the same way Mute/Bypass are, and `MidiLearnController::armAction()`/`forgetAction()` write the assignment into the learned device's `ControllerProfile.actions` (global, not the project doc — [`midi-remote.md`](midi-remote.md#undo)) | **shipped**: right-click Play → Learn → pad toggles playback; badge shows on the button |
@@ -58,8 +64,9 @@ MIDI: Knob 1 on Launchkey Mini       ← mapped: disabled title row, tells you w
    Forget MIDI                       ← removes it (undoable)
 ```
 
-"Edit MIDI assignment..." is omitted until the MIDI Remote panel exists to open (FRO131) — there is
-no dead menu item in the shipped module-card menu today.
+"Edit MIDI assignment..." shipped in FRO131: `GraphEditor::onEditMidiAssignmentRequested` (and the
+mixer column/master/transport-bar equivalents) open the MIDI Remote panel's dock tab with the
+assignment's control already selected.
 
 **States while learning (target-first learn):**
 
@@ -104,8 +111,9 @@ Toolbar toggle + `ShortcutManager` action `toggleMidiRemotePanel` (category Gene
 unbound). Files: `Source/UI/MidiRemote/MidiRemotePanel/` (`MidiRemotePanelComponent` + one unit
 per region below), `Source/UI/MidiRemote/ControllerSurface/`, `Source/UI/MidiRemote/Inspector/`.
 The panel opens attached in the dock by default; detach-to-window is available but is not the
-default. A known dock bug — opening the Mixer tab can leave the dock blank — is
-tracked separately and must be fixed before this third tab lands.
+default. FRO158 (still open, unrelated to this ticket) tracks a separate, unreproduced report that
+opening the Mixer tab can leave the dock blank; FRO131 does not depend on it and did not attempt
+to reproduce or fix it.
 
 ```text
 ┌ Controllers ──────┬ Surface: Launchkey Mini MK3 ───────────────────────┬ Inspector ─────────────┐
@@ -170,7 +178,7 @@ two choices:
   cancels. This is the only overlay-style mode in the
   feature, and it is entered from the panel, never as a global key.
 - **Choose an action** — a searchable list grouped by `ShortcutCategory` using the Shortcuts
-  tab's display names (`ShortcutManager::getDisplayName`), command-dispatched actions only.
+  tab's display names (`ShortcutManager::getActionDescription`), command-dispatched actions only.
 
 ### Detect mode
 

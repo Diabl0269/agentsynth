@@ -215,36 +215,42 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
         ControllerSurfaceComponent::CellModel cell;
         cell.control = control;
 
-        // FRO253's Target::Kind::nodeCommand (Solo mapping) can also live in doc_->assignments --
-        // no in-app path creates one yet (MixerPanelComponent::onSoloMidiLearnRequested is declared
-        // but never assigned to MidiLearnController), but RemoteModelJson deserializes one from a
-        // project file and RemoteEngine plays it back, so it's a real case, not a hypothetical one.
-        // Only a parameter target has the .target.parameter fields this cell label reads.
-        auto paramIt =
+        // FRO253's Target::Kind::nodeCommand (Solo mapping) can also live in doc_->assignments,
+        // alongside parameter targets -- find whichever one this control has, if any, then branch
+        // on .target.kind to read the right union member.
+        auto projectIt =
             std::find_if(doc_->assignments.begin(), doc_->assignments.end(), [&](const synth::Assignment& a) {
-                return a.control.profileId == profile->id && a.control.controlId == control.id &&
-                       a.target.isParameter();
+                return a.control.profileId == profile->id && a.control.controlId == control.id;
             });
         auto actionIt = std::find_if(profile->actions.begin(), profile->actions.end(),
                                      [&](const synth::Assignment& a) { return a.control.controlId == control.id; });
 
-        if (paramIt != doc_->assignments.end()) {
+        if (projectIt != doc_->assignments.end() && projectIt->target.isParameter()) {
             cell.isMapped = true;
-            const juce::String moduleName = resolveModuleName(*audioEngine_, paramIt->target.parameter.nodeUuid);
+            const juce::String moduleName = resolveModuleName(*audioEngine_, projectIt->target.parameter.nodeUuid);
             if (moduleName.isEmpty()) {
                 cell.assignmentLabel = "(missing module)";
                 cell.isWarning = true;
             } else {
-                auto* processor = resolveProcessor(*audioEngine_, paramIt->target.parameter.nodeUuid);
+                auto* processor = resolveProcessor(*audioEngine_, projectIt->target.parameter.nodeUuid);
                 juce::String paramName;
                 if (processor != nullptr) {
-                    auto resolution = synth::resolveLaneParameter(processor, paramIt->target.parameter.paramId,
-                                                                  paramIt->target.parameter.paramIndexHint);
+                    auto resolution = synth::resolveLaneParameter(processor, projectIt->target.parameter.paramId,
+                                                                  projectIt->target.parameter.paramIndexHint);
                     if (resolution.resolved())
                         paramName = resolution.liveParameter()->getName(64);
                 }
                 cell.assignmentLabel = moduleName + juce::String::fromUTF8(" \xc2\xb7 ") +
-                                       (paramName.isEmpty() ? paramIt->specControlName : paramName);
+                                       (paramName.isEmpty() ? projectIt->specControlName : paramName);
+            }
+        } else if (projectIt != doc_->assignments.end() && projectIt->target.isNodeCommand()) {
+            cell.isMapped = true;
+            const juce::String moduleName = resolveModuleName(*audioEngine_, projectIt->target.nodeCommand.nodeUuid);
+            if (moduleName.isEmpty()) {
+                cell.assignmentLabel = "(missing module)";
+                cell.isWarning = true;
+            } else {
+                cell.assignmentLabel = moduleName + juce::String::fromUTF8(" \xc2\xb7 Solo");
             }
         } else if (actionIt != profile->actions.end()) {
             cell.isMapped = true;
@@ -280,21 +286,29 @@ void MidiRemotePanelComponent::refreshInspectorForSelection() {
         for (const auto& a : doc_->assignments) {
             if (a.control.profileId != profile->id || a.control.controlId != selectedControlId_)
                 continue;
-            // A nodeCommand-target assignment (FRO253's Solo mapping, loadable from a project file
-            // even though no in-app Learn path creates one yet) can share this list with parameter
-            // targets, and this row's label reads .target.parameter -- skip rather than misread the
-            // union until Solo gets its own inspector row (MidiLearnController::armNodeCommand).
-            if (!a.target.isParameter())
-                continue;
+            // FRO253's Target::Kind::nodeCommand (Solo mapping) shares this list with parameter
+            // targets -- read the right union member for whichever kind this row actually is.
             ControlInspectorComponent::AssignmentRowModel row;
             row.assignment = a;
             row.scopeLabel = "Project";
-            row.nodeUuid = a.target.parameter.nodeUuid;
-            const juce::String moduleName =
-                audioEngine_ != nullptr ? resolveModuleName(*audioEngine_, row.nodeUuid) : "";
-            row.isOrphaned = moduleName.isEmpty();
-            row.drivesLabel = row.isOrphaned ? "(missing module)"
-                                             : moduleName + juce::String::fromUTF8(" \xc2\xb7 ") + a.specControlName;
+            if (a.target.isParameter()) {
+                row.nodeUuid = a.target.parameter.nodeUuid;
+                const juce::String moduleName =
+                    audioEngine_ != nullptr ? resolveModuleName(*audioEngine_, row.nodeUuid) : "";
+                row.isOrphaned = moduleName.isEmpty();
+                row.drivesLabel = row.isOrphaned
+                                      ? "(missing module)"
+                                      : moduleName + juce::String::fromUTF8(" \xc2\xb7 ") + a.specControlName;
+            } else if (a.target.isNodeCommand()) {
+                row.nodeUuid = a.target.nodeCommand.nodeUuid;
+                const juce::String moduleName =
+                    audioEngine_ != nullptr ? resolveModuleName(*audioEngine_, row.nodeUuid) : "";
+                row.isOrphaned = moduleName.isEmpty();
+                row.drivesLabel =
+                    row.isOrphaned ? "(missing module)" : moduleName + juce::String::fromUTF8(" \xc2\xb7 Solo");
+            } else {
+                continue; // not reachable today (doc_->assignments never holds an action target)
+            }
             model.assignments.push_back(row);
         }
     }
@@ -400,15 +414,20 @@ void MidiRemotePanelComponent::handleForgetRequested(const juce::String& assignm
         auto it = std::find_if(doc_->assignments.begin(), doc_->assignments.end(),
                                [&](const auto& a) { return a.id == assignmentId; });
         if (it != doc_->assignments.end()) {
-            // A nodeCommand-target entry (FRO253's Solo mapping) has no forget path yet either
-            // (no MidiLearnController::forgetNodeCommand) -- guard the union read rather than
-            // assume every project assignment is a parameter target.
-            if (it->target.isParameter() && audioEngine_ != nullptr) {
+            // FRO253's Target::Kind::nodeCommand (Solo mapping) shares this list with parameter
+            // targets -- forget() resolves the former by (nodeId, paramId), forgetNodeCommand() the
+            // latter by (nodeId, NodeCommandKind); guard the union read and call whichever matches.
+            if (audioEngine_ != nullptr) {
+                const juce::String targetUuid =
+                    it->target.isParameter() ? it->target.parameter.nodeUuid : it->target.nodeCommand.nodeUuid;
                 for (auto* node : audioEngine_->getGraph().getNodes()) {
-                    if (node->properties["uuid"].toString() == it->target.parameter.nodeUuid) {
+                    if (node->properties["uuid"].toString() != targetUuid)
+                        continue;
+                    if (it->target.isParameter())
                         learnController_->forget(node->nodeID, it->target.parameter.paramId);
-                        break;
-                    }
+                    else if (it->target.isNodeCommand())
+                        learnController_->forgetNodeCommand(node->nodeID, it->target.nodeCommand.command);
+                    break;
                 }
             }
             refreshSurfaceForSelectedProfile();

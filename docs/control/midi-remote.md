@@ -7,10 +7,14 @@ controller surface, the settings) lives in [`midi-remote-ui.md`](midi-remote-ui.
 feature that lets a hosted plugin card show a chosen set of its parameters as knobs — the knobs
 MIDI Remote then maps like any other — is [`plugin-card-layout.md`](plugin-card-layout.md).
 
-**Status:** the model, persistence and `RemoteEngine` are built and wired into `AudioEngine`, but
-nothing in the shipped UI can create an assignment yet — MIDI Learn on the module card is not
-wired up. This doc, and [`midi-remote-ui.md`](midi-remote-ui.md), describe the feature as designed;
-where current behaviour differs from the design, the surrounding text says so explicitly.
+**Status:** the model, persistence and `RemoteEngine` are built and wired into `AudioEngine`.
+Right-click MIDI Learn is shipped and creates real assignments on every covered surface, including
+the mixer column's Solo (FRO253's `nodeCommand` target). The MIDI Remote panel (FRO131) is shipped
+— dock tab, Controllers list, Surface, Inspector, and "Edit MIDI assignment..." — except Detect
+mode, Add controller, Templates/import-export, the control-first "Assign from the panel" popover
+and orphan Re-link/Recreate, all still design-only.
+This doc, and [`midi-remote-ui.md`](midi-remote-ui.md), describe the feature as designed; where
+current behaviour differs from the design, the surrounding text says so explicitly.
 
 ---
 
