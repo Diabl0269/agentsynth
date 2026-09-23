@@ -199,3 +199,64 @@ TEST_F(MidiRemotePanelLiveRefreshTest, ForgetThenUndoIsReflectedWithoutATabSwitc
         << "the panel re-pulled its Surface/Inspector state after the live-refresh pump, matching doc_ again -- "
            "before FRO263 this stayed stale until a tab switch";
 }
+
+// FRO262 (follow-up): a MIDI device that opens WHILE the panel is already showing must not stay
+// greyed until a tab switch -- MainComponent::wireMidiRemoteEngine() now reaches
+// scheduleLiveRefresh() from AudioEngine::onMidiDevicesChanged too, not just from
+// MidiLearnController::onChanged (that path is FRO263's own, covered above). This test
+// deliberately leaves controller_->onChanged UNWIRED so a pass here proves the NEW
+// onMidiDevicesChanged -> scheduleLiveRefresh() seam alone is sufficient, not a side effect of the
+// onChanged wiring already covered by LearnDoneWhileThePanelIsOpenAppearsWithoutATabSwitch above.
+TEST_F(MidiRemotePanelLiveRefreshTest, DeviceOpenedWhilePanelIsOpenAppearsWithoutATabSwitch) {
+    controller_->onChanged = nullptr; // isolate: only onMidiDevicesChanged wired below for this test
+
+    // Create a profile/assignment the ordinary way (arm+learn), same as the sibling test, but
+    // since onChanged is unwired the panel must NOT have picked it up yet -- exactly the FRO262
+    // repro shape: a device/mapping becomes real while the panel tab is already active.
+    controller_->arm(node_->nodeID, "cutoff");
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+    ASSERT_EQ(doc_.assignments.size(), 1u) << "the learn itself landed";
+    ASSERT_EQ(panel_.getControllersListRowCountForTest(), 0)
+        << "onChanged is deliberately unwired here -- nothing should have refreshed the panel yet";
+
+    // Reproduces AudioEngineDeviceLifecycle.cpp's call site: reconcileMidiInputs() found a change
+    // and fired onMidiDevicesChanged, wired here exactly as MainComponent::wireMidiRemoteEngine()
+    // wires it (refreshSources() + scheduleLiveRefresh()).
+    engine_->onMidiDevicesChanged = [this] { panel_.scheduleLiveRefresh(); };
+    engine_->onMidiDevicesChanged();
+    EXPECT_EQ(panel_.getControllersListRowCountForTest(), 0)
+        << "not yet -- scheduleLiveRefresh() defers via callAsync, same as every other caller of it";
+
+    pump();
+    EXPECT_EQ(panel_.getControllersListRowCountForTest(), 1)
+        << "the deferred rebuild ran off the onMidiDevicesChanged path alone and picked up the profile -- "
+           "before this fix the panel stayed stale here until a tab switch";
+}
+
+// FRO262 (bug 3): the Surface's cell for an already-mapped, already-touched control must seed its
+// widget from the target's REAL current value, not always show the minimum (0). Uses the same
+// arm/send/settle learn flow as the sibling tests above, but sets the FilterModule's "cutoff"
+// parameter to a known non-default value BEFORE resolving the surface, so a pass here can only mean
+// refreshSurfaceForSelectedProfile() actually read the live parameter rather than coincidentally
+// landing on a default.
+TEST_F(MidiRemotePanelLiveRefreshTest, MappedParameterCellSeedsWidgetFromItsCurrentValue) {
+    controller_->arm(node_->nodeID, "cutoff");
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+    ASSERT_EQ(doc_.assignments.size(), 1u) << "the learn itself landed";
+
+    auto* cutoff = findParameterByID(node_->getProcessor(), "cutoff");
+    ASSERT_NE(cutoff, nullptr);
+    cutoff->setValueNotifyingHost(0.35f);
+    const float expected = cutoff->getValue(); // read back in case the parameter snaps/quantises
+
+    const juce::String nodeUuid = node_->properties["uuid"].toString();
+    ASSERT_FALSE(nodeUuid.isEmpty());
+    ASSERT_TRUE(panel_.selectAssignmentForParameter(nodeUuid, "cutoff"))
+        << "selects the profile/control and calls refreshSurfaceForSelectedProfile()";
+
+    const juce::String controlId = doc_.assignments.front().control.controlId;
+    EXPECT_NEAR(panel_.getSurfaceCellValueForTest(controlId), expected, 1.0e-3)
+        << "before this fix the cell always started at 0.0f regardless of the parameter's real value";
+}

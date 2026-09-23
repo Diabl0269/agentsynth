@@ -8,6 +8,7 @@
 #include "MidiRemote/MidiLearnController.h"
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
 #include "MidiRemote/RemoteEngine/RemoteMessageSink.h"
+#include "Modules/ChannelStripModule.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "Timeline/AutomationBinding.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
@@ -250,8 +251,29 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
                 if (processor != nullptr) {
                     auto resolution = synth::resolveLaneParameter(processor, projectIt->target.parameter.paramId,
                                                                   projectIt->target.parameter.paramIndexHint);
-                    if (resolution.resolved())
+                    if (resolution.resolved()) {
                         paramName = resolution.liveParameter()->getName(64);
+                        const float paramValue = resolution.liveParameter()->getValue();
+                        if (projectIt->specEncoding == synth::Encoding::abs7) {
+                            // FRO262: Surface widgets show hardware position, not parameter position --
+                            // activity events are raw 0..1 (RemoteEngineDecode.cpp's pushActivityOnly),
+                            // only ever range-mapped on write (RemoteEngineInternal.h's mapThroughRange,
+                            // applied in RemoteEngineApply.cpp). Invert that same [rangeMin,rangeMax] map
+                            // to recover the hardware position this parameter's current value implies.
+                            const double rangeMin = projectIt->range.min;
+                            const double rangeMax = projectIt->range.max;
+                            cell.initialValue =
+                                !juce::approximatelyEqual(rangeMin, rangeMax)
+                                    ? juce::jlimit(0.0f, 1.0f,
+                                                   static_cast<float>((paramValue - rangeMin) / (rangeMax - rangeMin)))
+                                    : 0.0f;
+                        } else {
+                            // Relative encodings never range-map (RemoteEngineApply.cpp adds event.value
+                            // straight onto param->getValue()) -- the parameter's own value IS the
+                            // position noteActivity() would reach.
+                            cell.initialValue = paramValue;
+                        }
+                    }
                 }
                 cell.assignmentLabel = moduleName + juce::String::fromUTF8(" \xc2\xb7 ") +
                                        (paramName.isEmpty() ? projectIt->specControlName : paramName);
@@ -264,6 +286,12 @@ void MidiRemotePanelComponent::refreshSurfaceForSelectedProfile() {
                 cell.isWarning = true;
             } else {
                 cell.assignmentLabel = moduleName + juce::String::fromUTF8(" \xc2\xb7 Solo");
+                // FRO262: nodeCommand's only target today is Solo (FRO253) -- seed the cell from the
+                // strip's actual current solo state rather than always showing "off".
+                if (auto* processor = resolveProcessor(*audioEngine_, projectIt->target.nodeCommand.nodeUuid)) {
+                    if (auto* strip = dynamic_cast<ChannelStripModule*>(processor))
+                        cell.initialValue = strip->isSoloed() ? 1.0f : 0.0f;
+                }
             }
         } else if (actionIt != profile->actions.end()) {
             cell.isMapped = true;

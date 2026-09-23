@@ -261,8 +261,11 @@ MainComponent::~MainComponent() {
     // the editor being closed and reopened.
     if (ownedAudioEngine != nullptr) {
         // Drop the device-state callback first — it captures `this`, and shutdown() is the
-        // call that unsubscribes the engine from its device manager.
+        // call that unsubscribes the engine from its device manager. onMidiDevicesChanged
+        // (FRO262) captures `this` the same way and is reachable from the same changeListenerCallback,
+        // so it gets the same treatment.
         audioEngine.onDeviceStateChanged = nullptr;
+        audioEngine.onMidiDevicesChanged = nullptr;
         audioEngine.shutdown();
     }
 }

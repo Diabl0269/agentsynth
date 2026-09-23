@@ -51,7 +51,8 @@ void ControllerSurfaceComponent::setControls(const juce::String& profileId, cons
 
     for (const auto& cellModel : cells) {
         auto* cell = cells_.add(new ControllerSurfaceCell());
-        cell->configure(cellModel.control, cellModel.assignmentLabel, cellModel.isWarning, cellModel.isMapped);
+        cell->configure(cellModel.control, cellModel.assignmentLabel, cellModel.isWarning, cellModel.isMapped,
+                        cellModel.initialValue);
 
         const int x = kCellMargin + cellModel.control.layout.col * (kCellSize + kCellMargin);
         const int y = kCellMargin + cellModel.control.layout.row * (kCellSize + kCellMargin);
@@ -108,6 +109,13 @@ void ControllerSurfaceComponent::setSelectedControlId(const juce::String& contro
     selectedControlId_ = controlId;
     for (auto* cell : cells_)
         cell->setSelected(cell->getControlId() == controlId);
+}
+
+float ControllerSurfaceComponent::getCellValueForTest(const juce::String& controlId) const {
+    for (auto* cell : cells_)
+        if (cell->getControlId() == controlId)
+            return cell->getDisplayedValueForTest();
+    return -1.0f;
 }
 
 void ControllerSurfaceComponent::resized() {

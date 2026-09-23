@@ -33,12 +33,14 @@ Control makeControl(const juce::String& id, const juce::String& name, ControlKin
 
 ControllerSurfaceComponent::CellModel makeCellModel(const juce::String& id, const juce::String& name, ControlKind kind,
                                                     int col, int row, const juce::String& assignmentLabel = "-",
-                                                    bool isWarning = false, bool isMapped = false) {
+                                                    bool isWarning = false, bool isMapped = false,
+                                                    float initialValue = 0.0f) {
     ControllerSurfaceComponent::CellModel model;
     model.control = makeControl(id, name, kind, col, row);
     model.assignmentLabel = assignmentLabel;
     model.isWarning = isWarning;
     model.isMapped = isMapped;
+    model.initialValue = initialValue;
     return model;
 }
 
@@ -198,6 +200,55 @@ TEST(ControllerSurfaceComponentTest, NoteActivityAbsoluteSetsSliderValue) {
 
     surface.noteActivity("knob1", synth::midi::RemoteEventKind::absolute, 0.75f);
     EXPECT_NEAR(slider->getValue(), 0.75, 1.0e-6);
+}
+
+// FRO262: an already-mapped, already-touched control must show its real current value on build,
+// not always start at rest -- before this fix every cell configured at lastValue_ = 0.0f regardless
+// of CellModel::initialValue (which didn't exist).
+TEST(ControllerSurfaceComponentTest, SetControlsSeedsSliderFromCellModelInitialValue) {
+    ControllerSurfaceComponent surface;
+    surface.setSize(400, 400);
+    std::vector<ControllerSurfaceComponent::CellModel> cells = {
+        makeCellModel("knob1", "Cutoff", ControlKind::knob, 0, 0, "Filter - Cutoff", false, true, 0.65f),
+    };
+    surface.setControls("profileA", cells);
+
+    auto* knob = findCell(surface, "knob1");
+    ASSERT_NE(knob, nullptr);
+    auto* slider = findSliderChild(*knob);
+    ASSERT_NE(slider, nullptr);
+    EXPECT_NEAR(slider->getValue(), 0.65, 1.0e-6);
+
+    // Live activity still takes over from the seeded value exactly as before.
+    surface.noteActivity("knob1", synth::midi::RemoteEventKind::absolute, 0.2f);
+    EXPECT_NEAR(slider->getValue(), 0.2, 1.0e-6);
+}
+
+TEST(ControllerSurfaceComponentTest, SetControlsSeedsButtonToggleFromCellModelInitialValue) {
+    ControllerSurfaceComponent surface;
+    surface.setSize(400, 400);
+    std::vector<ControllerSurfaceComponent::CellModel> cells = {
+        makeCellModel("button1", "Solo", ControlKind::button, 0, 0, "Master . Solo", false, true, 1.0f),
+    };
+    surface.setControls("profileA", cells);
+
+    auto* button = findCell(surface, "button1");
+    ASSERT_NE(button, nullptr);
+    auto* toggleButton = findButtonChild(*button);
+    ASSERT_NE(toggleButton, nullptr);
+    EXPECT_TRUE(toggleButton->getToggleState());
+}
+
+TEST(ControllerSurfaceComponentTest, SetControlsWithNoInitialValueStartsAtRestAsBefore) {
+    ControllerSurfaceComponent surface;
+    surface.setSize(400, 400);
+    surface.setControls("profileA", fourControlModel()); // makeCellModel's default initialValue = 0.0f
+
+    auto* knob = findCell(surface, "knob1");
+    ASSERT_NE(knob, nullptr);
+    auto* slider = findSliderChild(*knob);
+    ASSERT_NE(slider, nullptr);
+    EXPECT_NEAR(slider->getValue(), 0.0, 1.0e-6);
 }
 
 TEST(ControllerSurfaceComponentTest, NoteActivityRelativeDeltaAccumulatesAndClamps) {

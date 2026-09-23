@@ -64,6 +64,14 @@ public:
      *  Controllers list, without exposing controllersList_ itself. */
     int getControllersListRowCountForTest() const { return controllersList_.getRowCountForTest(); }
 
+    /** FRO262 test seam: a mapped control's widget value as last built by
+     *  refreshSurfaceForSelectedProfile(), without exposing controllerSurface_ itself. -1.0f if
+     *  `controlId` isn't on the currently shown surface (see ControllerSurfaceComponent's own
+     *  getCellValueForTest()). */
+    float getSurfaceCellValueForTest(const juce::String& controlId) const {
+        return controllerSurface_.getCellValueForTest(controlId);
+    }
+
     /** MixerDockComponent::refreshMidiRemoteActivity() -- drains RemoteEngine::drainActivity() ONCE
      *  and fans the decoded events out to the Controllers list's activity dots and, for whichever
      *  control they match on the CURRENTLY SHOWN profile, the surface's live widget values. A

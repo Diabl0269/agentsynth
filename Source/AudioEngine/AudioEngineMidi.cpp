@@ -1,9 +1,24 @@
-// Concern: MIDI input/capture — opening named MIDI devices and dispatching incoming messages into
-// the MIDI Remote sink, ExternalMidiModule nodes, and the MIDI collector.
+// Concern: MIDI input/capture — opening named MIDI devices, reconciling the open set against the
+// Audio tab's ticked devices as it changes live, and dispatching incoming messages into the MIDI
+// Remote sink, ExternalMidiModule nodes, and the MIDI collector.
 
 #include "AudioEngine.h"
 #include "MidiRemote/RemoteEngine/RemoteMessageSink.h"
 #include "Modules/ExternalMidiModule.h"
+#include <algorithm>
+
+juce::Array<juce::MidiDeviceInfo> AudioEngine::availableMidiInputs() const {
+    return juce::MidiInput::getAvailableDevices();
+}
+
+bool AudioEngine::openMidiInput(const juce::MidiDeviceInfo& info) {
+    auto input = juce::MidiInput::openDevice(info.identifier, this);
+    if (input == nullptr)
+        return false;
+    input->start();
+    midiInputs.push_back(std::move(input));
+    return true;
+}
 
 void AudioEngine::ensureMidiDeviceOpen(const juce::String& deviceName) {
     // Hosted mode never opens hardware MIDI itself — the host owns device routing and forwards
@@ -17,13 +32,9 @@ void AudioEngine::ensureMidiDeviceOpen(const juce::String& deviceName) {
         }
     }
 
-    for (auto& info : juce::MidiInput::getAvailableDevices()) {
+    for (auto& info : availableMidiInputs()) {
         if (info.name == deviceName) {
-            auto input = juce::MidiInput::openDevice(info.identifier, this);
-            if (input != nullptr) {
-                input->start();
-                midiInputs.push_back(std::move(input));
-            }
+            openMidiInput(info);
             break;
         }
     }
@@ -32,6 +43,64 @@ void AudioEngine::ensureMidiDeviceOpen(const juce::String& deviceName) {
 void AudioEngine::openMidiDevicesForRemote(const std::vector<juce::String>& deviceNames) {
     for (const auto& name : deviceNames)
         ensureMidiDeviceOpen(name);
+}
+
+// FRO262: initialiseDevices() only ever opened the MIDI inputs available at that ONE moment (app
+// launch). A controller plugged in afterwards -- or ticked in the Audio tab once CoreMIDI/the OS
+// enumerates it, which can arrive after that launch loop has already run -- was invisible to MIDI
+// Learn/MIDI Remote and to general MIDI input alike, because nothing ever re-ran the open loop.
+// changeListenerCallback calls this on every AudioDeviceManager change broadcast (device picks,
+// sample-rate changes, AND MIDI Input ticks all share the one broadcast) to keep midiInputs in
+// step with the Audio tab's checkboxes.
+//
+// Open is additive: anything ticked that isn't open yet. Close is deliberately NOT "anything
+// unticked" -- deviceManager's own enabled-device bookkeeping stays empty for every user who has
+// never touched the Audio tab (no saved DEVICESETUP to restore it from), while the launch loop
+// above opens EVERY available input regardless of that bookkeeping. Treating "not enabled" as
+// "close it" would therefore close every MIDI input for those users on the very first change
+// broadcast (deviceManager.initialise() can itself send one) -- a straight regression of the
+// existing "MIDI just works out of the box" behaviour. Close is instead keyed on physical
+// presence: a device that has vanished from availableMidiInputs() (unplugged) is removed so a
+// later replug -- which JUCE will hand a fresh identifier or, on some backends, the same one --
+// is never mistaken for "already open" by ensureMidiDeviceOpen()'s own by-name check.
+bool AudioEngine::reconcileMidiInputs() {
+    if (isHosted())
+        return false;
+
+    bool changed = false;
+    const auto available = availableMidiInputs();
+
+    for (auto& info : available) {
+        if (!deviceManager.isMidiInputDeviceEnabled(info.identifier))
+            continue;
+        const bool alreadyOpen = std::any_of(midiInputs.begin(), midiInputs.end(), [&](const auto& input) {
+            return input->getIdentifier() == info.identifier;
+        });
+        if (!alreadyOpen && openMidiInput(info))
+            changed = true;
+    }
+
+    // Windows workaround inherited from shutdown()'s own midiInputs.clear() loop (see that
+    // function's comment / commit f8d5b10, "wrap MIDI device creation in platform-specific macros
+    // for Windows") -- juce::MidiInput::stop() during a live reconcile hits the same platform
+    // hazard shutdown() was written to avoid, so a disconnected device on Windows stays in
+    // midiInputs (harmlessly inert; its driver thread is already gone) rather than risk it.
+#if JUCE_LINUX || JUCE_BSD || JUCE_MAC || JUCE_IOS
+    for (auto it = midiInputs.begin(); it != midiInputs.end();) {
+        const bool stillPresent = std::any_of(available.begin(), available.end(), [&](const auto& info) {
+            return info.identifier == (*it)->getIdentifier();
+        });
+        if (!stillPresent) {
+            (*it)->stop();
+            it = midiInputs.erase(it);
+            changed = true;
+        } else {
+            ++it;
+        }
+    }
+#endif
+
+    return changed;
 }
 
 std::vector<juce::String> AudioEngine::getOpenMidiInputIdentifiers() const {
