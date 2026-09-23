@@ -198,6 +198,10 @@ public:
      *  -- see MainComponentPanels.cpp. */
     void performToggleMixerPanel();
 
+    /** FRO131: same open/close symmetry as performToggleMixerPanel() above, for the MidiRemote
+     *  tab -- see MainComponentPanels.cpp. */
+    void performToggleMidiRemotePanel();
+
     /** The settings key the user-dragged timeline height round-trips through; the theme metric is
      *  only the DEFAULT — see clampTimelinePanelHeight(). */
     static constexpr const char* kTimelinePanelHeightKey = "timelinePanelHeight";
@@ -735,6 +739,9 @@ private:
     juce::DrawableButton toggleLibraryButton{"toggleLibrary", juce::DrawableButton::ImageAboveTextLabel};
     // Timeline panel toggle — see ToolbarComponent::Slot::ToggleTimeline.
     juce::DrawableButton toggleTimelineButton{"toggleTimeline", juce::DrawableButton::ImageAboveTextLabel};
+    // FRO131 (docs/control/midi-remote-ui.md#the-midi-remote-panel) — see
+    // ToolbarComponent::Slot::ToggleMidiRemote.
+    juce::DrawableButton toggleMidiRemoteButton{"toggleMidiRemote", juce::DrawableButton::ImageAboveTextLabel};
     juce::DrawableButton themeToggleButton{"toggleTheme", juce::DrawableButton::ImageAboveTextLabel};
 
     std::unique_ptr<juce::FileChooser> fileChooser;

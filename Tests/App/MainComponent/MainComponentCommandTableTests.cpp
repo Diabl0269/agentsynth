@@ -60,6 +60,8 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     // FRO11 (P9-5): the new row sits right after toggleTimelinePanel in
     // MainComponentCommandTable.cpp -- see that file's own comment for why.
     AppCommands::toggleMixerPanel,
+    // FRO131: same shape as toggleMixerPanel's own row above -- a third tab on the same dock.
+    AppCommands::toggleMidiRemotePanel,
     AppCommands::focusNextRegion,
     AppCommands::focusPrevRegion,
     AppCommands::focusTimeline,

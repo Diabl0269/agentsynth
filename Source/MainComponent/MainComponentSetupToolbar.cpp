@@ -197,6 +197,13 @@ void MainComponent::addToolbarToggleButtons() {
         applyToolbarIcons();
     };
 
+    // FRO131 (docs/control/midi-remote-ui.md#the-midi-remote-panel): same shape as
+    // toggleTimelineButton above, through performToggleMidiRemotePanel() rather than a plain
+    // triggerClick() -- the dock is shared between three tabs now.
+    addAndMakeVisible(toggleMidiRemoteButton);
+    toggleMidiRemoteButton.setComponentID("toggleMidiRemote");
+    toggleMidiRemoteButton.onClick = [this] { performToggleMidiRemotePanel(); };
+
     addAndMakeVisible(toggleModMatrixButton);
     toggleModMatrixButton.setComponentID("toggleModMatrix");
     toggleModMatrixButton.onClick = [this] {
@@ -262,7 +269,7 @@ void MainComponent::assembleToolbar() {
     // Calling setSize() before setButtons() leaves all buttons with zero bounds on first launch.
     toolbar.setButtons({&toggleLibraryButton, &newButton, &saveButton, &loadButton, &settingsButton, &feedbackButton,
                         &undoButton, &redoButton, &autoArrangeButton, &toggleMinimapButton, &toggleModMatrixButton,
-                        &toggleAiPanelButton, &toggleTimelineButton, &themeToggleButton});
+                        &toggleAiPanelButton, &toggleTimelineButton, &toggleMidiRemoteButton, &themeToggleButton});
 
     // Now that buttons are registered, trigger the first layout pass. resized() calls
     // toolbar.layoutButtons() which positions the buttons using their registered pointers.

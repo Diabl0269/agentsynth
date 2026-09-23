@@ -172,6 +172,16 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp
     Source/UI/MidiRemote/MidiLearnMenu.h
     Source/UI/MidiRemote/MidiLearnMenu.cpp
+    Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.h
+    Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.cpp
+    Source/UI/MidiRemote/ControllersList/ControllersListComponent.h
+    Source/UI/MidiRemote/ControllersList/ControllersListComponent.cpp
+    Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceComponent.h
+    Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceComponent.cpp
+    Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceCell.h
+    Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceCell.cpp
+    Source/UI/MidiRemote/Inspector/ControlInspectorComponent.h
+    Source/UI/MidiRemote/Inspector/ControlInspectorComponent.cpp
     Source/UI/Macros/MacroCardComponent.cpp
     Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogLifecycle.cpp
     Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogRowOrdering.cpp

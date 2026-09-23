@@ -417,6 +417,96 @@ MidiLearnController::queryNodeCommandMappings(juce::AudioProcessorGraph::NodeID 
     return result;
 }
 
+bool MidiLearnController::updateProfile(const ControllerProfile& profile) {
+    auto existing = std::find_if(profiles_.begin(), profiles_.end(),
+                                 [&](const ControllerProfile& p) { return p.id == profile.id; });
+    if (existing == profiles_.end())
+        return false;
+    *existing = profile;
+    profileStore_.save(profile);
+    remoteEngine_.setProfiles(profiles_);
+    return true;
+}
+
+int MidiLearnController::countProjectAssignmentsForProfile(const juce::String& profileId) const {
+    return static_cast<int>(
+        std::count_if(doc_.assignments.begin(), doc_.assignments.end(),
+                      [&](const synth::Assignment& a) { return a.control.profileId == profileId; }));
+}
+
+// Right-click Delete on a controller row. Project assignments referencing this profile are left
+// untouched -- they become exactly the "orphan controller" state a profile missing from this
+// machine already produces (docs/control/midi-remote.md#where-does-a-mapping-live--global-or-in-the-project).
+bool MidiLearnController::deleteProfile(const juce::String& profileId) {
+    auto existing =
+        std::find_if(profiles_.begin(), profiles_.end(), [&](const ControllerProfile& p) { return p.id == profileId; });
+    if (existing == profiles_.end())
+        return false;
+    profileStore_.deleteProfile(profileId);
+    profiles_.erase(existing);
+    remoteEngine_.setProfiles(profiles_);
+    return true;
+}
+
+// Drops the control from profile.controls, drops any global action assignment on it from
+// profile.actions (not undoable, same as every other profile edit), and removes any PROJECT
+// assignment referencing it (undoable, mirroring forget()'s own before/after-JSON snapshot).
+bool MidiLearnController::deleteControl(const juce::String& profileId, const juce::String& controlId) {
+    auto profileIt =
+        std::find_if(profiles_.begin(), profiles_.end(), [&](const ControllerProfile& p) { return p.id == profileId; });
+    if (profileIt == profiles_.end())
+        return false;
+
+    auto& controls = profileIt->controls;
+    const auto controlIt =
+        std::find_if(controls.begin(), controls.end(), [&](const Control& c) { return c.id == controlId; });
+    if (controlIt == controls.end())
+        return false;
+    controls.erase(controlIt);
+
+    // Not undoable, same as every other profile edit -- drop any global action assignment on it too.
+    auto& actions = profileIt->actions;
+    actions.erase(std::remove_if(actions.begin(), actions.end(),
+                                 [&](const synth::Assignment& a) { return a.control.controlId == controlId; }),
+                  actions.end());
+    profileStore_.save(*profileIt);
+    remoteEngine_.setProfiles(profiles_);
+
+    // The project half IS undoable, mirroring forget()'s own before/after-JSON snapshot.
+    const juce::var beforeJson = doc_.toVar();
+    auto& assignments = doc_.assignments;
+    const auto sizeBefore = assignments.size();
+    assignments.erase(std::remove_if(assignments.begin(), assignments.end(),
+                                     [&](const synth::Assignment& a) { return a.control.controlId == controlId; }),
+                      assignments.end());
+    if (assignments.size() != sizeBefore) {
+        const juce::var afterJson = doc_.toVar();
+        undo_.recordMidiRemoteChange(doc_, beforeJson, afterJson, [this] { publishAssignments(); });
+        publishAssignments();
+    }
+    return true;
+}
+
+// Undoable (docs/control/midi-remote.md#undo: "Project assignments ... edit ... undoable"), same
+// before/after-JSON shape as forget(). Rejects an action target (a profile edit, not this method's
+// job) and a nodeCommand target (routes through armNodeCommand/forgetNodeCommand instead).
+bool MidiLearnController::updateAssignment(const Assignment& updated) {
+    if (!updated.target.isParameter())
+        return false;
+
+    auto it = std::find_if(doc_.assignments.begin(), doc_.assignments.end(),
+                           [&](const synth::Assignment& a) { return a.id == updated.id; });
+    if (it == doc_.assignments.end())
+        return false;
+
+    const juce::var beforeJson = doc_.toVar();
+    *it = updated;
+    const juce::var afterJson = doc_.toVar();
+    undo_.recordMidiRemoteChange(doc_, beforeJson, afterJson, [this] { publishAssignments(); });
+    publishAssignments();
+    return true;
+}
+
 void MidiLearnController::publishAssignments() {
     remoteEngine_.setAssignments(doc_.assignments);
     // FRO253: setAssignments() rebuilds the snapshot with graph == nullptr by design, so it can

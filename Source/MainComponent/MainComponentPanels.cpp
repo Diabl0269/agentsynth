@@ -498,6 +498,10 @@ void MainComponent::applyToolbarIcons() {
     // No dedicated timeline glyph exists yet — reuse TransportPlay, otherwise unused this
     // phase ("scaffolding only — no DrawableButton wired"; see IconLibrary.h).
     setIcon(toggleTimelineButton, Icon::TransportPlay);
+    // FRO131: TrackMidi is a real MIDI glyph already in the library (used for track-header kind
+    // icons) -- no need for a dedicated new asset, same "reuse what exists" reasoning as
+    // toggleTimelineButton's own TransportPlay borrow above.
+    setIcon(toggleMidiRemoteButton, Icon::TrackMidi);
     setIcon(themeToggleButton, Icon::ThemeToggle);
 
     // Master-mute uses the transport-stop glyph (no real play/stop transport this phase).
@@ -513,6 +517,8 @@ void MainComponent::applyToolbarIcons() {
     toggleModMatrixButton.setToggleState(graphEditor.isModMatrixVisible(), juce::dontSendNotification);
     toggleAiPanelButton.setToggleState(isAiPanelVisible, juce::dontSendNotification);
     toggleTimelineButton.setToggleState(isTimelineVisible, juce::dontSendNotification);
+    toggleMidiRemoteButton.setToggleState(isTimelineVisible && mixerDock.isMidiRemoteTabActive(),
+                                          juce::dontSendNotification);
 
     // Text: cleared in narrow mode; stateful for the toggles in wide mode.
     newButton.setButtonText(iconOnly ? "" : "New");
@@ -528,6 +534,9 @@ void MainComponent::applyToolbarIcons() {
                                                : (graphEditor.isMinimapVisible() ? "Hide Minimap" : "Show Minimap"));
     toggleAiPanelButton.setButtonText(iconOnly ? "" : (isAiPanelVisible ? "Hide AI" : "Show AI"));
     toggleTimelineButton.setButtonText(iconOnly ? "" : (isTimelineVisible ? "Hide Timeline" : "Show Timeline"));
+    toggleMidiRemoteButton.setButtonText(
+        iconOnly ? ""
+                 : ((isTimelineVisible && mixerDock.isMidiRemoteTabActive()) ? "Hide MIDI Remote" : "MIDI Remote"));
     toggleLibraryButton.setButtonText(iconOnly ? "" : (isLibraryVisible ? "Hide Library" : "Show Library"));
     themeToggleButton.setButtonText(
         iconOnly ? ""
@@ -564,6 +573,10 @@ void MainComponent::applyToolbarIcons() {
 
     const juce::String timelineBase = isTimelineVisible ? "Hide Timeline" : "Show Timeline";
     toggleTimelineButton.setTooltip(hint(timelineBase, "toggleTimelinePanel"));
+
+    const juce::String midiRemoteBase =
+        (isTimelineVisible && mixerDock.isMidiRemoteTabActive()) ? "Hide MIDI Remote" : "Show MIDI Remote";
+    toggleMidiRemoteButton.setTooltip(hint(midiRemoteBase, "toggleMidiRemotePanel"));
 
     const juce::String libBase = isLibraryVisible ? "Hide Library" : "Show Library";
     toggleLibraryButton.setTooltip(hint(libBase, "toggleLibrary"));
@@ -726,6 +739,30 @@ void MainComponent::performToggleMixerPanel() {
         return;
     }
     mixerDock.setActiveTab(synth::ui::MixerDockComponent::Tab::Mixer);
+}
+
+// FRO131: same open/close symmetry as performToggleMixerPanel() above -- MidiRemote has no
+// placement-controller detour (unlike Mixer's mixerPlacement_.revealOrToggle()), since it offers
+// no Own-panel/Window placement variant.
+void MainComponent::performToggleMidiRemotePanel() {
+    if (!isTimelineVisible) {
+        isTimelineVisible = true;
+        appProperties.getUserSettings()->setValue("timelinePanelVisible", "1");
+        appProperties.getUserSettings()->saveIfNeeded();
+        mixerDock.setActiveTab(synth::ui::MixerDockComponent::Tab::MidiRemote);
+        applyToolbarIcons();
+        beginPanelSlide();
+        return;
+    }
+    if (mixerDock.isMidiRemoteTabActive()) {
+        isTimelineVisible = false;
+        appProperties.getUserSettings()->setValue("timelinePanelVisible", "0");
+        appProperties.getUserSettings()->saveIfNeeded();
+        applyToolbarIcons();
+        beginPanelSlide();
+        return;
+    }
+    mixerDock.setActiveTab(synth::ui::MixerDockComponent::Tab::MidiRemote);
 }
 
 // ---- Collapsible library sidebar (slides, persisted) ----

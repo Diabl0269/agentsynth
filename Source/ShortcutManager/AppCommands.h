@@ -69,6 +69,7 @@ enum CommandIDs {
     togglePlayback,
     toggleTimelinePanel,
     toggleMixerPanel,
+    toggleMidiRemotePanel,
     // ---- Grid division, set outright (Ctrl+Shift+1..8) ----
     // Eight commands rather than one parameterised command because juce::ApplicationCommandManager
     // has no notion of an argument: a menu row and a key binding are per-command, so "set the grid
@@ -212,6 +213,8 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return toggleTimelinePanel;
     if (actionId == "toggleMixerPanel")
         return toggleMixerPanel;
+    if (actionId == "toggleMidiRemotePanel")
+        return toggleMidiRemotePanel;
     if (actionId == "snapSetWhole")
         return snapSetWhole;
     if (actionId == "snapSetHalf")

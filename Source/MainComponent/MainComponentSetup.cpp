@@ -246,6 +246,25 @@ void MainComponent::wireGraphEditorCallbacks() {
     graphEditor.onMidiForgetRequested = [this](juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
         midiLearnController_.forget(nodeId, paramId);
     };
+    // FRO131 decision (2026-09-22): "Edit MIDI assignment..." -- open the dock (same sequence
+    // performToggleMidiRemotePanel()'s own "closed" branch runs, mirroring
+    // trackChannelLink_.setMixerRevealHook()'s own "open before reveal" shape above) before asking
+    // the panel to select the assignment; a closed dock has nothing on screen to select into yet.
+    graphEditor.onEditMidiAssignmentRequested = [this](juce::AudioProcessorGraph::NodeID nodeId,
+                                                       const juce::String& paramId) {
+        auto* node = audioEngine.getGraph().getNodeForId(nodeId);
+        const juce::String nodeUuid = node != nullptr ? node->properties["uuid"].toString() : juce::String();
+        if (nodeUuid.isEmpty())
+            return;
+        if (!isTimelineVisible) {
+            isTimelineVisible = true;
+            appProperties.getUserSettings()->setValue("timelinePanelVisible", "1");
+            appProperties.getUserSettings()->saveIfNeeded();
+            applyToolbarIcons();
+            beginPanelSlide();
+        }
+        mixerDock.selectMidiRemoteAssignment(nodeUuid, paramId);
+    };
     graphEditor.snippetProvider = [this](const juce::String& name) -> juce::var {
         return synth::SnippetManager::loadSnippet(
             synth::SnippetManager::fileForName(synth::SnippetManager::getDefaultSnippetsDirectory(), name));
@@ -375,6 +394,13 @@ void MainComponent::wireMidiRemoteEngine() {
     // transport bar's own breathing outline for the SAME/an action target.
     midiLearnController_.setMixerPanel(&mixerDock.getMixerPanel());
     midiLearnController_.setTransportBar(&timelinePanel.getTransportBar());
+
+    // FRO131: same "wire it once everything it needs is alive" reasoning as the two calls above --
+    // the MIDI Remote panel needs remoteEngine/midiLearnController_/midiRemoteDoc, none of which
+    // exist yet at MixerDockComponent's own construction time (see MixerDockComponent::
+    // configureMidiRemote()'s doc comment).
+    mixerDock.configureMidiRemote(audioEngine, remoteEngine, midiLearnController_, midiRemoteDoc, graphEditor);
+    mixerDock.getMidiRemotePanel().onLocateNode = [this](const juce::String& nodeUuid) { selectNodeInGraph(nodeUuid); };
 
     // Transport-bar right-click MIDI Learn (FRO133) -- action targets, so these three forward to
     // MidiLearnController's action-keyed overloads rather than GraphEditor's node-keyed ones (see
@@ -546,9 +572,15 @@ void MainComponent::rebuildFocusRegions() {
     // FRO12: guarded -- a Timeline detached to its own window has nothing docked here to cycle
     // to; Tab inside that window cycles its OWN one-region registry instead (see
     // DetachedPanelWindow::keyPressed). Wrapping only -- never reorder/rename the regions below.
+    // FRO131: the dock grew a third tab (MidiRemote) -- excluding only Mixer here is no longer
+    // enough to say Timeline is the one actually showing, or this region reports open while the
+    // MidiRemote tab is the one on screen.
     if (!mixerDock.getTimelineHost().isDetached())
         focusRegions_.addRegion({"timeline", &timelinePanel,
-                                 [this] { return isTimelineVisible && !mixerDock.isMixerTabActive(); },
+                                 [this] {
+                                     return isTimelineVisible && !mixerDock.isMixerTabActive() &&
+                                            !mixerDock.isMidiRemoteTabActive();
+                                 },
                                  [this] {
                                      mixerDock.setActiveTab(synth::ui::MixerDockComponent::Tab::Timeline);
                                      if (!isTimelineVisible && toggleTimelineButton.onClick)
@@ -579,6 +611,19 @@ void MainComponent::rebuildFocusRegions() {
             focusRegions_.addRegion(
                 {"mixer", &mixerDock.getMixerPanel(), [this] { return mixerPlacement_.isOwnPanelShowing(); }, nullptr});
     }
+    // FRO131: same guard shape as "timeline" above -- MidiRemote has no placement variant (no
+    // Own-panel/Window controller like Mixer's mixerPlacement_), so it is always parented here
+    // unless detached to its own window, in which case that window's own one-region registry
+    // covers it (DetachablePanelHost::setHostedPanelFocusRegion, wired alongside the other two in
+    // wireTimelinePanelServicesAndShortcuts() below).
+    if (!mixerDock.getMidiRemoteHost().isDetached())
+        focusRegions_.addRegion({"midiRemote", &mixerDock.getMidiRemotePanel(),
+                                 [this] { return isTimelineVisible && mixerDock.isMidiRemoteTabActive(); },
+                                 [this] {
+                                     mixerDock.setActiveTab(synth::ui::MixerDockComponent::Tab::MidiRemote);
+                                     if (!isTimelineVisible && toggleMidiRemoteButton.onClick)
+                                         toggleMidiRemoteButton.onClick();
+                                 }});
     focusRegions_.addRegion({"aiPanel", &aiChatComponent, [this] { return isAiPanelVisible; },
                              [this] {
                                  if (!isAiPanelVisible && toggleAiPanelButton.onClick)

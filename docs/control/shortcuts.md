@@ -94,14 +94,17 @@ base for arrow-key navigation within the module library and for Up/Down + M/S/R 
 track header rows (below); both build on top of it without changing the registry itself. A
 `synth::ui::FocusRegionRegistry` is a plain member of `MainComponent` (never a `Desktop`-global
 singleton — a host process can run multiple plugin instances, and a future separate-window
-mixer/timeline would need its own registry), populated with seven regions once every root component
+mixer/timeline would need its own registry), populated with eight regions once every root component
 exists: **Toolbar** (always open — the top strip), **Library** (`isLibraryVisible`), **Canvas**
-(always open — the `graphEditor`), **Timeline** (`isTimelineVisible && !mixerDock.isMixerTabActive()`),
+(always open — the `graphEditor`), **Timeline** (`isTimelineVisible && !mixerDock.isMixerTabActive() && !mixerDock.isMidiRemoteTabActive()`),
 **Mixer** (`isTimelineVisible && mixerDock.isMixerTabActive()`, no `open` callback — like Mod
-Matrix, no direct-focus shortcut targets it), **AI Panel** (`isAiPanelVisible`) and **Mod Matrix**
-(`graphEditor.isModMatrixVisible()`). Timeline and Mixer share one dock (`MixerDockComponent`) with one tab visible at a time, so `isTimelineVisible` alone (the dock's own open/closed
-state) stopped being enough to say the Timeline region is on screen the moment the Mixer tab
-exists — each region's `isOpen` also checks which of the dock's two tabs is active, and each
+Matrix, no direct-focus shortcut targets it), **MIDI Remote** (`isTimelineVisible &&
+mixerDock.isMidiRemoteTabActive()`, FRO131 — same dock-tab shape as Mixer, but does take a direct
+`open` callback), **AI Panel** (`isAiPanelVisible`) and **Mod Matrix**
+(`graphEditor.isModMatrixVisible()`). Timeline, Mixer and MIDI Remote share one dock
+(`MixerDockComponent`) with one tab visible at a time, so `isTimelineVisible` alone (the dock's own
+open/closed state) stopped being enough to say the Timeline region is on screen the moment a second
+tab exists — each region's `isOpen` also checks which of the dock's tabs is active, and each
 region's `open` re-selects its own tab before falling through to the same "open the dock if it's
 closed" step every panel toggle already does. See [**Mixer column navigation**](#mixer-column-navigation)
 below for the Mixer region's own keyboard behaviour.

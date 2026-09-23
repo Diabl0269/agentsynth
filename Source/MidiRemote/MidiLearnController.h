@@ -121,6 +121,42 @@ public:
      *  and badges. */
     void setTransportBar(synth::ui::TimelineTransportBar* bar) noexcept { transportBar_ = bar; }
 
+    // ---- FRO131: MIDI Remote panel profile mutations ----
+    // Every panel-side edit to a ControllerProfile routes through ONE of these rather than the
+    // panel writing ControllerProfileStore directly, so the engine's published snapshot can never
+    // go stale relative to what's on disk (docs/control/midi-remote.md's "assignment exists ->
+    // consumed" rule means a deleted control that never reaches setProfiles() would keep consuming
+    // messages). All are profile edits, so -- like arm()/armAction()'s own profile writes -- NONE
+    // of these are undoable (docs/control/midi-remote.md#undo: "Profile edits ... not undoable").
+
+    /** Rename, or a drag-to-move layout change: saves `profile` verbatim (it must already carry
+     *  the caller's edit) and republishes. Returns false if `profile.id` doesn't match a known
+     *  profile. */
+    bool updateProfile(const ControllerProfile& profile);
+
+    /** How many project ("midiRemote") assignments reference `profileId` -- for the Delete
+     *  controller confirm dialog's "will orphan N assignments" count. */
+    int countProjectAssignmentsForProfile(const juce::String& profileId) const;
+
+    /** Deletes the profile file and drops it from the live set; leaves any project assignment
+     *  referencing it as an orphan. Returns false if `profileId` isn't known. See the .cpp for why. */
+    bool deleteProfile(const juce::String& profileId);
+
+    /** Removes one control from a profile, and any assignment (global or project) referencing it.
+     *  Returns false if the control isn't found. See the .cpp for undo-scope details. */
+    bool deleteControl(const juce::String& profileId, const juce::String& controlId);
+
+    /** Plain file-copy passthrough to the underlying store, for the Controllers list's right-click
+     *  "Export...". */
+    bool exportProfile(const juce::String& profileId, const juce::File& destFile) const {
+        return profileStore_.exportProfile(profileId, destFile);
+    }
+
+    /** Inspector edit of an existing PROJECT parameter-target assignment's takeover/range/invert.
+     *  Returns false if `updated.id` isn't a known project assignment or isn't a parameter target
+     *  -- see the .cpp for why action/nodeCommand targets are rejected here. */
+    bool updateAssignment(const Assignment& updated);
+
 private:
     /** Forwards MouseListener clicks and polls RemoteEngine::isLearnArmed() for the silent-timeout
      *  cancel path, which fires no callback of its own

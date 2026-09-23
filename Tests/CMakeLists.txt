@@ -385,6 +385,10 @@ add_executable(Tests
     UI/Mixer/MixerFaderDragTests.cpp
     UI/Mixer/MixerSendListTests.cpp
     UI/Mixer/MixerDockComponentTests.cpp
+    UI/MidiRemote/MidiRemotePanelTests.cpp
+    UI/MidiRemote/ControllersListTests.cpp
+    UI/MidiRemote/ControllerSurfaceTests.cpp
+    UI/MidiRemote/ControlInspectorTests.cpp
     UI/Mixer/MixerDockMeterGatingTests.cpp
     UI/Mixer/MixerEqThumbnailTests.cpp
     UI/Mixer/MixerColumnComponentTests.cpp
@@ -553,6 +557,11 @@ add_executable(Tests
     ../Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
     ../Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp
     ../Source/UI/MidiRemote/MidiLearnMenu.cpp
+    ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.cpp
+    ../Source/UI/MidiRemote/ControllersList/ControllersListComponent.cpp
+    ../Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceComponent.cpp
+    ../Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceCell.cpp
+    ../Source/UI/MidiRemote/Inspector/ControlInspectorComponent.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibrarySearch.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryRows.cpp

@@ -473,3 +473,269 @@ TEST_F(MidiLearnControllerTest, LearnNodeCommandThenImmediatePressTogglesSoloWit
     EXPECT_TRUE(strip->isSoloed())
         << "the freshly learned node-command assignment must already be resolved against the live graph";
 }
+
+// ============================================================================
+// FRO131: MIDI Remote panel profile mutations (updateProfile, countProjectAssignmentsForProfile,
+// deleteProfile, deleteControl, updateAssignment) -- FRO130 arm/forget/learn paths handle
+// the project doc half (undoable) and auto-profiles (saved unconditionally, not undoable);
+// these five panel-side methods route profile edits and project-doc removals through one
+// seam so the engine's published snapshot never goes stale.
+// ============================================================================
+
+TEST_F(MidiLearnControllerTest, UpdateProfileRenamesTheControllerAndReflectsInGetProfiles) {
+    controller_->arm(node_->nodeID, "cutoff");
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+    ASSERT_EQ(controller_->getProfiles().size(), 1u);
+    const juce::String profileId = controller_->getProfiles()[0].id;
+    const juce::String oldName = controller_->getProfiles()[0].name;
+    EXPECT_FALSE(oldName.isEmpty());
+
+    ControllerProfile updatedProfile = controller_->getProfiles()[0];
+    updatedProfile.name = "My Custom Device";
+    EXPECT_TRUE(controller_->updateProfile(updatedProfile));
+
+    ASSERT_EQ(controller_->getProfiles().size(), 1u);
+    EXPECT_EQ(controller_->getProfiles()[0].name, "My Custom Device");
+    EXPECT_EQ(controller_->getProfiles()[0].id, profileId);
+}
+
+TEST_F(MidiLearnControllerTest, UpdateProfileIsNotUndoable) {
+    controller_->arm(node_->nodeID, "cutoff");
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+    ASSERT_TRUE(undo_.canUndo()) << "the parameter learn creates an undo step";
+    undo_.undo();
+    undo_.redo();
+    EXPECT_TRUE(undo_.canUndo());
+
+    ControllerProfile updatedProfile = controller_->getProfiles()[0];
+    updatedProfile.name = "New Name";
+    controller_->updateProfile(updatedProfile);
+
+    EXPECT_TRUE(undo_.canUndo()) << "a profile edit is a global setting, not a project-doc undo step";
+    // Undoing gets us back to the learned state, not before the rename.
+    undo_.undo();
+    EXPECT_EQ(controller_->getProfiles()[0].name, "New Name") << "renaming the profile did not create an undo step";
+}
+
+TEST_F(MidiLearnControllerTest, UpdateProfileReturnsFalseForUnknownProfileId) {
+    ControllerProfile unknownProfile;
+    unknownProfile.id = "unknown-profile-id";
+    unknownProfile.name = "Unknown";
+    EXPECT_FALSE(controller_->updateProfile(unknownProfile));
+}
+
+TEST_F(MidiLearnControllerTest, CountProjectAssignmentsForProfileCountsMatchingAssignments) {
+    controller_->arm(node_->nodeID, "cutoff");
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+    ASSERT_EQ(doc_.assignments.size(), 1u);
+    const juce::String profileA = controller_->getProfiles()[0].id;
+
+    // Create a second assignment on the same profile
+    controller_->arm(node_->nodeID, "resonance");
+    send(juce::MidiMessage::controllerEvent(1, 30, 64));
+    settle();
+    ASSERT_EQ(doc_.assignments.size(), 2u);
+    EXPECT_EQ(doc_.assignments[0].control.profileId, profileA);
+    EXPECT_EQ(doc_.assignments[1].control.profileId, profileA);
+
+    EXPECT_EQ(controller_->countProjectAssignmentsForProfile(profileA), 2);
+
+    // An action-target learn on profileA's own device doesn't add a project assignment.
+    controller_->armAction("transportRecord");
+    send(juce::MidiMessage::controllerEvent(1, 40, 64));
+    settle();
+    ASSERT_EQ(controller_->getProfiles().size(), 1u) << "same device -- still one profile";
+    EXPECT_EQ(controller_->countProjectAssignmentsForProfile(profileA), 2)
+        << "action assignments don't count, only project doc (parameter/nodeCommand) assignments";
+
+    // A profile id this fixture never created must count zero -- RemoteEngine::handleMessage
+    // drops any message whose sourceKey isn't already registered (refreshSources() only ever
+    // knows hostSourceKey() in this Hosted-mode fixture), so a genuine second device/profile isn't
+    // reachable here; this still catches a scoping bug (e.g. forgetting to filter by profileId at
+    // all, which would wrongly return doc_.assignments.size() for any id).
+    EXPECT_EQ(controller_->countProjectAssignmentsForProfile("unknown-id"), 0);
+}
+
+TEST_F(MidiLearnControllerTest, DeleteProfileRemovesItFromGetProfilesAndDisk) {
+    controller_->arm(node_->nodeID, "cutoff");
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+    ASSERT_EQ(controller_->getProfiles().size(), 1u);
+    const juce::String profileId = controller_->getProfiles()[0].id;
+
+    // Verify the profile file exists on disk -- a fresh store against the same root_, since
+    // controller_ owns its own ControllerProfileStore instance rather than exposing it.
+    auto profiles = synth::ControllerProfileStore(root_).loadAll();
+    ASSERT_EQ(profiles.profiles.size(), 1u);
+
+    EXPECT_TRUE(controller_->deleteProfile(profileId));
+
+    EXPECT_TRUE(controller_->getProfiles().empty()) << "the profile is removed from getProfiles()";
+
+    // Verify the profile file is deleted from disk
+    profiles = synth::ControllerProfileStore(root_).loadAll();
+    EXPECT_TRUE(profiles.profiles.empty()) << "the profile file is deleted";
+}
+
+TEST_F(MidiLearnControllerTest, DeleteProfileLeavesProjectAssignmentsUntouched) {
+    controller_->arm(node_->nodeID, "cutoff");
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+    ASSERT_EQ(doc_.assignments.size(), 1u);
+    const juce::String profileId = controller_->getProfiles()[0].id;
+
+    controller_->deleteProfile(profileId);
+
+    EXPECT_EQ(doc_.assignments.size(), 1u) << "project assignments remain after profile deletion";
+    EXPECT_EQ(doc_.assignments[0].control.profileId, profileId)
+        << "the assignment still references the deleted profile (orphan state)";
+}
+
+TEST_F(MidiLearnControllerTest, DeleteProfileReturnsFalseForUnknownProfileId) {
+    EXPECT_FALSE(controller_->deleteProfile("unknown-profile-id"));
+}
+
+TEST_F(MidiLearnControllerTest, DeleteControlRemovesItFromProfileAndProjectAssignments) {
+    // Set up a profile with 2 controls
+    controller_->arm(node_->nodeID, "cutoff");
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+    ASSERT_EQ(controller_->getProfiles()[0].controls.size(), 1u);
+    const juce::String profileId = controller_->getProfiles()[0].id;
+    const juce::String controlId1 = controller_->getProfiles()[0].controls[0].id;
+
+    // Add a second control
+    controller_->arm(node_->nodeID, "resonance");
+    send(juce::MidiMessage::controllerEvent(1, 30, 64));
+    settle();
+    ASSERT_EQ(controller_->getProfiles()[0].controls.size(), 2u);
+    const juce::String controlId2 = controller_->getProfiles()[0].controls[1].id;
+
+    // Verify we have 2 assignments
+    ASSERT_EQ(doc_.assignments.size(), 2u);
+
+    // Delete the first control
+    EXPECT_TRUE(controller_->deleteControl(profileId, controlId1));
+
+    // Verify the first control is removed from the profile
+    ASSERT_EQ(controller_->getProfiles()[0].controls.size(), 1u);
+    EXPECT_EQ(controller_->getProfiles()[0].controls[0].id, controlId2) << "the second control remains";
+
+    // Verify the first assignment is removed from the project
+    ASSERT_EQ(doc_.assignments.size(), 1u);
+    EXPECT_EQ(doc_.assignments[0].target.parameter.paramId, "resonance") << "only the resonance assignment remains";
+}
+
+TEST_F(MidiLearnControllerTest, DeleteControlRecordsAnUndoStepForProjectAssignmentRemoval) {
+    controller_->arm(node_->nodeID, "cutoff");
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+    ASSERT_EQ(doc_.assignments.size(), 1u);
+    const auto assignmentId = doc_.assignments[0].id;
+    const juce::String profileId = controller_->getProfiles()[0].id;
+    const juce::String controlId = controller_->getProfiles()[0].controls[0].id;
+
+    // Prove the learn's own undo step really works, then wipe it -- redo() replays the step, it
+    // does not remove it from history, so canUndo() would stay true without clearUndoHistory().
+    undo_.undo();
+    EXPECT_TRUE(doc_.assignments.empty());
+    undo_.redo();
+    ASSERT_EQ(doc_.assignments.size(), 1u);
+    undo_.clearUndoHistory();
+    EXPECT_FALSE(undo_.canUndo());
+
+    // Delete the control
+    controller_->deleteControl(profileId, controlId);
+
+    EXPECT_TRUE(doc_.assignments.empty());
+    EXPECT_TRUE(undo_.canUndo()) << "the project assignment removal is undoable";
+    undo_.undo();
+    EXPECT_EQ(doc_.assignments.size(), 1u) << "undoing restores the assignment";
+    EXPECT_EQ(doc_.assignments[0].id, assignmentId);
+}
+
+TEST_F(MidiLearnControllerTest, DeleteControlRemovesGlobalActionAssignmentOnThatControl) {
+    // Create a profile with a control + a global action assignment on it
+    controller_->armAction("transportRecord");
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+    ASSERT_EQ(controller_->getProfiles()[0].controls.size(), 1u);
+    ASSERT_EQ(controller_->getProfiles()[0].actions.size(), 1u);
+    const juce::String profileId = controller_->getProfiles()[0].id;
+    const juce::String controlId = controller_->getProfiles()[0].controls[0].id;
+
+    EXPECT_TRUE(controller_->deleteControl(profileId, controlId));
+
+    EXPECT_TRUE(controller_->getProfiles()[0].controls.empty());
+    EXPECT_TRUE(controller_->getProfiles()[0].actions.empty())
+        << "the action assignment on that control is dropped (profile edit, not undoable)";
+}
+
+TEST_F(MidiLearnControllerTest, DeleteControlReturnsFalseForUnknownProfileOrControl) {
+    EXPECT_FALSE(controller_->deleteControl("unknown-profile", "unknown-control"));
+
+    controller_->arm(node_->nodeID, "cutoff");
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+    const juce::String profileId = controller_->getProfiles()[0].id;
+
+    EXPECT_FALSE(controller_->deleteControl(profileId, "unknown-control"));
+    EXPECT_FALSE(controller_->deleteControl("unknown-profile", profileId));
+}
+
+TEST_F(MidiLearnControllerTest, UpdateAssignmentChangesExistingProjectAssignmentAndRecordsUndo) {
+    controller_->arm(node_->nodeID, "cutoff");
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+    ASSERT_EQ(doc_.assignments.size(), 1u);
+    const auto originalId = doc_.assignments[0].id;
+    EXPECT_EQ(doc_.assignments[0].takeover, synth::Takeover::useDefault);
+
+    // Clear undo state -- redo() replays the learn's own step, it does not remove it from
+    // history, so canUndo() would stay true without an explicit clearUndoHistory().
+    undo_.clearUndoHistory();
+    EXPECT_FALSE(undo_.canUndo());
+
+    // Update the assignment
+    synth::Assignment updated = doc_.assignments[0];
+    updated.takeover = synth::Takeover::scale;
+    updated.range.min = 0.2f;
+    updated.range.max = 0.8f;
+
+    EXPECT_TRUE(controller_->updateAssignment(updated));
+
+    EXPECT_EQ(doc_.assignments[0].id, originalId);
+    EXPECT_EQ(doc_.assignments[0].takeover, synth::Takeover::scale);
+    EXPECT_EQ(doc_.assignments[0].range.min, 0.2f);
+    EXPECT_EQ(doc_.assignments[0].range.max, 0.8f);
+
+    EXPECT_TRUE(undo_.canUndo()) << "the assignment update is undoable";
+    undo_.undo();
+    EXPECT_EQ(doc_.assignments[0].takeover, synth::Takeover::useDefault) << "undoing restores the original takeover";
+    EXPECT_EQ(doc_.assignments[0].range.min, 0.0f);
+    EXPECT_EQ(doc_.assignments[0].range.max, 1.0f);
+}
+
+TEST_F(MidiLearnControllerTest, UpdateAssignmentReturnsFalseForNonExistentAssignmentId) {
+    synth::Assignment unknown;
+    unknown.id = "non-existent-id";
+    unknown.target.kind = synth::Target::Kind::parameter;
+    EXPECT_FALSE(controller_->updateAssignment(unknown));
+}
+
+TEST_F(MidiLearnControllerTest, UpdateAssignmentReturnsFalseForActionTargetAssignment) {
+    controller_->armAction("transportRecord");
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+    ASSERT_EQ(controller_->getProfiles()[0].actions.size(), 1u);
+
+    // Try to update via the project doc (which doesn't have it)
+    synth::Assignment actionAssignment = controller_->getProfiles()[0].actions[0];
+    EXPECT_TRUE(actionAssignment.target.isAction());
+
+    EXPECT_FALSE(controller_->updateAssignment(actionAssignment))
+        << "updateAssignment rejects action targets (profile edits are not this method's job)";
+}

@@ -323,6 +323,13 @@ void MainComponent::timerCallback() {
     if (mixerDock.isMixerShowing() || mixerPlacement_.isOwnPanelShowing())
         mixerDock.refreshMeters();
 
+    // FRO131 (docs/control/midi-remote-ui.md#surface-centre): same "existing 10 Hz tick, only
+    // while showing" shape as the mixer meters above -- well under the design doc's <=30 Hz cap,
+    // and no free-running timer of its own. MidiRemote has no Own-panel-style placement, so
+    // isMidiRemoteShowing() alone (docked-and-active OR detached) is the whole gate.
+    if (mixerDock.isMidiRemoteShowing())
+        mixerDock.refreshMidiRemoteActivity();
+
     // Status bar polls at 5 Hz (every 2nd tick of the 10 Hz timer). update() is gated — it
     // only repaints the status bar when a displayed value actually changes. ZERO logging.
     if (++statusBarTickCount_ >= 2) {

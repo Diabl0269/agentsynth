@@ -41,6 +41,8 @@ public:
         ToggleAiPanel,
         // Timeline panel toggle, right before the theme toggle.
         ToggleTimeline,
+        // FRO131: the MIDI Remote panel's own toggle, right after Timeline's.
+        ToggleMidiRemote,
         ToggleTheme,
         NumSlots
     };

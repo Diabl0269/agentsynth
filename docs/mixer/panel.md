@@ -61,9 +61,11 @@ scoped per window.
 
 The mechanism is `Source/UI/Layout/DetachablePanelHost/` (`DetachablePanelHost` plus
 `DetachedPanelWindow`): a slot that moves a panel **by reference** — never copied or rebuilt —
-between its dock and a `DetachedPanelWindow`. `MixerDockComponent` owns two hosts,
-`timelineHost_`/`mixerHost_`, both wrapping the SAME `TimelinePanelComponent`/`MixerPanelComponent`
-instances it already held, so scroll, zoom and selection survive a detach untouched.
+between its dock and a `DetachedPanelWindow`. `MixerDockComponent` owns three hosts,
+`timelineHost_`/`mixerHost_`/`midiRemoteHost_`, each wrapping the SAME `TimelinePanelComponent`/
+`MixerPanelComponent`/`MidiRemotePanelComponent` instance it already held, so scroll, zoom and
+selection survive a detach untouched. `midiRemoteHost_` (FRO131) is always Tab placement — no
+Own-panel/Window placement variant like Mixer's own, so it has no third row in the table below.
 
 `synth::ui::MixerPlacementController` (the one collaborator `MainComponent.h` adds for this) moves
 `mixerHost_` between its three homes:
@@ -91,8 +93,8 @@ launch (`MainComponent::wireTimelinePanel`) and again on every settings-file wri
 work.
 
 `MainComponent::isTimelineVisible` and the persisted `timelinePanelVisible` key open and close the
-whole dock, either tab, while `MixerDockComponent`'s own `bottomDockActiveTab` key persists which tab
-is showing (default `"timeline"`) — see
+whole dock, any of its tabs, while `MixerDockComponent`'s own `bottomDockActiveTab` key persists
+which tab is showing (`"timeline"` default, or `"mixer"`/`"midiRemote"`) — see
 [`docs/timeline/timeline.md`](../timeline/timeline.md#docking-toggle-and-the-bottom-dock).
 
 ### Per window keyboard focus
@@ -320,5 +322,7 @@ The full key table, the region's open predicate and the accessibility handler de
 - [`docs/mixer/sends-and-buses.md`](sends-and-buses.md) — the send list and bus columns.
 - [`docs/timeline/timeline.md`](../timeline/timeline.md#docking-toggle-and-the-bottom-dock) — the
   bottom dock the Mixer tab shares.
+- [`docs/control/midi-remote-ui.md#the-midi-remote-panel`](../control/midi-remote-ui.md#the-midi-remote-panel)
+  — the dock's third tab (FRO131), same Tab-only placement as Mixer's own Tab row above.
 - [`docs/layout/rendering.md`](../layout/rendering.md) — the no-unconditional-repaint rule.
 - [`docs/layout/theming.md`](../layout/theming.md) — the theme tokens a detached window reads.

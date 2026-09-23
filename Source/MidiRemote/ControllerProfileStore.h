@@ -76,6 +76,10 @@ public:
      *  imported (so a caller doesn't have to loadAll() again just to see what arrived). */
     bool importProfile(const juce::File& srcFile, ControllerProfile& outProfile) const;
 
+    /** FRO131: deletes `<profileId>.json`. Returns false if the profile isn't in this store; a
+     *  missing file is not otherwise an error (delete is idempotent). */
+    bool deleteProfile(const juce::String& profileId) const;
+
 private:
     juce::File controllersDir_;
 };

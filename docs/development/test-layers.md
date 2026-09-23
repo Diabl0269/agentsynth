@@ -214,6 +214,24 @@ dock-relative) and `timelinePanelIsOpen(mc)` (`isVisible() && mixerDock.isVisibl
 needs a real Desktop peer, unavailable headless), because `TimelinePanelComponent` nests inside
 `MixerDockComponent` rather than being `MainComponent`'s direct child.
 
+## MIDI Remote panel
+
+`Tests/UI/MidiRemote/` (FRO131, [`../control/midi-remote-ui.md#the-midi-remote-panel`](../control/midi-remote-ui.md#the-midi-remote-panel))
+— the dock's third tab, same real off-screen `MainComponent` style as the Mixer panel tests above.
+The engine/model/learn-controller test suite this panel sits on top of lives in `Tests/MidiRemote/`
+(FRO124/FRO130/FRO133/FRO253) and is not covered here.
+
+| File | Covers |
+|------|--------|
+| `MidiRemotePanelTests.cpp` | pre-`configure()` null-safety; post-`configure()` via a real `MainComponent`; dock tab-switch shows the panel and hides the others |
+| `ControllersListTests.cpp` | present/absent/orphan row states; right-click Rename/Export/Delete via `synth::ui::test_hooks`' free-function seams (the header is locked for this ticket — see the file's own comment) |
+| `ControllerSurfaceTests.cpp` | grid layout from `col`/`row`; activity decode onto the display-only widgets; drag-to-move reporting; a themed PNG render smoke test gated on `MIDI_SURFACE_PNG` |
+| `ControlInspectorTests.cpp` | Project vs Global assignment rows; takeover/range editing gated to a parameter target (`isTakeoverEditable()`) |
+
+Tests using `MixerDockComponent::Tab::MidiRemote` share the same
+`MixerDockActiveTabResetGuardMDT` reset guard as the Mixer panel tests above (`bottomDockActiveTab`
+is one shared on-disk settings key across all three tabs).
+
 ## Audio clip playback
 
 `Tests/Timeline/AudioClipPlaybackTests.cpp`. Five layers. Playback tests render through
