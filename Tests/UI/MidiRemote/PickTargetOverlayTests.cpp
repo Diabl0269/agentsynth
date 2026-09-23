@@ -221,6 +221,47 @@ TEST_F(MidiRemotePickTargetTest, AControlClippedOutByTheCanvasEdgeIsNotOutlinedO
     controller_->cancelPickTarget();
 }
 
+TEST_F(MidiRemotePickTargetTest, APassThroughComponentReceivesTheClickAndTheSessionSurvivesIt) {
+    juce::TextButton tab("Mixer");
+    host_.addAndMakeVisible(tab);
+    tab.setBounds(1000, 1120, 80, 22); // over the canvas/bar gap, where no candidate sits
+    controller_->setPickPassThrough({&tab});
+    ASSERT_TRUE(controller_->beginPickTarget("p1", "knob"));
+
+    const auto centre = tab.getBounds().getCentre();
+    EXPECT_EQ(host_.getComponentAt(centre), &tab) << "the overlay steps aside over a pass-through component";
+    EXPECT_EQ(host_.getComponentAt(juce::Point<int>(centre.x, centre.y - 60)), &overlay())
+        << "everywhere else it still swallows the click";
+    EXPECT_TRUE(controller_->isPickingTarget());
+
+    tab.setVisible(false);
+    EXPECT_EQ(host_.getComponentAt(centre), &overlay()) << "a hidden pass-through no longer opens a hole";
+    controller_->cancelPickTarget();
+}
+
+TEST_F(MidiRemotePickTargetTest, RefreshPickTargetRecollectsCandidatesAfterATabSwitchRevealedAnotherSurface) {
+    bar_.setVisible(false); // the Timeline tab is not showing yet
+    ASSERT_TRUE(controller_->beginPickTarget("p1", "knob"));
+    int actions = 0;
+    for (int i = 0; i < overlay().getOutlineCountForTest(); ++i)
+        if (const auto* c = overlay().findCandidateAt(overlay().getOutlineBoundsForTest(i).getCentre());
+            c != nullptr && c->target.kind == PickTarget::Kind::action)
+            ++actions;
+    EXPECT_EQ(actions, 0);
+
+    bar_.setVisible(true); // the user clicked the Timeline tab
+    controller_->refreshPickTarget();
+    EXPECT_GT(overlay().getOutlineCountForTest(), 0);
+    bool sawPlay = false;
+    for (int i = 0; i < overlay().getOutlineCountForTest(); ++i)
+        if (const auto* c = overlay().findCandidateAt(overlay().getOutlineBoundsForTest(i).getCentre());
+            c != nullptr && c->target.kind == PickTarget::Kind::action &&
+            c->target.actionId == "transportTogglePlayStop")
+            sawPlay = true;
+    EXPECT_TRUE(sawPlay) << "the transport buttons are pickable once their tab is showing";
+    controller_->cancelPickTarget();
+}
+
 // ---- The wiring MainComponent gives the session (not the test doubles above) ----------------------------
 
 TEST(MidiRemotePickTargetMainComponentTest, TheOverlayCoversTheWholeWindowAndEscapeAndACanvasRebuildEndTheSession) {
@@ -258,6 +299,15 @@ TEST(MidiRemotePickTargetMainComponentTest, TheOverlayCoversTheWholeWindowAndEsc
         mc.getGraphEditor().detachAllModuleComponents();
         EXPECT_FALSE(controller.isPickingTarget()) << "a graph rebuild ends the session";
         EXPECT_TRUE(controller.getProfiles().front().actions.empty());
+
+        // The dock's tab buttons let clicks through, and a tab switch keeps the session and re-collects.
+        ASSERT_TRUE(controller.beginPickTarget("p1", "knob"));
+        EXPECT_EQ(mc.getMixerDock().getTabButtons().size(), 3u);
+        ASSERT_TRUE(static_cast<bool>(mc.getMixerDock().onActiveTabChanged));
+        // Calling the real tab-change hook must leave the session up (it re-collects, never ends).
+        mc.getMixerDock().onActiveTabChanged();
+        EXPECT_TRUE(controller.isPickingTarget()) << "switching dock tabs must not end the pick";
+        controller.cancelPickTarget();
     }
     root.deleteRecursively();
 }

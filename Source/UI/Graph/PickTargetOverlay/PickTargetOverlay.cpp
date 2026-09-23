@@ -52,6 +52,19 @@ void PickTargetOverlay::begin(std::vector<PickCandidate> candidates) {
         grabKeyboardFocus(); // a hidden or peer-less host (a headless test) cannot take focus
 }
 
+void PickTargetOverlay::setCandidates(std::vector<PickCandidate> candidates) {
+    if (!active_)
+        return;
+    candidates_ = std::move(candidates);
+    refreshOutlines();
+}
+
+void PickTargetOverlay::setPassThrough(std::vector<juce::Component*> components) {
+    passThrough_.clear();
+    for (auto* c : components)
+        passThrough_.emplace_back(c);
+}
+
 void PickTargetOverlay::end() {
     active_ = false;
     candidates_.clear();
@@ -118,7 +131,15 @@ void PickTargetOverlay::paint(juce::Graphics& g) {
     }
 }
 
-bool PickTargetOverlay::hitTest(int, int) { return active_ && !probing_; }
+bool PickTargetOverlay::hitTest(int x, int y) {
+    if (!active_ || probing_)
+        return false;
+    for (auto& p : passThrough_)
+        if (auto* c = p.getComponent();
+            c != nullptr && isVisibleInHierarchy(*c) && getLocalArea(c, c->getLocalBounds()).contains(x, y))
+            return false;
+    return true;
+}
 
 void PickTargetOverlay::mouseDown(const juce::MouseEvent& e) {
     if (!active_)

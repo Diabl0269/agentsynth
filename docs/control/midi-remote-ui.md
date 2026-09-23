@@ -189,8 +189,12 @@ Select a control → **Assign…** (toolbar) or **Learn target** (inspector) →
   on every card, mixer column and the transport bar gets a subtle outline; the status bar says
   *"Click the knob, slider or button that Knob 1 should drive - Esc to cancel"*; the next left click
   on a learnable control makes the assignment and ends the overlay. Clicking anything else, a right
-  click, or Esc cancels. This is the only overlay-style mode in the
-  feature, and it is entered from the panel, never as a global key.
+  click, or Esc cancels. The dock's **Timeline / Mixer / MIDI Remote tab buttons are the exception**:
+  they receive the click (the overlay steps aside over them), so you can switch to the Mixer or Timeline
+  to reach its controls mid-pick; the session stays open and re-collects its candidates for the newly
+  showing surface. This is the only overlay-style mode in the feature, and it is entered from the panel,
+  never as a global key. A mixer detached into its own window is not a child of the main window and is
+  not pickable.
 - **Choose an action** — a searchable list grouped by `ShortcutCategory` using the Shortcuts
   tab's display names (`ShortcutManager::getActionDescription`), command-dispatched actions only
   (`AppCommands::getCommandForAction` is not `kNoCommand`).
@@ -204,7 +208,8 @@ drove in the same scope, so a control has at most one project and one global ass
 children. It draws once (no timer, no animation), resolves the click itself against the candidates every
 surface reports through its own `collectPickCandidates()` (each surface keeps its own registry; no card
 knows the mode exists), clips each outline by its ancestors so a control under the dock's edge is neither
-drawn nor pickable, and ends on Esc, on any graph rebuild (`GraphEditor::onBeforeDetachAllModuleComponents`)
+drawn nor pickable, lets `MixerDockComponent::getTabButtons()` through (`setPickPassThrough`) and re-collects
+on `MixerDockComponent::onActiveTabChanged` (`MidiLearnController::refreshPickTarget`), and ends on Esc, on any graph rebuild (`GraphEditor::onBeforeDetachAllModuleComponents`)
 or on a click that hits nothing. The action picker is `ActionPickerComponent`
 (`Source/UI/MidiRemote/ActionPicker/`).
 

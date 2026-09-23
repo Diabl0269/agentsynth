@@ -129,6 +129,10 @@ public:
     bool isPickingTarget() const noexcept;
     synth::ui::PickTargetOverlay* getPickOverlayForTest() noexcept { return pickOverlay_.get(); }
     void cancelPickTarget();
+    /** Re-collects the pick candidates from every surface (a dock tab switch changed what is showing). */
+    void refreshPickTarget();
+    /** Components (the dock's tab buttons) whose clicks reach them instead of ending the pick. */
+    void setPickPassThrough(std::vector<juce::Component*> components) { pickPassThrough_ = std::move(components); }
 
     bool isArmed() const noexcept;
     /** Esc key / clicking the canvas elsewhere while armed. A no-op if nothing is armed. */
@@ -260,6 +264,7 @@ private:
 
     juce::Component::SafePointer<juce::Component> pickOverlayHost_;
     std::unique_ptr<synth::ui::PickTargetOverlay> pickOverlay_;
+    std::vector<juce::Component*> pickPassThrough_;
     juce::String pickProfileId_;
     juce::String pickControlId_;
 

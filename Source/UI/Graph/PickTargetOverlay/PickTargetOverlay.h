@@ -25,6 +25,11 @@ public:
     void begin(std::vector<PickCandidate> candidates);
     /** Hides the overlay and drops the candidates. Safe to call from the callbacks below. */
     void end();
+    /** Replaces the candidates while active (a tab switch rebuilt or revealed other surfaces). */
+    void setCandidates(std::vector<PickCandidate> candidates);
+    /** Components whose clicks go straight through the overlay (the dock's tab buttons), so the user
+     *  can reveal the Mixer or Timeline mid-pick. They neither pick nor cancel. */
+    void setPassThrough(std::vector<juce::Component*> components);
     bool isActive() const noexcept { return active_; }
 
     /** A left click landed on a candidate. The overlay has already ended. */
@@ -57,6 +62,7 @@ private:
 
     std::vector<PickCandidate> candidates_;
     std::vector<Outline> outlines_;
+    std::vector<juce::Component::SafePointer<juce::Component>> passThrough_;
     bool active_ = false;
     bool probing_ = false;
     juce::Component::SafePointer<juce::Component> watchedParent_;

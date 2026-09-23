@@ -13,8 +13,31 @@
 
 namespace synth::midi {
 
+namespace {
+
+std::vector<synth::ui::PickCandidate> collectAllPickCandidates(GraphEditor& graph,
+                                                               synth::ui::MixerPanelComponent* mixer,
+                                                               synth::ui::TimelineTransportBar* transport) {
+    std::vector<synth::ui::PickCandidate> candidates;
+    synth::ui::collectGraphPickCandidates(graph, candidates);
+    if (mixer != nullptr)
+        mixer->collectPickCandidates(candidates);
+    if (transport != nullptr)
+        transport->collectPickCandidates(candidates);
+    return candidates;
+}
+
+} // namespace
+
 bool MidiLearnController::isPickingTarget() const noexcept {
     return pickOverlay_ != nullptr && pickOverlay_->isActive();
+}
+
+// The dock's tab buttons pass clicks through the overlay, and a tab switch rebuilds or reveals the
+// Mixer/Timeline surfaces, so the candidates collected at begin() are stale by then.
+void MidiLearnController::refreshPickTarget() {
+    if (isPickingTarget())
+        pickOverlay_->setCandidates(collectAllPickCandidates(graphEditor_, mixerPanel_, transportBar_));
 }
 
 bool MidiLearnController::beginPickTarget(const juce::String& profileId, const juce::String& controlId) {
@@ -29,13 +52,6 @@ bool MidiLearnController::beginPickTarget(const juce::String& profileId, const j
         return false;
 
     cancelArmed(); // only one learn-style mode at a time (docs/control/midi-remote-ui.md#the-learn-interaction)
-
-    std::vector<synth::ui::PickCandidate> candidates;
-    synth::ui::collectGraphPickCandidates(graphEditor_, candidates);
-    if (mixerPanel_ != nullptr)
-        mixerPanel_->collectPickCandidates(candidates);
-    if (transportBar_ != nullptr)
-        transportBar_->collectPickCandidates(candidates);
 
     if (pickOverlay_ == nullptr) {
         pickOverlay_ = std::make_unique<synth::ui::PickTargetOverlay>();
@@ -53,7 +69,8 @@ bool MidiLearnController::beginPickTarget(const juce::String& profileId, const j
 
     pickProfileId_ = profileId;
     pickControlId_ = controlId;
-    pickOverlay_->begin(std::move(candidates));
+    pickOverlay_->setPassThrough(pickPassThrough_);
+    pickOverlay_->begin(collectAllPickCandidates(graphEditor_, mixerPanel_, transportBar_));
     statusBar_.showStickyMessage("Click the knob, slider or button that '" + control->name +
                                  "' should drive - Esc to cancel");
     return true;
