@@ -35,6 +35,8 @@ public:
     /** FRO262 test seam: the widget's current displayed value (0..1) -- what configure()'s
      *  initialValue seeded and/or noteActivity() has since driven. */
     float getDisplayedValueForTest() const noexcept { return lastValue_; }
+    const juce::String& getAssignmentLabelForTest() const noexcept { return assignmentLabel_; }
+    bool isAssignmentWarningForTest() const noexcept { return assignmentIsWarning_; }
 
     void setSelected(bool selected);
     bool isSelected() const noexcept { return selected_; }

@@ -11,6 +11,7 @@
 #include "Modules/ModuleBase.h"
 #include "UI/Chrome/StatusBarComponent.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
+#include "UI/Graph/PickTargetOverlay/PickTargetOverlay.h"
 #include "UI/Mixer/MixerPanelComponent/MixerPanelComponent.h"
 #include "UI/Timeline/TimelineTransportBar.h"
 #include <algorithm>

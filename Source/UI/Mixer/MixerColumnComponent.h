@@ -8,6 +8,7 @@
 #include "MixerMeter.h"
 #include "MixerMeterReadout.h"
 #include "MixerSendList.h"
+#include "UI/Graph/PickTargetOverlay/PickCandidate.h"
 #include "UI/MidiRemote/MidiLearnMenu.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -163,6 +164,10 @@ public:
 
     // FRO256: test seam for the armed breathing outline's per-tick repaint -- see refreshMeter().
     int getMidiLearnArmedRepaintCountForTest() const noexcept { return midiLearnArmedRepaintCount_; }
+
+    /** FRO135: appends every learnable control here (parameters, and Solo as a node command) for the
+     *  pick-target overlay. */
+    void collectPickCandidates(std::vector<PickCandidate>& out) const;
 
     /** Same seam as ModuleComponent::setShowContextMenuHookForTest -- juce::PopupMenu never runs
      *  in a test process (docs/development/test-patterns.md), so a test installs a capturing hook

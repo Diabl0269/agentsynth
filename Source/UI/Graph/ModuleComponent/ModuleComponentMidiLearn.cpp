@@ -84,6 +84,14 @@ void ModuleComponent::registerMidiLearnable(juce::Component& control, juce::Rang
     midiLearnableRegistry_.add(control, param);
 }
 
+// The pick-target overlay's view of this card (FRO135): every registered control with its parameter,
+// so the overlay never needs to know what a card is.
+void ModuleComponent::collectPickCandidates(std::vector<synth::ui::PickCandidate>& out) const {
+    for (const auto& e : midiLearnableRegistry_.entries())
+        if (e.param != nullptr)
+            out.push_back({e.component, synth::midi::PickTarget::parameter(nodeId, e.param->paramID)});
+}
+
 // ============================================================================
 // Menu
 // ============================================================================

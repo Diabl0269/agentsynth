@@ -21,6 +21,15 @@ ControllerSurfaceToolbar::ControllerSurfaceToolbar() {
     };
     addAndMakeVisible(detectButton_);
 
+    assignButton_.setButtonText("Assign...");
+    assignButton_.setComponentID("assignButton");
+    assignButton_.setTooltip("Choose what the selected control drives");
+    assignButton_.onClick = [this] {
+        if (onAssignRequested)
+            onAssignRequested(assignButton_);
+    };
+    addAndMakeVisible(assignButton_);
+
     templatesButton_.setButtonText(juce::String::fromUTF8("Templates \xe2\x96\xbe"));
     templatesButton_.setComponentID("templatesButton");
     templatesButton_.setTooltip("Start from a generic layout");
@@ -48,6 +57,7 @@ ControllerSurfaceToolbar::ControllerSurfaceToolbar() {
     addChildComponent(hintLabel_);
 
     setProfileSelected(false);
+    setControlSelected(false);
 }
 
 ControllerSurfaceToolbar::~ControllerSurfaceToolbar() = default;
@@ -59,6 +69,8 @@ void ControllerSurfaceToolbar::setProfileSelected(bool selected) {
     if (!selected && detectOn_)
         setDetectOn(false);
 }
+
+void ControllerSurfaceToolbar::setControlSelected(bool selected) { assignButton_.setEnabled(selected); }
 
 void ControllerSurfaceToolbar::setDetectOn(bool on) {
     detectOn_ = on;
@@ -74,6 +86,8 @@ void ControllerSurfaceToolbar::resized() {
     auto bounds = getLocalBounds();
     auto row = bounds.removeFromTop(kRowHeight).reduced(6, 3);
     detectButton_.setBounds(row.removeFromLeft(72));
+    row.removeFromLeft(6);
+    assignButton_.setBounds(row.removeFromLeft(84));
     row.removeFromLeft(6);
     templatesButton_.setBounds(row.removeFromLeft(110));
     row.removeFromLeft(6);

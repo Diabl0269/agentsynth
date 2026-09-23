@@ -11,10 +11,9 @@ rather than a parameter) ships here as well. The MIDI Remote panel itself
 Surface cell / Inspector row, resolved by node command rather than parameter), and
 `GraphEditor::onEditMidiAssignmentRequested`. Detect mode, the "+ Add controller" popover,
 Templates, Import/Export and the Inspector's encoder Auto-detect (FRO134) shipped too, along with
-the Inspector's editable name, kind and encoding. Still design-only/not yet built: the "Assign from
-the panel" control-first-learn popover and its pick-target overlay, orphan Re-link/Recreate, and
-the Inspector's **Relearn** button (rendered, disabled) — all listed with their own sections below
-and left for follow-up tickets.
+the Inspector's editable name, kind and encoding. The mapping assistant (FRO135) shipped after it:
+"Assign from the panel" with its pick-target overlay and action picker, orphan Re-link/Recreate, and
+the orphan-node display. Still design-only: the Inspector's **Relearn** button (rendered, disabled).
 
 ---
 
@@ -144,7 +143,8 @@ Controllers list's present/absent state updates immediately rather than only on 
 One row per profile: name, a live-activity dot, a state glyph — present (device found and
 open), **absent** (profile exists, device not connected: greyed, assignments kept), **orphan**
 (the project references a profile this machine lacks: [`midi-remote.md`](midi-remote.md#where-does-a-mapping-live--global-or-in-the-project), row shows
-*"not on this machine"* and the inspector offers **Re-link** / **Recreate**). Right-click:
+*"not on this machine"*; selecting it shows [Orphan controllers](#orphan-controllers) in the inspector's
+place instead of a control inspector). Right-click:
 Rename, Export…, Delete… (confirms with the count of project assignments it will orphan). "+
 Add controller" is [Add controller](#add-controller). In the plugin build the list holds exactly "Host MIDI".
 
@@ -183,17 +183,45 @@ everywhere (the project one wins at runtime while the project is open).
 
 ### Assign from the panel (control-first learn)
 
-Select a control → **Assign…** (or **Learn target** in the inspector) → a small popover with
-two choices:
+Select a control → **Assign…** (toolbar) or **Learn target** (inspector) → a two-item menu:
 
-- **Pick a module control** — the canvas enters a *pick-target* overlay: every learnable control
+- **Pick a module control** — the *pick-target* overlay: every learnable control
   on every card, mixer column and the transport bar gets a subtle outline; the status bar says
-  *"Click the knob, slider or button that Knob 1 should drive — Esc to cancel"*; the next click
-  on a learnable control makes the assignment and ends the overlay. Clicking anything else
-  cancels. This is the only overlay-style mode in the
+  *"Click the knob, slider or button that Knob 1 should drive - Esc to cancel"*; the next left click
+  on a learnable control makes the assignment and ends the overlay. Clicking anything else, a right
+  click, or Esc cancels. This is the only overlay-style mode in the
   feature, and it is entered from the panel, never as a global key.
 - **Choose an action** — a searchable list grouped by `ShortcutCategory` using the Shortcuts
-  tab's display names (`ShortcutManager::getActionDescription`), command-dispatched actions only.
+  tab's display names (`ShortcutManager::getActionDescription`), command-dispatched actions only
+  (`AppCommands::getCommandForAction` is not `kNoCommand`).
+
+Where it lives: the assignment is made by `MidiLearnController::assignControl` (a parameter or Solo →
+project scope, one `recordMidiRemoteChange` step; an action, e.g. a transport button → global, written
+into the profile and not undoable). It replaces whatever the target was mapped to and whatever the control
+drove in the same scope, so a control has at most one project and one global assignment. The overlay is
+`synth::ui::PickTargetOverlay` (`Source/UI/Graph/PickTargetOverlay/`), a transparent layer added to
+`MainComponent` — not to the canvas — because the mixer columns and the transport bar are not canvas
+children. It draws once (no timer, no animation), resolves the click itself against the candidates every
+surface reports through its own `collectPickCandidates()` (each surface keeps its own registry; no card
+knows the mode exists), clips each outline by its ancestors so a control under the dock's edge is neither
+drawn nor pickable, and ends on Esc, on any graph rebuild (`GraphEditor::onBeforeDetachAllModuleComponents`)
+or on a click that hits nothing. The action picker is `ActionPickerComponent`
+(`Source/UI/MidiRemote/ActionPicker/`).
+
+### Orphan controllers
+
+An orphan controller row (the project names a `profileId` this machine lacks) shows, in the inspector's
+place, how many assignments depend on it and two repairs — **Re-link…** (choose a controller on this
+machine) and **Recreate** (choose a free MIDI input) — whose rules are in
+[`midi-remote.md`](midi-remote.md#where-does-a-mapping-live--global-or-in-the-project). Re-link reports
+"N of M assignments linked; K stay orphaned" when some specs have no counterpart, and the orphan row stays
+until none are left. Recreate is disabled when no MIDI input is free.
+
+**Orphan node.** A project assignment whose parameter target no longer resolves (its module was deleted, or a
+hosted plugin's parameter drifted away) after `RemoteEngine::reconcile` is shown as *"(missing module)"* in
+the warning colour on the surface and in the inspector, where **Forget** is its only action (takeover, range and
+invert are disabled). Forget works by assignment id, so it does not need the module it points at. It is never
+re-bound automatically.
 
 ### Detect mode
 
@@ -309,7 +337,9 @@ fake message source (no real `juce::MidiInput`):
   the right-click block appears on every surface in [Right-click MIDI Learn — coverage](#right-click-midi-learn--coverage)'s table (one test per row, "test the
   real mouse path" convention); the badge paints only when mapped; the panel's list/surface/
   inspector render from a profile; Detect adds cells in order (`ControllerSurfaceDetectTests.cpp`); pick-target overlay assigns and
-  cancels; orphan controller Re-link/Recreate; PNG render of the surface for visual inspection
+  cancels (`PickTargetOverlayTests.cpp`, `ActionPickerTests.cpp`, `MidiRemotePanelAssignTests.cpp`); orphan
+  controller Re-link/Recreate and the orphan node (`OrphanControllerTests.cpp`,
+  `Tests/MidiRemote/MidiLearnControllerOrphanTests.cpp`); PNG render of the surface for visual inspection
   (`MIDI_SURFACE_PNG=<path>`, like the ADSR card's).
 - **E2E** (`Tests/E2E/E2EMidiRemoteWorkflow.cpp`): fake device → Learn on Filter cutoff → sweep
   → parameter follows, automation Touch records it, undo reverts one step → save project →

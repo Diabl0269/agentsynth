@@ -53,6 +53,7 @@ public:
     /** FRO262 test seam: the widget's current displayed value (0..1) for `controlId`, or -1.0f if
      *  no cell with that id is currently shown. */
     float getCellValueForTest(const juce::String& controlId) const;
+    const ControllerSurfaceCell* findCellForTest(const juce::String& controlId) const;
 
     std::function<void(const juce::String& controlId)> onSelectControl;
     /** A drag landed on a new grid cell, already clamped to col >= 0 / row >= 0. The caller writes

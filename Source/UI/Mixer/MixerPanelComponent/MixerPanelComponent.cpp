@@ -285,6 +285,16 @@ void MixerPanelComponent::clearMidiLearnArmedSolo() {
     midiLearnArmedSoloNodeId_ = {};
 }
 
+// FRO135: the pick-target overlay's view of the mixer -- every strip column, plus Master's fader.
+// The Direct column has nothing learnable. Columns that are not showing are skipped by the overlay.
+void MixerPanelComponent::collectPickCandidates(std::vector<PickCandidate>& out) const {
+    for (const auto& column : stripColumns_)
+        if (column != nullptr)
+            column->collectPickCandidates(out);
+    if (masterColumn_ != nullptr)
+        masterColumn_->collectPickCandidates(out);
+}
+
 // FRO253: called after a nodeCommand press changes solo OUTSIDE any column's own click (via
 // MainComponentRemoteActionInvoker::invokeNodeCommand) -- MixerColumnComponent::toggleSoloed()'s
 // own refresh only runs on ITS OWN click, so nothing else re-syncs a column's M/S visuals after a

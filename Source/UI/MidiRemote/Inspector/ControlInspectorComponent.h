@@ -9,9 +9,9 @@
 // Remote panel's right region -- the selected control's name/kind/message spec/encoding/button
 // mode, then one block per assignment (a control may carry one project + one global assignment at
 // most in v1, docs/control/midi-remote-ui.md#inspector-right). Takeover, range+invert and Forget
-// are wired (FRO131); FRO134 adds the editable name and kind, the Encoding combo and Auto-detect....
-// Still inert: Relearn (re-detecting a control's message needs the same primitive the panel-side
-// learn will) and Learn target / the assign-from-panel popover (task 8).
+// are wired (FRO131); FRO134 adds the editable name and kind, the Encoding combo and Auto-detect...;
+// FRO135 adds Learn target (the assign-from-panel popover) and limits an orphaned row to Forget.
+// Still inert: Relearn (re-detecting a control's message needs a panel-side learn primitive).
 namespace synth::ui {
 
 class ControlInspectorComponent : public juce::Component {
@@ -53,6 +53,8 @@ public:
     std::function<void(const synth::Control& control)> onControlEdited;
     /** FRO134: "Auto-detect..." pressed (enabled only for a CC knob/encoder). */
     std::function<void(const synth::Control& control)> onAutoDetectRequested;
+    /** FRO135: "Learn target" pressed; `anchor` is the button, for the assign popover to hang from. */
+    std::function<void(juce::Component& anchor)> onLearnTargetRequested;
     /** "Forget" on the row for `assignmentId`. */
     std::function<void(const juce::String& assignmentId)> onForgetRequested;
 
@@ -72,6 +74,7 @@ private:
     juce::TextButton relearnButton_{"Relearn"}; // disabled -- needs the panel-side learn primitive
     juce::ComboBox encodingCombo_;
     juce::TextButton autoDetectButton_{"Auto-detect..."};
+    juce::TextButton learnTargetButton_{"Learn target"};
     juce::Label buttonModeLabel_;
 
     juce::OwnedArray<AssignmentRow> assignmentRows_;

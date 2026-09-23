@@ -147,6 +147,13 @@ float ControllerSurfaceComponent::getCellValueForTest(const juce::String& contro
     return -1.0f;
 }
 
+const ControllerSurfaceCell* ControllerSurfaceComponent::findCellForTest(const juce::String& controlId) const {
+    for (auto* cell : cells_)
+        if (cell->getControlId() == controlId)
+            return cell;
+    return nullptr;
+}
+
 void ControllerSurfaceComponent::resized() {
     // Cells are positioned by grid col/row in setControls(), not by this component's own size --
     // nothing to lay out here.

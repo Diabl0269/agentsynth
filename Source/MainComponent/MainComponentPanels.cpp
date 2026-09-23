@@ -318,6 +318,10 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
     // FRO130: Esc cancels an armed MIDI Learn (docs/control/midi-remote-ui.md#the-learn-interaction),
     // ahead of everything below -- including GraphEditor's own canvas Escape (clears the selection),
     // which only reaches here at all when nothing is selected.
+    if (key == juce::KeyPress::escapeKey && midiLearnController_.isPickingTarget()) {
+        midiLearnController_.cancelPickTarget();
+        return true;
+    }
     if (key == juce::KeyPress::escapeKey && midiLearnController_.isArmed()) {
         midiLearnController_.cancelArmed();
         return true;

@@ -416,6 +416,7 @@ void MainComponent::wireMidiRemoteEngine() {
     // transport bar's own breathing outline for the SAME/an action target.
     midiLearnController_.setMixerPanel(&mixerDock.getMixerPanel());
     midiLearnController_.setTransportBar(&timelinePanel.getTransportBar());
+    midiLearnController_.setPickOverlayHost(this); // FRO135: the pick-target overlay covers canvas, dock and transport
 
     // FRO131: same "wire it once everything it needs is alive" reasoning as the two calls above --
     // the MIDI Remote panel needs remoteEngine/midiLearnController_/midiRemoteDoc, none of which

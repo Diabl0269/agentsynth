@@ -242,6 +242,9 @@ add_executable(Tests
     MidiRemote/RemoteEngineLearnTests.cpp
     MidiRemote/ControllerProfileStoreTests.cpp
     MidiRemote/MidiRemoteLearnBinderTests.cpp
+    MidiRemote/MidiRemoteMappingTests.cpp
+    MidiRemote/MidiLearnControllerAssignTests.cpp
+    MidiRemote/MidiLearnControllerOrphanTests.cpp
     MidiRemote/ControllerTemplatesTests.cpp
     MidiRemote/ControllerDetectTests.cpp
     MidiRemote/EncoderAutoDetectTests.cpp
@@ -395,6 +398,10 @@ add_executable(Tests
     UI/MidiRemote/ControllersListTests.cpp
     UI/MidiRemote/ControllerSurfaceTests.cpp
     UI/MidiRemote/ControlInspectorTests.cpp
+    UI/MidiRemote/PickTargetOverlayTests.cpp
+    UI/MidiRemote/ActionPickerTests.cpp
+    UI/MidiRemote/OrphanControllerTests.cpp
+    UI/MidiRemote/MidiRemotePanelAssignTests.cpp
     UI/Mixer/MixerDockMeterGatingTests.cpp
     UI/Mixer/MixerEqThumbnailTests.cpp
     UI/Mixer/MixerColumnComponentTests.cpp
@@ -451,6 +458,10 @@ add_executable(Tests
     ../Source/ShortcutManager/ShortcutManagerActionNames.cpp
     ../Source/MidiRemote/ControllerProfileStore.cpp
     ../Source/MidiRemote/MidiLearnController.cpp
+    ../Source/MidiRemote/MidiLearnControllerMapping.cpp
+    ../Source/MidiRemote/MidiLearnControllerPick.cpp
+    ../Source/UI/Graph/PickTargetOverlay/GraphPickCandidates.cpp
+    ../Source/UI/Graph/PickTargetOverlay/PickTargetOverlay.cpp
     # Source/MidiRemote/RemoteEngine/*.cpp is NOT listed here on purpose: those five units are
     # registered in the root CMakeLists.txt (Core), same as RemoteModel.h/RemoteModelJson.cpp right
     # above them there, because Core's own AudioEngineMidi.cpp/AudioEngineHostMode.cpp call into
@@ -574,6 +585,10 @@ add_executable(Tests
     ../Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceComponent.cpp
     ../Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceCell.cpp
     ../Source/UI/MidiRemote/Inspector/ControlInspectorComponent.cpp
+    ../Source/UI/MidiRemote/ActionPicker/ActionPickerComponent.cpp
+    ../Source/UI/MidiRemote/Orphan/OrphanControllerComponent.cpp
+    ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelAssign.cpp
+    ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelOrphans.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibrarySearch.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryRows.cpp
