@@ -50,6 +50,7 @@ public:
     std::function<void()> onDragEnded; // owner commits the move (updateProfile()) here, not per-step
 
     void paint(juce::Graphics& g) override;
+    void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
     void mouseDown(const juce::MouseEvent& event) override;
     void mouseDrag(const juce::MouseEvent& event) override;

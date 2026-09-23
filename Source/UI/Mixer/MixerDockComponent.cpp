@@ -173,10 +173,14 @@ void MixerDockComponent::applyTabVisibility(bool allowMixerRebuild) {
     resetMetersButton_.setVisible(mixerActive);
     if (mixerActive && allowMixerRebuild)
         mixer_.rebuild();
-    // FRO131: catches up on any profile/assignment change that happened while this tab was hidden
-    // (Detect/Learn/an undo), same reasoning as the Mixer tab's own "coming back into view" rebuild
-    // above -- allowMixerRebuild's false-on-pure-detach exception applies here too, for the same
-    // reason (a detach/redock changes nothing about which profile is selected).
+    // FRO131: catches up on any profile/assignment change that happened while this tab was hidden,
+    // same reasoning as the Mixer tab's own "coming back into view" rebuild above --
+    // allowMixerRebuild's false-on-pure-detach exception applies here too, for the same reason (a
+    // detach/redock changes nothing about which profile is selected). FRO263: belt-and-braces now
+    // that MidiLearnController::onChanged and MainComponent::reconcileTimelineAfterGraphChange()
+    // keep the panel live while it's SHOWING too (Learn/Forget/Undo/Redo/a panel edit) -- this call
+    // still matters for the case those two don't cover: a change made while the tab was hidden,
+    // between the last live refresh and now.
     if (midiRemoteActive && allowMixerRebuild)
         midiRemotePanel_.rebuildFromProfiles();
     refreshDetachButton();

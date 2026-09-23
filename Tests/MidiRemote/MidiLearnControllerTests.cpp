@@ -739,3 +739,87 @@ TEST_F(MidiLearnControllerTest, UpdateAssignmentReturnsFalseForActionTargetAssig
     EXPECT_FALSE(controller_->updateAssignment(actionAssignment))
         << "updateAssignment rejects action targets (profile edits are not this method's job)";
 }
+
+// ============================================================================
+// FRO263 (docs/control/midi-remote-ui.md#the-midi-remote-panel): onChanged fires after every
+// mutation that changes what the panel shows, including as the undo/redo postRestore -- these
+// don't re-check every mutation MidiLearnControllerTests.cpp already covers above, just that the
+// hook reaches every DISTINCT code path that republishes profiles_/doc_.assignments (a project
+// mutation via publishAssignments(), and the five profile-only paths that call
+// remoteEngine_.setProfiles() without it).
+// ============================================================================
+
+TEST_F(MidiLearnControllerTest, OnChangedFiresOnLearn) {
+    int calls = 0;
+    controller_->onChanged = [&] { ++calls; };
+
+    controller_->arm(node_->nodeID, "cutoff");
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+
+    EXPECT_GE(calls, 1) << "a project assignment (Learn) goes through publishAssignments()";
+}
+
+TEST_F(MidiLearnControllerTest, OnChangedFiresOnForgetAndOnItsUndoRedo) {
+    controller_->arm(node_->nodeID, "cutoff");
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+    ASSERT_EQ(doc_.assignments.size(), 1u);
+
+    int calls = 0;
+    controller_->onChanged = [&] { ++calls; };
+
+    controller_->forget(node_->nodeID, "cutoff");
+    EXPECT_GE(calls, 1) << "forget() goes through publishAssignments()";
+
+    calls = 0;
+    undo_.undo(); // the ticket's own repro: Forget, then Cmd+Z
+    EXPECT_GE(calls, 1) << "undo's postRestore is publishAssignments()";
+
+    calls = 0;
+    undo_.redo();
+    EXPECT_GE(calls, 1) << "redo's postRestore is publishAssignments() too";
+}
+
+TEST_F(MidiLearnControllerTest, OnChangedFiresOnEveryProfileOnlyMutation) {
+    controller_->arm(node_->nodeID, "cutoff");
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+    ASSERT_EQ(controller_->getProfiles().size(), 1u);
+    auto profile = controller_->getProfiles()[0];
+    const juce::String profileId = profile.id;
+
+    int calls = 0;
+    controller_->onChanged = [&] { ++calls; };
+
+    // updateProfile() -- e.g. a panel-side rename or a drag-to-reposition.
+    profile.name = "Renamed";
+    EXPECT_TRUE(controller_->updateProfile(profile));
+    EXPECT_EQ(calls, 1);
+
+    // forgetAction() -- an action target has no project assignment, so it never reaches
+    // publishAssignments() at all; this is the path that would otherwise be missed.
+    calls = 0;
+    controller_->armAction("transportRecord");
+    send(juce::MidiMessage::controllerEvent(1, 21, 64));
+    settle();
+    calls = 0; // ignore the Learn's own notify, isolate forgetAction()'s
+    controller_->forgetAction("transportRecord");
+    EXPECT_EQ(calls, 1);
+
+    // deleteControl() when the control had no project assignment -- only the profile half runs.
+    calls = 0;
+    controller_->arm(node_->nodeID, "resonance");
+    send(juce::MidiMessage::controllerEvent(1, 22, 64));
+    settle();
+    controller_->forget(node_->nodeID, "resonance"); // drop the project half, keep the control
+    const juce::String secondControlId = controller_->getProfiles()[0].controls.back().id;
+    calls = 0;
+    EXPECT_TRUE(controller_->deleteControl(profileId, secondControlId));
+    EXPECT_EQ(calls, 1);
+
+    // deleteProfile().
+    calls = 0;
+    EXPECT_TRUE(controller_->deleteProfile(profileId));
+    EXPECT_EQ(calls, 1);
+}

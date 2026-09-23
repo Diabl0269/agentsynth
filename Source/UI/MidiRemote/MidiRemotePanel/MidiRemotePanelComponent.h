@@ -44,8 +44,25 @@ public:
     /** Re-reads the profile set (MidiLearnController::getProfiles()) and the project doc's
      *  controller refs, and rebuilds the Controllers list. Call after any mutation this panel
      *  itself makes (rename/delete profile/delete control) and after configure(). Cheap: a handful
-     *  of rows, never on the MIDI path. */
+     *  of rows, never on the MIDI path. Synchronous -- callers already off a live mouse gesture
+     *  (MixerDockComponent's tab-switch-in, MainComponent's post-graph-change reconcile) can call
+     *  this directly; scheduleLiveRefresh() below is for a call site that might not be. */
     void rebuildFromProfiles();
+
+    /** FRO263 (docs/control/midi-remote-ui.md#the-midi-remote-panel): MidiLearnController::onChanged's
+     *  target (wired once in MainComponent::wireMidiRemoteEngine()) -- keeps the panel live while
+     *  it's open instead of only catching up on the next tab-switch-in. Defers the actual
+     *  rebuildFromProfiles() via MessageManager::callAsync and coalesces repeat calls into one,
+     *  because onChanged can fire from inside a cell's own mouseUp call stack (a drag-to-reposition
+     *  ending in MidiLearnController::updateProfile()) -- a synchronous rebuild there would free the
+     *  very ControllerSurfaceCell whose mouseUp is still executing (same hazard
+     *  ControllerSurfaceComponent.cpp's own mid-gesture-rebuild comment documents). A no-op before
+     *  configure() (rebuildFromProfiles() itself already guards on that). */
+    void scheduleLiveRefresh();
+
+    /** FRO263 test seam: proves scheduleLiveRefresh()'s deferred rebuild actually reaches the
+     *  Controllers list, without exposing controllersList_ itself. */
+    int getControllersListRowCountForTest() const { return controllersList_.getRowCountForTest(); }
 
     /** MixerDockComponent::refreshMidiRemoteActivity() -- drains RemoteEngine::drainActivity() ONCE
      *  and fans the decoded events out to the Controllers list's activity dots and, for whichever
@@ -101,6 +118,12 @@ private:
     std::map<juce::String, bool> profileActivityLit_;
     std::map<juce::String, juce::int64> profileLastActivityMs_;
     static constexpr int kActivityLitMs = 150;
+
+    // FRO263: scheduleLiveRefresh()'s coalescing latch -- true from the first call until the
+    // deferred rebuildFromProfiles() actually runs, so several onChanged notifications in a row
+    // (e.g. a Learn's profile write followed by its project-assignment write) collapse into one
+    // rebuild rather than one per notification.
+    bool liveRefreshPending_ = false;
 
     ControllersListComponent controllersList_;
     ControllerSurfaceComponent controllerSurface_;

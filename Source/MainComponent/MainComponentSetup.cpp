@@ -402,6 +402,13 @@ void MainComponent::wireMidiRemoteEngine() {
     mixerDock.configureMidiRemote(audioEngine, remoteEngine, midiLearnController_, midiRemoteDoc, graphEditor);
     mixerDock.getMidiRemotePanel().onLocateNode = [this](const juce::String& nodeUuid) { selectNodeInGraph(nodeUuid); };
 
+    // FRO263: keep the panel live while it's open, not just on its own tab-switch-in --
+    // MidiLearnController::onChanged fires after every mutation that changes what the panel shows
+    // (see its own doc comment), so wiring it here covers Learn/Forget/Undo/Redo/a panel-side profile
+    // edit without a callback per mutation site. midiLearnController_ is declared after mixerDock in
+    // MainComponent.h, so it destructs first -- this lambda's `this` capture never outlives mixerDock.
+    midiLearnController_.onChanged = [this] { mixerDock.getMidiRemotePanel().scheduleLiveRefresh(); };
+
     // Transport-bar right-click MIDI Learn (FRO133) -- action targets, so these three forward to
     // MidiLearnController's action-keyed overloads rather than GraphEditor's node-keyed ones (see
     // this function's own graphEditor.onMidiLearnRequested sibling in wireGraphEditorCallbacks()).

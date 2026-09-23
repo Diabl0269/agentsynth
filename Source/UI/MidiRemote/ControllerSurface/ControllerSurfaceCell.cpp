@@ -167,6 +167,20 @@ void ControllerSurfaceCell::paint(juce::Graphics& g) {
         synth::ui::midilearn::paintMidiMappedBadge(g, getLocalBounds(), badgeColour);
 }
 
+// FRO263: continuous feedback for the whole span a real cell-to-cell move is in progress -- a
+// dim overlay across the WHOLE cell (including the slider/button child, which paint() above never
+// reaches) so a slow drag has something visible happening between whole-cell snaps, instead of
+// nothing until the next boundary crossing. paintOverChildren() (not paint()) because the
+// slider_/button_ children paint themselves after this component's own paint() call, so only an
+// over-children pass can sit on top of them. Toggled alongside the drag cursor in
+// mouseDrag()/mouseUp() below.
+void ControllerSurfaceCell::paintOverChildren(juce::Graphics& g) {
+    if (!isDragging_)
+        return;
+    g.setColour(juce::Colours::black.withAlpha(0.35f));
+    g.fillRect(getLocalBounds());
+}
+
 void ControllerSurfaceCell::resized() {
     auto bounds = getLocalBounds();
     bounds.removeFromTop(kNameHeight);
@@ -192,6 +206,10 @@ void ControllerSurfaceCell::mouseDown(const juce::MouseEvent& event) {
     isDragging_ = false;
     getProperties().set(kLastFiredDeltaColProperty, 0);
     getProperties().set(kLastFiredDeltaRowProperty, 0);
+    // FRO263: a hand cursor for the whole press-to-release span, not only once a whole-cell move is
+    // detected below -- gives a press immediate "this can be dragged" feedback even if it turns out
+    // to be a plain click, which reverts it in mouseUp() below just as promptly.
+    setMouseCursor(juce::MouseCursor::DraggingHandCursor);
     if (onSelected)
         onSelected();
 }
@@ -215,8 +233,14 @@ void ControllerSurfaceCell::mouseDrag(const juce::MouseEvent& event) {
     getProperties().set(kLastFiredDeltaRowProperty, dRows);
     // isDragging_ becomes true only once a real cell-crossing fires onDraggedByCells, not merely
     // because mouseDrag() was called -- so mouseUp below only fires onDragEnded for a drag that
-    // actually moved the cell, never for a plain click or a sub-cell jiggle.
+    // actually moved the cell, never for a plain click or a sub-cell jiggle. FRO263: paintOverChildren()
+    // reads this same flag for the dim-while-dragging overlay, so the first crossing also needs a
+    // repaint to turn it on (every crossing after that already repaints via noteActivity()/the
+    // owner's move, so this only matters once per drag).
+    const bool wasDragging = isDragging_;
     isDragging_ = true;
+    if (!wasDragging)
+        repaint();
     if (onDraggedByCells)
         onDraggedByCells(dCols, dRows);
 }
@@ -224,8 +248,12 @@ void ControllerSurfaceCell::mouseDrag(const juce::MouseEvent& event) {
 void ControllerSurfaceCell::mouseUp(const juce::MouseEvent&) {
     const bool didDrag = isDragging_;
     isDragging_ = false;
-    if (didDrag && onDragEnded)
-        onDragEnded();
+    setMouseCursor(juce::MouseCursor::NormalCursor);
+    if (didDrag) {
+        repaint(); // clears the FRO263 dim-while-dragging overlay
+        if (onDragEnded)
+            onDragEnded();
+    }
 }
 
 } // namespace synth::ui
