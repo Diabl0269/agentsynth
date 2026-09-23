@@ -60,8 +60,15 @@ const juce::StringArray& surfaceResolvedActionIds() {
 // (see EveryActionIdHasABindingACategoryAndADescription below), so this is the one exception list.
 const juce::StringArray& intentionallyUnboundActionIds() {
     static const juce::StringArray ids{
-        "transportPlay",          "transportStop", "transportToggleLoop", "transportRecord", "transportToggleMetronome",
+        "transportPlay",
+        "transportStop",
+        "transportToggleLoop",
+        "transportRecord",
+        "transportToggleMetronome",
         "transportReturnToStart",
+        // FRO131: shipped unbound (docs/control/midi-remote-ui.md#the-midi-remote-panel) -- a
+        // toolbar button and MIDI Remote target already reach it; a user may still bind one.
+        "toggleMidiRemotePanel",
     };
     return ids;
 }

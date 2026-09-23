@@ -321,6 +321,11 @@ public:
         bindings["transportRecord"] = juce::KeyPress();
         bindings["transportToggleMetronome"] = juce::KeyPress();
         bindings["transportReturnToStart"] = juce::KeyPress();
+
+        // FRO131: same "explicit invalid KeyPress, not an absent entry" reasoning as the transport
+        // family above -- shipped unbound (a toolbar button and MIDI Remote target already reach
+        // it), but still needs a `bindings` entry or saveToProperties()'s `.at()` throws.
+        bindings["toggleMidiRemotePanel"] = juce::KeyPress();
     }
 
     void addGraphDefaultBindings() {

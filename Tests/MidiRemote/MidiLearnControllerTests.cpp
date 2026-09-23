@@ -543,15 +543,24 @@ TEST_F(MidiLearnControllerTest, CountProjectAssignmentsForProfileCountsMatchingA
 
     EXPECT_EQ(controller_->countProjectAssignmentsForProfile(profileA), 2);
 
-    // Create a second profile
+    // An action-target learn on profileA's own device doesn't add a project assignment.
     controller_->armAction("transportRecord");
     send(juce::MidiMessage::controllerEvent(1, 40, 64));
     settle();
-    ASSERT_EQ(controller_->getProfiles().size(), 2u);
-    const juce::String profileB = controller_->getProfiles()[1].id;
-
-    EXPECT_EQ(controller_->countProjectAssignmentsForProfile(profileB), 0)
+    ASSERT_EQ(controller_->getProfiles().size(), 1u) << "same device -- still one profile";
+    EXPECT_EQ(controller_->countProjectAssignmentsForProfile(profileA), 2)
         << "action assignments don't count, only project doc (parameter/nodeCommand) assignments";
+
+    // A genuinely different device (its own sourceKey) auto-creates its own profile.
+    controller_->arm(node_->nodeID, "attack");
+    remoteEngine_.handleMessage("second-test-device", juce::MidiMessage::controllerEvent(1, 50, 64));
+    settle();
+    ASSERT_EQ(controller_->getProfiles().size(), 2u);
+    const juce::String profileB = controller_->getProfiles()[0].id == profileA ? controller_->getProfiles()[1].id
+                                                                               : controller_->getProfiles()[0].id;
+
+    EXPECT_EQ(controller_->countProjectAssignmentsForProfile(profileB), 1)
+        << "profileB's own assignment must not be attributed to profileA";
 
     EXPECT_EQ(controller_->countProjectAssignmentsForProfile("unknown-id"), 0);
 }
@@ -635,12 +644,14 @@ TEST_F(MidiLearnControllerTest, DeleteControlRecordsAnUndoStepForProjectAssignme
     const juce::String profileId = controller_->getProfiles()[0].id;
     const juce::String controlId = controller_->getProfiles()[0].controls[0].id;
 
-    // Clear the existing undo state
+    // Prove the learn's own undo step really works, then wipe it -- redo() replays the step, it
+    // does not remove it from history, so canUndo() would stay true without clearUndoHistory().
     undo_.undo();
     EXPECT_TRUE(doc_.assignments.empty());
     undo_.redo();
     ASSERT_EQ(doc_.assignments.size(), 1u);
-    EXPECT_FALSE(undo_.canUndo()) << "redo leaves nothing to undo";
+    undo_.clearUndoHistory();
+    EXPECT_FALSE(undo_.canUndo());
 
     // Delete the control
     controller_->deleteControl(profileId, controlId);
@@ -689,9 +700,9 @@ TEST_F(MidiLearnControllerTest, UpdateAssignmentChangesExistingProjectAssignment
     const auto originalId = doc_.assignments[0].id;
     EXPECT_EQ(doc_.assignments[0].takeover, synth::Takeover::useDefault);
 
-    // Clear undo state
-    undo_.undo();
-    undo_.redo();
+    // Clear undo state -- redo() replays the learn's own step, it does not remove it from
+    // history, so canUndo() would stay true without an explicit clearUndoHistory().
+    undo_.clearUndoHistory();
     EXPECT_FALSE(undo_.canUndo());
 
     // Update the assignment

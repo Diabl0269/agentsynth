@@ -146,8 +146,8 @@ TEST(MixerFocusRegionTest, RegisterMixerFocusRegionIsReusableAcrossIndependentRe
         << "the same helper call must keep honouring ITS OWN dockOpen predicate, not some fixed rule";
 
     // Registering against a second registry must not touch MainComponent's own -- still exactly
-    // the seven regions RegistersExactlyTheSevenDocumentedRegionsInOrder documents.
-    EXPECT_EQ(mc.getFocusRegionsForTest().getRegions().size(), 7u);
+    // the eight regions RegistersExactlyTheEightDocumentedRegionsInOrder documents.
+    EXPECT_EQ(mc.getFocusRegionsForTest().getRegions().size(), 8u);
 }
 
 TEST(MixerFocusRegionTest, RegisterMixerFocusRegionTreatsANullDockOpenAsAlwaysOpen) {
