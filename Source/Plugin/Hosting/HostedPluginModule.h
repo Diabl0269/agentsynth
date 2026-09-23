@@ -32,8 +32,8 @@ namespace synth {
  * audio thread has demonstrably started two later blocks (`blockCounter_`).
  *
  * State/trust: getExtraState() carries the identity (format + uniqueId + name, never a path) plus
- * the plugin's own opaque state blob, base64'd. "Hosted Plugin" is in AIStateMapper's
- * kNonAuthorableModuleTypes, so untrusted apply never calls setExtraState — a plugin state blob is
+ * the plugin's own opaque state blob, base64'd, and the optional "cardLayout" override. "Hosted Plugin" is in
+ * AIStateMapper's kNonAuthorableModuleTypes, so untrusted apply never calls setExtraState — a plugin state blob is
  * opaque bytes handed to third-party code and must never arrive from a model. A module holding an
  * identity with no instance is a valid state (a patch opened where the plugin isn't installed).
  *
