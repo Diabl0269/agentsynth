@@ -558,9 +558,15 @@ void MainComponent::rebuildFocusRegions() {
     // FRO12: guarded -- a Timeline detached to its own window has nothing docked here to cycle
     // to; Tab inside that window cycles its OWN one-region registry instead (see
     // DetachedPanelWindow::keyPressed). Wrapping only -- never reorder/rename the regions below.
+    // FRO131: the dock grew a third tab (MidiRemote) -- excluding only Mixer here is no longer
+    // enough to say Timeline is the one actually showing, or this region reports open while the
+    // MidiRemote tab is the one on screen.
     if (!mixerDock.getTimelineHost().isDetached())
         focusRegions_.addRegion({"timeline", &timelinePanel,
-                                 [this] { return isTimelineVisible && !mixerDock.isMixerTabActive(); },
+                                 [this] {
+                                     return isTimelineVisible && !mixerDock.isMixerTabActive() &&
+                                            !mixerDock.isMidiRemoteTabActive();
+                                 },
                                  [this] {
                                      mixerDock.setActiveTab(synth::ui::MixerDockComponent::Tab::Timeline);
                                      if (!isTimelineVisible && toggleTimelineButton.onClick)
