@@ -8,7 +8,7 @@ A free, open-source modular synth. Patch oscillators, filters, envelopes and eff
 together in a node graph, play it from a keyboard or sequencer, and use it standalone
 or as a VST3/AU plugin in your DAW.
 
-![Agent Synth's node graph editor, zooming out across a multi-voice patch of oscillators, filters, envelopes and effect modules wired together with cables](assets/readme/demo.gif)
+![Agent Synth's node graph editor showing two LFOs modulating an oscillator and filter via cyan cables, with an ADSR envelope driving the VCA](assets/readme/hero.png)
 
 *From [Macros in Agent Synth](https://youtu.be/Ot4gqm3FoaE) — full patching walkthrough on YouTube.*
 
@@ -21,14 +21,6 @@ description; the synth doesn't depend on it.
 ## What's in the box
 
 Agent Synth provides a visual patching environment where audio modules can be freely connected to create complex sounds. Each module processes audio and/or control signals, enabling everything from simple subtractive synthesis to elaborate modulation chains.
-
-### Module Graph
-Modules connect via inputs and outputs:
-```
-[Sequencer] ──▶ [Oscillator] ──▶ [Filter] ──▶ [VCA] ──▶ [Output]
-                    ▲               ▲           ▲
-                 [LFO]          [ADSR]       [ADSR]
-```
 
 ### Core Modules
 - **Oscillator**: Anti-aliased waveform generator (Sine, Saw, Square, Triangle).
