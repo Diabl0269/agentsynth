@@ -237,6 +237,7 @@ add_executable(Tests
     MidiRemote/RemoteEngineApplyTests.cpp
     MidiRemote/RemoteEngineReconcileTests.cpp
     MidiRemote/RemoteEngineHostedTests.cpp
+    MidiRemote/RemoteEngineNodeCommandE2ETests.cpp
     MidiRemote/RemoteEngineThreadingTests.cpp
     MidiRemote/RemoteEngineLearnTests.cpp
     MidiRemote/ControllerProfileStoreTests.cpp
@@ -443,13 +444,14 @@ add_executable(Tests
     ../Source/ShortcutManager/ShortcutManagerActionNames.cpp
     ../Source/MidiRemote/ControllerProfileStore.cpp
     ../Source/MidiRemote/MidiLearnController.cpp
-#Source / MidiRemote / RemoteEngine/*.cpp is NOT listed here on purpose: those five units are
+    # Source/MidiRemote/RemoteEngine/*.cpp is NOT listed here on purpose: those five units are
     # registered in the root CMakeLists.txt (Core), same as RemoteModel.h/RemoteModelJson.cpp right
     # above them there, because Core's own AudioEngineMidi.cpp/AudioEngineHostMode.cpp call into
     # synth::midi::RemoteMessageSink/hostSourceKey(). Tests links Core directly (see the
     # MeterColourStops.cpp comment above), so re-listing them here would double-compile/duplicate-
     # symbol them exactly like that comment warns against.
     ../Source/MainComponent/MainComponent.cpp
+    ../Source/MainComponent/MainComponentRemoteActionInvoker.cpp
     ../Source/MainComponent/MainComponentSetup.cpp
     ../Source/MainComponent/MainComponentSetupToolbar.cpp
     ../Source/MainComponent/MainComponentSetupTimeline.cpp
