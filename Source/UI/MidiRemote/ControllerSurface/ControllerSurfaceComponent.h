@@ -21,6 +21,7 @@ public:
         juce::String assignmentLabel; // "Filter . Cutoff" / "Play" / "-" / "(missing module)"
         bool isWarning = false;       // orphaned target -> warning-colour label
         bool isMapped = false;        // paints the MIDI badge
+        float initialValue = 0.0f;    // 0..1, same domain as noteActivity(); 0 for unmapped/orphaned/action targets
     };
 
     ControllerSurfaceComponent();
@@ -39,6 +40,10 @@ public:
 
     void setSelectedControlId(const juce::String& controlId);
     juce::String getSelectedControlId() const noexcept { return selectedControlId_; }
+
+    /** FRO262 test seam: the widget's current displayed value (0..1) for `controlId`, or -1.0f if
+     *  no cell with that id is currently shown. */
+    float getCellValueForTest(const juce::String& controlId) const;
 
     std::function<void(const juce::String& controlId)> onSelectControl;
     /** A drag landed on a new grid cell, already clamped to col >= 0 / row >= 0. The caller writes

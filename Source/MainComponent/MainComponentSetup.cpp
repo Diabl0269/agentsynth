@@ -393,7 +393,19 @@ void MainComponent::wireMidiRemoteEngine() {
     // in Hosted mode: the callback that would invoke it can structurally never fire there
     // (changeListenerCallback's own isHosted() guard) -- cleared in MainComponent's destructor
     // beside onDeviceStateChanged.
-    audioEngine.onMidiDevicesChanged = [this] { midiLearnController_.refreshSources(); };
+    //
+    // FRO262 (follow-up): refreshSources() alone only fixes MIDI Learn actually hearing the device
+    // -- it never told the panel. MidiRemotePanelComponent::rebuildFromProfiles() computes each
+    // Controllers-list row's present/absent state from audioEngine.getOpenMidiInputIdentifiers() at
+    // rebuild time, so a device that newly opens while the panel tab is already showing stayed
+    // greyed until MixerDockComponent::applyTabVisibility()'s tab-switch-in catch-up ran it.
+    // scheduleLiveRefresh() (FRO263) is the same deferred/coalesced entry point
+    // midiLearnController_.onChanged below uses, so this reuses that seam rather than adding a
+    // second seam.
+    audioEngine.onMidiDevicesChanged = [this] {
+        midiLearnController_.refreshSources();
+        mixerDock.getMidiRemotePanel().scheduleLiveRefresh();
+    };
 
     // FRO133: the mixer panel and transport bar are plain MainComponent members, already fully
     // constructed by the time any constructor-body wiring function runs (member-init order, not

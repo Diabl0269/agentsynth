@@ -22,15 +22,19 @@ ControllerSurfaceCell::ControllerSurfaceCell() = default;
 ControllerSurfaceCell::~ControllerSurfaceCell() = default;
 
 void ControllerSurfaceCell::configure(const synth::Control& control, const juce::String& assignmentLabel,
-                                      bool isWarningLabel, bool isMapped) {
+                                      bool isWarningLabel, bool isMapped, float initialValue) {
     controlId_ = control.id;
     control_ = control;
     assignmentLabel_ = assignmentLabel;
     assignmentIsWarning_ = isWarningLabel;
     mapped_ = isMapped;
-    lastValue_ = 0.0f;
+    lastValue_ = juce::jlimit(0.0f, 1.0f, initialValue);
     lastPressed_ = false;
-    buildWidgetForKind();
+    buildWidgetForKind(); // rebuilds slider_/button_ at rest (0 / not pressed) -- seed from lastValue_ below
+    if (slider_ != nullptr)
+        slider_->setValue((double)lastValue_, juce::dontSendNotification);
+    else if (button_ != nullptr)
+        button_->setToggleState(lastValue_ > 0.5f, juce::dontSendNotification);
     resized();
     repaint();
 }

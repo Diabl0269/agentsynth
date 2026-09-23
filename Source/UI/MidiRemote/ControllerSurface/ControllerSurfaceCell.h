@@ -23,14 +23,18 @@ public:
     ControllerSurfaceCell();
     ~ControllerSurfaceCell() override;
 
-    /** Structural: which control this cell represents, its assignment label
-     *  ("Filter . Cutoff" / "Play" / "-" / "(missing module)") and whether it should paint the
-     *  MIDI-mapped badge (Source/UI/MidiRemote/MidiLearnMenu.h's paintMidiMappedBadge). */
+    /** Structural: which control this cell represents, its assignment label, whether it should
+     *  paint the MIDI-mapped badge, and the widget's initial displayed value (0..1, same domain as
+     *  noteActivity()). */
     void configure(const synth::Control& control, const juce::String& assignmentLabel, bool isWarningLabel,
-                   bool isMapped);
+                   bool isMapped, float initialValue = 0.0f);
 
     const juce::String& getControlId() const noexcept { return controlId_; }
     const synth::Control& getControl() const noexcept { return control_; }
+
+    /** FRO262 test seam: the widget's current displayed value (0..1) -- what configure()'s
+     *  initialValue seeded and/or noteActivity() has since driven. */
+    float getDisplayedValueForTest() const noexcept { return lastValue_; }
 
     void setSelected(bool selected);
     bool isSelected() const noexcept { return selected_; }

@@ -119,7 +119,9 @@ The panel stays live while it's open (FRO263) — it re-pulls the profile/assign
 mutation that changes it, wherever it happens: a canvas Learn/Forget, Undo/Redo, an action Learn on
 the transport bar, or the panel's own Rename/Delete/Retype/drag-to-reposition. It is not limited to
 catching up when the tab is switched into, which is now the fallback for changes made while the tab
-was hidden, not the only refresh path.
+was hidden, not the only refresh path. FRO262 extends the same live-refresh seam to a MIDI device
+opening or closing after launch (a controller ticked in the Audio tab, or one that reconnects) — the
+Controllers list's present/absent state updates immediately rather than only on the next tab switch.
 
 ```text
 ┌ Controllers ──────┬ Surface: Launchkey Mini MK3 ───────────────────────┬ Inspector ─────────────┐
@@ -153,7 +155,10 @@ snapped) using the app's own widgets: a rotary for `knob`/`encoder`, a vertical 
 Each cell shows the control's name above and its **assignment label** below (parameter:
 *"Filter · Cutoff"*, node command (FRO253's Solo): *"Kick · Solo"*, action: *"Play"*, none: *"—"*,
 orphaned node: *"(missing module)"* in the warning colour). Widgets are **display-only** — they move with the hardware (activity events,
-[`midi-remote.md`](midi-remote.md#the-engine)) and are never dragged to send MIDI. Clicking a cell selects it (inspector);
+[`midi-remote.md`](midi-remote.md#the-engine)) and are never dragged to send MIDI. A cell mapped to
+a parameter or the Solo node command builds already showing that target's current value
+(FRO262) rather than always at rest — an unmapped, orphaned, or action-target cell still shows 0/off,
+since there is nothing live to read. Clicking a cell selects it (inspector);
 dragging moves it on the grid; Delete removes the control (and its assignments, undoable for the
 project half). Repaint is event-driven from the activity ring at ≤ 30 Hz while the tab is
 showing, gated exactly like `MixerDockComponent::refreshMeters` — no free-running timer.
