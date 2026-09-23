@@ -804,3 +804,56 @@ TEST(ScaleAssistPanelTest, CustomEditorTwelveToggleBoundsAreVisibleAndNonOverlap
                 panel.getCustomPitchToggle(a).getBounds().intersects(panel.getCustomPitchToggle(b).getBounds()))
                 << "pitch classes " << a << " and " << b << " overlap";
 }
+
+// ---- Scroll: the sidebar's controls live inside a juce::Viewport that surfaces a vertical
+// scrollbar ONLY when the panel's own height can't show them all — a tall-enough panel
+// (the normal case, since the panel is as tall as the roll) shows the whole sidebar with no
+// scroll, while a cramped one gives the user a bar to reach the tail. ----
+
+TEST(ScaleAssistPanelTest, PanelFitsFullyAndNeverScrollsWhenTallEnough) {
+    ScaleAssistPanel panel; // custom-scale editor hidden: the shorter content footprint
+    ASSERT_FALSE(panel.isCustomEditorVisibleForTest());
+    const int natural = panel.getContentNaturalHeightForTest();
+    ASSERT_GT(natural, 0);
+
+    panel.setSize(PianoRollComponent::kScalePanelWidth, natural + 100);
+    EXPECT_FALSE(panel.getScrollViewportForTest().canScrollVertically())
+        << "a panel a hundred px taller than its content needs shows no scrollbar";
+    EXPECT_FALSE(panel.getScrollViewportForTest().getVerticalScrollBar().isVisible())
+        << "the vertical scrollbar stays hidden while the whole sidebar fits";
+}
+
+TEST(ScaleAssistPanelTest, PanelShowsScrollBarWhenShorterThanContent) {
+    ScaleAssistPanel panel;
+    const int natural = panel.getContentNaturalHeightForTest();
+    ASSERT_GT(natural, 0);
+
+    panel.setSize(PianoRollComponent::kScalePanelWidth, juce::jmax(40, natural / 2));
+    EXPECT_TRUE(panel.getScrollViewportForTest().canScrollVertically())
+        << "a panel half the content's height offers a scrollbar to reach its tail";
+    EXPECT_TRUE(panel.getScrollViewportForTest().getVerticalScrollBar().isVisible())
+        << "the vertical scrollbar shows while the panel can't show every control";
+}
+
+// Revealing the custom-scale editor grows the content; a panel that exactly fit the editor-less
+// content then overflows once the editor is shown — the threshold-crossing the user actually hits.
+TEST(ScaleAssistPanelTest, RevealingCustomEditorGrowsContentAndForcesScroll) {
+    ScaleAssistPanel panel; // editor hidden
+    const int naturalWithout = panel.getContentNaturalHeightForTest();
+    ASSERT_GT(naturalWithout, 0);
+
+    panel.setSize(PianoRollComponent::kScalePanelWidth, naturalWithout + 8);
+    ASSERT_FALSE(panel.isCustomEditorVisibleForTest());
+    EXPECT_FALSE(panel.getScrollViewportForTest().canScrollVertically())
+        << "a panel sized to the editor-less content fits it with room to spare";
+
+    // Select the "Edit custom scales..." row (always last) — the same gesture every other custom-
+    // editor test uses — growing the content past the same panel height.
+    panel.getScaleCombo().setSelectedId(panel.getScaleCombo().getItemId(panel.getScaleCombo().getNumItems() - 1),
+                                        juce::sendNotificationSync);
+    ASSERT_TRUE(panel.isCustomEditorVisibleForTest());
+    EXPECT_GT(panel.getContentNaturalHeightForTest(), naturalWithout)
+        << "the custom-scale editor adds a block of controls, so the content grows";
+    EXPECT_TRUE(panel.getScrollViewportForTest().canScrollVertically())
+        << "the same panel now scrolls once the editor has grown the content past it";
+}

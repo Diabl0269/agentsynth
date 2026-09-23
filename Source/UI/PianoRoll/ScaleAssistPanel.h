@@ -37,6 +37,16 @@ public:
         buildCustomScaleEditor();
         buildPitchVisibilityControl();
         buildRandomGenerationControls();
+        // Every control above lives in `scaleContent_`, the scrolled child of `scrollViewport_`.
+        // The viewport shows its vertical scrollbar (and clips its child) only while the content's
+        // natural height exceeds the panel's own height, so when the panel IS tall enough the whole
+        // sidebar is visible and there is nothing to scroll. A too-short panel (a cramped timeline)
+        // gets the scrollbar and the user scrolls within the sidebar instead of having its tail
+        // controls squished off the bottom. See resized()/contentNaturalHeight().
+        addAndMakeVisible(scrollViewport_);
+        scrollViewport_.setComponentID("scaleAssistScrollViewport");
+        scrollViewport_.setViewedComponent(&scaleContent_, /*resizeWhenParentChanges=*/false);
+        scrollViewport_.setScrollBarsShown(/*vertical=*/true, /*horizontal=*/false);
         rebuildScaleCombo();
         showCustomEditor(false);
     }
@@ -51,7 +61,42 @@ public:
     }
 
     void resized() override {
-        auto bounds = getLocalBounds().reduced(6);
+        // Every control lives in `scaleContent_`, the scrolled child of `scrollViewport_`. The
+        // viewport shows its vertical scrollbar and clips its child only while the content's
+        // natural height exceeds the panel's own — so a tall-enough panel shows the whole sidebar
+        // and there is nothing to scroll, while a cramped one gets the scrollbar to reach its tail.
+        scrollViewport_.setBounds(getLocalBounds());
+        scaleContent_.setSize(juce::jmax(0, scrollViewport_.getWidth()), juce::jmax(0, contentNaturalHeight()));
+        layoutContentInto(scaleContent_.getLocalBounds());
+        scrollViewport_.repaint();
+    }
+
+    // Height the sidebar needs at full size: the 6 px inset on each side plus every row that
+    // layoutContentInto consumes (the custom-editor block only while it is showing). It mirrors
+    // that layout's row sizes exactly, so the two stay in lockstep.
+    int contentNaturalHeight() const {
+        constexpr int kInset = 6; // matches the inset layoutContentInto takes off the content area
+        int y = kInset;
+        y += 22 + 4; // root row + gap
+        y += 22 + 6; // scale combo + gap
+        if (customEditorVisible_) {
+            y += 18 + 2; // sharps row + gap
+            y += 24 + 4; // naturals row + gap
+            y += 22 + 6; // name row + gap
+        }
+        y += 22 + 10; // pitch-visibility toggle + gap
+        y += 22 + 4;  // min row + gap
+        y += 22 + 6;  // max row + gap
+        y += 24 + 2;  // generate button + gap
+        y += 20;      // add-to-existing toggle
+        return y + kInset;
+    }
+
+    // The one layout pass, positioning every control inside `area` (the content component's
+    // local space). No panel height enters here — it just lays out to full size; scrolling is
+    // the viewport's job above. Kept in lockstep with contentNaturalHeight.
+    void layoutContentInto(juce::Rectangle<int> area) {
+        auto bounds = area.reduced(6);
 
         auto rootRow = bounds.removeFromTop(22);
         rootLabel_.setBounds(rootRow.removeFromLeft(34));
@@ -163,6 +208,11 @@ public:
     }
     bool isCustomEditorVisibleForTest() const noexcept { return customEditorVisible_; }
     const std::vector<synth::UserScale>& getUserScalesForTest() const noexcept { return userScales_; }
+    // The viewport is the object that decides the scroll; exposing it (and the natural content height
+    // it compares against) lets a test assert "bar shows only when content overflows" without any
+    // paint or device.
+    juce::Viewport& getScrollViewportForTest() noexcept { return scrollViewport_; }
+    int getContentNaturalHeightForTest() const noexcept { return contentNaturalHeight(); }
 
 private:
     static constexpr int kNoScaleId = 1;
@@ -270,11 +320,11 @@ private:
     }
 
     void buildRootAndScaleControls() {
-        addAndMakeVisible(rootLabel_);
+        scaleContent_.addAndMakeVisible(rootLabel_);
         rootLabel_.setText("Root", juce::dontSendNotification);
         rootLabel_.setFont(juce::Font(juce::FontOptions(11.5f)));
 
-        addAndMakeVisible(rootCombo_);
+        scaleContent_.addAndMakeVisible(rootCombo_);
         rootCombo_.setComponentID("scaleAssistRootCombo");
         for (int pc = 0; pc < 12; ++pc)
             rootCombo_.addItem(pitchClassName(pc), pc + 1);
@@ -288,7 +338,7 @@ private:
             }
         };
 
-        addAndMakeVisible(scaleCombo_);
+        scaleContent_.addAndMakeVisible(scaleCombo_);
         scaleCombo_.setComponentID("scaleAssistScaleCombo");
         scaleCombo_.onChange = [this] { handleScaleComboChanged(); };
     }
@@ -296,23 +346,23 @@ private:
     void buildCustomScaleEditor() {
         for (int pc = 0; pc < 12; ++pc) {
             auto& toggle = customPitchToggles_[(size_t)pc];
-            addChildComponent(toggle);
+            scaleContent_.addChildComponent(toggle);
             toggle.setComponentID("scaleAssistCustomToggle" + juce::String(pc));
             toggle.setButtonText(pitchClassName(pc));
             toggle.setBlackKey(isBlackPitchClass(pc));
         }
 
-        addChildComponent(customScaleNameEditor_);
+        scaleContent_.addChildComponent(customScaleNameEditor_);
         customScaleNameEditor_.setComponentID("scaleAssistCustomNameEditor");
         customScaleNameEditor_.setTextToShowWhenEmpty("Scale name", juce::Colours::grey);
 
-        addChildComponent(saveCustomScaleButton_);
+        scaleContent_.addChildComponent(saveCustomScaleButton_);
         saveCustomScaleButton_.setComponentID("scaleAssistCustomSaveButton");
         saveCustomScaleButton_.onClick = [this] { handleSaveCustomScale(); };
     }
 
     void buildPitchVisibilityControl() {
-        addAndMakeVisible(pitchVisibilityToggle_);
+        scaleContent_.addAndMakeVisible(pitchVisibilityToggle_);
         pitchVisibilityToggle_.setComponentID("scaleAssistPitchVisibilityToggle");
         // Named to match the header chip's tooltip word for word — they are two views of ONE piece of
         // state (the roll's toggleScaleFilter is the single writer), and two names for one switch is
@@ -326,16 +376,16 @@ private:
     }
 
     void buildRandomGenerationControls() {
-        addAndMakeVisible(minNoteLabel_);
+        scaleContent_.addAndMakeVisible(minNoteLabel_);
         minNoteLabel_.setText("Min", juce::dontSendNotification);
         minNoteLabel_.setFont(juce::Font(juce::FontOptions(11.5f)));
-        addAndMakeVisible(minNoteCombo_);
+        scaleContent_.addAndMakeVisible(minNoteCombo_);
         minNoteCombo_.setComponentID("scaleAssistMinNoteCombo");
 
-        addAndMakeVisible(maxNoteLabel_);
+        scaleContent_.addAndMakeVisible(maxNoteLabel_);
         maxNoteLabel_.setText("Max", juce::dontSendNotification);
         maxNoteLabel_.setFont(juce::Font(juce::FontOptions(11.5f)));
-        addAndMakeVisible(maxNoteCombo_);
+        scaleContent_.addAndMakeVisible(maxNoteCombo_);
         maxNoteCombo_.setComponentID("scaleAssistMaxNoteCombo");
 
         for (int pitch = 0; pitch <= 127; ++pitch) {
@@ -346,14 +396,14 @@ private:
         minNoteCombo_.setSelectedId(kDefaultMinPitch + 1, juce::dontSendNotification);
         maxNoteCombo_.setSelectedId(kDefaultMaxPitch + 1, juce::dontSendNotification);
 
-        addAndMakeVisible(generateButton_);
+        scaleContent_.addAndMakeVisible(generateButton_);
         generateButton_.setComponentID("scaleAssistGenerateButton");
         generateButton_.onClick = [this] {
             if (onGenerate)
                 onGenerate(getMinPitchSelection(), getMaxPitchSelection(), isAddToExistingSelected());
         };
 
-        addAndMakeVisible(addToExistingToggle_);
+        scaleContent_.addAndMakeVisible(addToExistingToggle_);
         addToExistingToggle_.setComponentID("scaleAssistAddToExistingToggle");
         addToExistingToggle_.setButtonText("Add to existing");
         addToExistingToggle_.setTooltip("Off: Generate replaces every note in the clip. On: the generated notes are "
@@ -494,6 +544,11 @@ private:
     bool pitchVisibilityOn_ = false;
     int rootPitchClass_ = 0;
     bool customEditorVisible_ = false;
+
+    // The scrolled content that holds every control, plus the viewport that shows a vertical
+    // scrollbar only when that content is taller than the panel — see resized()/contentNaturalHeight().
+    juce::Component scaleContent_;
+    juce::Viewport scrollViewport_;
 
     juce::Label rootLabel_;
     juce::ComboBox rootCombo_;
