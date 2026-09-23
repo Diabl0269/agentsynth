@@ -222,6 +222,8 @@ set(APPUI_SOURCES
     Source/UI/ModuleViews/ThresholdControlComponent.h
     Source/UI/Graph/ModMatrixComponent.cpp
     Source/UI/Graph/ModMatrixComponent.h
+    Source/UI/Settings/AudioSettingsTab.cpp
+    Source/UI/Settings/AudioSettingsTab.h
     Source/UI/Settings/SettingsWindow.cpp
     Source/UI/Settings/SettingsWindow.h
     Source/UI/Chrome/WelcomeScreenComponent.cpp
@@ -242,6 +244,7 @@ set(APPUI_SOURCES
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviour.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAutosave.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMixerDefaults.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMidiRemote.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h
     Source/UI/Settings/ShortcutsSettingsTab.cpp
     Source/ShortcutManager/AppCommands.h

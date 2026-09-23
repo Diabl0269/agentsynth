@@ -37,4 +37,14 @@ inline constexpr const char* kPluginScanListSettingKey = "pluginScanList";
  *  a hosted plugin never opens its own Load dialog), unlike the scan list above. */
 inline constexpr const char* kRecentProjectsSettingKey = "recentProjects";
 
+/** MIDI Remote's Default takeover (docs/control/midi-remote-ui.md#settings): "jump" / "pickup" /
+ *  "scale", the same spellings a Takeover takes in the project's "midiRemote" JSON. Absent or
+ *  unrecognised reads as "scale". Written by PreferencesSettingsTab, read by MainComponent (which
+ *  hands it to RemoteEngine::setDefaultTakeover) through MidiRemotePreferences.h. */
+inline constexpr const char* kMidiRemoteDefaultTakeoverSettingKey = "midiRemoteDefaultTakeover";
+
+/** MIDI Remote's "Show MIDI badges on mapped controls" (bool, default true). Written by
+ *  PreferencesSettingsTab, read by MainComponent, which hands it to the badge painter. */
+inline constexpr const char* kMidiRemoteShowBadgesSettingKey = "midiRemoteShowBadges";
+
 } // namespace synth

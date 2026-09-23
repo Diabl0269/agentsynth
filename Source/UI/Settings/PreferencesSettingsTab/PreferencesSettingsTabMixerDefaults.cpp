@@ -184,6 +184,7 @@ void PreferencesSettingsTab::setupMixerPlacementControls() {
     // this to one code path -- same idiom setupMixerDefaultTrackPresetControls() uses above.
     setMixerPlacement(appProperties.getUserSettings()->getValue(kMixerPlacementKey, "tab"));
     mixerPlacementCombo.onChange = [this] { persistMixerPlacement(getMixerPlacement()); };
+    setupMidiRemoteControls(); // FRO136 -- chained here, the constructor is baselined
 }
 
 void PreferencesSettingsTab::layoutMixerPlacementGroup(
@@ -193,8 +194,14 @@ void PreferencesSettingsTab::layoutMixerPlacementGroup(
     const std::initializer_list<juce::Component*> mixerPlacementComps = {&mixerPlacementLabel, &mixerPlacementCombo};
     const bool visible = groupMatches(mixerPlacementComps);
     setGroupVisible(mixerPlacementComps, visible);
-    if (!visible)
+    // FRO136: the MIDI Remote group follows; chained here for the same baselined-layoutContent reason.
+    const auto chainNext = [&] {
+        layoutMidiRemoteGroup(y, contentWidth, visible || previousGroupWasVisible, groupMatches, setGroupVisible);
+    };
+    if (!visible) {
+        chainNext();
         return;
+    }
     if (previousGroupWasVisible) {
         // Same divider math as layoutContent's own addDivider() closure -- inlined rather than
         // shared, since that closure (and the pendingDivider local it tracks) lives inside a
@@ -209,4 +216,5 @@ void PreferencesSettingsTab::layoutMixerPlacementGroup(
     row.removeFromLeft(4);
     mixerPlacementCombo.setBounds(row.removeFromLeft(160));
     y += 24;
+    chainNext();
 }

@@ -2,6 +2,7 @@
 #include "AI/AIProviderRegistry.h"
 #include "AI/LocalHistoryStore.h"
 #include "AppearanceSettingsTab.h"
+#include "AudioSettingsTab.h"
 #include "Branding.h"
 #include "FeedbackSettingsTab.h"
 #include "ShortcutManager/ShortcutManager.h"
@@ -381,16 +382,12 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
                                synth::AIIntegrationService& aiService, synth::AIChatComponent& aiChatComponent,
                                ShortcutManager& shortcutManager, synth::theme::ThemeManager& themeManager,
                                GraphEditor* graphEditor, synth::AccountService* accountService, bool showAudioTab,
-                               juce::String initialTabName)
+                               juce::String initialTabName, std::vector<juce::String> midiRemoteDeviceNames)
     : appProperties(appProperties)
     , themeManager(themeManager) {
     if (showAudioTab) {
-        auto* audioSelector = new juce::AudioDeviceSelectorComponent(deviceManager, 0, 2, // min/max inputs
-                                                                     0, 2,                // min/max outputs
-                                                                     true, true,          // midi
-                                                                     false, false         // bit depths
-        );
-        tabs.addTab("Audio", juce::Colours::transparentBlack, audioSelector, true);
+        tabs.addTab("Audio", juce::Colours::transparentBlack,
+                    new AudioSettingsTab(deviceManager, midiRemoteDeviceNames), true);
     }
 
     auto* aiSettingsTab = new AISettingsTab(appProperties, aiService, aiChatComponent, accountService);

@@ -168,7 +168,7 @@ void ControllerSurfaceCell::paint(juce::Graphics& g) {
     g.drawFittedText(assignmentLabel_, labelArea, juce::Justification::centred, 1);
 
     if (mapped_)
-        synth::ui::midilearn::paintMidiMappedBadge(g, getLocalBounds(), badgeColour);
+        synth::ui::midilearn::paintMidiMappedDot(g, getLocalBounds(), badgeColour);
 }
 
 // FRO263: continuous feedback for the whole span a real cell-to-cell move is in progress -- a

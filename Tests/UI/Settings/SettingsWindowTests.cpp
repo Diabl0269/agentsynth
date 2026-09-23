@@ -8,6 +8,7 @@
 #include "UI/Assistant/AIChatComponent/AIChatComponent.h"
 #include "UI/PianoRoll/NoteColour.h"
 #include "UI/Settings/AppearanceSettingsTab.h"
+#include "UI/Settings/AudioSettingsTab.h"
 #include "UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h"
 #include "UI/Settings/SettingsWindow.h"
 #include "UI/Settings/ShortcutsSettingsTab.h"
@@ -230,8 +231,45 @@ TEST_F(SettingsWindowTest, AudioTabContainsDeviceSelector) {
     auto* tabContent = settingsWindow.getTabs().getTabContentComponent(0);
     ASSERT_NE(tabContent, nullptr);
 
-    auto* deviceSelector = dynamic_cast<juce::AudioDeviceSelectorComponent*>(tabContent);
-    ASSERT_NE(deviceSelector, nullptr);
+    auto* audioTab = dynamic_cast<AudioSettingsTab*>(tabContent);
+    ASSERT_NE(audioTab, nullptr);
+    EXPECT_TRUE(audioTab->isParentOf(&audioTab->getDeviceSelector()));
+    EXPECT_TRUE(audioTab->getDeviceSelector().isVisible());
+}
+
+// FRO136: the stock selector's MIDI checklist cannot carry a per-device "(MIDI Remote)" suffix, so
+// the Audio tab names the profiled controllers in a caption under it instead.
+TEST_F(SettingsWindowTest, AudioTabCaptionListsTheControllersThatHaveAMidiRemoteProfile) {
+    SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                  themeManager, nullptr, nullptr, true, {},
+                                  {"Launchkey Mini MK3", "nanoKONTROL2", "Launchkey Mini MK3", ""});
+    settingsWindow.setSize(500, 450);
+    auto* audioTab = dynamic_cast<AudioSettingsTab*>(settingsWindow.getTabs().getTabContentComponent(0));
+    ASSERT_NE(audioTab, nullptr);
+
+    const auto caption = audioTab->getCaptionTextForTest();
+    EXPECT_TRUE(caption.contains("MIDI Remote"));
+    EXPECT_TRUE(caption.contains("Launchkey Mini MK3, nanoKONTROL2")) << "listed once each, in order";
+    EXPECT_EQ(caption.indexOf("Launchkey"), caption.lastIndexOf("Launchkey")) << "duplicates dropped";
+}
+
+TEST_F(SettingsWindowTest, AudioTabHasNoCaptionWhenNoControllerHasAProfile) {
+    SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                  themeManager, nullptr);
+    auto* audioTab = dynamic_cast<AudioSettingsTab*>(settingsWindow.getTabs().getTabContentComponent(0));
+    ASSERT_NE(audioTab, nullptr);
+    EXPECT_TRUE(audioTab->getCaptionTextForTest().isEmpty());
+}
+
+// The plugin build hides the Audio tab altogether (the host owns audio and MIDI), and with it the
+// caption: nothing about real devices is shown inside a host.
+TEST_F(SettingsWindowTest, HostedBuildHasNoAudioTabAndSoNoMidiRemoteCaption) {
+    SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                  themeManager, nullptr, nullptr, /*showAudioTab=*/false, {}, {"nanoKONTROL2"});
+    for (int i = 0; i < settingsWindow.getNumTabs(); ++i) {
+        EXPECT_NE(settingsWindow.getTabName(i), "Audio");
+        EXPECT_EQ(dynamic_cast<AudioSettingsTab*>(settingsWindow.getTabs().getTabContentComponent(i)), nullptr);
+    }
 }
 
 TEST_F(SettingsWindowTest, AITabPersistsProviderSetting) {

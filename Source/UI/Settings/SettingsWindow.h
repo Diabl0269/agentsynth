@@ -7,6 +7,7 @@
 #include "UI/Theme/ThemeManager.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <vector>
 
 class ShortcutManager;
 
@@ -29,7 +30,7 @@ public:
                    synth::AIIntegrationService& aiService, synth::AIChatComponent& aiChatComponent,
                    ShortcutManager& shortcutManager, synth::theme::ThemeManager& themeManager, GraphEditor* graphEditor,
                    synth::AccountService* accountService = nullptr, bool showAudioTab = true,
-                   juce::String initialTabName = {});
+                   juce::String initialTabName = {}, std::vector<juce::String> midiRemoteDeviceNames = {});
     ~SettingsWindow() override;
 
     void resized() override;

@@ -4,6 +4,8 @@
 // MainComponent is declared in MainComponent.h; the rest of its implementation lives in the
 // sibling MainComponent*.cpp units next to this one.
 #include "MainComponent.h"
+#include "MidiRemote/MidiRemotePreferences.h"
+#include "UI/MidiRemote/MidiLearnMenu.h"
 #include "WhatsNewData.h"
 #include <algorithm>
 
@@ -867,4 +869,19 @@ void MainComponent::applyZoomScrollPreference() {
     const bool upZoomsIn = appProperties.getUserSettings() == nullptr ||
                            appProperties.getUserSettings()->getBoolValue(kZoomScrollUpZoomsInKey, true);
     timelinePanel.setZoomScrollInverted(!upZoomsIn);
+}
+
+void MainComponent::applyMidiRemotePreferences() {
+    const auto* settings = appProperties.getUserSettings();
+    if (settings == nullptr)
+        return;
+    remoteEngine.setDefaultTakeover(synth::midi::loadDefaultTakeover(*settings));
+
+    const bool showBadges = synth::midi::loadShowBadges(*settings);
+    if (showBadges == synth::ui::midilearn::areMappedBadgesVisible())
+        return;
+    synth::ui::midilearn::setMappedBadgesVisible(showBadges);
+    graphEditor.repaint();
+    mixerDock.getMixerPanel().repaint();
+    timelinePanel.repaint();
 }

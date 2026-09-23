@@ -43,8 +43,18 @@ struct MenuContent {
  *  `content.learn` is null. See MidiLearnMenu.cpp for the exact shape. */
 void appendMidiLearnMenuItems(juce::PopupMenu& menu, const MenuContent& content);
 
-/** Caller gates on "is this control mapped"; always paints when called. */
+/** The Preferences "Show MIDI badges on mapped controls" switch (default on). Message thread only;
+ *  MainComponent pushes it on launch and on every settings change. It gates paintMidiMappedBadge()
+ *  below, so the module cards, mixer and transport bar all honour it without knowing about it. */
+void setMappedBadgesVisible(bool visible) noexcept;
+bool areMappedBadgesVisible() noexcept;
+
+/** Caller gates on "is this control mapped"; paints unless the Preferences switch is off. */
 void paintMidiMappedBadge(juce::Graphics& g, juce::Rectangle<int> controlBounds, juce::Colour badgeColour);
+
+/** The same dot, ignoring the Preferences switch -- for the MIDI Remote panel's own surface cells,
+ *  where the dot is part of the panel's content rather than a decoration on someone else's control. */
+void paintMidiMappedDot(juce::Graphics& g, juce::Rectangle<int> controlBounds, juce::Colour badgeColour);
 
 /** Caller gates on "is this the armed control"; always paints when called, and must be repainted
  *  only by an existing gated timer/poll (Source/UI/CLAUDE.md's animation rule). */

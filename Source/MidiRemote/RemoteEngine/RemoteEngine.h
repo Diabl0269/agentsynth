@@ -116,8 +116,9 @@ public:
     void setAssignments(std::vector<Assignment> assignments);
 
     /** Preferences' default takeover, used by assignments set to Takeover::useDefault. Scale until
-     *  the Preferences UI ships. */
+     *  set; a no-op for the current value and for useDefault itself. */
     void setDefaultTakeover(Takeover takeover);
+    Takeover getDefaultTakeover() const noexcept { return defaultTakeover_; }
 
     void setActionInvoker(RemoteActionInvoker* invoker) noexcept { actionInvoker_ = invoker; }
 
