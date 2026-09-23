@@ -47,6 +47,10 @@ void RemoteEngine::setAssignments(std::vector<Assignment> assignments) {
 }
 
 void RemoteEngine::setDefaultTakeover(Takeover takeover) {
+    // Called on every settings-file write (a drag elsewhere in the app writes at frame rate), so an
+    // unchanged value must not republish the snapshot; useDefault is meaningless as a default.
+    if (takeover == Takeover::useDefault || takeover == defaultTakeover_)
+        return;
     defaultTakeover_ = takeover;
     rebuildAndPublish(nullptr);
 }

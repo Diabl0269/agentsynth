@@ -57,6 +57,9 @@ public:
      *  this directly; scheduleLiveRefresh() below is for a call site that might not be. */
     void rebuildFromProfiles();
 
+    /** FRO136: the Preferences default takeover, so the inspector's "Default" item can name it. */
+    void setDefaultTakeover(synth::Takeover takeover) { inspector_.setDefaultTakeover(takeover); }
+
     /** FRO263 (docs/control/midi-remote-ui.md#the-midi-remote-panel): MidiLearnController::onChanged's
      *  target (wired once in MainComponent::wireMidiRemoteEngine()) -- keeps the panel live while
      *  it's open instead of only catching up on the next tab-switch-in. Defers the actual
@@ -71,6 +74,7 @@ public:
     /** FRO263 test seam: proves scheduleLiveRefresh()'s deferred rebuild actually reaches the
      *  Controllers list, without exposing controllersList_ itself. */
     int getControllersListRowCountForTest() const { return controllersList_.getRowCountForTest(); }
+    const ControllersListComponent& getControllersListForTest() const { return controllersList_; }
 
     /** FRO262 test seam: a mapped control's widget value as last built by
      *  refreshSurfaceForSelectedProfile(), without exposing controllerSurface_ itself. -1.0f if
@@ -219,6 +223,16 @@ private:
     const synth::ControllerProfile* findSelectedProfile() const;
     bool isOrphanId(const juce::String& profileId) const;
     bool isProfilePresent(const synth::ControllerProfile& profile) const;
+
+    // FRO136 (docs/control/midi-remote-ui.md#plugin-build): the plugin build's one live controller.
+    // Its row is always listed, under this id, even before a profile exists; selecting the row
+    // creates the profile under the same id (a Learn that got there first has a profile with the
+    // host source key under its own id, and then no extra row is added).
+    static constexpr const char* kHostMidiProfileId = "host-midi";
+    bool hostMidiProfileExists() const;
+    void createHostMidiProfile();
+    /** A profile is selected and can hear something: always in the standalone app, only Host MIDI in a host. */
+    bool isSelectedProfileUsable() const;
 
     AudioEngine* audioEngine_ = nullptr;
     synth::midi::RemoteEngine* remoteEngine_ = nullptr;

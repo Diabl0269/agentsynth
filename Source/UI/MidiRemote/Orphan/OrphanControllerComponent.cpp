@@ -39,12 +39,16 @@ OrphanControllerComponent::OrphanControllerComponent() {
 
 OrphanControllerComponent::~OrphanControllerComponent() = default;
 
-void OrphanControllerComponent::setOrphan(const juce::String& name, int assignmentCount, bool canRecreate) {
+void OrphanControllerComponent::setOrphan(const juce::String& name, int assignmentCount, bool canRecreate,
+                                          bool hosted) {
     titleLabel_.setText(name + " (not on this machine)", juce::dontSendNotification);
     bodyLabel_.setText("This project has " + juce::String(assignmentCount) +
                            (assignmentCount == 1 ? " assignment" : " assignments") +
                            " for a controller that isn't set up here. Re-link them to a controller you have, "
-                           "or Recreate it from what the project remembers.",
+                           "or Recreate it from what the project remembers." +
+                           (hosted ? juce::String(" Inside a host, only Host MIDI is live: a standalone assignment "
+                                                  "does not fire here, whatever you re-link it to.")
+                                   : juce::String()),
                        juce::dontSendNotification);
     recreateButton_.setEnabled(canRecreate);
     recreateButton_.setTooltip(canRecreate ? "Create a controller from this project's assignments"

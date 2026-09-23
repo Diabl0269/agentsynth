@@ -229,39 +229,35 @@ void MainComponent::addToolbarToggleButtons() {
 
     addAndMakeVisible(settingsButton);
     settingsButton.setComponentID("settingsButton");
-    settingsButton.onClick = [this]() {
-        auto* settingsComp =
-            new SettingsWindow(audioEngine.getDeviceManager(), appProperties, aiService, aiChatComponent,
-                               shortcutManager, *themeManager, &graphEditor, &accountService,
-                               /*showAudioTab=*/!audioEngine.isHosted());
-        settingsComp->setSize(500, 450);
-
-        juce::DialogWindow::LaunchOptions options;
-        options.content.setOwned(settingsComp);
-        options.dialogTitle = "Settings";
-        options.componentToCentreAround = this;
-        options.useNativeTitleBar = true;
-        options.resizable = true;
-        options.launchAsync();
-    };
+    settingsButton.onClick = [this]() { launchSettingsWindow({}); };
 
     addAndMakeVisible(feedbackButton);
     feedbackButton.setComponentID("feedbackButton");
-    feedbackButton.onClick = [this]() {
-        auto* settingsComp =
-            new SettingsWindow(audioEngine.getDeviceManager(), appProperties, aiService, aiChatComponent,
-                               shortcutManager, *themeManager, &graphEditor, &accountService,
-                               /*showAudioTab=*/!audioEngine.isHosted(), "Feedback");
-        settingsComp->setSize(500, 450);
+    feedbackButton.onClick = [this]() { launchSettingsWindow("Feedback"); };
+}
 
-        juce::DialogWindow::LaunchOptions options;
-        options.content.setOwned(settingsComp);
-        options.dialogTitle = "Settings";
-        options.componentToCentreAround = this;
-        options.useNativeTitleBar = true;
-        options.resizable = true;
-        options.launchAsync();
-    };
+// One place for both entry points (the gear and the feedback button), which differ only in the tab
+// they open on. The Audio tab's caption names the profiled MIDI controllers (FRO136); a Host MIDI
+// profile has no device of its own, so it is left out.
+void MainComponent::launchSettingsWindow(const juce::String& initialTabName) {
+    std::vector<juce::String> profiledDevices;
+    for (const auto& profile : midiLearnController_.getProfiles())
+        if (profile.input.identifier != synth::midi::hostSourceKey())
+            profiledDevices.push_back(profile.input.name);
+
+    auto* settingsComp =
+        new SettingsWindow(audioEngine.getDeviceManager(), appProperties, aiService, aiChatComponent, shortcutManager,
+                           *themeManager, &graphEditor, &accountService,
+                           /*showAudioTab=*/!audioEngine.isHosted(), initialTabName, std::move(profiledDevices));
+    settingsComp->setSize(500, 450);
+
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned(settingsComp);
+    options.dialogTitle = "Settings";
+    options.componentToCentreAround = this;
+    options.useNativeTitleBar = true;
+    options.resizable = true;
+    options.launchAsync();
 }
 
 void MainComponent::assembleToolbar() {

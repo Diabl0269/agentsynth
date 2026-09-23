@@ -179,6 +179,7 @@ set(APPUI_SOURCES
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.h
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.cpp
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelDetect.cpp
+    Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelHosted.cpp
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelControllers.cpp
     Source/UI/MidiRemote/Detect/DetectModeController.h
     Source/UI/MidiRemote/Detect/DetectModeController.cpp
@@ -222,6 +223,8 @@ set(APPUI_SOURCES
     Source/UI/ModuleViews/ThresholdControlComponent.h
     Source/UI/Graph/ModMatrixComponent.cpp
     Source/UI/Graph/ModMatrixComponent.h
+    Source/UI/Settings/AudioSettingsTab.cpp
+    Source/UI/Settings/AudioSettingsTab.h
     Source/UI/Settings/SettingsWindow.cpp
     Source/UI/Settings/SettingsWindow.h
     Source/UI/Chrome/WelcomeScreenComponent.cpp
@@ -242,6 +245,7 @@ set(APPUI_SOURCES
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviour.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAutosave.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMixerDefaults.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMidiRemote.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h
     Source/UI/Settings/ShortcutsSettingsTab.cpp
     Source/ShortcutManager/AppCommands.h

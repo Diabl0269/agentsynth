@@ -52,7 +52,14 @@ constexpr int kGapPx = 6;
 
 juce::String rowDisplayName(const ControllersListComponent::RowModel& row) {
     // docs/control/midi-remote-ui.md#controllers-list-left's exact wording for an orphan row.
-    return row.state == ControllersListComponent::RowState::orphan ? row.name + " (not on this machine)" : row.name;
+    switch (row.state) {
+    case ControllersListComponent::RowState::orphan:
+        return row.name + " (not on this machine)";
+    case ControllersListComponent::RowState::standaloneOnly:
+        return row.name + " (standalone only)";
+    default:
+        return row.name;
+    }
 }
 
 // present = normal text colour, absent = greyed (assignments kept, device just not connected --
@@ -61,6 +68,7 @@ juce::Colour rowStateColour(ControllersListComponent::RowState state, juce::Colo
                             juce::Colour mutedColour, juce::Colour warningColour) {
     switch (state) {
     case ControllersListComponent::RowState::absent:
+    case ControllersListComponent::RowState::standaloneOnly:
         return mutedColour;
     case ControllersListComponent::RowState::orphan:
         return warningColour;
@@ -252,6 +260,37 @@ void ControllersListComponent::resized() {
 }
 
 void ControllersListComponent::setAddControllerVisible(bool visible) { addControllerButton_.setVisible(visible); }
+
+void ControllersListComponent::setHosted(bool hosted) {
+    hosted_ = hosted;
+    setAddControllerVisible(!hosted);
+}
+
+// docs/control/midi-remote-ui.md#plugin-build: the panel says a standalone assignment does not fire
+// inside a host, on the rows that would otherwise look live.
+juce::String ControllersListComponent::getTooltipForProfile(const juce::String& profileId) const {
+    const auto it = std::find_if(rows_.begin(), rows_.end(), [&](const Row& r) { return r.profileId == profileId; });
+    if (it == rows_.end())
+        return {};
+    if (it->state == RowState::standaloneOnly)
+        return "A controller from the standalone app. Assignments made against a real controller do not fire "
+               "inside a host; only Host MIDI is live here.";
+    if (it->state == RowState::orphan)
+        return hosted_ ? "This project was made with a controller that is not set up on this machine. "
+                         "A standalone assignment does not fire inside a host either way."
+                       : "This project was made with a controller that is not set up on this machine.";
+    return {};
+}
+
+juce::String ControllersListComponent::getTooltip() {
+    const int index = rowIndexAt(getMouseXYRelative());
+    return index < 0 ? juce::String() : getTooltipForProfile(rows_[static_cast<size_t>(index)].profileId);
+}
+
+juce::String ControllersListComponent::getRowDisplayNameForTest(const juce::String& profileId) const {
+    const auto it = std::find_if(rows_.begin(), rows_.end(), [&](const Row& r) { return r.profileId == profileId; });
+    return it == rows_.end() ? juce::String() : rowDisplayName(*it);
+}
 
 void ControllersListComponent::showContextMenuForRow(int rowIndex) {
     if (rowIndex < 0 || rowIndex >= static_cast<int>(rows_.size()))

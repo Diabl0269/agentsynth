@@ -53,10 +53,22 @@ void appendMidiLearnMenuItems(juce::PopupMenu& menu, const MenuContent& content)
         menu.addItem("Forget MIDI", content.forget);
 }
 
+namespace {
+bool mappedBadgesVisible = true; // message thread only
+}
+
+void setMappedBadgesVisible(bool visible) noexcept { mappedBadgesVisible = visible; }
+bool areMappedBadgesVisible() noexcept { return mappedBadgesVisible; }
+
+void paintMidiMappedBadge(juce::Graphics& g, juce::Rectangle<int> controlBounds, juce::Colour badgeColour) {
+    if (mappedBadgesVisible)
+        paintMidiMappedDot(g, controlBounds, badgeColour);
+}
+
 // 6px dot at controlBounds's top-right, in badgeColour (the caller's resolved
 // theme.colors.midiMapped, or its fallback constant when no AppLookAndFeel is available -- the
 // same idiom every paint() override in this codebase already uses).
-void paintMidiMappedBadge(juce::Graphics& g, juce::Rectangle<int> controlBounds, juce::Colour badgeColour) {
+void paintMidiMappedDot(juce::Graphics& g, juce::Rectangle<int> controlBounds, juce::Colour badgeColour) {
     constexpr int kBadgeDiameter = 6;
     g.setColour(badgeColour);
     g.fillEllipse(static_cast<float>(controlBounds.getRight() - kBadgeDiameter),

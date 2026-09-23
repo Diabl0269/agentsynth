@@ -271,6 +271,7 @@ add_executable(Tests
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAutosaveTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycleTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMixerPlacementTests.cpp
+    UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMidiRemoteTests.cpp
     UI/Settings/FeedbackSettingsTabTests.cpp
     Engine/AudioRendering/AudioRenderingBasicTests.cpp
     Engine/AudioRendering/AudioRenderingFXModuleTests.cpp
@@ -392,6 +393,8 @@ add_executable(Tests
     UI/Mixer/MixerSendListTests.cpp
     UI/Mixer/MixerDockComponentTests.cpp
     UI/MidiRemote/MidiRemotePanelTests.cpp
+    UI/MidiRemote/MidiRemotePreferencesTests.cpp
+    UI/MidiRemote/MidiRemotePanelHostedTests.cpp
     UI/MidiRemote/ControllerSurfaceDetectTests.cpp
     UI/MidiRemote/MidiRemotePanelControllersTests.cpp
     UI/MidiRemote/AddControllerPopoverTests.cpp
@@ -577,6 +580,7 @@ add_executable(Tests
     ../Source/UI/MidiRemote/MidiLearnMenu.cpp
     ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.cpp
     ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelDetect.cpp
+    ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelHosted.cpp
     ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelControllers.cpp
     ../Source/UI/MidiRemote/Detect/DetectModeController.cpp
     ../Source/UI/MidiRemote/AddController/AddControllerPopover.cpp
@@ -603,6 +607,7 @@ add_executable(Tests
     ../Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogTestSeams.cpp
     ../Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogAutoPortPrompt.cpp
     ../Source/Plugin/Hosting/HostedPluginEditorWindow.cpp
+    ../Source/UI/Settings/AudioSettingsTab.cpp
     ../Source/UI/Settings/SettingsWindow.cpp
     ../Source/UI/Settings/AppearanceSettingsTab.cpp
     ../Source/UI/Settings/MeterColourStopsEditor.cpp
@@ -611,6 +616,7 @@ add_executable(Tests
     ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviour.cpp
     ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAutosave.cpp
     ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMixerDefaults.cpp
+    ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMidiRemote.cpp
     ../Source/UI/Settings/ShortcutsSettingsTab.cpp
     ../Source/UI/Settings/FeedbackSettingsTab.cpp
     ../Source/UI/Chrome/WelcomeScreenComponent.cpp

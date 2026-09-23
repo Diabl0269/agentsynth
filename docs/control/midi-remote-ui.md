@@ -291,27 +291,42 @@ Learn ([`midi-remote.md`](midi-remote.md#learn-what-does-the-first-message-mean)
 
 ## Settings
 
-Preferences tab (`PreferencesSettingsTab`), a new "MIDI Remote" group:
+Preferences tab (`PreferencesSettingsTab`), a "MIDI Remote" group (FRO136). Both are scalar keys in
+the shared settings file, documented in `Source/UserSettings.h`:
 
-- **Default takeover**: Jump / Pick-up / Scale (default Scale). Assignments set to *Default*
-  follow it live.
-- **Show MIDI badges on mapped controls** (default on).
+- **Default takeover**: Jump / Pick-up / Scale (default Scale; key `midiRemoteDefaultTakeover`,
+  stored as `jump` / `pickup` / `scale`). Assignments set to *Default* follow it live:
+  `MainComponent::applyMidiRemotePreferences` re-reads it on every settings-file change and hands it
+  to `RemoteEngine::setDefaultTakeover` — Core never reads settings.
+- **Show MIDI badges on mapped controls** (default on; key `midiRemoteShowBadges`). The same
+  function pushes it to `synth::ui::midilearn::setMappedBadgesVisible`, which gates
+  `paintMidiMappedBadge` — so module cards, mixer columns and the transport bar all honour it without
+  knowing about it. The panel's own surface cells use `paintMidiMappedDot` and always show theirs.
 
 The Audio tab's MIDI-input checklist keeps its meaning (which devices feed the *patch*); a
-device with a profile is opened by the remote engine regardless ([`midi-remote.md`](midi-remote.md#the-engine)), and the
-Audio tab shows a small "(MIDI Remote)" suffix on such devices so the two lists explain each
-other. The dead MIDI-output selector stays hidden until v2 feedback needs it.
+device with a profile is opened by the remote engine regardless ([`midi-remote.md`](midi-remote.md#the-engine)).
+JUCE's stock device selector cannot decorate a single device row, so instead of a per-row
+"(MIDI Remote)" suffix the tab (`AudioSettingsTab`) carries a one-paragraph caption under the selector
+naming every profiled controller, which is what lets the two lists explain each other. No profiled
+controllers, no caption. The dead MIDI-output selector stays hidden until v2 feedback needs it.
 
 ---
 
 ## Plugin build
 
-In `HostMode::Hosted` ([`midi-remote.md`](midi-remote.md#the-plugin-build-vst3au-inside-a-host)): the controllers list shows only **Host MIDI**;
-Add controller, device pickers, Detect-by-device and the Audio-tab suffix are hidden; Detect
-mode still works (it reads the host stream); profiles for real devices that exist on the
-machine are listed as *"standalone only"* but inert. Assignments made in the standalone app
-against a real controller do not fire inside a host (different source key) — the panel says so
-on the orphan row rather than pretending.
+In `HostMode::Hosted` ([`midi-remote.md`](midi-remote.md#the-plugin-build-vst3au-inside-a-host)) the
+one live controller is the pseudo-controller **Host MIDI**, fed from the MIDI buffer the host hands to
+`processHostBlock`:
+
+- The controllers list always has a **Host MIDI** row, even before any profile exists; selecting it
+  creates the (empty) Host MIDI profile, so Detect, templates and Learn all work on it.
+- Add controller, the device pickers and Detect-by-device are hidden (`ControllersListComponent::setHosted`);
+  the Audio tab, and with it its MIDI Remote caption, is not built at all in the plugin.
+- Profiles for real devices that exist on the machine are listed as *"standalone only"*, greyed and
+  inert: they are viewable, and Detect is not offered on them.
+- Assignments made in the standalone app against a real controller do not fire inside a host
+  (different source key). The panel says so on the row's tooltip — for a standalone-only row and for
+  an orphan row alike — rather than pretending.
 
 ---
 

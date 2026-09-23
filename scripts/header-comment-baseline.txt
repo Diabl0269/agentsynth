@@ -46,7 +46,7 @@
 24 Source/UI/Mixer/MeterColourStops.h
 18 Source/UI/Mixer/MixerDockComponent.h
 12 Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.h
-22 Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h
+14 Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h
 84 Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h
 96 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h
 24 Source/UI/Timeline/TimelinePlayheadOverlay.h

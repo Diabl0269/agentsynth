@@ -357,6 +357,7 @@ void MainComponent::wireCommandsAndShortcuts() {
 // no-ops/empty in Hosted mode regardless of whether the real audio device has been opened yet, so nothing here depends
 // on initialiseAudioEngine() having run first.
 void MainComponent::wireMidiRemoteEngine() {
+    applyMidiRemotePreferences(); // the Preferences group's default takeover + badge switch
     remoteEngine.setActionInvoker(&remoteActionInvoker_);
     remoteEngine.setActionCommandLookup(
         [](const juce::String& actionId) { return AppCommands::getCommandForAction(actionId); });

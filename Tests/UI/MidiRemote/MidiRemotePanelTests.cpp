@@ -113,18 +113,22 @@ TEST(MidiRemotePanelComponentTests, SwitchingDockToMidiRemoteTabShowsThePanelAnd
 // reproduced here exactly as MainComponent::wireMidiRemoteEngine() does it.
 
 TEST_F(MidiRemotePanelLiveRefreshTest, LearnDoneWhileThePanelIsOpenAppearsWithoutATabSwitch) {
-    ASSERT_EQ(panel_.getControllersListRowCountForTest(), 0);
+    // The fixture is Hosted, so the list starts with the always-listed, not-yet-created Host MIDI row
+    // (FRO136); the learn's auto-created profile takes its place under its own id, which is what
+    // shows a refresh happened.
+    ASSERT_EQ(panel_.getControllersListForTest().getRowDisplayNameForTest("host-midi"), "Host MIDI");
 
     controller_->arm(node_->nodeID, "cutoff");
     send(juce::MidiMessage::controllerEvent(1, 20, 64));
     settle();
     ASSERT_EQ(doc_.assignments.size(), 1u) << "the learn itself landed";
-    EXPECT_EQ(panel_.getControllersListRowCountForTest(), 0)
+    EXPECT_EQ(panel_.getControllersListForTest().getRowDisplayNameForTest("host-midi"), "Host MIDI")
         << "not yet -- scheduleLiveRefresh() defers via callAsync, same as the mid-gesture-rebuild hazard";
 
     pump();
-    EXPECT_EQ(panel_.getControllersListRowCountForTest(), 1)
+    EXPECT_EQ(panel_.getControllersListForTest().getRowDisplayNameForTest("host-midi"), "")
         << "the deferred rebuild ran and picked up the auto-created profile";
+    EXPECT_EQ(panel_.getControllersListRowCountForTest(), 1);
 }
 
 // The ticket's own repro (FRO263): assign a knob, Forget, Cmd+Z -- the panel must not keep showing
@@ -169,7 +173,7 @@ TEST_F(MidiRemotePanelLiveRefreshTest, DeviceOpenedWhilePanelIsOpenAppearsWithou
     send(juce::MidiMessage::controllerEvent(1, 20, 64));
     settle();
     ASSERT_EQ(doc_.assignments.size(), 1u) << "the learn itself landed";
-    ASSERT_EQ(panel_.getControllersListRowCountForTest(), 0)
+    ASSERT_EQ(panel_.getControllersListForTest().getRowDisplayNameForTest("host-midi"), "Host MIDI")
         << "onChanged is deliberately unwired here -- nothing should have refreshed the panel yet";
 
     // Reproduces AudioEngineDeviceLifecycle.cpp's call site: reconcileMidiInputs() found a change
@@ -177,11 +181,11 @@ TEST_F(MidiRemotePanelLiveRefreshTest, DeviceOpenedWhilePanelIsOpenAppearsWithou
     // wires it (refreshSources() + scheduleLiveRefresh()).
     engine_->onMidiDevicesChanged = [this] { panel_.scheduleLiveRefresh(); };
     engine_->onMidiDevicesChanged();
-    EXPECT_EQ(panel_.getControllersListRowCountForTest(), 0)
+    EXPECT_EQ(panel_.getControllersListForTest().getRowDisplayNameForTest("host-midi"), "Host MIDI")
         << "not yet -- scheduleLiveRefresh() defers via callAsync, same as every other caller of it";
 
     pump();
-    EXPECT_EQ(panel_.getControllersListRowCountForTest(), 1)
+    EXPECT_EQ(panel_.getControllersListForTest().getRowDisplayNameForTest("host-midi"), "")
         << "the deferred rebuild ran off the onMidiDevicesChanged path alone and picked up the profile -- "
            "before this fix the panel stayed stale here until a tab switch";
 }

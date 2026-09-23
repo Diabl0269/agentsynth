@@ -92,6 +92,7 @@ public:
     static synth::ControllerProfileStore controllerProfileStoreForCtor(); // FRO193: real folder, or the test override
     static void setControllerProfileTestDirectory(const juce::File& dir); // test-only; see .cpp
     synth::midi::MidiLearnController& getMidiLearnControllerForTest() noexcept { return midiLearnController_; }
+    synth::midi::RemoteEngine& getRemoteEngineForTest() noexcept { return remoteEngine; }
 
     void timerCallback() override;
 
@@ -180,6 +181,12 @@ public:
      *  forwards it to the piano roll) — independent of applyNaturalScrollingPreference; same
      *  propagation path and idempotence. */
     void applyZoomScrollPreference();
+
+    /** Re-reads the two MIDI Remote preferences (UserSettings.h) and pushes them: the default
+     *  takeover into RemoteEngine, the badge switch into the MIDI Learn badge painter (repainting
+     *  the surfaces that draw one when it flips). Called at startup and on every settings-file
+     *  change; idempotent. */
+    void applyMidiRemotePreferences();
 
     /** Per-press zoom step for the four zoom commands; the out factor is the exact reciprocal. */
     static constexpr double kZoomInFactor = 1.25;
@@ -611,6 +618,9 @@ private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
 
     void globalFocusChanged(juce::Component* focusedComponent) override;
+
+    /** The gear / feedback button's Settings dialog; `initialTabName` empty = the last-used tab. */
+    void launchSettingsWindow(const juce::String& initialTabName);
 
     void initialiseCommon(std::unique_ptr<synth::AIProvider> provider, synth::AIProviderRegistry registry);
 

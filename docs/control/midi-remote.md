@@ -313,7 +313,8 @@ knob — Cubase's surface editor is the power tool, not the entrance.
 hosted build the remote engine has exactly **one source, a pseudo-controller named "Host MIDI"**
 fed from the MIDI buffer the host passes to `processHostBlock`. Learn, assignments, takeover and
 consume all work on that stream; the panel hides device management (no Add controller, no device
-picker, no Detect-by-device) and shows Host MIDI's surface only. Whether the host actually
+picker, no Detect-by-device) and offers Host MIDI's surface as the only live one (profiles for real
+devices are listed as *standalone only* and are inert — [`midi-remote-ui.md`](midi-remote-ui.md#plugin-build)). Whether the host actually
 forwards a controller's CCs to a plugin is the host's business (most do for instrument tracks).
 
 ### Action targets

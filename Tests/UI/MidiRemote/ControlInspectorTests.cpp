@@ -265,6 +265,24 @@ TEST_F(ControlInspectorComponentTest, ProjectRowTakeoverRangeAndInvertAreEnabled
     EXPECT_TRUE(invertToggle->isEnabled());
 }
 
+// FRO136: the Default item names what the Preferences default currently is, and follows it.
+TEST_F(ControlInspectorComponentTest, DefaultTakeoverItemNamesThePreferencesDefaultAndFollowsIt) {
+    auto takeoverCombo = [&] {
+        return dynamic_cast<juce::ComboBox*>(findComponentWithID(inspector, "assignmentTakeoverCombo0"));
+    };
+    inspector.setControl(makeModel({makeProjectRow()}));
+    ASSERT_NE(takeoverCombo(), nullptr);
+    EXPECT_EQ(takeoverCombo()->getItemText(0), "Default (Scale)");
+
+    inspector.setDefaultTakeover(synth::Takeover::jump);
+    ASSERT_NE(takeoverCombo(), nullptr);
+    EXPECT_EQ(takeoverCombo()->getItemText(0), "Default (Jump)");
+    EXPECT_EQ(takeoverCombo()->getSelectedId(), 1) << "the assignment is still on Default";
+
+    inspector.setDefaultTakeover(synth::Takeover::pickup);
+    EXPECT_EQ(takeoverCombo()->getItemText(0), "Default (Pick-up)");
+}
+
 //==============================================================================
 // Global (action-target) row: takeover/range/invert DISABLED, Forget still fires.
 //==============================================================================
