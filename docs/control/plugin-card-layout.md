@@ -6,7 +6,9 @@ decides how a user picks the parameters a plugin card shows as knobs, how that c
 data type it introduces — `CardLayout` — is the seed of the future "edit any module's layout"
 feature (see [Future: editing any module's layout](#future-editing-any-modules-layout-out-of-scope-here)), which is otherwise **out of scope** here.
 
-**Status:** designed, not built.
+**Status:** the data layer is built (FRO126): `CardLayout`, the precedence resolver, the automatic
+default, `PluginCardLayoutStore`, the per-instance `"cardLayout"` extra-state key and its undo
+seam. The card rendering, `HostedParameterAttachment` and the picker are still designed only.
 
 ---
 
@@ -93,6 +95,33 @@ A layout's slot count is uncapped in the model; the card shows them in the ordin
 (`layoutKnobGrid`, width buckets from [`layout/module-card.md`](../layout/module-card.md#width-buckets)),
 growing the card's height like any module with many parameters. An empty layout shows the "Open Editor" button and a **Choose knobs…**
 button as the whole body.
+
+---
+
+## Data layer as built (FRO126)
+
+- `Source/Modules/CardLayout.{h,cpp}` (Core): `CardLayout`/`CardSlot`, `toVar`/`fromVar`
+  (`ParseStatus::UnsupportedVersion` for a newer file, `Malformed` for anything else, including a
+  slot with no `paramId` or an unknown `kind` — refused whole, never partly loaded), and
+  `deriveSlotKind` / `effectiveSlotKind`.
+- `Source/Plugin/Hosting/HostedPluginCardLayout.{h,cpp}` (AppUI, beside the store):
+  `resolveHostedCardLayout(node, store)` returns a `ResolvedCardLayout` — the source
+  (`Instance` / `PluginDefault` / `Automatic`), the layout as stored, and each slot bound to its
+  live parameter. Binding goes through `resolveLaneParameter` itself, so a slot rescues and orphans
+  exactly like an automation lane. An override or stored default that does not parse is skipped, not
+  fatal, and left untouched. While no instance is live a slot is *unresolved*, not orphaned (the
+  plugin may still be loading); `layoutWithoutOrphans()` is what a save writes.
+- `Source/Plugin/Hosting/PluginCardLayoutStore.{h,cpp}` (AppUI): one directory per plugin,
+  `<format>-<uid>` (a uid of 0 falls back to `<format>-name-<name>`), holding `default.json` and
+  `<preset>.json`. Each file is the layout plus the plugin's identity, so the picker can show a name
+  for a plugin that is not loaded. `default` is a reserved preset name, compared case-insensitively.
+  The `Listener` fires after `setDefault` / `clearDefault` only, never for presets.
+- Per-instance override: `HostedPluginModule::getCardLayoutOverride` / `setCardLayoutOverride`
+  (stored as opaque JSON, so the module needs no knowledge of `CardLayout`), in
+  `HostedPluginModuleCardLayout.cpp`.
+- Undo: `AppUndoManager::recordNodeExtraStateChange` takes before/after **layout-only patches**
+  (`HostedPluginModule::makeCardLayoutPatch`), never a full `getExtraState()` — that carries the
+  plugin's state blob and would make undo re-load the plugin.
 
 ---
 
@@ -218,7 +247,10 @@ grid, so "edit layout" there means at most hide/reorder of the knobs they *do* e
   behaviour, precedence resolution with all three sources, automatic default rule
   (`isAutomatable`, bypass skipped, first 8).
 - `Tests/Plugin/PluginCardLayoutStoreTests.cpp`: default/preset files, listener broadcast,
-  version refusal, "All instances" clears overrides.
+  version refusal. Writing a default clears nothing by itself: dropping instance overrides when the
+  user picks "All instances" is the picker's job.
+- `Tests/Plugin/HostedPluginTests.cpp`: the `"cardLayout"` key round-trips through the trusted
+  extra-state path, a layout-only patch never reloads the plugin, and untrusted apply never sets it.
 - `Tests/UI/Graph/ModuleComponent/HostedPluginCardTests.cpp` (uses the existing headless
   `HostedPluginTests` fake instance): slots render as the right widget, empty layout shows the
   two buttons, an orphan slot renders no knob and the picker lists it as missing,

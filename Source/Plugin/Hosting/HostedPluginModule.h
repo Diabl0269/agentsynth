@@ -32,8 +32,8 @@ namespace synth {
  * audio thread has demonstrably started two later blocks (`blockCounter_`).
  *
  * State/trust: getExtraState() carries the identity (format + uniqueId + name, never a path) plus
- * the plugin's own opaque state blob, base64'd. "Hosted Plugin" is in AIStateMapper's
- * kNonAuthorableModuleTypes, so untrusted apply never calls setExtraState — a plugin state blob is
+ * the plugin's own opaque state blob, base64'd, and the optional "cardLayout" override. "Hosted Plugin" is in
+ * AIStateMapper's kNonAuthorableModuleTypes, so untrusted apply never calls setExtraState — a plugin state blob is
  * opaque bytes handed to third-party code and must never arrive from a model. A module holding an
  * identity with no instance is a valid state (a patch opened where the plugin isn't installed).
  *
@@ -200,6 +200,18 @@ public:
      *  same transient state HostedPluginModule already models elsewhere. */
     std::vector<InstanceParameterInfo> getInstanceParameters() const;
 
+    /** The per-instance layout as raw JSON (a CardLayout::toVar object), void when there is none. */
+    const juce::var& getCardLayoutOverride() const noexcept { return cardLayoutOverride_; }
+
+    /** Message thread. Void clears it. Fires onCardLayoutChanged only when the value changed. */
+    void setCardLayoutOverride(const juce::var& layout);
+
+    /** The layout-only extra-state object `setExtraState` applies without touching the plugin. */
+    static juce::var makeCardLayoutPatch(const juce::var& layout);
+
+    /** Message thread. Single slot, owned by the module's card; fires after every override change. */
+    std::function<void()> onCardLayoutChanged;
+
     //==============================================================================
     // AudioProcessor
     //==============================================================================
@@ -258,6 +270,9 @@ private:
     /** Message thread. The identity half of loadPlugin(), WITHOUT clearing pendingBlob_ — the state
      *  restore in setExtraState() is the only caller allowed to carry a blob into a load. */
     void startIdentityLoad(const PluginIdentity& identity, HostedPluginBackend& backend);
+
+    /** Message thread. Applies a layout-only patch (see makeCardLayoutPatch); false if `state` is not one. */
+    bool applyCardLayoutPatch(const juce::var& state);
 
     /** Message thread. Prepares, validates and publishes `instance`, or refuses it with a reason. */
     void publishInstance(std::unique_ptr<juce::AudioPluginInstance> instance);
@@ -350,6 +365,7 @@ private:
     // cleared by every other load: it belongs to the plugin it was saved from.
     juce::MemoryBlock pendingBlob_;
     juce::String statusMessage_;
+    juce::var cardLayoutOverride_; // see getCardLayoutOverride(); belongs to identity_, cleared on any other load
     bool loading_ = false;
 
     // Generation guard: a callback from a superseded load must not clobber a newer one. Compared

@@ -234,6 +234,12 @@ set(APPUI_SOURCES
     Source/Plugin/Hosting/HostedPluginEditorWindow.cpp
     Source/Plugin/Hosting/HostedPluginEditorWindow.h
     Source/Plugin/Hosting/HostedPluginWindowManager.h
+    # Plugin card layout (FRO126) — the per-plugin-type store reads the settings folder, so it is
+    # app layer, not Core; the resolver that consults it sits beside it.
+    Source/Plugin/Hosting/PluginCardLayoutStore.cpp
+    Source/Plugin/Hosting/PluginCardLayoutStore.h
+    Source/Plugin/Hosting/HostedPluginCardLayout.cpp
+    Source/Plugin/Hosting/HostedPluginCardLayout.h
     Source/UI/Settings/AppearanceSettingsTab.cpp
     Source/UI/Settings/AppearanceSettingsTab.h
     Source/UI/Settings/MeterColourStopsEditor.cpp

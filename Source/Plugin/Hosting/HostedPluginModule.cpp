@@ -52,6 +52,7 @@ void HostedPluginModule::loadPlugin(const juce::PluginDescription& description, 
     // Nothing but a state restore may carry a blob into a load: the blob belongs to the plugin it was
     // saved from, and applying it to a DIFFERENT plugin hands third-party code someone else's bytes.
     pendingBlob_.reset();
+    setCardLayoutOverride({}); // like the blob, a card layout belongs to the plugin it was made for
 
     identity_ = PluginIdentity::fromDescription(description);
     statusMessage_.clear();
@@ -87,6 +88,7 @@ void HostedPluginModule::loadPlugin(const juce::PluginDescription& description, 
 
 void HostedPluginModule::loadPlugin(const PluginIdentity& identity, HostedPluginBackend& backend) {
     pendingBlob_.reset(); // see the description overload
+    setCardLayoutOverride({});
     startIdentityLoad(identity, backend);
 }
 
@@ -129,6 +131,7 @@ void HostedPluginModule::unloadPlugin() {
     retireActiveInstance();
     identity_ = {};
     pendingBlob_.reset();
+    setCardLayoutOverride({});
     statusMessage_.clear();
     // Notified, unlike the publish edge — an unload takes the node's latency N -> 0 and the
     // graph is still compensating the parallel paths for a plugin that is no longer there.
@@ -523,6 +526,9 @@ juce::var HostedPluginModule::getExtraState() const {
     if (blob.getSize() > 0)
         object->setProperty("pluginState", blob.toBase64Encoding());
 
+    if (!cardLayoutOverride_.isVoid())
+        object->setProperty("cardLayout", cardLayoutOverride_.clone());
+
     // NOTE: no path is written here, ever — not the plugin binary's, not anything else. The identity
     // is format + uniqueId + name (see PluginIdentity). HostedPluginTests asserts it over the
     // serialized patch.
@@ -534,9 +540,13 @@ void HostedPluginModule::setExtraState(const juce::var& state) {
     if (object == nullptr)
         return;
 
+    if (applyCardLayoutPatch(state))
+        return;
+
     const PluginIdentity identity = PluginIdentity::fromVar(state);
 
     pendingBlob_.reset();
+    setCardLayoutOverride(object->getProperty("cardLayout"));
     const juce::String encoded = object->getProperty("pluginState").toString();
     if (encoded.isNotEmpty())
         pendingBlob_.fromBase64Encoding(encoded);

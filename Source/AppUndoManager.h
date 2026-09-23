@@ -52,6 +52,10 @@ public:
     void recordParameterChange(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID nodeId,
                                const juce::String& paramId, float oldValue, float newValue);
 
+    /** Records an already-applied node extra-state edit; undo/redo replay before/after via setExtraState. */
+    void recordNodeExtraStateChange(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID nodeId,
+                                    const juce::var& beforeExtraState, const juce::var& afterExtraState);
+
     /**
      * @brief Records a module position change (drag on the canvas).
      *
