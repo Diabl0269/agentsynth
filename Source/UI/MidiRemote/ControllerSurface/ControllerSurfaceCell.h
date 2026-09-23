@@ -46,6 +46,17 @@ public:
      *  doesn't actually change the widget's current state. */
     void noteActivity(synth::midi::RemoteEventKind kind, float value);
 
+    /** FRO134 (docs/control/midi-remote-ui.md#detect-mode): a control Detect just added pulses (a
+     *  breathing accent outline, time-bounded to kDetectPulseMaxMs) until the next message arrives.
+     *  `sinceMs` is juce::Time::getMillisecondCounterHiRes() at the moment it started; 0 stops it. */
+    void setDetectPulse(double sinceMs);
+    /** An existing control lit by Detect: a solid outline for kDetectFlashMs. */
+    void flash();
+    /** Repaints only while a pulse/flash is live or has just expired -- called from the panel's
+     *  existing gated activity tick, never a timer of its own (Source/UI/CLAUDE.md). */
+    void tickHighlight();
+    bool hasLiveHighlightForTest() const noexcept { return pulseSinceMs_ != 0.0 || flashUntilMs_ != 0.0; }
+
     std::function<void()> onSelected;
     /** Fired on drag once the pointer has crossed into a new cell -- (dCols, dRows) is the delta
      *  from the drag's START cell, so the owner can compute newCol/newRow = startCol/startRow +
@@ -61,6 +72,8 @@ public:
     void mouseUp(const juce::MouseEvent& event) override;
 
     static constexpr int kCellSize = 56;
+    static constexpr double kDetectPulseMaxMs = 10000.0;
+    static constexpr double kDetectFlashMs = 250.0;
 
 private:
     void buildWidgetForKind();
@@ -73,6 +86,8 @@ private:
     bool selected_ = false;
     float lastValue_ = 0.0f;
     bool lastPressed_ = false;
+    double pulseSinceMs_ = 0.0; // 0 = not pulsing
+    double flashUntilMs_ = 0.0; // 0 = not flashing
 
     std::unique_ptr<juce::Slider> slider_;     // knob/encoder/fader/wheel, style set per kind
     std::unique_ptr<juce::TextButton> button_; // pad/button

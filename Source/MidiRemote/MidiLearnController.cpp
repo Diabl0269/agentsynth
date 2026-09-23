@@ -438,6 +438,93 @@ bool MidiLearnController::updateProfile(const ControllerProfile& profile) {
     return true;
 }
 
+bool MidiLearnController::addProfile(const ControllerProfile& profile) {
+    if (profile.id.isEmpty() || findProfile(profile.id) != nullptr)
+        return false;
+    profileStore_.save(profile);
+    profiles_.push_back(profile);
+    remoteEngine_.setProfiles(profiles_);
+    if (onChanged)
+        onChanged();
+    return true;
+}
+
+// The file is parsed and re-saved under its own id rather than file-copied
+// (ControllerProfileStore::importProfile), because "Replace" has to overwrite a known id, which the
+// store's copy refuses by design. Replacing keeps every project assignment linked: they reference
+// the profile by id, and the imported document carries the same one.
+MidiLearnController::ImportResult MidiLearnController::importProfile(const juce::File& srcFile, bool replaceExisting) {
+    ImportResult result;
+    ControllerProfile parsed;
+    if (!parsed.fromVar(juce::JSON::parse(srcFile)))
+        return result;
+    result.profile = parsed;
+
+    auto existing =
+        std::find_if(profiles_.begin(), profiles_.end(), [&](const ControllerProfile& p) { return p.id == parsed.id; });
+    if (existing != profiles_.end() && !replaceExisting) {
+        result.status = ImportStatus::conflict;
+        return result;
+    }
+
+    profileStore_.save(parsed);
+    if (existing != profiles_.end()) {
+        *existing = parsed;
+        result.status = ImportStatus::replaced;
+    } else {
+        profiles_.push_back(parsed);
+        result.status = ImportStatus::imported;
+    }
+    remoteEngine_.setProfiles(profiles_);
+    if (onChanged)
+        onChanged();
+    return result;
+}
+
+// The assignment copies are rewritten IN PLACE, outside any undo step: a control edit is a global
+// profile edit (docs/control/midi-remote.md#undo: "Profile edits ... not undoable"), so undoing an
+// older project edit past this one can restore the previous encoding/name on an assignment until it
+// is edited again -- the same profile-vs-project seam deleteControl() has.
+bool MidiLearnController::updateControl(const juce::String& profileId, const Control& edited) {
+    auto profileIt =
+        std::find_if(profiles_.begin(), profiles_.end(), [&](const ControllerProfile& p) { return p.id == profileId; });
+    if (profileIt == profiles_.end())
+        return false;
+    auto controlIt = std::find_if(profileIt->controls.begin(), profileIt->controls.end(),
+                                  [&](const Control& c) { return c.id == edited.id; });
+    if (controlIt == profileIt->controls.end())
+        return false;
+
+    controlIt->name = edited.name;
+    controlIt->kind = edited.kind;
+    controlIt->encoding = edited.encoding;
+    controlIt->buttonMode = edited.buttonMode;
+
+    const auto syncAssignment = [&](Assignment& a) {
+        a.specControlName = controlIt->name;
+        a.specEncoding = controlIt->encoding;
+        a.specButtonMode = controlIt->buttonMode;
+    };
+    bool projectChanged = false;
+    for (auto& a : doc_.assignments) {
+        if (a.control.profileId == profileId && a.control.controlId == edited.id) {
+            syncAssignment(a);
+            projectChanged = true;
+        }
+    }
+    for (auto& a : profileIt->actions)
+        if (a.control.controlId == edited.id)
+            syncAssignment(a);
+
+    profileStore_.save(*profileIt);
+    remoteEngine_.setProfiles(profiles_);
+    if (projectChanged)
+        publishAssignments(); // notifies onChanged
+    else if (onChanged)
+        onChanged();
+    return true;
+}
+
 int MidiLearnController::countProjectAssignmentsForProfile(const juce::String& profileId) const {
     return static_cast<int>(
         std::count_if(doc_.assignments.begin(), doc_.assignments.end(),

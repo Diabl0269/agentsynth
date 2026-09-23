@@ -242,6 +242,9 @@ add_executable(Tests
     MidiRemote/RemoteEngineLearnTests.cpp
     MidiRemote/ControllerProfileStoreTests.cpp
     MidiRemote/MidiRemoteLearnBinderTests.cpp
+    MidiRemote/ControllerTemplatesTests.cpp
+    MidiRemote/ControllerDetectTests.cpp
+    MidiRemote/EncoderAutoDetectTests.cpp
     MidiRemote/MidiLearnControllerTests.cpp
     App/E2EWorkflowTests.cpp
     Modules/ExternalMidiModuleTests.cpp
@@ -386,6 +389,9 @@ add_executable(Tests
     UI/Mixer/MixerSendListTests.cpp
     UI/Mixer/MixerDockComponentTests.cpp
     UI/MidiRemote/MidiRemotePanelTests.cpp
+    UI/MidiRemote/ControllerSurfaceDetectTests.cpp
+    UI/MidiRemote/MidiRemotePanelControllersTests.cpp
+    UI/MidiRemote/AddControllerPopoverTests.cpp
     UI/MidiRemote/ControllersListTests.cpp
     UI/MidiRemote/ControllerSurfaceTests.cpp
     UI/MidiRemote/ControlInspectorTests.cpp
@@ -559,6 +565,11 @@ add_executable(Tests
     ../Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp
     ../Source/UI/MidiRemote/MidiLearnMenu.cpp
     ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.cpp
+    ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelDetect.cpp
+    ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelControllers.cpp
+    ../Source/UI/MidiRemote/Detect/DetectModeController.cpp
+    ../Source/UI/MidiRemote/AddController/AddControllerPopover.cpp
+    ../Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceToolbar.cpp
     ../Source/UI/MidiRemote/ControllersList/ControllersListComponent.cpp
     ../Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceComponent.cpp
     ../Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceCell.cpp

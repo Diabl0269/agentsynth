@@ -174,6 +174,14 @@ set(APPUI_SOURCES
     Source/UI/MidiRemote/MidiLearnMenu.cpp
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.h
     Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.cpp
+    Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelDetect.cpp
+    Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelControllers.cpp
+    Source/UI/MidiRemote/Detect/DetectModeController.h
+    Source/UI/MidiRemote/Detect/DetectModeController.cpp
+    Source/UI/MidiRemote/AddController/AddControllerPopover.h
+    Source/UI/MidiRemote/AddController/AddControllerPopover.cpp
+    Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceToolbar.h
+    Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceToolbar.cpp
     Source/UI/MidiRemote/ControllersList/ControllersListComponent.h
     Source/UI/MidiRemote/ControllersList/ControllersListComponent.cpp
     Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceComponent.h

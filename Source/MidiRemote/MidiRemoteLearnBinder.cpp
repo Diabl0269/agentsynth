@@ -1,5 +1,7 @@
 #include "MidiRemote/MidiRemoteLearnBinder.h"
 
+#include "MidiRemote/ControllerDetect.h"
+
 #include <algorithm>
 #include <juce_audio_basics/juce_audio_basics.h> // juce::MidiMessage::getMidiNoteName
 
@@ -31,26 +33,6 @@ juce::String nameForSpec(const MessageSpec& spec) {
 // lands on, and the panel lets the user retype it either way.
 ControlKind kindForSpec(const MessageSpec& spec) {
     return spec.type == MessageType::note ? ControlKind::button : ControlKind::knob;
-}
-
-constexpr int kAutoLayoutColumns = 8;
-
-// The first {col, row} (row-major, kAutoLayoutColumns wide) not already occupied by a control on
-// this profile -- "layout: next free grid cell" (same doc section). Deliberately simple: the user
-// drags controls around in the panel afterwards (docs/control/midi-remote.md#the-surface-is-detected-not-drawn).
-void placeAtNextFreeCell(Control& control, const std::vector<Control>& existing) {
-    for (int row = 0;; ++row) {
-        for (int col = 0; col < kAutoLayoutColumns; ++col) {
-            const bool taken = std::any_of(existing.begin(), existing.end(), [&](const Control& c) {
-                return c.layout.col == col && c.layout.row == row;
-            });
-            if (!taken) {
-                control.layout.col = col;
-                control.layout.row = row;
-                return;
-            }
-        }
-    }
 }
 
 } // namespace

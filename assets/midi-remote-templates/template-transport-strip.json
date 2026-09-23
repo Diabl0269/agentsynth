@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "id": "template-transport-strip",
+  "name": "Transport strip",
+  "input": {
+    "identifier": "",
+    "name": ""
+  },
+  "passMapped": false,
+  "controls": [
+    {
+      "id": "play",
+      "name": "Play",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 115
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 0
+      }
+    },
+    {
+      "id": "stop",
+      "name": "Stop",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 116
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 0
+      }
+    },
+    {
+      "id": "record",
+      "name": "Record",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 117
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 2,
+        "row": 0
+      }
+    },
+    {
+      "id": "loop",
+      "name": "Loop",
+      "kind": "button",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 118
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 3,
+        "row": 0
+      }
+    }
+  ],
+  "actions": []
+}

@@ -90,7 +90,36 @@ void ControllerSurfaceComponent::setControls(const juce::String& profileId, cons
         };
 
         cell->setSelected(controlId == selectedControlId_);
+        if (controlId == pulseControlId_)
+            cell->setDetectPulse(pulseSinceMs_);
     }
+}
+
+void ControllerSurfaceComponent::setDetectPulseControlId(const juce::String& controlId) {
+    if (controlId == pulseControlId_)
+        return;
+    pulseControlId_ = controlId;
+    pulseSinceMs_ = controlId.isEmpty() ? 0.0 : juce::Time::getMillisecondCounterHiRes();
+    for (auto* cell : cells_)
+        cell->setDetectPulse(cell->getControlId() == controlId ? pulseSinceMs_ : 0.0);
+}
+
+void ControllerSurfaceComponent::flashControl(const juce::String& controlId) {
+    for (auto* cell : cells_)
+        if (cell->getControlId() == controlId)
+            cell->flash();
+}
+
+void ControllerSurfaceComponent::tickDetectHighlights() {
+    for (auto* cell : cells_)
+        cell->tickHighlight();
+}
+
+bool ControllerSurfaceComponent::isControlPulsingForTest(const juce::String& controlId) const {
+    for (auto* cell : cells_)
+        if (cell->getControlId() == controlId)
+            return cell->hasLiveHighlightForTest();
+    return false;
 }
 
 void ControllerSurfaceComponent::noteActivity(const juce::String& controlId, synth::midi::RemoteEventKind kind,

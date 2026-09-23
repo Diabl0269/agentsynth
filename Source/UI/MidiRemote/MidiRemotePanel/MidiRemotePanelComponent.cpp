@@ -5,6 +5,7 @@
 #include "MidiRemotePanelComponent.h"
 
 #include "AudioEngine/AudioEngine.h"
+#include "MidiRemote/ControllerDetect.h"
 #include "MidiRemote/MidiLearnController.h"
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
 #include "MidiRemote/RemoteEngine/RemoteMessageSink.h"
@@ -33,14 +34,6 @@ juce::AudioProcessor* resolveProcessor(AudioEngine& audioEngine, const juce::Str
     return nullptr;
 }
 
-bool messageSpecMatches(const synth::MessageSpec& spec, const synth::midi::RemoteEvent& event) {
-    if (static_cast<std::uint8_t>(spec.type) != event.specType)
-        return false;
-    if (spec.channel != 0 && spec.channel != event.specChannel)
-        return false;
-    return spec.number == event.specNumber;
-}
-
 } // namespace
 
 MidiRemotePanelComponent::MidiRemotePanelComponent() {
@@ -50,6 +43,7 @@ MidiRemotePanelComponent::MidiRemotePanelComponent() {
     setWantsKeyboardFocus(true);
 
     addAndMakeVisible(controllersList_);
+    addAndMakeVisible(toolbar_);
     addAndMakeVisible(controllerSurface_);
     addAndMakeVisible(inspector_);
 
@@ -64,6 +58,12 @@ MidiRemotePanelComponent::MidiRemotePanelComponent() {
     controllersList_.onDeleteConfirmed = [this](const juce::String& profileId) {
         handleDeleteProfileRequested(profileId);
     };
+
+    controllersList_.onAddControllerRequested = [this](juce::Component& anchor) { showAddControllerPopover(anchor); };
+
+    toolbar_.onDetectToggled = [this](bool on) { setDetectActive(on); };
+    toolbar_.onTemplatesRequested = [this](juce::Component& anchor) { showTemplatesMenu(anchor); };
+    toolbar_.onMoreRequested = [this](juce::Component& anchor) { showMoreMenu(anchor); };
 
     controllerSurface_.onSelectControl = [this](const juce::String& controlId) { selectControl(controlId); };
     controllerSurface_.onControlMoved = [this](const juce::String& controlId, int col, int row) {
@@ -83,6 +83,8 @@ MidiRemotePanelComponent::MidiRemotePanelComponent() {
         refreshInspectorForSelection();
     };
     inspector_.onForgetRequested = [this](const juce::String& assignmentId) { handleForgetRequested(assignmentId); };
+    inspector_.onControlEdited = [this](const synth::Control& control) { handleControlEdited(control); };
+    inspector_.onAutoDetectRequested = [this](const synth::Control& control) { beginEncoderAutoDetect(control); };
 }
 
 MidiRemotePanelComponent::~MidiRemotePanelComponent() = default;
@@ -122,11 +124,14 @@ void MidiRemotePanelComponent::rebuildFromProfiles() {
             rows.push_back({ref.profileId, ref.name, ControllersListComponent::RowState::orphan});
     }
     controllersList_.setRows(rows);
+    controllersList_.setAddControllerVisible(!hosted); // the plugin build's list is exactly Host MIDI
 
     if (!selectedProfileId_.isEmpty() && findSelectedProfile() == nullptr) {
         selectedProfileId_.clear();
         selectedControlId_.clear();
+        setDetectActive(false);
     }
+    toolbar_.setProfileSelected(findSelectedProfile() != nullptr);
     refreshSurfaceForSelectedProfile();
     refreshInspectorForSelection();
 }
@@ -144,12 +149,21 @@ void MidiRemotePanelComponent::scheduleLiveRefresh() {
     });
 }
 
+// ONE drainActivity() pass feeds everything: the Controllers list's dots, the surface's live
+// widgets, Detect (FRO134) and encoder auto-detect (FRO134) -- a second drain would steal events
+// from the first. Detect works on a copy of the selected profile and persists it once, after the
+// drain, so a burst of new controls is one write and one grid rebuild.
 void MidiRemotePanelComponent::refreshActivity() {
     if (remoteEngine_ == nullptr || learnController_ == nullptr)
         return;
 
     const auto& profiles = learnController_->getProfiles();
     const auto now = juce::Time::getMillisecondCounter();
+
+    std::optional<synth::ControllerProfile> working;
+    bool profileChanged = false;
+    std::vector<juce::String> litControlIds;
+    std::vector<synth::midi::RemoteEvent> selectedEvents;
 
     remoteEngine_->drainActivity([&](const juce::String& sourceKey, const synth::midi::RemoteEvent& event) {
         auto profileIt = std::find_if(profiles.begin(), profiles.end(),
@@ -162,13 +176,23 @@ void MidiRemotePanelComponent::refreshActivity() {
 
         if (profile->id != selectedProfileId_)
             return;
-        for (const auto& control : profile->controls) {
-            if (messageSpecMatches(control.message, event)) {
-                controllerSurface_.noteActivity(control.id, event.kind, event.value);
-                break;
-            }
+
+        encoderDetect_.feed(event);
+        selectedEvents.push_back(event);
+
+        if (detect_.isActive()) {
+            if (!working)
+                working = *profile;
+            const auto step = detect_.handleEvent(*working, event);
+            profileChanged = profileChanged || step.controlAdded;
+            if (step.litControlId.isNotEmpty())
+                litControlIds.push_back(step.litControlId);
         }
+        if (const auto* control = synth::midi::findControlForEvent(profile->controls, event))
+            controllerSurface_.noteActivity(control->id, event.kind, event.value);
     });
+
+    commitDetectStep(working, profileChanged, litControlIds, selectedEvents);
 
     for (const auto& profile : profiles) {
         const auto lastMs = profileLastActivityMs_.count(profile.id) ? profileLastActivityMs_[profile.id] : 0;
@@ -196,9 +220,14 @@ bool MidiRemotePanelComponent::selectAssignmentForParameter(const juce::String& 
 }
 
 void MidiRemotePanelComponent::selectProfile(const juce::String& profileId) {
+    if (profileId != selectedProfileId_) {
+        setDetectActive(false); // Detect belongs to one controller
+        encoderDetect_.cancel();
+    }
     selectedProfileId_ = profileId;
     selectedControlId_.clear();
     controllersList_.setSelectedProfileId(profileId);
+    toolbar_.setProfileSelected(findSelectedProfile() != nullptr);
     refreshSurfaceForSelectedProfile();
     refreshInspectorForSelection();
 }
@@ -487,10 +516,22 @@ void MidiRemotePanelComponent::handleForgetRequested(const juce::String& assignm
     refreshInspectorForSelection();
 }
 
+// FRO134/FRO264: name / kind / encoding edits from the Inspector. Rebuilds synchronously -- this
+// is the inspector's own combo/label callback, not a cell's mouse stack.
+void MidiRemotePanelComponent::handleControlEdited(const synth::Control& control) {
+    if (learnController_ == nullptr || selectedProfileId_.isEmpty())
+        return;
+    if (!learnController_->updateControl(selectedProfileId_, control))
+        return;
+    refreshSurfaceForSelectedProfile();
+    refreshInspectorForSelection();
+}
+
 void MidiRemotePanelComponent::resized() {
     auto bounds = getLocalBounds();
     controllersList_.setBounds(bounds.removeFromLeft(kListWidth));
     inspector_.setBounds(bounds.removeFromRight(kInspectorWidth));
+    toolbar_.setBounds(bounds.removeFromTop(toolbar_.getPreferredHeight()));
     controllerSurface_.setBounds(bounds);
 }
 

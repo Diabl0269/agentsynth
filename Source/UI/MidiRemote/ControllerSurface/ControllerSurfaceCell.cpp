@@ -179,10 +179,48 @@ void ControllerSurfaceCell::paint(juce::Graphics& g) {
 // over-children pass can sit on top of them. Toggled alongside the drag cursor in
 // mouseDrag()/mouseUp() below.
 void ControllerSurfaceCell::paintOverChildren(juce::Graphics& g) {
-    if (!isDragging_)
+    if (isDragging_) {
+        g.setColour(juce::Colours::black.withAlpha(0.35f));
+        g.fillRect(getLocalBounds());
+    }
+
+    if (pulseSinceMs_ == 0.0 && flashUntilMs_ == 0.0)
         return;
-    g.setColour(juce::Colours::black.withAlpha(0.35f));
-    g.fillRect(getLocalBounds());
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    const juce::Colour accent = lf != nullptr ? lf->getTheme().colors.accent : juce::Colours::cyan;
+    const auto now = juce::Time::getMillisecondCounterHiRes();
+    if (flashUntilMs_ != 0.0 && now < flashUntilMs_) {
+        g.setColour(accent);
+        g.drawRect(getLocalBounds(), 2);
+    } else if (pulseSinceMs_ != 0.0) {
+        synth::ui::midilearn::paintMidiLearnArmedOutline(g, getLocalBounds(), accent, pulseSinceMs_);
+    }
+}
+
+// FRO134. The pulse's alpha is recomputed from wall time inside paintMidiLearnArmedOutline, but
+// nothing repaints on its own: the panel's gated activity tick calls tickHighlight(), which asks for
+// a repaint of THIS cell only while something is live (and once more when it ends, to erase it).
+void ControllerSurfaceCell::setDetectPulse(double sinceMs) {
+    if (juce::approximatelyEqual(pulseSinceMs_, sinceMs))
+        return;
+    pulseSinceMs_ = sinceMs;
+    repaint();
+}
+
+void ControllerSurfaceCell::flash() {
+    flashUntilMs_ = juce::Time::getMillisecondCounterHiRes() + kDetectFlashMs;
+    repaint();
+}
+
+void ControllerSurfaceCell::tickHighlight() {
+    if (pulseSinceMs_ == 0.0 && flashUntilMs_ == 0.0)
+        return;
+    const auto now = juce::Time::getMillisecondCounterHiRes();
+    if (pulseSinceMs_ != 0.0 && now - pulseSinceMs_ > kDetectPulseMaxMs)
+        pulseSinceMs_ = 0.0;
+    if (flashUntilMs_ != 0.0 && now >= flashUntilMs_)
+        flashUntilMs_ = 0.0;
+    repaint();
 }
 
 void ControllerSurfaceCell::resized() {

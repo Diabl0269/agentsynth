@@ -6,13 +6,12 @@
 #include <vector>
 
 // ControlInspectorComponent.h -- FRO131 (docs/control/midi-remote-ui.md#inspector-right): the MIDI
-// Remote panel's right region -- the selected control's name/kind/message spec/button mode, then
-// one block per assignment (a control may carry one project + one global assignment at most in
-// v1, docs/control/midi-remote-ui.md#inspector-right). Rendered but INERT (disabled, tooltip only)
-// per the ticket's own task split: message-spec editing and Relearn (the shared re-detect
-// primitive belongs to task 7 alongside Detect/Auto-detect -- see MidiLearnController.h's comment
-// on why it isn't built here), Auto-detect encoding (task 7), and Learn target / the assign-from-
-// panel popover (task 8). Takeover, range+invert and Forget ARE wired here.
+// Remote panel's right region -- the selected control's name/kind/message spec/encoding/button
+// mode, then one block per assignment (a control may carry one project + one global assignment at
+// most in v1, docs/control/midi-remote-ui.md#inspector-right). Takeover, range+invert and Forget
+// are wired (FRO131); FRO134 adds the editable name and kind, the Encoding combo and Auto-detect....
+// Still inert: Relearn (re-detecting a control's message needs the same primitive the panel-side
+// learn will) and Learn target / the assign-from-panel popover (task 8).
 namespace synth::ui {
 
 class ControlInspectorComponent : public juce::Component {
@@ -49,6 +48,11 @@ public:
      *  to absolute continuous encodings", docs/control/midi-remote.md#takeover -- an action target
      *  is always a button). */
     std::function<void(const synth::Assignment& assignment)> onAssignmentEdited;
+    /** FRO134: the name, kind or encoding of the selected control was edited -- `control` carries
+     *  every field, already updated, ready for MidiLearnController::updateControl(). */
+    std::function<void(const synth::Control& control)> onControlEdited;
+    /** FRO134: "Auto-detect..." pressed (enabled only for a CC knob/encoder). */
+    std::function<void(const synth::Control& control)> onAutoDetectRequested;
     /** "Forget" on the row for `assignmentId`. */
     std::function<void(const juce::String& assignmentId)> onForgetRequested;
 
@@ -59,14 +63,15 @@ private:
     class AssignmentRow;
 
     void rebuildRows();
+    void fireControlEdited();
 
     ControlModel model_;
     juce::Label nameLabel_;
-    juce::Label kindLabel_;
+    juce::ComboBox kindCombo_;
     juce::Label messageSpecLabel_;
-    juce::TextButton relearnButton_{"Relearn"};           // disabled -- task 7 (shared engine primitive)
-    juce::ComboBox encodingCombo_;                        // disabled -- Auto-detect... is task 7
-    juce::TextButton autoDetectButton_{"Auto-detect..."}; // disabled -- task 7
+    juce::TextButton relearnButton_{"Relearn"}; // disabled -- needs the panel-side learn primitive
+    juce::ComboBox encodingCombo_;
+    juce::TextButton autoDetectButton_{"Auto-detect..."};
     juce::Label buttonModeLabel_;
 
     juce::OwnedArray<AssignmentRow> assignmentRows_;

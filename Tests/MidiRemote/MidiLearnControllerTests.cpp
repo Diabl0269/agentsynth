@@ -823,3 +823,85 @@ TEST_F(MidiLearnControllerTest, OnChangedFiresOnEveryProfileOnlyMutation) {
     EXPECT_TRUE(controller_->deleteProfile(profileId));
     EXPECT_EQ(calls, 1);
 }
+
+// ============================================================================
+// FRO134: add / import / updateControl
+// ============================================================================
+
+TEST_F(MidiLearnControllerTest, AddProfileSavesPublishesAndRefusesDuplicatesAndEmptyIds) {
+    ControllerProfile profile;
+    profile.id = "new-profile";
+    profile.name = "Fresh";
+    profile.input.identifier = hostSourceKey();
+    int changed = 0;
+    controller_->onChanged = [&] { ++changed; };
+
+    EXPECT_TRUE(controller_->addProfile(profile));
+    EXPECT_EQ(changed, 1);
+    ASSERT_EQ(controller_->getProfiles().size(), 1u);
+    EXPECT_EQ(synth::ControllerProfileStore(root_).loadAll().profiles.size(), 1u);
+
+    EXPECT_FALSE(controller_->addProfile(profile)) << "same id";
+    ControllerProfile noId;
+    EXPECT_FALSE(controller_->addProfile(noId));
+    EXPECT_EQ(changed, 1);
+}
+
+TEST_F(MidiLearnControllerTest, ImportProfileReportsConflictUntilReplaceIsAsked) {
+    ControllerProfile profile;
+    profile.id = "p1";
+    profile.name = "Original";
+    ASSERT_TRUE(controller_->addProfile(profile));
+    const auto file = root_.getChildFile("doc.json");
+    ASSERT_TRUE(controller_->exportProfile("p1", file));
+
+    profile.name = "Changed";
+    ASSERT_TRUE(controller_->updateProfile(profile));
+
+    auto conflict = controller_->importProfile(file, false);
+    EXPECT_EQ(conflict.status, MidiLearnController::ImportStatus::conflict);
+    EXPECT_EQ(controller_->getProfiles()[0].name, "Changed");
+
+    auto replaced = controller_->importProfile(file, true);
+    EXPECT_EQ(replaced.status, MidiLearnController::ImportStatus::replaced);
+    EXPECT_EQ(controller_->getProfiles()[0].name, "Original");
+    EXPECT_EQ(controller_->getProfiles().size(), 1u);
+
+    ASSERT_TRUE(controller_->deleteProfile("p1"));
+    EXPECT_EQ(controller_->importProfile(file, false).status, MidiLearnController::ImportStatus::imported);
+    EXPECT_EQ(controller_->importProfile(root_.getChildFile("missing.json"), false).status,
+              MidiLearnController::ImportStatus::invalid);
+}
+
+TEST_F(MidiLearnControllerTest, UpdateControlRewritesEveryAssignmentCopyAndTheEngineDecodesTheNewEncoding) {
+    controller_->arm(node_->nodeID, "cutoff");
+    send(juce::MidiMessage::controllerEvent(1, 20, 64));
+    settle();
+    ASSERT_EQ(doc_.assignments.size(), 1u);
+    const auto profileId = controller_->getProfiles()[0].id;
+    auto control = controller_->getProfiles()[0].controls[0];
+
+    control.name = "Cutoff dial";
+    control.encoding = Encoding::relSignMag;
+    control.kind = ControlKind::encoder;
+    EXPECT_TRUE(controller_->updateControl(profileId, control));
+
+    EXPECT_EQ(controller_->getProfiles()[0].controls[0].name, "Cutoff dial");
+    EXPECT_EQ(controller_->getProfiles()[0].controls[0].kind, ControlKind::encoder);
+    EXPECT_EQ(doc_.assignments[0].specEncoding, Encoding::relSignMag);
+    EXPECT_EQ(doc_.assignments[0].specControlName, "Cutoff dial");
+    // The message key and layout are the stored ones, never the edit's.
+    EXPECT_EQ(controller_->getProfiles()[0].controls[0].message.number, 20);
+
+    send(juce::MidiMessage::controllerEvent(1, 20, 65)); // sign-magnitude -1
+    std::vector<RemoteEvent> events;
+    remoteEngine_.drainActivity([&](const juce::String&, const RemoteEvent& e) { events.push_back(e); });
+    ASSERT_FALSE(events.empty());
+    EXPECT_EQ(events.back().kind, RemoteEventKind::relativeDelta);
+    EXPECT_LT(events.back().value, 0.0f);
+
+    EXPECT_FALSE(controller_->updateControl("nope", control));
+    auto unknown = control;
+    unknown.id = "nope";
+    EXPECT_FALSE(controller_->updateControl(profileId, unknown));
+}

@@ -289,3 +289,39 @@ TEST(MidiRemoteEngineDecodeTest, IneligibleMessagesAreDroppedEntirely) {
         EXPECT_TRUE(h.drainActivity().empty()) << "an ineligible message must never reach the activity ring";
     }
 }
+
+// ============================================================================
+// FRO134: Detect / encoder auto-detect feed off the activity ring
+// ============================================================================
+
+// Detect's whole premise (docs/control/midi-remote-ui.md#detect-mode): a controller profile with NO
+// controls and NO assignments still mirrors every eligible message from its device onto the
+// activity ring, and never consumes it.
+TEST(MidiRemoteEngineDecodeTest, ProfileWithNoControlsStillMirrorsUnknownMessagesAndDoesNotConsume) {
+    DecodeHarness h;
+    h.finalize();
+
+    EXPECT_FALSE(h.send(juce::MidiMessage::controllerEvent(3, 21, 90)));
+    EXPECT_FALSE(h.send(juce::MidiMessage::noteOn(10, 60, (juce::uint8)100)));
+    const auto events = h.drainActivity();
+    ASSERT_EQ(events.size(), 2u);
+    EXPECT_EQ(events[0].slotIndex, -1);
+    EXPECT_EQ(events[0].specChannel, 3);
+    EXPECT_EQ(events[0].specNumber, 21);
+    EXPECT_EQ(events[1].kind, RemoteEventKind::buttonPress);
+    EXPECT_EQ(events[1].specType, static_cast<std::uint8_t>(MessageType::note));
+}
+
+// Encoder auto-detect classifies the raw byte, so it must survive a relative decode (where `value`
+// is a signed delta) and an abs7 one alike.
+TEST(MidiRemoteEngineDecodeTest, EventsCarryTheRawDataByteWhateverTheEncoding) {
+    DecodeHarness h;
+    h.addControl("rt", MessageType::cc, 1, 50, Encoding::relTwos);
+    h.addControl("ab", MessageType::cc, 1, 51, Encoding::abs7);
+    h.finalize();
+
+    EXPECT_EQ(h.sendAndReadOne(juce::MidiMessage::controllerEvent(1, 50, 127)).rawValue, 127);
+    EXPECT_EQ(h.sendAndReadOne(juce::MidiMessage::controllerEvent(1, 50, 1)).rawValue, 1);
+    EXPECT_EQ(h.sendAndReadOne(juce::MidiMessage::controllerEvent(1, 51, 93)).rawValue, 93);
+    EXPECT_EQ(h.sendAndReadOne(juce::MidiMessage::controllerEvent(1, 99, 65)).rawValue, 65) << "unassigned";
+}

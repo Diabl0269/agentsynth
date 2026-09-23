@@ -49,6 +49,11 @@ struct RemoteEvent {
     std::uint8_t specType = 0;    // static_cast<std::uint8_t>(synth::MessageType)
     std::uint8_t specChannel = 0; // 1..16 exactly as received (never the profile's 0 = "any")
     std::uint8_t specNumber = 0;  // cc/note number; 0 for pitchBend / channelPressure
+    /** The message's own 7-bit data byte exactly as received (cc value / note velocity / pressure),
+     *  never scaled or decoded -- what `value` is NOT for a relative encoding or a range-mapped
+     *  assignment. Encoder auto-detect (docs/control/midi-remote-ui.md#detect-mode) classifies the
+     *  raw pattern, so it must see this whatever encoding the control currently claims. */
+    std::uint8_t rawValue = 0;
 };
 
 static_assert(std::is_trivially_copyable_v<RemoteEvent>, "RemoteEvent rides a lock-free ring");
