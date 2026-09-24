@@ -509,6 +509,9 @@ protected:
     // TEST SEAM (message thread): devices JUCE currently sees as connected. See AudioEngineMidi.cpp.
     virtual juce::Array<juce::MidiDeviceInfo> availableMidiInputs() const;
 
+    // MESSAGE THREAD. Opens `info` into midiInputs unless already open; returns whether it did.
+    bool openMidiInput(const juce::MidiDeviceInfo& info);
+
     // TEST SEAM, and the ONE place initialise() touches real hardware in Standalone mode:
     // it opens the audio device (from `savedDeviceState` when there is one, from JUCE's defaults
     // when there isn't), attaches this engine as the device callback, subscribes to device-state
@@ -732,9 +735,6 @@ private:
 
     juce::MidiMessageCollector midiMessageCollector;
     std::vector<std::unique_ptr<juce::MidiInput>> midiInputs;
-
-    // MESSAGE THREAD. Opens `info` into midiInputs unless already open; returns whether it did.
-    bool openMidiInput(const juce::MidiDeviceInfo& info);
 
     // MESSAGE THREAD, Standalone only (FRO262). Returns whether the open set changed.
     bool reconcileMidiInputs();

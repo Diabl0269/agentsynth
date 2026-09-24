@@ -462,6 +462,7 @@ add_executable(Tests
     Engine/MetronomeTests.cpp
     Engine/DeviceChangeTests.cpp
     Engine/MidiInputReconcileTests.cpp
+    Engine/MidiInputDeliveryTests.cpp
     Timeline/TimelineE2ETests.cpp
     Project/PatchDocumentTests.cpp
     Project/ProjectBundleTests.cpp
