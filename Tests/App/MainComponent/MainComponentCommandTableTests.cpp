@@ -88,6 +88,11 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::transportNudgeForwardBar,
     AppCommands::transportJumpToLoopStart,
     AppCommands::transportJumpToLoopEnd,
+    // FRO278: buildSelectionStepCommandRows(), appended after the transport rows.
+    AppCommands::selectNextModule,
+    AppCommands::selectPreviousModule,
+    AppCommands::selectNextTrack,
+    AppCommands::selectPreviousTrack,
 };
 
 } // namespace

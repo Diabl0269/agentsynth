@@ -349,6 +349,11 @@ public:
         bindings["transportNudgeForwardBar"] = juce::KeyPress();
         bindings["transportJumpToLoopStart"] = juce::KeyPress();
         bindings["transportJumpToLoopEnd"] = juce::KeyPress();
+        // FRO278: selection stepping -- unbound like the transport family, reachable from MIDI Remote.
+        bindings["selectNextModule"] = juce::KeyPress();
+        bindings["selectPreviousModule"] = juce::KeyPress();
+        bindings["selectNextTrack"] = juce::KeyPress();
+        bindings["selectPreviousTrack"] = juce::KeyPress();
 
         // FRO131: same "explicit invalid KeyPress, not an absent entry" reasoning as the transport
         // family above -- shipped unbound (a toolbar button and MIDI Remote target already reach
@@ -725,6 +730,11 @@ private:
             {"transportNudgeForwardBar", ShortcutCategory::General},
             {"transportJumpToLoopStart", ShortcutCategory::General},
             {"transportJumpToLoopEnd", ShortcutCategory::General},
+            // FRO278: selection stepping, unbound by default.
+            {"selectNextModule", ShortcutCategory::General},
+            {"selectPreviousModule", ShortcutCategory::General},
+            {"selectNextTrack", ShortcutCategory::General},
+            {"selectPreviousTrack", ShortcutCategory::General},
             // Graph — the verbs that mean nothing on any other surface.
             {"autoArrange", ShortcutCategory::Graph},
             {"saveSnippet", ShortcutCategory::Graph},

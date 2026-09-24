@@ -394,6 +394,7 @@ public:
     // Which track header row currently holds keyboard focus, as an index into the doc's track order
     // (-1 = none) -- see TimelinePanelTrackHeaders.cpp for the full focus-movement contract.
     int getFocusedTrackIndexForTest() const noexcept { return focusedTrackIndex_; }
+    bool selectAdjacentTrack(int direction);
 
     /** Builds the "+ Track" menu WITHOUT showing it — openAddTrackMenu() calls this then shows the
      *  result async. The headless test seam for inspecting menu CONTENTS (item text, enabled state,

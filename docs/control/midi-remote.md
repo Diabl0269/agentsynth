@@ -335,7 +335,7 @@ forwards a controller's CCs to a plugin is the host's business (most do for inst
 **command-dispatched** actions are targets. The transport verbs users actually want on hardware
 buttons — **Play, Stop, Play/Stop toggle, Record, Loop toggle, Metronome toggle, Return to
 start** — plus the cursor moves (**Move Cursor Back/Forward by a Beat or a Bar**) and the loop
-jumps (**Jump to Loop Start/End**) — are today either surface-resolved (loop) or not actions at all (record, metronome,
+jumps (**Jump to Loop Start/End**) and the selection steps (**Select Next/Previous Module** on the canvas, **Select Next/Previous Track** on the timeline) — are today either surface-resolved (loop) or not actions at all (record, metronome,
 stop, return-to-start). They were **promoted to command-dispatched actions** first (which also
 gave them keyboard shortcuts, which they lacked). The
 panel's action picker lists actions by `ShortcutCategory` with the same display names as the

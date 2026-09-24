@@ -162,7 +162,15 @@ enum CommandIDs {
     // no dialog, no prompt, no analytics event. Menu-only like showWelcomeScreen/whatsNew (no
     // ShortcutManager actionId/binding) and registered unconditionally. Appended last per the snapSet
     // comment above, so no existing enumerator's value moves.
-    contribute
+    contribute,
+    // FRO278: step the selection to the next/previous module on the graph canvas or the next/previous
+    // track on the timeline. Two pairs rather than one focus-routed pair: a controller press must land
+    // the same way wherever the last mouse click was, and moving track focus itself changes which
+    // surface resolveEditSurface() reports. Appended last so no existing enumerator's value moves.
+    selectNextModule,
+    selectPreviousModule,
+    selectNextTrack,
+    selectPreviousTrack
 };
 
 /** What getCommandForAction() answers for a SURFACE action — an id that is rebindable and appears
@@ -296,6 +304,14 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return transportJumpToLoopStart;
     if (actionId == "transportJumpToLoopEnd")
         return transportJumpToLoopEnd;
+    if (actionId == "selectNextModule")
+        return selectNextModule;
+    if (actionId == "selectPreviousModule")
+        return selectPreviousModule;
+    if (actionId == "selectNextTrack")
+        return selectNextTrack;
+    if (actionId == "selectPreviousTrack")
+        return selectPreviousTrack;
     // Every SURFACE action lands here — see kNoCommand.
     return kNoCommand;
 }

@@ -4,6 +4,56 @@
 // on the declaration.
 #include "ShortcutManager.h"
 
+namespace {
+
+// The transport family and the selection-stepping actions, split out of getActionDescription to keep
+// that function under the function-size cap. Empty when `actionId` is not one of them.
+juce::String transportAndSelectionActionName(const juce::String& actionId) {
+    // FRO125: the transport family (docs/control/midi-remote.md#action-targets). "Play"/"Stop" name the direction
+    // outright; the alias reuses togglePlayback's "Play / Stop" verbatim since it IS togglePlayback's
+    // command (see AppCommands::getCommandForAction) and must read as the same action, not a rival
+    // one. The label sorts next to "Play" and "Stop" in the MIDI Remote action picker (FRO271).
+    if (actionId == "transportPlay")
+        return "Play";
+    if (actionId == "transportStop")
+        return "Stop";
+    if (actionId == "transportTogglePlayStop")
+        return "Play / Stop";
+    if (actionId == "transportToggleLoop")
+        return "Toggle Looping";
+    if (actionId == "transportRecord")
+        return "Record";
+    if (actionId == "transportToggleMetronome")
+        return "Toggle Metronome";
+    if (actionId == "transportReturnToStart")
+        return "Return to Start";
+    // FRO271: cursor moves and loop-locator jumps.
+    if (actionId == "transportNudgeBackBeat")
+        return "Move Cursor Back (Beat)";
+    if (actionId == "transportNudgeForwardBeat")
+        return "Move Cursor Forward (Beat)";
+    if (actionId == "transportNudgeBackBar")
+        return "Move Cursor Back (Bar)";
+    if (actionId == "transportNudgeForwardBar")
+        return "Move Cursor Forward (Bar)";
+    if (actionId == "transportJumpToLoopStart")
+        return "Jump to Loop Start";
+    if (actionId == "transportJumpToLoopEnd")
+        return "Jump to Loop End";
+    // FRO278: selection stepping.
+    if (actionId == "selectNextModule")
+        return "Select Next Module";
+    if (actionId == "selectPreviousModule")
+        return "Select Previous Module";
+    if (actionId == "selectNextTrack")
+        return "Select Next Track";
+    if (actionId == "selectPreviousTrack")
+        return "Select Previous Track";
+    return {};
+}
+
+} // namespace
+
 juce::String ShortcutManager::getActionDescription(const juce::String& actionId) {
     if (actionId == "openSettings")
         return "Open Settings";
@@ -84,37 +134,8 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Focus Library";
     if (actionId == "focusLibrarySearch")
         return "Focus Library Search";
-    // FRO125: the transport family (docs/control/midi-remote.md#action-targets). "Play"/"Stop" name the direction
-    // outright; the alias reuses togglePlayback's "Play / Stop" verbatim since it IS togglePlayback's
-    // command (see AppCommands::getCommandForAction) and must read as the same action, not a rival
-    // one. The label sorts next to "Play" and "Stop" in the MIDI Remote action picker (FRO271).
-    if (actionId == "transportPlay")
-        return "Play";
-    if (actionId == "transportStop")
-        return "Stop";
-    if (actionId == "transportTogglePlayStop")
-        return "Play / Stop";
-    if (actionId == "transportToggleLoop")
-        return "Toggle Looping";
-    if (actionId == "transportRecord")
-        return "Record";
-    if (actionId == "transportToggleMetronome")
-        return "Toggle Metronome";
-    if (actionId == "transportReturnToStart")
-        return "Return to Start";
-    // FRO271: cursor moves and loop-locator jumps.
-    if (actionId == "transportNudgeBackBeat")
-        return "Move Cursor Back (Beat)";
-    if (actionId == "transportNudgeForwardBeat")
-        return "Move Cursor Forward (Beat)";
-    if (actionId == "transportNudgeBackBar")
-        return "Move Cursor Back (Bar)";
-    if (actionId == "transportNudgeForwardBar")
-        return "Move Cursor Forward (Bar)";
-    if (actionId == "transportJumpToLoopStart")
-        return "Jump to Loop Start";
-    if (actionId == "transportJumpToLoopEnd")
-        return "Jump to Loop End";
+    if (const auto name = transportAndSelectionActionName(actionId); name.isNotEmpty())
+        return name;
     if (actionId == "timelineSnapToggle")
         return "Toggle Snap";
     if (actionId == "timelineToggleLoop")

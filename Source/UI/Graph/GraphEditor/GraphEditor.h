@@ -158,6 +158,10 @@ public:
     void setSelectedNodes(const std::vector<juce::AudioProcessorGraph::NodeID>& ids) override;
     void clearSelection();
     void selectAllModules();
+    /** FRO278: selects the module `direction` (+1 next, -1 previous) steps from the selection, left to
+     *  right across the canvas (ModuleStepOrder.h), and pans it into view if it is off-screen.
+     *  @return false when the canvas has no module to select. */
+    bool selectAdjacentModule(int direction);
     bool isNodeSelected(juce::AudioProcessorGraph::NodeID nodeId) const { return selection.contains(nodeId); }
     int getSelectionCount() const { return selection.size(); }
     std::vector<juce::AudioProcessorGraph::NodeID> getSelectedNodes() const { return selection.getSelected(); }
