@@ -293,6 +293,8 @@ TEST_F(MainComponentTest, CommandManagerHasCommands) {
     // UNCONDITIONALLY rather than mac-only — neither needs OS integration, only
     // ownedAudioEngine != nullptr, which is true for every MainComponent this test constructs.
     expectedCommandCount += 2;
+    // FRO94: contribute joins them as a third unconditional, chord-less Help command.
+    expectedCommandCount += 1;
     // openPreset (P8-31) is a menu-only command: patch-load is reached via the Load menu/chooser, so
     // only openProject took the rebindable Cmd+O binding. openPreset is still registered in
     // getAllCommands so the menu can invoke it but, like checkForUpdates, has no shortcut-table

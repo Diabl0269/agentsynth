@@ -815,6 +815,17 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandR
              return true;
          }},
 #endif
+        // FRO94: menu-only, always active, no chord. Opens the contribute page in the browser.
+        {AppCommands::contribute,
+         "Contribute to Agent Synth...",
+         "Opens agentsynth.app/contribute in your browser: ways to help build Agent Synth.",
+         "Help",
+         nullptr,
+         {},
+         [](MainComponent& m) {
+             m.openContributePage();
+             return true;
+         }},
     };
 }
 

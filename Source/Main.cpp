@@ -188,13 +188,7 @@ private:
 
         void closeButtonPressed() override { JUCEApplication::getInstance()->systemRequestedQuit(); }
 
-        juce::StringArray getMenuBarNames() override {
-#if JUCE_MAC
-            return {"File", "Edit", "Help"};
-#else
-            return {"File", "Edit"};
-#endif
-        }
+        juce::StringArray getMenuBarNames() override { return {"File", "Edit", "Help"}; }
 
         juce::PopupMenu getMenuForIndex(int menuIndex, const juce::String&) override {
             juce::PopupMenu menu;
@@ -218,15 +212,16 @@ private:
                 } else if (menuIndex == 1) {
                     menu.addCommandItem(&cm, AppCommands::undo);
                     menu.addCommandItem(&cm, AppCommands::redo);
-                }
-#if JUCE_MAC
-                else if (menuIndex == 2) {
+                } else if (menuIndex == 2) {
                     menu.addCommandItem(&cm, AppCommands::showWelcomeScreen);
                     menu.addCommandItem(&cm, AppCommands::whatsNew);
+#if JUCE_MAC || JUCE_WINDOWS
                     menu.addSeparator();
                     menu.addCommandItem(&cm, AppCommands::checkForUpdates);
-                }
 #endif
+                    menu.addSeparator();
+                    menu.addCommandItem(&cm, AppCommands::contribute);
+                }
             }
             return menu;
         }

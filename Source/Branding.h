@@ -45,6 +45,10 @@ constexpr const char* kLegacyFolderNames[] = {kSettingsFolderName, "Gravisynth"}
 // Product website, for the About box / support links. Not yet referenced anywhere.
 constexpr const char* kWebsiteUrl = "https://agentsynth.app";
 
+// Page behind the in-app Help-menu "contribute" item (AppCommands::contribute, FRO94). One canonical
+// URL so the payment providers behind it can change without touching the binary.
+constexpr const char* kContributeUrl = "https://agentsynth.app/contribute";
+
 // Support contact address, for the About box / support links. Not yet referenced anywhere.
 constexpr const char* kSupportEmail = "support@agentsynth.app";
 
