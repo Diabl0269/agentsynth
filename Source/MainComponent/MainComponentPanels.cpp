@@ -837,6 +837,8 @@ void MainComponent::showWhatsNewDialog() {
     juce::AlertWindow::showAsync(options, nullptr);
 }
 
+void MainComponent::openContributePage() { urlOpener_(juce::URL(synth::branding::kContributeUrl)); }
+
 // ---- Alignment guides toggle (UI Phase 7 - Item 4) ----
 void MainComponent::setAlignmentGuidesEnabled(bool enabled) {
     isAlignmentGuidesEnabled = enabled;

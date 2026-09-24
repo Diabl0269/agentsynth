@@ -109,6 +109,9 @@ public:
     // Test-only: CommandSpec itself stays private -- read via auto (MainComponentCommandTableTests.cpp).
     const auto& getCommandTableForTest() const { return commandTable(); }
 
+    // Test-only: replaces the browser launch behind AppCommands::contribute (FRO94).
+    void setUrlOpenerForTest(std::function<void(const juce::URL&)> opener) { urlOpener_ = std::move(opener); }
+
     bool keyPressed(const juce::KeyPress& key) override;
 
     juce::ApplicationCommandManager& getCommandManager() { return commandManager; }
@@ -670,6 +673,9 @@ private:
     void hideWelcomeScreen();
     void showWelcomeScreen();
     void showWhatsNewDialog();
+    // FRO94: AppCommands::contribute. Opens branding::kContributeUrl through urlOpener_ (default: the
+    // system browser), so a test can observe the URL without launching one.
+    void openContributePage();
 
     // ---- Timeline panel height (user-resizable, persisted) ----
     int defaultTimelinePanelHeight() const;
@@ -929,6 +935,8 @@ private:
 #if JUCE_MAC || JUCE_WINDOWS
     synth::update::UpdateManager updateManager;
 #endif
+
+    std::function<void(const juce::URL&)> urlOpener_ = [](const juce::URL& u) { u.launchInDefaultBrowser(); };
 
     // ---- Panel slide animations (fraction-driven, time-bounded, auto-stop) ----
     // Each sliding panel owns a [0..1] open fraction and resized() derives its size from that, so a

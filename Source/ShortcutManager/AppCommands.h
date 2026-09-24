@@ -157,7 +157,12 @@ enum CommandIDs {
     transportNudgeBackBar,
     transportNudgeForwardBar,
     transportJumpToLoopStart,
-    transportJumpToLoopEnd
+    transportJumpToLoopEnd,
+    // FRO94: opens the site's contribute page (branding::kContributeUrl) in the default browser --
+    // no dialog, no prompt, no analytics event. Menu-only like showWelcomeScreen/whatsNew (no
+    // ShortcutManager actionId/binding) and registered unconditionally. Appended last per the snapSet
+    // comment above, so no existing enumerator's value moves.
+    contribute
 };
 
 /** What getCommandForAction() answers for a SURFACE action — an id that is rebindable and appears
