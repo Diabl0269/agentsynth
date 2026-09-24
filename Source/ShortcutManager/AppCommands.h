@@ -149,6 +149,15 @@ enum CommandIDs {
     // "timelineMetronomeEnabled" state stays authoritative.
     transportToggleMetronome,
     transportReturnToStart,
+    // FRO271: cursor moves and loop-locator jumps, command-dispatched so a MIDI Remote action
+    // target (or a keyboard shortcut) can fire them. Unbound by default like the family above.
+    // Appended after transportReturnToStart -- never interleaved, so persisted ids stay stable.
+    transportNudgeBackBeat,
+    transportNudgeForwardBeat,
+    transportNudgeBackBar,
+    transportNudgeForwardBar,
+    transportJumpToLoopStart,
+    transportJumpToLoopEnd,
     // FRO94: opens the site's contribute page (branding::kContributeUrl) in the default browser --
     // no dialog, no prompt, no analytics event. Menu-only like showWelcomeScreen/whatsNew (no
     // ShortcutManager actionId/binding) and registered unconditionally. Appended last per the snapSet
@@ -275,6 +284,18 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return transportToggleMetronome;
     if (actionId == "transportReturnToStart")
         return transportReturnToStart;
+    if (actionId == "transportNudgeBackBeat")
+        return transportNudgeBackBeat;
+    if (actionId == "transportNudgeForwardBeat")
+        return transportNudgeForwardBeat;
+    if (actionId == "transportNudgeBackBar")
+        return transportNudgeBackBar;
+    if (actionId == "transportNudgeForwardBar")
+        return transportNudgeForwardBar;
+    if (actionId == "transportJumpToLoopStart")
+        return transportJumpToLoopStart;
+    if (actionId == "transportJumpToLoopEnd")
+        return transportJumpToLoopEnd;
     // Every SURFACE action lands here — see kNoCommand.
     return kNoCommand;
 }

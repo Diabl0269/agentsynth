@@ -635,7 +635,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
         // dropping it from the Settings shortcut list entirely. Space is GLOBAL -- no
         // resolveEditSurface() branch, unlike C/V/D above.
         {AppCommands::togglePlayback,
-         "Toggle Playback",
+         "Play / Stop",
          "Play or stop the timeline transport",
          "Transport",
          "togglePlayback",
@@ -903,8 +903,63 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTransportCommandRows
          "transportReturnToStart",
          {},
          [](MainComponent& m) {
-             m.audioEngine.getTransport().locateBeat(0.0);
-             return true;
+             return synth::locateTransportTracked(m.audioEngine.getTransport(), m.transportNudge_, 0.0);
+         }},
+        // FRO271: cursor moves and loop-locator jumps. Nudges accumulate through transportNudge_ so
+        // several firing inside one audio block (a jog wheel) don't lose steps; see TransportNudge.h.
+        {AppCommands::transportNudgeBackBeat,
+         "Move Cursor Back (Beat)",
+         "Move the transport cursor back one beat",
+         "Transport",
+         "transportNudgeBackBeat",
+         {},
+         [](MainComponent& m) {
+             return synth::nudgeTransportCursor(m.audioEngine.getTransport(), m.transportNudge_, -1.0);
+         }},
+        {AppCommands::transportNudgeForwardBeat,
+         "Move Cursor Forward (Beat)",
+         "Move the transport cursor forward one beat",
+         "Transport",
+         "transportNudgeForwardBeat",
+         {},
+         [](MainComponent& m) {
+             return synth::nudgeTransportCursor(m.audioEngine.getTransport(), m.transportNudge_, 1.0);
+         }},
+        {AppCommands::transportNudgeBackBar,
+         "Move Cursor Back (Bar)",
+         "Move the transport cursor back one bar",
+         "Transport",
+         "transportNudgeBackBar",
+         {},
+         [](MainComponent& m) {
+             return synth::nudgeTransportCursorBars(m.audioEngine.getTransport(), m.transportNudge_, -1.0);
+         }},
+        {AppCommands::transportNudgeForwardBar,
+         "Move Cursor Forward (Bar)",
+         "Move the transport cursor forward one bar",
+         "Transport",
+         "transportNudgeForwardBar",
+         {},
+         [](MainComponent& m) {
+             return synth::nudgeTransportCursorBars(m.audioEngine.getTransport(), m.transportNudge_, 1.0);
+         }},
+        {AppCommands::transportJumpToLoopStart,
+         "Jump to Loop Start",
+         "Locate the transport to the loop start (no-op without a loop range)",
+         "Transport",
+         "transportJumpToLoopStart",
+         {},
+         [](MainComponent& m) {
+             return synth::jumpToLoopLocator(m.audioEngine.getTransport(), m.transportNudge_, false);
+         }},
+        {AppCommands::transportJumpToLoopEnd,
+         "Jump to Loop End",
+         "Locate the transport to the loop end (no-op without a loop range)",
+         "Transport",
+         "transportJumpToLoopEnd",
+         {},
+         [](MainComponent& m) {
+             return synth::jumpToLoopLocator(m.audioEngine.getTransport(), m.transportNudge_, true);
          }},
     };
 }

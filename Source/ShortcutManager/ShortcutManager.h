@@ -342,6 +342,13 @@ public:
         bindings["transportRecord"] = juce::KeyPress();
         bindings["transportToggleMetronome"] = juce::KeyPress();
         bindings["transportReturnToStart"] = juce::KeyPress();
+        // FRO271: cursor moves and loop jumps -- same unbound-by-default reasoning as above.
+        bindings["transportNudgeBackBeat"] = juce::KeyPress();
+        bindings["transportNudgeForwardBeat"] = juce::KeyPress();
+        bindings["transportNudgeBackBar"] = juce::KeyPress();
+        bindings["transportNudgeForwardBar"] = juce::KeyPress();
+        bindings["transportJumpToLoopStart"] = juce::KeyPress();
+        bindings["transportJumpToLoopEnd"] = juce::KeyPress();
 
         // FRO131: same "explicit invalid KeyPress, not an absent entry" reasoning as the transport
         // family above -- shipped unbound (a toolbar button and MIDI Remote target already reach
@@ -711,6 +718,13 @@ private:
             {"transportRecord", ShortcutCategory::General},
             {"transportToggleMetronome", ShortcutCategory::General},
             {"transportReturnToStart", ShortcutCategory::General},
+            // FRO271: cursor moves and loop jumps, unbound by default like the transport verbs above.
+            {"transportNudgeBackBeat", ShortcutCategory::General},
+            {"transportNudgeForwardBeat", ShortcutCategory::General},
+            {"transportNudgeBackBar", ShortcutCategory::General},
+            {"transportNudgeForwardBar", ShortcutCategory::General},
+            {"transportJumpToLoopStart", ShortcutCategory::General},
+            {"transportJumpToLoopEnd", ShortcutCategory::General},
             // Graph — the verbs that mean nothing on any other surface.
             {"autoArrange", ShortcutCategory::Graph},
             {"saveSnippet", ShortcutCategory::Graph},

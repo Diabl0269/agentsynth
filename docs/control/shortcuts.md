@@ -48,8 +48,8 @@ when reasoning about a key that "does nothing."
 | Cmd+D | Duplicate (Selected Modules, or the selected clips/notes) |
 | Cmd+X | Cut — Copy then delete, as ONE undo step (Selected Modules, or the timeline's selected clips/notes; see "Surface routing" below) |
 | Cmd+R | Repeat — prompts for a count (1–64) via an `AlertWindow` and creates that many back-to-back copies of the selection, tiled forward one selection-span at a time, as ONE undo step. Timeline-only: inactive on the Graph surface (see below) |
-| Space | Toggle Playback (play/stop the timeline transport) |
-| *(unbound)* | Play / Stop / Record / Toggle Looping / Toggle Metronome / Return to Start — see [**Transport family**](#transport-family) below |
+| Space | Play / Stop (toggle the timeline transport) |
+| *(unbound)* | Play / Stop / Record / Toggle Looping / Toggle Metronome / Return to Start / Move Cursor Back or Forward (Beat, Bar) / Jump to Loop Start or End — see [**Transport family**](#transport-family) below |
 | Cmd+= | Zoom In (routed per focused surface — see [**Zoom**](#zoom) below) |
 | Cmd+- | Zoom Out |
 | Cmd+Shift+= | Zoom In Vertically |
@@ -299,7 +299,7 @@ even with no mouse involved.
 
 Every transport verb is promoted to a command-dispatched `AppCommands` action — the
 [`midi-remote.md`](midi-remote.md#action-targets) prerequisite for a MIDI Remote hardware button to trigger
-one via `ApplicationCommandManager::invokeDirectly`. All six are **General**, and ship **unbound**
+one via `ApplicationCommandManager::invokeDirectly`. All of them are **General**, and ship **unbound**
 by default (no default keypress) — they exist first as command/MIDI-Remote targets, and a user may
 still bind one from Settings like any other action:
 
@@ -307,11 +307,19 @@ still bind one from Settings like any other action:
 |---|---|---|
 | `transportPlay` | Play | `TransportService::play()` if not already playing (a direction, not a toggle) |
 | `transportStop` | Stop | `TransportService::stop()` if currently playing |
-| `transportTogglePlayStop` | Toggle Playback | **Alias, not a new action** — `AppCommands::getCommandForAction` resolves it straight to the existing `togglePlayback` command id. It is not a registered/rebindable id of its own and has no row in Settings; `togglePlayback` keeps its own Space binding untouched (see "Why the locator jumps are on plain Option+digit" above for why a default never migrates a persisted key, and why this alias is a lookup rather than a rename) |
+| `transportTogglePlayStop` | Play / Stop | **Alias, not a new action** — `AppCommands::getCommandForAction` resolves it straight to the existing `togglePlayback` command id. It is not a registered/rebindable id of its own and has no row in Settings; `togglePlayback` keeps its own Space binding untouched (see "Why the locator jumps are on plain Option+digit" above for why a default never migrates a persisted key, and why this alias is a lookup rather than a rename) |
 | `transportToggleLoop` | Toggle Looping | Triggers the transport bar's own loop button — the exact `setLoop(start, end, !looping)` verb the surface-resolved `timelineToggleLoop` key already performs, which keeps working unchanged |
 | `transportRecord` | Record | Triggers the transport bar's own Record button, so it reaches `MainComponent::handleRecordToggle`'s armed-track gate exactly as a mouse click would — never bypassed |
 | `transportToggleMetronome` | Toggle Metronome | Triggers the transport bar's own metronome button, so its persisted `timelineMetronomeEnabled` state stays authoritative |
 | `transportReturnToStart` | Return to Start | `TransportService::locateBeat(0)` — relocates only, does not stop |
+| `transportNudgeBackBeat` / `transportNudgeForwardBeat` | Move Cursor Back (Beat) / Move Cursor Forward (Beat) | Relocates one beat (a quarter note) back or forward from the current position, clamped at beat 0. Works playing or stopped; never starts or stops the transport |
+| `transportNudgeBackBar` / `transportNudgeForwardBar` | Move Cursor Back (Bar) / Move Cursor Forward (Bar) | As above, by one bar of the current time signature (`numerator × 4 / denominator` beats — 4 in 4/4, 3 in 3/4, 3 in 6/8) |
+| `transportJumpToLoopStart` / `transportJumpToLoopEnd` | Jump to Loop Start / Jump to Loop End | Relocates to the left / right loop locator. A no-op when the locators span no range (end at or before start) |
+
+The label "Play / Stop" is shared by `togglePlayback` and its alias so the toggle sits next to
+"Play" and "Stop" in the MIDI Remote action picker. Cursor moves posted faster than the audio thread
+applies them (a jog wheel, key repeat) accumulate — each builds on the previous request rather than
+on the once-per-block position snapshot, so no step is lost (`Source/Transport/TransportNudge.h`).
 
 See [`timeline/transport.md`](../timeline/transport.md) for the transport bar itself.
 
