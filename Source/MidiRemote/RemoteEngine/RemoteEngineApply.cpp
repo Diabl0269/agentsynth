@@ -32,7 +32,7 @@ void RemoteEngine::applyToAction(const RemoteMappingSnapshot::Slot& slot, const 
 
 // FRO253 (docs/control/midi-remote.md#node-command-targets): same "press only, momentary and
 // toggle alike" rule as applyToAction above -- a pad press toggles solo, like a mouse click;
-// hold-to-solo is not v1.
+// hold-to-solo is not built.
 void RemoteEngine::applyToNodeCommand(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event) {
     if (event.kind != RemoteEventKind::buttonPress)
         return;

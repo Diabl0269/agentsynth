@@ -8,7 +8,7 @@
 // ControlInspectorComponent.h -- FRO131 (docs/control/midi-remote-ui.md#inspector-right): the MIDI
 // Remote panel's right region -- the selected control's name/kind/message spec/encoding/button
 // mode, then one block per assignment (a control may carry one project + one global assignment at
-// most in v1, docs/control/midi-remote-ui.md#inspector-right). Takeover, range+invert and Forget
+// most for now, docs/control/midi-remote-ui.md#inspector-right). Takeover, range+invert and Forget
 // are wired (FRO131); FRO134 adds the editable name and kind, the Encoding combo and Auto-detect...;
 // FRO135 adds Learn target (the assign-from-panel popover) and limits an orphaned row to Forget.
 // Still inert: Relearn (re-detecting a control's message needs a panel-side learn primitive).

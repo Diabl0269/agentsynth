@@ -13,16 +13,21 @@ the mixer column's Solo (FRO253's `nodeCommand` target). The MIDI Remote panel (
 — dock tab, Controllers list, Surface, Inspector, and "Edit MIDI assignment..." — as are Detect
 mode, Add controller, Templates, import/export and the encoder Auto-detect (FRO134); and the
 mapping assistant (FRO135) — the control-first "Assign from the panel" flow (pick-target overlay,
-action picker), orphan-controller Re-link/Recreate and the orphan-node display. Only the
-Inspector's Relearn is still design-only.
-This doc, and [`midi-remote-ui.md`](midi-remote-ui.md), describe the feature as designed; where
-current behaviour differs from the design, the surrounding text says so explicitly.
+action picker), orphan-controller Re-link/Recreate and the orphan-node display; the Preferences
+group and the plugin build's Host MIDI source (FRO136) round it out, with an end-to-end workflow test
+(FRO138). Two things are built only in part: the Inspector's Relearn (rendered, disabled) and
+[hosted-plugin knobs](plugin-card-layout.md) — the engine already resolves a hosted parameter
+target, but the plugin card shows no knobs yet, so there is nothing on it to right-click.
+This doc, and [`midi-remote-ui.md`](midi-remote-ui.md), describe what has shipped so far; where current
+behaviour differs from the design, the surrounding text says so explicitly.
 
 ---
 
-## What exists today
+## The baseline this was built on
 
-External MIDI today is a **note path only** ([`midi-input.md`](midi-input.md)):
+The survey below is the state of the app **before** MIDI Remote — kept because the decisions that
+follow answer to it. Where a bullet has since changed, it says so. External MIDI at that point was
+a **note path only** ([`midi-input.md`](midi-input.md)):
 
 - `AudioEngine::handleIncomingMidiMessage` (MIDI driver thread,
   `Source/AudioEngine/AudioEngineMidi.cpp`) is the single convergence point for every opened
@@ -33,8 +38,9 @@ External MIDI today is a **note path only** ([`midi-input.md`](midi-input.md)):
   `HostMode::Hosted` — the host owns MIDI and hands it in through `processHostBlock`.
 - There is no persistent "enabled MIDI devices" list beyond what the stock
   `juce::AudioDeviceSelectorComponent` (Settings → Audio) ticks in `AudioDeviceManager`.
-- **Nothing interprets CC, pitch-bend, aftertouch or program change.** No `MidiLearn`,
-  `controllerNumber`, `isController` anywhere in `Source/`. This is a from-scratch feature.
+- **Nothing interpreted CC, pitch-bend, aftertouch or program change.** No `MidiLearn`,
+  `controllerNumber`, `isController` anywhere in `Source/` — a from-scratch feature.
+  `RemoteEngine` is now that interpreter; an unmapped message still takes exactly this path.
 - **No MIDI output.** The Audio tab's MIDI-output selector is a dead control: nothing reads
   `deviceManager.getDefaultMidiOutput()`.
 - Parameters are plain `juce::AudioParameterFloat/Int/Bool/Choice` on a `ModuleBase`
@@ -61,16 +67,17 @@ External MIDI today is a **note path only** ([`midi-input.md`](midi-input.md)):
   (`Source/UI/Graph/ModuleComponent/ModuleComponent.cpp`): a rotary `juce::Slider` per
   float/int parameter (each registered with `slider->addMouseListener(this)` — the
   "right-click-any-knob" hook), a `ComboBox` per choice, a `ToggleButton` per bool (no mouse
-  listener today), parallel `sliders`/`sliderParams` arrays. Right-click on a knob today shows one
+  listener at the time), parallel `sliders`/`sliderParams` arrays. Right-click on a knob showed one
   item, **"Automate '<Param>'"** (`showAutomateMenuForSlider`,
-  `ModuleComponentInteraction.cpp`). A hosted plugin card shows **no parameters at all** — only
-  "Open Editor".
+  `ModuleComponentInteraction.cpp`); the MIDI Learn block now sits under it, registered through
+  `registerMidiLearnable`. A hosted plugin card shows **no parameters at all** — only
+  "Open Editor" — and still does until [`plugin-card-layout.md`](plugin-card-layout.md)'s card lands.
 
 ---
 
 ## Goals and non-goals
 
-**Goals (v1):**
+**Goals:**
 
 1. **Right-click any control → MIDI Learn.** Every knob, slider, toggle and combo on every
    module card, the mixer strips (fader, pan, mute, solo, sends), the master, and the transport
@@ -91,7 +98,7 @@ External MIDI today is a **note path only** ([`midi-input.md`](midi-input.md)):
 7. **The plugin build degrades honestly** (see [The plugin build](#the-plugin-build-vst3au-inside-a-host)): no device management inside a host, but
    mappings on the host-supplied MIDI stream still work.
 
-**Non-goals (v1)** — each a planned extension tracked separately, not an accident: 14-bit CC / NRPN,
+**Non-goals (for now)** — each a planned extension tracked separately, not an accident: 14-bit CC / NRPN,
 feedback to the controller (LED rings, motor faders, MIDI out), MCU/HUI protocol surfaces,
 MPE per-note expression, a "focused module" bank that follows selection, a device template
 library beyond a few generic ones, OSC.
@@ -265,7 +272,7 @@ binds the **message key with the most messages** in that window (a knob sweep pr
 CCs; a stray touch-strip blip produces one). Eligible: CC, note-on, pitch-bend, channel
 pressure, program change. **Ignored while learning:** note-off, per-note (poly) aftertouch,
 clock/active-sensing/sysex, and any message on a channel the profile marks as MPE member
-channels (MPE is out of scope for v1; this rule just stops MPE traffic from binding garbage). A learn
+channels (MPE is out of scope for now; this rule just stops MPE traffic from binding garbage). A learn
 on a *button-like* target (bool param, action) prefers note-on / CC 0-or-127 patterns and sets
 `buttonMode` from the observed behaviour (a CC that returns to 0 on release → momentary).
 
@@ -326,8 +333,8 @@ forwards a controller's CCs to a plugin is the host's business (most do for inst
 **command-dispatched** actions are targets. The transport verbs users actually want on hardware
 buttons — **Play, Stop, Play/Stop toggle, Record, Loop toggle, Metronome toggle, Return to
 start** — are today either surface-resolved (loop) or not actions at all (record, metronome,
-stop, return-to-start). They get **promoted to command-dispatched actions** first (a
-prerequisite task in the tracker; it also gives them keyboard shortcuts, which they lack). The
+stop, return-to-start). They were **promoted to command-dispatched actions** first (which also
+gave them keyboard shortcuts, which they lacked). The
 panel's action picker lists actions by `ShortcutCategory` with the same display names as the
 Keyboard Shortcuts settings tab, so the two lists can never disagree.
 
@@ -351,7 +358,7 @@ parameter assignment (it names a node uuid that only means something within this
 `MidiRemoteProjectDoc::assignments`, never a `ControllerProfile`'s global `actions`. It resolves
 against the graph and orphans on a missing node exactly like a parameter target. It fires
 **press-only**, in both momentary and toggle button modes, exactly like an action target — a pad
-press toggles solo, like a mouse click; hold-to-solo is not v1. Applying reaches the app layer
+press toggles solo, like a mouse click; hold-to-solo is not built. Applying reaches the app layer
 through a new `RemoteActionInvoker::invokeNodeCommand(nodeId, command)` (Core knows neither
 `ChannelStripModule` nor `AudioEngine::setChannelStripSoloed`), which performs the SAME undo-bracketed
 call the mixer column's own click does — one undo step per press.
@@ -368,7 +375,7 @@ ControllerProfile                         // GLOBAL — one per physical control
   id            : uuid string
   name          : "Launchkey Mini MK3"
   input         : { identifier, name }    // juce::MidiDeviceInfo; identifier matches first, name is the fallback
-  output        : { identifier, name } | null   // reserved for v2 feedback; never read in v1
+  output        : { identifier, name } | null   // reserved for controller feedback; never read yet
   passMapped    : bool (default false)    // see Are mapped messages consumed
   controls[]    : Control
   actions[]     : Assignment              // GLOBAL assignments: target.kind == action only
@@ -379,7 +386,7 @@ Control
   name          : "Knob 1"
   kind          : knob | fader | button | pad | encoder | wheel
   message       : MessageSpec
-  encoding      : abs7 | relTwos | relBinOffset | relSignMag      // abs14 is v2
+  encoding      : abs7 | relTwos | relBinOffset | relSignMag      // abs14 is not built yet
   buttonMode    : momentary | toggle       // buttons/pads only
   layout        : { col, row }             // grid cell on the drawn surface
 
@@ -416,7 +423,9 @@ Rules:
   hosted-plugin rules (exact id, index hint rescue, drift → orphan) come for free.
 - Deleting a node orphans its assignments (they stay in the project, flagged; the control does
   nothing). Deleting the assignment is explicit. Duplicating / pasting a module does **not**
-  copy its assignments in v1.
+  copy its assignments yet. Engine-side a deleted node simply leaves the slot's parameter
+  unresolved (`Slot::orphaned` is the separate flag for hosted-plugin drift and node commands);
+  the panel shows either state as "(missing module)".
 - A **relative** encoding delivers a signed delta; the engine applies `delta × sensitivity` to
   the *current* normalised value (sensitivity per assignment, default 1/127 per detent). Takeover
   is skipped. Auto-detect of the encoding is a Detect-mode helper ("turn it left, now right"),
@@ -428,7 +437,7 @@ Rules:
 
 ## The engine
 
-`synth::midi::RemoteEngine` (Core, `Source/MidiRemote/RemoteEngine*.cpp` split by concern):
+`synth::midi::RemoteEngine` (Core, `Source/MidiRemote/RemoteEngine/RemoteEngine*.cpp` split by concern):
 
 ```text
 MIDI thread (or the host's audio thread in Hosted mode)
@@ -514,6 +523,8 @@ without an assignment.
 
 - **Parameter values** driven from hardware: one undo step per gesture, produced by the existing
   gesture listeners — nothing new (see [How does a hardware value reach a parameter](#how-does-a-hardware-value-reach-a-parameter)).
+  A sweep over a lane armed for automation Touch records a take, which is its own undo step, so it
+  costs two — exactly what a mouse drag over the same lane does.
 - **Project assignments** (create via Learn, edit, delete, re-link): undoable through a new
   `AppUndoManager::recordMidiRemoteChange(before, after)` snapshotting the `"midiRemote"`
   document, the same before/after-JSON shape as `recordTimelineChange`. A Learn that also
@@ -527,7 +538,7 @@ without an assignment.
 ## Related
 
 - [`midi-remote-ui.md`](midi-remote-ui.md) — the interaction design, the panel, coverage of
-  every control surface, tests and the implementation tracker.
+  every control surface, and the tests.
 - [`plugin-card-layout.md`](plugin-card-layout.md) — which hosted-plugin parameters show as
   knobs (and the future "edit any module's layout").
 - [`midi-input.md`](midi-input.md) — the existing note path this feature sits in front of.
