@@ -14,11 +14,11 @@ the mixer column's Solo (FRO253's `nodeCommand` target). The MIDI Remote panel (
 mode, Add controller, Templates, import/export and the encoder Auto-detect (FRO134); and the
 mapping assistant (FRO135) — the control-first "Assign from the panel" flow (pick-target overlay,
 action picker), orphan-controller Re-link/Recreate and the orphan-node display; the Preferences
-group and the plugin build's Host MIDI source (FRO136) close v1, with an end-to-end workflow test
+group and the plugin build's Host MIDI source (FRO136) round it out, with an end-to-end workflow test
 (FRO138). Two things are built only in part: the Inspector's Relearn (rendered, disabled) and
 [hosted-plugin knobs](plugin-card-layout.md) — the engine already resolves a hosted parameter
 target, but the plugin card shows no knobs yet, so there is nothing on it to right-click.
-This doc, and [`midi-remote-ui.md`](midi-remote-ui.md), describe the shipped v1; where current
+This doc, and [`midi-remote-ui.md`](midi-remote-ui.md), describe what has shipped so far; where current
 behaviour differs from the design, the surrounding text says so explicitly.
 
 ---
@@ -77,7 +77,7 @@ a **note path only** ([`midi-input.md`](midi-input.md)):
 
 ## Goals and non-goals
 
-**Goals (v1):**
+**Goals:**
 
 1. **Right-click any control → MIDI Learn.** Every knob, slider, toggle and combo on every
    module card, the mixer strips (fader, pan, mute, solo, sends), the master, and the transport
@@ -98,7 +98,7 @@ a **note path only** ([`midi-input.md`](midi-input.md)):
 7. **The plugin build degrades honestly** (see [The plugin build](#the-plugin-build-vst3au-inside-a-host)): no device management inside a host, but
    mappings on the host-supplied MIDI stream still work.
 
-**Non-goals (v1)** — each a planned extension tracked separately, not an accident: 14-bit CC / NRPN,
+**Non-goals (for now)** — each a planned extension tracked separately, not an accident: 14-bit CC / NRPN,
 feedback to the controller (LED rings, motor faders, MIDI out), MCU/HUI protocol surfaces,
 MPE per-note expression, a "focused module" bank that follows selection, a device template
 library beyond a few generic ones, OSC.
@@ -272,7 +272,7 @@ binds the **message key with the most messages** in that window (a knob sweep pr
 CCs; a stray touch-strip blip produces one). Eligible: CC, note-on, pitch-bend, channel
 pressure, program change. **Ignored while learning:** note-off, per-note (poly) aftertouch,
 clock/active-sensing/sysex, and any message on a channel the profile marks as MPE member
-channels (MPE is out of scope for v1; this rule just stops MPE traffic from binding garbage). A learn
+channels (MPE is out of scope for now; this rule just stops MPE traffic from binding garbage). A learn
 on a *button-like* target (bool param, action) prefers note-on / CC 0-or-127 patterns and sets
 `buttonMode` from the observed behaviour (a CC that returns to 0 on release → momentary).
 
@@ -358,7 +358,7 @@ parameter assignment (it names a node uuid that only means something within this
 `MidiRemoteProjectDoc::assignments`, never a `ControllerProfile`'s global `actions`. It resolves
 against the graph and orphans on a missing node exactly like a parameter target. It fires
 **press-only**, in both momentary and toggle button modes, exactly like an action target — a pad
-press toggles solo, like a mouse click; hold-to-solo is not v1. Applying reaches the app layer
+press toggles solo, like a mouse click; hold-to-solo is not built. Applying reaches the app layer
 through a new `RemoteActionInvoker::invokeNodeCommand(nodeId, command)` (Core knows neither
 `ChannelStripModule` nor `AudioEngine::setChannelStripSoloed`), which performs the SAME undo-bracketed
 call the mixer column's own click does — one undo step per press.
@@ -375,7 +375,7 @@ ControllerProfile                         // GLOBAL — one per physical control
   id            : uuid string
   name          : "Launchkey Mini MK3"
   input         : { identifier, name }    // juce::MidiDeviceInfo; identifier matches first, name is the fallback
-  output        : { identifier, name } | null   // reserved for v2 feedback; never read in v1
+  output        : { identifier, name } | null   // reserved for controller feedback; never read yet
   passMapped    : bool (default false)    // see Are mapped messages consumed
   controls[]    : Control
   actions[]     : Assignment              // GLOBAL assignments: target.kind == action only
@@ -386,7 +386,7 @@ Control
   name          : "Knob 1"
   kind          : knob | fader | button | pad | encoder | wheel
   message       : MessageSpec
-  encoding      : abs7 | relTwos | relBinOffset | relSignMag      // abs14 is v2
+  encoding      : abs7 | relTwos | relBinOffset | relSignMag      // abs14 is not built yet
   buttonMode    : momentary | toggle       // buttons/pads only
   layout        : { col, row }             // grid cell on the drawn surface
 
@@ -423,7 +423,7 @@ Rules:
   hosted-plugin rules (exact id, index hint rescue, drift → orphan) come for free.
 - Deleting a node orphans its assignments (they stay in the project, flagged; the control does
   nothing). Deleting the assignment is explicit. Duplicating / pasting a module does **not**
-  copy its assignments in v1. Engine-side a deleted node simply leaves the slot's parameter
+  copy its assignments yet. Engine-side a deleted node simply leaves the slot's parameter
   unresolved (`Slot::orphaned` is the separate flag for hosted-plugin drift and node commands);
   the panel shows either state as "(missing module)".
 - A **relative** encoding delivers a signed delta; the engine applies `delta × sensitivity` to

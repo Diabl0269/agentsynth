@@ -20,7 +20,7 @@ enum class ControlKind { knob, fader, button, pad, encoder, wheel };
 
 enum class MessageType { cc, note, pitchBend, channelPressure, programChange };
 
-// abs14 (14-bit MSB/LSB pairs) is a v2 extension (FRO140) — not modelled here.
+// abs14 (14-bit MSB/LSB pairs) is a later extension (FRO140) — not modelled here.
 enum class Encoding { abs7, relTwos, relBinOffset, relSignMag };
 
 enum class ButtonMode { momentary, toggle };
@@ -168,7 +168,7 @@ struct ControllerProfile {
     };
     Input input;
 
-    // Reserved for a v2 feedback extension (FRO139); never read in v1. A nullable
+    // Reserved for a later feedback extension (FRO139); never read yet. A nullable
     // struct: hasOutput == false means "no output device set" and `output` itself is inert.
     bool hasOutput = false;
     Input output;

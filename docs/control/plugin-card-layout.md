@@ -185,10 +185,10 @@ card's right-click menu (`buildModuleContextMenu`). It opens `PluginKnobPicker`
   preset copies it into whichever scope *Apply to* selects; *Reset to automatic* removes the
   chosen scope's layout so precedence falls through.
 - **Touch in the plugin editor to add**: while ticked, a parameter that reports a **gesture
-  start** on the instance (`parameterGestureChanged(index, true)`) is appended to the layout. v1
+  start** on the instance (`parameterGestureChanged(index, true)`) is appended to the layout. For now it
   listens to gestures only. Many plugins never emit gestures; a **value-change fallback**
   (debounced so an automation-driven or preset-load burst — more than 3 distinct parameters
-  within 200 ms — is ignored rather than adding all of them) is deferred to a v2 ticket. The
+  within 200 ms — is ignored rather than adding all of them) is deferred to a later ticket. The
   picker opens the plugin's editor window when this is ticked and it is not already open.
 - Changes apply live to the card as they are made (no OK button); closing the popover keeps
   them.

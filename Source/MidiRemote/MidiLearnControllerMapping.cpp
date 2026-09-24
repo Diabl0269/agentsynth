@@ -31,7 +31,7 @@ bool sameProjectTarget(const synth::Target& a, const synth::Target& b) {
 // profile's `actions`, not undoable -- docs/control/midi-remote.md#undo), a parameter or node
 // command is PROJECT scope (undoable via recordMidiRemoteChange). Assigning replaces whatever the
 // target was mapped to before AND whatever the control drove in the same scope (one project
-// assignment and one global assignment per control in v1).
+// assignment and one global assignment per control for now).
 AssignStatus MidiLearnController::assignControl(const juce::String& profileId, const juce::String& controlId,
                                                 const PickTarget& pick) {
     const auto* profile = findProfile(profileId);
