@@ -133,6 +133,25 @@ TEST(MidiRemotePreferencesTests, BpmContinuousTargetReachesTheRealTransportThrou
     EXPECT_NEAR(audioEngine.getTransport().getPositionSnapshot().bpm, synth::kRemoteBpmWindowMin, 1e-2)
         << "CC 0 with Jump must reach the real transport's BPM through the real invoker";
 
+    // A relative encoder whose detents all land in ONE drain, before the audio thread has applied
+    // any of them: each detent must build on the previous request, not on the stale snapshot.
+    a.spec.number = 21;
+    a.specEncoding = synth::Encoding::relTwos;
+    profile.controls[0].message.number = 21;
+    profile.controls[0].kind = synth::ControlKind::encoder;
+    profile.controls[0].encoding = synth::Encoding::relTwos;
+    engine.setProfiles({profile});
+    engine.setAssignments({a});
+    engine.reconcile(mc.getAudioEngine().getGraph());
+
+    const double before = audioEngine.getTransport().getPositionSnapshot().bpm;
+    for (int i = 0; i < 3; ++i)
+        ASSERT_TRUE(engine.handleMessage("test-source", juce::MidiMessage::controllerEvent(1, 21, 1)));
+    engine.drain();
+    driveOneBlock();
+    EXPECT_NEAR(audioEngine.getTransport().getPositionSnapshot().bpm, before + 3.0, 1e-6)
+        << "three +1 detents in one drain must add 3 BPM, not collapse into one";
+
     audioEngine.audioDeviceStopped();
 }
 

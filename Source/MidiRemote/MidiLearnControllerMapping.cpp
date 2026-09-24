@@ -91,12 +91,12 @@ AssignStatus MidiLearnController::assignControl(const juce::String& profileId, c
         auto& actions = updated.actions;
         actions.erase(std::remove_if(actions.begin(), actions.end(),
                                      [&](const Assignment& a) {
+                                         // One global assignment per control, whatever its kind.
+                                         if (a.control.controlId == controlId)
+                                             return true;
                                          if (target.isAction())
-                                             return a.target.isAction() && (a.target.action.actionId == pick.actionId ||
-                                                                            a.control.controlId == controlId);
-                                         return a.target.isContinuous() &&
-                                                (a.target.continuous.kind == pick.continuous ||
-                                                 a.control.controlId == controlId);
+                                             return a.target.isAction() && a.target.action.actionId == pick.actionId;
+                                         return a.target.isContinuous() && a.target.continuous.kind == pick.continuous;
                                      }),
                       actions.end());
         actions.push_back(assignment);

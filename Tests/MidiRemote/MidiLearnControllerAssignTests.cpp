@@ -138,6 +138,20 @@ TEST_F(MidiRemoteAssignTest, AssigningAContinuousTargetReplacesTheSameKindOrTheS
     EXPECT_EQ(profile().actions[0].target.continuous.kind, synth::ContinuousTargetKind::masterVolume);
 }
 
+// One global assignment per control across kinds: an action and a continuous target on the same
+// control would otherwise both claim its message, and the lookup table keeps only one.
+TEST_F(MidiRemoteAssignTest, ContinuousAndActionTargetsReplaceEachOtherOnTheSameControl) {
+    ASSERT_EQ(controller_->assignControl("p1", "knob", PickTarget::action("togglePlayback")), AssignStatus::assigned);
+    ASSERT_EQ(controller_->assignControl("p1", "knob", PickTarget::continuousTarget(synth::ContinuousTargetKind::bpm)),
+              AssignStatus::assigned);
+    ASSERT_EQ(profile().actions.size(), 1u);
+    EXPECT_TRUE(profile().actions[0].target.isContinuous());
+
+    ASSERT_EQ(controller_->assignControl("p1", "knob", PickTarget::action("togglePlayback")), AssignStatus::assigned);
+    ASSERT_EQ(profile().actions.size(), 1u);
+    EXPECT_TRUE(profile().actions[0].target.isAction());
+}
+
 TEST_F(MidiRemoteAssignTest, RefusesWhatCannotBeMappedAndChangesNothing) {
     EXPECT_EQ(controller_->assignControl("nope", "knob", PickTarget::action("togglePlayback")),
               AssignStatus::unknownControl);

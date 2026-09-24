@@ -385,9 +385,10 @@ still leave a jog wheel unable to report which way it turned, which is the whole
 wheel. A continuous target is scope **GLOBAL**, exactly like an action (`ControllerProfile::actions`,
 never a project's `MidiRemoteProjectDoc`) — "the current project's tempo" is a contradiction; there
 is one transport and one master fader per *machine session*, not per project, so it means the same
-thing everywhere an action id does. Assigning a continuous kind replaces any existing assignment in
-that profile's actions with the same continuous kind OR the same control, mirroring the action
-rule.
+thing everywhere an action id does. A control drives at most one global target: assigning a
+continuous kind replaces any existing assignment in that profile's actions on the same control
+(action or continuous) or with the same continuous kind — and assigning an action likewise replaces
+a continuous one on that control.
 
 **masterVolume reuses the parameter path outright.** It resolves to the SAME
 `juce::AudioProcessorParameter*` the mixer's own master fader binds (a new injected
@@ -408,7 +409,8 @@ applies — the same `[rangeMin, rangeMax]` role a parameter assignment's range 
 **Reaching the transport:** `RemoteActionInvoker` (the same Core-to-app-layer seam `nodeCommand`
 uses) gains three message-thread methods — `getContinuousValue`/`setContinuousValue` (native units)
 and `getContinuousWindow` (playhead's window; bpm's is the Core constants above, so it never asks).
-The app layer's implementation drives `synth::TransportService::setBpm` for bpm, and for playhead
+The app layer's implementation drives `synth::TransportService::setBpm` for bpm (tracking its own
+last posted BPM the same unconsumed-request way, so several detents in one drain add up), and for playhead
 reuses FRO271's own tracked-request state (`Source/Transport/TransportNudge.h`,
 `locateTransportTracked`/the same accumulation `nudgeTransportCursor` relies on) rather than a
 second "where is the cursor really going" bookkeeping — a fast jog wheel produces several relative

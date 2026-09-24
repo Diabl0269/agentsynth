@@ -47,4 +47,12 @@ private:
     AppUndoManager& undoManager_;
     synth::TransportNudgeState& transportNudge_;
     const synth::TimelineDoc& timelineDoc_;
+
+    // The last BPM this invoker posted, until the audio thread applies it (see getContinuousValue).
+    struct PendingBpm {
+        bool pending = false;
+        double baseBpm = 0.0; // snapshot BPM when it was posted
+        double target = 0.0;  // the BPM it asked for
+        std::uint32_t requestedAtMs = 0;
+    } pendingBpm_;
 };

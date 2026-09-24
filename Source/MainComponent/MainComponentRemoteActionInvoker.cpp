@@ -55,8 +55,17 @@ void MainComponentRemoteActionInvoker::invokeNodeCommand(juce::AudioProcessorGra
 // RemoteEngine::drain() to read a continuous target's current value in native units.
 double MainComponentRemoteActionInvoker::getContinuousValue(synth::ContinuousTargetKind kind) {
     const auto snap = audioEngine_.getTransport().getPositionSnapshot();
-    if (kind == synth::ContinuousTargetKind::bpm)
-        return snap.bpm;
+    if (kind == synth::ContinuousTargetKind::bpm) {
+        // setBpm only POSTS a command; several detents drained in one tick would each read the same
+        // stale snapshot and collapse into one step. Same unconsumed-request rule as the playhead
+        // below: while the snapshot still shows the BPM the last request was based on (and the
+        // window hasn't expired), that request's own target is the current value.
+        const bool unconsumed =
+            pendingBpm_.pending && snap.bpm == pendingBpm_.baseBpm &&
+            static_cast<std::uint32_t>(juce::Time::getMillisecondCounter() - pendingBpm_.requestedAtMs) <=
+                synth::kNudgeAccumulateWindowMs;
+        return unconsumed ? pendingBpm_.target : snap.bpm;
+    }
 
     // playhead: a relative move must accumulate several fast detents inside one audio block exactly
     // like FRO271's cursor-move actions do (TransportNudge.h's own comment on why
@@ -80,7 +89,10 @@ void MainComponentRemoteActionInvoker::setContinuousValue(synth::ContinuousTarge
         return;
     auto& transport = audioEngine_.getTransport();
     if (kind == synth::ContinuousTargetKind::bpm) {
-        transport.setBpm(juce::jlimit(synth::TransportService::kMinBpm, synth::TransportService::kMaxBpm, native));
+        const double clamped = juce::jlimit(synth::TransportService::kMinBpm, synth::TransportService::kMaxBpm, native);
+        const double snapBpm = transport.getPositionSnapshot().bpm;
+        if (transport.setBpm(clamped) && clamped != snapBpm)
+            pendingBpm_ = {true, snapBpm, clamped, juce::Time::getMillisecondCounter()};
         return;
     }
     // playhead (bpm handled above; masterVolume never reaches this invoker at all -- it goes
