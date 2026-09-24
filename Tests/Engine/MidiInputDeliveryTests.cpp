@@ -41,6 +41,17 @@ public:
     }
 };
 
+/** JUCE only offers virtual MIDI devices off Windows (MidiOutput::createNewDevice is compiled out
+ *  there); nullptr makes the tests skip. */
+std::unique_ptr<juce::MidiOutput> makeVirtualSource(const juce::String& name) {
+#if JUCE_WINDOWS
+    juce::ignoreUnused(name);
+    return nullptr;
+#else
+    return juce::MidiOutput::createNewDevice(name);
+#endif
+}
+
 /** Waits (bounded) for the driver thread to deliver; the OS MIDI callback is asynchronous. */
 void settle(const std::atomic<int>& counter, int atLeast) {
     for (int i = 0; i < 100 && counter.load() < atLeast; ++i)
@@ -53,7 +64,7 @@ void settle(const std::atomic<int>& counter, int atLeast) {
 
 TEST(MidiInputDeliveryTest, OneMessageFromAnOpenedSourceIsDeliveredOnce) {
     const juce::String name = "FRO279 Delivery Test Source";
-    auto virtualSource = juce::MidiOutput::createNewDevice(name);
+    auto virtualSource = makeVirtualSource(name);
     if (virtualSource == nullptr)
         GTEST_SKIP() << "no OS MIDI service: cannot create a virtual source";
 
@@ -80,7 +91,7 @@ TEST(MidiInputDeliveryTest, OneMessageFromAnOpenedSourceIsDeliveredOnce) {
 // twice (a relative encoder at double speed, a toggle that flips back).
 TEST(MidiInputDeliveryTest, ProfileOpenFollowedByLaunchLoopOpensTheSourceOnce) {
     const juce::String name = "FRO279 Launch Order Test Source";
-    auto virtualSource = juce::MidiOutput::createNewDevice(name);
+    auto virtualSource = makeVirtualSource(name);
     if (virtualSource == nullptr)
         GTEST_SKIP() << "no OS MIDI service: cannot create a virtual source";
 
