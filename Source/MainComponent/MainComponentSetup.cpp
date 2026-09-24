@@ -368,6 +368,11 @@ void MainComponent::wireMidiRemoteEngine() {
     remoteEngine.setParameterClaimedPredicate([this](const juce::AudioProcessorParameter* param) {
         return automationRecorder.getAudioState().claims.isClaimed(param);
     });
+    // FRO139 (docs/control/midi-remote.md#controller-feedback): a hosted plugin has no MIDI output
+    // of its own to send through, so feedback is a standalone-only feature -- remoteEngine's
+    // feedbackSink_ stays null there and drain()'s feedback pass is a no-op.
+    if (!audioEngine.isHosted())
+        remoteEngine.setFeedbackSink(&remoteFeedbackOutputs_);
 
     // Profiles are loaded once by MidiLearnController's own construction (a member declared right
     // after remoteEngine, so it is already alive here) -- this just republishes that same load.
@@ -406,6 +411,10 @@ void MainComponent::wireMidiRemoteEngine() {
     audioEngine.onMidiDevicesChanged = [this] {
         midiLearnController_.refreshSources();
         mixerDock.getMidiRemotePanel().scheduleLiveRefresh();
+        // FRO139: the device set changed, so any cached juce::MidiOutput/remembered-failure is
+        // stale, and every mapped parameter needs to re-announce its value to whatever is open now.
+        remoteFeedbackOutputs_.closeAll();
+        remoteEngine.resendFeedback();
     };
 
     // FRO133: the mixer panel and transport bar are plain MainComponent members, already fully

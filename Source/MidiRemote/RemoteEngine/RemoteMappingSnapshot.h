@@ -86,6 +86,12 @@ struct RemoteMappingSnapshot {
         // RemoteEngineReconcile.cpp.
         juce::AudioProcessorGraph::NodeID nodeId;
         bool orphaned = false;
+        // FRO139 (docs/control/midi-remote.md#controller-feedback): the assignment's own message
+        // spec and owning profile id, resolved at snapshot-build time same as everything else here.
+        // MESSAGE THREAD ONLY -- the MIDI path never reads either field, only RemoteEngineFeedback.cpp's
+        // drain-time echo does.
+        MessageSpec spec;
+        juce::String profileId;
     };
 
     /** Bumped on every publish, copied into every RemoteEvent the MIDI path pushes so the drain

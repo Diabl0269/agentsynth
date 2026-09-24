@@ -45,6 +45,15 @@ void RemoteEngine::applyToParameter(const RemoteMappingSnapshot::Slot& slot, con
     if (slot.orphaned || slot.param == nullptr)
         return;
 
+    // FRO139 (docs/control/midi-remote.md#controller-feedback): every real hardware event on this
+    // control counts, even one a claim takeover below is about to reject -- a controller that just
+    // sent something is a controller the drain must not immediately echo a stale value back to.
+    {
+        FeedbackState& fb = feedback_[slot.assignmentId];
+        fb.hasHardware = true;
+        fb.lastHardwareMs = clock_();
+    }
+
     const auto existingIt = gestures_.find(slot.assignmentId);
     const bool hasActiveGesture = existingIt != gestures_.end() && existingIt->second.gestureActive;
     if (isClaimedByOther_ && !hasActiveGesture && isClaimedByOther_(slot.param))

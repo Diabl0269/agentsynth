@@ -8,6 +8,7 @@
 #include "Branding.h"
 #include "MainComponentRemoteActionInvoker.h"
 #include "MidiRemote/MidiLearnController.h"
+#include "MidiRemote/MidiRemoteFeedbackOutputs.h"
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
 #include "MidiRemote/RemoteModel.h"
 #include "Mixer/TrackPresetManager.h"
@@ -900,6 +901,10 @@ private:
     ShortcutManager shortcutManager;
     juce::ApplicationCommandManager commandManager;
 
+    // FRO139 (docs/control/midi-remote.md#controller-feedback): declared BEFORE remoteEngine --
+    // remoteEngine holds a raw RemoteFeedbackSink* into this, so it must outlive the engine, and
+    // members destroy in reverse declaration order. Wired in wireMidiRemoteEngine().
+    synth::midi::MidiRemoteFeedbackOutputs remoteFeedbackOutputs_;
     // FRO127/FRO253: see MainComponentRemoteActionInvoker.h -- extracted to its own file rather
     // than nested here (this header sits at the 1,000-line cap).
     synth::midi::RemoteEngine remoteEngine; // docs/control/midi-remote.md#the-engine; wired in wireMidiRemoteEngine()

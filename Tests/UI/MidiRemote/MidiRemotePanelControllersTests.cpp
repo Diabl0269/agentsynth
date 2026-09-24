@@ -267,3 +267,44 @@ TEST_F(MidiRemotePanelControllersTest, CancellingTheFirstPromptEndsAutoDetect) {
     answer(false);
     EXPECT_EQ(panel_.getEncoderAutoDetectForTest().phase(), synth::midi::EncoderAutoDetect::Phase::idle);
 }
+
+// ---- Send feedback to (FRO139, docs/control/midi-remote.md#controller-feedback) -----------------
+
+TEST_F(MidiRemotePanelControllersTest, SetFeedbackOutputWithADeviceSetsHasOutputAndPersists) {
+    const auto id = create(AddControllerPopover::StartWith::empty);
+    synth::ControllerProfile::Input device;
+    device.identifier = "out1";
+    device.name = "Feedback Out";
+
+    panel_.setFeedbackOutput(id, device);
+
+    const auto* profile = find(id);
+    ASSERT_NE(profile, nullptr);
+    EXPECT_TRUE(profile->hasOutput);
+    EXPECT_EQ(profile->output.identifier, "out1");
+    EXPECT_EQ(profile->output.name, "Feedback Out");
+    EXPECT_EQ(synth::ControllerProfileStore(root_).loadAll().profiles.front().output.identifier, "out1")
+        << "written to disk";
+}
+
+TEST_F(MidiRemotePanelControllersTest, SetFeedbackOutputWithNoneClearsHasOutput) {
+    const auto id = create(AddControllerPopover::StartWith::empty);
+    synth::ControllerProfile::Input device;
+    device.identifier = "out1";
+    device.name = "Feedback Out";
+    panel_.setFeedbackOutput(id, device);
+
+    panel_.setFeedbackOutput(id, std::nullopt);
+
+    const auto* profile = find(id);
+    ASSERT_NE(profile, nullptr);
+    EXPECT_FALSE(profile->hasOutput);
+    EXPECT_TRUE(profile->output.identifier.isEmpty());
+}
+
+TEST_F(MidiRemotePanelControllersTest, SetFeedbackOutputForUnknownProfileIsANoOp) {
+    // No crash, and no profile materialises (the fixture's Hosted AudioEngine already shows one
+    // row -- "Host MIDI" -- before this call, per MidiRemotePanelHostedTest's own baseline).
+    panel_.setFeedbackOutput("does-not-exist", std::nullopt);
+    EXPECT_EQ(find("does-not-exist"), nullptr);
+}

@@ -11,7 +11,8 @@
 //                         and allocates — see the note on the drain timer below).
 //   message thread        drain(): apply events to parameters exactly as a mouse would
 //                         (beginChangeGesture / setValueNotifyingHost / endChangeGesture), invoke
-//                         action commands, resolve learns, free retired snapshots.
+//                         action commands, resolve learns, send feedback for every changed mapped
+//                         parameter back out to its controller (FRO139), free retired snapshots.
 //   message thread        setProfiles / setAssignments / setSources / reconcile: rebuild the
 //                         snapshot and publish it by atomic pointer swap.
 //
@@ -26,6 +27,7 @@
 // module-card parameter, a transport-bar action, or a mixer column's Solo node command.
 
 #include "MidiRemote/RemoteEngine/RemoteEvent.h"
+#include "MidiRemote/RemoteEngine/RemoteFeedbackSink.h"
 #include "MidiRemote/RemoteEngine/RemoteMappingSnapshot.h"
 #include "MidiRemote/RemoteEngine/RemoteMessageSink.h"
 #include "MidiRemote/RemoteModel.h"
@@ -56,6 +58,10 @@ inline constexpr int kDrainHz = 60;
 /** One hardware tick of a relative encoder moves a parameter by this much (see
  *  docs/control/midi-remote.md#data-model, "relative -> signed delta x sensitivity"). */
 inline constexpr float kRelativeSensitivity = 1.0f / 127.0f;
+/** A hardware event on a slot silences its own feedback echo for this long afterwards (FRO139,
+ *  docs/control/midi-remote.md#controller-feedback) -- the same window as the gesture-idle timeout,
+ *  since both exist to answer "has the user actually stopped moving this control yet?". */
+inline constexpr double kFeedbackCooldownMs = kGestureIdleMs;
 
 /** How the engine reaches an action target. Implemented in the app layer over
  *  juce::ApplicationCommandManager — Core never sees MainComponent. */
@@ -122,6 +128,15 @@ public:
 
     void setActionInvoker(RemoteActionInvoker* invoker) noexcept { actionInvoker_ = invoker; }
 
+    /** FRO139 (docs/control/midi-remote.md#controller-feedback): where drain() sends a mapped
+     *  parameter's new value back out to its controller. Null (the default, and always null in
+     *  HostMode::Hosted -- the app layer never wires one there) means feedback is simply not sent. */
+    void setFeedbackSink(RemoteFeedbackSink* sink) noexcept;
+    /** Clears every per-assignment feedback state so the next drain re-sends every mapped
+     *  parameter's current value, even one that hasn't changed -- for a feedback sink that just
+     *  reopened (a device list change) or a controller whose LEDs need resyncing from scratch. */
+    void resendFeedback();
+
     /** Returns true while something *other* than this engine holds the parameter — a real mouse
      *  drag, via AutomationRecorder's gesture claim. The engine then yields exactly as a second
      *  mouse would (docs/control/midi-remote.md#how-does-a-hardware-value-reach-a-parameter). Injected so Core keeps no
@@ -185,6 +200,9 @@ private:
     void expireIdleGestures();
     void endAllGestures();
 
+    // Feedback (RemoteEngineFeedback.cpp).
+    void sendFeedback(const RemoteMappingSnapshot& snapshot);
+
     // Learn (RemoteEngineLearn.cpp).
     void noteLearnCandidate(const juce::String& sourceKey, const RemoteEvent& event);
     void settleLearnIfDue();
@@ -242,6 +260,15 @@ private:
 
     std::map<juce::String, GestureState> gestures_;
 
+    /** Per-assignment feedback state (FRO139). Message thread only; keyed by assignment id, same as
+     *  gestures_ above, so it survives a republish that keeps the assignment. */
+    struct FeedbackState {
+        int lastSent = -1; // the last encoded value sent, or -1 (nothing sent yet)
+        bool hasHardware = false;
+        double lastHardwareMs = 0.0;
+    };
+    std::map<juce::String, FeedbackState> feedback_;
+
     /** 0 == disarmed. The only learn state the MIDI path reads, and it is one word. */
     std::atomic<std::uint32_t> learnToken_{0};
     std::uint32_t nextLearnToken_ = 1;
@@ -257,6 +284,7 @@ private:
     double learnFirstEventMs_ = 0.0;
     double learnArmedMs_ = 0.0;
 
+    RemoteFeedbackSink* feedbackSink_ = nullptr;
     RemoteActionInvoker* actionInvoker_ = nullptr;
     ActionCommandLookup actionLookup_;
     std::function<bool(const juce::AudioProcessorParameter*)> isClaimedByOther_;

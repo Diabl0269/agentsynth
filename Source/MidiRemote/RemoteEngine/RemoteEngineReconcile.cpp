@@ -180,6 +180,8 @@ void addSlot(const Assignment& assignment, juce::AudioProcessorGraph* graph, con
     slot.rangeMin = assignment.range.min;
     slot.rangeMax = assignment.range.max;
     slot.target = assignment.target;
+    slot.spec = assignment.spec;
+    slot.profileId = assignment.control.profileId;
 
     if (assignment.target.isParameter())
         resolveParameterTarget(assignment, graph, processorByUuid, previousResolution, slot);
@@ -265,6 +267,19 @@ void RemoteEngine::rebuildAndPublish(juce::AudioProcessorGraph* graph) {
         } else {
             ++it;
         }
+    }
+
+    // Same cleanup for feedback_ (FRO139): an assignment that no longer exists needs no cooldown
+    // state kept around for it. Unlike gestures_ this never republishes on setProfiles/setAssignments
+    // alone -- see setProfiles()'s own comment for why THAT case clears feedback_ wholesale instead.
+    for (auto it = feedback_.begin(); it != feedback_.end();) {
+        const bool stillPresent =
+            std::any_of(fresh->slots.begin(), fresh->slots.end(),
+                        [&](const RemoteMappingSnapshot::Slot& slot) { return slot.assignmentId == it->first; });
+        if (!stillPresent)
+            it = feedback_.erase(it);
+        else
+            ++it;
     }
 
     fresh->generation = ++snapshotGeneration_;

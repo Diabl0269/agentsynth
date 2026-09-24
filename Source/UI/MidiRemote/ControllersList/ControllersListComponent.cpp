@@ -182,6 +182,40 @@ void beginRename(ControllersListComponent& self, const juce::String& profileId, 
                             false);
 }
 
+// FRO139 (docs/control/midi-remote.md#controller-feedback): right-click "Send feedback to ->" --
+// "None" plus one item per available output device, ticked against the row's own
+// hasFeedbackOutput/feedbackOutputIdentifier. The device rows come from
+// ControllersListComponent::queryFeedbackOutputs, called fresh on every right-click (the menu is
+// short-lived and rebuilt each time, unlike the plugin-picker snapshot rule in Source/UI/CLAUDE.md,
+// which exists for a list a background scan can mutate WHILE the menu is open) -- this component
+// never calls juce::MidiOutput::getAvailableDevices() itself, see the header's own comment on why.
+void appendFeedbackOutputSubmenu(ControllersListComponent& self, juce::PopupMenu& parent,
+                                 const ControllersListComponent::RowModel& row) {
+    juce::PopupMenu submenu;
+    juce::Component::SafePointer<ControllersListComponent> safeThis(&self);
+    const juce::String profileId = row.profileId;
+
+    submenu.addItem("None", true, !row.hasFeedbackOutput, [safeThis, profileId] {
+        auto* self2 = safeThis.getComponent();
+        if (self2 != nullptr && self2->onFeedbackOutputRequested)
+            self2->onFeedbackOutputRequested(profileId, {}, {});
+    });
+    submenu.addSeparator();
+    const auto devices = self.queryFeedbackOutputs ? self.queryFeedbackOutputs()
+                                                   : std::vector<ControllersListComponent::FeedbackDeviceOption>();
+    for (const auto& device : devices) {
+        const bool ticked = row.hasFeedbackOutput && row.feedbackOutputIdentifier == device.identifier;
+        submenu.addItem(device.name, true, ticked,
+                        [safeThis, profileId, identifier = device.identifier, name = device.name] {
+                            auto* self2 = safeThis.getComponent();
+                            if (self2 != nullptr && self2->onFeedbackOutputRequested)
+                                self2->onFeedbackOutputRequested(profileId, identifier, name);
+                        });
+    }
+
+    parent.addSubMenu("Send feedback to", submenu);
+}
+
 } // namespace
 
 ControllersListComponent::ControllersListComponent() {
@@ -317,6 +351,11 @@ void ControllersListComponent::showContextMenuForRow(int rowIndex) {
         if (auto* self = safeThis.getComponent())
             beginDelete(*self, profileId, name);
     });
+
+    // FRO139 (docs/control/midi-remote.md#controller-feedback): hidden in the plugin build, same as
+    // "+ Add controller" -- a hosted plugin has no MIDI output of its own to pick.
+    if (!hosted_)
+        appendFeedbackOutputSubmenu(*this, menu, rows_[static_cast<size_t>(rowIndex)]);
 
     // Bare Options() -- menu at the mouse position, desktop-level (ModuleComponent's own default
     // hook uses the same). A withParentComponent(this) would parent the popup INSIDE the 240px-wide

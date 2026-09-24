@@ -381,3 +381,68 @@ TEST_F(ControllersListComponentTest, AddControllerFooterFiresTheCallbackWithItsB
     list.setAddControllerVisible(false);
     EXPECT_FALSE(button->isVisible());
 }
+
+// ============================================================================
+// FRO139 (docs/control/midi-remote.md#controller-feedback): "Send feedback to" submenu
+// ============================================================================
+
+// triggerMenuItem's plain (non-recursive) MenuItemIterator can't reach into a submenu -- this finds
+// an item anywhere in the tree instead, mirroring MenuItemIterator's own `searchRecursively` flag.
+bool triggerMenuItemRecursive(const juce::PopupMenu& menu, const juce::String& text) {
+    juce::PopupMenu::MenuItemIterator it(menu, true);
+    while (it.next()) {
+        if (it.getItem().text == text) {
+            it.getItem().action();
+            return true;
+        }
+    }
+    return false;
+}
+
+TEST_F(ControllersListComponentTest, RightClickShowsSendFeedbackToSubmenuHiddenWhenHosted) {
+    ControllersListComponent list;
+    list.setSize(240, 300);
+    list.setRows(makeRows());
+
+    juce::PopupMenu captured;
+    synth::ui::test_hooks::contextMenuHookForTest() = [&](juce::PopupMenu& menu) { captured = menu; };
+
+    clickRow(list, 0, true);
+    const auto standaloneTexts = menuItemTexts(captured);
+    EXPECT_NE(std::find(standaloneTexts.begin(), standaloneTexts.end(), "Send feedback to"), standaloneTexts.end());
+
+    list.setHosted(true);
+    clickRow(list, 0, true);
+    const auto hostedTexts = menuItemTexts(captured);
+    EXPECT_EQ(std::find(hostedTexts.begin(), hostedTexts.end(), "Send feedback to"), hostedTexts.end())
+        << "a hosted plugin has no MIDI output of its own to pick";
+}
+
+TEST_F(ControllersListComponentTest, SendFeedbackToNoneFiresWithEmptyIdentifierAndName) {
+    ControllersListComponent list;
+    list.setSize(240, 300);
+    auto rows = makeRows();
+    rows[0].hasFeedbackOutput = true;
+    rows[0].feedbackOutputIdentifier = "out1";
+    list.setRows(rows);
+
+    juce::PopupMenu captured;
+    synth::ui::test_hooks::contextMenuHookForTest() = [&](juce::PopupMenu& menu) { captured = menu; };
+
+    juce::String requestedProfileId, requestedIdentifier, requestedName;
+    bool fired = false;
+    list.onFeedbackOutputRequested = [&](const juce::String& profileId, const juce::String& identifier,
+                                         const juce::String& name) {
+        fired = true;
+        requestedProfileId = profileId;
+        requestedIdentifier = identifier;
+        requestedName = name;
+    };
+
+    clickRow(list, 0, true);
+    ASSERT_TRUE(triggerMenuItemRecursive(captured, "None"));
+    EXPECT_TRUE(fired);
+    EXPECT_EQ(requestedProfileId, "profile-a");
+    EXPECT_TRUE(requestedIdentifier.isEmpty());
+    EXPECT_TRUE(requestedName.isEmpty());
+}

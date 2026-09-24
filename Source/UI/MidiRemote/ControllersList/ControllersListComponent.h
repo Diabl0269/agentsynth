@@ -27,6 +27,23 @@ public:
         juce::String profileId;
         juce::String name;
         RowState state = RowState::present;
+        // FRO139 (docs/control/midi-remote.md#controller-feedback): the current "Send feedback to"
+        // choice, for the context menu's tick mark. feedbackOutputIdentifier is empty when
+        // hasFeedbackOutput is false (mirrors ControllerProfile::hasOutput/output).
+        bool hasFeedbackOutput = false;
+        juce::String feedbackOutputIdentifier;
+    };
+
+    /** FRO139: one "Send feedback to" submenu row. Deliberately not juce::MidiDeviceInfo (that
+     *  would pull juce_audio_devices into this header) -- MidiRemotePanelComponent maps
+     *  juce::MidiOutput::getAvailableDevices() into this on demand, via queryFeedbackOutputs below,
+     *  so this component never calls a live device-enumeration API itself: doing so from inside a
+     *  juce::PopupMenu build crashed in the headless test process (no CoreMIDI entitlement/bundle),
+     *  and the same "owner supplies the device list" split is how showAddControllerPopover() keeps
+     *  AddControllerPopover itself off the live juce::MidiInput enumeration too. */
+    struct FeedbackDeviceOption {
+        juce::String identifier;
+        juce::String name;
     };
 
     ControllersListComponent();
@@ -78,6 +95,15 @@ public:
      *  only invoking this callback if the user confirms. */
     std::function<int(const juce::String& profileId)> countProjectAssignments;
     std::function<void(const juce::String& profileId)> onDeleteConfirmed;
+    /** FRO139 (docs/control/midi-remote.md#controller-feedback): right-click "Send feedback to ->"
+     *  item chosen -- empty `identifier`/`name` means "None". Hidden in the plugin build, same as
+     *  "+ Add controller" and every other device-facing control (setHosted(true)). */
+    std::function<void(const juce::String& profileId, const juce::String& identifier, const juce::String& name)>
+        onFeedbackOutputRequested;
+    /** Supplies the submenu's device rows on demand (called once per right-click, never cached) --
+     *  unset means an empty list (just "None"), which is what every test that doesn't care about
+     *  device rows gets for free. */
+    std::function<std::vector<FeedbackDeviceOption>()> queryFeedbackOutputs;
 
     void paint(juce::Graphics& g) override;
     void resized() override;

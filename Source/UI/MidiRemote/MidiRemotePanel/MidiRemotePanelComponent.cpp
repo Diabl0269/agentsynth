@@ -14,6 +14,7 @@
 #include "Timeline/AutomationBinding.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include <algorithm>
+#include <juce_audio_devices/juce_audio_devices.h>
 
 namespace synth::ui {
 
@@ -66,6 +67,22 @@ MidiRemotePanelComponent::MidiRemotePanelComponent() {
     };
     controllersList_.onDeleteConfirmed = [this](const juce::String& profileId) {
         handleDeleteProfileRequested(profileId);
+    };
+    controllersList_.onFeedbackOutputRequested = [this](const juce::String& profileId, const juce::String& identifier,
+                                                        const juce::String& name) {
+        std::optional<synth::ControllerProfile::Input> device;
+        if (identifier.isNotEmpty())
+            device = synth::ControllerProfile::Input{identifier, name};
+        setFeedbackOutput(profileId, device);
+    };
+    // FRO139: the ONLY call to the live juce::MidiOutput enumeration -- ControllersListComponent
+    // itself never calls it (see its own header comment on why: it crashed inside a headless test
+    // process). Mirrors showAddControllerPopover()'s identical split for juce::MidiInput.
+    controllersList_.queryFeedbackOutputs = [] {
+        std::vector<ControllersListComponent::FeedbackDeviceOption> result;
+        for (const auto& info : juce::MidiOutput::getAvailableDevices())
+            result.push_back({info.identifier, info.name});
+        return result;
     };
 
     controllersList_.onAddControllerRequested = [this](juce::Component& anchor) { showAddControllerPopover(anchor); };
@@ -127,7 +144,8 @@ void MidiRemotePanelComponent::rebuildFromProfiles() {
         const auto notHere =
             hosted ? ControllersListComponent::RowState::standaloneOnly : ControllersListComponent::RowState::absent;
         rows.push_back({profile.id, profile.name,
-                        isProfilePresent(profile) ? ControllersListComponent::RowState::present : notHere});
+                        isProfilePresent(profile) ? ControllersListComponent::RowState::present : notHere,
+                        profile.hasOutput, profile.output.identifier});
     }
     for (const auto& ref : doc_->controllers) {
         const bool hasLocalProfile =
@@ -468,6 +486,21 @@ void MidiRemotePanelComponent::handleDeleteProfileRequested(const juce::String& 
         selectedProfileId_.clear();
         selectedControlId_.clear();
     }
+    rebuildFromProfiles();
+}
+
+void MidiRemotePanelComponent::setFeedbackOutput(const juce::String& profileId,
+                                                 const std::optional<synth::ControllerProfile::Input>& device) {
+    if (learnController_ == nullptr)
+        return;
+    const auto& profiles = learnController_->getProfiles();
+    auto it = std::find_if(profiles.begin(), profiles.end(), [&](const auto& p) { return p.id == profileId; });
+    if (it == profiles.end())
+        return;
+    auto updated = *it;
+    updated.hasOutput = device.has_value();
+    updated.output = device.value_or(synth::ControllerProfile::Input{});
+    learnController_->updateProfile(updated); // saves, republishes to the engine (setProfiles clears feedback_)
     rebuildFromProfiles();
 }
 

@@ -23,6 +23,8 @@ set(APPUI_SOURCES
     Source/UserSettings.h
     Source/MidiRemote/ControllerProfileStore.h
     Source/MidiRemote/ControllerProfileStore.cpp
+    Source/MidiRemote/MidiRemoteFeedbackOutputs.h
+    Source/MidiRemote/MidiRemoteFeedbackOutputs.cpp
     Source/MidiRemote/MidiLearnController.h
     Source/MidiRemote/MidiLearnController.cpp
     Source/MidiRemote/MidiLearnControllerMapping.cpp
