@@ -432,6 +432,16 @@ void TimelinePanelComponent::moveFocusedTrack(int direction) {
     ensureTrackVisible(focusedTrackIndex_);
 }
 
+// FRO278: moves track-header focus one row `direction` (-1 up, +1 down) -- the same step the header's
+// own Up/Down keys take, so M/S/R then act on that track. Clamps at the ends. Returns false when the
+// timeline has no tracks.
+bool TimelinePanelComponent::selectAdjacentTrack(int direction) {
+    if (trackHeaderList_.headers.isEmpty())
+        return false;
+    moveFocusedTrack(direction);
+    return true;
+}
+
 // Computed against viewState_.trackScrollY + trackHeaderViewport_.getMaximumVisibleHeight() rather
 // than trackHeaderViewport_.getViewArea() -- the latter is a cached snapshot (lastVisibleArea) that
 // is only correct after a layout round trip and reads zero-height before the panel has ever been

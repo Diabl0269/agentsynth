@@ -430,6 +430,8 @@ private:
     static std::vector<CommandSpec> buildFocusAndHelpCommandRows();
     // Play/stop/record/loop/metronome/return-to-start/cursor moves/loop jumps, appended last in commandTable().
     static std::vector<CommandSpec> buildTransportCommandRows();
+    // FRO278: next/previous module and track selection, appended after the transport rows.
+    static std::vector<CommandSpec> buildSelectionStepCommandRows();
 
     // Named perform() bodies, too long for an inline table lambda.
     bool performLocateMaster();

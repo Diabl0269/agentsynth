@@ -7,6 +7,7 @@
 #include "GraphEditor.h"
 
 #include "UI/Graph/ModuleComponent/ModuleComponent.h"
+#include "UI/Graph/ModuleStepOrder.h"
 
 // ---------------------------------------------------------------------------------------
 // Selection (issue #156)
@@ -98,6 +99,29 @@ void GraphEditor::selectAllModules() {
             all.push_back(comp->getNodeId());
     }
     applySelectionChange(all);
+}
+
+// Steps the selection to the next/previous module (see ModuleStepOrder.h for the order). Only
+// visible cards count: a collapsed macro hides its members, and stepping onto one the user cannot
+// see would select something invisible. The view pans only when the target is not already fully
+// on screen, so stepping through a patch that fits does not make the canvas jump.
+bool GraphEditor::selectAdjacentModule(int direction) {
+    std::vector<synth::ui::StepModule> modules;
+    for (auto* comp : content.getModules()) {
+        if (comp != nullptr && comp->getModule() != nullptr && comp->isVisible())
+            modules.push_back({comp->getNodeId(), comp->getBounds().toFloat()});
+    }
+
+    const auto target = synth::ui::adjacentModule(modules, selection.getSelected(), direction);
+    if (target.uid == 0)
+        return false;
+
+    selectModule(target, /*additive=*/false);
+    for (const auto& m : modules) {
+        if (m.id == target && !getVisibleCanvasRect().contains(m.bounds))
+            centreViewOn(m.bounds.getCentre());
+    }
+    return true;
 }
 
 // Drops selected ids whose nodes no longer exist. Called after any graph mutation that can

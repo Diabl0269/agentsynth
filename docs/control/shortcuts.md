@@ -1,8 +1,8 @@
 # Keyboard Shortcuts
 
 Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/Settings/ShortcutsSettingsTab.h/.cpp`).
-`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **80 actions** across four categories —
-**General** (36, app-wide or routed per focused editor), **Graph** (6), **Timeline** (25) and
+`ShortcutManager` (`Source/ShortcutManager/ShortcutManager.h`) registers **92 actions** across four categories —
+**General** (48, app-wide or routed per focused editor), **Graph** (6), **Timeline** (25) and
 **Piano Roll** (13) — every one of them rebindable, including keys that used to be hardcoded:
 nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the six tool
 digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
@@ -50,6 +50,7 @@ when reasoning about a key that "does nothing."
 | Cmd+R | Repeat — prompts for a count (1–64) via an `AlertWindow` and creates that many back-to-back copies of the selection, tiled forward one selection-span at a time, as ONE undo step. Timeline-only: inactive on the Graph surface (see below) |
 | Space | Play / Stop (toggle the timeline transport) |
 | *(unbound)* | Play / Stop / Record / Toggle Looping / Toggle Metronome / Return to Start / Move Cursor Back or Forward (Beat, Bar) / Jump to Loop Start or End — see [**Transport family**](#transport-family) below |
+| *(unbound)* | Select Next / Previous Module, Select Next / Previous Track — see [**Selection stepping**](#selection-stepping) below |
 | Cmd+= | Zoom In (routed per focused surface — see [**Zoom**](#zoom) below) |
 | Cmd+- | Zoom Out |
 | Cmd+Shift+= | Zoom In Vertically |
@@ -322,6 +323,22 @@ applies them (a jog wheel, key repeat) accumulate — each builds on the previou
 on the once-per-block position snapshot, so no step is lost (`Source/Transport/TransportNudge.h`).
 
 See [`timeline/transport.md`](../timeline/transport.md) for the transport bar itself.
+
+### Selection stepping
+
+Four more command-dispatched General actions, unbound by default, so a controller pad or a key can
+walk the selection instead of the mouse:
+
+| Action id | Display name | Behaviour |
+|---|---|---|
+| `selectNextModule` / `selectPreviousModule` | Select Next Module / Select Previous Module | `GraphEditor::selectAdjacentModule`: selects one module, stepping left to right across the canvas (centre x, then y; `Source/UI/Graph/ModuleStepOrder.h`). Nothing selected starts at the first (next) or last (previous) module; a multi-selection steps from its last (next) or first (previous) member. Clamps at the ends, never wraps. Pans the canvas only when the new module is not already fully on screen. Cards hidden inside a collapsed macro are skipped |
+| `selectNextTrack` / `selectPreviousTrack` | Select Next Track / Select Previous Track | `TimelinePanelComponent::selectAdjacentTrack`: moves track-header focus one row, the same step the header's own Up/Down keys take, so the bare `M`/`S`/`R` keys then act on that track. Nothing focused starts at the first row; clamps at the ends. Inactive while the timeline panel is closed |
+
+These are two explicit pairs rather than one pair routed by `resolveEditSurface()` like Select All
+and Zoom. A controller has no notion of "where the last click was", and moving track focus itself
+changes which surface `resolveEditSurface()` reports (a track header is neither the clip lane nor
+the piano roll), so a routed pair would flip from tracks to modules between two presses of the same
+pad.
 
 ## Graph
 
@@ -632,10 +649,10 @@ onto 1–6. Shipping one of the missing three later costs no rebind: the digit i
 
 ## Command vs surface actions
 
-The 80 actions split into two kinds, and telling them apart is the key to reasoning about "why
+The 92 actions split into two kinds, and telling them apart is the key to reasoning about "why
 doesn't this key do anything":
 
-- **Command-dispatched** (52 actions) — every General action (including the transport family
+- **Command-dispatched** (64 actions) — every General action (including the transport family
   above), all six Graph actions, and the Timeline category's eight grid-set + two grid-cycle
   commands. `AppCommands::getCommandForAction(actionId)`
   returns a real `juce::CommandID` for these; `MainComponent` implements

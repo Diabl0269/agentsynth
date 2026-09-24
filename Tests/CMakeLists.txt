@@ -272,6 +272,7 @@ add_executable(Tests
     App/ShortcutManager/ShortcutManagerKeyMatchingTests.cpp
     App/ShortcutManager/ShortcutManagerTransportActionsTests.cpp
     App/ShortcutManager/ShortcutManagerCursorActionsTests.cpp
+    App/ShortcutManager/ShortcutManagerSelectionStepTests.cpp
     UI/Settings/ShortcutsSettingsTabTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGraphBehaviourTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviourTests.cpp
@@ -320,6 +321,7 @@ add_executable(Tests
     Project/SnippetManager/SnippetManagerMacroTests.cpp
     Project/SnippetManager/SnippetManagerPersistenceTests.cpp
     UI/Graph/MultiSelectTests.cpp
+    UI/Graph/ModuleStepOrderTests.cpp
     Macros/MacroGroupController/MacroGroupControllerTests.cpp
     Macros/MacroContainer/MacroContainerTests.cpp
     Macros/MacroContainer/MacroContainerGeometryTests.cpp
@@ -384,6 +386,7 @@ add_executable(Tests
     Modules/ModuleMidiFlagsTests.cpp
     App/FocusArbitration/FocusArbitrationClipboardTests.cpp
     App/FocusArbitration/FocusArbitrationSelectionTests.cpp
+    App/FocusArbitration/FocusArbitrationSelectionStepTests.cpp
     App/FocusArbitration/FocusArbitrationPlaybackDeleteTests.cpp
     App/FocusArbitration/FocusArbitrationZoomGridTests.cpp
     App/FocusArbitration/FocusArbitrationShiftedKeysTests.cpp
@@ -492,6 +495,7 @@ add_executable(Tests
     ../Source/MainComponent/MainComponentFileIO.cpp
     ../Source/MainComponent/MainComponentCommands.cpp
     ../Source/MainComponent/MainComponentCommandTable.cpp
+    ../Source/MainComponent/MainComponentSelectionCommands.cpp
     ../Source/MainComponent/MainComponentPanels.cpp
     ../Source/MainComponent/MainComponentTimeline.cpp
     ../Source/MainComponent/MainComponentTrackHeaderHost.cpp

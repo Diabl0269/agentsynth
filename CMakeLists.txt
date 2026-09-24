@@ -445,6 +445,7 @@ add_library(Core STATIC
     # UI utilities
     Source/UI/Layout/LayoutUtil.h
     Source/UI/Layout/LayoutUtil.cpp
+    Source/UI/Graph/ModuleStepOrder.h
     Source/UI/Graph/SelectionModel.h
     Source/UI/Chrome/StatusBarComponent.h
     Source/UI/Chrome/StatusBarComponent.cpp

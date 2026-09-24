@@ -100,6 +100,11 @@ TEST(MidiRemoteActionPickerTest, ListsTheCursorAndLoopActionsAndTheRenamedPlaySt
     EXPECT_EQ(labelOf("transportJumpToLoopStart"), "Jump to Loop Start");
     EXPECT_EQ(labelOf("transportJumpToLoopEnd"), "Jump to Loop End");
     EXPECT_EQ(labelOf("togglePlayback"), "Play / Stop");
+    // FRO278: selection stepping.
+    EXPECT_EQ(labelOf("selectNextModule"), "Select Next Module");
+    EXPECT_EQ(labelOf("selectPreviousModule"), "Select Previous Module");
+    EXPECT_EQ(labelOf("selectNextTrack"), "Select Next Track");
+    EXPECT_EQ(labelOf("selectPreviousTrack"), "Select Previous Track");
     // The alias is not a registered action of its own, but reads identically wherever it is named.
     EXPECT_EQ(ShortcutManager::getActionDescription("transportTogglePlayStop"), "Play / Stop");
 
