@@ -31,7 +31,7 @@ Two numbers are baked into every macOS build, and they mean different things:
 
 ## What's New (build-time, no network)
 
-A "What's New..." Help-menu item (macOS, `AppCommands::whatsNew`) and a link on the welcome screen's
+A "What's New..." Help-menu item (`AppCommands::whatsNew`) and a link on the welcome screen's
 footer show recent changes with **no HTTP client and no offline-handling complexity** — everything
 is sourced from this repo's own local git history at CMake **configure** time, so it works even in
 an airgapped build.
