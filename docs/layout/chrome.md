@@ -197,6 +197,7 @@ launches via `ApplicationProperties`:
 |---|---|---|
 | `librarySidebarVisible` | `"1"` (true) | `moduleLibrary` left panel |
 | `aiPanelVisible` | `"0"` (false) | `aiChatComponent` right panel |
+| `mixerOwnPanelHeight` | absent (`220`, also the minimum) | the Mixer's "Own panel" strip — written once per resize drag, on mouse-up (FRO231) |
 
 Both keys are read at the top of `initialiseCommon()`, before any `setVisible()` or
 `addAndMakeVisible()` call. Cmd+B toggles the library sidebar, wired through `ShortcutManager`.

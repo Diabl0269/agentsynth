@@ -400,6 +400,8 @@ add_executable(Tests
     UI/Mixer/MixerSendListTests.cpp
     UI/Mixer/MixerDockComponentTests.cpp
     UI/Mixer/MixerDockResizeTests.cpp
+    UI/Mixer/MixerOwnPanelResizeTests.cpp
+    UI/Mixer/MixerOwnPanelSlideTests.cpp
     UI/Layout/PanelResizeHandleTests.cpp
     UI/MidiRemote/MidiRemotePanelTests.cpp
     UI/MidiRemote/MidiRemotePreferencesTests.cpp

@@ -73,7 +73,7 @@ Own-panel/Window placement variant like Mixer's own, so it has no third row in t
 | Placement | Mixer lives | Timeline dock | Detach state |
 |---|---|---|---|
 | Tab (default) | `MixerDockComponent`'s own tab strip | unaffected | tab-strip button |
-| Own panel | `MixerPlacementController` itself, a second independent bottom strip below the Timeline dock | unaffected | its own header (embedded=false) |
+| Own panel | `MixerPlacementController` itself, a second independent bottom strip below the Timeline dock; slides, resizable | unaffected | its own header (embedded=false) |
 | Window | a `DetachedPanelWindow`, opened on first reveal, never eagerly at launch | unaffected | `mixerHost_` stays parented and hidden inside the dock until revealed |
 
 **In Tab placement neither host draws its own header** (`setEmbeddedHeader(true)`): the dock's
@@ -89,10 +89,26 @@ dock exactly like the Timeline does. It overlaps the top 5 px of the tab strip (
 lands on a button) and reports the total dock height through `MixerDockComponent::onResizeHeight` /
 `onResizeHeightCommitted`. The rules (clamp, persistence, live relayout) are in
 [`docs/timeline/timeline.md`](../timeline/timeline.md#panel-height); Own-panel placement is a
-separate strip and does not have a handle.
+separate strip with its own handle, below.
 
-"Own panel" is a plain visible-or-hidden strip at `MixerPlacementController::kOwnPanelHeight`
-(220 px), with no animated open and close slide and no persisted height.
+**"Own panel" slides, is resizable and remembers its height** (FRO231), all inside
+`MixerPlacementController` so `MainComponent` holds no extra member for it:
+
+- **Slide.** Toggling (`revealOrToggle()`) moves the strip's own `PanelSlide` fraction with the same
+  190 ms ease as the dock (`docs/layout/animation.md`). It is visible for the whole slide, including
+  the closing one, so `isOwnPanelShowing()` (meters, focus region) is true throughout. Choosing the
+  placement in Preferences, or launching in it, snaps it open with no animation.
+- **Height.** `mixerOwnPanelHeight` (absent = `kOwnPanelMinHeight` = 220, which is also the
+  minimum), clamped to `[220, max(220, 3/4 of the window - what an open dock keeps)]`
+  (`MixerPlacementController::clampHeight`). The stored value is the user's wish and is re-clamped
+  at read time, never rewritten by a layout pass, so it comes back when the window grows or the
+  dock closes. Persisted once per drag, on mouse-up, and never for a click that did not move.
+- **Handle.** A `PanelResizeHandle` (`ownPanelResizeHandle`) on the strip's own top edge; the hosted
+  panel with its header starts 5 px below it. Dragging calls `setOwnPanelHeight()` and asks
+  `MainComponent` to lay out through `onLayoutNeeded`.
+- **Sharing the window with the dock.** `MainComponent::resized()` carves the Own panel first (it owns
+  the bottom edge), then gives the dock `min(its height, max(its minimum, 3/4 of the window - the Own
+  panel's carve))` — local to the layout pass, the dock's stored/persisted height is untouched.
 
 **Preference changes apply live.** `MixerPlacementController::applyPlacementPreference()` runs once at
 launch (`MainComponent::wireTimelinePanel`) and again on every settings-file write
