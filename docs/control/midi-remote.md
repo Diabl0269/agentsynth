@@ -664,6 +664,14 @@ next arm. Unticking a device does **not** close it live — only a physical disc
 why treating "unticked" as a close signal would regress every user who has never opened the Audio
 tab at all.
 
+A device is opened **at most once**: `AudioEngine::openMidiInput` skips an identifier that is already
+open. That matters because the profile priming above runs *before* `initialiseDevices()`'s
+open-every-available-input loop, so a profiled controller is reached by both — a second
+`juce::MidiInput` on the same endpoint delivers every message twice and doubled each hardware
+gesture (a jog wheel at double speed, a toggle that flipped straight back; FRO279).
+`Tests/Engine/MidiInputDeliveryTests.cpp` drives a real virtual OS MIDI source through that launch
+order (it skips where the OS offers no virtual devices).
+
 Live activity for the panel ([`midi-remote-ui.md`](midi-remote-ui.md#the-midi-remote-panel)) rides the same FIFO: every event carries its
 decoded value; the panel drains a separate mirror ring at its own rate, and an unassigned control
 still produces an activity-only event so Detect mode and the surface's "it lit up" feedback work

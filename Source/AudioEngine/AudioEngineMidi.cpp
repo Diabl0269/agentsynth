@@ -11,7 +11,19 @@ juce::Array<juce::MidiDeviceInfo> AudioEngine::availableMidiInputs() const {
     return juce::MidiInput::getAvailableDevices();
 }
 
+// FRO279: the header promises "unless already open", but this used to open unconditionally, and two
+// callers reach the same device: MainComponent::wireMidiRemoteEngine opens a saved profile's
+// controller by name (ensureMidiDeviceOpen), and initialiseDevices() -- which runs AFTER it, by
+// design -- then opens EVERY available input. A second juce::MidiInput on the same endpoint is a
+// second OS connection with this engine as the callback, so every message was delivered (and
+// applied) twice: a relative encoder at double speed, a toggle that flipped straight back. Keyed on
+// the identifier, like reconcileMidiInputs(), since that is what the MIDI Remote source key is.
 bool AudioEngine::openMidiInput(const juce::MidiDeviceInfo& info) {
+    const bool alreadyOpen = std::any_of(midiInputs.begin(), midiInputs.end(),
+                                         [&](const auto& open) { return open->getIdentifier() == info.identifier; });
+    if (alreadyOpen)
+        return false;
+
     auto input = juce::MidiInput::openDevice(info.identifier, this);
     if (input == nullptr)
         return false;
