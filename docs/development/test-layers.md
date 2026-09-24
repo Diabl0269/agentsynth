@@ -29,7 +29,7 @@ RMS levels, silence detection, frequency response, waveform accuracy.
 | FX module tests | Delay (passthrough, feedback), Distortion (clipping, drive), Reverb (room size), Chorus, Phaser, Compressor, Flanger, Limiter, Bitcrusher (downsampling, quantization, CV), Ring Modulator (diode-ring, oversampling aliasing) |
 | GateModuleTest | `Tests/FX/GateModuleTests.cpp`. Hysteresis Schmitt trigger (opens at Threshold, closes only below Threshold - hysteresis, a level sitting in the gap keeps whichever state the gate was already in), Attack/Hold/Release timing measured in samples against the analytic linear-ramp model, Range floor is the parameterised gain (e.g. -20 dB -> 0.1 amplitude) not silence, both stereo legs gated identically by the linked max(\|L\|,\|R\|) detector, port labels/counts, module type/category. Bypass dry pass-through and mute silence live in `FXBypassTest` alongside every other FX module |
 | PitchShifterModuleTest | Pitch mode transposition ratios (spectral peak), Frequency mode SSB offset and sideband suppression, CV routing, feedback stability, state round-trip |
-| SamplerModuleTest | Registration plus port/parameter surface; WAV load (success, missing file, unreadable file, failed load keeps the previous sample, clear); Sample mode playback verified sample-exact against a ramp file at unity rate, at `pitch = +12` (2×), via MIDI note transpose, and with `start = 0.5`; monotonic anti-click fade-in; one-shot falls silent at the last frame vs loop keeps going; Granular mode produces bounded finite audio and stays silent with no sample loaded, including at max density × max grain size; gate precedence (free-run with nothing patched, trigger-CV latch silences a low gate, retrigger, a gate rising mid-block is not mistaken for an unpatched jack); bypass/mute clear; CV channels do not leak to the output; level CV sums with the parameter; zero-channel buffer is safe; `getExtraState`/`setExtraState` round trip, restored through `graphToJSON` → `applyJSONToGraph` on the trusted path and **dropped** on the untrusted path |
+| SamplerModuleTest | Registration plus port/parameter surface; WAV load (success, missing file, unreadable file, failed load keeps the previous sample, clear); Sample mode playback verified sample-exact against a ramp file at unity rate, at `pitch = +12` (2×), via MIDI note transpose, and with `start = 0.5`; monotonic anti-click fade-in; one-shot falls silent at the last frame vs loop keeps going; Granular mode produces bounded finite audio and stays silent with no sample loaded, including at max density × max grain size; gate precedence (free-run with nothing patched, trigger-CV latch silences a low gate, retrigger, a gate rising mid-block is not mistaken for an unpatched jack); FRO246 sample-accurate MIDI retrigger — two Note-Ons with no Note-Off between them across separate blocks and within one block both retrigger at their own pitch, a Note-Off immediately followed by a Note-On in the same block (adjacent samples, and the exact-boundary same-sample case a transport loop restart produces) still cuts and restarts; bypass/mute clear; CV channels do not leak to the output; level CV sums with the parameter; zero-channel buffer is safe; `getExtraState`/`setExtraState` round trip, restored through `graphToJSON` → `applyJSONToGraph` on the trusted path and **dropped** on the untrusted path |
 | SampleWaveformPeaks | `SampleWaveformComponent::computePeaks` — empty inputs, columns span the buffer and track min/max extremes, channels averaged (opposite phase cancels), more columns than frames |
 | SampleWaveformPaint | Paints the empty state ("No sample loaded") and a loaded sample with a live playhead into a `juce::Image`; repeat `timerCallback()` with nothing changed is a no-op; zero-width component is safe |
 | SamplerFormats | `getSupportedFormatWildcard()` is non-empty and includes `*.wav`; `isSupportedAudioFile` accepts wav/WAV/aiff and rejects .json/.txt/extensionless/directories (extension-only check, so drag-hover stays cheap) |
@@ -202,6 +202,7 @@ rig's style):
 | File | Covers |
 |------|--------|
 | `MixerDockComponentTests.cpp` | tab strip switches without closing the dock; `toggleMixerPanel` (Cmd+Alt+M) opens on Mixer then closes on a second press; actionId round-trips to `AppCommands::toggleMixerPanel`; active tab persists across an `ApplicationProperties` reload |
+| `MixerDockResizeTests.cpp` | FRO231: the dock-wide resize handle on each of the Timeline / Mixer / MIDI Remote tabs (parameterized) — bounds and cursor, hit-test priority over the tab buttons, hover, total-height drag, live vs commit, stray click; plus `MainComponent`'s ownership of the height (default, persisted, clamp, smaller-window reclamp, hide/show, detached Timeline) |
 | `MixerPanelComponentTests.cpp` | one column per strip plus Direct plus Master; themed PNG render smoke test (Obsidian plus Daylight, see the [`createComponentSnapshot` pattern](test-patterns.md#component-snapshot-smoke-tests)); clicking a column selects its owning macro (the clip-readout PNG inspection test is in [`../mixer/meters.md#test-coverage`](../mixer/meters.md#test-coverage)) |
 | `MixerFaderTests.cpp` | the fader's `SliderParameterAttachment` binding and dB readout, plus a regression test for a `MixerFader::parameterValueChanged` use-after-free (a `callAsync` lambda captured raw `this`; fixed with `SafePointer`) |
 
@@ -213,6 +214,24 @@ Tests calling `dock.setActiveTab(...)` use `MixerDockActiveTabResetGuardMDT` (se
 dock-relative) and `timelinePanelIsOpen(mc)` (`isVisible() && mixerDock.isVisible()`; `isShowing()`
 needs a real Desktop peer, unavailable headless), because `TimelinePanelComponent` nests inside
 `MixerDockComponent` rather than being `MainComponent`'s direct child.
+
+## MIDI Remote panel
+
+`Tests/UI/MidiRemote/` (FRO131, [`../control/midi-remote-ui.md#the-midi-remote-panel`](../control/midi-remote-ui.md#the-midi-remote-panel))
+— the dock's third tab, same real off-screen `MainComponent` style as the Mixer panel tests above.
+The engine/model/learn-controller test suite this panel sits on top of lives in `Tests/MidiRemote/`
+(FRO124/FRO130/FRO133/FRO253) and is not covered here.
+
+| File | Covers |
+|------|--------|
+| `MidiRemotePanelTests.cpp` | pre-`configure()` null-safety; post-`configure()` via a real `MainComponent`; dock tab-switch shows the panel and hides the others |
+| `ControllersListTests.cpp` | present/absent/orphan row states; right-click Rename/Export/Delete via `synth::ui::test_hooks`' free-function seams (the header is locked for this ticket — see the file's own comment) |
+| `ControllerSurfaceTests.cpp` | grid layout from `col`/`row`; activity decode onto the display-only widgets; drag-to-move reporting; a themed PNG render smoke test gated on `MIDI_SURFACE_PNG` |
+| `ControlInspectorTests.cpp` | Project vs Global assignment rows; takeover/range editing gated to a parameter target (`isTakeoverEditable()`) |
+
+Tests using `MixerDockComponent::Tab::MidiRemote` share the same
+`MixerDockActiveTabResetGuardMDT` reset guard as the Mixer panel tests above (`bottomDockActiveTab`
+is one shared on-disk settings key across all three tabs).
 
 ## Audio clip playback
 

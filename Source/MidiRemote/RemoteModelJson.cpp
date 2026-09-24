@@ -69,6 +69,8 @@ const char* toString(MessageType t) {
         return "channelPressure";
     case MessageType::programChange:
         return "programChange";
+    case MessageType::nrpn:
+        return "nrpn";
     }
     return "cc";
 }
@@ -92,6 +94,10 @@ bool messageTypeFromString(const juce::String& s, MessageType& out) {
     }
     if (s == "programChange") {
         out = MessageType::programChange;
+        return true;
+    }
+    if (s == "nrpn") {
+        out = MessageType::nrpn;
         return true;
     }
     return false;
@@ -153,6 +159,10 @@ const char* toString(Encoding e) {
         return "relBinOffset";
     case Encoding::relSignMag:
         return "relSignMag";
+    case Encoding::abs14:
+        return "abs14";
+    case Encoding::abs14LsbFirst:
+        return "abs14LsbFirst";
     }
     return "abs7";
 }
@@ -168,6 +178,14 @@ bool encodingFromString(const juce::String& s, Encoding& out) {
     }
     if (s == "relBinOffset") {
         out = Encoding::relBinOffset;
+        return true;
+    }
+    if (s == "abs14") {
+        out = Encoding::abs14;
+        return true;
+    }
+    if (s == "abs14LsbFirst") {
+        out = Encoding::abs14LsbFirst;
         return true;
     }
     if (s == "relSignMag") {
@@ -211,6 +229,52 @@ const char* toString(Takeover t) {
         return "default";
     }
     return "default";
+}
+
+const char* toString(NodeCommandKind k) {
+    switch (k) {
+    case NodeCommandKind::toggleSolo:
+        return "toggleSolo";
+    }
+    return "toggleSolo";
+}
+
+bool nodeCommandKindFromString(const juce::String& s, NodeCommandKind& out) {
+    if (s == "toggleSolo") {
+        out = NodeCommandKind::toggleSolo;
+        return true;
+    }
+    return false;
+}
+
+// FRO236 (docs/control/midi-remote.md#continuous-targets): doc-exact camelCase, same hard-fail-on-
+// unknown-string rule as every other enum in this file.
+const char* toString(ContinuousTargetKind k) {
+    switch (k) {
+    case ContinuousTargetKind::bpm:
+        return "bpm";
+    case ContinuousTargetKind::playhead:
+        return "playhead";
+    case ContinuousTargetKind::masterVolume:
+        return "masterVolume";
+    }
+    return "bpm";
+}
+
+bool continuousTargetKindFromString(const juce::String& s, ContinuousTargetKind& out) {
+    if (s == "bpm") {
+        out = ContinuousTargetKind::bpm;
+        return true;
+    }
+    if (s == "playhead") {
+        out = ContinuousTargetKind::playhead;
+        return true;
+    }
+    if (s == "masterVolume") {
+        out = ContinuousTargetKind::masterVolume;
+        return true;
+    }
+    return false;
 }
 
 bool takeoverFromString(const juce::String& s, Takeover& out) {
@@ -294,7 +358,7 @@ bool MessageSpec::fromVar(const juce::var& v, MessageSpec& out) {
         return false;
 
     int number = 0;
-    if (!readInt(obj->getProperty("number"), number) || number < 0 || number > 127)
+    if (!readInt(obj->getProperty("number"), number) || number < 0 || number > MessageSpec::maxNumber(type))
         return false;
 
     out.type = type;
@@ -343,6 +407,8 @@ bool Control::fromVar(const juce::var& v, Control& out) {
     juce::String encStr;
     if (!readString(obj->getProperty("encoding"), encStr) || !encodingFromString(encStr, parsed.encoding))
         return false;
+    if (!encodingValidForSpec(parsed.message, parsed.encoding))
+        return false;
 
     juce::String buttonModeStr;
     if (!readString(obj->getProperty("buttonMode"), buttonModeStr) ||
@@ -370,10 +436,19 @@ juce::var Target::toVar() const {
         p->setProperty("paramId", parameter.paramId);
         p->setProperty("paramIndexHint", parameter.paramIndexHint);
         obj->setProperty("parameter", juce::var(p));
-    } else {
+    } else if (kind == Kind::action) {
         auto* a = new juce::DynamicObject();
         a->setProperty("actionId", action.actionId);
         obj->setProperty("action", juce::var(a));
+    } else if (kind == Kind::nodeCommand) {
+        auto* n = new juce::DynamicObject();
+        n->setProperty("nodeUuid", nodeCommand.nodeUuid);
+        n->setProperty("command", toString(nodeCommand.command));
+        obj->setProperty("nodeCommand", juce::var(n));
+    } else {
+        auto* c = new juce::DynamicObject();
+        c->setProperty("kind", toString(continuous.kind));
+        obj->setProperty("continuous", juce::var(c));
     }
     return juce::var(obj);
 }
@@ -385,8 +460,12 @@ bool Target::fromVar(const juce::var& v, Target& out) {
 
     const bool hasParameter = obj->hasProperty("parameter");
     const bool hasAction = obj->hasProperty("action");
-    // Reject BOTH present or NEITHER present — exactly one is a Target (docs/control/midi-remote.md#data-model).
-    if (hasParameter == hasAction)
+    const bool hasNodeCommand = obj->hasProperty("nodeCommand");
+    const bool hasContinuous = obj->hasProperty("continuous");
+    // Reject anything but EXACTLY ONE of the four present (docs/control/midi-remote.md#data-model).
+    const int presentCount =
+        (hasParameter ? 1 : 0) + (hasAction ? 1 : 0) + (hasNodeCommand ? 1 : 0) + (hasContinuous ? 1 : 0);
+    if (presentCount != 1)
         return false;
 
     Target parsed;
@@ -405,7 +484,7 @@ bool Target::fromVar(const juce::var& v, Target& out) {
 
         parsed.kind = Target::Kind::parameter;
         parsed.parameter = param;
-    } else {
+    } else if (hasAction) {
         auto* a = obj->getProperty("action").getDynamicObject();
         if (a == nullptr)
             return false;
@@ -416,6 +495,32 @@ bool Target::fromVar(const juce::var& v, Target& out) {
 
         parsed.kind = Target::Kind::action;
         parsed.action = act;
+    } else if (hasNodeCommand) {
+        auto* n = obj->getProperty("nodeCommand").getDynamicObject();
+        if (n == nullptr)
+            return false;
+
+        Target::NodeCommand cmd;
+        if (!readString(n->getProperty("nodeUuid"), cmd.nodeUuid) || cmd.nodeUuid.isEmpty())
+            return false;
+        juce::String commandStr;
+        if (!readString(n->getProperty("command"), commandStr) || !nodeCommandKindFromString(commandStr, cmd.command))
+            return false;
+
+        parsed.kind = Target::Kind::nodeCommand;
+        parsed.nodeCommand = cmd;
+    } else {
+        auto* c = obj->getProperty("continuous").getDynamicObject();
+        if (c == nullptr)
+            return false;
+
+        juce::String kindStr;
+        Target::Continuous cont;
+        if (!readString(c->getProperty("kind"), kindStr) || !continuousTargetKindFromString(kindStr, cont.kind))
+            return false;
+
+        parsed.kind = Target::Kind::continuous;
+        parsed.continuous = cont;
     }
 
     out = parsed;
@@ -474,6 +579,8 @@ bool Assignment::fromVar(const juce::var& v, Assignment& out) {
 
     juce::String encStr;
     if (!readString(obj->getProperty("specEncoding"), encStr) || !encodingFromString(encStr, parsed.specEncoding))
+        return false;
+    if (!encodingValidForSpec(parsed.spec, parsed.specEncoding))
         return false;
 
     juce::String buttonModeStr;

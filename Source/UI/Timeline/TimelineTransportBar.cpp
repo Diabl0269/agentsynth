@@ -14,8 +14,7 @@ constexpr int kButtonSize = 26;
 // Inter-control spacing. Widened from 4 px: the row read as one dense block of glyphs rather than
 // four separate buttons. Group separations are kGap * 2.
 constexpr int kGap = 7;
-// The bar's own padding inside its strip. The panel already trims the 5 px resize grab strip off
-// the top before handing us our bounds, so this is plain breathing room — kept tight vertically so
+// The bar's own padding inside its strip. This is plain breathing room — kept tight vertically so
 // the square buttons get as much of the 34 px strip as possible.
 constexpr int kEdgePaddingX = 4;
 constexpr int kEdgePaddingY = 2;
@@ -338,6 +337,12 @@ void TimelineTransportBar::updateFromTransport(const synth::TransportService::Po
                               juce::dontSendNotification);
 
     refreshReadout(snapshot);
+    // FRO133: no timer of its own -- rides the SAME 10 Hz poll as everything else this method
+    // resyncs (the class comment's "never any faster" rule).
+    refreshMidiLearnBadges();
+    // FRO256: same poll also keeps the armed breathing outline animating -- see
+    // repaintArmedMidiLearnOutline()'s own comment.
+    repaintArmedMidiLearnOutline();
 }
 
 void TimelineTransportBar::refreshReadout(const synth::TransportService::PositionSnapshot& snapshot) {
@@ -439,5 +444,10 @@ void TimelineTransportBar::paint(juce::Graphics& g) {
         g.drawText(lastReadoutText_, readoutBounds_, juce::Justification::centredLeft, false);
     }
 }
+
+// FRO133: the four glyph buttons are children, so the badge/armed-outline overlay must paint OVER
+// them -- paint() above runs BEFORE children paint (ModuleComponent/MixerColumnComponent's own
+// overlay is the same paintOverChildren() split, for the same reason).
+void TimelineTransportBar::paintOverChildren(juce::Graphics& g) { paintMidiLearnOverlays(g); }
 
 } // namespace synth::ui

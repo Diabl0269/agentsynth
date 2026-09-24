@@ -166,6 +166,102 @@ TEST(MidiRemoteModelTest, TargetWithNeitherParameterNorActionIsRejected) {
     EXPECT_FALSE(Target::fromVar(v, parsed));
 }
 
+// -- Target::NodeCommand (FRO253, docs/control/midi-remote.md#node-command-targets) -----------------
+
+TEST(MidiRemoteModelTest, TargetNodeCommandVariantRoundTrips) {
+    Target target;
+    target.kind = Target::Kind::nodeCommand;
+    target.nodeCommand.nodeUuid = "node-1";
+    target.nodeCommand.command = NodeCommandKind::toggleSolo;
+
+    Target parsed;
+    ASSERT_TRUE(Target::fromVar(target.toVar(), parsed));
+    EXPECT_TRUE(parsed.isNodeCommand());
+    EXPECT_FALSE(parsed.isParameter());
+    EXPECT_FALSE(parsed.isAction());
+    EXPECT_EQ(parsed.nodeCommand.nodeUuid, target.nodeCommand.nodeUuid);
+    EXPECT_EQ(parsed.nodeCommand.command, NodeCommandKind::toggleSolo);
+}
+
+TEST(MidiRemoteModelTest, TargetNodeCommandSerialisesAsToggleSoloString) {
+    Target target;
+    target.kind = Target::Kind::nodeCommand;
+    target.nodeCommand.nodeUuid = "node-1";
+    target.nodeCommand.command = NodeCommandKind::toggleSolo;
+
+    const auto v = target.toVar();
+    EXPECT_EQ(v.getDynamicObject()->getProperty("nodeCommand").getDynamicObject()->getProperty("command").toString(),
+              "toggleSolo");
+}
+
+TEST(MidiRemoteModelTest, TargetWithTwoOfThreeKindsIsRejected) {
+    juce::var v = juce::JSON::parse(R"({
+        "parameter": {"nodeUuid": "n1", "paramId": "p1", "paramIndexHint": -1},
+        "nodeCommand": {"nodeUuid": "n1", "command": "toggleSolo"}
+    })");
+    Target parsed;
+    EXPECT_FALSE(Target::fromVar(v, parsed));
+}
+
+TEST(MidiRemoteModelTest, TargetNodeCommandRejectsUnknownCommandString) {
+    juce::var v = juce::JSON::parse(R"({"nodeCommand": {"nodeUuid": "n1", "command": "toggleMute"}})");
+    Target parsed;
+    EXPECT_FALSE(Target::fromVar(v, parsed));
+}
+
+TEST(MidiRemoteModelTest, TargetNodeCommandRejectsEmptyNodeUuid) {
+    juce::var v = juce::JSON::parse(R"({"nodeCommand": {"nodeUuid": "", "command": "toggleSolo"}})");
+    Target parsed;
+    EXPECT_FALSE(Target::fromVar(v, parsed));
+}
+
+// -- Target::Continuous (FRO236, docs/control/midi-remote.md#continuous-targets) -----------------
+
+TEST(MidiRemoteModelTest, TargetContinuousVariantRoundTripsForEveryKind) {
+    for (const auto kind :
+         {ContinuousTargetKind::bpm, ContinuousTargetKind::playhead, ContinuousTargetKind::masterVolume}) {
+        Target target;
+        target.kind = Target::Kind::continuous;
+        target.continuous.kind = kind;
+
+        Target parsed;
+        ASSERT_TRUE(Target::fromVar(target.toVar(), parsed)) << "kind=" << static_cast<int>(kind);
+        EXPECT_TRUE(parsed.isContinuous());
+        EXPECT_EQ(parsed.continuous.kind, kind);
+    }
+}
+
+TEST(MidiRemoteModelTest, TargetContinuousSerialisesAsDocExactCamelCaseStrings) {
+    struct Case {
+        ContinuousTargetKind kind;
+        const char* expected;
+    };
+    for (const auto& c : {Case{ContinuousTargetKind::bpm, "bpm"}, Case{ContinuousTargetKind::playhead, "playhead"},
+                          Case{ContinuousTargetKind::masterVolume, "masterVolume"}}) {
+        Target target;
+        target.kind = Target::Kind::continuous;
+        target.continuous.kind = c.kind;
+        const auto v = target.toVar();
+        EXPECT_EQ(v.getDynamicObject()->getProperty("continuous").getDynamicObject()->getProperty("kind").toString(),
+                  juce::String(c.expected));
+    }
+}
+
+TEST(MidiRemoteModelTest, TargetWithTwoOfFourKindsIsRejected) {
+    juce::var v = juce::JSON::parse(R"({
+        "action": {"actionId": "a1"},
+        "continuous": {"kind": "bpm"}
+    })");
+    Target parsed;
+    EXPECT_FALSE(Target::fromVar(v, parsed));
+}
+
+TEST(MidiRemoteModelTest, TargetContinuousRejectsUnknownKindString) {
+    juce::var v = juce::JSON::parse(R"({"continuous": {"kind": "reverb"}})");
+    Target parsed;
+    EXPECT_FALSE(Target::fromVar(v, parsed));
+}
+
 // -- Assignment -------------------------------------------------------------------------------------
 
 TEST(MidiRemoteModelTest, AssignmentRoundTrips) {
@@ -359,6 +455,25 @@ TEST(MidiRemoteModelTest, MidiRemoteProjectDocRoundTrips) {
     EXPECT_EQ(parsed.controllers[0].name, ref.name);
 }
 
+TEST(MidiRemoteModelTest, MidiRemoteProjectDocWithNodeCommandAssignmentRoundTrips) {
+    Assignment a = makeParameterAssignment("assign-solo");
+    a.target.kind = Target::Kind::nodeCommand;
+    a.target.parameter = {}; // FRO253: the previous kind's payload must not survive the switch
+    a.target.nodeCommand.nodeUuid = "strip-node-uuid";
+    a.target.nodeCommand.command = NodeCommandKind::toggleSolo;
+
+    MidiRemoteProjectDoc doc;
+    doc.version = 1;
+    doc.assignments.push_back(a);
+
+    MidiRemoteProjectDoc parsed;
+    ASSERT_TRUE(parsed.fromVar(doc.toVar()));
+    ASSERT_EQ(parsed.assignments.size(), 1u);
+    EXPECT_TRUE(parsed.assignments[0].target.isNodeCommand());
+    EXPECT_EQ(parsed.assignments[0].target.nodeCommand.nodeUuid, "strip-node-uuid");
+    EXPECT_EQ(parsed.assignments[0].target.nodeCommand.command, NodeCommandKind::toggleSolo);
+}
+
 TEST(MidiRemoteModelTest, MidiRemoteProjectDocEmptyDocRoundTrips) {
     MidiRemoteProjectDoc doc; // version 1, no assignments, no controllers
     MidiRemoteProjectDoc parsed;
@@ -386,4 +501,104 @@ TEST(MidiRemoteModelTest, MidiRemoteProjectDocRejectsMissingVersion) {
 
     MidiRemoteProjectDoc parsed;
     EXPECT_FALSE(parsed.fromVar(v));
+}
+
+// -- 14-bit and NRPN encodings (FRO140) -----------------------------------------------------------------
+
+TEST(MidiRemoteModelTest, NrpnAndPairedControlsRoundTrip) {
+    auto nrpn = makeControl("ctrl-nrpn", makeSpec(MessageType::nrpn, 1, MessageSpec::maxNumber(MessageType::nrpn)));
+    nrpn.encoding = Encoding::abs14;
+    auto lsbFirst = makeControl("ctrl-lsb", makeSpec(MessageType::cc, 1, 21));
+    lsbFirst.encoding = Encoding::abs14LsbFirst;
+
+    Control parsedNrpn;
+    ASSERT_TRUE(Control::fromVar(nrpn.toVar(), parsedNrpn));
+    EXPECT_EQ(parsedNrpn.message.type, MessageType::nrpn);
+    EXPECT_EQ(parsedNrpn.message.number, 16383);
+    EXPECT_EQ(parsedNrpn.encoding, Encoding::abs14);
+
+    Control parsedLsb;
+    ASSERT_TRUE(Control::fromVar(lsbFirst.toVar(), parsedLsb));
+    EXPECT_EQ(parsedLsb.message.number, 21);
+    EXPECT_EQ(parsedLsb.encoding, Encoding::abs14LsbFirst);
+}
+
+TEST(MidiRemoteModelTest, AssignmentCarryingNrpnAndPairedEncodingsRoundTrips) {
+    auto nrpn = makeParameterAssignment("assign-nrpn");
+    nrpn.spec = makeSpec(MessageType::nrpn, 0, 16383);
+    nrpn.specEncoding = Encoding::abs14;
+    auto paired = makeParameterAssignment("assign-paired");
+    paired.spec = makeSpec(MessageType::cc, 1, 21);
+    paired.specEncoding = Encoding::abs14LsbFirst;
+
+    Assignment parsedNrpn;
+    ASSERT_TRUE(Assignment::fromVar(nrpn.toVar(), parsedNrpn));
+    EXPECT_TRUE(parsedNrpn.spec == nrpn.spec);
+    EXPECT_EQ(parsedNrpn.specEncoding, Encoding::abs14);
+
+    Assignment parsedPaired;
+    ASSERT_TRUE(Assignment::fromVar(paired.toVar(), parsedPaired));
+    EXPECT_TRUE(parsedPaired.spec == paired.spec);
+    EXPECT_EQ(parsedPaired.specEncoding, Encoding::abs14LsbFirst);
+}
+
+TEST(MidiRemoteModelTest, MessageSpecRejectsNrpnAddressAboveFourteenBits) {
+    MessageSpec parsed;
+    EXPECT_FALSE(MessageSpec::fromVar(juce::JSON::parse(R"({"type":"nrpn","channel":1,"number":16384})"), parsed));
+    EXPECT_TRUE(MessageSpec::fromVar(juce::JSON::parse(R"({"type":"nrpn","channel":1,"number":16383})"), parsed));
+}
+
+TEST(MidiRemoteModelTest, MessageSpecStillRejectsCcNumberAbove127) {
+    // The widened range is nrpn-only; every other type keeps its 7-bit cap.
+    MessageSpec parsed;
+    EXPECT_FALSE(MessageSpec::fromVar(juce::JSON::parse(R"({"type":"cc","channel":1,"number":128})"), parsed));
+}
+
+TEST(MidiRemoteModelTest, ControlRejectsPairedEncodingOnCcWithoutLsbPartner) {
+    auto control = makeControl("ctrl-1", makeSpec(MessageType::cc, 1, 40)); // 40 + 32 > 63
+    control.encoding = Encoding::abs14;
+
+    Control parsed;
+    parsed.id = "sentinel-untouched"; // all-or-nothing: a rejected control leaves `out` alone
+    EXPECT_FALSE(Control::fromVar(control.toVar(), parsed));
+    EXPECT_EQ(parsed.id, "sentinel-untouched");
+}
+
+TEST(MidiRemoteModelTest, ControlRejectsRelativeEncodingOnNrpn) {
+    auto control = makeControl("ctrl-1", makeSpec(MessageType::nrpn, 1, 1024));
+    control.encoding = Encoding::relTwos;
+
+    Control parsed;
+    EXPECT_FALSE(Control::fromVar(control.toVar(), parsed));
+}
+
+TEST(MidiRemoteModelTest, ControlStillRejectsUnknownEncodingStringOnNrpn) {
+    auto control = makeControl("ctrl-1", makeSpec(MessageType::nrpn, 1, 1024));
+    auto v = control.toVar();
+    v.getDynamicObject()->setProperty("encoding", "abs15");
+
+    Control parsed;
+    EXPECT_FALSE(Control::fromVar(v, parsed));
+}
+
+TEST(MidiRemoteModelTest, AssignmentRejectsEncodingInvalidForItsSpec) {
+    auto pairedOnHighCc = makeParameterAssignment("assign-bad-1");
+    pairedOnHighCc.spec = makeSpec(MessageType::cc, 1, 40);
+    pairedOnHighCc.specEncoding = Encoding::abs14;
+    auto relativeNrpn = makeParameterAssignment("assign-bad-2");
+    relativeNrpn.spec = makeSpec(MessageType::nrpn, 1, 1024);
+    relativeNrpn.specEncoding = Encoding::relBinOffset;
+
+    Assignment parsed;
+    EXPECT_FALSE(Assignment::fromVar(pairedOnHighCc.toVar(), parsed));
+    EXPECT_FALSE(Assignment::fromVar(relativeNrpn.toVar(), parsed));
+}
+
+TEST(MidiRemoteModelTest, EncodingValidForSpecBoundaries) {
+    // The highest MSB with an LSB partner (31 + 32 = 63) is fine; CC 32 has none.
+    EXPECT_TRUE(encodingValidForSpec(makeSpec(MessageType::cc, 1, 31), Encoding::abs14));
+    EXPECT_FALSE(encodingValidForSpec(makeSpec(MessageType::cc, 1, 32), Encoding::abs14LsbFirst));
+    EXPECT_TRUE(encodingValidForSpec(makeSpec(MessageType::nrpn, 1, 5), Encoding::abs7));
+    EXPECT_FALSE(encodingValidForSpec(makeSpec(MessageType::note, 1, 60), Encoding::abs14));
+    EXPECT_TRUE(encodingValidForSpec(makeSpec(MessageType::note, 1, 60), Encoding::relTwos));
 }

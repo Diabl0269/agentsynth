@@ -1,0 +1,141 @@
+{
+  "version": 1,
+  "id": "template-8-knobs",
+  "name": "8 knobs",
+  "input": {
+    "identifier": "",
+    "name": ""
+  },
+  "passMapped": false,
+  "controls": [
+    {
+      "id": "k1",
+      "name": "Knob 1",
+      "kind": "knob",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 21
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 0,
+        "row": 0
+      }
+    },
+    {
+      "id": "k2",
+      "name": "Knob 2",
+      "kind": "knob",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 22
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 1,
+        "row": 0
+      }
+    },
+    {
+      "id": "k3",
+      "name": "Knob 3",
+      "kind": "knob",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 23
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 2,
+        "row": 0
+      }
+    },
+    {
+      "id": "k4",
+      "name": "Knob 4",
+      "kind": "knob",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 24
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 3,
+        "row": 0
+      }
+    },
+    {
+      "id": "k5",
+      "name": "Knob 5",
+      "kind": "knob",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 25
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 4,
+        "row": 0
+      }
+    },
+    {
+      "id": "k6",
+      "name": "Knob 6",
+      "kind": "knob",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 26
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 5,
+        "row": 0
+      }
+    },
+    {
+      "id": "k7",
+      "name": "Knob 7",
+      "kind": "knob",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 27
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 6,
+        "row": 0
+      }
+    },
+    {
+      "id": "k8",
+      "name": "Knob 8",
+      "kind": "knob",
+      "message": {
+        "type": "cc",
+        "channel": 0,
+        "number": 28
+      },
+      "encoding": "abs7",
+      "buttonMode": "momentary",
+      "layout": {
+        "col": 7,
+        "row": 0
+      }
+    }
+  ],
+  "actions": []
+}

@@ -187,8 +187,9 @@ void MainComponent::addAudioTrack() {
 
             // Box {Track Audio, EQ, Compressor, Strip} into ONE collapsed macro named after the
             // track. Master is deliberately NOT a member — see this method's own comment above.
-            graphEditor.addMacroForMembers({trackAudioUuid, channel.eqUuid, channel.compressorUuid, channel.stripUuid},
-                                           trackName, trackAudioPosition);
+            graphEditor.getMacroController().addMacroForMembers(
+                {trackAudioUuid, channel.eqUuid, channel.compressorUuid, channel.stripUuid}, trackName,
+                trackAudioPosition);
 
             // Inside the mutation, not after: MacroSet::retainOnly() (run by updateComponents())
             // must see every node above still alive to keep the macro's membership.
@@ -488,7 +489,7 @@ bool MainComponent::buildInstrumentChannelAndMacro(const juce::String& trackName
     macroMembers.push_back(channel.eqUuid);
     macroMembers.push_back(channel.compressorUuid);
     macroMembers.push_back(channel.stripUuid);
-    graphEditor.addMacroForMembers(macroMembers, trackName, build.trackInPosition);
+    graphEditor.getMacroController().addMacroForMembers(macroMembers, trackName, build.trackInPosition);
     return true;
 }
 

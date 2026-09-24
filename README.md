@@ -1,18 +1,26 @@
 # Agent Synth
 
-A **modular synthesizer** application built with JUCE and C++20, featuring a node-based graph editor for sound design.
+[![Build and Release](https://github.com/Diabl0269/agentsynth/actions/workflows/build-artifacts.yml/badge.svg?branch=main)](https://github.com/Diabl0269/agentsynth/actions/workflows/build-artifacts.yml)
+[![Latest release](https://img.shields.io/github/v/release/Diabl0269/agentsynth)](https://github.com/Diabl0269/agentsynth/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/Diabl0269/agentsynth)](LICENSE)
 
-## Overview
+A free, open-source modular synth. Patch oscillators, filters, envelopes and effects
+together in a node graph, play it from a keyboard or sequencer, and use it standalone
+or as a VST3/AU plugin in your DAW.
+
+![Agent Synth's node graph editor showing two LFOs modulating an oscillator and filter via cyan cables, with an ADSR envelope driving the VCA](assets/readme/hero.png)
+
+*From [Macros in Agent Synth](https://youtu.be/Ot4gqm3FoaE) — full patching walkthrough on YouTube.*
+
+Built by one person, MIT-licensed, early but shipping. macOS (Apple Silicon), Windows
+and Linux. There's an experimental AI assistant that builds patches from a text
+description; the synth doesn't depend on it.
+
+**Get it:** [latest release](https://github.com/Diabl0269/agentsynth/releases/latest) — app + plugin zips, installer, `SHA256SUMS.txt`. Or [build from source](#building). Site: https://agentsynth.app.
+
+## What's in the box
 
 Agent Synth provides a visual patching environment where audio modules can be freely connected to create complex sounds. Each module processes audio and/or control signals, enabling everything from simple subtractive synthesis to elaborate modulation chains.
-
-### Module Graph
-Modules connect via inputs and outputs:
-```
-[Sequencer] ──▶ [Oscillator] ──▶ [Filter] ──▶ [VCA] ──▶ [Output]
-                    ▲               ▲           ▲
-                 [LFO]          [ADSR]       [ADSR]
-```
 
 ### Core Modules
 - **Oscillator**: Anti-aliased waveform generator (Sine, Saw, Square, Triangle).
@@ -38,11 +46,20 @@ Agent Synth uses a hidden **Attenuverter** node architecture for modulation rout
 - **Mod Matrix Panel**: A panel listing all active CV connections with labelled sliders. Fully synced with the smart cable knobs in real time.
 - **Panel Toggles**: Top-bar **Hide AI** and **Hide Matrix** buttons collapse panels to give the graph more space.
 
-### AI Integration
+## AI Integration
 > **Note**: The AI integration is currently in an experimental state and may not function as expected. There are plans to migrate the AI harness into a separate, closed-source project in the future. The core Agent Synth engine and modular synth will remain open-source forever.
 
 - **AI Sound Designer**: Describe a sound in natural language and the AI generates the complete patch (modules, parameters, and connections).
 - **One-Click Apply**: Instantly apply AI-generated patches to the graph editor.
+
+## Help build it
+
+Agent Synth is free and open source, built by one person. The most helpful contribution right
+now is towards development time, one-off or monthly, at https://agentsynth.app/contribute: it lets
+me put more hours into this instead of other work, and hopefully one day most of them. Sharing
+it with someone who'd use it, opening an issue with feedback, starring the repo, following the
+[YouTube channel](https://www.youtube.com/@DiabolusLark), and code contributions (see
+[CONTRIBUTING.md](CONTRIBUTING.md)) genuinely help too. No pressure, it stays free either way.
 
 ## Building
 
@@ -93,7 +110,8 @@ Agent Synth uses CMake for its build system.
 
 > **Plugin builds**: The same build also produces VST3 (Linux/macOS/Windows) and AU (macOS) audio-plugin bundles wrapping the same engine and UI as the standalone app. Prebuilt plugin bundles ship alongside the app in every [release](https://github.com/Diabl0269/agentsynth/releases).
 
-## Development
+<details>
+<summary>Development & Testing</summary>
 
 ### Project Structure
 - `Source/`: Main source code
@@ -103,11 +121,11 @@ Agent Synth uses CMake for its build system.
 - `docs/`: **Technical Documentation (Architecture, Module Specs)**
 - `GEMINI.md`: **Developer Guide & Contribution Standards**
 
-## Testing
+### Testing
 
 Agent Synth uses GoogleTest for unit testing.
 
-### Running Unit Tests
+#### Running Unit Tests
 
 By default, builds skip tests to save time. To build the test suite, configure with `-DENABLE_TESTS=ON`:
 
@@ -126,7 +144,7 @@ By default, builds skip tests to save time. To build the test suite, configure w
     ./build/Tests/Tests
     ```
 
-### Code Coverage
+#### Code Coverage
 
 To generate a code coverage report (requires `llvm-cov` and `llvm-profdata`):
 
@@ -135,7 +153,10 @@ bash scripts/coverage.sh
 ```
 This script will build the project with coverage flags, run the tests, and generate a detailed coverage report.
 
-## Roadmap
+</details>
+
+<details>
+<summary>Roadmap</summary>
 
 ### UI/UX & Workflow
 - [x] **FX Suite**: Delay, Distortion, Reverb.
@@ -156,6 +177,8 @@ This script will build the project with coverage flags, run the tests, and gener
 - [x] **Natural Language Patching**: Text-to-patch generation.
 - [ ] **Conversational Refinement**: Iterate on patches via chat.
 - [ ] **Parameter Learning**: Train models on user sound preferences.
+
+</details>
 
 ## License
 MIT

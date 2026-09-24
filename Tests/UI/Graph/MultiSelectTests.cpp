@@ -276,9 +276,9 @@ TEST(MultiSelectMarquee, CollapsedMacroMembersAreNotMarqueeSelectable) {
     auto band = boundsA.getUnion(boundsB);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, true);
+    editor.getMacroController().setMacroCollapsed(macroId, true);
 
     editor.beginMarquee(band.getTopLeft(), /*additive=*/false);
     editor.updateMarquee(band.getBottomRight());
@@ -596,7 +596,7 @@ TEST(MultiSelectSnippet, DroppingASnippetPayloadFromTheLibraryInsertsTheGroup) {
 
     const int before = engine.getGraph().getNumNodes();
     editor.itemDragEnter(details); // must size the ghost from the group, not one module
-    EXPECT_TRUE(editor.isDragPreviewActive());
+    EXPECT_TRUE(editor.getDragDropController().isDragPreviewActive());
     editor.itemDropped(details);
 
     EXPECT_EQ(engine.getGraph().getNumNodes(), before + 2);

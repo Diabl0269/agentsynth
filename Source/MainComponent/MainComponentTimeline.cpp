@@ -97,6 +97,13 @@ void MainComponent::reconcileTimelineAfterGraphChange() {
     // 2).
     remoteEngine.reconcile(audioEngine.getGraph());
 
+    // FRO263: an assignment's target can flip between resolved and orphaned ("(missing module)") by
+    // the reconcile() call just above -- publishAssignments()'s own onChanged notify never reaches
+    // this path (it's not a MIDI Remote doc/profile mutation), so the panel needs its own catch-up
+    // call here, same "cheap enough for every graph change" contract mixerDock.rebuildMixer() below
+    // already relies on.
+    mixerDock.rebuildMidiRemote();
+
     // FRO14: a LINKED track's M/S live on its channel strip, not in the doc, so a graph change (an
     // undo of a channel mute/solo included) moves state no doc notification would ever report.
     // Every header re-reads its channel here; refreshFromDoc() is idempotent and cheap.

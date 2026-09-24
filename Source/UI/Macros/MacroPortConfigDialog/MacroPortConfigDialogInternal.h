@@ -428,10 +428,18 @@ public:
         const juce::String uuid = nodeUuid;
         return std::make_unique<synth::ui::ColourPickerPopup>(
             colourSwatch.colour, owner_.colourPickerProps_,
-            [safeRow](juce::Colour c) {
+            [safeRow, safeDialog, uuid](juce::Colour c) {
                 if (auto* row = safeRow.getComponent()) {
                     row->colourSwatch.colour = c;
                     row->colourSwatch.repaint();
+                    // Also preview this port's jack on BOTH surfaces (the docked widget and the collapsed
+                    // card) live, so the jack tracks the pick in real time. View-layer only (a preview, never a
+                    // MacroPort::colour write -- onCommit below owns the commit), so a drag pushes no undo step.
+                    // Captured via safeDialog: the popup outlives one click dispatch just like onCommit; the optional
+                    // onPreviewPortColour is skipped when unset (the default in a standalone test).
+                    if (auto* dialog = safeDialog.getComponent())
+                        if (dialog->onPreviewPortColour)
+                            dialog->onPreviewPortColour(uuid, c);
                 }
             },
             [safeDialog, uuid](juce::Colour c) {

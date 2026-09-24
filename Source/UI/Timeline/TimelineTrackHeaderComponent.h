@@ -389,7 +389,7 @@ public:
     // scroll state — see the class comment), so it hands raw SCREEN Y positions up rather than
     // computing an insertion index itself; TimelinePanelComponent (which owns the ordered header
     // list) is the one place that can turn a Y position into "between which two tracks". Modelled
-    // on ResizeHandle's own screen-coordinate drag in TimelinePanelComponent.h.
+    // on PanelResizeHandle's own screen-coordinate drag (Source/UI/Layout/PanelResizeHandle.h).
     //
     // Fired once a background mouseDrag crosses a small pixel threshold past mouseDown — a plain
     // click (select) or a click that lands on a child component never reaches here.

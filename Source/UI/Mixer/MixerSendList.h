@@ -40,6 +40,14 @@ public:
      *  reconcile, same contract as MixerInsertList::onMutated. */
     std::function<void()> onMutated;
 
+    /** FRO133: fires once per row from rebuildKnobs(), right after that row's knob/attachment are
+     *  created against a resolved sendNLevel parameter -- lets the owning MixerColumnComponent
+     *  register the knob in its own MIDI-learn registry
+     * (docs/control/midi-remote-ui.md#right-click-midi-learn--coverage) without this list needing a menu/registry of
+     * its own. Never fires for a row whose param didn't resolve (the same "nothing to register" case every other
+     * registration site skips). */
+    std::function<void(juce::Slider&, juce::RangedAudioParameter*)> onSendKnobBuilt;
+
     /** "+ Send > New bus..." -- creates a bus channel (its own undo step) and returns its strip's
      *  node id, or an invalid id on failure. Supplied by MixerPanelComponent, which is the one that
      *  can size canvas cards. */

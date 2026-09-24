@@ -69,7 +69,7 @@ TwoMemberMacro makeTwoMemberMacro(GraphEditor& editor, AudioEngine& engine) {
     m.a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     m.b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     editor.setSelectedNodes({m.a, m.b});
-    m.macroId = editor.groupSelectionIntoMacro();
+    m.macroId = editor.getMacroController().groupSelectionIntoMacro();
     return m;
 }
 
@@ -95,7 +95,7 @@ TEST(MacroCardJack, LayoutIsEmptyForAMacroWithNoConfiguredPorts) {
     auto m = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(m.macroId.isEmpty());
 
-    EXPECT_TRUE(editor.macroCardPortLayout(m.macroId).empty())
+    EXPECT_TRUE(editor.getMacroController().macroCardPortLayout(m.macroId).empty())
         << "a macro with no ports yet draws no jacks - just the plain P8-12 card";
 }
 
@@ -106,17 +106,17 @@ TEST(MacroCardJack, InputsLayOutDownTheLeftEdgeAndOutputsDownTheRightEdgeInOrder
     auto m = makeTwoMemberMacro(editor, engine);
     ASSERT_FALSE(m.macroId.isEmpty());
 
-    const auto in0 = editor.addMacroPort(m.macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV,
-                                         MacroPortShape::Mono, 1, "In A");
-    const auto in1 = editor.addMacroPort(m.macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV,
-                                         MacroPortShape::Mono, 1, "In B");
-    const auto out0 = editor.addMacroPort(m.macroId, /*isInput=*/false, synth::MacroPortKind::AudioCV,
-                                          MacroPortShape::Mono, 1, "Out A");
+    const auto in0 = editor.getMacroController().addMacroPort(
+        m.macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
+    const auto in1 = editor.getMacroController().addMacroPort(
+        m.macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In B");
+    const auto out0 = editor.getMacroController().addMacroPort(
+        m.macroId, /*isInput=*/false, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "Out A");
     ASSERT_FALSE(in0.isEmpty());
     ASSERT_FALSE(in1.isEmpty());
     ASSERT_FALSE(out0.isEmpty());
 
-    const auto layout = editor.macroCardPortLayout(m.macroId);
+    const auto layout = editor.getMacroController().macroCardPortLayout(m.macroId);
     ASSERT_EQ(layout.size(), 3u);
 
     std::vector<GraphEditor::MacroCardPort> inputs, outputs;
@@ -140,7 +140,7 @@ TEST(MacroCardJack, InputsLayOutDownTheLeftEdgeAndOutputsDownTheRightEdgeInOrder
     EXPECT_LT(inputs[0].jackPos.y, inputs[1].jackPos.y);
 
     // Every jack lands inside the card's fixed footprint - never off the card entirely.
-    const auto* card = editor.getMacroCardForTest(m.macroId);
+    const auto* card = editor.getMacroController().getMacroCardForTest(m.macroId);
     ASSERT_NE(card, nullptr);
     for (const auto& p : layout)
         EXPECT_TRUE(card->getLocalBounds().contains(p.jackPos)) << p.nodeUuid;
@@ -154,12 +154,12 @@ TEST(MacroCardJack, LayoutCarriesThePortsUserColourAndDefaultsToUnset) {
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
     auto m = makeTwoMemberMacro(editor, engine);
-    const auto in0 = editor.addMacroPort(m.macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV,
-                                         MacroPortShape::Mono, 1, "In A");
+    const auto in0 = editor.getMacroController().addMacroPort(
+        m.macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In A");
     ASSERT_FALSE(in0.isEmpty());
 
     auto findPort = [&]() -> std::optional<GraphEditor::MacroCardPort> {
-        for (const auto& p : editor.macroCardPortLayout(m.macroId))
+        for (const auto& p : editor.getMacroController().macroCardPortLayout(m.macroId))
             if (p.nodeUuid == in0)
                 return p;
         return std::nullopt;
@@ -185,8 +185,8 @@ TEST(MacroCardJack, DroppingACableExactlyOnAnExistingInputJackWiresToThatPortNot
     auto m = makeTwoMemberMacro(editor, engine);
     ASSERT_TRUE(editor.getMacros().find(m.macroId)->collapsed);
 
-    const auto portUuid = editor.addMacroPort(m.macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV,
-                                              MacroPortShape::Mono, 1, "Pitch In");
+    const auto portUuid = editor.getMacroController().addMacroPort(
+        m.macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "Pitch In");
     ASSERT_FALSE(portUuid.isEmpty());
     const auto portNodeId = nodeIdForUuid(engine, portUuid);
 
@@ -194,11 +194,11 @@ TEST(MacroCardJack, DroppingACableExactlyOnAnExistingInputJackWiresToThatPortNot
     auto* extComp = findComponent(editor, extOscId);
     ASSERT_NE(extComp, nullptr);
 
-    auto* card = editor.getMacroCardForTest(m.macroId);
+    auto* card = editor.getMacroController().getMacroCardForTest(m.macroId);
     ASSERT_NE(card, nullptr);
     ASSERT_TRUE(card->isVisible());
 
-    const auto layout = editor.macroCardPortLayout(m.macroId);
+    const auto layout = editor.getMacroController().macroCardPortLayout(m.macroId);
     ASSERT_EQ(layout.size(), 1u);
     ASSERT_TRUE(layout[0].isInput);
     ASSERT_EQ(layout[0].nodeUuid, portUuid);
@@ -232,8 +232,8 @@ TEST(MacroCardJack, DroppingOnAJackWithTheWrongDirectionIsRefusedAndCreatesNoCon
     auto m = makeTwoMemberMacro(editor, engine);
 
     // An INPUT port on the card...
-    const auto portUuid = editor.addMacroPort(m.macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV,
-                                              MacroPortShape::Mono, 1, "Pitch In");
+    const auto portUuid = editor.getMacroController().addMacroPort(
+        m.macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "Pitch In");
     ASSERT_FALSE(portUuid.isEmpty());
     const auto portNodeId = nodeIdForUuid(engine, portUuid);
 
@@ -246,9 +246,9 @@ TEST(MacroCardJack, DroppingOnAJackWithTheWrongDirectionIsRefusedAndCreatesNoCon
     auto* extComp = findComponent(editor, extFilterId);
     ASSERT_NE(extComp, nullptr);
 
-    auto* card = editor.getMacroCardForTest(m.macroId);
+    auto* card = editor.getMacroController().getMacroCardForTest(m.macroId);
     ASSERT_NE(card, nullptr);
-    const auto layout = editor.macroCardPortLayout(m.macroId);
+    const auto layout = editor.getMacroController().macroCardPortLayout(m.macroId);
     ASSERT_EQ(layout.size(), 1u);
     const auto targetScreen = card->localPointToGlobal(layout[0].jackPos.toFloat());
 
@@ -284,17 +284,17 @@ TEST(MacroCardJack, BoundaryCableThroughAPortAnchorsAtItsJackWhileAnInteriorMemb
     editor.connectPorts(extOscId, 0, m.b, 0, /*isMidi=*/false, /*recordUndo=*/false);
 
     // Cable 2: a real port, connected to a second external module.
-    const auto outUuid = editor.addMacroPort(m.macroId, /*isInput=*/false, synth::MacroPortKind::AudioCV,
-                                             MacroPortShape::Mono, 1, "Out");
+    const auto outUuid = editor.getMacroController().addMacroPort(
+        m.macroId, /*isInput=*/false, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "Out");
     ASSERT_FALSE(outUuid.isEmpty());
     const auto outNodeId = nodeIdForUuid(engine, outUuid);
     auto extSinkId = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 900, 1100);
     editor.connectPorts(outNodeId, 0, extSinkId, 0, /*isMidi=*/false, /*recordUndo=*/false);
 
-    auto* card = editor.getMacroCardForTest(m.macroId);
+    auto* card = editor.getMacroController().getMacroCardForTest(m.macroId);
     ASSERT_NE(card, nullptr);
     const auto cardBounds = card->getBounds();
-    const auto layout = editor.macroCardPortLayout(m.macroId);
+    const auto layout = editor.getMacroController().macroCardPortLayout(m.macroId);
     ASSERT_EQ(layout.size(), 1u);
     const auto expectedJackCanvas = (cardBounds.getPosition() + layout[0].jackPos).toFloat();
 
@@ -346,7 +346,7 @@ TEST(MacroCardJack, InteriorMemberCableEnteringMacroAnchorsOnTheLeftEdge) {
     auto extOscId = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 10);
     editor.connectPorts(extOscId, 0, m.b, 0, /*isMidi=*/false, /*recordUndo=*/false);
 
-    auto* card = editor.getMacroCardForTest(m.macroId);
+    auto* card = editor.getMacroController().getMacroCardForTest(m.macroId);
     ASSERT_NE(card, nullptr);
     const auto cardBounds = card->getBounds();
 
@@ -378,7 +378,7 @@ TEST(MacroCardJack, InteriorMemberCableLeavingMacroAnchorsOnTheRightEdge) {
     auto extSinkId = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 10);
     editor.connectPorts(m.a, 0, extSinkId, 0, /*isMidi=*/false, /*recordUndo=*/false);
 
-    auto* card = editor.getMacroCardForTest(m.macroId);
+    auto* card = editor.getMacroController().getMacroCardForTest(m.macroId);
     ASSERT_NE(card, nullptr);
     const auto cardBounds = card->getBounds();
 
@@ -408,7 +408,7 @@ TEST(MacroCardJack, SeveralEdgeAnchoredCablesOnTheSameSideGetDistinctYPositions)
     auto filterA = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 100);
     auto filterB = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     editor.setSelectedNodes({filterA, filterB});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
     ASSERT_TRUE(editor.getMacros().find(macroId)->collapsed);
 
@@ -420,7 +420,7 @@ TEST(MacroCardJack, SeveralEdgeAnchoredCablesOnTheSameSideGetDistinctYPositions)
     editor.connectPorts(extAbove, 0, filterA, 0, /*isMidi=*/false, /*recordUndo=*/false);
     editor.connectPorts(extBelow, 0, filterB, 0, /*isMidi=*/false, /*recordUndo=*/false);
 
-    auto* card = editor.getMacroCardForTest(macroId);
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
     ASSERT_NE(card, nullptr);
     const auto cardBounds = card->getBounds();
 
@@ -449,8 +449,8 @@ TEST(MacroCardJack, EdgeAnchoredCableDoesNotLandOnAPortJackOnTheSameSide) {
 
     // A real input port (case a) alongside an ordinary interior-member cable (case b) crossing
     // the SAME left edge - the two treatments must not coincide.
-    const auto inUuid =
-        editor.addMacroPort(m.macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    const auto inUuid = editor.getMacroController().addMacroPort(
+        m.macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
     ASSERT_FALSE(inUuid.isEmpty());
     const auto portNodeId = nodeIdForUuid(engine, inUuid);
     auto extForPort = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 100);
@@ -459,7 +459,7 @@ TEST(MacroCardJack, EdgeAnchoredCableDoesNotLandOnAPortJackOnTheSameSide) {
     auto extForInterior = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 150);
     editor.connectPorts(extForInterior, 0, m.b, 0, /*isMidi=*/false, /*recordUndo=*/false);
 
-    auto* card = editor.getMacroCardForTest(m.macroId);
+    auto* card = editor.getMacroController().getMacroCardForTest(m.macroId);
     ASSERT_NE(card, nullptr);
     const auto cardBounds = card->getBounds();
 
@@ -499,8 +499,8 @@ TEST(MacroCardJack, UngroupingRemovesThePortAndSplicesTheExternalCableToTheInter
     auto m = makeTwoMemberMacro(editor, engine);
     ASSERT_TRUE(editor.getMacros().find(m.macroId)->collapsed);
 
-    const auto inUuid =
-        editor.addMacroPort(m.macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    const auto inUuid = editor.getMacroController().addMacroPort(
+        m.macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
     ASSERT_FALSE(inUuid.isEmpty());
     const auto portNodeId = nodeIdForUuid(engine, inUuid);
 
@@ -517,7 +517,7 @@ TEST(MacroCardJack, UngroupingRemovesThePortAndSplicesTheExternalCableToTheInter
     // Ungroup by selecting a member and calling the same entry point Cmd+Shift+G drives
     // (GraphEditor::ungroupSelection).
     editor.setSelectedNodes({m.a});
-    editor.ungroupSelection();
+    editor.getMacroController().ungroupSelection();
 
     ASSERT_EQ(editor.getMacros().find(m.macroId), nullptr) << "the macro record itself is gone";
     EXPECT_EQ(editor.getAudioEngine().getGraph().getNodeForId(portNodeId), nullptr)
@@ -544,8 +544,8 @@ TEST(MacroCardJack, UngroupingDropsAOneSidedPortWithNothingToSpliceBackTo) {
     editor.setSize(1600, 1200);
     auto m = makeTwoMemberMacro(editor, engine);
 
-    const auto inUuid =
-        editor.addMacroPort(m.macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    const auto inUuid = editor.getMacroController().addMacroPort(
+        m.macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
     ASSERT_FALSE(inUuid.isEmpty());
     const auto portNodeId = nodeIdForUuid(engine, inUuid);
 
@@ -554,7 +554,7 @@ TEST(MacroCardJack, UngroupingDropsAOneSidedPortWithNothingToSpliceBackTo) {
     ASSERT_TRUE(hasConnection(engine, extOscId, 0, portNodeId, 0));
 
     editor.setSelectedNodes({m.a});
-    editor.ungroupSelection();
+    editor.getMacroController().ungroupSelection();
 
     EXPECT_EQ(editor.getAudioEngine().getGraph().getNodeForId(portNodeId), nullptr);
     EXPECT_FALSE(hasConnection(engine, extOscId, 0, portNodeId, 0));

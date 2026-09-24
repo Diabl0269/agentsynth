@@ -117,6 +117,7 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
     if (source != nullptr && source == appProperties.getUserSettings()) {
         applyNaturalScrollingPreference();
         applyZoomScrollPreference();
+        applyMidiRemotePreferences();
         // FRO12 (P9-6): a live Preferences placement change applies immediately, no restart --
         // idempotent (mixerPlacement_ no-ops when the persisted value already matches), so this is
         // also safe against the same broadcast a DetachedPanelWindow's own bounds-persist
@@ -322,6 +323,13 @@ void MainComponent::timerCallback() {
     // component's own tab/visibility state.
     if (mixerDock.isMixerShowing() || mixerPlacement_.isOwnPanelShowing())
         mixerDock.refreshMeters();
+
+    // FRO131 (docs/control/midi-remote-ui.md#surface-centre): same "existing 10 Hz tick, only
+    // while showing" shape as the mixer meters above -- well under the design doc's <=30 Hz cap,
+    // and no free-running timer of its own. MidiRemote has no Own-panel-style placement, so
+    // isMidiRemoteShowing() alone (docked-and-active OR detached) is the whole gate.
+    if (mixerDock.isMidiRemoteShowing())
+        mixerDock.refreshMidiRemoteActivity();
 
     // Status bar polls at 5 Hz (every 2nd tick of the 10 Hz timer). update() is gated — it
     // only repaints the status bar when a displayed value actually changes. ZERO logging.
@@ -571,7 +579,7 @@ void MainComponent::launchOpenProjectChooser() {
 // Cmd+S's actual decision: resave silently to the remembered bundle when one is open and
 // `forceChooser` is false, otherwise prompt (defaulting the suggested name to `.agsproj`, which
 // is what steers a first save toward the bundle format instead of the legacy plain preset).
-// `forceChooser` is what "Save Project As" (Cmd+Opt+S) sets to always prompt even with a bundle
+// `forceChooser` is what "Save Project As" (Cmd+Shift+S) sets to always prompt even with a bundle
 // already open. `onFinished` (optional) reports whether the save actually happened: false for a
 // cancelled chooser AND for a save that ran but failed — the unsaved-changes guard's Save arm
 // is the only caller that supplies it, since every other call site (menu/toolbar) has nothing
@@ -586,7 +594,9 @@ void MainComponent::performSaveProject(bool forceChooser, std::function<void(boo
 
     const auto suggested = synth::ProjectBundle::getDefaultProjectsDirectory().getChildFile(
         currentPatchName_ + synth::ProjectBundle::kBundleExtension);
-    fileChooser = std::make_unique<juce::FileChooser>("Save Project", suggested, kPatchFileFilter);
+    // Bundle-only filter: with "*.json;*.agsproj" the macOS panel appended the FIRST listed type to
+    // a bare typed name, so "Save Project As" silently wrote a plain .json patch.
+    fileChooser = std::make_unique<juce::FileChooser>("Save Project", suggested, "*.agsproj");
     auto flags = juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles;
     fileChooser->launchAsync(flags, [this, onFinished](const juce::FileChooser& fc) {
         auto file = fc.getResult();
@@ -595,6 +605,9 @@ void MainComponent::performSaveProject(bool forceChooser, std::function<void(boo
                 onFinished(false);
             return;
         }
+        // Whatever the user typed (no extension, or a stray .json), this command saves a project.
+        if (file.getFileExtension() != synth::ProjectBundle::kBundleExtension)
+            file = file.withFileExtension(synth::ProjectBundle::kBundleExtension);
         const bool ok = saveToFile(file);
         if (onFinished)
             onFinished(ok);

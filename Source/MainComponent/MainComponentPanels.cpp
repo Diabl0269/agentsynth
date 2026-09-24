@@ -4,6 +4,8 @@
 // MainComponent is declared in MainComponent.h; the rest of its implementation lives in the
 // sibling MainComponent*.cpp units next to this one.
 #include "MainComponent.h"
+#include "MidiRemote/MidiRemotePreferences.h"
+#include "UI/MidiRemote/MidiLearnMenu.h"
 #include "WhatsNewData.h"
 #include <algorithm>
 
@@ -315,6 +317,18 @@ MainComponent::EditSurface MainComponent::resolveEditSurface() const {
 }
 
 bool MainComponent::keyPressed(const juce::KeyPress& key) {
+    // FRO130: Esc cancels an armed MIDI Learn (docs/control/midi-remote-ui.md#the-learn-interaction),
+    // ahead of everything below -- including GraphEditor's own canvas Escape (clears the selection),
+    // which only reaches here at all when nothing is selected.
+    if (key == juce::KeyPress::escapeKey && midiLearnController_.isPickingTarget()) {
+        midiLearnController_.cancelPickTarget();
+        return true;
+    }
+    if (key == juce::KeyPress::escapeKey && midiLearnController_.isArmed()) {
+        midiLearnController_.cancelArmed();
+        return true;
+    }
+
     // The LAST stop for a key: JUCE bubbles an unhandled keyPressed up the parent chain, so
     // everything the focused surface wanted has already had its turn. Only COMMAND actions are
     // dispatched from here.
@@ -405,19 +419,30 @@ void MainComponent::resized() {
     // A panel that is both closed AND hidden is skipped entirely — its bounds are dead state, and
     // removeFrom*(0) would carve nothing from the canvas anyway.
     // FRO12 (P9-6): the Mixer's "Own panel" placement -- a second, INDEPENDENT bottom strip BELOW
-    // the Timeline dock carved next. Fixed height, no slide (the ticket's own scope cut -- see
-    // MixerPlacementController's class comment): a plain visible/hidden carve, same "|| isVisible()
-    // frame-0" guard as every other panel above. Carved FIRST (before the Timeline dock below)
+    // the Timeline dock carved next. FRO231: it slides and has a user height like the dock, but
+    // through its OWN PanelSlide inside MixerPlacementController (which calls back into this pass
+    // each frame), so its carve is asked for rather than derived from a member here. Same "|| showing"
+    // frame-0 guard as every other panel above. Carved FIRST (before the Timeline dock below)
     // so it claims the window's actual bottom edge -- carving it second would instead stack it
     // ABOVE the Timeline dock, the opposite of docs/mixer/panel.md's own layout.
-    if (mixerPlacement_.isOwnPanelShowing())
-        mixerPlacement_.setBounds(bounds.removeFromBottom(synth::ui::MixerPlacementController::kOwnPanelHeight));
+    const int dockMinHeight = defaultTimelinePanelHeight();
+    const bool dockOpen = timelineSlide_.getProgress() > 0.0f || mixerDock.isVisible();
+    mixerPlacement_.setLayoutContext(getHeight(), dockOpen ? dockMinHeight : 0);
+    const int ownCarve = mixerPlacement_.getCarveHeight();
+    if (ownCarve > 0 || mixerPlacement_.isOwnPanelShowing())
+        mixerPlacement_.setBounds(bounds.removeFromBottom(ownCarve));
 
-    if (timelineSlide_.getProgress() > 0.0f || mixerDock.isVisible()) {
+    if (dockOpen) {
         // Re-clamped every pass: the window may have shrunk since the height was set (or persisted
         // on a larger one), and the canvas must stay usable.
         timelinePanelHeight_ = clampTimelinePanelHeight(timelinePanelHeight_);
-        mixerDock.setBounds(bounds.removeFromBottom(timelineSlide_.sizeBetween(0, timelinePanelHeight_)));
+        // With the Own panel open too, the two strips share the same 3/4-of-the-window budget: the
+        // dock gives way (never below its own minimum) rather than eat the canvas. Local only --
+        // the stored, persisted height is the user's wish and comes back when the Own panel closes.
+        const int dockHeight =
+            getHeight() > 0 ? std::min(timelinePanelHeight_, std::max(dockMinHeight, (getHeight() * 3) / 4 - ownCarve))
+                            : timelinePanelHeight_;
+        mixerDock.setBounds(bounds.removeFromBottom(timelineSlide_.sizeBetween(0, dockHeight)));
     }
 
     if (aiW > 0 || aiChatComponent.isVisible())
@@ -490,6 +515,10 @@ void MainComponent::applyToolbarIcons() {
     // No dedicated timeline glyph exists yet — reuse TransportPlay, otherwise unused this
     // phase ("scaffolding only — no DrawableButton wired"; see IconLibrary.h).
     setIcon(toggleTimelineButton, Icon::TransportPlay);
+    // FRO131: TrackMidi is a real MIDI glyph already in the library (used for track-header kind
+    // icons) -- no need for a dedicated new asset, same "reuse what exists" reasoning as
+    // toggleTimelineButton's own TransportPlay borrow above.
+    setIcon(toggleMidiRemoteButton, Icon::TrackMidi);
     setIcon(themeToggleButton, Icon::ThemeToggle);
 
     // Master-mute uses the transport-stop glyph (no real play/stop transport this phase).
@@ -505,6 +534,8 @@ void MainComponent::applyToolbarIcons() {
     toggleModMatrixButton.setToggleState(graphEditor.isModMatrixVisible(), juce::dontSendNotification);
     toggleAiPanelButton.setToggleState(isAiPanelVisible, juce::dontSendNotification);
     toggleTimelineButton.setToggleState(isTimelineVisible, juce::dontSendNotification);
+    toggleMidiRemoteButton.setToggleState(isTimelineVisible && mixerDock.isMidiRemoteTabActive(),
+                                          juce::dontSendNotification);
 
     // Text: cleared in narrow mode; stateful for the toggles in wide mode.
     newButton.setButtonText(iconOnly ? "" : "New");
@@ -520,6 +551,9 @@ void MainComponent::applyToolbarIcons() {
                                                : (graphEditor.isMinimapVisible() ? "Hide Minimap" : "Show Minimap"));
     toggleAiPanelButton.setButtonText(iconOnly ? "" : (isAiPanelVisible ? "Hide AI" : "Show AI"));
     toggleTimelineButton.setButtonText(iconOnly ? "" : (isTimelineVisible ? "Hide Timeline" : "Show Timeline"));
+    toggleMidiRemoteButton.setButtonText(
+        iconOnly ? ""
+                 : ((isTimelineVisible && mixerDock.isMidiRemoteTabActive()) ? "Hide MIDI Remote" : "MIDI Remote"));
     toggleLibraryButton.setButtonText(iconOnly ? "" : (isLibraryVisible ? "Hide Library" : "Show Library"));
     themeToggleButton.setButtonText(
         iconOnly ? ""
@@ -532,7 +566,7 @@ void MainComponent::applyToolbarIcons() {
     };
 
     newButton.setTooltip(hint("New patch", "newPatch"));
-    saveButton.setTooltip(hint("Save preset", "savePreset"));
+    saveButton.setTooltip(hint("Save project", "savePreset"));
     loadButton.setTooltip(hint("Load a patch or project", "openProject"));
     settingsButton.setTooltip(hint("Open settings", "openSettings"));
     feedbackButton.setTooltip("Send feedback");
@@ -556,6 +590,10 @@ void MainComponent::applyToolbarIcons() {
 
     const juce::String timelineBase = isTimelineVisible ? "Hide Timeline" : "Show Timeline";
     toggleTimelineButton.setTooltip(hint(timelineBase, "toggleTimelinePanel"));
+
+    const juce::String midiRemoteBase =
+        (isTimelineVisible && mixerDock.isMidiRemoteTabActive()) ? "Hide MIDI Remote" : "Show MIDI Remote";
+    toggleMidiRemoteButton.setTooltip(hint(midiRemoteBase, "toggleMidiRemotePanel"));
 
     const juce::String libBase = isLibraryVisible ? "Hide Library" : "Show Library";
     toggleLibraryButton.setTooltip(hint(libBase, "toggleLibrary"));
@@ -720,6 +758,30 @@ void MainComponent::performToggleMixerPanel() {
     mixerDock.setActiveTab(synth::ui::MixerDockComponent::Tab::Mixer);
 }
 
+// FRO131: same open/close symmetry as performToggleMixerPanel() above -- MidiRemote has no
+// placement-controller detour (unlike Mixer's mixerPlacement_.revealOrToggle()), since it offers
+// no Own-panel/Window placement variant.
+void MainComponent::performToggleMidiRemotePanel() {
+    if (!isTimelineVisible) {
+        isTimelineVisible = true;
+        appProperties.getUserSettings()->setValue("timelinePanelVisible", "1");
+        appProperties.getUserSettings()->saveIfNeeded();
+        mixerDock.setActiveTab(synth::ui::MixerDockComponent::Tab::MidiRemote);
+        applyToolbarIcons();
+        beginPanelSlide();
+        return;
+    }
+    if (mixerDock.isMidiRemoteTabActive()) {
+        isTimelineVisible = false;
+        appProperties.getUserSettings()->setValue("timelinePanelVisible", "0");
+        appProperties.getUserSettings()->saveIfNeeded();
+        applyToolbarIcons();
+        beginPanelSlide();
+        return;
+    }
+    mixerDock.setActiveTab(synth::ui::MixerDockComponent::Tab::MidiRemote);
+}
+
 // ---- Collapsible library sidebar (slides, persisted) ----
 // Collapse/expand the library sidebar. Slides to the target layout (beginPanelSlide()).
 void MainComponent::setLibraryVisible(bool v) {
@@ -786,6 +848,8 @@ void MainComponent::showWhatsNewDialog() {
     juce::AlertWindow::showAsync(options, nullptr);
 }
 
+void MainComponent::openContributePage() { urlOpener_(juce::URL(synth::branding::kContributeUrl)); }
+
 // ---- Alignment guides toggle (UI Phase 7 - Item 4) ----
 void MainComponent::setAlignmentGuidesEnabled(bool enabled) {
     isAlignmentGuidesEnabled = enabled;
@@ -818,4 +882,21 @@ void MainComponent::applyZoomScrollPreference() {
     const bool upZoomsIn = appProperties.getUserSettings() == nullptr ||
                            appProperties.getUserSettings()->getBoolValue(kZoomScrollUpZoomsInKey, true);
     timelinePanel.setZoomScrollInverted(!upZoomsIn);
+}
+
+void MainComponent::applyMidiRemotePreferences() {
+    const auto* settings = appProperties.getUserSettings();
+    if (settings == nullptr)
+        return;
+    const auto defaultTakeover = synth::midi::loadDefaultTakeover(*settings);
+    remoteEngine.setDefaultTakeover(defaultTakeover);
+    mixerDock.getMidiRemotePanel().setDefaultTakeover(defaultTakeover);
+
+    const bool showBadges = synth::midi::loadShowBadges(*settings);
+    if (showBadges == synth::ui::midilearn::areMappedBadgesVisible())
+        return;
+    synth::ui::midilearn::setMappedBadgesVisible(showBadges);
+    graphEditor.repaintMidiLearnBadges();
+    mixerDock.getMixerPanel().repaint();
+    timelinePanel.repaint();
 }

@@ -749,6 +749,15 @@ private:
     bool hasPlayheadX_ = false;
     // See setFollowPlayhead. Off by default.
     bool followPlayhead_ = false;
+    // Follow's auto-page branch (setPlayheadBeat) is suspended -- i.e. it never moves rollView_ --
+    // until this goes back to false. Set whenever the user changes the horizontal view on their
+    // own terms (openClip's fresh fit-to-clip framing counts: a stale follow position from the
+    // PREVIOUS clip must not fight the pattern the user just opened) or scrolls/zooms the roll
+    // manually; cleared only by an explicit setFollowPlayhead(true), which is the one gesture that
+    // says "snap to the playhead now". Without this, follow re-pages on the very next tick after
+    // either action, which reads as "the notes editor opens on an empty view" and "scrolling snaps
+    // back" respectively -- see setPlayheadBeat's follow branch in PianoRollPainting.cpp.
+    bool followSuspended_ = false;
 
     bool quantiseFlash_ = false;
     bool quantiseLengthFlash_ = false;

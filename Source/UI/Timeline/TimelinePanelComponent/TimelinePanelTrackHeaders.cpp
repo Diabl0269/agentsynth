@@ -457,7 +457,7 @@ int TimelinePanelComponent::trackDropBoundaryForScreenY(int screenY) const {
         return 0;
     // getLocalPoint with a null source component treats the point as already being in SCREEN
     // coordinates (see its own JUCE doc comment) — the same "compare against something that isn't
-    // this row" idiom ResizeHandle::desiredHeightFor uses, just resolved against the list instead
+    // this row" idiom PanelResizeHandle::desiredHeightFor uses, just resolved against the list instead
     // of the panel.
     const int localY = trackHeaderList_.getLocalPoint(nullptr, juce::Point<int>(0, screenY)).y;
     const int rowHeight = currentRowHeight();

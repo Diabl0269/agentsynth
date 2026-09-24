@@ -46,6 +46,7 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     // stored on the host now, applied to whichever DetachedPanelWindow it builds later. Re-running
     // MainComponent's own registration pass on every detach/redock (rather than reordering/renaming
     // anything already registered above) is the guard rule the plan's focus section spells out.
+    mixerDock.getMidiRemoteHost().setHostedPanelFocusRegion("midiRemote", mixerDock.getMidiRemotePanel());
     mixerDock.getTimelineHost().setHostedPanelFocusRegion("timeline", timelinePanel);
     mixerDock.getMixerHost().setHostedPanelFocusRegion("mixer", mixerDock.getMixerPanel());
     mixerDock.onPanelDetachStateChanged = [this] { rebuildFocusRegions(); };
@@ -63,7 +64,12 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
     // called from the AFTER-restore hook) AFTER the restore already freed the param --
     // MixerFader::unbind()'s removeListener() on that freed memory is what hung the Linux CI build
     // (deadlock inside CriticalSection::enter on freed memory) that this fixes.
-    graphEditor.onBeforeDetachAllModuleComponents = [this] { mixerDock.getMixerPanel().unbindAllColumns(); };
+    // FRO135: a pick-target session also ends here -- its candidates are components this rebuild is
+    // about to free, and a click on one must never assign to a node that no longer exists.
+    graphEditor.onBeforeDetachAllModuleComponents = [this] {
+        midiLearnController_.cancelPickTarget();
+        mixerDock.getMixerPanel().unbindAllColumns();
+    };
     // The channel chip's click (TrackChannelLinkSurface::revealChannelForTrack, "THE P9-5 HOOK"
     // per its own comment): open the dock (same sequence performToggleMixerPanel's own "closed"
     // branch runs) before revealColumnForStrip switches tabs and scrolls to the column -- a closed
@@ -109,19 +115,13 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
         });
     });
 
-    // The panel's top-edge drag reports a desired height; THIS component owns it — clamp, lay out
-    // live, and persist once the drag ends (not per pixel).
-    //
-    // FRO11 (P9-5): the panel reports its own desired CONTENT height (TimelinePanelComponent::
-    // ResizeHandle::desiredHeightFor stays agnostic of whatever chrome it sits inside), but
-    // setTimelinePanelHeight owns the TOTAL dock-carve height -- mixerDock's own tab strip above
-    // that content, whenever the timeline is showing inside the shared dock rather than
-    // standalone. This is the one seam that knows about both, so it adds the difference.
-    timelinePanel.onResizeHeight = [this](int desiredHeight) {
-        setTimelinePanelHeight(desiredHeight + synth::ui::MixerDockComponent::kTabStripHeight, /*persist=*/false);
-    };
-    timelinePanel.onResizeHeightCommitted = [this](int desiredHeight) {
-        setTimelinePanelHeight(desiredHeight + synth::ui::MixerDockComponent::kTabStripHeight, /*persist=*/true);
+    // The dock's top-edge drag (FRO231: one handle for every tab, not the Timeline panel's own)
+    // reports a desired TOTAL dock-carve height, measured from the dock's pinned bottom edge --
+    // exactly what setTimelinePanelHeight owns, so no translation. THIS component clamps it, lays
+    // out live, and persists once the drag ends (not per pixel).
+    mixerDock.onResizeHeight = [this](int desiredHeight) { setTimelinePanelHeight(desiredHeight, /*persist=*/false); };
+    mixerDock.onResizeHeightCommitted = [this](int desiredHeight) {
+        setTimelinePanelHeight(desiredHeight, /*persist=*/true);
     };
 }
 

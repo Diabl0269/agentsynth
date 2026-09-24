@@ -580,6 +580,88 @@ TEST(HostedPluginTest, UntrustedApplyNeverReachesSetExtraStateOnAnExistingNode) 
     EXPECT_EQ(juce::JSON::toString(modulePtr->getExtraState()), juce::JSON::toString(before));
 }
 
+TEST(HostedPluginTest, CardLayoutOverrideRoundTripsThroughTheTrustedExtraStatePath) {
+    StubBackend backend;
+    HostedPluginBackend::ScopedDefault installed(&backend);
+
+    juce::AudioProcessorGraph source;
+    auto module = std::make_unique<HostedPluginModule>();
+    auto* modulePtr = module.get();
+    source.addNode(std::move(module));
+    modulePtr->prepareToPlay(kSampleRate, kBlockSize);
+    modulePtr->loadPlugin(stubDescription("Layout Plugin"), backend);
+    ASSERT_TRUE(pumpUntil([&] { return modulePtr->hasInstance(); }));
+
+    EXPECT_FALSE(modulePtr->getExtraState().getDynamicObject()->hasProperty("cardLayout"))
+        << "no override, no key: an untouched card adds no JSON noise";
+
+    const juce::var layout =
+        juce::JSON::parse(R"({"version":1,"slots":[{"paramId":"cutoff","indexHint":2,"label":"Cut","kind":"knob"}]})");
+    modulePtr->setCardLayoutOverride(layout);
+    ASSERT_TRUE(modulePtr->getExtraState().getDynamicObject()->hasProperty("cardLayout"));
+
+    const juce::var json = synth::AIStateMapper::graphToJSON(source);
+    juce::AudioProcessorGraph restored;
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, restored, /*clearExisting=*/true, /*trusted=*/true));
+    HostedPluginModule* restoredModule = nullptr;
+    for (auto* node : restored.getNodes())
+        if (auto* candidate = dynamic_cast<HostedPluginModule*>(node->getProcessor()))
+            restoredModule = candidate;
+    ASSERT_NE(restoredModule, nullptr);
+    EXPECT_EQ(juce::JSON::toString(restoredModule->getCardLayoutOverride()), juce::JSON::toString(layout));
+    ASSERT_TRUE(pumpUntil([&] { return restoredModule->hasInstance(); }));
+    EXPECT_EQ(juce::JSON::toString(restoredModule->getCardLayoutOverride()), juce::JSON::toString(layout))
+        << "the override must survive the plugin finishing its load";
+
+    // A layout-only patch is what undo replays: it changes the override and nothing else.
+    const int createsBefore = backend.createCount;
+    modulePtr->setExtraState(HostedPluginModule::makeCardLayoutPatch({}));
+    EXPECT_TRUE(modulePtr->getCardLayoutOverride().isVoid());
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    EXPECT_EQ(backend.createCount, createsBefore) << "a layout patch must not reload the plugin";
+    EXPECT_EQ(modulePtr->getIdentity().name, "Layout Plugin");
+}
+
+TEST(HostedPluginTest, TheCardLayoutBelongsToThePluginItWasMadeFor) {
+    StubBackend backend;
+    HostedPluginBackend::ScopedDefault installed(&backend);
+
+    HostedPluginModule module;
+    module.prepareToPlay(kSampleRate, kBlockSize);
+    module.loadPlugin(stubDescription("First"), backend);
+    ASSERT_TRUE(pumpUntil([&] { return module.hasInstance(); }));
+
+    int changes = 0;
+    module.onCardLayoutChanged = [&] { ++changes; };
+    module.setCardLayoutOverride(juce::JSON::parse(R"({"version":1,"slots":[]})"));
+    module.setCardLayoutOverride(juce::JSON::parse(R"({"version":1,"slots":[]})"));
+    EXPECT_EQ(changes, 1) << "re-setting an equal layout is not a change";
+
+    module.loadPlugin(stubDescription("Second", 0x77), backend);
+    EXPECT_TRUE(module.getCardLayoutOverride().isVoid()) << "a different plugin must not inherit the layout";
+    EXPECT_EQ(changes, 2);
+}
+
+TEST(HostedPluginTest, UntrustedApplyNeverSetsACardLayoutOnAnExistingNode) {
+    StubBackend backend;
+    HostedPluginBackend::ScopedDefault installed(&backend);
+
+    juce::AudioProcessorGraph graph;
+    auto module = std::make_unique<HostedPluginModule>();
+    auto* modulePtr = module.get();
+    graph.addNode(std::move(module));
+    modulePtr->prepareToPlay(kSampleRate, kBlockSize);
+    modulePtr->loadPlugin(stubDescription("Victim"), backend);
+    ASSERT_TRUE(pumpUntil([&] { return modulePtr->hasInstance(); }));
+
+    const juce::var merge = juce::JSON::parse(
+        R"({"nodes":[{"id":1,"type":"Hosted Plugin","state":{"cardLayout":{"version":1,"slots":[]}}}],"connections":[]})");
+    EXPECT_FALSE(synth::AIStateMapper::applyJSONToGraph(merge, graph, /*clearExisting=*/false, /*trusted=*/false));
+
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    EXPECT_TRUE(modulePtr->getCardLayoutOverride().isVoid()) << "provider output must never author a card layout";
+}
+
 // ============================================================================
 // 6. Instance lifetime — the audio thread never frees
 // ============================================================================

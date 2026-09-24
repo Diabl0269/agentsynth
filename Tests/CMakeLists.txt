@@ -1,13 +1,13 @@
 enable_testing()
 
 include(FetchContent)
-# URL pinned in cmake/DependencyVersions.cmake (included by the top-level CMakeLists) so the
-# CI build/_deps cache key tracks the pin and nothing else.
+#URL pinned in cmake / DependencyVersions.cmake(included by the top - level CMakeLists) so the
+#CI build / _deps cache key tracks the pin and nothing else.
 FetchContent_Declare(
   googletest
   URL ${SYNTH_GOOGLETEST_URL}
 )
-# For Windows: Prevent overriding the parent project's compiler/linker settings
+#For Windows : Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
@@ -15,6 +15,7 @@ add_executable(Tests
     TestMain.cpp
     UI/Layout/LayoutUtilTests.cpp
     Modules/OscillatorTests.cpp
+    Modules/CardLayoutTests.cpp
     Modules/FilterTests.cpp
     Modules/StereoVoiceModule/StereoVoiceModulePanLawTests.cpp
     Modules/StereoVoiceModule/StereoVoiceModuleOscillatorTests.cpp
@@ -120,6 +121,7 @@ add_executable(Tests
     Engine/LatencyAlignmentTests.cpp
     Timeline/AudioClipPlaybackTests.cpp
     Plugin/HostedPluginTests.cpp
+    Plugin/PluginCardLayoutStoreTests.cpp
     Plugin/PluginScan/PluginScanLifecycleTests.cpp
     Plugin/PluginScan/PluginScanCrashTimeoutTests.cpp
     Plugin/PluginScan/PluginScanCrashGuardTests.cpp
@@ -190,6 +192,7 @@ add_executable(Tests
     UI/Graph/ModuleComponent/ModuleComponentWavetableTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentPaintTests.cpp
     UI/Graph/ModuleComponent/ModuleComponentEnvelopeCardTests.cpp
+    UI/Graph/ModuleComponent/ModuleComponentMidiLearnTests.cpp
     UI/Graph/AutomationUiReflectionTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentTests.cpp
     UI/Assistant/AIChatComponent/AIChatComponentHistoryTests.cpp
@@ -233,11 +236,25 @@ add_executable(Tests
     Project/UndoRedo/UndoRedoMidiRemoteTests.cpp
     MidiRemote/RemoteModelTests.cpp
     MidiRemote/RemoteEngineDecodeTests.cpp
+    MidiRemote/RemoteEngineTwoHalfDecodeTests.cpp
     MidiRemote/RemoteEngineApplyTests.cpp
+    MidiRemote/RemoteEngineFeedbackTests.cpp
     MidiRemote/RemoteEngineReconcileTests.cpp
     MidiRemote/RemoteEngineHostedTests.cpp
+    MidiRemote/RemoteEngineNodeCommandE2ETests.cpp
+    MidiRemote/MidiRemoteWorkflowE2ETests.cpp
     MidiRemote/RemoteEngineThreadingTests.cpp
+    MidiRemote/RemoteEngineLearnTests.cpp
     MidiRemote/ControllerProfileStoreTests.cpp
+    MidiRemote/MidiRemoteFeedbackOutputsTests.cpp
+    MidiRemote/MidiRemoteLearnBinderTests.cpp
+    MidiRemote/MidiRemoteMappingTests.cpp
+    MidiRemote/MidiLearnControllerAssignTests.cpp
+    MidiRemote/MidiLearnControllerOrphanTests.cpp
+    MidiRemote/ControllerTemplatesTests.cpp
+    MidiRemote/ControllerDetectTests.cpp
+    MidiRemote/EncoderAutoDetectTests.cpp
+    MidiRemote/MidiLearnControllerTests.cpp
     App/E2EWorkflowTests.cpp
     Modules/ExternalMidiModuleTests.cpp
     Project/PresetManagerTests.cpp
@@ -254,12 +271,14 @@ add_executable(Tests
     App/ShortcutManager/ShortcutManagerDefaultsTests.cpp
     App/ShortcutManager/ShortcutManagerKeyMatchingTests.cpp
     App/ShortcutManager/ShortcutManagerTransportActionsTests.cpp
+    App/ShortcutManager/ShortcutManagerCursorActionsTests.cpp
     UI/Settings/ShortcutsSettingsTabTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabGraphBehaviourTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviourTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAutosaveTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycleTests.cpp
     UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMixerPlacementTests.cpp
+    UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMidiRemoteTests.cpp
     UI/Settings/FeedbackSettingsTabTests.cpp
     Engine/AudioRendering/AudioRenderingBasicTests.cpp
     Engine/AudioRendering/AudioRenderingFXModuleTests.cpp
@@ -322,6 +341,7 @@ add_executable(Tests
     Macros/MacroAutoPort/MacroAutoPortDeleteTests.cpp
     Macros/MacroCardJackTests.cpp
     Macros/MacroPortWidgetTests.cpp
+    Macros/MacroPortWidgetColourTests.cpp
     Macros/MacroBypassMuteTests.cpp
     UI/Graph/ClipboardTests.cpp
     UI/Layout/PanelAnimationAndLoadingTests.cpp
@@ -370,6 +390,7 @@ add_executable(Tests
     UI/Layout/FocusRegionTests.cpp
     UI/Timeline/AutomationEditorTests.cpp
     UI/Timeline/TimelineTransportBarTests.cpp
+    UI/Timeline/TransportBarMidiLearnTests.cpp
     UI/Timeline/TimelineViewStateTests.cpp
     UI/Mixer/MixerPanelComponentTests.cpp
     UI/Mixer/MixerPanelUndoUnbindTests.cpp
@@ -378,10 +399,29 @@ add_executable(Tests
     UI/Mixer/MixerFaderDragTests.cpp
     UI/Mixer/MixerSendListTests.cpp
     UI/Mixer/MixerDockComponentTests.cpp
+    UI/Mixer/MixerDockResizeTests.cpp
+    UI/Mixer/MixerOwnPanelResizeTests.cpp
+    UI/Mixer/MixerOwnPanelSlideTests.cpp
+    UI/Layout/PanelResizeHandleTests.cpp
+    UI/MidiRemote/MidiRemotePanelTests.cpp
+    UI/MidiRemote/MidiRemotePreferencesTests.cpp
+    UI/MidiRemote/MidiRemotePanelHostedTests.cpp
+    UI/MidiRemote/ControllerSurfaceDetectTests.cpp
+    UI/MidiRemote/MidiRemotePanelControllersTests.cpp
+    UI/MidiRemote/AddControllerPopoverTests.cpp
+    UI/MidiRemote/ControllersListTests.cpp
+    UI/MidiRemote/ControllerSurfaceTests.cpp
+    UI/MidiRemote/ControlInspectorTests.cpp
+    UI/MidiRemote/PickTargetOverlayTests.cpp
+    UI/MidiRemote/ActionPickerTests.cpp
+    UI/MidiRemote/OrphanControllerTests.cpp
+    UI/MidiRemote/MidiRemotePanelAssignTests.cpp
     UI/Mixer/MixerDockMeterGatingTests.cpp
     UI/Mixer/MixerEqThumbnailTests.cpp
     UI/Mixer/MixerColumnComponentTests.cpp
     UI/Mixer/MixerColumnComponentMeterTests.cpp
+    UI/Mixer/MixerColumnMidiLearnTests.cpp
+    UI/Mixer/MixerMasterColumnMidiLearnTests.cpp
     UI/Mixer/MixerMeterScaleTests.cpp
     UI/Mixer/MeterColourStopsTests.cpp
     UI/Mixer/MeterColourStopsPersistenceTests.cpp
@@ -421,6 +461,7 @@ add_executable(Tests
     UI/Chrome/ExportAudioDialogTests.cpp
     Engine/MetronomeTests.cpp
     Engine/DeviceChangeTests.cpp
+    Engine/MidiInputReconcileTests.cpp
     Timeline/TimelineE2ETests.cpp
     Project/PatchDocumentTests.cpp
     Project/ProjectBundleTests.cpp
@@ -430,13 +471,20 @@ add_executable(Tests
     App/BrandingTests.cpp
     ../Source/ShortcutManager/ShortcutManagerActionNames.cpp
     ../Source/MidiRemote/ControllerProfileStore.cpp
-    # Source/MidiRemote/RemoteEngine/*.cpp is NOT listed here on purpose: those five units are
+    ../Source/MidiRemote/MidiRemoteFeedbackOutputs.cpp
+    ../Source/MidiRemote/MidiLearnController.cpp
+    ../Source/MidiRemote/MidiLearnControllerMapping.cpp
+    ../Source/MidiRemote/MidiLearnControllerPick.cpp
+    ../Source/UI/Graph/PickTargetOverlay/GraphPickCandidates.cpp
+    ../Source/UI/Graph/PickTargetOverlay/PickTargetOverlay.cpp
+    # Source/MidiRemote/RemoteEngine/*.cpp is NOT listed here on purpose: those six units are
     # registered in the root CMakeLists.txt (Core), same as RemoteModel.h/RemoteModelJson.cpp right
     # above them there, because Core's own AudioEngineMidi.cpp/AudioEngineHostMode.cpp call into
     # synth::midi::RemoteMessageSink/hostSourceKey(). Tests links Core directly (see the
     # MeterColourStops.cpp comment above), so re-listing them here would double-compile/duplicate-
     # symbol them exactly like that comment warns against.
     ../Source/MainComponent/MainComponent.cpp
+    ../Source/MainComponent/MainComponentRemoteActionInvoker.cpp
     ../Source/MainComponent/MainComponentSetup.cpp
     ../Source/MainComponent/MainComponentSetupToolbar.cpp
     ../Source/MainComponent/MainComponentSetupTimeline.cpp
@@ -461,6 +509,7 @@ add_executable(Tests
     ../Source/UI/Timeline/ChannelChipComponent.cpp
     ../Source/UI/Timeline/TrackChannelLinkController.cpp
     ../Source/UI/Timeline/TimelineTransportBar.cpp
+    ../Source/UI/Timeline/TimelineTransportBarMidiLearn.cpp
     ../Source/UI/Mixer/MixerMeter.cpp
     # MeterColourStops.cpp is now compiled into Core (root CMakeLists.txt, FRO147) -- Tests links
     # Core directly, so it must NOT also be listed here (would double-compile/duplicate-symbol it).
@@ -471,12 +520,14 @@ add_executable(Tests
     ../Source/UI/Mixer/MixerEqThumbnail.cpp
     ../Source/UI/Mixer/MixerSendList.cpp
     ../Source/UI/Mixer/MixerColumnComponent.cpp
+    ../Source/UI/Mixer/MixerColumnMidiLearn.cpp
     ../Source/UI/Mixer/MixerDirectColumn.cpp
     ../Source/UI/Mixer/MixerMasterColumn.cpp
     ../Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.cpp
     ../Source/UI/Mixer/MixerPanelComponent/MixerPanelKeyboard.cpp
     ../Source/UI/Mixer/MixerDockComponent.cpp
     ../Source/UI/Mixer/MixerPlacementController.cpp
+    ../Source/UI/Layout/PanelResizeHandle.cpp
     ../Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.cpp
     ../Source/UI/Layout/DetachablePanelHost/DetachedPanelWindow.cpp
     ../Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.cpp
@@ -538,6 +589,23 @@ add_executable(Tests
     ../Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
     ../Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
     ../Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
+    ../Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp
+    ../Source/UI/MidiRemote/MidiLearnMenu.cpp
+    ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.cpp
+    ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelDetect.cpp
+    ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelHosted.cpp
+    ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelControllers.cpp
+    ../Source/UI/MidiRemote/Detect/DetectModeController.cpp
+    ../Source/UI/MidiRemote/AddController/AddControllerPopover.cpp
+    ../Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceToolbar.cpp
+    ../Source/UI/MidiRemote/ControllersList/ControllersListComponent.cpp
+    ../Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceComponent.cpp
+    ../Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceCell.cpp
+    ../Source/UI/MidiRemote/Inspector/ControlInspectorComponent.cpp
+    ../Source/UI/MidiRemote/ActionPicker/ActionPickerComponent.cpp
+    ../Source/UI/MidiRemote/Orphan/OrphanControllerComponent.cpp
+    ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelAssign.cpp
+    ../Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelOrphans.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibrarySearch.cpp
     ../Source/UI/Library/ModuleLibraryComponent/ModuleLibraryRows.cpp
@@ -551,7 +619,10 @@ add_executable(Tests
     ../Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogRowOrdering.cpp
     ../Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogTestSeams.cpp
     ../Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogAutoPortPrompt.cpp
+    ../Source/Plugin/Hosting/PluginCardLayoutStore.cpp
+    ../Source/Plugin/Hosting/HostedPluginCardLayout.cpp
     ../Source/Plugin/Hosting/HostedPluginEditorWindow.cpp
+    ../Source/UI/Settings/AudioSettingsTab.cpp
     ../Source/UI/Settings/SettingsWindow.cpp
     ../Source/UI/Settings/AppearanceSettingsTab.cpp
     ../Source/UI/Settings/MeterColourStopsEditor.cpp
@@ -560,6 +631,7 @@ add_executable(Tests
     ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviour.cpp
     ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAutosave.cpp
     ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMixerDefaults.cpp
+    ../Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMidiRemote.cpp
     ../Source/UI/Settings/ShortcutsSettingsTab.cpp
     ../Source/UI/Settings/FeedbackSettingsTab.cpp
     ../Source/UI/Chrome/WelcomeScreenComponent.cpp

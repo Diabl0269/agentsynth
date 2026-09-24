@@ -76,6 +76,9 @@ public:
     // what keeps an untouched install on the legacy defaults path above. Owners must null-check.
     std::function<void(std::unique_ptr<juce::XmlElement>)> onDeviceStateChanged;
 
+    // MESSAGE THREAD. Fires when reconcileMidiInputs() (FRO262) changes what's open; never in Hosted mode.
+    std::function<void()> onMidiDevicesChanged;
+
     // MESSAGE THREAD, installed by the OWNER before initialise(). Fires as the very first thing
     // shutdown() does, before mainProcessorGraph.clear() frees every node and its
     // AudioProcessorParameters. This is the seam the UI owner uses to detach live parameter
@@ -503,6 +506,9 @@ public:
     std::vector<juce::String> getOpenMidiInputIdentifiers() const;
 
 protected:
+    // TEST SEAM (message thread): devices JUCE currently sees as connected. See AudioEngineMidi.cpp.
+    virtual juce::Array<juce::MidiDeviceInfo> availableMidiInputs() const;
+
     // TEST SEAM, and the ONE place initialise() touches real hardware in Standalone mode:
     // it opens the audio device (from `savedDeviceState` when there is one, from JUCE's defaults
     // when there isn't), attaches this engine as the device callback, subscribes to device-state
@@ -726,6 +732,12 @@ private:
 
     juce::MidiMessageCollector midiMessageCollector;
     std::vector<std::unique_ptr<juce::MidiInput>> midiInputs;
+
+    // MESSAGE THREAD. Opens `info` into midiInputs unless already open; returns whether it did.
+    bool openMidiInput(const juce::MidiDeviceInfo& info);
+
+    // MESSAGE THREAD, Standalone only (FRO262). Returns whether the open set changed.
+    bool reconcileMidiInputs();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioEngine)
 };

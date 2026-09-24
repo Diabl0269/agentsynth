@@ -19,9 +19,10 @@ TEST(MacroPortFlow, DraggingFromAnExpandedMacroMemberToAnExternalModuleAutoCreat
     auto oscMember = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto filterMember = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 400);
     editor.setSelectedNodes({oscMember, filterMember});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false); // expand: members become real, visible ModuleComponents
+    editor.getMacroController().setMacroCollapsed(macroId,
+                                                  false); // expand: members become real, visible ModuleComponents
 
     auto* memberComp = compFor(editor, oscMember);
     ASSERT_NE(memberComp, nullptr);
@@ -60,9 +61,9 @@ TEST(MacroPortFlow, DraggingFromAnExternalModuleToAnExpandedMacroMemberAutoCreat
     auto oscMember = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto filterMember = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 400);
     editor.setSelectedNodes({oscMember, filterMember});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
     auto* memberComp = compFor(editor, filterMember);
     ASSERT_NE(memberComp, nullptr);
@@ -99,17 +100,17 @@ TEST(MacroPortFlow, DraggingBetweenMembersOfTwoDifferentMacrosCreatesAPortOnEach
     auto oscX = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto fillerX = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 400);
     editor.setSelectedNodes({oscX, fillerX});
-    const auto macroXId = editor.groupSelectionIntoMacro();
+    const auto macroXId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroXId.isEmpty());
-    editor.setMacroCollapsed(macroXId, false);
+    editor.getMacroController().setMacroCollapsed(macroXId, false);
 
     // Macro Y: a Filter (the drag destination) plus a filler member.
     auto filterY = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 900, 100);
     auto fillerY = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 400);
     editor.setSelectedNodes({filterY, fillerY});
-    const auto macroYId = editor.groupSelectionIntoMacro();
+    const auto macroYId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroYId.isEmpty());
-    editor.setMacroCollapsed(macroYId, false);
+    editor.getMacroController().setMacroCollapsed(macroYId, false);
 
     auto* oscXComp = compFor(editor, oscX);
     auto* filterYComp = compFor(editor, filterY);
@@ -147,9 +148,9 @@ TEST(MacroPortFlow, DraggingBetweenTwoMembersOfTheSameMacroCreatesAPlainDirectCo
     auto oscMember = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto filterMember = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     editor.setSelectedNodes({oscMember, filterMember});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
     auto* oscComp = compFor(editor, oscMember);
     auto* filterComp = compFor(editor, filterMember);
@@ -174,10 +175,10 @@ TEST(MacroPortFlow, DraggingToAnExistingPortDirectlyDoesNotMintASecondPortRegres
     editor.setSize(1600, 1200);
 
     auto macroId = makeTwoMemberMacro(editor, engine);
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
-    const auto portUuid =
-        editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    const auto portUuid = editor.getMacroController().addMacroPort(
+        macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
     ASSERT_FALSE(portUuid.isEmpty());
     const auto portId = nodeIdForUuid(engine, portUuid);
     ASSERT_TRUE(portId.uid != 0);
@@ -211,9 +212,9 @@ TEST(MacroPortFlow,
     auto lfoMember = addModuleAt(editor, engine, std::make_unique<LFOModule>(), 100, 100);
     auto fillerMember = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 400);
     editor.setSelectedNodes({lfoMember, fillerMember});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
     auto* lfoComp = compFor(editor, lfoMember);
     ASSERT_NE(lfoComp, nullptr);
@@ -286,9 +287,9 @@ TEST(MacroPortFlow, TheWholeModCVAutoCreateSequenceIsOneUndoStep) {
     auto lfoMember = addModuleAt(editor, engine, std::make_unique<LFOModule>(), 100, 100);
     auto fillerMember = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 400);
     editor.setSelectedNodes({lfoMember, fillerMember});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
     auto* lfoComp = compFor(editor, lfoMember);
     ASSERT_NE(lfoComp, nullptr);
@@ -345,18 +346,18 @@ TEST(MacroPortFlow,
     auto lfoX = addModuleAt(editor, engine, std::make_unique<LFOModule>(), 100, 100);
     auto fillerX = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 400);
     editor.setSelectedNodes({lfoX, fillerX});
-    const auto macroXId = editor.groupSelectionIntoMacro();
+    const auto macroXId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroXId.isEmpty());
-    editor.setMacroCollapsed(macroXId, false);
+    editor.getMacroController().setMacroCollapsed(macroXId, false);
 
     // Macro Y: a Wavetable Oscillator (its "Position" slider is the drag destination, a real
     // modulation target) plus a filler member.
     auto wtY = addModuleAt(editor, engine, std::make_unique<WavetableOscillatorModule>(), 900, 100);
     auto fillerY = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 900, 400);
     editor.setSelectedNodes({wtY, fillerY});
-    const auto macroYId = editor.groupSelectionIntoMacro();
+    const auto macroYId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroYId.isEmpty());
-    editor.setMacroCollapsed(macroYId, false);
+    editor.getMacroController().setMacroCollapsed(macroYId, false);
 
     auto* lfoXComp = compFor(editor, lfoX);
     auto* wtYComp = compFor(editor, wtY);
@@ -423,9 +424,9 @@ TEST(MacroPortFlow, TheWholeAutoCreateSequenceIsOneUndoStep) {
     auto oscMember = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto filterMember = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 400);
     editor.setSelectedNodes({oscMember, filterMember});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
     auto* memberComp = compFor(editor, oscMember);
     ASSERT_NE(memberComp, nullptr);
@@ -467,9 +468,9 @@ TEST(MacroPortFlow, AutoCreateOnDragDisabledPreferenceLeavesTheOriginalBehaviour
     auto oscMember = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto filterMember = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 100, 400);
     editor.setSelectedNodes({oscMember, filterMember});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.setMacroCollapsed(macroId, false);
+    editor.getMacroController().setMacroCollapsed(macroId, false);
 
     auto* memberComp = compFor(editor, oscMember);
     ASSERT_NE(memberComp, nullptr);

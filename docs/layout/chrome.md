@@ -197,6 +197,7 @@ launches via `ApplicationProperties`:
 |---|---|---|
 | `librarySidebarVisible` | `"1"` (true) | `moduleLibrary` left panel |
 | `aiPanelVisible` | `"0"` (false) | `aiChatComponent` right panel |
+| `mixerOwnPanelHeight` | absent (`220`, also the minimum) | the Mixer's "Own panel" strip — written once per resize drag, on mouse-up (FRO231) |
 
 Both keys are read at the top of `initialiseCommon()`, before any `setVisible()` or
 `addAndMakeVisible()` call. Cmd+B toggles the library sidebar, wired through `ShortcutManager`.
@@ -205,6 +206,16 @@ The Timeline and Mixer panels are a separate mechanism: each can additionally DE
 top-level window (`Source/UI/Layout/DetachablePanelHost/`) rather than only hide and show in place,
 and the Mixer's dock-vs-own-panel-vs-window placement is itself a Preferences setting. See
 [`docs/mixer/mixer.md`](../mixer/mixer.md).
+
+### Bottom dock height
+
+The bottom dock (Timeline / Mixer / MIDI Remote tabs) is resizable from ONE top-edge grab strip,
+`synth::ui::PanelResizeHandle`, owned by `MixerDockComponent` and therefore live on every tab
+(FRO231). Dragging reports the desired total dock height through `MixerDockComponent::onResizeHeight`
+(live) and `onResizeHeightCommitted` (mouse-up, only after a real drag); `MainComponent` clamps it
+(`[Metrics::timelinePanelHeight, max(metric, 75% of the window)]`), lays out live and persists the
+`timelinePanelHeight` key once per gesture. The height is the dock's, not a tab's, so it holds when
+switching tabs. Full rules: [`docs/timeline/timeline.md`](../timeline/timeline.md#panel-height).
 
 ## Welcome screen overlay
 

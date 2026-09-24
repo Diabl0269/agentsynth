@@ -50,10 +50,11 @@ namespace synth::midi {
 
 /** Packs (source, type, channel, number) into one sortable integer so the MIDI thread's lookup is a
  *  binary search over a flat array — no hashing, no allocation, no string compare. `channel` is
- *  0..16 (0 = the profile's "any channel"). */
+ *  0..16 (0 = the profile's "any channel"); `number` is 14 bits so an NRPN address fits (bits 0-13,
+ *  channel 14-18, type 19-21, source 22-26). */
 inline std::uint32_t packLookupKey(int sourceIndex, MessageType type, int channel, int number) noexcept {
-    return (static_cast<std::uint32_t>(sourceIndex) << 16) | (static_cast<std::uint32_t>(type) << 13) |
-           (static_cast<std::uint32_t>(channel) << 8) | static_cast<std::uint32_t>(number & 0xff);
+    return (static_cast<std::uint32_t>(sourceIndex) << 22) | (static_cast<std::uint32_t>(type) << 19) |
+           (static_cast<std::uint32_t>(channel) << 14) | static_cast<std::uint32_t>(number & 0x3fff);
 }
 
 /** Immutable once published. Built on the message thread by RemoteEngine::rebuildSnapshot. */
@@ -81,7 +82,25 @@ struct RemoteMappingSnapshot {
         // dereferences these — it only reports the slot index.
         juce::AudioProcessorParameter* param = nullptr;
         juce::CommandID commandId = 0;
+        // FRO253: the resolved graph node for a nodeCommand target (Target::isNodeCommand()) --
+        // resolved by nodeUuid alongside `param` above, on the message thread, in
+        // RemoteEngineReconcile.cpp.
+        juce::AudioProcessorGraph::NodeID nodeId;
         bool orphaned = false;
+        // FRO236: target.continuous.kind, copied out here so the apply path never has to reach
+        // through `target` -- masterVolume resolves `param` above through the injected
+        // ContinuousParameterLookup and is otherwise identical to a parameter slot; bpm/playhead
+        // have no `param` and are NEVER orphaned (there is nothing to resolve against a graph).
+        ContinuousTargetKind continuous = ContinuousTargetKind::bpm;
+        /** FRO140: `spec.number`, readable on the MIDI path -- the MSB CC (or NRPN address) a paired
+         *  slot decides "which half arrived?" against. Never changes after the snapshot is built. */
+        int messageNumber = 0;
+        // FRO139 (docs/control/midi-remote.md#controller-feedback): the assignment's own message
+        // spec and owning profile id, resolved at snapshot-build time same as everything else here.
+        // MESSAGE THREAD ONLY -- the MIDI path never reads either field, only RemoteEngineFeedback.cpp's
+        // drain-time echo does.
+        MessageSpec spec;
+        juce::String profileId;
     };
 
     /** Bumped on every publish, copied into every RemoteEvent the MIDI path pushes so the drain

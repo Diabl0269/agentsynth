@@ -7,7 +7,7 @@ enum CommandIDs {
     openSettings = 0x100,
     savePreset,
     // Save-with-a-chooser, always — the explicit escape hatch from savePreset's "resave silently
-    // to the remembered bundle" default. Rebindable (Cmd+Opt+S) — see resetToDefaults().
+    // to the remembered bundle" default. Rebindable (Cmd+Shift+S) — see resetToDefaults().
     saveProjectAs,
     // Legacy patch-only export: writes a plain `.json` via GraphEditor::savePreset directly, never
     // touching currentBundleDir_ or the window title -- a SIDE export, not "the project got
@@ -69,6 +69,7 @@ enum CommandIDs {
     togglePlayback,
     toggleTimelinePanel,
     toggleMixerPanel,
+    toggleMidiRemotePanel,
     // ---- Grid division, set outright (Ctrl+Shift+1..8) ----
     // Eight commands rather than one parameterised command because juce::ApplicationCommandManager
     // has no notion of an argument: a menu row and a key binding are per-command, so "set the grid
@@ -147,7 +148,21 @@ enum CommandIDs {
     // Routes through the transport bar's own metronome button, so its persisted
     // "timelineMetronomeEnabled" state stays authoritative.
     transportToggleMetronome,
-    transportReturnToStart
+    transportReturnToStart,
+    // FRO271: cursor moves and loop-locator jumps, command-dispatched so a MIDI Remote action
+    // target (or a keyboard shortcut) can fire them. Unbound by default like the family above.
+    // Appended after transportReturnToStart -- never interleaved, so persisted ids stay stable.
+    transportNudgeBackBeat,
+    transportNudgeForwardBeat,
+    transportNudgeBackBar,
+    transportNudgeForwardBar,
+    transportJumpToLoopStart,
+    transportJumpToLoopEnd,
+    // FRO94: opens the site's contribute page (branding::kContributeUrl) in the default browser --
+    // no dialog, no prompt, no analytics event. Menu-only like showWelcomeScreen/whatsNew (no
+    // ShortcutManager actionId/binding) and registered unconditionally. Appended last per the snapSet
+    // comment above, so no existing enumerator's value moves.
+    contribute
 };
 
 /** What getCommandForAction() answers for a SURFACE action — an id that is rebindable and appears
@@ -212,6 +227,8 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return toggleTimelinePanel;
     if (actionId == "toggleMixerPanel")
         return toggleMixerPanel;
+    if (actionId == "toggleMidiRemotePanel")
+        return toggleMidiRemotePanel;
     if (actionId == "snapSetWhole")
         return snapSetWhole;
     if (actionId == "snapSetHalf")
@@ -267,6 +284,18 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return transportToggleMetronome;
     if (actionId == "transportReturnToStart")
         return transportReturnToStart;
+    if (actionId == "transportNudgeBackBeat")
+        return transportNudgeBackBeat;
+    if (actionId == "transportNudgeForwardBeat")
+        return transportNudgeForwardBeat;
+    if (actionId == "transportNudgeBackBar")
+        return transportNudgeBackBar;
+    if (actionId == "transportNudgeForwardBar")
+        return transportNudgeForwardBar;
+    if (actionId == "transportJumpToLoopStart")
+        return transportJumpToLoopStart;
+    if (actionId == "transportJumpToLoopEnd")
+        return transportJumpToLoopEnd;
     // Every SURFACE action lands here — see kNoCommand.
     return kNoCommand;
 }

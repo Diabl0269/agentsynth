@@ -1,5 +1,6 @@
 #pragma once
 
+#include "MidiRemote/RemoteModel.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -89,6 +90,13 @@ public:
     // restart) via the same settings-file ChangeListener every other live preference here uses.
     juce::String getMixerPlacement() const;
     void setMixerPlacement(const juce::String& placement);
+    // MIDI Remote group (docs/control/midi-remote-ui.md#settings). Default takeover is never
+    // Takeover::useDefault; both are picked up live by MainComponent via the settings file.
+    synth::Takeover getMidiRemoteDefaultTakeover() const;
+    void setMidiRemoteDefaultTakeover(synth::Takeover takeover);
+    bool isMidiRemoteShowBadgesEnabled() const;
+    void setMidiRemoteShowBadgesEnabled(bool enabled);
+
     // "all" (every key labelled) vs "c" (only the Cs) — PianoRollComponent::KeyLabelMode, read by
     // TimelinePanelComponent::reloadPianoRollAppearancePrefs(). true == "all" (the default).
     bool isPianoRollKeyLabelModeAll() const;
@@ -183,6 +191,8 @@ private:
     void persistMixerPlacement(const juce::String& placement);
     void persistPianoRollKeyLabelMode(bool labelEveryKey);
     void persistDualIOPerModuleOverrides();
+    void persistMidiRemoteDefaultTakeover(synth::Takeover takeover);
+    void persistMidiRemoteShowBadges(bool enabled);
 
     // FRO13 (P9-7): constructs/wires the two Mixer -> per-type default track preset combos.
     // Pulled out of the constructor (which was tripping the function-size ratchet) into its own
@@ -191,6 +201,9 @@ private:
     // FRO12 (P9-6): constructs/wires the Mixer placement combo, same "own named step" reason as
     // setupMixerDefaultTrackPresetControls() above.
     void setupMixerPlacementControls();
+    // FRO136: the MIDI Remote group, chained from the tail of setupMixerPlacementControls() for the
+    // same baselined-constructor reason.
+    void setupMidiRemoteControls();
 
     // Shared by the real button and createDualIOPerModuleDefaultsPopupForTest() so the test seam
     // exercises the exact component a click would open, not a lookalike.
@@ -235,6 +248,13 @@ private:
         int& y, int contentWidth, bool previousGroupWasVisible,
         const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
         const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible);
+
+    // FRO136: lays out the MIDI Remote group, chained from layoutMixerPlacementGroup() the same way
+    // that one is chained from layoutMixerDefaultTrackPresetGroup().
+    void
+    layoutMidiRemoteGroup(int& y, int contentWidth, bool previousGroupWasVisible,
+                          const std::function<bool(std::initializer_list<juce::Component*>)>& groupMatches,
+                          const std::function<void(std::initializer_list<juce::Component*>, bool)>& setGroupVisible);
 
     // Paints the group-separator hairlines. Called by ContentHost::paint (the viewport's viewed
     // component), so the rules scroll along with the groups they separate — same owner-delegation
@@ -333,6 +353,10 @@ private:
     // combo id 1) / Own panel (2) / Window (3).
     juce::Label mixerPlacementLabel;
     juce::ComboBox mixerPlacementCombo;
+    // FRO136: Default takeover (Jump / Pick-up / Scale) and the badge switch.
+    juce::Label midiRemoteTakeoverLabel;
+    juce::ComboBox midiRemoteTakeoverCombo;
+    juce::ToggleButton midiRemoteShowBadgesToggle{"Show MIDI badges on mapped controls"};
 
     // Hairline rules between preference groups, painted in paint() from these bounds.
     std::vector<juce::Rectangle<int>> dividerBounds;

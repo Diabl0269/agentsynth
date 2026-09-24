@@ -61,12 +61,19 @@ MainComponent::MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLo
 }
 
 // ---- Delegating constructor for tests / legacy call sites ----
-MainComponent::MainComponent(std::unique_ptr<synth::AIProvider> provider, synth::AIProviderRegistry registry)
+MainComponent::MainComponent(std::unique_ptr<synth::AIProvider> provider, synth::AIProviderRegistry registry,
+                             synth::ControllerProfileStore profileStore)
     : ownedAudioEngine(std::make_unique<AudioEngine>(AudioEngine::HostMode::Standalone))
     , audioEngine(*ownedAudioEngine)
     , graphEditor(audioEngine, &undoManager)
     , aiService(audioEngine.getGraph())
-    , aiChatComponent(aiService, appProperties) {
+    , aiChatComponent(aiService, appProperties)
+    // FRO193: this is the ONLY ctor every MainComponent*Tests.cpp call site actually uses, so this
+    // is where controllerProfileStoreForCtor()'s test-directory override (Tests/TestMain.cpp)
+    // actually takes effect -- the primary/plugin ctors above keep the in-class default member
+    // initializer (a real ControllerProfileStore()) untouched, since nothing calls them from a test.
+    , midiLearnController_(audioEngine, graphEditor, remoteEngine, midiRemoteDoc, undoManager, statusBar,
+                           std::move(profileStore)) {
     // Own a default ThemeManager + LookAndFeel so the code behaves identically
     // to the primary-ctor path (no special-casing in the rest of the class).
     ownedThemeManager = std::make_unique<synth::theme::ThemeManager>();
@@ -85,6 +92,27 @@ MainComponent::MainComponent(std::unique_ptr<synth::AIProvider> provider, synth:
     themeManager->addChangeListener(this);
 
     initialiseCommon(std::move(provider), std::move(registry));
+}
+
+namespace {
+// FRO193: empty (the default-constructed juce::File) means "no override" -- Tests/TestMain.cpp
+// sets this once, before any test constructs a MainComponent, so every one of the ~50
+// MainComponent*Tests.cpp call sites (none of which know or care about MIDI Remote) gets a
+// temp-dir ControllerProfileStore for free instead of silently reading/writing the developer's
+// real <settings>/MidiRemote/Controllers folder.
+juce::File& controllerProfileTestDirectoryStorage() {
+    static juce::File dir;
+    return dir;
+}
+} // namespace
+
+synth::ControllerProfileStore MainComponent::controllerProfileStoreForCtor() {
+    const auto& dir = controllerProfileTestDirectoryStorage();
+    return dir != juce::File() ? synth::ControllerProfileStore(dir) : synth::ControllerProfileStore();
+}
+
+void MainComponent::setControllerProfileTestDirectory(const juce::File& dir) {
+    controllerProfileTestDirectoryStorage() = dir;
 }
 
 // ---- Shared post-construction body ----
@@ -233,8 +261,11 @@ MainComponent::~MainComponent() {
     // the editor being closed and reopened.
     if (ownedAudioEngine != nullptr) {
         // Drop the device-state callback first — it captures `this`, and shutdown() is the
-        // call that unsubscribes the engine from its device manager.
+        // call that unsubscribes the engine from its device manager. onMidiDevicesChanged
+        // (FRO262) captures `this` the same way and is reachable from the same changeListenerCallback,
+        // so it gets the same treatment.
         audioEngine.onDeviceStateChanged = nullptr;
+        audioEngine.onMidiDevicesChanged = nullptr;
         audioEngine.shutdown();
     }
 }

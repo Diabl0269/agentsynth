@@ -84,4 +84,11 @@ bool ControllerProfileStore::importProfile(const juce::File& srcFile, Controller
     return true;
 }
 
+bool ControllerProfileStore::deleteProfile(const juce::String& profileId) const {
+    const auto file = controllersDir_.getChildFile(profileId + ".json");
+    if (!file.existsAsFile())
+        return false;
+    return file.deleteFile();
+}
+
 } // namespace synth

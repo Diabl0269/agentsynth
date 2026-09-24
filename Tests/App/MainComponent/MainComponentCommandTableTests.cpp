@@ -60,6 +60,8 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     // FRO11 (P9-5): the new row sits right after toggleTimelinePanel in
     // MainComponentCommandTable.cpp -- see that file's own comment for why.
     AppCommands::toggleMixerPanel,
+    // FRO131: same shape as toggleMixerPanel's own row above -- a third tab on the same dock.
+    AppCommands::toggleMidiRemotePanel,
     AppCommands::focusNextRegion,
     AppCommands::focusPrevRegion,
     AppCommands::focusTimeline,
@@ -70,6 +72,7 @@ const std::vector<juce::CommandID> kExpectedOrder = {
 #if JUCE_MAC || JUCE_WINDOWS
     AppCommands::checkForUpdates,
 #endif
+    AppCommands::contribute,
     // FRO125: buildTransportCommandRows(), appended last in commandTable() -- see that function's
     // own comment for why appending (never interleaving) is always safe here.
     AppCommands::transportPlay,
@@ -78,6 +81,13 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::transportRecord,
     AppCommands::transportToggleMetronome,
     AppCommands::transportReturnToStart,
+    // FRO271: cursor moves and loop-locator jumps, appended after the FRO125 rows.
+    AppCommands::transportNudgeBackBeat,
+    AppCommands::transportNudgeForwardBeat,
+    AppCommands::transportNudgeBackBar,
+    AppCommands::transportNudgeForwardBar,
+    AppCommands::transportJumpToLoopStart,
+    AppCommands::transportJumpToLoopEnd,
 };
 
 } // namespace
@@ -126,4 +136,21 @@ TEST_F(MainComponentTest, EveryActionIdRoundTripsToItsOwnCommand) {
         EXPECT_EQ(AppCommands::getCommandForAction(spec.actionId), spec.id)
             << "actionId \"" << spec.actionId << "\" does not round-trip to its own row's id";
     }
+}
+
+// FRO94: the Help > contribute item. Dispatched through the command manager (what the menu item does)
+// with the browser launch replaced, so the test sees the URL without opening a real browser.
+TEST_F(MainComponentTest, ContributeCommandOpensTheContributePageExactlyOnce) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    std::vector<juce::String> opened;
+    mc.setUrlOpenerForTest([&opened](const juce::URL& u) { opened.push_back(u.toString(true)); });
+
+    juce::ApplicationCommandInfo info(AppCommands::contribute);
+    mc.getCommandInfo(AppCommands::contribute, info);
+    EXPECT_TRUE((info.flags & juce::ApplicationCommandInfo::isDisabled) == 0) << "must not be greyed out";
+    EXPECT_TRUE(info.defaultKeypresses.isEmpty()) << "menu-only: no chord";
+
+    ASSERT_TRUE(mc.getCommandManager().invokeDirectly(AppCommands::contribute, false));
+    ASSERT_EQ(opened.size(), 1u);
+    EXPECT_EQ(opened[0], juce::String(synth::branding::kContributeUrl));
 }

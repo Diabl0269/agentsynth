@@ -2,6 +2,7 @@
 #include "AI/AIStateMapper/AIStateMapper.h"
 #include "MacroSet.h"
 #include "MidiRemote/RemoteModel.h"
+#include "Modules/ModuleBase.h"
 #include "Timeline/TimelineDoc/TimelineDoc.h"
 #include "UI/Graph/GraphEditor/GraphEditor.h"
 
@@ -450,6 +451,57 @@ private:
 };
 
 /**
+ * @class NodeExtraStateAction
+ * @brief Undoable action that replays a module's extra state (ModuleBase::setExtraState) before/after.
+ *
+ * Like ParameterChangeAction, the edit is already applied when this is pushed (firstPerform skips
+ * it). The payload is whatever the module's setExtraState accepts as a PARTIAL update -- for a
+ * HostedPluginModule that is HostedPluginModule::makeCardLayoutPatch(), never a full getExtraState(),
+ * which would carry the plugin's state blob and make undo re-load the plugin. A node that no longer
+ * exists is skipped and still reports success, as a structural undo can remove it first.
+ */
+class NodeExtraStateAction : public juce::UndoableAction {
+public:
+    NodeExtraStateAction(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID nodeId,
+                         const juce::var& before, const juce::var& after)
+        : graph(graph)
+        , nodeId(nodeId)
+        , before(before)
+        , after(after) {}
+
+    bool perform() override {
+        if (firstPerform) {
+            firstPerform = false;
+            return true;
+        }
+        apply(after);
+        return true;
+    }
+
+    bool undo() override {
+        apply(before);
+        return true;
+    }
+
+    int getSizeInUnits() override { return 1; }
+
+private:
+    void apply(const juce::var& state) {
+        if (auto* node = graph.getNodeForId(nodeId))
+            if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor()))
+                module->setExtraState(state);
+    }
+
+    juce::AudioProcessorGraph& graph;
+    juce::AudioProcessorGraph::NodeID nodeId;
+    juce::var before;
+    juce::var after;
+    bool firstPerform = true;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(NodeExtraStateAction)
+};
+
+/**
  * @class PositionChangeAction
  * @brief Undoable action for module position changes on the canvas.
  */
@@ -551,6 +603,17 @@ void AppUndoManager::recordParameterChange(juce::AudioProcessorGraph& graph, juc
     performAction(new ParameterChangeAction(graph, nodeId, paramId, oldValue, newValue));
 }
 
+void AppUndoManager::recordNodeExtraStateChange(juce::AudioProcessorGraph& graph,
+                                                juce::AudioProcessorGraph::NodeID nodeId,
+                                                const juce::var& beforeExtraState, const juce::var& afterExtraState) {
+    // Same no-op rule as recordTimelineChange: an edit that left the state as it was is not an undo step.
+    if (juce::JSON::toString(beforeExtraState) == juce::JSON::toString(afterExtraState))
+        return;
+
+    undoManager.beginNewTransaction();
+    performAction(new NodeExtraStateAction(graph, nodeId, beforeExtraState, afterExtraState));
+}
+
 void AppUndoManager::recordPositionChange(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID nodeId,
                                           int oldX, int oldY, int newX, int newY, std::function<void()> postRestore) {
     undoManager.beginNewTransaction();
@@ -637,13 +700,17 @@ bool AppUndoManager::recordTimelineChange(synth::TimelineDoc& doc, const std::fu
     return true;
 }
 
+// No-op check: if beforeJson/afterJson serialise identically, nothing is pushed -- a no-op edit
+// must not create an undo step. Lifetime note: exactly like TimelineSnapshotAction, the pushed
+// MidiRemoteSnapshotAction holds a reference to `doc` for as long as it sits on the undo stack --
+// `doc` must outlive this AppUndoManager, or clearUndoHistory() must run before it is destroyed.
 bool AppUndoManager::recordMidiRemoteChange(synth::MidiRemoteProjectDoc& doc, const juce::var& beforeJson,
-                                            const juce::var& afterJson) {
+                                            const juce::var& afterJson, std::function<void()> postRestore) {
     if (juce::JSON::toString(beforeJson) == juce::JSON::toString(afterJson))
         return false; // no-op edit: don't create an undo step
 
     undoManager.beginNewTransaction();
-    performAction(new MidiRemoteSnapshotAction(doc, beforeJson, afterJson));
+    performAction(new MidiRemoteSnapshotAction(doc, beforeJson, afterJson, std::move(postRestore)));
     return true;
 }
 

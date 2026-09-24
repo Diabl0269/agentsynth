@@ -187,15 +187,21 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     // Attenuverter has no header at all; a macro-port widget (P8-15 fix F2) has no header CHROME —
     // "no module header chrome and no body" — so neither gets bypass/mute/delete/Dual I/O buttons.
     if (getType(module) != ModuleType::Attenuverter && !isMacroPortType(getType(module))) {
-        bypassButton = std::make_unique<juce::DrawableButton>("Bypass", juce::DrawableButton::ImageFitted);
+        // MidiLearnableDrawableButton (FRO130): plain juce::DrawableButton fires its click on a
+        // RIGHT click too (Button::mouseDown/mouseUp have no isPopupMenu() guard), which would
+        // toggle bypass/mute/Dual I/O before the addMouseListener(this) below ever sees the press.
+        bypassButton =
+            std::make_unique<detail::MidiLearnableDrawableButton>("Bypass", juce::DrawableButton::ImageFitted);
         bypassButton->setClickingTogglesState(true);
         bypassButton->setTooltip("Bypass");
         addAndMakeVisible(*bypassButton);
+        bypassButton->addMouseListener(this, false);
 
-        muteButton = std::make_unique<juce::DrawableButton>("Mute", juce::DrawableButton::ImageFitted);
+        muteButton = std::make_unique<detail::MidiLearnableDrawableButton>("Mute", juce::DrawableButton::ImageFitted);
         muteButton->setClickingTogglesState(true);
         muteButton->setTooltip("Mute");
         addAndMakeVisible(*muteButton);
+        muteButton->addMouseListener(this, false);
 
         deleteButton = std::make_unique<juce::DrawableButton>("Delete", juce::DrawableButton::ImageFitted);
         deleteButton->setTooltip("Delete module");
@@ -203,10 +209,12 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         addAndMakeVisible(*deleteButton);
 
         if (auto* mb = dynamic_cast<ModuleBase*>(module); mb != nullptr && mb->hasDualIOParameter()) {
-            dualIOButton = std::make_unique<juce::DrawableButton>("Dual I/O", juce::DrawableButton::ImageFitted);
+            dualIOButton =
+                std::make_unique<detail::MidiLearnableDrawableButton>("Dual I/O", juce::DrawableButton::ImageFitted);
             dualIOButton->setClickingTogglesState(true);
             updateDualIOTooltip();
             addAndMakeVisible(*dualIOButton);
+            dualIOButton->addMouseListener(this, false);
         }
     }
 
@@ -520,6 +528,27 @@ void ModuleComponent::timerCallback() {
         lastPaintedRMS = cachedRMS;
         repaint();
     }
+
+    // FRO130: MIDI-mapped badges (ONE query per module, repainting only on an actual change --
+    // see refreshMidiLearnBadges' own comment) and, while a control on THIS card is armed, its
+    // breathing outline -- confined to that control's own bounds, never the whole card, and
+    // bounded overall by RemoteEngine's 10 s learn timeout, not by this tick. FRO256: this repaint
+    // is what makes the outline's alpha (computed from wall time on every paint(), see
+    // synth::ui::midilearn::paintMidiLearnArmedOutline) actually animate -- MixerColumnComponent/
+    // MixerMasterColumn/TimelineTransportBar turned out to have NO equivalent repaint at all, which
+    // froze their own outlines at whatever alpha their first paint happened to land on;
+    // midiLearnArmedRepaintCount_ (getMidiLearnArmedRepaintCountForTest()) proves this one already
+    // fires on every tick, the same way those three surfaces' own new counters prove their fix.
+    refreshMidiLearnBadges();
+    if (midiLearnArmedParamId_.isNotEmpty()) {
+        for (const auto& e : midiLearnableRegistry_.entries()) {
+            if (e.param != nullptr && e.param->paramID == midiLearnArmedParamId_) {
+                repaint(e.component->getBounds().expanded(2));
+                ++midiLearnArmedRepaintCount_;
+                break;
+            }
+        }
+    }
 }
 
 // External MIDI's device + channel combos, extracted out of createControls (FRO117) to keep that
@@ -632,6 +661,11 @@ void ModuleComponent::createControls() {
                     combo->addItemList(choiceParam->choices, 1);
                 }
                 addAndMakeVisible(combo);
+                // Right-click MIDI Learn (FRO130). juce::ComboBox::mouseDown already refuses to
+                // open its popup on a right click (checks e.mods.isPopupMenu() itself), so no
+                // subclass is needed here the way the toggle/header buttons below need one.
+                combo->addMouseListener(this, false);
+                registerMidiLearnable(*combo, choiceParam);
 
                 auto* attach = comboAttachments.add(new juce::ComboBoxParameterAttachment(*choiceParam, *combo));
                 comboParams.add(choiceParam); // param -> control mapping for reflection
@@ -650,6 +684,7 @@ void ModuleComponent::createControls() {
                 // object finishes destructing), so attaching `this` as the listener rather than a
                 // separately-owned object has no dangling-pointer window to reason about.
                 slider->addMouseListener(this, false);
+                registerMidiLearnable(*slider, floatParam); // FRO130: right-click MIDI Learn
 
                 auto* attach = sliderAttachments.add(new juce::SliderParameterAttachment(*floatParam, *slider));
                 applyAdsrTimeSliderSkew(*slider, *floatParam);
@@ -666,7 +701,8 @@ void ModuleComponent::createControls() {
                 // slider->setRange(intParam->getRange().start,
                 // intParam->getRange().end, 1.0); // Attachment handles range
                 addAndMakeVisible(slider);
-                slider->addMouseListener(this, false); // right-click-any-knob, see above
+                slider->addMouseListener(this, false);    // right-click-any-knob, see above
+                registerMidiLearnable(*slider, intParam); // FRO130: right-click MIDI Learn
 
                 auto* attach = sliderAttachments.add(new juce::SliderParameterAttachment(*intParam, *slider));
                 sliderParams.add(intParam); // param -> control mapping for reflection
@@ -680,9 +716,12 @@ void ModuleComponent::createControls() {
                 if (shouldSkipGenericBoolToggle(module, *boolParam))
                     continue;
 
-                auto* toggle = toggles.add(new juce::ToggleButton(boolParam->getName(100)));
+                auto* toggle = toggles.add(new detail::MidiLearnableToggleButton(boolParam->getName(100)));
                 toggle->setComponentID(boolParam->getName(100)); // ID for Lookup
                 addAndMakeVisible(toggle);
+                // Right-click MIDI Learn (FRO130) -- same idiom as the generic slider loop above.
+                toggle->addMouseListener(this, false);
+                registerMidiLearnable(*toggle, boolParam);
 
                 auto* attach = buttonAttachments.add(new juce::ButtonParameterAttachment(*boolParam, *toggle));
             }
@@ -695,12 +734,15 @@ void ModuleComponent::createControls() {
                 if (boolParam->paramID == "bypassed") {
                     bypassAttachment =
                         std::make_unique<juce::ButtonParameterAttachment>(*boolParam, *bypassButton, nullptr);
+                    registerMidiLearnable(*bypassButton, boolParam);
                 } else if (boolParam->paramID == "muted") {
                     muteAttachment =
                         std::make_unique<juce::ButtonParameterAttachment>(*boolParam, *muteButton, nullptr);
+                    registerMidiLearnable(*muteButton, boolParam);
                 } else if (boolParam->paramID == "dualIO" && dualIOButton) {
                     dualIOAttachment =
                         std::make_unique<juce::ButtonParameterAttachment>(*boolParam, *dualIOButton, nullptr);
+                    registerMidiLearnable(*dualIOButton, boolParam);
                 }
             }
         }

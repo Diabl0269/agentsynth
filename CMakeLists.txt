@@ -8,18 +8,8 @@ if(APPLE)
     enable_language(OBJCXX)
 endif()
 
-# Enable ccache if available.
-#
-# The launcher is PER LANGUAGE, and CMake counts Objective-C++ as a language of its own. Wiring only
-# C/CXX left every .mm compile bypassing ccache entirely — 103 translation units per macOS build,
-# because JUCE ships each module as one ObjC++ unity file and every target compiles its own copy
-# (Core, AppUI, AgentSynth, the plugin, Tests and the two AI harnesses). Those units never change,
-# yet they were rebuilt cold on every CI run and dominated the critical path: ~12 min of a 12 min
-# 45 s macOS job, ending in a near-serial chain of 20–35 s juce_gui_basics / juce_audio_processors
-# compiles. It hid well, because ccache's own hit rate showed 54% — merely mediocre, not broken:
-# a compile that never reaches ccache is counted as neither a hit nor a miss. Guarded by
-# scripts/ci-cache-check.sh, which reads build.ninja and fails if any C/CXX/OBJC/OBJCXX compile
-# rule is missing its launcher.
+# Enable ccache if available. The launcher is PER LANGUAGE (Objective-C++ is its own CMake
+# language) — see docs/development/ci-caching.md (rule 5) and scripts/ci-cache-check.sh.
 find_program(CCACHE_PROGRAM ccache)
 if(CCACHE_PROGRAM)
     set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
@@ -95,17 +85,12 @@ set(SYNTH_COMPANY_NAME "yourcompany" CACHE STRING "JUCE COMPANY_NAME / macOS bun
 set(SYNTH_BUNDLE_ID "com.agentsynth.app" CACHE STRING "macOS/iOS CFBundleIdentifier")
 
 # Auto-update (Sparkle on macOS, WinSparkle on Windows — see docs/development/auto-update.md).
-# SYNTH_SPARKLE_PUBLIC_KEY / SYNTH_WINSPARKLE_PUBLIC_KEY are deliberately empty by default: both
-# update managers check for a non-empty key at startup and stay inert without one, so a dev/local
-# build never shows an "app is misconfigured" alert. CI supplies the real keys via
-# -DSYNTH_SPARKLE_PUBLIC_KEY / -DSYNTH_WINSPARKLE_PUBLIC_KEY, read from the (non-secret, public)
-# SPARKLE_PUBLIC_KEY / WINSPARKLE_PUBLIC_KEY repository variables once they exist. The two are
-# separate, independent EdDSA key pairs — WinSparkle's own signing tool, not interchangeable with
-# Sparkle's.
+# The public keys are deliberately empty by default: both update managers stay inert without one,
+# so a dev/local build never shows an "app is misconfigured" alert. CI supplies the real keys via
+# -DSYNTH_SPARKLE_PUBLIC_KEY / -DSYNTH_WINSPARKLE_PUBLIC_KEY (separate, independent EdDSA pairs).
 #
 # One cache var for the feed URL, platform-conditional default: mac and Windows publish separate
-# appcast files (a Windows client can't parse a macOS enclosure and vice versa), but both live
-# under the same agentsynth.app/updates/ path.
+# appcast files under the same agentsynth.app/updates/ path.
 if(APPLE)
     set(SYNTH_UPDATE_FEED_URL_DEFAULT "https://agentsynth.app/updates/appcast.xml")
 elseif(WIN32)
@@ -119,35 +104,21 @@ set(SYNTH_SPARKLE_PUBLIC_KEY "" CACHE STRING "Sparkle SUPublicEDKey (base64, pub
 set(SYNTH_WINSPARKLE_PUBLIC_KEY "" CACHE STRING "WinSparkle EdDSA public key (base64, WinSparkle's own key pair, separate from Sparkle's)")
 
 # Marketing version — the human-facing version users see (CFBundleShortVersionString, the plugin's
-# own VERSION arg, the Windows installer's Add/Remove Programs entry). Defaults to PROJECT_VERSION
-# (declared by project() above), so a plain local `cmake -S . -B build` keeps behaving exactly as
-# before. CI overrides it: build-artifacts.yml's `version` job dry-runs the same tag computation
-# (mathieudutour/github-tag-action) the release job is about to commit to, and passes the result via
-# -DSYNTH_MARKETING_VERSION — so the version baked into every build is guaranteed to equal the tag
-# that gets published for it, with nobody hand-bumping project(AgentSynth VERSION ...) to keep the
-# two in sync.
+# own VERSION arg, the installer's Add/Remove Programs entry). Defaults to PROJECT_VERSION so a
+# local build behaves unchanged; CI overrides it via -DSYNTH_MARKETING_VERSION to match the
+# computed release tag exactly, with nobody hand-bumping project(AgentSynth VERSION ...).
 set(SYNTH_MARKETING_VERSION "${PROJECT_VERSION}" CACHE STRING
     "Marketing version embedded in the build (CFBundleShortVersionString / plugin VERSION / installer version); CI sets this to the computed release tag, local builds default to PROJECT_VERSION")
 
-# CFBundleVersion (Sparkle's actual update-comparison key) is intentionally NOT the same as
-# SYNTH_MARKETING_VERSION above: that's the human-facing marketing version (now CI-injected to match
-# the release tag — see the block above; local builds keep defaulting to PROJECT_VERSION).
-# SYNTH_BUILD_NUMBER is a separate, always-available counter instead: GITHUB_RUN_NUMBER is known
-# before the build starts and increases every run, so it doesn't depend on the version job's tag
-# computation or on semver formatting. CI passes it via -DSYNTH_BUILD_NUMBER. Local builds default
-# to "0" — never distributed, so Sparkle comparison doesn't matter for them.
+# CFBundleVersion (Sparkle's actual update-comparison key) is deliberately NOT
+# SYNTH_MARKETING_VERSION above. SYNTH_BUILD_NUMBER is a separate, always-available counter:
+# GITHUB_RUN_NUMBER, known before the build starts, passed via -DSYNTH_BUILD_NUMBER. Local builds
+# default to "0" — never distributed, so Sparkle comparison doesn't matter for them.
 set(SYNTH_BUILD_NUMBER "0" CACHE STRING "CFBundleVersion — monotonic build number, CI sets this to the workflow run number")
 
-# ---- "What's New" (T114/P8-10, Feature 2): build-time, no-network release notes -----------------
-# Deliberately the CHEAP version: no HTTP client, no offline-handling complexity, works even in an
-# airgapped build. Sourced entirely from THIS repo's own git history at CONFIGURE time (not build
-# time — a re-run of `cmake --build` with no re-configure keeps showing whatever was captured at the
-# last `cmake -S . -B build`, which is fine: the alternative, a custom build-time command, buys
-# nothing here and would just make incremental builds re-run git on every invocation).
-#
-# Sensitive-info boundary: COMMIT SUBJECT LINES ONLY (the first line of each commit message) from
-# this project's own public commit history — never the body, never author name/email. See
-# docs/development/distribution.md's "What's New" section for the full rationale.
+# ---- "What's New": build-time, no-network release notes ----
+# See docs/development/distribution.md's "What's New" section for the full rationale (why
+# configure-time not build-time, the commit-subject-lines-only sensitive-info boundary, rendering).
 execute_process(
     COMMAND git describe --tags --abbrev=0
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
@@ -174,11 +145,9 @@ if(NOT SYNTH_WHATSNEW_LOG_RESULT EQUAL 0 OR SYNTH_WHATSNEW_LOG STREQUAL "")
     set(SYNTH_WHATSNEW_LOG "No release history available.")
 endif()
 
-# Sanitize BOTH captures before they reach a C string literal: this text lands in a generated
-# header that reaches juce::String at runtime, and juce::String's `const char*` ctor decodes bytes
-# as Latin-1 (see CLAUDE.md's non-ASCII-literal invariant) — a stray UTF-8 byte in a commit subject
-# would mojibake. Escape backslash/quote FIRST, so the ASCII-range replacement below can't touch
-# (and corrupt) an escape sequence it just introduced.
+# Sanitize BOTH captures before they reach a C string literal (juce::String's `const char*` ctor
+# decodes as Latin-1, so a stray UTF-8 byte would mojibake). Escape backslash/quote FIRST, so the
+# ASCII-range replacement below can't corrupt an escape sequence it just introduced.
 foreach(_synth_whatsnew_var SYNTH_WHATSNEW_TAG SYNTH_WHATSNEW_LOG)
     string(REPLACE "\\" "\\\\" ${_synth_whatsnew_var} "${${_synth_whatsnew_var}}")
     string(REPLACE "\"" "\\\"" ${_synth_whatsnew_var} "${${_synth_whatsnew_var}}")
@@ -249,14 +218,33 @@ add_library(Core STATIC
     Source/PatchDocument.h
     Source/ProjectBundle.cpp
     Source/ProjectBundle.h
-    # Headers omitted here (unlike RemoteModel.h below) to keep this file under its own 1000-line cap.
+    Source/MidiRemote/RemoteEngine/RemoteEngine.h
     Source/MidiRemote/RemoteEngine/RemoteEngine.cpp
     Source/MidiRemote/RemoteEngine/RemoteEngineApply.cpp
     Source/MidiRemote/RemoteEngine/RemoteEngineDecode.cpp
+    Source/MidiRemote/RemoteEngine/RemoteEngineFeedback.cpp
+    Source/MidiRemote/RemoteEngine/RemoteEngineInternal.h
     Source/MidiRemote/RemoteEngine/RemoteEngineLearn.cpp
     Source/MidiRemote/RemoteEngine/RemoteEngineReconcile.cpp
+    Source/MidiRemote/RemoteEngine/RemoteEvent.h
+    Source/MidiRemote/RemoteEngine/RemoteFeedbackSink.h
+    Source/MidiRemote/RemoteEngine/RemoteMappingSnapshot.h
+    Source/MidiRemote/RemoteEngine/RemoteMessageSink.h
     Source/MidiRemote/RemoteModel.h
     Source/MidiRemote/RemoteModelJson.cpp
+    Source/MidiRemote/ContinuousTarget.h
+    Source/MidiRemote/ContinuousTarget.cpp
+    Source/MidiRemote/MidiRemoteLearnBinder.h
+    Source/MidiRemote/MidiRemoteLearnBinder.cpp
+    Source/MidiRemote/MidiRemoteMapping.h
+    Source/MidiRemote/MidiRemoteMapping.cpp
+    Source/MidiRemote/PickTarget.h
+    Source/MidiRemote/ControllerDetect.h
+    Source/MidiRemote/ControllerDetect.cpp
+    Source/MidiRemote/EncoderAutoDetect.h
+    Source/MidiRemote/EncoderAutoDetect.cpp
+    Source/MidiRemote/ControllerTemplates.h
+    Source/MidiRemote/ControllerTemplates.cpp
     Source/RecentProjects.cpp
     Source/RecentProjects.h
     Source/SnippetManager.cpp
@@ -308,6 +296,7 @@ add_library(Core STATIC
     Source/Transport/StemSession.h
     Source/Transport/TempoMap.h
     Source/Transport/TransportService.cpp
+    Source/Transport/TransportNudge.h
     Source/Transport/TransportService.h
     # Timeline
     Source/Timeline/ArrangementContext.cpp
@@ -374,6 +363,8 @@ add_library(Core STATIC
     Source/Modules/ComparatorModule.h
     Source/Modules/AttenuverterModule.h
     Source/Modules/EnvelopeFollowerModule.h
+    Source/Modules/CardLayout.cpp
+    Source/Modules/CardLayout.h
     Source/Modules/MacroControlModule.h
     Source/Modules/RecordTapModule.cpp
     Source/Modules/RecordTapModule.h
@@ -407,6 +398,7 @@ add_library(Core STATIC
     Source/Plugin/Hosting/HostedPluginBackend.h
     Source/Plugin/Hosting/HostedPluginModule.cpp
     Source/Plugin/Hosting/HostedPluginModule.h
+    Source/Plugin/Hosting/HostedPluginModuleCardLayout.cpp
     Source/Plugin/Hosting/PluginScanService.cpp
     Source/Plugin/Hosting/PluginScanService.h
     Source/Plugin/Hosting/PluginScanCrashGuard.cpp
@@ -671,6 +663,13 @@ juce_add_binary_data(Assets SOURCES
     # FRO12 (P9-6, docs/mixer/panel.md): detach-to-window icon, shared by DetachablePanelHost for
     # both the Timeline and Mixer panels. BinaryData symbol: actiondetachwindow_svg.
     assets/icons/action-detach-window.svg
+    # FRO134 (docs/control/midi-remote.md): generic MIDI-controller templates, each a full
+    # ControllerProfile JSON document, enumerated at runtime by synth::midi::listControllerTemplates
+    # via BinaryData::namedResourceList (no per-file symbol is referenced by name).
+    assets/midi-remote-templates/template-8-knobs.json
+    assets/midi-remote-templates/template-8-faders-8-buttons.json
+    assets/midi-remote-templates/template-transport-strip.json
+    assets/midi-remote-templates/template-keyboard-8-knobs.json
 )
 
 # The themed LookAndFeel lives in Core and pulls typefaces from BinaryData;
@@ -988,8 +987,8 @@ endif()
 # Measurement harnesses for AI patch/timeline validity and quality. AIPatchHarness/AIEvalHarness
 # need a live Ollama; TimelineOpsHarness replays recorded fixtures instead and needs none, but is
 # gated the same way for consistency (it is a measurement instrument, not something CI gates on —
-# see Tests/Timeline/TimelineOpsFixtureTests.cpp for the CI-enforced twin). None of the three is ever part
-# of the default build or CI — see their READMEs under Tools/.
+# see Tests/Timeline/TimelineOpsFixtureTests.cpp for the CI-enforced twin). None of the three is in
+# the default build (READMEs under Tools/); in CI only Linux builds them (+183 TUs), to catch rot.
 if(ENABLE_AI_HARNESS)
     add_subdirectory(Tools/AIPatchHarness)
     add_subdirectory(Tools/AIEvalHarness)

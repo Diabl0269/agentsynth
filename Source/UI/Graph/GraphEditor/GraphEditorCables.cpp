@@ -132,7 +132,7 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
         // rather than computing its own width.
         const juce::String label = macro.name.isNotEmpty() ? macro.name : juce::String("Macro");
         g.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
-        const auto chipBounds = editor.macroChipBounds(macro.id);
+        const auto chipBounds = editor.getMacroController().macroChipBounds(macro.id);
         juce::Rectangle<float> chip = chipBounds.toFloat();
         g.setColour(macro.colour.withAlpha(0.85f));
         g.fillRoundedRectangle(chip, 6.0f);
@@ -158,7 +158,7 @@ void paintExpandedMacroHulls(juce::Graphics& g, GraphEditor& editor) {
         // the same control in its two states. macroCollapseButtonBounds is the ONE definition of
         // this rect — hit-testing (GraphEditor::macroCollapseButtonAt, used by mouseDown) must see
         // exactly what gets painted here.
-        const auto collapseBounds = editor.macroCollapseButtonBounds(macro.id).toFloat();
+        const auto collapseBounds = editor.getMacroController().macroCollapseButtonBounds(macro.id).toFloat();
         g.setColour(macro.colour.withAlpha(0.85f));
         g.fillRoundedRectangle(collapseBounds, 4.0f);
 
@@ -441,7 +441,7 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
                 if (nodeId.uid != 0)
                     collapsedMacroForNode[nodeId.uid] = &macro;
             }
-            for (const auto& port : macroCardPortLayout(macro.id)) {
+            for (const auto& port : macroController_.macroCardPortLayout(macro.id)) {
                 auto nodeId = macroController_.resolveMemberNodeId(port.nodeUuid);
                 if (nodeId.uid != 0)
                     portJackLocalForNode[nodeId.uid] = port.jackPos;
@@ -647,7 +647,7 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     // ---- Drag-preview grid dots (only while a module is being dragged) ----
     // Draw subtle dots at kGridSize*5 = 40px spacing over the VISIBLE canvas region only.
     // This stays cheap: we compute the visible clip in canvas coords and skip everything outside.
-    if (editor.isDragPreviewActive()) {
+    if (editor.getDragDropController().isDragPreviewActive()) {
         // The content component's transform maps canvas -> screen. The clip rect of g is
         // already in canvas coords (paint runs in local/canvas space), so getClipBounds()
         // gives us the visible region for free.
@@ -797,13 +797,14 @@ void GraphEditor::GraphContentComponent::resized() {}
 void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
     // ---- Drag-preview landing ghost (on top of module cards) ----
     // Draw a translucent rounded rect at the exact snapped+anti-overlapped landing position.
-    if (editor.isDragPreviewActive() && !editor.getDragPreviewGhost().isEmpty()) {
+    if (editor.getDragDropController().isDragPreviewActive() &&
+        !editor.getDragDropController().getDragPreviewGhost().isEmpty()) {
         auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
         const juce::Colour accentColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
         const auto& m = lf != nullptr ? lf->getTheme().metrics : synth::theme::Metrics{};
         const float cornerRadius = m.cornerRadius;
 
-        auto ghostF = editor.getDragPreviewGhost().toFloat();
+        auto ghostF = editor.getDragDropController().getDragPreviewGhost().toFloat();
 
         // Fill: accent colour at ~18% alpha
         g.setColour(accentColour.withAlpha(0.18f));
@@ -817,14 +818,15 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
 
     // ---- Alignment guides (UI Phase 7 - Item 4) ----
     // Draw aligned edges when hovering near other modules (Figma-style)
-    if (editor.isDragPreviewActive() && !editor.getAlignmentGuides().empty() && editor.alignmentGuidesEnabled) {
+    if (editor.getDragDropController().isDragPreviewActive() &&
+        !editor.getDragDropController().getAlignmentGuides().empty() && editor.alignmentGuidesEnabled) {
         auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
         const juce::Colour guideColour = lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::white;
 
         // Solid lines, ~70% opacity for visibility without distraction
         const float guideAlpha = lf != nullptr ? lf->getTheme().metrics.guideAlpha : 0.7f;
         g.setColour(guideColour.withAlpha(guideAlpha));
-        for (const auto& guide : editor.getAlignmentGuides()) {
+        for (const auto& guide : editor.getDragDropController().getAlignmentGuides()) {
             const float dx = guide.end.x - guide.start.x;
             const float dy = guide.end.y - guide.start.y;
 
@@ -852,7 +854,8 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
     }
 
     // ---- Smart-connection frosted preview cables ----
-    if (editor.isDragPreviewActive() && !editor.getSmartSuggestions().empty()) {
+    if (editor.getDragDropController().isDragPreviewActive() &&
+        !editor.getSmartConnections().getSmartSuggestions().empty()) {
         auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
 
         // Colours resolve only through colourForCable (→ synth::ui::resolveCableColour), so the
@@ -892,7 +895,7 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
         // segments taking their place — otherwise the extra previews read as "and also", and the
         // user expects the old wires to still be there after the drop. All of them, not just this
         // leg's: a stereo upstream can have one doomed cable per leg.
-        for (const auto& s : editor.getSmartSuggestions()) {
+        for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
             if (!s.isInsert)
                 continue;
             for (const auto& doomed : s.doomedLinks) {
@@ -909,7 +912,7 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
         // Draw the RESOLVED legs, not one segment per suggestion: a collapsed jack landing on the
         // terminal sink is one suggestion but two cables, and a preview that showed a single wire
         // while the drop fanned both raws was lying about what was about to happen.
-        for (const auto& s : editor.getSmartSuggestions()) {
+        for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
             const auto legColour = [&](synth::ui::ModuleCategory category) {
                 const auto base = previewColour(s.signal, category, 0.40f);
                 return s.isInsert ? insertTint(base) : base;

@@ -22,11 +22,11 @@ shape for a single caller does not earn a new icon asset either.
 
 **Glyph geometry: one centred square, always.** Every glyph is drawn inside the button's shorter
 side, inset by `kGlyphInsetRatio` (24%) on each edge — never a fraction of the *width* applied to
-both axes, which flattens all four glyphs once the panel's 5 px resize grab strip leaves the bar
-~19 px tall. Everything scales off that square (the loop arc's stroke and arrowhead, the note's
-head and stem), so the row stays legible at any strip height.
+both axes, which flattens all four glyphs once the strip gets short. Everything scales off that square (the
+loop arc's stroke and arrowhead, the note's head and stem), so the row stays legible at any strip
+height.
 `Tests/UI/Timeline/TimelineTransportBarTests.cpp::GlyphButtonsAreSquareAndSpaced` pins squareness
-and the gaps at both the full and the trimmed strip height.
+and the gaps at both the full strip height and a shorter one.
 
 ## Record red
 
@@ -177,10 +177,41 @@ path.
 
 `transportPlay` / `transportStop` / `transportReturnToStart` call `TransportService` directly:
 play and stop are guarded on the current snapshot so each is idempotent, and return-to-start is
-`locateBeat(0)` with no implicit stop. `transportToggleLoop` and `transportToggleMetronome` reuse
+`locateBeat(0)` with no implicit stop. The cursor moves (`transportNudge*Beat` / `*Bar`) and loop
+jumps (`transportJumpToLoopStart` / `transportJumpToLoopEnd`) also relocate through
+`locateBeat` without changing play state; see `Source/Transport/TransportNudge.h` for how nudges
+fired inside one audio block accumulate. `transportToggleLoop` and `transportToggleMetronome` reuse
 the loop and metronome buttons' own `triggerClick()` the same way `transportRecord` reuses
 Record's — see [`shortcuts.md`](../control/shortcuts.md#transport-family) for the full action-id table. All
-six ship unbound by default; only `togglePlayback` keeps a default key (Space).
+of them ship unbound by default; only `togglePlayback` keeps a default key (Space).
+
+## Right-click MIDI Learn (FRO133)
+
+Each of the four glyph buttons (`TimelineTransportBar::GlyphButton`) carries its own MIDI Learn
+menu on right-click, the same "MIDI Learn '<name>'..." / mapped block shown on every other learnable
+surface ([`midi-remote-ui.md`](../control/midi-remote-ui.md#right-click-midi-learn--coverage)), but
+the target is an **action** id, not a graph parameter — the bar stays graph-free, exactly as the
+rest of this doc describes: `TimelineTransportBarMidiLearn.cpp`'s `actionIdForGlyph()` maps
+Play/Stop → `"transportTogglePlayStop"`, Record → `"transportRecord"`, Loop → `"transportToggleLoop"`,
+Metronome → `"transportToggleMetronome"` — the exact same four ids this section documents above,
+so a mapping learned here and a keyboard shortcut rebind in Settings can never disagree about which
+command a button drives.
+
+`GlyphButton` is right-click-safe (`synth::ui::midilearn::RightClickSafeButton`,
+[`midi-remote-ui.md`](../control/midi-remote-ui.md)): a plain `juce::Button` fires `onClick` on any
+mouse button, so without the guard a right-click meant to open the menu would also toggle
+playback/record/loop/metronome on its way there.
+
+`TimelineTransportBar::onMidiLearnRequested`/`onMidiForgetRequested`/`onQueryMidiMappingsForActions`
+(actionId-keyed, not the `(nodeId, paramId)` shape `GraphEditor`'s module-card callbacks use) are
+wired in `MainComponent::wireMidiRemoteEngine()` to `MidiLearnController::armAction()`/
+`forgetAction()`/`queryActionMappings()`. An action assignment is a **global** setting stored on the
+learned controller's `ControllerProfile`, not the project's `"midiRemote"` doc — see
+[`midi-remote.md`](../control/midi-remote.md#undo): "the profile stays" applies here the same way it
+does to an auto-created profile from a parameter Learn. The badge/armed-outline overlay rides the
+bar's own existing 10 Hz poll (`updateFromTransport()`) and paints in a dedicated
+`paintOverChildren()` (the four buttons are children, so it must paint AFTER them, unlike the
+readout text in `paint()`).
 
 ## Metronome and count-in
 

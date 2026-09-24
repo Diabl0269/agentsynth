@@ -82,6 +82,13 @@ struct Colors {
     // static-literal convention rather than introducing a new "derives from" mechanism.
     juce::Colour toolActive{0xff00D1FF}; // active edit-tool button highlight
 
+    // The MIDI Learn "mapped" badge (docs/control/midi-remote-ui.md#the-learn-interaction): a 6 px
+    // dot on a control that has a MIDI assignment. Defaults to the same literal as `midiWire`'s
+    // Obsidian default (same "static literal, not a derives-from" convention as toolActive above)
+    // — the existing MIDI-wire hue reads as "MIDI" without competing with `accent`'s "selected"
+    // meaning, in every theme (Obsidian has glow 0, so this must never rely on a glow to read).
+    juce::Colour midiMapped{0xffB48EF5}; // MIDI Learn "this control is mapped" badge
+
     // Cable colours for CableColourMode::BySourceCategory, indexed by synth::ui::ModuleCategory
     // (Sources, Sequencing, Envelopes & Control, Filters, Modulation FX, Time FX, Dynamics,
     // Utility). Eight distinguishable hues rather than one per module type — see CableColour.h.

@@ -126,6 +126,14 @@ more.
 the same pattern by hand and are deliberately **not** ported to it: they are single-panel surfaces
 and correct as they stand.
 
+**The Mixer's Own panel is a fourth slide that does NOT share `MainComponent`'s driver** (FRO231).
+`MixerPlacementController` owns its own `PanelSlide`, `AnimationDriver` and
+`VBlankAnimatorUpdater` (190 ms, `easeInOutCubic`, `canAnimate` = the parent is showing) and follows
+the same rules: opening is visible before the first frame, closing hides only in its finish, a
+mid-flight reversal starts from the current fraction. It never touches the three `MainComponent`
+fractions; each frame it calls `onLayoutNeeded` (wired to `MainComponent::resized()`), which reads
+`getCarveHeight()`. Choosing the Own-panel placement (or launching in it) snaps open with no tween.
+
 ## formatShortcutHint
 
 ```cpp
@@ -147,6 +155,7 @@ strings.
 | **Library section collapse/expand** | Band-height fold (150 ms), `easeInOutCubic` | `ModuleLibraryComponent` |
 | **AI panel show/hide** | `PanelSlide` fraction tween (190 ms, `easeInOutCubic`), shared driver | `MainComponent` |
 | **Timeline panel show/hide** | `PanelSlide` fraction tween (190 ms, `easeInOutCubic`), shared driver — same slide, bottom axis | `MainComponent` |
+| **Mixer Own-panel show/hide** | `PanelSlide` fraction tween (190 ms, `easeInOutCubic`) on the controller's OWN driver — not the shared one | `MixerPlacementController` |
 | **Empty-canvas first-run hint** | Static drawn text, no animation — drawn only when `isCanvasEmpty(nodeCount)` returns `true` | `GraphEditor` |
 | **Library rows** | Hover highlight; grab / dragging-hand cursor on draggable rows; per-module descriptions via `descriptionFor(name)` surfaced as `setTooltip()`; search-query substring highlight on matching labels | `ModuleLibraryComponent` |
 | **Preset-load feedback** | Status bar text updated during load; no spinner | `MainComponent` into `StatusBarComponent` |

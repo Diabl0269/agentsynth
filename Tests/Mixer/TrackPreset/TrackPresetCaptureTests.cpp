@@ -233,7 +233,7 @@ TEST(TrackPresetCapture, MacroMenuOffersTrackPresetItemsOnlyForAChannelMacro) {
     auto* a = addPlainNodeCFT(patch.engine.getGraph(), "Oscillator", {1200, 0}, unused);
     auto* b = addPlainNodeCFT(patch.engine.getGraph(), "Filter", {1400, 0}, unused);
     editor.setSelectedNodes({a->nodeID, b->nodeID});
-    const auto plainMacroId = editor.groupSelectionIntoMacro();
+    const auto plainMacroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(plainMacroId.isEmpty());
 
     const auto plainMenu = editor.buildMacroMenu(plainMacroId);

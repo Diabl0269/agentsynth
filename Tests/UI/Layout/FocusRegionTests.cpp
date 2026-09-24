@@ -318,15 +318,18 @@ private:
 
 // The registry MainComponent builds must be exactly the six T159 phase-1 regions, in the
 // documented Tab-cycle order (Toolbar, Library, Canvas, Timeline, AI Panel, Mod Matrix).
-TEST_F(FocusRegionMainComponentTest, RegistersExactlyTheSevenDocumentedRegionsInOrder) {
+TEST_F(FocusRegionMainComponentTest, RegistersExactlyTheEightDocumentedRegionsInOrder) {
     // FRO18: the mixer panel joined as a 7th region, registered right after "timeline" -- the two
     // share one dock (one tab visible at a time), so it belongs next to the region it splits from,
     // not appended at the end (see MixerFocusRegionTests.cpp for the two regions' open predicates).
+    // FRO131: "midiRemote" joined as an 8th region the same way, right after "mixer" -- all three
+    // share the one dock now.
     MainComponent mc(std::make_unique<FocusRegionMockProvider>());
     juce::StringArray ids;
     for (const auto& region : mc.getFocusRegionsForTest().getRegions())
         ids.add(region.id);
-    EXPECT_EQ(ids, juce::StringArray({"toolbar", "library", "canvas", "timeline", "mixer", "aiPanel", "modMatrix"}));
+    EXPECT_EQ(ids, juce::StringArray(
+                       {"toolbar", "library", "canvas", "timeline", "mixer", "midiRemote", "aiPanel", "modMatrix"}));
 
     // Every region's root must actually be the live component it claims to wrap.
     auto& regs = mc.getFocusRegionsForTest();
@@ -334,6 +337,7 @@ TEST_F(FocusRegionMainComponentTest, RegistersExactlyTheSevenDocumentedRegionsIn
     EXPECT_EQ(regs.findById("canvas")->root, &mc.getGraphEditor());
     EXPECT_EQ(regs.findById("timeline")->root, &mc.getTimelinePanel());
     EXPECT_EQ(regs.findById("mixer")->root, &mc.getMixerDock().getMixerPanel());
+    EXPECT_EQ(regs.findById("midiRemote")->root, &mc.getMixerDock().getMidiRemotePanel());
     EXPECT_EQ(regs.findById("aiPanel")->root, &mc.getAiChatComponent());
     EXPECT_EQ(regs.findById("modMatrix")->root, &mc.getGraphEditor().getModMatrix());
 }

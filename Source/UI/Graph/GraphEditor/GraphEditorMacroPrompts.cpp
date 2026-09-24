@@ -19,6 +19,8 @@
 // owned outright by MacroGroupController), rewritten to go through macroController_ directly.
 
 #include "GraphEditor.h"
+#include "UI/Chrome/ColourPickerPopup.h"
+#include "UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h"
 
 #include "Mixer/ChannelFlows/ChannelFlows.h"
 #include "UI/Macros/MacroCardComponent.h"
@@ -52,7 +54,7 @@ bool GraphEditor::isChannelMacroForTrack(const juce::String& memberUuid) const {
 // recolour favourites use — since the modal can fire before a Settings window (and therefore a
 // PreferencesSettingsTab) has ever been constructed.
 void GraphEditor::requestGroupSelectionIntoMacro() {
-    const bool hasCrossing = selectionHasCrossingMacroCable();
+    const bool hasCrossing = macroController_.selectionHasCrossingMacroCable();
 
     if (macroAutoPortPreference_ == MacroAutoPortPreference::Unset && hasCrossing) {
         juce::Component::SafePointer<GraphEditor> safeThis(this);
@@ -73,7 +75,7 @@ void GraphEditor::requestGroupSelectionIntoMacro() {
                     self->propertiesFile_->saveIfNeeded();
                 }
             }
-            self->groupSelectionIntoMacro(createPorts);
+            self->getMacroController().groupSelectionIntoMacro(createPorts);
         };
         if (macroAutoPortModalForTest)
             macroAutoPortModalForTest(respond);
@@ -82,7 +84,7 @@ void GraphEditor::requestGroupSelectionIntoMacro() {
         return;
     }
 
-    groupSelectionIntoMacro(macroAutoPortPreference_ == MacroAutoPortPreference::AutoCreatePorts);
+    macroController_.groupSelectionIntoMacro(macroAutoPortPreference_ == MacroAutoPortPreference::AutoCreatePorts);
 }
 
 // Launches the real "Create ports for the crossing cables?" modal
@@ -128,6 +130,11 @@ void GraphEditor::showMacroAutoPortModal(std::function<void(bool createPorts, bo
 // ModalCallbackFunction + a unique_ptr taken inside the callback). The collapsed card keeps its
 // own nicer inline rename (MacroCardComponent::beginRename) — this is only for the case that has
 // no card.
+//
+// promptRenameMacroForTest (see GraphEditor.h) replaces the real juce::AlertWindow below when set:
+// a real AlertWindow segfaults on a headless Linux CI runner with no display, the same class of
+// issue ModuleComponent::setShowContextMenuHookForTest documents for PopupMenu and
+// macroAutoPortModalForTest works around for the auto-port prompt.
 void GraphEditor::promptRenameMacro(const juce::String& macroId) {
     const auto* macro = macros.find(macroId);
     if (macro == nullptr)
@@ -160,7 +167,7 @@ void GraphEditor::promptRenameMacro(const juce::String& macroId) {
                                 if (typed.isEmpty())
                                     return; // empty/whitespace-only input cancels without renaming
 
-                                self->renameMacro(macroId, typed);
+                                self->getMacroController().renameMacro(macroId, typed);
                             }),
                             false);
 }
@@ -216,7 +223,7 @@ std::unique_ptr<synth::ui::ColourPickerPopup> GraphEditor::buildMacroColourPicke
             // back first (outside the recorded mutation, so it does not itself become undoable),
             // then perform the real edit as the one recorded step.
             m->colour = originalColour;
-            self->setMacroColour(macroId, finalColour);
+            self->getMacroController().setMacroColour(macroId, finalColour);
         });
 }
 
@@ -311,7 +318,7 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
     juce::PopupMenu m;
     m.addItem(collapsed ? "Expand" : "Collapse", [safeThis, macroId, collapsed] {
         if (safeThis != nullptr)
-            safeThis->setMacroCollapsed(macroId, !collapsed);
+            safeThis->getMacroController().setMacroCollapsed(macroId, !collapsed);
     });
 
     // The collapsed card passes its own inline-TextEditor opener here; everywhere else (the
@@ -338,10 +345,10 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
 
         juce::Rectangle<int> anchor;
         if (liveMacro->collapsed) {
-            if (auto* card = self->getMacroCardForTest(macroId))
+            if (auto* card = self->getMacroController().getMacroCardForTest(macroId))
                 anchor = card->getScreenBounds();
         } else {
-            anchor = self->content.localAreaToGlobal(self->macroChipBounds(macroId));
+            anchor = self->content.localAreaToGlobal(self->getMacroController().macroChipBounds(macroId));
         }
         if (anchor.isEmpty())
             anchor = self->getScreenBounds(); // fallback: nothing resolved, anchor on the editor
@@ -361,16 +368,16 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
     // targeting OFF ("Enable"/"Unmute") — the same convergence rule toggleMacroBypassed/ toggleMacroMuted apply. Mute
     // is omitted entirely when no member could possibly honour it (e.g. a macro made only of Macro In/Out ports),
     // rather than offering a command that can only ever no-op.
-    m.addItem(macroBypassState(macroId) == MacroToggleState::AllOn ? "Enable Macro" : "Bypass Macro",
+    m.addItem(macroController_.macroBypassState(macroId) == MacroToggleState::AllOn ? "Enable Macro" : "Bypass Macro",
               [safeThis, macroId] {
                   if (safeThis != nullptr)
-                      safeThis->toggleMacroBypassed(macroId);
+                      safeThis->getMacroController().toggleMacroBypassed(macroId);
               });
     if (macroController_.macroHasMuteEligibleMember(macroId)) {
-        m.addItem(macroMuteState(macroId) == MacroToggleState::AllOn ? "Unmute Macro" : "Mute Macro",
+        m.addItem(macroController_.macroMuteState(macroId) == MacroToggleState::AllOn ? "Unmute Macro" : "Mute Macro",
                   [safeThis, macroId] {
                       if (safeThis != nullptr)
-                          safeThis->toggleMacroMuted(macroId);
+                          safeThis->getMacroController().toggleMacroMuted(macroId);
                   });
     }
     m.addSeparator();
@@ -384,7 +391,7 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
     m.addItem("Save as Snippet...", [safeThis, macroId] {
         if (safeThis == nullptr)
             return;
-        safeThis->selectMacro(macroId, false);
+        safeThis->getMacroController().selectMacro(macroId, false);
         if (safeThis->onSaveSnippetRequested)
             safeThis->onSaveSnippetRequested();
     });
@@ -395,14 +402,14 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
         m.addItem("Save Track as Preset...", [safeThis, macroId] {
             if (safeThis == nullptr)
                 return;
-            safeThis->selectMacro(macroId, false);
+            safeThis->getMacroController().selectMacro(macroId, false);
             if (safeThis->onTrackPresetMenuAction)
                 safeThis->onTrackPresetMenuAction(macroId, false);
         });
         m.addItem("Set as Default Track Preset", [safeThis, macroId] {
             if (safeThis == nullptr)
                 return;
-            safeThis->selectMacro(macroId, false);
+            safeThis->getMacroController().selectMacro(macroId, false);
             if (safeThis->onTrackPresetMenuAction)
                 safeThis->onTrackPresetMenuAction(macroId, true);
         });
@@ -410,8 +417,8 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
     m.addItem("Ungroup", [safeThis, macroId] {
         if (safeThis == nullptr)
             return;
-        safeThis->selectMacro(macroId, false);
-        safeThis->ungroupSelection();
+        safeThis->getMacroController().selectMacro(macroId, false);
+        safeThis->getMacroController().ungroupSelection();
     });
     // T138: unlike the two items above, these act on the captured selection (addableUuids/
     // removableUuids), not on whatever is selected at click time — see the capture comment above.
@@ -420,20 +427,20 @@ GraphEditor::buildMacroMenu(const juce::String& macroId, std::function<void()> r
     if (!addableUuids.empty()) {
         m.addItem("Add Selection to Macro", [safeThis, macroId, addableUuids] {
             if (safeThis != nullptr)
-                safeThis->addSelectionToMacro(macroId, addableUuids);
+                safeThis->getMacroController().addSelectionToMacro(macroId, addableUuids);
         });
     }
     if (!removableUuids.empty()) {
         m.addItem(removableUuids.size() == 1 ? "Remove from Macro" : "Remove Selection from Macro",
                   [safeThis, macroId, removableUuids] {
                       if (safeThis != nullptr)
-                          safeThis->removeSelectionFromMacro(macroId, removableUuids);
+                          safeThis->getMacroController().removeSelectionFromMacro(macroId, removableUuids);
                   });
     }
     m.addSeparator();
     m.addItem("Delete Macro && Modules", [safeThis, macroId] {
         if (safeThis != nullptr)
-            safeThis->deleteMacroAndMembers(macroId);
+            safeThis->getMacroController().deleteMacroAndMembers(macroId);
     });
 
     return m;
@@ -467,9 +474,14 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
     juce::Component::SafePointer<GraphEditor> safeThis(this);
     juce::Component::SafePointer<synth::ui::MacroPortConfigDialog> safeDialog(dialog);
 
-    dialog->onRequestClose = [window] {
+    dialog->onRequestClose = [safeThis, window] {
         if (window != nullptr)
             window->exitModalState(0);
+        // Teardown backstop: an abandoned picker's CallOutBox can outlive this dialog and its onCommit
+        // clear may never reach it, so disarm whatever this session armed (by the node it cached, no node
+        // arg); a no-op when nothing was armed, so a plain Close of a never-previewed picker repaints nothing.
+        if (auto* self = safeThis.getComponent())
+            self->cancelArmedMacroPortColourPreview();
     };
 
     // Every callback below defers its mutate-then-refresh to the next message-loop tick — a
@@ -483,7 +495,7 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
             auto* self = safeThis.getComponent();
             if (self == nullptr)
                 return;
-            self->addMacroPort(macroId, isInput, kind, shape, voiceCount, name);
+            self->getMacroController().addMacroPort(macroId, isInput, kind, shape, voiceCount, name);
             if (auto* d = safeDialog.getComponent())
                 d->refreshPorts(self->macroController_.macroPortRowsForDialog(macroId));
         });
@@ -493,7 +505,7 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
             auto* self = safeThis.getComponent();
             if (self == nullptr)
                 return;
-            self->renameMacroPort(macroId, nodeUuid, name);
+            self->getMacroController().renameMacroPort(macroId, nodeUuid, name);
             if (auto* d = safeDialog.getComponent())
                 d->refreshPorts(self->macroController_.macroPortRowsForDialog(macroId));
         });
@@ -503,7 +515,7 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
             auto* self = safeThis.getComponent();
             if (self == nullptr)
                 return;
-            self->removeMacroPort(macroId, nodeUuid);
+            self->getMacroController().removeMacroPort(macroId, nodeUuid);
             if (auto* d = safeDialog.getComponent())
                 d->refreshPorts(self->macroController_.macroPortRowsForDialog(macroId));
         });
@@ -513,7 +525,7 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
             auto* self = safeThis.getComponent();
             if (self == nullptr)
                 return;
-            self->moveMacroPortOrder(macroId, nodeUuid, moveUp);
+            self->getMacroController().moveMacroPortOrder(macroId, nodeUuid, moveUp);
             if (auto* d = safeDialog.getComponent())
                 d->refreshPorts(self->macroController_.macroPortRowsForDialog(macroId));
         });
@@ -523,7 +535,7 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
             auto* self = safeThis.getComponent();
             if (self == nullptr)
                 return;
-            self->reorderMacroPortToIndex(macroId, nodeUuid, newIndexInGroup);
+            self->getMacroController().reorderMacroPortToIndex(macroId, nodeUuid, newIndexInGroup);
             if (auto* d = safeDialog.getComponent())
                 d->refreshPorts(self->macroController_.macroPortRowsForDialog(macroId));
         });
@@ -534,7 +546,7 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
             auto* self = safeThis.getComponent();
             if (self == nullptr)
                 return;
-            self->changeMacroPortShape(macroId, nodeUuid, newShape, newVoiceCount);
+            self->getMacroController().changeMacroPortShape(macroId, nodeUuid, newShape, newVoiceCount);
             if (auto* d = safeDialog.getComponent())
                 d->refreshPorts(self->macroController_.macroPortRowsForDialog(macroId));
         });
@@ -551,6 +563,14 @@ void GraphEditor::promptConfigureMacroIO(const juce::String& macroId) {
         });
     };
 
+    // Live preview: fired on every selector tick with the in-progress colour, so the jack on both surfaces
+    // tracks the pick without committing (view-layer only, no undo). No callAsync (unlike the mutators
+    // above): previewMacroPortColour mutates no data and rebuilds nothing, so it runs synchronously on the
+    // picker's own broadcast -- a rebuild would tear down the row still inside its own dispatch.
+    dialog->onPreviewPortColour = [safeThis, macroId](const juce::String& nodeUuid, juce::Colour colour) {
+        if (auto* self = safeThis.getComponent())
+            self->previewMacroPortColour(macroId, nodeUuid, colour);
+    };
     window->enterModalState(true, nullptr, true);
 }
 
@@ -593,7 +613,7 @@ void GraphEditor::promptRenameMacroPort(const juce::String& macroId, const juce:
                                 if (typed.isEmpty())
                                     return; // empty/whitespace-only input cancels without renaming
 
-                                self->renameMacroPort(macroId, nodeUuid, typed);
+                                self->getMacroController().renameMacroPort(macroId, nodeUuid, typed);
                             }),
                             false);
 }

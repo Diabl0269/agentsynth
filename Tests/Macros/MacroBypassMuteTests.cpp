@@ -63,7 +63,7 @@ juce::String makeTwoMemberMacro(GraphEditor& editor, AudioEngine& engine, NodeID
     a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     editor.setSelectedNodes({a, b});
-    return editor.groupSelectionIntoMacro();
+    return editor.getMacroController().groupSelectionIntoMacro();
 }
 
 /** Groups two mute-ineligible Macro In/Out nodes (no "muted" parameter -- see
@@ -74,7 +74,7 @@ juce::String makeMuteIneligibleMacro(GraphEditor& editor, AudioEngine& engine, N
     a = addModuleAt(editor, engine, std::make_unique<MacroInletModule>(), 100, 100);
     b = addModuleAt(editor, engine, std::make_unique<MacroOutletModule>(), 500, 100);
     editor.setSelectedNodes({a, b});
-    return editor.groupSelectionIntoMacro();
+    return editor.getMacroController().groupSelectionIntoMacro();
 }
 
 } // namespace
@@ -91,7 +91,7 @@ TEST(MacroBypassMute, SetMacroBypassedSetsEveryMember) {
     auto macroId = makeTwoMemberMacro(editor, engine, a, b);
     ASSERT_FALSE(macroId.isEmpty());
 
-    editor.setMacroBypassed(macroId, true);
+    editor.getMacroController().setMacroBypassed(macroId, true);
 
     EXPECT_TRUE(moduleAt(engine, a)->isBypassed());
     EXPECT_TRUE(moduleAt(engine, b)->isBypassed());
@@ -107,17 +107,17 @@ TEST(MacroBypassMute, ChannelMacroBypassSkipsSourceAndStripButMuteIncludesTheStr
     const auto insert = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     const auto strip = addModuleAt(editor, engine, std::make_unique<ChannelStripModule>(), 900, 100);
     editor.setSelectedNodes({source, insert, strip});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
-    editor.setMacroBypassed(macroId, true);
+    editor.getMacroController().setMacroBypassed(macroId, true);
     EXPECT_TRUE(moduleAt(engine, insert)->isBypassed()) << "the insert goes dry";
     EXPECT_FALSE(moduleAt(engine, source)->isBypassed()) << "the source keeps producing";
     EXPECT_FALSE(moduleAt(engine, strip)->isBypassed()) << "the strip keeps passing signal";
-    EXPECT_EQ(editor.macroBypassState(macroId), GraphEditor::MacroToggleState::AllOn)
+    EXPECT_EQ(editor.getMacroController().macroBypassState(macroId), GraphEditor::MacroToggleState::AllOn)
         << "the tri-state reads over the same members the fan-out touches";
 
-    editor.setMacroMuted(macroId, true);
+    editor.getMacroController().setMacroMuted(macroId, true);
     EXPECT_TRUE(moduleAt(engine, strip)->isMuted()) << "muting a channel mutes its strip";
     EXPECT_TRUE(moduleAt(engine, insert)->isMuted());
 }
@@ -130,7 +130,7 @@ TEST(MacroBypassMute, SetMacroMutedSetsEveryMember) {
     auto macroId = makeTwoMemberMacro(editor, engine, a, b);
     ASSERT_FALSE(macroId.isEmpty());
 
-    editor.setMacroMuted(macroId, true);
+    editor.getMacroController().setMacroMuted(macroId, true);
 
     EXPECT_TRUE(moduleAt(engine, a)->isMuted());
     EXPECT_TRUE(moduleAt(engine, b)->isMuted());
@@ -146,7 +146,7 @@ TEST(MacroBypassMute, BypassFanOutIsOneUndoStep) {
     auto macroId = makeTwoMemberMacro(editor, engine, a, b);
     ASSERT_FALSE(macroId.isEmpty());
 
-    editor.setMacroBypassed(macroId, true);
+    editor.getMacroController().setMacroBypassed(macroId, true);
     ASSERT_TRUE(moduleAt(engine, a)->isBypassed());
     ASSERT_TRUE(moduleAt(engine, b)->isBypassed());
 
@@ -174,7 +174,7 @@ TEST(MacroBypassMute, MuteFanOutIsOneUndoStep) {
     auto macroId = makeTwoMemberMacro(editor, engine, a, b);
     ASSERT_FALSE(macroId.isEmpty());
 
-    editor.setMacroMuted(macroId, true);
+    editor.getMacroController().setMacroMuted(macroId, true);
     ASSERT_TRUE(moduleAt(engine, a)->isMuted());
     ASSERT_TRUE(moduleAt(engine, b)->isMuted());
 
@@ -204,20 +204,20 @@ TEST(MacroBypassMute, MuteSkipsAMemberWithNoMuteParameterWithoutCrashing) {
     ASSERT_FALSE(macroId.isEmpty());
 
     // A Macro In port added to the macro is a member with NO "muted" parameter (docs/macros/ports.md#node-types).
-    const auto portUuid =
-        editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    const auto portUuid = editor.getMacroController().addMacroPort(
+        macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
     ASSERT_FALSE(portUuid.isEmpty());
     auto* inlet = moduleAt(engine, nodeIdForUuid(engine, portUuid));
     ASSERT_NE(inlet, nullptr);
     ASSERT_FALSE(inlet->hasMuteParameter());
 
-    editor.setMacroMuted(macroId, true); // must not crash on inlet's unset mutedParam
+    editor.getMacroController().setMacroMuted(macroId, true); // must not crash on inlet's unset mutedParam
 
     EXPECT_TRUE(moduleAt(engine, a)->isMuted());
     EXPECT_TRUE(moduleAt(engine, b)->isMuted());
     // Nothing to assert on inlet's mute state -- it has none -- but macroMuteState (below)
     // confirms it was correctly excluded from the tally.
-    EXPECT_EQ(editor.macroMuteState(macroId), GraphEditor::MacroToggleState::AllOn);
+    EXPECT_EQ(editor.getMacroController().macroMuteState(macroId), GraphEditor::MacroToggleState::AllOn);
 }
 
 // ============================================================================
@@ -232,13 +232,13 @@ TEST(MacroBypassMute, BypassStateReportsAllOffThenAllOnThenMixed) {
     auto macroId = makeTwoMemberMacro(editor, engine, a, b);
     ASSERT_FALSE(macroId.isEmpty());
 
-    EXPECT_EQ(editor.macroBypassState(macroId), GraphEditor::MacroToggleState::AllOff);
+    EXPECT_EQ(editor.getMacroController().macroBypassState(macroId), GraphEditor::MacroToggleState::AllOff);
 
-    editor.setMacroBypassed(macroId, true);
-    EXPECT_EQ(editor.macroBypassState(macroId), GraphEditor::MacroToggleState::AllOn);
+    editor.getMacroController().setMacroBypassed(macroId, true);
+    EXPECT_EQ(editor.getMacroController().macroBypassState(macroId), GraphEditor::MacroToggleState::AllOn);
 
     moduleAt(engine, a)->setBypassed(false);
-    EXPECT_EQ(editor.macroBypassState(macroId), GraphEditor::MacroToggleState::Mixed);
+    EXPECT_EQ(editor.getMacroController().macroBypassState(macroId), GraphEditor::MacroToggleState::Mixed);
 }
 
 TEST(MacroBypassMute, MuteStateIgnoresMuteIneligibleMembersEntirely) {
@@ -251,7 +251,7 @@ TEST(MacroBypassMute, MuteStateIgnoresMuteIneligibleMembersEntirely) {
 
     // Every member is mute-ineligible -> reads AllOff, matching macroMuteState's documented
     // "zero queryable members reads AllOff" rule -- NOT Mixed, and not a crash.
-    EXPECT_EQ(editor.macroMuteState(macroId), GraphEditor::MacroToggleState::AllOff);
+    EXPECT_EQ(editor.getMacroController().macroMuteState(macroId), GraphEditor::MacroToggleState::AllOff);
 }
 
 // ============================================================================
@@ -267,19 +267,19 @@ TEST(MacroBypassMute, ToggleBypassedConvergesMixedAndAllOffToBypassingEveryMembe
     ASSERT_FALSE(macroId.isEmpty());
 
     // AllOff -> toggle -> AllOn.
-    editor.toggleMacroBypassed(macroId);
+    editor.getMacroController().toggleMacroBypassed(macroId);
     EXPECT_TRUE(moduleAt(engine, a)->isBypassed());
     EXPECT_TRUE(moduleAt(engine, b)->isBypassed());
 
     // AllOn -> toggle -> AllOff (the opposite direction).
-    editor.toggleMacroBypassed(macroId);
+    editor.getMacroController().toggleMacroBypassed(macroId);
     EXPECT_FALSE(moduleAt(engine, a)->isBypassed());
     EXPECT_FALSE(moduleAt(engine, b)->isBypassed());
 
     // Mixed -> toggle -> AllOn (converges toward bypassing, not toward the un-bypassed member).
     moduleAt(engine, a)->setBypassed(true);
-    ASSERT_EQ(editor.macroBypassState(macroId), GraphEditor::MacroToggleState::Mixed);
-    editor.toggleMacroBypassed(macroId);
+    ASSERT_EQ(editor.getMacroController().macroBypassState(macroId), GraphEditor::MacroToggleState::Mixed);
+    editor.getMacroController().toggleMacroBypassed(macroId);
     EXPECT_TRUE(moduleAt(engine, a)->isBypassed());
     EXPECT_TRUE(moduleAt(engine, b)->isBypassed());
 }
@@ -292,11 +292,11 @@ TEST(MacroBypassMute, ToggleMutedConvergesMixedAndAllOffToMutingEveryEligibleMem
     auto macroId = makeTwoMemberMacro(editor, engine, a, b);
     ASSERT_FALSE(macroId.isEmpty());
 
-    editor.toggleMacroMuted(macroId);
+    editor.getMacroController().toggleMacroMuted(macroId);
     EXPECT_TRUE(moduleAt(engine, a)->isMuted());
     EXPECT_TRUE(moduleAt(engine, b)->isMuted());
 
-    editor.toggleMacroMuted(macroId);
+    editor.getMacroController().toggleMacroMuted(macroId);
     EXPECT_FALSE(moduleAt(engine, a)->isMuted());
     EXPECT_FALSE(moduleAt(engine, b)->isMuted());
 }
@@ -312,7 +312,7 @@ TEST(MacroBypassMute, SetMacroBypassedIsANoOpForAnUnknownMacroId) {
     undo.setGraphEditor(&editor);
     editor.setSize(1600, 1200);
 
-    editor.setMacroBypassed("not-a-real-macro-id", true);
+    editor.getMacroController().setMacroBypassed("not-a-real-macro-id", true);
 
     EXPECT_FALSE(undo.canUndo());
 }
@@ -330,7 +330,7 @@ TEST(MacroBypassMute, SetMacroMutedIsANoOpWhenNoMemberIsMuteEligible) {
     // canUndo() (which is already true), so this only fails if setMacroMuted pushes its own.
     const int serialBefore = undo.getEditSerial();
 
-    editor.setMacroMuted(macroId, true);
+    editor.getMacroController().setMacroMuted(macroId, true);
 
     EXPECT_EQ(undo.getEditSerial(), serialBefore); // no undo entry for a mutation that touched nothing
 }
@@ -346,7 +346,7 @@ TEST(MacroBypassMute, ToggleMutedRefusesWithStatusMessageWhenNoMemberIsMuteEligi
     juce::String lastStatus;
     editor.onStatusMessage = [&lastStatus](const juce::String& msg) { lastStatus = msg; };
 
-    editor.toggleMacroMuted(macroId);
+    editor.getMacroController().toggleMacroMuted(macroId);
 
     EXPECT_FALSE(lastStatus.isEmpty());
 }
@@ -359,7 +359,7 @@ TEST(MacroBypassMute, ToggleBypassedRefusesWithStatusMessageForAnUnknownMacroId)
     juce::String lastStatus;
     editor.onStatusMessage = [&lastStatus](const juce::String& msg) { lastStatus = msg; };
 
-    editor.toggleMacroBypassed("not-a-real-macro-id");
+    editor.getMacroController().toggleMacroBypassed("not-a-real-macro-id");
 
     EXPECT_FALSE(lastStatus.isEmpty());
 }
@@ -378,9 +378,9 @@ TEST(MacroBypassMute, TitleRowNeverOverlapsEitherToggleBadgeSlot) {
 
     // Long enough that, before getTitleRowBounds() reserved room for both badges, its drawn text
     // would have run under them -- the exact bug the badges' geometry has to not reintroduce.
-    editor.renameMacro(macroId, "A Rather Long Descriptive Macro Name");
+    editor.getMacroController().renameMacro(macroId, "A Rather Long Descriptive Macro Name");
 
-    auto* card = editor.getMacroCardForTest(macroId);
+    auto* card = editor.getMacroController().getMacroCardForTest(macroId);
     ASSERT_NE(card, nullptr);
 
     const auto titleRow = card->getTitleRowBoundsForTest();

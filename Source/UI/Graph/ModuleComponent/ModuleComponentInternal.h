@@ -8,6 +8,12 @@
 // the JUCE module headers these declarations depend on).
 
 #include "Modules/ModuleBase.h"
+#include "UI/MidiRemote/MidiLearnMenu.h"
+
+#include <functional>
+#include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_gui_basics/juce_gui_basics.h>
+#include <vector>
 
 namespace detail {
 
@@ -68,5 +74,11 @@ inline bool isAudioOutputIONode(juce::AudioProcessor* module) {
     auto* io = dynamic_cast<IOProcessor*>(module);
     return io != nullptr && io->getType() == IOProcessor::audioOutputNode;
 }
+
+// RightClickSafeButton moved to Source/UI/MidiRemote/MidiLearnMenu.h in FRO133 -- the mixer
+// (Mute button) and the transport bar (the GlyphButtons) need the exact same right-click guard,
+// and that header (unlike this one) is meant to be included outside the ModuleComponent units.
+using MidiLearnableToggleButton = synth::ui::midilearn::RightClickSafeButton<juce::ToggleButton>;
+using MidiLearnableDrawableButton = synth::ui::midilearn::RightClickSafeButton<juce::DrawableButton>;
 
 } // namespace detail

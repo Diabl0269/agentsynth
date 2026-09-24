@@ -4,6 +4,7 @@
 #include "AudioEngine/AudioEngine.h"
 #include "Modules/FilterModule.h"
 #include "Modules/MidiKeyboardModule.h"
+#include "UI/Graph/PickTargetOverlay/PickCandidate.h"
 #include "UI/ModuleViews/CurveEditor/CurveEditorComponent.h"
 #include "UI/ModuleViews/EQCurveComponent.h"
 #include "UI/ModuleViews/EQWindow.h"
@@ -17,6 +18,8 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+#include <optional>
+#include <vector>
 
 class GraphEditor;        // Forward declaration
 class ExternalMidiModule; // Forward declaration — see Modules/ExternalMidiModule.h
@@ -73,6 +76,26 @@ public:
      *  and static so a test can pin the propagation without capturing pixels — paintMacroPortWidget
      *  is the only caller. */
     static juce::Colour resolveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint);
+
+    // Live preview of a docked widget's jack colour while the Configure I/O picker is open -- a view-layer
+    // transient, so a pick pushes no undo step. Each setter is idempotent: it reports whether this
+    // surface actually changed, so a tick that left the colour alone repaints nothing.
+    bool setPortColourPreview(juce::Colour c) {
+        if (portColourPreview_ && *portColourPreview_ == c)
+            return false;
+        portColourPreview_ = c;
+        return true;
+    }
+    bool clearPortColourPreview() {
+        if (!portColourPreview_.has_value())
+            return false;
+        portColourPreview_.reset();
+        return true;
+    }
+
+    // The jack's actual colour (preview > stored > tint) -- mirrors paint, so a headless test can read it.
+    juce::Colour effectiveMacroPortJackColour(const synth::MacroPort* port, juce::Colour kindTint) const;
+    bool hasPortColourPreviewForTest() const noexcept { return portColourPreview_.has_value(); }
 
     /** Re-measures the card after its VISIBLE PORT COUNT changed for a reason that is not a
      *  parameter gesture — today only Audio Input, whose jacks follow the audio device. Same three
@@ -253,6 +276,30 @@ public:
             hook ? std::move(hook) : [](juce::PopupMenu& m) { m.showMenuAsync(juce::PopupMenu::Options()); };
     }
 
+    // ---- MIDI Learn (FRO130, ModuleComponentMidiLearn.cpp -- see its file comment for the design) ----
+
+    /** Arms/clears (empty id) the breathing outline for the control bound to `paramId`. Message
+     *  thread only. */
+    void setMidiLearnArmedParam(const juce::String& paramId);
+
+public:
+    /** Test/inspection: the param a right-click on `component` would open MIDI Learn for, or null. */
+    juce::RangedAudioParameter* findMidiLearnableParamForTest(const juce::Component* component) const {
+        return midiLearnableRegistry_.find(component);
+    }
+
+    /** Test/inspection: `component`'s MIDI-mapped badge cache, as of the last timerCallback() tick. */
+    bool isMidiLearnBadgeMappedForTest(const juce::Component* component) const {
+        for (const auto& e : midiLearnableRegistry_.entries())
+            if (e.component == component)
+                return e.mapped;
+        return false;
+    }
+
+    // FRO256: test seam for the armed breathing outline's per-tick repaint -- see timerCallback().
+    int getMidiLearnArmedRepaintCountForTest() const noexcept { return midiLearnArmedRepaintCount_; }
+    void collectPickCandidates(std::vector<synth::ui::PickCandidate>& out) const;
+
 private:
     // Non-owning: the juce::Component base owns this via setCachedComponentImage(). See
     // ZoomFrozenCachedImage.h — installed instead of setBufferedToImage(true) so a canvas zoom
@@ -262,6 +309,7 @@ private:
 
     juce::AudioProcessor* module;
     juce::AudioProcessorGraph::NodeID nodeId;
+    std::optional<juce::Colour> portColourPreview_; // live jack-colour preview; view-layer only
     GraphEditor& owner;
     juce::ComponentDragger dragger;
 
@@ -285,6 +333,40 @@ private:
     // gets a null entry so the arrays stay aligned and a match against them is a safe no-op.
     juce::Array<juce::RangedAudioParameter*> sliderParams;
     juce::Array<juce::RangedAudioParameter*> comboParams;
+
+    /** Every learnable control on this card, mapped to the RangedAudioParameter it drives --
+     *  registered via registerMidiLearnable(), read by the menu builder and the badge/pulse paint.
+     *  A nested class rather than living in ModuleComponentInternal.h: it's used as a member's TYPE
+     *  here, and that header assumes ModuleComponent.h is already complete. Entries are non-owning
+     *  (same lifetime as sliderParams/comboParams above). See ModuleComponentMidiLearn.cpp for the
+     *  full design. */
+    class MidiLearnableRegistry {
+    public:
+        struct Entry {
+            juce::Component* component = nullptr;
+            juce::RangedAudioParameter* param = nullptr;
+            bool mapped = false;      // badge cache, written only by refreshBadges() below
+            juce::String tooltip;     // assignment text, e.g. "MIDI: Knob 1 on Launchkey Mini MK3"
+            juce::String baseTooltip; // component's own tooltip at registration (e.g. "Bypass")
+        };
+
+        void add(juce::Component& component, juce::RangedAudioParameter* param);
+        juce::RangedAudioParameter* find(const juce::Component* component) const;
+        const std::vector<Entry>& entries() const { return entries_; }
+
+        /** Mapped display label for `paramId` ("Knob 1 on Launchkey Mini"), or empty if unmapped.
+         *  Refreshes every entry's badge/tooltip cache; returns whether anything changed. */
+        bool refreshBadges(const std::function<juce::String(const juce::String&)>& mappingLabelFor);
+
+    private:
+        std::vector<Entry> entries_;
+    };
+
+    MidiLearnableRegistry midiLearnableRegistry_;
+    juce::String midiLearnArmedParamId_; // the control that should breathe, while armed
+    double midiLearnArmedSinceMs_ = 0.0;
+    // FRO256: backs getMidiLearnArmedRepaintCountForTest() -- test-only, never read in production.
+    int midiLearnArmedRepaintCount_ = 0;
 
     // Attachments need to be kept alive.
     // We are using raw pointers for parameters currently.
@@ -422,14 +504,48 @@ private:
     void layoutMacroPortWidget();
     void paintMacroPortWidget(juce::Graphics& g);
 
+    // The pending-drop-target ring and the live Serum-style modulation rings on knobs. Split out of
+    // paint() (which was at the function-size ratchet's ceiling) rather than grown further.
+    void paintModulationRings(juce::Graphics& g, ModuleBase* mod, juce::Colour jackAccentColour);
+
     /** Right-click-any-knob entry point into the automation lane editor. Attached as a
      *  MouseListener on every generic auto-UI slider (createControls()'s float/int branches) via
      *  addMouseListener(this, false) — mouseDown() dispatches here first when e.eventComponent
      *  isn't this component's own body (checked by identity against `sliders`, index-parallel to
-     *  `sliderParams` exactly like reflectParameterValue()'s lookup). Fires
-     *  owner.onAutomateParameterRequested (if set) with this module's nodeId and the parameter's
-     *  paramID; a no-op otherwise (headless build, no host wired, or a null sliderParams entry). */
+     *  `sliderParams` exactly like reflectParameterValue()'s lookup). Builds "Automate '<Param>'"
+     *  plus the MIDI Learn block (appendMidiLearnMenuItems, ModuleComponentMidiLearn.cpp) under one
+     *  separator, through showContextMenuHook_ so a test can capture it headlessly. */
     void showAutomateMenuForSlider(juce::RangedAudioParameter* param);
+
+    // ---- MIDI Learn (FRO130, ModuleComponentMidiLearn.cpp) ----
+
+    /** Every control on this card whose right-click should offer MIDI Learn -- see
+     *  MidiLearnableRegistry's own comment. Called once per control from createControls(); a null
+     *  `param` is silently ignored. */
+    void registerMidiLearnable(juce::Component& control, juce::RangedAudioParameter* param);
+
+    /** mouseDown()'s right-click handler for every registered control OTHER than a generic slider.
+     *  Routes through showContextMenuHook_, same as showAutomateMenuForSlider. */
+    void showMidiLearnOnlyMenu(juce::RangedAudioParameter* param);
+
+    /** Shared by both menu builders above: appends the doc-exact MIDI Learn block
+     *  (docs/control/midi-remote-ui.md#the-learn-interaction) to `menu`. A no-op if
+     *  owner.onQueryMidiMappingsForNode isn't set. */
+    void appendMidiLearnMenuItems(juce::PopupMenu& menu, juce::RangedAudioParameter* param);
+
+    /** "MIDI Learn"/"MIDI Learn again" menu action: fires owner.onMidiLearnRequested(nodeId, paramId). */
+    void armMidiLearnFor(const juce::String& paramId);
+
+    /** "Forget MIDI" menu action: fires owner.onMidiForgetRequested(nodeId, paramId). */
+    void forgetMidiFor(const juce::String& paramId);
+
+    /** Refreshes every registered control's MIDI-mapped badge cache (ONE query per module) and
+     *  repaints only if something changed. Called from the existing gated 15 Hz timerCallback. */
+    void refreshMidiLearnBadges();
+
+    /** Paints the "mapped" badge on every registered control that has one, and the armed control's
+     *  breathing outline. Called from paint() (ModuleComponentPaint.cpp). */
+    void paintMidiLearnOverlays(juce::Graphics& g);
 
     // Raw->LogicalPort snapshots of the module's current channel layout. "poly" and "dualIO"
     // change that layout, so these are captured at construction and refreshed on each toggle.

@@ -3,8 +3,11 @@
 // or invokes an action command on press. This is where takeover (jump/pick-up/scale) and the 250 ms gesture-idle rule
 // live.
 
+#include "MidiRemote/ContinuousTarget.h"
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
 #include "MidiRemote/RemoteEngine/RemoteEngineInternal.h"
+
+#include <algorithm>
 
 namespace synth::midi {
 
@@ -15,6 +18,13 @@ void RemoteEngine::applyEvent(const RemoteMappingSnapshot& snapshot, const Remot
     const auto& slot = snapshot.slots[static_cast<std::size_t>(event.slotIndex)];
     if (slot.target.isAction())
         applyToAction(slot, event);
+    else if (slot.target.isNodeCommand())
+        applyToNodeCommand(slot, event);
+    else if (slot.target.isContinuous() && slot.continuous != ContinuousTargetKind::masterVolume)
+        // FRO236: masterVolume falls through to applyToParameter below, exactly like a parameter
+        // target -- it resolves to the SAME juce::AudioProcessorParameter* the mixer's master fader
+        // binds (RemoteEngineReconcile.cpp), so takeover/gesture/feedback all come for free.
+        applyToContinuous(slot, event);
     else
         applyToParameter(slot, event);
 }
@@ -28,9 +38,29 @@ void RemoteEngine::applyToAction(const RemoteMappingSnapshot::Slot& slot, const 
     actionInvoker_->invokeRemoteCommand(slot.commandId);
 }
 
+// FRO253 (docs/control/midi-remote.md#node-command-targets): same "press only, momentary and
+// toggle alike" rule as applyToAction above -- a pad press toggles solo, like a mouse click;
+// hold-to-solo is not built.
+void RemoteEngine::applyToNodeCommand(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event) {
+    if (event.kind != RemoteEventKind::buttonPress)
+        return;
+    if (slot.orphaned || actionInvoker_ == nullptr)
+        return;
+    actionInvoker_->invokeNodeCommand(slot.nodeId, slot.target.nodeCommand.command);
+}
+
 void RemoteEngine::applyToParameter(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event) {
     if (slot.orphaned || slot.param == nullptr)
         return;
+
+    // FRO139 (docs/control/midi-remote.md#controller-feedback): every real hardware event on this
+    // control counts, even one a claim takeover below is about to reject -- a controller that just
+    // sent something is a controller the drain must not immediately echo a stale value back to.
+    {
+        FeedbackState& fb = feedback_[slot.assignmentId];
+        fb.hasHardware = true;
+        fb.lastHardwareMs = clock_();
+    }
 
     const auto existingIt = gestures_.find(slot.assignmentId);
     const bool hasActiveGesture = existingIt != gestures_.end() && existingIt->second.gestureActive;
@@ -111,6 +141,84 @@ void RemoteEngine::applyToParameter(const RemoteMappingSnapshot::Slot& slot, con
     state.lastEventMs = clock_();
 }
 
+// FRO236 (docs/control/midi-remote.md#continuous-targets): bpm/playhead dispatch here; masterVolume
+// never reaches this function (RemoteEngine::applyEvent routes it to applyToParameter instead).
+void RemoteEngine::applyToContinuous(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event) {
+    if (event.kind == RemoteEventKind::buttonPress || event.kind == RemoteEventKind::buttonRelease)
+        return; // no defined behaviour -- docs/control/midi-remote.md#continuous-targets
+    if (actionInvoker_ == nullptr)
+        return;
+
+    const ContinuousTargetKind kind = slot.continuous;
+
+    if (event.kind == RemoteEventKind::relativeDelta) {
+        // Relative encodings bypass takeover entirely, same rule as applyToParameter.
+        const int detents = juce::roundToInt(event.value / kRelativeSensitivity);
+        if (detents == 0)
+            return;
+        double native = actionInvoker_->getContinuousValue(kind) + detents * kRemoteContinuousRelativeStep;
+        if (kind == ContinuousTargetKind::playhead)
+            native = std::max(0.0, native);
+        actionInvoker_->setContinuousValue(kind, native);
+        continuousGestures_.erase(slot.assignmentId); // no in-flight takeover state for relative
+        return;
+    }
+
+    double lo = 0.0, hi = 1.0;
+    if (kind == ContinuousTargetKind::bpm) {
+        lo = kRemoteBpmWindowMin;
+        hi = kRemoteBpmWindowMax;
+    } else if (!actionInvoker_->getContinuousWindow(kind, lo, hi)) {
+        return; // inert right now -- e.g. the plugin build, which never owns the transport
+    }
+
+    const float hw = detail::mapThroughRange(event.value, slot.rangeMin, slot.rangeMax);
+
+    if (kind == ContinuousTargetKind::playhead) {
+        // ALWAYS Jump -- the playhead moves on its own, so takeover has nothing to converge from
+        // (docs/control/midi-remote.md#continuous-targets).
+        actionInvoker_->setContinuousValue(kind, lo + static_cast<double>(hw) * (hi - lo));
+        return;
+    }
+
+    // bpm absolute: takeover honoured exactly like applyToParameter, with its own per-assignment
+    // state (continuousGestures_ has no juce parameter gesture to begin/end).
+    const auto existingIt = continuousGestures_.find(slot.assignmentId);
+    const bool isNewGesture = existingIt == continuousGestures_.end();
+    ContinuousGestureState& state = continuousGestures_[slot.assignmentId];
+
+    const double current = actionInvoker_->getContinuousValue(kind);
+    const float cur = juce::jlimit(0.0f, 1.0f, static_cast<float>((current - lo) / (hi - lo)));
+    const Takeover resolved = slot.takeover == Takeover::useDefault ? defaultTakeover_ : slot.takeover;
+
+    float target = hw;
+    bool shouldApply = true;
+    if (resolved == Takeover::pickup) {
+        if (state.takeoverEngaged) {
+            // target already hw
+        } else if (isNewGesture) {
+            shouldApply = false;
+        } else if (detail::pickupHasCrossed(state.lastValue, cur, hw)) {
+            state.takeoverEngaged = true;
+        } else {
+            shouldApply = false;
+        }
+    } else if (resolved != Takeover::jump) {
+        // Scale (and the defensive useDefault fallback).
+        if (isNewGesture)
+            shouldApply = false;
+        else
+            target = detail::scaleTarget(cur, state.lastValue, hw);
+    }
+    state.lastValue = hw;
+    state.lastEventMs = clock_();
+
+    if (!shouldApply)
+        return;
+
+    actionInvoker_->setContinuousValue(kind, lo + static_cast<double>(target) * (hi - lo));
+}
+
 void RemoteEngine::expireIdleGestures() {
     const double now = clock_();
     for (auto it = gestures_.begin(); it != gestures_.end();) {
@@ -121,6 +229,14 @@ void RemoteEngine::expireIdleGestures() {
         } else {
             ++it;
         }
+    }
+    // FRO236: a bpm absolute takeover's per-assignment state resets the same way a real gesture's
+    // does -- the next turn after this idle window is a fresh "first event" for pickup/scale.
+    for (auto it = continuousGestures_.begin(); it != continuousGestures_.end();) {
+        if (now - it->second.lastEventMs >= kGestureIdleMs)
+            it = continuousGestures_.erase(it);
+        else
+            ++it;
     }
 }
 

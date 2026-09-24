@@ -45,7 +45,7 @@ TEST(MacroWrap, WrapAndUnwrapRoundTrip) {
     auto uuidB = uuidOf(engine, b);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
     EXPECT_EQ(editor.getMacros().size(), 1);
 
@@ -55,7 +55,7 @@ TEST(MacroWrap, WrapAndUnwrapRoundTrip) {
     EXPECT_TRUE(macro->hasMember(uuidA));
     EXPECT_TRUE(macro->hasMember(uuidB));
 
-    editor.ungroupSelection();
+    editor.getMacroController().ungroupSelection();
     EXPECT_TRUE(editor.getMacros().empty());
     EXPECT_NE(engine.getGraph().getNodeForId(a), nullptr) << "ungroup keeps the modules";
     EXPECT_NE(engine.getGraph().getNodeForId(b), nullptr);
@@ -84,7 +84,7 @@ TEST(MacroWrap, WrapsFreshlyDroppedModulesWithNoUuidYet) {
     editor.setSelectedNodes({a->nodeID, b->nodeID});
     EXPECT_EQ(editor.getSelectionCount(), 2);
 
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
     auto* macro = editor.getMacros().find(macroId);
     ASSERT_NE(macro, nullptr);
@@ -102,14 +102,14 @@ TEST(MacroWrap, RefusesFewerThanTwoSelected) {
     editor.onStatusMessage = [&](const juce::String& msg) { lastMessage = msg; };
 
     // Nothing selected.
-    EXPECT_TRUE(editor.groupSelectionIntoMacro().isEmpty());
+    EXPECT_TRUE(editor.getMacroController().groupSelectionIntoMacro().isEmpty());
     EXPECT_TRUE(editor.getMacros().empty());
     EXPECT_FALSE(lastMessage.isEmpty());
 
     lastMessage.clear();
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 0, 0);
     editor.selectModule(a, false);
-    EXPECT_TRUE(editor.groupSelectionIntoMacro().isEmpty());
+    EXPECT_TRUE(editor.getMacroController().groupSelectionIntoMacro().isEmpty());
     EXPECT_TRUE(editor.getMacros().empty());
     EXPECT_FALSE(lastMessage.isEmpty());
 }
@@ -124,14 +124,14 @@ TEST(MacroWrap, RefusesNestingAnAlreadyGroupedModule) {
     auto c = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 900, 100);
 
     editor.setSelectedNodes({a, b});
-    auto firstMacroId = editor.groupSelectionIntoMacro();
+    auto firstMacroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(firstMacroId.isEmpty());
 
     juce::String lastMessage;
     editor.onStatusMessage = [&](const juce::String& msg) { lastMessage = msg; };
 
     editor.setSelectedNodes({b, c}); // b is already in a macro
-    EXPECT_TRUE(editor.groupSelectionIntoMacro().isEmpty());
+    EXPECT_TRUE(editor.getMacroController().groupSelectionIntoMacro().isEmpty());
     EXPECT_FALSE(lastMessage.isEmpty());
 
     ASSERT_EQ(editor.getMacros().size(), 1) << "nesting must be refused, not silently create a second macro";
@@ -161,10 +161,10 @@ TEST(MacroPersistence, MembershipAndPresentationSurviveProjectBundleSaveAndLoad)
     auto uuidB = uuidOf(engine, b);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
-    editor.renameMacro(macroId, "MyGroup");
-    editor.setMacroColour(macroId, juce::Colour(0xffabcdef));
+    editor.getMacroController().renameMacro(macroId, "MyGroup");
+    editor.getMacroController().setMacroColour(macroId, juce::Colour(0xffabcdef));
 
     synth::TimelineDoc timeline;
     synth::PatchDocument patchDocument;
@@ -208,7 +208,7 @@ TEST(MacroSnippet, ExtractAndInsertSucceedsAndCreatesANewMacroWithFreshUuids) {
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
     auto* originalMacro = editor.getMacros().find(macroId);
@@ -248,11 +248,11 @@ TEST(MacroSnippet, ConfiguredPortSurvivesDuplicateAndSaveAsSnippet) {
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
-    auto portUuid = editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono,
-                                        1, "Pitch In");
+    auto portUuid = editor.getMacroController().addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV,
+                                                             MacroPortShape::Mono, 1, "Pitch In");
     ASSERT_FALSE(portUuid.isEmpty());
 
     auto* original = editor.getMacros().find(macroId);
@@ -260,7 +260,7 @@ TEST(MacroSnippet, ConfiguredPortSurvivesDuplicateAndSaveAsSnippet) {
     ASSERT_EQ(original->ports.size(), 1u);
 
     // ---- Duplicate ----
-    editor.selectMacro(macroId, false);
+    editor.getMacroController().selectMacro(macroId, false);
     ASSERT_EQ(editor.getSelectionCount(), 3) << "the macro now has 3 members: a, b, and the port's inlet node";
     ASSERT_TRUE(editor.duplicateSelection());
 
@@ -276,7 +276,7 @@ TEST(MacroSnippet, ConfiguredPortSurvivesDuplicateAndSaveAsSnippet) {
     const juce::String duplicatedId = duplicated->id; // copy before the next mutation may reallocate MacroSet
 
     // ---- Save as Snippet / insert ----
-    editor.selectMacro(macroId, false);
+    editor.getMacroController().selectMacro(macroId, false);
     auto snippet = editor.extractSelectionSnippet("PortedMacro");
     ASSERT_TRUE(editor.insertSnippetAt(snippet, {1400, 900}));
 
@@ -304,7 +304,7 @@ TEST(MacroDelete, DeletingOneMemberShrinksTheMacro) {
     auto uuidA = uuidOf(engine, a);
 
     editor.setSelectedNodes({a, b, c});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
     editor.setSelectedNodes({a});
@@ -328,7 +328,7 @@ TEST(MacroDelete, DeletingDownToOneMemberDoesNotDissolveButDeletingTheLastDoes) 
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
     editor.setSelectedNodes({a});
@@ -354,10 +354,10 @@ TEST(MacroDelete, DeleteMacroAndMembersRemovesBothTheMacroAndItsNodes) {
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
-    editor.deleteMacroAndMembers(macroId);
+    editor.getMacroController().deleteMacroAndMembers(macroId);
 
     EXPECT_EQ(editor.getMacros().find(macroId), nullptr);
     EXPECT_EQ(engine.getGraph().getNodeForId(a), nullptr);
@@ -373,10 +373,10 @@ TEST(MacroDelete, UngroupSelectionKeepsTheModulesInTheGraph) {
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
-    editor.ungroupSelection();
+    editor.getMacroController().ungroupSelection();
 
     EXPECT_TRUE(editor.getMacros().empty());
     EXPECT_NE(engine.getGraph().getNodeForId(a), nullptr);
@@ -399,10 +399,10 @@ TEST(MacroMembership, AddSelectionToMacroAddsALooseModuleAsANewOrdinaryMember) {
     auto uuidC = uuidOf(engine, c);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
-    editor.addSelectionToMacro(macroId, {uuidC});
+    editor.getMacroController().addSelectionToMacro(macroId, {uuidC});
 
     auto* macro = editor.getMacros().find(macroId);
     ASSERT_NE(macro, nullptr);
@@ -418,13 +418,13 @@ TEST(MacroMembership, AddSelectionToMacroRefusesWhenAUuidIsAlreadyInAnotherMacro
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<FilterModule>(), 500, 100);
     editor.setSelectedNodes({a, b});
-    auto macroA = editor.groupSelectionIntoMacro();
+    auto macroA = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroA.isEmpty());
 
     auto c = addModuleAt(editor, engine, std::make_unique<VCAModule>(), 900, 100);
     auto d = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 1300, 100);
     editor.setSelectedNodes({c, d});
-    auto macroB = editor.groupSelectionIntoMacro();
+    auto macroB = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroB.isEmpty());
 
     auto uuidC = uuidOf(engine, c); // already a member of macroB
@@ -434,7 +434,7 @@ TEST(MacroMembership, AddSelectionToMacroRefusesWhenAUuidIsAlreadyInAnotherMacro
     juce::String lastMessage;
     editor.onStatusMessage = [&](const juce::String& msg) { lastMessage = msg; };
 
-    editor.addSelectionToMacro(macroA, {uuidLoose, uuidC});
+    editor.getMacroController().addSelectionToMacro(macroA, {uuidLoose, uuidC});
 
     EXPECT_FALSE(lastMessage.isEmpty()) << "must refuse with a status message, not a silent no-op";
     auto* macro = editor.getMacros().find(macroA);
@@ -462,11 +462,11 @@ TEST(MacroMembership, AddSelectionToMacroIsOneUndoStep) {
     auto uuidC = uuidOf(engine, c);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
     undoManager.clearUndoHistory();
 
-    editor.addSelectionToMacro(macroId, {uuidC});
+    editor.getMacroController().addSelectionToMacro(macroId, {uuidC});
     ASSERT_TRUE(editor.getMacros().find(macroId)->hasMember(uuidC));
 
     ASSERT_TRUE(undoManager.canUndo());
@@ -488,10 +488,10 @@ TEST(MacroMembership, RemoveSelectionFromMacroShrinksTheMacroWithoutDissolvingIt
     auto uuidA = uuidOf(engine, a);
 
     editor.setSelectedNodes({a, b, c});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
-    editor.removeSelectionFromMacro(macroId, {uuidA});
+    editor.getMacroController().removeSelectionFromMacro(macroId, {uuidA});
 
     auto* macro = editor.getMacros().find(macroId);
     ASSERT_NE(macro, nullptr);
@@ -511,10 +511,10 @@ TEST(MacroMembership, RemoveSelectionFromMacroDissolvesOnTheLastMember) {
     auto uuidB = uuidOf(engine, b);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
-    editor.removeSelectionFromMacro(macroId, {uuidA, uuidB});
+    editor.getMacroController().removeSelectionFromMacro(macroId, {uuidA, uuidB});
 
     EXPECT_EQ(editor.getMacros().find(macroId), nullptr);
     EXPECT_TRUE(editor.getMacros().empty());
@@ -537,7 +537,7 @@ TEST(MacroMembership, RemoveSelectionFromMacroSkipsAPortUuidRatherThanDesyncingM
     auto portUuid = uuidOf(engine, portNode);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
     // Hand-crafts a MacroPort entry fronting that real node, mirroring the one invariant
@@ -553,7 +553,7 @@ TEST(MacroMembership, RemoveSelectionFromMacroSkipsAPortUuidRatherThanDesyncingM
     macro->ports.push_back(port);
 
     const auto uuidB = uuidOf(engine, b);
-    editor.removeSelectionFromMacro(macroId, {portUuid, uuidB});
+    editor.getMacroController().removeSelectionFromMacro(macroId, {portUuid, uuidB});
 
     macro = editor.getMacros().find(macroId);
     ASSERT_NE(macro, nullptr);
@@ -582,11 +582,11 @@ TEST(MacroMembership, RemoveSelectionFromMacroCreatesAPortForTheNewlyCrossingCab
     auto uuidA = uuidOf(engine, a);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro(); // no auto-ports at creation (default false)
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro(); // no auto-ports at creation (default false)
     ASSERT_FALSE(macroId.isEmpty());
     ASSERT_TRUE(editor.getMacros().find(macroId)->ports.empty());
 
-    editor.removeSelectionFromMacro(macroId, {uuidA});
+    editor.getMacroController().removeSelectionFromMacro(macroId, {uuidA});
 
     auto* macro = editor.getMacros().find(macroId);
     ASSERT_NE(macro, nullptr);
@@ -627,11 +627,11 @@ TEST(MacroMembership, AddSelectionToMacroCreatesAPortForTheNewCrossingCable) {
     auto uuidC = uuidOf(engine, c);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
     ASSERT_TRUE(editor.getMacros().find(macroId)->ports.empty());
 
-    editor.addSelectionToMacro(macroId, {uuidC});
+    editor.getMacroController().addSelectionToMacro(macroId, {uuidC});
 
     auto* macro = editor.getMacros().find(macroId);
     ASSERT_NE(macro, nullptr);
@@ -674,7 +674,7 @@ TEST(MacroMembership, AddSelectionToMacroSplicesOutAnExistingPortTheJoiningMembe
 
     auto a = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 100, 100);
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro(true);
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro(true);
     ASSERT_FALSE(macroId.isEmpty());
     ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u) << "the crossing to `outside` got a real port";
     const auto portUuidBefore = editor.getMacros().find(macroId)->ports.front().nodeUuid;
@@ -682,7 +682,7 @@ TEST(MacroMembership, AddSelectionToMacroSplicesOutAnExistingPortTheJoiningMembe
     // Now `outside` itself joins the SAME macro -- its own connection to b's port is no longer a
     // real external boundary at all (both ends interior), so that port must be spliced back out
     // into a plain direct b<->outside connection, not left as a redundant double-port.
-    editor.addSelectionToMacro(macroId, {uuidOutside});
+    editor.getMacroController().addSelectionToMacro(macroId, {uuidOutside});
 
     auto* macro = editor.getMacros().find(macroId);
     ASSERT_NE(macro, nullptr);
@@ -713,11 +713,11 @@ TEST(MacroMembership, RemoveSelectionFromMacroWithASplicedPortIsOneUndoStep) {
     auto uuidA = uuidOf(engine, a);
 
     editor.setSelectedNodes({a, b});
-    auto macroId = editor.groupSelectionIntoMacro();
+    auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
     undoManager.clearUndoHistory();
 
-    editor.removeSelectionFromMacro(macroId, {uuidA});
+    editor.getMacroController().removeSelectionFromMacro(macroId, {uuidA});
     ASSERT_EQ(editor.getMacros().find(macroId)->ports.size(), 1u) << "sanity: this call really did splice a port";
 
     ASSERT_TRUE(undoManager.canUndo());

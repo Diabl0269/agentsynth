@@ -40,6 +40,9 @@ void MainComponent::addCanvasAndPanels() {
         // exactly the cases that need it — a binding can only start or stop resolving when a node
         // appears or disappears, which is also the only way an orphan flag moves.
         reconcileTimelineBindingsOnly();
+        // FRO135: a canvas delete orphans MIDI Remote assignments; the open panel shows "(missing module)"
+        // only once it rebuilds. Deferred and coalesced, so a burst of structural changes is one rebuild.
+        mixerDock.getMidiRemotePanel().scheduleLiveRefresh();
         // FRO103: the other half of onBeforeDetachAllModuleComponents. A single-node removal
         // (deleteSelection, requestDeleteModule, replaceModule) unbinds the WHOLE mixer before it
         // frees anything, and has no rebuild of its own -- reconcileTimelineBindingsOnly() above
@@ -65,6 +68,8 @@ void MainComponent::addCanvasAndPanels() {
     // added here (Own-panel visibility is unrelated to isTimelineVisible above) and given real
     // bounds only by resized(), gated on mixerPlacement_.isOwnPanelShowing().
     addAndMakeVisible(mixerPlacement_);
+    // FRO231: the Own panel's slide/height changes are laid out by THIS component's carve.
+    mixerPlacement_.onLayoutNeeded = [this] { resized(); };
     graphEditor.getModMatrix().setVisible(graphEditor.isModMatrixVisible());
 }
 
@@ -197,6 +202,13 @@ void MainComponent::addToolbarToggleButtons() {
         applyToolbarIcons();
     };
 
+    // FRO131 (docs/control/midi-remote-ui.md#the-midi-remote-panel): same shape as
+    // toggleTimelineButton above, through performToggleMidiRemotePanel() rather than a plain
+    // triggerClick() -- the dock is shared between three tabs now.
+    addAndMakeVisible(toggleMidiRemoteButton);
+    toggleMidiRemoteButton.setComponentID("toggleMidiRemote");
+    toggleMidiRemoteButton.onClick = [this] { performToggleMidiRemotePanel(); };
+
     addAndMakeVisible(toggleModMatrixButton);
     toggleModMatrixButton.setComponentID("toggleModMatrix");
     toggleModMatrixButton.onClick = [this] {
@@ -219,39 +231,35 @@ void MainComponent::addToolbarToggleButtons() {
 
     addAndMakeVisible(settingsButton);
     settingsButton.setComponentID("settingsButton");
-    settingsButton.onClick = [this]() {
-        auto* settingsComp =
-            new SettingsWindow(audioEngine.getDeviceManager(), appProperties, aiService, aiChatComponent,
-                               shortcutManager, *themeManager, &graphEditor, &accountService,
-                               /*showAudioTab=*/!audioEngine.isHosted());
-        settingsComp->setSize(500, 450);
-
-        juce::DialogWindow::LaunchOptions options;
-        options.content.setOwned(settingsComp);
-        options.dialogTitle = "Settings";
-        options.componentToCentreAround = this;
-        options.useNativeTitleBar = true;
-        options.resizable = true;
-        options.launchAsync();
-    };
+    settingsButton.onClick = [this]() { launchSettingsWindow({}); };
 
     addAndMakeVisible(feedbackButton);
     feedbackButton.setComponentID("feedbackButton");
-    feedbackButton.onClick = [this]() {
-        auto* settingsComp =
-            new SettingsWindow(audioEngine.getDeviceManager(), appProperties, aiService, aiChatComponent,
-                               shortcutManager, *themeManager, &graphEditor, &accountService,
-                               /*showAudioTab=*/!audioEngine.isHosted(), "Feedback");
-        settingsComp->setSize(500, 450);
+    feedbackButton.onClick = [this]() { launchSettingsWindow("Feedback"); };
+}
 
-        juce::DialogWindow::LaunchOptions options;
-        options.content.setOwned(settingsComp);
-        options.dialogTitle = "Settings";
-        options.componentToCentreAround = this;
-        options.useNativeTitleBar = true;
-        options.resizable = true;
-        options.launchAsync();
-    };
+// One place for both entry points (the gear and the feedback button), which differ only in the tab
+// they open on. The Audio tab's caption names the profiled MIDI controllers (FRO136); a Host MIDI
+// profile has no device of its own, so it is left out.
+void MainComponent::launchSettingsWindow(const juce::String& initialTabName) {
+    std::vector<juce::String> profiledDevices;
+    for (const auto& profile : midiLearnController_.getProfiles())
+        if (profile.input.identifier != synth::midi::hostSourceKey())
+            profiledDevices.push_back(profile.input.name);
+
+    auto* settingsComp =
+        new SettingsWindow(audioEngine.getDeviceManager(), appProperties, aiService, aiChatComponent, shortcutManager,
+                           *themeManager, &graphEditor, &accountService,
+                           /*showAudioTab=*/!audioEngine.isHosted(), initialTabName, std::move(profiledDevices));
+    settingsComp->setSize(500, 450);
+
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned(settingsComp);
+    options.dialogTitle = "Settings";
+    options.componentToCentreAround = this;
+    options.useNativeTitleBar = true;
+    options.resizable = true;
+    options.launchAsync();
 }
 
 void MainComponent::assembleToolbar() {
@@ -262,7 +270,7 @@ void MainComponent::assembleToolbar() {
     // Calling setSize() before setButtons() leaves all buttons with zero bounds on first launch.
     toolbar.setButtons({&toggleLibraryButton, &newButton, &saveButton, &loadButton, &settingsButton, &feedbackButton,
                         &undoButton, &redoButton, &autoArrangeButton, &toggleMinimapButton, &toggleModMatrixButton,
-                        &toggleAiPanelButton, &toggleTimelineButton, &themeToggleButton});
+                        &toggleAiPanelButton, &toggleTimelineButton, &toggleMidiRemoteButton, &themeToggleButton});
 
     // Now that buttons are registered, trigger the first layout pass. resized() calls
     // toolbar.layoutButtons() which positions the buttons using their registered pointers.

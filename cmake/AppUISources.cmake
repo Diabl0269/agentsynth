@@ -6,6 +6,8 @@ set(APPUI_SOURCES
     Source/MainComponent/MainComponent.cpp
     Source/MainComponent/MainComponent.h
     Source/MainComponent/MainComponentInternal.h
+    Source/MainComponent/MainComponentRemoteActionInvoker.h
+    Source/MainComponent/MainComponentRemoteActionInvoker.cpp
     Source/MainComponent/MainComponentSetup.cpp
     Source/MainComponent/MainComponentSetupToolbar.cpp
     Source/MainComponent/MainComponentSetupTimeline.cpp
@@ -21,6 +23,14 @@ set(APPUI_SOURCES
     Source/UserSettings.h
     Source/MidiRemote/ControllerProfileStore.h
     Source/MidiRemote/ControllerProfileStore.cpp
+    Source/MidiRemote/MidiRemoteFeedbackOutputs.h
+    Source/MidiRemote/MidiRemoteFeedbackOutputs.cpp
+    Source/MidiRemote/MidiLearnController.h
+    Source/MidiRemote/MidiLearnController.cpp
+    Source/MidiRemote/MidiLearnControllerMapping.cpp
+    Source/MidiRemote/MidiLearnControllerPick.cpp
+    Source/UI/Graph/PickTargetOverlay/GraphPickCandidates.cpp
+    Source/UI/Graph/PickTargetOverlay/PickTargetOverlay.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.cpp
     Source/UI/Timeline/TimelinePanelComponent/TimelinePanelStrips.cpp
@@ -41,6 +51,7 @@ set(APPUI_SOURCES
     Source/UI/Timeline/TrackChannelLinkController.cpp
     Source/UI/Timeline/TimelineTransportBar.h
     Source/UI/Timeline/TimelineTransportBar.cpp
+    Source/UI/Timeline/TimelineTransportBarMidiLearn.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.cpp
     Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneInternal.h
@@ -73,6 +84,7 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerSendList.cpp
     Source/UI/Mixer/MixerColumnComponent.h
     Source/UI/Mixer/MixerColumnComponent.cpp
+    Source/UI/Mixer/MixerColumnMidiLearn.cpp
     Source/UI/Mixer/MixerDirectColumn.h
     Source/UI/Mixer/MixerDirectColumn.cpp
     Source/UI/Mixer/MixerMasterColumn.h
@@ -85,6 +97,8 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerDockComponent.cpp
     Source/UI/Mixer/MixerPlacementController.h
     Source/UI/Mixer/MixerPlacementController.cpp
+    Source/UI/Layout/PanelResizeHandle.h
+    Source/UI/Layout/PanelResizeHandle.cpp
     Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.h
     Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.cpp
     Source/UI/Layout/DetachablePanelHost/DetachedPanelWindow.h
@@ -163,6 +177,32 @@ set(APPUI_SOURCES
     Source/UI/Graph/ModuleComponent/ModuleComponentPaint.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentInteraction.cpp
     Source/UI/Graph/ModuleComponent/ModuleComponentEnvelopeCard.cpp
+    Source/UI/Graph/ModuleComponent/ModuleComponentMidiLearn.cpp
+    Source/UI/MidiRemote/MidiLearnMenu.h
+    Source/UI/MidiRemote/MidiLearnMenu.cpp
+    Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.h
+    Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.cpp
+    Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelDetect.cpp
+    Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelHosted.cpp
+    Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelControllers.cpp
+    Source/UI/MidiRemote/Detect/DetectModeController.h
+    Source/UI/MidiRemote/Detect/DetectModeController.cpp
+    Source/UI/MidiRemote/AddController/AddControllerPopover.h
+    Source/UI/MidiRemote/AddController/AddControllerPopover.cpp
+    Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceToolbar.h
+    Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceToolbar.cpp
+    Source/UI/MidiRemote/ControllersList/ControllersListComponent.h
+    Source/UI/MidiRemote/ControllersList/ControllersListComponent.cpp
+    Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceComponent.h
+    Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceComponent.cpp
+    Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceCell.h
+    Source/UI/MidiRemote/ControllerSurface/ControllerSurfaceCell.cpp
+    Source/UI/MidiRemote/Inspector/ControlInspectorComponent.h
+    Source/UI/MidiRemote/Inspector/ControlInspectorComponent.cpp
+    Source/UI/MidiRemote/ActionPicker/ActionPickerComponent.cpp
+    Source/UI/MidiRemote/Orphan/OrphanControllerComponent.cpp
+    Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelAssign.cpp
+    Source/UI/MidiRemote/MidiRemotePanel/MidiRemotePanelOrphans.cpp
     Source/UI/Macros/MacroCardComponent.cpp
     Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogLifecycle.cpp
     Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialogRowOrdering.cpp
@@ -187,6 +227,8 @@ set(APPUI_SOURCES
     Source/UI/ModuleViews/ThresholdControlComponent.h
     Source/UI/Graph/ModMatrixComponent.cpp
     Source/UI/Graph/ModMatrixComponent.h
+    Source/UI/Settings/AudioSettingsTab.cpp
+    Source/UI/Settings/AudioSettingsTab.h
     Source/UI/Settings/SettingsWindow.cpp
     Source/UI/Settings/SettingsWindow.h
     Source/UI/Chrome/WelcomeScreenComponent.cpp
@@ -196,6 +238,12 @@ set(APPUI_SOURCES
     Source/Plugin/Hosting/HostedPluginEditorWindow.cpp
     Source/Plugin/Hosting/HostedPluginEditorWindow.h
     Source/Plugin/Hosting/HostedPluginWindowManager.h
+    # Plugin card layout (FRO126) — the per-plugin-type store reads the settings folder, so it is
+    # app layer, not Core; the resolver that consults it sits beside it.
+    Source/Plugin/Hosting/PluginCardLayoutStore.cpp
+    Source/Plugin/Hosting/PluginCardLayoutStore.h
+    Source/Plugin/Hosting/HostedPluginCardLayout.cpp
+    Source/Plugin/Hosting/HostedPluginCardLayout.h
     Source/UI/Settings/AppearanceSettingsTab.cpp
     Source/UI/Settings/AppearanceSettingsTab.h
     Source/UI/Settings/MeterColourStopsEditor.cpp
@@ -207,6 +255,7 @@ set(APPUI_SOURCES
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabTimelineBehaviour.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabAutosave.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMixerDefaults.cpp
+    Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabMidiRemote.cpp
     Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h
     Source/UI/Settings/ShortcutsSettingsTab.cpp
     Source/ShortcutManager/AppCommands.h

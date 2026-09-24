@@ -64,6 +64,11 @@ void MixerSendList::rebuildKnobs() {
                                                                            (double)range.interval, (double)range.skew,
                                                                            range.symmetricSkew));
             row.attachment = std::make_unique<juce::SliderParameterAttachment>(*param, *row.knob);
+            // FRO133: lets the owning MixerColumnComponent register this row's knob in its OWN
+            // MIDI-learn registry -- this list stays free of a second registry/menu of its own
+            // (see MixerColumnMidiLearn.cpp's file comment).
+            if (onSendKnobBuilt)
+                onSendKnobBuilt(*row.knob, param);
         }
         rows_.push_back(std::move(row));
     }

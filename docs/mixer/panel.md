@@ -61,9 +61,11 @@ scoped per window.
 
 The mechanism is `Source/UI/Layout/DetachablePanelHost/` (`DetachablePanelHost` plus
 `DetachedPanelWindow`): a slot that moves a panel **by reference** — never copied or rebuilt —
-between its dock and a `DetachedPanelWindow`. `MixerDockComponent` owns two hosts,
-`timelineHost_`/`mixerHost_`, both wrapping the SAME `TimelinePanelComponent`/`MixerPanelComponent`
-instances it already held, so scroll, zoom and selection survive a detach untouched.
+between its dock and a `DetachedPanelWindow`. `MixerDockComponent` owns three hosts,
+`timelineHost_`/`mixerHost_`/`midiRemoteHost_`, each wrapping the SAME `TimelinePanelComponent`/
+`MixerPanelComponent`/`MidiRemotePanelComponent` instance it already held, so scroll, zoom and
+selection survive a detach untouched. `midiRemoteHost_` (FRO131) is always Tab placement — no
+Own-panel/Window placement variant like Mixer's own, so it has no third row in the table below.
 
 `synth::ui::MixerPlacementController` (the one collaborator `MainComponent.h` adds for this) moves
 `mixerHost_` between its three homes:
@@ -71,7 +73,7 @@ instances it already held, so scroll, zoom and selection survive a detach untouc
 | Placement | Mixer lives | Timeline dock | Detach state |
 |---|---|---|---|
 | Tab (default) | `MixerDockComponent`'s own tab strip | unaffected | tab-strip button |
-| Own panel | `MixerPlacementController` itself, a second independent bottom strip below the Timeline dock | unaffected | its own header (embedded=false) |
+| Own panel | `MixerPlacementController` itself, a second independent bottom strip below the Timeline dock; slides, resizable | unaffected | its own header (embedded=false) |
 | Window | a `DetachedPanelWindow`, opened on first reveal, never eagerly at launch | unaffected | `mixerHost_` stays parented and hidden inside the dock until revealed |
 
 **In Tab placement neither host draws its own header** (`setEmbeddedHeader(true)`): the dock's
@@ -80,8 +82,33 @@ acts on whichever tab is active, and the header — with the real button, now re
 appears only on the DETACHED window itself. That is a deliberate simplification over reparenting
 either host's own button through three different parents.
 
-"Own panel" is a plain visible-or-hidden strip at `MixerPlacementController::kOwnPanelHeight`
-(220 px), with no animated open and close slide and no persisted height.
+**The dock resizes from every tab** (FRO231). One `synth::ui::PanelResizeHandle` lives on the
+dock's own top edge — not inside the Timeline panel — so the Mixer and MIDI Remote tabs resize the
+dock exactly like the Timeline does. It overlaps the top 5 px of the tab strip (the strip stays
+22 px; the tab, detach, `+ Bus` and Reset Meters buttons are laid out below it, so a grab never
+lands on a button) and reports the total dock height through `MixerDockComponent::onResizeHeight` /
+`onResizeHeightCommitted`. The rules (clamp, persistence, live relayout) are in
+[`docs/timeline/timeline.md`](../timeline/timeline.md#panel-height); Own-panel placement is a
+separate strip with its own handle, below.
+
+**"Own panel" slides, is resizable and remembers its height** (FRO231), all inside
+`MixerPlacementController` so `MainComponent` holds no extra member for it:
+
+- **Slide.** Toggling (`revealOrToggle()`) moves the strip's own `PanelSlide` fraction with the same
+  190 ms ease as the dock (`docs/layout/animation.md`). It is visible for the whole slide, including
+  the closing one, so `isOwnPanelShowing()` (meters, focus region) is true throughout. Choosing the
+  placement in Preferences, or launching in it, snaps it open with no animation.
+- **Height.** `mixerOwnPanelHeight` (absent = `kOwnPanelMinHeight` = 220, which is also the
+  minimum), clamped to `[220, max(220, 3/4 of the window - what an open dock keeps)]`
+  (`MixerPlacementController::clampHeight`). The stored value is the user's wish and is re-clamped
+  at read time, never rewritten by a layout pass, so it comes back when the window grows or the
+  dock closes. Persisted once per drag, on mouse-up, and never for a click that did not move.
+- **Handle.** A `PanelResizeHandle` (`ownPanelResizeHandle`) on the strip's own top edge; the hosted
+  panel with its header starts 5 px below it. Dragging calls `setOwnPanelHeight()` and asks
+  `MainComponent` to lay out through `onLayoutNeeded`.
+- **Sharing the window with the dock.** `MainComponent::resized()` carves the Own panel first (it owns
+  the bottom edge), then gives the dock `min(its height, max(its minimum, 3/4 of the window - the Own
+  panel's carve))` — local to the layout pass, the dock's stored/persisted height is untouched.
 
 **Preference changes apply live.** `MixerPlacementController::applyPlacementPreference()` runs once at
 launch (`MainComponent::wireTimelinePanel`) and again on every settings-file write
@@ -91,8 +118,8 @@ launch (`MainComponent::wireTimelinePanel`) and again on every settings-file wri
 work.
 
 `MainComponent::isTimelineVisible` and the persisted `timelinePanelVisible` key open and close the
-whole dock, either tab, while `MixerDockComponent`'s own `bottomDockActiveTab` key persists which tab
-is showing (default `"timeline"`) — see
+whole dock, any of its tabs, while `MixerDockComponent`'s own `bottomDockActiveTab` key persists
+which tab is showing (`"timeline"` default, or `"mixer"`/`"midiRemote"`) — see
 [`docs/timeline/timeline.md`](../timeline/timeline.md#docking-toggle-and-the-bottom-dock).
 
 ### Per window keyboard focus
@@ -180,6 +207,15 @@ pointers **without destroying anything** (`MixerColumnComponent::unbindFromGraph
 `MixerMasterColumn::unbindFromGraph()`, both idempotent and null-safe, like `MixerFader::unbind()`).
 `~MainComponent()`'s own `detachAllModuleComponents()` call, already ordered before
 `audioEngine.shutdown()`, covers the same teardown hazard for free.
+
+**FRO133 (right-click MIDI Learn on the mixer, [`docs/control/midi-remote-ui.md`](../control/midi-remote-ui.md#right-click-midi-learn--coverage))
+adds one more thing to this list.** Both `unbindFromGraph()` methods above also clear a small MIDI
+Learn registry (`MixerColumnComponent`'s own `midiLearnableEntries_`, `MixerMasterColumn`'s own
+`midiLearnableFaderParam_`) — each entry's `param` is the exact same kind of raw
+`juce::RangedAudioParameter*` into a graph node that the fader/pan/mute bindings above exist to
+protect, just read by the right-click menu and the mapped-badge paint instead of a
+`SliderParameterAttachment`. Rebuilt by the next `rebindControls()`/`setNodeId()`, same lifecycle as
+everything else this section covers.
 
 **Why a pre-restore hook rather than relying on the rebuild.** A graph-structural undo or redo, New
 Patch, Open, or an AI patch apply freezes the affected `ChannelStripModule`/`MasterModule` nodes'
@@ -311,5 +347,7 @@ The full key table, the region's open predicate and the accessibility handler de
 - [`docs/mixer/sends-and-buses.md`](sends-and-buses.md) — the send list and bus columns.
 - [`docs/timeline/timeline.md`](../timeline/timeline.md#docking-toggle-and-the-bottom-dock) — the
   bottom dock the Mixer tab shares.
+- [`docs/control/midi-remote-ui.md#the-midi-remote-panel`](../control/midi-remote-ui.md#the-midi-remote-panel)
+  — the dock's third tab (FRO131), same Tab-only placement as Mixer's own Tab row above.
 - [`docs/layout/rendering.md`](../layout/rendering.md) — the no-unconditional-repaint rule.
 - [`docs/layout/theming.md`](../layout/theming.md) — the theme tokens a detached window reads.

@@ -19,13 +19,18 @@ MixerDockComponent::MixerDockComponent(TimelinePanelComponent& timelinePanel, Au
                                        synth::theme::AppLookAndFeel* lookAndFeel, ShortcutManager* shortcutManager)
     : timelinePanel_(timelinePanel)
     , timelineHost_(timelinePanel_, "Timeline", "timelineWindowBounds", &appProperties, lookAndFeel, shortcutManager)
-    , mixerHost_(mixer_, "Mixer", "mixerWindowBounds", &appProperties, lookAndFeel, shortcutManager) {
+    , mixerHost_(mixer_, "Mixer", "mixerWindowBounds", &appProperties, lookAndFeel, shortcutManager)
+    , midiRemoteHost_(midiRemotePanel_, "MIDI Remote", "midiRemoteWindowBounds", &appProperties, lookAndFeel,
+                      shortcutManager) {
     addAndMakeVisible(timelineTabButton_);
     addAndMakeVisible(mixerTabButton_);
+    addAndMakeVisible(midiRemoteTabButton_);
     timelineTabButton_.setClickingTogglesState(false);
     mixerTabButton_.setClickingTogglesState(false);
+    midiRemoteTabButton_.setClickingTogglesState(false);
     timelineTabButton_.onClick = [this] { setActiveTab(Tab::Timeline); };
     mixerTabButton_.onClick = [this] { setActiveTab(Tab::Mixer); };
+    midiRemoteTabButton_.onClick = [this] { setActiveTab(Tab::MidiRemote); };
 
     // FRO12: icon-only, lives in this strip rather than either host's own header -- see
     // DetachablePanelHost's class comment. Acts on whichever tab is active (activeHost()).
@@ -40,6 +45,7 @@ MixerDockComponent::MixerDockComponent(TimelinePanelComponent& timelinePanel, Au
     // steal them back out from under their host and break detach/redock).
     timelineHost_.setEmbeddedHeader(true);
     mixerHost_.setEmbeddedHeader(true);
+    midiRemoteHost_.setEmbeddedHeader(true);
     auto onEitherHostDetachStateChanged = [this] {
         // FRO146 follow-up: false -- see applyTabVisibility()'s own doc comment on why a pure
         // detach/redock must never rebuild the mixer's columns (it would silently wipe every
@@ -50,8 +56,10 @@ MixerDockComponent::MixerDockComponent(TimelinePanelComponent& timelinePanel, Au
     };
     timelineHost_.onDetachedStateChanged = onEitherHostDetachStateChanged;
     mixerHost_.onDetachedStateChanged = onEitherHostDetachStateChanged;
+    midiRemoteHost_.onDetachedStateChanged = onEitherHostDetachStateChanged;
     addAndMakeVisible(timelineHost_);
     addAndMakeVisible(mixerHost_);
+    addAndMakeVisible(midiRemoteHost_);
 
     // FRO15 (docs/mixer/sends-and-buses.md): "Add bus" sits on the tab strip and is visible only on the
     // Mixer tab -- it has no meaning while the Timeline tab is showing.
@@ -70,6 +78,19 @@ MixerDockComponent::MixerDockComponent(TimelinePanelComponent& timelinePanel, Au
 
     mixer_.configure(audioEngine.getGraph(), doc, graphEditor.getMacros(), undoManager, graphEditor, audioEngine);
 
+    // Last, so the top few pixels always belong to the resize gesture whatever tab is showing. The
+    // dock is the handle's owner, so the desired height it reports is already the TOTAL dock height.
+    addAndMakeVisible(resizeHandle_);
+    resizeHandle_.setComponentID("dockResizeHandle");
+    resizeHandle_.onResize = [this](int desiredHeight) {
+        if (onResizeHeight)
+            onResizeHeight(desiredHeight);
+    };
+    resizeHandle_.onResizeCommitted = [this](int desiredHeight) {
+        if (onResizeHeightCommitted)
+            onResizeHeightCommitted(desiredHeight);
+    };
+
     applyTabVisibility();
 }
 
@@ -78,7 +99,7 @@ void MixerDockComponent::setApplicationProperties(juce::ApplicationProperties* p
     if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
         return;
     const auto saved = appProperties_->getUserSettings()->getValue(kActiveTabKey, "timeline");
-    activeTab_ = saved == "mixer" ? Tab::Mixer : Tab::Timeline;
+    activeTab_ = saved == "mixer" ? Tab::Mixer : (saved == "midiRemote" ? Tab::MidiRemote : Tab::Timeline);
     applyTabVisibility();
 }
 
@@ -103,6 +124,8 @@ void MixerDockComponent::setActiveTab(Tab tab) {
     activeTab_ = tab;
     applyTabVisibility();
     persistActiveTab();
+    if (onActiveTabChanged)
+        onActiveTabChanged();
 }
 
 void MixerDockComponent::setMixerTabEnabled(bool enabled) {
@@ -116,7 +139,11 @@ void MixerDockComponent::setMixerTabEnabled(bool enabled) {
 }
 
 DetachablePanelHost& MixerDockComponent::activeHost() noexcept {
-    return (activeTab_ == Tab::Mixer && mixerTabEnabled_) ? mixerHost_ : timelineHost_;
+    if (activeTab_ == Tab::Mixer && mixerTabEnabled_)
+        return mixerHost_;
+    if (activeTab_ == Tab::MidiRemote)
+        return midiRemoteHost_;
+    return timelineHost_;
 }
 
 void MixerDockComponent::refreshDetachButton() {
@@ -136,8 +163,11 @@ void MixerDockComponent::refreshDetachButton() {
 
 void MixerDockComponent::applyTabVisibility(bool allowMixerRebuild) {
     const bool mixerActive = activeTab_ == Tab::Mixer && mixerTabEnabled_;
-    timelineHost_.setVisible(!mixerActive);
+    const bool midiRemoteActive = activeTab_ == Tab::MidiRemote;
+    const bool timelineActive = !mixerActive && !midiRemoteActive;
+    timelineHost_.setVisible(timelineActive);
     mixerHost_.setVisible(mixerActive);
+    midiRemoteHost_.setVisible(midiRemoteActive);
     // Also toggle each panel's OWN visible flag, preserving the pre-FRO12 contract
     // TimelinePanelTestFixture.h's timelinePanelIsOpen() documents ("timelinePanel_.isVisible()
     // means the Timeline tab is selected") for the common (docked) case -- but ONLY while docked
@@ -145,16 +175,29 @@ void MixerDockComponent::applyTabVisibility(bool allowMixerRebuild) {
     // DetachedPanelWindow), so touching its visible flag would wrongly hide/show it inside that
     // window based on which dock tab happens to be "active" here.
     if (!timelineHost_.isDetached())
-        timelinePanel_.setVisible(!mixerActive);
+        timelinePanel_.setVisible(timelineActive);
     if (!mixerHost_.isDetached())
         mixer_.setVisible(mixerActive);
+    if (!midiRemoteHost_.isDetached())
+        midiRemotePanel_.setVisible(midiRemoteActive);
     mixerTabButton_.setVisible(mixerTabEnabled_);
-    timelineTabButton_.setToggleState(!mixerActive, juce::dontSendNotification);
+    timelineTabButton_.setToggleState(timelineActive, juce::dontSendNotification);
     mixerTabButton_.setToggleState(mixerActive, juce::dontSendNotification);
+    midiRemoteTabButton_.setToggleState(midiRemoteActive, juce::dontSendNotification);
     addBusButton_.setVisible(mixerActive);
     resetMetersButton_.setVisible(mixerActive);
     if (mixerActive && allowMixerRebuild)
         mixer_.rebuild();
+    // FRO131: catches up on any profile/assignment change that happened while this tab was hidden,
+    // same reasoning as the Mixer tab's own "coming back into view" rebuild above --
+    // allowMixerRebuild's false-on-pure-detach exception applies here too, for the same reason (a
+    // detach/redock changes nothing about which profile is selected). FRO263: belt-and-braces now
+    // that MidiLearnController::onChanged and MainComponent::reconcileTimelineAfterGraphChange()
+    // keep the panel live while it's SHOWING too (Learn/Forget/Undo/Redo/a panel edit) -- this call
+    // still matters for the case those two don't cover: a change made while the tab was hidden,
+    // between the last live refresh and now.
+    if (midiRemoteActive && allowMixerRebuild)
+        midiRemotePanel_.rebuildFromProfiles();
     refreshDetachButton();
     resized();
 }
@@ -162,7 +205,12 @@ void MixerDockComponent::applyTabVisibility(bool allowMixerRebuild) {
 void MixerDockComponent::persistActiveTab() {
     if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
         return;
-    appProperties_->getUserSettings()->setValue(kActiveTabKey, activeTab_ == Tab::Mixer ? "mixer" : "timeline");
+    const char* value = "timeline";
+    if (activeTab_ == Tab::Mixer)
+        value = "mixer";
+    else if (activeTab_ == Tab::MidiRemote)
+        value = "midiRemote";
+    appProperties_->getUserSettings()->setValue(kActiveTabKey, value);
     appProperties_->getUserSettings()->saveIfNeeded();
 }
 
@@ -172,8 +220,13 @@ bool MixerDockComponent::revealColumnForStrip(juce::AudioProcessorGraph::NodeID 
 }
 
 void MixerDockComponent::resized() {
+    // The grab strip runs the dock's full width along its top edge, OVERLAPPING the tab strip: the
+    // strip keeps its full kTabStripHeight (the content below never moves), but its buttons are
+    // laid out below the handle so a resize grab never lands on one.
+    resizeHandle_.setBounds(0, 0, getWidth(), PanelResizeHandle::kHeight);
+
     auto bounds = getLocalBounds();
-    auto tabStrip = bounds.removeFromTop(kTabStripHeight);
+    auto tabStrip = bounds.removeFromTop(kTabStripHeight).withTrimmedTop(PanelResizeHandle::kHeight);
     // Rightmost: the FRO12 detach button (always present, acts on whichever tab is active), then
     // the FRO15 "+ Bus" button (only visible -- and so only carved -- on the Mixer tab), then
     // whatever's left splits between the two tab buttons, unless FRO12's Own-panel/Window
@@ -183,16 +236,23 @@ void MixerDockComponent::resized() {
         addBusButton_.setBounds(tabStrip.removeFromRight(kAddBusButtonWidth));
     if (resetMetersButton_.isVisible())
         resetMetersButton_.setBounds(tabStrip.removeFromRight(kResetMetersButtonWidth));
+    // FRO131: MidiRemote has no placement variant (unlike Mixer's mixerTabEnabled_), so its button
+    // is always offered -- a three-way split when Mixer is also offered, two-way otherwise.
     if (mixerTabEnabled_) {
-        timelineTabButton_.setBounds(tabStrip.removeFromLeft(tabStrip.getWidth() / 2));
-        mixerTabButton_.setBounds(tabStrip);
+        const int third = tabStrip.getWidth() / 3;
+        timelineTabButton_.setBounds(tabStrip.removeFromLeft(third));
+        mixerTabButton_.setBounds(tabStrip.removeFromLeft(third));
+        midiRemoteTabButton_.setBounds(tabStrip);
     } else {
-        timelineTabButton_.setBounds(tabStrip);
+        const int half = tabStrip.getWidth() / 2;
+        timelineTabButton_.setBounds(tabStrip.removeFromLeft(half));
         mixerTabButton_.setBounds({});
+        midiRemoteTabButton_.setBounds(tabStrip);
     }
 
     timelineHost_.setBounds(bounds);
     mixerHost_.setBounds(bounds);
+    midiRemoteHost_.setBounds(bounds);
 }
 
 void MixerDockComponent::lookAndFeelChanged() { refreshDetachButton(); }

@@ -17,7 +17,7 @@ void MacroCardComponent::paint(juce::Graphics& g) {
         return;
 
     auto bounds = getLocalBounds().toFloat();
-    const bool selected = owner.isMacroSelected(macroId);
+    const bool selected = owner.getMacroController().isMacroSelected(macroId);
 
     g.setColour(macro->colour.withAlpha(0.22f));
     g.fillRoundedRectangle(bounds, 8.0f);
@@ -49,7 +49,7 @@ void MacroCardComponent::paint(juce::Graphics& g) {
     // size on the same canvas.
     const auto previewArea = textArea.reduced(0, 2);
     if (!previewArea.isEmpty()) {
-        const auto members = owner.macroMemberPreviews(macroId);
+        const auto members = owner.getMacroController().macroMemberPreviews(macroId);
         juce::Rectangle<int> unionBounds;
         for (const auto& member : members)
             unionBounds = unionBounds.isEmpty() ? member.bounds : unionBounds.getUnion(member.bounds);
@@ -76,7 +76,7 @@ void MacroCardComponent::paint(juce::Graphics& g) {
 
     // ---- Port jacks (P8-15c, T141: docs/macros/ports.md#cable-rendering-across-the-boundary) ----
     // One jack per configured port — inputs down the left edge, outputs down the right, from the
-    // SAME owner.macroCardPortLayout() that this card's own hit-testing (endConnectionDrag's jack
+    // SAME owner.getMacroController().macroCardPortLayout() that this card's own hit-testing (endConnectionDrag's jack
     // check) and buildVisibleCables()'s boundary-cable anchoring both read, so the drawn dot is
     // never anywhere those two disagree about. Colour matches ModuleComponent::paint's own jack
     // convention verbatim (its comment: "Audio-signal jacks (MIDI in/out) -> audioWire;
@@ -91,10 +91,11 @@ void MacroCardComponent::paint(juce::Graphics& g) {
     static const synth::theme::Colors fallbackColors{};
     const auto& themeColors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
     {
-        for (const auto& port : owner.macroCardPortLayout(macro->id)) {
+        for (const auto& port : owner.getMacroController().macroCardPortLayout(macro->id)) {
             const juce::Colour kindTint =
                 port.kind == synth::MacroPortKind::Midi ? themeColors.audioWire : themeColors.accent;
-            g.setColour(port.colour.value_or(kindTint));
+            // An armed preview is the jack's colour; else the stored user colour, else the kind tint.
+            g.setColour(resolvePortJackColour(port.nodeUuid, port.colour, kindTint));
             g.fillEllipse((float)port.jackPos.x - 5.0f, (float)port.jackPos.y - 5.0f, 10.0f, 10.0f);
 
             // Port name (founder-review fix F2, item 3/docs/macros/ports.md#cable-rendering-across-the-boundary: "it's
@@ -152,8 +153,10 @@ void MacroCardComponent::paint(juce::Graphics& g) {
 
     // colors.warning is the bypass family (ModMatrixComponent's own bypass toggle uses it);
     // colors.error is documented as "error / mute" on Theme::Colors itself.
-    paintToggleBadge(getToggleBadgeBounds(false), themeColors.warning, owner.macroBypassState(macro->id));
-    paintToggleBadge(getToggleBadgeBounds(true), themeColors.error, owner.macroMuteState(macro->id));
+    paintToggleBadge(getToggleBadgeBounds(false), themeColors.warning,
+                     owner.getMacroController().macroBypassState(macro->id));
+    paintToggleBadge(getToggleBadgeBounds(true), themeColors.error,
+                     owner.getMacroController().macroMuteState(macro->id));
 
     // Expand chevron — a filled triangle rather than a text glyph, so there's no non-ASCII
     // string literal to trip check-nonascii-literals.test.sh and no themed icon asset to add for
@@ -210,23 +213,23 @@ void MacroCardComponent::mouseDown(const juce::MouseEvent& e) {
         // case, 2026-09-10).
         const auto priorSelection = owner.getSelectedNodes();
         if (priorSelection.empty())
-            owner.selectMacro(macroId, false);
+            owner.getMacroController().selectMacro(macroId, false);
         showContextMenu(priorSelection);
         return;
     }
 
     if (getExpandButtonBounds().contains(e.position)) {
-        owner.setMacroCollapsed(macroId, false);
+        owner.getMacroController().setMacroCollapsed(macroId, false);
         return;
     }
 
     if (e.mods.isShiftDown() || e.mods.isCommandDown()) {
-        owner.selectMacro(macroId, true);
+        owner.getMacroController().selectMacro(macroId, true);
         return;
     }
 
-    if (!owner.isMacroSelected(macroId))
-        owner.selectMacro(macroId, false);
+    if (!owner.getMacroController().isMacroSelected(macroId))
+        owner.getMacroController().selectMacro(macroId, false);
 
     dragStartPosition = getPosition();
     bodyDragActive = true;
@@ -274,7 +277,7 @@ void MacroCardComponent::mouseDoubleClick(const juce::MouseEvent& e) {
         return;
     }
 
-    owner.setMacroCollapsed(macroId, false);
+    owner.getMacroController().setMacroCollapsed(macroId, false);
 }
 
 void MacroCardComponent::beginRename() {
@@ -308,7 +311,7 @@ void MacroCardComponent::finishRename(bool commit) {
     editor.reset();
 
     if (commit)
-        owner.renameMacro(macroId, typed.trim());
+        owner.getMacroController().renameMacro(macroId, typed.trim());
     repaint();
 }
 
@@ -359,7 +362,7 @@ juce::String MacroCardComponent::getModuleCountText() const {
 }
 
 juce::String MacroCardComponent::getTooltip() {
-    const auto names = owner.macroMemberNames(macroId);
+    const auto names = owner.getMacroController().macroMemberNames(macroId);
     constexpr int kMaxNamesShown = 10;
 
     juce::StringArray shown;
@@ -369,4 +372,42 @@ juce::String MacroCardComponent::getTooltip() {
         shown.add("+" + juce::String(names.size() - kMaxNamesShown) + " more");
 
     return shown.joinIntoString("\n");
+}
+
+// ---- live jack-colour preview (view-layer only; never the stored MacroPort::colour) -------
+//
+// Per-port, because one card draws EVERY port's jack at once: the armed entry is keyed by nodeUuid, so
+// previewing one port cannot recolour its siblings. Both set/clear return whether the card actually
+// moved, so GraphEditor::previewMacroPortColour can skip the repaint on an unchanged tick (the picker
+// re-fires the same colour on commit) and clearMacroPortColourPreview stays a real no-op when the
+// committed port was never previewed. Transient view state only -- it is never written back to
+// MacroPort::colour, so dragging the selector pushes no undo step.
+bool MacroCardComponent::setPortColourPreview(const juce::String& nodeUuid, juce::Colour c) {
+    // Idempotent -- re-arming the same node with the same colour changes nothing, so repaint nothing.
+    if (portColourPreview_ && portColourPreview_->first == nodeUuid && portColourPreview_->second == c)
+        return false;
+    portColourPreview_ = {nodeUuid, c};
+    return true;
+}
+
+bool MacroCardComponent::clearPortColourPreview(const juce::String& nodeUuid) {
+    // Only clear when this entry matches the node told to clear, so a stale clear for a different
+    // port (one the picker no longer previews) does not wipe a fresh preview.
+    if (!portColourPreview_ || portColourPreview_->first != nodeUuid)
+        return false;
+    portColourPreview_.reset();
+    return true;
+}
+
+bool MacroCardComponent::hasPortColourPreviewForTest(const juce::String& nodeUuid) const {
+    return portColourPreview_.has_value() && portColourPreview_->first == nodeUuid;
+}
+
+juce::Colour MacroCardComponent::resolvePortJackColour(const juce::String& nodeUuid,
+                                                       const std::optional<juce::Colour>& stored,
+                                                       juce::Colour kindTint) const {
+    // Mirrors paint()'s branch: a preview for this node wins, else the stored colour, else the kind tint.
+    if (portColourPreview_.has_value() && portColourPreview_->first == nodeUuid)
+        return portColourPreview_->second;
+    return stored.value_or(kindTint);
 }

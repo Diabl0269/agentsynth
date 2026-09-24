@@ -30,6 +30,17 @@ juce::AudioParameterFloat* findFloatParam(juce::AudioProcessor& processor, const
             return floatParam;
     return nullptr;
 }
+
+// FRO133: ModuleBase's own mutedParam (paramID "muted", Source/Modules/ModuleBase.h) is private
+// with no accessor of its own -- mirrors findFloatParam's identity-scan idiom rather than adding
+// one, since every other param lookup in this file already goes through getParameters() this way.
+juce::AudioParameterBool* findBoolParam(juce::AudioProcessor& processor, const juce::String& paramId) {
+    for (auto* param : processor.getParameters())
+        if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param);
+            boolParam != nullptr && boolParam->paramID == paramId)
+            return boolParam;
+    return nullptr;
+}
 } // namespace
 
 MixerColumnComponent::MixerColumnComponent() {
@@ -107,11 +118,19 @@ MixerColumnComponent::MixerColumnComponent() {
 
 void MixerColumnComponent::configure(juce::AudioProcessorGraph& graph, AppUndoManager& undoManager,
                                      synth::MacroSet& macros, GraphEditor& graphEditor, AudioEngine& audioEngine) {
+    graphEditor_ = &graphEditor;
     graph_ = &graph;
     undoManager_ = &undoManager;
     audioEngine_ = &audioEngine;
     insertList_.configure(graph, undoManager, macros, graphEditor);
     sendList_.configure(graph, undoManager, macros, graphEditor);
+    // FRO133: fires once per send row rebuilt inside sendList_ (MixerSendList::rebuildKnobs(),
+    // itself triggered by setEntries() from setColumn() below) so this column's ONE MIDI-learn
+    // registry covers send levels too, without MixerSendList needing a menu/registry of its own --
+    // see MixerColumnMidiLearn.cpp.
+    sendList_.onSendKnobBuilt = [this](juce::Slider& knob, juce::RangedAudioParameter* param) {
+        registerMidiLearnable(knob, param);
+    };
 }
 
 void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juce::String& sourceLine) {
@@ -130,7 +149,6 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
     sourceLineLabel_.setText(sourceLine_, juce::dontSendNotification);
     insertList_.setEntries(column.inserts, column.insertChainIsLinear, column.editOnCanvasTargetUuid,
                            column.sourceNodeId, column.nodeId);
-    sendList_.setEntries(column.sends, column.nodeId);
 
     // FRO16 (P9-10): the first Parametric EQ in signal order gets the column's curve thumbnail --
     // Cubase's own single-slot idiom. A second EQ further down the chain stays reachable through
@@ -161,12 +179,17 @@ void MixerColumnComponent::setColumn(const synth::MixerColumn& column, const juc
     meter_.setTitle(column.name + " meter");
 
     rebindControls();
+    // FRO133: must run AFTER rebindControls() -- it clears midiLearnableEntries_ and would wipe out
+    // send-row entries registered by sendList_.onSendKnobBuilt (fired from rebuildKnobs() inside
+    // setEntries()) if this ran first.
+    sendList_.setEntries(column.sends, column.nodeId);
     resized();
 }
 
 void MixerColumnComponent::rebindControls() {
     panAttachment_.reset();
     fader_.unbind();
+    midiLearnableEntries_.clear();
 
     if (graph_ == nullptr)
         return;
@@ -175,20 +198,30 @@ void MixerColumnComponent::rebindControls() {
     if (processor == nullptr)
         return;
 
-    if (auto* gainParam = findFloatParam(*processor, "gain"); gainParam != nullptr && undoManager_ != nullptr)
+    if (auto* gainParam = findFloatParam(*processor, "gain"); gainParam != nullptr && undoManager_ != nullptr) {
         fader_.bind(*graph_, *undoManager_, *gainParam);
+        registerMidiLearnable(fader_.getSlider(), gainParam);
+    }
     if (auto* panParam = findFloatParam(*processor, "pan")) {
         const auto floatRange = panParam->getNormalisableRange();
         panSlider_.setNormalisableRange(juce::NormalisableRange<double>(
             (double)floatRange.start, (double)floatRange.end, (double)floatRange.interval, (double)floatRange.skew,
             floatRange.symmetricSkew));
         panAttachment_ = std::make_unique<juce::SliderParameterAttachment>(*panParam, panSlider_);
+        registerMidiLearnable(panSlider_, panParam);
     }
+    if (auto* muteParam = findBoolParam(*processor, "muted"))
+        registerMidiLearnable(muteButton_, muteParam);
 
     auto* module = dynamic_cast<ModuleBase*>(processor);
     muteButton_.onClick = [this] { toggleMuted(); };
-    soloButton_.setVisible(dynamic_cast<ChannelStripModule*>(processor) != nullptr);
+    const bool isChannelStrip = dynamic_cast<ChannelStripModule*>(processor) != nullptr;
+    soloButton_.setVisible(isChannelStrip);
     soloButton_.onClick = [this] { toggleSoloed(); };
+    // FRO253: only a ChannelStrip column's Solo is MIDI-learnable (soloButton_ is hidden, and has
+    // no node command to point at, on every other column kind).
+    if (isChannelStrip)
+        registerSoloMidiLearnable();
     refreshMuteSoloAccessibility(module, dynamic_cast<ChannelStripModule*>(processor));
     juce::ignoreUnused(module);
 }
@@ -244,12 +277,29 @@ void MixerColumnComponent::toggleSoloed() {
     repaint();
 }
 
+// FRO253: see this method's own header comment -- re-syncs the M/S visuals after something other
+// than THIS column's own click flips solo (a MIDI Remote node-command press).
+void MixerColumnComponent::refreshMuteSoloVisual() {
+    if (graph_ == nullptr)
+        return;
+    auto* n = graph_->getNodeForId(nodeId_);
+    auto* processor = n != nullptr ? n->getProcessor() : nullptr;
+    if (processor == nullptr)
+        return;
+    refreshMuteSoloAccessibility(dynamic_cast<ModuleBase*>(processor), dynamic_cast<ChannelStripModule*>(processor));
+    repaint();
+}
+
 void MixerColumnComponent::unbindFromGraph() {
     panAttachment_.reset();
     fader_.unbind();
     // FRO15: the send rows hold SliderParameterAttachments onto the strip's own sendNLevel
     // parameters -- the same use-after-free-on-undo the fader/pan pair above exist to avoid.
     sendList_.unbindFromGraph();
+    // FRO133: every entry's `param` is a raw pointer into a graph node's parameter -- same
+    // use-after-free-on-undo hazard as panAttachment_/fader_/sendList_ above
+    // (Source/UI/CLAUDE.md's mixer-unbind invariant). Rebuilt by the next rebindControls().
+    midiLearnableEntries_.clear();
     muteButton_.onClick = nullptr;
     soloButton_.onClick = nullptr;
     meter_.peakProvider = nullptr;
@@ -274,6 +324,13 @@ void MixerColumnComponent::refreshMeter(float elapsedSeconds) {
     };
     meter_.refresh(elapsedSeconds);
     meterReadout_.updatePeak(std::max(meter_.getDisplayedDbForTest(0), meter_.getDisplayedDbForTest(1)));
+    // FRO133: no timer of its own -- rides the SAME 10 Hz tick every other per-column visual
+    // already uses (Source/UI/CLAUDE.md's no-unconditional-repaint rule), mirroring
+    // ModuleComponent's own gated-timer precedent for its badge refresh.
+    refreshMidiLearnBadges();
+    // FRO256: same tick also keeps the armed breathing outline animating -- see that method's own
+    // comment for why nothing did before this.
+    repaintArmedMidiLearnOutline();
 }
 
 void MixerColumnComponent::setSelected(bool selected) {
@@ -308,6 +365,11 @@ void MixerColumnComponent::paint(juce::Graphics& g) {
 }
 
 void MixerColumnComponent::paintOverChildren(juce::Graphics& g) {
+    // FRO133: badges/armed outline paint OVER every child control they annotate, same as
+    // ModuleComponent's paintMidiLearnOverlays() -- must run before the keyboard-focus outline
+    // below returns early so a mapped/armed control still shows its overlay on an unfocused column.
+    paintMidiLearnOverlays(g);
+
     // FRO18: the focused column's OWN outline, distinct from setSelected()'s reveal highlight --
     // they may co-paint (a revealed column can also be the keyboard-focused one). Real
     // hasKeyboardFocus() is always false headless with no native peer (same accepted gap

@@ -46,7 +46,8 @@ void ModuleComponent::reflectParameterValue(const juce::AudioProcessorParameter*
     }
 }
 
-// Right-click-any-knob -> "Automate '<Param>'". `param` may be null (a control this
+// Right-click-any-knob -> "Automate '<Param>'" plus the MIDI Learn block (FRO130,
+// appendMidiLearnMenuItems, ModuleComponentMidiLearn.cpp). `param` may be null (a control this
 // component built without a real RangedAudioParameter behind it, e.g. the ExternalMidiModule
 // device/channel combos — never true for anything reaching here through `sliders`, but checked
 // anyway since sliderParams can hold a null entry per its own header comment).
@@ -54,7 +55,7 @@ void ModuleComponent::showAutomateMenuForSlider(juce::RangedAudioParameter* para
     if (param == nullptr)
         return;
 
-    // The popup's action runs asynchronously (showMenuAsync), so `this` must be re-checked rather
+    // The popup's actions run asynchronously (showMenuAsync), so `this` must be re-checked rather
     // than captured raw — the module (and its GraphEditor selection) could be gone by the time the
     // user picks an item (a delete, an undo, a preset load while the menu is open).
     juce::Component::SafePointer<ModuleComponent> safeThis(this);
@@ -68,7 +69,12 @@ void ModuleComponent::showAutomateMenuForSlider(juce::RangedAudioParameter* para
         if (safeThis->owner.onAutomateParameterRequested)
             safeThis->owner.onAutomateParameterRequested(nodeIdCopy, paramId);
     });
-    menu.showMenuAsync(juce::PopupMenu::Options());
+    appendMidiLearnMenuItems(menu, param);
+    // Routed through showContextMenuHook_ (rather than a direct showMenuAsync) so a test can
+    // capture the built menu headlessly, the same seam buildModuleContextMenu()/
+    // buildMacroPortContextMenu() already use — this menu had never needed it before FRO130 added
+    // MIDI items worth asserting on.
+    showContextMenuHook_(menu);
 }
 
 void ModuleComponent::parameterValueChanged(int parameterIndex, float newValue) {
@@ -286,7 +292,7 @@ void ModuleComponent::parameterGestureChanged(int parameterIndex, bool gestureIs
 
 juce::PopupMenu ModuleComponent::buildMacroPortContextMenu() {
     juce::PopupMenu m;
-    const auto ownership = owner.macroPortOwnerFor(nodeId);
+    const auto ownership = owner.getMacroController().macroPortOwnerFor(nodeId);
 
     if (ownership.macro != nullptr && ownership.port != nullptr) {
         const juce::String macroId = ownership.macro->id;
@@ -296,7 +302,8 @@ juce::PopupMenu ModuleComponent::buildMacroPortContextMenu() {
         m.addSeparator();
         // Splices the boundary cable back together rather than dropping it (founder-review fix
         // G7) — GraphEditor::deleteMacroPortNode, sharing spliceOutMacroPort with ungroup.
-        m.addItem("Delete Port", [this, macroId, uuid] { owner.deleteMacroPortNode(macroId, uuid); });
+        m.addItem("Delete Port",
+                  [this, macroId, uuid] { owner.getMacroController().deleteMacroPortNode(macroId, uuid); });
     } else {
         // Defensive: macroPortOwnerFor's own header comment says this shouldn't happen (every
         // port node is constructed as a macro member with a matching MacroPort entry), but a port
@@ -357,10 +364,10 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
     // is the only always-reachable UI for the round trip. Shown for either state now —
     // toggleSelectionMacrosCollapsed() picks the right direction from the touched
     // macro's own current state, matching the label offered here.
-    const auto* macro = owner.macroForNode(nodeId);
+    const auto* macro = owner.getMacroController().macroForNode(nodeId);
     if (macro != nullptr)
         m.addItem(macro->collapsed ? "Expand Macro" : "Collapse Macro",
-                  [this] { owner.toggleSelectionMacrosCollapsed(); });
+                  [this] { owner.getMacroController().toggleSelectionMacrosCollapsed(); });
     // T138: a top-level escape hatch for the single most common macro-membership gesture — right-
     // click a member module you want OUT, without hunting for the nested "Macro: <name>" submenu's
     // own "Remove from Macro" item (found via live testing 2026-09-10: a user's first instinct was
@@ -373,7 +380,7 @@ juce::PopupMenu ModuleComponent::buildModuleContextMenu() {
     // this method's own early-return above — so `macro != nullptr` here always means an ordinary
     // member.
     if (macro != nullptr)
-        m.addItem("Remove from Macro", [this] { owner.removeNodeFromMacro(nodeId); });
+        m.addItem("Remove from Macro", [this] { owner.getMacroController().removeNodeFromMacro(nodeId); });
 
     m.addSeparator();
 
@@ -493,6 +500,14 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
                     showAutomateMenuForSlider(sliderParams[i]);
                 return;
             }
+        }
+        // FRO130: every other learnable control (toggles, combos, header buttons, bespoke-card
+        // knobs already matched above via `sliders`) -- ONE registry lookup rather than a new
+        // per-kind identity loop (docs/control/midi-remote-ui.md#right-click-midi-learn--coverage,
+        // Source/UI/CLAUDE.md). No "Automate" item here: that has only ever existed for sliders.
+        if (e.mods.isPopupMenu()) {
+            if (auto* param = midiLearnableRegistry_.find(e.eventComponent))
+                showMidiLearnOnlyMenu(param);
         }
         return; // some other attached child's own click — nothing for the module body to do
     }
@@ -643,7 +658,7 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
             // Record every selected module's origin so they can all follow this one.
             owner.beginSelectionDrag();
             // Show grid + ghost for this module-body drag.
-            owner.beginDragPreview(getWidth(), getHeight(), getNodeId());
+            owner.getDragDropController().beginDragPreview(getWidth(), getHeight(), getNodeId());
         }
     }
 }
@@ -712,7 +727,7 @@ void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
         // Carry every other selected module by the same delta from its own recorded origin.
         owner.dragSelectionBy(getPosition() - dragStartPosition, this);
         // Update the landing ghost to follow the live drag position.
-        owner.updateDragPreview(getPosition());
+        owner.getDragDropController().updateDragPreview(getPosition());
 
         // Gap 3: re-derive reparentArmed live for a SINGLE-module drag, so Cmd pressed or released
         // mid-drag arms/disarms reparent on the spot instead of only whatever mouseDown latched —
@@ -780,7 +795,7 @@ void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
         // Click without movement: drop the recorded origins without re-resolving positions.
         owner.cancelSelectionDrag();
         owner.clearMacroDragCandidate();
-        owner.endDragPreview();
+        owner.getDragDropController().endDragPreview();
         return;
     }
 
@@ -797,7 +812,7 @@ void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
     // has no way to ask for one without the other (docs/macros/menu-and-membership.md#cmd-drag-across-a-hull-border).
     const juce::String macroCandidate = wasReparentArmed ? owner.getMacroDragCandidateId() : juce::String();
     if (macroCandidate.isNotEmpty()) {
-        const bool isJoin = owner.macroForNode(nodeId) == nullptr;
+        const bool isJoin = owner.getMacroController().macroForNode(nodeId) == nullptr;
         // This capture was never going to be consumed by a pushSnapshotFromCapture — the reparent
         // finalize below consumes it itself instead (GraphEditor::finalizeMacroMembershipDrag's
         // own comment has the full story on why it needs the ORIGINAL mousedown-time capture
@@ -820,5 +835,5 @@ void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
     if (undoManager)
         undoManager->pushSnapshotFromCapture(owner.getAudioEngine().getGraph());
     owner.clearMacroDragCandidate();
-    owner.endDragPreview();
+    owner.getDragDropController().endDragPreview();
 }

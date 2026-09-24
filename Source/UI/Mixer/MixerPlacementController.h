@@ -1,8 +1,11 @@
 #pragma once
 
 #include "ShortcutManager/ShortcutManager.h"
+#include "UI/Layout/PanelResizeHandle.h"
+#include "UI/Layout/UIAnimation.h"
 #include "UI/Mixer/MixerDockComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 
 namespace synth::ui {
@@ -25,10 +28,12 @@ namespace synth::ui {
 // resized() renders nothing once detached anyway) -- only "Own panel" actually reparents it, into
 // THIS component (which IS the second strip; MainComponent adds and bounds it directly).
 //
-// "Own panel" ships without the Timeline dock's animated open/close slide or persisted height in
-// this ticket -- a plain visible/hidden strip at a fixed height (an explicit scope cut, matching
-// the plan's own "no resize handle" cut for the same row). The MixerDockComponent/isTimelineVisible
-// rename mentioned in FRO11's own comments stays deferred -- see docs/mixer/panel.md#the-three-placements.
+// "Own panel" (FRO231) slides open and closed like the Timeline dock, has a persisted user height
+// ("mixerOwnPanelHeight") and its own top-edge PanelResizeHandle. The slide is this class's own
+// PanelSlide + AnimationDriver (MainComponent's three fractions are not touched); it calls
+// onLayoutNeeded each frame and MainComponent::resized() reads getCarveHeight(). The
+// MixerDockComponent/isTimelineVisible rename mentioned in FRO11's own comments stays deferred --
+// see docs/mixer/panel.md#the-three-placements.
 class MixerPlacementController : public juce::Component {
 public:
     enum class Placement { Tab, OwnPanel, Window };
@@ -46,15 +51,44 @@ public:
 
     Placement getPlacement() const noexcept { return placement_; }
 
-    /** Own-panel's fixed height -- see the class comment on the scope cut. MainComponent's
-     *  resized() carves this much off the bottom, below the Timeline dock, whenever this is
-     *  showing. */
-    static constexpr int kOwnPanelHeight = 220;
+    /** Default AND minimum Own-panel height. */
+    static constexpr int kOwnPanelMinHeight = 220;
+    static constexpr const char* kOwnPanelHeightKey = "mixerOwnPanelHeight";
+
+    /** OwnPanel placement and visible -- true for the whole open/close slide, not just at rest. */
     bool isOwnPanelShowing() const noexcept { return placement_ == Placement::OwnPanel && isVisible(); }
+
+    /** Pixels MainComponent::resized() carves off the bottom: the slide fraction times the height,
+     *  0 outside OwnPanel placement. */
+    int getCarveHeight() const noexcept;
+    /** The current full (open) height, clamped against the last layout context. */
+    int getOwnPanelHeight() const noexcept;
+    /** Clamps, stores and (if `persist`) writes the height; lays out live via onLayoutNeeded. */
+    void setOwnPanelHeight(int desiredHeight, bool persist);
+    /** [kOwnPanelMinHeight, max(min, 3/4 of the window - reservedForDock)]. */
+    static int clampHeight(int desiredHeight, int windowHeight, int reservedForDock) noexcept;
+    /** MainComponent::resized() feeds the window height and what the dock keeps (0 when closed). */
+    void setLayoutContext(int windowHeight, int reservedForDock) noexcept;
+
+    /** Fired per slide frame, at slide end and on every height change: MainComponent re-lays out. */
+    std::function<void()> onLayoutNeeded;
+
+    /** The strip's top-edge grab handle, and the slide's state -- test seams (no OS mouse source or
+     *  VBlank exists headlessly). */
+    juce::Component& getResizeHandle() noexcept { return ownHandle_; }
+    float getSlideProgressForTest() const noexcept { return slide_.getProgress(); }
+    float getSlideTweenStartForTest() const noexcept { return slide_.getTweenStart(); }
+    bool isSlideAnimatingForTest() const noexcept { return slideAnim_.isRunning(); }
+    void setSlideProgressForTest(float progress) noexcept { slide_.snapTo(progress); }
+    /** Makes the next toggle start a real tween even off-screen (no VBlank then delivers frames). */
+    void forceSlideAnimationForTest(bool force) noexcept { forceAnimateForTest_ = force; }
+    /** Stands in for one VBlank frame at eased progress `t`, and for the slide's completion. */
+    void applySlideFrameForTest(float t) { applySlideFrame(t); }
+    void finishSlideForTest() { finishSlide(); }
 
     /** "Reveal" the Mixer regardless of placement -- MainComponent::performToggleMixerPanel funnels
      *  through here first. Tab placement: false, unhandled (the caller keeps its existing
-     *  open/close-the-dock behaviour). Own panel: toggles this strip's own visibility, true (handled
+     *  open/close-the-dock behaviour). Own panel: slides this strip open/closed, true (handled
      *  here). Window: opens (first reveal) / closes the DetachedPanelWindow, true (handled here). */
     bool revealOrToggle();
 
@@ -65,10 +99,27 @@ public:
 private:
     void applyPlacement(Placement placement);
     Placement readPersistedPlacement() const;
+    void restorePersistedHeight();
+    void hideStripAtRest();
+    void beginSlide();
+    void applySlideFrame(float t);
+    void finishSlide();
+    int effectiveHeight() const noexcept;
 
     MixerDockComponent& mixerDock_;
     juce::ApplicationProperties& appProperties_;
     Placement placement_ = Placement::Tab; // matches MixerDockComponent's own already-Tab default
+    // Added last in the constructor so it wins the hit test over the hosted panel's own header.
+    PanelResizeHandle ownHandle_{*this};
+    PanelSlide slide_;
+    juce::VBlankAnimatorUpdater updater_{this};
+    AnimationDriver slideAnim_;
+    bool open_ = false; // the OwnPanel open/closed INTENT; slide_ is where the strip currently is
+    int ownPanelHeight_ = kOwnPanelMinHeight;
+    bool heightRestored_ = false;
+    bool forceAnimateForTest_ = false;
+    int windowHeight_ = 0;
+    int reservedForDock_ = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MixerPlacementController)
 };

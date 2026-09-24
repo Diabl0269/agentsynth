@@ -61,8 +61,8 @@ TEST_P(SmartConnectionFxInsertTest, CtrlDragAtTheGapInsertsThisFx) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 900);
-    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
-    editor.setInsertModifierOverrideForTests(true); // Ctrl held
+    editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setInsertModifierOverrideForTests(true); // Ctrl held
 
     auto& graph = engine.getGraph();
     auto f = makeFxChain(engine, editor);
@@ -79,8 +79,9 @@ TEST_P(SmartConnectionFxInsertTest, CtrlDragAtTheGapInsertsThisFx) {
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
 
-    ASSERT_GT(editor.getSmartSuggestionCount(), 0) << fxName << " offered nothing with the cursor over the gap";
-    for (const auto& s : editor.getSmartSuggestions()) {
+    ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0)
+        << fxName << " offered nothing with the cursor over the gap";
+    for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
         EXPECT_TRUE(s.isInsert) << fxName << " offered a plain connect instead of an insert";
         EXPECT_EQ(s.neighborId, f.targetId) << fxName << " aimed at the wrong neighbour";
         EXPECT_EQ(s.upstreamId, f.upstreamId) << fxName << " picked the wrong upstream";
@@ -112,8 +113,8 @@ TEST_F(GraphEditorTest, SmartConnectionInsertAimWindowSpansTheWholeGap) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 900);
-    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
-    editor.setInsertModifierOverrideForTests(true);
+    editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setInsertModifierOverrideForTests(true);
 
     auto f = makeFxChain(engine, editor);
     DummyDragSource dummySource;
@@ -124,10 +125,10 @@ TEST_F(GraphEditorTest, SmartConnectionInsertAimWindowSpansTheWholeGap) {
         editor.itemDragEnter(d);
         editor.itemDragMove(d);
         int n = 0;
-        for (const auto& s : editor.getSmartSuggestions())
+        for (const auto& s : editor.getSmartConnections().getSmartSuggestions())
             if (s.isInsert)
                 ++n;
-        editor.endDragPreview();
+        editor.getDragDropController().endDragPreview();
         return n;
     };
 
@@ -149,8 +150,8 @@ TEST_F(GraphEditorTest, SmartConnectionPlainSuggestionKeepsTheLeftToRightFlowRul
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 900);
-    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
-    editor.setInsertModifierOverrideForTests(false); // no Ctrl
+    editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setInsertModifierOverrideForTests(false); // no Ctrl
 
     auto& graph = engine.getGraph();
     auto delayNode = graph.addNode(std::make_unique<DelayModule>());
@@ -166,11 +167,11 @@ TEST_F(GraphEditorTest, SmartConnectionPlainSuggestionKeepsTheLeftToRightFlowRul
     juce::DragAndDropTarget::SourceDetails d(juce::var("Chorus"), &dummySource, juce::Point<int>(760, kFxLaneY));
     editor.itemDragEnter(d);
     editor.itemDragMove(d);
-    for (const auto& s : editor.getSmartSuggestions()) {
+    for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
         EXPECT_FALSE(s.isInsert) << "no modifier, so nothing may be rerouted";
         EXPECT_FALSE(s.ghostIsSource) << "a ghost to the right must not feed the module on its left";
     }
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 }
 
 // --- Vertical aim: the whole destination card, both axes ---------------------
@@ -197,10 +198,10 @@ static VerticalAimProbe probeVerticalAim(GraphEditor& editor, juce::AudioProcess
         editor.itemDragEnter(d);
         editor.itemDragMove(d);
         bool hit = false;
-        for (const auto& s : editor.getSmartSuggestions())
+        for (const auto& s : editor.getSmartConnections().getSmartSuggestions())
             if (s.isInsert && s.neighborId == destId)
                 hit = true;
-        editor.endDragPreview();
+        editor.getDragDropController().endDragPreview();
 
         if (hit) {
             if (p.firstHit < 0)
@@ -238,8 +239,8 @@ TEST_P(SmartConnectionVerticalAimTest, InsertIsOfferedAcrossTheWholeDestinationC
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(2000, 1600);
-    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
-    editor.setInsertModifierOverrideForTests(true);
+    editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setInsertModifierOverrideForTests(true);
 
     auto& graph = engine.getGraph();
     constexpr int kDestX = 460;
@@ -292,8 +293,8 @@ TEST_F(GraphEditorTest, SmartConnectionInsertOutranksAPlainSuggestionFromTheUpst
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(2000, 1200);
-    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
-    editor.setInsertModifierOverrideForTests(true);
+    editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setInsertModifierOverrideForTests(true);
 
     auto& graph = engine.getGraph();
     auto outNode = addAudioOutputNode(graph, 460, 400);
@@ -309,13 +310,13 @@ TEST_F(GraphEditorTest, SmartConnectionInsertOutranksAPlainSuggestionFromTheUpst
     editor.itemDragEnter(d);
     editor.itemDragMove(d);
 
-    ASSERT_GT(editor.getSmartSuggestionCount(), 0);
-    for (const auto& s : editor.getSmartSuggestions()) {
+    ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0);
+    for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
         EXPECT_TRUE(s.isInsert) << "a plain suggestion from the upstream hid the insert";
         EXPECT_EQ(s.neighborId, outNode->nodeID);
         EXPECT_EQ(s.upstreamId, up->nodeID);
     }
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 }
 
 // --- Ctrl with nothing to insert must still connect normally -----------------
@@ -329,8 +330,8 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlWithNothingToInsertStillConnectsOnLib
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 900);
-    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
-    editor.setInsertModifierOverrideForTests(true); // Ctrl held, but nothing is occupied
+    editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setInsertModifierOverrideForTests(true); // Ctrl held, but nothing is occupied
 
     auto& graph = engine.getGraph();
     auto dest = graph.addNode(std::make_unique<DelayModule>());
@@ -345,8 +346,9 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlWithNothingToInsertStillConnectsOnLib
     editor.itemDragEnter(d);
     editor.itemDragMove(d);
 
-    ASSERT_GT(editor.getSmartSuggestionCount(), 0) << "Ctrl must not suppress an ordinary connection";
-    for (const auto& s : editor.getSmartSuggestions()) {
+    ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0)
+        << "Ctrl must not suppress an ordinary connection";
+    for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
         EXPECT_FALSE(s.isInsert) << "there is nothing occupied to insert into";
         EXPECT_EQ(s.neighborId, dest->nodeID);
     }
@@ -361,8 +363,8 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlWithNothingToInsertStillConnectsOnCan
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
-    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
-    editor.setInsertModifierOverrideForTests(true);
+    editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setInsertModifierOverrideForTests(true);
 
     auto& graph = engine.getGraph();
     auto dest = graph.addNode(std::make_unique<DelayModule>());
@@ -380,13 +382,14 @@ TEST_F(GraphEditorTest, SmartConnectionCtrlWithNothingToInsertStillConnectsOnCan
             ghostComp = c;
     ASSERT_NE(ghostComp, nullptr);
 
-    editor.beginDragPreview(ghostComp->getWidth(), ghostComp->getHeight(), ghost->nodeID);
-    editor.updateDragPreview({700 - 280 - 40, 400}); // a move is top-left anchored
-    ASSERT_GT(editor.getSmartSuggestionCount(), 0) << "Ctrl must not suppress an ordinary connection on a move";
-    for (const auto& s : editor.getSmartSuggestions())
+    editor.getDragDropController().beginDragPreview(ghostComp->getWidth(), ghostComp->getHeight(), ghost->nodeID);
+    editor.getDragDropController().updateDragPreview({700 - 280 - 40, 400}); // a move is top-left anchored
+    ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0)
+        << "Ctrl must not suppress an ordinary connection on a move";
+    for (const auto& s : editor.getSmartConnections().getSmartSuggestions())
         EXPECT_FALSE(s.isInsert);
     editor.finalizeModuleDrag(ghostComp);
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 
     EXPECT_GT(countAudioConnectionsBetween(graph, ghost->nodeID, dest->nodeID), 0);
 }
@@ -397,8 +400,8 @@ TEST_F(GraphEditorTest, SmartConnectionInsertDoesNotStealFromTheModuleBeingAimed
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(2400, 1400);
-    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
-    editor.setInsertModifierOverrideForTests(true);
+    editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setInsertModifierOverrideForTests(true);
 
     auto& graph = engine.getGraph();
     auto freeDest = graph.addNode(std::make_unique<DelayModule>());
@@ -419,12 +422,12 @@ TEST_F(GraphEditorTest, SmartConnectionInsertDoesNotStealFromTheModuleBeingAimed
     editor.itemDragEnter(d);
     editor.itemDragMove(d);
 
-    ASSERT_GT(editor.getSmartSuggestionCount(), 0);
-    for (const auto& s : editor.getSmartSuggestions()) {
+    ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0);
+    for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
         EXPECT_EQ(s.neighborId, freeDest->nodeID) << "the insert stole the drop from the module under the cursor";
         EXPECT_FALSE(s.isInsert);
     }
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 }
 
 // --- Role-named mono audio inputs (Ring Modulator Carrier / Modulator) -------
@@ -442,8 +445,8 @@ TEST_F(GraphEditorTest, SmartConnectionDualUpstreamSumsBothLegsIntoRingModulator
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 900);
-    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
-    editor.setInsertModifierOverrideForTests(false);
+    editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setInsertModifierOverrideForTests(false);
 
     auto& graph = engine.getGraph();
     auto ring = graph.addNode(std::make_unique<RingModulatorModule>());
@@ -467,20 +470,21 @@ TEST_F(GraphEditorTest, SmartConnectionDualUpstreamSumsBothLegsIntoRingModulator
             distComp = c;
     ASSERT_NE(distComp, nullptr);
 
-    editor.beginDragPreview(distComp->getWidth(), distComp->getHeight(), dist->nodeID);
-    editor.updateDragPreview({140, 400});
-    ASSERT_GT(editor.getSmartSuggestionCount(), 0);
-    for (const auto& s : editor.getSmartSuggestions())
+    editor.getDragDropController().beginDragPreview(distComp->getWidth(), distComp->getHeight(), dist->nodeID);
+    editor.getDragDropController().updateDragPreview({140, 400});
+    ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0);
+    for (const auto& s : editor.getSmartConnections().getSmartSuggestions())
         EXPECT_EQ(s.neighborJack, 0) << "only Carrier may be proposed; Modulator is patched deliberately";
     editor.finalizeModuleDrag(distComp);
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 
     // Both legs summed into Carrier (raw 0), and nothing on Modulator (raw 1).
     EXPECT_TRUE(graph.isConnected({{dist->nodeID, 0}, {ring->nodeID, 0}})) << "Left leg missing from Carrier";
     EXPECT_TRUE(graph.isConnected({{dist->nodeID, 1}, {ring->nodeID, 0}})) << "Right leg missing from Carrier";
     EXPECT_FALSE(graph.isConnected({{dist->nodeID, 0}, {ring->nodeID, 1}}));
     EXPECT_FALSE(graph.isConnected({{dist->nodeID, 1}, {ring->nodeID, 1}}));
-    EXPECT_TRUE(editor.isInputJackFreeForTests(ring->nodeID, 1)) << "Modulator must never be auto-wired";
+    EXPECT_TRUE(editor.getSmartConnections().isInputJackFree(ring->nodeID, 1, false))
+        << "Modulator must never be auto-wired";
 }
 
 TEST_F(GraphEditorTest, SmartConnectionRingModulatorAsSourceIsUnchanged) {
@@ -488,8 +492,8 @@ TEST_F(GraphEditorTest, SmartConnectionRingModulatorAsSourceIsUnchanged) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(1600, 900);
-    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
-    editor.setInsertModifierOverrideForTests(false);
+    editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setInsertModifierOverrideForTests(false);
 
     auto& graph = engine.getGraph();
     auto dest = graph.addNode(std::make_unique<DelayModule>());
@@ -507,15 +511,16 @@ TEST_F(GraphEditorTest, SmartConnectionRingModulatorAsSourceIsUnchanged) {
             ringComp = c;
     ASSERT_NE(ringComp, nullptr);
 
-    editor.beginDragPreview(ringComp->getWidth(), ringComp->getHeight(), ring->nodeID);
-    editor.updateDragPreview({700 - 280 - 40, 400});
-    ASSERT_GT(editor.getSmartSuggestionCount(), 0) << "Ring Modulator must still work as a source";
-    for (const auto& s : editor.getSmartSuggestions()) {
+    editor.getDragDropController().beginDragPreview(ringComp->getWidth(), ringComp->getHeight(), ring->nodeID);
+    editor.getDragDropController().updateDragPreview({700 - 280 - 40, 400});
+    ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0)
+        << "Ring Modulator must still work as a source";
+    for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
         EXPECT_TRUE(s.ghostIsSource);
         EXPECT_EQ(s.neighborId, dest->nodeID);
     }
     editor.finalizeModuleDrag(ringComp);
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
     EXPECT_GT(countAudioConnectionsBetween(graph, ring->nodeID, dest->nodeID), 0);
 }
 
@@ -550,8 +555,8 @@ TEST_F(GraphEditorTest, SmartConnectionInsertsIntoAJackFedByASummedDualPair) {
     AppUndoManager undoMgr;
     GraphEditor editor(engine, &undoMgr);
     editor.setSize(2000, 1200);
-    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
-    editor.setInsertModifierOverrideForTests(true);
+    editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setInsertModifierOverrideForTests(true);
 
     auto& graph = engine.getGraph();
     auto delayNode = graph.addNode(std::make_unique<DelayModule>());
@@ -582,8 +587,9 @@ TEST_F(GraphEditorTest, SmartConnectionInsertsIntoAJackFedByASummedDualPair) {
     editor.itemDragEnter(d);
     editor.itemDragMove(d);
 
-    ASSERT_GT(editor.getSmartSuggestionCount(), 0) << "a summed dual pair is our own wiring, not a hand-built mix";
-    for (const auto& s : editor.getSmartSuggestions()) {
+    ASSERT_GT(editor.getSmartConnections().getSmartSuggestionCount(), 0)
+        << "a summed dual pair is our own wiring, not a hand-built mix";
+    for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
         EXPECT_TRUE(s.isInsert);
         EXPECT_EQ(s.neighborId, crusherId);
         EXPECT_EQ(s.upstreamId, delayId);
@@ -634,8 +640,8 @@ TEST_F(GraphEditorTest, SmartConnectionStillRefusesAJackMixedFromDifferentNodes)
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(2000, 1400);
-    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
-    editor.setInsertModifierOverrideForTests(true);
+    editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setInsertModifierOverrideForTests(true);
 
     auto& graph = engine.getGraph();
     auto crusher = graph.addNode(std::make_unique<BitcrusherModule>());
@@ -657,9 +663,9 @@ TEST_F(GraphEditorTest, SmartConnectionStillRefusesAJackMixedFromDifferentNodes)
                                              libraryCursorForGhostTopLeft("Distortion", {760 - 280 - 40, 400}));
     editor.itemDragEnter(d);
     editor.itemDragMove(d);
-    for (const auto& s : editor.getSmartSuggestions())
+    for (const auto& s : editor.getSmartConnections().getSmartSuggestions())
         EXPECT_FALSE(s.isInsert) << "a mix from two different nodes must never be rerouted";
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 }
 
 // --- Gesture matrix: the whole smart-connect contract in one table -----------
@@ -761,7 +767,7 @@ TEST_P(SmartConnectionGestureMatrixTest, MatchesTheExpectedOutcome) {
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(2000, 1400);
-    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+    editor.getSmartConnections().setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
 
     auto& graph = engine.getGraph();
     constexpr int kDestX = 760;
@@ -819,7 +825,7 @@ TEST_P(SmartConnectionGestureMatrixTest, MatchesTheExpectedOutcome) {
 
     const bool startsWithCtrl =
         c.row.modifier == ModifierGesture::CtrlHeldBefore || c.row.modifier == ModifierGesture::CtrlReleasedMidDrag;
-    editor.setInsertModifierOverrideForTests(startsWithCtrl);
+    editor.getSmartConnections().setInsertModifierOverrideForTests(startsWithCtrl);
 
     DummyDragSource ds;
     juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &ds,
@@ -833,21 +839,21 @@ TEST_P(SmartConnectionGestureMatrixTest, MatchesTheExpectedOutcome) {
             if (mc->getNodeId() == ghostId)
                 ghostComp = mc;
         ASSERT_NE(ghostComp, nullptr);
-        editor.beginDragPreview(ghostComp->getWidth(), ghostComp->getHeight(), ghostId);
-        editor.updateDragPreview(ghostTopLeft);
+        editor.getDragDropController().beginDragPreview(ghostComp->getWidth(), ghostComp->getHeight(), ghostId);
+        editor.getDragDropController().updateDragPreview(ghostTopLeft);
     }
 
     // Mid-drag modifier transitions go through the live per-tick re-sample, with NO mouse movement.
     if (c.row.modifier == ModifierGesture::CtrlPressedMidDrag) {
-        editor.setInsertModifierOverrideForTests(true);
+        editor.getSmartConnections().setInsertModifierOverrideForTests(true);
         editor.pumpDragModifierTickForTests();
     } else if (c.row.modifier == ModifierGesture::CtrlReleasedMidDrag) {
-        editor.setInsertModifierOverrideForTests(false);
+        editor.getSmartConnections().setInsertModifierOverrideForTests(false);
         editor.pumpDragModifierTickForTests();
     }
 
     GestureOutcome actual = GestureOutcome::None;
-    for (const auto& s : editor.getSmartSuggestions()) {
+    for (const auto& s : editor.getSmartConnections().getSmartSuggestions()) {
         if (s.neighborId != destId)
             continue;
         actual = s.isInsert ? GestureOutcome::Insert : GestureOutcome::Plain;
@@ -858,7 +864,7 @@ TEST_P(SmartConnectionGestureMatrixTest, MatchesTheExpectedOutcome) {
                                       << " dest=" << (int)c.row.dest << " modifier=" << (int)c.row.modifier
                                       << " expected=" << outcomeName(c.row.expected)
                                       << " actual=" << outcomeName(actual);
-    editor.endDragPreview();
+    editor.getDragDropController().endDragPreview();
 }
 
 INSTANTIATE_TEST_SUITE_P(EveryCell, SmartConnectionGestureMatrixTest, ::testing::ValuesIn(allGestureMatrixCases()));

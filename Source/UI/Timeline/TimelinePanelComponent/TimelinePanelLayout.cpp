@@ -1,8 +1,7 @@
 // TimelinePanelLayout.cpp
 //
 // Application-properties-backed preferences (snap/follow-playhead/scroll-invert),
-// zoom/scroll helpers, resized(), paint()/paintOverChildren(), and the ResizeHandle
-// child component (the panel's top-edge drag-to-resize affordance). TimelinePanelComponent
+// zoom/scroll helpers, resized() and paint()/paintOverChildren(). TimelinePanelComponent
 // is declared in TimelinePanelComponent.h; sibling TimelinePanel*.cpp files in this
 // directory hold the rest of the class.
 
@@ -513,14 +512,9 @@ void TimelinePanelComponent::resized() {
         automationEditor_.setBounds(strip);
     }
 
-    // The grab strip runs the panel's full width along its top edge, OVERLAPPING the transport-bar
-    // strip — transportBarBounds_ stays the whole strip (the three regions still tile), but the
-    // controls inside it are laid out BELOW the handle so a resize grab never lands on a button.
-    resizeHandle_.setBounds(0, 0, getWidth(), kResizeHandleHeight);
-
     // Snap selector: right-hand side of the transport bar. The transport controls (play/stop/
     // record/loop + BPM/time-sig + readout) fill the rest, left-aligned.
-    auto transportBar = transportBarBounds_.withTrimmedTop(kResizeHandleHeight);
+    auto transportBar = transportBarBounds_;
     snapCombo_.setBounds(transportBar.removeFromRight(kSnapComboWidth).reduced(2));
     snapToggleButton_.setBounds(transportBar.removeFromRight(kSnapToggleButtonWidth).reduced(2));
     // Follow-playhead sits immediately left of the snap toggle — see its member comment.
@@ -704,94 +698,5 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
 // panel's own edge, so an outline painted at the end of paint() above would sit UNDER them and
 // never show.
 void TimelinePanelComponent::paintOverChildren(juce::Graphics& g) { synth::ui::paintFocusRegionOutline(*this, g); }
-
-//==============================================================================
-// ---- Top-edge resize handle ----
-
-// The drag is measured in SCREEN coordinates against the panel's bottom edge, not as a delta: the
-// owner moves the panel's top edge under the cursor on every callback, so a component-relative
-// delta would chase itself. Both callbacks report the panel's DESIRED height; clamping belongs to
-// the owner.
-TimelinePanelComponent::ResizeHandle::ResizeHandle(TimelinePanelComponent& owner)
-    : owner_(owner) {
-    setMouseCursor(juce::MouseCursor::UpDownResizeCursor);
-}
-
-void TimelinePanelComponent::ResizeHandle::paint(juce::Graphics& g) {
-    juce::Colour line;
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
-        const auto& c = lf->getTheme().colors;
-        line = isHighlighted() ? c.accent : c.border;
-    } else {
-        line = isHighlighted() ? juce::Colours::white : juce::Colours::grey;
-    }
-
-    // Idle: exactly the hairline the panel already draws at y == 0, so nothing new is visible until
-    // the pointer arrives. Hovered/dragging: the hairline brightens and the strip picks up a faint
-    // wash, which is the whole affordance.
-    if (isHighlighted())
-        g.fillAll(line.withAlpha(0.18f));
-    g.setColour(line);
-    g.fillRect(0, 0, getWidth(), 1);
-}
-
-void TimelinePanelComponent::ResizeHandle::mouseEnter(const juce::MouseEvent&) {
-    if (hovered_)
-        return; // repaint only on a CHANGE
-    hovered_ = true;
-    repaint();
-}
-
-void TimelinePanelComponent::ResizeHandle::mouseExit(const juce::MouseEvent&) {
-    if (!hovered_)
-        return;
-    hovered_ = false;
-    if (!dragging_)
-        repaint();
-}
-
-int TimelinePanelComponent::ResizeHandle::desiredHeightFor(const juce::MouseEvent& e) const {
-    // Absolute, not a delta: the owner moves the panel's top edge (and this handle with it) on
-    // every callback, so only the panel's FIXED bottom edge is a stable reference.
-    //
-    // This returns the PANEL's OWN desired content height -- deliberately with no notion of
-    // whatever chrome an owner might sit inside (FRO11: MixerDockComponent's 22px tab strip,
-    // when the panel is showing inside the mixer dock rather than standalone). Translating that
-    // into MainComponent's own total-carve height is the callback wiring's job
-    // (MainComponentSetupTimeline.cpp's onResizeHeight/onResizeHeightCommitted), since that's the
-    // one place that knows about the tab strip; TimelinePanelComponent itself stays agnostic.
-    const int topY = e.getScreenPosition().y - grabOffsetY_;
-    return owner_.getScreenBounds().getBottom() - topY;
-}
-
-void TimelinePanelComponent::ResizeHandle::mouseDown(const juce::MouseEvent& e) {
-    const bool wasHighlighted = isHighlighted();
-    dragging_ = true;
-    moved_ = false;
-    grabOffsetY_ = (int)e.getEventRelativeTo(&owner_).position.y;
-    lastDesiredHeight_ = desiredHeightFor(e);
-    if (!wasHighlighted)
-        repaint();
-}
-
-void TimelinePanelComponent::ResizeHandle::mouseDrag(const juce::MouseEvent& e) {
-    if (!dragging_)
-        return;
-    moved_ = true;
-    lastDesiredHeight_ = desiredHeightFor(e);
-    if (owner_.onResizeHeight)
-        owner_.onResizeHeight(lastDesiredHeight_);
-}
-
-void TimelinePanelComponent::ResizeHandle::mouseUp(const juce::MouseEvent&) {
-    if (!dragging_)
-        return;
-    dragging_ = false;
-    if (!hovered_)
-        repaint(); // the highlight only changes when the pointer has already left
-    // Persist point for the owner — and only for a real drag: a stray click must not write settings.
-    if (moved_ && owner_.onResizeHeightCommitted)
-        owner_.onResizeHeightCommitted(lastDesiredHeight_);
-}
 
 } // namespace synth::ui

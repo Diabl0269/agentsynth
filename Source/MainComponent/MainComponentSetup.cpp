@@ -5,7 +5,8 @@
 // in MainComponent.cpp for the ordered call sequence these steps implement.
 #include "AI/AIProviderRegistry.h"
 #include "MainComponent.h"
-#include "MidiRemote/ControllerProfileStore.h"
+#include "Mixer/MasterSplice.h"
+#include "Modules/MasterModule.h"
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ShortcutManager/AppCommands.h"
 #include "UI/Mixer/MixerPanelComponent/MixerFocusRegion.h"
@@ -40,7 +41,7 @@ void MainComponent::restorePanelPreferences() {
         appProperties.getUserSettings()->getIntValue(kTimelinePanelHeightKey, defaultTimelinePanelHeight()));
     graphEditor.setAlignmentGuidesEnabled(
         appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true));
-    graphEditor.setSmartConnectionMode(GraphEditor::smartConnectionModeFromString(
+    graphEditor.getSmartConnections().setSmartConnectionMode(GraphEditor::smartConnectionModeFromString(
         appProperties.getUserSettings()->getValue("smartConnectionMode", "NewAndUnwired")));
     graphEditor.setDoubleClickPortDisconnectEnabled(
         appProperties.getUserSettings()->getBoolValue("doubleClickPortDisconnect", true));
@@ -236,6 +237,36 @@ void MainComponent::wireGraphEditorCallbacks() {
             if (auto* hostedPlugin = dynamic_cast<synth::HostedPluginModule*>(node->getProcessor()))
                 pluginWindowManager.openEditorFor(hostedPlugin, nodeId);
     };
+    // Module-card right-click MIDI Learn (FRO130) -- all three forward to the one collaborator
+    // that owns RemoteEngine/midiRemoteDoc access; see MidiLearnController.h.
+    graphEditor.onQueryMidiMappingsForNode = [this](juce::AudioProcessorGraph::NodeID nodeId) {
+        return midiLearnController_.queryMappings(nodeId);
+    };
+    graphEditor.onMidiLearnRequested = [this](juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
+        midiLearnController_.arm(nodeId, paramId);
+    };
+    graphEditor.onMidiForgetRequested = [this](juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
+        midiLearnController_.forget(nodeId, paramId);
+    };
+    // FRO131 decision (2026-09-22): "Edit MIDI assignment..." -- open the dock (same sequence
+    // performToggleMidiRemotePanel()'s own "closed" branch runs, mirroring
+    // trackChannelLink_.setMixerRevealHook()'s own "open before reveal" shape above) before asking
+    // the panel to select the assignment; a closed dock has nothing on screen to select into yet.
+    graphEditor.onEditMidiAssignmentRequested = [this](juce::AudioProcessorGraph::NodeID nodeId,
+                                                       const juce::String& paramId) {
+        auto* node = audioEngine.getGraph().getNodeForId(nodeId);
+        const juce::String nodeUuid = node != nullptr ? node->properties["uuid"].toString() : juce::String();
+        if (nodeUuid.isEmpty())
+            return;
+        if (!isTimelineVisible) {
+            isTimelineVisible = true;
+            appProperties.getUserSettings()->setValue("timelinePanelVisible", "1");
+            appProperties.getUserSettings()->saveIfNeeded();
+            applyToolbarIcons();
+            beginPanelSlide();
+        }
+        mixerDock.selectMidiRemoteAssignment(nodeUuid, paramId);
+    };
     graphEditor.snippetProvider = [this](const juce::String& name) -> juce::var {
         return synth::SnippetManager::loadSnippet(
             synth::SnippetManager::fileForName(synth::SnippetManager::getDefaultSnippetsDirectory(), name));
@@ -318,15 +349,6 @@ void MainComponent::wireCommandsAndShortcuts() {
     startTimerHz(10);
 }
 
-MainComponent::RemoteActionInvokerImpl::RemoteActionInvokerImpl(juce::ApplicationCommandManager& cm) noexcept
-    : commandManager_(cm) {}
-
-// MESSAGE THREAD (called from RemoteEngine::drain()). Synchronous, exactly like a menu item or a
-// keypress dispatch — never posted/async.
-void MainComponent::RemoteActionInvokerImpl::invokeRemoteCommand(juce::CommandID commandId) {
-    commandManager_.invokeDirectly(commandId, false);
-}
-
 // FRO127: wires synth::midi::RemoteEngine to the AudioEngine seam and primes it with whatever
 // controller profiles and project assignments already exist. Called right after
 // wireCommandsAndShortcuts() above (commandManager must exist — the action invoker dispatches
@@ -337,9 +359,27 @@ void MainComponent::RemoteActionInvokerImpl::invokeRemoteCommand(juce::CommandID
 // no-ops/empty in Hosted mode regardless of whether the real audio device has been opened yet, so nothing here depends
 // on initialiseAudioEngine() having run first.
 void MainComponent::wireMidiRemoteEngine() {
+    applyMidiRemotePreferences(); // the Preferences group's default takeover + badge switch
     remoteEngine.setActionInvoker(&remoteActionInvoker_);
     remoteEngine.setActionCommandLookup(
         [](const juce::String& actionId) { return AppCommands::getCommandForAction(actionId); });
+    // FRO236 (docs/control/midi-remote.md#continuous-targets): resolves masterVolume to the SAME
+    // juce::AudioParameterFloat* the mixer's own master fader binds (MixerMasterColumn::setNodeId) --
+    // Core must not include MasterModule.h, so this lookup lives here instead.
+    remoteEngine.setContinuousParameterLookup(
+        [](juce::AudioProcessorGraph& graph, synth::ContinuousTargetKind kind) -> juce::AudioProcessorParameter* {
+            if (kind != synth::ContinuousTargetKind::masterVolume)
+                return nullptr;
+            auto* masterNode = synth::findMasterNode(graph);
+            auto* master = masterNode != nullptr ? dynamic_cast<MasterModule*>(masterNode->getProcessor()) : nullptr;
+            if (master == nullptr)
+                return nullptr;
+            for (auto* param : master->getParameters())
+                if (auto* floatParam = dynamic_cast<juce::AudioParameterFloat*>(param);
+                    floatParam != nullptr && floatParam->paramID == "gain")
+                    return floatParam;
+            return nullptr;
+        });
     // The engine yields exactly as a second mouse would while a real gesture already holds the
     // same parameter (docs/control/midi-remote.md#how-does-a-hardware-value-reach-a-parameter) —
     // GestureClaims::isClaimed is already exactly the audio-visible predicate AutomationApplier itself consults, so no
@@ -347,15 +387,21 @@ void MainComponent::wireMidiRemoteEngine() {
     remoteEngine.setParameterClaimedPredicate([this](const juce::AudioProcessorParameter* param) {
         return automationRecorder.getAudioState().claims.isClaimed(param);
     });
+    // FRO139 (docs/control/midi-remote.md#controller-feedback): a hosted plugin has no MIDI output
+    // of its own to send through, so feedback is a standalone-only feature -- remoteEngine's
+    // feedbackSink_ stays null there and drain()'s feedback pass is a no-op.
+    if (!audioEngine.isHosted())
+        remoteEngine.setFeedbackSink(&remoteFeedbackOutputs_);
 
-    synth::ControllerProfileStore profileStore;
-    const auto loaded = profileStore.loadAll();
-    remoteEngine.setProfiles(loaded.profiles);
+    // Profiles are loaded once by MidiLearnController's own construction (a member declared right
+    // after remoteEngine, so it is already alive here) -- this just republishes that same load.
+    const auto& profiles = midiLearnController_.getProfiles();
+    remoteEngine.setProfiles(profiles);
     remoteEngine.setAssignments(midiRemoteDoc.assignments);
 
     std::vector<juce::String> deviceNames;
-    deviceNames.reserve(loaded.profiles.size());
-    for (const auto& profile : loaded.profiles)
+    deviceNames.reserve(profiles.size());
+    for (const auto& profile : profiles)
         deviceNames.push_back(profile.input.name);
     audioEngine.openMidiDevicesForRemote(deviceNames); // no-op in Hosted mode
 
@@ -363,6 +409,101 @@ void MainComponent::wireMidiRemoteEngine() {
     if (audioEngine.isHosted())
         sources.push_back(synth::midi::hostSourceKey());
     remoteEngine.setSources(sources);
+
+    // FRO262: the priming above only ever runs once, here. A device ticked in the Audio tab (or one
+    // that reappears after a reconnect) afterwards needs the SAME re-registration --
+    // AudioEngine::reconcileMidiInputs() (changeListenerCallback) decides WHICH devices end up
+    // open, and refreshSources() just republishes the resulting set through the identical
+    // getOpenMidiInputIdentifiers -> RemoteEngine::setSources() path used above. A no-op assignment
+    // in Hosted mode: the callback that would invoke it can structurally never fire there
+    // (changeListenerCallback's own isHosted() guard) -- cleared in MainComponent's destructor
+    // beside onDeviceStateChanged.
+    //
+    // FRO262 (follow-up): refreshSources() alone only fixes MIDI Learn actually hearing the device
+    // -- it never told the panel. MidiRemotePanelComponent::rebuildFromProfiles() computes each
+    // Controllers-list row's present/absent state from audioEngine.getOpenMidiInputIdentifiers() at
+    // rebuild time, so a device that newly opens while the panel tab is already showing stayed
+    // greyed until MixerDockComponent::applyTabVisibility()'s tab-switch-in catch-up ran it.
+    // scheduleLiveRefresh() (FRO263) is the same deferred/coalesced entry point
+    // midiLearnController_.onChanged below uses, so this reuses that seam rather than adding a
+    // second seam.
+    audioEngine.onMidiDevicesChanged = [this] {
+        midiLearnController_.refreshSources();
+        mixerDock.getMidiRemotePanel().scheduleLiveRefresh();
+        // FRO139: the device set changed, so any cached juce::MidiOutput/remembered-failure is
+        // stale, and every mapped parameter needs to re-announce its value to whatever is open now.
+        remoteFeedbackOutputs_.closeAll();
+        remoteEngine.resendFeedback();
+    };
+
+    // FRO133: the mixer panel and transport bar are plain MainComponent members, already fully
+    // constructed by the time any constructor-body wiring function runs (member-init order, not
+    // this function's own call order) -- so it's safe to hand MidiLearnController their addresses
+    // here regardless of whether mixerDock/timelinePanel have run their own configure() yet. See
+    // MidiLearnController::setMixerPanel()/setTransportBar()'s own doc comment for why this exists:
+    // GraphEditor::setMidiLearnArmed() only reaches the canvas card, not the mixer column or the
+    // transport bar's own breathing outline for the SAME/an action target.
+    midiLearnController_.setMixerPanel(&mixerDock.getMixerPanel());
+    midiLearnController_.setTransportBar(&timelinePanel.getTransportBar());
+    midiLearnController_.setPickOverlayHost(this); // FRO135: the pick-target overlay covers canvas, dock and transport
+    midiLearnController_.setPickPassThrough(mixerDock.getTabButtons());
+    mixerDock.onActiveTabChanged = [this] {
+        midiLearnController_.refreshPickTarget();
+        // Rebuilds and layout the switch queued land after this call; re-measure once they have.
+        juce::MessageManager::callAsync([safe = juce::Component::SafePointer<MainComponent>(this)] {
+            if (safe != nullptr)
+                safe->midiLearnController_.refreshPickTarget();
+        });
+    };
+
+    // FRO131: same "wire it once everything it needs is alive" reasoning as the two calls above --
+    // the MIDI Remote panel needs remoteEngine/midiLearnController_/midiRemoteDoc, none of which
+    // exist yet at MixerDockComponent's own construction time (see MixerDockComponent::
+    // configureMidiRemote()'s doc comment).
+    mixerDock.configureMidiRemote(audioEngine, remoteEngine, midiLearnController_, midiRemoteDoc, graphEditor);
+    mixerDock.getMidiRemotePanel().onLocateNode = [this](const juce::String& nodeUuid) { selectNodeInGraph(nodeUuid); };
+
+    // FRO263: keep the panel live while it's open, not just on its own tab-switch-in --
+    // MidiLearnController::onChanged fires after every mutation that changes what the panel shows
+    // (see its own doc comment), so wiring it here covers Learn/Forget/Undo/Redo/a panel-side profile
+    // edit without a callback per mutation site. midiLearnController_ is declared after mixerDock in
+    // MainComponent.h, so it destructs first -- this lambda's `this` capture never outlives mixerDock.
+    midiLearnController_.onChanged = [this] { mixerDock.getMidiRemotePanel().scheduleLiveRefresh(); };
+
+    // Transport-bar right-click MIDI Learn (FRO133) -- action targets, so these three forward to
+    // MidiLearnController's action-keyed overloads rather than GraphEditor's node-keyed ones (see
+    // this function's own graphEditor.onMidiLearnRequested sibling in wireGraphEditorCallbacks()).
+    auto& transportBar = timelinePanel.getTransportBar();
+    transportBar.onQueryMidiMappingsForActions = [this] { return midiLearnController_.queryActionMappings(); };
+    transportBar.onMidiLearnRequested = [this](const juce::String& actionId) {
+        midiLearnController_.armAction(actionId);
+    };
+    transportBar.onMidiForgetRequested = [this](const juce::String& actionId) {
+        midiLearnController_.forgetAction(actionId);
+    };
+
+    // FRO253: mixer column Solo right-click MIDI Learn -- a nodeCommand target, so these three
+    // forward to MidiLearnController's node-command-keyed overloads (mirrors the transport-bar
+    // action wiring immediately above; unlike a parameter target, Solo has no
+    // GraphEditor::onMidiLearnRequested sibling to reuse -- see MixerColumnMidiLearn.cpp).
+    auto& mixerPanel = mixerDock.getMixerPanel();
+    mixerPanel.onQuerySoloMidiMapping = [this](juce::AudioProcessorGraph::NodeID nodeId) -> juce::String {
+        const auto mappings = midiLearnController_.queryNodeCommandMappings(nodeId);
+        const auto found = mappings.find(synth::NodeCommandKind::toggleSolo);
+        return found != mappings.end() ? found->second : juce::String();
+    };
+    mixerPanel.onSoloMidiLearnRequested = [this](juce::AudioProcessorGraph::NodeID nodeId) {
+        midiLearnController_.armNodeCommand(nodeId, synth::NodeCommandKind::toggleSolo);
+    };
+    mixerPanel.onSoloMidiForgetRequested = [this](juce::AudioProcessorGraph::NodeID nodeId) {
+        midiLearnController_.forgetNodeCommand(nodeId, synth::NodeCommandKind::toggleSolo);
+    };
+    // FRO253: re-syncs the mixer column's M/S visuals after a hardware press flips solo outside
+    // any column's own click -- see MixerColumnComponent::toggleSoloed's callers for why nothing
+    // else does this (MixerColumnMidiLearn.cpp / RemoteActionInvokerImpl's own comment).
+    remoteActionInvoker_.onNodeCommandApplied = [&mixerPanel](juce::AudioProcessorGraph::NodeID) {
+        mixerPanel.refreshMuteSoloVisuals();
+    };
 
     // Installed last: nothing may reach the sink before it has profiles/assignments/sources.
     audioEngine.setRemoteMessageSink(&remoteEngine);
@@ -499,9 +640,15 @@ void MainComponent::rebuildFocusRegions() {
     // FRO12: guarded -- a Timeline detached to its own window has nothing docked here to cycle
     // to; Tab inside that window cycles its OWN one-region registry instead (see
     // DetachedPanelWindow::keyPressed). Wrapping only -- never reorder/rename the regions below.
+    // FRO131: the dock grew a third tab (MidiRemote) -- excluding only Mixer here is no longer
+    // enough to say Timeline is the one actually showing, or this region reports open while the
+    // MidiRemote tab is the one on screen.
     if (!mixerDock.getTimelineHost().isDetached())
         focusRegions_.addRegion({"timeline", &timelinePanel,
-                                 [this] { return isTimelineVisible && !mixerDock.isMixerTabActive(); },
+                                 [this] {
+                                     return isTimelineVisible && !mixerDock.isMixerTabActive() &&
+                                            !mixerDock.isMidiRemoteTabActive();
+                                 },
                                  [this] {
                                      mixerDock.setActiveTab(synth::ui::MixerDockComponent::Tab::Timeline);
                                      if (!isTimelineVisible && toggleTimelineButton.onClick)
@@ -532,6 +679,19 @@ void MainComponent::rebuildFocusRegions() {
             focusRegions_.addRegion(
                 {"mixer", &mixerDock.getMixerPanel(), [this] { return mixerPlacement_.isOwnPanelShowing(); }, nullptr});
     }
+    // FRO131: same guard shape as "timeline" above -- MidiRemote has no placement variant (no
+    // Own-panel/Window controller like Mixer's mixerPlacement_), so it is always parented here
+    // unless detached to its own window, in which case that window's own one-region registry
+    // covers it (DetachablePanelHost::setHostedPanelFocusRegion, wired alongside the other two in
+    // wireTimelinePanelServicesAndShortcuts() below).
+    if (!mixerDock.getMidiRemoteHost().isDetached())
+        focusRegions_.addRegion({"midiRemote", &mixerDock.getMidiRemotePanel(),
+                                 [this] { return isTimelineVisible && mixerDock.isMidiRemoteTabActive(); },
+                                 [this] {
+                                     mixerDock.setActiveTab(synth::ui::MixerDockComponent::Tab::MidiRemote);
+                                     if (!isTimelineVisible && toggleMidiRemoteButton.onClick)
+                                         toggleMidiRemoteButton.onClick();
+                                 }});
     focusRegions_.addRegion({"aiPanel", &aiChatComponent, [this] { return isAiPanelVisible; },
                              [this] {
                                  if (!isAiPanelVisible && toggleAiPanelButton.onClick)

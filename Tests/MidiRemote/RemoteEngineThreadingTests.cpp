@@ -10,6 +10,7 @@
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
 
 #include <atomic>
+#include <chrono>
 #include <gtest/gtest.h>
 #include <memory>
 #include <thread>
@@ -141,7 +142,13 @@ TEST(MidiRemoteSnapshotPublisher, ReadersNeverSeeATornOrFreedTable) {
         });
     }
 
-    for (int generation = 1; generation <= 500; ++generation) {
+    // At least 500 swaps, and keep swapping until the readers have actually overlapped with them: on
+    // a loaded machine (a full suite run) the 500 swaps can finish in a few ms before any reader
+    // thread is scheduled, which made `reads > 0` below fail spuriously. Capped at 2 s.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    for (int generation = 1; generation <= 500 || (reads.load(std::memory_order_relaxed) < 1000 &&
+                                                   std::chrono::steady_clock::now() < deadline);
+         ++generation) {
         publisher.publish(makeSnapshot(1 + (generation % 8)));
         publisher.collectRetired();
     }

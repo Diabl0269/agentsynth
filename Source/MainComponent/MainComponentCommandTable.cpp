@@ -284,7 +284,7 @@ bool MainComponent::applyZoomCommand(juce::CommandID commandID) {
 
 bool MainComponent::touchesAnyMacro() const {
     for (auto nodeId : graphEditor.getSelectedNodes()) {
-        if (graphEditor.macroForNode(nodeId) != nullptr)
+        if (graphEditor.getMacroController().macroForNode(nodeId) != nullptr)
             return true;
     }
     return false;
@@ -402,8 +402,8 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildGeneralCommandRows()
              return true;
          }},
         {AppCommands::savePreset,
-         "Save Preset",
-         "Save the current preset",
+         "Save Project",
+         "Save the project (graph and timeline)",
          "General",
          "savePreset",
          {},
@@ -413,7 +413,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildGeneralCommandRows()
          }},
         {AppCommands::saveProjectAs,
          "Save Project As...",
-         "Save the project to a new location",
+         "Save the project to a new .agsproj bundle",
          "General",
          "saveProjectAs",
          {},
@@ -557,14 +557,14 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
          "Group the selection into a new Macro, or toggle collapse/expand if it already touches one", "Edit",
          "groupSelection", [](const MainComponent& m) { return m.canGroupSelection(); },
          [](MainComponent& m) {
-             m.graphEditor.groupOrToggleSelectionMacros();
+             m.graphEditor.getMacroController().groupOrToggleSelectionMacros();
              return true;
          }},
         {AppCommands::ungroupSelection, "Ungroup Macro",
          "Dissolve the macro the selection belongs to, keeping its modules", "Edit", "ungroupSelection",
          [](const MainComponent& m) { return m.hasSelection(); },
          [](MainComponent& m) {
-             m.graphEditor.ungroupSelection();
+             m.graphEditor.getMacroController().ungroupSelection();
              return true;
          }},
         // toggleSelectionMacrosCollapsed() itself refuses (with a status message) when the
@@ -575,7 +575,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
          "Toggle the collapsed state of the macro the selection belongs to", "Edit", "collapseMacro",
          [](const MainComponent& m) { return m.touchesAnyMacro(); },
          [](MainComponent& m) {
-             m.graphEditor.toggleSelectionMacrosCollapsed();
+             m.graphEditor.getMacroController().toggleSelectionMacrosCollapsed();
              return true;
          }},
         // Mirrors the canvas context menu item's setEnabled -- same predicate, so the two
@@ -635,7 +635,7 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildEditAndGraphCommandR
         // dropping it from the Settings shortcut list entirely. Space is GLOBAL -- no
         // resolveEditSurface() branch, unlike C/V/D above.
         {AppCommands::togglePlayback,
-         "Toggle Playback",
+         "Play / Stop",
          "Play or stop the timeline transport",
          "Transport",
          "togglePlayback",
@@ -721,6 +721,17 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTimelineAndPanelComm
              m.performToggleMixerPanel();
              return true;
          }},
+        // FRO131: same shape as toggleMixerPanel's own row above -- a third tab on the same dock.
+        {AppCommands::toggleMidiRemotePanel,
+         "Toggle MIDI Remote Panel",
+         "Toggle the MIDI Remote tab in the bottom-docked panel",
+         "View",
+         "toggleMidiRemotePanel",
+         {},
+         [](MainComponent& m) {
+             m.performToggleMidiRemotePanel();
+             return true;
+         }},
     };
 }
 
@@ -804,6 +815,17 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildFocusAndHelpCommandR
              return true;
          }},
 #endif
+        // FRO94: menu-only, always active, no chord. Opens the contribute page in the browser.
+        {AppCommands::contribute,
+         "Contribute to Agent Synth...",
+         "Opens agentsynth.app/contribute in your browser: ways to help build Agent Synth.",
+         "Help",
+         nullptr,
+         {},
+         [](MainComponent& m) {
+             m.openContributePage();
+             return true;
+         }},
     };
 }
 
@@ -881,8 +903,63 @@ std::vector<MainComponent::CommandSpec> MainComponent::buildTransportCommandRows
          "transportReturnToStart",
          {},
          [](MainComponent& m) {
-             m.audioEngine.getTransport().locateBeat(0.0);
-             return true;
+             return synth::locateTransportTracked(m.audioEngine.getTransport(), m.transportNudge_, 0.0);
+         }},
+        // FRO271: cursor moves and loop-locator jumps. Nudges accumulate through transportNudge_ so
+        // several firing inside one audio block (a jog wheel) don't lose steps; see TransportNudge.h.
+        {AppCommands::transportNudgeBackBeat,
+         "Move Cursor Back (Beat)",
+         "Move the transport cursor back one beat",
+         "Transport",
+         "transportNudgeBackBeat",
+         {},
+         [](MainComponent& m) {
+             return synth::nudgeTransportCursor(m.audioEngine.getTransport(), m.transportNudge_, -1.0);
+         }},
+        {AppCommands::transportNudgeForwardBeat,
+         "Move Cursor Forward (Beat)",
+         "Move the transport cursor forward one beat",
+         "Transport",
+         "transportNudgeForwardBeat",
+         {},
+         [](MainComponent& m) {
+             return synth::nudgeTransportCursor(m.audioEngine.getTransport(), m.transportNudge_, 1.0);
+         }},
+        {AppCommands::transportNudgeBackBar,
+         "Move Cursor Back (Bar)",
+         "Move the transport cursor back one bar",
+         "Transport",
+         "transportNudgeBackBar",
+         {},
+         [](MainComponent& m) {
+             return synth::nudgeTransportCursorBars(m.audioEngine.getTransport(), m.transportNudge_, -1.0);
+         }},
+        {AppCommands::transportNudgeForwardBar,
+         "Move Cursor Forward (Bar)",
+         "Move the transport cursor forward one bar",
+         "Transport",
+         "transportNudgeForwardBar",
+         {},
+         [](MainComponent& m) {
+             return synth::nudgeTransportCursorBars(m.audioEngine.getTransport(), m.transportNudge_, 1.0);
+         }},
+        {AppCommands::transportJumpToLoopStart,
+         "Jump to Loop Start",
+         "Locate the transport to the loop start (no-op without a loop range)",
+         "Transport",
+         "transportJumpToLoopStart",
+         {},
+         [](MainComponent& m) {
+             return synth::jumpToLoopLocator(m.audioEngine.getTransport(), m.transportNudge_, false);
+         }},
+        {AppCommands::transportJumpToLoopEnd,
+         "Jump to Loop End",
+         "Locate the transport to the loop end (no-op without a loop range)",
+         "Transport",
+         "transportJumpToLoopEnd",
+         {},
+         [](MainComponent& m) {
+             return synth::jumpToLoopLocator(m.audioEngine.getTransport(), m.transportNudge_, true);
          }},
     };
 }

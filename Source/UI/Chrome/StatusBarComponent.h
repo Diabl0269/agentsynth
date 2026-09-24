@@ -55,6 +55,11 @@ public:
     // then auto-clear and restore normal status. Safe to call from any message-thread code.
     void showMessage(const juce::String& msg);
 
+    // Stays up until clearMessage()/another message -- for MIDI Learn's armed/settling text, which
+    // can outlive showMessage()'s 2.5 s auto-clear.
+    void showStickyMessage(const juce::String& msg);
+    void clearMessage(); // a no-op for a transient showMessage(), which is left to its own timer
+
     // Push play-state + a pre-formatted position readout + BPM into the transport cluster. See the
     // class comment for why `positionText` arrives pre-formatted (typically the caller's own
     // synth::ui::TimelineTransportBar::formatBarBeat(ppq, tsNumerator, tsDenominator)).
@@ -132,8 +137,9 @@ private:
     // the geometry constants it reads live there (anonymous namespace).
     bool isRoundTripSegmentVisible() const noexcept;
 
-    // Transient message state. Empty string means no transient message is active.
+    // Transient/sticky message state. Empty transientMessage_ means neither is active.
     juce::String transientMessage_;
+    bool messageIsSticky_ = false; // set via showStickyMessage(); clearMessage() only touches this one
 
     // Last-rendered values, used for gated-repaint comparison.
     float lastCpu_{-1.f};

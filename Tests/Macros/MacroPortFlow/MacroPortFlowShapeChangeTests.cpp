@@ -19,8 +19,8 @@ TEST(MacroPortFlow, ChangeShapeIsOneUndoStepAndPreservesCablesOnStillActiveChann
     const auto memberIds = macro->members; // Oscillator, Filter uuids
     const auto filterId = nodeIdForUuid(engine, memberIds[1]);
 
-    const auto oldUuid = editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV,
-                                             MacroPortShape::Mono, 1, "Pitch In");
+    const auto oldUuid = editor.getMacroController().addMacroPort(
+        macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "Pitch In");
     ASSERT_FALSE(oldUuid.isEmpty());
     const auto oldNodeId = nodeIdForUuid(engine, oldUuid);
 
@@ -34,7 +34,7 @@ TEST(MacroPortFlow, ChangeShapeIsOneUndoStepAndPreservesCablesOnStillActiveChann
 
     const int nodesBefore = engine.getGraph().getNodes().size();
 
-    const auto newUuid = editor.changeMacroPortShape(macroId, oldUuid, MacroPortShape::Stereo, 1);
+    const auto newUuid = editor.getMacroController().changeMacroPortShape(macroId, oldUuid, MacroPortShape::Stereo, 1);
     ASSERT_FALSE(newUuid.isEmpty());
     EXPECT_NE(newUuid, oldUuid);
     EXPECT_EQ(engine.getGraph().getNodes().size(), nodesBefore); // delete + create: net zero nodes
@@ -77,8 +77,8 @@ TEST(MacroPortFlow, ChangeShapeDropsACableOnARawChannelTheNewShapeNoLongerExpose
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
 
-    const auto uuid =
-        editor.addMacroPort(macroId, true, synth::MacroPortKind::AudioCV, MacroPortShape::Stereo, 1, "Stereo In");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::AudioCV,
+                                                               MacroPortShape::Stereo, 1, "Stereo In");
     const auto nodeId = nodeIdForUuid(engine, uuid);
 
     auto extOsc = addModuleAt(editor, engine, std::make_unique<OscillatorModule>(), 900, 900);
@@ -86,7 +86,7 @@ TEST(MacroPortFlow, ChangeShapeDropsACableOnARawChannelTheNewShapeNoLongerExpose
     engine.getGraph().addConnection({{extOsc, 0}, {nodeId, MacroInletModule::kRightBase}});
     ASSERT_TRUE(hasConnection(engine, extOsc, 0, nodeId, MacroInletModule::kRightBase));
 
-    const auto newUuid = editor.changeMacroPortShape(macroId, uuid, MacroPortShape::Mono, 1);
+    const auto newUuid = editor.getMacroController().changeMacroPortShape(macroId, uuid, MacroPortShape::Mono, 1);
     ASSERT_FALSE(newUuid.isEmpty());
     const auto newNodeId = nodeIdForUuid(engine, newUuid);
 
@@ -100,9 +100,10 @@ TEST(MacroPortFlow, ChangeShapeIsANoOpForAMidiPort) {
     GraphEditor editor(engine);
     editor.setSize(1600, 1200);
     auto macroId = makeTwoMemberMacro(editor, engine);
-    const auto uuid = editor.addMacroPort(macroId, true, synth::MacroPortKind::Midi, MacroPortShape::Mono, 1, "");
+    const auto uuid = editor.getMacroController().addMacroPort(macroId, true, synth::MacroPortKind::Midi,
+                                                               MacroPortShape::Mono, 1, "");
 
-    const auto result = editor.changeMacroPortShape(macroId, uuid, MacroPortShape::Stereo, 1);
+    const auto result = editor.getMacroController().changeMacroPortShape(macroId, uuid, MacroPortShape::Stereo, 1);
     EXPECT_TRUE(result.isEmpty());
     EXPECT_FALSE(nodeIdForUuid(engine, uuid).uid == 0) << "the original MIDI node is untouched";
 }

@@ -38,6 +38,14 @@ void RemoteEngine::setSources(const std::vector<juce::String>& sourceKeys) {
 
 void RemoteEngine::setProfiles(std::vector<ControllerProfile> profiles) {
     profiles_ = std::move(profiles);
+    // FRO139: a profile's output device may just have changed (or the profile may have gained/lost
+    // one) -- every "what did I last send" / cooldown fact feedback_ holds was computed against the
+    // OLD output, so it's simplest and safest to forget all of it and let the next drain re-send
+    // from scratch, rather than try to diff which assignments' profiles actually changed. Unlike
+    // rebuildAndPublish's own per-publish feedback_ cleanup (RemoteEngineReconcile.cpp), this is not
+    // "drop what's gone" -- it's "drop everything", because rebuildAndPublish runs after every graph
+    // change too and must NOT do this (that would resend on every module you add).
+    feedback_.clear();
     rebuildAndPublish(nullptr);
 }
 
@@ -47,11 +55,19 @@ void RemoteEngine::setAssignments(std::vector<Assignment> assignments) {
 }
 
 void RemoteEngine::setDefaultTakeover(Takeover takeover) {
+    // Called on every settings-file write (a drag elsewhere in the app writes at frame rate), so an
+    // unchanged value must not republish the snapshot; useDefault is meaningless as a default.
+    if (takeover == Takeover::useDefault || takeover == defaultTakeover_)
+        return;
     defaultTakeover_ = takeover;
     rebuildAndPublish(nullptr);
 }
 
 void RemoteEngine::setClock(std::function<double()> clock) { clock_ = std::move(clock); }
+
+void RemoteEngine::setFeedbackSink(RemoteFeedbackSink* sink) noexcept { feedbackSink_ = sink; }
+
+void RemoteEngine::resendFeedback() { feedback_.clear(); }
 
 int RemoteEngine::laneIndexFor(const juce::String& sourceKey) {
     const auto found = laneIndexByKey_.find(sourceKey);
@@ -104,6 +120,7 @@ void RemoteEngine::drain() {
 
     settleLearnIfDue();
     expireIdleGestures();
+    sendFeedback(*snap);
     publisher_.collectRetired();
     updateTimerState();
 }

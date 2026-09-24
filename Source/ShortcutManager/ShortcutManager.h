@@ -49,6 +49,28 @@ public:
             if (settings->containsKey(key))
                 bindings[actionId] = parseKeyPress(settings->getValue(key));
         }
+        migrateSaveAsChordSwap(*settings);
+    }
+
+    /** One-shot: Save Project As and Save Snippet swapped chords (Save As took the standard
+     *  Cmd+Shift+S). saveToProperties() persists every action's key, so an install that ever saved
+     *  its settings still holds the OLD pair and would keep Save As on Cmd+Opt+S with the snippet
+     *  command shadowing the standard chord. Swap only when BOTH still hold the old defaults, so a
+     *  user who rebound either one keeps their choice; the flag stops it re-firing if they later
+     *  rebind back to the old pair on purpose. */
+    void migrateSaveAsChordSwap(juce::PropertiesFile& settings) {
+        constexpr auto flag = "shortcutMigration_saveAsCmdShiftS";
+        if (settings.getBoolValue(flag, false))
+            return;
+        settings.setValue(flag, true);
+        const auto cmdShiftS =
+            juce::KeyPress('s', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+        const auto cmdOptS =
+            juce::KeyPress('s', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
+        if (bindings["saveSnippet"] == cmdShiftS && bindings["saveProjectAs"] == cmdOptS) {
+            bindings["saveSnippet"] = cmdOptS;
+            bindings["saveProjectAs"] = cmdShiftS;
+        }
     }
 
     void saveToProperties() {
@@ -188,14 +210,13 @@ public:
         // ---- General ----
         bindings["openSettings"] = juce::KeyPress(',', juce::ModifierKeys::commandModifier, 0);
         bindings["savePreset"] = juce::KeyPress('s', juce::ModifierKeys::commandModifier, 0);
-        // Cmd+Opt+S, deliberately NOT Cmd+Shift+S (that chord is "saveSnippet" — two command
-        // actions can never share a chord, since MainComponent::keyPressed dispatches the FIRST
-        // bound action that has a command, and the loser would be permanently dead). Cmd+Opt+S is
-        // free: the only other 's' bindings are savePreset (Cmd+S), saveSnippet (Cmd+Shift+S), and
-        // pianoRollToggleScaleFilter (bare Alt+S) — and modifier equality is exact, so Cmd+Alt+S can
-        // never match bare Alt+S.
+        // Cmd+Shift+S is the platform-standard Save As, so it belongs to saveProjectAs; saveSnippet
+        // moved to Cmd+Opt+S (see addGraphDefaultBindings). Two command actions can never share a
+        // chord, since MainComponent::keyPressed dispatches the FIRST bound action that has a
+        // command, and the loser would be permanently dead. The only other 's' bindings are
+        // savePreset (Cmd+S), saveSnippet (Cmd+Opt+S) and pianoRollToggleScaleFilter (bare Alt+S).
         bindings["saveProjectAs"] =
-            juce::KeyPress('s', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
+            juce::KeyPress('s', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
         // Cmd+Shift+E, the same chord Logic/Ableton use for bounce/export. Free on both counts: no
         // other binding in this table uses 'e' with any modifier set, and no keyPressed() override
         // hardcodes a bare 'e' either.
@@ -321,13 +342,27 @@ public:
         bindings["transportRecord"] = juce::KeyPress();
         bindings["transportToggleMetronome"] = juce::KeyPress();
         bindings["transportReturnToStart"] = juce::KeyPress();
+        // FRO271: cursor moves and loop jumps -- same unbound-by-default reasoning as above.
+        bindings["transportNudgeBackBeat"] = juce::KeyPress();
+        bindings["transportNudgeForwardBeat"] = juce::KeyPress();
+        bindings["transportNudgeBackBar"] = juce::KeyPress();
+        bindings["transportNudgeForwardBar"] = juce::KeyPress();
+        bindings["transportJumpToLoopStart"] = juce::KeyPress();
+        bindings["transportJumpToLoopEnd"] = juce::KeyPress();
+
+        // FRO131: same "explicit invalid KeyPress, not an absent entry" reasoning as the transport
+        // family above -- shipped unbound (a toolbar button and MIDI Remote target already reach
+        // it), but still needs a `bindings` entry or saveToProperties()'s `.at()` throws.
+        bindings["toggleMidiRemotePanel"] = juce::KeyPress();
     }
 
     void addGraphDefaultBindings() {
         // ---- Graph ----
         bindings["autoArrange"] = juce::KeyPress('l', juce::ModifierKeys::commandModifier, 0);
+        // Cmd+Opt+S: Cmd+Shift+S is Save Project As. Modifier equality is exact, so Cmd+Alt+S can
+        // never match the piano roll's bare Alt+S.
         bindings["saveSnippet"] =
-            juce::KeyPress('s', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+            juce::KeyPress('s', juce::ModifierKeys::commandModifier | juce::ModifierKeys::altModifier, 0);
         // Cmd+G / Cmd+Shift+G — the Cubase/Ableton convention for group/ungroup, and free on both
         // counts: 'g' appears nowhere else in this table, and no component keyPressed() override
         // matches it either (P8-12).
@@ -650,6 +685,11 @@ private:
             {"toggleLibrary", ShortcutCategory::General},
             {"toggleTimelinePanel", ShortcutCategory::General},
             {"toggleMixerPanel", ShortcutCategory::General},
+            // FRO131 (docs/control/midi-remote-ui.md#the-midi-remote-panel): default unbound --
+            // deliberately absent from resetToDefaults()'s bindings map below, not merely an empty
+            // KeyPress (the strict-resolution contract other surfaces rely on treats "no key in the
+            // map" as "no key at all", MainComponent::keyPressed's sole-dispatch-point comment).
+            {"toggleMidiRemotePanel", ShortcutCategory::General},
             {"selectAllModules", ShortcutCategory::General},
             {"copySelection", ShortcutCategory::General},
             {"pasteSelection", ShortcutCategory::General},
@@ -678,6 +718,13 @@ private:
             {"transportRecord", ShortcutCategory::General},
             {"transportToggleMetronome", ShortcutCategory::General},
             {"transportReturnToStart", ShortcutCategory::General},
+            // FRO271: cursor moves and loop jumps, unbound by default like the transport verbs above.
+            {"transportNudgeBackBeat", ShortcutCategory::General},
+            {"transportNudgeForwardBeat", ShortcutCategory::General},
+            {"transportNudgeBackBar", ShortcutCategory::General},
+            {"transportNudgeForwardBar", ShortcutCategory::General},
+            {"transportJumpToLoopStart", ShortcutCategory::General},
+            {"transportJumpToLoopEnd", ShortcutCategory::General},
             // Graph — the verbs that mean nothing on any other surface.
             {"autoArrange", ShortcutCategory::Graph},
             {"saveSnippet", ShortcutCategory::Graph},

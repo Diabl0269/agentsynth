@@ -46,7 +46,7 @@ void MixerPanelComponent::configure(juce::AudioProcessorGraph& graph, synth::Tim
             onMakeChannelForNode(source);
     };
     masterColumn_ = std::make_unique<MixerMasterColumn>();
-    masterColumn_->configure(graph, undoManager);
+    masterColumn_->configure(graph, undoManager, graphEditor);
     masterColumn_->onResetAllMetersRequested = [this] { resetAllMeterReadouts(); };
 }
 
@@ -59,11 +59,11 @@ void MixerPanelComponent::selectOnCanvas(const juce::String& targetId) {
     // else select the node itself (docs/mixer/panel.md#what-the-mixer-shows: "clicking a column selects its macro",
     // falling back to the node when it isn't boxed).
     if (macros_->find(targetId) != nullptr) {
-        graphEditor_->selectMacro(targetId, false);
+        graphEditor_->getMacroController().selectMacro(targetId, false);
         return;
     }
     if (const auto* macro = macros_->findByMember(targetId)) {
-        graphEditor_->selectMacro(macro->id, false);
+        graphEditor_->getMacroController().selectMacro(macro->id, false);
         return;
     }
     for (auto* node : graph_->getNodes())
@@ -121,6 +121,20 @@ void MixerPanelComponent::rebuild() {
                 onGraphMutated();
         };
         widget->onResetAllMetersRequested = [this] { resetAllMeterReadouts(); };
+        // FRO253: forwards this panel's single set of Solo-learn callbacks down to the column,
+        // filling in the nodeId each column already knows about itself -- see this class's own
+        // onSoloMidiLearnRequested/onSoloMidiForgetRequested/onQuerySoloMidiMapping doc comments.
+        widget->onSoloMidiLearnRequested = [this, nodeId = column.nodeId] {
+            if (onSoloMidiLearnRequested)
+                onSoloMidiLearnRequested(nodeId);
+        };
+        widget->onSoloMidiForgetRequested = [this, nodeId = column.nodeId] {
+            if (onSoloMidiForgetRequested)
+                onSoloMidiForgetRequested(nodeId);
+        };
+        widget->onQuerySoloMidiMapping = [this, nodeId = column.nodeId]() -> juce::String {
+            return onQuerySoloMidiMapping ? onQuerySoloMidiMapping(nodeId) : juce::String();
+        };
         content_.addAndMakeVisible(*widget);
 
         ColumnEntry entry;
@@ -233,6 +247,63 @@ bool MixerPanelComponent::revealColumn(juce::AudioProcessorGraph::NodeID stripId
         return false;
     viewport_.setViewPosition(target->getX(), 0);
     return true;
+}
+
+void MixerPanelComponent::setMidiLearnArmed(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
+    midiLearnArmedNodeId_ = nodeId;
+    for (auto& column : stripColumns_)
+        if (column != nullptr)
+            column->setMidiLearnArmedParam(column->getNodeId() == nodeId ? paramId : juce::String());
+    if (masterColumn_ != nullptr)
+        masterColumn_->setMidiLearnArmedParam(masterColumn_->getNodeId() == nodeId ? paramId : juce::String());
+}
+
+void MixerPanelComponent::clearMidiLearnArmed() {
+    for (auto& column : stripColumns_)
+        if (column != nullptr && column->getNodeId() == midiLearnArmedNodeId_)
+            column->setMidiLearnArmedParam({});
+    if (masterColumn_ != nullptr && masterColumn_->getNodeId() == midiLearnArmedNodeId_)
+        masterColumn_->setMidiLearnArmedParam({});
+    midiLearnArmedNodeId_ = {};
+}
+
+// FRO253: mirrors setMidiLearnArmed()/clearMidiLearnArmed() above -- kept as a separate
+// nodeId-keyed pair rather than overloading paramId with a sentinel, since Solo has no
+// juce::RangedAudioParameter identity to key on. Master has no Solo button (MixerMasterColumn.h),
+// so only strip columns are ever touched.
+void MixerPanelComponent::setMidiLearnArmedSolo(juce::AudioProcessorGraph::NodeID nodeId) {
+    midiLearnArmedSoloNodeId_ = nodeId;
+    for (auto& column : stripColumns_)
+        if (column != nullptr)
+            column->setMidiLearnArmedSolo(column->getNodeId() == nodeId);
+}
+
+void MixerPanelComponent::clearMidiLearnArmedSolo() {
+    for (auto& column : stripColumns_)
+        if (column != nullptr && column->getNodeId() == midiLearnArmedSoloNodeId_)
+            column->setMidiLearnArmedSolo(false);
+    midiLearnArmedSoloNodeId_ = {};
+}
+
+// FRO135: the pick-target overlay's view of the mixer -- every strip column, plus Master's fader.
+// The Direct column has nothing learnable. Columns that are not showing are skipped by the overlay.
+void MixerPanelComponent::collectPickCandidates(std::vector<PickCandidate>& out) const {
+    for (const auto& column : stripColumns_)
+        if (column != nullptr)
+            column->collectPickCandidates(out);
+    if (masterColumn_ != nullptr)
+        masterColumn_->collectPickCandidates(out);
+}
+
+// FRO253: called after a nodeCommand press changes solo OUTSIDE any column's own click (via
+// MainComponentRemoteActionInvoker::invokeNodeCommand) -- MixerColumnComponent::toggleSoloed()'s
+// own refresh only runs on ITS OWN click, so nothing else re-syncs a column's M/S visuals after a
+// hardware toggle. Cheap enough to refresh every column unconditionally (a handful of strips,
+// never per-frame) rather than resolving which one node id maps to.
+void MixerPanelComponent::refreshMuteSoloVisuals() {
+    for (auto& column : stripColumns_)
+        if (column != nullptr)
+            column->refreshMuteSoloVisual();
 }
 
 namespace {

@@ -8,7 +8,7 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
     if (actionId == "openSettings")
         return "Open Settings";
     if (actionId == "savePreset")
-        return "Save Preset";
+        return "Save Project";
     if (actionId == "saveProjectAs")
         return "Save Project As";
     if (actionId == "exportAudio")
@@ -59,11 +59,13 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
     if (actionId == "repeatSelection")
         return "Repeat Selection";
     if (actionId == "togglePlayback")
-        return "Toggle Playback";
+        return "Play / Stop";
     if (actionId == "toggleTimelinePanel")
         return "Toggle Timeline Panel";
     if (actionId == "toggleMixerPanel")
         return "Toggle Mixer Panel";
+    if (actionId == "toggleMidiRemotePanel")
+        return "Toggle MIDI Remote Panel";
     if (actionId == "zoomInHorizontal")
         return "Zoom In";
     if (actionId == "zoomOutHorizontal")
@@ -83,14 +85,15 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
     if (actionId == "focusLibrarySearch")
         return "Focus Library Search";
     // FRO125: the transport family (docs/control/midi-remote.md#action-targets). "Play"/"Stop" name the direction
-    // outright; the alias reuses "Toggle Playback" verbatim since it IS togglePlayback's command
-    // (see AppCommands::getCommandForAction) and must read as the same action, not a rival one.
+    // outright; the alias reuses togglePlayback's "Play / Stop" verbatim since it IS togglePlayback's
+    // command (see AppCommands::getCommandForAction) and must read as the same action, not a rival
+    // one. The label sorts next to "Play" and "Stop" in the MIDI Remote action picker (FRO271).
     if (actionId == "transportPlay")
         return "Play";
     if (actionId == "transportStop")
         return "Stop";
     if (actionId == "transportTogglePlayStop")
-        return "Toggle Playback";
+        return "Play / Stop";
     if (actionId == "transportToggleLoop")
         return "Toggle Looping";
     if (actionId == "transportRecord")
@@ -99,6 +102,19 @@ juce::String ShortcutManager::getActionDescription(const juce::String& actionId)
         return "Toggle Metronome";
     if (actionId == "transportReturnToStart")
         return "Return to Start";
+    // FRO271: cursor moves and loop-locator jumps.
+    if (actionId == "transportNudgeBackBeat")
+        return "Move Cursor Back (Beat)";
+    if (actionId == "transportNudgeForwardBeat")
+        return "Move Cursor Forward (Beat)";
+    if (actionId == "transportNudgeBackBar")
+        return "Move Cursor Back (Bar)";
+    if (actionId == "transportNudgeForwardBar")
+        return "Move Cursor Forward (Bar)";
+    if (actionId == "transportJumpToLoopStart")
+        return "Jump to Loop Start";
+    if (actionId == "transportJumpToLoopEnd")
+        return "Jump to Loop End";
     if (actionId == "timelineSnapToggle")
         return "Toggle Snap";
     if (actionId == "timelineToggleLoop")

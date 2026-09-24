@@ -50,11 +50,11 @@ TEST(MacroAutoPortDelete, LastCableRemovedAutoDeletesThePortAndDissolvesTheMacro
     auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro(); // no crossing -> zero ports
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro(); // no crossing -> zero ports
     ASSERT_FALSE(macroId.isEmpty());
 
-    const auto portUuid =
-        editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    const auto portUuid = editor.getMacroController().addMacroPort(
+        macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
     ASSERT_FALSE(portUuid.isEmpty());
     auto portId = nodeIdForUuid(engine, portUuid);
     ASSERT_TRUE(portId.uid != 0);
@@ -85,11 +85,11 @@ TEST(MacroAutoPortDelete, DisconnectingOneOfTwoLegsLeavesThePortAlone) {
     auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
-    const auto portUuid =
-        editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    const auto portUuid = editor.getMacroController().addMacroPort(
+        macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
     const auto portId = nodeIdForUuid(engine, portUuid);
     auto ext = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Ext", 100, 100);
     engine.getGraph().addConnection({{ext, 0}, {portId, 0}}); // exterior leg
@@ -114,11 +114,11 @@ TEST(MacroAutoPortDelete, AFanInPortIsOnlyDeletedOnceEveryConnectionIsGone) {
     auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
-    const auto portUuid =
-        editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    const auto portUuid = editor.getMacroController().addMacroPort(
+        macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
     const auto portId = nodeIdForUuid(engine, portUuid);
     auto ext1 = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Ext1", 100, 100);
     auto ext2 = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Ext2", 100, 300);
@@ -152,11 +152,11 @@ TEST(MacroAutoPortDelete, AutoDeleteViaDisconnectPortIsOneUndoStepAndUndoRestore
     auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
-    const auto portUuid =
-        editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    const auto portUuid = editor.getMacroController().addMacroPort(
+        macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
     auto portId = nodeIdForUuid(engine, portUuid);
     auto ext1 = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Ext1", 100, 100);
     auto ext2 = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Ext2", 100, 300);
@@ -197,11 +197,11 @@ TEST(MacroAutoPortDelete, AutoDeleteViaDisconnectCableIsOneUndoStep) {
     auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
-    const auto portUuid =
-        editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    const auto portUuid = editor.getMacroController().addMacroPort(
+        macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
     auto portId = nodeIdForUuid(engine, portUuid);
     auto ext = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Ext", 100, 100);
     engine.getGraph().addConnection({{ext, 0}, {portId, 0}}); // the port's ONE cable
@@ -242,11 +242,11 @@ TEST(MacroAutoPortDelete, DisabledPreferenceLeavesACablelessPortInPlaceRegressio
     auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
-    const auto portUuid =
-        editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    const auto portUuid = editor.getMacroController().addMacroPort(
+        macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
     auto portId = nodeIdForUuid(engine, portUuid);
     auto ext = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "Ext", 100, 100);
     engine.getGraph().addConnection({{ext, 0}, {portId, 0}}); // the port's ONE cable
@@ -280,11 +280,11 @@ TEST(MacroAutoPortDelete, DeletingAnOrdinaryMemberViaRequestDeleteModuleStrandsA
     auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
-    const auto portUuid =
-        editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    const auto portUuid = editor.getMacroController().addMacroPort(
+        macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
     ASSERT_FALSE(portUuid.isEmpty());
     const auto portId = nodeIdForUuid(engine, portUuid);
     ASSERT_TRUE(portId.uid != 0);
@@ -309,11 +309,11 @@ TEST(MacroAutoPortDelete, ABatchDeletionDoesNotTreatAConnectionBetweenTwoDeleted
     auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
-    const auto portUuid =
-        editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    const auto portUuid = editor.getMacroController().addMacroPort(
+        macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
     ASSERT_FALSE(portUuid.isEmpty());
     const auto portId = nodeIdForUuid(engine, portUuid);
     ASSERT_TRUE(portId.uid != 0);
@@ -340,15 +340,15 @@ TEST(MacroAutoPortDelete, DeletingTheLastOrdinaryMemberViaDeleteSelectionStrands
     auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
     // Strip to just `a` (ordinary setup, mirrors the T148 tests above).
     editor.requestDeleteModule(b);
     ASSERT_EQ(editor.getMacros().find(macroId)->members.size(), 1u);
 
-    const auto portUuid =
-        editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    const auto portUuid = editor.getMacroController().addMacroPort(
+        macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
     ASSERT_FALSE(portUuid.isEmpty());
     const auto portId = nodeIdForUuid(engine, portUuid);
     ASSERT_TRUE(portId.uid != 0);
@@ -371,14 +371,14 @@ TEST(MacroAutoPortDelete, FanOutPortWithASurvivingConnectionIsNotSweptJustBecaus
     auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
     editor.requestDeleteModule(b); // strip to just `a`, ordinary setup
     ASSERT_EQ(editor.getMacros().find(macroId)->members.size(), 1u);
 
-    const auto portUuid =
-        editor.addMacroPort(macroId, /*isInput=*/false, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "Out");
+    const auto portUuid = editor.getMacroController().addMacroPort(
+        macroId, /*isInput=*/false, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "Out");
     ASSERT_FALSE(portUuid.isEmpty());
     const auto portId = nodeIdForUuid(engine, portUuid);
     ASSERT_TRUE(portId.uid != 0);
@@ -406,14 +406,14 @@ TEST(MacroAutoPortDelete, AutoDeleteViaDeleteSelectionIsOneUndoStepAndUndoRestor
     const auto aUuid = engine.getGraph().getNodeForId(a)->properties["uuid"].toString();
     auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
     editor.requestDeleteModule(b); // strip to just `a`, ordinary setup
     ASSERT_EQ(editor.getMacros().find(macroId)->members.size(), 1u);
 
-    const auto portUuid =
-        editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    const auto portUuid = editor.getMacroController().addMacroPort(
+        macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
     ASSERT_FALSE(portUuid.isEmpty());
     const auto portId = nodeIdForUuid(engine, portUuid);
     engine.getGraph().addConnection({{portId, 0}, {a, 0}}); // the port's ONLY connection
@@ -446,14 +446,14 @@ TEST(MacroAutoPortDelete, DisabledPreferenceLeavesACablelessPortInPlaceAfterDele
     auto a = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "A", 400, 100);
     auto b = addModuleAt(editor, engine, std::make_unique<TestMonoModule>(), "B", 400, 300);
     editor.setSelectedNodes({a, b});
-    const auto macroId = editor.groupSelectionIntoMacro();
+    const auto macroId = editor.getMacroController().groupSelectionIntoMacro();
     ASSERT_FALSE(macroId.isEmpty());
 
     editor.requestDeleteModule(b); // strip to just `a`, ordinary setup
     ASSERT_EQ(editor.getMacros().find(macroId)->members.size(), 1u);
 
-    const auto portUuid =
-        editor.addMacroPort(macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
+    const auto portUuid = editor.getMacroController().addMacroPort(
+        macroId, /*isInput=*/true, synth::MacroPortKind::AudioCV, MacroPortShape::Mono, 1, "In");
     ASSERT_FALSE(portUuid.isEmpty());
     const auto portId = nodeIdForUuid(engine, portUuid);
     engine.getGraph().addConnection({{portId, 0}, {a, 0}}); // the port's ONLY connection

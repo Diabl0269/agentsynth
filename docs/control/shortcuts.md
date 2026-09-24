@@ -25,13 +25,14 @@ when reasoning about a key that "does nothing."
 |----------|--------|
 | Cmd+, | Open Settings |
 | Cmd+N | New Patch (clear canvas) |
-| Cmd+S | Save Preset — writes a project bundle (`.agsproj`, graph + timeline) and silently resaves to the remembered bundle on every subsequent press; prompts for a location only on the first save or when no bundle is open (see [`architecture/project-bundle.md`](../architecture/project-bundle.md#opening-and-saving-one-from-the-app)) |
-| Cmd+Opt+S | Save Project As — always prompts for a new location |
+| Cmd+S | Save Project — writes a project bundle (`.agsproj`, graph + timeline) and silently resaves to the remembered bundle on every subsequent press; prompts for a location only on the first save or when no bundle is open (see [`architecture/project-bundle.md`](../architecture/project-bundle.md#opening-and-saving-one-from-the-app)) |
+| Cmd+Shift+S | Save Project As — always prompts for a new `.agsproj` location |
 | Cmd+Shift+E | Export Audio — opens the Export Audio dialog (bounce the arrangement or the current loop range to WAV/AIFF, see [`architecture/audio-engine.md`](../architecture/audio-engine.md#bounceexport)). Greyed out while a bounce is already running |
 | (menu only) | Export Stems — opens the same dialog in its stems mode, rendering each mixer channel to its own file in a folder (see [`architecture/audio-engine.md`](../architecture/audio-engine.md#stem-export)). A menu-only `AppCommands::exportStems` (File menu, immediately after Export Audio), with no default shortcut, like `openPreset`. Also greyed out while a render is already running |
 | Cmd+Shift+P | Export Patch Only — saves just the patch (a legacy `.json` via `GraphEditor::savePreset`) without the timeline or bundle, never touching the window title. Rebindable |
 | Cmd+O | Open Project - a `.agsproj` bundle (patch + timeline). This was split from the former combined "Load from file..." chooser; it took Cmd+O from the old combined open, which is now the menu-only "Open Patch" |
 | (menu only) | Open Patch - a plain `.json` preset (graph only). A menu-only `AppCommands::openPreset` (the Load icon's **Patches** submenu and the top-bar **File** menu), with no default shortcut, like `checkForUpdates` |
+| (menu only) | Contribute to Agent Synth... — **Help** menu (macOS and Windows; the app has no menu on the plugin path). `AppCommands::contribute` opens `branding::kContributeUrl` (agentsynth.app/contribute) in the default browser: no dialog, no startup prompt, no analytics event, no shortcut. Always enabled; a test replaces the browser launch via `MainComponent::setUrlOpenerForTest`. |
 | Cmd+Z | Undo |
 | Cmd+Shift+Z | Redo |
 | Cmd+M | Toggle Mod Matrix |
@@ -41,14 +42,14 @@ when reasoning about a key that "does nothing."
 | Cmd+T | Toggle Timeline Panel (see [`timeline/timeline.md`](../timeline/timeline.md#docking-toggle-and-the-bottom-dock)) |
 | Cmd+Alt+M | Toggle Mixer Panel (`toggleMixerPanel`) — opens the bottom dock on the Mixer tab if closed, or on Timeline; closes it on a second press only when the dock is already open on Mixer, mirroring Cmd+T's own open/close symmetry. See [`docs/mixer/panel.md#placement-and-detachable-windows`](../mixer/panel.md#placement-and-detachable-windows) |
 | Cmd+A | Select All in Focused Editor (actionId/`AppCommands` name still `selectAllModules` — see "Surface routing" below) |
-| Cmd+Shift+S | Save Selection as Snippet |
+| Cmd+Opt+S | Save Selection as Snippet |
 | Cmd+C | Copy (Selected Modules, or — see "Surface routing" below — the timeline's selected clips/notes) |
 | Cmd+V | Paste (Modules, or the copied clips/notes) |
 | Cmd+D | Duplicate (Selected Modules, or the selected clips/notes) |
 | Cmd+X | Cut — Copy then delete, as ONE undo step (Selected Modules, or the timeline's selected clips/notes; see "Surface routing" below) |
 | Cmd+R | Repeat — prompts for a count (1–64) via an `AlertWindow` and creates that many back-to-back copies of the selection, tiled forward one selection-span at a time, as ONE undo step. Timeline-only: inactive on the Graph surface (see below) |
-| Space | Toggle Playback (play/stop the timeline transport) |
-| *(unbound)* | Play / Stop / Record / Toggle Looping / Toggle Metronome / Return to Start — see [**Transport family**](#transport-family) below |
+| Space | Play / Stop (toggle the timeline transport) |
+| *(unbound)* | Play / Stop / Record / Toggle Looping / Toggle Metronome / Return to Start / Move Cursor Back or Forward (Beat, Bar) / Jump to Loop Start or End — see [**Transport family**](#transport-family) below |
 | Cmd+= | Zoom In (routed per focused surface — see [**Zoom**](#zoom) below) |
 | Cmd+- | Zoom Out |
 | Cmd+Shift+= | Zoom In Vertically |
@@ -66,7 +67,7 @@ the same as any other timeline-only command.
 owns the bare chord and the AI panel sits on a REAL `Ctrl+A` on macOS (Ctrl is a distinct physical
 modifier there) and on `Cmd+Shift+A` everywhere else: on Windows/Linux JUCE's `commandModifier` IS
 Ctrl, so a Ctrl+A default there would be the same chord as Select All and the two commands would
-collide. `Cmd+Shift+S` keeps its Shift variant because `Cmd+S` (Save Preset) is bound. Like every row above, all of these are rebindable in
+collide. Like every row above, all of these are rebindable in
 Settings — and note that a machine which already persisted the old bindings keeps them until
 "Reset to Defaults" (bindings are stored per actionId, defaults only fill the gaps).
 
@@ -94,14 +95,17 @@ base for arrow-key navigation within the module library and for Up/Down + M/S/R 
 track header rows (below); both build on top of it without changing the registry itself. A
 `synth::ui::FocusRegionRegistry` is a plain member of `MainComponent` (never a `Desktop`-global
 singleton — a host process can run multiple plugin instances, and a future separate-window
-mixer/timeline would need its own registry), populated with seven regions once every root component
+mixer/timeline would need its own registry), populated with eight regions once every root component
 exists: **Toolbar** (always open — the top strip), **Library** (`isLibraryVisible`), **Canvas**
-(always open — the `graphEditor`), **Timeline** (`isTimelineVisible && !mixerDock.isMixerTabActive()`),
+(always open — the `graphEditor`), **Timeline** (`isTimelineVisible && !mixerDock.isMixerTabActive() && !mixerDock.isMidiRemoteTabActive()`),
 **Mixer** (`isTimelineVisible && mixerDock.isMixerTabActive()`, no `open` callback — like Mod
-Matrix, no direct-focus shortcut targets it), **AI Panel** (`isAiPanelVisible`) and **Mod Matrix**
-(`graphEditor.isModMatrixVisible()`). Timeline and Mixer share one dock (`MixerDockComponent`) with one tab visible at a time, so `isTimelineVisible` alone (the dock's own open/closed
-state) stopped being enough to say the Timeline region is on screen the moment the Mixer tab
-exists — each region's `isOpen` also checks which of the dock's two tabs is active, and each
+Matrix, no direct-focus shortcut targets it), **MIDI Remote** (`isTimelineVisible &&
+mixerDock.isMidiRemoteTabActive()`, FRO131 — same dock-tab shape as Mixer, but does take a direct
+`open` callback), **AI Panel** (`isAiPanelVisible`) and **Mod Matrix**
+(`graphEditor.isModMatrixVisible()`). Timeline, Mixer and MIDI Remote share one dock
+(`MixerDockComponent`) with one tab visible at a time, so `isTimelineVisible` alone (the dock's own
+open/closed state) stopped being enough to say the Timeline region is on screen the moment a second
+tab exists — each region's `isOpen` also checks which of the dock's tabs is active, and each
 region's `open` re-selects its own tab before falling through to the same "open the dock if it's
 closed" step every panel toggle already does. See [**Mixer column navigation**](#mixer-column-navigation)
 below for the Mixer region's own keyboard behaviour.
@@ -295,7 +299,7 @@ even with no mouse involved.
 
 Every transport verb is promoted to a command-dispatched `AppCommands` action — the
 [`midi-remote.md`](midi-remote.md#action-targets) prerequisite for a MIDI Remote hardware button to trigger
-one via `ApplicationCommandManager::invokeDirectly`. All six are **General**, and ship **unbound**
+one via `ApplicationCommandManager::invokeDirectly`. All of them are **General**, and ship **unbound**
 by default (no default keypress) — they exist first as command/MIDI-Remote targets, and a user may
 still bind one from Settings like any other action:
 
@@ -303,11 +307,19 @@ still bind one from Settings like any other action:
 |---|---|---|
 | `transportPlay` | Play | `TransportService::play()` if not already playing (a direction, not a toggle) |
 | `transportStop` | Stop | `TransportService::stop()` if currently playing |
-| `transportTogglePlayStop` | Toggle Playback | **Alias, not a new action** — `AppCommands::getCommandForAction` resolves it straight to the existing `togglePlayback` command id. It is not a registered/rebindable id of its own and has no row in Settings; `togglePlayback` keeps its own Space binding untouched (see "Why the locator jumps are on plain Option+digit" above for why a default never migrates a persisted key, and why this alias is a lookup rather than a rename) |
+| `transportTogglePlayStop` | Play / Stop | **Alias, not a new action** — `AppCommands::getCommandForAction` resolves it straight to the existing `togglePlayback` command id. It is not a registered/rebindable id of its own and has no row in Settings; `togglePlayback` keeps its own Space binding untouched (see "Why the locator jumps are on plain Option+digit" above for why a default never migrates a persisted key, and why this alias is a lookup rather than a rename) |
 | `transportToggleLoop` | Toggle Looping | Triggers the transport bar's own loop button — the exact `setLoop(start, end, !looping)` verb the surface-resolved `timelineToggleLoop` key already performs, which keeps working unchanged |
 | `transportRecord` | Record | Triggers the transport bar's own Record button, so it reaches `MainComponent::handleRecordToggle`'s armed-track gate exactly as a mouse click would — never bypassed |
 | `transportToggleMetronome` | Toggle Metronome | Triggers the transport bar's own metronome button, so its persisted `timelineMetronomeEnabled` state stays authoritative |
 | `transportReturnToStart` | Return to Start | `TransportService::locateBeat(0)` — relocates only, does not stop |
+| `transportNudgeBackBeat` / `transportNudgeForwardBeat` | Move Cursor Back (Beat) / Move Cursor Forward (Beat) | Relocates one beat (a quarter note) back or forward from the current position, clamped at beat 0. Works playing or stopped; never starts or stops the transport |
+| `transportNudgeBackBar` / `transportNudgeForwardBar` | Move Cursor Back (Bar) / Move Cursor Forward (Bar) | As above, by one bar of the current time signature (`numerator × 4 / denominator` beats — 4 in 4/4, 3 in 3/4, 3 in 6/8) |
+| `transportJumpToLoopStart` / `transportJumpToLoopEnd` | Jump to Loop Start / Jump to Loop End | Relocates to the left / right loop locator. A no-op when the locators span no range (end at or before start) |
+
+The label "Play / Stop" is shared by `togglePlayback` and its alias so the toggle sits next to
+"Play" and "Stop" in the MIDI Remote action picker. Cursor moves posted faster than the audio thread
+applies them (a jog wheel, key repeat) accumulate — each builds on the previous request rather than
+on the once-per-block position snapshot, so no step is lost (`Source/Transport/TransportNudge.h`).
 
 See [`timeline/transport.md`](../timeline/transport.md) for the transport bar itself.
 
@@ -316,7 +328,7 @@ See [`timeline/transport.md`](../timeline/transport.md) for the transport bar it
 | Shortcut | Action |
 |----------|--------|
 | Cmd+L | Auto Arrange |
-| Cmd+Shift+S | Save Selection as Snippet |
+| Cmd+Opt+S | Save Selection as Snippet |
 | Cmd+G | Group / Toggle Macro |
 | Cmd+Shift+G | Ungroup Macro |
 | Cmd+Alt+G | Collapse / Expand Macro (toggle) |
