@@ -21,8 +21,33 @@ MessageSpec specFromEvent(const RemoteEvent& event);
  *  matches every channel). */
 bool specMatchesEvent(const MessageSpec& spec, const RemoteEvent& event);
 
+/** True when `event` belongs to `control`: its own message, or -- for a paired-CC control (abs14 /
+ *  abs14LsbFirst on a cc n) -- the LSB partner CC n+32 that completes it. */
+bool controlMatchesEvent(const Control& control, const RemoteEvent& event);
+
+/** True when `spec` is `control`'s own message or its paired LSB partner (same channel, number + 32). */
+bool controlClaimsSpec(const Control& control, const MessageSpec& spec);
+
 /** The control on `controls` this event belongs to, or nullptr. */
 const Control* findControlForEvent(const std::vector<Control>& controls, const RemoteEvent& event);
+
+/** Two CCs n / n+32 arriving within this many milliseconds are one 14-bit control (Detect mode). */
+inline constexpr int kPairedHalvesWindowMs = 5;
+
+/** The last CC Detect turned into a NEW control, so a partner half arriving right behind it can fold
+ *  into that control instead of adding a second one. */
+struct DetectedCc {
+    bool valid = false;
+    std::uint16_t timeMs = 0;
+    int channel = 0;
+    int number = 0;
+    juce::String controlId;
+};
+
+/** If `event` is the other half of the 14-bit pair `previous` just created a control for (CC n then
+ *  n+32 -> abs14, or n+32 then n -> abs14LsbFirst, on one channel within kPairedHalvesWindowMs),
+ *  rewrites that control in `controls` into the paired control and returns true. */
+bool foldIntoPairedControl(std::vector<Control>& controls, const DetectedCc& previous, const RemoteEvent& event);
 
 /** Sets control.layout to the first {col,row} (row-major, kAutoLayoutColumns wide) no control in
  *  `existing` occupies. */

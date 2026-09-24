@@ -69,6 +69,8 @@ const char* toString(MessageType t) {
         return "channelPressure";
     case MessageType::programChange:
         return "programChange";
+    case MessageType::nrpn:
+        return "nrpn";
     }
     return "cc";
 }
@@ -92,6 +94,10 @@ bool messageTypeFromString(const juce::String& s, MessageType& out) {
     }
     if (s == "programChange") {
         out = MessageType::programChange;
+        return true;
+    }
+    if (s == "nrpn") {
+        out = MessageType::nrpn;
         return true;
     }
     return false;
@@ -153,6 +159,10 @@ const char* toString(Encoding e) {
         return "relBinOffset";
     case Encoding::relSignMag:
         return "relSignMag";
+    case Encoding::abs14:
+        return "abs14";
+    case Encoding::abs14LsbFirst:
+        return "abs14LsbFirst";
     }
     return "abs7";
 }
@@ -168,6 +178,14 @@ bool encodingFromString(const juce::String& s, Encoding& out) {
     }
     if (s == "relBinOffset") {
         out = Encoding::relBinOffset;
+        return true;
+    }
+    if (s == "abs14") {
+        out = Encoding::abs14;
+        return true;
+    }
+    if (s == "abs14LsbFirst") {
+        out = Encoding::abs14LsbFirst;
         return true;
     }
     if (s == "relSignMag") {
@@ -310,7 +328,7 @@ bool MessageSpec::fromVar(const juce::var& v, MessageSpec& out) {
         return false;
 
     int number = 0;
-    if (!readInt(obj->getProperty("number"), number) || number < 0 || number > 127)
+    if (!readInt(obj->getProperty("number"), number) || number < 0 || number > MessageSpec::maxNumber(type))
         return false;
 
     out.type = type;
@@ -358,6 +376,8 @@ bool Control::fromVar(const juce::var& v, Control& out) {
 
     juce::String encStr;
     if (!readString(obj->getProperty("encoding"), encStr) || !encodingFromString(encStr, parsed.encoding))
+        return false;
+    if (!encodingValidForSpec(parsed.message, parsed.encoding))
         return false;
 
     juce::String buttonModeStr;
@@ -511,6 +531,8 @@ bool Assignment::fromVar(const juce::var& v, Assignment& out) {
 
     juce::String encStr;
     if (!readString(obj->getProperty("specEncoding"), encStr) || !encodingFromString(encStr, parsed.specEncoding))
+        return false;
+    if (!encodingValidForSpec(parsed.spec, parsed.specEncoding))
         return false;
 
     juce::String buttonModeStr;

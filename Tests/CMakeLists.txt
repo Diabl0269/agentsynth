@@ -236,6 +236,7 @@ add_executable(Tests
     Project/UndoRedo/UndoRedoMidiRemoteTests.cpp
     MidiRemote/RemoteModelTests.cpp
     MidiRemote/RemoteEngineDecodeTests.cpp
+    MidiRemote/RemoteEngineTwoHalfDecodeTests.cpp
     MidiRemote/RemoteEngineApplyTests.cpp
     MidiRemote/RemoteEngineFeedbackTests.cpp
     MidiRemote/RemoteEngineReconcileTests.cpp

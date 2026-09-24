@@ -163,6 +163,27 @@ void addLookupEntry(const std::vector<ControllerProfile>& profiles,
     pending.emplace_back(key, slotIndex);
 }
 
+// FRO140: a paired-CC slot at CC n is ALSO reached by its LSB partner CC n+32, so the LSB key routes
+// to the same slot. Appended after every primary entry (see the stable_sort below): an explicit
+// assignment on CC n+32 keeps that message.
+void addPairedAliasEntries(const std::vector<ControllerProfile>& profiles,
+                           const std::vector<RemoteMappingSnapshot::SourceEntry>& sources,
+                           const RemoteMappingSnapshot& fresh,
+                           std::vector<std::pair<std::uint32_t, std::int32_t>>& pending) {
+    for (std::size_t i = 0; i < fresh.slots.size(); ++i) {
+        const auto& slot = fresh.slots[i];
+        if (!isPairedEncoding(slot.encoding) || slot.spec.type != MessageType::cc ||
+            slot.spec.number + kPairedLsbOffset > 63)
+            continue;
+        const int sourceIndex = findSourceIndexForProfile(profiles, sources, slot.profileId);
+        if (sourceIndex < 0)
+            continue;
+        pending.emplace_back(
+            packLookupKey(sourceIndex, MessageType::cc, slot.spec.channel, slot.spec.number + kPairedLsbOffset),
+            static_cast<std::int32_t>(i));
+    }
+}
+
 // One parameter-, action- or nodeCommand-target assignment -> one Slot, appended to `fresh`, plus
 // its pending lookup-table entry (if its profile's device is currently open).
 void addSlot(const Assignment& assignment, juce::AudioProcessorGraph* graph, const ProcessorByUuid& processorByUuid,
@@ -181,6 +202,7 @@ void addSlot(const Assignment& assignment, juce::AudioProcessorGraph* graph, con
     slot.rangeMax = assignment.range.max;
     slot.target = assignment.target;
     slot.spec = assignment.spec;
+    slot.messageNumber = assignment.spec.number;
     slot.profileId = assignment.control.profileId;
 
     if (assignment.target.isParameter())
@@ -238,6 +260,8 @@ void RemoteEngine::rebuildAndPublish(juce::AudioProcessorGraph* graph) {
         for (const auto& assignment : profile.actions)
             addSlot(assignment, graph, processorByUuid, nodeIdByUuid, previousResolution, profiles_, actionLookup_,
                     *fresh, lookupPending);
+
+    addPairedAliasEntries(profiles_, fresh->sources, *fresh, lookupPending);
 
     // Sorted lookup table, first-inserted wins on a duplicate key (stable_sort keeps ties in
     // insertion order).

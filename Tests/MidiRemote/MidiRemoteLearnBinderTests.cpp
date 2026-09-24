@@ -127,3 +127,82 @@ TEST(MidiRemoteLearnBinderTest, AssignmentCarriesADenormalisedCopyOfTheControlSp
     EXPECT_EQ(outcome.assignment.takeover, Takeover::useDefault);
     EXPECT_TRUE(outcome.assignment.enabled);
 }
+
+// -- 14-bit pairs and NRPN (FRO140) ------------------------------------------------------------------
+
+TEST(MidiRemoteLearnBinderTest, LearningTheLsbHalfBindsTheExistingPairedControlNotANewOne) {
+    ControllerProfile existing;
+    existing.id = "profile-1";
+    existing.input.identifier = "dev-id";
+    Control fader;
+    fader.id = "control-1";
+    fader.name = "Fader 1";
+    fader.kind = ControlKind::fader;
+    fader.message = {MessageType::cc, 1, 21};
+    fader.encoding = Encoding::abs14;
+    existing.controls.push_back(fader);
+
+    // The LearnResult a moved fader's CC 53 half produces: a plain abs7 CC.
+    const auto outcome = bindLearnResult(makeResult(MessageType::cc, 53), "Dev", {existing});
+
+    EXPECT_FALSE(outcome.controlIsNew);
+    ASSERT_EQ(outcome.profile.controls.size(), 1u);
+    EXPECT_EQ(outcome.profile.controls[0].id, "control-1");
+    EXPECT_EQ(outcome.profile.controls[0].encoding, Encoding::abs14)
+        << "one plain half is no evidence it stopped being 14-bit";
+    EXPECT_EQ(outcome.profile.controls[0].message.number, 21);
+    EXPECT_EQ(outcome.assignment.control.controlId, "control-1");
+    EXPECT_TRUE(outcome.assignment.spec == fader.message) << "the assignment is keyed on the MSB CC 21, not CC 53";
+    EXPECT_EQ(outcome.assignment.specEncoding, Encoding::abs14);
+}
+
+TEST(MidiRemoteLearnBinderTest, LearningTheMsbHalfOfAPairedControlKeepsItsEncodingToo) {
+    ControllerProfile existing;
+    existing.id = "profile-1";
+    existing.input.identifier = "dev-id";
+    Control fader;
+    fader.id = "control-1";
+    fader.message = {MessageType::cc, 1, 21};
+    fader.encoding = Encoding::abs14LsbFirst;
+    existing.controls.push_back(fader);
+
+    const auto outcome = bindLearnResult(makeResult(MessageType::cc, 21), "Dev", {existing});
+
+    EXPECT_FALSE(outcome.controlIsNew);
+    EXPECT_EQ(outcome.profile.controls[0].encoding, Encoding::abs14LsbFirst);
+    EXPECT_EQ(outcome.assignment.specEncoding, Encoding::abs14LsbFirst);
+}
+
+TEST(MidiRemoteLearnBinderTest, LsbNumberOfAnUnpairedControlStillCreatesANewControl) {
+    ControllerProfile existing;
+    existing.id = "profile-1";
+    existing.input.identifier = "dev-id";
+    Control knob;
+    knob.id = "control-1";
+    knob.message = {MessageType::cc, 1, 21};
+    knob.encoding = Encoding::abs7;
+    existing.controls.push_back(knob);
+
+    const auto outcome = bindLearnResult(makeResult(MessageType::cc, 53), "Dev", {existing});
+
+    EXPECT_TRUE(outcome.controlIsNew) << "CC 53 belongs to CC 21 only when CC 21 is a 14-bit control";
+    EXPECT_EQ(outcome.profile.controls.size(), 2u);
+}
+
+TEST(MidiRemoteLearnBinderTest, NrpnLearnCreatesAKnobNamedByItsAddressWithTheLearnedEncoding) {
+    auto result = makeResult(MessageType::nrpn, 1024);
+    result.encoding = Encoding::abs14;
+
+    const auto outcome = bindLearnResult(result, "Dev", {});
+
+    EXPECT_TRUE(outcome.controlIsNew);
+    ASSERT_EQ(outcome.profile.controls.size(), 1u);
+    EXPECT_EQ(outcome.profile.controls[0].name, "NRPN 1024");
+    EXPECT_EQ(outcome.profile.controls[0].kind, ControlKind::knob);
+    EXPECT_EQ(outcome.profile.controls[0].message.type, MessageType::nrpn);
+    EXPECT_EQ(outcome.profile.controls[0].message.number, 1024);
+    EXPECT_EQ(outcome.profile.controls[0].encoding, Encoding::abs14);
+    EXPECT_TRUE(outcome.assignment.spec == result.spec);
+    EXPECT_EQ(outcome.assignment.specEncoding, Encoding::abs14);
+    EXPECT_EQ(outcome.assignment.specControlName, "NRPN 1024");
+}

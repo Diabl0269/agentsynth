@@ -1,5 +1,6 @@
 #pragma once
 
+#include "MidiRemote/ControllerDetect.h"
 #include "MidiRemote/RemoteEngine/RemoteEvent.h"
 #include "MidiRemote/RemoteModel.h"
 
@@ -26,7 +27,9 @@ public:
     /** While active: a message no control on `profile` claims adds one (touch order, next free
      *  cell) and it becomes the pulsing control; an existing control's message reports it as lit and
      *  ends the pulse. Inactive: a no-op. `profile` is a working copy the caller persists once
-     *  after the drain, only when a step reported controlAdded. */
+     *  after the drain, only when a step reported controlAdded. A CC that arrives within
+     *  kPairedHalvesWindowMs of the CC n / n+32 partner that just added a control folds into it as a
+     *  14-bit control (controlAdded again: the profile changed) instead of adding a second. */
     Step handleEvent(synth::ControllerProfile& profile, const synth::midi::RemoteEvent& event);
 
     /** The control that should pulse until the next message arrives; empty when none. */
@@ -35,6 +38,7 @@ public:
 private:
     bool active_ = false;
     juce::String pulsingControlId_;
+    synth::midi::DetectedCc lastNewCc_; // the CC that added the newest control, for 14-bit pairing
 };
 
 } // namespace synth::ui
