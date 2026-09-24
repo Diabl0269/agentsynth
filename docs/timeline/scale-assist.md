@@ -34,6 +34,29 @@ Contents, top to bottom:
 owned by the roll rather than `ScaleAssistPanel` itself, since visibility is a roll-chrome decision
 rather than scale data.
 
+## Scrolling the sidebar
+
+The panel is as tall as the roll, but a short roll can't show every control — the custom-scale
+editor in particular grows the control stack taller than a cramped roll. The controls are
+therefore NOT children of the panel directly: they live inside a `juce::Viewport`
+(`scrollViewport_`, sized to `getLocalBounds()`) that views a single content component
+(`scaleContent_`). `resized()` sizes `scaleContent_` to the panel width by
+`contentNaturalHeight()` — the sum of every row's height plus inset, mirroring the row sizes
+`layoutContentInto()` lays out with (a test pins the two together) — and then `layoutContentInto()` positions
+the controls within that natural height.
+
+Because the natural height is constant while the panel height varies, the vertical scrollbar shows
+**only when the content is taller than the panel**: a roll tall enough to show everything offers no
+scrollbar at all (the common case), a cramped roll shows one and the user scrolls within the
+sidebar. The scrollbar is the viewport's own; it auto-occupies the 6px right inset rather than
+narrowing the controls. No horizontal bar is shown — the width is fixed and never overflows.
+
+The custom-scale editor's show/hide (`showCustomEditor`, fired by selecting the "Edit custom
+scales..." row) toggles `customEditorVisible_` and calls `resized()`, so hiding it reclaims the
+height it used and re-decides whether the panel still overflows — no stale scrollbar. The panel's
+background and right-edge hairline stay painted on the panel itself, behind the (transparent)
+viewport, so nothing visually changes when scrolling is not needed.
+
 ## The scale engine
 
 `Source/Timeline/MusicalScale.h` is deliberately header-only and free of any UI or
