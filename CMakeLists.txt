@@ -222,10 +222,12 @@ add_library(Core STATIC
     Source/MidiRemote/RemoteEngine/RemoteEngine.cpp
     Source/MidiRemote/RemoteEngine/RemoteEngineApply.cpp
     Source/MidiRemote/RemoteEngine/RemoteEngineDecode.cpp
+    Source/MidiRemote/RemoteEngine/RemoteEngineFeedback.cpp
     Source/MidiRemote/RemoteEngine/RemoteEngineInternal.h
     Source/MidiRemote/RemoteEngine/RemoteEngineLearn.cpp
     Source/MidiRemote/RemoteEngine/RemoteEngineReconcile.cpp
     Source/MidiRemote/RemoteEngine/RemoteEvent.h
+    Source/MidiRemote/RemoteEngine/RemoteFeedbackSink.h
     Source/MidiRemote/RemoteEngine/RemoteMappingSnapshot.h
     Source/MidiRemote/RemoteEngine/RemoteMessageSink.h
     Source/MidiRemote/RemoteModel.h

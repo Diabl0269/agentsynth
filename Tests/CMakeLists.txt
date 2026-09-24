@@ -237,6 +237,7 @@ add_executable(Tests
     MidiRemote/RemoteModelTests.cpp
     MidiRemote/RemoteEngineDecodeTests.cpp
     MidiRemote/RemoteEngineApplyTests.cpp
+    MidiRemote/RemoteEngineFeedbackTests.cpp
     MidiRemote/RemoteEngineReconcileTests.cpp
     MidiRemote/RemoteEngineHostedTests.cpp
     MidiRemote/RemoteEngineNodeCommandE2ETests.cpp
@@ -244,6 +245,7 @@ add_executable(Tests
     MidiRemote/RemoteEngineThreadingTests.cpp
     MidiRemote/RemoteEngineLearnTests.cpp
     MidiRemote/ControllerProfileStoreTests.cpp
+    MidiRemote/MidiRemoteFeedbackOutputsTests.cpp
     MidiRemote/MidiRemoteLearnBinderTests.cpp
     MidiRemote/MidiRemoteMappingTests.cpp
     MidiRemote/MidiLearnControllerAssignTests.cpp
@@ -463,12 +465,13 @@ add_executable(Tests
     App/BrandingTests.cpp
     ../Source/ShortcutManager/ShortcutManagerActionNames.cpp
     ../Source/MidiRemote/ControllerProfileStore.cpp
+    ../Source/MidiRemote/MidiRemoteFeedbackOutputs.cpp
     ../Source/MidiRemote/MidiLearnController.cpp
     ../Source/MidiRemote/MidiLearnControllerMapping.cpp
     ../Source/MidiRemote/MidiLearnControllerPick.cpp
     ../Source/UI/Graph/PickTargetOverlay/GraphPickCandidates.cpp
     ../Source/UI/Graph/PickTargetOverlay/PickTargetOverlay.cpp
-    # Source/MidiRemote/RemoteEngine/*.cpp is NOT listed here on purpose: those five units are
+    # Source/MidiRemote/RemoteEngine/*.cpp is NOT listed here on purpose: those six units are
     # registered in the root CMakeLists.txt (Core), same as RemoteModel.h/RemoteModelJson.cpp right
     # above them there, because Core's own AudioEngineMidi.cpp/AudioEngineHostMode.cpp call into
     # synth::midi::RemoteMessageSink/hostSourceKey(). Tests links Core directly (see the

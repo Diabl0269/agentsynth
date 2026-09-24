@@ -116,6 +116,11 @@ public:
     /** Import controller... with the file already chosen: prompts (async) if a controller with the
      *  same id exists. */
     void importControllerFile(const juce::File& file);
+    /** FRO139 (docs/control/midi-remote.md#controller-feedback): the Controllers-list right-click
+     *  "Send feedback to" choice -- `device` unset means "None". A public, directly-callable method
+     *  (rather than only reachable through the list's own callback) so it is unit-testable without
+     *  driving a real right-click menu. */
+    void setFeedbackOutput(const juce::String& profileId, const std::optional<synth::ControllerProfile::Input>& device);
     /** The prompt-free half: `replaceExisting` false reports `conflict` and changes nothing. A
      *  successful import selects the controller. */
     ImportOutcome importControllerFileNow(const juce::File& file, bool replaceExisting);

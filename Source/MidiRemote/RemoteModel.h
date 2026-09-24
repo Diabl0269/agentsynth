@@ -168,7 +168,9 @@ struct ControllerProfile {
     };
     Input input;
 
-    // Reserved for a later feedback extension (FRO139); never read yet. A nullable
+    // FRO139 (docs/control/midi-remote.md#controller-feedback): RemoteEngine's drain sends every
+    // mapped parameter's value back out to this device, picked per-controller from the panel's
+    // Controllers-list right-click rather than the dead Audio-tab MIDI-output selector. A nullable
     // struct: hasOutput == false means "no output device set" and `output` itself is inert.
     bool hasOutput = false;
     Input output;

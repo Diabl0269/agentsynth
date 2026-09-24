@@ -41,8 +41,9 @@ a **note path only** ([`midi-input.md`](midi-input.md)):
 - **Nothing interpreted CC, pitch-bend, aftertouch or program change.** No `MidiLearn`,
   `controllerNumber`, `isController` anywhere in `Source/` — a from-scratch feature.
   `RemoteEngine` is now that interpreter; an unmapped message still takes exactly this path.
-- **No MIDI output.** The Audio tab's MIDI-output selector is a dead control: nothing reads
-  `deviceManager.getDefaultMidiOutput()`.
+- **The Audio tab's MIDI-output selector is still dead** — nothing reads
+  `deviceManager.getDefaultMidiOutput()`. Controller feedback (FRO139, below) does not use it: it
+  sends through each `ControllerProfile`'s own `output` device instead.
 - Parameters are plain `juce::AudioParameterFloat/Int/Bool/Choice` on a `ModuleBase`
   (no APVTS). A parameter is addressed persistently as **(node uuid, `paramID`)** —
   `ModuleBase::getNodeUuid()` + `findParameterByID`, never by index — and every lane / binding
@@ -99,9 +100,9 @@ a **note path only** ([`midi-input.md`](midi-input.md)):
    mappings on the host-supplied MIDI stream still work.
 
 **Non-goals (for now)** — each a planned extension tracked separately, not an accident: 14-bit CC / NRPN,
-feedback to the controller (LED rings, motor faders, MIDI out), MCU/HUI protocol surfaces,
-MPE per-note expression, a "focused module" bank that follows selection, a device template
-library beyond a few generic ones, OSC.
+MCU/HUI protocol surfaces, MPE per-note expression, a "focused module" bank that follows selection,
+a device template library beyond a few generic ones, OSC. (Feedback to the controller shipped —
+see [Controller feedback](#controller-feedback).)
 
 ---
 
@@ -363,6 +364,46 @@ through a new `RemoteActionInvoker::invokeNodeCommand(nodeId, command)` (Core kn
 `ChannelStripModule` nor `AudioEngine::setChannelStripSoloed`), which performs the SAME undo-bracketed
 call the mixer column's own click does — one undo step per press.
 
+### Controller feedback
+
+**Decision (FRO139):** `RemoteEngine::drain()` sends every mapped parameter's current value back
+out to its controller, so LED rings / motor faders / pad lights follow a mouse edit, automation
+playback, undo, or a project load, not just a hardware turn.
+
+- **Polling in the drain, not a parameter listener.** The drain already runs on the message thread
+  at `kDrainHz` for the apply path, and a mapped parameter can change from four places: a mouse
+  drag, automation playback (`synth::AutomationApplier` moves it with a bare `setValue()`, which
+  notifies no `juce::AudioProcessorParameter::Listener` at all), undo/redo, and project load.
+  Reading `param->getValue()` once per assignment in the same drain pass costs nothing extra and
+  needs no per-slot listener to add/remove across every reconcile. It also can never re-enter
+  `apply`: this only ever calls `RemoteFeedbackSink::sendFeedback()`, never
+  `beginChangeGesture`/`setValueNotifyingHost`.
+- **The cooldown.** `kFeedbackCooldownMs` (== `kGestureIdleMs`, 250 ms) treats "a hardware event
+  arrived recently" as "the user is still touching this control" and holds off sending an echo — a
+  motor fader or LED ring that receives its own just-sent value back while still moving visibly
+  hunts. Sending the final value once the window closes is what re-syncs a pick-up/scale takeover's
+  own picture of where the parameter really is, and what a motor fader needs to snap to on release.
+- **Encoding** is the exact inverse of the assignment's own range mapping (`docs` above, "hardware
+  value reach a parameter"): the parameter's normalised value is mapped back through
+  `[rangeMin, rangeMax]` to 0..1, then encoded per `MessageSpec.type` — `cc`/`pitchBend` scale to
+  7-/14-bit; `note` sends note-on velocity 127/0 for a bool parameter or a button-like control,
+  else a scaled velocity. A relative-encoded control still gets the same absolute CC echo — an LED
+  ring reads position, not delta. Channel 0 (the profile's "any channel" for the incoming lookup)
+  becomes channel 1 for feedback, since a message must go out on one real channel.
+- **Only a parameter target with an output-configured profile sends anything** — an action or
+  `nodeCommand` target has no value to echo, and a profile with `hasOutput == false` (the default)
+  is silent. The output device is picked per controller, from the Controllers list's own
+  right-click (see [midi-remote-ui.md](midi-remote-ui.md#controllers-list-left)), never the dead
+  Audio-tab MIDI-output selector.
+- **The plugin build never sends feedback.** `MainComponent` only calls
+  `RemoteEngine::setFeedbackSink()` outside `HostMode::Hosted` — a hosted plugin has no MIDI output
+  of its own to send through, so `RemoteEngine`'s `feedbackSink_` stays null there and the whole
+  pass is a no-op.
+- Implemented in `Source/MidiRemote/RemoteEngine/RemoteEngineFeedback.cpp` (Core; the interface,
+  `synth::midi::RemoteFeedbackSink`, is Core too, same split as `RemoteMessageSink`) and
+  `Source/MidiRemote/MidiRemoteFeedbackOutputs.{h,cpp}` (app layer: opens and caches a real
+  `juce::MidiOutput` per device, remembering rather than retrying a failed open every drain tick).
+
 ---
 
 ## Data model
@@ -375,7 +416,7 @@ ControllerProfile                         // GLOBAL — one per physical control
   id            : uuid string
   name          : "Launchkey Mini MK3"
   input         : { identifier, name }    // juce::MidiDeviceInfo; identifier matches first, name is the fallback
-  output        : { identifier, name } | null   // reserved for controller feedback; never read yet
+  output        : { identifier, name } | null   // controller feedback's destination -- see Controller feedback
   passMapped    : bool (default false)    // see Are mapped messages consumed
   controls[]    : Control
   actions[]     : Assignment              // GLOBAL assignments: target.kind == action only

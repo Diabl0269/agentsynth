@@ -148,7 +148,12 @@ open), **absent** (profile exists, device not connected: greyed, assignments kep
 (the project references a profile this machine lacks: [`midi-remote.md`](midi-remote.md#where-does-a-mapping-live--global-or-in-the-project), row shows
 *"not on this machine"*; selecting it shows [Orphan controllers](#orphan-controllers) in the inspector's
 place instead of a control inspector). Right-click:
-Rename, Export…, Delete… (confirms with the count of project assignments it will orphan). "+
+Rename, Export…, Delete… (confirms with the count of project assignments it will orphan), **Send
+feedback to ▸** (FRO139, [`midi-remote.md`](midi-remote.md#controller-feedback)) — "None" (ticked
+when the profile has no output configured) plus one item per available MIDI output device, ticked
+against whichever one is currently picked; choosing an item sets that `ControllerProfile`'s
+`output`/`hasOutput` and republishes it, so `RemoteEngine`'s drain starts (or stops) echoing mapped
+values to it. Hidden in the plugin build, same as "+ Add controller". "+
 Add controller" is [Add controller](#add-controller). In the plugin build the list holds exactly "Host MIDI".
 
 ### Surface (centre)
@@ -311,7 +316,9 @@ device with a profile is opened by the remote engine regardless ([`midi-remote.m
 JUCE's stock device selector cannot decorate a single device row, so instead of a per-row
 "(MIDI Remote)" suffix the tab (`AudioSettingsTab`) carries a one-paragraph caption under the selector
 naming every profiled controller, which is what lets the two lists explain each other. No profiled
-controllers, no caption. The dead MIDI-output selector stays hidden until controller feedback needs it.
+controllers, no caption. The Audio tab's MIDI-output selector stays hidden and dead either way —
+controller feedback (FRO139) is picked per controller from the Controllers list's own right-click
+("Send feedback to ▸", above), not from that selector.
 
 ---
 
