@@ -37,12 +37,12 @@ rather than scale data.
 ## Scrolling the sidebar
 
 The panel is as tall as the roll, but a short roll can't show every control — the custom-scale
-editor in particular grows the stack well past `kScalePanelWidth`'s natural height. The controls are
+editor in particular grows the control stack taller than a cramped roll. The controls are
 therefore NOT children of the panel directly: they live inside a `juce::Viewport`
 (`scrollViewport_`, sized to `getLocalBounds()`) that views a single content component
 (`scaleContent_`). `resized()` sizes `scaleContent_` to the panel width by
-`contentNaturalHeight()` — the sum of every row's height plus inset, computed from the *same*
-constants `layoutContentInto()` lays the rows out with — and then `layoutContentInto()` positions
+`contentNaturalHeight()` — the sum of every row's height plus inset, mirroring the row sizes
+`layoutContentInto()` lays out with (a test pins the two together) — and then `layoutContentInto()` positions
 the controls within that natural height.
 
 Because the natural height is constant while the panel height varies, the vertical scrollbar shows

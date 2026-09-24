@@ -857,3 +857,20 @@ TEST(ScaleAssistPanelTest, RevealingCustomEditorGrowsContentAndForcesScroll) {
     EXPECT_TRUE(panel.getScrollViewportForTest().canScrollVertically())
         << "the same panel now scrolls once the editor has grown the content past it";
 }
+
+// contentNaturalHeight() hand-mirrors layoutContentInto()'s row sizes; if a row is added or resized in
+// one and not the other the scrollbar would show too early/late or clip the last control. The last
+// row's bottom plus the 6 px inset must equal the natural height, with the custom editor hidden AND shown.
+TEST(ScaleAssistPanelTest, ContentNaturalHeightMatchesLaidOutContent) {
+    ScaleAssistPanel panel;
+    panel.setSize(PianoRollComponent::kScalePanelWidth, 1000);
+    constexpr int kInset = 6;
+    EXPECT_EQ(panel.getAddToExistingToggle().getBottom() + kInset, panel.getContentNaturalHeightForTest())
+        << "custom editor hidden";
+
+    panel.getScaleCombo().setSelectedId(panel.getScaleCombo().getItemId(panel.getScaleCombo().getNumItems() - 1),
+                                        juce::sendNotificationSync);
+    ASSERT_TRUE(panel.isCustomEditorVisibleForTest());
+    EXPECT_EQ(panel.getAddToExistingToggle().getBottom() + kInset, panel.getContentNaturalHeightForTest())
+        << "custom editor shown";
+}

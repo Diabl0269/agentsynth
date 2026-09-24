@@ -45,7 +45,7 @@ public:
         // controls squished off the bottom. See resized()/contentNaturalHeight().
         addAndMakeVisible(scrollViewport_);
         scrollViewport_.setComponentID("scaleAssistScrollViewport");
-        scrollViewport_.setViewedComponent(&scaleContent_, /*resizeWhenParentChanges=*/false);
+        scrollViewport_.setViewedComponent(&scaleContent_, /*deleteComponentWhenNoLongerNeeded=*/false);
         scrollViewport_.setScrollBarsShown(/*vertical=*/true, /*horizontal=*/false);
         rebuildScaleCombo();
         showCustomEditor(false);
@@ -73,7 +73,7 @@ public:
 
     // Height the sidebar needs at full size: the 6 px inset on each side plus every row that
     // layoutContentInto consumes (the custom-editor block only while it is showing). It mirrors
-    // that layout's row sizes exactly, so the two stay in lockstep.
+    // that layout's row sizes (a test pins the two together: the last row's bottom plus the inset).
     int contentNaturalHeight() const {
         constexpr int kInset = 6; // matches the inset layoutContentInto takes off the content area
         int y = kInset;
