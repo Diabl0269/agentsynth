@@ -40,7 +40,8 @@ namespace synth {
  * `loadPlugin(PluginIdentity)` resolves through HostedPluginBackend::getDefault() and its
  * PluginScanService, which is the only place a plugin PATH ever lives.
  *
- * `onInstanceChanged` fires on every edge of hasInstance(): once with the instance already gone
+ * `onInstanceChanged` (and, right after it, every InstanceObserver — the module card's parameter
+ * bindings) fires on every edge of hasInstance(): once with the instance already gone
  * (before it can be reaped) and once with a freshly published instance live — see
  * retireActiveInstance() for why a listener holding an editor needs that ordering. The DESTRUCTOR
  * fires the gone edge too, before it frees the instance — a node delete destroys this module with an
@@ -104,10 +105,24 @@ public:
 
     /** Fired on the message thread on every edge of hasInstance() — see the class comment's
      *  "Editor windows and instance-change notification" section for the exact ordering guarantee.
-     *  A single slot (not a listener list): only one HostedPluginEditorWindow can ever be open for
-     *  a given module (HostedPluginWindowManager enforces one window per node), so nothing else
-     *  needs to observe this today. */
+     *  A single slot owned by the editor window (HostedPluginWindowManager enforces one window per
+     *  node); anything else that must follow the edges registers an InstanceObserver instead. */
     std::function<void()> onInstanceChanged;
+
+    /** Multi-observer twin of onInstanceChanged, fired at the same two edges and with the same ordering. */
+    class InstanceObserver {
+    public:
+        virtual ~InstanceObserver() = default;
+        /** Message thread. The instance is going away but is still alive for the whole call: drop every pointer into
+         * it. */
+        virtual void hostedInstanceGone() = 0;
+        /** Message thread. A new instance has just been published and is live. */
+        virtual void hostedInstanceLive() = 0;
+    };
+
+    /** Message thread only. Not owned; the observer must remove itself before it is destroyed. */
+    void addInstanceObserver(InstanceObserver* observer) { instanceObservers_.add(observer); }
+    void removeInstanceObserver(InstanceObserver* observer) { instanceObservers_.remove(observer); }
 
     /** Fired on the MESSAGE thread whenever this module's reported latency actually CHANGED
      *  — a runtime change inside the plugin (hopped off whatever thread reported it; see the class
@@ -280,6 +295,9 @@ private:
     /** Message thread. Moves the live instance into `retired_` and clears the port counts. */
     void retireActiveInstance();
 
+    /** Message thread. Fires onInstanceChanged, then the InstanceObservers, for one edge of hasInstance(). */
+    void fireInstanceEdge(bool live);
+
     /** Message thread. Frees retired instances the audio thread has provably let go of. */
     void reapRetired();
 
@@ -359,6 +377,7 @@ private:
     // One listener for the module's whole life, moved from instance to instance — so a queued
     // update can never outlive the object that would deliver it.
     InstanceListener instanceListener_{*this};
+    juce::ListenerList<InstanceObserver> instanceObservers_;
 
     PluginIdentity identity_;
     // Last known plugin state, applied when an instance arrives. Set ONLY by a state restore, and

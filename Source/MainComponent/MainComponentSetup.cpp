@@ -233,6 +233,8 @@ void MainComponent::wireGraphEditorCallbacks() {
                                                       const juce::String& paramId) {
         automateParameter(nodeId, paramId);
     };
+    // Hosted-plugin cards resolve their layout against this store (FRO128); the member outlives graphEditor.
+    graphEditor.setPluginCardLayoutStore(&pluginCardLayoutStore);
     // A hosted-plugin card's "Open Editor" button. Mirrors onAutomateParameterRequested's
     // shape — GraphEditor owns neither the module lookup nor the window manager.
     graphEditor.onOpenPluginEditorRequested = [this](juce::AudioProcessorGraph::NodeID nodeId) {

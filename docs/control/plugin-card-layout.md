@@ -6,9 +6,11 @@ decides how a user picks the parameters a plugin card shows as knobs, how that c
 data type it introduces — `CardLayout` — is the seed of the future "edit any module's layout"
 feature (see [Future: editing any module's layout](#future-editing-any-modules-layout-out-of-scope-here)), which is otherwise **out of scope** here.
 
-**Status:** the data layer is built (FRO126): `CardLayout`, the precedence resolver, the automatic
-default, `PluginCardLayoutStore`, the per-instance `"cardLayout"` extra-state key and its undo
-seam. The card rendering, `HostedParameterAttachment` and the picker are still designed only.
+**Status:** built. The data layer (FRO126): `CardLayout`, the precedence resolver, the automatic
+default, `PluginCardLayoutStore`, the per-instance `"cardLayout"` extra-state key and its undo seam.
+The card unit and `HostedParameterAttachment` (FRO128), described in
+[Card rendering as built](#card-rendering-as-built-fro128). The picker and the MIDI Learn / Automate
+right-click on a plugin-card knob are still designed only.
 
 ---
 
@@ -23,9 +25,8 @@ seam. The card rendering, `HostedParameterAttachment` and the picker are still d
   the automation lane picker. `findInstanceParameter(paramId)` /
   `findInstanceParameterByIndex` / `getInstanceParamIndexFallback` back
   `synth::resolveLaneParameter`'s hosted rules (exact id → index hint rescue → drift orphans).
-- `ModuleComponent::createControls()`'s `HostedPluginModule` branch
-  (`Source/UI/Graph/ModuleComponent/ModuleComponent.cpp`) builds one "Open Editor" button.
-  Per-type card units already exist as the precedent for a bespoke body
+- Before FRO128, `ModuleComponent::createControls()`'s `HostedPluginModule` branch built one "Open
+  Editor" button and nothing else; it now calls the card unit described below. Per-type card units already exist as the precedent for a bespoke body
   (`ModuleComponentEQCard.cpp`, `ModuleComponentEnvelopeCard.cpp`, `ModuleComponentWavetable.cpp`).
 - Plugin identity for persistence is `PluginIdentity {format, name, uid}` (no path), carried in
   the node's extra state with the plugin's opaque state blob; extra state is applied on the
@@ -127,30 +128,80 @@ button as the whole body.
 
 ## Rendering: `ModuleComponentHostedPluginCard.cpp`
 
-A new per-type card unit (the EQ/Envelope precedent), taking the `HostedPluginModule` branch
-**out** of `createControls()` rather than growing it (that function is at the function-size
-ratchet ceiling — `Source/UI/CLAUDE.md`). Per slot it creates the same widget the generic path
-would for that kind (rotary `juce::Slider`, `ToggleButton`, `ComboBox` from the parameter's
-`getAllValueStrings()`), labelled with `label` or the parameter's name, and binds it with a new
-**`HostedParameterAttachment`** (`Source/UI/Graph/ModuleComponent/HostedParameterAttachment.h`):
+A per-type card unit (the EQ/Envelope precedent), taking the `HostedPluginModule` branch **out** of
+`createControls()` rather than growing it (that function is at the function-size ratchet ceiling —
+`Source/UI/CLAUDE.md`). Per resolved slot it creates the same widget the generic path would for that
+kind (rotary `juce::Slider`, `ToggleButton`, `ComboBox` from the parameter's value strings), labelled
+with `label` or the parameter's name, and binds it with a **`HostedParameterAttachment`**
+(`Source/UI/Graph/ModuleComponent/HostedParameterAttachment.h`):
 
-- slider range 0..1 normalised; text via `param.getText(value, 0)` / `getValueForText`;
+- slider range 0..1 normalised; text via `param.getText(value, 1024)` / `getValueForText` (not a
+  max length of 0: the VST3 wrapper truncates to it and would return an empty string);
+- a combo's items are `getAllValueStrings()` (or, for a slot forced to Choice on a parameter with none,
+  its steps when there are 2..64) and index `i` of `N` items is normalised `i / (N - 1)` — the item
+  count, never `getNumSteps()`, which is `0x7fffffff` for a parameter that does not override it;
 - writes: `beginChangeGesture` / `setValueNotifyingHost` / `endChangeGesture` on the hosted
-  parameter, so the plugin, the automation recorder and the undo gesture listener see a normal
-  gesture;
+  parameter. A drag is one gesture; any other change (typed text, a click, a wheel notch) wraps its own
+  begin/end pair around its single set;
 - reads: an `AudioProcessorParameter::Listener` **per bound parameter** (not an instance-wide
-  `AudioProcessorListener`) whose `parameterValueChanged` may arrive on any thread and is hopped
-  with an `AsyncUpdater` (the `HostedPluginModule::InstanceListener` idiom) before touching the
-  slider; re-entrancy guarded so a slider-driven write does not echo.
+  `AudioProcessorListener`) whose `parameterValueChanged` may arrive on any thread and only stores the
+  value and triggers an `AsyncUpdater` (the `HostedPluginModule::InstanceListener` idiom); the widget is
+  updated from `handleAsyncUpdate` with `dontSendNotification`, so a widget-driven write never echoes.
+  Automation writes a hosted parameter with a plain `setValue` that no listener hears, so
+  `ModuleComponent::reflectParameterValue` also feeds the attachment that owns the parameter.
 
-The card's own `parameterGestureChanged`-based undo capture works unchanged because the
-attachment emits gestures on the hosted parameter and the card listens on the parameters it
-registered. The unit registers every slot with the MIDI Learn registry
-([`midi-remote-ui.md`](midi-remote-ui.md#right-click-midi-learn--coverage)) using the `(nodeUuid, paramId, indexHint)` triple.
+### Card rendering as built (FRO128)
 
-Unbind discipline: the attachment holds raw pointers into the instance, so the card unbinds
-in `GraphEditor::onBeforeDetachAllModuleComponents` and before a "Replace with…" / delete —
-the same seam the mixer's bound controls use (`Source/UI/CLAUDE.md`).
+- **What is drawn.** Every slot whose parameter resolves. An **orphaned** slot, and a slot with no live
+  parameter yet (the plugin is still loading), renders nothing; only the picker will mention them. Each
+  widget is added to the card's existing `sliders` / `comboBoxes` / `toggles` arrays (with a null entry
+  in the index-parallel `sliderParams` / `comboParams`: a hosted parameter is not a
+  `RangedAudioParameter`), so the generic layout places them and the card grows like any many-parameter
+  module; after a rebuild the card re-measures and asks the canvas to accept the new size
+  (`refreshPortLayout`). Component ids are `hostedKnob:<paramId>` / `hostedToggle:` / `hostedChoice:`.
+  A Choice slot with fewer than two entries is drawn as a knob.
+- **Chrome.** One row at the top of the body: **Open Editor** and **Choose knobs...** (id
+  `chooseKnobs`), each half of the narrow band. **Choose knobs...** only fires
+  `ModuleComponent::onChooseKnobsRequested`, which the picker will set. With no automatable parameters
+  the two buttons are the whole body.
+- **Rebuild triggers.** The instance going live (a card is built before an async load publishes, so it
+  starts with the buttons only), the per-instance override changing (`HostedPluginModule::onCardLayoutChanged`,
+  a single slot the card owns), and `PluginCardLayoutStore::Listener::layoutChangedForPlugin` for this
+  module's identity. The store is owned by `MainComponent` (declared before the `GraphEditor`) and
+  injected with `GraphEditor::setPluginCardLayoutStore`; a null store is fine (`resolveHostedCardLayout`
+  accepts one).
+- **Undo.** Hosted parameters are **not** routed through `ModuleComponent::parameterGestureChanged`: it
+  keys on an `int` index into the module's own parameter array, where a hosted index 0 would collide with
+  `muted`. The attachment forwards every gesture on its parameter (the card's own widget, the plugin's
+  editor, a controller) to `ModuleComponent::handleHostedGesture`, which captures the graph at the first
+  start and pushes the snapshot at the last end: one begin/end pair, one undo step, and overlapping
+  gestures still make one.
+- **Not yet wired.** The card registers nothing with the MIDI Learn registry (`registerMidiLearnable`
+  takes a `RangedAudioParameter*`) and adds no right-click Automate; hosted widgets are inert to
+  right-click. That comes with the picker work.
+
+### Instance lifetime and unbinding
+
+An attachment holds a listener on a parameter that belongs to the plugin instance, so it has to be
+removed **before** that instance is freed. `HostedPluginModule` gained a multi-observer for the two edges
+of `hasInstance()`, `HostedPluginModule::InstanceObserver` (`hostedInstanceGone` / `hostedInstanceLive`),
+fired from the same two sites as `onInstanceChanged` and with the same ordering guarantee: the gone edge
+fires while the instance is still alive and before `reapRetired()` can free it, and the module's
+destructor fires it too, before it frees the instance. A poll could not win that race. The card is the
+observer (`ModuleComponent::HostedCardBinding`): gone unbinds every attachment synchronously and empties
+the body (the re-measure is deferred one loop turn, because a node delete fires this edge from the
+module's destructor with the node already out of the graph); live rebuilds from `resolveHostedCardLayout`.
+
+`detachFromProcessor` leaves the observers first and unbinds, reaching the module only through a
+`WeakReference`; if the module or the bound instance is already gone the attachments are abandoned rather
+than detached, so no freed parameter is ever touched. Which paths reach which half:
+
+- undo/redo restore, Load, New Patch, AI apply: `GraphEditor::detachAllModuleComponents` calls every
+  card's `detachFromProcessor` before the nodes are freed;
+- `deleteSelection`, `requestDeleteModule`, `replaceModule` ("Replace with..."): these fire
+  `onBeforeDetachAllModuleComponents` (the mixer's seam) but free the node **before** the card is torn
+  down in `updateComponents()` and do not call the card's `detachFromProcessor` first; the module's own
+  gone edge, fired from its destructor, is what unbinds the card there.
 
 ---
 
@@ -251,11 +302,15 @@ grid, so "edit layout" there means at most hide/reorder of the knobs they *do* e
   user picks "All instances" is the picker's job.
 - `Tests/Plugin/HostedPluginTests.cpp`: the `"cardLayout"` key round-trips through the trusted
   extra-state path, a layout-only patch never reloads the plugin, and untrusted apply never sets it.
-- `Tests/UI/Graph/ModuleComponent/HostedPluginCardTests.cpp` (uses the existing headless
-  `HostedPluginTests` fake instance): slots render as the right widget, empty layout shows the
-  two buttons, an orphan slot renders no knob and the picker lists it as missing,
-  `HostedParameterAttachment` round-trips value and text, a plugin-side change reaches the
-  slider on the message thread, unbind on detach.
+- `Tests/UI/Graph/ModuleComponent/HostedPluginCardTests.cpp` (FRO128; uses the headless
+  `HostedPluginTests` fake instance): slots render as the right widget with the right label, an empty
+  layout shows the two buttons, an orphan slot renders no widget, the automatic default / per-instance
+  override / stored default each rebuild the card, `HostedParameterAttachment` round-trips value and text
+  (slider, toggle, combo at several sizes), a plugin-side change reaches the widget only after the message
+  loop runs (from another thread and from the message thread), a widget write does not echo, one gesture
+  pair is one undo step, the instance-gone edge fires before anything can be freed, and the card unbinds on
+  unload, replace, node delete, `detachAllModuleComponents` and a detach after its node was freed. The picker
+  listing an orphan as missing belongs to the picker's tests.
 - `Tests/UI/Graph/PluginKnobPickerTests.cpp`: search, tick/untick, reorder, label, scope
   switch, presets, touch-to-add via gesture (the value-change fallback and its burst-ignored
   debounce are deferred to a follow-up, see [Choosing knobs](#choosing-knobs)).

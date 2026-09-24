@@ -14,6 +14,7 @@
 #include "Mixer/TrackPresetManager.h"
 #include "Modules/RecordTapModule.h"
 #include "Plugin/Hosting/HostedPluginWindowManager.h"
+#include "Plugin/Hosting/PluginCardLayoutStore.h"
 #include "Plugin/Hosting/PluginScanService.h"
 #include "PresetManager.h"
 #include "ProjectBundle.h"
@@ -724,6 +725,8 @@ private:
     std::unique_ptr<AudioEngine> ownedAudioEngine;
     AudioEngine& audioEngine;
 
+    // Declared BEFORE graphEditor so it is destroyed after it: every hosted card holds a listener on it.
+    synth::PluginCardLayoutStore pluginCardLayoutStore;
     GraphEditor graphEditor;
 
     // The startup overlay offering New/Open Default/Open Existing/Recent instead of silently

@@ -23,6 +23,9 @@
 
 class ModuleComponent;
 class MacroCardComponent;
+namespace synth {
+class PluginCardLayoutStore; // hosted-plugin card layouts, see setPluginCardLayoutStore
+}
 namespace synth::ui {
 class ColourPickerPopup; // a unique_ptr return type only; 89 files include this header
 }
@@ -379,6 +382,10 @@ public:
     // A hosted-plugin card's "Open Editor" button; resolves `nodeId` to its HostedPluginModule and
     // hands it to HostedPluginWindowManager::openEditorFor -- same reason as the callbacks above.
     std::function<void(juce::AudioProcessorGraph::NodeID)> onOpenPluginEditorRequested;
+
+    // The per-plugin card-layout store hosted cards resolve against. Not owned, may be null, must outlive this editor.
+    void setPluginCardLayoutStore(synth::PluginCardLayoutStore* store) noexcept { pluginCardLayoutStore_ = store; }
+    synth::PluginCardLayoutStore* getPluginCardLayoutStore() const noexcept { return pluginCardLayoutStore_; }
 
     // ---- Copy / paste / duplicate ----
     // All three run through the snippet pipeline (self-contained connections, modulation as
@@ -776,6 +783,7 @@ private:
     void applySelectionChange(const std::vector<juce::AudioProcessorGraph::NodeID>& newSelection) override;
 
     AppUndoManager* undoManager = nullptr;
+    synth::PluginCardLayoutStore* pluginCardLayoutStore_ = nullptr;
 
     // Where the macro recolour picker's favourites shelf persists to — see setPropertiesFile.
     // Null (the default) keeps favourites in-memory only, which is what a headless test with no
