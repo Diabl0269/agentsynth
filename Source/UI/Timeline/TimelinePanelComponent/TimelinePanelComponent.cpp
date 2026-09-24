@@ -276,12 +276,6 @@ TimelinePanelComponent::TimelinePanelComponent() {
     // region itself is set in resized(), which is the only place the offset is known.
     playhead_.setLocalPlayheadClient(&pianoRoll_);
 
-    // After the playhead, so the top few pixels always belong to the resize gesture rather than to
-    // the transport controls underneath. It never overlaps the playhead (which starts below the
-    // transport-bar strip).
-    addAndMakeVisible(resizeHandle_);
-    resizeHandle_.setComponentID("timelineResizeHandle");
-
     // Every tool button, snapToggleButton_ and followPlayheadButton_ now exist — set their initial
     // (no-manager-installed, hardcoded-default) tooltip text. setShortcutManager re-runs this once
     // a real manager is wired, and again on every bindings-changed notification.

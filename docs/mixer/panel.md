@@ -82,6 +82,15 @@ acts on whichever tab is active, and the header — with the real button, now re
 appears only on the DETACHED window itself. That is a deliberate simplification over reparenting
 either host's own button through three different parents.
 
+**The dock resizes from every tab** (FRO231). One `synth::ui::PanelResizeHandle` lives on the
+dock's own top edge — not inside the Timeline panel — so the Mixer and MIDI Remote tabs resize the
+dock exactly like the Timeline does. It overlaps the top 5 px of the tab strip (the strip stays
+22 px; the tab, detach, `+ Bus` and Reset Meters buttons are laid out below it, so a grab never
+lands on a button) and reports the total dock height through `MixerDockComponent::onResizeHeight` /
+`onResizeHeightCommitted`. The rules (clamp, persistence, live relayout) are in
+[`docs/timeline/timeline.md`](../timeline/timeline.md#panel-height); Own-panel placement is a
+separate strip and does not have a handle.
+
 "Own panel" is a plain visible-or-hidden strip at `MixerPlacementController::kOwnPanelHeight`
 (220 px), with no animated open and close slide and no persisted height.
 

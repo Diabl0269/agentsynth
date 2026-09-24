@@ -170,7 +170,7 @@ private:
     // the class comment. getToggleState() selects which visual each glyph shows: play vs stop for
     // PlayStop, outline vs filled-red for Record, dim vs lit-accent for Loop and Metronome. Every
     // glyph is drawn inside a CENTRED SQUARE inset from the button, so a button that isn't square
-    // (the strip is only ~19 px tall once the resize grab strip is trimmed off) never squashes it.
+    // (however short the strip it is handed) never squashes it.
     // FRO133: right-click-safe (synth::ui::midilearn::RightClickSafeButton, Source/UI/MidiRemote/MidiLearnMenu.h)
     // so a MIDI Learn menu can open on any of the four buttons without also toggling
     // playback/record/loop/metronome — juce::Button has no isPopupMenu() guard of its own.

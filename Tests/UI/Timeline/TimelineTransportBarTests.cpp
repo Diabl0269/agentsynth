@@ -208,7 +208,7 @@ TEST(TimelineTransportBarTest, RecordReadsRedWhenEngaged) {
 
 // The founder read the button row as "really dense": the glyphs are drawn inside a square, so a
 // squat slot flattened every one of them, and 4 px gaps ran them together. Pinned at both the full
-// strip height and the height it actually gets once the panel's 5 px resize strip is trimmed off.
+// strip height and a shorter one (the bar must never depend on getting the full 34 px).
 TEST(TimelineTransportBarTest, GlyphButtonsAreSquareAndSpaced) {
     synth::ui::TimelineTransportBar bar;
 

@@ -206,6 +206,16 @@ top-level window (`Source/UI/Layout/DetachablePanelHost/`) rather than only hide
 and the Mixer's dock-vs-own-panel-vs-window placement is itself a Preferences setting. See
 [`docs/mixer/mixer.md`](../mixer/mixer.md).
 
+### Bottom dock height
+
+The bottom dock (Timeline / Mixer / MIDI Remote tabs) is resizable from ONE top-edge grab strip,
+`synth::ui::PanelResizeHandle`, owned by `MixerDockComponent` and therefore live on every tab
+(FRO231). Dragging reports the desired total dock height through `MixerDockComponent::onResizeHeight`
+(live) and `onResizeHeightCommitted` (mouse-up, only after a real drag); `MainComponent` clamps it
+(`[Metrics::timelinePanelHeight, max(metric, 75% of the window)]`), lays out live and persists the
+`timelinePanelHeight` key once per gesture. The height is the dock's, not a tab's, so it holds when
+switching tabs. Full rules: [`docs/timeline/timeline.md`](../timeline/timeline.md#panel-height).
+
 ## Welcome screen overlay
 
 `Source/UI/WelcomeScreenComponent` is a full-window overlay, not a docked panel — it covers the

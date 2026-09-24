@@ -44,7 +44,7 @@
 125 Source/UI/Library/ModuleLibraryComponent/ModuleLibraryComponent.h
 70 Source/UI/Macros/MacroPortConfigDialog/MacroPortConfigDialog.h
 24 Source/UI/Mixer/MeterColourStops.h
-18 Source/UI/Mixer/MixerDockComponent.h
+13 Source/UI/Mixer/MixerDockComponent.h
 12 Source/UI/Mixer/MixerPanelComponent/MixerPanelComponent.h
 14 Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTab.h
 84 Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.h

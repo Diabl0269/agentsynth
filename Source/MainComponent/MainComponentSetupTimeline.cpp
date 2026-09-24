@@ -115,19 +115,13 @@ void MainComponent::wireTimelinePanelServicesAndShortcuts() {
         });
     });
 
-    // The panel's top-edge drag reports a desired height; THIS component owns it — clamp, lay out
-    // live, and persist once the drag ends (not per pixel).
-    //
-    // FRO11 (P9-5): the panel reports its own desired CONTENT height (TimelinePanelComponent::
-    // ResizeHandle::desiredHeightFor stays agnostic of whatever chrome it sits inside), but
-    // setTimelinePanelHeight owns the TOTAL dock-carve height -- mixerDock's own tab strip above
-    // that content, whenever the timeline is showing inside the shared dock rather than
-    // standalone. This is the one seam that knows about both, so it adds the difference.
-    timelinePanel.onResizeHeight = [this](int desiredHeight) {
-        setTimelinePanelHeight(desiredHeight + synth::ui::MixerDockComponent::kTabStripHeight, /*persist=*/false);
-    };
-    timelinePanel.onResizeHeightCommitted = [this](int desiredHeight) {
-        setTimelinePanelHeight(desiredHeight + synth::ui::MixerDockComponent::kTabStripHeight, /*persist=*/true);
+    // The dock's top-edge drag (FRO231: one handle for every tab, not the Timeline panel's own)
+    // reports a desired TOTAL dock-carve height, measured from the dock's pinned bottom edge --
+    // exactly what setTimelinePanelHeight owns, so no translation. THIS component clamps it, lays
+    // out live, and persists once the drag ends (not per pixel).
+    mixerDock.onResizeHeight = [this](int desiredHeight) { setTimelinePanelHeight(desiredHeight, /*persist=*/false); };
+    mixerDock.onResizeHeightCommitted = [this](int desiredHeight) {
+        setTimelinePanelHeight(desiredHeight, /*persist=*/true);
     };
 }
 

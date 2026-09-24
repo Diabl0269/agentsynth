@@ -17,5 +17,5 @@
 319 Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp::PreferencesSettingsTab::PreferencesSettingsTab
 234 Source/UI/Settings/PreferencesSettingsTab/PreferencesSettingsTabLifecycle.cpp::PreferencesSettingsTab::layoutContent
 286 Source/UI/Theme/ThemeLoader.cpp::ThemeLoader::parseTheme
-261 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.cpp::TimelinePanelComponent::TimelinePanelComponent
+255 Source/UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.cpp::TimelinePanelComponent::TimelinePanelComponent
 222 Tools/AIPatchHarness/Main.cpp::main

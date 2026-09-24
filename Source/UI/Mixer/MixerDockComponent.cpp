@@ -78,6 +78,19 @@ MixerDockComponent::MixerDockComponent(TimelinePanelComponent& timelinePanel, Au
 
     mixer_.configure(audioEngine.getGraph(), doc, graphEditor.getMacros(), undoManager, graphEditor, audioEngine);
 
+    // Last, so the top few pixels always belong to the resize gesture whatever tab is showing. The
+    // dock is the handle's owner, so the desired height it reports is already the TOTAL dock height.
+    addAndMakeVisible(resizeHandle_);
+    resizeHandle_.setComponentID("dockResizeHandle");
+    resizeHandle_.onResize = [this](int desiredHeight) {
+        if (onResizeHeight)
+            onResizeHeight(desiredHeight);
+    };
+    resizeHandle_.onResizeCommitted = [this](int desiredHeight) {
+        if (onResizeHeightCommitted)
+            onResizeHeightCommitted(desiredHeight);
+    };
+
     applyTabVisibility();
 }
 
@@ -207,8 +220,13 @@ bool MixerDockComponent::revealColumnForStrip(juce::AudioProcessorGraph::NodeID 
 }
 
 void MixerDockComponent::resized() {
+    // The grab strip runs the dock's full width along its top edge, OVERLAPPING the tab strip: the
+    // strip keeps its full kTabStripHeight (the content below never moves), but its buttons are
+    // laid out below the handle so a resize grab never lands on one.
+    resizeHandle_.setBounds(0, 0, getWidth(), PanelResizeHandle::kHeight);
+
     auto bounds = getLocalBounds();
-    auto tabStrip = bounds.removeFromTop(kTabStripHeight);
+    auto tabStrip = bounds.removeFromTop(kTabStripHeight).withTrimmedTop(PanelResizeHandle::kHeight);
     // Rightmost: the FRO12 detach button (always present, acts on whichever tab is active), then
     // the FRO15 "+ Bus" button (only visible -- and so only carved -- on the Mixer tab), then
     // whatever's left splits between the two tab buttons, unless FRO12's Own-panel/Window

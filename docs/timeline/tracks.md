@@ -140,7 +140,7 @@ above. `mouseDrag()` only commits to a drag once the pointer has moved `kRowDrag
 past `mouseDown` — below that it is a plain click-to-select — and from then on hands raw **screen**
 Y positions up through `onRowDragStarted` / `onRowDragged` / `onRowDragEnded`, the same "compare
 against something that is not this component" idiom
-`TimelinePanelComponent::ResizeHandle::desiredHeightFor` uses for its own drag.
+`PanelResizeHandle::desiredHeightFor` uses for its own drag.
 
 `TimelinePanelComponent` is the one place that can turn a Y position into "between which two
 tracks", since it owns the ordered header list (`trackHeaderList_.headers`):
