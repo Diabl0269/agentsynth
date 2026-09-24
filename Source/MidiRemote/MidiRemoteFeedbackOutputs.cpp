@@ -46,13 +46,17 @@ MidiRemoteFeedbackOutputs::~MidiRemoteFeedbackOutputs() = default;
 
 void MidiRemoteFeedbackOutputs::sendFeedback(const ControllerProfile::Input& outputDevice,
                                              const juce::MidiMessage& message) {
-    if (outputDevice.identifier.isEmpty())
+    // Keyed by identifier, or by name when a profile carries only a name (an imported or
+    // hand-edited file) -- the opener's name fallback handles that case, so it must not be dropped.
+    const juce::String key =
+        outputDevice.identifier.isNotEmpty() ? outputDevice.identifier : "name:" + outputDevice.name;
+    if (outputDevice.identifier.isEmpty() && outputDevice.name.isEmpty())
         return;
 
-    auto it = senders_.find(outputDevice.identifier);
+    auto it = senders_.find(key);
     if (it == senders_.end()) {
         auto sender = opener_ ? opener_(outputDevice) : std::function<void(const juce::MidiMessage&)>();
-        it = senders_.emplace(outputDevice.identifier, std::move(sender)).first;
+        it = senders_.emplace(key, std::move(sender)).first;
     }
 
     if (it->second)
