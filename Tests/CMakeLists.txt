@@ -240,6 +240,7 @@ add_executable(Tests
     MidiRemote/RemoteEngineReconcileTests.cpp
     MidiRemote/RemoteEngineHostedTests.cpp
     MidiRemote/RemoteEngineNodeCommandE2ETests.cpp
+    MidiRemote/MidiRemoteWorkflowE2ETests.cpp
     MidiRemote/RemoteEngineThreadingTests.cpp
     MidiRemote/RemoteEngineLearnTests.cpp
     MidiRemote/ControllerProfileStoreTests.cpp

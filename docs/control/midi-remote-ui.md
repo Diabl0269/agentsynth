@@ -13,7 +13,10 @@ Surface cell / Inspector row, resolved by node command rather than parameter), a
 Templates, Import/Export and the Inspector's encoder Auto-detect (FRO134) shipped too, along with
 the Inspector's editable name, kind and encoding. The mapping assistant (FRO135) shipped after it:
 "Assign from the panel" with its pick-target overlay and action picker, orphan Re-link/Recreate, and
-the orphan-node display. Still design-only: the Inspector's **Relearn** button (rendered, disabled).
+the orphan-node display. The Preferences group, the Audio-tab caption and the plugin build's Host
+MIDI source (FRO136) close v1. Still design-only: the Inspector's **Relearn** button (rendered,
+disabled), and right-click Learn on a hosted plugin's knobs — the card shows none until
+[`plugin-card-layout.md`](plugin-card-layout.md)'s card lands.
 
 ---
 
@@ -32,7 +35,7 @@ Learn from there binds the right parameter (or, for the mixer column's Solo, a [
 | Generic module card | `ComboBox` per choice param | right-click on a `ComboBox` must **not** open its popup: `ModuleComponent::mouseDown`'s registry lookup runs before the combo's own native popup handling | **shipped**: right-click a choice combo → Learn shows the MIDI block; the popup never opens |
 | Bespoke cards | EQ card bands, Envelope card knobs, Wavetable card, Sampler controls | each card's own control creation registers its controls with the same registry the generic path uses (`registerMidiLearnable(component, param)`), so `mouseDown` needs no card-specific branches | **shipped**: every parameter visible on a bespoke card is learnable; a control with no parameter shows no MIDI items |
 | Header buttons | Bypass, Mute, Dual I/O | same registry, via `RightClickSafeButton<juce::DrawableButton>` | **shipped**: right-click Bypass → Learn → pad toggles bypass |
-| Hosted plugin card | the chosen knobs (`plugin-card-layout.md`) | the card unit registers each knob with the hosted parameter's `(uuid, paramId, indexHint)` triple | Learn on a plugin knob binds through `resolveLaneParameter`'s hosted rules |
+| Hosted plugin card | the chosen knobs (`plugin-card-layout.md`) | the card unit registers each knob with the hosted parameter's `(uuid, paramId, indexHint)` triple | **not yet** (the card shows no knobs): Learn on a plugin knob binds through `resolveLaneParameter`'s hosted rules |
 | Mixer column | fader (`MixerFader`), pan, Mute, each send level (`MixerSendList`) | one `mouseDown` in `MixerColumnComponent` over its bound params (they are `ChannelStripModule` params, so ordinary parameter targets); `MixerSendList::onSendKnobBuilt` hands send-row knobs back for the SAME registry | **shipped**: right-click a fader → Learn → CC drives the strip's level |
 | Mixer column | Solo | `MixerColumnComponent`'s registry gets an `isSolo` entry (no parameter — `ChannelStripModule::soloed_` is engine state, [`Source/Modules/ChannelStripModule.h`](../../Source/Modules/ChannelStripModule.h)); its menu/badge/armed outline route through `MixerPanelComponent::onSoloMidiLearnRequested`/`onSoloMidiForgetRequested`/`onQuerySoloMidiMapping` to `MidiLearnController::armNodeCommand`/`forgetNodeCommand`/`queryNodeCommandMappings` rather than `GraphEditor`'s parameter-keyed callbacks | **shipped**: right-click S → MIDI Learn 'Solo'... → press a pad/button → it toggles solo (one undo step per press); Forget MIDI clears it. The MIDI Remote panel's Surface cell and Inspector row resolve it too (FRO131, "ModuleName · Solo") |
 | Master column | master level (fader only — Master has no pan/insert list, and no Mute learn in v1 either, just the fader) | `MixerMasterColumn` registers its own fader the same way, via a `GraphEditor&` threaded through `configure()` | **shipped**: right-click Master's fader → Learn → CC drives Master's level |
@@ -361,9 +364,17 @@ fake message source (no real `juce::MidiInput`):
   controller Re-link/Recreate and the orphan node (`OrphanControllerTests.cpp`,
   `Tests/MidiRemote/MidiLearnControllerOrphanTests.cpp`); PNG render of the surface for visual inspection
   (`MIDI_SURFACE_PNG=<path>`, like the ADSR card's).
-- **E2E** (`Tests/E2E/E2EMidiRemoteWorkflow.cpp`): fake device → Learn on Filter cutoff → sweep
-  → parameter follows, automation Touch records it, undo reverts one step → save project →
-  reload → assignment resolves → delete node → orphan → Forget.
+- **E2E** (`Tests/MidiRemote/MidiRemoteWorkflowE2ETests.cpp`): one workflow through the real seams (messages enter
+  `AudioEngine::handleIncomingMidiMessageFromSource`, `RemoteEngine::drain()` applies them on a fake clock). Fake
+  device → a real right-click "MIDI Learn 'Cutoff'..." on the Filter card → sweep → the CC settles, the assignment
+  and auto-profile exist → the sweep moves the parameter as one gesture pair → an armed Touch lane records the take
+  (its own undo step) → one Cmd+Z reverts the whole sweep → save the project, reload into a fresh session, the
+  assignment resolves and still drives the parameter → delete the node, the assignment is unresolved and never
+  rebinds (even to a new Filter), Forget removes it. Also a transport pad learned onto `transportTogglePlayStop`
+  invoking the `togglePlayback` command on press only, and a Hosted-mode learn + sweep fed through
+  `processHostBlock` under the `"Host MIDI"` source. Stand-ins for what a headless run cannot reach: the fake device
+  key is re-registered with `RemoteEngine::setSources()` after arming (no real `juce::MidiInput` to enumerate), and
+  the action is checked at `RemoteActionInvoker::invokeRemoteCommand` (`MainComponent`'s invoker is private).
 
 ---
 
