@@ -80,6 +80,13 @@ const std::vector<juce::CommandID> kExpectedOrder = {
     AppCommands::transportRecord,
     AppCommands::transportToggleMetronome,
     AppCommands::transportReturnToStart,
+    // FRO271: cursor moves and loop-locator jumps, appended after the FRO125 rows.
+    AppCommands::transportNudgeBackBeat,
+    AppCommands::transportNudgeForwardBeat,
+    AppCommands::transportNudgeBackBar,
+    AppCommands::transportNudgeForwardBar,
+    AppCommands::transportJumpToLoopStart,
+    AppCommands::transportJumpToLoopEnd,
 };
 
 } // namespace

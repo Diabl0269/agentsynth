@@ -148,7 +148,16 @@ enum CommandIDs {
     // Routes through the transport bar's own metronome button, so its persisted
     // "timelineMetronomeEnabled" state stays authoritative.
     transportToggleMetronome,
-    transportReturnToStart
+    transportReturnToStart,
+    // FRO271: cursor moves and loop-locator jumps, command-dispatched so a MIDI Remote action
+    // target (or a keyboard shortcut) can fire them. Unbound by default like the family above.
+    // Appended after transportReturnToStart -- never interleaved, so persisted ids stay stable.
+    transportNudgeBackBeat,
+    transportNudgeForwardBeat,
+    transportNudgeBackBar,
+    transportNudgeForwardBar,
+    transportJumpToLoopStart,
+    transportJumpToLoopEnd
 };
 
 /** What getCommandForAction() answers for a SURFACE action — an id that is rebindable and appears
@@ -270,6 +279,18 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return transportToggleMetronome;
     if (actionId == "transportReturnToStart")
         return transportReturnToStart;
+    if (actionId == "transportNudgeBackBeat")
+        return transportNudgeBackBeat;
+    if (actionId == "transportNudgeForwardBeat")
+        return transportNudgeForwardBeat;
+    if (actionId == "transportNudgeBackBar")
+        return transportNudgeBackBar;
+    if (actionId == "transportNudgeForwardBar")
+        return transportNudgeForwardBar;
+    if (actionId == "transportJumpToLoopStart")
+        return transportJumpToLoopStart;
+    if (actionId == "transportJumpToLoopEnd")
+        return transportJumpToLoopEnd;
     // Every SURFACE action lands here — see kNoCommand.
     return kNoCommand;
 }

@@ -76,6 +76,38 @@ TEST(MidiRemoteActionPickerTest, SearchFiltersByDescriptionCaseInsensitivelyAndD
     EXPECT_EQ(buildActionPickerRows("  ").size(), all.size()) << "a blank search shows everything";
 }
 
+// FRO271: the six cursor/loop actions reach the picker on their own (it walks the category table and
+// requires a command mapping), and the play/stop toggle carries the "Play / Stop" label so a search for
+// "play" or "stop" finds it next to Play and Stop.
+TEST(MidiRemoteActionPickerTest, ListsTheCursorAndLoopActionsAndTheRenamedPlayStopToggle) {
+    const auto rows = buildActionPickerRows({});
+    auto labelOf = [&](const juce::String& id) {
+        for (const auto& row : rows)
+            if (!row.isHeader && row.actionId == id)
+                return row.label;
+        return juce::String();
+    };
+    EXPECT_EQ(labelOf("transportNudgeBackBeat"), "Move Cursor Back (Beat)");
+    EXPECT_EQ(labelOf("transportNudgeForwardBeat"), "Move Cursor Forward (Beat)");
+    EXPECT_EQ(labelOf("transportNudgeBackBar"), "Move Cursor Back (Bar)");
+    EXPECT_EQ(labelOf("transportNudgeForwardBar"), "Move Cursor Forward (Bar)");
+    EXPECT_EQ(labelOf("transportJumpToLoopStart"), "Jump to Loop Start");
+    EXPECT_EQ(labelOf("transportJumpToLoopEnd"), "Jump to Loop End");
+    EXPECT_EQ(labelOf("togglePlayback"), "Play / Stop");
+    // The alias is not a registered action of its own, but reads identically wherever it is named.
+    EXPECT_EQ(ShortcutManager::getActionDescription("transportTogglePlayStop"), "Play / Stop");
+
+    for (const char* query : {"play", "stop"}) {
+        bool foundToggle = false, foundVerb = false;
+        for (const auto& row : buildActionPickerRows(query)) {
+            foundToggle = foundToggle || (!row.isHeader && row.label == "Play / Stop");
+            foundVerb = foundVerb || (!row.isHeader && row.label.equalsIgnoreCase(query));
+        }
+        EXPECT_TRUE(foundToggle) << query;
+        EXPECT_TRUE(foundVerb) << query;
+    }
+}
+
 TEST(MidiRemoteActionPickerTest, ChoosingAnActionRowFiresOnChosenAndAHeaderDoesNot) {
     ActionPickerComponent picker;
     juce::String chosen;

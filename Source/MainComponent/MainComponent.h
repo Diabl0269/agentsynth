@@ -27,6 +27,7 @@
 #include "Transport/BounceRunner.h"
 #include "Transport/StemExporter.h"
 #include "Transport/StemRunner.h"
+#include "Transport/TransportNudge.h"
 #include "UI/Assistant/AIChatComponent/AIChatComponent.h"
 #include "UI/Chrome/ExportAudioDialog.h"
 #include "UI/Chrome/StatusBarComponent.h"
@@ -424,7 +425,7 @@ private:
     static std::vector<CommandSpec> buildEditAndGraphCommandRows();
     static std::vector<CommandSpec> buildTimelineAndPanelCommandRows();
     static std::vector<CommandSpec> buildFocusAndHelpCommandRows();
-    // Play/stop/record/loop/metronome/return-to-start, appended last in commandTable().
+    // Play/stop/record/loop/metronome/return-to-start/cursor moves/loop jumps, appended last in commandTable().
     static std::vector<CommandSpec> buildTransportCommandRows();
 
     // Named perform() bodies, too long for an inline table lambda.
@@ -801,6 +802,9 @@ private:
     // Playing->stopped edge detection for the MIDI recorder's auto-commit-on-stop, updated once
     // per 10 Hz poll tick — mirrors AutomationRecorder's own `lastPlaying` bookkeeping.
     bool wasTransportPlaying_ = false;
+    // Message-thread memory of the last cursor-move request, so nudges fired faster than the audio
+    // thread applies them accumulate (TransportNudge.h).
+    synth::TransportNudgeState transportNudge_;
 
     // The feedback-guard re-arm latch. True from a guard trip until the armed-Audio-track set goes
     // from NONE armed to at least one armed again. While true, the poll keeps input monitoring off

@@ -526,7 +526,7 @@ TEST(ModuleLibraryHelpContent, ShortcutLinesWithNoManagerUseTheDocumentedDefault
     EXPECT_TRUE(joined.contains("Undo"));
     EXPECT_TRUE(joined.contains(cmdZ));
     EXPECT_TRUE(joined.contains("Redo"));
-    EXPECT_TRUE(joined.contains("Toggle Playback"));
+    EXPECT_TRUE(joined.contains("Play / Stop"));
     EXPECT_TRUE(joined.contains("Space"));
     EXPECT_TRUE(joined.contains("Toggle Snap"));
 }

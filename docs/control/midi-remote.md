@@ -58,7 +58,7 @@ a **note path only** ([`midi-input.md`](midi-input.md)):
   `setValueNotifyingHost` / `endChangeGesture`, one undo snapshot per gesture via
   `AppUndoManager::captureBeforeState` / `pushSnapshotFromCapture`).
 - `synth::TransportService` producers (`play/stop/locateBeat/setLoop/setBpm`) are
-  **message-thread only**. `ShortcutManager` is a real action registry (74 named actions), but
+  **message-thread only**. `ShortcutManager` is a real action registry (dozens of named actions), but
   only *command-dispatched* actions carry a `juce::CommandID` (`AppCommands::getCommandForAction`);
   `togglePlayback`, `undo`, `redo` do, while `timelineToggleLoop` and friends are
   *surface-resolved* (the panel's own `keyPressed` matches them). Record and metronome have no
@@ -334,7 +334,8 @@ forwards a controller's CCs to a plugin is the host's business (most do for inst
 `ApplicationCommandManager::invokeDirectly` on the message thread — i.e. only
 **command-dispatched** actions are targets. The transport verbs users actually want on hardware
 buttons — **Play, Stop, Play/Stop toggle, Record, Loop toggle, Metronome toggle, Return to
-start** — are today either surface-resolved (loop) or not actions at all (record, metronome,
+start** — plus the cursor moves (**Move Cursor Back/Forward by a Beat or a Bar**) and the loop
+jumps (**Jump to Loop Start/End**) — are today either surface-resolved (loop) or not actions at all (record, metronome,
 stop, return-to-start). They were **promoted to command-dispatched actions** first (which also
 gave them keyboard shortcuts, which they lacked). The
 panel's action picker lists actions by `ShortcutCategory` with the same display names as the
@@ -343,6 +344,10 @@ Keyboard Shortcuts settings tab, so the two lists can never disagree.
 A button target's `buttonMode` (momentary / toggle) decides whether note-off / CC 0 fires
 anything (momentary: nothing; toggle: the action fires on every press only). BPM and playhead
 position as *continuous* action targets are a planned extension, tracked separately.
+
+Action targets are press-only, so a relative encoder assigned to an action fires it on every
+detent regardless of direction; direction-aware jogging needs a continuous playhead target, which
+is a planned extension.
 
 ### Node command targets
 

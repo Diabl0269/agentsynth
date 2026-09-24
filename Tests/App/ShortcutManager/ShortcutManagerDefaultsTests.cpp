@@ -66,6 +66,13 @@ const juce::StringArray& intentionallyUnboundActionIds() {
         "transportRecord",
         "transportToggleMetronome",
         "transportReturnToStart",
+        // FRO271: cursor moves and loop-locator jumps.
+        "transportNudgeBackBeat",
+        "transportNudgeForwardBeat",
+        "transportNudgeBackBar",
+        "transportNudgeForwardBar",
+        "transportJumpToLoopStart",
+        "transportJumpToLoopEnd",
         // FRO131: shipped unbound (docs/control/midi-remote-ui.md#the-midi-remote-panel) -- a
         // toolbar button and MIDI Remote target already reach it; a user may still bind one.
         "toggleMidiRemotePanel",
