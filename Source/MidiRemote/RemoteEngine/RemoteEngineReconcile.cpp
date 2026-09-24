@@ -124,6 +124,26 @@ void resolveParameterTarget(const Assignment& assignment, juce::AudioProcessorGr
     }
 }
 
+// FRO236 (docs/control/midi-remote.md#continuous-targets): resolves a masterVolume continuous
+// target through the injected ContinuousParameterLookup -- otherwise identical to
+// resolveParameterTarget above (a setter's graph==nullptr rebuild keeps the previous resolution).
+// bpm/playhead never call this: addSlot leaves them param==nullptr, orphaned==false unconditionally
+// (there is nothing to resolve against a graph -- see RemoteMappingSnapshot::Slot::continuous).
+void resolveContinuousParameterTarget(const Assignment& assignment, juce::AudioProcessorGraph* graph,
+                                      const ContinuousParameterLookup& continuousLookup,
+                                      const PreviousResolution& previousResolution, RemoteMappingSnapshot::Slot& slot) {
+    if (graph != nullptr) {
+        slot.param = continuousLookup ? continuousLookup(*graph, assignment.target.continuous.kind) : nullptr;
+        slot.orphaned = slot.param == nullptr;
+        return;
+    }
+    const auto found = previousResolution.find(assignment.id);
+    if (found != previousResolution.end()) {
+        slot.param = found->second.param;
+        slot.orphaned = found->second.orphaned;
+    }
+}
+
 // FRO253 (docs/control/midi-remote.md#node-command-targets): mirrors resolveParameterTarget above,
 // but resolves to a NodeID rather than a juce::AudioProcessorParameter* -- a node command has no
 // parameter to point at (ChannelStripModule::soloed_ is engine state, not a
@@ -189,7 +209,8 @@ void addPairedAliasEntries(const std::vector<ControllerProfile>& profiles,
 void addSlot(const Assignment& assignment, juce::AudioProcessorGraph* graph, const ProcessorByUuid& processorByUuid,
              const NodeIdByUuid& nodeIdByUuid, const PreviousResolution& previousResolution,
              const std::vector<ControllerProfile>& profiles, const ActionCommandLookup& actionLookup,
-             RemoteMappingSnapshot& fresh, std::vector<std::pair<std::uint32_t, std::int32_t>>& lookupPending) {
+             const ContinuousParameterLookup& continuousLookup, RemoteMappingSnapshot& fresh,
+             std::vector<std::pair<std::uint32_t, std::int32_t>>& lookupPending) {
     if (!assignment.enabled)
         return;
 
@@ -211,6 +232,13 @@ void addSlot(const Assignment& assignment, juce::AudioProcessorGraph* graph, con
         slot.commandId = actionLookup(assignment.target.action.actionId);
     else if (assignment.target.isNodeCommand())
         resolveNodeCommandTarget(assignment, graph, nodeIdByUuid, previousResolution, slot);
+    else if (assignment.target.isContinuous()) {
+        slot.continuous = assignment.target.continuous.kind;
+        if (slot.continuous == ContinuousTargetKind::masterVolume)
+            resolveContinuousParameterTarget(assignment, graph, continuousLookup, previousResolution, slot);
+        // bpm/playhead: no graph resolution -- param stays nullptr, orphaned stays false (see
+        // RemoteMappingSnapshot::Slot::continuous's own comment).
+    }
 
     const Control* control = findControl(profiles, assignment.control.profileId, assignment.control.controlId);
     const bool controlIsButtonLike =
@@ -254,12 +282,12 @@ void RemoteEngine::rebuildAndPublish(juce::AudioProcessorGraph* graph) {
     std::vector<std::pair<std::uint32_t, std::int32_t>> lookupPending;
 
     for (const auto& assignment : assignments_)
-        addSlot(assignment, graph, processorByUuid, nodeIdByUuid, previousResolution, profiles_, actionLookup_, *fresh,
-                lookupPending);
+        addSlot(assignment, graph, processorByUuid, nodeIdByUuid, previousResolution, profiles_, actionLookup_,
+                continuousLookup_, *fresh, lookupPending);
     for (const auto& profile : profiles_)
         for (const auto& assignment : profile.actions)
             addSlot(assignment, graph, processorByUuid, nodeIdByUuid, previousResolution, profiles_, actionLookup_,
-                    *fresh, lookupPending);
+                    continuousLookup_, *fresh, lookupPending);
 
     addPairedAliasEntries(profiles_, fresh->sources, *fresh, lookupPending);
 
@@ -302,6 +330,17 @@ void RemoteEngine::rebuildAndPublish(juce::AudioProcessorGraph* graph) {
                         [&](const RemoteMappingSnapshot::Slot& slot) { return slot.assignmentId == it->first; });
         if (!stillPresent)
             it = feedback_.erase(it);
+        else
+            ++it;
+    }
+
+    // FRO236: same cleanup for continuousGestures_ as gestures_/feedback_ above.
+    for (auto it = continuousGestures_.begin(); it != continuousGestures_.end();) {
+        const bool stillPresent =
+            std::any_of(fresh->slots.begin(), fresh->slots.end(),
+                        [&](const RemoteMappingSnapshot::Slot& slot) { return slot.assignmentId == it->first; });
+        if (!stillPresent)
+            it = continuousGestures_.erase(it);
         else
             ++it;
     }

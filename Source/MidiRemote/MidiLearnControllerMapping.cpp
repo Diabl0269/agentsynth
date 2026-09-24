@@ -5,6 +5,7 @@
 
 #include "AppUndoManager.h"
 #include "AudioEngine/AudioEngine.h"
+#include "MidiRemote/ContinuousTarget.h"
 #include "MidiRemote/MidiLearnController.h"
 #include "MidiRemote/MidiRemoteMapping.h"
 #include "Modules/ModuleBase.h"
@@ -51,6 +52,10 @@ AssignStatus MidiLearnController::assignControl(const juce::String& profileId, c
         target.kind = synth::Target::Kind::action;
         target.action.actionId = pick.actionId;
         targetName = ShortcutManager::getActionDescription(pick.actionId);
+    } else if (pick.kind == PickTarget::Kind::continuous) {
+        target.kind = synth::Target::Kind::continuous;
+        target.continuous.kind = pick.continuous;
+        targetName = synth::continuousTargetDisplayName(pick.continuous);
     } else {
         const juce::String uuid = ensureNodeUuid(pick.nodeId);
         if (uuid.isEmpty())
@@ -78,13 +83,20 @@ AssignStatus MidiLearnController::assignControl(const juce::String& profileId, c
 
     const Assignment assignment = makeAssignmentForControl(*profile, control, target);
 
-    if (target.isAction()) {
+    // FRO236: a continuous target is GLOBAL, exactly like an action (docs/control/midi-remote.md#continuous-targets
+    // -- it means the same thing in every project), so it shares this branch and mirrors the action
+    // rule verbatim, just keyed on ContinuousTargetKind instead of an actionId.
+    if (target.isAction() || target.isContinuous()) {
         ControllerProfile updated = *profile;
         auto& actions = updated.actions;
         actions.erase(std::remove_if(actions.begin(), actions.end(),
                                      [&](const Assignment& a) {
-                                         return a.target.isAction() && (a.target.action.actionId == pick.actionId ||
-                                                                        a.control.controlId == controlId);
+                                         if (target.isAction())
+                                             return a.target.isAction() && (a.target.action.actionId == pick.actionId ||
+                                                                            a.control.controlId == controlId);
+                                         return a.target.isContinuous() &&
+                                                (a.target.continuous.kind == pick.continuous ||
+                                                 a.control.controlId == controlId);
                                      }),
                       actions.end());
         actions.push_back(assignment);

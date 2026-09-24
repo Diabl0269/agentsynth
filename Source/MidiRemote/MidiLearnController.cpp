@@ -596,6 +596,25 @@ bool MidiLearnController::deleteControl(const juce::String& profileId, const juc
 // before/after-JSON shape as forget(). Rejects an action target (a profile edit, not this method's
 // job) and a nodeCommand target (routes through armNodeCommand/forgetNodeCommand instead).
 bool MidiLearnController::updateAssignment(const Assignment& updated) {
+    // FRO236 (docs/control/midi-remote.md#continuous-targets): a continuous target is GLOBAL, like
+    // an action, so its takeover/range edit is a profile edit -- NOT undoable, mirroring
+    // updateControl()'s own in-place rewrite, rather than this method's project-scope undo step.
+    if (updated.target.isContinuous()) {
+        for (auto& profile : profiles_) {
+            auto it = std::find_if(profile.actions.begin(), profile.actions.end(),
+                                   [&](const synth::Assignment& a) { return a.id == updated.id; });
+            if (it == profile.actions.end())
+                continue;
+            *it = updated;
+            profileStore_.save(profile);
+            remoteEngine_.setProfiles(profiles_);
+            if (onChanged)
+                onChanged();
+            return true;
+        }
+        return false;
+    }
+
     if (!updated.target.isParameter())
         return false;
 

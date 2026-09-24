@@ -247,6 +247,36 @@ bool nodeCommandKindFromString(const juce::String& s, NodeCommandKind& out) {
     return false;
 }
 
+// FRO236 (docs/control/midi-remote.md#continuous-targets): doc-exact camelCase, same hard-fail-on-
+// unknown-string rule as every other enum in this file.
+const char* toString(ContinuousTargetKind k) {
+    switch (k) {
+    case ContinuousTargetKind::bpm:
+        return "bpm";
+    case ContinuousTargetKind::playhead:
+        return "playhead";
+    case ContinuousTargetKind::masterVolume:
+        return "masterVolume";
+    }
+    return "bpm";
+}
+
+bool continuousTargetKindFromString(const juce::String& s, ContinuousTargetKind& out) {
+    if (s == "bpm") {
+        out = ContinuousTargetKind::bpm;
+        return true;
+    }
+    if (s == "playhead") {
+        out = ContinuousTargetKind::playhead;
+        return true;
+    }
+    if (s == "masterVolume") {
+        out = ContinuousTargetKind::masterVolume;
+        return true;
+    }
+    return false;
+}
+
 bool takeoverFromString(const juce::String& s, Takeover& out) {
     if (s == "jump") {
         out = Takeover::jump;
@@ -410,11 +440,15 @@ juce::var Target::toVar() const {
         auto* a = new juce::DynamicObject();
         a->setProperty("actionId", action.actionId);
         obj->setProperty("action", juce::var(a));
-    } else {
+    } else if (kind == Kind::nodeCommand) {
         auto* n = new juce::DynamicObject();
         n->setProperty("nodeUuid", nodeCommand.nodeUuid);
         n->setProperty("command", toString(nodeCommand.command));
         obj->setProperty("nodeCommand", juce::var(n));
+    } else {
+        auto* c = new juce::DynamicObject();
+        c->setProperty("kind", toString(continuous.kind));
+        obj->setProperty("continuous", juce::var(c));
     }
     return juce::var(obj);
 }
@@ -427,8 +461,10 @@ bool Target::fromVar(const juce::var& v, Target& out) {
     const bool hasParameter = obj->hasProperty("parameter");
     const bool hasAction = obj->hasProperty("action");
     const bool hasNodeCommand = obj->hasProperty("nodeCommand");
-    // Reject anything but EXACTLY ONE of the three present (docs/control/midi-remote.md#data-model).
-    const int presentCount = (hasParameter ? 1 : 0) + (hasAction ? 1 : 0) + (hasNodeCommand ? 1 : 0);
+    const bool hasContinuous = obj->hasProperty("continuous");
+    // Reject anything but EXACTLY ONE of the four present (docs/control/midi-remote.md#data-model).
+    const int presentCount =
+        (hasParameter ? 1 : 0) + (hasAction ? 1 : 0) + (hasNodeCommand ? 1 : 0) + (hasContinuous ? 1 : 0);
     if (presentCount != 1)
         return false;
 
@@ -459,7 +495,7 @@ bool Target::fromVar(const juce::var& v, Target& out) {
 
         parsed.kind = Target::Kind::action;
         parsed.action = act;
-    } else {
+    } else if (hasNodeCommand) {
         auto* n = obj->getProperty("nodeCommand").getDynamicObject();
         if (n == nullptr)
             return false;
@@ -473,6 +509,18 @@ bool Target::fromVar(const juce::var& v, Target& out) {
 
         parsed.kind = Target::Kind::nodeCommand;
         parsed.nodeCommand = cmd;
+    } else {
+        auto* c = obj->getProperty("continuous").getDynamicObject();
+        if (c == nullptr)
+            return false;
+
+        juce::String kindStr;
+        Target::Continuous cont;
+        if (!readString(c->getProperty("kind"), kindStr) || !continuousTargetKindFromString(kindStr, cont.kind))
+            return false;
+
+        parsed.kind = Target::Kind::continuous;
+        parsed.continuous = cont;
     }
 
     out = parsed;

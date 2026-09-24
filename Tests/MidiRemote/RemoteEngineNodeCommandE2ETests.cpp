@@ -72,6 +72,11 @@ public:
 
     void invokeRemoteCommand(juce::CommandID) override {}
 
+    // FRO236: this suite doesn't exercise continuous targets -- stub, never called.
+    double getContinuousValue(ContinuousTargetKind) override { return 0.0; }
+    void setContinuousValue(ContinuousTargetKind, double) override {}
+    bool getContinuousWindow(ContinuousTargetKind, double&, double&) override { return false; }
+
     void invokeNodeCommand(juce::AudioProcessorGraph::NodeID nodeId, NodeCommandKind command) override {
         if (command != NodeCommandKind::toggleSolo)
             return;

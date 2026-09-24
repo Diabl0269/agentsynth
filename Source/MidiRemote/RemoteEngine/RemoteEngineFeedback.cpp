@@ -106,7 +106,13 @@ void RemoteEngine::sendFeedback(const RemoteMappingSnapshot& snapshot) {
     const double now = clock_();
 
     for (const auto& slot : snapshot.slots) {
-        if (!slot.target.isParameter() || slot.orphaned || slot.param == nullptr)
+        // FRO236: a masterVolume continuous target resolves to a real juce::AudioProcessorParameter*
+        // (RemoteEngineReconcile.cpp) and is echoed exactly like a parameter target; bpm/playhead
+        // have no `param` and fall out of this same check via slot.param == nullptr below.
+        const bool isParameterLike =
+            slot.target.isParameter() ||
+            (slot.target.isContinuous() && slot.continuous == ContinuousTargetKind::masterVolume);
+        if (!isParameterLike || slot.orphaned || slot.param == nullptr)
             continue;
         // An nrpn slot is skipped like every other type without a feedback encoding: echoing an NRPN
         // means re-sending its address CCs first, which the controller may not accept.

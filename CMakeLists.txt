@@ -232,6 +232,8 @@ add_library(Core STATIC
     Source/MidiRemote/RemoteEngine/RemoteMessageSink.h
     Source/MidiRemote/RemoteModel.h
     Source/MidiRemote/RemoteModelJson.cpp
+    Source/MidiRemote/ContinuousTarget.h
+    Source/MidiRemote/ContinuousTarget.cpp
     Source/MidiRemote/MidiRemoteLearnBinder.h
     Source/MidiRemote/MidiRemoteLearnBinder.cpp
     Source/MidiRemote/MidiRemoteMapping.h

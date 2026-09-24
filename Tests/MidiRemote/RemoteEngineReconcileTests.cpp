@@ -81,6 +81,22 @@ Assignment makeNodeCommandAssignment(const juce::String& id, const juce::String&
     return a;
 }
 
+// FRO236 (docs/control/midi-remote.md#continuous-targets): mirrors makeNodeCommandAssignment above.
+Assignment makeContinuousAssignment(const juce::String& id, const juce::String& controlId, MessageType type,
+                                    int channel, int number, Encoding encoding, ContinuousTargetKind kind) {
+    Assignment a;
+    a.id = id;
+    a.control.profileId = "profile";
+    a.control.controlId = controlId;
+    a.spec.type = type;
+    a.spec.channel = channel;
+    a.spec.number = number;
+    a.specEncoding = encoding;
+    a.target.kind = Target::Kind::continuous;
+    a.target.continuous.kind = kind;
+    return a;
+}
+
 // Mirrors ModuleBase::setNodeUuid + node->properties.set("uuid", ...), exactly as
 // RemoteEngineReconcile.cpp's buildProcessorByUuid expects (it reads node->properties["uuid"]).
 void setUuid(juce::AudioProcessorGraph::Node& node, const juce::String& uuid) {
@@ -334,4 +350,85 @@ TEST(MidiRemoteEngineReconcileTest, NodeCommandSetterAloneKeepsThePreviousResolu
     ASSERT_NE(stillResolved, nullptr);
     EXPECT_FALSE(stillResolved->orphaned);
     EXPECT_EQ(stillResolved->nodeId, node->nodeID);
+}
+
+// ============================================================================
+// Continuous targets (FRO236, docs/control/midi-remote.md#continuous-targets)
+// ============================================================================
+
+TEST(MidiRemoteEngineReconcileTest, ContinuousSlotOnAKnobIsNotButtonLike) {
+    juce::AudioProcessorGraph graph;
+
+    RemoteEngine engine;
+    engine.setProfiles({makeProfile({makeControl("knob", MessageType::cc, 1, 10, Encoding::abs7)})});
+    engine.setSources({juce::String(kSource)});
+    engine.setAssignments(
+        {makeContinuousAssignment("a1", "knob", MessageType::cc, 1, 10, Encoding::abs7, ContinuousTargetKind::bpm)});
+    engine.reconcile(graph);
+
+    const auto* slot = findSlotByAssignmentId(engine, "a1");
+    ASSERT_NE(slot, nullptr);
+    EXPECT_FALSE(slot->buttonLike) << "a continuous target on a knob control must not be buttonLike, unlike an "
+                                      "action/nodeCommand target";
+    EXPECT_FALSE(slot->orphaned) << "bpm is never orphaned -- there is nothing to resolve against a graph";
+    EXPECT_EQ(slot->param, nullptr);
+}
+
+TEST(MidiRemoteEngineReconcileTest, PlayheadIsNeverOrphanedAndHasNoParam) {
+    juce::AudioProcessorGraph graph; // empty -- there is nothing playhead could resolve against anyway
+
+    RemoteEngine engine;
+    engine.setProfiles({makeProfile({makeControl("knob", MessageType::cc, 1, 10, Encoding::abs7)})});
+    engine.setSources({juce::String(kSource)});
+    engine.setAssignments({makeContinuousAssignment("a1", "knob", MessageType::cc, 1, 10, Encoding::abs7,
+                                                    ContinuousTargetKind::playhead)});
+    engine.reconcile(graph);
+
+    const auto* slot = findSlotByAssignmentId(engine, "a1");
+    ASSERT_NE(slot, nullptr);
+    EXPECT_FALSE(slot->orphaned);
+    EXPECT_EQ(slot->param, nullptr);
+    EXPECT_EQ(slot->continuous, ContinuousTargetKind::playhead);
+}
+
+TEST(MidiRemoteEngineReconcileTest, MasterVolumeResolvesThroughTheInjectedLookup) {
+    juce::AudioProcessorGraph graph;
+    auto node = graph.addNode(std::make_unique<FilterModule>());
+    setUuid(*node, kNodeUuid);
+    auto* cutoff = findParameterByID(node->getProcessor(), "cutoff");
+    ASSERT_NE(cutoff, nullptr);
+
+    RemoteEngine engine;
+    // Stands in for MainComponentSetup.cpp's real lookup (Master node -> its "gain" param) -- what
+    // it resolves through doesn't matter to RemoteEngine, only that it IS a real parameter.
+    engine.setContinuousParameterLookup(
+        [cutoff](juce::AudioProcessorGraph&, ContinuousTargetKind kind) -> juce::AudioProcessorParameter* {
+            return kind == ContinuousTargetKind::masterVolume ? cutoff : nullptr;
+        });
+    engine.setProfiles({makeProfile({makeControl("knob", MessageType::cc, 1, 10, Encoding::abs7)})});
+    engine.setSources({juce::String(kSource)});
+    engine.setAssignments({makeContinuousAssignment("a1", "knob", MessageType::cc, 1, 10, Encoding::abs7,
+                                                    ContinuousTargetKind::masterVolume)});
+    engine.reconcile(graph);
+
+    const auto* slot = findSlotByAssignmentId(engine, "a1");
+    ASSERT_NE(slot, nullptr);
+    EXPECT_FALSE(slot->orphaned);
+    EXPECT_EQ(slot->param, cutoff);
+}
+
+TEST(MidiRemoteEngineReconcileTest, MasterVolumeOrphansWhenTheLookupResolvesNothing) {
+    juce::AudioProcessorGraph graph; // no lookup installed at all -- resolves to nullptr always
+
+    RemoteEngine engine;
+    engine.setProfiles({makeProfile({makeControl("knob", MessageType::cc, 1, 10, Encoding::abs7)})});
+    engine.setSources({juce::String(kSource)});
+    engine.setAssignments({makeContinuousAssignment("a1", "knob", MessageType::cc, 1, 10, Encoding::abs7,
+                                                    ContinuousTargetKind::masterVolume)});
+    engine.reconcile(graph);
+
+    const auto* slot = findSlotByAssignmentId(engine, "a1");
+    ASSERT_NE(slot, nullptr);
+    EXPECT_TRUE(slot->orphaned);
+    EXPECT_EQ(slot->param, nullptr);
 }

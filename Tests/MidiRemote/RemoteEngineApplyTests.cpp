@@ -12,6 +12,7 @@
 // (setClock), per the ticket's "never sleep or poll for time" rule. Suite names contain
 // "MidiRemote" per the ship-task --gtest_filter convention.
 
+#include "MidiRemote/ContinuousTarget.h"
 #include "MidiRemote/RemoteEngine/RemoteEngine.h"
 #include "Modules/FilterModule.h"
 #include "Modules/ModuleBase.h"
@@ -124,6 +125,10 @@ public:
     int ends = 0;
 };
 
+// FRO236 (docs/control/midi-remote.md#continuous-targets): records/replays bpm and playhead the
+// same way a real transport would -- currentBpm/currentBeat start at an arbitrary value the test
+// picks, setContinuousValue writes it back, and getContinuousWindow returns whatever the test set
+// (false = inert, mirroring the plugin build).
 class CountingActionInvoker : public RemoteActionInvoker {
 public:
     void invokeRemoteCommand(juce::CommandID commandId) override { invoked.push_back(commandId); }
@@ -131,9 +136,51 @@ public:
     void invokeNodeCommand(juce::AudioProcessorGraph::NodeID nodeId, NodeCommandKind command) override {
         invokedNodeCommands.push_back({nodeId, command});
     }
+
+    double getContinuousValue(ContinuousTargetKind kind) override {
+        return kind == ContinuousTargetKind::bpm ? currentBpm : currentBeat;
+    }
+    void setContinuousValue(ContinuousTargetKind kind, double native) override {
+        setCalls.push_back({kind, native});
+        (kind == ContinuousTargetKind::bpm ? currentBpm : currentBeat) = native;
+    }
+    bool getContinuousWindow(ContinuousTargetKind kind, double& lo, double& hi) override {
+        if (kind != ContinuousTargetKind::playhead || !playheadWindowValid)
+            return false;
+        lo = playheadWindowLo;
+        hi = playheadWindowHi;
+        return true;
+    }
+
     std::vector<juce::CommandID> invoked;
     std::vector<std::pair<juce::AudioProcessorGraph::NodeID, NodeCommandKind>> invokedNodeCommands;
+    double currentBpm = 120.0;
+    double currentBeat = 0.0;
+    bool playheadWindowValid = true;
+    double playheadWindowLo = 0.0;
+    double playheadWindowHi = 32.0;
+    std::vector<std::pair<ContinuousTargetKind, double>> setCalls;
 };
+
+// FRO236: an assignment to a continuous target -- mirrors makeParamAssignment above.
+Assignment makeContinuousAssignment(const juce::String& id, const juce::String& controlId, MessageType type,
+                                    int channel, int number, Encoding encoding, ContinuousTargetKind kind,
+                                    Takeover takeover = Takeover::jump, double rangeMin = 0.0, double rangeMax = 1.0) {
+    Assignment a;
+    a.id = id;
+    a.control.profileId = "profile";
+    a.control.controlId = controlId;
+    a.spec.type = type;
+    a.spec.channel = channel;
+    a.spec.number = number;
+    a.specEncoding = encoding;
+    a.target.kind = Target::Kind::continuous;
+    a.target.continuous.kind = kind;
+    a.takeover = takeover;
+    a.range.min = rangeMin;
+    a.range.max = rangeMax;
+    return a;
+}
 
 } // namespace
 
@@ -520,4 +567,161 @@ TEST(MidiRemoteEngineApplyTest, OrphanedNodeCommandInvokesNothing) {
     h.engine.drain();
 
     EXPECT_TRUE(invoker.invokedNodeCommands.empty()) << "an orphaned node command must invoke nothing";
+}
+
+// ============================================================================
+// Continuous targets (FRO236, docs/control/midi-remote.md#continuous-targets)
+// ============================================================================
+
+TEST(MidiRemoteEngineApplyTest, BpmAbsoluteJumpReachesTheWindowMappedValue) {
+    ApplyHarness h;
+    CountingActionInvoker invoker;
+    h.engine.setActionInvoker(&invoker);
+    h.publish({makeProfile({makeControl("bpm", MessageType::cc, 1, 10, Encoding::abs7)})},
+              {makeContinuousAssignment("a1", "bpm", MessageType::cc, 1, 10, Encoding::abs7, ContinuousTargetKind::bpm,
+                                        Takeover::jump)});
+
+    for (int cc : {0, 64, 127}) {
+        h.send(juce::MidiMessage::controllerEvent(1, 10, cc));
+        h.engine.drain();
+        const double expected = kRemoteBpmWindowMin + (static_cast<double>(cc) / 127.0) * 127.0;
+        EXPECT_NEAR(invoker.currentBpm, expected, 1e-3) << "cc=" << cc;
+    }
+}
+
+TEST(MidiRemoteEngineApplyTest, BpmAbsoluteScaleDefaultPrimesOnFirstEventThenConverges) {
+    ApplyHarness h;
+    CountingActionInvoker invoker;
+    h.engine.setActionInvoker(&invoker);
+    invoker.currentBpm = 120.0; // far from CC 127's window-mapped 187
+    h.publish({makeProfile({makeControl("bpm", MessageType::cc, 1, 10, Encoding::abs7)})},
+              {makeContinuousAssignment("a1", "bpm", MessageType::cc, 1, 10, Encoding::abs7, ContinuousTargetKind::bpm,
+                                        Takeover::scale)});
+
+    h.send(juce::MidiMessage::controllerEvent(1, 10, 127));
+    h.engine.drain();
+    EXPECT_TRUE(invoker.setCalls.empty()) << "scale must apply nothing on the first event (it only primes state)";
+
+    double prevBpm = invoker.currentBpm;
+    double prevHw = 127.0 / 127.0;
+    for (int cc = 100; cc >= 0; cc -= 20) {
+        h.send(juce::MidiMessage::controllerEvent(1, 10, cc));
+        h.engine.drain();
+        const double hwBpm = kRemoteBpmWindowMin + (static_cast<double>(cc) / 127.0) * 127.0;
+        const double hw = cc / 127.0;
+        EXPECT_LE(std::abs(invoker.currentBpm - hwBpm),
+                  std::abs(prevBpm - (kRemoteBpmWindowMin + prevHw * 127.0)) + 1e-3)
+            << "scale must converge toward the hardware value, never diverge further, cc=" << cc;
+        prevBpm = invoker.currentBpm;
+        prevHw = hw;
+    }
+}
+
+TEST(MidiRemoteEngineApplyTest, BpmRelativeMovesOneBpmPerDetentInEitherDirection) {
+    ApplyHarness h;
+    CountingActionInvoker invoker;
+    h.engine.setActionInvoker(&invoker);
+    invoker.currentBpm = 120.0;
+    h.publish(
+        {makeProfile({makeControl("bpm", MessageType::cc, 1, 10, Encoding::relTwos)})},
+        {makeContinuousAssignment("a1", "bpm", MessageType::cc, 1, 10, Encoding::relTwos, ContinuousTargetKind::bpm)});
+
+    h.send(juce::MidiMessage::controllerEvent(1, 10, 1)); // relTwos: +1 detent
+    h.engine.drain();
+    EXPECT_NEAR(invoker.currentBpm, 121.0, 1e-6);
+
+    h.send(juce::MidiMessage::controllerEvent(1, 10, 127)); // relTwos: -1 detent
+    h.engine.drain();
+    EXPECT_NEAR(invoker.currentBpm, 120.0, 1e-6);
+}
+
+TEST(MidiRemoteEngineApplyTest, PlayheadAbsoluteAlwaysJumpsIgnoringTakeover) {
+    ApplyHarness h;
+    CountingActionInvoker invoker;
+    h.engine.setActionInvoker(&invoker);
+    invoker.playheadWindowValid = true;
+    invoker.playheadWindowLo = 0.0;
+    invoker.playheadWindowHi = 32.0; // 8 bars of 4/4
+    // Scale would normally do nothing on the first event -- playhead must jump regardless.
+    h.publish({makeProfile({makeControl("play", MessageType::cc, 1, 10, Encoding::abs7)})},
+              {makeContinuousAssignment("a1", "play", MessageType::cc, 1, 10, Encoding::abs7,
+                                        ContinuousTargetKind::playhead, Takeover::scale)});
+
+    h.send(juce::MidiMessage::controllerEvent(1, 10, 64));
+    h.engine.drain();
+    EXPECT_NEAR(invoker.currentBeat, (64.0 / 127.0) * 32.0, 1e-3)
+        << "playhead must move on the very first event -- takeover never applies to it";
+}
+
+TEST(MidiRemoteEngineApplyTest, PlayheadRelativeMovesOneBeatPerDetentAndClampsAtZero) {
+    ApplyHarness h;
+    CountingActionInvoker invoker;
+    h.engine.setActionInvoker(&invoker);
+    invoker.currentBeat = 2.0;
+    h.publish({makeProfile({makeControl("play", MessageType::cc, 1, 10, Encoding::relTwos)})},
+              {makeContinuousAssignment("a1", "play", MessageType::cc, 1, 10, Encoding::relTwos,
+                                        ContinuousTargetKind::playhead)});
+
+    h.send(juce::MidiMessage::controllerEvent(1, 10, 1)); // relTwos: +1 detent -> +1 beat
+    h.engine.drain();
+    EXPECT_NEAR(invoker.currentBeat, 3.0, 1e-6);
+
+    invoker.currentBeat = 0.5;
+    h.send(juce::MidiMessage::controllerEvent(1, 10, 127)); // relTwos: -1 detent
+    h.engine.drain();
+    EXPECT_NEAR(invoker.currentBeat, 0.0, 1e-6) << "a negative move must clamp at 0, never go negative";
+}
+
+TEST(MidiRemoteEngineApplyTest, ButtonPressAndReleaseAreIgnoredForAContinuousTarget) {
+    ApplyHarness h;
+    CountingActionInvoker invoker;
+    h.engine.setActionInvoker(&invoker);
+    h.publish(
+        {makeProfile({makeControl("btn", MessageType::note, 1, 40, Encoding::abs7, ControlKind::button)})},
+        {makeContinuousAssignment("a1", "btn", MessageType::note, 1, 40, Encoding::abs7, ContinuousTargetKind::bpm)});
+
+    h.send(juce::MidiMessage::noteOn(1, 40, (juce::uint8)100));
+    h.engine.drain();
+    h.send(juce::MidiMessage::noteOff(1, 40));
+    h.engine.drain();
+    EXPECT_TRUE(invoker.setCalls.empty())
+        << "buttonPress/buttonRelease have no defined behaviour for a continuous target";
+}
+
+TEST(MidiRemoteEngineApplyTest, PlayheadInertWhenTheInvokerReportsNoWindow) {
+    ApplyHarness h;
+    CountingActionInvoker invoker;
+    h.engine.setActionInvoker(&invoker);
+    invoker.playheadWindowValid = false; // e.g. the plugin build, which never owns the transport
+    invoker.currentBeat = 5.0;
+    h.publish({makeProfile({makeControl("play", MessageType::cc, 1, 10, Encoding::abs7)})},
+              {makeContinuousAssignment("a1", "play", MessageType::cc, 1, 10, Encoding::abs7,
+                                        ContinuousTargetKind::playhead)});
+
+    h.send(juce::MidiMessage::controllerEvent(1, 10, 64));
+    h.engine.drain();
+    EXPECT_TRUE(invoker.setCalls.empty()) << "no window means inert: nothing applies";
+    EXPECT_NEAR(invoker.currentBeat, 5.0, 1e-9);
+}
+
+// masterVolume reuses the parameter path outright: it resolves through the injected
+// ContinuousParameterLookup to a REAL juce::AudioProcessorParameter* (here, "cutoff" standing in
+// for the master gain param -- what it's actually bound to is MainComponentSetup.cpp's own
+// concern), so takeover/gesture math is exactly ExactlyOneGesturePairPerSweep's, just reached
+// through a continuous target instead of a parameter one.
+TEST(MidiRemoteEngineApplyTest, MasterVolumeMovesTheParameterThroughTheParameterPath) {
+    ApplyHarness h;
+    h.engine.setContinuousParameterLookup(
+        [&h](juce::AudioProcessorGraph&, ContinuousTargetKind kind) -> juce::AudioProcessorParameter* {
+            return kind == ContinuousTargetKind::masterVolume ? h.cutoff() : nullptr;
+        });
+    h.publish({makeProfile({makeControl("vol", MessageType::cc, 1, 10, Encoding::abs7)})},
+              {makeContinuousAssignment("a1", "vol", MessageType::cc, 1, 10, Encoding::abs7,
+                                        ContinuousTargetKind::masterVolume, Takeover::jump)});
+    h.cutoff()->setValueNotifyingHost(0.9f);
+
+    h.send(juce::MidiMessage::controllerEvent(1, 10, 0));
+    h.engine.drain();
+    EXPECT_NEAR(h.cutoff()->getValue(), 0.0f, 1e-5f)
+        << "jump takes the hardware value, exactly like a parameter target";
 }

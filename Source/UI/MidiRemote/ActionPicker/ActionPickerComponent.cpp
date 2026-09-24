@@ -2,9 +2,11 @@
 
 #include "UI/MidiRemote/ActionPicker/ActionPickerComponent.h"
 
+#include "MidiRemote/ContinuousTarget.h"
 #include "ShortcutManager/AppCommands.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
+#include <array>
 
 namespace synth::ui {
 
@@ -19,12 +21,29 @@ std::vector<ActionPickerRow> buildActionPickerRows(const juce::String& filter) {
             const auto label = ShortcutManager::getActionDescription(id);
             if (needle.isNotEmpty() && !label.containsIgnoreCase(needle))
                 continue;
-            group.push_back({false, id, label});
+            group.push_back({false, false, id, label, {}});
         }
         if (group.empty())
             continue;
-        rows.push_back({true, {}, ShortcutManager::getCategoryName(category)});
+        rows.push_back({true, false, {}, ShortcutManager::getCategoryName(category), {}});
         rows.insert(rows.end(), group.begin(), group.end());
+    }
+
+    // FRO236 (docs/control/midi-remote.md#continuous-targets): one more group, appended last, same
+    // filter rule as every action category above.
+    static constexpr std::array<synth::ContinuousTargetKind, 3> kContinuousKinds{
+        synth::ContinuousTargetKind::bpm, synth::ContinuousTargetKind::playhead,
+        synth::ContinuousTargetKind::masterVolume};
+    std::vector<ActionPickerRow> continuousGroup;
+    for (const auto kind : kContinuousKinds) {
+        const auto label = synth::continuousTargetDisplayName(kind);
+        if (needle.isNotEmpty() && !label.containsIgnoreCase(needle))
+            continue;
+        continuousGroup.push_back({false, true, {}, label, kind});
+    }
+    if (!continuousGroup.empty()) {
+        rows.push_back({true, false, {}, "Continuous", {}});
+        rows.insert(rows.end(), continuousGroup.begin(), continuousGroup.end());
     }
     return rows;
 }
@@ -56,8 +75,14 @@ void ActionPickerComponent::setFilter(const juce::String& filter) {
 void ActionPickerComponent::chooseRow(int row) {
     if (row < 0 || row >= static_cast<int>(rows_.size()) || rows_[static_cast<size_t>(row)].isHeader)
         return;
+    const auto& chosen = rows_[static_cast<size_t>(row)];
+    if (chosen.isContinuous) {
+        if (onContinuousChosen)
+            onContinuousChosen(chosen.continuousKind);
+        return;
+    }
     if (onChosen)
-        onChosen(rows_[static_cast<size_t>(row)].actionId);
+        onChosen(chosen.actionId);
 }
 
 void ActionPickerComponent::paintListBoxItem(int row, juce::Graphics& g, int width, int height, bool selected) {

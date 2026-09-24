@@ -75,10 +75,32 @@ public:
      *  target reaches the app layer through, since Core knows neither ChannelStripModule nor
      *  AudioEngine::setChannelStripSoloed. */
     virtual void invokeNodeCommand(juce::AudioProcessorGraph::NodeID nodeId, NodeCommandKind command) = 0;
+
+    // ---- FRO236 (docs/control/midi-remote.md#continuous-targets): bpm/playhead only --
+    // masterVolume reuses the parameter path (ContinuousParameterLookup below), never these. ----
+
+    /** MESSAGE THREAD. The target's current value in NATIVE units (BPM, or beats). */
+    virtual double getContinuousValue(ContinuousTargetKind kind) = 0;
+    /** MESSAGE THREAD. Sets the target to `native` units. A no-op in the plugin build (the host owns
+     *  the transport). */
+    virtual void setContinuousValue(ContinuousTargetKind kind, double native) = 0;
+    /** MESSAGE THREAD. The absolute mapping window an assignment's [0,1] range narrows within, in
+     *  native units (`lo`/`hi` out params). Returns false when the target is inert right now (the
+     *  plugin build never owns the transport) -- a false return applies nothing. bpm never calls
+     *  this (its window is the Core constants in ContinuousTarget.h); playhead's window is the loop
+     *  region when looping, else the arrangement end rounded up to a whole bar (minimum 8 bars). */
+    virtual bool getContinuousWindow(ContinuousTargetKind kind, double& lo, double& hi) = 0;
 };
 
 /** Resolves a ShortcutManager action id to its juce::CommandID. Injected for the same reason. */
 using ActionCommandLookup = std::function<juce::CommandID(const juce::String& actionId)>;
+
+/** FRO236 (docs/control/midi-remote.md#continuous-targets): resolves masterVolume to the SAME
+ *  juce::AudioProcessorParameter* the mixer's own master fader binds. Injected because Core must
+ *  not include MasterModule.h (Source/CLAUDE.md's Core-layering rule) -- the app layer finds the
+ *  Master node and its gain parameter. May return nullptr (orphaned: no Master node yet). */
+using ContinuousParameterLookup =
+    std::function<juce::AudioProcessorParameter*(juce::AudioProcessorGraph& graph, ContinuousTargetKind kind)>;
 
 /** What a learn is armed on, and what it produced. */
 struct LearnRequest {
@@ -145,6 +167,9 @@ public:
         isClaimedByOther_ = std::move(pred);
     }
     void setActionCommandLookup(ActionCommandLookup lookup) { actionLookup_ = std::move(lookup); }
+    /** FRO236: resolves a masterVolume continuous target; see ContinuousParameterLookup's own
+     *  comment. May be left unset (masterVolume then always orphans). */
+    void setContinuousParameterLookup(ContinuousParameterLookup lookup) { continuousLookup_ = std::move(lookup); }
 
     /** Test seam: milliseconds, monotonic. Defaults to juce::Time::getMillisecondCounterHiRes, so
      *  tests drive the 250 ms gesture idle and the 300 ms settle window without sleeping. */
@@ -197,6 +222,8 @@ private:
     void applyToParameter(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event);
     void applyToAction(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event);
     void applyToNodeCommand(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event);
+    // FRO236: bpm/playhead only -- masterVolume dispatches to applyToParameter above instead.
+    void applyToContinuous(const RemoteMappingSnapshot::Slot& slot, const RemoteEvent& event);
     void expireIdleGestures();
     void endAllGestures();
 
@@ -260,6 +287,19 @@ private:
 
     std::map<juce::String, GestureState> gestures_;
 
+    /** FRO236: per-assignment takeover state for a bpm continuous target's ABSOLUTE encoding only
+     *  (playhead is always Jump, so it needs no state; relative encodings bypass takeover
+     *  entirely). Message thread only, keyed by assignment id like gestures_ above -- cleaned up the
+     *  same way, in rebuildAndPublish and expireIdleGestures. There is no juce host gesture to
+     *  begin/end here (setContinuousValue is not a juce::AudioProcessorParameter), so this is a
+     *  smaller struct than GestureState. */
+    struct ContinuousGestureState {
+        double lastEventMs = 0.0;
+        float lastValue = 0.0f; // last hardware value seen, 0..1 (mapThroughRange's own output)
+        bool takeoverEngaged = false;
+    };
+    std::map<juce::String, ContinuousGestureState> continuousGestures_;
+
     /** Per-assignment feedback state (FRO139). Message thread only; keyed by assignment id, same as
      *  gestures_ above, so it survives a republish that keeps the assignment. */
     struct FeedbackState {
@@ -287,6 +327,7 @@ private:
     RemoteFeedbackSink* feedbackSink_ = nullptr;
     RemoteActionInvoker* actionInvoker_ = nullptr;
     ActionCommandLookup actionLookup_;
+    ContinuousParameterLookup continuousLookup_;
     std::function<bool(const juce::AudioProcessorParameter*)> isClaimedByOther_;
     std::function<double()> clock_;
 

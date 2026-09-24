@@ -55,6 +55,14 @@ enum class Takeover { jump, pickup, scale, useDefault };
 // extends this enum rather than growing Target with a fourth kind.
 enum class NodeCommandKind { toggleSolo };
 
+// FRO236 (docs/control/midi-remote.md#continuous-targets): what a Target::Continuous drives. Unlike
+// a parameter/action/nodeCommand target these are never resolved against a graph node by uuid --
+// bpm and playhead reach the app layer's transport through RemoteActionInvoker's continuous
+// methods, and masterVolume resolves through a separate injected ContinuousParameterLookup (Core
+// must not include MasterModule.h) straight to the SAME juce::AudioProcessorParameter* the mixer's
+// own master fader binds, so it reuses applyToParameter/RemoteEngineFeedback.cpp verbatim.
+enum class ContinuousTargetKind { bpm, playhead, masterVolume };
+
 // -- MessageSpec ----------------------------------------------------------------------------------
 /** The engine's lookup key for a hardware message (docs/control/midi-remote.md#data-model): (type, channel,
  *  number). `channel` == 0 means "any channel", else 1..16. `number` is the cc/note number and is
@@ -111,13 +119,15 @@ struct Control {
 
 // -- Target ----------------------------------------------------------------------------------------
 /** An Assignment's destination: exactly one of a graph parameter, a ShortcutManager-registered
- *  action, or a node command (docs/control/midi-remote.md#where-does-a-mapping-live--global-or-in-the-project,
+ *  action, a node command, or a continuous target
+ * (docs/control/midi-remote.md#where-does-a-mapping-live--global-or-in-the-project,
  *  docs/control/midi-remote.md#action-targets, docs/control/midi-remote.md#node-command-targets,
- *  docs/control/midi-remote.md#data-model). Modelled as a tagged union (rather than three
- *  std::optional payloads) so fromVar can reject a JSON object carrying more than one of
- *  "parameter"/"action"/"nodeCommand", or none, as a single well-defined check. */
+ *  docs/control/midi-remote.md#continuous-targets, docs/control/midi-remote.md#data-model). Modelled
+ *  as a tagged union (rather than four std::optional payloads) so fromVar can reject a JSON object
+ *  carrying more than one of "parameter"/"action"/"nodeCommand"/"continuous", or none, as a single
+ *  well-defined check. */
 struct Target {
-    enum class Kind { parameter, action, nodeCommand };
+    enum class Kind { parameter, action, nodeCommand, continuous };
 
     struct Parameter {
         juce::String nodeUuid;
@@ -133,20 +143,26 @@ struct Target {
         juce::String nodeUuid;
         NodeCommandKind command = NodeCommandKind::toggleSolo;
     };
+    // FRO236: no nodeUuid -- see ContinuousTargetKind's own comment on how each kind resolves.
+    struct Continuous {
+        ContinuousTargetKind kind = ContinuousTargetKind::bpm;
+    };
 
     Kind kind = Kind::parameter;
     Parameter parameter;
     Action action;
     NodeCommand nodeCommand;
+    Continuous continuous;
 
     bool isParameter() const noexcept { return kind == Kind::parameter; }
     bool isAction() const noexcept { return kind == Kind::action; }
     bool isNodeCommand() const noexcept { return kind == Kind::nodeCommand; }
+    bool isContinuous() const noexcept { return kind == Kind::continuous; }
 
     // Only the payload matching `kind` is written — see fromVar for the "exactly one" rejection.
     juce::var toVar() const;
     /** All-or-nothing: rejects (returns false, leaves `out` untouched) unless the JSON object
-     *  carries EXACTLY ONE of "parameter"/"action"/"nodeCommand". */
+     *  carries EXACTLY ONE of "parameter"/"action"/"nodeCommand"/"continuous". */
     static bool fromVar(const juce::var& v, Target& out);
 };
 
@@ -213,16 +229,19 @@ struct ControllerProfile {
     bool passMapped = false;
 
     std::vector<Control> controls;
-    std::vector<Assignment> actions; // GLOBAL assignments: target.kind == action only
+    // GLOBAL assignments: target.kind == action or continuous only (FRO236: a continuous target
+    // means the same thing in every project -- there is exactly one transport/master volume --
+    // exactly like an action, so it lives here rather than in a project's MidiRemoteProjectDoc).
+    std::vector<Assignment> actions;
 
     int version = 1;
 
     juce::var toVar() const;
 
     /** All-or-nothing (mirrors TimelineDoc::fromVar): a malformed field, an unrecognised enum
-     *  string, a missing/wrong "version" (must equal exactly 1), a Target with both/neither of
-     *  parameter+action, or two controls sharing a MessageSpec all reject the WHOLE load and
-     *  leave `this` completely untouched. */
+     *  string, a missing/wrong "version" (must equal exactly 1), a Target with anything other than
+     *  exactly one of parameter/action/nodeCommand/continuous, or two controls sharing a
+     *  MessageSpec all reject the WHOLE load and leave `this` completely untouched. */
     bool fromVar(const juce::var& state);
 };
 
@@ -234,8 +253,8 @@ struct ControllerProfile {
 class MidiRemoteProjectDoc {
 public:
     int version = 1;
-    // FRO253: a project assignment is never an action (actions are GLOBAL, ControllerProfile::actions
-    // only) -- parameter and nodeCommand targets both live here.
+    // FRO253/FRO236: a project assignment is never an action or a continuous target (both are
+    // GLOBAL, ControllerProfile::actions only) -- parameter and nodeCommand targets both live here.
     std::vector<Assignment> assignments;
 
     struct ControllerRef {

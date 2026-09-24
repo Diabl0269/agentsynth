@@ -83,6 +83,10 @@ public:
     void invokeNodeCommand(juce::AudioProcessorGraph::NodeID nodeId, NodeCommandKind command) override {
         invokedNodeCommands.push_back({nodeId, command});
     }
+    // FRO236: this suite doesn't exercise continuous targets -- stub, never called.
+    double getContinuousValue(ContinuousTargetKind) override { return 0.0; }
+    void setContinuousValue(ContinuousTargetKind, double) override {}
+    bool getContinuousWindow(ContinuousTargetKind, double&, double&) override { return false; }
     std::vector<juce::CommandID> invoked;
     std::vector<std::pair<juce::AudioProcessorGraph::NodeID, NodeCommandKind>> invokedNodeCommands;
 };

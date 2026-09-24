@@ -87,6 +87,11 @@ struct RemoteMappingSnapshot {
         // RemoteEngineReconcile.cpp.
         juce::AudioProcessorGraph::NodeID nodeId;
         bool orphaned = false;
+        // FRO236: target.continuous.kind, copied out here so the apply path never has to reach
+        // through `target` -- masterVolume resolves `param` above through the injected
+        // ContinuousParameterLookup and is otherwise identical to a parameter slot; bpm/playhead
+        // have no `param` and are NEVER orphaned (there is nothing to resolve against a graph).
+        ContinuousTargetKind continuous = ContinuousTargetKind::bpm;
         /** FRO140: `spec.number`, readable on the MIDI path -- the MSB CC (or NRPN address) a paired
          *  slot decides "which half arrived?" against. Never changes after the snapshot is built. */
         int messageNumber = 0;
