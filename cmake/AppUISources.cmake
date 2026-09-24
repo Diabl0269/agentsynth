@@ -97,6 +97,8 @@ set(APPUI_SOURCES
     Source/UI/Mixer/MixerDockComponent.cpp
     Source/UI/Mixer/MixerPlacementController.h
     Source/UI/Mixer/MixerPlacementController.cpp
+    Source/UI/Layout/PanelResizeHandle.h
+    Source/UI/Layout/PanelResizeHandle.cpp
     Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.h
     Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.cpp
     Source/UI/Layout/DetachablePanelHost/DetachedPanelWindow.h

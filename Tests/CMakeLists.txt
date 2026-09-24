@@ -399,6 +399,10 @@ add_executable(Tests
     UI/Mixer/MixerFaderDragTests.cpp
     UI/Mixer/MixerSendListTests.cpp
     UI/Mixer/MixerDockComponentTests.cpp
+    UI/Mixer/MixerDockResizeTests.cpp
+    UI/Mixer/MixerOwnPanelResizeTests.cpp
+    UI/Mixer/MixerOwnPanelSlideTests.cpp
+    UI/Layout/PanelResizeHandleTests.cpp
     UI/MidiRemote/MidiRemotePanelTests.cpp
     UI/MidiRemote/MidiRemotePreferencesTests.cpp
     UI/MidiRemote/MidiRemotePanelHostedTests.cpp
@@ -523,6 +527,7 @@ add_executable(Tests
     ../Source/UI/Mixer/MixerPanelComponent/MixerPanelKeyboard.cpp
     ../Source/UI/Mixer/MixerDockComponent.cpp
     ../Source/UI/Mixer/MixerPlacementController.cpp
+    ../Source/UI/Layout/PanelResizeHandle.cpp
     ../Source/UI/Layout/DetachablePanelHost/DetachablePanelHost.cpp
     ../Source/UI/Layout/DetachablePanelHost/DetachedPanelWindow.cpp
     ../Source/UI/Timeline/TimelineClipLaneArea/TimelineClipLaneArea.cpp

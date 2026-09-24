@@ -22,11 +22,11 @@ shape for a single caller does not earn a new icon asset either.
 
 **Glyph geometry: one centred square, always.** Every glyph is drawn inside the button's shorter
 side, inset by `kGlyphInsetRatio` (24%) on each edge — never a fraction of the *width* applied to
-both axes, which flattens all four glyphs once the panel's 5 px resize grab strip leaves the bar
-~19 px tall. Everything scales off that square (the loop arc's stroke and arrowhead, the note's
-head and stem), so the row stays legible at any strip height.
+both axes, which flattens all four glyphs once the strip gets short. Everything scales off that square (the
+loop arc's stroke and arrowhead, the note's head and stem), so the row stays legible at any strip
+height.
 `Tests/UI/Timeline/TimelineTransportBarTests.cpp::GlyphButtonsAreSquareAndSpaced` pins squareness
-and the gaps at both the full and the trimmed strip height.
+and the gaps at both the full strip height and a shorter one.
 
 ## Record red
 

@@ -68,6 +68,8 @@ void MainComponent::addCanvasAndPanels() {
     // added here (Own-panel visibility is unrelated to isTimelineVisible above) and given real
     // bounds only by resized(), gated on mixerPlacement_.isOwnPanelShowing().
     addAndMakeVisible(mixerPlacement_);
+    // FRO231: the Own panel's slide/height changes are laid out by THIS component's carve.
+    mixerPlacement_.onLayoutNeeded = [this] { resized(); };
     graphEditor.getModMatrix().setVisible(graphEditor.isModMatrixVisible());
 }
 

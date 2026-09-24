@@ -1,113 +1,20 @@
 // TimelinePanelResizeTests.cpp
 //
-// The resizable panel height: the panel's top-edge grab strip (ungated) and MainComponent's
-// ownership of the value — default from the theme metric, clamp, live relayout, persistence.
+// The panel's layout at any dock height. The resize gesture itself (one top-edge handle on the
+// bottom DOCK, every tab) and MainComponent's ownership of the value live in
+// Tests/UI/Mixer/MixerDockResizeTests.cpp since FRO231.
 
-#include "AI/AIProvider.h"
-#include "AI/AIStateMapper/AIStateMapper.h"
-#include "AppUndoManager.h"
-#include "MainComponent/MainComponent.h"
-#include "ProjectBundle.h"
-#include "Timeline/TimelineDoc/TimelineDoc.h"
-#include "TimelinePanelTestFixture.h"
-#include "Transport/TransportService.h"
-#include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
-#include "UI/Theme/BuiltInThemes.h"
-#include "UI/Timeline/EdgeAutoScroll.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
-#include "UI/Timeline/TrackColour.h"
-#include "UserSettings.h"
-#include <algorithm>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
 // ============================================================================
-// 5. Resizable panel height — the panel's top-edge grab strip (ungated) and MainComponent's
-//    ownership of the value (gated, like the rest of group 2).
+// 5. Panel layout at any height — the panel never resizes itself; the dock reports the height.
 // ============================================================================
 
 TEST(TimelinePanelComponentTest, AddTrackButtonCarriesATooltip) {
     synth::ui::TimelinePanelComponent panel;
     EXPECT_EQ(panel.getAddTrackButton().getTooltip(), "Add a MIDI or Audio track");
-}
-
-TEST(TimelinePanelResizeTest, GrabStripCoversTheTopEdgeAndKeepsTheTransportControlsClear) {
-    using Panel = synth::ui::TimelinePanelComponent;
-    Panel panel;
-    panel.setSize(1200, 220);
-
-    auto& handle = panel.getResizeHandle();
-    EXPECT_EQ(handle.getBounds(), juce::Rectangle<int>(0, 0, 1200, Panel::kResizeHandleHeight));
-    EXPECT_TRUE(handle.getMouseCursor() == juce::MouseCursor::UpDownResizeCursor);
-
-    // The strip is chrome ON the transport strip, not a fourth region: transportBarBounds_ still
-    // starts at y == 0 (PanelRegionsTile's tiling holds), but the controls inside start below it,
-    // so a resize grab can never land on a transport button.
-    EXPECT_EQ(panel.getTransportBarBounds().getY(), 0);
-    EXPECT_GE(panel.getTransportBar().getY(), Panel::kResizeHandleHeight);
-    EXPECT_GE(panel.getSnapCombo().getY(), Panel::kResizeHandleHeight);
-}
-
-TEST(TimelinePanelResizeTest, HoverStateFlipsOnlyOnEnterAndExit) {
-    synth::ui::TimelinePanelComponent panel;
-    panel.setSize(1200, 220);
-    auto& handle = panel.getResizeHandle();
-
-    EXPECT_FALSE(panel.isResizeHandleHovered());
-    handle.mouseEnter(makeClickEvent(handle, {10.0f, 2.0f}));
-    EXPECT_TRUE(panel.isResizeHandleHovered());
-    // A second enter is not a change — the strip repaints only when the state moves.
-    handle.mouseEnter(makeClickEvent(handle, {40.0f, 3.0f}));
-    EXPECT_TRUE(panel.isResizeHandleHovered());
-    handle.mouseExit(makeClickEvent(handle, {40.0f, 3.0f}));
-    EXPECT_FALSE(panel.isResizeHandleHovered());
-}
-
-// The panel reports a DESIRED height measured from its fixed bottom edge, unclamped — clamping and
-// layout belong to the owner. Persistence is signalled once, on mouse-up.
-TEST(TimelinePanelResizeTest, DraggingReportsTheHeightMeasuredFromTheFixedBottomEdge) {
-    synth::ui::TimelinePanelComponent panel;
-    panel.setSize(1200, 220);
-
-    std::vector<int> live, committed;
-    panel.onResizeHeight = [&live](int h) { live.push_back(h); };
-    panel.onResizeHeightCommitted = [&committed](int h) { committed.push_back(h); };
-
-    auto& handle = panel.getResizeHandle();
-    // Grabbed 2 px into the strip, dragged 62 px UP: bottom edge pinned, so 220 + 62.
-    handle.mouseDown(makeClickEvent(handle, {10.0f, 2.0f}));
-    handle.mouseDrag(makeDragEvent(handle, {10.0f, -60.0f}, {10.0f, 2.0f}));
-    ASSERT_EQ(live.size(), 1u);
-    EXPECT_EQ(live.front(), 282);
-    EXPECT_TRUE(committed.empty()) << "nothing is committed mid-drag";
-
-    handle.mouseUp(makeClickEvent(handle, {10.0f, -60.0f}));
-    ASSERT_EQ(committed.size(), 1u);
-    EXPECT_EQ(committed.front(), 282);
-    EXPECT_EQ(live.size(), 1u) << "mouse-up adds no extra layout step";
-
-    // Downward drag shrinks it, and the reported value is NOT clamped to the panel's minimum.
-    live.clear();
-    committed.clear();
-    handle.mouseDown(makeClickEvent(handle, {10.0f, 2.0f}));
-    handle.mouseDrag(makeDragEvent(handle, {10.0f, 90.0f}, {10.0f, 2.0f}));
-    ASSERT_EQ(live.size(), 1u);
-    EXPECT_EQ(live.front(), 132); // 220 - 88
-    handle.mouseUp(makeClickEvent(handle, {10.0f, 90.0f}));
-
-    // A drag that never began on the strip reports nothing.
-    live.clear();
-    committed.clear();
-    handle.mouseDrag(makeDragEvent(handle, {10.0f, -300.0f}, {10.0f, 2.0f}));
-    handle.mouseUp(makeClickEvent(handle, {10.0f, -300.0f}));
-    EXPECT_TRUE(live.empty());
-    EXPECT_TRUE(committed.empty());
-
-    // A click that never dragged commits nothing either — no settings write on a stray click.
-    handle.mouseDown(makeClickEvent(handle, {10.0f, 2.0f}));
-    handle.mouseUp(makeClickEvent(handle, {10.0f, 2.0f}));
-    EXPECT_TRUE(live.empty());
-    EXPECT_TRUE(committed.empty());
 }
 
 // Nothing inside the panel assumes the default height: at 2x, every extra pixel goes to the lanes.
@@ -123,7 +30,7 @@ TEST(TimelinePanelResizeTest, InternalLayoutHoldsAtDoubleHeight) {
     EXPECT_EQ(transport.getUnion(trackHeader).getUnion(lanes), panel.getLocalBounds());
     EXPECT_EQ(transport.getHeight(), 34) << "the transport strip keeps its metric height";
     EXPECT_EQ(lanes.getHeight(), lanesAtDefault + 220) << "the extra height all goes to the lanes";
-    EXPECT_EQ(panel.getResizeHandle().getWidth(), 1200);
+    EXPECT_EQ(transport.getY(), 0) << "no handle overlaps the strip: it starts at the panel's own top edge";
 
     // The clip lanes still fill the lanes region below the 30 px ruler — the rect the grid is
     // painted into, so clips stay aligned with it at any height. (30, up from 24: the strip now
@@ -147,151 +54,4 @@ TEST(TimelinePanelResizeTest, InternalLayoutHoldsAtDoubleHeight) {
     const juce::Image img = panel.createComponentSnapshot(panel.getLocalBounds());
     EXPECT_FALSE(img.isNull());
     EXPECT_EQ(img.getHeight(), 440);
-}
-
-namespace {
-// Leaves a height in the shared settings file the way an earlier session would have — the same file
-// TimelinePanelIntegrationTest::resetPanelKeys() clears the key from.
-void persistTimelinePanelHeight(int height) {
-    juce::ApplicationProperties props;
-    props.setStorageParameters(synth::userSettingsOptions());
-    if (auto* s = props.getUserSettings()) {
-        s->setValue(MainComponent::kTimelinePanelHeightKey, height);
-        s->saveIfNeeded();
-    }
-}
-
-int readPersistedTimelinePanelHeight(MainComponent& mc) {
-    return mc.getAppPropertiesForTest().getUserSettings()->getIntValue(MainComponent::kTimelinePanelHeightKey, -1);
-}
-} // namespace
-
-TEST_F(TimelinePanelIntegrationTest, AbsentSettingFallsBackToTheThemeMetric) {
-    MainComponent mc(std::make_unique<MockProviderTL>());
-    mc.setSize(1600, 900);
-    mc.simulateToggleTimelineClick();
-
-    EXPECT_EQ(mc.getTimelinePanelHeight(), 220); // Metrics::timelinePanelHeight literal default
-    // FRO11 (P9-5): the panel's own local height is the dock's total carve (220) minus
-    // MixerDockComponent's 22px tab strip -- getTimelinePanelHeight() stays the dock-level
-    // concept, unaffected (see timelinePanelBoundsInMainComponent's own comment).
-    EXPECT_EQ(mc.getTimelinePanel().getBounds().getHeight(), 198);
-    EXPECT_EQ(readPersistedTimelinePanelHeight(mc), -1) << "showing the panel writes no height";
-}
-
-TEST_F(TimelinePanelIntegrationTest, PersistedHeightIsHonouredAtStartup) {
-    persistTimelinePanelHeight(400);
-
-    MainComponent mc(std::make_unique<MockProviderTL>());
-    mc.setSize(1600, 900);
-    mc.simulateToggleTimelineClick();
-    ASSERT_TRUE(timelinePanelIsOpen(mc));
-
-    // FRO11 (P9-5): MainComponent-relative bounds (see timelinePanelBoundsInMainComponent's own
-    // comment) -- the panel is nested inside MixerDockComponent's 22px tab strip now, so its raw
-    // getBounds() can't be compared against the status bar / graph editor directly.
-    const auto panelBounds = timelinePanelBoundsInMainComponent(mc);
-    EXPECT_EQ(mc.getTimelinePanelHeight(), 400);
-    EXPECT_EQ(panelBounds.getHeight(), 378); // 400 - the dock's 22px tab strip
-    EXPECT_EQ(panelBounds.getBottom(), mc.getStatusBar().getBounds().getY());
-    // Graph editor sits above the WHOLE dock (tab strip included), not just the nested panel.
-    EXPECT_EQ(mc.getGraphEditor().getBounds().getBottom(), panelBounds.getY() - 22);
-}
-
-TEST_F(TimelinePanelIntegrationTest, DraggingTheGrabStripResizesLiveAndPersistsOnDragEnd) {
-    MainComponent mc(std::make_unique<MockProviderTL>());
-    mc.setSize(1600, 900);
-    mc.simulateToggleTimelineClick();
-
-    auto& panel = mc.getTimelinePanel();
-    // 220 total carve minus MixerDockComponent's 22px tab strip -- see
-    // timelinePanelBoundsInMainComponent's own comment.
-    ASSERT_EQ(panel.getBounds().getHeight(), 198);
-
-    auto& handle = panel.getResizeHandle();
-    handle.mouseDown(makeClickEvent(handle, {10.0f, 2.0f}));
-    // 142 px above the grab point, against a pinned bottom edge: 220 + 142.
-    handle.mouseDrag(makeDragEvent(handle, {10.0f, -140.0f}, {10.0f, 2.0f}));
-
-    // LIVE: the owner already re-laid out, before any mouse-up.
-    EXPECT_EQ(mc.getTimelinePanelHeight(), 362);
-    const auto liveBounds = timelinePanelBoundsInMainComponent(mc);
-    EXPECT_EQ(liveBounds.getHeight(), 340); // 362 - 22
-    EXPECT_EQ(liveBounds.getBottom(), mc.getStatusBar().getBounds().getY());
-    EXPECT_EQ(mc.getGraphEditor().getBounds().getBottom(), liveBounds.getY() - 22);
-    EXPECT_EQ(readPersistedTimelinePanelHeight(mc), -1) << "not persisted per pixel";
-
-    handle.mouseUp(makeClickEvent(handle, {10.0f, -140.0f}));
-    EXPECT_EQ(readPersistedTimelinePanelHeight(mc), 362);
-
-    // A second component reads the same file back — and shows the panel at that height.
-    MainComponent mc2(std::make_unique<MockProviderTL>());
-    mc2.setSize(1600, 900);
-    EXPECT_EQ(mc2.getTimelinePanelHeight(), 362);
-}
-
-TEST_F(TimelinePanelIntegrationTest, HeightIsClampedToTheMetricFloorAndThreeQuartersOfTheWindow) {
-    MainComponent mc(std::make_unique<MockProviderTL>());
-    mc.setSize(1600, 900);
-    mc.simulateToggleTimelineClick();
-
-    auto& panel = mc.getTimelinePanel();
-    ASSERT_TRUE(panel.onResizeHeight != nullptr);
-
-    panel.onResizeHeight(5000);
-    EXPECT_EQ(mc.getTimelinePanelHeight(), 675) << "75% of the 900 px window";
-    EXPECT_EQ(panel.getBounds().getHeight(), 653); // 675 - the dock's 22px tab strip
-    EXPECT_GT(mc.getGraphEditor().getBounds().getHeight(), 0);
-
-    panel.onResizeHeight(10);
-    EXPECT_EQ(mc.getTimelinePanelHeight(), 220) << "the theme metric is the floor";
-    EXPECT_EQ(panel.getBounds().getHeight(), 198); // 220 - 22
-
-    EXPECT_EQ(readPersistedTimelinePanelHeight(mc), -1) << "only the drag-end callback persists";
-}
-
-TEST_F(TimelinePanelIntegrationTest, ASmallerWindowReclampsTheHeightSoTheCanvasSurvives) {
-    persistTimelinePanelHeight(600);
-
-    MainComponent mc(std::make_unique<MockProviderTL>());
-    mc.setSize(1600, 900);
-    mc.simulateToggleTimelineClick();
-    ASSERT_EQ(mc.getTimelinePanelHeight(), 600); // within 75% of 900
-
-    mc.setSize(1000, 400);
-    EXPECT_EQ(mc.getTimelinePanelHeight(), 300) << "75% of the 400 px window";
-    const auto smallBounds = timelinePanelBoundsInMainComponent(mc);
-    EXPECT_EQ(smallBounds.getHeight(), 278); // 300 - the dock's 22px tab strip
-    EXPECT_GT(mc.getGraphEditor().getBounds().getHeight(), 0);
-    EXPECT_EQ(smallBounds.getBottom(), mc.getStatusBar().getBounds().getY());
-
-    // Shorter than 4/3 of the floor (below the enforced minWindowHeight, so a corner case only):
-    // the floor wins rather than the cap.
-    mc.setSize(1000, 280);
-    EXPECT_EQ(mc.getTimelinePanelHeight(), 220);
-}
-
-TEST_F(TimelinePanelIntegrationTest, HidingThePanelReturnsTheCanvasAndReshowingKeepsTheDraggedHeight) {
-    MainComponent mc(std::make_unique<MockProviderTL>());
-    mc.setSize(1600, 900);
-    const auto canvasWithNoPanel = mc.getGraphEditor().getBounds();
-
-    mc.simulateToggleTimelineClick();
-    // FRO11 (P9-5): onResizeHeight's argument is the panel's own desired CONTENT height (see
-    // TimelinePanelComponent::ResizeHandle::desiredHeightFor's own comment) -- the
-    // onResizeHeight/onResizeHeightCommitted wiring (MainComponentSetupTimeline.cpp) adds
-    // MixerDockComponent::kTabStripHeight (22) to get the total dock-carve height this component
-    // owns, so 420 here means the panel's CONTENT ends up 420, not the total carve.
-    mc.getTimelinePanel().onResizeHeight(420);
-    ASSERT_EQ(timelinePanelBoundsInMainComponent(mc).getHeight(), 420);
-
-    mc.simulateToggleTimelineClick();      // hide
-    EXPECT_FALSE(timelinePanelIsOpen(mc)); // see HiddenByDefaultAndCarvesNothing's comment
-    EXPECT_EQ(mc.getGraphEditor().getBounds(), canvasWithNoPanel) << "a hidden panel carves nothing, at any height";
-    EXPECT_EQ(mc.getTimelinePanelHeight(), 442) << "the height outlives a hide"; // 420 + the 22px tab strip
-
-    mc.simulateToggleTimelineClick(); // show again
-    const auto reshownBounds = timelinePanelBoundsInMainComponent(mc);
-    EXPECT_EQ(reshownBounds.getHeight(), 420);
-    EXPECT_EQ(reshownBounds.getBottom(), mc.getStatusBar().getBounds().getY());
 }

@@ -3,6 +3,7 @@
 #include "MixerPanelComponent/MixerPanelComponent.h"
 #include "ShortcutManager/ShortcutManager.h"
 #include "UI/Layout/DetachablePanelHost/DetachablePanelHost.h"
+#include "UI/Layout/PanelResizeHandle.h"
 #include "UI/MidiRemote/MidiRemotePanel/MidiRemotePanelComponent.h"
 #include "UI/Theme/AppLookAndFeel/AppLookAndFeel.h"
 #include "UI/Timeline/TimelinePanelComponent/TimelinePanelComponent.h"
@@ -170,13 +171,19 @@ public:
     void resized() override;
     void lookAndFeelChanged() override; // refreshes the tab-strip detach button's themed icon
 
-    /** Height of the tab strip above the timeline panel's own content -- the amount
-     *  MainComponentSetupTimeline.cpp's onResizeHeight/onResizeHeightCommitted wiring must add to
-     *  the panel's self-reported desired content height (TimelinePanelComponent::ResizeHandle::
-     *  desiredHeightFor, which stays agnostic of any owner chrome) to get MainComponent's own
-     *  total dock-carve height. Public because the panel resize's whole point is a stable pixel
-     *  contract between this component and its caller, not an implementation detail. */
+    /** Total tab-strip height, including the top PanelResizeHandle::kHeight px the handle overlaps. */
     static constexpr int kTabStripHeight = 22;
+
+    // ---- Resizable height (top-edge grab strip, every tab) ----
+    // Both callbacks carry the desired TOTAL dock height, UNCLAMPED; MainComponent clamps and persists.
+
+    /** Fired on every drag step. */
+    std::function<void(int desiredHeight)> onResizeHeight;
+    /** Fired once on mouse-up after a real drag (never for a stray click): the cue to persist. */
+    std::function<void(int desiredHeight)> onResizeHeightCommitted;
+    /** Test seam: no OS mouse source exists headlessly, so tests drive events through the strip. */
+    juce::Component& getResizeHandle() noexcept { return resizeHandle_; }
+    bool isResizeHandleHovered() const noexcept { return resizeHandle_.isHovered(); }
 
     /** FRO15 test seam: the "Add bus" button the tab strip shows on the Mixer tab. */
     juce::TextButton& getAddBusButtonForTest() noexcept { return addBusButton_; }
@@ -224,6 +231,8 @@ private:
     // FRO146: sits next to "+ Bus" (same Mixer-tab-only visibility) -- resets every column's clip
     // readout (docs/mixer/mixer.md meters section's "Meter Peak Level" reset action).
     juce::TextButton resetMetersButton_{"Reset Meters"};
+    // Added LAST in the constructor so it wins the hit test; forwards into onResizeHeight*.
+    PanelResizeHandle resizeHandle_{*this};
     Tab activeTab_ = Tab::Timeline;
     bool mixerTabEnabled_ = true;
     juce::ApplicationProperties* appProperties_ = nullptr;

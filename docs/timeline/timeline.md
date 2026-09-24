@@ -30,7 +30,7 @@ Source layout — one file per concern; the class itself is declared in `Timelin
 | `TimelinePanelClipClipboard.cpp` | Clip clipboard: copy/paste/cut/duplicate/repeat/select-all |
 | `TimelinePanelShortcuts.cpp` | Panel-scoped keyboard shortcut dispatch (`matchesAction`/`keyPressed`) |
 | `TimelinePanelTrackHeaders.cpp` | Add-track menu, `timelineChanged`, header sync/layout, focus movement, drag-to-reorder |
-| `TimelinePanelLayout.cpp` | Preferences (snap/follow-playhead/scroll-invert), zoom/scroll helpers, `resized()`/`paint()`, the `ResizeHandle` child component |
+| `TimelinePanelLayout.cpp` | Preferences (snap/follow-playhead/scroll-invert), zoom/scroll helpers, `resized()`/`paint()` |
 
 ## Regions
 
@@ -38,7 +38,7 @@ The low-rate transport poll ([playhead](playhead.md#two-timers)) aside, everythi
 layout-plus-paint with no timer or animation of its own:
 
 ```
-+====================================================================+  <- resize grab strip
++====================================================================+
 | Transport bar strip  (play/stop/record/loop, BPM, time-sig, ruler   |  transport
 | readout, metronome/count-in .......................... snap combo) |   (+ view's snap selector)
 +---------------------+----------------------------------------------+
@@ -117,27 +117,30 @@ minimum**:
 - **Persistence**: the `timelinePanelHeight` int key (same name as the metric) in
   `juce::ApplicationProperties`, absent by default — absence is what makes the metric the default.
   Written **once per gesture**, on drag end, never per pixel.
-- **The value is the total dock-carve height**, i.e. it includes `MixerDockComponent::
-  kTabStripHeight` (22 px) on top of the timeline panel's own content height.
-  `TimelinePanelComponent::ResizeHandle::desiredHeightFor()` stays agnostic of whatever chrome it
-  sits inside and reports only its own desired *content* height; the `onResizeHeight` /
-  `onResizeHeightCommitted` wiring in `MainComponentSetupTimeline.cpp` is the one seam that knows
-  about both and adds the tab-strip height before calling `setTimelinePanelHeight()`. A height
-  persisted before the dock existed is therefore honoured as a total-carve value unchanged.
-- **The grab strip** (`TimelinePanelComponent::kResizeHandleHeight = 5`,
-  `MouseCursor::UpDownResizeCursor`) spans the panel's full width along its top edge, *overlapping*
-  the transport bar strip: `getTransportBarBounds()` still starts at `y == 0` (the three regions
-  tile exactly), but the transport controls inside it are laid out below the strip, so a resize
-  grab never lands on a transport button. Idle it paints exactly the hairline the panel already
-  drew there; hovered or dragging it brightens to the accent colour with a faint wash, and it
-  repaints **only on a hover-state change** (`docs/layout/rendering.md`'s repaint
-  discipline).
-- **The panel never resizes itself.** Dragging reports the *desired* height — measured absolutely,
-  from the panel's pinned bottom edge in screen coordinates, so the owner moving the top edge under
+- **The value is the total dock-carve height** — the whole `MixerDockComponent`, tab strip
+  (`MixerDockComponent::kTabStripHeight`, 22 px) included. The dock's handle is the dock's own and
+  measures from the dock's pinned bottom edge, so it already reports that total and
+  `MainComponentSetupTimeline.cpp`'s `mixerDock.onResizeHeight` / `onResizeHeightCommitted` wiring
+  passes it straight to `setTimelinePanelHeight()` with no translation. A height persisted before
+  the dock existed is a total-carve value too and is honoured unchanged.
+- **One grab strip for the whole dock, on every tab** (FRO231). `synth::ui::PanelResizeHandle`
+  (`Source/UI/Layout/PanelResizeHandle.h`, `kHeight = 5`, `MouseCursor::UpDownResizeCursor`) is
+  owned by `MixerDockComponent` and spans the dock's full width along ITS top edge, so the dock can
+  be resized from Timeline, Mixer and MIDI Remote alike (and while the Timeline is detached into
+  its own window). It *overlaps* the top 5 px of the 22 px tab strip: the strip keeps its full
+  height so the content below never moves, but the tab/detach/`+ Bus`/Reset Meters buttons are laid
+  out beneath it, so a resize grab never lands on a button. The Timeline panel itself has no handle
+  and no resize callbacks; its transport bar uses its whole `Metrics::timelineTransportBarHeight`
+  strip. Idle the handle paints a 1 px border hairline along the dock's top edge; hovered or
+  dragging it brightens to the accent colour with a faint wash, and it repaints **only on a
+  hover-state change** (`docs/layout/rendering.md`'s repaint discipline).
+- **The dock never resizes itself.** Dragging reports the *desired* height — measured absolutely,
+  from the dock's pinned bottom edge in screen coordinates, so the owner moving the top edge under
   the cursor cannot make the gesture chase itself — through `onResizeHeight` (every drag step,
-  unclamped) and `onResizeHeightCommitted` (once, on mouse-up: the cue to persist). The owner
-  clamps, stores and re-runs its layout on each step, which is what makes the drag live. That is
-  one user-driven layout pass per mouse event, not a free-running animation.
+  unclamped) and `onResizeHeightCommitted` (once, on mouse-up, and only when the gesture actually
+  moved: the cue to persist). The owner clamps, stores and re-runs its layout on each step, which
+  is what makes the drag live. That is one user-driven layout pass per mouse event, not a
+  free-running animation.
 
 ## The show/hide slide
 

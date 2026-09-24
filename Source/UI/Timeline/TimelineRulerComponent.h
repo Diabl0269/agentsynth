@@ -374,7 +374,7 @@ private:
     synth::MarkerId draggingMarker_;
     double markerDragBeat_ = 0.0;
     double markerDragGrabOffsetBeats_ = 0.0;
-    // A press that never moved commits nothing — the same rule the panel's resize handle follows,
+    // A press that never moved commits nothing — the same rule PanelResizeHandle follows,
     // so a stray click on a flag can't quietly re-snap the marker it landed on.
     bool markerDragMoved_ = false;
 

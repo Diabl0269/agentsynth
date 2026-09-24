@@ -419,19 +419,30 @@ void MainComponent::resized() {
     // A panel that is both closed AND hidden is skipped entirely — its bounds are dead state, and
     // removeFrom*(0) would carve nothing from the canvas anyway.
     // FRO12 (P9-6): the Mixer's "Own panel" placement -- a second, INDEPENDENT bottom strip BELOW
-    // the Timeline dock carved next. Fixed height, no slide (the ticket's own scope cut -- see
-    // MixerPlacementController's class comment): a plain visible/hidden carve, same "|| isVisible()
-    // frame-0" guard as every other panel above. Carved FIRST (before the Timeline dock below)
+    // the Timeline dock carved next. FRO231: it slides and has a user height like the dock, but
+    // through its OWN PanelSlide inside MixerPlacementController (which calls back into this pass
+    // each frame), so its carve is asked for rather than derived from a member here. Same "|| showing"
+    // frame-0 guard as every other panel above. Carved FIRST (before the Timeline dock below)
     // so it claims the window's actual bottom edge -- carving it second would instead stack it
     // ABOVE the Timeline dock, the opposite of docs/mixer/panel.md's own layout.
-    if (mixerPlacement_.isOwnPanelShowing())
-        mixerPlacement_.setBounds(bounds.removeFromBottom(synth::ui::MixerPlacementController::kOwnPanelHeight));
+    const int dockMinHeight = defaultTimelinePanelHeight();
+    const bool dockOpen = timelineSlide_.getProgress() > 0.0f || mixerDock.isVisible();
+    mixerPlacement_.setLayoutContext(getHeight(), dockOpen ? dockMinHeight : 0);
+    const int ownCarve = mixerPlacement_.getCarveHeight();
+    if (ownCarve > 0 || mixerPlacement_.isOwnPanelShowing())
+        mixerPlacement_.setBounds(bounds.removeFromBottom(ownCarve));
 
-    if (timelineSlide_.getProgress() > 0.0f || mixerDock.isVisible()) {
+    if (dockOpen) {
         // Re-clamped every pass: the window may have shrunk since the height was set (or persisted
         // on a larger one), and the canvas must stay usable.
         timelinePanelHeight_ = clampTimelinePanelHeight(timelinePanelHeight_);
-        mixerDock.setBounds(bounds.removeFromBottom(timelineSlide_.sizeBetween(0, timelinePanelHeight_)));
+        // With the Own panel open too, the two strips share the same 3/4-of-the-window budget: the
+        // dock gives way (never below its own minimum) rather than eat the canvas. Local only --
+        // the stored, persisted height is the user's wish and comes back when the Own panel closes.
+        const int dockHeight =
+            getHeight() > 0 ? std::min(timelinePanelHeight_, std::max(dockMinHeight, (getHeight() * 3) / 4 - ownCarve))
+                            : timelinePanelHeight_;
+        mixerDock.setBounds(bounds.removeFromBottom(timelineSlide_.sizeBetween(0, dockHeight)));
     }
 
     if (aiW > 0 || aiChatComponent.isVisible())
